@@ -18,6 +18,7 @@ func _initialize() -> void:
 	_test_match_scoring_and_rotation()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
+	_test_block_closing_and_touch_distribution()
 	_test_default_offense_without_saved_play()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
@@ -321,6 +322,42 @@ func _test_coverage_arrival_and_reception_ownership() -> void:
 			reception_has_arrival_data = event.metadata.has("arrival")
 	_check(non_libero_received, "serve placement allows a non-libero passer to own reception")
 	_check(reception_has_arrival_data, "reception events expose physical arrival data")
+
+
+func _test_block_closing_and_touch_distribution() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = true
+	var home_block_events := 0
+	var stuff_blocks := 0
+	var touches_and_funnels := 0
+	var non_middle_primary := false
+	for seed_value in range(5000, 5300):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					or str(event.metadata.get("side", "")) != "home":
+				continue
+			home_block_events += 1
+			var outcome := str(event.metadata.get("outcome", "miss"))
+			if outcome == "stuff":
+				stuff_blocks += 1
+			elif outcome in ["touch", "funnel"]:
+				touches_and_funnels += 1
+			var blocker := manager.player_by_id(event.actor_id)
+			if blocker != null and blocker.position_role != "Middle Blocker":
+				non_middle_primary = true
+	_check(home_block_events > 20, "block distribution test observes enough home contests")
+	_check(non_middle_primary, "nearest pin players can lead blocks instead of the middle")
+	_check(
+		touches_and_funnels > stuff_blocks,
+		"partial block outcomes occur more often than terminal stuff blocks",
+	)
+	_check(
+		float(stuff_blocks) / maxf(float(home_block_events), 1.0) < 0.22,
+		"home stuff-block rate remains below the prototype balance ceiling",
+	)
 
 
 func _test_default_offense_without_saved_play() -> void:

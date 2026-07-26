@@ -68,6 +68,12 @@
   their reaction, speed, acceleration, fatigue and reach allow them to arrive.
 - Resolve home floor contacts with the same physical arrival model, including
   approximate attack flight time and nearby coverage support.
+- Form home blocks through a nearest-player primary and travel-limited assist.
+  Pin players lead pin blocks; middles only assist when anticipation, lateral
+  speed and set timing allow them to close.
+- Distinguish terminal stuff blocks from touches, funnels and misses. Touches
+  reduce attack force and add floor-defense reaction time instead of awarding
+  an immediate point.
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
@@ -91,7 +97,8 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 72 passing headless foundation checks and UI-binding validation.
+- 76 passing headless foundation checks and UI-binding validation, including a
+  seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet
 

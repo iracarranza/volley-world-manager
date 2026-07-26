@@ -115,3 +115,17 @@ The tactical radius therefore describes responsibility rather than granting
 extra physical ability. Rally events retain landing, flight-time and arrival
 metadata so explanations and future animation can show why a player did or did
 not reach the ball.
+
+## Block closing
+
+Home blocking no longer selects the roster's highest-rated blocker globally.
+The front-row player nearest the attack lane becomes primary. Other front-row
+players are evaluated as possible assists using horizontal distance, reaction,
+lateral speed, set tempo and set quality. Tactical commit choices alter the
+available closing window rather than adding an unconditional quality bonus.
+
+A sufficiently complete, high-quality contest may stuff the attack. More often,
+partial contests produce a touch or funnel. A touch lowers effective attack
+force and increases flight time before `CoverageCalculator` selects a floor
+defender; a funnel provides a smaller control benefit. This keeps blocking and
+floor defense connected instead of resolving them as competing binary checks.

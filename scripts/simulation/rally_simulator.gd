@@ -334,30 +334,49 @@ func _resolve_opponent_transition(
 		"Contact 3 of 3 · power swing at %d%% quality." % roundi(opponent_attack * 100.0),
 		{"side": "opponent", "lane_x": opponent_contact.x,
 			"attack_type": _opponent_attack_type(home_target)})
-	var blocker := _best_blocker(players, lineup)
-	var home_block := _rating(blocker, "block_timing") * 0.55 \
-		+ _rating(blocker, "jump_reach") * 0.30 \
-		+ _rating(blocker, "lateral_speed") * 0.15
-	if defensive_plan != null:
-		if defensive_plan.block_strategy == "Read Block":
-			home_block += 0.04
-		elif defensive_plan.block_strategy == "Commit Pin" \
-				and str(opponent_team.tendencies.get("preferred_lane", "")) == "Left Pin":
-			home_block += 0.10
-	var block_success: bool = home_block + rng.randf_range(-0.13, 0.13) > opponent_attack
+	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
+	var block_result := _resolve_home_block(
+		players, lineup, defensive_plan, opponent_contact.x,
+		opponent_tempo, opponent_set_quality, opponent_attack,
+	)
+	var blocker := block_result.primary as VolleyballPlayer
+	var assisting_blocker := block_result.assist as VolleyballPlayer
+	var home_block := float(block_result.quality)
+	var block_outcome := str(block_result.outcome)
+	var assist_text := ""
+	if assisting_blocker != null:
+		assist_text = " %s assisted at %d%% close." % [
+			assisting_blocker.display_name,
+			roundi(float(block_result.assist_close) * 100.0),
+		]
 	_add_event(result, RallyEventModel.EventType.BLOCK, blocker.id, blocker.display_name,
 		Vector2(opponent_contact.x, 0.53), Vector2(opponent_contact.x, 0.50),
-		block_success, home_block, "%s closes the block" % blocker.display_name,
-		"Tracks lane %.0f%% across court at %d%% close quality." % [
-			opponent_contact.x * 100.0, roundi(home_block * 100.0),
-		])
-	if block_success:
+		block_outcome != "miss", home_block,
+		"%s leads the block · %s" % [blocker.display_name, block_outcome.capitalize()],
+		"Primary close %d%%; block quality %d%%.%s" % [
+			roundi(float(block_result.primary_close) * 100.0),
+			roundi(home_block * 100.0), assist_text,
+		], {"side": "home", "outcome": block_outcome,
+			"primary_close": block_result.primary_close,
+			"assist_close": block_result.assist_close,
+			"assist_id": assisting_blocker.id if assisting_blocker != null else -1})
+	if block_outcome == "stuff":
 		return _finish(result, "counter_block", true, blocker.id, {
 			"hitter": original_hitter.display_name,
 			"blocker": blocker.display_name,
 		})
+	if block_outcome == "touch":
+		result.key_factors.append(ExplanationText.factor("block_touch"))
+		opponent_attack = maxf(opponent_attack - 0.10 - home_block * 0.05, 0.12)
+	elif block_outcome == "funnel":
+		result.key_factors.append(ExplanationText.factor("block_funnel"))
+		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
 	var attack_type := _opponent_attack_type(home_target)
 	var attack_time := _attack_flight_time(opponent_attack, attack_type)
+	if block_outcome == "touch":
+		attack_time += 0.24
+	elif block_outcome == "funnel":
+		attack_time += 0.06
 	var defense_claim: Dictionary = CoverageModel.choose_claimant(
 		_lineup_players(players, lineup),
 		defensive_plan.zones_for(DefensiveZoneModel.ZoneType.FLOOR_DEFENSE),
@@ -685,6 +704,110 @@ func _best_blocker(
 			best = player
 			best_score = score
 	return best
+
+
+func _resolve_home_block(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	attack_x: float,
+	tempo: int,
+	set_quality: float,
+	attack_quality: float,
+) -> Dictionary:
+	var front_blockers: Array[VolleyballPlayer] = []
+	for player_id in lineup.front_row_player_ids():
+		var player := _player_by_id(players, player_id)
+		if player != null:
+			front_blockers.append(player)
+	var primary: VolleyballPlayer
+	var primary_distance := 1000.0
+	for candidate in front_blockers:
+		var slot_number := lineup.slot_for_player(candidate.id)
+		var candidate_x := CourtConstants.slot_position(slot_number).x
+		var distance := absf(candidate_x - attack_x)
+		if distance < primary_distance:
+			primary = candidate
+			primary_distance = distance
+	var close_time := 0.30 + float(clampi(tempo, 0, 3)) * 0.045 \
+		+ (1.0 - set_quality) * 0.18
+	var strategy := str(defensive_plan.block_strategy) if defensive_plan != null \
+		else "Read Block"
+	var pin_attack := attack_x <= 0.34 or attack_x >= 0.66
+	if strategy == "Commit Pin":
+		close_time += 0.10 if pin_attack else -0.08
+	elif strategy == "Commit Middle":
+		close_time += 0.10 if not pin_attack else -0.09
+	var primary_close := _blocker_close_fraction(
+		primary, lineup, attack_x, close_time
+	)
+	var assist: VolleyballPlayer
+	var assist_close := 0.0
+	for candidate in front_blockers:
+		if candidate.id == primary.id:
+			continue
+		var close_fraction := _blocker_close_fraction(
+			candidate, lineup, attack_x, close_time
+		)
+		if close_fraction > assist_close:
+			assist = candidate
+			assist_close = close_fraction
+	if assist_close < 0.34:
+		assist = null
+		assist_close = 0.0
+	var primary_skill := _block_contact_skill(primary, primary_close)
+	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
+	var block_quality := clampf(
+		primary_skill * 0.68 + assist_skill * 0.32 * assist_close,
+		0.08, 0.94,
+	)
+	var contest := block_quality + rng.randf_range(-0.14, 0.12)
+	var outcome := "miss"
+	if contest > attack_quality + 0.14 and primary_close >= 0.72:
+		outcome = "stuff"
+	elif contest > attack_quality - 0.16:
+		outcome = "touch"
+	elif contest > attack_quality - 0.30:
+		outcome = "funnel"
+	return {
+		"primary": primary,
+		"assist": assist,
+		"primary_close": primary_close,
+		"assist_close": assist_close,
+		"quality": block_quality,
+		"outcome": outcome,
+	}
+
+
+func _blocker_close_fraction(
+	blocker: VolleyballPlayer,
+	lineup: RotationLineup,
+	attack_x: float,
+	available_time: float,
+) -> float:
+	if blocker == null:
+		return 0.0
+	var slot_number := lineup.slot_for_player(blocker.id)
+	var start_x := CourtConstants.slot_position(slot_number).x
+	var distance_meters := absf(start_x - attack_x) * 9.0
+	var anticipation := _rating(blocker, "anticipation")
+	var reaction_delay := lerpf(0.34, 0.12, anticipation)
+	var movement_time := maxf(available_time - reaction_delay, 0.0)
+	var movement_speed := lerpf(1.25, 4.40, _rating(blocker, "lateral_speed"))
+	var travel_capacity := movement_speed * movement_time + 0.72
+	return clampf(1.0 - maxf(distance_meters - travel_capacity, 0.0) / 2.8, 0.0, 1.0)
+
+
+func _block_contact_skill(blocker: VolleyballPlayer, close_fraction: float) -> float:
+	if blocker == null:
+		return 0.0
+	return clampf(
+		_rating(blocker, "block_timing") * 0.46
+		+ _rating(blocker, "jump_reach") * 0.34
+		+ _rating(blocker, "anticipation") * 0.08
+		+ close_fraction * 0.12,
+		0.05, 0.98,
+	)
 
 
 func _best_home_server(

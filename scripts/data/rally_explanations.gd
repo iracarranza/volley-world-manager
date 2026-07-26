@@ -45,6 +45,8 @@ const FACTOR_LINES := {
 	"opponent_adapted": "The opponent recognized a repeated lane or tempo and formed earlier.",
 	"defense_assignment_fit": "The saved defensive responsibility matched the attack target.",
 	"defense_assignment_stretch": "A defender had to leave the saved responsibility to reach the ball.",
+	"block_touch": "A partial block touch slowed the attack and gave floor defense more time.",
+	"block_funnel": "The block shaped the attack toward the saved floor-defense structure.",
 }
 
 
