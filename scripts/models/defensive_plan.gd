@@ -130,7 +130,6 @@ func _default_assignment(player_id: int, slot_number: int) -> Resource:
 	assignment.player_id = player_id
 	if CourtConstants.is_front_row_slot(slot_number):
 		assignment.base_responsibility = "Net defense"
-		assignment.read_responsibility = "Read setter and hitter"
 		assignment.seam_responsibility = "Close blocking seam"
 		assignment.short_ball_responsibility = "Cover tip behind block"
 		assignment.emergency_responsibility = "Release to emergency set"
@@ -140,7 +139,6 @@ func _default_assignment(player_id: int, slot_number: int) -> Resource:
 		)
 	else:
 		assignment.base_responsibility = "Perimeter defense"
-		assignment.read_responsibility = "Read hitter shoulder"
 		assignment.seam_responsibility = "Own inside seam"
 		assignment.short_ball_responsibility = "Step into tip coverage"
 		assignment.emergency_responsibility = "Pursue deep deflection"

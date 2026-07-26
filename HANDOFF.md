@@ -62,9 +62,10 @@
 - Switch between floor-defense and serve-reception views, drag each player's
   independent zone center, and save block strategy, floor system, serve target
   and serve risk.
-- Select any defender and explicitly assign base structure, read cue, seam,
-  short-ball, emergency and attack-coverage responsibilities. Assignments are
-  saved per rotation and contribute to defensive contact quality.
+- Select any defender and explicitly assign base structure, seam, short-ball,
+  emergency and attack-coverage responsibilities. Players read the developing
+  play automatically through anticipation, decision making and tactical
+  discipline rather than a coach-selected visual cue.
 - Assign primary or secondary emergency setters. When the regular setter makes
   first contact, the best available assigned player owns contact two; the rally
   event and playback explanation identify the emergency setter.

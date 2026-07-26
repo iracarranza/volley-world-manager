@@ -44,11 +44,11 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var defense_section_option: OptionButton = %DefenseSectionOption
 @onready var block_strategy_option: OptionButton = %BlockStrategyOption
 @onready var floor_system_option: OptionButton = %FloorSystemOption
+@onready var floor_section_option: OptionButton = %FloorSectionOption
 @onready var serve_target_option: OptionButton = %ServeTargetOption
 @onready var serve_risk_slider: HSlider = %ServeRiskSlider
 @onready var selected_defender_label: Label = %SelectedDefenderLabel
 @onready var base_responsibility_option: OptionButton = %BaseResponsibilityOption
-@onready var read_responsibility_option: OptionButton = %ReadResponsibilityOption
 @onready var seam_responsibility_option: OptionButton = %SeamResponsibilityOption
 @onready var short_ball_responsibility_option: OptionButton = %ShortBallResponsibilityOption
 @onready var emergency_responsibility_option: OptionButton = %EmergencyResponsibilityOption
@@ -121,6 +121,7 @@ func _ready() -> void:
 	save_defense_button.pressed.connect(_save_defensive_plan)
 	apply_defender_assignment_button.pressed.connect(_apply_defender_assignment)
 	defense_section_option.item_selected.connect(_defense_section_changed)
+	floor_section_option.item_selected.connect(_floor_section_changed)
 	zone_type_option.item_selected.connect(_defensive_zone_type_changed)
 	zone_radius_slider.value_changed.connect(_zone_radius_changed)
 	apply_zone_button.pressed.connect(_apply_selected_zone)
@@ -201,9 +202,6 @@ func _populate_static_options() -> void:
 	_populate_text_options(base_responsibility_option, [
 		"Net defense", "Perimeter defense", "Rotation coverage", "Middle-up defense",
 	])
-	_populate_text_options(read_responsibility_option, [
-		"Read setter and hitter", "Read hitter shoulder", "Read setter release", "Read block hands",
-	])
 	_populate_text_options(seam_responsibility_option, [
 		"Close blocking seam", "Own inside seam", "Own line seam", "Release cross-court seam",
 	])
@@ -225,6 +223,10 @@ func _populate_static_options() -> void:
 	for section_name in ["Serve Receive", "Blocking", "Floor Defense"]:
 		defense_section_option.add_item(section_name)
 	defense_section_option.select(0)
+	floor_section_option.clear()
+	floor_section_option.add_item("Positioning & Zones")
+	floor_section_option.add_item("Player Duties")
+	floor_section_option.select(0)
 	zone_type_option.clear()
 	zone_type_option.add_item("Floor Defense")
 	zone_type_option.set_item_metadata(
@@ -357,7 +359,6 @@ func _load_defender_assignment(player_id: int) -> void:
 		player.position_code, player.display_name,
 	]
 	_select_option_text(base_responsibility_option, str(assignment.base_responsibility))
-	_select_option_text(read_responsibility_option, str(assignment.read_responsibility))
 	_select_option_text(seam_responsibility_option, str(assignment.seam_responsibility))
 	_select_option_text(
 		short_ball_responsibility_option, str(assignment.short_ball_responsibility)
@@ -385,9 +386,6 @@ func _apply_defender_assignment() -> void:
 		return
 	assignment.base_responsibility = base_responsibility_option.get_item_text(
 		base_responsibility_option.selected
-	)
-	assignment.read_responsibility = read_responsibility_option.get_item_text(
-		read_responsibility_option.selected
 	)
 	assignment.seam_responsibility = seam_responsibility_option.get_item_text(
 		seam_responsibility_option.selected
@@ -679,6 +677,7 @@ func _assignment_popup_closed() -> void:
 func _court_mode_changed(index: int) -> void:
 	var defense_enabled := index == 1
 	defense_controls.visible = defense_enabled
+	_set_offensive_editor_visible(not defense_enabled)
 	tactical_court.set_defensive_view(
 		defense_enabled, GameManager.current_defensive_plan(),
 		selected_defensive_zone_type,
@@ -693,6 +692,24 @@ func _court_mode_changed(index: int) -> void:
 		_load_defender_assignment(selected_player_id)
 	if defense_enabled:
 		_update_defense_section_visibility(defense_section_option.selected)
+
+
+func _set_offensive_editor_visible(show_controls: bool) -> void:
+	var editor := court_mode_option.get_parent()
+	for node_name in [
+		"EditorTitle", "SelectedHitterLabel", "LaneLabel", "LaneOption",
+		"TempoLabel", "TempoOption", "ResponsibilityLabel",
+		"ResponsibilityOption", "AssignButton", "DemandLabel",
+		"PlaySeparator", "PlayTitle", "PlayNameEdit", "SavePlayButton",
+		"SavedPlayLabel", "SavedPlayOption", "CallPlayButton",
+		"CalledPlayLabel", "MatchDaySeparator", "MatchDayTitle",
+		"MatchOverviewLabel", "SubstituteOutOption", "SubstituteInOption",
+		"ApplySubstitutionButton", "UndoSubstitutionButton",
+		"RallyHistoryLabel",
+	]:
+		var control := editor.get_node_or_null(str(node_name)) as Control
+		if control != null:
+			control.visible = show_controls
 
 
 func _refresh_defensive_plan() -> void:
@@ -766,31 +783,39 @@ func _defense_section_changed(index: int) -> void:
 	_refresh_match_preview()
 
 
+func _floor_section_changed(_index: int) -> void:
+	_update_defense_section_visibility(defense_section_option.selected)
+	if selected_player_id >= 0:
+		_load_defender_assignment(selected_player_id)
+
+
 func _update_defense_section_visibility(index: int) -> void:
 	var serve_receive := index == 0
 	var blocking := index == 1
 	var floor_defense := index == 2
+	var floor_positioning := floor_defense and floor_section_option.selected == 0
+	var floor_duties := floor_defense and floor_section_option.selected == 1
 	serve_target_option.visible = serve_receive
 	serve_risk_slider.visible = serve_receive
 	%ServeRiskLabel.visible = serve_receive
 	block_strategy_option.visible = blocking
 	floor_system_option.visible = floor_defense
-	selected_defender_label.visible = blocking or floor_defense
-	base_responsibility_option.visible = floor_defense
-	read_responsibility_option.visible = blocking
+	floor_section_option.visible = floor_defense
+	selected_defender_label.visible = blocking or floor_duties
+	base_responsibility_option.visible = floor_duties
 	seam_responsibility_option.visible = blocking
-	short_ball_responsibility_option.visible = floor_defense
-	emergency_responsibility_option.visible = floor_defense
-	attack_coverage_option.visible = floor_defense
-	second_contact_option.visible = floor_defense
-	apply_defender_assignment_button.visible = blocking or floor_defense
-	zone_formation_summary_label.visible = serve_receive or floor_defense
-	selected_zone_label.visible = serve_receive or floor_defense
-	zone_radius_value_label.visible = serve_receive or floor_defense
-	zone_radius_slider.visible = serve_receive or floor_defense
-	zone_priority_option.visible = serve_receive or floor_defense
-	zone_enabled_check.visible = serve_receive or floor_defense
-	apply_zone_button.visible = serve_receive or floor_defense
+	short_ball_responsibility_option.visible = floor_duties
+	emergency_responsibility_option.visible = floor_duties
+	attack_coverage_option.visible = floor_duties
+	second_contact_option.visible = floor_duties
+	apply_defender_assignment_button.visible = blocking or floor_duties
+	zone_formation_summary_label.visible = serve_receive or floor_positioning
+	selected_zone_label.visible = serve_receive or floor_positioning
+	zone_radius_value_label.visible = serve_receive or floor_positioning
+	zone_radius_slider.visible = serve_receive or floor_positioning
+	zone_priority_option.visible = serve_receive or floor_positioning
+	zone_enabled_check.visible = serve_receive or floor_positioning
+	apply_zone_button.visible = serve_receive or floor_positioning
 	defense_summary_label.visible = false
 	opponent_scouting_label.visible = blocking
 	%OpponentAdaptationRateLabel.visible = blocking
@@ -800,7 +825,9 @@ func _update_defense_section_visibility(index: int) -> void:
 		if serve_receive else (
 			"Select a blocker to set read and seam responsibility."
 			if blocking else
-			"Drag floor zones and assign recovery, emergency-set and attack-cover duties."
+			("Drag floor zones and tune each player's coverage radius."
+			if floor_positioning else
+			"Assign recovery, emergency-set and attack-cover duties.")
 		)
 	)
 
@@ -1067,6 +1094,8 @@ func _show_rally_result(result: Resource) -> void:
 		roundi(result.attack_quality * 100.0),
 	])
 	rally_result_factors.text = "\n".join(factor_lines)
+	dashboard_explanation_label.text = result.explanation + "\n\n" \
+		+ "\n".join(factor_lines)
 	_set_status("Rally resolved from seed %d." % (rally_seed - 1))
 
 

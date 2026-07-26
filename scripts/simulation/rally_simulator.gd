@@ -794,9 +794,6 @@ func _defensive_responsibility_fit(
 		fit += 0.045
 	elif attack_type == "Line attack" and "Perimeter" in str(assignment.base_responsibility):
 		fit += 0.035
-	if defensive_plan.block_strategy == "Read Block" \
-			and "read" in str(assignment.read_responsibility).to_lower():
-		fit += 0.015
 	if defensive_plan.floor_system == "Perimeter" \
 			and "Perimeter" in str(assignment.base_responsibility):
 		fit += 0.015

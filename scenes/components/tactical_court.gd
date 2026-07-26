@@ -212,15 +212,15 @@ func _defensive_read_position(
 	action_target: Vector2,
 	blocking: bool,
 ) -> Vector2:
-	var read_weight := 0.18
-	var assignment: Resource = defensive_plan.assignment_for(player_id) \
-		if defensive_plan != null else null
-	if assignment != null:
-		var cue := str(assignment.read_responsibility)
-		if "setter" in cue.to_lower():
-			read_weight += 0.05
-		elif "shoulder" in cue.to_lower() or "hands" in cue.to_lower():
-			read_weight += 0.09
+	var player := players_by_id.get(player_id) as VolleyballPlayer
+	var read_quality := 0.5
+	if player != null:
+		read_quality = (
+			float(player.anticipation)
+			+ float(player.decision_making)
+			+ float(player.tactical_discipline)
+		) / 300.0
+	var read_weight := lerpf(0.10, 0.31, clampf(read_quality, 0.0, 1.0))
 	var read_position := base_position.lerp(action_target, read_weight)
 	if blocking:
 		read_position.y = lerpf(base_position.y, 0.54, 0.42)

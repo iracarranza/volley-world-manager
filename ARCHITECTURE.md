@@ -160,10 +160,10 @@ interpretation.
 ## Defensive movement and second contact
 
 The presenter treats saved court positions as the base state. Reception,
-blocking and floor-defense contacts animate through a responsibility-informed
-read position, the eventual contact position and a recovery step. Read cues
-change the first movement without moving outcome authority out of the seeded
-simulator.
+blocking and floor-defense contacts animate through an attribute-derived read
+position, the eventual contact position and a recovery step. Anticipation,
+decision making and tactical discipline shape the first movement without
+moving outcome authority out of the seeded simulator.
 
 The normal setter owns contact two unless that player made first contact. In
 that case, `RallySimulator` ranks the other five players using the saved primary
