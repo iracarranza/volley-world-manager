@@ -1,11 +1,15 @@
 class_name VolleyballTrainingSystem
 extends RefCounted
 
+const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+
 const ACTIVITIES := {
 	"Team Practice": {"attributes": ["tactical_discipline", "court_vision"], "fatigue": 0.05, "morale": 0.01, "familiarity": 0.035,
 		"description": "Build collective systems, tactical discipline and court vision."},
-	"Serving": {"attributes": ["serve_power", "serve_accuracy"], "fatigue": 0.06, "morale": 0.0, "familiarity": 0.01,
-		"description": "Develop serve pressure and placement."},
+	"Serving": {"attributes": ["serve_power", "serve_technique", "serve_placement",
+		"serve_consistency", "serve_aggression", "serve_variation"], "fatigue": 0.06,
+		"morale": 0.0, "familiarity": 0.01,
+		"description": "Develop serve power, contact, placement, reliability, risk and variation."},
 	"Serve Receive": {"attributes": ["reception", "reception_balance", "reception_stability", "dig_control"], "fatigue": 0.055, "morale": 0.005, "familiarity": 0.02,
 		"description": "Train platform control, movement balance and stability under pace."},
 	"Attack & Transition": {"attributes": ["attack_power", "attack_accuracy", "approach_timing", "arm_speed", "tooling", "feinting", "finesse", "shot_variety", "transition_speed"], "fatigue": 0.08, "morale": 0.005, "familiarity": 0.02,
@@ -48,6 +52,7 @@ static func apply_week(
 				improved += 1
 		player.fatigue = clampf(player.fatigue + float(activity.fatigue), 0.0, 1.0)
 		player.morale = clampf(player.morale + float(activity.morale), 0.0, 1.0)
+		AttributeProfiles.assign_serve_style(player)
 	team.tactical_familiarity = clampf(
 		float(team.tactical_familiarity) + float(activity.familiarity), 0.0, 1.0
 	)

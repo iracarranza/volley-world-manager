@@ -29,6 +29,8 @@
   organization-aware roster/market generation.
 - `scripts/systems/training_system.gd`: stateless definitions and weekly
   effects for volleyball training and recovery.
+- `scripts/systems/attribute_profile_system.gd`: stateless detailed/summative
+  player profiles, D-S grading and serve-style proficiency calculations.
 - `scripts/models/match_statistics.gd`: derives persistent team and player
   contact totals from authoritative rally events.
 - `scripts/data/rally_explanations.gd`: all current player-facing rally result

@@ -15,9 +15,15 @@
   Roster, Team, Transfers/Recruitment and Competition screens.
 - Inspect individual player identity, availability, age, experience, morale,
   fatigue, position-weighted ability stars, potential stars, measurements and
-  every raw attribute from the Roster screen. Switch among Attacking,
-  Defensive, Setting & Ball Control and Physical wheels; usable power and
-  baseline defensive range are derived summaries rather than duplicate stats.
+  every raw attribute from the Roster screen. View a six-axis Player Profile
+  derived from Attacking, Defensive, Setting & Ball Control, Physical, Serving
+  and Mental & Tactical wheels. Every wheel vertex uses D-S presentation grades;
+  usable power and baseline defensive range remain derived rather than duplicate stats.
+- Generate a five-style serving repertoire for every player: Standing, Jump
+  Topspin, Jump Float, Hybrid and Sky Ball. The primary style and its proficiency
+  derive from power, technique, placement, consistency, aggression, variation
+  and supporting physical/mental attributes, then influence rally pressure,
+  error risk, placement, server selection, event text and flight time.
 - Review team identity, tactical familiarity, captain/libero hierarchy and the
   position depth chart. Select one of seven weekly training focuses with visible
   attribute, fatigue, morale and familiarity effects.
@@ -235,7 +241,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 167 passing headless foundation checks and UI-binding validation, including a
+- 171 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

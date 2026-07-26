@@ -11,6 +11,7 @@ const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.g
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
+const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -183,6 +184,26 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_check(club_roster[0].current_ability_score() >= 1 \
 			and club_roster[0].current_ability_score() <= 100,
 		"position-weighted current ability remains within the attribute scale")
+	_check(club_roster[0].serve_style_proficiencies.size() == 5 \
+			and club_roster[0].primary_serve_style in club_roster[0].serve_style_proficiencies,
+		"generated players receive a five-style serving repertoire and primary style")
+	var summary_profile: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.summary_profile(club_roster[0])
+	_check(summary_profile.size() == 6 and ATTRIBUTE_PROFILE_SCRIPT.grade(85.0) == "S" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(39.0) == "D",
+		"player profile summarizes six graded categories from detailed wheels")
+	var restored_server := VolleyballPlayer.from_dict(club_roster[0].to_dict())
+	_check(restored_server.serve_technique == club_roster[0].serve_technique \
+			and restored_server.primary_serve_style == club_roster[0].primary_serve_style \
+			and restored_server.serve_style_proficiencies.size() == 5,
+		"serve attributes and style proficiencies survive player serialization")
+	var serve_manager := GAME_MANAGER_SCRIPT.new()
+	serve_manager.seed_vertical_slice_data()
+	serve_manager.match_state.serving_home = true
+	var serve_result: Resource = serve_manager.resolve_active_rally(77531)
+	var serve_event: Resource = serve_result.events[0]
+	_check(serve_event.metadata.has("serve_style"),
+		"rally serve events expose the mechanically selected serving style")
+	serve_manager.free()
 	var team := VolleyballTeam.new()
 	team.tactical_familiarity = 0.30
 	var prior_familiarity := team.tactical_familiarity

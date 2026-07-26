@@ -7,6 +7,7 @@ const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
+const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -41,11 +42,19 @@ func resolve(
 	var server_name := opponent_server.display_name
 	var setter := _player_by_id(players, lineup.active_setter_id())
 	var serve_quality := clampf(
-		_power_rating(opponent_server, "serve_power") * 0.56
-		+ _rating(opponent_server, "serve_accuracy") * 0.34
+		_power_rating(opponent_server, "serve_power") * 0.28
+		+ _rating(opponent_server, "serve_technique") * 0.13
+		+ _rating(opponent_server, "serve_placement") * 0.07
+		+ _rating(opponent_server, "serve_consistency") * 0.12
+		+ _rating(opponent_server, "serve_aggression") * 0.04
+		+ _serve_style_proficiency(opponent_server) * 0.08
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
-	var serve_error := rng.randf() < 0.055
+	var opponent_risk := _rating(opponent_server, "serve_aggression")
+	var serve_error_chance := clampf(0.025 + opponent_risk * 0.08 \
+		- _rating(opponent_server, "serve_consistency") * 0.055 \
+		- _serve_style_proficiency(opponent_server) * 0.02, 0.01, 0.15)
+	var serve_error := rng.randf() < serve_error_chance
 	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_landing := _serve_landing_point(
 		intended_target, opponent_server, players, lineup, true
@@ -56,10 +65,11 @@ func resolve(
 	)
 	_add_event(result, RallyEventModel.EventType.SERVE, -1, server_name,
 		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
-		"Pressure serve" if not serve_error else "Serve misses",
+		"%s serve" % opponent_server.primary_serve_style if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
 			"side": "opponent", "target": intended_target,
+			"serve_style": opponent_server.primary_serve_style,
 			"flight_time": serve_time,
 			"event_time": 0.0, "contact_time": serve_time,
 			"outgoing_trajectory": serve_trajectory,
@@ -439,12 +449,17 @@ func _resolve_home_serve(
 	if defensive_plan != null:
 		serve_risk = float(defensive_plan.serve_risk)
 	var serve_quality := clampf(
-		_power_rating(server, "serve_power") * 0.48
-		+ _rating(server, "serve_accuracy") * 0.34
-		+ serve_risk * 0.18 + rng.randf_range(-0.14, 0.14), 0.05, 0.98
+		_power_rating(server, "serve_power") * 0.25
+		+ _rating(server, "serve_technique") * 0.20
+		+ _rating(server, "serve_placement") * 0.13
+		+ _rating(server, "serve_consistency") * 0.14
+		+ _serve_style_proficiency(server) * 0.13
+		+ serve_risk * 0.15 + rng.randf_range(-0.14, 0.14), 0.05, 0.98
 	)
 	var error_chance := clampf(
-		0.025 + serve_risk * 0.09 - _rating(server, "serve_accuracy") * 0.035,
+		0.025 + serve_risk * 0.07 + _rating(server, "serve_aggression") * 0.025 \
+		- _rating(server, "serve_consistency") * 0.065 \
+		- _serve_style_proficiency(server) * 0.02,
 		0.01, 0.14,
 	)
 	var serve_error := rng.randf() < error_chance
@@ -458,9 +473,10 @@ func _resolve_home_serve(
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
 		Vector2(0.82, 0.92), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
-		"%d%% pressure at %d%% selected risk." % [
+		"%s · %d%% pressure at %d%% selected risk." % [server.primary_serve_style,
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
-		], {"side": "home", "target": target_name, "flight_time": serve_time})
+		], {"side": "home", "target": target_name, "flight_time": serve_time,
+			"serve_style": server.primary_serve_style})
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
 			"server": server.display_name,
@@ -1893,7 +1909,8 @@ func _best_home_server(
 		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
 		if player == null:
 			continue
-		var score := player.serve_power + player.serve_accuracy
+		var score := player.serve_power + player.serve_technique \
+			+ player.serve_consistency + player.active_serve_style_score()
 		if score > best_score:
 			best = player
 			best_score = score
@@ -1955,7 +1972,7 @@ func _serve_landing_point(
 			intended = _weak_passer_target(home_players, lineup, landing_on_home_side)
 		_:
 			intended = Vector2(0.20, home_y)
-	var accuracy := _rating(server, "serve_accuracy")
+	var accuracy := _rating(server, "serve_placement")
 	var deviation := lerpf(0.105, 0.018, accuracy)
 	var min_y := 0.54 if landing_on_home_side else 0.04
 	var max_y := 0.96 if landing_on_home_side else 0.46
@@ -1988,8 +2005,20 @@ func _weak_passer_target(
 
 
 func _serve_flight_time(server: VolleyballPlayer, serve_quality: float) -> float:
-	var power := _power_rating(server, "serve_power")
-	return clampf(1.28 - power * 0.42 - serve_quality * 0.24, 0.58, 1.15)
+	var power: float = _power_rating(server, "serve_power")
+	var style_modifier: float = float({"Jump Topspin": 0.0, "Hybrid": 0.01,
+		"Jump Float": 0.04, "Standing": 0.06, "Sky Ball": 0.24}.get(
+		server.primary_serve_style, 0.0
+	))
+	return clampf(1.28 - power * 0.42 - serve_quality * 0.24 \
+		+ float(style_modifier), 0.52, 1.48)
+
+
+func _serve_style_proficiency(server: VolleyballPlayer) -> float:
+	var scores := server.serve_style_proficiencies
+	if scores.is_empty():
+		scores = AttributeProfiles.serve_style_proficiencies(server)
+	return clampf(float(scores.get(server.primary_serve_style, 50)) / 100.0, 0.01, 1.0)
 
 
 func _attack_flight_time(attack_quality: float, attack_type: String) -> float:

@@ -26,6 +26,11 @@ extends Resource
 @export_category("Technical")
 @export_range(1, 100) var serve_power: int = 50
 @export_range(1, 100) var serve_accuracy: int = 50
+@export_range(1, 100) var serve_technique: int = 50
+@export_range(1, 100) var serve_placement: int = 50
+@export_range(1, 100) var serve_consistency: int = 50
+@export_range(1, 100) var serve_aggression: int = 50
+@export_range(1, 100) var serve_variation: int = 50
 @export_range(1, 100) var reception: int = 50
 @export_range(1, 100) var reception_balance: int = 50
 @export_range(1, 100) var reception_stability: int = 50
@@ -58,10 +63,13 @@ extends Resource
 @export_range(0.0, 1.0) var fatigue: float = 0.0
 @export_range(-1.0, 1.0) var current_form: float = 0.0
 @export var traits: Array[String] = []
+@export_enum("Standing", "Jump Topspin", "Jump Float", "Hybrid", "Sky Ball") var primary_serve_style: String = "Standing"
+@export var serve_style_proficiencies: Dictionary = {}
 
 const ABILITY_ATTRIBUTES: Array[String] = [
 	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-	"stamina", "arm_speed", "serve_power", "serve_accuracy", "reception", "reception_balance",
+	"stamina", "arm_speed", "serve_power", "serve_technique", "serve_placement",
+	"serve_consistency", "serve_aggression", "serve_variation", "reception", "reception_balance",
 	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
 	"set_disguise", "hand_control", "attack_power", "attack_accuracy", "approach_timing",
 	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
@@ -144,6 +152,11 @@ func to_dict() -> Dictionary:
 		"arm_speed": arm_speed,
 		"serve_power": serve_power,
 		"serve_accuracy": serve_accuracy,
+		"serve_technique": serve_technique,
+		"serve_placement": serve_placement,
+		"serve_consistency": serve_consistency,
+		"serve_aggression": serve_aggression,
+		"serve_variation": serve_variation,
 		"reception": reception,
 		"reception_balance": reception_balance,
 		"reception_stability": reception_stability,
@@ -172,6 +185,8 @@ func to_dict() -> Dictionary:
 		"fatigue": fatigue,
 		"current_form": current_form,
 		"traits": traits.duplicate(),
+		"primary_serve_style": primary_serve_style,
+		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
 	}
 
 
@@ -200,10 +215,22 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 		"decision_making", "composure", "tactical_discipline", "improvisation",
 	]:
 		player.set(property_name, clampi(int(data.get(property_name, 50)), 1, 100))
+	var legacy_serve_accuracy := int(data.get("serve_accuracy", 50))
+	for property_name in ["serve_technique", "serve_placement", "serve_consistency",
+		"serve_aggression", "serve_variation"]:
+		player.set(property_name, clampi(int(data.get(property_name, legacy_serve_accuracy)), 1, 100))
+	player.primary_serve_style = str(data.get("primary_serve_style", "Standing"))
+	player.serve_style_proficiencies = Dictionary(
+		data.get("serve_style_proficiencies", {})
+	).duplicate(true)
 	player.fatigue = clampf(float(data.get("fatigue", 0.0)), 0.0, 1.0)
 	player.current_form = clampf(float(data.get("current_form", 0.0)), -1.0, 1.0)
 	player.traits = Array(data.get("traits", []), TYPE_STRING, "", null)
 	return player
+
+
+func active_serve_style_score() -> int:
+	return clampi(int(serve_style_proficiencies.get(primary_serve_style, 50)), 1, 100)
 
 
 func standing_reach_cm() -> float:

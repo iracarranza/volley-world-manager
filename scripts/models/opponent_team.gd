@@ -58,7 +58,8 @@ func setter() -> Resource:
 
 
 func best_server() -> Resource:
-	return _best_by_sum(["serve_power", "serve_accuracy"])
+	return _best_by_sum(["serve_power", "serve_technique", "serve_placement",
+		"serve_consistency"])
 
 
 func best_hitter() -> Resource:

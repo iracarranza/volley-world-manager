@@ -6,16 +6,17 @@ signal title_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const ATTRIBUTE_GROUPS := {
 	"Physical": ["acceleration", "lateral_speed", "transition_speed", "explosiveness", "jump_reach", "stamina"],
-	"Serving": ["serve_power", "serve_accuracy"],
+	"Serving": ["serve_power", "serve_technique", "serve_placement", "serve_consistency", "serve_aggression", "serve_variation"],
 	"Reception": ["reception", "reception_balance", "reception_stability", "ball_control"],
 	"Setting and Hand Control": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control"],
 	"Attacking": ["attack_power", "arm_speed", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety"],
 	"Defense": ["block_timing", "dig_control"],
 	"Mental and Tactical": ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"],
 }
-const WHEEL_PROFILES: Array[String] = ["Attacking", "Defensive", "Setting & Ball Control", "Physical"]
+const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const WHEEL_TOOLTIPS := {
 	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
 	"Tooling": "Deliberately using blockers' hands to score or create an advantageous deflection.",
@@ -41,6 +42,12 @@ const WHEEL_TOOLTIPS := {
 	"Explosiveness": "How quickly the player accesses maximum jump capacity.",
 	"Jump Capacity": "The player's maximum available jumping reach rating.",
 	"Stamina": "Capacity to preserve physical execution through workload and fatigue.",
+	"Serve Power": "Maximum velocity and force available on a serve.",
+	"Serve Technique": "Contact quality and ability to create the intended spin or float.",
+	"Serve Placement": "Precision targeting zones, seams and individual receivers.",
+	"Serve Consistency": "Ability to reproduce a legal controlled serve without errors.",
+	"Serve Aggression": "Natural willingness and ability to increase pressure at greater risk.",
+	"Serve Variation": "Ability to vary trajectory, pace, depth and serve type.",
 }
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -190,6 +197,10 @@ func _roster_selected(index: int) -> void:
 		player.current_ability_stars(), player.potential_ability_stars(),
 		key_attributes, player.height_cm, player.mass_kg, player.wingspan_cm,
 		"Slot %d" % GameManager.current_lineup().slot_for_player(player.id) if GameManager.current_lineup().slot_for_player(player.id) >= 1 else "Bench"]
+	roster_detail.text += "\n\n[b]Serve repertoire[/b]\n%s · %s proficiency" % [
+		player.primary_serve_style,
+		AttributeProfiles.grade(float(player.active_serve_style_score())),
+	]
 	_refresh_player_wheel(player)
 	raw_attributes.text = _raw_attribute_text(player)
 
@@ -202,28 +213,12 @@ func _wheel_profile_selected(_index: int) -> void:
 
 func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 	var profile_name := wheel_profile_option.get_item_text(wheel_profile_option.selected) \
-		if wheel_profile_option.selected >= 0 else "Attacking"
-	var profile: Dictionary
-	match profile_name:
-		"Defensive":
-			profile = {"Reception Technique": player.reception,
-				"Reception Balance": player.reception_balance,
-				"Reception Stability": player.reception_stability,
-				"Defensive Range": player.baseline_defensive_range(),
-				"Block Timing": player.block_timing, "Dig Control": player.dig_control}
-		"Setting & Ball Control":
-			profile = {"Set Accuracy": player.set_accuracy, "Set Balance": player.set_balance,
-				"Set Stability": player.set_stability, "Tempo Control": player.tempo_control,
-				"Set Disguise": player.set_disguise, "Hand Control": player.hand_control}
-		"Physical":
-			profile = {"Acceleration": player.acceleration, "Lateral Speed": player.lateral_speed,
-				"Transition Speed": player.transition_speed, "Explosiveness": player.explosiveness,
-				"Jump Capacity": player.jump_reach, "Stamina": player.stamina}
-		_:
-			profile = {"Power": player.usable_attack_power(), "Tooling": player.tooling,
-				"Feinting": player.feinting, "Finesse": player.finesse,
-				"Approach Timing": player.approach_timing, "Shot Variety": player.shot_variety}
-	player_attribute_wheel.set_profile(profile, WHEEL_TOOLTIPS)
+		if wheel_profile_option.selected >= 0 else "Player Profile"
+	var profile := AttributeProfiles.summary_profile(player) if profile_name == "Player Profile" \
+		else AttributeProfiles.detailed_profile(player, profile_name)
+	var tooltips := AttributeProfiles.PROFILE_TOOLTIPS if profile_name == "Player Profile" \
+		else WHEEL_TOOLTIPS
+	player_attribute_wheel.set_profile(profile, tooltips, true)
 
 
 func _raw_attribute_text(player: VolleyballPlayer) -> String:

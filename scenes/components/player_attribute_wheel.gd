@@ -4,14 +4,20 @@ extends Control
 var axes: Array[String] = []
 var profile: Dictionary = {}
 var axis_tooltips: Dictionary = {}
+var show_grades: bool = true
 
 
-func set_profile(new_profile: Dictionary, new_tooltips: Dictionary = {}) -> void:
+func set_profile(
+	new_profile: Dictionary,
+	new_tooltips: Dictionary = {},
+	use_grades: bool = true,
+) -> void:
 	profile = new_profile.duplicate(true)
 	axes.clear()
 	for axis_name in profile:
 		axes.append(str(axis_name))
 	axis_tooltips = new_tooltips.duplicate(true)
+	show_grades = use_grades
 	queue_redraw()
 
 
@@ -48,7 +54,9 @@ func _draw() -> void:
 		draw_polyline(outline, Color(0.3, 0.76, 1.0, 0.95), 2.0, true)
 	var font := ThemeDB.fallback_font
 	for index in range(axes.size()):
-		var label := "%s %d" % [axes[index], int(profile.get(axes[index], 0))]
+		var score := float(profile.get(axes[index], 0))
+		var label := "%s %s" % [axes[index], _grade(score)] if show_grades \
+			else "%s %d" % [axes[index], int(score)]
 		var label_size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12)
 		var label_position := center + _axis_vector(index) * (radius + 25.0)
 		label_position += Vector2(-label_size.x * 0.5, 6.0)
@@ -59,3 +67,15 @@ func _draw() -> void:
 func _axis_vector(index: int) -> Vector2:
 	var angle := -PI / 2.0 + TAU * float(index) / float(axes.size())
 	return Vector2(cos(angle), sin(angle))
+
+
+func _grade(score: float) -> String:
+	if score >= 85.0:
+		return "S"
+	if score >= 70.0:
+		return "A"
+	if score >= 55.0:
+		return "B"
+	if score >= 40.0:
+		return "C"
+	return "D"

@@ -6,6 +6,7 @@ const DefensivePlanScript := preload("res://scripts/models/defensive_plan.gd")
 const OpponentTeamScript := preload("res://scripts/models/opponent_team.gd")
 const TeamScript := preload("res://scripts/models/team.gd")
 const MatchFormatScript := preload("res://scripts/models/match_format.gd")
+const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 
 signal rotation_changed(rotation_number: int)
 signal playbook_changed
@@ -246,6 +247,19 @@ func _make_player(
 	player.apply_role_physical_defaults()
 	for property_name in overrides:
 		player.set(str(property_name), overrides[property_name])
+	if not overrides.has("serve_technique"):
+		player.serve_technique = player.serve_accuracy
+	if not overrides.has("serve_placement"):
+		player.serve_placement = player.serve_accuracy
+	if not overrides.has("serve_consistency"):
+		player.serve_consistency = player.serve_accuracy
+	if not overrides.has("serve_aggression"):
+		player.serve_aggression = roundi(
+			float(player.serve_power) * 0.60 + float(player.serve_accuracy) * 0.40
+		)
+	if not overrides.has("serve_variation"):
+		player.serve_variation = player.serve_accuracy
+	AttributeProfiles.assign_serve_style(player)
 	return player
 
 
@@ -637,7 +651,9 @@ func from_dict(data: Dictionary) -> void:
 	_seed_opponent()
 	players.clear()
 	for player_data in data.get("players", []):
-		players.append(VolleyballPlayer.from_dict(player_data))
+		var player := VolleyballPlayer.from_dict(player_data)
+		AttributeProfiles.assign_serve_style(player)
+		players.append(player)
 	team = TeamScript.from_dict(data.get("team", {}))
 	if team.player_ids.is_empty():
 		for player in players:
