@@ -60,6 +60,14 @@
   and contribute to defensive contact quality.
 - See each player's compact structural responsibility directly on the defensive
   court.
+- Use separate saved serve-reception and floor-defense zones with a radius,
+  priority and enabled state for every player. Floor zones are visible as
+  translucent metre-scaled overlays on the defensive court.
+- Resolve serve placement before choosing a receiver. Outside hitters, liberos
+  and any other enabled back-row passer claim balls using zone priority only if
+  their reaction, speed, acceleration, fatigue and reach allow them to arrive.
+- Resolve home floor contacts with the same physical arrival model, including
+  approximate attack flight time and nearby coverage support.
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
@@ -76,13 +84,14 @@
 ## Implemented underneath
 
 - Typed player, rotation, hitter-assignment, offensive-play, rally-event and
-  rally-result Resources, plus typed per-player defensive assignments.
+  rally-result Resources, plus typed per-player defensive assignments and
+  coverage zones.
 - Normalized court coordinates.
 - Rotation and play validation.
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 66 passing headless foundation checks and UI-binding validation.
+- 72 passing headless foundation checks and UI-binding validation.
 
 ## Intentionally not implemented yet
 

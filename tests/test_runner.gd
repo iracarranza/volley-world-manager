@@ -17,6 +17,7 @@ func _initialize() -> void:
 	_test_seeded_rally_resolution()
 	_test_match_scoring_and_rotation()
 	_test_defense_opponent_and_match_day_controls()
+	_test_coverage_arrival_and_reception_ownership()
 	_test_default_offense_without_saved_play()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
@@ -273,6 +274,53 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 		restored.opponent_team.anticipated_lane() == "Left Pin",
 		"opponent adaptation survives serialization",
 	)
+	_check(
+		restored.current_defensive_plan().floor_defense_zones.size() >= 6,
+		"floor-defense zones survive serialization",
+	)
+	_check(
+		restored.current_defensive_plan().reception_zones.size() >= 6,
+		"serve-reception zones survive serialization",
+	)
+
+
+func _test_coverage_arrival_and_reception_ownership() -> void:
+	var player := VolleyballPlayer.new()
+	player.id = 900
+	player.lateral_speed = 75
+	player.acceleration = 75
+	player.anticipation = 75
+	player.ball_control = 75
+	player.reception = 75
+	var zone := DefensiveZone.new()
+	zone.player_id = player.id
+	zone.center = Vector2(0.20, 0.84)
+	zone.radius_meters = 3.0
+	zone.priority = 2
+	var reachable: Dictionary = CoverageCalculator.evaluate_arrival(
+		player, zone, Vector2(0.35, 0.84), 1.0, "reception"
+	)
+	var unreachable: Dictionary = CoverageCalculator.evaluate_arrival(
+		player, zone, Vector2(0.70, 0.84), 0.35, "reception"
+	)
+	_check(bool(reachable.get("reachable", false)), "adequate ball time permits a reachable contact")
+	_check(not bool(unreachable.get("reachable", true)), "short ball time can make a zone unreachable")
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var non_libero_received := false
+	var reception_has_arrival_data := false
+	for seed_value in range(2000, 2025):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if event.event_type != RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+					or str(event.metadata.get("side", "")) != "home":
+				continue
+			if event.actor_id != 6:
+				non_libero_received = true
+			reception_has_arrival_data = event.metadata.has("arrival")
+	_check(non_libero_received, "serve placement allows a non-libero passer to own reception")
+	_check(reception_has_arrival_data, "reception events expose physical arrival data")
 
 
 func _test_default_offense_without_saved_play() -> void:

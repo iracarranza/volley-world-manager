@@ -2,6 +2,7 @@ class_name DefensivePlan
 extends Resource
 
 const DefensiveAssignmentModel := preload("res://scripts/models/defensive_assignment.gd")
+const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 
 @export_range(1, 6) var rotation_number: int = 1
 @export var plan_name: String = "Base Defense"
@@ -11,6 +12,8 @@ const DefensiveAssignmentModel := preload("res://scripts/models/defensive_assign
 @export_range(0.0, 1.0) var serve_risk: float = 0.5
 @export var defender_positions: Dictionary = {}
 @export var assignments: Dictionary = {}
+@export var reception_zones: Dictionary = {}
+@export var floor_defense_zones: Dictionary = {}
 
 
 func ensure_defaults(lineup: RotationLineup) -> void:
@@ -20,6 +23,14 @@ func ensure_defaults(lineup: RotationLineup) -> void:
 			defender_positions[player_id] = CourtConstants.slot_position(slot_number)
 		if player_id not in assignments:
 			assignments[player_id] = _default_assignment(player_id, slot_number)
+		if player_id not in reception_zones:
+			reception_zones[player_id] = _default_zone(
+				player_id, slot_number, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+			)
+		if player_id not in floor_defense_zones:
+			floor_defense_zones[player_id] = _default_zone(
+				player_id, slot_number, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+			)
 
 
 func assignment_for(player_id: int) -> Resource:
@@ -47,10 +58,22 @@ func set_defender_position(player_id: int, position: Vector2) -> void:
 		clampf(position.x, 0.06, 0.94),
 		clampf(position.y, 0.53, 0.96),
 	)
+	var floor_zone: Resource = floor_defense_zones.get(player_id) as Resource
+	if floor_zone != null:
+		floor_zone.center = defender_positions[player_id]
 
 
 func defender_position(player_id: int, fallback: Vector2) -> Vector2:
 	return defender_positions.get(player_id, fallback)
+
+
+func zones_for(zone_type: int) -> Dictionary:
+	return reception_zones if zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE \
+		else floor_defense_zones
+
+
+func zone_for(player_id: int, zone_type: int) -> Resource:
+	return zones_for(zone_type).get(player_id) as Resource
 
 
 func to_dict() -> Dictionary:
@@ -71,6 +94,8 @@ func to_dict() -> Dictionary:
 		"serve_risk": serve_risk,
 		"defender_positions": positions,
 		"assignments": assignment_data,
+		"reception_zones": _zones_to_dict(reception_zones),
+		"floor_defense_zones": _zones_to_dict(floor_defense_zones),
 	}
 
 
@@ -96,6 +121,8 @@ func load_dict(data: Dictionary) -> void:
 			saved_assignments[raw_player_id]
 		)
 		assignments[int(raw_player_id)] = assignment
+	reception_zones = _zones_from_dict(data.get("reception_zones", {}))
+	floor_defense_zones = _zones_from_dict(data.get("floor_defense_zones", {}))
 
 
 func _default_assignment(player_id: int, slot_number: int) -> Resource:
@@ -114,3 +141,35 @@ func _default_assignment(player_id: int, slot_number: int) -> Resource:
 		assignment.short_ball_responsibility = "Step into tip coverage"
 		assignment.emergency_responsibility = "Pursue deep deflection"
 	return assignment
+
+
+func _default_zone(player_id: int, slot_number: int, zone_type: int) -> Resource:
+	var zone: Resource = DefensiveZoneModel.new()
+	zone.player_id = player_id
+	zone.zone_type = zone_type
+	zone.center = CourtConstants.slot_position(slot_number)
+	var front_row := CourtConstants.is_front_row_slot(slot_number)
+	if zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
+		zone.enabled = not front_row
+		zone.radius_meters = 3.2
+		zone.priority = 2 if slot_number in [5, 6] else 1
+	else:
+		zone.enabled = true
+		zone.radius_meters = 3.0 if not front_row else 2.2
+		zone.priority = 2 if not front_row else 1
+	return zone
+
+
+func _zones_to_dict(zones: Dictionary) -> Dictionary:
+	var result := {}
+	for player_id in zones:
+		result[player_id] = zones[player_id].to_dict()
+	return result
+
+
+func _zones_from_dict(data: Dictionary) -> Dictionary:
+	var result := {}
+	for raw_player_id in data:
+		var zone: Resource = DefensiveZoneModel.from_dict(data[raw_player_id])
+		result[int(raw_player_id)] = zone
+	return result

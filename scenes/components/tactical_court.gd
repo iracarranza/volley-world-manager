@@ -481,6 +481,7 @@ func _draw() -> void:
 		)
 	_draw_lane_guides()
 	_draw_assignments()
+	_draw_defensive_zones()
 	_draw_assignment_drag()
 	_draw_movement_trails()
 	_draw_players()
@@ -513,6 +514,36 @@ func _draw_assignments() -> void:
 		draw_string(
 			ThemeDB.fallback_font, target + Vector2(10, 14), "T%d" % assignment.tempo,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, path_color,
+		)
+
+
+func _draw_defensive_zones() -> void:
+	if not defensive_mode or defensive_plan == null or lineup == null:
+		return
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		var zone: Resource = defensive_plan.floor_defense_zones.get(player_id) as Resource
+		if zone == null or not bool(zone.enabled):
+			continue
+		var points := PackedVector2Array()
+		for point_index in range(41):
+			var angle := TAU * float(point_index) / 40.0
+			var court_point: Vector2 = Vector2(zone.center) + Vector2(
+				cos(angle) * float(zone.radius_meters) / 9.0,
+				sin(angle) * float(zone.radius_meters) / 18.0,
+			)
+			points.append(_court_to_local(court_point))
+		var zone_color: Color = palette["secondary_path"]
+		zone_color.a = 0.12 + float(zone.priority) * 0.035
+		draw_colored_polygon(points, zone_color)
+		var outline_color: Color = palette["secondary_path"]
+		outline_color.a = 0.45 if player_id != selected_player_id else 0.90
+		draw_polyline(points, outline_color, 2.0 if player_id != selected_player_id else 3.5)
+		var label_position := _court_to_local(zone.center)
+		draw_string(
+			ThemeDB.fallback_font, label_position + Vector2(23, -19),
+			"P%d · %.1fm" % [int(zone.priority), float(zone.radius_meters)],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, outline_color,
 		)
 
 

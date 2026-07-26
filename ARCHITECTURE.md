@@ -16,6 +16,10 @@
   serve intent, normalized defender positions and player responsibility map.
 - `scripts/models/defensive_assignment.gd`: one player's base, read, seam,
   short-ball and emergency responsibilities.
+- `scripts/models/defensive_zone.gd`: a player's normalized zone center,
+  metre-based responsibility radius, priority, activity and zone type.
+- `scripts/simulation/coverage_calculator.gd`: pure court-distance, reaction,
+  travel, reach and zone-claim calculations shared by reception and defense.
 - `scripts/models/opponent_team.gd`: opponent roster, real player attributes,
   tendencies and scouting confidence.
 - `scenes/main/main.gd`: presentation coordinator. It requests a completed
@@ -96,3 +100,18 @@ to four exchanges before a deterministic safety resolution.
 Defensive plans and opponent profiles are simulation inputs. The rally
 simulator reads them but never edits them. Defender dragging remains a court
 presentation concern and is converted back into normalized plan coordinates.
+
+## Ball arrival and coverage
+
+Serve and attack events receive an approximate flight time. Coverage converts
+normalized court deltas into metres, subtracts an anticipation-derived reaction
+delay, then derives travel from lateral speed, acceleration and fatigue. Basic
+reach is added after travel. A contact is eligible only when the landing point
+is inside both physical reach and the assigned tactical radius.
+
+Among eligible players, zone priority, arrival margin, anticipation and contact
+skill determine the claimant; other eligible players count as nearby support.
+The tactical radius therefore describes responsibility rather than granting
+extra physical ability. Rally events retain landing, flight-time and arrival
+metadata so explanations and future animation can show why a player did or did
+not reach the ball.

@@ -4,6 +4,8 @@ extends RefCounted
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
+const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
+const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -32,7 +34,6 @@ func resolve(
 		)
 	var opponent_server := opponent_team.best_server() as VolleyballPlayer
 	var server_name := opponent_server.display_name
-	var receiver := _receiver(players, lineup)
 	var setter := _player_by_id(players, lineup.setter_id)
 	var serve_quality := clampf(
 		_rating(opponent_server, "serve_power") * 0.56
@@ -40,30 +41,58 @@ func resolve(
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
 	var serve_error := rng.randf() < 0.055
+	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
+	var serve_landing := _serve_landing_point(
+		intended_target, opponent_server, players, lineup, true
+	)
+	var serve_time := _serve_flight_time(opponent_server, serve_quality)
 	_add_event(result, RallyEventModel.EventType.SERVE, -1, server_name,
-		Vector2(0.80, 0.08), Vector2(0.22, 0.88), not serve_error, serve_quality,
+		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
 		"Pressure serve" if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
-			"side": "opponent", "target": "Zone 5",
+			"side": "opponent", "target": intended_target,
+			"flight_time": serve_time,
 		})
 
 	if serve_error:
 		return _finish_serve_error(result, server_name)
 
+	var reception_claim: Dictionary = CoverageModel.choose_claimant(
+		_lineup_players(players, lineup),
+		defensive_plan.zones_for(DefensiveZoneModel.ZoneType.SERVE_RECEIVE),
+		serve_landing, serve_time, "reception",
+	)
+	var receiver := reception_claim.get("player") as VolleyballPlayer
+	var receiver_arrived := receiver != null
+	if receiver == null:
+		receiver = _nearest_reception_player(players, lineup, defensive_plan, serve_landing)
+	var arrival: Dictionary = reception_claim.get("arrival", {})
+	var arrival_bonus := clampf(
+		float(arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12
+	)
+	var support_count := int(reception_claim.get("support_count", 0))
+	var support_bonus := minf(float(support_count) * 0.025, 0.075)
 	var reception_base := _rating(receiver, "reception") * 0.65 \
 		+ _rating(receiver, "ball_control") * 0.20 \
 		+ _rating(receiver, "composure") * 0.15
 	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
-		+ rng.randf_range(-0.14, 0.14) + 0.30, 0.0, 1.0)
-	var reception_success: bool = float(result.reception_quality) >= 0.18
+		+ arrival_bonus + support_bonus + rng.randf_range(-0.14, 0.14) + 0.30,
+		0.0, 1.0)
+	if not receiver_arrived:
+		result.reception_quality = minf(result.reception_quality, 0.12)
+	var reception_success: bool = receiver_arrived \
+		and float(result.reception_quality) >= 0.18
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		Vector2(0.22, 0.88), Vector2(0.50, 0.67), reception_success,
+		serve_landing, Vector2(0.50, 0.67), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
-		"%d%% reception quality. %s" % [
+		"%d%% reception quality. %s %s" % [
 			roundi(float(result.reception_quality) * 100.0),
 			_quality_phrase(float(result.reception_quality)),
-		])
+			_arrival_phrase(arrival, receiver_arrived, support_count),
+		], {"side": "home", "landing": serve_landing,
+			"flight_time": serve_time, "arrival": arrival,
+			"support_count": support_count})
 	if not reception_success:
 		return _finish(result, "ace", false, receiver.id, {
 			"server": server_name,
@@ -214,31 +243,56 @@ func _resolve_home_serve(
 		0.01, 0.14,
 	)
 	var serve_error := rng.randf() < error_chance
+	var target_name := str(
+		defensive_plan.serve_target if defensive_plan != null else "Zone 5"
+	)
+	var opponent_landing := _serve_landing_point(
+		target_name, server, [], null, false
+	)
+	var serve_time := _serve_flight_time(server, serve_quality)
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
-		Vector2(0.82, 0.92), Vector2(0.22, 0.12), not serve_error,
+		Vector2(0.82, 0.92), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
 		"%d%% pressure at %d%% selected risk." % [
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
-		], {"side": "home", "target": str(
-			defensive_plan.serve_target if defensive_plan != null else "Zone 5"
-		)})
+		], {"side": "home", "target": target_name, "flight_time": serve_time})
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
 			"server": server.display_name,
 		})
-	var receiver := opponent_team.best_defender() as VolleyballPlayer
+	var opponent_coverage := _opponent_reception_coverage(opponent_team)
+	var opponent_claim: Dictionary = CoverageModel.choose_claimant(
+		opponent_coverage.players, opponent_coverage.zones,
+		opponent_landing, serve_time, "reception",
+	)
+	var receiver := opponent_claim.get("player") as VolleyballPlayer
+	var receiver_arrived := receiver != null
+	if receiver == null:
+		receiver = opponent_team.best_defender() as VolleyballPlayer
+	var opponent_arrival: Dictionary = opponent_claim.get("arrival", {})
+	var support_count := int(opponent_claim.get("support_count", 0))
 	var reception_quality := clampf(
 		_rating(receiver, "reception") * 0.58
 		+ _rating(receiver, "ball_control") * 0.24
-		- serve_quality * 0.44 + 0.27 + rng.randf_range(-0.12, 0.12),
+		- serve_quality * 0.44 + 0.27
+		+ clampf(float(opponent_arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12)
+		+ minf(float(support_count) * 0.025, 0.075)
+		+ rng.randf_range(-0.12, 0.12),
 		0.0, 1.0,
 	)
+	if not receiver_arrived:
+		reception_quality = minf(reception_quality, 0.12)
 	result.reception_quality = reception_quality
-	var reception_success := reception_quality >= 0.18
+	var reception_success := receiver_arrived and reception_quality >= 0.18
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		Vector2(0.22, 0.12), Vector2(0.50, 0.34), reception_success,
+		opponent_landing, Vector2(0.50, 0.34), reception_success,
 		reception_quality, "%s receives" % receiver.display_name,
-		"Opponent reception quality: %d%%." % roundi(reception_quality * 100.0))
+		"Opponent reception quality: %d%%. %s" % [
+			roundi(reception_quality * 100.0),
+			_arrival_phrase(opponent_arrival, receiver_arrived, support_count),
+		], {"side": "opponent", "landing": opponent_landing,
+			"flight_time": serve_time, "arrival": opponent_arrival,
+			"support_count": support_count})
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
 	return _resolve_opponent_transition(
@@ -302,24 +356,44 @@ func _resolve_opponent_transition(
 			"hitter": original_hitter.display_name,
 			"blocker": blocker.display_name,
 		})
-	var defender := _best_positioned_defender(players, lineup, defensive_plan, home_target)
 	var attack_type := _opponent_attack_type(home_target)
+	var attack_time := _attack_flight_time(opponent_attack, attack_type)
+	var defense_claim: Dictionary = CoverageModel.choose_claimant(
+		_lineup_players(players, lineup),
+		defensive_plan.zones_for(DefensiveZoneModel.ZoneType.FLOOR_DEFENSE),
+		home_target, attack_time, "reception",
+	)
+	var defender := defense_claim.get("player") as VolleyballPlayer
+	var defender_arrived := defender != null
+	if defender == null:
+		defender = _nearest_floor_defender(players, lineup, defensive_plan, home_target)
+	var defense_arrival: Dictionary = defense_claim.get("arrival", {})
+	var support_count := int(defense_claim.get("support_count", 0))
 	var responsibility_fit := _defensive_responsibility_fit(
 		defensive_plan, defender.id, home_target, attack_type
 	)
 	var defense_quality := _rating(defender, "anticipation") * 0.38 \
 		+ _rating(defender, "reception") * 0.36 \
 		+ _rating(defender, "lateral_speed") * 0.18 \
-		+ responsibility_fit + rng.randf_range(-0.12, 0.12)
-	var defense_success: bool = defense_quality > opponent_attack - 0.12
+		+ responsibility_fit \
+		+ clampf(float(defense_arrival.get("arrival_margin", -1.0)) * 0.065, -0.16, 0.12) \
+		+ minf(float(support_count) * 0.018, 0.054) \
+		+ rng.randf_range(-0.12, 0.12)
+	if not defender_arrived:
+		defense_quality = minf(defense_quality, 0.10)
+	var defense_success: bool = defender_arrived \
+		and defense_quality > opponent_attack - 0.12
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
 		home_target, home_target + Vector2(0.03, -0.04), defense_success,
 		defense_quality, "%s defends" % defender.display_name,
-		"%d%% defensive contact against a %d%% attack. %s" % [
+		"%d%% defensive contact against a %d%% attack. %s %s" % [
 			roundi(defense_quality * 100.0), roundi(opponent_attack * 100.0),
 			_responsibility_phrase(defensive_plan, defender.id, attack_type),
+			_arrival_phrase(defense_arrival, defender_arrived, support_count),
 		], {"side": "home", "attack_type": attack_type,
-			"responsibility_fit": responsibility_fit})
+			"responsibility_fit": responsibility_fit,
+			"flight_time": attack_time, "arrival": defense_arrival,
+			"support_count": support_count})
 	result.key_factors.append(ExplanationText.factor(
 		"defense_assignment_fit" if responsibility_fit >= 0.02 \
 		else "defense_assignment_stretch"
@@ -652,6 +726,161 @@ func _fallback_assignment(hitter: VolleyballPlayer, lineup: RotationLineup) -> H
 		else "Right Pin"
 	assignment.tempo = 3
 	return assignment
+
+
+func _lineup_players(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+) -> Array[VolleyballPlayer]:
+	var result: Array[VolleyballPlayer] = []
+	for slot_number in range(1, 7):
+		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if player != null:
+			result.append(player)
+	return result
+
+
+func _serve_landing_point(
+	target_name: String,
+	server: VolleyballPlayer,
+	home_players: Array,
+	lineup: RotationLineup,
+	landing_on_home_side: bool,
+) -> Vector2:
+	var home_y := 0.84 if landing_on_home_side else 0.16
+	var short_y := 0.67 if landing_on_home_side else 0.33
+	var intended := Vector2(0.20, home_y)
+	match target_name:
+		"Zone 1":
+			intended = Vector2(0.80, home_y)
+		"Short Middle":
+			intended = Vector2(0.50, short_y)
+		"Weak Passer":
+			intended = _weak_passer_target(home_players, lineup, landing_on_home_side)
+		_:
+			intended = Vector2(0.20, home_y)
+	var accuracy := _rating(server, "serve_accuracy")
+	var deviation := lerpf(0.105, 0.018, accuracy)
+	var min_y := 0.54 if landing_on_home_side else 0.04
+	var max_y := 0.96 if landing_on_home_side else 0.46
+	return Vector2(
+		clampf(intended.x + rng.randf_range(-deviation, deviation), 0.06, 0.94),
+		clampf(intended.y + rng.randf_range(-deviation * 0.65, deviation * 0.65), min_y, max_y),
+	)
+
+
+func _weak_passer_target(
+	home_players: Array,
+	lineup: RotationLineup,
+	landing_on_home_side: bool,
+) -> Vector2:
+	if landing_on_home_side and lineup != null:
+		var weakest: VolleyballPlayer
+		var weakest_slot := 5
+		for slot_number in [5, 6, 1]:
+			var candidate: VolleyballPlayer
+			for player_resource in home_players:
+				var player := player_resource as VolleyballPlayer
+				if player.id == lineup.player_at_slot(slot_number):
+					candidate = player
+					break
+			if candidate != null and (weakest == null or candidate.reception < weakest.reception):
+				weakest = candidate
+				weakest_slot = slot_number
+		return CourtConstants.slot_position(weakest_slot)
+	return Vector2(0.78, 0.16)
+
+
+func _serve_flight_time(server: VolleyballPlayer, serve_quality: float) -> float:
+	var power := _rating(server, "serve_power")
+	return clampf(1.28 - power * 0.42 - serve_quality * 0.24, 0.58, 1.15)
+
+
+func _attack_flight_time(attack_quality: float, attack_type: String) -> float:
+	var base_time := 0.68 if attack_type == "Short tip" else 0.50
+	return clampf(base_time - attack_quality * 0.17, 0.28, 0.72)
+
+
+func _nearest_reception_player(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	landing_point: Vector2,
+) -> VolleyballPlayer:
+	var zones: Dictionary = defensive_plan.zones_for(
+		DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+	)
+	return _nearest_zone_player(
+		_lineup_players(players, lineup), zones, landing_point, true
+	)
+
+
+func _nearest_floor_defender(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	landing_point: Vector2,
+) -> VolleyballPlayer:
+	var zones: Dictionary = defensive_plan.zones_for(
+		DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+	)
+	return _nearest_zone_player(
+		_lineup_players(players, lineup), zones, landing_point, false
+	)
+
+
+func _nearest_zone_player(
+	candidates: Array[VolleyballPlayer],
+	zones: Dictionary,
+	landing_point: Vector2,
+	require_enabled: bool,
+) -> VolleyballPlayer:
+	var nearest: VolleyballPlayer
+	var nearest_distance := 1000.0
+	for candidate in candidates:
+		var zone: Resource = zones.get(candidate.id) as Resource
+		if zone == null or (require_enabled and not bool(zone.enabled)):
+			continue
+		var distance := CoverageModel.court_distance_meters(zone.center, landing_point)
+		if distance < nearest_distance:
+			nearest = candidate
+			nearest_distance = distance
+	if nearest == null and not candidates.is_empty():
+		nearest = candidates[0]
+	return nearest
+
+
+func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
+	var passers: Array[VolleyballPlayer] = []
+	var zones := {}
+	var outside_index := 0
+	for player_resource in opponent_team.players:
+		var player := player_resource as VolleyballPlayer
+		if player.position_role not in ["Outside Hitter", "Libero"]:
+			continue
+		var zone: Resource = DefensiveZoneModel.new()
+		zone.player_id = player.id
+		zone.zone_type = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+		zone.radius_meters = 3.2
+		zone.priority = 2
+		if player.position_role == "Libero":
+			zone.center = Vector2(0.50, 0.13)
+			zone.priority = 3
+		else:
+			zone.center = Vector2(0.20 if outside_index == 0 else 0.80, 0.16)
+			outside_index += 1
+		passers.append(player)
+		zones[player.id] = zone
+	return {"players": passers, "zones": zones}
+
+
+func _arrival_phrase(arrival: Dictionary, arrived: bool, support_count: int) -> String:
+	if not arrived:
+		return "No assigned player could arrive before the ball landed."
+	return "Arrived with %.2f m to spare; %d nearby teammate%s supported the zone." % [
+		float(arrival.get("arrival_margin", 0.0)), support_count,
+		"" if support_count == 1 else "s",
+	]
 
 
 func _receiver(players: Array[VolleyballPlayer], lineup: RotationLineup) -> VolleyballPlayer:
