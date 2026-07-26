@@ -154,6 +154,9 @@
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
+- Keep all six opponent position markers visible on the Match Center court.
+  The active opponent marker follows its simulated contact during playback;
+  opponent markers are read-only and never enter the home tactics editor state.
 - Select opponent attackers from eligible pin and middle options instead of
   routing every transition to the highest-rated hitter. Attack selection now
   considers aptitude, set quality, approach demand and targetable floor space.
@@ -188,7 +191,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 124 passing headless foundation checks and UI-binding validation, including a
+- 126 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

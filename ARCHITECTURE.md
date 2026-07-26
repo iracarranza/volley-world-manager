@@ -272,3 +272,9 @@ events retain attacker direction, movement, arrival, set geometry and blocker
 read metadata. `RallyResult.analysis` reduces that event stream into concise
 post-rally diagnostics; it is presentation data derived from the authoritative
 events, not a second outcome model.
+
+`TacticalCourt` owns a separate, optional opponent presentation layer. Match
+Center enables it from `OpponentTeam`; the tactics editor leaves it disabled.
+This keeps opponent icons visible and animatable without adding opponent IDs to
+the editable home `RotationLineup` or allowing opponent markers to receive home
+drag/input behavior.

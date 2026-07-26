@@ -697,6 +697,7 @@ func _refresh_match_preview() -> void:
 	if match_preview_lineup == null:
 		return
 	match_preview_court.set_lineup(match_preview_lineup, GameManager.players)
+	match_preview_court.set_opponent_team(GameManager.opponent_team, true)
 	if match_preview_play != null:
 		match_preview_court.set_play_preview(
 			match_preview_play.assignments,

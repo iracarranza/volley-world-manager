@@ -4,6 +4,7 @@ const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
+const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -30,6 +31,7 @@ func _initialize() -> void:
 	_test_default_offense_without_saved_play()
 	_test_defensive_presets_release_and_setting_systems()
 	_test_spatial_opponent_and_replay_analysis()
+	_test_match_court_opponent_layer()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -89,6 +91,19 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 	_check(graded_set_observed, "opponent setting exposes target-specific geometry")
 	_check(blocker_read_observed, "home block records attribute-driven read quality")
 	_check(analysis_observed, "completed rallies expose concise replay analysis")
+
+
+func _test_match_court_opponent_layer() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var court := TACTICAL_COURT_SCRIPT.new()
+	court.set_opponent_team(manager.opponent_team, true)
+	_check(court.show_opponents, "Match Center court enables persistent opponent markers")
+	_check(
+		court.opponent_players_by_id.size() == 6,
+		"opponent marker layer receives all six opponent players",
+	)
+	court.free()
 
 
 func _test_court_coordinates() -> void:

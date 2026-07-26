@@ -24,6 +24,8 @@ const LIGHT_PALETTE := {
 	"net": Color("d94343"),
 	"marker": Color("176b45"),
 	"marker_selected": Color("d94343"),
+	"opponent_marker": Color("d94343"),
+	"opponent_text": Color("ffffff"),
 	"text": Color("10281d"),
 	"path": Color("d94343"),
 	"secondary_path": Color("c77b28"),
@@ -37,6 +39,8 @@ const DARK_PALETTE := {
 	"net": Color("f4d329"),
 	"marker": Color("2368bf"),
 	"marker_selected": Color("f4d329"),
+	"opponent_marker": Color("f4d329"),
+	"opponent_text": Color("090d16"),
 	"text": Color("f6f3d4"),
 	"path": Color("f4d329"),
 	"secondary_path": Color("62b4ff"),
@@ -44,6 +48,9 @@ const DARK_PALETTE := {
 
 var lineup: RotationLineup
 var players_by_id: Dictionary = {}
+var opponent_team: Resource
+var opponent_players_by_id: Dictionary = {}
+var show_opponents: bool = false
 var assignments: Array[HitterAssignment] = []
 var primary_hitter_id: int = -1
 var secondary_hitter_id: int = -1
@@ -89,6 +96,18 @@ func set_lineup(p_lineup: RotationLineup, players: Array[VolleyballPlayer]) -> v
 	for player in players:
 		players_by_id[player.id] = player
 	selected_player_id = -1
+	queue_redraw()
+
+
+func set_opponent_team(team: Resource, visible: bool = true) -> void:
+	opponent_team = team
+	show_opponents = visible and team != null
+	opponent_players_by_id.clear()
+	if team != null:
+		for player_resource in team.players:
+			var player: VolleyballPlayer = player_resource as VolleyballPlayer
+			if player != null:
+				opponent_players_by_id[player.id] = player
 	queue_redraw()
 
 
@@ -621,6 +640,7 @@ func _draw() -> void:
 	_draw_setter_release_path()
 	_draw_assignment_drag()
 	_draw_movement_trails()
+	_draw_opponents()
 	_draw_players()
 	_draw_rally_playback()
 
@@ -872,6 +892,46 @@ func _draw_players() -> void:
 					HORIZONTAL_ALIGNMENT_CENTER, 96, 10,
 					_with_alpha(palette["text"], 0.78),
 				)
+
+
+func _draw_opponents() -> void:
+	if not show_opponents or opponent_team == null:
+		return
+	for player_resource in opponent_team.players:
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		var court_position: Vector2 = opponent_team.court_position(player.id, "defense")
+		if playback_event != null \
+				and str(playback_event.metadata.get("side", "")) == "opponent" \
+				and int(playback_event.actor_id) == player.id:
+			var movement_origin: Vector2 = playback_event.metadata.get(
+				"movement_start",
+				playback_event.metadata.get("hitter_start", court_position),
+			)
+			var action_target: Vector2 = playback_event.start_position
+			if int(playback_event.event_type) == RallyEventModel.EventType.SET:
+				action_target = playback_event.metadata.get(
+					"setter_position", playback_event.start_position
+				)
+			court_position = movement_origin.lerp(action_target, playback_progress)
+		var center := _court_to_local(court_position)
+		var active := playback_event != null \
+			and str(playback_event.metadata.get("side", "")) == "opponent" \
+			and int(playback_event.actor_id) == player.id
+		var radius := 19.0 if active else 16.0
+		draw_circle(center + Vector2(3, 4), radius, Color(0, 0, 0, 0.30))
+		draw_circle(center, radius, palette["opponent_marker"])
+		draw_circle(center, radius, palette["line"], false, 2.0)
+		draw_string(
+			ThemeDB.fallback_font, center + Vector2(-14, 5), player.position_code,
+			HORIZONTAL_ALIGNMENT_CENTER, 28, 12, palette["opponent_text"],
+		)
+		draw_string(
+			ThemeDB.fallback_font, center + Vector2(-38, -24), player.display_name,
+			HORIZONTAL_ALIGNMENT_CENTER, 76, 10,
+			_with_alpha(palette["text"], 0.82),
+		)
 
 
 func _short_responsibility(value: String) -> String:
