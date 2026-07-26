@@ -4,6 +4,8 @@ extends Resource
 @export var id: int = 1
 @export var team_name: String = "Harbor City VC"
 @export var short_name: String = "HCV"
+@export var identity: String = "Balanced"
+@export_range(0.0, 1.0) var tactical_familiarity: float = 0.35
 @export var player_ids: Array[int] = []
 @export var captain_id: int = -1
 @export var libero_ids: Array[int] = []
@@ -77,6 +79,7 @@ func validate() -> Array[String]:
 
 func to_dict() -> Dictionary:
 	return {"id": id, "team_name": team_name, "short_name": short_name,
+		"identity": identity, "tactical_familiarity": tactical_familiarity,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
 		"libero_ids": libero_ids.duplicate(), "depth_chart": depth_chart.duplicate(true),
 		"roster_limit": roster_limit}
@@ -87,6 +90,8 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.id = int(data.get("id", 1))
 	team.team_name = str(data.get("team_name", "Harbor City VC"))
 	team.short_name = str(data.get("short_name", "HCV"))
+	team.identity = str(data.get("identity", "Balanced"))
+	team.tactical_familiarity = clampf(float(data.get("tactical_familiarity", 0.35)), 0.0, 1.0)
 	for raw_id in data.get("player_ids", []):
 		team.player_ids.append(int(raw_id))
 	team.captain_id = int(data.get("captain_id", -1))

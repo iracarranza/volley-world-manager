@@ -2,6 +2,12 @@
 
 ## Current boundaries
 
+- `scenes/application.tscn`: application router. It switches between title,
+  new-career, career dashboard and the existing Match Center without moving
+  simulation state into UI nodes.
+- `scripts/managers/career_manager.gd`: owns the active career, save-slot I/O,
+  calendar advancement, weekly training selection, fixtures, transfer pool and
+  the boundary into/out of a match.
 - `scripts/models`: persistent typed volleyball and tactical data.
 - `scripts/tactics`: pure validation and tactical-demand calculations.
 - `scripts/simulation`: seeded discrete rally resolution. It does not use scene
@@ -12,7 +18,17 @@
   rotations, saved
   plays, active plays, match state, rally-resolution entry point and serialization.
 - `scripts/models/team.gd`: owns roster registration, captain/libero roles,
-  roster limits and position depth charts. It does not own tactical positions.
+  roster limits, identity, tactical familiarity and position depth charts. It
+  does not own tactical positions.
+- `scripts/models/career_state.gd`: career identity, organization type, region,
+  time, resources, fixtures, transfer pool, training focus and match format.
+- `scripts/models/match_format.gd`: best-of-set rules, regular/deciding targets
+  and required winning margin. `MatchState` consumes it instead of hardcoding
+  best-of-five rules.
+- `scripts/systems/player_generator.gd`: deterministic region- and
+  organization-aware roster/market generation.
+- `scripts/systems/training_system.gd`: stateless definitions and weekly
+  effects for volleyball training and recovery.
 - `scripts/models/match_statistics.gd`: derives persistent team and player
   contact totals from authoritative rally events.
 - `scripts/data/rally_explanations.gd`: all current player-facing rally result
@@ -37,6 +53,24 @@
   result from the manager, then controls event playback speed and skipping.
 
 ## Data flow
+
+```text
+Title save selection / New Career form
+→ CareerManager + CareerState
+→ deterministic VolleyballPlayer generation
+→ GameManager managed Team / rotations / tactics
+→ Career Dashboard calendar, roster, training, recruitment and fixtures
+→ CareerManager.prepare_fixture()
+→ configured VolleyballMatchState + existing Match Center
+→ completed result / statistics / reputation
+→ Career Dashboard + versioned save slot
+```
+
+The career layer is deliberately above the match layer. `CareerManager` may
+configure or serialize `GameManager`, but rally simulation never reads calendar,
+transfer UI or save-slot state.
+
+## Match data flow
 
 ```text
 Court/editor input

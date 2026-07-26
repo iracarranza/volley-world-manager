@@ -311,6 +311,12 @@ custom_minimum_size = Vector2(120, 36)
 layout_mode = 2
 text = "Team & Roster"
 
+[node name="ReturnCareerButton" type="Button" parent="Margin/Content/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "Career Home"
+
 [node name="QuickRallyBar" type="HBoxContainer" parent="Margin/Content" unique_id=397876992]
 layout_mode = 2
 theme_override_constants/separation = 8

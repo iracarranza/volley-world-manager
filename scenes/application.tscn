@@ -1,0 +1,37 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scenes/application.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/screens/title_screen.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/screens/new_career_screen.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/screens/career_dashboard.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/main/main.tscn" id="5"]
+[ext_resource type="Theme" path="res://scenes/themes/dark_theme.tres" id="6"]
+
+[node name="Application" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("6")
+script = ExtResource("1")
+
+[node name="TitleScreen" parent="." instance=ExtResource("2")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="NewCareerScreen" parent="." instance=ExtResource("3")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="CareerDashboard" parent="." instance=ExtResource("4")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="MatchCenter" parent="." instance=ExtResource("5")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1

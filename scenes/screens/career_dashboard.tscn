@@ -1,0 +1,289 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/screens/career_dashboard.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/dashboard_card.tscn" id="2"]
+
+[node name="CareerDashboard" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.035, 0.055, 0.1, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 18.0
+offset_top = 14.0
+offset_right = -18.0
+offset_bottom = -14.0
+
+[node name="Root" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Header" type="HBoxContainer" parent="Margin/Root"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="OrganizationLabel" type="Label" parent="Margin/Root/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 24
+text = "Organization"
+
+[node name="DateLabel" type="Label" parent="Margin/Root/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 36)
+layout_mode = 2
+vertical_alignment = 1
+
+[node name="SaveButton" type="Button" parent="Margin/Root/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Career"
+
+[node name="TitleButton" type="Button" parent="Margin/Root/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Title Screen"
+
+[node name="Body" type="HBoxContainer" parent="Margin/Root"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="Navigation" type="PanelContainer" parent="Margin/Root/Body"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+
+[node name="NavMargin" type="MarginContainer" parent="Margin/Root/Body/Navigation"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Nav" type="VBoxContainer" parent="Margin/Root/Body/Navigation/NavMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HomeNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Home"
+metadata/section = "Home"
+
+[node name="RosterNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Roster"
+metadata/section = "Roster"
+
+[node name="TeamNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Team"
+metadata/section = "Team"
+
+[node name="TransfersNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Transfers / Recruitment"
+metadata/section = "Transfers"
+
+[node name="CompetitionNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Competition"
+metadata/section = "Competition"
+
+[node name="Spacer" type="Control" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AdvanceWeekButton" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Advance Week"
+
+[node name="ContentPanel" type="PanelContainer" parent="Margin/Root/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ContentMargin" type="MarginContainer" parent="Margin/Root/Body/ContentPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="Content" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin"]
+layout_mode = 2
+
+[node name="SectionTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Home"
+
+[node name="Sections" type="TabContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+tabs_visible = false
+
+[node name="Home" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HomeCards" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+layout_mode = 2
+columns = 2
+
+[node name="RosterCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+unique_name_in_owner = true
+section_id = "Roster"
+title_text = "Roster"
+summary_text = "Players, availability and development."
+icon_text = "R"
+
+[node name="TeamCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+unique_name_in_owner = true
+section_id = "Team"
+title_text = "Team"
+summary_text = "Identity, depth chart and weekly training."
+icon_text = "T"
+
+[node name="TransfersCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+unique_name_in_owner = true
+section_id = "Transfers"
+title_text = "Transfers / Recruitment"
+summary_text = "Regional candidates and roster additions."
+icon_text = "+"
+
+[node name="CompetitionCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+unique_name_in_owner = true
+section_id = "Competition"
+title_text = "Competition"
+summary_text = "Fixtures, results and match entry."
+icon_text = "V"
+
+[node name="HomeSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+fit_content = true
+
+[node name="Roster" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+split_offset = 330
+
+[node name="RosterList" type="ItemList" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+bbcode_enabled = true
+
+[node name="Team" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TeamSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="TrainingTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Weekly Training Focus"
+
+[node name="TrainingOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="TrainingDescription" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="ApplyTrainingButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Weekly Training Focus"
+
+[node name="Transfers" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+split_offset = 350
+
+[node name="TransferList" type="ItemList" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Transfers"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+
+[node name="TransferSide" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Transfers"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TransferDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Transfers/TransferSide"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="SignButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Transfers/TransferSide"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Sign Player"
+
+[node name="Competition" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+split_offset = 390
+
+[node name="FixtureList" type="ItemList" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Competition"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+
+[node name="FixtureSide" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Competition"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FixtureDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Competition/FixtureSide"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="PlayMatchButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Competition/FixtureSide"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "Play Match"
+
+[node name="StatusLabel" type="Label" parent="Margin/Root"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2

@@ -1,5 +1,7 @@
 extends Control
 
+signal career_exit_requested
+
 const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
@@ -99,6 +101,7 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var short_ball_priority_option: OptionButton = %ShortBallPriorityOption
 @onready var deflection_priority_option: OptionButton = %DeflectionPriorityOption
 @onready var setter_release_help: Label = %SetterReleaseHelp
+@onready var return_career_button: Button = %ReturnCareerButton
 @onready var team_roster_button: Button = %TeamRosterButton
 @onready var roster_popup: PopupPanel = %RosterPopup
 @onready var close_roster_button: Button = %CloseRosterButton
@@ -172,6 +175,7 @@ func _ready() -> void:
 	tactical_workspace_popup.popup_hide.connect(_tactical_workspace_hidden)
 	open_tactical_workspace_button.pressed.connect(_open_tactical_workspace)
 	close_tactical_workspace_button.pressed.connect(_close_tactical_workspace)
+	return_career_button.pressed.connect(_return_to_career)
 	team_roster_button.pressed.connect(_open_roster)
 	close_roster_button.pressed.connect(roster_popup.hide)
 	roster_player_option.item_selected.connect(_roster_player_selected)
@@ -193,6 +197,26 @@ func _ready() -> void:
 	_refresh_match_controls()
 	_refresh_roster_popup()
 	_update_interface_scale()
+	return_career_button.visible = CareerManager.has_career()
+
+
+func enter_career_match() -> void:
+	return_career_button.visible = true
+	last_rally_result = null
+	_capture_match_preview_snapshot()
+	_refresh_rotation()
+	_refresh_match_header()
+	_refresh_match_controls()
+	_reset_tactical_positions(false)
+
+
+func _return_to_career() -> void:
+	if rally_playback_active:
+		_skip_rally_playback()
+	if GameManager.match_state != null and GameManager.match_state.match_complete:
+		CareerManager.complete_active_match()
+	CareerManager.save_career()
+	career_exit_requested.emit()
 
 
 func _update_interface_scale() -> void:

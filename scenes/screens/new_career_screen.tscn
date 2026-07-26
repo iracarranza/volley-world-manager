@@ -1,0 +1,137 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/screens/new_career_screen.gd" id="1"]
+
+[node name="NewCareerScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.035, 0.055, 0.1, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(820, 600)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 24
+
+[node name="Content" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="HBoxContainer" parent="Center/Panel/Margin/Content"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/Panel/Margin/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 28
+text = "Create a Volleyball Career"
+
+[node name="BackButton" type="Button" parent="Center/Panel/Margin/Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"
+
+[node name="Names" type="GridContainer" parent="Center/Panel/Margin/Content"]
+layout_mode = 2
+columns = 2
+
+[node name="CareerLabel" type="Label" parent="Center/Panel/Margin/Content/Names"]
+layout_mode = 2
+text = "Career name"
+
+[node name="OrganizationLabel" type="Label" parent="Center/Panel/Margin/Content/Names"]
+layout_mode = 2
+text = "Organization name"
+
+[node name="CareerNameEdit" type="LineEdit" parent="Center/Panel/Margin/Content/Names"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 38)
+layout_mode = 2
+placeholder_text = "My Volleyball Career"
+
+[node name="OrganizationNameEdit" type="LineEdit" parent="Center/Panel/Margin/Content/Names"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 38)
+layout_mode = 2
+placeholder_text = "Harbor City VC"
+
+[node name="Choices" type="GridContainer" parent="Center/Panel/Margin/Content"]
+layout_mode = 2
+columns = 2
+
+[node name="RegionField" type="VBoxContainer" parent="Center/Panel/Margin/Content/Choices"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Center/Panel/Margin/Content/Choices/RegionField"]
+layout_mode = 2
+text = "Region"
+
+[node name="RegionOption" type="OptionButton" parent="Center/Panel/Margin/Content/Choices/RegionField"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 38)
+layout_mode = 2
+
+[node name="TypeField" type="VBoxContainer" parent="Center/Panel/Margin/Content/Choices"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Center/Panel/Margin/Content/Choices/TypeField"]
+layout_mode = 2
+text = "Organization type"
+
+[node name="OrganizationTypeOption" type="OptionButton" parent="Center/Panel/Margin/Content/Choices/TypeField"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 38)
+layout_mode = 2
+
+[node name="IdentityField" type="VBoxContainer" parent="Center/Panel/Margin/Content/Choices"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Center/Panel/Margin/Content/Choices/IdentityField"]
+layout_mode = 2
+text = "Team identity"
+
+[node name="IdentityOption" type="OptionButton" parent="Center/Panel/Margin/Content/Choices/IdentityField"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 38)
+layout_mode = 2
+
+[node name="SetupDescription" type="Label" parent="Center/Panel/Margin/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.66, 0.75, 0.86, 1)
+autowrap_mode = 2
+
+[node name="ErrorLabel" type="Label" parent="Center/Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.38, 0.38, 1)
+
+[node name="CreateCareerButton" type="Button" parent="Center/Panel/Margin/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 46)
+layout_mode = 2
+text = "Create Career"

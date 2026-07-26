@@ -2,6 +2,7 @@ class_name VolleyballMatchState
 extends Resource
 
 const MatchStatisticsModel := preload("res://scripts/models/match_statistics.gd")
+const MatchFormatModel := preload("res://scripts/models/match_format.gd")
 
 @export var home_score: int = 0
 @export var opponent_score: int = 0
@@ -18,6 +19,7 @@ const MatchStatisticsModel := preload("res://scripts/models/match_statistics.gd"
 @export var substitution_history: Array[Dictionary] = []
 @export var rally_history: Array[Dictionary] = []
 @export var statistics: Resource = MatchStatisticsModel.new()
+@export var match_format: Resource = MatchFormatModel.new()
 
 
 func record_rally(result: Resource) -> Dictionary:
@@ -47,15 +49,16 @@ func record_rally(result: Resource) -> Dictionary:
 		"outcome": str(result.terminal_outcome),
 		"explanation": str(result.explanation),
 	})
-	var target := 15 if set_number == 5 else 25
+	var target: int = match_format.target_for_set(set_number)
 	var set_complete := (home_score >= target or opponent_score >= target) \
-		and absi(home_score - opponent_score) >= 2
+		and absi(home_score - opponent_score) >= int(match_format.win_by)
 	if set_complete:
 		if home_score > opponent_score:
 			home_sets += 1
 		else:
 			opponent_sets += 1
-		match_complete = home_sets >= 3 or opponent_sets >= 3
+		match_complete = home_sets >= match_format.sets_to_win() \
+			or opponent_sets >= match_format.sets_to_win()
 		if not match_complete:
 			set_number += 1
 			home_score = 0
@@ -97,6 +100,7 @@ func to_dict() -> Dictionary:
 		"substitution_history": substitution_history.duplicate(true),
 		"rally_history": rally_history.duplicate(true),
 		"statistics": statistics.to_dict(),
+		"match_format": match_format.to_dict(),
 	}
 
 
@@ -117,3 +121,7 @@ func load_dict(data: Dictionary) -> void:
 	rally_history.assign(data.get("rally_history", []))
 	statistics = MatchStatisticsModel.new()
 	statistics.load_dict(data.get("statistics", {}))
+	match_format = MatchFormatModel.from_dict(data.get("match_format", {
+		"format_name": "Best of 5", "best_of_sets": 5,
+		"regular_set_target": 25, "deciding_set_target": 15, "win_by": 2,
+	}))

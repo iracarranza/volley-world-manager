@@ -5,6 +5,11 @@ const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
+const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
+const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
+const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
+const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
+const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -33,6 +38,7 @@ func _initialize() -> void:
 	_test_spatial_opponent_and_replay_analysis()
 	_test_match_court_opponent_layer()
 	_test_team_roster_statistics_and_opponent_rotation()
+	_test_career_calendar_generation_training_and_saves()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -141,6 +147,86 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 		"match statistics survive serialization")
 	_check(restored.opponent_team.current_rotation == 2,
 		"opponent rotation survives serialization")
+
+
+func _test_career_calendar_generation_training_and_saves() -> void:
+	var second_year: Dictionary = CALENDAR_RULES_SCRIPT.state_for_week(49)
+	_check(int(second_year.year) == 2 and int(second_year.week_of_year) == 1,
+		"48-week calendar advances into a second career year")
+	var club_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Europe", "Club", 4242
+	)
+	var repeated_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Europe", "Club", 4242
+	)
+	var academy_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Europe", "Academy", 4242
+	)
+	_check(club_roster.size() == 10 and academy_roster.size() == 12,
+		"club and academy starts create distinct roster sizes")
+	_check(club_roster[0].display_name == repeated_roster[0].display_name \
+			and club_roster[0].set_accuracy == repeated_roster[0].set_accuracy,
+		"regional roster generation is deterministic")
+	_check(academy_roster[0].age <= 20 and academy_roster[0].potential >= 74,
+		"academy generation produces young high-potential players")
+	var team := VolleyballTeam.new()
+	team.tactical_familiarity = 0.30
+	var prior_familiarity := team.tactical_familiarity
+	var prior_discipline := club_roster[0].tactical_discipline
+	var report: Dictionary = TRAINING_SYSTEM_SCRIPT.apply_week(
+		"Team Practice", club_roster, team
+	)
+	_check(team.tactical_familiarity > prior_familiarity,
+		"team practice raises tactical familiarity")
+	_check(club_roster[0].tactical_discipline >= prior_discipline,
+		"weekly training applies defined attribute development")
+	_check(int(report.attribute_improvements) > 0,
+		"training produces a report with concrete improvements")
+	var format := MATCH_FORMAT_SCRIPT.new()
+	format.best_of_sets = 3
+	format.regular_set_target = 25
+	format.deciding_set_target = 25
+	_check(format.sets_to_win() == 2 and format.target_for_set(3) == 25,
+		"career match format supports best-of-three with every set to 25")
+	var career_manager := CAREER_MANAGER_SCRIPT.new()
+	var game_autoload: Node = get_root().get_node("GameManager")
+	career_manager.game_manager_override = game_autoload
+	var test_save_id := "__automated_career_test__"
+	var test_path := ProjectSettings.globalize_path("user://careers/%s.json" % test_save_id)
+	if FileAccess.file_exists(test_path):
+		DirAccess.remove_absolute(test_path)
+	var create_error: String = career_manager.create_career(
+		"__Automated Career Test__", "Test Volley Academy", "Europe", "Academy", "Development"
+	)
+	_check(create_error.is_empty(), "career creation builds a playable deterministic career")
+	_check(career_manager.career.organization_type == "Academy" \
+			and game_autoload.players.size() == 12,
+		"created career configures the managed academy roster")
+	_check(career_manager.career.fixtures.size() == 3,
+		"new careers receive a starter competition schedule")
+	_check(career_manager.advance_week().is_empty(),
+		"career can train and advance before its opening fixture")
+	_check(career_manager.prepare_fixture(1).is_empty(),
+		"due fixture prepares the configured Match Center state")
+	_check(game_autoload.match_state.match_format.best_of_sets == 3,
+		"fixture preparation passes career match format into MatchState")
+	var candidate := career_manager.career.transfer_pool[0] as VolleyballPlayer
+	var funds_before := int(career_manager.career.finances)
+	var signing_cost := career_manager.transfer_cost(candidate)
+	_check(career_manager.sign_transfer(candidate.id).is_empty(),
+		"regional transfer candidate can join an eligible roster")
+	_check(int(career_manager.career.finances) == funds_before - signing_cost,
+		"transfer signing deducts its displayed cost")
+	var load_manager := CAREER_MANAGER_SCRIPT.new()
+	load_manager.game_manager_override = game_autoload
+	_check(load_manager.load_career(test_save_id).is_empty(),
+		"career save reloads through save-slot persistence")
+	_check(load_manager.career.organization_name == "Test Volley Academy",
+		"career organization metadata survives loading")
+	if FileAccess.file_exists(test_path):
+		DirAccess.remove_absolute(test_path)
+	career_manager.free()
+	load_manager.free()
 
 
 func _test_court_coordinates() -> void:

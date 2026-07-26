@@ -5,6 +5,7 @@ const MatchStateScript := preload("res://scripts/models/match_state.gd")
 const DefensivePlanScript := preload("res://scripts/models/defensive_plan.gd")
 const OpponentTeamScript := preload("res://scripts/models/opponent_team.gd")
 const TeamScript := preload("res://scripts/models/team.gd")
+const MatchFormatScript := preload("res://scripts/models/match_format.gd")
 
 signal rotation_changed(rotation_number: int)
 signal playbook_changed
@@ -108,6 +109,11 @@ func seed_vertical_slice_data() -> void:
 		plan.ensure_defaults(rotations[rotation_number])
 		defensive_plans[rotation_number] = plan
 	_seed_opponent()
+	var prototype_format: Resource = MatchFormatScript.new()
+	prototype_format.format_name = "Best of 5"
+	prototype_format.best_of_sets = 5
+	prototype_format.deciding_set_target = 15
+	match_state.match_format = prototype_format
 
 
 func _seed_opponent() -> void:
@@ -156,6 +162,73 @@ func _seed_opponent() -> void:
 			lineup.assign_slot(slot_number, player_id)
 		opponent_team.rotations[rotation_number] = lineup
 	opponent_team.select_rotation(1)
+
+
+func configure_managed_team(new_team: Resource, generated_players: Array[VolleyballPlayer]) -> String:
+	var by_role := {"Setter": [], "Outside Hitter": [], "Middle Blocker": [],
+		"Opposite": [], "Libero": []}
+	for player in generated_players:
+		if player.position_role in by_role:
+			by_role[player.position_role].append(player.id)
+	for required in {"Setter": 1, "Outside Hitter": 2, "Middle Blocker": 2,
+		"Opposite": 1, "Libero": 1}:
+		if Array(by_role[required]).size() < int({"Setter": 1, "Outside Hitter": 2,
+			"Middle Blocker": 2, "Opposite": 1, "Libero": 1}[required]):
+			return "Generated roster lacks required %s coverage." % required
+	players.assign(generated_players)
+	team = new_team
+	team.player_ids.clear()
+	for player in players:
+		team.player_ids.append(player.id)
+	team.captain_id = int(by_role["Setter"][0])
+	team.libero_ids.assign([int(by_role["Libero"][0])])
+	team.depth_chart.clear()
+	for role_name in by_role:
+		team.depth_chart[role_name] = Array(by_role[role_name]).duplicate()
+	var base_ids: Array[int] = [int(by_role.Setter[0]), int(by_role["Outside Hitter"][0]),
+		int(by_role["Middle Blocker"][0]), int(by_role.Opposite[0]),
+		int(by_role["Outside Hitter"][1]), int(by_role["Middle Blocker"][1])]
+	var libero_id := int(by_role.Libero[0])
+	rotations.clear()
+	for rotation_number in range(1, 7):
+		var lineup := RotationLineup.new()
+		lineup.rotation_number = rotation_number
+		lineup.setter_id = int(by_role.Setter[0])
+		lineup.designated_setter_ids = [lineup.setter_id]
+		for slot_number in range(1, 7):
+			var player_id := base_ids[posmod(slot_number - rotation_number, 6)]
+			if slot_number in [1, 5, 6] and player_id in by_role["Middle Blocker"]:
+				player_id = libero_id
+			lineup.assign_slot(slot_number, player_id)
+		rotations[rotation_number] = lineup
+	selected_rotation = 1
+	saved_plays.clear()
+	called_play_id = -1
+	active_play_ids_by_rotation.clear()
+	_next_play_id = 1
+	defensive_plans.clear()
+	for rotation_number in range(1, 7):
+		var plan: Resource = DefensivePlanScript.new()
+		plan.rotation_number = rotation_number
+		plan.plan_name = "Rotation %d Defense" % rotation_number
+		plan.ensure_defaults(rotations[rotation_number])
+		defensive_plans[rotation_number] = plan
+	_seed_opponent()
+	start_new_match(MatchFormatScript.new())
+	roster_changed.emit()
+	rotation_changed.emit(1)
+	return ""
+
+
+func start_new_match(format: Resource) -> void:
+	match_state = MatchStateScript.new()
+	match_state.match_format = MatchFormatScript.from_dict(format.to_dict()) \
+		if format != null else MatchFormatScript.new()
+	selected_rotation = 1
+	if opponent_team == null:
+		_seed_opponent()
+	opponent_team.select_rotation(1)
+	rotation_changed.emit(1)
 
 
 func _make_player(
