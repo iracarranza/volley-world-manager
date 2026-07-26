@@ -191,6 +191,74 @@ unique_name_in_owner = true
 title = "Confirm Substitution"
 dialog_text = "Confirm substitution?"
 
+[node name="RosterPopup" type="PopupPanel" parent="."]
+unique_name_in_owner = true
+initial_position = 2
+size = Vector2i(720, 520)
+
+[node name="RosterMargin" type="MarginContainer" parent="RosterPopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 18.0
+offset_right = -20.0
+offset_bottom = -18.0
+
+[node name="RosterContent" type="VBoxContainer" parent="RosterPopup/RosterMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="RosterHeader" type="HBoxContainer" parent="RosterPopup/RosterMargin/RosterContent"]
+layout_mode = 2
+
+[node name="RosterTitle" type="Label" parent="RosterPopup/RosterMargin/RosterContent/RosterHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Team & Roster"
+
+[node name="CloseRosterButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(34, 30)
+layout_mode = 2
+text = "×"
+
+[node name="RosterSummaryLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="RosterPlayerOption" type="OptionButton" parent="RosterPopup/RosterMargin/RosterContent"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RosterPlayerDetailLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 105)
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="RosterActions" type="HBoxContainer" parent="RosterPopup/RosterMargin/RosterContent"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SetCaptainButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Set Captain"
+
+[node name="SetLiberoButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Toggle Libero"
+
+[node name="DepthChartLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+
 [node name="Margin" type="MarginContainer" parent="." unique_id=1628029922]
 layout_mode = 1
 anchors_preset = 15
@@ -236,6 +304,12 @@ custom_minimum_size = Vector2(130, 36)
 layout_mode = 2
 tooltip_text = "Toggle between Mikasa-inspired dark mode and Molten-inspired light mode."
 text = "Mikasa Dark"
+
+[node name="TeamRosterButton" type="Button" parent="Margin/Content/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "Team & Roster"
 
 [node name="QuickRallyBar" type="HBoxContainer" parent="Margin/Content" unique_id=397876992]
 layout_mode = 2

@@ -104,7 +104,7 @@ func set_opponent_team(team: Resource, visible: bool = true) -> void:
 	show_opponents = visible and team != null
 	opponent_players_by_id.clear()
 	if team != null:
-		for player_resource in team.players:
+		for player_resource in team.on_court_players():
 			var player: VolleyballPlayer = player_resource as VolleyballPlayer
 			if player != null:
 				opponent_players_by_id[player.id] = player
@@ -897,7 +897,7 @@ func _draw_players() -> void:
 func _draw_opponents() -> void:
 	if not show_opponents or opponent_team == null:
 		return
-	for player_resource in opponent_team.players:
+	for player_resource in opponent_team.on_court_players():
 		var player: VolleyballPlayer = player_resource as VolleyballPlayer
 		if player == null:
 			continue

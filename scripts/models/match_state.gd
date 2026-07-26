@@ -1,12 +1,15 @@
 class_name VolleyballMatchState
 extends Resource
 
+const MatchStatisticsModel := preload("res://scripts/models/match_statistics.gd")
+
 @export var home_score: int = 0
 @export var opponent_score: int = 0
 @export var home_sets: int = 0
 @export var opponent_sets: int = 0
 @export var serving_home: bool = false
 @export_range(1, 6) var home_rotation: int = 1
+@export_range(1, 6) var opponent_rotation: int = 1
 @export var set_number: int = 1
 @export var match_complete: bool = false
 @export var home_timeouts_remaining: int = 2
@@ -14,6 +17,7 @@ extends Resource
 @export var substitution_pairs: Dictionary = {}
 @export var substitution_history: Array[Dictionary] = []
 @export var rally_history: Array[Dictionary] = []
+@export var statistics: Resource = MatchStatisticsModel.new()
 
 
 func record_rally(result: Resource) -> Dictionary:
@@ -21,6 +25,7 @@ func record_rally(result: Resource) -> Dictionary:
 		return {"match_complete": true, "set_complete": false, "rotated": false}
 	var home_won: bool = bool(result.home_team_won)
 	var rotated := false
+	var opponent_rotated := false
 	if home_won:
 		home_score += 1
 		if not serving_home:
@@ -29,7 +34,11 @@ func record_rally(result: Resource) -> Dictionary:
 			rotated = true
 	else:
 		opponent_score += 1
+		if serving_home:
+			opponent_rotation = posmod(opponent_rotation, 6) + 1
+			opponent_rotated = true
 		serving_home = false
+	statistics.record_rally(result)
 	rally_history.append({
 		"set": set_number,
 		"home_score": home_score,
@@ -61,6 +70,7 @@ func record_rally(result: Resource) -> Dictionary:
 		"home_substitutions_used": home_substitutions_used,
 		"set_complete": set_complete,
 		"rotated": rotated,
+		"opponent_rotated": opponent_rotated,
 	}
 
 
@@ -78,6 +88,7 @@ func to_dict() -> Dictionary:
 		"opponent_sets": opponent_sets,
 		"serving_home": serving_home,
 		"home_rotation": home_rotation,
+		"opponent_rotation": opponent_rotation,
 		"set_number": set_number,
 		"match_complete": match_complete,
 		"home_timeouts_remaining": home_timeouts_remaining,
@@ -85,6 +96,7 @@ func to_dict() -> Dictionary:
 		"substitution_pairs": substitution_pairs.duplicate(true),
 		"substitution_history": substitution_history.duplicate(true),
 		"rally_history": rally_history.duplicate(true),
+		"statistics": statistics.to_dict(),
 	}
 
 
@@ -95,6 +107,7 @@ func load_dict(data: Dictionary) -> void:
 	opponent_sets = int(data.get("opponent_sets", 0))
 	serving_home = bool(data.get("serving_home", false))
 	home_rotation = clampi(int(data.get("home_rotation", 1)), 1, 6)
+	opponent_rotation = clampi(int(data.get("opponent_rotation", 1)), 1, 6)
 	set_number = clampi(int(data.get("set_number", 1)), 1, 5)
 	match_complete = bool(data.get("match_complete", false))
 	home_timeouts_remaining = int(data.get("home_timeouts_remaining", 2))
@@ -102,3 +115,5 @@ func load_dict(data: Dictionary) -> void:
 	substitution_pairs = data.get("substitution_pairs", {}).duplicate(true)
 	substitution_history.assign(data.get("substitution_history", []))
 	rally_history.assign(data.get("rally_history", []))
+	statistics = MatchStatisticsModel.new()
+	statistics.load_dict(data.get("statistics", {}))

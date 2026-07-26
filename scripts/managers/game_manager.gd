@@ -4,9 +4,11 @@ const RallySimulatorScript := preload("res://scripts/simulation/rally_simulator.
 const MatchStateScript := preload("res://scripts/models/match_state.gd")
 const DefensivePlanScript := preload("res://scripts/models/defensive_plan.gd")
 const OpponentTeamScript := preload("res://scripts/models/opponent_team.gd")
+const TeamScript := preload("res://scripts/models/team.gd")
 
 signal rotation_changed(rotation_number: int)
 signal playbook_changed
+signal roster_changed
 
 var players: Array[VolleyballPlayer] = []
 var rotations: Dictionary = {} # rotation number -> RotationLineup
@@ -18,6 +20,7 @@ var _next_play_id: int = 1
 var match_state: Resource
 var defensive_plans: Dictionary = {}
 var opponent_team: Resource
+var team: Resource
 
 
 func _ready() -> void:
@@ -69,6 +72,14 @@ func seed_vertical_slice_data() -> void:
 		"height_cm": 190.0, "mass_kg": 83.0, "wingspan_cm": 194.0,
 		"explosiveness": 74,
 	}))
+	team = TeamScript.new()
+	team.player_ids.assign([1, 2, 3, 4, 5, 6, 7, 8])
+	team.captain_id = 1
+	team.libero_ids.assign([6])
+	team.depth_chart = {
+		"Setter": [1], "Outside Hitter": [2, 5, 8],
+		"Middle Blocker": [3, 7], "Opposite": [4], "Libero": [6],
+	}
 	rotations.clear()
 	var base_rotation_ids: Array[int] = [1, 2, 3, 4, 5, 7]
 	for rotation_number in range(1, 7):
@@ -126,8 +137,25 @@ func _seed_opponent() -> void:
 		}))
 	opponent_players.append(_make_player(106, "Emi", "Libero", "L", {
 			"reception": 88, "anticipation": 85, "ball_control": 87,
-		}))
+	}))
+	opponent_players.append(_make_player(107, "Noa", "Middle Blocker", "M2", {
+		"block_timing": 80, "jump_reach": 84, "approach_timing": 77,
+	}))
 	opponent_team.players = opponent_players
+	var opponent_base_ids: Array[int] = [101, 102, 103, 104, 105, 107]
+	for rotation_number in range(1, 7):
+		var lineup := RotationLineup.new()
+		lineup.rotation_number = rotation_number
+		lineup.setter_id = 101
+		lineup.designated_setter_ids = [101]
+		for slot_number in range(1, 7):
+			var player_index := posmod(slot_number - rotation_number, 6)
+			var player_id: int = opponent_base_ids[player_index]
+			if slot_number in [1, 5, 6] and player_id in [103, 107]:
+				player_id = 106
+			lineup.assign_slot(slot_number, player_id)
+		opponent_team.rotations[rotation_number] = lineup
+	opponent_team.select_rotation(1)
 
 
 func _make_player(
@@ -163,6 +191,27 @@ func current_lineup() -> RotationLineup:
 
 func current_defensive_plan() -> Resource:
 	return defensive_plans.get(selected_rotation) as Resource
+
+
+func match_roster_errors() -> Array[String]:
+	var errors: Array[String] = team.validate() if team != null else ["No managed team exists."]
+	var lineup := current_lineup()
+	if lineup == null:
+		errors.append("No rotation lineup is selected.")
+		return errors
+	for lineup_error in lineup.validate():
+		errors.append(lineup_error)
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		if team != null and player_id not in team.player_ids:
+			errors.append("Slot %d contains an unregistered player." % slot_number)
+			continue
+		var player := player_by_id(player_id)
+		if player == null:
+			errors.append("Slot %d references a missing player." % slot_number)
+		elif player.availability in ["Injured", "Suspended"]:
+			errors.append("%s is unavailable (%s)." % [player.display_name, player.availability])
+	return errors
 
 
 func configure_setting_system(system_name: String, second_setter_id: int = -1) -> String:
@@ -310,6 +359,8 @@ func record_rally(result: Resource) -> Dictionary:
 	_apply_rally_fatigue_and_form(result)
 	if bool(update.get("rotated", false)):
 		select_rotation(int(match_state.home_rotation))
+	if bool(update.get("opponent_rotated", false)) and opponent_team != null:
+		opponent_team.select_rotation(int(match_state.opponent_rotation))
 	return update
 
 
@@ -419,6 +470,53 @@ func bench_player_ids() -> Array[int]:
 	return result
 
 
+func set_team_captain(player_id: int) -> String:
+	var error: String = team.set_captain(player_id)
+	if error.is_empty():
+		roster_changed.emit()
+	return error
+
+
+func set_team_libero(player_id: int, enabled: bool) -> String:
+	var player := player_by_id(player_id)
+	if player == null:
+		return "That roster player does not exist."
+	if enabled and player.position_role != "Libero":
+		return "Only a libero-role player can receive the libero designation."
+	var error: String = team.set_libero(player_id, enabled)
+	if error.is_empty():
+		roster_changed.emit()
+	return error
+
+
+func register_player(player: VolleyballPlayer) -> String:
+	if player == null or player.id < 0:
+		return "A registered player requires a valid identity."
+	if player_by_id(player.id) != null:
+		return "That player identity is already in use."
+	var error: String = team.add_player(player.id)
+	if not error.is_empty():
+		return error
+	players.append(player)
+	roster_changed.emit()
+	return ""
+
+
+func unregister_player(player_id: int) -> String:
+	for rotation_number in rotations:
+		if (rotations[rotation_number] as RotationLineup).slot_for_player(player_id) >= 0:
+			return "Remove the player from every rotation sheet before unregistering them."
+	var error: String = team.remove_player(player_id)
+	if not error.is_empty():
+		return error
+	for index in range(players.size() - 1, -1, -1):
+		if players[index].id == player_id:
+			players.remove_at(index)
+			break
+	roster_changed.emit()
+	return ""
+
+
 func _apply_rally_fatigue_and_form(result: Resource) -> void:
 	var lineup := current_lineup()
 	for slot_number in range(1, 7):
@@ -448,6 +546,7 @@ func to_dict() -> Dictionary:
 		play_data.append(play.to_dict())
 	return {
 		"players": player_data,
+		"team": team.to_dict() if team != null else {},
 		"rotations": rotation_data,
 		"saved_plays": play_data,
 		"selected_rotation": selected_rotation,
@@ -466,6 +565,10 @@ func from_dict(data: Dictionary) -> void:
 	players.clear()
 	for player_data in data.get("players", []):
 		players.append(VolleyballPlayer.from_dict(player_data))
+	team = TeamScript.from_dict(data.get("team", {}))
+	if team.player_ids.is_empty():
+		for player in players:
+			team.player_ids.append(player.id)
 	rotations.clear()
 	for rotation_data in data.get("rotations", []):
 		var lineup := RotationLineup.from_dict(rotation_data)
@@ -486,6 +589,7 @@ func from_dict(data: Dictionary) -> void:
 	_next_play_id = maxi(int(data.get("next_play_id", 1)), 1)
 	match_state = MatchStateScript.new()
 	match_state.load_dict(data.get("match_state", {}))
+	opponent_team.select_rotation(int(match_state.opponent_rotation))
 	opponent_team.load_adaptation(data.get("opponent_adaptation", {}))
 	defensive_plans.clear()
 	for plan_data in data.get("defensive_plans", []):

@@ -5,6 +5,11 @@ extends Resource
 @export var display_name: String = "Player"
 @export var position_role: String = "Outside Hitter"
 @export var position_code: String = "OH"
+@export_range(15, 45) var age: int = 24
+@export_range(0, 25) var professional_experience: int = 3
+@export_range(1, 100) var potential: int = 70
+@export_range(0.0, 1.0) var morale: float = 0.70
+@export_enum("Available", "Resting", "Injured", "Suspended") var availability: String = "Available"
 
 @export_category("Physical")
 @export_range(150.0, 220.0, 0.5) var height_cm: float = 188.0
@@ -52,6 +57,11 @@ func to_dict() -> Dictionary:
 		"display_name": display_name,
 		"position_role": position_role,
 		"position_code": position_code,
+		"age": age,
+		"professional_experience": professional_experience,
+		"potential": potential,
+		"morale": morale,
+		"availability": availability,
 		"height_cm": height_cm,
 		"mass_kg": mass_kg,
 		"wingspan_cm": wingspan_cm,
@@ -92,6 +102,11 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.display_name = str(data.get("display_name", "Player"))
 	player.position_role = str(data.get("position_role", "Outside Hitter"))
 	player.position_code = str(data.get("position_code", "OH"))
+	player.age = clampi(int(data.get("age", 24)), 15, 45)
+	player.professional_experience = clampi(int(data.get("professional_experience", 3)), 0, 25)
+	player.potential = clampi(int(data.get("potential", 70)), 1, 100)
+	player.morale = clampf(float(data.get("morale", 0.70)), 0.0, 1.0)
+	player.availability = str(data.get("availability", "Available"))
 	player.apply_role_physical_defaults()
 	player.height_cm = clampf(float(data.get("height_cm", player.height_cm)), 150.0, 220.0)
 	player.mass_kg = clampf(float(data.get("mass_kg", player.mass_kg)), 50.0, 130.0)

@@ -39,6 +39,19 @@
 - Continue through repeated three-contact possessions, emergency T3 outside
   balls and transition attacks until a point or four-exchange safety limit.
 - Track points, sets, service possession, side-out rotation and rally history.
+- Rotate both teams through six rotation-specific lineups. Port Azure carries a
+  seven-player roster so its libero can replace a back-row middle without
+  removing the second middle from front-row rotations.
+- Accumulate persistent team and player match statistics from rally events,
+  with kills, blocks, aces and digs summarized in Match Center.
+- Open Team & Roster from the header to inspect registered players, current
+  court/bench status, captain and libero roles, availability, age, experience,
+  potential, morale, fatigue and the initial positional depth chart.
+- Change captain and libero designations through roster-safe manager actions.
+  Registration APIs reject duplicate or over-limit additions and prevent a
+  player still used by a rotation sheet from being removed.
+- Prevent rally resolution when the selected rotation contains an unregistered,
+  missing, injured or suspended player.
 - Enable automatic rallies, optionally pausing after aces, blocks and set ends.
 - Scale themes and controls up with windows larger than the 1280×720 baseline.
 - Use a taller court without the redundant name/position lineup key.
@@ -151,7 +164,7 @@
 - Show a temporary physical-debug profile whenever a home player marker is
   selected, including body measurements, derived standing reach, movement,
   jump, stamina, balance and stability.
-- Scout and play against a six-player Port Azure VC profile with individual
+- Scout and play against a seven-player, rotation-ready Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
 - Keep all six opponent position markers visible on the Match Center court.
@@ -191,7 +204,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 126 passing headless foundation checks and UI-binding validation, including a
+- 141 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet
@@ -200,6 +213,7 @@
 - Unlimited continuation contacts; rallies intentionally use a four-exchange
   safety bound to prevent pathological simulation loops.
 
-The next pass should add opponent rotation sheets, substitutions and tactical
-counter-adjustments. Marker movement is intentionally schematic; future 2.5D
+The next pass should deepen roster editing, calendar and training while opponent
+substitutions and tactical counter-adjustments can remain match-engine follow-up.
+Marker movement is intentionally schematic; future 2.5D
 work can replace the presenter without changing rally outcomes.

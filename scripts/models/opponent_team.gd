@@ -6,6 +6,8 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 @export var team_name: String = "Port Azure VC"
 @export var players: Array[Resource] = []
 @export var setter_id: int = -1
+@export_range(1, 6) var current_rotation: int = 1
+@export var rotations: Dictionary = {}
 @export_range(0.0, 1.0) var scouting_confidence: float = 0.42
 @export var tendencies: Dictionary = {
 	"preferred_lane": "Left Pin",
@@ -25,6 +27,30 @@ func player_by_id(player_id: int) -> Resource:
 		if int(player.id) == player_id:
 			return player
 	return null
+
+
+func current_lineup() -> RotationLineup:
+	return rotations.get(current_rotation) as RotationLineup
+
+
+func on_court_players() -> Array[Resource]:
+	var result: Array[Resource] = []
+	var lineup := current_lineup()
+	if lineup == null:
+		return players.duplicate()
+	for slot_number in range(1, 7):
+		var player := player_by_id(lineup.player_at_slot(slot_number))
+		if player != null:
+			result.append(player)
+	return result
+
+
+func select_rotation(rotation_number: int) -> void:
+	current_rotation = clampi(rotation_number, 1, 6)
+
+
+func rotate() -> void:
+	current_rotation = posmod(current_rotation, 6) + 1
 
 
 func setter() -> Resource:
@@ -51,6 +77,12 @@ func court_position(player_id: int, phase: String = "defense") -> Vector2:
 	var player := player_by_id(player_id)
 	if player == null:
 		return Vector2(0.5, 0.25)
+	var lineup := current_lineup()
+	if lineup != null:
+		var slot_number := lineup.slot_for_player(player_id)
+		if slot_number >= 1:
+			var home_position := CourtConstants.slot_position(slot_number)
+			return Vector2(home_position.x, 1.0 - home_position.y)
 	var code := str(player.position_code)
 	var positions := {
 		"S": Vector2(0.70, 0.38), "M1": Vector2(0.50, 0.40),
@@ -65,7 +97,7 @@ func court_position(player_id: int, phase: String = "defense") -> Vector2:
 
 func eligible_hitters(setter_player_id: int = -1) -> Array[Resource]:
 	var candidates: Array[Resource] = []
-	for player in players:
+	for player in on_court_players():
 		if int(player.id) == setter_player_id or str(player.position_code) == "L":
 			continue
 		if str(player.position_code) in ["OH1", "OH2", "OP", "M1", "M2"]:
@@ -76,7 +108,7 @@ func eligible_hitters(setter_player_id: int = -1) -> Array[Resource]:
 func _best_by_sum(properties: Array[String]) -> Resource:
 	var best: Resource
 	var best_score := -1
-	for player in players:
+	for player in on_court_players():
 		var score := 0
 		for property_name in properties:
 			score += int(player.get(property_name))

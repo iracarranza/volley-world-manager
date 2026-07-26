@@ -99,6 +99,15 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var short_ball_priority_option: OptionButton = %ShortBallPriorityOption
 @onready var deflection_priority_option: OptionButton = %DeflectionPriorityOption
 @onready var setter_release_help: Label = %SetterReleaseHelp
+@onready var team_roster_button: Button = %TeamRosterButton
+@onready var roster_popup: PopupPanel = %RosterPopup
+@onready var close_roster_button: Button = %CloseRosterButton
+@onready var roster_summary_label: Label = %RosterSummaryLabel
+@onready var roster_player_option: OptionButton = %RosterPlayerOption
+@onready var roster_player_detail_label: Label = %RosterPlayerDetailLabel
+@onready var set_captain_button: Button = %SetCaptainButton
+@onready var set_libero_button: Button = %SetLiberoButton
+@onready var depth_chart_label: Label = %DepthChartLabel
 
 var selected_player_id: int = -1
 var draft_play: OffensivePlay
@@ -163,8 +172,14 @@ func _ready() -> void:
 	tactical_workspace_popup.popup_hide.connect(_tactical_workspace_hidden)
 	open_tactical_workspace_button.pressed.connect(_open_tactical_workspace)
 	close_tactical_workspace_button.pressed.connect(_close_tactical_workspace)
+	team_roster_button.pressed.connect(_open_roster)
+	close_roster_button.pressed.connect(roster_popup.hide)
+	roster_player_option.item_selected.connect(_roster_player_selected)
+	set_captain_button.pressed.connect(_set_selected_captain)
+	set_libero_button.pressed.connect(_toggle_selected_libero)
 	GameManager.playbook_changed.connect(_refresh_saved_plays)
 	GameManager.rotation_changed.connect(_rotation_changed)
+	GameManager.roster_changed.connect(_refresh_roster_popup)
 	rotation_option.select(GameManager.selected_rotation - 1)
 	_setup_tactical_workspace()
 	_setup_defender_popup()
@@ -176,6 +191,7 @@ func _ready() -> void:
 	_refresh_saved_plays()
 	_refresh_match_header()
 	_refresh_match_controls()
+	_refresh_roster_popup()
 	_update_interface_scale()
 
 
@@ -1421,6 +1437,11 @@ func _refresh_match_controls() -> void:
 		int(GameManager.match_state.home_timeouts_remaining)
 	timeout_button.disabled = GameManager.match_state.home_timeouts_remaining <= 0 \
 		or GameManager.match_state.match_complete
+	var roster_errors: Array[String] = GameManager.match_roster_errors()
+	resolve_rally_button.disabled = GameManager.match_state.match_complete \
+		or not roster_errors.is_empty() or rally_playback_active
+	resolve_rally_button.tooltip_text = "Resolve the next rally." if roster_errors.is_empty() \
+		else "Match roster issue: %s" % roster_errors[0]
 	substitute_out_option.clear()
 	var lineup := GameManager.current_lineup()
 	for slot_number in range(1, 7):
@@ -1468,6 +1489,10 @@ func _refresh_match_controls() -> void:
 		roundi(average_fatigue * 100.0),
 		" · ".join(next_codes),
 	]
+	match_overview_label.text += "\nOpponent rotation %d · %s" % [
+		int(GameManager.match_state.opponent_rotation),
+		GameManager.match_state.statistics.summary(),
+	]
 	var history_lines: Array[String] = []
 	var history: Array = GameManager.match_state.rally_history
 	var start_index := maxi(history.size() - 4, 0)
@@ -1480,6 +1505,102 @@ func _refresh_match_controls() -> void:
 	rally_history_label.text = "Recent rallies\n%s" % (
 		"\n".join(history_lines) if not history_lines.is_empty() else "No rallies yet."
 	)
+
+
+func _open_roster() -> void:
+	_refresh_roster_popup()
+	roster_popup.popup_centered(Vector2i(720, 520))
+
+
+func _refresh_roster_popup() -> void:
+	if GameManager.team == null:
+		return
+	var previous_id := _selected_roster_player_id()
+	roster_player_option.clear()
+	var lineup := GameManager.current_lineup()
+	for player_id in GameManager.team.player_ids:
+		var player := GameManager.player_by_id(player_id)
+		if player == null:
+			continue
+		var status := "On court" if lineup.slot_for_player(player.id) >= 0 else "Bench"
+		var markers: Array[String] = []
+		if player.id == int(GameManager.team.captain_id):
+			markers.append("C")
+		if player.id in GameManager.team.libero_ids:
+			markers.append("L")
+		roster_player_option.add_item("%s · %s · %s%s" % [
+			player.position_code, player.display_name, status,
+			" · %s" % "/".join(markers) if not markers.is_empty() else "",
+		])
+		roster_player_option.set_item_metadata(
+			roster_player_option.item_count - 1, player.id
+		)
+		if player.id == previous_id:
+			roster_player_option.select(roster_player_option.item_count - 1)
+	roster_summary_label.text = "%s (%s) · %d/%d registered · Captain: %s · Liberos: %d/2" % [
+		GameManager.team.team_name, GameManager.team.short_name,
+		GameManager.team.player_ids.size(), GameManager.team.roster_limit,
+		_player_name(int(GameManager.team.captain_id)),
+		GameManager.team.libero_ids.size(),
+	]
+	var depth_lines: Array[String] = ["DEPTH CHART"]
+	for role_name in ["Setter", "Outside Hitter", "Middle Blocker", "Opposite", "Libero"]:
+		var names: Array[String] = []
+		for player_id in GameManager.team.depth_chart.get(role_name, []):
+			names.append(_player_name(int(player_id)))
+		depth_lines.append("%s: %s" % [role_name, " → ".join(names) if not names.is_empty() else "Unassigned"])
+	depth_chart_label.text = "\n".join(depth_lines)
+	_refresh_roster_player_detail()
+
+
+func _roster_player_selected(_index: int) -> void:
+	_refresh_roster_player_detail()
+
+
+func _refresh_roster_player_detail() -> void:
+	var player_id := _selected_roster_player_id()
+	var player := GameManager.player_by_id(player_id)
+	if player == null:
+		roster_player_detail_label.text = "Select a registered player."
+		set_captain_button.disabled = true
+		set_libero_button.disabled = true
+		return
+	var lineup := GameManager.current_lineup()
+	var slot_number := lineup.slot_for_player(player.id)
+	var assignment := "Rotation %d · Slot %d" % [GameManager.selected_rotation, slot_number] \
+		if slot_number >= 1 else "Bench for current rotation"
+	roster_player_detail_label.text = "%s · %s\nAge %d · %d pro seasons · Potential %d/100\n%s · %s · Morale %d%% · Fatigue %d%%" % [
+		player.display_name, player.position_role, player.age,
+		player.professional_experience, player.potential, assignment,
+		player.availability, roundi(player.morale * 100.0), roundi(player.fatigue * 100.0),
+	]
+	set_captain_button.disabled = player.id == int(GameManager.team.captain_id)
+	set_libero_button.disabled = player.position_role != "Libero"
+	set_libero_button.text = "Remove Libero" if player.id in GameManager.team.libero_ids \
+		else "Designate Libero"
+
+
+func _set_selected_captain() -> void:
+	var error := GameManager.set_team_captain(_selected_roster_player_id())
+	_set_status(error if not error.is_empty() else "Team captain updated.", not error.is_empty())
+
+
+func _toggle_selected_libero() -> void:
+	var player_id := _selected_roster_player_id()
+	var enabled: bool = player_id not in GameManager.team.libero_ids
+	var error := GameManager.set_team_libero(player_id, enabled)
+	_set_status(error if not error.is_empty() else "Libero designation updated.", not error.is_empty())
+
+
+func _selected_roster_player_id() -> int:
+	if roster_player_option == null or roster_player_option.selected < 0:
+		return -1
+	return int(roster_player_option.get_item_metadata(roster_player_option.selected))
+
+
+func _player_name(player_id: int) -> String:
+	var player := GameManager.player_by_id(player_id)
+	return player.display_name if player != null else "Unassigned"
 
 
 func _call_timeout() -> void:

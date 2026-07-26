@@ -8,8 +8,13 @@
   nodes, timers or animation state.
 - `scenes/components/tactical_court.gd`: presentation and input only. It draws
   normalized tactical data and never determines whether a contact succeeds.
-- `scripts/managers/game_manager.gd`: owns the demo roster, rotations, saved
+- `scripts/managers/game_manager.gd`: coordinates the managed team, players,
+  rotations, saved
   plays, active plays, match state, rally-resolution entry point and serialization.
+- `scripts/models/team.gd`: owns roster registration, captain/libero roles,
+  roster limits and position depth charts. It does not own tactical positions.
+- `scripts/models/match_statistics.gd`: derives persistent team and player
+  contact totals from authoritative rally events.
 - `scripts/data/rally_explanations.gd`: all current player-facing rally result
   templates and factor captions.
 - `scripts/models/defensive_plan.gd`: per-rotation block intent, functional
@@ -25,8 +30,9 @@
   travel, reach and zone-claim calculations shared by reception and defense.
 - `scripts/simulation/rotation_legality.gd`: pure serve-contact overlap bounds
   derived from same-row neighbors and each front/back counterpart.
-- `scripts/models/opponent_team.gd`: opponent roster, real player attributes,
-  tendencies and scouting confidence.
+- `scripts/models/opponent_team.gd`: opponent roster, six rotation sheets,
+  current on-court personnel, real player attributes, tendencies and scouting
+  confidence.
 - `scenes/main/main.gd`: presentation coordinator. It requests a completed
   result from the manager, then controls event playback speed and skipping.
 
@@ -42,8 +48,13 @@ Court/editor input
 → RallyResult event timeline
 → TacticalCourt animation
 → post-rally explanation
-→ VolleyballMatchState scoring/rotation/history
+→ VolleyballMatchState scoring/rotation/history/statistics
 ```
+
+`VolleyballTeam` owns who is registered and their long-term roles.
+`RotationLineup` owns who occupies each match position. Before rally resolution,
+`GameManager.match_roster_errors()` checks team registration, lineup legality
+and player availability; injured or suspended starters cannot enter a rally.
 
 Court coordinates stored in models are normalized from `0.0` to `1.0`.
 Conversion to pixels belongs exclusively to the court presentation component.

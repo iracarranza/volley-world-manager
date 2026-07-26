@@ -876,7 +876,7 @@ func _choose_home_attack_target(
 	var best_space := -1.0
 	for candidate in candidates:
 		var nearest := 10.0
-		for defender_resource in opponent_team.players:
+		for defender_resource in opponent_team.on_court_players():
 			var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
 			if defender == null:
 				continue
@@ -906,7 +906,7 @@ func _choose_opponent_defender(
 	var best_score := -1000.0
 	var best_data := {"start": target, "distance_meters": 99.0,
 		"travel_time": 9.0, "arrival_margin": -9.0}
-	for defender_resource in opponent_team.players:
+	for defender_resource in opponent_team.on_court_players():
 		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
 		if defender == null or str(defender.position_code) in ["S", "M1", "M2"]:
 			continue
@@ -2050,7 +2050,7 @@ func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
 	var passers: Array[VolleyballPlayer] = []
 	var zones := {}
 	var outside_index := 0
-	for player_resource in opponent_team.players:
+	for player_resource in opponent_team.on_court_players():
 		var player := player_resource as VolleyballPlayer
 		if player.position_role not in ["Outside Hitter", "Libero"]:
 			continue

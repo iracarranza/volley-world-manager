@@ -32,6 +32,7 @@ func _initialize() -> void:
 	_test_defensive_presets_release_and_setting_systems()
 	_test_spatial_opponent_and_replay_analysis()
 	_test_match_court_opponent_layer()
+	_test_team_roster_statistics_and_opponent_rotation()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -104,6 +105,42 @@ func _test_match_court_opponent_layer() -> void:
 		"opponent marker layer receives all six opponent players",
 	)
 	court.free()
+
+
+func _test_team_roster_statistics_and_opponent_rotation() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	_check(manager.team.player_ids.size() == 8, "managed team owns its registered roster")
+	_check(manager.team.captain_id == 1, "managed team stores a captain")
+	_check(manager.team.libero_ids == [6], "managed team stores libero designations")
+	_check(manager.match_roster_errors().is_empty(), "seeded lineup passes roster eligibility")
+	_check(manager.set_team_captain(2).is_empty(), "captain can be changed through the manager")
+	var reserve := VolleyballPlayer.new()
+	reserve.id = 99
+	reserve.display_name = "Test Reserve"
+	_check(manager.register_player(reserve).is_empty(), "a new player can be registered")
+	_check(manager.unregister_player(99).is_empty(), "an unused reserve can be unregistered")
+	var unavailable_id := manager.current_lineup().player_at_slot(2)
+	manager.player_by_id(unavailable_id).availability = "Injured"
+	_check(not manager.match_roster_errors().is_empty(), "unavailable lineup players block match eligibility")
+	manager.player_by_id(unavailable_id).availability = "Available"
+	manager.match_state.serving_home = true
+	var loss := RallyResult.new()
+	loss.home_team_won = false
+	loss.terminal_outcome = "opponent_kill"
+	loss.explanation = "Test opponent point."
+	var update: Dictionary = manager.record_rally(loss)
+	_check(bool(update.get("opponent_rotated", false)), "opponent rotates on a side-out")
+	_check(manager.opponent_team.current_rotation == 2, "opponent lineup follows match rotation")
+	_check(int(manager.match_state.statistics.opponent.get("points", 0)) == 1,
+		"match statistics record opponent points")
+	var restored := GAME_MANAGER_SCRIPT.new()
+	restored.from_dict(manager.to_dict())
+	_check(restored.team.captain_id == 2, "team roles survive serialization")
+	_check(restored.match_state.statistics.summary() == manager.match_state.statistics.summary(),
+		"match statistics survive serialization")
+	_check(restored.opponent_team.current_rotation == 2,
+		"opponent rotation survives serialization")
 
 
 func _test_court_coordinates() -> void:
@@ -329,7 +366,8 @@ func _test_match_scoring_and_rotation() -> void:
 func _test_defense_opponent_and_match_day_controls() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
-	_check(manager.opponent_team.players.size() == 6, "opponent has an actual six-player profile")
+	_check(manager.opponent_team.players.size() == 7, "opponent has a rotation-ready seven-player profile")
+	_check(manager.opponent_team.on_court_players().size() == 6, "opponent fields six players")
 	_check(
 		not manager.opponent_team.scouting_summary().is_empty(),
 		"opponent exposes a scouting summary",
