@@ -7,12 +7,40 @@ signal title_requested
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const ATTRIBUTE_GROUPS := {
-	"Physical": ["acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness", "stamina"],
+	"Physical": ["acceleration", "lateral_speed", "transition_speed", "explosiveness", "jump_reach", "stamina"],
 	"Serving": ["serve_power", "serve_accuracy"],
 	"Reception": ["reception", "reception_balance", "reception_stability", "ball_control"],
-	"Setting": ["set_accuracy", "set_balance", "set_stability", "court_vision"],
-	"Attacking": ["attack_power", "attack_accuracy", "approach_timing"],
-	"Defense and Mental": ["block_timing", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"],
+	"Setting and Hand Control": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control"],
+	"Attacking": ["attack_power", "arm_speed", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety"],
+	"Defense": ["block_timing", "dig_control"],
+	"Mental and Tactical": ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"],
+}
+const WHEEL_PROFILES: Array[String] = ["Attacking", "Defensive", "Setting & Ball Control", "Physical"]
+const WHEEL_TOOLTIPS := {
+	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
+	"Tooling": "Deliberately using blockers' hands to score or create an advantageous deflection.",
+	"Feinting": "Selling a full attack before tipping, wiping, rolling, or changing pace.",
+	"Finesse": "Precise control of placement, depth, angle, and touch.",
+	"Approach Timing": "Arriving in a balanced hitting window relative to the set.",
+	"Shot Variety": "The number of credible attack solutions available to the player.",
+	"Reception Technique": "Platform angle and directional control on ordinary contacts.",
+	"Reception Balance": "Maintaining platform quality while moving, reaching, or contacting near the edge of range.",
+	"Reception Stability": "Withstanding high ball speed without the platform breaking down.",
+	"Defensive Range": "Baseline range derived from movement, anticipation, reach, control, and stamina; actual rally range also depends on ball-flight time and position.",
+	"Block Timing": "Matching jump and hand penetration to the attacker's contact.",
+	"Dig Control": "Turning a defensive touch into a playable ball rather than merely making contact.",
+	"Set Accuracy": "Delivering the ball to the intended contact window.",
+	"Set Balance": "Maintaining setting quality while moving or reaching.",
+	"Set Stability": "Maintaining clean contact against difficult incoming pace and spin.",
+	"Tempo Control": "Controlling release timing and the attacker's contact rhythm.",
+	"Set Disguise": "Hiding the intended target and release direction.",
+	"Hand Control": "Fine manipulation of height, spin, and touch on overhead contacts.",
+	"Acceleration": "How quickly the player reaches useful movement speed.",
+	"Lateral Speed": "Side-to-side movement speed used in blocking and floor defense.",
+	"Transition Speed": "Speed moving between phases and into an approach.",
+	"Explosiveness": "How quickly the player accesses maximum jump capacity.",
+	"Jump Capacity": "The player's maximum available jumping reach rating.",
+	"Stamina": "Capacity to preserve physical execution through workload and fatigue.",
 }
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -25,6 +53,7 @@ const ATTRIBUTE_GROUPS := {
 @onready var roster_detail: RichTextLabel = %RosterDetail
 @onready var raw_attributes: RichTextLabel = %RawAttributes
 @onready var player_attribute_wheel: Control = %PlayerAttributeWheel
+@onready var wheel_profile_option: OptionButton = %WheelProfileOption
 @onready var team_summary: RichTextLabel = %TeamSummary
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
@@ -38,6 +67,7 @@ const ATTRIBUTE_GROUPS := {
 
 var selected_transfer_id: int = -1
 var selected_fixture_id: int = -1
+var selected_roster_id: int = -1
 
 
 func _ready() -> void:
@@ -49,6 +79,7 @@ func _ready() -> void:
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
 	training_option.item_selected.connect(_training_selected)
 	roster_list.item_selected.connect(_roster_selected)
+	wheel_profile_option.item_selected.connect(_wheel_profile_selected)
 	transfer_list.item_selected.connect(_transfer_selected)
 	sign_button.pressed.connect(_sign_transfer)
 	fixture_list.item_selected.connect(_fixture_selected)
@@ -58,6 +89,8 @@ func _ready() -> void:
 	CareerManager.transfer_pool_changed.connect(refresh)
 	for activity_name in Training.activity_names():
 		training_option.add_item(activity_name)
+	for profile_name in WHEEL_PROFILES:
+		wheel_profile_option.add_item(profile_name)
 	for card in [%RosterCard, %TeamCard, %TransfersCard, %CompetitionCard]:
 		card.section_requested.connect(_navigate)
 	refresh()
@@ -148,6 +181,7 @@ func _roster_selected(index: int) -> void:
 	var player := GameManager.player_by_id(int(roster_list.get_item_metadata(index)))
 	if player == null:
 		return
+	selected_roster_id = player.id
 	var key_attributes := _key_attributes(player)
 	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]  %s\n%s · Age %d · %d pro seasons\nAvailability: %s · Morale %d%% · Fatigue %d%%\n\n[b]Ability[/b]\nCurrent: %s\nPotential: %s\n[color=#8294ad]Current stars are weighted for this player's position.[/color]\n\n[b]Key attributes[/b]\n%s\n\n[b]Measurements[/b]\n%.0f cm · %.0f kg · %.0f cm wingspan\n\nCurrent rotation: %s" % [
 		player.display_name, player.position_code, player.position_role, player.age,
@@ -156,37 +190,56 @@ func _roster_selected(index: int) -> void:
 		player.current_ability_stars(), player.potential_ability_stars(),
 		key_attributes, player.height_cm, player.mass_kg, player.wingspan_cm,
 		"Slot %d" % GameManager.current_lineup().slot_for_player(player.id) if GameManager.current_lineup().slot_for_player(player.id) >= 1 else "Bench"]
-	player_attribute_wheel.set_profile(_attribute_profile(player))
+	_refresh_player_wheel(player)
 	raw_attributes.text = _raw_attribute_text(player)
 
 
-func _attribute_profile(player: VolleyballPlayer) -> Dictionary:
-	return {
-		"Physical": _attribute_average(player, ATTRIBUTE_GROUPS["Physical"]),
-		"Serve": _attribute_average(player, ATTRIBUTE_GROUPS["Serving"]),
-		"Reception": _attribute_average(player, ATTRIBUTE_GROUPS["Reception"]),
-		"Setting": _attribute_average(player, ATTRIBUTE_GROUPS["Setting"]),
-		"Attack": _attribute_average(player, ATTRIBUTE_GROUPS["Attacking"]),
-		"Defense / IQ": _attribute_average(player, ATTRIBUTE_GROUPS["Defense and Mental"]),
-	}
+func _wheel_profile_selected(_index: int) -> void:
+	var player := GameManager.player_by_id(selected_roster_id)
+	if player != null:
+		_refresh_player_wheel(player)
 
 
-func _attribute_average(player: VolleyballPlayer, attribute_names: Array) -> int:
-	var total := 0.0
-	for attribute_name in attribute_names:
-		total += float(player.get(str(attribute_name)))
-	return roundi(total / maxf(float(attribute_names.size()), 1.0))
+func _refresh_player_wheel(player: VolleyballPlayer) -> void:
+	var profile_name := wheel_profile_option.get_item_text(wheel_profile_option.selected) \
+		if wheel_profile_option.selected >= 0 else "Attacking"
+	var profile: Dictionary
+	match profile_name:
+		"Defensive":
+			profile = {"Reception Technique": player.reception,
+				"Reception Balance": player.reception_balance,
+				"Reception Stability": player.reception_stability,
+				"Defensive Range": player.baseline_defensive_range(),
+				"Block Timing": player.block_timing, "Dig Control": player.dig_control}
+		"Setting & Ball Control":
+			profile = {"Set Accuracy": player.set_accuracy, "Set Balance": player.set_balance,
+				"Set Stability": player.set_stability, "Tempo Control": player.tempo_control,
+				"Set Disguise": player.set_disguise, "Hand Control": player.hand_control}
+		"Physical":
+			profile = {"Acceleration": player.acceleration, "Lateral Speed": player.lateral_speed,
+				"Transition Speed": player.transition_speed, "Explosiveness": player.explosiveness,
+				"Jump Capacity": player.jump_reach, "Stamina": player.stamina}
+		_:
+			profile = {"Power": player.usable_attack_power(), "Tooling": player.tooling,
+				"Feinting": player.feinting, "Finesse": player.finesse,
+				"Approach Timing": player.approach_timing, "Shot Variety": player.shot_variety}
+	player_attribute_wheel.set_profile(profile, WHEEL_TOOLTIPS)
 
 
 func _raw_attribute_text(player: VolleyballPlayer) -> String:
-	var columns: Array[String] = []
+	var result := "[table=3]"
 	for group_name in ATTRIBUTE_GROUPS:
 		var lines: Array[String] = ["[b]%s[/b]" % group_name]
 		for attribute_name in ATTRIBUTE_GROUPS[group_name]:
-			lines.append("%s: %d" % [str(attribute_name).replace("_", " ").capitalize(),
+			var display_name := str(attribute_name).replace("_", " ").capitalize()
+			if str(attribute_name) == "reception":
+				display_name = "Reception Technique"
+			elif str(attribute_name) == "attack_power":
+				display_name = "Power Transfer"
+			lines.append("%s: %d" % [display_name,
 				int(player.get(str(attribute_name)))])
-		columns.append("\n".join(lines))
-	return "[table=3][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][/table]" % columns
+		result += "[cell]%s[/cell]" % "\n".join(lines)
+	return result + "[/table]"
 
 
 func _key_attributes(player: VolleyballPlayer) -> String:

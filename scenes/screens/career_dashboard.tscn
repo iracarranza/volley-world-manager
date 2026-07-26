@@ -215,10 +215,20 @@ layout_mode = 2
 size_flags_horizontal = 3
 bbcode_enabled = true
 
-[node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(390, 315)
+[node name="WheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+custom_minimum_size = Vector2(400, 0)
 layout_mode = 2
+
+[node name="WheelProfileOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose which phase of the selected player's profile to visualize."
+
+[node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(400, 285)
+layout_mode = 2
+size_flags_vertical = 3
 mouse_filter = 1
 script = ExtResource("3_wheel")
 

@@ -14,8 +14,10 @@
 - Navigate a career dashboard with reusable summary cards and dedicated Home,
   Roster, Team, Transfers/Recruitment and Competition screens.
 - Inspect individual player identity, availability, age, experience, morale,
-  fatigue, potential, physical profile, current match status and position-key
-  attributes from the Roster screen.
+  fatigue, position-weighted ability stars, potential stars, measurements and
+  every raw attribute from the Roster screen. Switch among Attacking,
+  Defensive, Setting & Ball Control and Physical wheels; usable power and
+  baseline defensive range are derived summaries rather than duplicate stats.
 - Review team identity, tactical familiarity, captain/libero hierarchy and the
   position depth chart. Select one of seven weekly training focuses with visible
   attribute, fatigue, morale and familiarity effects.
@@ -233,7 +235,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 163 passing headless foundation checks and UI-binding validation, including a
+- 167 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

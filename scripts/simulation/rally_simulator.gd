@@ -187,14 +187,17 @@ func resolve(
 			"event_time": rally_clock, "deadline": rally_clock + second_contact_window,
 			"incoming_trajectory": pass_trajectory})
 
-	var tempo_demand := float(3 - assignment.tempo) * 0.055
+	var tempo_demand := float(3 - assignment.tempo) * 0.055 \
+		* lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
 	var set_target := CourtConstants.lane_target(assignment.lane)
 	var set_geometry := _set_geometry(
 		setter, setter_start, set_contact, set_target, preferred_release
 	)
-	var set_base: float = _rating(setter, "set_accuracy") * 0.52 \
-		+ _rating(setter, "court_vision") * 0.25 \
-		+ _rating(setter, "composure") * 0.13 \
+	var set_base: float = _rating(setter, "set_accuracy") * 0.42 \
+		+ _rating(setter, "court_vision") * 0.20 \
+		+ _rating(setter, "hand_control") * 0.10 \
+		+ _rating(setter, "tempo_control") * 0.08 \
+		+ _rating(setter, "composure") * 0.10 \
 		+ result.reception_quality * 0.28 - tempo_demand \
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty)
@@ -674,8 +677,9 @@ func _resolve_opponent_transition(
 	var responsibility_fit := _defensive_responsibility_fit(
 		defensive_plan, defender.id, home_target, attack_type
 	)
-	var defense_quality := _rating(defender, "anticipation") * 0.38 \
-		+ _rating(defender, "reception") * 0.36 \
+	var defense_quality := _rating(defender, "anticipation") * 0.34 \
+		+ _rating(defender, "reception") * 0.28 \
+		+ _rating(defender, "dig_control") * 0.16 \
 		+ _rating(defender, "lateral_speed") * 0.18 \
 		+ responsibility_fit \
 		+ clampf(float(defense_arrival.get("arrival_margin", -1.0)) * 0.065, -0.16, 0.12) \
@@ -830,8 +834,9 @@ func _resolve_home_continuation(
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
 	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
-	var defense_quality := _rating(opponent_defender, "reception") * 0.46 \
-		+ _rating(opponent_defender, "anticipation") * 0.38 \
+	var defense_quality := _rating(opponent_defender, "reception") * 0.36 \
+		+ _rating(opponent_defender, "dig_control") * 0.16 \
+		+ _rating(opponent_defender, "anticipation") * 0.34 \
 		+ rng.randf_range(-0.16, 0.16)
 	var dug: bool = defense_quality > attack_quality + rng.randf_range(-0.18, 0.14)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
@@ -2132,12 +2137,12 @@ func _rating(player: VolleyballPlayer, property_name: String) -> float:
 
 
 func _power_rating(player: VolleyballPlayer, property_name: String) -> float:
+	if property_name == "attack_power":
+		return clampf(float(player.usable_attack_power()) / 100.0 \
+			* (1.0 - player.fatigue * 0.18) + player.current_form * 0.06, 0.05, 1.0)
 	var base := _rating(player, property_name)
 	var mass_bonus := clampf((player.mass_kg - 82.0) / 48.0, -0.50, 1.0) * 0.07
-	var explosive_bonus := 0.0
-	if property_name == "attack_power":
-		explosive_bonus = (_rating(player, "explosiveness") - 0.50) * 0.05
-	return clampf(base + mass_bonus + explosive_bonus, 0.05, 1.0)
+	return clampf(base + mass_bonus, 0.05, 1.0)
 
 
 func _available_jump_rating(player: VolleyballPlayer) -> float:

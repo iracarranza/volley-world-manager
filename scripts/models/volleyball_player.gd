@@ -21,6 +21,7 @@ extends Resource
 @export_range(1, 100) var jump_reach: int = 50
 @export_range(1, 100) var explosiveness: int = 50
 @export_range(1, 100) var stamina: int = 50
+@export_range(1, 100) var arm_speed: int = 50
 
 @export_category("Technical")
 @export_range(1, 100) var serve_power: int = 50
@@ -31,11 +32,19 @@ extends Resource
 @export_range(1, 100) var set_accuracy: int = 50
 @export_range(1, 100) var set_balance: int = 50
 @export_range(1, 100) var set_stability: int = 50
+@export_range(1, 100) var tempo_control: int = 50
+@export_range(1, 100) var set_disguise: int = 50
+@export_range(1, 100) var hand_control: int = 50
 @export_range(1, 100) var attack_power: int = 50
 @export_range(1, 100) var attack_accuracy: int = 50
 @export_range(1, 100) var approach_timing: int = 50
+@export_range(1, 100) var tooling: int = 50
+@export_range(1, 100) var feinting: int = 50
+@export_range(1, 100) var finesse: int = 50
+@export_range(1, 100) var shot_variety: int = 50
 @export_range(1, 100) var block_timing: int = 50
 @export_range(1, 100) var ball_control: int = 50
+@export_range(1, 100) var dig_control: int = 50
 
 @export_category("Mental and Tactical")
 @export_range(1, 100) var court_vision: int = 50
@@ -52,18 +61,19 @@ extends Resource
 
 const ABILITY_ATTRIBUTES: Array[String] = [
 	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-	"stamina", "serve_power", "serve_accuracy", "reception", "reception_balance",
-	"reception_stability", "set_accuracy", "set_balance", "set_stability", "attack_power",
-	"attack_accuracy", "approach_timing", "block_timing", "ball_control", "court_vision",
+	"stamina", "arm_speed", "serve_power", "serve_accuracy", "reception", "reception_balance",
+	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
+	"set_disguise", "hand_control", "attack_power", "attack_accuracy", "approach_timing",
+	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
 	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
 ]
 
 const POSITION_WEIGHTS := {
-	"Setter": ["set_accuracy", "set_balance", "set_stability", "court_vision", "decision_making", "ball_control", "composure"],
-	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "reception", "reception_balance", "transition_speed", "ball_control"],
+	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "court_vision", "decision_making"],
+	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance"],
 	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation"],
-	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "block_timing", "serve_power", "composure"],
-	"Libero": ["reception", "reception_balance", "reception_stability", "ball_control", "anticipation", "lateral_speed", "decision_making"],
+	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "tooling", "shot_variety", "block_timing", "serve_power"],
+	"Libero": ["reception", "reception_balance", "reception_stability", "dig_control", "ball_control", "anticipation", "lateral_speed", "decision_making"],
 }
 
 
@@ -97,6 +107,20 @@ func potential_ability_stars() -> String:
 	return format_stars(potential)
 
 
+func usable_attack_power() -> int:
+	var normalized_mass := clampf(inverse_lerp(55.0, 115.0, mass_kg) * 100.0, 1.0, 100.0)
+	return clampi(roundi(float(attack_power) * 0.25 + normalized_mass * 0.10 \
+		+ float(explosiveness) * 0.18 + float(transition_speed) * 0.12 \
+		+ float(arm_speed) * 0.20 + float(approach_timing) * 0.15), 1, 100)
+
+
+func baseline_defensive_range() -> int:
+	var reach := clampf(inverse_lerp(190.0, 280.0, standing_reach_cm()) * 100.0, 1.0, 100.0)
+	return clampi(roundi(float(acceleration) * 0.22 + float(lateral_speed) * 0.24 \
+		+ float(anticipation) * 0.22 + reach * 0.14 + float(ball_control) * 0.08 \
+		+ float(stamina) * 0.10), 1, 100)
+
+
 func to_dict() -> Dictionary:
 	return {
 		"id": id,
@@ -117,6 +141,7 @@ func to_dict() -> Dictionary:
 		"jump_reach": jump_reach,
 		"explosiveness": explosiveness,
 		"stamina": stamina,
+		"arm_speed": arm_speed,
 		"serve_power": serve_power,
 		"serve_accuracy": serve_accuracy,
 		"reception": reception,
@@ -125,11 +150,19 @@ func to_dict() -> Dictionary:
 		"set_accuracy": set_accuracy,
 		"set_balance": set_balance,
 		"set_stability": set_stability,
+		"tempo_control": tempo_control,
+		"set_disguise": set_disguise,
+		"hand_control": hand_control,
 		"attack_power": attack_power,
 		"attack_accuracy": attack_accuracy,
 		"approach_timing": approach_timing,
+		"tooling": tooling,
+		"feinting": feinting,
+		"finesse": finesse,
+		"shot_variety": shot_variety,
 		"block_timing": block_timing,
 		"ball_control": ball_control,
+		"dig_control": dig_control,
 		"court_vision": court_vision,
 		"anticipation": anticipation,
 		"decision_making": decision_making,
@@ -159,11 +192,11 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.wingspan_cm = clampf(float(data.get("wingspan_cm", player.wingspan_cm)), 150.0, 235.0)
 	for property_name in [
 		"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-		"stamina", "serve_power", "serve_accuracy", "reception",
+		"stamina", "arm_speed", "serve_power", "serve_accuracy", "reception",
 		"reception_balance", "reception_stability",
-		"set_accuracy", "set_balance", "set_stability",
-		"attack_power", "attack_accuracy", "approach_timing",
-		"block_timing", "ball_control", "court_vision", "anticipation",
+		"set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control",
+		"attack_power", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety",
+		"block_timing", "ball_control", "dig_control", "court_vision", "anticipation",
 		"decision_making", "composure", "tactical_discipline", "improvisation",
 	]:
 		player.set(property_name, clampi(int(data.get(property_name, 50)), 1, 100))

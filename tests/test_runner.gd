@@ -866,6 +866,15 @@ func _test_physical_body_attributes() -> void:
 	player.reception_stability = 61
 	player.set_balance = 67
 	player.set_stability = 73
+	player.tempo_control = 81
+	player.set_disguise = 76
+	player.hand_control = 84
+	player.arm_speed = 88
+	player.tooling = 72
+	player.feinting = 69
+	player.finesse = 79
+	player.shot_variety = 83
+	player.dig_control = 64
 	var restored := VolleyballPlayer.from_dict(player.to_dict())
 	_check(is_equal_approx(restored.height_cm, 207.0), "height survives player serialization")
 	_check(is_equal_approx(restored.mass_kg, 101.0), "mass survives player serialization")
@@ -878,6 +887,38 @@ func _test_physical_body_attributes() -> void:
 		restored.set_balance == 67 and restored.set_stability == 73,
 		"setting balance and stability survive player serialization",
 	)
+	_check(restored.tempo_control == 81 and restored.set_disguise == 76 \
+			and restored.hand_control == 84,
+		"setting control attributes survive player serialization")
+	_check(restored.tooling == 72 and restored.feinting == 69 and restored.finesse == 79 \
+			and restored.shot_variety == 83 and restored.dig_control == 64,
+		"attack-solution and dig-control attributes survive player serialization")
+	var low_power := VolleyballPlayer.new()
+	low_power.mass_kg = 65.0
+	low_power.attack_power = 55
+	low_power.explosiveness = 40
+	low_power.transition_speed = 42
+	low_power.arm_speed = 38
+	low_power.approach_timing = 45
+	var usable_power := VolleyballPlayer.new()
+	usable_power.mass_kg = 100.0
+	usable_power.attack_power = 55
+	usable_power.explosiveness = 82
+	usable_power.transition_speed = 76
+	usable_power.arm_speed = 88
+	usable_power.approach_timing = 84
+	_check(usable_power.usable_attack_power() > low_power.usable_attack_power(),
+		"usable hitting power derives from body and approach qualities, not strength alone")
+	var limited_range := VolleyballPlayer.new()
+	limited_range.acceleration = 35
+	limited_range.lateral_speed = 35
+	limited_range.anticipation = 35
+	var broad_range := VolleyballPlayer.new()
+	broad_range.acceleration = 85
+	broad_range.lateral_speed = 85
+	broad_range.anticipation = 85
+	_check(broad_range.baseline_defensive_range() > limited_range.baseline_defensive_range(),
+		"displayed defensive range is derived from movement, anticipation, and reach")
 	var zone := DefensiveZone.new()
 	zone.center = Vector2(0.20, 0.84)
 	zone.radius_meters = 4.0

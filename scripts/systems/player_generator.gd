@@ -60,10 +60,11 @@ static func _apply_attributes(
 ) -> void:
 	var base := rng.randi_range(42, 62) if academy else rng.randi_range(52, 72)
 	for property_name in ["acceleration", "lateral_speed", "transition_speed", "jump_reach",
-		"explosiveness", "stamina", "serve_power", "serve_accuracy", "reception",
+		"explosiveness", "stamina", "arm_speed", "serve_power", "serve_accuracy", "reception",
 		"reception_balance", "reception_stability", "set_accuracy", "set_balance",
-		"set_stability", "attack_power", "attack_accuracy", "approach_timing",
-		"block_timing", "ball_control", "court_vision", "anticipation",
+		"set_stability", "tempo_control", "set_disguise", "hand_control",
+		"attack_power", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety",
+		"block_timing", "ball_control", "dig_control", "court_vision", "anticipation",
 		"decision_making", "composure", "tactical_discipline", "improvisation"]:
 		var modifier := int(region.physical) if property_name in ["acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness", "stamina"] else (
 			int(region.mental) if property_name in ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"] else int(region.technical)
