@@ -39,7 +39,12 @@ func resolve(
 		return _resolve_home_serve(
 			result, players, lineup, opponent_team, defensive_plan
 		)
-	var opponent_server := opponent_team.best_server() as VolleyballPlayer
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	var opponent_server := opponent_team.player_by_id(
+		opponent_lineup.player_at_slot(1) if opponent_lineup != null else -1
+	) as VolleyballPlayer
+	if opponent_server == null:
+		opponent_server = opponent_team.best_server() as VolleyballPlayer
 	var server_name := opponent_server.display_name
 	var setter := _player_by_id(players, lineup.active_setter_id())
 	var serve_quality := clampf(
@@ -64,12 +69,13 @@ func resolve(
 	var serve_trajectory := _ball_trajectory(
 		"serve", Vector2(0.80, 0.08), serve_landing, serve_time, 0.45
 	)
-	_add_event(result, RallyEventModel.EventType.SERVE, -1, server_name,
+	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
 		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
 		"%s serve" % opponent_server.primary_serve_style if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
 			"side": "opponent", "target": intended_target,
+			"server_id": opponent_server.id, "server_slot": 1,
 			"serve_style": opponent_server.primary_serve_style,
 			"flight_time": serve_time,
 			"event_time": 0.0, "contact_time": serve_time,
@@ -485,6 +491,7 @@ func _resolve_home_serve(
 		"%s · %d%% pressure at %d%% selected risk." % [server.primary_serve_style,
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
 		], {"side": "home", "target": target_name, "flight_time": serve_time,
+			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style})
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
@@ -1912,18 +1919,9 @@ func _best_home_server(
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
 ) -> VolleyballPlayer:
-	var best: VolleyballPlayer
-	var best_score := -1
-	for slot_number in range(1, 7):
-		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if player == null:
-			continue
-		var score := player.serve_power + player.serve_technique \
-			+ player.serve_consistency + player.active_serve_style_score()
-		if score > best_score:
-			best = player
-			best_score = score
-	return best
+	# Service ownership follows rotational zone 1. The server's attributes still
+	# determine quality; the strongest server cannot replace the legal server.
+	return _player_by_id(players, lineup.player_at_slot(1))
 
 
 func _hit_type(assignment: HitterAssignment, hitter: VolleyballPlayer) -> String:

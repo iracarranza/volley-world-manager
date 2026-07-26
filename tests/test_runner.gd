@@ -228,6 +228,28 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	var serve_event: Resource = serve_result.events[0]
 	_check(serve_event.metadata.has("serve_style"),
 		"rally serve events expose the mechanically selected serving style")
+	var home_zone_one_correct := true
+	for rotation_number in range(1, 7):
+		serve_manager.select_rotation(rotation_number)
+		serve_manager.match_state.serving_home = true
+		var rotated_result: Resource = serve_manager.resolve_active_rally(77531 + rotation_number)
+		var rotated_serve: Resource = rotated_result.events[0]
+		home_zone_one_correct = home_zone_one_correct \
+			and rotated_serve.actor_id == serve_manager.current_lineup().player_at_slot(1) \
+			and int(rotated_serve.metadata.get("server_slot", -1)) == 1
+	_check(home_zone_one_correct,
+		"home serving ownership follows the player in zone 1 for every rotation")
+	serve_manager.match_state.serving_home = false
+	var opponent_zone_one_correct := true
+	for rotation_number in range(1, 7):
+		serve_manager.opponent_team.select_rotation(rotation_number)
+		var opponent_result: Resource = serve_manager.resolve_active_rally(77600 + rotation_number)
+		var opponent_serve: Resource = opponent_result.events[0]
+		opponent_zone_one_correct = opponent_zone_one_correct \
+			and opponent_serve.actor_id == serve_manager.opponent_team.current_lineup().player_at_slot(1) \
+			and int(opponent_serve.metadata.get("server_slot", -1)) == 1
+	_check(opponent_zone_one_correct,
+		"opponent serving ownership follows the player in zone 1 for every rotation")
 	serve_manager.free()
 	var team := VolleyballTeam.new()
 	team.tactical_familiarity = 0.30
