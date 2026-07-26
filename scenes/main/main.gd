@@ -37,6 +37,7 @@ const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 @onready var popup_responsibility_option: OptionButton = %PopupResponsibilityOption
 @onready var popup_apply_button: Button = %PopupApplyButton
 @onready var court_mode_option: OptionButton = %CourtModeOption
+@onready var physical_debug_label: Label = %PhysicalDebugLabel
 @onready var defense_controls: VBoxContainer = %DefenseControls
 @onready var block_strategy_option: OptionButton = %BlockStrategyOption
 @onready var floor_system_option: OptionButton = %FloorSystemOption
@@ -206,6 +207,7 @@ func _apply_light_mode(light_mode: bool) -> void:
 	var secondary_text := Color("315f4b") if light_mode else Color("b9cce0")
 	court_instructions.add_theme_color_override("font_color", secondary_text)
 	demand_label.add_theme_color_override("font_color", secondary_text)
+	physical_debug_label.add_theme_color_override("font_color", secondary_text)
 	_update_status_color()
 
 
@@ -218,6 +220,7 @@ func _select_rotation(index: int) -> void:
 
 func _rotation_changed(_rotation_number: int) -> void:
 	selected_player_id = -1
+	physical_debug_label.text = "PHYSICAL DEBUG · Select a player marker."
 	_begin_draft()
 	_refresh_rotation()
 	_refresh_saved_plays()
@@ -247,6 +250,7 @@ func _select_hitter(player_id: int) -> void:
 	var player := GameManager.player_by_id(player_id)
 	var lineup := GameManager.current_lineup()
 	var slot_number := lineup.slot_for_player(player_id)
+	_refresh_physical_debug(player)
 	if court_mode_option.selected == 1:
 		_load_defender_assignment(player_id)
 		return
@@ -264,6 +268,24 @@ func _select_hitter(player_id: int) -> void:
 	_preview_demand(0)
 	if not eligible:
 		_set_status("This prototype does not assign Setter or Libero attack lanes.", true)
+
+
+func _refresh_physical_debug(player: VolleyballPlayer) -> void:
+	if player == null:
+		physical_debug_label.text = "PHYSICAL DEBUG · Player unavailable."
+		return
+	physical_debug_label.text = (
+		"PHYSICAL DEBUG · %s (%s)\n"
+		+ "Height %.1f cm · Mass %.1f kg · Wingspan %.1f cm · Standing reach %.1f cm\n"
+		+ "Acceleration %d · Lateral %d · Transition %d · Explosiveness %d · Jump %d · Stamina %d\n"
+		+ "Reception balance %d · Reception stability %d"
+	) % [
+		player.display_name, player.position_code,
+		player.height_cm, player.mass_kg, player.wingspan_cm, player.standing_reach_cm(),
+		player.acceleration, player.lateral_speed, player.transition_speed,
+		player.explosiveness, player.jump_reach, player.stamina,
+		player.reception_balance, player.reception_stability,
+	]
 
 
 func _load_defender_assignment(player_id: int) -> void:

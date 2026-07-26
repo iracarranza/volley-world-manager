@@ -36,7 +36,7 @@ func resolve(
 	var server_name := opponent_server.display_name
 	var setter := _player_by_id(players, lineup.setter_id)
 	var serve_quality := clampf(
-		_rating(opponent_server, "serve_power") * 0.56
+		_power_rating(opponent_server, "serve_power") * 0.56
 		+ _rating(opponent_server, "serve_accuracy") * 0.34
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
@@ -77,6 +77,7 @@ func resolve(
 		+ _rating(receiver, "ball_control") * 0.20 \
 		+ _rating(receiver, "composure") * 0.15
 	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
+		- CoverageModel.reception_body_penalty(receiver, arrival, serve_quality) \
 		+ arrival_bonus + support_bonus + rng.randf_range(-0.14, 0.14) + 0.30,
 		0.0, 1.0)
 	if not receiver_arrived:
@@ -144,7 +145,7 @@ func resolve(
 	var approach_fit := _rating(hitter, "approach_timing") * 0.32 \
 		+ _rating(hitter, "transition_speed") * 0.18
 	var attack_base: float = _rating(hitter, "attack_accuracy") * 0.38 \
-		+ _rating(hitter, "attack_power") * 0.24 \
+		+ _power_rating(hitter, "attack_power") * 0.24 \
 		+ _rating(hitter, "decision_making") * 0.13 \
 		+ approach_fit + result.set_quality * 0.25 - tempo_demand
 	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
@@ -166,7 +167,8 @@ func resolve(
 	var opponent_blocker := opponent_team.best_blocker() as VolleyballPlayer
 	var block_strength := clampf(
 		_rating(opponent_blocker, "block_timing") * 0.52
-		+ _rating(opponent_blocker, "jump_reach") * 0.34
+		+ _available_jump_rating(opponent_blocker) * 0.24
+		+ _body_reach_rating(opponent_blocker) * 0.10
 		+ rng.randf_range(-0.13, 0.13) \
 		- float(3 - assignment.tempo) * 0.035, 0.15, 0.92)
 	var adaptation_bonus := _opponent_adaptation_bonus(
@@ -234,7 +236,7 @@ func _resolve_home_serve(
 	if defensive_plan != null:
 		serve_risk = float(defensive_plan.serve_risk)
 	var serve_quality := clampf(
-		_rating(server, "serve_power") * 0.48
+		_power_rating(server, "serve_power") * 0.48
 		+ _rating(server, "serve_accuracy") * 0.34
 		+ serve_risk * 0.18 + rng.randf_range(-0.14, 0.14), 0.05, 0.98
 	)
@@ -275,6 +277,7 @@ func _resolve_home_serve(
 		_rating(receiver, "reception") * 0.58
 		+ _rating(receiver, "ball_control") * 0.24
 		- serve_quality * 0.44 + 0.27
+		- CoverageModel.reception_body_penalty(receiver, opponent_arrival, serve_quality)
 		+ clampf(float(opponent_arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12)
 		+ minf(float(support_count) * 0.025, 0.075)
 		+ rng.randf_range(-0.12, 0.12),
@@ -324,7 +327,9 @@ func _resolve_opponent_transition(
 		dig_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0))
-	var opponent_attack := clampf(0.64 + opponent_set_quality * 0.20 \
+	var opponent_attack := clampf(
+		_power_rating(opponent_hitter, "attack_power") * 0.62 \
+		+ opponent_set_quality * 0.20 + 0.08 \
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
 	var home_target := Vector2(rng.randf_range(0.20, 0.80), rng.randf_range(0.76, 0.92))
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
@@ -397,6 +402,7 @@ func _resolve_opponent_transition(
 		+ responsibility_fit \
 		+ clampf(float(defense_arrival.get("arrival_margin", -1.0)) * 0.065, -0.16, 0.12) \
 		+ minf(float(support_count) * 0.018, 0.054) \
+		- CoverageModel.reception_body_penalty(defender, defense_arrival, opponent_attack) \
 		+ rng.randf_range(-0.12, 0.12)
 	if not defender_arrived:
 		defense_quality = minf(defense_quality, 0.10)
@@ -465,7 +471,7 @@ func _resolve_home_continuation(
 		])
 	var attack_quality := clampf(
 		_rating(hitter, "attack_accuracy") * 0.42
-		+ _rating(hitter, "attack_power") * 0.26
+		+ _power_rating(hitter, "attack_power") * 0.26
 		+ _rating(hitter, "approach_timing") * 0.18
 		+ set_quality * 0.18 - exchange_penalty
 		+ rng.randf_range(-0.15, 0.15), 0.12, 0.95
@@ -483,7 +489,8 @@ func _resolve_home_continuation(
 		})
 	var opponent_blocker := opponent_team.best_blocker() as VolleyballPlayer
 	var block_quality := _rating(opponent_blocker, "block_timing") * 0.52 \
-		+ _rating(opponent_blocker, "jump_reach") * 0.34 \
+		+ _available_jump_rating(opponent_blocker) * 0.24 \
+		+ _body_reach_rating(opponent_blocker) * 0.10 \
 		+ rng.randf_range(-0.12, 0.12)
 	var blocked: bool = block_quality > attack_quality + rng.randf_range(-0.14, 0.16)
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker.id,
@@ -793,7 +800,11 @@ func _blocker_close_fraction(
 	var anticipation := _rating(blocker, "anticipation")
 	var reaction_delay := lerpf(0.34, 0.12, anticipation)
 	var movement_time := maxf(available_time - reaction_delay, 0.0)
-	var movement_speed := lerpf(1.25, 4.40, _rating(blocker, "lateral_speed"))
+	var mass_multiplier := lerpf(1.05, 0.91, clampf(
+		(blocker.mass_kg - 55.0) / 60.0, 0.0, 1.0
+	))
+	var movement_speed := lerpf(1.25, 4.40, _rating(blocker, "lateral_speed")) \
+		* mass_multiplier
 	var travel_capacity := movement_speed * movement_time + 0.72
 	return clampf(1.0 - maxf(distance_meters - travel_capacity, 0.0) / 2.8, 0.0, 1.0)
 
@@ -802,10 +813,11 @@ func _block_contact_skill(blocker: VolleyballPlayer, close_fraction: float) -> f
 	if blocker == null:
 		return 0.0
 	return clampf(
-		_rating(blocker, "block_timing") * 0.46
-		+ _rating(blocker, "jump_reach") * 0.34
+		_rating(blocker, "block_timing") * 0.40
+		+ _available_jump_rating(blocker) * 0.25
+		+ _body_reach_rating(blocker) * 0.13
 		+ _rating(blocker, "anticipation") * 0.08
-		+ close_fraction * 0.12,
+		+ close_fraction * 0.14,
 		0.05, 0.98,
 	)
 
@@ -915,7 +927,7 @@ func _weak_passer_target(
 
 
 func _serve_flight_time(server: VolleyballPlayer, serve_quality: float) -> float:
-	var power := _rating(server, "serve_power")
+	var power := _power_rating(server, "serve_power")
 	return clampf(1.28 - power * 0.42 - serve_quality * 0.24, 0.58, 1.15)
 
 
@@ -1056,6 +1068,27 @@ func _rating(player: VolleyballPlayer, property_name: String) -> float:
 		raw_rating * (1.0 - player.fatigue * 0.18) + player.current_form * 0.06,
 		0.05, 1.0,
 	)
+
+
+func _power_rating(player: VolleyballPlayer, property_name: String) -> float:
+	var base := _rating(player, property_name)
+	var mass_bonus := clampf((player.mass_kg - 82.0) / 48.0, -0.50, 1.0) * 0.07
+	var explosive_bonus := 0.0
+	if property_name == "attack_power":
+		explosive_bonus = (_rating(player, "explosiveness") - 0.50) * 0.05
+	return clampf(base + mass_bonus + explosive_bonus, 0.05, 1.0)
+
+
+func _available_jump_rating(player: VolleyballPlayer) -> float:
+	var maximum_jump := _rating(player, "jump_reach")
+	var jump_access := lerpf(0.62, 1.0, _rating(player, "explosiveness"))
+	return clampf(maximum_jump * jump_access, 0.05, 1.0)
+
+
+func _body_reach_rating(player: VolleyballPlayer) -> float:
+	var standing_reach := inverse_lerp(200.0, 275.0, player.standing_reach_cm())
+	var wingspan := inverse_lerp(160.0, 225.0, player.wingspan_cm)
+	return clampf(standing_reach * 0.68 + wingspan * 0.32, 0.05, 1.0)
 
 
 func _quality_phrase(quality: float) -> String:

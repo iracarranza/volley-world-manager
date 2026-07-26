@@ -19,6 +19,7 @@ func _initialize() -> void:
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_block_closing_and_touch_distribution()
+	_test_physical_body_attributes()
 	_test_default_offense_without_saved_play()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
@@ -357,6 +358,72 @@ func _test_block_closing_and_touch_distribution() -> void:
 	_check(
 		float(stuff_blocks) / maxf(float(home_block_events), 1.0) < 0.22,
 		"home stuff-block rate remains below the prototype balance ceiling",
+	)
+
+
+func _test_physical_body_attributes() -> void:
+	var player := VolleyballPlayer.new()
+	player.position_role = "Middle Blocker"
+	player.apply_role_physical_defaults()
+	player.height_cm = 207.0
+	player.mass_kg = 101.0
+	player.wingspan_cm = 216.0
+	player.explosiveness = 89
+	player.reception_balance = 43
+	player.reception_stability = 61
+	var restored := VolleyballPlayer.from_dict(player.to_dict())
+	_check(is_equal_approx(restored.height_cm, 207.0), "height survives player serialization")
+	_check(is_equal_approx(restored.mass_kg, 101.0), "mass survives player serialization")
+	_check(restored.explosiveness == 89, "explosiveness survives player serialization")
+	_check(
+		restored.reception_balance == 43 and restored.reception_stability == 61,
+		"reception balance and stability survive player serialization",
+	)
+	var zone := DefensiveZone.new()
+	zone.center = Vector2(0.20, 0.84)
+	zone.radius_meters = 4.0
+	var short_span := VolleyballPlayer.new()
+	short_span.wingspan_cm = 165.0
+	var long_span := VolleyballPlayer.new()
+	long_span.wingspan_cm = 220.0
+	var short_arrival: Dictionary = CoverageCalculator.evaluate_arrival(
+		short_span, zone, Vector2(0.30, 0.84), 0.8, "reception"
+	)
+	var long_arrival: Dictionary = CoverageCalculator.evaluate_arrival(
+		long_span, zone, Vector2(0.30, 0.84), 0.8, "reception"
+	)
+	_check(
+		float(long_arrival.physical_reach_meters) > float(short_arrival.physical_reach_meters),
+		"longer wingspan increases physical defensive reach",
+	)
+	var light_player := VolleyballPlayer.new()
+	light_player.mass_kg = 60.0
+	var heavy_player := VolleyballPlayer.new()
+	heavy_player.mass_kg = 120.0
+	var light_arrival: Dictionary = CoverageCalculator.evaluate_arrival(
+		light_player, zone, Vector2(0.38, 0.84), 1.0, "reception"
+	)
+	var heavy_arrival: Dictionary = CoverageCalculator.evaluate_arrival(
+		heavy_player, zone, Vector2(0.38, 0.84), 1.0, "reception"
+	)
+	_check(
+		float(light_arrival.physical_reach_meters) > float(heavy_arrival.physical_reach_meters),
+		"greater mass slightly reduces movement-derived coverage",
+	)
+	var unstable := VolleyballPlayer.new()
+	unstable.reception_balance = 20
+	unstable.reception_stability = 20
+	var stable := VolleyballPlayer.new()
+	stable.reception_balance = 90
+	stable.reception_stability = 90
+	var edge_arrival := {"edge_ratio": 0.92}
+	_check(
+		CoverageCalculator.reception_body_penalty(
+			stable, edge_arrival, 0.90
+		) < CoverageCalculator.reception_body_penalty(
+			unstable, edge_arrival, 0.90
+		),
+		"balance and stability reduce edge-and-pace reception penalties",
 	)
 
 

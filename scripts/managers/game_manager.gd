@@ -29,29 +29,44 @@ func seed_vertical_slice_data() -> void:
 	players.clear()
 	players.append(_make_player(1, "Mira", "Setter", "S", {
 		"set_accuracy": 86, "court_vision": 90, "decision_making": 84,
-		"improvisation": 78,
+		"improvisation": 78, "height_cm": 185.0, "mass_kg": 77.0,
+		"wingspan_cm": 188.0, "explosiveness": 73,
 	}))
 	players.append(_make_player(2, "Tala", "Outside Hitter", "OH1", {
 		"reception": 78, "attack_accuracy": 76, "approach_timing": 80,
+		"height_cm": 191.0, "mass_kg": 84.0, "wingspan_cm": 197.0,
+		"explosiveness": 82, "reception_balance": 82, "reception_stability": 76,
 	}))
 	players.append(_make_player(3, "Boro", "Middle Blocker", "M1", {
 		"jump_reach": 88, "block_timing": 84, "approach_timing": 79,
+		"height_cm": 205.0, "mass_kg": 98.0, "wingspan_cm": 214.0,
+		"explosiveness": 91,
 	}))
 	players.append(_make_player(4, "Sena", "Opposite", "OP", {
 		"attack_power": 91, "jump_reach": 86, "lateral_speed": 38,
+		"height_cm": 199.0, "mass_kg": 99.0, "wingspan_cm": 207.0,
+		"explosiveness": 86,
 	}))
 	players.append(_make_player(5, "Ivo", "Outside Hitter", "OH2", {
 		"transition_speed": 82, "attack_accuracy": 73, "court_vision": 76,
+		"height_cm": 195.0, "mass_kg": 90.0, "wingspan_cm": 200.0,
+		"explosiveness": 76, "reception_balance": 72, "reception_stability": 80,
 	}))
 	players.append(_make_player(6, "Nemi", "Libero", "L", {
 		"reception": 92, "ball_control": 90, "anticipation": 88,
-		"attack_power": 20,
+		"attack_power": 20, "height_cm": 176.0, "mass_kg": 69.0,
+		"wingspan_cm": 180.0, "explosiveness": 75,
+		"reception_balance": 94, "reception_stability": 95,
 	}))
 	players.append(_make_player(7, "Kiri", "Middle Blocker", "M2", {
 		"jump_reach": 84, "block_timing": 79, "transition_speed": 74,
+		"height_cm": 201.0, "mass_kg": 92.0, "wingspan_cm": 208.0,
+		"explosiveness": 82,
 	}))
 	players.append(_make_player(8, "Rui", "Outside Hitter", "OH3", {
 		"reception": 70, "attack_accuracy": 68, "stamina": 76,
+		"height_cm": 190.0, "mass_kg": 83.0, "wingspan_cm": 194.0,
+		"explosiveness": 74,
 	}))
 	rotations.clear()
 	var base_rotation_ids: Array[int] = [1, 2, 3, 4, 5, 7]
@@ -124,6 +139,7 @@ func _make_player(
 	player.display_name = player_name
 	player.position_role = role_name
 	player.position_code = position_code
+	player.apply_role_physical_defaults()
 	for property_name in overrides:
 		player.set(str(property_name), overrides[property_name])
 	return player

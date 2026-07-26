@@ -29,7 +29,11 @@ static func evaluate_arrival(
 	var speed_rating := float(player.lateral_speed) / 100.0
 	var acceleration_rating := float(player.acceleration) / 100.0
 	var fatigue_multiplier := 1.0 - player.fatigue * 0.30
-	var movement_speed := lerpf(1.35, 4.65, speed_rating) * fatigue_multiplier
+	var mass_multiplier := lerpf(1.06, 0.90, clampf(
+		(player.mass_kg - 55.0) / 60.0, 0.0, 1.0
+	))
+	var movement_speed := lerpf(1.35, 4.65, speed_rating) \
+		* fatigue_multiplier * mass_multiplier
 	var acceleration_factor := lerpf(0.62, 1.0, acceleration_rating)
 	var travel_distance := movement_speed * available_time * acceleration_factor
 	var base_reach := _base_reach_meters(player, contact_skill)
@@ -38,6 +42,7 @@ static func evaluate_arrival(
 	var reachable := distance <= minf(physical_reach, assigned_reach)
 	var arrival_margin := physical_reach - distance
 	var zone_margin := assigned_reach - distance
+	var edge_ratio := distance / maxf(assigned_reach, 0.1)
 	var skill_rating := float(player.get(contact_skill)) / 100.0
 	var claim_score := float(zone.priority) * 0.24 \
 		+ clampf(arrival_margin / 3.0, -0.5, 0.5) * 0.34 \
@@ -51,6 +56,7 @@ static func evaluate_arrival(
 		"physical_reach_meters": physical_reach,
 		"assigned_reach_meters": assigned_reach,
 		"arrival_margin": arrival_margin,
+		"edge_ratio": edge_ratio,
 		"claim_score": claim_score,
 	}
 
@@ -88,8 +94,27 @@ static func choose_claimant(
 	return best
 
 
+static func reception_body_penalty(
+	player: VolleyballPlayer,
+	arrival: Dictionary,
+	ball_force: float,
+) -> float:
+	if player == null or arrival.is_empty():
+		return 0.0
+	var edge_ratio := float(arrival.get("edge_ratio", 0.0))
+	var edge_exposure := clampf((edge_ratio - 0.52) / 0.48, 0.0, 1.0)
+	var balance := float(player.reception_balance) / 100.0
+	var stability := float(player.reception_stability) / 100.0
+	var movement_penalty := edge_exposure * (1.0 - balance) * 0.20
+	var pace_exposure := clampf((ball_force - 0.48) / 0.52, 0.0, 1.0)
+	var pace_penalty := pace_exposure * (1.0 - stability) * 0.18
+	return movement_penalty + pace_penalty
+
+
 static func _base_reach_meters(player: VolleyballPlayer, contact_skill: String) -> float:
 	var control := float(player.ball_control) / 100.0
-	var role_bonus := 0.18 if player.position_role == "Libero" else 0.0
-	var defense_bonus := 0.12 if contact_skill == "reception" else 0.0
-	return 0.72 + control * 0.42 + role_bonus + defense_bonus
+	var wingspan_factor := clampf(player.wingspan_cm / 200.0, 0.78, 1.18)
+	var role_bonus := 0.12 if player.position_role == "Libero" else 0.0
+	var defense_bonus := 0.08 if contact_skill == "reception" else 0.0
+	return 0.55 + wingspan_factor * 0.42 + control * 0.25 \
+		+ role_bonus + defense_bonus

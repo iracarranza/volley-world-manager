@@ -74,6 +74,16 @@
 - Distinguish terminal stuff blocks from touches, funnels and misses. Touches
   reduce attack force and add floor-defense reaction time instead of awarding
   an immediate point.
+- Model height, mass and wingspan for every generated demo player, with standing
+  reach derived from height and wingspan. Mass raises attainable serve/attack
+  power slightly while applying a small movement-speed tradeoff; wingspan
+  affects defensive and blocking reach.
+- Use explosiveness to determine how much maximum jump reach is available in a
+  contact window. Reception balance protects moving contacts near a zone edge,
+  while reception stability protects against high ball speed.
+- Show a temporary physical-debug profile whenever a home player marker is
+  selected, including body measurements, derived standing reach, movement,
+  jump, stamina, balance and stability.
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
@@ -97,7 +107,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 76 passing headless foundation checks and UI-binding validation, including a
+- 83 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

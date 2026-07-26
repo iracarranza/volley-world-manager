@@ -129,3 +129,19 @@ partial contests produce a touch or funnel. A touch lowers effective attack
 force and increases flight time before `CoverageCalculator` selects a floor
 defender; a funnel provides a smaller control benefit. This keeps blocking and
 floor defense connected instead of resolving them as competing binary checks.
+
+## Body geometry and reception
+
+`VolleyballPlayer` stores height, mass and wingspan and derives standing reach.
+Position-based defaults migrate older saves without requiring an independent
+standing-reach value. Mass applies a bounded power modifier and small movement
+tradeoff. Wingspan affects base defensive reach; standing reach and wingspan
+both contribute to block geometry.
+
+Maximum `jump_reach` remains the player's ceiling. `explosiveness` determines
+how much of that ceiling is available within the current contact window.
+`reception` remains the compatibility/technique rating, while
+`reception_balance` reduces edge-of-zone movement penalties and
+`reception_stability` reduces high-pace penalties. The reusable penalty lives
+in `CoverageCalculator` so serve reception and floor defense use the same
+interpretation.
