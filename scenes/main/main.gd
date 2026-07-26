@@ -42,8 +42,16 @@ const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 @onready var floor_system_option: OptionButton = %FloorSystemOption
 @onready var serve_target_option: OptionButton = %ServeTargetOption
 @onready var serve_risk_slider: HSlider = %ServeRiskSlider
+@onready var selected_defender_label: Label = %SelectedDefenderLabel
+@onready var base_responsibility_option: OptionButton = %BaseResponsibilityOption
+@onready var read_responsibility_option: OptionButton = %ReadResponsibilityOption
+@onready var seam_responsibility_option: OptionButton = %SeamResponsibilityOption
+@onready var short_ball_responsibility_option: OptionButton = %ShortBallResponsibilityOption
+@onready var emergency_responsibility_option: OptionButton = %EmergencyResponsibilityOption
+@onready var apply_defender_assignment_button: Button = %ApplyDefenderAssignmentButton
 @onready var defense_summary_label: Label = %DefenseSummaryLabel
 @onready var opponent_scouting_label: Label = %OpponentScoutingLabel
+@onready var opponent_adaptation_rate_slider: HSlider = %OpponentAdaptationRateSlider
 @onready var save_defense_button: Button = %SaveDefenseButton
 @onready var timeout_button: Button = %TimeoutButton
 @onready var substitute_out_option: OptionButton = %SubstituteOutOption
@@ -95,6 +103,8 @@ func _ready() -> void:
 	court_mode_option.item_selected.connect(_court_mode_changed)
 	tactical_court.defender_position_changed.connect(_defender_position_changed)
 	save_defense_button.pressed.connect(_save_defensive_plan)
+	apply_defender_assignment_button.pressed.connect(_apply_defender_assignment)
+	opponent_adaptation_rate_slider.value_changed.connect(_opponent_adaptation_rate_changed)
 	timeout_button.pressed.connect(_call_timeout)
 	apply_substitution_button.pressed.connect(_apply_substitution)
 	undo_substitution_button.pressed.connect(_undo_substitution)
@@ -168,6 +178,21 @@ func _populate_static_options() -> void:
 	_populate_text_options(serve_target_option, [
 		"Zone 1", "Zone 5", "Short Middle", "Weak Passer",
 	])
+	_populate_text_options(base_responsibility_option, [
+		"Net defense", "Perimeter defense", "Rotation coverage", "Middle-up defense",
+	])
+	_populate_text_options(read_responsibility_option, [
+		"Read setter and hitter", "Read hitter shoulder", "Read setter release", "Read block hands",
+	])
+	_populate_text_options(seam_responsibility_option, [
+		"Close blocking seam", "Own inside seam", "Own line seam", "Release cross-court seam",
+	])
+	_populate_text_options(short_ball_responsibility_option, [
+		"Cover tip behind block", "Step into tip coverage", "Hold for roll shot", "No short-ball duty",
+	])
+	_populate_text_options(emergency_responsibility_option, [
+		"Release to emergency set", "Pursue deep deflection", "Cover hitter", "Take second contact",
+	])
 
 
 func _apply_light_mode(light_mode: bool) -> void:
@@ -222,6 +247,9 @@ func _select_hitter(player_id: int) -> void:
 	var player := GameManager.player_by_id(player_id)
 	var lineup := GameManager.current_lineup()
 	var slot_number := lineup.slot_for_player(player_id)
+	if court_mode_option.selected == 1:
+		_load_defender_assignment(player_id)
+		return
 	var eligible := player != null \
 		and player.position_role not in ["Setter", "Libero"]
 	selected_hitter_label.text = "%s · %s · slot %d (%s row)" % [
@@ -236,6 +264,59 @@ func _select_hitter(player_id: int) -> void:
 	_preview_demand(0)
 	if not eligible:
 		_set_status("This prototype does not assign Setter or Libero attack lanes.", true)
+
+
+func _load_defender_assignment(player_id: int) -> void:
+	var player := GameManager.player_by_id(player_id)
+	var plan: Resource = GameManager.current_defensive_plan()
+	var assignment: Resource = plan.assignment_for(player_id) if plan != null else null
+	if player == null or assignment == null:
+		selected_defender_label.text = "No defensive assignment is available."
+		apply_defender_assignment_button.disabled = true
+		return
+	selected_defender_label.text = "%s · %s responsibilities" % [
+		player.position_code, player.display_name,
+	]
+	_select_option_text(base_responsibility_option, str(assignment.base_responsibility))
+	_select_option_text(read_responsibility_option, str(assignment.read_responsibility))
+	_select_option_text(seam_responsibility_option, str(assignment.seam_responsibility))
+	_select_option_text(
+		short_ball_responsibility_option, str(assignment.short_ball_responsibility)
+	)
+	_select_option_text(
+		emergency_responsibility_option, str(assignment.emergency_responsibility)
+	)
+	apply_defender_assignment_button.disabled = false
+	_set_status("Editing %s's defensive responsibilities." % player.display_name)
+
+
+func _apply_defender_assignment() -> void:
+	if selected_player_id < 0:
+		return
+	var plan: Resource = GameManager.current_defensive_plan()
+	var assignment: Resource = plan.assignment_for(selected_player_id) if plan != null else null
+	if assignment == null:
+		return
+	assignment.base_responsibility = base_responsibility_option.get_item_text(
+		base_responsibility_option.selected
+	)
+	assignment.read_responsibility = read_responsibility_option.get_item_text(
+		read_responsibility_option.selected
+	)
+	assignment.seam_responsibility = seam_responsibility_option.get_item_text(
+		seam_responsibility_option.selected
+	)
+	assignment.short_ball_responsibility = short_ball_responsibility_option.get_item_text(
+		short_ball_responsibility_option.selected
+	)
+	assignment.emergency_responsibility = emergency_responsibility_option.get_item_text(
+		emergency_responsibility_option.selected
+	)
+	plan.set_assignment(selected_player_id, assignment)
+	_refresh_defensive_plan()
+	tactical_court.queue_redraw()
+	match_preview_court.queue_redraw()
+	_set_status("Applied individual defensive responsibilities.")
 
 
 func _refresh_lane_options(slot_number: int) -> void:
@@ -514,6 +595,8 @@ func _court_mode_changed(index: int) -> void:
 		"Drag a player marker to an attack lane, then finalize tempo and responsibility beside the marker."
 	)
 	_refresh_match_preview()
+	if defense_enabled and selected_player_id >= 0:
+		_load_defender_assignment(selected_player_id)
 
 
 func _refresh_defensive_plan() -> void:
@@ -528,10 +611,27 @@ func _refresh_defensive_plan() -> void:
 		plan.block_strategy, plan.floor_system, plan.serve_target,
 		roundi(float(plan.serve_risk) * 100.0),
 	]
-	opponent_scouting_label.text = "%s\n%s" % [
+	var responsibility_lines: Array[String] = []
+	var lineup := GameManager.current_lineup()
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		var player := GameManager.player_by_id(player_id)
+		var assignment: Resource = plan.assignment_for(player_id)
+		if player != null and assignment != null:
+			responsibility_lines.append("%s — %s; %s" % [
+				player.position_code,
+				assignment.base_responsibility,
+				assignment.short_ball_responsibility,
+			])
+	defense_summary_label.text += "\n" + "\n".join(responsibility_lines)
+	opponent_scouting_label.text = "%s\n%s\n%s" % [
 		GameManager.opponent_team.team_name,
 		GameManager.opponent_team.scouting_summary(),
+		GameManager.opponent_team.adaptation_summary(),
 	]
+	opponent_adaptation_rate_slider.set_value_no_signal(
+		float(GameManager.opponent_team.adaptation_rate) * 100.0
+	)
 	if court_mode_option.selected == 1:
 		tactical_court.set_defensive_view(true, plan)
 
@@ -553,6 +653,12 @@ func _save_defensive_plan() -> void:
 	)
 	_refresh_defensive_plan()
 	_set_status("Defensive plan saved for rotation %d." % GameManager.selected_rotation)
+
+
+func _opponent_adaptation_rate_changed(value: float) -> void:
+	GameManager.opponent_team.adaptation_rate = clampf(value / 100.0, 0.0, 0.40)
+	_refresh_defensive_plan()
+	_set_status("Opponent adaptation rate set to %d%%." % roundi(value))
 
 
 func _populate_text_options(option: OptionButton, values: Array[String]) -> void:
@@ -655,6 +761,7 @@ func _play_rally(result: Resource) -> void:
 	var match_update: Dictionary = GameManager.record_rally(result)
 	_refresh_match_header()
 	_refresh_match_controls()
+	_refresh_defensive_plan()
 	rally_playback_active = false
 	resolve_rally_button.disabled = bool(GameManager.match_state.match_complete)
 	skip_playback_button.disabled = true

@@ -331,6 +331,43 @@ unique_name_in_owner = true
 layout_mode = 2
 value = 50.0
 
+[node name="SelectedDefenderLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Select a defender to edit individual responsibilities."
+autowrap_mode = 2
+
+[node name="BaseResponsibilityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "The defender's starting structural responsibility."
+
+[node name="ReadResponsibilityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "The cue this defender reads before moving."
+
+[node name="SeamResponsibilityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Which blocking or floor-defense seam this player owns."
+
+[node name="ShortBallResponsibilityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Responsibility for tips, rolls and short deflections."
+
+[node name="EmergencyResponsibilityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Fallback duty after a broken or deflected play."
+
+[node name="ApplyDefenderAssignmentButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Apply Player Responsibilities"
+disabled = true
+
 [node name="SaveDefenseButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=994939557]
 unique_name_in_owner = true
 layout_mode = 2
@@ -347,6 +384,19 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(330, 48)
 layout_mode = 2
 autowrap_mode = 2
+
+[node name="OpponentAdaptationRateLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+layout_mode = 2
+text = "Opponent adaptation rate"
+
+[node name="OpponentAdaptationRateSlider" type="HSlider" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 40.0
+step = 1.0
+value = 16.0
+tooltip_text = "Balancing control: how quickly this opponent learns repeated lanes, tempos and serve targets."
 
 [node name="EditorTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1756695895]
 layout_mode = 2

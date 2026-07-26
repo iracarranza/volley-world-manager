@@ -44,7 +44,9 @@ func resolve(
 		Vector2(0.80, 0.08), Vector2(0.22, 0.88), not serve_error, serve_quality,
 		"Pressure serve" if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
-		if not serve_error else "The serve does not enter the court.")
+		if not serve_error else "The serve does not enter the court.", {
+			"side": "opponent", "target": "Zone 5",
+		})
 
 	if serve_error:
 		return _finish_serve_error(result, server_name)
@@ -125,7 +127,8 @@ func resolve(
 		"%s from %s at T%d · %d%% contact quality." % [
 			hit_type, assignment.lane, assignment.tempo,
 			roundi(float(result.attack_quality) * 100.0),
-		])
+		], {"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
+			"attack_type": hit_type})
 	if result.attack_quality < 0.29:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
@@ -137,13 +140,23 @@ func resolve(
 		+ _rating(opponent_blocker, "jump_reach") * 0.34
 		+ rng.randf_range(-0.13, 0.13) \
 		- float(3 - assignment.tempo) * 0.035, 0.15, 0.92)
+	var adaptation_bonus := _opponent_adaptation_bonus(
+		opponent_team, assignment.lane, assignment.tempo
+	)
+	block_strength = clampf(block_strength + adaptation_bonus, 0.15, 0.96)
+	if adaptation_bonus >= 0.035:
+		result.key_factors.append(ExplanationText.factor("opponent_adapted"))
 	var blocked: bool = block_strength > float(result.attack_quality) \
 		+ rng.randf_range(-0.15, 0.15)
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker.id,
 		opponent_blocker.display_name,
 		Vector2(set_target.x, 0.47), Vector2(set_target.x, 0.50), blocked,
 		block_strength, "Block forms at %s" % assignment.lane,
-		"%d%% close speed; the blockers seal the chosen lane." % roundi(block_strength * 100.0))
+		"%d%% close speed; the blockers seal the chosen lane.%s" % [
+			roundi(block_strength * 100.0),
+			" Scouting anticipated this pattern." if adaptation_bonus >= 0.035 else "",
+		], {"side": "opponent", "lane": assignment.lane,
+			"adaptation_bonus": adaptation_bonus})
 	if blocked:
 		result.key_factors.append(ExplanationText.factor("strong_block"))
 		return _finish(result, "blocked", false, hitter.id, {
@@ -206,7 +219,9 @@ func _resolve_home_serve(
 		serve_quality, "%s serves" % server.display_name,
 		"%d%% pressure at %d%% selected risk." % [
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
-		])
+		], {"side": "home", "target": str(
+			defensive_plan.serve_target if defensive_plan != null else "Zone 5"
+		)})
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
 			"server": server.display_name,
@@ -262,7 +277,9 @@ func _resolve_opponent_transition(
 		opponent_hitter.display_name,
 		opponent_contact, home_target, true, opponent_attack,
 		"Opponent transition swing · exchange %d" % exchange_number,
-		"Contact 3 of 3 · power swing at %d%% quality." % roundi(opponent_attack * 100.0))
+		"Contact 3 of 3 · power swing at %d%% quality." % roundi(opponent_attack * 100.0),
+		{"side": "opponent", "lane_x": opponent_contact.x,
+			"attack_type": _opponent_attack_type(home_target)})
 	var blocker := _best_blocker(players, lineup)
 	var home_block := _rating(blocker, "block_timing") * 0.55 \
 		+ _rating(blocker, "jump_reach") * 0.30 \
@@ -286,17 +303,27 @@ func _resolve_opponent_transition(
 			"blocker": blocker.display_name,
 		})
 	var defender := _best_positioned_defender(players, lineup, defensive_plan, home_target)
+	var attack_type := _opponent_attack_type(home_target)
+	var responsibility_fit := _defensive_responsibility_fit(
+		defensive_plan, defender.id, home_target, attack_type
+	)
 	var defense_quality := _rating(defender, "anticipation") * 0.38 \
 		+ _rating(defender, "reception") * 0.36 \
 		+ _rating(defender, "lateral_speed") * 0.18 \
-		+ rng.randf_range(-0.12, 0.12)
+		+ responsibility_fit + rng.randf_range(-0.12, 0.12)
 	var defense_success: bool = defense_quality > opponent_attack - 0.12
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
 		home_target, home_target + Vector2(0.03, -0.04), defense_success,
 		defense_quality, "%s defends" % defender.display_name,
-		"%d%% defensive contact against a %d%% attack." % [
+		"%d%% defensive contact against a %d%% attack. %s" % [
 			roundi(defense_quality * 100.0), roundi(opponent_attack * 100.0),
-		])
+			_responsibility_phrase(defensive_plan, defender.id, attack_type),
+		], {"side": "home", "attack_type": attack_type,
+			"responsibility_fit": responsibility_fit})
+	result.key_factors.append(ExplanationText.factor(
+		"defense_assignment_fit" if responsibility_fit >= 0.02 \
+		else "defense_assignment_stretch"
+	))
 	if not defense_success:
 		return _finish(result, "opponent_kill", false, -1, {
 			"hitter": original_hitter.display_name,
@@ -354,7 +381,9 @@ func _resolve_home_continuation(
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, attack_quality >= 0.25, attack_quality,
 		"T3 outside swing · exchange %d" % exchange_number,
-		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0))
+		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0),
+		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
+			"attack_type": _hit_type(assignment, hitter)})
 	if attack_quality < 0.25:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
@@ -428,6 +457,7 @@ func _add_event(
 	quality: float,
 	headline: String,
 	detail: String,
+	metadata: Dictionary = {},
 ) -> void:
 	var event: Resource = RallyEventModel.new()
 	event.sequence = result.events.size()
@@ -440,7 +470,82 @@ func _add_event(
 	event.quality = quality
 	event.headline = headline
 	event.detail = detail
+	event.metadata = metadata.duplicate(true)
 	result.events.append(event)
+
+
+func _opponent_adaptation_bonus(
+	opponent_team: Resource,
+	lane: String,
+	tempo: int,
+) -> float:
+	if opponent_team == null:
+		return 0.0
+	var pattern_match := 0.0
+	if opponent_team.anticipated_lane() == lane:
+		pattern_match += 0.65
+	if opponent_team.anticipated_tempo() == tempo:
+		pattern_match += 0.35
+	return float(opponent_team.adaptation_strength) * pattern_match * 0.12
+
+
+func _opponent_attack_type(target: Vector2) -> String:
+	if target.y < 0.80:
+		return "Short tip"
+	if target.x < 0.38 or target.x > 0.62:
+		return "Line attack"
+	return "Seam attack"
+
+
+func _defensive_responsibility_fit(
+	defensive_plan: Resource,
+	player_id: int,
+	target: Vector2,
+	attack_type: String,
+) -> float:
+	if defensive_plan == null:
+		return 0.0
+	var assignment: Resource = defensive_plan.assignment_for(player_id)
+	if assignment == null:
+		return -0.035
+	var fit := 0.0
+	if attack_type == "Short tip" and "Tip" in str(assignment.short_ball_responsibility):
+		fit += 0.055
+	elif attack_type == "Seam attack" and "seam" in str(assignment.seam_responsibility).to_lower():
+		fit += 0.045
+	elif attack_type == "Line attack" and "Perimeter" in str(assignment.base_responsibility):
+		fit += 0.035
+	if defensive_plan.block_strategy == "Read Block" \
+			and "read" in str(assignment.read_responsibility).to_lower():
+		fit += 0.015
+	if defensive_plan.floor_system == "Perimeter" \
+			and "Perimeter" in str(assignment.base_responsibility):
+		fit += 0.015
+	elif defensive_plan.floor_system == "Middle-Up" \
+			and "Middle-up" in str(assignment.base_responsibility):
+		fit += 0.02
+	elif defensive_plan.floor_system == "Rotation Defense" \
+			and "Rotation" in str(assignment.base_responsibility):
+		fit += 0.02
+	var base_position: Vector2 = defensive_plan.defender_position(player_id, target)
+	fit += lerpf(-0.025, 0.025, 1.0 - clampf(base_position.distance_to(target), 0.0, 1.0))
+	return clampf(fit, -0.04, 0.08)
+
+
+func _responsibility_phrase(
+	defensive_plan: Resource,
+	player_id: int,
+	attack_type: String,
+) -> String:
+	if defensive_plan == null:
+		return "No saved responsibility shaped the contact."
+	var assignment: Resource = defensive_plan.assignment_for(player_id)
+	if assignment == null:
+		return "The defender covered outside a saved responsibility."
+	return "%s met the %s responsibility behind the %s." % [
+		str(assignment.base_responsibility), attack_type.to_lower(),
+		str(defensive_plan.block_strategy).to_lower(),
+	]
 
 
 func _choose_assignment(

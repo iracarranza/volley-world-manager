@@ -1,6 +1,8 @@
 class_name DefensivePlan
 extends Resource
 
+const DefensiveAssignmentModel := preload("res://scripts/models/defensive_assignment.gd")
+
 @export_range(1, 6) var rotation_number: int = 1
 @export var plan_name: String = "Base Defense"
 @export var block_strategy: String = "Read Block"
@@ -8,6 +10,7 @@ extends Resource
 @export var serve_target: String = "Zone 5"
 @export_range(0.0, 1.0) var serve_risk: float = 0.5
 @export var defender_positions: Dictionary = {}
+@export var assignments: Dictionary = {}
 
 
 func ensure_defaults(lineup: RotationLineup) -> void:
@@ -15,6 +18,28 @@ func ensure_defaults(lineup: RotationLineup) -> void:
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id not in defender_positions:
 			defender_positions[player_id] = CourtConstants.slot_position(slot_number)
+		if player_id not in assignments:
+			assignments[player_id] = _default_assignment(player_id, slot_number)
+
+
+func assignment_for(player_id: int) -> Resource:
+	return assignments.get(player_id) as Resource
+
+
+func set_assignment(player_id: int, assignment: Resource) -> void:
+	assignment.player_id = player_id
+	assignments[player_id] = assignment
+
+
+func responsibility_summary(player_id: int) -> String:
+	var assignment := assignment_for(player_id)
+	if assignment == null:
+		return "Unassigned"
+	return "%s · %s · %s" % [
+		assignment.base_responsibility,
+		assignment.seam_responsibility,
+		assignment.short_ball_responsibility,
+	]
 
 
 func set_defender_position(player_id: int, position: Vector2) -> void:
@@ -33,6 +58,10 @@ func to_dict() -> Dictionary:
 	for player_id in defender_positions:
 		var position: Vector2 = defender_positions[player_id]
 		positions[player_id] = [position.x, position.y]
+	var assignment_data := {}
+	for player_id in assignments:
+		var assignment: Resource = assignments[player_id]
+		assignment_data[player_id] = assignment.to_dict()
 	return {
 		"rotation_number": rotation_number,
 		"plan_name": plan_name,
@@ -41,6 +70,7 @@ func to_dict() -> Dictionary:
 		"serve_target": serve_target,
 		"serve_risk": serve_risk,
 		"defender_positions": positions,
+		"assignments": assignment_data,
 	}
 
 
@@ -59,3 +89,28 @@ func load_dict(data: Dictionary) -> void:
 			defender_positions[int(raw_player_id)] = Vector2(
 				float(coordinates[0]), float(coordinates[1])
 			)
+	assignments.clear()
+	var saved_assignments: Dictionary = data.get("assignments", {})
+	for raw_player_id in saved_assignments:
+		var assignment: Resource = DefensiveAssignmentModel.from_dict(
+			saved_assignments[raw_player_id]
+		)
+		assignments[int(raw_player_id)] = assignment
+
+
+func _default_assignment(player_id: int, slot_number: int) -> Resource:
+	var assignment: Resource = DefensiveAssignmentModel.new()
+	assignment.player_id = player_id
+	if CourtConstants.is_front_row_slot(slot_number):
+		assignment.base_responsibility = "Net defense"
+		assignment.read_responsibility = "Read setter and hitter"
+		assignment.seam_responsibility = "Close blocking seam"
+		assignment.short_ball_responsibility = "Cover tip behind block"
+		assignment.emergency_responsibility = "Release to emergency set"
+	else:
+		assignment.base_responsibility = "Perimeter defense"
+		assignment.read_responsibility = "Read hitter shoulder"
+		assignment.seam_responsibility = "Own inside seam"
+		assignment.short_ball_responsibility = "Step into tip coverage"
+		assignment.emergency_responsibility = "Pursue deep deflection"
+	return assignment

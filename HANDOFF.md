@@ -55,9 +55,18 @@
 - Switch the coaching board between offense and per-rotation defense.
 - Drag defensive positions and save block strategy, floor system, serve target
   and serve risk.
+- Select any defender and explicitly assign base structure, read cue, seam,
+  short-ball and emergency responsibilities. Assignments are saved per rotation
+  and contribute to defensive contact quality.
+- See each player's compact structural responsibility directly on the defensive
+  court.
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
+- Let the opponent learn repeated home attack lanes, set tempos and serve
+  targets. Learned patterns improve its block formation gradually, persist in
+  saves and are summarized in the scouting panel.
+- Adjust the opponent adaptation rate from the defensive panel for balancing.
 - Take timeouts, confirm rotation-wide substitutions, undo the latest change,
   monitor average fatigue and short-term form, and view recent rally outcomes.
 - Use rotation sheets that automatically replace the back-row middle with the
@@ -67,13 +76,13 @@
 ## Implemented underneath
 
 - Typed player, rotation, hitter-assignment, offensive-play, rally-event and
-  rally-result Resources.
+  rally-result Resources, plus typed per-player defensive assignments.
 - Normalized court coordinates.
 - Rotation and play validation.
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 60 passing headless foundation checks and UI-binding validation.
+- 66 passing headless foundation checks and UI-binding validation.
 
 ## Intentionally not implemented yet
 
@@ -81,6 +90,6 @@
 - Unlimited continuation contacts; rallies intentionally use a four-exchange
   safety bound to prevent pathological simulation loops.
 
-The next pass should deepen individual defensive responsibilities and opponent
-adaptation. Marker movement is still intentionally schematic; future 2.5D work
-can replace the presenter without changing rally outcomes.
+The next pass should add opponent rotation-specific personnel and tactical
+counter-adjustments. Marker movement is intentionally schematic; future 2.5D
+work can replace the presenter without changing rally outcomes.

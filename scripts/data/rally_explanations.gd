@@ -42,6 +42,9 @@ const FACTOR_LINES := {
 	"strong_defense": "Defensive anticipation covered the chosen target.",
 	"attack_control": "Attack accuracy converted the available opening.",
 	"default_offense": "No play was active; the setter used the default T3 outside ball.",
+	"opponent_adapted": "The opponent recognized a repeated lane or tempo and formed earlier.",
+	"defense_assignment_fit": "The saved defensive responsibility matched the attack target.",
+	"defense_assignment_stretch": "A defender had to leave the saved responsibility to reach the ball.",
 }
 
 

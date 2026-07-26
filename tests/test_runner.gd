@@ -222,6 +222,28 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 			== Vector2(0.25, 0.82),
 		"defensive positions are editable per rotation",
 	)
+	var assignment: Resource = manager.current_defensive_plan().assignment_for(6)
+	_check(assignment != null, "every defender receives an explicit responsibility")
+	_check(
+		not str(assignment.short_ball_responsibility).is_empty(),
+		"defensive responsibility includes short-ball coverage",
+	)
+	var observed_result: Resource = preload("res://scripts/models/rally_result.gd").new()
+	var observed_attack: Resource = RALLY_EVENT_SCRIPT.new()
+	observed_attack.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	observed_attack.metadata = {
+		"side": "home", "lane": "Left Pin", "tempo": 2,
+	}
+	observed_result.events.append(observed_attack)
+	manager.opponent_team.observe_rally(observed_result)
+	_check(
+		manager.opponent_team.anticipated_lane() == "Left Pin",
+		"opponent adaptation learns the observed attack lane",
+	)
+	_check(
+		manager.opponent_team.adaptation_strength > 0.0,
+		"opponent adaptation rises at the exposed tuning rate",
+	)
 	_check(manager.call_timeout().is_empty(), "a match timeout can be called")
 	_check(manager.match_state.home_timeouts_remaining == 1, "timeout inventory decreases")
 	_check(
@@ -242,6 +264,14 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 		restored.current_defensive_plan().defender_position(6, Vector2.ZERO) \
 			== Vector2(0.25, 0.82),
 		"defensive plan survives serialization",
+	)
+	_check(
+		restored.current_defensive_plan().assignment_for(6) != null,
+		"defensive responsibilities survive serialization",
+	)
+	_check(
+		restored.opponent_team.anticipated_lane() == "Left Pin",
+		"opponent adaptation survives serialization",
 	)
 
 

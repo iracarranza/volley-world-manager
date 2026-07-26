@@ -238,6 +238,8 @@ func record_rally(result: Resource) -> Dictionary:
 	if match_state == null:
 		match_state = MatchStateScript.new()
 	var update: Dictionary = match_state.record_rally(result)
+	if opponent_team != null:
+		opponent_team.observe_rally(result)
 	_apply_rally_fatigue_and_form(result)
 	if bool(update.get("rotated", false)):
 		select_rotation(int(match_state.home_rotation))
@@ -308,6 +310,7 @@ func substitute_current_rotation(player_out_id: int, player_in_id: int) -> Strin
 			plan.set_defender_position(
 				player_in_id, CourtConstants.slot_position(int(change["slot"]))
 			)
+			plan.ensure_defaults(lineup)
 	match_state.home_substitutions_used += 1
 	match_state.substitution_pairs[player_out_id] = player_in_id
 	match_state.substitution_pairs[player_in_id] = player_out_id
@@ -386,6 +389,8 @@ func to_dict() -> Dictionary:
 		"next_play_id": _next_play_id,
 		"match_state": match_state.to_dict() if match_state != null else {},
 		"defensive_plans": _defensive_plans_to_data(),
+		"opponent_adaptation": opponent_team.adaptation_to_dict() \
+			if opponent_team != null else {},
 	}
 
 
@@ -414,10 +419,12 @@ func from_dict(data: Dictionary) -> void:
 	_next_play_id = maxi(int(data.get("next_play_id", 1)), 1)
 	match_state = MatchStateScript.new()
 	match_state.load_dict(data.get("match_state", {}))
+	opponent_team.load_adaptation(data.get("opponent_adaptation", {}))
 	defensive_plans.clear()
 	for plan_data in data.get("defensive_plans", []):
 		var plan: Resource = DefensivePlanScript.new()
 		plan.load_dict(plan_data)
+		plan.ensure_defaults(rotations[plan.rotation_number])
 		defensive_plans[plan.rotation_number] = plan
 	for rotation_number in range(1, 7):
 		if rotation_number not in defensive_plans:

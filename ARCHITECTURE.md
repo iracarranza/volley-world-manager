@@ -13,7 +13,9 @@
 - `scripts/data/rally_explanations.gd`: all current player-facing rally result
   templates and factor captions.
 - `scripts/models/defensive_plan.gd`: per-rotation block intent, floor system,
-  serve intent and normalized defender positions.
+  serve intent, normalized defender positions and player responsibility map.
+- `scripts/models/defensive_assignment.gd`: one player's base, read, seam,
+  short-ball and emergency responsibilities.
 - `scripts/models/opponent_team.gd`: opponent roster, real player attributes,
   tendencies and scouting confidence.
 - `scenes/main/main.gd`: presentation coordinator. It requests a completed
@@ -61,6 +63,19 @@ post-contact movement phases. `main.gd` sequences those phases around the ball
 flight, while `tactical_court.gd` owns interpolation, short trails, destination
 markers and phase captions. Reception, setting, attacking, blocking and defense
 therefore read differently without placing animation state in the simulator.
+Support targets are derived for the full home unit around each event, so attack
+coverage, setter support, block closing and floor-defense movement happen as a
+coordinated presentation phase. Only normalized defensive-plan state—not these
+temporary animated positions—is read by the simulator.
+
+## Adaptation flow
+
+Home attack and serve events carry compact tactical metadata. After the rally
+is scored, `OpponentTeam.observe_rally()` counts exposed lanes, tempos and serve
+targets and advances an adjustable adaptation strength. The next rally may use
+that learned pattern as a bounded block bonus. Updating after resolution avoids
+changing an outcome retroactively, and the adaptation state is serialized by
+`GameManager`.
 
 ## Theme ownership
 
