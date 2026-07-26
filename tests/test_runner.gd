@@ -3,6 +3,7 @@ extends SceneTree
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
+const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -12,6 +13,7 @@ func _initialize() -> void:
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
+	_test_ball_trajectory_geometry()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -108,6 +110,23 @@ func _test_serve_receive_overlap_bounds() -> void:
 			3, Vector2(0.90, 0.62), positions
 		),
 		"crossing the right-front player is identified as an overlap fault",
+	)
+
+
+func _test_ball_trajectory_geometry() -> void:
+	var trajectory: Resource = BALL_TRAJECTORY_SCRIPT.create(
+		"test", Vector2(0.1, 0.2), Vector2(0.5, 0.1),
+		Vector2(0.9, 0.8), 2.0, 0.8, 2.4
+	)
+	_check(
+		Vector2(trajectory.position_at(0.0)).is_equal_approx(Vector2(0.1, 0.2))
+			and Vector2(trajectory.position_at(1.0)).is_equal_approx(Vector2(0.9, 0.8)),
+		"ball trajectory preserves exact contact endpoints",
+	)
+	_check(
+		is_equal_approx(float(trajectory.duration()), 0.8)
+			and is_equal_approx(float(trajectory.apex_height_meters), 2.4),
+		"ball trajectory preserves timing and apex height",
 	)
 
 
@@ -375,6 +394,8 @@ func _test_coverage_arrival_and_reception_ownership() -> void:
 	manager.seed_vertical_slice_data()
 	var non_libero_received := false
 	var reception_has_arrival_data := false
+	var reception_has_platform_data := false
+	var setter_chased_actual_pass := false
 	for seed_value in range(2000, 2025):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
@@ -385,8 +406,25 @@ func _test_coverage_arrival_and_reception_ownership() -> void:
 			if event.actor_id != 6:
 				non_libero_received = true
 			reception_has_arrival_data = event.metadata.has("arrival")
+			reception_has_platform_data = reception_has_platform_data or ( \
+				event.metadata.has("body_alignment") \
+				and event.metadata.has("platform_feasibility") \
+				and event.metadata.has("outgoing_trajectory")
+			)
+			var actual_target: Vector2 = event.metadata.get(
+				"actual_pass_target", Vector2.ZERO
+			)
+			for follow_event_resource in result.events:
+				var follow_event: Resource = follow_event_resource
+				if follow_event.event_type == RALLY_EVENT_SCRIPT.EventType.SET:
+					setter_chased_actual_pass = setter_chased_actual_pass or Vector2(
+						follow_event.start_position
+					).is_equal_approx(actual_target)
+					break
 	_check(non_libero_received, "serve placement allows a non-libero passer to own reception")
 	_check(reception_has_arrival_data, "reception events expose physical arrival data")
+	_check(reception_has_platform_data, "reception exposes posture, platform and pass trajectory")
+	_check(setter_chased_actual_pass, "setter contact follows the generated reception destination")
 	var seam_partner := VolleyballPlayer.new()
 	seam_partner.id = 901
 	seam_partner.lateral_speed = 75

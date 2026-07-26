@@ -24,6 +24,9 @@
   highlights and a block envelope, with 0.5×/1×/2× playback and skip.
 - Watch home markers move toward reception, setting, approach, blocking and
   defensive contact positions while events play.
+- Watch the ball follow continuous contact-to-contact trajectories while the
+  next player moves into position, including separate attack-to-block and
+  block-deflection paths at the net.
 - Complete event-specific movement phases before drawing the associated ball
   flight: read/receive, setter transition/set position, transition/approach,
   read/block close and read/defensive move or dive.
@@ -92,6 +95,10 @@
   and any other enabled passer claim balls using zone priority only if their
   reaction, speed, acceleration, fatigue and reach allow them to arrive.
   Equal-priority overlaps can create a penalized seam conflict.
+- Resolve reception as an actual redirected vector. Body alignment, movement
+  posture, settling time, edge pressure, pace, balance, stability, reception
+  technique and ball control determine platform feasibility and pass error;
+  the setter must chase the generated destination.
 - Resolve home floor contacts with the same physical arrival model, including
   approximate attack flight time and nearby coverage support.
 - Form home blocks through a nearest-player primary and travel-limited assist.
@@ -126,15 +133,15 @@
 
 ## Implemented underneath
 
-- Typed player, rotation, hitter-assignment, offensive-play, rally-event and
-  rally-result Resources, plus typed per-player defensive assignments and
-  coverage zones.
+- Typed player, rotation, hitter-assignment, offensive-play, rally-event,
+  rally-result and ball-trajectory Resources, plus typed per-player defensive
+  assignments and coverage zones.
 - Normalized court coordinates.
 - Rotation and play validation.
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 104 passing headless foundation checks and UI-binding validation, including a
+- 108 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

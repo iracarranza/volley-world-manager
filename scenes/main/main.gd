@@ -962,14 +962,34 @@ func _play_rally(result: Resource) -> void:
 	rally_result_explanation.text = ""
 	rally_result_factors.text = ""
 	var playback_speed := float(_selected_metadata(playback_speed_option))
-	for event_resource in result.events:
-		var event: Resource = event_resource
+	for event_index in range(result.events.size()):
+		var event: Resource = result.events[event_index]
 		if skip_rally_playback:
 			break
 		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
 			float(event.metadata.get("event_time", 0.0)),
 			event.type_name(), event.headline, event.detail,
 		])
+		if event.event_type == RallyEvent.EventType.SET_DECISION:
+			continue
+		var outgoing_trajectory: Dictionary = event.metadata.get(
+			"outgoing_trajectory", {}
+		)
+		var next_contact := _next_contact_event(result.events, event_index + 1)
+		if not outgoing_trajectory.is_empty() and next_contact != null:
+			var trajectory_duration := clampf(
+				float(outgoing_trajectory.get("duration", 0.5)), 0.20, 2.20
+			) / maxf(playback_speed, 0.1)
+			tactical_court.animate_spatial_transition(
+				event, next_contact, trajectory_duration
+			)
+			match_preview_court.animate_spatial_transition(
+				event, next_contact, trajectory_duration
+			)
+			await _wait_for_playback_phase(trajectory_duration)
+			tactical_court.finish_event_animation()
+			match_preview_court.finish_event_animation()
+			continue
 		var has_movement := tactical_court.has_player_movement(event)
 		var simulated_movement := float(event.metadata.get("movement_duration", 0.0))
 		var simulated_flight := float(event.metadata.get("flight_time",
@@ -1064,6 +1084,17 @@ func _play_rally(result: Resource) -> void:
 			"HOME WIN" if GameManager.match_state.home_sets > \
 			GameManager.match_state.opponent_sets else "OPPONENT WIN"
 		)
+
+
+func _next_contact_event(events: Array, start_index: int) -> Resource:
+	for event_index in range(start_index, events.size()):
+		var candidate: Resource = events[event_index]
+		if candidate.event_type not in [
+			RallyEvent.EventType.SET_DECISION,
+			RallyEvent.EventType.POINT,
+		]:
+			return candidate
+	return null
 
 
 func _wait_for_playback_phase(duration: float) -> void:

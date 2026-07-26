@@ -18,6 +18,8 @@
   short-ball, emergency, attack-coverage and second-contact responsibilities.
 - `scripts/models/defensive_zone.gd`: a player's normalized zone center,
   metre-based responsibility radius, priority, activity and zone type.
+- `scripts/models/ball_trajectory.gd`: one authoritative contact-to-contact
+  quadratic ball path, including normalized endpoints, flight timing and apex.
 - `scripts/simulation/coverage_calculator.gd`: pure court-distance, reaction,
   travel, reach and zone-claim calculations shared by reception and defense.
 - `scripts/simulation/rotation_legality.gd`: pure serve-contact overlap bounds
@@ -164,6 +166,28 @@ how much of that ceiling is available within the current contact window.
 `reception_stability` reduces high-pace penalties. The reusable penalty lives
 in `CoverageCalculator` so serve reception and floor defense use the same
 interpretation.
+
+Reception resolves a desired pass vector separately from the receiver's actual
+output. Movement direction, time available to settle, zone-edge pressure and
+incoming force establish body alignment and contact posture. Reception,
+ball control, balance and stability establish platform feasibility; technique
+then limits the redirection error cone. The resulting destination is stored on
+the event and becomes the setter's real chase target rather than descriptive
+text layered over a perfect pass.
+
+## Contact trajectories
+
+Every playable ball contact exposes an `outgoing_trajectory`. The simulator
+owns its start, control point, destination, time window, velocity and apex; the
+court presenter only samples that path. Attacks that meet a block terminate at
+the net and the block begins a separate deflection trajectory, so the rendered
+ball cannot pass through a contact before the corresponding event occurs.
+
+During playback, the outgoing ball flight and the next player's movement run
+concurrently. This creates continuous-looking rally movement while preserving
+the seeded, discrete-event outcome model. A future 2.5D presenter can project
+the same normalized trajectories without moving physics authority into scene
+nodes or frame callbacks.
 
 ## Defensive movement and second contact
 

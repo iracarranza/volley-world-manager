@@ -126,6 +126,39 @@ func animate_event(event: Resource, duration: float) -> void:
 	_start_playback_tween(duration)
 
 
+func animate_spatial_transition(
+	ball_event: Resource,
+	next_contact_event: Resource,
+	duration: float,
+) -> void:
+	playback_event = ball_event
+	playback_ball_visible = true
+	_prepare_player_movement(next_contact_event)
+	unit_movement_starts.clear()
+	unit_movement_targets = _unit_support_targets(
+		next_contact_event, _movement_action_target(next_contact_event)
+	)
+	if movement_player_id >= 0:
+		unit_movement_targets[movement_player_id] = _movement_action_target(
+			next_contact_event
+		)
+	for raw_player_id in unit_movement_targets:
+		var player_id := int(raw_player_id)
+		var slot_number := lineup.slot_for_player(player_id)
+		var start: Vector2 = live_player_positions.get(
+			player_id, _player_court_position(player_id, slot_number)
+		)
+		if player_id == movement_player_id \
+				and next_contact_event.metadata.has("movement_start"):
+			start = Vector2(next_contact_event.metadata["movement_start"])
+			live_player_positions[player_id] = start
+		unit_movement_starts[player_id] = start
+		_append_movement_trail(player_id, start)
+		_append_movement_trail(player_id, unit_movement_targets[player_id])
+	movement_phase_caption = "Tracking live ball"
+	_start_playback_tween(duration)
+
+
 func animate_player_movement(event: Resource, duration: float) -> void:
 	playback_event = event
 	playback_ball_visible = false
@@ -739,9 +772,23 @@ func _short_responsibility(value: String) -> String:
 func _draw_rally_playback() -> void:
 	if playback_event == null:
 		return
-	var start := _court_to_local(playback_event.start_position)
-	var finish := _court_to_local(playback_event.end_position)
-	var ball_position := start.lerp(finish, playback_progress)
+	var trajectory: Dictionary = playback_event.metadata.get("outgoing_trajectory", {})
+	var trajectory_start: Vector2 = trajectory.get(
+		"start_position", playback_event.start_position
+	)
+	var trajectory_control: Vector2 = trajectory.get(
+		"control_position", trajectory_start.lerp(playback_event.end_position, 0.5)
+	)
+	var trajectory_end: Vector2 = trajectory.get(
+		"end_position", playback_event.end_position
+	)
+	var start := _court_to_local(trajectory_start)
+	var finish := _court_to_local(trajectory_end)
+	var control := _court_to_local(trajectory_control)
+	var inverse := 1.0 - playback_progress
+	var ball_position := inverse * inverse * start \
+		+ 2.0 * inverse * playback_progress * control \
+		+ playback_progress * playback_progress * finish
 	var event_color: Color = palette["path"] if playback_event.success \
 		else Color("e64f4f")
 	if playback_event.actor_id >= 0 and lineup != null:
@@ -753,7 +800,16 @@ func _draw_rally_playback() -> void:
 			draw_circle(actor_position, 27.0, event_color, false, 4.0)
 	if not playback_ball_visible:
 		return
-	draw_line(start, finish, _with_alpha(event_color, 0.42), 2.0)
+	var path_points := PackedVector2Array()
+	for path_index in range(21):
+		var path_t := float(path_index) / 20.0
+		var path_inverse := 1.0 - path_t
+		path_points.append(
+			path_inverse * path_inverse * start
+			+ 2.0 * path_inverse * path_t * control
+			+ path_t * path_t * finish
+		)
+	draw_polyline(path_points, _with_alpha(event_color, 0.34), 2.0)
 	if playback_event.event_type == RallyEventModel.EventType.BLOCK:
 		var segments: Array = playback_event.metadata.get("coverage_segments", [])
 		if segments.is_empty():
@@ -773,7 +829,9 @@ func _draw_rally_playback() -> void:
 			)
 	var shadow_position := ball_position + Vector2(3.0, 5.0)
 	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
-	draw_circle(ball_position, 9.0, Color("f5d328"))
+	var apex_height := float(trajectory.get("apex_height_meters", 0.0))
+	var height_scale := sin(PI * playback_progress) * apex_height
+	draw_circle(ball_position, 9.0 + height_scale * 0.8, Color("f5d328"))
 	draw_arc(ball_position, 6.0, 0.0, TAU, 16, Color("245ba7"), 2.0)
 
 

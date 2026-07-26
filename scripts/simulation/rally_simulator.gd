@@ -6,6 +6,7 @@ const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -50,6 +51,9 @@ func resolve(
 		intended_target, opponent_server, players, lineup, true
 	)
 	var serve_time := _serve_flight_time(opponent_server, serve_quality)
+	var serve_trajectory := _ball_trajectory(
+		"serve", Vector2(0.80, 0.08), serve_landing, serve_time, 0.45
+	)
 	_add_event(result, RallyEventModel.EventType.SERVE, -1, server_name,
 		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
 		"Pressure serve" if not serve_error else "Serve misses",
@@ -58,6 +62,7 @@ func resolve(
 			"side": "opponent", "target": intended_target,
 			"flight_time": serve_time,
 			"event_time": 0.0, "contact_time": serve_time,
+			"outgoing_trajectory": serve_trajectory,
 		})
 	rally_clock = serve_time
 
@@ -98,6 +103,12 @@ func resolve(
 		receiver, receiver_start, serve_landing, "lateral"
 	)
 	live_positions[receiver.id] = serve_landing
+	var reception_pass := _reception_pass_result(
+		receiver, receiver_start, serve_landing, Vector2(0.50, 0.67),
+		Vector2(0.80, 0.08), serve_quality, arrival,
+		float(result.reception_quality)
+	)
+	var pass_trajectory: Dictionary = reception_pass.trajectory
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		serve_landing, Vector2(0.50, 0.67), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
@@ -112,7 +123,14 @@ func resolve(
 			"claim_margin": float(reception_claim.get("claim_margin", 1.0)),
 			"movement_start": receiver_start,
 			"movement_duration": receiver_move_time,
-			"event_time": rally_clock})
+			"event_time": rally_clock,
+			"incoming_trajectory": serve_trajectory,
+			"outgoing_trajectory": pass_trajectory,
+			"body_alignment": reception_pass.body_alignment,
+			"platform_feasibility": reception_pass.platform_feasibility,
+			"contact_posture": reception_pass.contact_posture,
+			"desired_pass_target": Vector2(0.50, 0.67),
+			"actual_pass_target": reception_pass.destination})
 	if seam_conflict:
 		result.key_factors.append(ExplanationText.factor("seam_conflict"))
 	if not reception_success:
@@ -122,10 +140,8 @@ func resolve(
 	setter = _second_contact_setter(
 		players, lineup, defensive_plan, receiver.id
 	)
-	var set_contact := Vector2(0.50, 0.67)
-	var second_contact_window := lerpf(
-		0.52, 0.92, clampf(float(result.reception_quality), 0.0, 1.0)
-	)
+	var set_contact: Vector2 = reception_pass.destination
+	var second_contact_window := float(pass_trajectory.get("duration", 0.68))
 	var setter_choice := _spatial_setter_choice(
 		players, lineup, defensive_plan, receiver.id, setter,
 		set_contact, second_contact_window
@@ -164,7 +180,8 @@ func resolve(
 		if active_play == null else "Moves to the safest available option."),
 		{"side": "home", "emergency_setter": emergency_setter,
 			"first_contact_id": receiver.id,
-			"event_time": rally_clock, "deadline": rally_clock + second_contact_window})
+			"event_time": rally_clock, "deadline": rally_clock + second_contact_window,
+			"incoming_trajectory": pass_trajectory})
 
 	var tempo_demand := float(3 - assignment.tempo) * 0.055
 	var set_base: float = _rating(setter, "set_accuracy") * 0.52 \
@@ -174,6 +191,13 @@ func resolve(
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08)
 	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
 	var set_target := CourtConstants.lane_target(assignment.lane)
+	var set_flight_time: float = float(
+		[0.34, 0.48, 0.70, 1.02][clampi(assignment.tempo, 0, 3)]
+	)
+	var set_trajectory := _ball_trajectory(
+		"set", set_contact, set_target, set_flight_time,
+		lerpf(0.7, 2.4, set_flight_time / 1.02), rally_clock + second_contact_window
+	)
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, result.set_quality >= 0.24,
 		result.set_quality, "Set to %s" % assignment.lane,
@@ -189,15 +213,14 @@ func resolve(
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
 			"deadline": rally_clock + second_contact_window,
-			"event_time": rally_clock + second_contact_window})
+			"event_time": rally_clock + second_contact_window,
+			"incoming_trajectory": pass_trajectory,
+			"outgoing_trajectory": set_trajectory})
 	live_positions[setter.id] = set_contact
 	rally_clock += second_contact_window
 	if assignment.tempo <= 1:
 		result.key_factors.append(ExplanationText.factor("fast_tempo"))
 
-	var set_flight_time: float = float(
-		[0.34, 0.48, 0.70, 1.02][clampi(assignment.tempo, 0, 3)]
-	)
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
 	)
@@ -215,6 +238,11 @@ func resolve(
 	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	var hit_type := _hit_type(assignment, hitter)
+	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
+	var attack_trajectory := _ball_trajectory(
+		"attack", set_target, attack_target, attack_flight, 0.55,
+		rally_clock + set_flight_time
+	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, result.attack_quality >= 0.25,
 		result.attack_quality, "%s: %s" % [hitter.display_name, hit_type],
@@ -230,7 +258,9 @@ func resolve(
 			"arrival_margin": hitter_arrival_margin,
 			"deadline": rally_clock + float(set_flight_time),
 			"event_time": rally_clock + float(set_flight_time),
-			"set_flight_time": float(set_flight_time)})
+			"set_flight_time": float(set_flight_time),
+			"incoming_trajectory": set_trajectory,
+			"outgoing_trajectory": attack_trajectory})
 	live_positions[hitter.id] = set_target
 	rally_clock += float(set_flight_time)
 	if result.attack_quality < 0.29:
@@ -260,6 +290,19 @@ func resolve(
 	var recycled := block_outcome == "recycle"
 	var recycle_target := _attack_coverage_target(set_target, block_strength) \
 		if recycled else Vector2(set_target.x, 0.50)
+	var net_contact := Vector2(set_target.x, 0.50)
+	var attack_event: Resource = result.events[-1]
+	attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
+		"attack_to_block", set_target, net_contact, 0.22, 0.45,
+		float(attack_event.metadata.get("event_time", rally_clock))
+	)
+	var post_block_target := recycle_target if recycled else attack_target
+	if blocked:
+		post_block_target = Vector2(set_target.x, 0.57)
+	var opponent_block_trajectory := _ball_trajectory(
+		"block_deflection", net_contact, post_block_target,
+		0.24 if recycled else 0.18, 0.35, rally_clock
+	)
 	var opponent_block_segments: Array[Dictionary] = [
 		_block_coverage_segment(
 			set_target.x, opponent_blocker, block_strength, block_strength
@@ -276,7 +319,9 @@ func resolve(
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
 			"deflection_target": recycle_target,
 			"coverage_segments": opponent_block_segments,
-			"event_time": rally_clock})
+			"event_time": rally_clock,
+			"incoming_trajectory": attack_event.metadata.outgoing_trajectory,
+			"outgoing_trajectory": opponent_block_trajectory})
 	if blocked:
 		result.key_factors.append(ExplanationText.factor("strong_block"))
 		return _finish(result, "blocked", false, hitter.id, {
@@ -459,13 +504,19 @@ func _resolve_opponent_transition(
 		+ opponent_set_quality * 0.20 + 0.08 \
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
 	var home_target := Vector2(rng.randf_range(0.20, 0.80), rng.randf_range(0.76, 0.92))
+	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
+	var opponent_attack_trajectory := _ball_trajectory(
+		"attack_to_block", opponent_contact, opponent_net_contact,
+		0.23, 0.48, rally_clock
+	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
 		opponent_contact, home_target, true, opponent_attack,
 		"Opponent transition swing · exchange %d" % exchange_number,
 		"Contact 3 of 3 · power swing at %d%% quality." % roundi(opponent_attack * 100.0),
 		{"side": "opponent", "lane_x": opponent_contact.x,
-			"attack_type": _opponent_attack_type(home_target)})
+			"attack_type": _opponent_attack_type(home_target),
+			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
 	var block_result := _resolve_home_block(
 		players, lineup, defensive_plan, opponent_contact.x,
@@ -484,6 +535,13 @@ func _resolve_opponent_transition(
 		deflection_target = _home_block_deflection_target(
 			home_target, opponent_contact.x, home_block, block_outcome
 		)
+	var home_block_target := Vector2(opponent_contact.x, 0.43) \
+		if block_outcome == "stuff" else deflection_target
+	var home_block_trajectory := _ball_trajectory(
+		"block_deflection", opponent_net_contact, home_block_target,
+		0.30 if block_outcome == "touch" else 0.22,
+		0.42, rally_clock
+	)
 	var assist_text := ""
 	if assisting_blocker != null:
 		assist_text = " %s assisted at %d%% close." % [
@@ -503,7 +561,9 @@ func _resolve_opponent_transition(
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
-			"event_time": rally_clock})
+			"event_time": rally_clock,
+			"incoming_trajectory": opponent_attack_trajectory,
+			"outgoing_trajectory": home_block_trajectory})
 	if block_outcome == "stuff":
 		return _finish(result, "counter_block", true, blocker.id, {
 			"hitter": original_hitter.display_name,
@@ -778,6 +838,108 @@ func _movement_time(
 		+ distance / maxf(maximum_speed, 0.4)
 
 
+func _ball_trajectory(
+	kind: String,
+	start: Vector2,
+	end: Vector2,
+	flight_time: float,
+	apex_height: float,
+	start_timestamp: float = -1.0,
+) -> Dictionary:
+	var timestamp := rally_clock if start_timestamp < 0.0 else start_timestamp
+	var direction := end - start
+	var perpendicular := Vector2(-direction.y, direction.x).normalized()
+	var curve_amount := clampf(direction.length() * 0.08, 0.0, 0.035)
+	var control := start.lerp(end, 0.5) + perpendicular * curve_amount
+	var trajectory: Resource = BallTrajectoryModel.create(
+		kind, start, control, end, timestamp, flight_time, apex_height
+	)
+	return trajectory.to_dict()
+
+
+func _reception_pass_result(
+	receiver: VolleyballPlayer,
+	start_position: Vector2,
+	contact_position: Vector2,
+	desired_target: Vector2,
+	serve_origin: Vector2,
+	serve_force: float,
+	arrival: Dictionary,
+	reception_quality: float,
+) -> Dictionary:
+	var movement_vector := contact_position - start_position
+	var desired_vector := desired_target - contact_position
+	var incoming_vector := contact_position - serve_origin
+	var movement_direction := movement_vector.normalized() \
+		if movement_vector.length() > 0.008 else desired_vector.normalized()
+	var desired_direction := desired_vector.normalized()
+	var incoming_direction := incoming_vector.normalized()
+	var movement_alignment := clampf(
+		(movement_direction.dot(desired_direction) + 1.0) * 0.5, 0.0, 1.0
+	)
+	var redirect_demand := clampf(
+		absf(incoming_direction.angle_to(desired_direction)) / PI, 0.0, 1.0
+	)
+	var arrival_margin := float(arrival.get("arrival_margin", -0.5))
+	var settle_factor := clampf((arrival_margin + 0.25) / 1.25, 0.0, 1.0)
+	var edge_ratio := float(arrival.get("edge_ratio", 1.0))
+	var body_alignment := clampf(
+		movement_alignment * 0.42 + settle_factor * 0.38
+		+ (1.0 - clampf(edge_ratio, 0.0, 1.2) / 1.2) * 0.20,
+		0.0, 1.0,
+	)
+	var platform_feasibility := clampf(
+		_rating(receiver, "reception") * 0.30
+		+ _rating(receiver, "ball_control") * 0.18
+		+ _rating(receiver, "reception_balance") * 0.15
+		+ _rating(receiver, "reception_stability") * 0.14
+		+ body_alignment * 0.18
+		+ settle_factor * 0.12
+		- redirect_demand * 0.08
+		- serve_force * (1.0 - _rating(receiver, "reception_stability")) * 0.16,
+		0.0, 1.0,
+	)
+	var execution := clampf(
+		platform_feasibility * 0.66 + reception_quality * 0.34, 0.0, 1.0
+	)
+	var error_scale := pow(1.0 - execution, 1.35)
+	var perpendicular := Vector2(-desired_direction.y, desired_direction.x)
+	var directional_error := rng.randf_range(-0.30, 0.30) * error_scale
+	var depth_error := rng.randf_range(-0.24, 0.24) * error_scale
+	var destination := desired_target \
+		+ perpendicular * directional_error + desired_direction * depth_error
+	if execution < 0.18:
+		destination += Vector2(
+			rng.randf_range(-0.25, 0.25), rng.randf_range(-0.04, 0.18)
+		)
+	destination = Vector2(
+		clampf(destination.x, 0.02, 0.98), clampf(destination.y, 0.51, 0.98)
+	)
+	var pass_distance := CoverageModel.court_distance_meters(
+		contact_position, destination
+	)
+	var flight_time := clampf(
+		0.38 + pass_distance / lerpf(5.2, 8.4, execution), 0.42, 1.25
+	)
+	var posture := "planted"
+	if arrival_margin < 0.0:
+		posture = "reaching"
+	elif edge_ratio > 0.82:
+		posture = "moving"
+	elif body_alignment < 0.42:
+		posture = "off-axis"
+	return {
+		"destination": destination,
+		"body_alignment": body_alignment,
+		"platform_feasibility": platform_feasibility,
+		"contact_posture": posture,
+		"trajectory": _ball_trajectory(
+			"reception_pass", contact_position, destination,
+			flight_time, lerpf(1.1, 2.8, execution), rally_clock
+		),
+	}
+
+
 func _spatial_setter_choice(
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
@@ -954,6 +1116,7 @@ func _finish(
 
 
 func _finalize_rally_timeline(result: Resource) -> void:
+	_ensure_event_trajectories(result)
 	var timeline := 0.0
 	for event_resource in result.events:
 		var event: Resource = event_resource
@@ -963,6 +1126,8 @@ func _finalize_rally_timeline(result: Resource) -> void:
 		var movement_duration := float(metadata.get("movement_duration", 0.0))
 		var flight_duration := float(metadata.get("flight_time", 0.0)) \
 			if int(event.event_type) == RallyEventModel.EventType.SERVE else 0.0
+		var trajectory_data: Dictionary = metadata.get("outgoing_trajectory", {})
+		var trajectory_duration := float(trajectory_data.get("duration", 0.0))
 		var default_duration := 0.12
 		match int(event.event_type):
 			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
@@ -974,12 +1139,46 @@ func _finalize_rally_timeline(result: Resource) -> void:
 			RallyEventModel.EventType.POINT:
 				default_duration = 0.10
 		var duration := maxf(
-			default_duration, maxf(movement_duration, flight_duration)
+			default_duration,
+			maxf(movement_duration, maxf(flight_duration, trajectory_duration))
 		)
 		metadata["event_time"] = timeline
 		metadata["event_duration"] = duration
 		event.metadata = metadata
 		timeline += duration
+
+
+func _ensure_event_trajectories(result: Resource) -> void:
+	for event_index in range(result.events.size()):
+		var event: Resource = result.events[event_index]
+		if event.event_type == RallyEventModel.EventType.POINT \
+				or event.metadata.has("outgoing_trajectory"):
+			continue
+		var start: Vector2 = event.start_position
+		var end: Vector2 = event.end_position
+		if event.event_type == RallyEventModel.EventType.BLOCK \
+				and event.metadata.has("deflection_target"):
+			end = Vector2(event.metadata.deflection_target)
+		var flight_time := float(event.metadata.get("flight_time", 0.0))
+		if flight_time <= 0.0:
+			match int(event.event_type):
+				RallyEventModel.EventType.SERVE: flight_time = 0.72
+				RallyEventModel.EventType.RECEPTION: flight_time = 0.62
+				RallyEventModel.EventType.SET: flight_time = 0.72
+				RallyEventModel.EventType.ATTACK: flight_time = 0.42
+				RallyEventModel.EventType.BLOCK: flight_time = 0.24
+				RallyEventModel.EventType.DEFENSE: flight_time = 0.58
+				_: continue
+		var apex := 0.5
+		match int(event.event_type):
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+				apex = 1.8
+			RallyEventModel.EventType.SET:
+				apex = 2.4
+		event.metadata["outgoing_trajectory"] = _ball_trajectory(
+			event.type_name().to_lower(), start, end, flight_time, apex,
+			float(event.metadata.get("event_time", 0.0))
+		)
 
 
 func _add_event(
