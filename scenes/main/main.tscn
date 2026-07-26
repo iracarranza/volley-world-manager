@@ -115,6 +115,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Player Instructions"
 
+[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+text = "Close ×"
+
 [node name="BlockParticipationCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=1923420421]
 unique_name_in_owner = true
 layout_mode = 2

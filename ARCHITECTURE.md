@@ -215,7 +215,9 @@ the simulator then grades the real set from its contact distance, direction,
 body orientation and displacement from that release region.
 During Serve Receive, the court renders that target as an independent draggable
 handle connected to the active setter. Click-release opens contextual
-instructions above the court; exceeding the
+instructions as a local `TacticalCourt` child rather than a popup-window child;
+this prevents window layout from expanding the card into an invisible
+screen-wide input layer. Exceeding the
 drag threshold edits spatial state without creating a modal popup mid-drag.
 
 Floor systems are presets, not outcome bonuses disguised as labels. Applying

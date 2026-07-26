@@ -8,6 +8,7 @@ const RotationLegalityModel := preload("res://scripts/simulation/rotation_legali
 signal player_selected(player_id: int)
 signal player_instruction_requested(player_id: int, marker_screen_position: Vector2)
 signal player_drag_started(player_id: int)
+signal court_background_clicked()
 signal assignment_dragged(player_id: int, lane_name: String, marker_position: Vector2)
 signal defender_position_changed(player_id: int, court_position: Vector2)
 signal coverage_zone_position_changed(
@@ -518,6 +519,9 @@ func _gui_input(event: InputEvent) -> void:
 			player_selected.emit(dragging_player_id)
 			player_drag_started.emit(dragging_player_id)
 			accept_event()
+			return
+		court_background_clicked.emit()
+		accept_event()
 		return
 	if dragging_release_target:
 		dragging_release_target = false

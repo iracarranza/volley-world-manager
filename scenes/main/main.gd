@@ -92,6 +92,7 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var defender_popup: PanelContainer = %DefenderPopup
 @onready var defender_popup_content: VBoxContainer = %DefenderPopupContent
 @onready var defender_popup_title: Label = %DefenderPopupTitle
+@onready var defender_popup_close_button: Button = %DefenderPopupCloseButton
 @onready var block_participation_check: CheckButton = %BlockParticipationCheck
 @onready var emergency_pursuit_check: CheckButton = %EmergencyPursuitCheck
 @onready var short_ball_priority_option: OptionButton = %ShortBallPriorityOption
@@ -120,6 +121,7 @@ func _ready() -> void:
 	tactical_court.player_selected.connect(_select_hitter)
 	tactical_court.player_instruction_requested.connect(_open_player_instructions)
 	tactical_court.player_drag_started.connect(_player_drag_started)
+	tactical_court.court_background_clicked.connect(_close_player_instructions)
 	tactical_court.assignment_dragged.connect(_open_assignment_popup)
 	lane_option.item_selected.connect(_preview_demand)
 	tempo_option.item_selected.connect(_preview_demand)
@@ -158,6 +160,7 @@ func _ready() -> void:
 	rotation_option.select(GameManager.selected_rotation - 1)
 	_setup_tactical_workspace()
 	_setup_defender_popup()
+	defender_popup_close_button.pressed.connect(_close_player_instructions)
 	_apply_light_mode(false)
 	_begin_draft()
 	_refresh_rotation()
@@ -706,6 +709,13 @@ func _setup_defender_popup() -> void:
 		zone_priority_option, zone_enabled_check, apply_zone_button,
 	]:
 		control.reparent(defender_popup_content)
+	# A Control parented directly to Window is expanded to the window's usable
+	# rect. Parenting the card to the court makes its size and position local to
+	# the marker surface and prevents a screen-wide invisible input layer.
+	defender_popup.reparent(tactical_court)
+	defender_popup.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	defender_popup.position = Vector2.ZERO
+	defender_popup.size = Vector2(210.0, 100.0)
 
 
 func _open_player_instructions(player_id: int, marker_screen_position: Vector2) -> void:
@@ -716,18 +726,16 @@ func _open_player_instructions(player_id: int, marker_screen_position: Vector2) 
 		maxf(content_minimum.x + 8.0, 210.0),
 		content_minimum.y + 6.0,
 	)
-	var court_origin := tactical_court.get_screen_position()
-	var court_end := court_origin + tactical_court.size
-	var popup_screen_position := marker_screen_position + Vector2(28.0, -popup_size.y * 0.52)
-	if popup_screen_position.x + popup_size.x > court_end.x - 8.0:
-		popup_screen_position.x = marker_screen_position.x - popup_size.x - 28.0
-	popup_screen_position.x = clampf(
-		popup_screen_position.x, court_origin.x + 8.0, court_end.x - popup_size.x - 8.0
+	var marker_local := marker_screen_position - tactical_court.get_screen_position()
+	var popup_position := marker_local + Vector2(28.0, -popup_size.y * 0.52)
+	if popup_position.x + popup_size.x > tactical_court.size.x - 8.0:
+		popup_position.x = marker_local.x - popup_size.x - 28.0
+	popup_position.x = clampf(
+		popup_position.x, 8.0, tactical_court.size.x - popup_size.x - 8.0
 	)
-	popup_screen_position.y = clampf(
-		popup_screen_position.y, court_origin.y + 8.0, court_end.y - popup_size.y - 8.0
+	popup_position.y = clampf(
+		popup_position.y, 8.0, tactical_court.size.y - popup_size.y - 8.0
 	)
-	var popup_position := popup_screen_position - Vector2(tactical_workspace_popup.position)
 	defender_popup.position = Vector2i(popup_position)
 	defender_popup.size = Vector2i(popup_size)
 	defender_popup.show()
@@ -737,6 +745,10 @@ func _open_player_instructions(player_id: int, marker_screen_position: Vector2) 
 func _player_drag_started(_player_id: int) -> void:
 	# A press may become either a click or a drag. Hide the old panel immediately;
 	# a true click release reopens it at the marker's current position.
+	defender_popup.hide()
+
+
+func _close_player_instructions() -> void:
 	defender_popup.hide()
 
 

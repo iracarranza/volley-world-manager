@@ -73,6 +73,9 @@
   becoming a modal layer or interrupting subsequent player movement.
 - Size that icon-adjacent panel directly from its visible controls, using only
   compact margins and no reserved whitespace for controls from other phases.
+- Parent the instruction card to `TacticalCourt` at runtime so it cannot expand
+  to the tactical window. Close it explicitly, by clicking empty court space,
+  or automatically by starting a player drag.
 - Apply Perimeter, Middle-Up and Rotation Defense as functional position/zone
   presets, then customize the resulting plan as a modified preset.
 - Edit Attack Coverage and Transition separately from Floor Defense, including
