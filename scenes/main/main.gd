@@ -1385,6 +1385,21 @@ func _show_rally_result(result: Resource) -> void:
 		roundi(result.set_quality * 100.0),
 		roundi(result.attack_quality * 100.0),
 	])
+	var analysis: Dictionary = result.analysis
+	var attack_types: Array = analysis.get("attack_types", [])
+	var directions: Array = analysis.get("directions", [])
+	if not attack_types.is_empty():
+		factor_lines.append("Attack mix: %s · targets: %s" % [
+			", ".join(attack_types),
+			", ".join(directions) if not directions.is_empty() else "unspecified",
+		])
+	factor_lines.append("Longest player movement %.2fs · tightest arrival %+.2fs" % [
+		float(analysis.get("longest_movement", 0.0)),
+		float(analysis.get("lowest_arrival_margin", 0.0)),
+	])
+	var block_read := float(analysis.get("average_block_read", -1.0))
+	if block_read >= 0.0:
+		factor_lines.append("Average blocker read %d%%" % roundi(block_read * 100.0))
 	rally_result_factors.text = "\n".join(factor_lines)
 	dashboard_explanation_label.text = result.explanation + "\n\n" \
 		+ "\n".join(factor_lines)

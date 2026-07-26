@@ -94,10 +94,10 @@ offset_bottom = 676.0
 
 [node name="Margin" type="MarginContainer" parent="TacticalWorkspacePopup/DefenderPopup" unique_id=1165081472]
 layout_mode = 2
+theme_override_constants/margin_left = 4
 theme_override_constants/margin_top = 3
 theme_override_constants/margin_right = 4
 theme_override_constants/margin_bottom = 3
-theme_override_constants/margin_left = 4
 
 [node name="Scroll" type="ScrollContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin" unique_id=57154572]
 layout_mode = 2
@@ -109,7 +109,7 @@ custom_minimum_size = Vector2(202, 0)
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="DefenderPopupTitleRow" type="HBoxContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="DefenderPopupTitleRow" type="HBoxContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=2014504776]
 layout_mode = 2
 theme_override_constants/separation = 2
 
@@ -119,6 +119,14 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 13
 text = "Player Instructions"
+
+[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent/DefenderPopupTitleRow" unique_id=674723426]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+tooltip_text = "Close player instructions."
+text = "×"
+flat = true
 
 [node name="BlockParticipationCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=1923420421]
 unique_name_in_owner = true
@@ -146,14 +154,6 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Drag S→ to move release target."
 autowrap_mode = 2
-
-[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent/DefenderPopupTitleRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(22, 22)
-layout_mode = 2
-tooltip_text = "Close player instructions."
-text = "×"
-flat = true
 
 [node name="WorkspacePopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup" unique_id=925463913]
 anchors_preset = 15
@@ -254,7 +254,7 @@ tooltip_text = "Resolve one rally using the active play and current rotation."
 disabled = true
 text = "Run Rally"
 
-[node name="ReplayRallyButton" type="Button" parent="Margin/Content/QuickRallyBar"]
+[node name="ReplayRallyButton" type="Button" parent="Margin/Content/QuickRallyBar" unique_id=877705306]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Replay the previous point without changing the score or simulation state."

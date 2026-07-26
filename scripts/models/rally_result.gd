@@ -11,4 +11,5 @@ extends Resource
 @export_range(0.0, 1.0) var set_quality: float = 0.0
 @export_range(0.0, 1.0) var attack_quality: float = 0.0
 @export var key_factors: Array[String] = []
+@export var analysis: Dictionary = {}
 @export var explanation: String = ""

@@ -149,7 +149,10 @@ available closing window rather than adding an unconditional quality bonus.
 Opponent transition derives a setter position from pass location and quality.
 Before reading the hitter lane, each home blocker's starting X position is
 pulled toward that setter by a bounded weight inversely proportional to tactical
-discipline and anticipation.
+discipline and anticipation. The subsequent read window is independently graded
+from anticipation, court vision, decision-making and discipline plus the
+clarity of the set cues. Physical closing still uses lateral speed, reach and
+the remaining time, keeping mental recognition separate from execution.
 
 A sufficiently complete, high-quality contest may stuff the attack. More often,
 partial contests produce a touch or funnel. A touch lowers effective attack
@@ -254,3 +257,18 @@ those values but does not determine the outcome.
 Block events expose one spatial net segment per arriving blocker. Segment width
 uses wingspan and close fraction; redness uses completeness. The renderer keeps
 the uncovered net white and paints only the simulated coverage.
+
+## Opponent spatial offense and rally analysis
+
+`OpponentTeam` exposes schematic phase positions and an eligible-hitter pool.
+Opponent transition selects an actual hitter, derives a lane-specific contact,
+and grades the target-specific set before choosing a power swing, quick, roll
+shot or emergency tip. Floor targets include line, seam, cross-court and short
+space. Home attacks use the same spatial idea against the opponent shape.
+
+Opponent floor defense compares player position, movement time, anticipation
+and reception instead of always using the roster's strongest defender. Rally
+events retain attacker direction, movement, arrival, set geometry and blocker
+read metadata. `RallyResult.analysis` reduces that event stream into concise
+post-rally diagnostics; it is presentation data derived from the authoritative
+events, not a second outcome model.

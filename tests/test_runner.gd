@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_test_tactical_playback_reset_on_lineup_change()
 	_test_default_offense_without_saved_play()
 	_test_defensive_presets_release_and_setting_systems()
+	_test_spatial_opponent_and_replay_analysis()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -42,6 +43,52 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+func _test_spatial_opponent_and_replay_analysis() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = true
+	var opponent_hitter_ids := {}
+	var direction_observed := false
+	var spatial_defense_observed := false
+	var graded_set_observed := false
+	var blocker_read_observed := false
+	var analysis_observed := false
+	for seed_value in range(7600, 7720):
+		manager.match_state.serving_home = seed_value % 2 == 0
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		analysis_observed = analysis_observed or (
+			result.analysis.has("attack_types")
+			and result.analysis.has("lowest_arrival_margin")
+		)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
+					and str(event.metadata.get("side", "")) == "opponent":
+				graded_set_observed = graded_set_observed or (
+					event.metadata.has("set_distance_meters")
+					and event.metadata.has("body_orientation_fit")
+				)
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == "opponent":
+				opponent_hitter_ids[event.actor_id] = true
+				direction_observed = direction_observed or event.metadata.has("attack_direction")
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+					and str(event.metadata.get("side", "")) == "opponent":
+				spatial_defense_observed = spatial_defense_observed or (
+					event.metadata.has("movement_start")
+					and event.metadata.has("arrival_margin")
+				)
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					and str(event.metadata.get("side", "")) == "home":
+				blocker_read_observed = blocker_read_observed or event.metadata.has("read_quality")
+	_check(opponent_hitter_ids.size() >= 2, "opponent transition uses multiple eligible hitters")
+	_check(direction_observed, "attacks expose line, seam, cross-court, or short direction")
+	_check(spatial_defense_observed, "opponent floor defense records travel and arrival")
+	_check(graded_set_observed, "opponent setting exposes target-specific geometry")
+	_check(blocker_read_observed, "home block records attribute-driven read quality")
+	_check(analysis_observed, "completed rallies expose concise replay analysis")
 
 
 func _test_court_coordinates() -> void:

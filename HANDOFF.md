@@ -154,9 +154,20 @@
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
+- Select opponent attackers from eligible pin and middle options instead of
+  routing every transition to the highest-rated hitter. Attack selection now
+  considers aptitude, set quality, approach demand and targetable floor space.
+- Resolve line, seam, cross-court, roll-shot and emergency-tip targets against
+  spatial defenders. Opponent defenders are selected by travel and arrival,
+  not by a global best-defender lookup.
 - Place the opponent setter along the net from pass location and set quality.
   That position pulls less disciplined or anticipatory home blockers slightly
   before they close to the actual hitter lane.
+- Grade opponent sets from distance, angle, body orientation and setter balance
+  and stability. Home blockers read those cues through anticipation, vision,
+  decisions and discipline before their physical closing calculation.
+- Review an after-rally analysis showing attack mix, target directions, longest
+  movement, tightest arrival margin and average blocker-read quality.
 - Let the opponent learn repeated home attack lanes, set tempos and serve
   targets. Learned patterns improve its block formation gradually, persist in
   saves and are summarized in the scouting panel.
@@ -177,7 +188,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 118 passing headless foundation checks and UI-binding validation, including a
+- 124 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet
@@ -186,6 +197,6 @@
 - Unlimited continuation contacts; rallies intentionally use a four-exchange
   safety bound to prevent pathological simulation loops.
 
-The next pass should add opponent rotation-specific personnel and tactical
+The next pass should add opponent rotation sheets, substitutions and tactical
 counter-adjustments. Marker movement is intentionally schematic; future 2.5D
 work can replace the presenter without changing rally outcomes.

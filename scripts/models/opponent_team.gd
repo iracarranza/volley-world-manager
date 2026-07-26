@@ -47,6 +47,32 @@ func best_defender() -> Resource:
 	return _best_by_sum(["reception", "anticipation"])
 
 
+func court_position(player_id: int, phase: String = "defense") -> Vector2:
+	var player := player_by_id(player_id)
+	if player == null:
+		return Vector2(0.5, 0.25)
+	var code := str(player.position_code)
+	var positions := {
+		"S": Vector2(0.70, 0.38), "M1": Vector2(0.50, 0.40),
+		"OH1": Vector2(0.18, 0.40), "OP": Vector2(0.82, 0.40),
+		"OH2": Vector2(0.24, 0.20), "L": Vector2(0.55, 0.16),
+	}
+	var position: Vector2 = positions.get(code, Vector2(0.5, 0.25))
+	if phase == "serve_receive" and code in ["OH1", "OH2", "L"]:
+		position.y = 0.16
+	return position
+
+
+func eligible_hitters(setter_player_id: int = -1) -> Array[Resource]:
+	var candidates: Array[Resource] = []
+	for player in players:
+		if int(player.id) == setter_player_id or str(player.position_code) == "L":
+			continue
+		if str(player.position_code) in ["OH1", "OH2", "OP", "M1", "M2"]:
+			candidates.append(player)
+	return candidates
+
+
 func _best_by_sum(properties: Array[String]) -> Resource:
 	var best: Resource
 	var best_score := -1

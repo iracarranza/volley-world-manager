@@ -250,8 +250,11 @@ func resolve(
 		+ approach_fit + result.set_quality * 0.25 - tempo_demand \
 		+ clampf(hitter_arrival_margin * 0.22, -0.58, 0.08)
 	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
-	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	var hit_type := _hit_type(assignment, hitter)
+	var attack_choice := _choose_home_attack_target(
+		hitter, assignment.lane, hit_type, opponent_team
+	)
+	var attack_target: Vector2 = attack_choice.target
 	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
 	var attack_trajectory := _ball_trajectory(
 		"attack", set_target, attack_target, attack_flight, 0.55,
@@ -267,7 +270,8 @@ func resolve(
 			if hitter_arrival_margin >= 0.0 else
 			" Arrived %.2fs late and lost the approach window." % absf(hitter_arrival_margin)),
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
-			"attack_type": hit_type, "movement_start": hitter_start,
+			"attack_type": hit_type, "attack_direction": attack_choice.direction,
+			"target_reason": attack_choice.reason, "movement_start": hitter_start,
 			"movement_duration": hitter_move_time,
 			"arrival_margin": hitter_arrival_margin,
 			"deadline": rally_clock + float(set_flight_time),
@@ -380,10 +384,14 @@ func resolve(
 			opponent_team, defensive_plan, 1,
 		)
 
-	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
+	var opponent_defense := _choose_opponent_defender(
+		opponent_team, attack_target, attack_flight
+	)
+	var opponent_defender := opponent_defense.player as VolleyballPlayer
 	var defense_strength := clampf(
 		_rating(opponent_defender, "reception") * 0.46
 		+ _rating(opponent_defender, "anticipation") * 0.38
+		+ clampf(float(opponent_defense.arrival_margin) * 0.08, -0.18, 0.10)
 		+ rng.randf_range(-0.16, 0.16), 0.1, 0.9
 	)
 	var dug: bool = defense_strength > float(result.attack_quality) \
@@ -392,7 +400,13 @@ func resolve(
 		opponent_defender.display_name,
 		attack_target, attack_target + Vector2(0.04, -0.03), dug,
 		defense_strength, "Defensive contact",
-		"The floor defender %s the attack." % ("controls" if dug else "cannot reach"))
+		"%s %s the %s attack after moving %.1fm." % [
+			opponent_defender.display_name, "controls" if dug else "cannot reach",
+			str(attack_choice.direction), float(opponent_defense.distance_meters),
+		], {"side": "opponent", "movement_start": opponent_defense.start,
+			"movement_duration": opponent_defense.travel_time,
+			"arrival_margin": opponent_defense.arrival_margin,
+			"attack_direction": attack_choice.direction})
 	if dug:
 		result.key_factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
@@ -501,28 +515,53 @@ func _resolve_opponent_transition(
 	exchange_number: int,
 ) -> Resource:
 	var opponent_setter := opponent_team.setter() as VolleyballPlayer
-	var opponent_hitter := opponent_team.best_hitter() as VolleyballPlayer
 	var transition_penalty := float(exchange_number - 1) * 0.035
-	var opponent_set_quality := clampf(
-		0.62 + rng.randf_range(-0.16, 0.16) - transition_penalty,
-		0.2, 0.9,
-	)
 	var opponent_setter_position := Vector2(
-		clampf(lerpf(dig_position.x, 0.50, opponent_set_quality), 0.24, 0.76),
+		clampf(lerpf(dig_position.x, 0.50, 0.66), 0.24, 0.76),
 		0.48,
 	)
-	var opponent_contact := Vector2(rng.randf_range(0.24, 0.76), 0.48)
+	var setter_start: Vector2 = opponent_team.court_position(opponent_setter.id, "transition")
+	var set_geometry := _set_geometry(
+		opponent_setter, setter_start, opponent_setter_position,
+		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
+	)
+	var opponent_set_quality := clampf(
+		_rating(opponent_setter, "set_accuracy") * 0.48
+		+ _rating(opponent_setter, "court_vision") * 0.22
+		+ _rating(opponent_setter, "decision_making") * 0.16
+		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
+		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
+	)
+	var attack_choice := _choose_opponent_attack(
+		opponent_team, opponent_setter, opponent_set_quality, _home_target_hint(defensive_plan)
+	)
+	var opponent_hitter := attack_choice.player as VolleyballPlayer
+	var opponent_contact: Vector2 = attack_choice.contact
+	var home_target: Vector2 = attack_choice.target
+	set_geometry = _set_geometry(
+		opponent_setter, setter_start, opponent_setter_position,
+		opponent_contact, Vector2(0.50, 0.48)
+	)
+	opponent_set_quality = clampf(
+		_rating(opponent_setter, "set_accuracy") * 0.48
+		+ _rating(opponent_setter, "court_vision") * 0.22
+		+ _rating(opponent_setter, "decision_making") * 0.16
+		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
+		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
+	)
 	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
 		opponent_setter.display_name,
 		dig_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
-		{"side": "opponent", "setter_position": opponent_setter_position})
+		{"side": "opponent", "setter_position": opponent_setter_position,
+			"movement_start": setter_start, "set_distance_meters": set_geometry.distance_meters,
+			"set_angle_degrees": set_geometry.angle_degrees,
+			"body_orientation_fit": set_geometry.body_orientation_fit})
 	var opponent_attack := clampf(
 		_power_rating(opponent_hitter, "attack_power") * 0.62 \
 		+ opponent_set_quality * 0.20 + 0.08 \
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
-	var home_target := Vector2(rng.randf_range(0.20, 0.80), rng.randf_range(0.76, 0.92))
 	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
 	var opponent_attack_trajectory := _ball_trajectory(
 		"attack_to_block", opponent_contact, opponent_net_contact,
@@ -532,9 +571,15 @@ func _resolve_opponent_transition(
 		opponent_hitter.display_name,
 		opponent_contact, home_target, true, opponent_attack,
 		"Opponent transition swing · exchange %d" % exchange_number,
-		"Contact 3 of 3 · power swing at %d%% quality." % roundi(opponent_attack * 100.0),
+		"Contact 3 of 3 · %s toward %s at %d%% quality." % [
+			str(attack_choice.attack_type), str(attack_choice.direction),
+			roundi(opponent_attack * 100.0),
+		],
 		{"side": "opponent", "lane_x": opponent_contact.x,
-			"attack_type": _opponent_attack_type(home_target),
+			"attack_type": attack_choice.attack_type,
+			"attack_direction": attack_choice.direction,
+			"hitter_start": attack_choice.start,
+			"hitter_travel_time": attack_choice.travel_time,
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
 	var block_result := _resolve_home_block(
@@ -585,6 +630,7 @@ func _resolve_opponent_transition(
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
 			"setter_pull": block_result.setter_pull,
+			"read_quality": block_result.read_quality,
 			"opponent_setter_position": opponent_setter_position,
 			"event_time": rally_clock,
 			"incoming_trajectory": opponent_attack_trajectory,
@@ -811,6 +857,152 @@ func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vecto
 		clampf(set_target.x + rng.randf_range(-spread, spread), 0.08, 0.92),
 		rng.randf_range(0.54, 0.70),
 	)
+
+
+func _choose_home_attack_target(
+	hitter: VolleyballPlayer,
+	lane: String,
+	hit_type: String,
+	opponent_team: Resource,
+) -> Dictionary:
+	var contact_x := CourtConstants.lane_target(lane).x
+	var candidates: Array[Vector2] = [
+		Vector2(0.18, 0.20), Vector2(0.50, 0.18), Vector2(0.82, 0.20),
+		Vector2(0.24, 0.36), Vector2(0.76, 0.36),
+	]
+	if hit_type == "Quick attack" or rng.randf() < 0.12:
+		candidates.append(Vector2(rng.randf_range(0.35, 0.65), 0.42))
+	var best_target := candidates[0]
+	var best_space := -1.0
+	for candidate in candidates:
+		var nearest := 10.0
+		for defender_resource in opponent_team.players:
+			var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+			if defender == null:
+				continue
+			nearest = minf(nearest, opponent_team.court_position(defender.id).distance_to(candidate))
+		if nearest > best_space:
+			best_space = nearest
+			best_target = candidate
+	var decision_fit := clampf(
+		_rating(hitter, "decision_making") * 0.68
+		+ _rating(hitter, "attack_accuracy") * 0.32, 0.0, 1.0
+	)
+	var target := best_target if rng.randf() < decision_fit \
+		else candidates[rng.randi_range(0, candidates.size() - 1)]
+	var direction := _attack_direction(contact_x, target)
+	return {
+		"target": target, "direction": direction,
+		"reason": "open floor" if target == best_target else "aggressive choice",
+	}
+
+
+func _choose_opponent_defender(
+	opponent_team: Resource,
+	target: Vector2,
+	flight_time: float,
+) -> Dictionary:
+	var best: VolleyballPlayer
+	var best_score := -1000.0
+	var best_data := {"start": target, "distance_meters": 99.0,
+		"travel_time": 9.0, "arrival_margin": -9.0}
+	for defender_resource in opponent_team.players:
+		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if defender == null or str(defender.position_code) in ["S", "M1", "M2"]:
+			continue
+		var start: Vector2 = opponent_team.court_position(defender.id, "defense")
+		var mirrored_target := Vector2(target.x, target.y)
+		var distance_meters := CoverageModel.court_distance_meters(start, mirrored_target)
+		var travel_time := _movement_time(defender, start, mirrored_target, "lateral")
+		var arrival_margin := flight_time - travel_time
+		var score := arrival_margin * 0.58 + _rating(defender, "anticipation") * 0.25 \
+			+ _rating(defender, "reception") * 0.17
+		if score > best_score:
+			best = defender
+			best_score = score
+			best_data = {"start": start, "distance_meters": distance_meters,
+				"travel_time": travel_time, "arrival_margin": arrival_margin}
+	best_data["player"] = best if best != null else opponent_team.best_defender()
+	return best_data
+
+
+func _choose_opponent_attack(
+	opponent_team: Resource,
+	setter: VolleyballPlayer,
+	set_quality: float,
+	open_target: Vector2,
+) -> Dictionary:
+	var candidates: Array[Resource] = opponent_team.eligible_hitters(setter.id)
+	if candidates.is_empty():
+		candidates.append(opponent_team.best_hitter())
+	var best: VolleyballPlayer
+	var best_score := -1000.0
+	for resource in candidates:
+		var candidate: VolleyballPlayer = resource as VolleyballPlayer
+		if candidate == null:
+			continue
+		var quick_demand := 0.13 if str(candidate.position_code).begins_with("M") else 0.0
+		var option_score := _power_rating(candidate, "attack_power") * 0.42 \
+			+ _rating(candidate, "attack_accuracy") * 0.24 \
+			+ _rating(candidate, "approach_timing") * 0.18 \
+			+ set_quality * 0.16 - quick_demand * (1.0 - set_quality) \
+			+ rng.randf_range(-0.12, 0.12)
+		if option_score > best_score:
+			best = candidate
+			best_score = option_score
+	var code := str(best.position_code)
+	var contact_x := 0.50
+	if code in ["OH1", "OH2"]:
+		contact_x = 0.18
+	elif code == "OP":
+		contact_x = 0.82
+	var start: Vector2 = opponent_team.court_position(best.id, "transition")
+	var contact := Vector2(contact_x, 0.48)
+	var travel_time := _movement_time(best, start, contact, "transition")
+	var attack_type := "Quick attack" if code.begins_with("M") and set_quality >= 0.46 \
+		else "Power swing"
+	if set_quality < 0.38 or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
+		attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
+	var target := open_target
+	if attack_type in ["Roll shot", "Emergency tip"]:
+		target.y = rng.randf_range(0.58, 0.72)
+	else:
+		target.y = rng.randf_range(0.80, 0.93)
+	return {"player": best, "start": start, "contact": contact,
+		"target": target, "travel_time": travel_time,
+		"attack_type": attack_type, "direction": _attack_direction(contact_x, target)}
+
+
+func _home_target_hint(defensive_plan: Resource) -> Vector2:
+	var candidates: Array[Vector2] = [
+		Vector2(0.18, 0.86), Vector2(0.50, 0.84), Vector2(0.82, 0.86),
+		Vector2(0.34, 0.66), Vector2(0.66, 0.66),
+	]
+	if defensive_plan == null:
+		return candidates[rng.randi_range(0, candidates.size() - 1)]
+	var zones: Dictionary = defensive_plan.zones_for(DefensiveZoneModel.ZoneType.FLOOR_DEFENSE)
+	var best := candidates[0]
+	var best_gap := -1.0
+	for target in candidates:
+		var nearest := 10.0
+		for player_id in zones:
+			var zone: Resource = zones[player_id]
+			if zone != null and bool(zone.enabled):
+				nearest = minf(nearest, Vector2(zone.center).distance_to(target))
+		if nearest > best_gap:
+			best = target
+			best_gap = nearest
+	return best
+
+
+func _attack_direction(contact_x: float, target: Vector2) -> String:
+	if target.y < 0.76:
+		return "short court"
+	if absf(target.x - contact_x) <= 0.20:
+		return "line"
+	if absf(target.x - 0.50) <= 0.14:
+		return "seam"
+	return "cross-court"
 
 
 func _initial_home_positions(
@@ -1219,8 +1411,42 @@ func _finish(
 	_add_event(result, RallyEventModel.EventType.POINT, decisive_actor_id,
 		"Home" if home_won else "Opponent", end_position, end_position,
 		home_won, 1.0, ExplanationText.headline(outcome), result.explanation)
+	result.analysis = _build_rally_analysis(result)
 	_finalize_rally_timeline(result)
 	return result
+
+
+func _build_rally_analysis(result: Resource) -> Dictionary:
+	var attack_types: Array[String] = []
+	var directions: Array[String] = []
+	var longest_movement := 0.0
+	var lowest_arrival_margin := 99.0
+	var blocker_read_values: Array[float] = []
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RallyEventModel.EventType.ATTACK:
+			var attack_type := str(event.metadata.get("attack_type", "Attack"))
+			if attack_type not in attack_types:
+				attack_types.append(attack_type)
+			var direction := str(event.metadata.get("attack_direction", ""))
+			if not direction.is_empty() and direction not in directions:
+				directions.append(direction)
+		longest_movement = maxf(longest_movement, float(event.metadata.get("movement_duration", 0.0)))
+		if event.metadata.has("arrival_margin"):
+			lowest_arrival_margin = minf(lowest_arrival_margin, float(event.metadata.arrival_margin))
+		if event.metadata.has("read_quality"):
+			blocker_read_values.append(float(event.metadata.read_quality))
+	var average_read := -1.0
+	if not blocker_read_values.is_empty():
+		average_read = 0.0
+		for value in blocker_read_values:
+			average_read += value
+		average_read /= blocker_read_values.size()
+	return {"contacts": result.events.size() - 1,
+		"attack_types": attack_types, "directions": directions,
+		"longest_movement": longest_movement,
+		"lowest_arrival_margin": lowest_arrival_margin if lowest_arrival_margin < 90.0 else 0.0,
+		"average_block_read": average_read}
 
 
 func _finalize_rally_timeline(result: Resource) -> void:
@@ -1500,6 +1726,11 @@ func _resolve_home_block(
 			primary_distance = distance
 	var close_time := 0.30 + float(clampi(tempo, 0, 3)) * 0.045 \
 		+ (1.0 - set_quality) * 0.18
+	var read_total := 0.0
+	for reader in front_blockers:
+		read_total += _blocker_read_quality(reader, tempo, set_quality, opponent_setter_x)
+	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
+	close_time += lerpf(-0.09, 0.09, read_quality)
 	var strategy := str(defensive_plan.block_strategy) if defensive_plan != null \
 		else "Read Block"
 	var pin_attack := attack_x <= 0.34 or attack_x >= 0.66
@@ -1549,7 +1780,26 @@ func _resolve_home_block(
 			attack_x, primary, primary_close, assist, assist_close
 		),
 		"setter_pull": setter_pull,
+		"read_quality": read_quality,
 	}
+
+
+func _blocker_read_quality(
+	blocker: VolleyballPlayer,
+	tempo: int,
+	set_quality: float,
+	opponent_setter_x: float,
+) -> float:
+	var cue_clarity := (1.0 - set_quality) * 0.18 \
+		+ absf(opponent_setter_x - 0.5) * 0.16 \
+		+ float(clampi(tempo, 0, 3)) * 0.025
+	return clampf(
+		_rating(blocker, "anticipation") * 0.34
+		+ _rating(blocker, "court_vision") * 0.25
+		+ _rating(blocker, "decision_making") * 0.21
+		+ _rating(blocker, "tactical_discipline") * 0.20
+		+ cue_clarity - rng.randf_range(0.0, 0.08), 0.0, 1.0
+	)
 
 
 func _blocker_close_fraction(
