@@ -23,6 +23,7 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var call_play_button: Button = %CallPlayButton
 @onready var called_play_label: Label = %CalledPlayLabel
 @onready var resolve_rally_button: Button = %ResolveRallyButton
+@onready var replay_rally_button: Button = %ReplayRallyButton
 @onready var playback_speed_option: OptionButton = %PlaybackSpeedOption
 @onready var skip_playback_button: Button = %SkipPlaybackButton
 @onready var reset_positions_button: Button = %ResetPositionsButton
@@ -111,6 +112,12 @@ var pending_drag_lane: String = ""
 var pending_substitution_out_id: int = -1
 var pending_substitution_in_id: int = -1
 var selected_defensive_zone_type: int = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+var match_preview_lineup: RotationLineup
+var match_preview_plan: DefensivePlan
+var match_preview_play: OffensivePlay
+var match_preview_zone_type: int = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+var match_preview_phase: int = 0
+var last_rally_result: Resource
 
 
 func _ready() -> void:
@@ -130,6 +137,7 @@ func _ready() -> void:
 	save_play_button.pressed.connect(_save_play)
 	call_play_button.pressed.connect(_call_selected_play)
 	resolve_rally_button.pressed.connect(_resolve_rally)
+	replay_rally_button.pressed.connect(_replay_last_rally)
 	skip_playback_button.pressed.connect(_skip_rally_playback)
 	reset_positions_button.pressed.connect(_reset_tactical_positions)
 	popup_apply_button.pressed.connect(_apply_popup_assignment)
@@ -161,6 +169,7 @@ func _ready() -> void:
 	_setup_tactical_workspace()
 	_setup_defender_popup()
 	defender_popup_close_button.pressed.connect(_close_player_instructions)
+	_capture_match_preview_snapshot()
 	_apply_light_mode(false)
 	_begin_draft()
 	_refresh_rotation()
@@ -338,7 +347,10 @@ func _refresh_rotation() -> void:
 	_reset_tactical_positions(false)
 	var lineup := GameManager.current_lineup()
 	tactical_court.set_lineup(lineup, GameManager.players)
-	match_preview_court.set_lineup(lineup, GameManager.players)
+	match_preview_court.set_lineup(
+		match_preview_lineup if match_preview_lineup != null else lineup,
+		GameManager.players,
+	)
 	_update_court_preview()
 	_refresh_defensive_plan()
 	_refresh_match_controls()
@@ -682,12 +694,37 @@ func _update_court_preview() -> void:
 
 
 func _refresh_match_preview() -> void:
-	# Match Center is a presentation surface, not a second tactics preview. It
-	# receives rally events and lineup state only; drafts and defensive edits stay
-	# inside the full tactical workspace.
-	var no_assignments: Array[HitterAssignment] = []
-	match_preview_court.set_play_preview(no_assignments, -1, -1)
-	match_preview_court.set_defensive_view(false)
+	if match_preview_lineup == null:
+		return
+	match_preview_court.set_lineup(match_preview_lineup, GameManager.players)
+	if match_preview_play != null:
+		match_preview_court.set_play_preview(
+			match_preview_play.assignments,
+			match_preview_play.primary_hitter_id,
+			match_preview_play.secondary_hitter_id,
+		)
+	else:
+		var no_assignments: Array[HitterAssignment] = []
+		match_preview_court.set_play_preview(no_assignments, -1, -1)
+	match_preview_court.set_defensive_view(
+		true, match_preview_plan, match_preview_zone_type, match_preview_phase
+	)
+
+
+func _capture_match_preview_snapshot() -> void:
+	var lineup := GameManager.current_lineup()
+	match_preview_lineup = RotationLineup.from_dict(lineup.to_dict())
+	var plan: Resource = GameManager.current_defensive_plan()
+	match_preview_plan = DefensivePlan.new()
+	match_preview_plan.load_dict(plan.to_dict())
+	var active_play := GameManager.called_play()
+	match_preview_play = OffensivePlay.from_dict(active_play.to_dict()) \
+		if active_play != null else null
+	var receiving := not bool(GameManager.match_state.serving_home)
+	match_preview_zone_type = DefensiveZoneModel.ZoneType.SERVE_RECEIVE \
+		if receiving else DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+	match_preview_phase = 0 if receiving else 2
+	_refresh_match_preview()
 
 
 func _setup_tactical_workspace() -> void:
@@ -709,6 +746,29 @@ func _setup_defender_popup() -> void:
 		zone_priority_option, zone_enabled_check, apply_zone_button,
 	]:
 		control.reparent(defender_popup_content)
+	var compact_control_order: Array[Control] = [
+		defender_popup_title,
+		zone_enabled_check,
+		block_participation_check,
+		attack_coverage_option,
+		deflection_priority_option,
+		second_contact_option,
+		emergency_responsibility_option,
+		emergency_pursuit_check,
+		short_ball_responsibility_option,
+		short_ball_priority_option,
+		zone_radius_value_label,
+		zone_radius_slider,
+		zone_priority_option,
+		setter_release_help,
+		seam_responsibility_option,
+		apply_defender_assignment_button,
+		apply_zone_button,
+	]
+	for control_index in range(compact_control_order.size()):
+		defender_popup_content.move_child(
+			compact_control_order[control_index], control_index
+		)
 	# A Control parented directly to Window is expanded to the window's usable
 	# rect. Parenting the card to the court makes its size and position local to
 	# the marker surface and prevents a screen-wide invisible input layer.
@@ -1116,16 +1176,25 @@ func _select_option_text(option: OptionButton, value: String) -> void:
 func _resolve_rally() -> void:
 	if rally_playback_active:
 		return
+	_capture_match_preview_snapshot()
 	var result: Resource = GameManager.resolve_active_rally(rally_seed)
 	rally_seed += 1
-	await _play_rally(result)
+	last_rally_result = result
+	await _play_rally(result, true)
 
 
-func _play_rally(result: Resource) -> void:
+func _replay_last_rally() -> void:
+	if rally_playback_active or last_rally_result == null:
+		return
+	await _play_rally(last_rally_result, false)
+
+
+func _play_rally(result: Resource, record_result: bool) -> void:
 	rally_playback_active = true
 	_reset_tactical_positions(false)
 	skip_rally_playback = false
 	resolve_rally_button.disabled = true
+	replay_rally_button.disabled = true
 	skip_playback_button.disabled = false
 	reset_positions_button.disabled = true
 	rotation_option.disabled = true
@@ -1232,20 +1301,23 @@ func _play_rally(result: Resource) -> void:
 	tactical_court.finish_event_animation()
 	match_preview_court.finish_event_animation()
 	_show_rally_result(result)
-	var match_update: Dictionary = GameManager.record_rally(result)
-	_refresh_match_header()
-	_refresh_match_controls()
-	_refresh_defensive_plan()
+	var match_update: Dictionary = {}
+	if record_result:
+		match_update = GameManager.record_rally(result)
+		_refresh_match_header()
+		_refresh_match_controls()
+		_refresh_defensive_plan()
 	_reset_tactical_positions(false)
 	rally_playback_active = false
 	resolve_rally_button.disabled = bool(GameManager.match_state.match_complete)
+	replay_rally_button.disabled = last_rally_result == null
 	skip_playback_button.disabled = true
 	reset_positions_button.disabled = false
 	rotation_option.disabled = false
 	var key_moment: bool = str(result.terminal_outcome) in [
 		"ace", "blocked", "counter_block",
 	] or bool(match_update.get("set_complete", false))
-	if auto_rallies_toggle.button_pressed \
+	if record_result and auto_rallies_toggle.button_pressed \
 			and not (pause_key_moments_toggle.button_pressed and key_moment) \
 			and not resolve_rally_button.disabled:
 		await get_tree().create_timer(0.65).timeout

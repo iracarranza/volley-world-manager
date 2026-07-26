@@ -503,12 +503,17 @@ func _resolve_opponent_transition(
 		0.62 + rng.randf_range(-0.16, 0.16) - transition_penalty,
 		0.2, 0.9,
 	)
+	var opponent_setter_position := Vector2(
+		clampf(lerpf(dig_position.x, 0.50, opponent_set_quality), 0.24, 0.76),
+		0.48,
+	)
 	var opponent_contact := Vector2(rng.randf_range(0.24, 0.76), 0.48)
 	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
 		opponent_setter.display_name,
 		dig_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
-		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0))
+		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
+		{"side": "opponent", "setter_position": opponent_setter_position})
 	var opponent_attack := clampf(
 		_power_rating(opponent_hitter, "attack_power") * 0.62 \
 		+ opponent_set_quality * 0.20 + 0.08 \
@@ -531,6 +536,7 @@ func _resolve_opponent_transition(
 	var block_result := _resolve_home_block(
 		players, lineup, defensive_plan, opponent_contact.x,
 		opponent_tempo, opponent_set_quality, opponent_attack,
+		opponent_setter_position.x,
 	)
 	var blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
@@ -574,6 +580,8 @@ func _resolve_opponent_transition(
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
+			"setter_pull": block_result.setter_pull,
+			"opponent_setter_position": opponent_setter_position,
 			"event_time": rally_clock,
 			"incoming_trajectory": opponent_attack_trajectory,
 			"outgoing_trajectory": home_block_trajectory})
@@ -1439,19 +1447,33 @@ func _resolve_home_block(
 	tempo: int,
 	set_quality: float,
 	attack_quality: float,
+	opponent_setter_x: float,
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
+	var setter_pull := {}
 	for player_id in lineup.front_row_player_ids():
 		var player := _player_by_id(players, player_id)
 		var assignment: Resource = defensive_plan.assignment_for(player_id) \
 			if defensive_plan != null else null
 		if player != null and (assignment == null or bool(assignment.block_participation)):
 			front_blockers.append(player)
+			var slot_number := lineup.slot_for_player(player.id)
+			var start: Vector2 = live_positions.get(
+				player.id, CourtConstants.slot_position(slot_number)
+			)
+			var discipline := clampf(
+				(_rating(player, "tactical_discipline") * 0.65
+				+ _rating(player, "anticipation") * 0.35), 0.0, 1.0
+			)
+			var pull_weight := (1.0 - discipline) * 0.18
+			var pulled_x := lerpf(start.x, opponent_setter_x, pull_weight)
+			setter_pull[player.id] = absf(pulled_x - start.x)
+			live_positions[player.id] = Vector2(pulled_x, start.y)
 	if front_blockers.is_empty():
 		return {
 			"primary": null, "assist": null, "primary_close": 0.0,
 			"assist_close": 0.0, "quality": 0.0, "outcome": "miss",
-			"coverage_segments": [],
+			"coverage_segments": [], "setter_pull": setter_pull,
 		}
 	var primary: VolleyballPlayer
 	var primary_distance := 1000.0
@@ -1512,6 +1534,7 @@ func _resolve_home_block(
 		"coverage_segments": _home_block_segments(
 			attack_x, primary, primary_close, assist, assist_close
 		),
+		"setter_pull": setter_pull,
 	}
 
 

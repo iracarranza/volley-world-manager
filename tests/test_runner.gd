@@ -599,6 +599,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 	var block_deflection_observed := false
 	var attack_coverage_observed := false
 	var block_segments_observed := false
+	var opponent_setter_pull_observed := false
 	for seed_value in range(5000, 5300):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
@@ -610,6 +611,10 @@ func _test_block_closing_and_touch_distribution() -> void:
 					or str(event.metadata.get("side", "")) != "home":
 				continue
 			home_block_events += 1
+			opponent_setter_pull_observed = opponent_setter_pull_observed or (
+				event.metadata.has("opponent_setter_position")
+				and not Dictionary(event.metadata.get("setter_pull", {})).is_empty()
+			)
 			block_segments_observed = block_segments_observed or not Array(
 				event.metadata.get("coverage_segments", [])
 			).is_empty()
@@ -643,6 +648,10 @@ func _test_block_closing_and_touch_distribution() -> void:
 	_check(block_deflection_observed, "partial home blocks expose a changed deflection target")
 	_check(attack_coverage_observed, "opponent block touches can trigger explicit attack coverage")
 	_check(block_segments_observed, "block events expose spatial net-coverage segments")
+	_check(
+		opponent_setter_pull_observed,
+		"opponent setter position creates discipline-weighted blocker pull metadata",
+	)
 
 
 func _test_physical_body_attributes() -> void:

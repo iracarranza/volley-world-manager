@@ -53,8 +53,11 @@
 - Keep hitter assignment nested inside the tactical workspace so assigning or
   dismissing it does not close the full board.
 - Animate the same rally events on the match preview and full tactical board.
-- Keep the Match Center court read-only and event-focused: tactical drafts,
-  defensive zones, release paths and unsaved edits appear only on the full board.
+- Freeze the Match Center court to the lineup, active play and defensive
+  formation actually used when the point began. Later tactical edits do not
+  rewrite the completed point's view.
+- Replay the previous point from its stored `RallyResult` without recording the
+  score, fatigue, adaptation or match history a second time.
 - Clear transient marker positions, trails and the previous ball event whenever
   a rally ends or a lineup/rotation is loaded. A fixed Reset Positions button
   restores both court surfaces without changing saved tactics.
@@ -148,6 +151,9 @@
 - Scout and play against a six-player Port Azure VC profile with individual
   serving, setting, attacking, blocking and defensive attributes.
 - Use actual opponent names and attributes during rally resolution.
+- Place the opponent setter along the net from pass location and set quality.
+  That position pulls less disciplined or anticipatory home blockers slightly
+  before they close to the actual hitter lane.
 - Let the opponent learn repeated home attack lanes, set tempos and serve
   targets. Learned patterns improve its block formation gradually, persist in
   saves and are summarized in the scouting panel.
@@ -168,7 +174,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 116 passing headless foundation checks and UI-binding validation, including a
+- 117 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

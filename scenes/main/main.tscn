@@ -115,12 +115,6 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Player Instructions"
 
-[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 22)
-layout_mode = 2
-text = "Close ×"
-
 [node name="BlockParticipationCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=1923420421]
 unique_name_in_owner = true
 layout_mode = 2
@@ -147,6 +141,21 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Drag S→ to move release target."
 autowrap_mode = 2
+
+[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -24.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = 24.0
+grow_horizontal = 0
+tooltip_text = "Close player instructions."
+text = "×"
+flat = true
 
 [node name="WorkspacePopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup" unique_id=925463913]
 anchors_preset = 15
@@ -246,6 +255,13 @@ size_flags_horizontal = 3
 tooltip_text = "Resolve one rally using the active play and current rotation."
 disabled = true
 text = "Run Rally"
+
+[node name="ReplayRallyButton" type="Button" parent="Margin/Content/QuickRallyBar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Replay the previous point without changing the score or simulation state."
+disabled = true
+text = "Replay Point"
 
 [node name="PlaybackSpeedOption" type="OptionButton" parent="Margin/Content/QuickRallyBar" unique_id=1836883194]
 unique_name_in_owner = true

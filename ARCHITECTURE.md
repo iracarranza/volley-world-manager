@@ -62,8 +62,10 @@ board without changing saved tactics or simulation data.
 
 The workspace node is reparented into the popup at runtime. This avoids a second
 copy of editor logic and makes the change straightforward to revert.
-The Match Center preview never receives offensive drafts or defensive-plan
-overlays; it displays lineup state and resolved rally events only.
+The Match Center preview receives a deep snapshot of the lineup, active play and
+defensive plan when a point begins. It retains that completed-point context
+while the player edits future tactics. Replay reuses the stored `RallyResult`
+without invoking `GameManager.record_rally()` again.
 The simulator completes the result before the first animation begins, so visual
 timing cannot change a point.
 The court presenter maintains temporary live marker positions during playback.
@@ -144,6 +146,10 @@ The front-row player nearest the attack lane becomes primary. Other front-row
 players are evaluated as possible assists using horizontal distance, reaction,
 lateral speed, set tempo and set quality. Tactical commit choices alter the
 available closing window rather than adding an unconditional quality bonus.
+Opponent transition derives a setter position from pass location and quality.
+Before reading the hitter lane, each home blocker's starting X position is
+pulled toward that setter by a bounded weight inversely proportional to tactical
+discipline and anticipation.
 
 A sufficiently complete, high-quality contest may stuff the attack. More often,
 partial contests produce a touch or funnel. A touch lowers effective attack
