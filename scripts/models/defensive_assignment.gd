@@ -7,6 +7,7 @@ extends Resource
 @export var seam_responsibility: String = "Inside seam"
 @export var short_ball_responsibility: String = "Tip coverage"
 @export var emergency_responsibility: String = "Deep pursuit"
+@export var attack_coverage_responsibility: String = "Cover assigned hitter"
 
 
 func coverage_tags() -> Array[String]:
@@ -16,6 +17,7 @@ func coverage_tags() -> Array[String]:
 		seam_responsibility,
 		short_ball_responsibility,
 		emergency_responsibility,
+		attack_coverage_responsibility,
 	]
 
 
@@ -27,6 +29,7 @@ func to_dict() -> Dictionary:
 		"seam_responsibility": seam_responsibility,
 		"short_ball_responsibility": short_ball_responsibility,
 		"emergency_responsibility": emergency_responsibility,
+		"attack_coverage_responsibility": attack_coverage_responsibility,
 	}
 
 
@@ -38,4 +41,7 @@ static func from_dict(data: Dictionary) -> DefensiveAssignment:
 	assignment.seam_responsibility = str(data.get("seam_responsibility", "Inside seam"))
 	assignment.short_ball_responsibility = str(data.get("short_ball_responsibility", "Tip coverage"))
 	assignment.emergency_responsibility = str(data.get("emergency_responsibility", "Deep pursuit"))
+	assignment.attack_coverage_responsibility = str(data.get(
+		"attack_coverage_responsibility", "Cover assigned hitter"
+	))
 	return assignment

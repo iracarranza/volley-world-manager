@@ -232,6 +232,14 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 		not str(assignment.short_ball_responsibility).is_empty(),
 		"defensive responsibility includes short-ball coverage",
 	)
+	assignment.attack_coverage_responsibility = "Take second contact"
+	manager.current_defensive_plan().set_assignment(6, assignment)
+	manager.set_coverage_zone(
+		6, DefensiveZone.ZoneType.SERVE_RECEIVE, 2.4, 3, false
+	)
+	manager.set_coverage_zone_center(
+		6, DefensiveZone.ZoneType.SERVE_RECEIVE, Vector2(0.44, 0.78)
+	)
 	var observed_result: Resource = preload("res://scripts/models/rally_result.gd").new()
 	var observed_attack: Resource = RALLY_EVENT_SCRIPT.new()
 	observed_attack.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
@@ -285,6 +293,22 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 		restored.current_defensive_plan().reception_zones.size() >= 6,
 		"serve-reception zones survive serialization",
 	)
+	var restored_zone: Resource = restored.current_defensive_plan().zone_for(
+		6, DefensiveZone.ZoneType.SERVE_RECEIVE
+	)
+	_check(
+		restored_zone != null and not bool(restored_zone.enabled)
+			and int(restored_zone.priority) == 3
+			and is_equal_approx(float(restored_zone.radius_meters), 2.4)
+			and Vector2(restored_zone.center).is_equal_approx(Vector2(0.44, 0.78)),
+		"editable reception radius, priority, visibility and center survive serialization",
+	)
+	_check(
+		str(restored.current_defensive_plan().assignment_for(
+			6
+		).attack_coverage_responsibility) == "Take second contact",
+		"attack-coverage responsibility survives serialization",
+	)
 
 
 func _test_coverage_arrival_and_reception_ownership() -> void:
@@ -324,6 +348,29 @@ func _test_coverage_arrival_and_reception_ownership() -> void:
 			reception_has_arrival_data = event.metadata.has("arrival")
 	_check(non_libero_received, "serve placement allows a non-libero passer to own reception")
 	_check(reception_has_arrival_data, "reception events expose physical arrival data")
+	var seam_partner := VolleyballPlayer.new()
+	seam_partner.id = 901
+	seam_partner.lateral_speed = 75
+	seam_partner.acceleration = 75
+	seam_partner.anticipation = 75
+	seam_partner.ball_control = 75
+	seam_partner.reception = 75
+	var seam_zone := DefensiveZone.new()
+	seam_zone.player_id = seam_partner.id
+	seam_zone.center = zone.center
+	seam_zone.radius_meters = zone.radius_meters
+	seam_zone.priority = zone.priority
+	var seam_players: Array[VolleyballPlayer] = [player, seam_partner]
+	var seam_zones := {player.id: zone, seam_partner.id: seam_zone}
+	var seam_claim: Dictionary = CoverageCalculator.choose_claimant(
+		seam_players, seam_zones, Vector2(0.25, 0.84), 1.0, "reception"
+	)
+	_check(bool(seam_claim.seam_conflict), "equal-priority overlap creates a reception seam conflict")
+	seam_zone.priority = 3
+	var clear_claim: Dictionary = CoverageCalculator.choose_claimant(
+		seam_players, seam_zones, Vector2(0.25, 0.84), 1.0, "reception"
+	)
+	_check(not bool(clear_claim.seam_conflict), "explicit claim priority resolves a reception seam")
 
 
 func _test_block_closing_and_touch_distribution() -> void:
@@ -334,10 +381,15 @@ func _test_block_closing_and_touch_distribution() -> void:
 	var stuff_blocks := 0
 	var touches_and_funnels := 0
 	var non_middle_primary := false
+	var block_deflection_observed := false
+	var attack_coverage_observed := false
 	for seed_value in range(5000, 5300):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+					and str(event.metadata.get("coverage", "")) == "attack":
+				attack_coverage_observed = true
 			if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
 					or str(event.metadata.get("side", "")) != "home":
 				continue
@@ -347,9 +399,18 @@ func _test_block_closing_and_touch_distribution() -> void:
 				stuff_blocks += 1
 			elif outcome in ["touch", "funnel"]:
 				touches_and_funnels += 1
+				block_deflection_observed = event.metadata.has("deflection_target")
 			var blocker := manager.player_by_id(event.actor_id)
 			if blocker != null and blocker.position_role != "Middle Blocker":
 				non_middle_primary = true
+	manager.match_state.serving_home = false
+	for seed_value in range(5300, 5600):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+					and str(event.metadata.get("coverage", "")) == "attack":
+				attack_coverage_observed = true
 	_check(home_block_events > 20, "block distribution test observes enough home contests")
 	_check(non_middle_primary, "nearest pin players can lead blocks instead of the middle")
 	_check(
@@ -360,6 +421,8 @@ func _test_block_closing_and_touch_distribution() -> void:
 		float(stuff_blocks) / maxf(float(home_block_events), 1.0) < 0.22,
 		"home stuff-block rate remains below the prototype balance ceiling",
 	)
+	_check(block_deflection_observed, "partial home blocks expose a changed deflection target")
+	_check(attack_coverage_observed, "opponent block touches can trigger explicit attack coverage")
 
 
 func _test_physical_body_attributes() -> void:

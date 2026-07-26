@@ -56,27 +56,31 @@
 - Apply changes and return to the Match Center without duplicating tactical or
   simulation state.
 - Switch the coaching board between offense and per-rotation defense.
-- Drag defensive positions and save block strategy, floor system, serve target
+- Switch between floor-defense and serve-reception views, drag each player's
+  independent zone center, and save block strategy, floor system, serve target
   and serve risk.
 - Select any defender and explicitly assign base structure, read cue, seam,
-  short-ball and emergency responsibilities. Assignments are saved per rotation
-  and contribute to defensive contact quality.
+  short-ball, emergency and attack-coverage responsibilities. Assignments are
+  saved per rotation and contribute to defensive contact quality.
 - See each player's compact structural responsibility directly on the defensive
   court.
-- Use separate saved serve-reception and floor-defense zones with a radius,
-  priority and enabled state for every player. Floor zones are visible as
-  translucent metre-scaled overlays on the defensive court.
+- Use separate saved serve-reception and floor-defense zones with an editable
+  center, radius, priority and enabled state for every player. Both views show
+  translucent metre-scaled overlays; reception summarizes active and hidden
+  passers as an explicit formation.
 - Resolve serve placement before choosing a receiver. Outside hitters, liberos
-  and any other enabled back-row passer claim balls using zone priority only if
-  their reaction, speed, acceleration, fatigue and reach allow them to arrive.
+  and any other enabled passer claim balls using zone priority only if their
+  reaction, speed, acceleration, fatigue and reach allow them to arrive.
+  Equal-priority overlaps can create a penalized seam conflict.
 - Resolve home floor contacts with the same physical arrival model, including
   approximate attack flight time and nearby coverage support.
 - Form home blocks through a nearest-player primary and travel-limited assist.
   Pin players lead pin blocks; middles only assist when anticipation, lateral
   speed and set timing allow them to close.
 - Distinguish terminal stuff blocks from touches, funnels and misses. Touches
-  reduce attack force and add floor-defense reaction time instead of awarding
-  an immediate point.
+  alter the ball target, reduce attack force and add floor-defense reaction time
+  instead of awarding an immediate point. Opponent block touches invoke saved
+  attack-coverage responsibility and can be controlled into a new home attack.
 - Model height, mass and wingspan for every generated demo player, with standing
   reach derived from height and wingspan. Mass raises attainable serve/attack
   power slightly while applying a small movement-speed tradeoff; wingspan
@@ -110,7 +114,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 86 passing headless foundation checks and UI-binding validation, including a
+- 92 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

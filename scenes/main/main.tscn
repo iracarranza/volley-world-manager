@@ -371,10 +371,61 @@ unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Fallback duty after a broken or deflected play."
 
+[node name="AttackCoverageOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Responsibility when an attack rebounds from the opponent block."
+
 [node name="ApplyDefenderAssignmentButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Apply Player Responsibilities"
+disabled = true
+
+[node name="ZoneTypeOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Switch between floor-defense and serve-reception formations. Drag a marker to move that player's selected zone."
+
+[node name="ZoneFormationSummaryLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Floor-defense zones"
+autowrap_mode = 2
+
+[node name="SelectedZoneLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Select a player to edit zone size and priority."
+autowrap_mode = 2
+
+[node name="ZoneRadiusValueLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Coverage radius · 3.0 m"
+
+[node name="ZoneRadiusSlider" type="HSlider" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.5
+max_value = 6.0
+step = 0.1
+value = 3.0
+
+[node name="ZonePriorityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Higher-priority players claim overlapping balls first. Equal-priority overlaps can create seam confusion."
+
+[node name="ZoneEnabledCheck" type="CheckButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Included in formation"
+
+[node name="ApplyZoneButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Apply Coverage Zone"
 disabled = true
 
 [node name="SaveDefenseButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=994939557]

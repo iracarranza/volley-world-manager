@@ -134,13 +134,42 @@ func _default_assignment(player_id: int, slot_number: int) -> Resource:
 		assignment.seam_responsibility = "Close blocking seam"
 		assignment.short_ball_responsibility = "Cover tip behind block"
 		assignment.emergency_responsibility = "Release to emergency set"
+		assignment.attack_coverage_responsibility = "Cover nearest attacker"
 	else:
 		assignment.base_responsibility = "Perimeter defense"
 		assignment.read_responsibility = "Read hitter shoulder"
 		assignment.seam_responsibility = "Own inside seam"
 		assignment.short_ball_responsibility = "Step into tip coverage"
 		assignment.emergency_responsibility = "Pursue deep deflection"
+		assignment.attack_coverage_responsibility = "Cover assigned hitter"
 	return assignment
+
+
+func set_zone(
+	player_id: int,
+	zone_type: int,
+	radius_meters: float,
+	priority: int,
+	enabled: bool,
+) -> void:
+	var zone: Resource = zone_for(player_id, zone_type)
+	if zone == null:
+		return
+	zone.radius_meters = clampf(radius_meters, 0.5, 6.0)
+	zone.priority = clampi(priority, 0, 3)
+	zone.enabled = enabled
+
+
+func set_zone_center(player_id: int, zone_type: int, position: Vector2) -> void:
+	var zone: Resource = zone_for(player_id, zone_type)
+	if zone == null:
+		return
+	zone.center = Vector2(
+		clampf(position.x, 0.06, 0.94),
+		clampf(position.y, 0.53, 0.96),
+	)
+	if zone_type == DefensiveZoneModel.ZoneType.FLOOR_DEFENSE:
+		defender_positions[player_id] = zone.center
 
 
 func _default_zone(player_id: int, slot_number: int, zone_type: int) -> Resource:

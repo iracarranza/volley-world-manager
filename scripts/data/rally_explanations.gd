@@ -47,6 +47,8 @@ const FACTOR_LINES := {
 	"defense_assignment_stretch": "A defender had to leave the saved responsibility to reach the ball.",
 	"block_touch": "A partial block touch slowed the attack and gave floor defense more time.",
 	"block_funnel": "The block shaped the attack toward the saved floor-defense structure.",
+	"seam_conflict": "Equal-priority passers hesitated over ownership at the reception seam.",
+	"attack_recycled": "Attack coverage controlled a block deflection and kept the rally alive.",
 }
 
 

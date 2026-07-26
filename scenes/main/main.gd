@@ -3,6 +3,7 @@ extends Control
 const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
+const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 
 @onready var background: ColorRect = %Background
 @onready var theme_toggle: CheckButton = %ThemeToggle
@@ -50,7 +51,16 @@ const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 @onready var seam_responsibility_option: OptionButton = %SeamResponsibilityOption
 @onready var short_ball_responsibility_option: OptionButton = %ShortBallResponsibilityOption
 @onready var emergency_responsibility_option: OptionButton = %EmergencyResponsibilityOption
+@onready var attack_coverage_option: OptionButton = %AttackCoverageOption
 @onready var apply_defender_assignment_button: Button = %ApplyDefenderAssignmentButton
+@onready var zone_type_option: OptionButton = %ZoneTypeOption
+@onready var zone_formation_summary_label: Label = %ZoneFormationSummaryLabel
+@onready var selected_zone_label: Label = %SelectedZoneLabel
+@onready var zone_radius_value_label: Label = %ZoneRadiusValueLabel
+@onready var zone_radius_slider: HSlider = %ZoneRadiusSlider
+@onready var zone_priority_option: OptionButton = %ZonePriorityOption
+@onready var zone_enabled_check: CheckButton = %ZoneEnabledCheck
+@onready var apply_zone_button: Button = %ApplyZoneButton
 @onready var defense_summary_label: Label = %DefenseSummaryLabel
 @onready var opponent_scouting_label: Label = %OpponentScoutingLabel
 @onready var opponent_adaptation_rate_slider: HSlider = %OpponentAdaptationRateSlider
@@ -84,6 +94,7 @@ var base_theme_scale: float = 1.0
 var pending_drag_lane: String = ""
 var pending_substitution_out_id: int = -1
 var pending_substitution_in_id: int = -1
+var selected_defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
 
 
 func _ready() -> void:
@@ -104,9 +115,12 @@ func _ready() -> void:
 	reset_positions_button.pressed.connect(_reset_tactical_positions)
 	popup_apply_button.pressed.connect(_apply_popup_assignment)
 	court_mode_option.item_selected.connect(_court_mode_changed)
-	tactical_court.defender_position_changed.connect(_defender_position_changed)
+	tactical_court.coverage_zone_position_changed.connect(_coverage_zone_position_changed)
 	save_defense_button.pressed.connect(_save_defensive_plan)
 	apply_defender_assignment_button.pressed.connect(_apply_defender_assignment)
+	zone_type_option.item_selected.connect(_defensive_zone_type_changed)
+	zone_radius_slider.value_changed.connect(_zone_radius_changed)
+	apply_zone_button.pressed.connect(_apply_selected_zone)
 	opponent_adaptation_rate_slider.value_changed.connect(_opponent_adaptation_rate_changed)
 	timeout_button.pressed.connect(_call_timeout)
 	apply_substitution_button.pressed.connect(_apply_substitution)
@@ -196,6 +210,29 @@ func _populate_static_options() -> void:
 	_populate_text_options(emergency_responsibility_option, [
 		"Release to emergency set", "Pursue deep deflection", "Cover hitter", "Take second contact",
 	])
+	_populate_text_options(attack_coverage_option, [
+		"Cover nearest attacker", "Cover assigned hitter",
+		"Take second contact", "Release for transition",
+	])
+	zone_type_option.clear()
+	zone_type_option.add_item("Floor Defense")
+	zone_type_option.set_item_metadata(
+		0, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+	)
+	zone_type_option.add_item("Serve Receive")
+	zone_type_option.set_item_metadata(
+		1, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+	)
+	zone_priority_option.clear()
+	for priority in range(4):
+		zone_priority_option.add_item("P%d · %s" % [
+			priority, "primary claim" if priority == 3 else (
+				"secondary claim" if priority == 2 else (
+					"support" if priority == 1 else "emergency only"
+				)
+			)
+		])
+		zone_priority_option.set_item_metadata(priority, priority)
 
 
 func _apply_light_mode(light_mode: bool) -> void:
@@ -315,6 +352,10 @@ func _load_defender_assignment(player_id: int) -> void:
 	_select_option_text(
 		emergency_responsibility_option, str(assignment.emergency_responsibility)
 	)
+	_select_option_text(
+		attack_coverage_option, str(assignment.attack_coverage_responsibility)
+	)
+	_load_selected_zone()
 	apply_defender_assignment_button.disabled = false
 	_set_status("Editing %s's defensive responsibilities." % player.display_name)
 
@@ -340,6 +381,9 @@ func _apply_defender_assignment() -> void:
 	)
 	assignment.emergency_responsibility = emergency_responsibility_option.get_item_text(
 		emergency_responsibility_option.selected
+	)
+	assignment.attack_coverage_responsibility = attack_coverage_option.get_item_text(
+		attack_coverage_option.selected
 	)
 	plan.set_assignment(selected_player_id, assignment)
 	_refresh_defensive_plan()
@@ -571,6 +615,7 @@ func _refresh_match_preview() -> void:
 	match_preview_court.set_defensive_view(
 		court_mode_option.selected == 1,
 		GameManager.current_defensive_plan(),
+		selected_defensive_zone_type,
 	)
 
 
@@ -616,7 +661,8 @@ func _court_mode_changed(index: int) -> void:
 	var defense_enabled := index == 1
 	defense_controls.visible = defense_enabled
 	tactical_court.set_defensive_view(
-		defense_enabled, GameManager.current_defensive_plan()
+		defense_enabled, GameManager.current_defensive_plan(),
+		selected_defensive_zone_type,
 	)
 	court_instructions.text = (
 		"Drag defenders anywhere on the home court, then save block, floor and serve intent."
@@ -662,7 +708,8 @@ func _refresh_defensive_plan() -> void:
 		float(GameManager.opponent_team.adaptation_rate) * 100.0
 	)
 	if court_mode_option.selected == 1:
-		tactical_court.set_defensive_view(true, plan)
+		tactical_court.set_defensive_view(true, plan, selected_defensive_zone_type)
+	_refresh_zone_formation_summary()
 
 
 func _defender_position_changed(player_id: int, court_position: Vector2) -> void:
@@ -671,6 +718,97 @@ func _defender_position_changed(player_id: int, court_position: Vector2) -> void
 	tactical_court.queue_redraw()
 	match_preview_court.queue_redraw()
 	_set_status("Defensive position updated; save the plan when ready.")
+
+
+func _defensive_zone_type_changed(index: int) -> void:
+	var metadata: Variant = zone_type_option.get_item_metadata(index)
+	selected_defensive_zone_type = int(metadata)
+	tactical_court.set_defensive_view(
+		true, GameManager.current_defensive_plan(), selected_defensive_zone_type
+	)
+	_load_selected_zone()
+	_refresh_zone_formation_summary()
+	_refresh_match_preview()
+
+
+func _zone_radius_changed(value: float) -> void:
+	zone_radius_value_label.text = "Coverage radius · %.1f m" % value
+
+
+func _load_selected_zone() -> void:
+	var plan: Resource = GameManager.current_defensive_plan()
+	var zone: Resource = plan.zone_for(
+		selected_player_id, selected_defensive_zone_type
+	) if plan != null and selected_player_id >= 0 else null
+	if zone == null:
+		selected_zone_label.text = "Select a player to edit zone size and priority."
+		apply_zone_button.disabled = true
+		return
+	var player := GameManager.player_by_id(selected_player_id)
+	var zone_name := "serve-reception" \
+		if selected_defensive_zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE \
+		else "floor-defense"
+	selected_zone_label.text = "%s · %s zone" % [
+		player.position_code if player != null else "?", zone_name,
+	]
+	zone_radius_slider.set_value_no_signal(float(zone.radius_meters))
+	_zone_radius_changed(float(zone.radius_meters))
+	zone_priority_option.select(clampi(int(zone.priority), 0, 3))
+	zone_enabled_check.button_pressed = bool(zone.enabled)
+	apply_zone_button.disabled = false
+
+
+func _apply_selected_zone() -> void:
+	if selected_player_id < 0:
+		return
+	var priority := int(zone_priority_option.get_item_metadata(
+		zone_priority_option.selected
+	))
+	GameManager.set_coverage_zone(
+		selected_player_id, selected_defensive_zone_type,
+		zone_radius_slider.value, priority, zone_enabled_check.button_pressed,
+	)
+	_refresh_defensive_plan()
+	tactical_court.queue_redraw()
+	match_preview_court.queue_redraw()
+	_set_status("Coverage zone applied to the current rotation.")
+
+
+func _coverage_zone_position_changed(
+	player_id: int, zone_type: int, court_position: Vector2
+) -> void:
+	GameManager.set_coverage_zone_center(player_id, zone_type, court_position)
+	_refresh_defensive_plan()
+	tactical_court.queue_redraw()
+	match_preview_court.queue_redraw()
+	_set_status("Coverage-zone center moved; save the rotation defense when ready.")
+
+
+func _refresh_zone_formation_summary() -> void:
+	var plan: Resource = GameManager.current_defensive_plan()
+	if plan == null:
+		return
+	var zones: Dictionary = plan.zones_for(selected_defensive_zone_type)
+	var enabled_codes: Array[String] = []
+	var hidden_codes: Array[String] = []
+	for raw_player_id in zones:
+		var player_id := int(raw_player_id)
+		var zone: Resource = zones[raw_player_id] as Resource
+		var player := GameManager.player_by_id(player_id)
+		var code := player.position_code if player != null else "?"
+		if zone != null and bool(zone.enabled):
+			enabled_codes.append(code)
+		else:
+			hidden_codes.append(code)
+	if selected_defensive_zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
+		zone_formation_summary_label.text = "%d-passer reception · active %s · hidden %s" % [
+			enabled_codes.size(), ", ".join(enabled_codes),
+			", ".join(hidden_codes) if not hidden_codes.is_empty() else "none",
+		]
+	else:
+		zone_formation_summary_label.text = "Floor defense · %d active zones · %s" % [
+			enabled_codes.size(), ", ".join(enabled_codes),
+		]
 
 
 func _save_defensive_plan() -> void:

@@ -68,7 +68,10 @@ static func choose_claimant(
 	ball_time_seconds: float,
 	contact_skill: String,
 ) -> Dictionary:
-	var best := {"player": null, "arrival": {}, "support_count": 0}
+	var best := {
+		"player": null, "arrival": {}, "support_count": 0,
+		"seam_conflict": false, "claim_margin": 1.0,
+	}
 	var best_score := -1000.0
 	var reachable_evaluations: Array[Dictionary] = []
 	for player in players:
@@ -82,7 +85,10 @@ static func choose_claimant(
 		var score := float(arrival.get("claim_score", -1000.0))
 		if score > best_score:
 			best_score = score
-			best = {"player": player, "arrival": arrival, "support_count": 0}
+			best = {
+				"player": player, "arrival": arrival, "support_count": 0,
+				"seam_conflict": false, "claim_margin": 1.0,
+			}
 	if best.player == null:
 		return best
 	var support_count := 0
@@ -91,6 +97,23 @@ static func choose_claimant(
 		if support_player.id != (best.player as VolleyballPlayer).id:
 			support_count += 1
 	best.support_count = support_count
+	var second_score := -1000.0
+	var best_priority := -1
+	var second_priority := -2
+	for evaluation in reachable_evaluations:
+		var evaluation_player := evaluation.player as VolleyballPlayer
+		var evaluation_arrival: Dictionary = evaluation.arrival
+		var evaluation_score := float(evaluation_arrival.get("claim_score", -1000.0))
+		var zone: Resource = zones.get(evaluation_player.id) as Resource
+		if evaluation_player.id == (best.player as VolleyballPlayer).id:
+			best_priority = int(zone.priority)
+		elif evaluation_score > second_score:
+			second_score = evaluation_score
+			second_priority = int(zone.priority)
+	var claim_margin := best_score - second_score if second_score > -999.0 else 1.0
+	best.claim_margin = claim_margin
+	best.seam_conflict = support_count > 0 and best_priority == second_priority \
+		and claim_margin < 0.10
 	return best
 
 

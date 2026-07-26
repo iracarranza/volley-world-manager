@@ -2,10 +2,14 @@ class_name TacticalCourt
 extends Control
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 
 signal player_selected(player_id: int)
 signal assignment_dragged(player_id: int, lane_name: String, marker_position: Vector2)
 signal defender_position_changed(player_id: int, court_position: Vector2)
+signal coverage_zone_position_changed(
+	player_id: int, zone_type: int, court_position: Vector2
+)
 
 const LIGHT_PALETTE := {
 	"outside": Color("eaf2ed"),
@@ -47,6 +51,7 @@ var dragging_player_id: int = -1
 var drag_position: Vector2 = Vector2.ZERO
 var defensive_mode: bool = false
 var defensive_plan: Resource
+var defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
 var landscape_orientation: bool = false
 var live_player_positions: Dictionary = {}
 var movement_player_id: int = -1
@@ -90,9 +95,14 @@ func set_play_preview(
 	queue_redraw()
 
 
-func set_defensive_view(enabled: bool, plan: Resource = null) -> void:
+func set_defensive_view(
+	enabled: bool,
+	plan: Resource = null,
+	zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE,
+) -> void:
 	defensive_mode = enabled
 	defensive_plan = plan
+	defensive_zone_type = zone_type
 	queue_redraw()
 
 
@@ -421,7 +431,9 @@ func _gui_input(event: InputEvent) -> void:
 		if defensive_mode:
 			var court_position := _local_to_court(mouse_event.position)
 			if court_position.y >= CourtConstants.NET_Y:
-				defender_position_changed.emit(released_player_id, court_position)
+				coverage_zone_position_changed.emit(
+					released_player_id, defensive_zone_type, court_position
+				)
 		else:
 			var lane_name := _nearest_lane(mouse_event.position, released_player_id)
 			if not lane_name.is_empty():
@@ -523,7 +535,8 @@ func _draw_defensive_zones() -> void:
 		return
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
-		var zone: Resource = defensive_plan.floor_defense_zones.get(player_id) as Resource
+		var zones: Dictionary = defensive_plan.zones_for(defensive_zone_type)
+		var zone: Resource = zones.get(player_id) as Resource
 		if zone == null or not bool(zone.enabled):
 			continue
 		var points := PackedVector2Array()
@@ -697,6 +710,10 @@ func _player_court_position(player_id: int, slot_number: int) -> Vector2:
 		return live_player_positions[player_id]
 	var fallback := CourtConstants.slot_position(slot_number)
 	if defensive_mode and defensive_plan != null:
+		var zones: Dictionary = defensive_plan.zones_for(defensive_zone_type)
+		var zone: Resource = zones.get(player_id) as Resource
+		if zone != null:
+			return Vector2(zone.center)
 		return defensive_plan.defender_position(player_id, fallback)
 	return fallback
 

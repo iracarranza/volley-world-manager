@@ -185,6 +185,28 @@ func set_defender_position(player_id: int, position: Vector2) -> void:
 		plan.set_defender_position(player_id, position)
 
 
+func set_coverage_zone(
+	player_id: int,
+	zone_type: int,
+	radius_meters: float,
+	priority: int,
+	enabled: bool,
+) -> void:
+	var plan: Resource = current_defensive_plan()
+	if plan != null:
+		plan.set_zone(player_id, zone_type, radius_meters, priority, enabled)
+
+
+func set_coverage_zone_center(
+	player_id: int,
+	zone_type: int,
+	position: Vector2,
+) -> void:
+	var plan: Resource = current_defensive_plan()
+	if plan != null:
+		plan.set_zone_center(player_id, zone_type, position)
+
+
 func player_by_id(player_id: int) -> VolleyballPlayer:
 	for player in players:
 		if player.id == player_id:

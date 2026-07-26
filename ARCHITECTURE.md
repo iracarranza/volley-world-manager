@@ -15,7 +15,7 @@
 - `scripts/models/defensive_plan.gd`: per-rotation block intent, floor system,
   serve intent, normalized defender positions and player responsibility map.
 - `scripts/models/defensive_assignment.gd`: one player's base, read, seam,
-  short-ball and emergency responsibilities.
+  short-ball, emergency and attack-coverage responsibilities.
 - `scripts/models/defensive_zone.gd`: a player's normalized zone center,
   metre-based responsibility radius, priority, activity and zone type.
 - `scripts/simulation/coverage_calculator.gd`: pure court-distance, reaction,
@@ -115,6 +115,10 @@ is inside both physical reach and the assigned tactical radius.
 
 Among eligible players, zone priority, arrival margin, anticipation and contact
 skill determine the claimant; other eligible players count as nearby support.
+Equal-priority claimants with a narrow score margin create a seam conflict and
+apply a reception penalty. Coaches can remove a player from reception, move the
+zone center, change its radius or establish explicit priority without changing
+the player's physical ratings.
 The tactical radius therefore describes responsibility rather than granting
 extra physical ability. Rally events retain landing, flight-time and arrival
 metadata so explanations and future animation can show why a player did or did
@@ -130,9 +134,12 @@ available closing window rather than adding an unconditional quality bonus.
 
 A sufficiently complete, high-quality contest may stuff the attack. More often,
 partial contests produce a touch or funnel. A touch lowers effective attack
-force and increases flight time before `CoverageCalculator` selects a floor
-defender; a funnel provides a smaller control benefit. This keeps blocking and
-floor defense connected instead of resolving them as competing binary checks.
+force, changes its landing point and increases flight time before
+`CoverageCalculator` selects a floor defender; a funnel redirects the target
+with a smaller control benefit. Opponent block touches can return to the home
+court, where an explicitly assigned attack-cover player attempts to recycle the
+ball before transition offense resumes. This keeps blocking, attack coverage
+and floor defense connected instead of resolving them as binary checks.
 
 ## Body geometry and reception
 

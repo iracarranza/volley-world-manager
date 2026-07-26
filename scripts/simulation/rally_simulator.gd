@@ -73,12 +73,15 @@ func resolve(
 	)
 	var support_count := int(reception_claim.get("support_count", 0))
 	var support_bonus := minf(float(support_count) * 0.025, 0.075)
+	var seam_conflict := bool(reception_claim.get("seam_conflict", false))
+	var seam_penalty := 0.09 if seam_conflict else 0.0
 	var reception_base := _rating(receiver, "reception") * 0.65 \
 		+ _rating(receiver, "ball_control") * 0.20 \
 		+ _rating(receiver, "composure") * 0.15
 	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
 		- CoverageModel.reception_body_penalty(receiver, arrival, serve_quality) \
-		+ arrival_bonus + support_bonus + rng.randf_range(-0.14, 0.14) + 0.30,
+		+ arrival_bonus + support_bonus - seam_penalty \
+		+ rng.randf_range(-0.14, 0.14) + 0.30,
 		0.0, 1.0)
 	if not receiver_arrived:
 		result.reception_quality = minf(result.reception_quality, 0.12)
@@ -90,10 +93,14 @@ func resolve(
 		"%d%% reception quality. %s %s" % [
 			roundi(float(result.reception_quality) * 100.0),
 			_quality_phrase(float(result.reception_quality)),
-			_arrival_phrase(arrival, receiver_arrived, support_count),
+			_arrival_phrase(arrival, receiver_arrived, support_count) \
+			+ (" Equal-priority passers hesitated at the seam." if seam_conflict else ""),
 		], {"side": "home", "landing": serve_landing,
 			"flight_time": serve_time, "arrival": arrival,
-			"support_count": support_count})
+			"support_count": support_count, "seam_conflict": seam_conflict,
+			"claim_margin": float(reception_claim.get("claim_margin", 1.0))})
+	if seam_conflict:
+		result.key_factors.append(ExplanationText.factor("seam_conflict"))
 	if not reception_success:
 		return _finish(result, "ace", false, receiver.id, {
 			"server": server_name,
@@ -177,22 +184,58 @@ func resolve(
 	block_strength = clampf(block_strength + adaptation_bonus, 0.15, 0.96)
 	if adaptation_bonus >= 0.035:
 		result.key_factors.append(ExplanationText.factor("opponent_adapted"))
-	var blocked: bool = block_strength > float(result.attack_quality) \
+	var block_margin := block_strength - float(result.attack_quality) \
 		+ rng.randf_range(-0.15, 0.15)
+	var block_outcome := "stuff" if block_margin > 0.12 else (
+		"recycle" if block_margin > -0.10 else "miss"
+	)
+	var blocked := block_outcome == "stuff"
+	var recycled := block_outcome == "recycle"
+	var recycle_target := _attack_coverage_target(set_target, block_strength) \
+		if recycled else Vector2(set_target.x, 0.50)
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker.id,
 		opponent_blocker.display_name,
-		Vector2(set_target.x, 0.47), Vector2(set_target.x, 0.50), blocked,
+		Vector2(set_target.x, 0.47), recycle_target, block_outcome != "miss",
 		block_strength, "Block forms at %s" % assignment.lane,
 		"%d%% close speed; the blockers seal the chosen lane.%s" % [
 			roundi(block_strength * 100.0),
 			" Scouting anticipated this pattern." if adaptation_bonus >= 0.035 else "",
 		], {"side": "opponent", "lane": assignment.lane,
-			"adaptation_bonus": adaptation_bonus})
+			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
+			"deflection_target": recycle_target})
 	if blocked:
 		result.key_factors.append(ExplanationText.factor("strong_block"))
 		return _finish(result, "blocked", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
+	if recycled:
+		var coverage_result := _resolve_attack_coverage(
+			players, lineup, defensive_plan, hitter, recycle_target, block_strength
+		)
+		var coverer := coverage_result.get("player") as VolleyballPlayer
+		var coverage_success := bool(coverage_result.get("success", false))
+		var coverage_quality := float(coverage_result.get("quality", 0.0))
+		_add_event(result, RallyEventModel.EventType.DEFENSE,
+			coverer.id if coverer != null else -1,
+			coverer.display_name if coverer != null else "Attack coverage",
+			recycle_target, recycle_target + Vector2(0.04, -0.05),
+			coverage_success, coverage_quality,
+			"%s covers the block touch" % (
+				coverer.display_name if coverer != null else "Nobody"
+			),
+			"%d%% recycle control from the assigned attack-coverage shape." % roundi(
+				coverage_quality * 100.0
+			), {"side": "home", "coverage": "attack",
+				"blocked_hitter_id": hitter.id})
+		if not coverage_success:
+			return _finish(result, "blocked", false, hitter.id, {
+				"hitter": hitter.display_name,
+			})
+		result.key_factors.append(ExplanationText.factor("attack_recycled"))
+		return _resolve_home_continuation(
+			result, players, lineup, coverer, recycle_target,
+			opponent_team, defensive_plan, 1,
+		)
 
 	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
 	var defense_strength := clampf(
@@ -348,6 +391,11 @@ func _resolve_opponent_transition(
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var home_block := float(block_result.quality)
 	var block_outcome := str(block_result.outcome)
+	var deflection_target := home_target
+	if block_outcome in ["touch", "funnel"]:
+		deflection_target = _home_block_deflection_target(
+			home_target, opponent_contact.x, home_block, block_outcome
+		)
 	var assist_text := ""
 	if assisting_blocker != null:
 		assist_text = " %s assisted at %d%% close." % [
@@ -364,7 +412,8 @@ func _resolve_opponent_transition(
 		], {"side": "home", "outcome": block_outcome,
 			"primary_close": block_result.primary_close,
 			"assist_close": block_result.assist_close,
-			"assist_id": assisting_blocker.id if assisting_blocker != null else -1})
+			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
+			"deflection_target": deflection_target})
 	if block_outcome == "stuff":
 		return _finish(result, "counter_block", true, blocker.id, {
 			"hitter": original_hitter.display_name,
@@ -373,9 +422,11 @@ func _resolve_opponent_transition(
 	if block_outcome == "touch":
 		result.key_factors.append(ExplanationText.factor("block_touch"))
 		opponent_attack = maxf(opponent_attack - 0.10 - home_block * 0.05, 0.12)
+		home_target = deflection_target
 	elif block_outcome == "funnel":
 		result.key_factors.append(ExplanationText.factor("block_funnel"))
 		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
+		home_target = deflection_target
 	var attack_type := _opponent_attack_type(home_target)
 	var attack_time := _attack_flight_time(opponent_attack, attack_type)
 	if block_outcome == "touch":
@@ -520,6 +571,81 @@ func _resolve_home_continuation(
 		result, players, lineup, hitter, attack_target,
 		opponent_team, defensive_plan, exchange_number + 1,
 	)
+
+
+func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vector2:
+	var spread := lerpf(0.14, 0.05, clampf(block_quality, 0.0, 1.0))
+	return Vector2(
+		clampf(set_target.x + rng.randf_range(-spread, spread), 0.08, 0.92),
+		rng.randf_range(0.54, 0.70),
+	)
+
+
+func _home_block_deflection_target(
+	original_target: Vector2,
+	attack_x: float,
+	block_quality: float,
+	outcome: String,
+) -> Vector2:
+	if outcome == "touch":
+		return Vector2(
+			clampf(attack_x + rng.randf_range(-0.16, 0.16), 0.08, 0.92),
+			rng.randf_range(0.58, lerpf(0.82, 0.69, block_quality)),
+		)
+	return Vector2(
+		clampf(lerpf(original_target.x, 0.50, 0.18), 0.08, 0.92),
+		clampf(original_target.y + 0.02, 0.54, 0.94),
+	)
+
+
+func _resolve_attack_coverage(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	blocked_hitter: VolleyballPlayer,
+	target: Vector2,
+	block_quality: float,
+) -> Dictionary:
+	var best: VolleyballPlayer
+	var best_score := -1000.0
+	for slot_number in range(1, 7):
+		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if candidate == null or candidate.id == blocked_hitter.id:
+			continue
+		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
+			if defensive_plan != null else null
+		var responsibility := str(assignment.attack_coverage_responsibility) \
+			if assignment != null else "Cover nearest attacker"
+		var start := CourtConstants.slot_position(slot_number)
+		if defensive_plan != null:
+			start = defensive_plan.defender_position(candidate.id, start)
+		var proximity := 1.0 - clampf(
+			CoverageModel.court_distance_meters(start, target) / 9.0, 0.0, 1.0
+		)
+		var responsibility_bonus := 0.0
+		match responsibility:
+			"Cover nearest attacker":
+				responsibility_bonus = proximity * 0.20
+			"Cover assigned hitter":
+				responsibility_bonus = 0.13
+			"Take second contact":
+				responsibility_bonus = 0.07
+			"Release for transition":
+				responsibility_bonus = -0.14
+		var score := proximity * 0.42 \
+			+ _rating(candidate, "ball_control") * 0.24 \
+			+ _rating(candidate, "anticipation") * 0.18 \
+			+ responsibility_bonus
+		if score > best_score:
+			best = candidate
+			best_score = score
+	if best == null:
+		return {"player": null, "quality": 0.0, "success": false}
+	var quality := clampf(
+		best_score - block_quality * 0.22 + rng.randf_range(-0.10, 0.10),
+		0.0, 1.0,
+	)
+	return {"player": best, "quality": quality, "success": quality >= 0.32}
 
 
 func _finish_serve_error(result: Resource, server_name: String) -> Resource:
