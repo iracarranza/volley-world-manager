@@ -12,8 +12,9 @@
   plays, active plays, match state, rally-resolution entry point and serialization.
 - `scripts/data/rally_explanations.gd`: all current player-facing rally result
   templates and factor captions.
-- `scripts/models/defensive_plan.gd`: per-rotation block intent, floor system,
-  serve intent, normalized defender positions and player responsibility map.
+- `scripts/models/defensive_plan.gd`: per-rotation block intent, functional
+  floor preset, serve intent, normalized defender positions, setter release
+  targets and player responsibility map.
 - `scripts/models/defensive_assignment.gd`: one player's base, read, seam,
   short-ball, emergency, attack-coverage and second-contact responsibilities.
 - `scripts/models/defensive_zone.gd`: a player's normalized zone center,
@@ -202,6 +203,20 @@ that case, `RallySimulator` ranks the other five players using the saved primary
 or secondary emergency-setter responsibility plus set accuracy, ball control
 and decision making. The resulting set event identifies the first-contact
 player and whether emergency ownership was activated.
+
+Setting ownership is derived from the rotation rather than the player's roster
+label. A 5-1 always activates its sole designated setter. A 6-2 activates the
+designated setter currently in the back row and leaves the front-row designated
+setter attack-eligible. Emergency setters remain a separate broken-play path.
+The active setter's saved release target shapes the preferred reception vector;
+the simulator then grades the real set from its contact distance, direction,
+body orientation and displacement from that release region.
+
+Floor systems are presets, not outcome bonuses disguised as labels. Applying
+Perimeter, Middle-Up or Rotation Defense writes positions, radii and claim
+priorities into the editable plan. Later edits preserve those concrete values
+and mark the preset modified. Depth, short-ball posture and the block-defense
+relationship apply bounded tradeoffs during floor contact and funnel resolution.
 
 ## Spatial rally clock
 

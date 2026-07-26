@@ -62,6 +62,20 @@
 - Open Serve Receive, Blocking or Floor Defense as separate defensive-plan
   submenus. Unrelated controls remain hidden so the editor does not require the
   player to scroll through every defensive phase.
+- Open player-specific defensive controls from the selected court marker while
+  retaining team presets and phase selection in the side panel. Back-row
+  players expose no blocking instructions; front-row floor participation is an
+  editable coverage toggle.
+- Apply Perimeter, Middle-Up and Rotation Defense as functional position/zone
+  presets, then customize the resulting plan as a modified preset.
+- Edit Attack Coverage and Transition separately from Floor Defense, including
+  block-rebound priority, emergency setting and a draggable active-setter
+  release path.
+- Choose a 5-1 or 6-2 setting system. A 6-2 derives its active setter from the
+  designated back-row player and keeps the front-row setter attack-eligible.
+- Grade passes against the intended release region and grade sets using actual
+  distance, direction, body orientation, tempo and displacement from the ideal
+  release point.
 - Switch between floor-defense and serve-reception views, drag each player's
   independent zone center, and save block strategy, floor system, serve target
   and serve risk.
@@ -141,7 +155,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 108 passing headless foundation checks and UI-binding validation, including a
+- 116 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

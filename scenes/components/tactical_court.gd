@@ -11,6 +11,7 @@ signal defender_position_changed(player_id: int, court_position: Vector2)
 signal coverage_zone_position_changed(
 	player_id: int, zone_type: int, court_position: Vector2
 )
+signal setter_release_position_changed(player_id: int, court_position: Vector2)
 
 const LIGHT_PALETTE := {
 	"outside": Color("eaf2ed"),
@@ -53,6 +54,7 @@ var drag_position: Vector2 = Vector2.ZERO
 var defensive_mode: bool = false
 var defensive_plan: Resource
 var defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+var defensive_phase: int = 0
 var landscape_orientation: bool = false
 var live_player_positions: Dictionary = {}
 var movement_player_id: int = -1
@@ -100,10 +102,12 @@ func set_defensive_view(
 	enabled: bool,
 	plan: Resource = null,
 	zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE,
+	phase: int = 0,
 ) -> void:
 	defensive_mode = enabled
 	defensive_plan = plan
 	defensive_zone_type = zone_type
+	defensive_phase = phase
 	queue_redraw()
 
 
@@ -498,7 +502,9 @@ func _gui_input(event: InputEvent) -> void:
 		queue_redraw()
 		if defensive_mode:
 			var court_position := _local_to_court(mouse_event.position)
-			if court_position.y >= CourtConstants.NET_Y:
+			if defensive_phase == 3 and released_player_id == lineup.active_setter_id():
+				setter_release_position_changed.emit(released_player_id, court_position)
+			elif court_position.y >= CourtConstants.NET_Y:
 				coverage_zone_position_changed.emit(
 					released_player_id, defensive_zone_type, court_position
 				)
@@ -565,6 +571,7 @@ func _draw() -> void:
 	_draw_assignments()
 	_draw_serve_receive_legality()
 	_draw_defensive_zones()
+	_draw_setter_release_path()
 	_draw_assignment_drag()
 	_draw_movement_trails()
 	_draw_players()
@@ -698,6 +705,26 @@ func _draw_serve_receive_legality() -> void:
 	)
 
 
+func _draw_setter_release_path() -> void:
+	if not defensive_mode or defensive_phase != 3 or defensive_plan == null or lineup == null:
+		return
+	var setter_id := lineup.active_setter_id()
+	var setter_slot := lineup.slot_for_player(setter_id)
+	if setter_slot < 0:
+		return
+	var start := _player_court_position(setter_id, setter_slot)
+	var target: Vector2 = defensive_plan.setter_release_target(setter_id)
+	draw_dashed_line(
+		_court_to_local(start), _court_to_local(target),
+		palette["secondary_path"], 3.0, 9.0,
+	)
+	draw_circle(_court_to_local(target), 12.0, palette["secondary_path"], false, 3.0)
+	draw_string(
+		ThemeDB.fallback_font, _court_to_local(target) + Vector2(15, -8),
+		"SETTER RELEASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, palette["text"],
+	)
+
+
 func _draw_assignment_drag() -> void:
 	if dragging_player_id < 0 or lineup == null:
 		return
@@ -757,9 +784,28 @@ func _draw_players() -> void:
 		if defensive_mode and defensive_plan != null:
 			var assignment: Resource = defensive_plan.assignment_for(player_id)
 			if assignment != null:
+				var phase_label := ""
+				if defensive_phase == 1:
+					phase_label = "BLOCK" if bool(assignment.block_participation) \
+						and CourtConstants.is_front_row_slot(slot_number) else "NO BLOCK ROLE"
+				elif defensive_phase == 2:
+					var floor_zone: Resource = defensive_plan.zone_for(
+						player_id, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+					)
+					phase_label = "FLOOR ACTIVE" if floor_zone != null and bool(floor_zone.enabled) \
+						else "OUT OF FLOOR DEFENSE"
+				elif defensive_phase == 3:
+					phase_label = "ACTIVE SETTER" if player_id == lineup.active_setter_id() \
+						else str(assignment.attack_coverage_responsibility)
+				else:
+					var receive_zone: Resource = defensive_plan.zone_for(
+						player_id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+					)
+					phase_label = "PASSER" if receive_zone != null and bool(receive_zone.enabled) \
+						else "HIDDEN"
 				draw_string(
 					ThemeDB.fallback_font, center + Vector2(-48, 52),
-					_short_responsibility(str(assignment.base_responsibility)),
+					phase_label,
 					HORIZONTAL_ALIGNMENT_CENTER, 96, 10,
 					_with_alpha(palette["text"], 0.78),
 				)

@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_test_physical_body_attributes()
 	_test_tactical_playback_reset_on_lineup_change()
 	_test_default_offense_without_saved_play()
+	_test_defensive_presets_release_and_setting_systems()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -752,3 +753,50 @@ func _test_default_offense_without_saved_play() -> void:
 			break
 	_check(safety_limit_respected, "bounded rally loop respects its event safety limit")
 	_check(continuation_seen, "seeded simulation produces multi-exchange rallies")
+
+
+func _test_defensive_presets_release_and_setting_systems() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup := manager.current_lineup()
+	_check(lineup.active_setter_id() == 1, "a 5-1 retains its single active setter")
+	var setting_error := manager.configure_setting_system("6-2", 4)
+	_check(setting_error.is_empty(), "opposite-row designated setters create a valid 6-2")
+	lineup = manager.current_lineup()
+	var active_setter := lineup.active_setter_id()
+	_check(
+		active_setter in [1, 4]
+			and not CourtConstants.is_front_row_slot(lineup.slot_for_player(active_setter)),
+		"the back-row designated setter owns second contact in a 6-2",
+	)
+	var front_setter := 4 if active_setter == 1 else 1
+	_check(lineup.is_attack_eligible(front_setter), "the front-row 6-2 setter may attack")
+	_check(not lineup.is_attack_eligible(active_setter), "the active setter may not attack")
+	var plan: Resource = manager.current_defensive_plan()
+	plan.apply_floor_preset("Middle-Up", lineup)
+	var middle_back_id := lineup.player_at_slot(6)
+	_check(
+		float(plan.defender_position(middle_back_id, Vector2.ZERO).y) < 0.80,
+		"Middle-Up applies a mechanically shallow middle-back position",
+	)
+	plan.set_setter_release_target(active_setter, Vector2(0.64, 0.59))
+	var restored_plan := DefensivePlan.new()
+	restored_plan.load_dict(plan.to_dict())
+	_check(
+		restored_plan.setter_release_target(active_setter).is_equal_approx(Vector2(0.64, 0.59)),
+		"setter release targets survive serialization",
+	)
+	var geometry_seen := false
+	for seed_value in range(200, 240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) == RallyEvent.EventType.SET \
+					and str(event.metadata.get("side", "")) == "home":
+				geometry_seen = event.metadata.has("set_distance_meters") \
+					and event.metadata.has("set_angle_degrees") \
+					and event.metadata.has("body_orientation_fit")
+				break
+		if geometry_seen:
+			break
+	_check(geometry_seen, "home sets expose distance, angle and body-orientation geometry")

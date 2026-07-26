@@ -74,6 +74,7 @@ func seed_vertical_slice_data() -> void:
 		var lineup := RotationLineup.new()
 		lineup.rotation_number = rotation_number
 		lineup.setter_id = 1
+		lineup.designated_setter_ids = [1]
 		for slot_number in range(1, 7):
 			var player_index := posmod(slot_number - rotation_number, 6)
 			var player_id: int = base_rotation_ids[player_index]
@@ -160,6 +161,32 @@ func current_lineup() -> RotationLineup:
 
 func current_defensive_plan() -> Resource:
 	return defensive_plans.get(selected_rotation) as Resource
+
+
+func configure_setting_system(system_name: String, second_setter_id: int = -1) -> String:
+	if system_name not in ["5-1", "6-2"]:
+		return "Unknown setting system."
+	if system_name == "6-2":
+		for rotation_number in rotations:
+			var candidate_lineup := rotations[rotation_number] as RotationLineup
+			var first_slot := candidate_lineup.slot_for_player(candidate_lineup.setter_id)
+			var second_slot := candidate_lineup.slot_for_player(second_setter_id)
+			if second_slot < 0:
+				return "The second setter must appear in every current rotation."
+			if CourtConstants.is_front_row_slot(first_slot) \
+					== CourtConstants.is_front_row_slot(second_slot):
+				return "The two 6-2 setters must remain in opposite rows."
+	for rotation_number in rotations:
+		var lineup := rotations[rotation_number] as RotationLineup
+		lineup.setting_system = system_name
+		lineup.designated_setter_ids = [lineup.setter_id]
+		if system_name == "6-2":
+			lineup.designated_setter_ids.append(second_setter_id)
+		var plan: Resource = defensive_plans.get(rotation_number) as Resource
+		if plan != null:
+			plan.ensure_defaults(lineup)
+	rotation_changed.emit(selected_rotation)
+	return ""
 
 
 func save_defensive_plan(

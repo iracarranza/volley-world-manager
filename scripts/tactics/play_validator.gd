@@ -17,6 +17,8 @@ static func validate(play: OffensivePlay, lineup: RotationLineup) -> Array[Strin
 		var rotation_slot := lineup.slot_for_player(assignment.player_id)
 		if rotation_slot < 0:
 			errors.append("Assigned hitter %d is not in this rotation." % assignment.player_id)
+		elif not lineup.is_attack_eligible(assignment.player_id):
+			errors.append("The active setter cannot receive a hitter assignment.")
 		elif not CourtConstants.is_front_row_slot(rotation_slot) \
 				and assignment.lane != "Pipe":
 			errors.append("Back-row hitters must use the Pipe lane in this prototype.")

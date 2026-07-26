@@ -84,6 +84,63 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Finalize Assignment"
 
+[node name="DefenderPopup" type="PopupPanel" parent="TacticalWorkspacePopup"]
+unique_name_in_owner = true
+initial_position = 1
+size = Vector2i(350, 570)
+
+[node name="Margin" type="MarginContainer" parent="TacticalWorkspacePopup/DefenderPopup"]
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 346.0
+offset_bottom = 566.0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="Scroll" type="ScrollContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="DefenderPopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(310, 0)
+layout_mode = 2
+theme_override_constants/separation = 7
+
+[node name="DefenderPopupTitle" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Player Instructions"
+
+[node name="BlockParticipationCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Participates in block"
+
+[node name="EmergencyPursuitCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Emergency pursuit allowed"
+
+[node name="ShortBallPriorityOption" type="OptionButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Priority for tips, rolls and other short attacks within this player's coverage."
+
+[node name="DeflectionPriorityOption" type="OptionButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Priority for pursuing balls deflected by either block."
+
+[node name="SetterReleaseHelp" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Drag the active setter to place the preferred release target."
+autowrap_mode = 2
+
 [node name="WorkspacePopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup" unique_id=925463913]
 anchors_preset = 15
 anchor_right = 1.0
@@ -348,6 +405,16 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 19
 text = "Rotation Defense"
 
+[node name="SettingSystemOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose a 5-1 or 6-2. In a 6-2, the designated back-row setter owns second contact."
+
+[node name="SecondSetterOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose the second designated setter used by the 6-2."
+
 [node name="DefenseSectionOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=743512490]
 unique_name_in_owner = true
 layout_mode = 2
@@ -361,8 +428,21 @@ tooltip_text = "Read reacts to the set; commit schemes trade coverage for an ear
 [node name="FloorSystemOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=90282772]
 unique_name_in_owner = true
 layout_mode = 2
+tooltip_text = "Apply a functional starting-position and zone-priority preset. Individual edits mark it Modified."
 
-[node name="FloorSectionOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+[node name="BlockDefenseRelationshipOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="DefensiveDepthOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ShortBallPostureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="FloorSectionOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=409925472]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Switch between floor positioning and individual recovery duties."
@@ -608,42 +688,50 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="MatchDaySeparator" type="HSeparator" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1353751991]
+visible = false
 layout_mode = 2
 
 [node name="MatchDayTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=731208047]
+visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 19
 text = "Match-Day Controls"
 
 [node name="MatchOverviewLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1602164218]
 unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(330, 54)
 layout_mode = 2
 autowrap_mode = 2
 
 [node name="SubstituteOutOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1019776176]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 tooltip_text = "Select the on-court player to replace."
 
 [node name="SubstituteInOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1313255311]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 tooltip_text = "Select an available bench player."
 
 [node name="ApplySubstitutionButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1732103700]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 text = "Apply Substitution"
 
 [node name="UndoSubstitutionButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=413402475]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 disabled = true
 text = "Undo Last Substitution"
 
 [node name="RallyHistoryLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=298980024]
 unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(330, 82)
 layout_mode = 2
 text = "Recent rallies

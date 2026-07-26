@@ -42,8 +42,13 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var physical_debug_label: Label = %PhysicalDebugLabel
 @onready var defense_controls: VBoxContainer = %DefenseControls
 @onready var defense_section_option: OptionButton = %DefenseSectionOption
+@onready var setting_system_option: OptionButton = %SettingSystemOption
+@onready var second_setter_option: OptionButton = %SecondSetterOption
 @onready var block_strategy_option: OptionButton = %BlockStrategyOption
 @onready var floor_system_option: OptionButton = %FloorSystemOption
+@onready var block_defense_relationship_option: OptionButton = %BlockDefenseRelationshipOption
+@onready var defensive_depth_option: OptionButton = %DefensiveDepthOption
+@onready var short_ball_posture_option: OptionButton = %ShortBallPostureOption
 @onready var floor_section_option: OptionButton = %FloorSectionOption
 @onready var serve_target_option: OptionButton = %ServeTargetOption
 @onready var serve_risk_slider: HSlider = %ServeRiskSlider
@@ -84,6 +89,14 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var substitution_confirmation: ConfirmationDialog = %SubstitutionConfirmation
 @onready var undo_substitution_button: Button = %UndoSubstitutionButton
 @onready var tactical_modal_underlay: ColorRect = %TacticalModalUnderlay
+@onready var defender_popup: PopupPanel = %DefenderPopup
+@onready var defender_popup_content: VBoxContainer = %DefenderPopupContent
+@onready var defender_popup_title: Label = %DefenderPopupTitle
+@onready var block_participation_check: CheckButton = %BlockParticipationCheck
+@onready var emergency_pursuit_check: CheckButton = %EmergencyPursuitCheck
+@onready var short_ball_priority_option: OptionButton = %ShortBallPriorityOption
+@onready var deflection_priority_option: OptionButton = %DeflectionPriorityOption
+@onready var setter_release_help: Label = %SetterReleaseHelp
 
 var selected_player_id: int = -1
 var draft_play: OffensivePlay
@@ -118,9 +131,13 @@ func _ready() -> void:
 	popup_apply_button.pressed.connect(_apply_popup_assignment)
 	court_mode_option.item_selected.connect(_court_mode_changed)
 	tactical_court.coverage_zone_position_changed.connect(_coverage_zone_position_changed)
+	tactical_court.setter_release_position_changed.connect(_setter_release_position_changed)
 	save_defense_button.pressed.connect(_save_defensive_plan)
 	apply_defender_assignment_button.pressed.connect(_apply_defender_assignment)
 	defense_section_option.item_selected.connect(_defense_section_changed)
+	floor_system_option.item_selected.connect(_floor_preset_changed)
+	setting_system_option.item_selected.connect(_setting_system_changed)
+	second_setter_option.item_selected.connect(_setting_system_changed)
 	floor_section_option.item_selected.connect(_floor_section_changed)
 	zone_type_option.item_selected.connect(_defensive_zone_type_changed)
 	zone_radius_slider.value_changed.connect(_zone_radius_changed)
@@ -138,6 +155,7 @@ func _ready() -> void:
 	GameManager.rotation_changed.connect(_rotation_changed)
 	rotation_option.select(GameManager.selected_rotation - 1)
 	_setup_tactical_workspace()
+	_setup_defender_popup()
 	_apply_light_mode(false)
 	_begin_draft()
 	_refresh_rotation()
@@ -196,6 +214,18 @@ func _populate_static_options() -> void:
 	_populate_text_options(floor_system_option, [
 		"Perimeter", "Rotation Defense", "Middle-Up",
 	])
+	_populate_text_options(block_defense_relationship_option, [
+		"Balanced", "Defend Line", "Defend Cross",
+	])
+	_populate_text_options(defensive_depth_option, ["Shallow", "Balanced", "Deep"])
+	_populate_text_options(short_ball_posture_option, ["Standard", "Compress Short"])
+	_populate_text_options(setting_system_option, ["5-1", "6-2"])
+	second_setter_option.clear()
+	for player in GameManager.players:
+		if player.position_role == "Libero" or player.id == 1:
+			continue
+		second_setter_option.add_item("%s · %s" % [player.position_code, player.display_name])
+		second_setter_option.set_item_metadata(second_setter_option.item_count - 1, player.id)
 	_populate_text_options(serve_target_option, [
 		"Zone 1", "Zone 5", "Short Middle", "Weak Passer",
 	])
@@ -220,7 +250,7 @@ func _populate_static_options() -> void:
 		"Stay available to attack", "No second-contact duty",
 	])
 	defense_section_option.clear()
-	for section_name in ["Serve Receive", "Blocking", "Floor Defense"]:
+	for section_name in ["Serve Receive", "Blocking", "Floor Defense", "Attack Coverage / Transition"]:
 		defense_section_option.add_item(section_name)
 	defense_section_option.select(0)
 	floor_section_option.clear()
@@ -246,6 +276,11 @@ func _populate_static_options() -> void:
 			)
 		])
 		zone_priority_option.set_item_metadata(priority, priority)
+	for option in [short_ball_priority_option, deflection_priority_option]:
+		option.clear()
+		for priority in range(4):
+			option.add_item("P%d · %s" % [priority, ["Emergency", "Support", "Secondary", "Primary"][priority]])
+			option.set_item_metadata(priority, priority)
 	zone_type_option.visible = false
 	_update_defense_section_visibility(0)
 
@@ -312,9 +347,10 @@ func _select_hitter(player_id: int) -> void:
 	_refresh_physical_debug(player)
 	if court_mode_option.selected == 1:
 		_load_defender_assignment(player_id)
+		_open_defender_popup()
 		return
-	var eligible := player != null \
-		and player.position_role not in ["Setter", "Libero"]
+	var eligible := player != null and player.position_role != "Libero" \
+		and lineup.is_attack_eligible(player_id)
 	selected_hitter_label.text = "%s · %s · slot %d (%s row)" % [
 		player.display_name if player != null else "Unknown",
 		player.position_role if player != null else "",
@@ -326,7 +362,7 @@ func _select_hitter(player_id: int) -> void:
 	_load_assignment_controls(draft_play.assignment_for_player(player_id))
 	_preview_demand(0)
 	if not eligible:
-		_set_status("This prototype does not assign Setter or Libero attack lanes.", true)
+		_set_status("The libero and active setter cannot receive attack assignments.", true)
 
 
 func _refresh_physical_debug(player: VolleyballPlayer) -> void:
@@ -358,6 +394,20 @@ func _load_defender_assignment(player_id: int) -> void:
 	selected_defender_label.text = "%s · %s responsibilities" % [
 		player.position_code, player.display_name,
 	]
+	defender_popup_title.text = "%s · %s" % [player.position_code, player.display_name]
+	var slot_number := GameManager.current_lineup().slot_for_player(player_id)
+	var front_row := CourtConstants.is_front_row_slot(slot_number)
+	var blocking_phase := defense_section_option.selected == 1
+	block_participation_check.visible = blocking_phase and front_row
+	seam_responsibility_option.visible = blocking_phase and front_row
+	block_participation_check.button_pressed = bool(assignment.block_participation)
+	emergency_pursuit_check.button_pressed = bool(assignment.emergency_pursuit)
+	short_ball_priority_option.select(clampi(int(assignment.short_ball_priority), 0, 3))
+	deflection_priority_option.select(clampi(int(assignment.deflection_priority), 0, 3))
+	setter_release_help.visible = defense_section_option.selected == 3 \
+		and player_id == GameManager.current_lineup().active_setter_id()
+	if blocking_phase and not front_row:
+		selected_defender_label.text = "%s is back row · no blocking instructions" % player.position_code
 	_select_option_text(base_responsibility_option, str(assignment.base_responsibility))
 	_select_option_text(seam_responsibility_option, str(assignment.seam_responsibility))
 	_select_option_text(
@@ -373,7 +423,7 @@ func _load_defender_assignment(player_id: int) -> void:
 		second_contact_option, str(assignment.second_contact_responsibility)
 	)
 	_load_selected_zone()
-	apply_defender_assignment_button.disabled = false
+	apply_defender_assignment_button.disabled = blocking_phase and not front_row
 	_set_status("Editing %s's defensive responsibilities." % player.display_name)
 
 
@@ -402,6 +452,13 @@ func _apply_defender_assignment() -> void:
 	assignment.second_contact_responsibility = second_contact_option.get_item_text(
 		second_contact_option.selected
 	)
+	assignment.block_participation = block_participation_check.button_pressed \
+		and CourtConstants.is_front_row_slot(
+			GameManager.current_lineup().slot_for_player(selected_player_id)
+		)
+	assignment.emergency_pursuit = emergency_pursuit_check.button_pressed
+	assignment.short_ball_priority = short_ball_priority_option.selected
+	assignment.deflection_priority = deflection_priority_option.selected
 	plan.set_assignment(selected_player_id, assignment)
 	_refresh_defensive_plan()
 	tactical_court.queue_redraw()
@@ -535,7 +592,8 @@ func _preview_demand(_index: int = -1) -> void:
 	if selected_player_id < 0 or lane_option.item_count == 0:
 		return
 	var player := GameManager.player_by_id(selected_player_id)
-	if player == null or player.position_role in ["Setter", "Libero"]:
+	if player == null or player.position_role == "Libero" \
+			or not GameManager.current_lineup().is_attack_eligible(selected_player_id):
 		return
 	var preview := HitterAssignment.new()
 	preview.player_id = selected_player_id
@@ -544,7 +602,7 @@ func _preview_demand(_index: int = -1) -> void:
 	)
 	preview.lane = str(_selected_metadata(lane_option))
 	preview.tempo = int(_selected_metadata(tempo_option))
-	var setter := GameManager.player_by_id(GameManager.current_lineup().setter_id)
+	var setter := GameManager.player_by_id(GameManager.current_lineup().active_setter_id())
 	var demand := TacticalDemand.evaluate(player, preview, setter)
 	demand_label.text = (
 		"Technical: %s · Physical: %s\nMental: %s · Synchronization: %s\nPrimary risk: %s"
@@ -633,6 +691,7 @@ func _refresh_match_preview() -> void:
 		court_mode_option.selected == 1,
 		GameManager.current_defensive_plan(),
 		selected_defensive_zone_type,
+		defense_section_option.selected,
 	)
 
 
@@ -641,6 +700,31 @@ func _setup_tactical_workspace() -> void:
 	match_preview_court.set_landscape_orientation(true)
 	workspace.reparent(tactical_workspace_host)
 	workspace.visible = true
+
+
+func _setup_defender_popup() -> void:
+	# Team structure stays in the side panel; player-specific controls travel with
+	# the selected marker in this contextual popup.
+	for control in [
+		selected_defender_label, base_responsibility_option,
+		seam_responsibility_option, short_ball_responsibility_option,
+		emergency_responsibility_option, attack_coverage_option,
+		second_contact_option, apply_defender_assignment_button,
+		selected_zone_label, zone_radius_value_label, zone_radius_slider,
+		zone_priority_option, zone_enabled_check, apply_zone_button,
+	]:
+		control.reparent(defender_popup_content)
+
+
+func _open_defender_popup() -> void:
+	var mouse := get_viewport().get_mouse_position()
+	var viewport_size := get_viewport_rect().size
+	var popup_size := Vector2(350, 570)
+	var popup_position := Vector2(
+		clampf(mouse.x + 24.0, 12.0, viewport_size.x - popup_size.x - 12.0),
+		clampf(mouse.y - 80.0, 12.0, viewport_size.y - popup_size.y - 12.0),
+	)
+	defender_popup.popup(Rect2i(Vector2i(popup_position), Vector2i(popup_size)))
 
 
 func _open_tactical_workspace() -> void:
@@ -667,6 +751,7 @@ func _close_tactical_workspace() -> void:
 func _tactical_workspace_hidden() -> void:
 	tactical_modal_underlay.visible = false
 	assignment_popup.hide()
+	defender_popup.hide()
 	pending_drag_lane = ""
 
 
@@ -681,6 +766,7 @@ func _court_mode_changed(index: int) -> void:
 	tactical_court.set_defensive_view(
 		defense_enabled, GameManager.current_defensive_plan(),
 		selected_defensive_zone_type,
+		defense_section_option.selected,
 	)
 	court_instructions.text = (
 		"Drag defenders anywhere on the home court, then save block, floor and serve intent."
@@ -702,10 +788,7 @@ func _set_offensive_editor_visible(show_controls: bool) -> void:
 		"ResponsibilityOption", "AssignButton", "DemandLabel",
 		"PlaySeparator", "PlayTitle", "PlayNameEdit", "SavePlayButton",
 		"SavedPlayLabel", "SavedPlayOption", "CallPlayButton",
-		"CalledPlayLabel", "MatchDaySeparator", "MatchDayTitle",
-		"MatchOverviewLabel", "SubstituteOutOption", "SubstituteInOption",
-		"ApplySubstitutionButton", "UndoSubstitutionButton",
-		"RallyHistoryLabel",
+		"CalledPlayLabel",
 	]:
 		var control := editor.get_node_or_null(str(node_name)) as Control
 		if control != null:
@@ -718,10 +801,16 @@ func _refresh_defensive_plan() -> void:
 		return
 	_select_option_text(block_strategy_option, str(plan.block_strategy))
 	_select_option_text(floor_system_option, str(plan.floor_system))
+	_select_option_text(block_defense_relationship_option, str(plan.block_defense_relationship))
+	_select_option_text(defensive_depth_option, str(plan.defensive_depth))
+	_select_option_text(short_ball_posture_option, str(plan.short_ball_posture))
+	_select_option_text(setting_system_option, GameManager.current_lineup().setting_system)
+	second_setter_option.visible = GameManager.current_lineup().setting_system == "6-2"
 	_select_option_text(serve_target_option, str(plan.serve_target))
 	serve_risk_slider.value = float(plan.serve_risk) * 100.0
-	defense_summary_label.text = "%s · %s · serve %s at %d%% risk" % [
-		plan.block_strategy, plan.floor_system, plan.serve_target,
+	defense_summary_label.text = "%s · %s%s · serve %s at %d%% risk" % [
+		plan.block_strategy, plan.floor_system,
+		" · Modified" if bool(plan.preset_modified) else "", plan.serve_target,
 		roundi(float(plan.serve_risk) * 100.0),
 	]
 	var responsibility_lines: Array[String] = []
@@ -746,7 +835,9 @@ func _refresh_defensive_plan() -> void:
 		float(GameManager.opponent_team.adaptation_rate) * 100.0
 	)
 	if court_mode_option.selected == 1:
-		tactical_court.set_defensive_view(true, plan, selected_defensive_zone_type)
+		tactical_court.set_defensive_view(
+			true, plan, selected_defensive_zone_type, defense_section_option.selected
+		)
 	_refresh_zone_formation_summary()
 
 
@@ -762,7 +853,8 @@ func _defensive_zone_type_changed(index: int) -> void:
 	var metadata: Variant = zone_type_option.get_item_metadata(index)
 	selected_defensive_zone_type = int(metadata)
 	tactical_court.set_defensive_view(
-		true, GameManager.current_defensive_plan(), selected_defensive_zone_type
+		true, GameManager.current_defensive_plan(), selected_defensive_zone_type,
+		defense_section_option.selected
 	)
 	_load_selected_zone()
 	_refresh_zone_formation_summary()
@@ -776,11 +868,13 @@ func _defense_section_changed(index: int) -> void:
 	)
 	_update_defense_section_visibility(index)
 	tactical_court.set_defensive_view(
-		true, GameManager.current_defensive_plan(), selected_defensive_zone_type
+		true, GameManager.current_defensive_plan(), selected_defensive_zone_type, index
 	)
 	_load_selected_zone()
 	_refresh_zone_formation_summary()
 	_refresh_match_preview()
+	if selected_player_id >= 0:
+		_load_defender_assignment(selected_player_id)
 
 
 func _floor_section_changed(_index: int) -> void:
@@ -793,6 +887,7 @@ func _update_defense_section_visibility(index: int) -> void:
 	var serve_receive := index == 0
 	var blocking := index == 1
 	var floor_defense := index == 2
+	var transition := index == 3
 	var floor_positioning := floor_defense and floor_section_option.selected == 0
 	var floor_duties := floor_defense and floor_section_option.selected == 1
 	serve_target_option.visible = serve_receive
@@ -800,15 +895,21 @@ func _update_defense_section_visibility(index: int) -> void:
 	%ServeRiskLabel.visible = serve_receive
 	block_strategy_option.visible = blocking
 	floor_system_option.visible = floor_defense
+	block_defense_relationship_option.visible = floor_defense
+	defensive_depth_option.visible = floor_defense
+	short_ball_posture_option.visible = floor_defense
 	floor_section_option.visible = floor_defense
-	selected_defender_label.visible = blocking or floor_duties
+	selected_defender_label.visible = blocking or floor_duties or transition
 	base_responsibility_option.visible = floor_duties
 	seam_responsibility_option.visible = blocking
 	short_ball_responsibility_option.visible = floor_duties
-	emergency_responsibility_option.visible = floor_duties
-	attack_coverage_option.visible = floor_duties
-	second_contact_option.visible = floor_duties
-	apply_defender_assignment_button.visible = blocking or floor_duties
+	short_ball_priority_option.visible = floor_duties
+	emergency_responsibility_option.visible = transition
+	attack_coverage_option.visible = transition
+	deflection_priority_option.visible = transition
+	second_contact_option.visible = transition
+	emergency_pursuit_check.visible = floor_duties
+	apply_defender_assignment_button.visible = blocking or floor_duties or transition
 	zone_formation_summary_label.visible = serve_receive or floor_positioning
 	selected_zone_label.visible = serve_receive or floor_positioning
 	zone_radius_value_label.visible = serve_receive or floor_positioning
@@ -824,12 +925,48 @@ func _update_defense_section_visibility(index: int) -> void:
 		"Drag passer zones, set their radius and establish seam priority."
 		if serve_receive else (
 			"Select a blocker to set read and seam responsibility."
-			if blocking else
+			if blocking else (
 			("Drag floor zones and tune each player's coverage radius."
 			if floor_positioning else
-			"Assign recovery, emergency-set and attack-cover duties.")
+			("Set floor pursuit priorities." if floor_duties else
+			"Edit attack coverage and drag the active setter's release target."))
+			)
 		)
 	)
+
+
+func _floor_preset_changed(_index: int) -> void:
+	var plan: Resource = GameManager.current_defensive_plan()
+	if plan == null:
+		return
+	plan.apply_floor_preset(floor_system_option.get_item_text(floor_system_option.selected), GameManager.current_lineup())
+	_refresh_defensive_plan()
+	tactical_court.queue_redraw()
+	match_preview_court.queue_redraw()
+	_set_status("Applied floor-defense preset; individual positions remain editable.")
+
+
+func _setting_system_changed(_index: int) -> void:
+	var system_name := setting_system_option.get_item_text(setting_system_option.selected)
+	var second_id := -1
+	if second_setter_option.selected >= 0:
+		second_id = int(second_setter_option.get_item_metadata(second_setter_option.selected))
+	var error := GameManager.configure_setting_system(system_name, second_id)
+	if not error.is_empty():
+		_set_status(error, true)
+		return
+	_refresh_rotation()
+	_set_status("%s setting system applied across all rotations." % system_name)
+
+
+func _setter_release_position_changed(player_id: int, court_position: Vector2) -> void:
+	var plan: Resource = GameManager.current_defensive_plan()
+	if plan == null or player_id != GameManager.current_lineup().active_setter_id():
+		return
+	plan.set_setter_release_target(player_id, court_position)
+	tactical_court.queue_redraw()
+	match_preview_court.queue_redraw()
+	_set_status("Setter release target updated; reception will aim for this route.")
 
 
 func _zone_radius_changed(value: float) -> void:
@@ -918,6 +1055,14 @@ func _save_defensive_plan() -> void:
 		floor_system_option.get_item_text(floor_system_option.selected),
 		serve_target_option.get_item_text(serve_target_option.selected),
 		serve_risk_slider.value / 100.0,
+	)
+	var plan: Resource = GameManager.current_defensive_plan()
+	plan.block_defense_relationship = block_defense_relationship_option.get_item_text(
+		block_defense_relationship_option.selected
+	)
+	plan.defensive_depth = defensive_depth_option.get_item_text(defensive_depth_option.selected)
+	plan.short_ball_posture = short_ball_posture_option.get_item_text(
+		short_ball_posture_option.selected
 	)
 	_refresh_defensive_plan()
 	_set_status("Defensive plan saved for rotation %d." % GameManager.selected_rotation)

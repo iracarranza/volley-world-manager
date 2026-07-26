@@ -8,6 +8,10 @@ extends Resource
 @export var emergency_responsibility: String = "Deep pursuit"
 @export var attack_coverage_responsibility: String = "Cover assigned hitter"
 @export var second_contact_responsibility: String = "No second-contact duty"
+@export var block_participation: bool = true
+@export var short_ball_priority: int = 1
+@export var deflection_priority: int = 1
+@export var emergency_pursuit: bool = true
 
 
 func coverage_tags() -> Array[String]:
@@ -30,6 +34,10 @@ func to_dict() -> Dictionary:
 		"emergency_responsibility": emergency_responsibility,
 		"attack_coverage_responsibility": attack_coverage_responsibility,
 		"second_contact_responsibility": second_contact_responsibility,
+		"block_participation": block_participation,
+		"short_ball_priority": short_ball_priority,
+		"deflection_priority": deflection_priority,
+		"emergency_pursuit": emergency_pursuit,
 	}
 
 
@@ -46,4 +54,8 @@ static func from_dict(data: Dictionary) -> DefensiveAssignment:
 	assignment.second_contact_responsibility = str(data.get(
 		"second_contact_responsibility", "No second-contact duty"
 	))
+	assignment.block_participation = bool(data.get("block_participation", true))
+	assignment.short_ball_priority = clampi(int(data.get("short_ball_priority", 1)), 0, 3)
+	assignment.deflection_priority = clampi(int(data.get("deflection_priority", 1)), 0, 3)
+	assignment.emergency_pursuit = bool(data.get("emergency_pursuit", true))
 	return assignment
