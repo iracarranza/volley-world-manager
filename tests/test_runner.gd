@@ -174,6 +174,8 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	)
 	_check(club_roster.size() == 10 and academy_roster.size() == 12,
 		"club and academy starts create distinct roster sizes")
+	_check(PLAYER_GENERATOR_SCRIPT.generate_market("Landavol", 9898).size() == 120,
+		"testing recruitment generates a 120-player variance pool")
 	_check(club_roster[0].display_name == repeated_roster[0].display_name \
 			and club_roster[0].set_accuracy == repeated_roster[0].set_accuracy,
 		"regional roster generation is deterministic")
@@ -270,19 +272,22 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"fixture preparation passes career match format into MatchState")
 	var candidate := career_manager.career.transfer_pool[0] as VolleyballPlayer
 	var funds_before := int(career_manager.career.finances)
-	var signing_cost := career_manager.transfer_cost(candidate)
 	_check(career_manager.sign_transfer(candidate.id).is_empty(),
 		"regional transfer candidate can join an eligible roster")
-	_check(int(career_manager.career.finances) == funds_before - signing_cost,
-		"transfer signing deducts its displayed cost")
+	_check(int(career_manager.career.finances) == funds_before,
+		"prototype roster additions are free for attribute testing")
+	var prior_starter := int(game_autoload.team.starting_player_ids[0])
+	_check(game_autoload.set_player_starting(prior_starter, false).is_empty() \
+			and game_autoload.set_player_starting(candidate.id, true).is_empty(),
+		"testing roster can move players directly between starter and bench status")
 	var load_manager := CAREER_MANAGER_SCRIPT.new()
 	load_manager.game_manager_override = game_autoload
 	_check(load_manager.load_career(test_save_id).is_empty(),
 		"career save reloads through save-slot persistence")
 	_check(load_manager.career.organization_name == "Test Volley Academy",
 		"career organization metadata survives loading")
-	if FileAccess.file_exists(test_path):
-		DirAccess.remove_absolute(test_path)
+	_check(career_manager.delete_save(test_save_id).is_empty() \
+			and not FileAccess.file_exists(test_path), "selected career saves can be deleted")
 	career_manager.free()
 	load_manager.free()
 

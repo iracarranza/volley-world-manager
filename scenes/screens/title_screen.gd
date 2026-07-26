@@ -11,6 +11,7 @@ const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 @onready var save_list: ItemList = %SaveList
 @onready var save_detail: Label = %SaveDetail
 @onready var load_button: Button = %LoadButton
+@onready var delete_button: Button = %DeleteButton
 
 var saves: Array[Dictionary] = []
 
@@ -19,6 +20,8 @@ func _ready() -> void:
 	%NewCareerButton.pressed.connect(func() -> void: new_career_requested.emit())
 	continue_button.pressed.connect(_continue_latest)
 	load_button.pressed.connect(_load_selected)
+	delete_button.pressed.connect(_confirm_delete)
+	%DeleteConfirmation.confirmed.connect(_delete_selected)
 	save_list.item_selected.connect(_select_save)
 	refresh_saves()
 
@@ -31,6 +34,7 @@ func refresh_saves() -> void:
 			metadata.get("organization_name", "Organization")])
 	continue_button.disabled = saves.is_empty()
 	load_button.disabled = saves.is_empty()
+	delete_button.disabled = saves.is_empty()
 	if saves.is_empty():
 		save_detail.text = "No saved careers yet. Start a new club or academy."
 	else:
@@ -58,3 +62,13 @@ func _load_selected() -> void:
 	var selected := save_list.get_selected_items()
 	if not selected.is_empty():
 		career_load_requested.emit(str(saves[selected[0]].save_id))
+
+func _confirm_delete() -> void:
+	if not save_list.get_selected_items().is_empty(): %DeleteConfirmation.popup_centered()
+
+func _delete_selected() -> void:
+	var selected := save_list.get_selected_items()
+	if selected.is_empty(): return
+	var error: String = CareerManager.delete_save(str(saves[selected[0]].save_id))
+	if not error.is_empty(): save_detail.text = error
+	else: refresh_saves()

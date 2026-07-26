@@ -48,12 +48,17 @@ static func generate_roster(
 	return result
 
 
-static func generate_market(region_name: String, seed_value: int, first_id: int = 1000) -> Array[Resource]:
-	var generated := generate_roster(region_name, "Club", seed_value)
+static func generate_market(region_name: String, seed_value: int, first_id: int = 1000, count: int = 120) -> Array[Resource]:
 	var result: Array[Resource] = []
-	for index in range(mini(generated.size(), 8)):
-		generated[index].id = first_id + index
-		result.append(generated[index])
+	var batch := 0
+	while result.size() < count:
+		var generated := generate_roster(region_name, "Club", seed_value + batch * 7919)
+		for player in generated:
+			if result.size() >= count: break
+			player.id = first_id + result.size()
+			player.display_name = "%s %03d" % [player.display_name.get_slice(" ", 0), result.size() + 1]
+			result.append(player)
+		batch += 1
 	return result
 
 

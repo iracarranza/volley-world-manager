@@ -10,6 +10,7 @@ extends Resource
 @export var captain_id: int = -1
 @export var libero_ids: Array[int] = []
 @export var depth_chart: Dictionary = {}
+@export var starting_player_ids: Array[int] = []
 @export_range(6, 18) var roster_limit: int = 14
 
 
@@ -29,6 +30,7 @@ func remove_player(player_id: int) -> String:
 	if captain_id == player_id:
 		captain_id = -1
 	libero_ids.erase(player_id)
+	starting_player_ids.erase(player_id)
 	for role in depth_chart:
 		var ordered_ids: Array = depth_chart[role]
 		ordered_ids.erase(player_id)
@@ -82,6 +84,7 @@ func to_dict() -> Dictionary:
 		"identity": identity, "tactical_familiarity": tactical_familiarity,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
 		"libero_ids": libero_ids.duplicate(), "depth_chart": depth_chart.duplicate(true),
+		"starting_player_ids": starting_player_ids.duplicate(),
 		"roster_limit": roster_limit}
 
 
@@ -98,5 +101,6 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	for raw_id in data.get("libero_ids", []):
 		team.libero_ids.append(int(raw_id))
 	team.depth_chart = data.get("depth_chart", {}).duplicate(true)
+	for raw_id in data.get("starting_player_ids", []): team.starting_player_ids.append(int(raw_id))
 	team.roster_limit = clampi(int(data.get("roster_limit", 14)), 6, 18)
 	return team

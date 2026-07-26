@@ -64,6 +64,7 @@ const WHEEL_TOOLTIPS := {
 @onready var wheel_profile_option: OptionButton = %WheelProfileOption
 @onready var position_training_option: OptionButton = %PositionTrainingOption
 @onready var position_training_summary: Label = %PositionTrainingSummary
+@onready var lineup_status_option: OptionButton = %LineupStatusOption
 @onready var team_summary: RichTextLabel = %TeamSummary
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
@@ -92,6 +93,8 @@ func _ready() -> void:
 	wheel_profile_option.item_selected.connect(_wheel_profile_selected)
 	%AssignPositionTrainingButton.pressed.connect(_assign_position_training)
 	%UsePositionButton.pressed.connect(_use_trained_position)
+	%ApplyLineupStatusButton.pressed.connect(_apply_lineup_status)
+	%ReturnToPoolButton.pressed.connect(_return_to_pool)
 	position_training_option.item_selected.connect(_position_training_preview)
 	transfer_list.item_selected.connect(_transfer_selected)
 	sign_button.pressed.connect(_sign_transfer)
@@ -212,6 +215,7 @@ func _roster_selected(index: int) -> void:
 	]
 	_refresh_player_wheel(player)
 	_refresh_position_training(player)
+	lineup_status_option.select(0 if player.id in GameManager.team.starting_player_ids else 1)
 	raw_attributes.text = _raw_attribute_text(player)
 
 
@@ -244,6 +248,16 @@ func _use_trained_position() -> void:
 	var target := position_training_option.get_item_text(position_training_option.selected)
 	var error: String = GameManager.assign_player_position(selected_roster_id, target)
 	_set_status(error if not error.is_empty() else "Roster position updated; rotation sheets remain separate.", not error.is_empty())
+	refresh()
+
+func _apply_lineup_status() -> void:
+	var error: String = GameManager.set_player_starting(selected_roster_id, lineup_status_option.selected == 0)
+	_set_status(error if not error.is_empty() else "Testing lineup updated.", not error.is_empty())
+	refresh()
+
+func _return_to_pool() -> void:
+	var error: String = CareerManager.release_to_pool(selected_roster_id)
+	_set_status(error if not error.is_empty() else "Player returned to the testing pool.", not error.is_empty())
 	refresh()
 
 
@@ -334,13 +348,11 @@ func _transfer_selected(index: int) -> void:
 	var player := _market_player(selected_transfer_id)
 	if player == null:
 		return
-	var cost := CareerManager.transfer_cost(player)
-	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Potential %d/100\n%s\n\nSigning cost: $%d\nAvailable funds: $%d" % [
-		player.display_name, player.position_role, player.age, player.potential,
-		_key_attributes(player), cost, CareerManager.career.finances]
-	sign_button.disabled = cost > int(CareerManager.career.finances) \
-		or GameManager.team.player_ids.size() >= GameManager.team.roster_limit
-	sign_button.text = "Sign for $%d" % cost
+	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Potential %s\n%s\n\nPrototype testing: freely add this player to the roster." % [
+		player.display_name, player.position_role, player.age,
+		player.potential_ability_stars(), _key_attributes(player)]
+	sign_button.disabled = false
+	sign_button.text = "Add to Testing Roster"
 
 
 func _sign_transfer() -> void:

@@ -271,6 +271,30 @@ unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 2
 
+[node name="TestingRosterControls" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
+layout_mode = 2
+
+[node name="LineupStatusOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/TestingRosterControls"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+item_count = 2
+selected = 1
+popup/item_0/text = "Starter"
+popup/item_0/id = 0
+popup/item_1/text = "Bench"
+popup/item_1/id = 1
+
+[node name="ApplyLineupStatusButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/TestingRosterControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Apply Lineup Status"
+
+[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/TestingRosterControls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Return to Player Pool"
+
 [node name="Team" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
 layout_mode = 2
 theme_override_constants/separation = 10

@@ -83,7 +83,21 @@ custom_minimum_size = Vector2(0, 70)
 layout_mode = 2
 autowrap_mode = 2
 
-[node name="LoadButton" type="Button" parent="Center/Panel/Margin/Content"]
+[node name="SaveActions" type="HBoxContainer" parent="Center/Panel/Margin/Content"]
+layout_mode = 2
+
+[node name="LoadButton" type="Button" parent="Center/Panel/Margin/Content/SaveActions"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Load Selected Career"
+
+[node name="DeleteButton" type="Button" parent="Center/Panel/Margin/Content/SaveActions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Delete Save"
+
+[node name="DeleteConfirmation" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Delete Career"
+dialog_text = "Permanently delete this career save?"

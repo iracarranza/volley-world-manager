@@ -164,17 +164,33 @@ func sign_transfer(player_id: int) -> String:
 			break
 	if candidate == null:
 		return "That player is no longer available."
-	var cost := transfer_cost(candidate)
-	if int(career.finances) < cost:
-		return "The organization cannot afford this signing."
 	var error: String = _game_manager().register_player(candidate)
 	if not error.is_empty():
 		return error
-	career.finances -= cost
 	career.transfer_pool.erase(candidate)
 	save_career()
 	transfer_pool_changed.emit()
 	career_changed.emit()
+	return ""
+
+func release_to_pool(player_id: int) -> String:
+	var player := _game_manager().player_by_id(player_id) as VolleyballPlayer
+	if player == null: return "Player not found."
+	if player_id in _game_manager().team.starting_player_ids: return "Move the player to the bench first."
+	_game_manager().clear_player_from_rotations(player_id)
+	var error: String = _game_manager().unregister_player(player_id)
+	if not error.is_empty(): return error
+	career.transfer_pool.append(player)
+	transfer_pool_changed.emit()
+	career_changed.emit()
+	return ""
+
+func delete_save(save_id: String) -> String:
+	var path := _save_path(save_id)
+	if not FileAccess.file_exists(path): return "Career save not found."
+	var error := DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	if error != OK: return "Could not delete the career save."
+	if career != null and str(career.save_id) == _safe_id(save_id): career = null
 	return ""
 
 

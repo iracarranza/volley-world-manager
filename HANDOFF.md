@@ -38,7 +38,11 @@
 - Advance a 48-week calendar using four-week months and four seasons. Training
   applies before fixtures; a due unplayed fixture blocks further advancement.
 - Browse a deterministic regional transfer pool, inspect candidates and costs,
-  and sign affordable players while respecting roster limits.
+  currently expanded to 120 generated players for attribute-variance testing.
+  Prototype roster mutation is intentionally free: add or return players, assign
+  trained positions, and move them between a six-player court unit, libero slot
+  and bench; complete starter changes rebuild all six rotation sheets.
+- Delete a selected career save from the title screen through a confirmation dialog.
 - Review scheduled fixtures and results. The opening fixture is in week two so
   the player makes at least one training decision before entering Match Center.
 - Play career matches under a data-driven best-of-three format with every set
@@ -249,7 +253,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 177 passing headless foundation checks and UI-binding validation, including a
+- 180 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

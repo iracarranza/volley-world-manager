@@ -180,6 +180,7 @@ func configure_managed_team(new_team: Resource, generated_players: Array[Volleyb
 	players.assign(generated_players)
 	team = new_team
 	team.player_ids.clear()
+	team.roster_limit = 200
 	for player in players:
 		team.player_ids.append(player.id)
 	team.captain_id = int(by_role["Setter"][0])
@@ -191,6 +192,8 @@ func configure_managed_team(new_team: Resource, generated_players: Array[Volleyb
 		int(by_role["Middle Blocker"][0]), int(by_role.Opposite[0]),
 		int(by_role["Outside Hitter"][1]), int(by_role["Middle Blocker"][1])]
 	var libero_id := int(by_role.Libero[0])
+	team.starting_player_ids = base_ids.duplicate()
+	team.starting_player_ids.append(libero_id)
 	rotations.clear()
 	for rotation_number in range(1, 7):
 		var lineup := RotationLineup.new()
@@ -287,6 +290,7 @@ func assign_player_position(player_id: int, position_name: String) -> String:
 	player.position_role = position_name
 	player.position_code = {"Setter": "S", "Outside Hitter": "OH", "Middle Blocker": "M", "Opposite": "OP", "Libero": "L"}.get(position_name, "P")
 	if position_name != "Libero": team.libero_ids.erase(player_id)
+	_rebuild_testing_rotations()
 	roster_changed.emit()
 	return ""
 
@@ -616,6 +620,52 @@ func register_player(player: VolleyballPlayer) -> String:
 	roster_changed.emit()
 	return ""
 
+func set_player_starting(player_id: int, starting: bool) -> String:
+	if player_by_id(player_id) == null: return "Player not found."
+	if starting:
+		if player_id in team.starting_player_ids: return ""
+		var candidate := player_by_id(player_id)
+		var same_kind := 0
+		for starter_id in team.starting_player_ids:
+			if (player_by_id(starter_id).position_role == "Libero") == (candidate.position_role == "Libero"): same_kind += 1
+		var limit := 1 if candidate.position_role == "Libero" else 6
+		if same_kind >= limit: return "Bench another %s first." % ("libero" if limit == 1 else "court starter")
+		team.starting_player_ids.append(player_id)
+	else:
+		team.starting_player_ids.erase(player_id)
+		clear_player_from_rotations(player_id)
+	_rebuild_testing_rotations()
+	roster_changed.emit()
+	return ""
+
+func clear_player_from_rotations(player_id: int) -> void:
+	for rotation_number in rotations:
+		var lineup := rotations[rotation_number] as RotationLineup
+		var slot_number := lineup.slot_for_player(player_id)
+		if slot_number >= 1: lineup.assign_slot(slot_number, -1)
+
+func _rebuild_testing_rotations() -> void:
+	var court_ids: Array[int] = []
+	var libero_id := -1
+	for player_id in team.starting_player_ids:
+		if player_by_id(player_id).position_role == "Libero": libero_id = player_id
+		else: court_ids.append(player_id)
+	if court_ids.size() != 6: return
+	var setter_id := int(court_ids[0])
+	for player_id in court_ids:
+		if player_by_id(player_id).position_role == "Setter": setter_id = player_id; break
+	rotations.clear()
+	for rotation_number in range(1, 7):
+		var lineup := RotationLineup.new()
+		lineup.rotation_number = rotation_number
+		lineup.setter_id = setter_id
+		lineup.designated_setter_ids = [setter_id]
+		for slot_number in range(1, 7):
+			var player_id := int(court_ids[posmod(slot_number - rotation_number, 6)])
+			if libero_id >= 0 and slot_number in [1, 5, 6] and player_by_id(player_id).position_role == "Middle Blocker": player_id = libero_id
+			lineup.assign_slot(slot_number, player_id)
+		rotations[rotation_number] = lineup
+
 
 func unregister_player(player_id: int) -> String:
 	for rotation_number in rotations:
@@ -690,6 +740,13 @@ func from_dict(data: Dictionary) -> void:
 	for rotation_data in data.get("rotations", []):
 		var lineup := RotationLineup.from_dict(rotation_data)
 		rotations[lineup.rotation_number] = lineup
+	if team.starting_player_ids.is_empty():
+		for rotation_number in rotations:
+			var loaded_lineup := rotations[rotation_number] as RotationLineup
+			for slot_number in range(1, 7):
+				var loaded_id := loaded_lineup.player_at_slot(slot_number)
+				if loaded_id >= 0 and loaded_id not in team.starting_player_ids:
+					team.starting_player_ids.append(loaded_id)
 	saved_plays.clear()
 	for play_data in data.get("saved_plays", []):
 		saved_plays.append(OffensivePlay.from_dict(play_data))
