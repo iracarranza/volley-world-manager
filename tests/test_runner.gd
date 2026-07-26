@@ -10,6 +10,7 @@ const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
+const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -150,17 +151,24 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 
 
 func _test_career_calendar_generation_training_and_saves() -> void:
+	var fictional_regions := REGIONS_SCRIPT.names()
+	_check(fictional_regions.size() == 4 and "Landavol" in fictional_regions \
+			and "Spëddigh" in fictional_regions and "Pāwa Hitō" in fictional_regions \
+			and "Bloc du Larg" in fictional_regions,
+		"career creation exposes only the four confirmed fictional regions")
+	_check(REGIONS_SCRIPT.canonical_name("Europe") == "Landavol",
+		"legacy real-world region saves migrate to a fictional setting")
 	var second_year: Dictionary = CALENDAR_RULES_SCRIPT.state_for_week(49)
 	_check(int(second_year.year) == 2 and int(second_year.week_of_year) == 1,
 		"48-week calendar advances into a second career year")
 	var club_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
-		"Europe", "Club", 4242
+		"Landavol", "Club", 4242
 	)
 	var repeated_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
-		"Europe", "Club", 4242
+		"Landavol", "Club", 4242
 	)
 	var academy_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
-		"Europe", "Academy", 4242
+		"Landavol", "Academy", 4242
 	)
 	_check(club_roster.size() == 10 and academy_roster.size() == 12,
 		"club and academy starts create distinct roster sizes")
@@ -169,6 +177,12 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"regional roster generation is deterministic")
 	_check(academy_roster[0].age <= 20 and academy_roster[0].potential >= 74,
 		"academy generation produces young high-potential players")
+	_check(not club_roster[0].current_ability_stars().is_empty() \
+			and not club_roster[0].potential_ability_stars().is_empty(),
+		"roster players expose current and potential star ratings")
+	_check(club_roster[0].current_ability_score() >= 1 \
+			and club_roster[0].current_ability_score() <= 100,
+		"position-weighted current ability remains within the attribute scale")
 	var team := VolleyballTeam.new()
 	team.tactical_familiarity = 0.30
 	var prior_familiarity := team.tactical_familiarity
@@ -196,7 +210,7 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	if FileAccess.file_exists(test_path):
 		DirAccess.remove_absolute(test_path)
 	var create_error: String = career_manager.create_career(
-		"__Automated Career Test__", "Test Volley Academy", "Europe", "Academy", "Development"
+		"__Automated Career Test__", "Test Volley Academy", "Landavol", "Academy", "Development"
 	)
 	_check(create_error.is_empty(), "career creation builds a playable deterministic career")
 	_check(career_manager.career.organization_type == "Academy" \

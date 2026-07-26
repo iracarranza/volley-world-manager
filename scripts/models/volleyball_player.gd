@@ -50,6 +50,52 @@ extends Resource
 @export_range(-1.0, 1.0) var current_form: float = 0.0
 @export var traits: Array[String] = []
 
+const ABILITY_ATTRIBUTES: Array[String] = [
+	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
+	"stamina", "serve_power", "serve_accuracy", "reception", "reception_balance",
+	"reception_stability", "set_accuracy", "set_balance", "set_stability", "attack_power",
+	"attack_accuracy", "approach_timing", "block_timing", "ball_control", "court_vision",
+	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
+]
+
+const POSITION_WEIGHTS := {
+	"Setter": ["set_accuracy", "set_balance", "set_stability", "court_vision", "decision_making", "ball_control", "composure"],
+	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "reception", "reception_balance", "transition_speed", "ball_control"],
+	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation"],
+	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "block_timing", "serve_power", "composure"],
+	"Libero": ["reception", "reception_balance", "reception_stability", "ball_control", "anticipation", "lateral_speed", "decision_making"],
+}
+
+
+func current_ability_score() -> int:
+	var role_attributes: Array = POSITION_WEIGHTS.get(position_role, ABILITY_ATTRIBUTES)
+	var role_total := 0.0
+	for attribute_name in role_attributes:
+		role_total += float(get(str(attribute_name)))
+	var role_score := role_total / maxf(float(role_attributes.size()), 1.0)
+	var complete_total := 0.0
+	for attribute_name in ABILITY_ATTRIBUTES:
+		complete_total += float(get(attribute_name))
+	var complete_score := complete_total / float(ABILITY_ATTRIBUTES.size())
+	return clampi(roundi(role_score * 0.75 + complete_score * 0.25), 1, 100)
+
+
+func format_stars(score: int) -> String:
+	var rating := clampf(float(score) / 20.0, 0.5, 5.0)
+	var half_steps := clampi(roundi(rating * 2.0), 1, 10)
+	var full_stars := half_steps / 2
+	var has_half := half_steps % 2 == 1
+	return "%s%s%s" % ["★".repeat(full_stars), "½" if has_half else "",
+		"☆".repeat(5 - full_stars - (1 if has_half else 0))]
+
+
+func current_ability_stars() -> String:
+	return format_stars(current_ability_score())
+
+
+func potential_ability_stars() -> String:
+	return format_stars(potential)
+
 
 func to_dict() -> Dictionary:
 	return {

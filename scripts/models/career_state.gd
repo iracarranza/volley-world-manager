@@ -1,11 +1,13 @@
 class_name VolleyballCareerState
 extends Resource
 
+const Regions := preload("res://scripts/data/regions.gd")
+
 @export var save_id: String = "career_1"
 @export var career_name: String = "New Career"
 @export var organization_name: String = "Harbor City VC"
 @export_enum("Club", "Academy") var organization_type: String = "Club"
-@export var region: String = "Europe"
+@export var region: String = "Landavol"
 @export var identity: String = "Balanced"
 @export var absolute_week: int = 1
 @export var reputation: int = 10
@@ -39,7 +41,7 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.career_name = str(data.get("career_name", "New Career"))
 	state.organization_name = str(data.get("organization_name", "Harbor City VC"))
 	state.organization_type = str(data.get("organization_type", "Club"))
-	state.region = str(data.get("region", "Europe"))
+	state.region = Regions.canonical_name(str(data.get("region", "Landavol")))
 	state.identity = str(data.get("identity", "Balanced"))
 	state.absolute_week = maxi(int(data.get("absolute_week", 1)), 1)
 	state.reputation = clampi(int(data.get("reputation", 10)), 0, 100)

@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scenes/screens/career_dashboard.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/dashboard_card.tscn" id="2"]
+[ext_resource type="Script" path="res://scenes/components/player_attribute_wheel.gd" id="3_wheel"]
 
 [node name="CareerDashboard" type="Control"]
 layout_mode = 3
@@ -83,31 +84,31 @@ theme_override_constants/separation = 8
 [node name="HomeNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Home"
+text = "Home  [Space]"
 metadata/section = "Home"
 
 [node name="RosterNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Roster"
+text = "Roster  [R]"
 metadata/section = "Roster"
 
 [node name="TeamNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Team"
+text = "Team / Training  [T]"
 metadata/section = "Team"
 
 [node name="TransfersNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Transfers / Recruitment"
+text = "Recruitment  [E]"
 metadata/section = "Transfers"
 
 [node name="CompetitionNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Competition"
+text = "Competition  [V]"
 metadata/section = "Competition"
 
 [node name="Spacer" type="Control" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
@@ -118,7 +119,7 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-text = "Advance Week"
+text = "Advance Week  [Space]"
 
 [node name="ContentPanel" type="PanelContainer" parent="Margin/Root/Body"]
 layout_mode = 2
@@ -173,7 +174,7 @@ unique_name_in_owner = true
 section_id = "Transfers"
 title_text = "Transfers / Recruitment"
 summary_text = "Regional candidates and roster additions."
-icon_text = "+"
+icon_text = "E"
 
 [node name="CompetitionCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
@@ -198,11 +199,40 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 
-[node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
+[node name="RosterPlayer" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Profile" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 bbcode_enabled = true
+
+[node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(390, 315)
+layout_mode = 2
+mouse_filter = 1
+script = ExtResource("3_wheel")
+
+[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Complete Attribute Profile"
+
+[node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 185)
+layout_mode = 2
+bbcode_enabled = true
+scroll_active = true
 
 [node name="Team" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
 layout_mode = 2

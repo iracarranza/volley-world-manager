@@ -5,7 +5,7 @@
 - Start at a dedicated title screen, continue the most recently saved career,
   inspect save-slot metadata, load a selected career or begin a new one.
 - Create a career through a two-column setup flow adapted from Music Manager:
-  choose one of five regions, create a Club or Academy, name the career and
+  choose Landavol, Spëddigh, Pāwa Hitō or Bloc du Larg, create a Club or Academy, name the career and
   organization, and select a team identity.
 - Generate starting rosters deterministically from career name, region and
   organization type. Regions modify names and physical/technical/mental
@@ -233,7 +233,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 159 passing headless foundation checks and UI-binding validation, including a
+- 163 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

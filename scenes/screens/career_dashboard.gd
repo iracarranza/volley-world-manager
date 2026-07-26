@@ -6,6 +6,14 @@ signal title_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+const ATTRIBUTE_GROUPS := {
+	"Physical": ["acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness", "stamina"],
+	"Serving": ["serve_power", "serve_accuracy"],
+	"Reception": ["reception", "reception_balance", "reception_stability", "ball_control"],
+	"Setting": ["set_accuracy", "set_balance", "set_stability", "court_vision"],
+	"Attacking": ["attack_power", "attack_accuracy", "approach_timing"],
+	"Defense and Mental": ["block_timing", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"],
+}
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var organization_label: Label = %OrganizationLabel
@@ -15,6 +23,8 @@ const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 @onready var home_summary: RichTextLabel = %HomeSummary
 @onready var roster_list: ItemList = %RosterList
 @onready var roster_detail: RichTextLabel = %RosterDetail
+@onready var raw_attributes: RichTextLabel = %RawAttributes
+@onready var player_attribute_wheel: Control = %PlayerAttributeWheel
 @onready var team_summary: RichTextLabel = %TeamSummary
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
@@ -52,6 +62,29 @@ func _ready() -> void:
 		card.section_requested.connect(_navigate)
 	refresh()
 	_navigate("Home")
+
+
+func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree() or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var key_event := event as InputEventKey
+	match key_event.keycode:
+		KEY_R:
+			_navigate("Roster")
+		KEY_T:
+			_navigate("Team")
+		KEY_E:
+			_navigate("Transfers")
+		KEY_V:
+			_navigate("Competition")
+		KEY_SPACE:
+			if sections.current_tab == 0:
+				_advance_week()
+			else:
+				_navigate("Home")
+		_:
+			return
+	get_viewport().set_input_as_handled()
 
 
 func refresh() -> void:
@@ -103,7 +136,8 @@ func _refresh_roster() -> void:
 		if player == null:
 			continue
 		var marker := " · C" if player.id == GameManager.team.captain_id else ""
-		roster_list.add_item("%s  %s%s" % [player.position_code, player.display_name, marker])
+		roster_list.add_item("%s  %s%s\n%s" % [player.position_code, player.display_name,
+			marker, player.current_ability_stars()])
 		roster_list.set_item_metadata(roster_list.item_count - 1, player.id)
 	if roster_list.item_count > 0:
 		roster_list.select(0)
@@ -115,12 +149,44 @@ func _roster_selected(index: int) -> void:
 	if player == null:
 		return
 	var key_attributes := _key_attributes(player)
-	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]  %s\n%s · Age %d · %d pro seasons\nAvailability: %s · Morale %d%% · Fatigue %d%%\nPotential: %d/100\n\n[b]Key attributes[/b]\n%s\n\n[b]Physical[/b]\n%.0f cm · %.0f kg · %.0f cm wingspan\n\nCurrent rotation: %s" % [
+	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]  %s\n%s · Age %d · %d pro seasons\nAvailability: %s · Morale %d%% · Fatigue %d%%\n\n[b]Ability[/b]\nCurrent: %s\nPotential: %s\n[color=#8294ad]Current stars are weighted for this player's position.[/color]\n\n[b]Key attributes[/b]\n%s\n\n[b]Measurements[/b]\n%.0f cm · %.0f kg · %.0f cm wingspan\n\nCurrent rotation: %s" % [
 		player.display_name, player.position_code, player.position_role, player.age,
 		player.professional_experience, player.availability,
-		roundi(player.morale * 100.0), roundi(player.fatigue * 100.0), player.potential,
+		roundi(player.morale * 100.0), roundi(player.fatigue * 100.0),
+		player.current_ability_stars(), player.potential_ability_stars(),
 		key_attributes, player.height_cm, player.mass_kg, player.wingspan_cm,
 		"Slot %d" % GameManager.current_lineup().slot_for_player(player.id) if GameManager.current_lineup().slot_for_player(player.id) >= 1 else "Bench"]
+	player_attribute_wheel.set_profile(_attribute_profile(player))
+	raw_attributes.text = _raw_attribute_text(player)
+
+
+func _attribute_profile(player: VolleyballPlayer) -> Dictionary:
+	return {
+		"Physical": _attribute_average(player, ATTRIBUTE_GROUPS["Physical"]),
+		"Serve": _attribute_average(player, ATTRIBUTE_GROUPS["Serving"]),
+		"Reception": _attribute_average(player, ATTRIBUTE_GROUPS["Reception"]),
+		"Setting": _attribute_average(player, ATTRIBUTE_GROUPS["Setting"]),
+		"Attack": _attribute_average(player, ATTRIBUTE_GROUPS["Attacking"]),
+		"Defense / IQ": _attribute_average(player, ATTRIBUTE_GROUPS["Defense and Mental"]),
+	}
+
+
+func _attribute_average(player: VolleyballPlayer, attribute_names: Array) -> int:
+	var total := 0.0
+	for attribute_name in attribute_names:
+		total += float(player.get(str(attribute_name)))
+	return roundi(total / maxf(float(attribute_names.size()), 1.0))
+
+
+func _raw_attribute_text(player: VolleyballPlayer) -> String:
+	var columns: Array[String] = []
+	for group_name in ATTRIBUTE_GROUPS:
+		var lines: Array[String] = ["[b]%s[/b]" % group_name]
+		for attribute_name in ATTRIBUTE_GROUPS[group_name]:
+			lines.append("%s: %d" % [str(attribute_name).replace("_", " ").capitalize(),
+				int(player.get(str(attribute_name)))])
+		columns.append("\n".join(lines))
+	return "[table=3][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][/table]" % columns
 
 
 func _key_attributes(player: VolleyballPlayer) -> String:
