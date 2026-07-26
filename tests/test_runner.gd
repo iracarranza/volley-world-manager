@@ -664,6 +664,8 @@ func _test_physical_body_attributes() -> void:
 	player.explosiveness = 89
 	player.reception_balance = 43
 	player.reception_stability = 61
+	player.set_balance = 67
+	player.set_stability = 73
 	var restored := VolleyballPlayer.from_dict(player.to_dict())
 	_check(is_equal_approx(restored.height_cm, 207.0), "height survives player serialization")
 	_check(is_equal_approx(restored.mass_kg, 101.0), "mass survives player serialization")
@@ -671,6 +673,10 @@ func _test_physical_body_attributes() -> void:
 	_check(
 		restored.reception_balance == 43 and restored.reception_stability == 61,
 		"reception balance and stability survive player serialization",
+	)
+	_check(
+		restored.set_balance == 67 and restored.set_stability == 73,
+		"setting balance and stability survive player serialization",
 	)
 	var zone := DefensiveZone.new()
 	zone.center = Vector2(0.20, 0.84)

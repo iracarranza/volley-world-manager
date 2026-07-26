@@ -92,6 +92,9 @@
 - Grade passes against the intended release region and grade sets using actual
   distance, direction, body orientation, tempo and displacement from the ideal
   release point.
+- Keep quick attacks available after poor receptions rather than hard-locking
+  them. Setting balance and stability mitigate moving, poorly oriented, long or
+  tight attempts; technique determines how successfully the setter executes.
 - Switch between floor-defense and serve-reception views, drag each player's
   independent zone center, and save block strategy, floor system, serve target
   and serve risk.
@@ -174,7 +177,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 117 passing headless foundation checks and UI-binding validation, including a
+- 118 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

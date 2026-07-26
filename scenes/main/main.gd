@@ -747,7 +747,6 @@ func _setup_defender_popup() -> void:
 	]:
 		control.reparent(defender_popup_content)
 	var compact_control_order: Array[Control] = [
-		defender_popup_title,
 		zone_enabled_check,
 		block_participation_check,
 		attack_coverage_option,
@@ -767,7 +766,7 @@ func _setup_defender_popup() -> void:
 	]
 	for control_index in range(compact_control_order.size()):
 		defender_popup_content.move_child(
-			compact_control_order[control_index], control_index
+			compact_control_order[control_index], control_index + 1
 		)
 	# A Control parented directly to Window is expanded to the window's usable
 	# rect. Parenting the card to the court makes its size and position local to

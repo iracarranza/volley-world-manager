@@ -219,6 +219,10 @@ setter attack-eligible. Emergency setters remain a separate broken-play path.
 The active setter's saved release target shapes the preferred reception vector;
 the simulator then grades the real set from its contact distance, direction,
 body orientation and displacement from that release region.
+Set options are never hard-locked by reception quality. Fast or awkward sets
+remain attempts, but distance, release displacement and body orientation become
+more punitive when the setter has weak setting balance, setting stability or
+set accuracy.
 During Serve Receive, the court renders that target as an independent draggable
 handle connected to the active setter. Click-release opens contextual
 instructions as a local `TacticalCourt` child rather than a popup-window child;

@@ -189,7 +189,9 @@ func resolve(
 
 	var tempo_demand := float(3 - assignment.tempo) * 0.055
 	var set_target := CourtConstants.lane_target(assignment.lane)
-	var set_geometry := _set_geometry(setter_start, set_contact, set_target, preferred_release)
+	var set_geometry := _set_geometry(
+		setter, setter_start, set_contact, set_target, preferred_release
+	)
 	var set_base: float = _rating(setter, "set_accuracy") * 0.52 \
 		+ _rating(setter, "court_vision") * 0.25 \
 		+ _rating(setter, "composure") * 0.13 \
@@ -225,7 +227,9 @@ func resolve(
 			"set_distance_meters": set_geometry.distance_meters,
 			"set_angle_degrees": set_geometry.angle_degrees,
 			"release_distance_meters": set_geometry.release_distance_meters,
-			"body_orientation_fit": set_geometry.body_orientation_fit})
+			"body_orientation_fit": set_geometry.body_orientation_fit,
+			"set_balance": set_geometry.set_balance,
+			"set_stability": set_geometry.set_stability})
 	live_positions[setter.id] = set_contact
 	rally_clock += second_contact_window
 	if assignment.tempo <= 1:
@@ -903,6 +907,7 @@ func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -
 
 
 func _set_geometry(
+	setter: VolleyballPlayer,
 	setter_start: Vector2,
 	contact: Vector2,
 	target: Vector2,
@@ -925,11 +930,18 @@ func _set_geometry(
 			0.0, 1.0,
 		)
 	var net_distance_meters := absf(contact.y - CourtConstants.NET_Y) * 18.0
-	var tight_risk := clampf((0.55 - net_distance_meters) * 0.10, 0.0, 0.055)
+	var balance := _rating(setter, "set_balance")
+	var stability := _rating(setter, "set_stability")
+	var tight_risk := clampf((0.55 - net_distance_meters) * 0.10, 0.0, 0.055) \
+		* lerpf(1.0, 0.55, stability)
+	var distance_difficulty := maxf(distance_meters - 2.0, 0.0) * 0.012 \
+		* lerpf(1.0, 0.68, stability)
+	var orientation_difficulty := (1.0 - orientation_fit) * 0.10 \
+		* lerpf(1.0, 0.48, balance)
 	var difficulty := clampf(
-		maxf(distance_meters - 2.0, 0.0) * 0.012
+		distance_difficulty
 		+ release_distance * 0.020
-		+ (1.0 - orientation_fit) * 0.10
+		+ orientation_difficulty
 		+ tight_risk,
 		0.0, 0.28,
 	)
@@ -938,6 +950,8 @@ func _set_geometry(
 		"angle_degrees": angle_degrees,
 		"release_distance_meters": release_distance,
 		"body_orientation_fit": orientation_fit,
+		"set_balance": balance,
+		"set_stability": stability,
 		"net_distance_meters": net_distance_meters,
 		"difficulty": difficulty,
 	}

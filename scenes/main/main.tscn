@@ -109,9 +109,14 @@ custom_minimum_size = Vector2(202, 0)
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="DefenderPopupTitle" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=344464890]
+[node name="DefenderPopupTitleRow" type="HBoxContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="DefenderPopupTitle" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent/DefenderPopupTitleRow" unique_id=344464890]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 13
 text = "Player Instructions"
 
@@ -142,17 +147,10 @@ theme_override_font_sizes/font_size = 11
 text = "Drag S→ to move release target."
 autowrap_mode = 2
 
-[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup"]
+[node name="DefenderPopupCloseButton" type="Button" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent/DefenderPopupTitleRow"]
 unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -24.0
-offset_top = 2.0
-offset_right = -2.0
-offset_bottom = 24.0
-grow_horizontal = 0
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
 tooltip_text = "Close player instructions."
 text = "×"
 flat = true

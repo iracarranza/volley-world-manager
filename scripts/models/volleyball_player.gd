@@ -24,6 +24,8 @@ extends Resource
 @export_range(1, 100) var reception_balance: int = 50
 @export_range(1, 100) var reception_stability: int = 50
 @export_range(1, 100) var set_accuracy: int = 50
+@export_range(1, 100) var set_balance: int = 50
+@export_range(1, 100) var set_stability: int = 50
 @export_range(1, 100) var attack_power: int = 50
 @export_range(1, 100) var attack_accuracy: int = 50
 @export_range(1, 100) var approach_timing: int = 50
@@ -65,6 +67,8 @@ func to_dict() -> Dictionary:
 		"reception_balance": reception_balance,
 		"reception_stability": reception_stability,
 		"set_accuracy": set_accuracy,
+		"set_balance": set_balance,
+		"set_stability": set_stability,
 		"attack_power": attack_power,
 		"attack_accuracy": attack_accuracy,
 		"approach_timing": approach_timing,
@@ -96,7 +100,8 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 		"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
 		"stamina", "serve_power", "serve_accuracy", "reception",
 		"reception_balance", "reception_stability",
-		"set_accuracy", "attack_power", "attack_accuracy", "approach_timing",
+		"set_accuracy", "set_balance", "set_stability",
+		"attack_power", "attack_accuracy", "approach_timing",
 		"block_timing", "ball_control", "court_vision", "anticipation",
 		"decision_making", "composure", "tactical_discipline", "improvisation",
 	]:

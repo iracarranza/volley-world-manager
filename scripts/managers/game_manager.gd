@@ -28,7 +28,8 @@ func _ready() -> void:
 func seed_vertical_slice_data() -> void:
 	players.clear()
 	players.append(_make_player(1, "Mira", "Setter", "S", {
-		"set_accuracy": 86, "court_vision": 90, "decision_making": 84,
+		"set_accuracy": 86, "set_balance": 82, "set_stability": 84,
+		"court_vision": 90, "decision_making": 84,
 		"improvisation": 78, "height_cm": 185.0, "mass_kg": 77.0,
 		"wingspan_cm": 188.0, "explosiveness": 73,
 	}))
@@ -108,7 +109,8 @@ func _seed_opponent() -> void:
 	}
 	var opponent_players: Array[Resource] = []
 	opponent_players.append(_make_player(101, "Ari", "Setter", "S", {
-			"set_accuracy": 78, "court_vision": 82, "decision_making": 76,
+			"set_accuracy": 78, "set_balance": 75, "set_stability": 77,
+			"court_vision": 82, "decision_making": 76,
 		}))
 	opponent_players.append(_make_player(102, "Vale", "Outside Hitter", "OH1", {
 			"attack_power": 84, "attack_accuracy": 76, "serve_power": 81,
