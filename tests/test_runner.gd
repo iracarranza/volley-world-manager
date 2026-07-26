@@ -21,6 +21,7 @@ func _initialize() -> void:
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
+	_test_spatial_timing_and_tactical_positions()
 	_test_block_closing_and_touch_distribution()
 	_test_physical_body_attributes()
 	_test_tactical_playback_reset_on_lineup_change()
@@ -453,6 +454,101 @@ func _test_second_contact_ownership() -> void:
 	)
 
 
+func _test_spatial_timing_and_tactical_positions() -> void:
+	var baseline := GAME_MANAGER_SCRIPT.new()
+	var displaced := GAME_MANAGER_SCRIPT.new()
+	baseline.seed_vertical_slice_data()
+	displaced.seed_vertical_slice_data()
+	baseline.match_state.serving_home = false
+	displaced.match_state.serving_home = false
+	var play := OffensivePlay.new()
+	play.play_name = "Spatial Right Pin"
+	play.rotation_number = 1
+	var outside := HitterAssignment.new()
+	outside.player_id = 2
+	outside.start_position = CourtConstants.slot_position(2)
+	outside.lane = "Right Pin"
+	outside.tempo = 2
+	outside.priority = 1
+	var middle := HitterAssignment.new()
+	middle.player_id = 3
+	middle.start_position = CourtConstants.slot_position(3)
+	middle.lane = "Front Quick"
+	middle.tempo = 1
+	middle.priority = 2
+	play.assignments = [outside, middle]
+	play.primary_hitter_id = 2
+	play.secondary_hitter_id = 3
+	_check(bool(baseline.save_offensive_play(play).success), "baseline spatial play saves")
+	_check(bool(displaced.save_offensive_play(play).success), "displaced spatial play saves")
+	var displaced_plan: Resource = displaced.current_defensive_plan()
+	var hitter_zone: Resource = displaced_plan.zone_for(
+		2, DefensiveZone.ZoneType.SERVE_RECEIVE
+	)
+	hitter_zone.center = Vector2(0.08, 0.94)
+	var setter_zone: Resource = displaced_plan.zone_for(
+		1, DefensiveZone.ZoneType.SERVE_RECEIVE
+	)
+	setter_zone.center = Vector2(0.08, 0.94)
+	setter_zone.enabled = false
+	var baseline_setter_zone: Resource = baseline.current_defensive_plan().zone_for(
+		1, DefensiveZone.ZoneType.SERVE_RECEIVE
+	)
+	baseline_setter_zone.enabled = false
+	var position_effect_observed := false
+	var speed_effect_observed := false
+	var timeline_observed := false
+	for seed_value in range(9100, 9500):
+		var base_result: Resource = baseline.resolve_active_rally(seed_value)
+		var moved_result: Resource = displaced.resolve_active_rally(seed_value)
+		var base_attack: Resource
+		var moved_attack: Resource
+		for event_resource in base_result.events:
+			var event: Resource = event_resource
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and event.actor_id == 2:
+				base_attack = event
+				break
+		for event_resource in moved_result.events:
+			var event: Resource = event_resource
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and event.actor_id == 2:
+				moved_attack = event
+				break
+		if base_attack != null and moved_attack != null:
+			position_effect_observed = (
+				float(moved_attack.metadata.get("arrival_margin", 0.0))
+				< float(base_attack.metadata.get("arrival_margin", 0.0)) - 0.60
+				and float(moved_attack.quality) < float(base_attack.quality)
+			)
+			var original_speed := displaced.player_by_id(2).transition_speed
+			displaced.player_by_id(2).transition_speed = 98
+			var fast_result: Resource = displaced.resolve_active_rally(seed_value)
+			displaced.player_by_id(2).transition_speed = original_speed
+			for event_resource in fast_result.events:
+				var fast_event: Resource = event_resource
+				if fast_event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+						and fast_event.actor_id == 2:
+					speed_effect_observed = float(fast_event.metadata.get(
+						"movement_duration", 99.0
+					)) < float(moved_attack.metadata.get("movement_duration", 0.0))
+					break
+		var previous_time := -1.0
+		timeline_observed = true
+		for event_resource in base_result.events:
+			var event: Resource = event_resource
+			var event_time := float(event.metadata.get("event_time", -1.0))
+			if event_time < previous_time or not event.metadata.has("event_duration"):
+				timeline_observed = false
+				break
+			previous_time = event_time
+		if position_effect_observed and speed_effect_observed and timeline_observed:
+			break
+	_check(position_effect_observed, "extreme hitter displacement reduces arrival and attack quality")
+	_check(speed_effect_observed, "transition speed changes calculated marker travel time")
+	_check(timeline_observed, "rally events expose a monotonic shared clock and duration")
+
+
 func _test_block_closing_and_touch_distribution() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
@@ -463,6 +559,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 	var non_middle_primary := false
 	var block_deflection_observed := false
 	var attack_coverage_observed := false
+	var block_segments_observed := false
 	for seed_value in range(5000, 5300):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
@@ -474,6 +571,9 @@ func _test_block_closing_and_touch_distribution() -> void:
 					or str(event.metadata.get("side", "")) != "home":
 				continue
 			home_block_events += 1
+			block_segments_observed = block_segments_observed or not Array(
+				event.metadata.get("coverage_segments", [])
+			).is_empty()
 			var outcome := str(event.metadata.get("outcome", "miss"))
 			if outcome == "stuff":
 				stuff_blocks += 1
@@ -503,6 +603,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 	)
 	_check(block_deflection_observed, "partial home blocks expose a changed deflection target")
 	_check(attack_coverage_observed, "opponent block touches can trigger explicit attack coverage")
+	_check(block_segments_observed, "block events expose spatial net-coverage segments")
 
 
 func _test_physical_body_attributes() -> void:

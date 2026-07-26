@@ -69,8 +69,15 @@
 - Assign primary or secondary emergency setters. When the regular setter makes
   first contact, the best available assigned player owns contact two; the rally
   event and playback explanation identify the emergency setter.
-- Animate home defense through base position, responsibility-informed read,
+- Animate home defense through base position, attribute-informed read,
   contact and recovery states before the ball advances to the next event.
+- Resolve rallies on a shared spatial clock. Saved starting positions now affect
+  setter travel, emergency second-contact ownership, hitter approach arrival,
+  block closing, floor defense, attack coverage and transition offense.
+- Scale marker playback duration from calculated movement time. Rally captions
+  expose simulation timestamps and explain early or late setter/hitter arrival.
+- Draw the net white by default, then paint only occupied block sections from
+  pale red to dark red according to each blocker's coverage completeness.
 - See each player's compact structural responsibility directly on the defensive
   court.
 - Use separate saved serve-reception and floor-defense zones with an editable
@@ -127,7 +134,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 98 passing headless foundation checks and UI-binding validation, including a
+- 104 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

@@ -345,6 +345,10 @@ func _prepare_player_movement(event: Resource) -> void:
 	movement_start = live_player_positions.get(
 		movement_player_id, _player_court_position(movement_player_id, slot_number)
 	)
+	if event.metadata.has("movement_start") \
+			and movement_player_id not in live_player_positions:
+		movement_start = Vector2(event.metadata["movement_start"])
+		live_player_positions[movement_player_id] = movement_start
 	match int(event.event_type):
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
 			movement_target = event.start_position
@@ -513,7 +517,8 @@ func _draw() -> void:
 	draw_rect(court_rect, palette["line"], false, 3.0)
 	var net_start := _court_to_local(Vector2(0.0, CourtConstants.NET_Y))
 	var net_end := _court_to_local(Vector2(1.0, CourtConstants.NET_Y))
-	draw_line(net_start, net_end, palette["net"], 5.0)
+	# White is the neutral net state; block events paint only occupied sections.
+	draw_line(net_start, net_end, Color("f4f4f4"), 5.0)
 	for attack_y in [
 		CourtConstants.OPPONENT_ATTACK_LINE_Y,
 		CourtConstants.HOME_ATTACK_LINE_Y,
@@ -750,11 +755,22 @@ func _draw_rally_playback() -> void:
 		return
 	draw_line(start, finish, _with_alpha(event_color, 0.42), 2.0)
 	if playback_event.event_type == RallyEventModel.EventType.BLOCK:
-		var block_half_width: float = 32.0 + float(playback_event.quality) * 36.0
-		draw_line(
-			finish + Vector2(-block_half_width, 0.0),
-			finish + Vector2(block_half_width, 0.0), event_color, 7.0,
-		)
+		var segments: Array = playback_event.metadata.get("coverage_segments", [])
+		if segments.is_empty():
+			segments.append({
+				"x_min": clampf(playback_event.end_position.x - 0.08, 0.0, 1.0),
+				"x_max": clampf(playback_event.end_position.x + 0.08, 0.0, 1.0),
+				"completeness": float(playback_event.quality),
+			})
+		for segment_data in segments:
+			var segment: Dictionary = segment_data
+			var completeness := clampf(float(segment.get("completeness", 0.0)), 0.0, 1.0)
+			var coverage_color := Color("f3b4b4").lerp(Color("a60d22"), completeness)
+			draw_line(
+				_court_to_local(Vector2(float(segment.get("x_min", 0.45)), CourtConstants.NET_Y)),
+				_court_to_local(Vector2(float(segment.get("x_max", 0.55)), CourtConstants.NET_Y)),
+				coverage_color, 7.0 + completeness * 4.0,
+			)
 	var shadow_position := ball_position + Vector2(3.0, 5.0)
 	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
 	draw_circle(ball_position, 9.0, Color("f5d328"))

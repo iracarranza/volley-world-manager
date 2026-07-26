@@ -962,18 +962,30 @@ func _play_rally(result: Resource) -> void:
 	rally_result_explanation.text = ""
 	rally_result_factors.text = ""
 	var playback_speed := float(_selected_metadata(playback_speed_option))
-	var event_duration := 0.72 / maxf(playback_speed, 0.1)
 	for event_resource in result.events:
 		var event: Resource = event_resource
 		if skip_rally_playback:
 			break
-		rally_event_label.text = "%s · %s\n%s" % [
+		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
+			float(event.metadata.get("event_time", 0.0)),
 			event.type_name(), event.headline, event.detail,
-		]
+		])
 		var has_movement := tactical_court.has_player_movement(event)
+		var simulated_movement := float(event.metadata.get("movement_duration", 0.0))
+		var simulated_flight := float(event.metadata.get("flight_time",
+			event.metadata.get("set_flight_time", 0.0)))
+		var simulated_duration := float(event.metadata.get(
+			"event_duration",
+			maxf(0.46, simulated_movement + simulated_flight * 0.55),
+		))
+		var event_duration := clampf(simulated_duration, 0.42, 2.20) \
+			/ maxf(playback_speed, 0.1)
 		var pre_targets: Array[Vector2] = tactical_court.movement_phase_targets(event)
 		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
-		var pre_budget := event_duration * 0.30 if has_movement else 0.0
+		var movement_share := clampf(
+			simulated_movement / maxf(simulated_duration, 0.1), 0.30, 0.72
+		)
+		var pre_budget := event_duration * movement_share if has_movement else 0.0
 		var contact_pause := event_duration * 0.07 if has_movement else 0.0
 		var post_budget := event_duration * 0.18 if has_movement else 0.0
 		var ball_duration := event_duration - pre_budget - contact_pause - post_budget
@@ -983,9 +995,10 @@ func _play_rally(result: Resource) -> void:
 				var caption := tactical_court.movement_phase_caption_for(
 					event, phase_index, false
 				)
-				rally_event_label.text = "%s · %s\n%s" % [
+				_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
+					float(event.metadata.get("event_time", 0.0)),
 					caption, event.headline, event.detail,
-				]
+				])
 				tactical_court.animate_player_to(
 					event, pre_targets[phase_index], pre_phase_duration, caption
 				)
@@ -996,9 +1009,10 @@ func _play_rally(result: Resource) -> void:
 				tactical_court.finish_event_animation()
 				match_preview_court.finish_event_animation()
 			if not skip_rally_playback:
-				rally_event_label.text = "Contact window · %s\n%s" % [
+				_set_playback_caption("t=%.2fs · Contact window · %s\n%s" % [
+					float(event.metadata.get("event_time", 0.0)),
 					event.headline, event.detail,
-				]
+				])
 				await _wait_for_playback_phase(contact_pause)
 		if skip_rally_playback:
 			break
@@ -1065,6 +1079,11 @@ func _skip_rally_playback() -> void:
 	skip_rally_playback = true
 	tactical_court.finish_event_animation()
 	match_preview_court.finish_event_animation()
+
+
+func _set_playback_caption(value: String) -> void:
+	rally_event_label.text = value
+	dashboard_event_label.text = value
 
 
 func _reset_tactical_positions(show_status: bool = true) -> void:

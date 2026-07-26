@@ -178,3 +178,22 @@ that case, `RallySimulator` ranks the other five players using the saved primary
 or secondary emergency-setter responsibility plus set accuracy, ball control
 and decision making. The resulting set event identifies the first-contact
 player and whether emergency ownership was activated.
+
+## Spatial rally clock
+
+`RallySimulator` initializes authoritative home-player positions from the saved
+serve-receive shape on side-out and the saved defensive shape while serving.
+Reception, setting, approach, blocking, floor defense and attack coverage update
+those live positions rather than repeatedly reading static slot coordinates.
+
+Movement time converts court distance to metres and applies acceleration,
+lateral or transition speed, mass and fatigue. Contact windows create explicit
+arrival margins: a late setter loses control or yields to an emergency setter;
+a late hitter loses approach quality and may miss the attack entirely. Every
+rally event is finalized onto a monotonic clock with `event_time`,
+`event_duration`, and applicable movement/deadline metadata. Presentation reads
+those values but does not determine the outcome.
+
+Block events expose one spatial net segment per arriving blocker. Segment width
+uses wingspan and close fraction; redness uses completeness. The renderer keeps
+the uncovered net white and paints only the simulated coverage.
