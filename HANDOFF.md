@@ -53,6 +53,8 @@
 - Keep hitter assignment nested inside the tactical workspace so assigning or
   dismissing it does not close the full board.
 - Animate the same rally events on the match preview and full tactical board.
+- Keep the Match Center court read-only and event-focused: tactical drafts,
+  defensive zones, release paths and unsaved edits appear only on the full board.
 - Clear transient marker positions, trails and the previous ball event whenever
   a rally ends or a lineup/rotation is loaded. A fixed Reset Positions button
   restores both court surfaces without changing saved tactics.
@@ -69,6 +71,8 @@
 - Distinguish a marker click from a drag before opening instructions. The small
   phase-specific panel attaches diagonally beside the selected marker without
   becoming a modal layer or interrupting subsequent player movement.
+- Size that icon-adjacent panel directly from its visible controls, using only
+  compact margins and no reserved whitespace for controls from other phases.
 - Apply Perimeter, Middle-Up and Rotation Defense as functional position/zone
   presets, then customize the resulting plan as a modified preset.
 - Edit Attack Coverage and Transition separately from Floor Defense, including

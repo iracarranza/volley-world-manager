@@ -62,6 +62,8 @@ board without changing saved tactics or simulation data.
 
 The workspace node is reparented into the popup at runtime. This avoids a second
 copy of editor logic and makes the change straightforward to revert.
+The Match Center preview never receives offensive drafts or defensive-plan
+overlays; it displays lineup state and resolved rally events only.
 The simulator completes the result before the first animation begins, so visual
 timing cannot change a point.
 The court presenter maintains temporary live marker positions during playback.

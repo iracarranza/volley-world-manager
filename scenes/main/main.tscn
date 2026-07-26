@@ -84,62 +84,62 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Finalize Assignment"
 
-[node name="DefenderPopup" type="PanelContainer" parent="TacticalWorkspacePopup"]
+[node name="DefenderPopup" type="PanelContainer" parent="TacticalWorkspacePopup" unique_id=142037638]
 unique_name_in_owner = true
 visible = false
-offset_left = 360.0
-offset_top = 100.0
-offset_right = 630.0
-offset_bottom = 400.0
-mouse_filter = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 1176.0
+offset_bottom = 676.0
 
-[node name="Margin" type="MarginContainer" parent="TacticalWorkspacePopup/DefenderPopup"]
+[node name="Margin" type="MarginContainer" parent="TacticalWorkspacePopup/DefenderPopup" unique_id=1165081472]
 layout_mode = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_top = 3
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 3
+theme_override_constants/margin_left = 4
 
-[node name="Scroll" type="ScrollContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin"]
+[node name="Scroll" type="ScrollContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin" unique_id=57154572]
 layout_mode = 2
 horizontal_scroll_mode = 0
 
-[node name="DefenderPopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll"]
+[node name="DefenderPopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll" unique_id=36936673]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(310, 0)
+custom_minimum_size = Vector2(202, 0)
 layout_mode = 2
-theme_override_constants/separation = 7
+theme_override_constants/separation = 2
 
-[node name="DefenderPopupTitle" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="DefenderPopupTitle" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=344464890]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 13
 text = "Player Instructions"
 
-[node name="BlockParticipationCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="BlockParticipationCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=1923420421]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Participates in block"
 
-[node name="EmergencyPursuitCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="EmergencyPursuitCheck" type="CheckButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=1832246959]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Emergency pursuit allowed"
 
-[node name="ShortBallPriorityOption" type="OptionButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="ShortBallPriorityOption" type="OptionButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=1370192837]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Priority for tips, rolls and other short attacks within this player's coverage."
 
-[node name="DeflectionPriorityOption" type="OptionButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="DeflectionPriorityOption" type="OptionButton" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=221444211]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Priority for pursuing balls deflected by either block."
 
-[node name="SetterReleaseHelp" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent"]
+[node name="SetterReleaseHelp" type="Label" parent="TacticalWorkspacePopup/DefenderPopup/Margin/Scroll/DefenderPopupContent" unique_id=300967845]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Drag the active setter to place the preferred release target."
+theme_override_font_sizes/font_size = 11
+text = "Drag S→ to move release target."
 autowrap_mode = 2
 
 [node name="WorkspacePopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup" unique_id=925463913]
@@ -406,12 +406,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 19
 text = "Rotation Defense"
 
-[node name="SettingSystemOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+[node name="SettingSystemOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=1207698012]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Choose a 5-1 or 6-2. In a 6-2, the designated back-row setter owns second contact."
 
-[node name="SecondSetterOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+[node name="SecondSetterOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=1752648446]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Choose the second designated setter used by the 6-2."
@@ -431,15 +431,15 @@ unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Apply a functional starting-position and zone-priority preset. Individual edits mark it Modified."
 
-[node name="BlockDefenseRelationshipOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+[node name="BlockDefenseRelationshipOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=2069793213]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="DefensiveDepthOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+[node name="DefensiveDepthOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=1617648230]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="ShortBallPostureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls"]
+[node name="ShortBallPostureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=736045948]
 unique_name_in_owner = true
 layout_mode = 2
 

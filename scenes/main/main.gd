@@ -679,22 +679,12 @@ func _update_court_preview() -> void:
 
 
 func _refresh_match_preview() -> void:
-	var active_play := GameManager.called_play()
-	if active_play != null:
-		match_preview_court.set_play_preview(
-			active_play.assignments,
-			active_play.primary_hitter_id,
-			active_play.secondary_hitter_id,
-		)
-	else:
-		var no_assignments: Array[HitterAssignment] = []
-		match_preview_court.set_play_preview(no_assignments, -1, -1)
-	match_preview_court.set_defensive_view(
-		court_mode_option.selected == 1,
-		GameManager.current_defensive_plan(),
-		selected_defensive_zone_type,
-		defense_section_option.selected,
-	)
+	# Match Center is a presentation surface, not a second tactics preview. It
+	# receives rally events and lineup state only; drafts and defensive edits stay
+	# inside the full tactical workspace.
+	var no_assignments: Array[HitterAssignment] = []
+	match_preview_court.set_play_preview(no_assignments, -1, -1)
+	match_preview_court.set_defensive_view(false)
 
 
 func _setup_tactical_workspace() -> void:
@@ -721,8 +711,11 @@ func _setup_defender_popup() -> void:
 func _open_player_instructions(player_id: int, marker_screen_position: Vector2) -> void:
 	selected_player_id = player_id
 	_load_defender_assignment(player_id)
-	var phase := defense_section_option.selected
-	var popup_size := Vector2(270.0, [265.0, 210.0, 315.0, 300.0][phase])
+	var content_minimum := defender_popup_content.get_combined_minimum_size()
+	var popup_size := Vector2(
+		maxf(content_minimum.x + 8.0, 210.0),
+		content_minimum.y + 6.0,
+	)
 	var court_origin := tactical_court.get_screen_position()
 	var court_end := court_origin + tactical_court.size
 	var popup_screen_position := marker_screen_position + Vector2(28.0, -popup_size.y * 0.52)
