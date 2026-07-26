@@ -1,0 +1,86 @@
+# Current Implementation Handoff
+
+## Playable now
+
+- Select any of six rotations.
+- Inspect all six player markers and rotation slots on a primitive court.
+- Select eligible hitters directly on the court.
+- Read player markers by volleyball position (`S`, `OH1`, `OH2`, `M1`, `M2`,
+  `OP`, `L`) rather than name initials.
+- Drag a hitter marker to a legal lane and finalize tempo/responsibility in a
+  contextual popup beside the court marker. The side editor remains available.
+- Assign front-row lanes or the back-row Pipe lane.
+- Select set tempo T0–T3.
+- Mark assignments as primary, secondary, option or decoy.
+- Preview approach paths, tempo labels and separate tactical demand categories.
+- Name and save an offensive play.
+- Filter saved plays by rotation and set a persistent active play. The first saved
+  play for each rotation becomes its default; players only intervene to change it.
+- Resolve rallies without a saved play by using a safe T3 set to the front-row
+  outside hitter at the nearest pin.
+- Run a seeded rally resolved as serve, reception, setter decision, set, attack,
+  block, defense and point events. Terminal failures naturally shorten the chain.
+- Watch the result on the tactical court using primitive ball paths, actor
+  highlights and a block envelope, with 0.5×/1×/2× playback and skip.
+- Watch home markers move toward reception, setting, approach, blocking and
+  defensive contact positions while events play.
+- Complete event-specific movement phases before drawing the associated ball
+  flight: read/receive, setter transition/set position, transition/approach,
+  read/block close and read/defensive move or dive.
+- Show short movement trails, the current destination and a concise phase
+  caption, then animate landing/recovery after the contact when relevant.
+- Read a post-rally result with the decisive outcome, tactical explanation,
+  key factors and reception/set/attack quality percentages.
+- Inspect contact-level playback details including receiver, reception quality,
+  attack type, contact quality, block lane and block close quality.
+- Continue through repeated three-contact possessions, emergency T3 outside
+  balls and transition attacks until a point or four-exchange safety limit.
+- Track points, sets, service possession, side-out rotation and rally history.
+- Enable automatic rallies, optionally pausing after aces, blocks and set ends.
+- Scale themes and controls up with windows larger than the 1280×720 baseline.
+- Use a taller court without the redundant name/position lineup key.
+- Draw the complete court at its regulation 9 m × 18 m top-down ratio, with the
+  wider coaching panel using the recovered horizontal space.
+- Keep rally playback, speed, automatic flow and timeout controls in a fixed
+  gameplay bar rather than burying them in the detailed scrolling panel.
+- Use a compact landscape tactical preview on the Match Center. Clicking the
+  preview opens the existing editor in a large FM-style popup workspace.
+- Dim the Match Center behind the tactical workspace with an opaque modal
+  underlay.
+- Keep hitter assignment nested inside the tactical workspace so assigning or
+  dismissing it does not close the full board.
+- Animate the same rally events on the match preview and full tactical board.
+- Apply changes and return to the Match Center without duplicating tactical or
+  simulation state.
+- Switch the coaching board between offense and per-rotation defense.
+- Drag defensive positions and save block strategy, floor system, serve target
+  and serve risk.
+- Scout and play against a six-player Port Azure VC profile with individual
+  serving, setting, attacking, blocking and defensive attributes.
+- Use actual opponent names and attributes during rally resolution.
+- Take timeouts, confirm rotation-wide substitutions, undo the latest change,
+  monitor average fatigue and short-term form, and view recent rally outcomes.
+- Use rotation sheets that automatically replace the back-row middle with the
+  libero while preventing front-row libero placement and attack assignment.
+- Toggle between Molten Light and Mikasa Dark themes.
+
+## Implemented underneath
+
+- Typed player, rotation, hitter-assignment, offensive-play, rally-event and
+  rally-result Resources.
+- Normalized court coordinates.
+- Rotation and play validation.
+- Playbook and active-play-per-rotation serialization.
+- Pure seeded `RallySimulator`; presentation never determines outcomes.
+- Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
+- 60 passing headless foundation checks and UI-binding validation.
+
+## Intentionally not implemented yet
+
+- Opponent substitutions, opponent timeouts and a second-libero ruleset.
+- Unlimited continuation contacts; rallies intentionally use a four-exchange
+  safety bound to prevent pathological simulation loops.
+
+The next pass should deepen individual defensive responsibilities and opponent
+adaptation. Marker movement is still intentionally schematic; future 2.5D work
+can replace the presenter without changing rally outcomes.

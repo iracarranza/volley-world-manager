@@ -1,0 +1,572 @@
+[gd_scene format=3 uid="uid://cf25mxv5ivoek"]
+
+[ext_resource type="Script" uid="uid://cwvn821kr6lok" path="res://scenes/main/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/components/tactical_court.tscn" id="2_court"]
+[ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="3_theme"]
+
+[node name="Main" type="Control" unique_id=564539663]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_main")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1961860647]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.027, 0.043, 0.075, 1)
+
+[node name="TacticalModalUnderlay" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.01, 0.015, 0.025, 0.82)
+
+[node name="TacticalWorkspacePopup" type="PopupPanel" parent="."]
+unique_name_in_owner = true
+initial_position = 1
+size = Vector2i(1180, 680)
+exclusive = true
+
+[node name="AssignmentPopup" type="PopupPanel" parent="TacticalWorkspacePopup" unique_id=941614470]
+unique_name_in_owner = true
+initial_position = 1
+size = Vector2i(220, 166)
+
+[node name="SubstitutionConfirmation" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Confirm Substitution"
+dialog_text = "Confirm substitution?"
+
+[node name="WorkspacePopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 10.0
+offset_right = -12.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="WorkspacePopupHeader" type="HBoxContainer" parent="TacticalWorkspacePopup/WorkspacePopupContent"]
+layout_mode = 2
+
+[node name="WorkspacePopupTitle" type="Label" parent="TacticalWorkspacePopup/WorkspacePopupContent/WorkspacePopupHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Tactical Board"
+
+[node name="CloseTacticalWorkspaceButton" type="Button" parent="TacticalWorkspacePopup/WorkspacePopupContent/WorkspacePopupHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Apply & Return to Match"
+
+[node name="TacticalWorkspaceHost" type="MarginContainer" parent="TacticalWorkspacePopup/WorkspacePopupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PopupMargin" type="MarginContainer" parent="TacticalWorkspacePopup/AssignmentPopup" unique_id=577942662]
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 216.0
+offset_bottom = 162.0
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="PopupContent" type="VBoxContainer" parent="TacticalWorkspacePopup/AssignmentPopup/PopupMargin" unique_id=2102230957]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="PopupAssignmentLabel" type="Label" parent="TacticalWorkspacePopup/AssignmentPopup/PopupMargin/PopupContent" unique_id=963969022]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "OH1 → Left Pin"
+
+[node name="PopupTempoLabel" type="Label" parent="TacticalWorkspacePopup/AssignmentPopup/PopupMargin/PopupContent" unique_id=74939690]
+layout_mode = 2
+text = "Set tempo"
+
+[node name="PopupTempoOption" type="OptionButton" parent="TacticalWorkspacePopup/AssignmentPopup/PopupMargin/PopupContent" unique_id=1326794456]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PopupResponsibilityOption" type="OptionButton" parent="TacticalWorkspacePopup/AssignmentPopup/PopupMargin/PopupContent" unique_id=1307354320]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PopupApplyButton" type="Button" parent="TacticalWorkspacePopup/AssignmentPopup/PopupMargin/PopupContent" unique_id=1745549102]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Finalize Assignment"
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1628029922]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 14.0
+offset_right = -20.0
+offset_bottom = -14.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Content" type="VBoxContainer" parent="Margin" unique_id=1822120369]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Margin/Content" unique_id=878462249]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Margin/Content/Header" unique_id=266073820]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 24
+text = "Volley World Manager · Match Center"
+
+[node name="MatchScoreLabel" type="Label" parent="Margin/Content/Header" unique_id=513665008]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 36)
+layout_mode = 2
+text = "HOME 0 — 0 OPPONENT · Sets 0–0 · Set 1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RotationOption" type="OptionButton" parent="Margin/Content/Header" unique_id=1194490248]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 36)
+layout_mode = 2
+
+[node name="ThemeToggle" type="CheckButton" parent="Margin/Content/Header" unique_id=169692011]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(130, 36)
+layout_mode = 2
+tooltip_text = "Toggle between Mikasa-inspired dark mode and Molten-inspired light mode."
+text = "Mikasa Dark"
+
+[node name="QuickRallyBar" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="QuickRallyLabel" type="Label" parent="Margin/Content/QuickRallyBar"]
+layout_mode = 2
+text = "Match controls"
+vertical_alignment = 1
+
+[node name="MatchDashboard" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="MatchPreviewPanel" type="PanelContainer" parent="Margin/Content/MatchDashboard"]
+custom_minimum_size = Vector2(720, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="MatchPreviewContent" type="VBoxContainer" parent="Margin/Content/MatchDashboard/MatchPreviewPanel"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="MatchPreviewTitle" type="Label" parent="Margin/Content/MatchDashboard/MatchPreviewPanel/MatchPreviewContent"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Live Tactical View · Click court to open full board"
+
+[node name="MatchPreviewArea" type="Control" parent="Margin/Content/MatchDashboard/MatchPreviewPanel/MatchPreviewContent"]
+custom_minimum_size = Vector2(680, 390)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MatchPreviewCourt" parent="Margin/Content/MatchDashboard/MatchPreviewPanel/MatchPreviewContent/MatchPreviewArea" instance=ExtResource("2_court")]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="OpenTacticalWorkspaceButton" type="Button" parent="Margin/Content/MatchDashboard/MatchPreviewPanel/MatchPreviewContent/MatchPreviewArea"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+tooltip_text = "Open the full tactical board."
+flat = true
+
+[node name="MatchSummaryPanel" type="PanelContainer" parent="Margin/Content/MatchDashboard"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+
+[node name="MatchSummaryContent" type="VBoxContainer" parent="Margin/Content/MatchDashboard/MatchSummaryPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DashboardEventLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 74)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Ready for the next rally."
+autowrap_mode = 2
+
+[node name="DashboardExplanationLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 100)
+layout_mode = 2
+text = "Rally explanations and tactical observations appear here."
+autowrap_mode = 2
+
+[node name="DashboardInstructionLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent"]
+custom_minimum_size = Vector2(330, 72)
+layout_mode = 2
+text = "Click the tactical view to edit rotations, offensive plays, defensive positioning and scouting plans."
+autowrap_mode = 2
+
+[node name="Workspace" type="HSplitContainer" parent="Margin/Content" unique_id=212129950]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+split_offsets = PackedInt32Array(760)
+split_offset = 760
+
+[node name="CourtPanel" type="PanelContainer" parent="Margin/Content/Workspace" unique_id=1581924906]
+custom_minimum_size = Vector2(650, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CourtContent" type="VBoxContainer" parent="Margin/Content/Workspace/CourtPanel" unique_id=542954336]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CourtInstructions" type="Label" parent="Margin/Content/Workspace/CourtPanel/CourtContent" unique_id=1758184616]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(480, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.72, 0.84, 1)
+text = "Drag a player marker to an attack lane, then finalize tempo and responsibility beside the marker."
+
+[node name="TacticalCourt" parent="Margin/Content/Workspace/CourtPanel/CourtContent" unique_id=928208356 instance=ExtResource("2_court")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(400, 500)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EditorPanel" type="PanelContainer" parent="Margin/Content/Workspace" unique_id=1772435667]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="EditorScroll" type="ScrollContainer" parent="Margin/Content/Workspace/EditorPanel" unique_id=1109812970]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Editor" type="VBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll" unique_id=1255023739]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="CourtModeOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=933995504]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Switch the coaching board between offensive and defensive editing."
+
+[node name="DefenseControls" type="VBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=339873134]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="DefenseTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=731071237]
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Rotation Defense"
+
+[node name="BlockStrategyOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=1436725542]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Read reacts to the set; commit schemes trade coverage for an earlier close."
+
+[node name="FloorSystemOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=90282772]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ServeTargetOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=1607113662]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ServeRiskLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=295639207]
+layout_mode = 2
+text = "Serve risk"
+
+[node name="ServeRiskSlider" type="HSlider" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=561924340]
+unique_name_in_owner = true
+layout_mode = 2
+value = 50.0
+
+[node name="SaveDefenseButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=994939557]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Rotation Defense"
+
+[node name="DefenseSummaryLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=925625940]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 38)
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="OpponentScoutingLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=925444319]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 48)
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="EditorTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1756695895]
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Hitter Assignment"
+
+[node name="SelectedHitterLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=877711619]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 42)
+layout_mode = 2
+text = "Select a hitter marker on the court."
+autowrap_mode = 2
+
+[node name="LaneLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=286684171]
+layout_mode = 2
+text = "Destination lane"
+
+[node name="LaneOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=702298342]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="TempoLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=26707471]
+layout_mode = 2
+text = "Set tempo"
+
+[node name="TempoOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=469987733]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "T0 is fastest; T3 is the slowest and most forgiving."
+
+[node name="ResponsibilityLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1835089300]
+layout_mode = 2
+text = "Play responsibility"
+
+[node name="ResponsibilityOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1553278543]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AssignButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=102342660]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Apply Hitter Assignment"
+
+[node name="DemandLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1127571912]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 74)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.72, 0.84, 1)
+text = "Demand preview appears after selecting a hitter."
+autowrap_mode = 2
+
+[node name="PlaySeparator" type="HSeparator" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=640058194]
+layout_mode = 2
+
+[node name="PlayTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=505522820]
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Offensive Play"
+
+[node name="PlayNameEdit" type="LineEdit" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1271309488]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Play name"
+
+[node name="SavePlayButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1028153603]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Play"
+
+[node name="SavedPlayLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1489535687]
+layout_mode = 2
+text = "Saved plays for this rotation"
+
+[node name="SavedPlayOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1736219451]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CallPlayButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1118100670]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Set Active Play"
+
+[node name="CalledPlayLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1425259499]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 24)
+layout_mode = 2
+text = "Active play: Default T3 Outside"
+
+[node name="RallySeparator" type="HSeparator" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1787143450]
+layout_mode = 2
+
+[node name="RallyTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=371571187]
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Rally Playback"
+
+[node name="RallyControls" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1578241339]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ResolveRallyButton" type="Button" parent="Margin/Content/QuickRallyBar" unique_id=446915207]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Resolve one rally using the active play and current rotation."
+disabled = true
+text = "Run Rally"
+
+[node name="PlaybackSpeedOption" type="OptionButton" parent="Margin/Content/QuickRallyBar" unique_id=1836883194]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+tooltip_text = "Change rally event playback speed."
+
+[node name="SkipPlaybackButton" type="Button" parent="Margin/Content/QuickRallyBar" unique_id=1207876122]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Skip the remaining animation and show the explanation."
+disabled = true
+text = "Skip"
+
+[node name="AutoFlowControls" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=22515860]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AutoRalliesToggle" type="CheckButton" parent="Margin/Content/QuickRallyBar" unique_id=1521893312]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Automatically begin the next rally using the rotation's active play."
+text = "Auto rallies"
+
+[node name="PauseKeyMomentsToggle" type="CheckButton" parent="Margin/Content/QuickRallyBar" unique_id=102787587]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Pause automatic playback after aces, blocks, and completed sets."
+button_pressed = true
+text = "Pause key moments"
+
+[node name="MatchDaySeparator" type="HSeparator" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1353751991]
+layout_mode = 2
+
+[node name="MatchDayTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=731208047]
+layout_mode = 2
+theme_override_font_sizes/font_size = 19
+text = "Match-Day Controls"
+
+[node name="MatchOverviewLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1602164218]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 54)
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="TimeoutButton" type="Button" parent="Margin/Content/QuickRallyBar" unique_id=71324808]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Use one of two set timeouts and recover a small amount of fatigue."
+text = "Timeout (2 left)"
+
+[node name="SubstituteOutOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1019776176]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Select the on-court player to replace."
+
+[node name="SubstituteInOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1313255311]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Select an available bench player."
+
+[node name="ApplySubstitutionButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1732103700]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Apply Substitution"
+
+[node name="UndoSubstitutionButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Undo Last Substitution"
+
+[node name="RallyHistoryLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=298980024]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 82)
+layout_mode = 2
+text = "Recent rallies
+No rallies yet."
+autowrap_mode = 2
+
+[node name="RallyEventLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=748305886]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 48)
+layout_mode = 2
+text = "Run a rally to view its discrete events."
+autowrap_mode = 2
+
+[node name="RallyResultTitle" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=247193510]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 24)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Post-rally explanation"
+autowrap_mode = 2
+
+[node name="RallyResultExplanation" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=208821244]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 56)
+layout_mode = 2
+text = "The decisive event and tactical reason will appear here."
+autowrap_mode = 2
+
+[node name="RallyResultFactors" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1217907090]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 72)
+layout_mode = 2
+text = "Key factors"
+autowrap_mode = 2
+
+[node name="StatusLabel" type="Label" parent="Margin/Content" unique_id=666777341]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(640, 24)
+layout_mode = 2
+text = "Tactical editor ready."

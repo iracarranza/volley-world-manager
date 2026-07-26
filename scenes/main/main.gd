@@ -1,0 +1,852 @@
+extends Control
+
+const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
+const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
+const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
+
+@onready var background: ColorRect = %Background
+@onready var theme_toggle: CheckButton = %ThemeToggle
+@onready var rotation_option: OptionButton = %RotationOption
+@onready var match_score_label: Label = %MatchScoreLabel
+@onready var tactical_court: TacticalCourt = %TacticalCourt
+@onready var court_instructions: Label = %CourtInstructions
+@onready var selected_hitter_label: Label = %SelectedHitterLabel
+@onready var lane_option: OptionButton = %LaneOption
+@onready var tempo_option: OptionButton = %TempoOption
+@onready var responsibility_option: OptionButton = %ResponsibilityOption
+@onready var assign_button: Button = %AssignButton
+@onready var demand_label: Label = %DemandLabel
+@onready var play_name_edit: LineEdit = %PlayNameEdit
+@onready var save_play_button: Button = %SavePlayButton
+@onready var saved_play_option: OptionButton = %SavedPlayOption
+@onready var call_play_button: Button = %CallPlayButton
+@onready var called_play_label: Label = %CalledPlayLabel
+@onready var resolve_rally_button: Button = %ResolveRallyButton
+@onready var playback_speed_option: OptionButton = %PlaybackSpeedOption
+@onready var skip_playback_button: Button = %SkipPlaybackButton
+@onready var auto_rallies_toggle: CheckButton = %AutoRalliesToggle
+@onready var pause_key_moments_toggle: CheckButton = %PauseKeyMomentsToggle
+@onready var rally_event_label: Label = %RallyEventLabel
+@onready var rally_result_title: Label = %RallyResultTitle
+@onready var rally_result_explanation: Label = %RallyResultExplanation
+@onready var rally_result_factors: Label = %RallyResultFactors
+@onready var status_label: Label = %StatusLabel
+@onready var assignment_popup: PopupPanel = %AssignmentPopup
+@onready var popup_assignment_label: Label = %PopupAssignmentLabel
+@onready var popup_tempo_option: OptionButton = %PopupTempoOption
+@onready var popup_responsibility_option: OptionButton = %PopupResponsibilityOption
+@onready var popup_apply_button: Button = %PopupApplyButton
+@onready var court_mode_option: OptionButton = %CourtModeOption
+@onready var defense_controls: VBoxContainer = %DefenseControls
+@onready var block_strategy_option: OptionButton = %BlockStrategyOption
+@onready var floor_system_option: OptionButton = %FloorSystemOption
+@onready var serve_target_option: OptionButton = %ServeTargetOption
+@onready var serve_risk_slider: HSlider = %ServeRiskSlider
+@onready var defense_summary_label: Label = %DefenseSummaryLabel
+@onready var opponent_scouting_label: Label = %OpponentScoutingLabel
+@onready var save_defense_button: Button = %SaveDefenseButton
+@onready var timeout_button: Button = %TimeoutButton
+@onready var substitute_out_option: OptionButton = %SubstituteOutOption
+@onready var substitute_in_option: OptionButton = %SubstituteInOption
+@onready var apply_substitution_button: Button = %ApplySubstitutionButton
+@onready var match_overview_label: Label = %MatchOverviewLabel
+@onready var rally_history_label: Label = %RallyHistoryLabel
+@onready var workspace: HSplitContainer = %Workspace
+@onready var tactical_workspace_popup: PopupPanel = %TacticalWorkspacePopup
+@onready var tactical_workspace_host: MarginContainer = %TacticalWorkspaceHost
+@onready var open_tactical_workspace_button: Button = %OpenTacticalWorkspaceButton
+@onready var close_tactical_workspace_button: Button = %CloseTacticalWorkspaceButton
+@onready var match_preview_court: TacticalCourt = %MatchPreviewCourt
+@onready var dashboard_event_label: Label = %DashboardEventLabel
+@onready var dashboard_explanation_label: Label = %DashboardExplanationLabel
+@onready var substitution_confirmation: ConfirmationDialog = %SubstitutionConfirmation
+@onready var undo_substitution_button: Button = %UndoSubstitutionButton
+@onready var tactical_modal_underlay: ColorRect = %TacticalModalUnderlay
+
+var selected_player_id: int = -1
+var draft_play: OffensivePlay
+var light_mode_enabled: bool = false
+var status_is_error: bool = false
+var rally_seed: int = 1001
+var rally_playback_active: bool = false
+var skip_rally_playback: bool = false
+var base_theme_scale: float = 1.0
+var pending_drag_lane: String = ""
+var pending_substitution_out_id: int = -1
+var pending_substitution_in_id: int = -1
+
+
+func _ready() -> void:
+	get_viewport().size_changed.connect(_update_interface_scale)
+	_populate_static_options()
+	theme_toggle.toggled.connect(_apply_light_mode)
+	rotation_option.item_selected.connect(_select_rotation)
+	tactical_court.player_selected.connect(_select_hitter)
+	tactical_court.assignment_dragged.connect(_open_assignment_popup)
+	lane_option.item_selected.connect(_preview_demand)
+	tempo_option.item_selected.connect(_preview_demand)
+	responsibility_option.item_selected.connect(_preview_demand)
+	assign_button.pressed.connect(_assign_selected_hitter)
+	save_play_button.pressed.connect(_save_play)
+	call_play_button.pressed.connect(_call_selected_play)
+	resolve_rally_button.pressed.connect(_resolve_rally)
+	skip_playback_button.pressed.connect(_skip_rally_playback)
+	popup_apply_button.pressed.connect(_apply_popup_assignment)
+	court_mode_option.item_selected.connect(_court_mode_changed)
+	tactical_court.defender_position_changed.connect(_defender_position_changed)
+	save_defense_button.pressed.connect(_save_defensive_plan)
+	timeout_button.pressed.connect(_call_timeout)
+	apply_substitution_button.pressed.connect(_apply_substitution)
+	undo_substitution_button.pressed.connect(_undo_substitution)
+	substitution_confirmation.confirmed.connect(_confirm_substitution)
+	assignment_popup.popup_hide.connect(_assignment_popup_closed)
+	tactical_workspace_popup.popup_hide.connect(_tactical_workspace_hidden)
+	open_tactical_workspace_button.pressed.connect(_open_tactical_workspace)
+	close_tactical_workspace_button.pressed.connect(_close_tactical_workspace)
+	GameManager.playbook_changed.connect(_refresh_saved_plays)
+	GameManager.rotation_changed.connect(_rotation_changed)
+	rotation_option.select(GameManager.selected_rotation - 1)
+	_setup_tactical_workspace()
+	_apply_light_mode(false)
+	_begin_draft()
+	_refresh_rotation()
+	_refresh_saved_plays()
+	_refresh_match_header()
+	_refresh_match_controls()
+	_update_interface_scale()
+
+
+func _update_interface_scale() -> void:
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var width_scale: float = viewport_size.x / 1280.0
+	var height_scale: float = viewport_size.y / 720.0
+	base_theme_scale = clampf(minf(width_scale, height_scale), 1.0, 1.55)
+	if theme != null:
+		theme.default_base_scale = base_theme_scale
+
+
+func _populate_static_options() -> void:
+	rotation_option.clear()
+	for rotation_number in range(1, 7):
+		rotation_option.add_item("Rotation %d" % rotation_number)
+		rotation_option.set_item_metadata(rotation_option.item_count - 1, rotation_number)
+	tempo_option.clear()
+	for tempo in CourtConstants.TEMPOS:
+		tempo_option.add_item("T%d" % tempo)
+		tempo_option.set_item_metadata(tempo_option.item_count - 1, tempo)
+	responsibility_option.clear()
+	popup_responsibility_option.clear()
+	for responsibility in ["Primary", "Secondary", "Option", "Decoy"]:
+		responsibility_option.add_item(responsibility)
+		responsibility_option.set_item_metadata(
+			responsibility_option.item_count - 1, responsibility
+		)
+		popup_responsibility_option.add_item(responsibility)
+		popup_responsibility_option.set_item_metadata(
+			popup_responsibility_option.item_count - 1, responsibility
+		)
+	popup_tempo_option.clear()
+	for tempo in CourtConstants.TEMPOS:
+		popup_tempo_option.add_item("T%d" % tempo)
+		popup_tempo_option.set_item_metadata(popup_tempo_option.item_count - 1, tempo)
+	playback_speed_option.clear()
+	for speed_data in [["0.5×", 0.5], ["1×", 1.0], ["2×", 2.0]]:
+		playback_speed_option.add_item(str(speed_data[0]))
+		playback_speed_option.set_item_metadata(
+			playback_speed_option.item_count - 1, float(speed_data[1])
+		)
+	playback_speed_option.select(1)
+	court_mode_option.clear()
+	court_mode_option.add_item("Offensive Play")
+	court_mode_option.add_item("Defensive Plan")
+	_populate_text_options(block_strategy_option, [
+		"Read Block", "Commit Pin", "Commit Middle",
+	])
+	_populate_text_options(floor_system_option, [
+		"Perimeter", "Rotation Defense", "Middle-Up",
+	])
+	_populate_text_options(serve_target_option, [
+		"Zone 1", "Zone 5", "Short Middle", "Weak Passer",
+	])
+
+
+func _apply_light_mode(light_mode: bool) -> void:
+	light_mode_enabled = light_mode
+	theme = LIGHT_THEME if light_mode else DARK_THEME
+	background.color = Color("e8f0eb") if light_mode else Color("070b13")
+	tactical_court.set_theme_mode(light_mode)
+	match_preview_court.set_theme_mode(light_mode)
+	theme_toggle.text = "Theme: Molten Light" if light_mode else "Theme: Mikasa Dark"
+	_update_interface_scale()
+	var secondary_text := Color("315f4b") if light_mode else Color("b9cce0")
+	court_instructions.add_theme_color_override("font_color", secondary_text)
+	demand_label.add_theme_color_override("font_color", secondary_text)
+	_update_status_color()
+
+
+func _select_rotation(index: int) -> void:
+	var rotation_number := int(rotation_option.get_item_metadata(index))
+	var error := GameManager.select_rotation(rotation_number)
+	if not error.is_empty():
+		_set_status(error, true)
+
+
+func _rotation_changed(_rotation_number: int) -> void:
+	selected_player_id = -1
+	_begin_draft()
+	_refresh_rotation()
+	_refresh_saved_plays()
+
+
+func _begin_draft() -> void:
+	draft_play = OffensivePlay.new()
+	draft_play.rotation_number = GameManager.selected_rotation
+	draft_play.play_name = "Rotation %d Attack" % GameManager.selected_rotation
+	play_name_edit.text = draft_play.play_name
+	selected_hitter_label.text = "Select a hitter marker on the court."
+	demand_label.text = "Demand preview appears after selecting a hitter."
+	assign_button.disabled = true
+
+
+func _refresh_rotation() -> void:
+	var lineup := GameManager.current_lineup()
+	tactical_court.set_lineup(lineup, GameManager.players)
+	match_preview_court.set_lineup(lineup, GameManager.players)
+	_update_court_preview()
+	_refresh_defensive_plan()
+	_refresh_match_controls()
+
+
+func _select_hitter(player_id: int) -> void:
+	selected_player_id = player_id
+	var player := GameManager.player_by_id(player_id)
+	var lineup := GameManager.current_lineup()
+	var slot_number := lineup.slot_for_player(player_id)
+	var eligible := player != null \
+		and player.position_role not in ["Setter", "Libero"]
+	selected_hitter_label.text = "%s · %s · slot %d (%s row)" % [
+		player.display_name if player != null else "Unknown",
+		player.position_role if player != null else "",
+		slot_number,
+		"front" if CourtConstants.is_front_row_slot(slot_number) else "back",
+	]
+	assign_button.disabled = not eligible
+	_refresh_lane_options(slot_number)
+	_load_assignment_controls(draft_play.assignment_for_player(player_id))
+	_preview_demand(0)
+	if not eligible:
+		_set_status("This prototype does not assign Setter or Libero attack lanes.", true)
+
+
+func _refresh_lane_options(slot_number: int) -> void:
+	var previous_lane: String = ""
+	var previous_metadata: Variant = _selected_metadata(lane_option)
+	if previous_metadata != null:
+		previous_lane = str(previous_metadata)
+	lane_option.clear()
+	var available_lanes: Array[String] = CourtConstants.LANES.duplicate()
+	if not CourtConstants.is_front_row_slot(slot_number):
+		available_lanes.clear()
+		available_lanes.append("Pipe")
+	for lane_name in available_lanes:
+		lane_option.add_item(lane_name)
+		lane_option.set_item_metadata(lane_option.item_count - 1, lane_name)
+		if lane_name == previous_lane:
+			lane_option.select(lane_option.item_count - 1)
+
+
+func _load_assignment_controls(assignment: HitterAssignment) -> void:
+	if assignment == null:
+		return
+	_select_option_metadata(lane_option, assignment.lane)
+	_select_option_metadata(tempo_option, assignment.tempo)
+	var responsibility := "Option"
+	if assignment.player_id == draft_play.primary_hitter_id:
+		responsibility = "Primary"
+	elif assignment.player_id == draft_play.secondary_hitter_id:
+		responsibility = "Secondary"
+	elif assignment.is_decoy:
+		responsibility = "Decoy"
+	_select_option_metadata(responsibility_option, responsibility)
+
+
+func _assign_selected_hitter() -> void:
+	if selected_player_id < 0 or lane_option.item_count == 0:
+		return
+	var lineup := GameManager.current_lineup()
+	var assignment := draft_play.assignment_for_player(selected_player_id)
+	if assignment == null:
+		assignment = HitterAssignment.new()
+		assignment.player_id = selected_player_id
+		assignment.start_position = CourtConstants.slot_position(
+			lineup.slot_for_player(selected_player_id)
+		)
+		draft_play.assignments.append(assignment)
+	assignment.lane = str(_selected_metadata(lane_option))
+	assignment.tempo = int(_selected_metadata(tempo_option))
+	var responsibility := str(_selected_metadata(responsibility_option))
+	assignment.is_decoy = responsibility == "Decoy"
+	if draft_play.primary_hitter_id == selected_player_id:
+		draft_play.primary_hitter_id = -1
+	if draft_play.secondary_hitter_id == selected_player_id:
+		draft_play.secondary_hitter_id = -1
+	if responsibility == "Primary":
+		draft_play.primary_hitter_id = selected_player_id
+	elif responsibility == "Secondary":
+		draft_play.secondary_hitter_id = selected_player_id
+	_normalize_priorities()
+	_update_court_preview()
+	_preview_demand(0)
+	_set_status("Assigned %s to %s at T%d." % [
+		GameManager.player_by_id(selected_player_id).display_name,
+		assignment.lane, assignment.tempo,
+	])
+
+
+func _open_assignment_popup(
+	player_id: int,
+	lane_name: String,
+	marker_position: Vector2,
+) -> void:
+	_select_hitter(player_id)
+	if assign_button.disabled:
+		return
+	pending_drag_lane = lane_name
+	var player := GameManager.player_by_id(player_id)
+	popup_assignment_label.text = "%s → %s" % [player.position_code, lane_name]
+	var existing := draft_play.assignment_for_player(player_id)
+	if existing != null:
+		_select_option_metadata(popup_tempo_option, existing.tempo)
+		var existing_responsibility := "Option"
+		if draft_play.primary_hitter_id == player_id:
+			existing_responsibility = "Primary"
+		elif draft_play.secondary_hitter_id == player_id:
+			existing_responsibility = "Secondary"
+		elif existing.is_decoy:
+			existing_responsibility = "Decoy"
+		_select_option_metadata(popup_responsibility_option, existing_responsibility)
+	else:
+		_select_option_metadata(popup_tempo_option, 2)
+		_select_option_metadata(popup_responsibility_option, "Option")
+	var screen_position := tactical_court.get_screen_position() + marker_position + Vector2(18, -34)
+	assignment_popup.position = Vector2i(screen_position)
+	assignment_popup.popup()
+
+
+func _apply_popup_assignment() -> void:
+	if pending_drag_lane.is_empty():
+		return
+	_select_option_metadata(lane_option, pending_drag_lane)
+	_select_option_metadata(tempo_option, _selected_metadata(popup_tempo_option))
+	_select_option_metadata(
+		responsibility_option, _selected_metadata(popup_responsibility_option)
+	)
+	_assign_selected_hitter()
+	assignment_popup.hide()
+	pending_drag_lane = ""
+
+
+func _normalize_priorities() -> void:
+	var next_option_priority := 3
+	for assignment in draft_play.assignments:
+		if assignment.player_id == draft_play.primary_hitter_id:
+			assignment.priority = 1
+			assignment.is_decoy = false
+		elif assignment.player_id == draft_play.secondary_hitter_id:
+			assignment.priority = 2
+			assignment.is_decoy = false
+		else:
+			assignment.priority = next_option_priority
+			next_option_priority += 1
+
+
+func _preview_demand(_index: int = -1) -> void:
+	if selected_player_id < 0 or lane_option.item_count == 0:
+		return
+	var player := GameManager.player_by_id(selected_player_id)
+	if player == null or player.position_role in ["Setter", "Libero"]:
+		return
+	var preview := HitterAssignment.new()
+	preview.player_id = selected_player_id
+	preview.start_position = CourtConstants.slot_position(
+		GameManager.current_lineup().slot_for_player(selected_player_id)
+	)
+	preview.lane = str(_selected_metadata(lane_option))
+	preview.tempo = int(_selected_metadata(tempo_option))
+	var setter := GameManager.player_by_id(GameManager.current_lineup().setter_id)
+	var demand := TacticalDemand.evaluate(player, preview, setter)
+	demand_label.text = (
+		"Technical: %s · Physical: %s\nMental: %s · Synchronization: %s\nPrimary risk: %s"
+		% [demand["technical"], demand["physical"], demand["mental"],
+			demand["synchronization"], demand["risk"]]
+	)
+
+
+func _save_play() -> void:
+	draft_play.play_name = play_name_edit.text.strip_edges()
+	var result := GameManager.save_offensive_play(draft_play)
+	if not result.get("success", false):
+		var errors: Array = result.get("errors", [])
+		_set_status("Cannot save: %s" % " ".join(errors), true)
+		return
+	var saved := result.get("play") as OffensivePlay
+	draft_play = OffensivePlay.from_dict(saved.to_dict())
+	_refresh_saved_plays(saved.id)
+	_update_court_preview()
+	_set_status("Saved offensive play: %s." % saved.play_name)
+
+
+func _refresh_saved_plays(preferred_id: int = -1) -> void:
+	var selected_id := preferred_id
+	if selected_id < 0 and saved_play_option.selected >= 0:
+		selected_id = int(_selected_metadata(saved_play_option))
+	saved_play_option.clear()
+	for play in GameManager.saved_plays:
+		if play.rotation_number != GameManager.selected_rotation:
+			continue
+		saved_play_option.add_item(play.play_name)
+		saved_play_option.set_item_metadata(saved_play_option.item_count - 1, play.id)
+		if play.id == selected_id:
+			saved_play_option.select(saved_play_option.item_count - 1)
+	call_play_button.disabled = saved_play_option.item_count == 0
+	resolve_rally_button.disabled = rally_playback_active \
+		or bool(GameManager.match_state.match_complete)
+	_refresh_called_play_label()
+
+
+func _call_selected_play() -> void:
+	if saved_play_option.selected < 0:
+		return
+	var play_id := int(_selected_metadata(saved_play_option))
+	var error := GameManager.call_play(play_id)
+	if not error.is_empty():
+		_set_status(error, true)
+		return
+	_refresh_called_play_label()
+	resolve_rally_button.disabled = false
+	_set_status("Active play set. It remains active until you choose another.")
+
+
+func _refresh_called_play_label() -> void:
+	var called := GameManager.called_play()
+	called_play_label.text = (
+		"Active play: %s" % called.play_name
+		if called != null else "Active play: Default T3 Outside"
+	)
+	_refresh_match_preview()
+
+
+func _update_court_preview() -> void:
+	if draft_play == null:
+		return
+	tactical_court.set_play_preview(
+		draft_play.assignments,
+		draft_play.primary_hitter_id,
+		draft_play.secondary_hitter_id,
+	)
+	_refresh_match_preview()
+
+
+func _refresh_match_preview() -> void:
+	var active_play := GameManager.called_play()
+	if active_play != null:
+		match_preview_court.set_play_preview(
+			active_play.assignments,
+			active_play.primary_hitter_id,
+			active_play.secondary_hitter_id,
+		)
+	else:
+		var no_assignments: Array[HitterAssignment] = []
+		match_preview_court.set_play_preview(no_assignments, -1, -1)
+	match_preview_court.set_defensive_view(
+		court_mode_option.selected == 1,
+		GameManager.current_defensive_plan(),
+	)
+
+
+func _setup_tactical_workspace() -> void:
+	tactical_court.set_landscape_orientation(true)
+	match_preview_court.set_landscape_orientation(true)
+	workspace.reparent(tactical_workspace_host)
+	workspace.visible = true
+
+
+func _open_tactical_workspace() -> void:
+	if rally_playback_active:
+		auto_rallies_toggle.button_pressed = false
+	var viewport_size := get_viewport_rect().size
+	var popup_rect := Rect2i(
+		24, 20,
+		maxi(roundi(viewport_size.x) - 48, 900),
+		maxi(roundi(viewport_size.y) - 40, 620),
+	)
+	tactical_modal_underlay.visible = true
+	tactical_workspace_popup.popup(popup_rect)
+	_set_status("Tactical playback paused while the full board is open.")
+
+
+func _close_tactical_workspace() -> void:
+	tactical_workspace_popup.hide()
+	tactical_modal_underlay.visible = false
+	_refresh_match_preview()
+	_set_status("Tactical changes applied. Returned to match view.")
+
+
+func _tactical_workspace_hidden() -> void:
+	tactical_modal_underlay.visible = false
+	assignment_popup.hide()
+	pending_drag_lane = ""
+
+
+func _assignment_popup_closed() -> void:
+	pending_drag_lane = ""
+
+
+func _court_mode_changed(index: int) -> void:
+	var defense_enabled := index == 1
+	defense_controls.visible = defense_enabled
+	tactical_court.set_defensive_view(
+		defense_enabled, GameManager.current_defensive_plan()
+	)
+	court_instructions.text = (
+		"Drag defenders anywhere on the home court, then save block, floor and serve intent."
+		if defense_enabled else
+		"Drag a player marker to an attack lane, then finalize tempo and responsibility beside the marker."
+	)
+	_refresh_match_preview()
+
+
+func _refresh_defensive_plan() -> void:
+	var plan: Resource = GameManager.current_defensive_plan()
+	if plan == null:
+		return
+	_select_option_text(block_strategy_option, str(plan.block_strategy))
+	_select_option_text(floor_system_option, str(plan.floor_system))
+	_select_option_text(serve_target_option, str(plan.serve_target))
+	serve_risk_slider.value = float(plan.serve_risk) * 100.0
+	defense_summary_label.text = "%s · %s · serve %s at %d%% risk" % [
+		plan.block_strategy, plan.floor_system, plan.serve_target,
+		roundi(float(plan.serve_risk) * 100.0),
+	]
+	opponent_scouting_label.text = "%s\n%s" % [
+		GameManager.opponent_team.team_name,
+		GameManager.opponent_team.scouting_summary(),
+	]
+	if court_mode_option.selected == 1:
+		tactical_court.set_defensive_view(true, plan)
+
+
+func _defender_position_changed(player_id: int, court_position: Vector2) -> void:
+	GameManager.set_defender_position(player_id, court_position)
+	_refresh_defensive_plan()
+	tactical_court.queue_redraw()
+	match_preview_court.queue_redraw()
+	_set_status("Defensive position updated; save the plan when ready.")
+
+
+func _save_defensive_plan() -> void:
+	GameManager.save_defensive_plan(
+		block_strategy_option.get_item_text(block_strategy_option.selected),
+		floor_system_option.get_item_text(floor_system_option.selected),
+		serve_target_option.get_item_text(serve_target_option.selected),
+		serve_risk_slider.value / 100.0,
+	)
+	_refresh_defensive_plan()
+	_set_status("Defensive plan saved for rotation %d." % GameManager.selected_rotation)
+
+
+func _populate_text_options(option: OptionButton, values: Array[String]) -> void:
+	option.clear()
+	for value in values:
+		option.add_item(value)
+
+
+func _select_option_text(option: OptionButton, value: String) -> void:
+	for item_index in range(option.item_count):
+		if option.get_item_text(item_index) == value:
+			option.select(item_index)
+			return
+
+
+func _resolve_rally() -> void:
+	if rally_playback_active:
+		return
+	var result: Resource = GameManager.resolve_active_rally(rally_seed)
+	rally_seed += 1
+	await _play_rally(result)
+
+
+func _play_rally(result: Resource) -> void:
+	rally_playback_active = true
+	tactical_court.reset_live_positions()
+	match_preview_court.reset_live_positions()
+	skip_rally_playback = false
+	resolve_rally_button.disabled = true
+	skip_playback_button.disabled = false
+	rally_result_title.text = "Rally in progress…"
+	rally_result_explanation.text = ""
+	rally_result_factors.text = ""
+	var playback_speed := float(_selected_metadata(playback_speed_option))
+	var event_duration := 0.72 / maxf(playback_speed, 0.1)
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		if skip_rally_playback:
+			break
+		rally_event_label.text = "%s · %s\n%s" % [
+			event.type_name(), event.headline, event.detail,
+		]
+		var has_movement := tactical_court.has_player_movement(event)
+		var pre_targets: Array[Vector2] = tactical_court.movement_phase_targets(event)
+		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
+		var pre_budget := event_duration * 0.30 if has_movement else 0.0
+		var contact_pause := event_duration * 0.07 if has_movement else 0.0
+		var post_budget := event_duration * 0.18 if has_movement else 0.0
+		var ball_duration := event_duration - pre_budget - contact_pause - post_budget
+		if has_movement:
+			var pre_phase_duration := pre_budget / maxf(float(pre_targets.size()), 1.0)
+			for phase_index in range(pre_targets.size()):
+				var caption := tactical_court.movement_phase_caption_for(
+					event, phase_index, false
+				)
+				rally_event_label.text = "%s · %s\n%s" % [
+					caption, event.headline, event.detail,
+				]
+				tactical_court.animate_player_to(
+					event, pre_targets[phase_index], pre_phase_duration, caption
+				)
+				match_preview_court.animate_player_to(
+					event, pre_targets[phase_index], pre_phase_duration, caption
+				)
+				await _wait_for_playback_phase(pre_phase_duration)
+				tactical_court.finish_event_animation()
+				match_preview_court.finish_event_animation()
+			if not skip_rally_playback:
+				rally_event_label.text = "Contact window · %s\n%s" % [
+					event.headline, event.detail,
+				]
+				await _wait_for_playback_phase(contact_pause)
+		if skip_rally_playback:
+			break
+		tactical_court.animate_event(event, ball_duration)
+		match_preview_court.animate_event(event, ball_duration)
+		await _wait_for_playback_phase(ball_duration)
+		tactical_court.finish_event_animation()
+		match_preview_court.finish_event_animation()
+		if skip_rally_playback:
+			break
+		if has_movement and not post_targets.is_empty():
+			var post_phase_duration := post_budget / float(post_targets.size())
+			for phase_index in range(post_targets.size()):
+				var caption := tactical_court.movement_phase_caption_for(
+					event, phase_index, true
+				)
+				tactical_court.animate_player_to(
+					event, post_targets[phase_index], post_phase_duration, caption
+				)
+				match_preview_court.animate_player_to(
+					event, post_targets[phase_index], post_phase_duration, caption
+				)
+				await _wait_for_playback_phase(post_phase_duration)
+				tactical_court.finish_event_animation()
+				match_preview_court.finish_event_animation()
+	tactical_court.finish_event_animation()
+	match_preview_court.finish_event_animation()
+	_show_rally_result(result)
+	var match_update: Dictionary = GameManager.record_rally(result)
+	_refresh_match_header()
+	_refresh_match_controls()
+	rally_playback_active = false
+	resolve_rally_button.disabled = bool(GameManager.match_state.match_complete)
+	skip_playback_button.disabled = true
+	var key_moment: bool = str(result.terminal_outcome) in [
+		"ace", "blocked", "counter_block",
+	] or bool(match_update.get("set_complete", false))
+	if auto_rallies_toggle.button_pressed \
+			and not (pause_key_moments_toggle.button_pressed and key_moment) \
+			and not resolve_rally_button.disabled:
+		await get_tree().create_timer(0.65).timeout
+		_resolve_rally.call_deferred()
+	elif bool(GameManager.match_state.match_complete):
+		rally_result_title.text = "MATCH COMPLETE · %s" % (
+			"HOME WIN" if GameManager.match_state.home_sets > \
+			GameManager.match_state.opponent_sets else "OPPONENT WIN"
+		)
+
+
+func _wait_for_playback_phase(duration: float) -> void:
+	var elapsed := 0.0
+	while elapsed < duration and not skip_rally_playback:
+		await get_tree().process_frame
+		elapsed += get_process_delta_time()
+
+
+func _skip_rally_playback() -> void:
+	if not rally_playback_active:
+		return
+	skip_rally_playback = true
+	tactical_court.finish_event_animation()
+
+
+func _show_rally_result(result: Resource) -> void:
+	rally_event_label.text = "Rally complete · %d discrete events" % result.events.size()
+	rally_result_title.text = "%s · %s" % [
+		"HOME POINT" if result.home_team_won else "OPPONENT POINT",
+		ExplanationText.headline(result.terminal_outcome),
+	]
+	rally_result_explanation.text = result.explanation
+	dashboard_event_label.text = rally_result_title.text
+	dashboard_explanation_label.text = result.explanation
+	var factor_lines: Array[String] = []
+	for factor in result.key_factors:
+		factor_lines.append("• %s" % factor)
+	factor_lines.append("Reception %d%% · Set %d%% · Attack %d%%" % [
+		roundi(result.reception_quality * 100.0),
+		roundi(result.set_quality * 100.0),
+		roundi(result.attack_quality * 100.0),
+	])
+	rally_result_factors.text = "\n".join(factor_lines)
+	_set_status("Rally resolved from seed %d." % (rally_seed - 1))
+
+
+func _refresh_match_header() -> void:
+	if GameManager.match_state == null:
+		match_score_label.text = "Match not started"
+		return
+	match_score_label.text = GameManager.match_state.score_text()
+
+
+func _refresh_match_controls() -> void:
+	if GameManager.match_state == null:
+		return
+	timeout_button.text = "Timeout (%d left)" % \
+		int(GameManager.match_state.home_timeouts_remaining)
+	timeout_button.disabled = GameManager.match_state.home_timeouts_remaining <= 0 \
+		or GameManager.match_state.match_complete
+	substitute_out_option.clear()
+	var lineup := GameManager.current_lineup()
+	for slot_number in range(1, 7):
+		var player := GameManager.player_by_id(lineup.player_at_slot(slot_number))
+		if player != null:
+			substitute_out_option.add_item("%s · %s" % [
+				player.position_code, player.display_name,
+			])
+			substitute_out_option.set_item_metadata(
+				substitute_out_option.item_count - 1, player.id
+			)
+	substitute_in_option.clear()
+	for player_id in GameManager.bench_player_ids():
+		var player := GameManager.player_by_id(player_id)
+		substitute_in_option.add_item("%s · %s" % [
+			player.position_code, player.display_name,
+		])
+		substitute_in_option.set_item_metadata(
+			substitute_in_option.item_count - 1, player.id
+		)
+	apply_substitution_button.disabled = substitute_in_option.item_count == 0 \
+		or GameManager.match_state.match_complete
+	undo_substitution_button.disabled = GameManager.match_state.substitution_history.is_empty()
+	var fatigue_values: Array[float] = []
+	for slot_number in range(1, 7):
+		var player := GameManager.player_by_id(lineup.player_at_slot(slot_number))
+		if player != null:
+			fatigue_values.append(player.fatigue)
+	var average_fatigue := 0.0
+	for fatigue_value in fatigue_values:
+		average_fatigue += fatigue_value
+	if not fatigue_values.is_empty():
+		average_fatigue /= fatigue_values.size()
+	var next_rotation_number := posmod(GameManager.selected_rotation, 6) + 1
+	var next_lineup := GameManager.rotations[next_rotation_number] as RotationLineup
+	var next_codes: Array[String] = []
+	for slot_number in range(1, 7):
+		var next_player := GameManager.player_by_id(next_lineup.player_at_slot(slot_number))
+		if next_player != null:
+			next_codes.append(next_player.position_code)
+	match_overview_label.text = "Serving: %s · Rotation %d · Subs %d · Fatigue %d%%\nNext rotation: %s" % [
+		"Home" if GameManager.match_state.serving_home else "Opponent",
+		GameManager.selected_rotation,
+		GameManager.match_state.home_substitutions_used,
+		roundi(average_fatigue * 100.0),
+		" · ".join(next_codes),
+	]
+	var history_lines: Array[String] = []
+	var history: Array = GameManager.match_state.rally_history
+	var start_index := maxi(history.size() - 4, 0)
+	for history_index in range(start_index, history.size()):
+		var entry: Dictionary = history[history_index]
+		history_lines.append("%d–%d · %s" % [
+			entry.get("home_score", 0), entry.get("opponent_score", 0),
+			str(entry.get("outcome", "point")).replace("_", " ").capitalize(),
+		])
+	rally_history_label.text = "Recent rallies\n%s" % (
+		"\n".join(history_lines) if not history_lines.is_empty() else "No rallies yet."
+	)
+
+
+func _call_timeout() -> void:
+	var error := GameManager.call_timeout()
+	if not error.is_empty():
+		_set_status(error, true)
+		return
+	_refresh_match_controls()
+	_set_status("Timeout taken. On-court fatigue reduced.")
+
+
+func _apply_substitution() -> void:
+	if substitute_out_option.selected < 0 or substitute_in_option.selected < 0:
+		return
+	pending_substitution_out_id = int(_selected_metadata(substitute_out_option))
+	pending_substitution_in_id = int(_selected_metadata(substitute_in_option))
+	var player_out := GameManager.player_by_id(pending_substitution_out_id)
+	var player_in := GameManager.player_by_id(pending_substitution_in_id)
+	substitution_confirmation.dialog_text = "Replace %s (%s) with %s (%s)?\nRegular substitutions apply across all six rotation sheets." % [
+		player_out.display_name, player_out.position_code,
+		player_in.display_name, player_in.position_code,
+	]
+	substitution_confirmation.popup_centered()
+
+
+func _confirm_substitution() -> void:
+	var error := GameManager.substitute_current_rotation(
+		pending_substitution_out_id, pending_substitution_in_id
+	)
+	if not error.is_empty():
+		_set_status(error, true)
+		return
+	_refresh_rotation()
+	_set_status("Substitution applied to all legal rotation sheets.")
+
+
+func _undo_substitution() -> void:
+	var error := GameManager.undo_last_substitution()
+	if not error.is_empty():
+		_set_status(error, true)
+		return
+	_refresh_rotation()
+	_set_status("Last substitution undone.")
+
+
+func _selected_metadata(option: OptionButton) -> Variant:
+	if option.selected < 0 or option.item_count == 0:
+		return null
+	return option.get_item_metadata(option.selected)
+
+
+func _select_option_metadata(option: OptionButton, value: Variant) -> void:
+	for item_index in range(option.item_count):
+		if option.get_item_metadata(item_index) == value:
+			option.select(item_index)
+			return
+
+
+func _set_status(message: String, is_error: bool = false) -> void:
+	status_label.text = message
+	status_is_error = is_error
+	_update_status_color()
+
+
+func _update_status_color() -> void:
+	if status_is_error:
+		status_label.modulate = Color("a92121") if light_mode_enabled else Color("ff7777")
+	else:
+		status_label.modulate = Color("176b45") if light_mode_enabled else Color("8ee5aa")
