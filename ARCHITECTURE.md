@@ -62,6 +62,10 @@ timing cannot change a point.
 The court presenter maintains temporary live marker positions during playback.
 Those positions are discarded before the next rally and never feed back into
 simulation probability.
+`TacticalCourt.set_lineup()` is also a hard reset boundary: changing rotation
+clears its event, live positions, movement trails, tween targets and captions
+before accepting the new lineup. `main.gd` applies the same reset to both court
+surfaces after scoring and through the manual Reset Positions control.
 For each rally event, the presenter derives normalized pre-contact and
 post-contact movement phases. `main.gd` sequences those phases around the ball
 flight, while `tactical_court.gd` owns interpolation, short trails, destination

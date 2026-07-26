@@ -50,6 +50,9 @@
 - Keep hitter assignment nested inside the tactical workspace so assigning or
   dismissing it does not close the full board.
 - Animate the same rally events on the match preview and full tactical board.
+- Clear transient marker positions, trails and the previous ball event whenever
+  a rally ends or a lineup/rotation is loaded. A fixed Reset Positions button
+  restores both court surfaces without changing saved tactics.
 - Apply changes and return to the Match Center without duplicating tactical or
   simulation state.
 - Switch the coaching board between offense and per-rotation defense.
@@ -107,7 +110,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 83 passing headless foundation checks and UI-binding validation, including a
+- 86 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

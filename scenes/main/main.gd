@@ -24,6 +24,7 @@ const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 @onready var resolve_rally_button: Button = %ResolveRallyButton
 @onready var playback_speed_option: OptionButton = %PlaybackSpeedOption
 @onready var skip_playback_button: Button = %SkipPlaybackButton
+@onready var reset_positions_button: Button = %ResetPositionsButton
 @onready var auto_rallies_toggle: CheckButton = %AutoRalliesToggle
 @onready var pause_key_moments_toggle: CheckButton = %PauseKeyMomentsToggle
 @onready var rally_event_label: Label = %RallyEventLabel
@@ -100,6 +101,7 @@ func _ready() -> void:
 	call_play_button.pressed.connect(_call_selected_play)
 	resolve_rally_button.pressed.connect(_resolve_rally)
 	skip_playback_button.pressed.connect(_skip_rally_playback)
+	reset_positions_button.pressed.connect(_reset_tactical_positions)
 	popup_apply_button.pressed.connect(_apply_popup_assignment)
 	court_mode_option.item_selected.connect(_court_mode_changed)
 	tactical_court.defender_position_changed.connect(_defender_position_changed)
@@ -212,6 +214,10 @@ func _apply_light_mode(light_mode: bool) -> void:
 
 
 func _select_rotation(index: int) -> void:
+	if rally_playback_active:
+		rotation_option.select(GameManager.selected_rotation - 1)
+		_set_status("Finish or skip the active rally before changing rotation.", true)
+		return
 	var rotation_number := int(rotation_option.get_item_metadata(index))
 	var error := GameManager.select_rotation(rotation_number)
 	if not error.is_empty():
@@ -237,6 +243,7 @@ func _begin_draft() -> void:
 
 
 func _refresh_rotation() -> void:
+	_reset_tactical_positions(false)
 	var lineup := GameManager.current_lineup()
 	tactical_court.set_lineup(lineup, GameManager.players)
 	match_preview_court.set_lineup(lineup, GameManager.players)
@@ -706,11 +713,12 @@ func _resolve_rally() -> void:
 
 func _play_rally(result: Resource) -> void:
 	rally_playback_active = true
-	tactical_court.reset_live_positions()
-	match_preview_court.reset_live_positions()
+	_reset_tactical_positions(false)
 	skip_rally_playback = false
 	resolve_rally_button.disabled = true
 	skip_playback_button.disabled = false
+	reset_positions_button.disabled = true
+	rotation_option.disabled = true
 	rally_result_title.text = "Rally in progress…"
 	rally_result_explanation.text = ""
 	rally_result_factors.text = ""
@@ -784,9 +792,12 @@ func _play_rally(result: Resource) -> void:
 	_refresh_match_header()
 	_refresh_match_controls()
 	_refresh_defensive_plan()
+	_reset_tactical_positions(false)
 	rally_playback_active = false
 	resolve_rally_button.disabled = bool(GameManager.match_state.match_complete)
 	skip_playback_button.disabled = true
+	reset_positions_button.disabled = false
+	rotation_option.disabled = false
 	var key_moment: bool = str(result.terminal_outcome) in [
 		"ace", "blocked", "counter_block",
 	] or bool(match_update.get("set_complete", false))
@@ -814,6 +825,16 @@ func _skip_rally_playback() -> void:
 		return
 	skip_rally_playback = true
 	tactical_court.finish_event_animation()
+	match_preview_court.finish_event_animation()
+
+
+func _reset_tactical_positions(show_status: bool = true) -> void:
+	if rally_playback_active and show_status:
+		return
+	tactical_court.clear_rally_playback()
+	match_preview_court.clear_rally_playback()
+	if show_status:
+		_set_status("Tactical markers returned to saved rotation positions.")
 
 
 func _show_rally_result(result: Resource) -> void:

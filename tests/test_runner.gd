@@ -20,6 +20,7 @@ func _initialize() -> void:
 	_test_coverage_arrival_and_reception_ownership()
 	_test_block_closing_and_touch_distribution()
 	_test_physical_body_attributes()
+	_test_tactical_playback_reset_on_lineup_change()
 	_test_default_offense_without_saved_play()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
@@ -425,6 +426,21 @@ func _test_physical_body_attributes() -> void:
 		),
 		"balance and stability reduce edge-and-pace reception penalties",
 	)
+
+
+func _test_tactical_playback_reset_on_lineup_change() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var court := TacticalCourt.new()
+	court.set_lineup(manager.rotations[1], manager.players)
+	court.live_player_positions[1] = Vector2(0.12, 0.62)
+	court.movement_trails[1] = [Vector2(0.12, 0.62), Vector2(0.40, 0.70)]
+	court.playback_event = RALLY_EVENT_SCRIPT.new()
+	court.set_lineup(manager.rotations[2], manager.players)
+	_check(court.live_player_positions.is_empty(), "lineup changes clear live marker positions")
+	_check(court.movement_trails.is_empty(), "lineup changes clear rally movement trails")
+	_check(court.playback_event == null, "lineup changes clear the previous rally event")
+	court.free()
 
 
 func _test_default_offense_without_saved_play() -> void:

@@ -529,6 +529,12 @@ tooltip_text = "Skip the remaining animation and show the explanation."
 disabled = true
 text = "Skip"
 
+[node name="ResetPositionsButton" type="Button" parent="Margin/Content/QuickRallyBar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Clear temporary rally movement and return both courts to the saved rotation and defensive positions."
+text = "Reset Positions"
+
 [node name="AutoFlowControls" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=22515860]
 layout_mode = 2
 theme_override_constants/separation = 8

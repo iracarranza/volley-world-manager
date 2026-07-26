@@ -70,6 +70,7 @@ func set_theme_mode(light_mode: bool) -> void:
 
 
 func set_lineup(p_lineup: RotationLineup, players: Array[VolleyballPlayer]) -> void:
+	clear_rally_playback()
 	lineup = p_lineup
 	players_by_id.clear()
 	for player in players:
