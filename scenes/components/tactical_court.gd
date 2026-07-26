@@ -6,6 +6,7 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const RotationLegalityModel := preload("res://scripts/simulation/rotation_legality.gd")
 
 signal player_selected(player_id: int)
+signal player_instruction_requested(player_id: int, marker_screen_position: Vector2)
 signal assignment_dragged(player_id: int, lane_name: String, marker_position: Vector2)
 signal defender_position_changed(player_id: int, court_position: Vector2)
 signal coverage_zone_position_changed(
@@ -51,6 +52,8 @@ var playback_progress: float = 1.0
 var playback_tween: Tween
 var dragging_player_id: int = -1
 var drag_position: Vector2 = Vector2.ZERO
+var drag_start_position: Vector2 = Vector2.ZERO
+var dragging_release_target: bool = false
 var defensive_mode: bool = false
 var defensive_plan: Resource
 var defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
@@ -478,7 +481,7 @@ func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionar
 func _gui_input(event: InputEvent) -> void:
 	if lineup == null:
 		return
-	if event is InputEventMouseMotion and dragging_player_id >= 0:
+	if event is InputEventMouseMotion and (dragging_player_id >= 0 or dragging_release_target):
 		drag_position = (event as InputEventMouseMotion).position
 		queue_redraw()
 		accept_event()
@@ -489,30 +492,57 @@ func _gui_input(event: InputEvent) -> void:
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if mouse_event.pressed:
+		if _release_target_at_local_position(mouse_event.position):
+			dragging_release_target = true
+			drag_start_position = mouse_event.position
+			drag_position = mouse_event.position
+			accept_event()
+			return
 		dragging_player_id = _player_at_local_position(mouse_event.position)
 		if dragging_player_id >= 0:
+			drag_start_position = mouse_event.position
 			drag_position = mouse_event.position
 			select_player(dragging_player_id)
 			player_selected.emit(dragging_player_id)
 			accept_event()
 		return
+	if dragging_release_target:
+		dragging_release_target = false
+		var release_position := _local_to_court(mouse_event.position)
+		setter_release_position_changed.emit(lineup.active_setter_id(), release_position)
+		queue_redraw()
+		accept_event()
+		return
 	if dragging_player_id >= 0:
 		var released_player_id := dragging_player_id
+		var was_dragged := drag_start_position.distance_to(mouse_event.position) >= 7.0
 		dragging_player_id = -1
 		queue_redraw()
-		if defensive_mode:
+		if defensive_mode and not was_dragged:
+			var marker_local := _court_to_local(_player_court_position(
+				released_player_id, lineup.slot_for_player(released_player_id)
+			))
+			player_instruction_requested.emit(
+				released_player_id, get_screen_position() + marker_local
+			)
+		elif defensive_mode:
 			var court_position := _local_to_court(mouse_event.position)
-			if defensive_phase == 3 and released_player_id == lineup.active_setter_id():
-				setter_release_position_changed.emit(released_player_id, court_position)
-			elif court_position.y >= CourtConstants.NET_Y:
+			if court_position.y >= CourtConstants.NET_Y:
 				coverage_zone_position_changed.emit(
 					released_player_id, defensive_zone_type, court_position
 				)
-		else:
+		elif was_dragged:
 			var lane_name := _nearest_lane(mouse_event.position, released_player_id)
 			if not lane_name.is_empty():
 				assignment_dragged.emit(released_player_id, lane_name, mouse_event.position)
 		accept_event()
+
+
+func _release_target_at_local_position(local_position: Vector2) -> bool:
+	if not defensive_mode or defensive_phase != 3 or defensive_plan == null or lineup == null:
+		return false
+	var target: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id())
+	return local_position.distance_to(_court_to_local(target)) <= 22.0
 
 
 func _player_at_local_position(local_position: Vector2) -> int:
@@ -713,16 +743,32 @@ func _draw_setter_release_path() -> void:
 	if setter_slot < 0:
 		return
 	var start := _player_court_position(setter_id, setter_slot)
-	var target: Vector2 = defensive_plan.setter_release_target(setter_id)
-	draw_dashed_line(
-		_court_to_local(start), _court_to_local(target),
-		palette["secondary_path"], 3.0, 9.0,
-	)
-	draw_circle(_court_to_local(target), 12.0, palette["secondary_path"], false, 3.0)
+	var target: Vector2 = _local_to_court(drag_position) if dragging_release_target \
+		else defensive_plan.setter_release_target(setter_id)
+	var start_local := _court_to_local(start)
+	var target_local := _court_to_local(target)
+	_draw_directional_line(start_local, target_local, palette["secondary_path"])
+	draw_circle(target_local, 17.0, palette["outside"])
+	draw_circle(target_local, 17.0, palette["secondary_path"], false, 3.0)
 	draw_string(
-		ThemeDB.fallback_font, _court_to_local(target) + Vector2(15, -8),
-		"SETTER RELEASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, palette["text"],
+		ThemeDB.fallback_font, target_local + Vector2(-11, 5),
+		"S→", HORIZONTAL_ALIGNMENT_CENTER, 22, 12, palette["text"],
 	)
+
+
+func _draw_directional_line(start: Vector2, target: Vector2, color: Color) -> void:
+	draw_line(start, target, color, 3.0, true)
+	var direction := (target - start).normalized()
+	if direction.length_squared() <= 0.0:
+		return
+	var midpoint := start.lerp(target, 0.52)
+	var perpendicular := Vector2(-direction.y, direction.x)
+	var arrow := PackedVector2Array([
+		midpoint + direction * 10.0,
+		midpoint - direction * 7.0 + perpendicular * 6.0,
+		midpoint - direction * 7.0 - perpendicular * 6.0,
+	])
+	draw_colored_polygon(arrow, color)
 
 
 func _draw_assignment_drag() -> void:

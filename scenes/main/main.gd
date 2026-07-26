@@ -89,7 +89,7 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @onready var substitution_confirmation: ConfirmationDialog = %SubstitutionConfirmation
 @onready var undo_substitution_button: Button = %UndoSubstitutionButton
 @onready var tactical_modal_underlay: ColorRect = %TacticalModalUnderlay
-@onready var defender_popup: PopupPanel = %DefenderPopup
+@onready var defender_popup: PanelContainer = %DefenderPopup
 @onready var defender_popup_content: VBoxContainer = %DefenderPopupContent
 @onready var defender_popup_title: Label = %DefenderPopupTitle
 @onready var block_participation_check: CheckButton = %BlockParticipationCheck
@@ -118,6 +118,7 @@ func _ready() -> void:
 	theme_toggle.toggled.connect(_apply_light_mode)
 	rotation_option.item_selected.connect(_select_rotation)
 	tactical_court.player_selected.connect(_select_hitter)
+	tactical_court.player_instruction_requested.connect(_open_player_instructions)
 	tactical_court.assignment_dragged.connect(_open_assignment_popup)
 	lane_option.item_selected.connect(_preview_demand)
 	tempo_option.item_selected.connect(_preview_demand)
@@ -347,7 +348,6 @@ func _select_hitter(player_id: int) -> void:
 	_refresh_physical_debug(player)
 	if court_mode_option.selected == 1:
 		_load_defender_assignment(player_id)
-		_open_defender_popup()
 		return
 	var eligible := player != null and player.position_role != "Libero" \
 		and lineup.is_attack_eligible(player_id)
@@ -391,10 +391,11 @@ func _load_defender_assignment(player_id: int) -> void:
 		selected_defender_label.text = "No defensive assignment is available."
 		apply_defender_assignment_button.disabled = true
 		return
-	selected_defender_label.text = "%s · %s responsibilities" % [
-		player.position_code, player.display_name,
-	]
-	defender_popup_title.text = "%s · %s" % [player.position_code, player.display_name]
+	selected_defender_label.visible = false
+	selected_zone_label.visible = false
+	defender_popup_title.text = [
+		"Serve Receive", "Blocking", "Floor Defense", "Attack Coverage & Transition",
+	][defense_section_option.selected]
 	var slot_number := GameManager.current_lineup().slot_for_player(player_id)
 	var front_row := CourtConstants.is_front_row_slot(slot_number)
 	var blocking_phase := defense_section_option.selected == 1
@@ -716,15 +717,21 @@ func _setup_defender_popup() -> void:
 		control.reparent(defender_popup_content)
 
 
-func _open_defender_popup() -> void:
-	var mouse := get_viewport().get_mouse_position()
-	var viewport_size := get_viewport_rect().size
-	var popup_size := Vector2(350, 570)
-	var popup_position := Vector2(
-		clampf(mouse.x + 24.0, 12.0, viewport_size.x - popup_size.x - 12.0),
-		clampf(mouse.y - 80.0, 12.0, viewport_size.y - popup_size.y - 12.0),
-	)
-	defender_popup.popup(Rect2i(Vector2i(popup_position), Vector2i(popup_size)))
+func _open_player_instructions(player_id: int, marker_screen_position: Vector2) -> void:
+	selected_player_id = player_id
+	_load_defender_assignment(player_id)
+	var phase := defense_section_option.selected
+	var popup_size := Vector2(270.0, [245.0, 210.0, 315.0, 330.0][phase])
+	var local_marker := marker_screen_position - Vector2(tactical_workspace_popup.position)
+	var workspace_size := Vector2(tactical_workspace_popup.size)
+	var popup_position := local_marker + Vector2(28.0, -popup_size.y * 0.52)
+	if popup_position.x + popup_size.x > workspace_size.x - 12.0:
+		popup_position.x = local_marker.x - popup_size.x - 28.0
+	popup_position.x = clampf(popup_position.x, 12.0, workspace_size.x - popup_size.x - 12.0)
+	popup_position.y = clampf(popup_position.y, 54.0, workspace_size.y - popup_size.y - 12.0)
+	defender_popup.position = Vector2i(popup_position)
+	defender_popup.size = Vector2i(popup_size)
+	defender_popup.show()
 
 
 func _open_tactical_workspace() -> void:
@@ -862,6 +869,7 @@ func _defensive_zone_type_changed(index: int) -> void:
 
 
 func _defense_section_changed(index: int) -> void:
+	defender_popup.hide()
 	selected_defensive_zone_type = (
 		DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 		if index == 0 else DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
@@ -899,8 +907,8 @@ func _update_defense_section_visibility(index: int) -> void:
 	defensive_depth_option.visible = floor_defense
 	short_ball_posture_option.visible = floor_defense
 	floor_section_option.visible = floor_defense
-	selected_defender_label.visible = blocking or floor_duties or transition
-	base_responsibility_option.visible = floor_duties
+	selected_defender_label.visible = false
+	base_responsibility_option.visible = false
 	seam_responsibility_option.visible = blocking
 	short_ball_responsibility_option.visible = floor_duties
 	short_ball_priority_option.visible = floor_duties
@@ -911,7 +919,7 @@ func _update_defense_section_visibility(index: int) -> void:
 	emergency_pursuit_check.visible = floor_duties
 	apply_defender_assignment_button.visible = blocking or floor_duties or transition
 	zone_formation_summary_label.visible = serve_receive or floor_positioning
-	selected_zone_label.visible = serve_receive or floor_positioning
+	selected_zone_label.visible = false
 	zone_radius_value_label.visible = serve_receive or floor_positioning
 	zone_radius_slider.visible = serve_receive or floor_positioning
 	zone_priority_option.visible = serve_receive or floor_positioning

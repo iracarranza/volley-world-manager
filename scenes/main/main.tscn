@@ -84,16 +84,17 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Finalize Assignment"
 
-[node name="DefenderPopup" type="PopupPanel" parent="TacticalWorkspacePopup"]
+[node name="DefenderPopup" type="PanelContainer" parent="TacticalWorkspacePopup"]
 unique_name_in_owner = true
-initial_position = 1
-size = Vector2i(350, 570)
+visible = false
+offset_left = 360.0
+offset_top = 100.0
+offset_right = 630.0
+offset_bottom = 400.0
+mouse_filter = 0
 
 [node name="Margin" type="MarginContainer" parent="TacticalWorkspacePopup/DefenderPopup"]
-offset_left = 4.0
-offset_top = 4.0
-offset_right = 346.0
-offset_bottom = 566.0
+layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12

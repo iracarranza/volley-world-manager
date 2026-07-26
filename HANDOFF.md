@@ -66,11 +66,17 @@
   retaining team presets and phase selection in the side panel. Back-row
   players expose no blocking instructions; front-row floor participation is an
   editable coverage toggle.
+- Distinguish a marker click from a drag before opening instructions. The small
+  phase-specific panel attaches diagonally beside the selected marker without
+  becoming a modal layer or interrupting subsequent player movement.
 - Apply Perimeter, Middle-Up and Rotation Defense as functional position/zone
   presets, then customize the resulting plan as a modified preset.
 - Edit Attack Coverage and Transition separately from Floor Defense, including
   block-rebound priority, emergency setting and a draggable active-setter
   release path.
+- Drag an independent `S→` release destination rather than the setter marker.
+  A solid setter-to-target line and midpoint arrow keep the direction visible
+  while the setter and preferred setting destination remain separate state.
 - Choose a 5-1 or 6-2 setting system. A 6-2 derives its active setter from the
   designated back-row player and keeps the front-row setter attack-eligible.
 - Grade passes against the intended release region and grade sets using actual
