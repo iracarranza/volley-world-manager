@@ -4,6 +4,9 @@ extends Control
 signal new_career_requested
 signal career_load_requested(save_id: String)
 
+const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+
+@onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var continue_button: Button = %ContinueButton
 @onready var save_list: ItemList = %SaveList
 @onready var save_detail: Label = %SaveDetail

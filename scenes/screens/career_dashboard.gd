@@ -5,7 +5,9 @@ signal play_match_requested
 signal title_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
+const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 
+@onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var organization_label: Label = %OrganizationLabel
 @onready var date_label: Label = %DateLabel
 @onready var section_title: Label = %SectionTitle

@@ -6,7 +6,9 @@ const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 
+@onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var background: ColorRect = %Background
 @onready var theme_toggle: CheckButton = %ThemeToggle
 @onready var rotation_option: OptionButton = %RotationOption

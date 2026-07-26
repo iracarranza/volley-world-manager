@@ -4,6 +4,9 @@ extends Control
 signal career_created
 signal back_requested
 
+const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+
+@onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var career_name_edit: LineEdit = %CareerNameEdit
 @onready var organization_name_edit: LineEdit = %OrganizationNameEdit
 @onready var region_option: OptionButton = %RegionOption

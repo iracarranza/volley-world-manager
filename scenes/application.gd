@@ -1,5 +1,8 @@
 extends Control
 
+const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+
+@onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var title_screen: VolleyballTitleScreen = %TitleScreen
 @onready var new_career_screen: VolleyballNewCareerScreen = %NewCareerScreen
 @onready var career_dashboard: VolleyballCareerDashboard = %CareerDashboard
