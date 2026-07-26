@@ -56,12 +56,20 @@
 - Apply changes and return to the Match Center without duplicating tactical or
   simulation state.
 - Switch the coaching board between offense and per-rotation defense.
+- Open Serve Receive, Blocking or Floor Defense as separate defensive-plan
+  submenus. Unrelated controls remain hidden so the editor does not require the
+  player to scroll through every defensive phase.
 - Switch between floor-defense and serve-reception views, drag each player's
   independent zone center, and save block strategy, floor system, serve target
   and serve risk.
 - Select any defender and explicitly assign base structure, read cue, seam,
   short-ball, emergency and attack-coverage responsibilities. Assignments are
   saved per rotation and contribute to defensive contact quality.
+- Assign primary or secondary emergency setters. When the regular setter makes
+  first contact, the best available assigned player owns contact two; the rally
+  event and playback explanation identify the emergency setter.
+- Animate home defense through base position, responsibility-informed read,
+  contact and recovery states before the ball advances to the next event.
 - See each player's compact structural responsibility directly on the defensive
   court.
 - Use separate saved serve-reception and floor-defense zones with an editable
@@ -114,7 +122,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 92 passing headless foundation checks and UI-binding validation, including a
+- 94 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

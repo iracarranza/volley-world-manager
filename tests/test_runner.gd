@@ -18,6 +18,7 @@ func _initialize() -> void:
 	_test_match_scoring_and_rotation()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
+	_test_second_contact_ownership()
 	_test_block_closing_and_touch_distribution()
 	_test_physical_body_attributes()
 	_test_tactical_playback_reset_on_lineup_change()
@@ -233,6 +234,7 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 		"defensive responsibility includes short-ball coverage",
 	)
 	assignment.attack_coverage_responsibility = "Take second contact"
+	assignment.second_contact_responsibility = "Primary emergency setter"
 	manager.current_defensive_plan().set_assignment(6, assignment)
 	manager.set_coverage_zone(
 		6, DefensiveZone.ZoneType.SERVE_RECEIVE, 2.4, 3, false
@@ -309,6 +311,12 @@ func _test_defense_opponent_and_match_day_controls() -> void:
 		).attack_coverage_responsibility) == "Take second contact",
 		"attack-coverage responsibility survives serialization",
 	)
+	_check(
+		str(restored.current_defensive_plan().assignment_for(
+			6
+		).second_contact_responsibility) == "Primary emergency setter",
+		"second-contact responsibility survives serialization",
+	)
 
 
 func _test_coverage_arrival_and_reception_ownership() -> void:
@@ -371,6 +379,48 @@ func _test_coverage_arrival_and_reception_ownership() -> void:
 		seam_players, seam_zones, Vector2(0.25, 0.84), 1.0, "reception"
 	)
 	_check(not bool(clear_claim.seam_conflict), "explicit claim priority resolves a reception seam")
+
+
+func _test_second_contact_ownership() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var lineup := manager.current_lineup()
+	var plan: Resource = manager.current_defensive_plan()
+	var setter_id := int(lineup.setter_id)
+	var emergency_setter_id := -1
+	for slot_number in range(1, 7):
+		var player_id := int(lineup.player_at_slot(slot_number))
+		var zone: Resource = plan.zone_for(
+			player_id, DefensiveZone.ZoneType.SERVE_RECEIVE
+		)
+		zone.enabled = player_id == setter_id
+		if player_id == setter_id:
+			zone.center = Vector2(0.50, 0.82)
+			zone.radius_meters = 6.0
+			zone.priority = 3
+		else:
+			var assignment: Resource = plan.assignment_for(player_id)
+			assignment.second_contact_responsibility = "No second-contact duty"
+			if emergency_setter_id < 0:
+				emergency_setter_id = player_id
+				assignment.second_contact_responsibility = "Primary emergency setter"
+			plan.set_assignment(player_id, assignment)
+	var emergency_assignment_observed := false
+	for seed_value in range(8100, 8300):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
+					and bool(event.metadata.get("emergency_setter", false)):
+				emergency_assignment_observed = event.actor_id == emergency_setter_id
+				break
+		if emergency_assignment_observed:
+			break
+	_check(
+		emergency_assignment_observed,
+		"the designated emergency setter takes second contact after the setter receives",
+	)
 
 
 func _test_block_closing_and_touch_distribution() -> void:

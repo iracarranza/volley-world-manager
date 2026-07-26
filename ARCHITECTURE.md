@@ -15,7 +15,7 @@
 - `scripts/models/defensive_plan.gd`: per-rotation block intent, floor system,
   serve intent, normalized defender positions and player responsibility map.
 - `scripts/models/defensive_assignment.gd`: one player's base, read, seam,
-  short-ball, emergency and attack-coverage responsibilities.
+  short-ball, emergency, attack-coverage and second-contact responsibilities.
 - `scripts/models/defensive_zone.gd`: a player's normalized zone center,
   metre-based responsibility radius, priority, activity and zone type.
 - `scripts/simulation/coverage_calculator.gd`: pure court-distance, reaction,
@@ -156,3 +156,17 @@ how much of that ceiling is available within the current contact window.
 `reception_stability` reduces high-pace penalties. The reusable penalty lives
 in `CoverageCalculator` so serve reception and floor defense use the same
 interpretation.
+
+## Defensive movement and second contact
+
+The presenter treats saved court positions as the base state. Reception,
+blocking and floor-defense contacts animate through a responsibility-informed
+read position, the eventual contact position and a recovery step. Read cues
+change the first movement without moving outcome authority out of the seeded
+simulator.
+
+The normal setter owns contact two unless that player made first contact. In
+that case, `RallySimulator` ranks the other five players using the saved primary
+or secondary emergency-setter responsibility plus set accuracy, ball control
+and decision making. The resulting set event identifies the first-contact
+player and whether emergency ownership was activated.

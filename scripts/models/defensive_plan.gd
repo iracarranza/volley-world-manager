@@ -135,6 +135,9 @@ func _default_assignment(player_id: int, slot_number: int) -> Resource:
 		assignment.short_ball_responsibility = "Cover tip behind block"
 		assignment.emergency_responsibility = "Release to emergency set"
 		assignment.attack_coverage_responsibility = "Cover nearest attacker"
+		assignment.second_contact_responsibility = (
+			"Primary emergency setter" if slot_number == 2 else "No second-contact duty"
+		)
 	else:
 		assignment.base_responsibility = "Perimeter defense"
 		assignment.read_responsibility = "Read hitter shoulder"
@@ -142,6 +145,9 @@ func _default_assignment(player_id: int, slot_number: int) -> Resource:
 		assignment.short_ball_responsibility = "Step into tip coverage"
 		assignment.emergency_responsibility = "Pursue deep deflection"
 		assignment.attack_coverage_responsibility = "Cover assigned hitter"
+		assignment.second_contact_responsibility = (
+			"Secondary emergency setter" if slot_number == 1 else "No second-contact duty"
+		)
 	return assignment
 
 

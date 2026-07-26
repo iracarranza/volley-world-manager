@@ -105,6 +105,10 @@ func resolve(
 		return _finish(result, "ace", false, receiver.id, {
 			"server": server_name,
 		})
+	setter = _second_contact_setter(
+		players, lineup, defensive_plan, receiver.id
+	)
+	var emergency_setter := setter != null and setter.id != lineup.setter_id
 
 	var follow_threshold := 0.22 + _rating(setter, "decision_making") * 0.35 \
 		+ _rating(setter, "tactical_discipline") * 0.18
@@ -127,10 +131,13 @@ func resolve(
 	))
 	_add_event(result, RallyEventModel.EventType.SET_DECISION, setter.id, setter.display_name,
 		Vector2(0.50, 0.67), Vector2(0.50, 0.60), true,
-		result.reception_quality, "Setter decision",
+		result.reception_quality,
+		"Emergency setter decision" if emergency_setter else "Setter decision",
 		"Stays with %s." % result.active_play_name if result.play_was_followed \
 		else ("Uses the default T3 ball to the nearest outside pin." \
-		if active_play == null else "Moves to the safest available option."))
+		if active_play == null else "Moves to the safest available option."),
+		{"side": "home", "emergency_setter": emergency_setter,
+			"first_contact_id": receiver.id})
 
 	var tempo_demand := float(3 - assignment.tempo) * 0.055
 	var set_base: float = _rating(setter, "set_accuracy") * 0.52 \
@@ -142,10 +149,12 @@ func resolve(
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		Vector2(0.50, 0.67), set_target, result.set_quality >= 0.24,
 		result.set_quality, "Set to %s" % assignment.lane,
-		"T%d set for %s · %d%% accuracy." % [
+		("T%d set for %s · %d%% accuracy." % [
 			assignment.tempo, hitter.display_name,
 			roundi(float(result.set_quality) * 100.0),
-		])
+		]) + (" Emergency second-contact assignment activated." if emergency_setter else ""),
+		{"side": "home", "emergency_setter": emergency_setter,
+			"first_contact_id": receiver.id})
 	if assignment.tempo <= 1:
 		result.key_factors.append(ExplanationText.factor("fast_tempo"))
 
@@ -503,7 +512,10 @@ func _resolve_home_continuation(
 	defensive_plan: Resource,
 	exchange_number: int,
 ) -> Resource:
-	var setter := _player_by_id(players, lineup.setter_id)
+	var setter := _second_contact_setter(
+		players, lineup, defensive_plan, defender.id
+	)
+	var emergency_setter := setter != null and setter.id != lineup.setter_id
 	var hitter := _fallback_hitter(players, lineup)
 	var assignment := _fallback_assignment(hitter, lineup)
 	var exchange_penalty := float(exchange_number) * 0.04
@@ -516,10 +528,12 @@ func _resolve_home_continuation(
 	var set_target := CourtConstants.lane_target(assignment.lane)
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		dig_position, set_target, true, set_quality,
-		"Emergency T3 outside set · exchange %d" % exchange_number,
+		("Emergency second-contact set" if emergency_setter else "Transition set") \
+		+ " · exchange %d" % exchange_number,
 		"Contact 2 of 3 after %s's dig · %d%% set quality." % [
 			defender.display_name, roundi(set_quality * 100.0),
-		])
+		], {"side": "home", "emergency_setter": emergency_setter,
+			"first_contact_id": defender.id})
 	var attack_quality := clampf(
 		_rating(hitter, "attack_accuracy") * 0.42
 		+ _power_rating(hitter, "attack_power") * 0.26
@@ -579,6 +593,45 @@ func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vecto
 		clampf(set_target.x + rng.randf_range(-spread, spread), 0.08, 0.92),
 		rng.randf_range(0.54, 0.70),
 	)
+
+
+func _second_contact_setter(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	first_contact_player_id: int,
+) -> VolleyballPlayer:
+	var regular_setter := _player_by_id(players, lineup.setter_id)
+	if regular_setter != null and regular_setter.id != first_contact_player_id:
+		return regular_setter
+	var best: VolleyballPlayer
+	var best_score := -1000.0
+	for slot_number in range(1, 7):
+		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if candidate == null or candidate.id == first_contact_player_id:
+			continue
+		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
+			if defensive_plan != null else null
+		var responsibility := str(assignment.second_contact_responsibility) \
+			if assignment != null else "No second-contact duty"
+		var responsibility_bonus := 0.0
+		match responsibility:
+			"Primary emergency setter":
+				responsibility_bonus = 0.42
+			"Secondary emergency setter":
+				responsibility_bonus = 0.24
+			"Stay available to attack":
+				responsibility_bonus = -0.10
+			"No second-contact duty":
+				responsibility_bonus = -0.22
+		var score := _rating(candidate, "set_accuracy") * 0.44 \
+			+ _rating(candidate, "ball_control") * 0.28 \
+			+ _rating(candidate, "decision_making") * 0.16 \
+			+ responsibility_bonus
+		if score > best_score:
+			best = candidate
+			best_score = score
+	return best
 
 
 func _home_block_deflection_target(

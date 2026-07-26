@@ -180,10 +180,14 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 				targets.append(current.lerp(action_target, 0.42))
 				targets.append(action_target)
 			RallyEventModel.EventType.BLOCK:
-				targets.append(current.lerp(action_target, 0.24))
+				targets.append(_defensive_read_position(
+					player_id, current, action_target, true
+				))
 				targets.append(action_target)
 			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-				targets.append(current.lerp(action_target, 0.18))
+				targets.append(_defensive_read_position(
+					player_id, current, action_target, false
+				))
 				targets.append(action_target)
 			RallyEventModel.EventType.SET:
 				targets.append(current.lerp(action_target, 0.35))
@@ -200,6 +204,32 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.SET:
 				targets.append(action_target.lerp(base_target, 0.16))
 	return targets
+
+
+func _defensive_read_position(
+	player_id: int,
+	base_position: Vector2,
+	action_target: Vector2,
+	blocking: bool,
+) -> Vector2:
+	var read_weight := 0.18
+	var assignment: Resource = defensive_plan.assignment_for(player_id) \
+		if defensive_plan != null else null
+	if assignment != null:
+		var cue := str(assignment.read_responsibility)
+		if "setter" in cue.to_lower():
+			read_weight += 0.05
+		elif "shoulder" in cue.to_lower() or "hands" in cue.to_lower():
+			read_weight += 0.09
+	var read_position := base_position.lerp(action_target, read_weight)
+	if blocking:
+		read_position.y = lerpf(base_position.y, 0.54, 0.42)
+	else:
+		read_position.y = clampf(read_position.y, 0.56, 0.94)
+	return Vector2(
+		clampf(read_position.x, 0.06, 0.94),
+		clampf(read_position.y, 0.53, 0.96),
+	)
 
 
 func movement_phase_caption_for(
