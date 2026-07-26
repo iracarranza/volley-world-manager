@@ -1020,7 +1020,27 @@ func _test_tactical_playback_reset_on_lineup_change() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	var court := TacticalCourt.new()
+	get_root().add_child(court)
 	court.set_lineup(manager.rotations[1], manager.players)
+	court.set_coverage_zones_visible(false)
+	_check(not court.coverage_zones_visible,
+		"match playback can suppress editable coverage-zone overlays")
+	var attack_event := RALLY_EVENT_SCRIPT.new()
+	attack_event.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	attack_event.actor_id = 2
+	attack_event.start_position = Vector2(0.2, 0.65)
+	attack_event.end_position = Vector2(0.2, 0.48)
+	var block_event := RALLY_EVENT_SCRIPT.new()
+	block_event.event_type = RALLY_EVENT_SCRIPT.EventType.BLOCK
+	block_event.actor_id = 3
+	block_event.start_position = Vector2(0.2, 0.52)
+	block_event.end_position = Vector2(0.2, 0.50)
+	court.animate_spatial_transition(attack_event, block_event, 0.01)
+	_check(court.contact_overlay_event == block_event,
+		"attack playback exposes block coverage during the same contact window")
+	court.clear_rally_playback()
+	_check(court.contact_overlay_event == null,
+		"resetting rally playback clears the simultaneous block overlay")
 	court.live_player_positions[1] = Vector2(0.12, 0.62)
 	court.movement_trails[1] = [Vector2(0.12, 0.62), Vector2(0.40, 0.70)]
 	court.playback_event = RALLY_EVENT_SCRIPT.new()

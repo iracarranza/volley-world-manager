@@ -253,7 +253,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 180 passing headless foundation checks and UI-binding validation, including a
+- 183 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

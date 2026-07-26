@@ -1234,6 +1234,8 @@ func _replay_last_rally() -> void:
 func _play_rally(result: Resource, record_result: bool) -> void:
 	rally_playback_active = true
 	_reset_tactical_positions(false)
+	tactical_court.set_coverage_zones_visible(false)
+	match_preview_court.set_coverage_zones_visible(false)
 	skip_rally_playback = false
 	resolve_rally_button.disabled = true
 	replay_rally_button.disabled = true
@@ -1350,6 +1352,8 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 		_refresh_match_controls()
 		_refresh_defensive_plan()
 	_reset_tactical_positions(false)
+	tactical_court.set_coverage_zones_visible(true)
+	match_preview_court.set_coverage_zones_visible(true)
 	rally_playback_active = false
 	resolve_rally_button.disabled = bool(GameManager.match_state.match_complete)
 	replay_rally_button.disabled = last_rally_result == null

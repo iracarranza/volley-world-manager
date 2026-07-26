@@ -383,6 +383,7 @@ text = "Timeout (2 left)"
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 10
+clip_contents = true
 
 [node name="MatchPreviewPanel" type="PanelContainer" parent="Margin/Content/MatchDashboard" unique_id=1681609741]
 custom_minimum_size = Vector2(720, 0)
@@ -434,6 +435,9 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "Ready for the next rally."
 autowrap_mode = 2
+max_lines_visible = 4
+text_overrun_behavior = 3
+clip_text = true
 
 [node name="DashboardExplanationLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1704552373]
 unique_name_in_owner = true
@@ -441,12 +445,18 @@ custom_minimum_size = Vector2(330, 100)
 layout_mode = 2
 text = "Rally explanations and tactical observations appear here."
 autowrap_mode = 2
+max_lines_visible = 7
+text_overrun_behavior = 3
+clip_text = true
 
 [node name="DashboardInstructionLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=761893219]
 custom_minimum_size = Vector2(330, 72)
 layout_mode = 2
 text = "Click the tactical view to edit rotations, offensive plays, defensive positioning and scouting plans."
 autowrap_mode = 2
+max_lines_visible = 4
+text_overrun_behavior = 3
+clip_text = true
 
 [node name="Workspace" type="HSplitContainer" parent="Margin/Content" unique_id=212129950]
 unique_name_in_owner = true

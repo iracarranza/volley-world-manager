@@ -57,6 +57,7 @@ var secondary_hitter_id: int = -1
 var selected_player_id: int = -1
 var palette: Dictionary = DARK_PALETTE
 var playback_event: Resource
+var contact_overlay_event: Resource
 var playback_progress: float = 1.0
 var playback_tween: Tween
 var dragging_player_id: int = -1
@@ -73,6 +74,7 @@ var movement_player_id: int = -1
 var movement_start: Vector2 = Vector2.ZERO
 var movement_target: Vector2 = Vector2.ZERO
 var playback_ball_visible: bool = true
+var coverage_zones_visible: bool = true
 var movement_trails: Dictionary = {}
 var movement_phase_caption: String = ""
 var unit_movement_starts: Dictionary = {}
@@ -135,6 +137,11 @@ func set_defensive_view(
 	queue_redraw()
 
 
+func set_coverage_zones_visible(visible: bool) -> void:
+	coverage_zones_visible = visible
+	queue_redraw()
+
+
 func set_landscape_orientation(enabled: bool) -> void:
 	landscape_orientation = enabled
 	queue_redraw()
@@ -158,6 +165,7 @@ func player_marker_screen_position(player_id: int) -> Vector2:
 
 func animate_event(event: Resource, duration: float) -> void:
 	playback_event = event
+	contact_overlay_event = null
 	playback_ball_visible = true
 	movement_player_id = -1
 	unit_movement_starts.clear()
@@ -171,6 +179,8 @@ func animate_spatial_transition(
 	duration: float,
 ) -> void:
 	playback_event = ball_event
+	contact_overlay_event = next_contact_event \
+		if int(next_contact_event.event_type) == RallyEventModel.EventType.BLOCK else null
 	playback_ball_visible = true
 	_prepare_player_movement(next_contact_event)
 	unit_movement_starts.clear()
@@ -200,6 +210,7 @@ func animate_spatial_transition(
 
 func animate_player_movement(event: Resource, duration: float) -> void:
 	playback_event = event
+	contact_overlay_event = null
 	playback_ball_visible = false
 	_prepare_player_movement(event)
 	_start_playback_tween(duration)
@@ -212,6 +223,7 @@ func animate_player_to(
 	phase_caption: String,
 ) -> void:
 	playback_event = event
+	contact_overlay_event = null
 	playback_ball_visible = false
 	_prepare_player_movement(event)
 	unit_movement_starts.clear()
@@ -376,6 +388,7 @@ func clear_rally_playback() -> void:
 	if playback_tween != null and playback_tween.is_valid():
 		playback_tween.kill()
 	playback_event = null
+	contact_overlay_event = null
 	playback_ball_visible = true
 	movement_phase_caption = ""
 	live_player_positions.clear()
@@ -675,7 +688,7 @@ func _draw_assignments() -> void:
 
 
 func _draw_defensive_zones() -> void:
-	if not defensive_mode or defensive_plan == null or lineup == null:
+	if not coverage_zones_visible or not defensive_mode or defensive_plan == null or lineup == null:
 		return
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
@@ -706,7 +719,7 @@ func _draw_defensive_zones() -> void:
 
 
 func _draw_serve_receive_legality() -> void:
-	if not defensive_mode or defensive_plan == null or lineup == null:
+	if not coverage_zones_visible or not defensive_mode or defensive_plan == null or lineup == null:
 		return
 	if defensive_zone_type != DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
 		return
@@ -979,29 +992,36 @@ func _draw_rally_playback() -> void:
 			+ path_t * path_t * finish
 		)
 	draw_polyline(path_points, _with_alpha(event_color, 0.34), 2.0)
-	if playback_event.event_type == RallyEventModel.EventType.BLOCK:
-		var segments: Array = playback_event.metadata.get("coverage_segments", [])
-		if segments.is_empty():
-			segments.append({
-				"x_min": clampf(playback_event.end_position.x - 0.08, 0.0, 1.0),
-				"x_max": clampf(playback_event.end_position.x + 0.08, 0.0, 1.0),
-				"completeness": float(playback_event.quality),
-			})
-		for segment_data in segments:
-			var segment: Dictionary = segment_data
-			var completeness := clampf(float(segment.get("completeness", 0.0)), 0.0, 1.0)
-			var coverage_color := Color("f3b4b4").lerp(Color("a60d22"), completeness)
-			draw_line(
-				_court_to_local(Vector2(float(segment.get("x_min", 0.45)), CourtConstants.NET_Y)),
-				_court_to_local(Vector2(float(segment.get("x_max", 0.55)), CourtConstants.NET_Y)),
-				coverage_color, 7.0 + completeness * 4.0,
-			)
+	var block_event: Resource = contact_overlay_event
+	if block_event == null and playback_event.event_type == RallyEventModel.EventType.BLOCK:
+		block_event = playback_event
+	if block_event != null:
+		_draw_block_coverage(block_event)
 	var shadow_position := ball_position + Vector2(3.0, 5.0)
 	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
 	var apex_height := float(trajectory.get("apex_height_meters", 0.0))
 	var height_scale := sin(PI * playback_progress) * apex_height
 	draw_circle(ball_position, 9.0 + height_scale * 0.8, Color("f5d328"))
 	draw_arc(ball_position, 6.0, 0.0, TAU, 16, Color("245ba7"), 2.0)
+
+
+func _draw_block_coverage(block_event: Resource) -> void:
+	var segments: Array = block_event.metadata.get("coverage_segments", [])
+	if segments.is_empty():
+		segments.append({
+			"x_min": clampf(block_event.end_position.x - 0.08, 0.0, 1.0),
+			"x_max": clampf(block_event.end_position.x + 0.08, 0.0, 1.0),
+			"completeness": float(block_event.quality),
+		})
+	for segment_data in segments:
+		var segment: Dictionary = segment_data
+		var completeness := clampf(float(segment.get("completeness", 0.0)), 0.0, 1.0)
+		var coverage_color := Color("f3b4b4").lerp(Color("a60d22"), completeness)
+		draw_line(
+			_court_to_local(Vector2(float(segment.get("x_min", 0.45)), CourtConstants.NET_Y)),
+			_court_to_local(Vector2(float(segment.get("x_max", 0.55)), CourtConstants.NET_Y)),
+			coverage_color, 7.0 + completeness * 4.0,
+		)
 
 
 func _court_rect() -> Rect2:
