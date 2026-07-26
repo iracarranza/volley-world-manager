@@ -954,7 +954,21 @@ func _short_responsibility(value: String) -> String:
 func _draw_rally_playback() -> void:
 	if playback_event == null:
 		return
+	var followup_block := _followup_block_event()
 	var trajectory: Dictionary = playback_event.metadata.get("outgoing_trajectory", {})
+	if followup_block != null and int(playback_event.event_type) == RallyEventModel.EventType.ATTACK:
+		var block_outcome := str(followup_block.metadata.get("outcome", ""))
+		if block_outcome == "stuff":
+			trajectory = {}
+		elif block_outcome in ["touch", "funnel", "recycle"]:
+			var deflection_target: Vector2 = followup_block.metadata.get(
+				"deflection_target", followup_block.end_position
+			)
+			trajectory = {
+				"start_position": playback_event.start_position,
+				"control_position": playback_event.start_position.lerp(deflection_target, 0.5),
+				"end_position": deflection_target,
+			}
 	var trajectory_start: Vector2 = trajectory.get(
 		"start_position", playback_event.start_position
 	)
@@ -971,8 +985,7 @@ func _draw_rally_playback() -> void:
 	var ball_position := inverse * inverse * start \
 		+ 2.0 * inverse * playback_progress * control \
 		+ playback_progress * playback_progress * finish
-	var event_color: Color = palette["path"] if playback_event.success \
-		else Color("e64f4f")
+	var event_color: Color = _playback_event_color(followup_block)
 	if playback_event.actor_id >= 0 and lineup != null:
 		var slot_number := lineup.slot_for_player(playback_event.actor_id)
 		if slot_number >= 0:
@@ -981,6 +994,10 @@ func _draw_rally_playback() -> void:
 			))
 			draw_circle(actor_position, 27.0, event_color, false, 4.0)
 	if not playback_ball_visible:
+		return
+	if trajectory.is_empty():
+		if followup_block != null and int(playback_event.event_type) == RallyEventModel.EventType.ATTACK:
+			_draw_block_reach_marker(followup_block)
 		return
 	var path_points := PackedVector2Array()
 	for path_index in range(21):
@@ -992,7 +1009,7 @@ func _draw_rally_playback() -> void:
 			+ path_t * path_t * finish
 		)
 	draw_polyline(path_points, _with_alpha(event_color, 0.34), 2.0)
-	var block_event: Resource = contact_overlay_event
+	var block_event: Resource = followup_block
 	if block_event == null and playback_event.event_type == RallyEventModel.EventType.BLOCK:
 		block_event = playback_event
 	if block_event != null:
@@ -1016,12 +1033,57 @@ func _draw_block_coverage(block_event: Resource) -> void:
 	for segment_data in segments:
 		var segment: Dictionary = segment_data
 		var completeness := clampf(float(segment.get("completeness", 0.0)), 0.0, 1.0)
-		var coverage_color := Color("f3b4b4").lerp(Color("a60d22"), completeness)
+		var coverage_color := _block_flash_color(block_event, completeness)
 		draw_line(
 			_court_to_local(Vector2(float(segment.get("x_min", 0.45)), CourtConstants.NET_Y)),
 			_court_to_local(Vector2(float(segment.get("x_max", 0.55)), CourtConstants.NET_Y)),
 			coverage_color, 7.0 + completeness * 4.0,
 		)
+
+
+func _followup_block_event() -> Resource:
+	if contact_overlay_event != null \
+			and int(contact_overlay_event.event_type) == RallyEventModel.EventType.BLOCK:
+		return contact_overlay_event
+	return null
+
+
+func _playback_event_color(followup_block: Resource) -> Color:
+	var event_type := int(playback_event.event_type)
+	if event_type == RallyEventModel.EventType.BLOCK:
+		var block_outcome := str(playback_event.metadata.get("outcome", ""))
+		if block_outcome == "stuff":
+			return Color("e64f4f")
+		if block_outcome in ["touch", "funnel", "recycle"]:
+			return Color("f2c94c")
+		if block_outcome == "miss":
+			return Color("4ad66d")
+		return palette["path"] if playback_event.success else Color("e64f4f")
+	if followup_block == null or event_type != RallyEventModel.EventType.ATTACK:
+		return palette["path"] if playback_event.success else Color("e64f4f")
+	var block_outcome := str(followup_block.metadata.get("outcome", ""))
+	if block_outcome == "stuff":
+		return Color("e64f4f")
+	if block_outcome in ["touch", "funnel", "recycle"]:
+		return Color("f2c94c")
+	return Color("4ad66d")
+
+
+func _block_flash_color(block_event: Resource, completeness: float) -> Color:
+	var outcome := str(block_event.metadata.get("outcome", ""))
+	match outcome:
+		"stuff":
+			return Color("e64f4f").lerp(Color("a60d22"), completeness)
+		"touch", "funnel", "recycle":
+			return Color("f2c94c").lerp(Color("c18f1a"), completeness)
+		_:
+			return Color("4ad66d").lerp(Color("1f8c4e"), completeness)
+
+
+func _draw_block_reach_marker(block_event: Resource) -> void:
+	var net_point := _court_to_local(Vector2(float(block_event.end_position.x), CourtConstants.NET_Y))
+	var intensity := clampf(float(block_event.quality), 0.0, 1.0)
+	draw_circle(net_point, 12.0 + intensity * 5.0, _block_flash_color(block_event, intensity), false, 4.0)
 
 
 func _court_rect() -> Rect2:

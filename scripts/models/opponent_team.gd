@@ -15,7 +15,9 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 	"serve_target": "Zone 5",
 }
 @export_range(0.0, 1.0) var adaptation_rate: float = 0.16
-@export_range(0.0, 1.0) var adaptation_strength: float = 0.0
+@export_range(0.0, 1.0) var block_adaptation_strength: float = 0.0
+@export_range(0.0, 1.0) var floor_defense_adaptation_strength: float = 0.0
+@export_range(0.0, 1.0) var serve_receive_adaptation_strength: float = 0.0
 @export var observed_attack_lanes: Dictionary = {}
 @export var observed_tempos: Dictionary = {}
 @export var observed_serve_targets: Dictionary = {}
@@ -150,10 +152,20 @@ func observe_rally(result: Resource) -> void:
 	if not pattern_observed:
 		return
 	rallies_observed += 1
-	adaptation_strength = clampf(
-		adaptation_strength + adaptation_rate * (1.0 - adaptation_strength),
-		0.0, 0.85,
-	)
+	if bool(observed_attack_lanes.size()) or bool(observed_tempos.size()):
+		block_adaptation_strength = clampf(
+			block_adaptation_strength + adaptation_rate * (1.0 - block_adaptation_strength),
+			0.0, 0.85,
+		)
+		floor_defense_adaptation_strength = clampf(
+			floor_defense_adaptation_strength + adaptation_rate * (1.0 - floor_defense_adaptation_strength),
+			0.0, 0.85,
+		)
+	if bool(observed_serve_targets.size()):
+		serve_receive_adaptation_strength = clampf(
+			serve_receive_adaptation_strength + adaptation_rate * (1.0 - serve_receive_adaptation_strength),
+			0.0, 0.85,
+		)
 
 
 func anticipated_lane() -> String:
@@ -170,8 +182,10 @@ func adaptation_summary() -> String:
 		return "No in-match patterns learned yet."
 	var lane := anticipated_lane()
 	var tempo := anticipated_tempo()
-	return "Adaptation %d%% · expects %s%s after %d rallies" % [
-		roundi(adaptation_strength * 100.0),
+	return "Block %d%% · Floor defense %d%% · Serve receive %d%% · expects %s%s after %d rallies" % [
+		roundi(block_adaptation_strength * 100.0),
+		roundi(floor_defense_adaptation_strength * 100.0),
+		roundi(serve_receive_adaptation_strength * 100.0),
 		lane if not lane.is_empty() else "mixed lanes",
 		" at T%d" % tempo if tempo >= 0 else "",
 		rallies_observed,
@@ -181,7 +195,9 @@ func adaptation_summary() -> String:
 func adaptation_to_dict() -> Dictionary:
 	return {
 		"adaptation_rate": adaptation_rate,
-		"adaptation_strength": adaptation_strength,
+		"block_adaptation_strength": block_adaptation_strength,
+		"floor_defense_adaptation_strength": floor_defense_adaptation_strength,
+		"serve_receive_adaptation_strength": serve_receive_adaptation_strength,
 		"observed_attack_lanes": observed_attack_lanes.duplicate(true),
 		"observed_tempos": observed_tempos.duplicate(true),
 		"observed_serve_targets": observed_serve_targets.duplicate(true),
@@ -191,11 +207,52 @@ func adaptation_to_dict() -> Dictionary:
 
 func load_adaptation(data: Dictionary) -> void:
 	adaptation_rate = clampf(float(data.get("adaptation_rate", adaptation_rate)), 0.0, 1.0)
-	adaptation_strength = clampf(float(data.get("adaptation_strength", 0.0)), 0.0, 0.85)
+	block_adaptation_strength = clampf(
+		float(data.get("block_adaptation_strength", data.get("adaptation_strength", 0.0))),
+		0.0, 0.85
+	)
+	floor_defense_adaptation_strength = clampf(
+		float(data.get("floor_defense_adaptation_strength", 0.0)),
+		0.0, 0.85
+	)
+	serve_receive_adaptation_strength = clampf(
+		float(data.get("serve_receive_adaptation_strength", 0.0)),
+		0.0, 0.85
+	)
 	observed_attack_lanes = data.get("observed_attack_lanes", {}).duplicate(true)
 	observed_tempos = data.get("observed_tempos", {}).duplicate(true)
 	observed_serve_targets = data.get("observed_serve_targets", {}).duplicate(true)
 	rallies_observed = maxi(int(data.get("rallies_observed", 0)), 0)
+
+
+func block_bonus() -> float:
+	return _adaptation_bonus(block_adaptation_strength)
+
+
+func floor_defense_bonus() -> float:
+	return _adaptation_bonus(floor_defense_adaptation_strength)
+
+
+func serve_receive_bonus() -> float:
+	return _adaptation_bonus(serve_receive_adaptation_strength)
+
+
+func anticipated_serve_target() -> String:
+	return _most_observed(observed_serve_targets, "")
+
+
+func _adaptation_bonus(strength: float) -> float:
+	var cross_penalty := 0.0
+	for other_strength in [
+		block_adaptation_strength, floor_defense_adaptation_strength,
+		serve_receive_adaptation_strength,
+	]:
+		if other_strength == strength:
+			continue
+		if other_strength > 0.35:
+			cross_penalty += (other_strength - 0.35) * 0.35
+	cross_penalty = minf(cross_penalty, 0.25)
+	return maxf(strength - cross_penalty, 0.0)
 
 
 func _increment(target: Dictionary, key: String) -> void:

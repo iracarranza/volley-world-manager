@@ -191,69 +191,69 @@ unique_name_in_owner = true
 title = "Confirm Substitution"
 dialog_text = "Confirm substitution?"
 
-[node name="RosterPopup" type="PopupPanel" parent="."]
+[node name="RosterPopup" type="PopupPanel" parent="." unique_id=661562018]
 unique_name_in_owner = true
 initial_position = 2
 size = Vector2i(720, 520)
 
-[node name="RosterMargin" type="MarginContainer" parent="RosterPopup"]
+[node name="RosterMargin" type="MarginContainer" parent="RosterPopup" unique_id=147734207]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 20.0
-offset_top = 18.0
-offset_right = -20.0
-offset_bottom = -18.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 716.0
+offset_bottom = 516.0
 
-[node name="RosterContent" type="VBoxContainer" parent="RosterPopup/RosterMargin"]
+[node name="RosterContent" type="VBoxContainer" parent="RosterPopup/RosterMargin" unique_id=1380853160]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="RosterHeader" type="HBoxContainer" parent="RosterPopup/RosterMargin/RosterContent"]
+[node name="RosterHeader" type="HBoxContainer" parent="RosterPopup/RosterMargin/RosterContent" unique_id=1983568783]
 layout_mode = 2
 
-[node name="RosterTitle" type="Label" parent="RosterPopup/RosterMargin/RosterContent/RosterHeader"]
+[node name="RosterTitle" type="Label" parent="RosterPopup/RosterMargin/RosterContent/RosterHeader" unique_id=74626593]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 22
 text = "Team & Roster"
 
-[node name="CloseRosterButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterHeader"]
+[node name="CloseRosterButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterHeader" unique_id=1826774755]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(34, 30)
 layout_mode = 2
 text = "×"
 
-[node name="RosterSummaryLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent"]
+[node name="RosterSummaryLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent" unique_id=926202889]
 unique_name_in_owner = true
 layout_mode = 2
 autowrap_mode = 2
 
-[node name="RosterPlayerOption" type="OptionButton" parent="RosterPopup/RosterMargin/RosterContent"]
+[node name="RosterPlayerOption" type="OptionButton" parent="RosterPopup/RosterMargin/RosterContent" unique_id=705298065]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="RosterPlayerDetailLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent"]
+[node name="RosterPlayerDetailLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent" unique_id=1603576380]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 105)
 layout_mode = 2
 autowrap_mode = 2
 
-[node name="RosterActions" type="HBoxContainer" parent="RosterPopup/RosterMargin/RosterContent"]
+[node name="RosterActions" type="HBoxContainer" parent="RosterPopup/RosterMargin/RosterContent" unique_id=1702591802]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="SetCaptainButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterActions"]
+[node name="SetCaptainButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterActions" unique_id=13167326]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Set Captain"
 
-[node name="SetLiberoButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterActions"]
+[node name="SetLiberoButton" type="Button" parent="RosterPopup/RosterMargin/RosterContent/RosterActions" unique_id=382756603]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Toggle Libero"
 
-[node name="DepthChartLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent"]
+[node name="DepthChartLabel" type="Label" parent="RosterPopup/RosterMargin/RosterContent" unique_id=1086016204]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -305,13 +305,13 @@ layout_mode = 2
 tooltip_text = "Toggle between Mikasa-inspired dark mode and Molten-inspired light mode."
 text = "Mikasa Dark"
 
-[node name="TeamRosterButton" type="Button" parent="Margin/Content/Header"]
+[node name="TeamRosterButton" type="Button" parent="Margin/Content/Header" unique_id=1153515068]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 36)
 layout_mode = 2
 text = "Team & Roster"
 
-[node name="ReturnCareerButton" type="Button" parent="Margin/Content/Header"]
+[node name="ReturnCareerButton" type="Button" parent="Margin/Content/Header" unique_id=1614843933]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 36)
 layout_mode = 2
@@ -380,10 +380,10 @@ tooltip_text = "Use one of two set timeouts and recover a small amount of fatigu
 text = "Timeout (2 left)"
 
 [node name="MatchDashboard" type="HBoxContainer" parent="Margin/Content" unique_id=813053362]
+clip_contents = true
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 10
-clip_contents = true
 
 [node name="MatchPreviewPanel" type="PanelContainer" parent="Margin/Content/MatchDashboard" unique_id=1681609741]
 custom_minimum_size = Vector2(720, 0)
@@ -435,9 +435,9 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "Ready for the next rally."
 autowrap_mode = 2
-max_lines_visible = 4
-text_overrun_behavior = 3
 clip_text = true
+text_overrun_behavior = 3
+max_lines_visible = 4
 
 [node name="DashboardExplanationLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1704552373]
 unique_name_in_owner = true
@@ -445,18 +445,18 @@ custom_minimum_size = Vector2(330, 100)
 layout_mode = 2
 text = "Rally explanations and tactical observations appear here."
 autowrap_mode = 2
-max_lines_visible = 7
-text_overrun_behavior = 3
 clip_text = true
+text_overrun_behavior = 3
+max_lines_visible = 7
 
 [node name="DashboardInstructionLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=761893219]
 custom_minimum_size = Vector2(330, 72)
 layout_mode = 2
 text = "Click the tactical view to edit rotations, offensive plays, defensive positioning and scouting plans."
 autowrap_mode = 2
-max_lines_visible = 4
-text_overrun_behavior = 3
 clip_text = true
+text_overrun_behavior = 3
+max_lines_visible = 4
 
 [node name="Workspace" type="HSplitContainer" parent="Margin/Content" unique_id=212129950]
 unique_name_in_owner = true

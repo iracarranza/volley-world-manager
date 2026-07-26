@@ -1250,9 +1250,11 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 		var event: Resource = result.events[event_index]
 		if skip_rally_playback:
 			break
+		var playback_headline := _playback_event_headline(event)
+		var playback_detail := _playback_event_detail(event)
 		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
 			float(event.metadata.get("event_time", 0.0)),
-			event.type_name(), event.headline, event.detail,
+			event.type_name(), playback_headline, playback_detail,
 		])
 		if event.event_type == RallyEvent.EventType.SET_DECISION:
 			continue
@@ -1299,9 +1301,11 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 				var caption := tactical_court.movement_phase_caption_for(
 					event, phase_index, false
 				)
+				var event_headline := _playback_event_headline(event)
+				var event_detail := _playback_event_detail(event)
 				_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
 					float(event.metadata.get("event_time", 0.0)),
-					caption, event.headline, event.detail,
+					caption, event_headline, event_detail,
 				])
 				tactical_court.animate_player_to(
 					event, pre_targets[phase_index], pre_phase_duration, caption
@@ -1313,9 +1317,11 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 				tactical_court.finish_event_animation()
 				match_preview_court.finish_event_animation()
 			if not skip_rally_playback:
+				var event_headline := _playback_event_headline(event)
+				var event_detail := _playback_event_detail(event)
 				_set_playback_caption("t=%.2fs · Contact window · %s\n%s" % [
 					float(event.metadata.get("event_time", 0.0)),
-					event.headline, event.detail,
+					event_headline, event_detail,
 				])
 				await _wait_for_playback_phase(contact_pause)
 		if skip_rally_playback:
@@ -1404,6 +1410,43 @@ func _skip_rally_playback() -> void:
 func _set_playback_caption(value: String) -> void:
 	rally_event_label.text = value
 	dashboard_event_label.text = value
+
+
+func _playback_event_headline(event: Resource) -> String:
+	if event == null:
+		return ""
+	if int(event.event_type) != RallyEvent.EventType.BLOCK:
+		return str(event.headline)
+	var outcome := str(event.metadata.get("outcome", ""))
+	var actor_name := str(event.actor_name)
+	match outcome:
+		"stuff":
+			return "%s stuffs the attack" % actor_name
+		"touch", "funnel":
+			return "%s gets a block touch" % actor_name
+		"miss":
+			return "%s misses the block" % actor_name
+		_:
+			return str(event.headline)
+
+
+func _playback_event_detail(event: Resource) -> String:
+	if event == null:
+		return ""
+	if int(event.event_type) != RallyEvent.EventType.BLOCK:
+		return str(event.detail)
+	var outcome := str(event.metadata.get("outcome", ""))
+	match outcome:
+		"stuff":
+			return "The block shuts the play down at the net."
+		"touch":
+			return "The block touches the ball and slows the attack enough for floor defense."
+		"funnel":
+			return "The block redirects the ball into the saved defensive shape."
+		"miss":
+			return "The block never gets a piece of the ball."
+		_:
+			return str(event.detail)
 
 
 func _reset_tactical_positions(show_status: bool = true) -> void:
