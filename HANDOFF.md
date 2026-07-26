@@ -77,6 +77,10 @@
   center, radius, priority and enabled state for every player. Both views show
   translucent metre-scaled overlays; reception summarizes active and hidden
   passers as an explicit formation.
+- Select a serve-receive marker to see its legal position at serve contact.
+  Dotted lines connect the relevant same-row neighbors and front/back
+  counterpart; the derived legal region changes with the other five positions
+  and turns into an overlap warning when the selected player is illegal.
 - Resolve serve placement before choosing a receiver. Outside hitters, liberos
   and any other enabled passer claim balls using zone priority only if their
   reaction, speed, acceleration, fatigue and reach allow them to arrive.
@@ -123,7 +127,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 94 passing headless foundation checks and UI-binding validation, including a
+- 98 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

@@ -2,6 +2,7 @@ extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -10,6 +11,7 @@ var failures: int = 0
 func _initialize() -> void:
 	_test_court_coordinates()
 	_test_rotation_legality()
+	_test_serve_receive_overlap_bounds()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -78,6 +80,34 @@ func _test_rotation_legality() -> void:
 	)
 	var restored := RotationLineup.from_dict(lineup.to_dict())
 	_check(restored.player_at_slot(4) == 4, "rotation survives serialization")
+
+
+func _test_serve_receive_overlap_bounds() -> void:
+	var positions := {}
+	for slot_number in range(1, 7):
+		positions[slot_number] = CourtConstants.slot_position(slot_number)
+	var middle_front_bounds: Rect2 = ROTATION_LEGALITY_SCRIPT.legal_bounds(3, positions)
+	_check(
+		middle_front_bounds.position.x > Vector2(positions[4]).x
+			and middle_front_bounds.end.x < Vector2(positions[2]).x,
+		"front-middle legality is bounded by both same-row neighbors",
+	)
+	_check(
+		middle_front_bounds.end.y < Vector2(positions[6]).y,
+		"front-middle must remain closer to the net than back-middle",
+	)
+	_check(
+		ROTATION_LEGALITY_SCRIPT.is_position_legal(
+			3, Vector2(0.50, 0.62), positions
+		),
+		"a correctly overlapped front-middle reception position is legal",
+	)
+	_check(
+		not ROTATION_LEGALITY_SCRIPT.is_position_legal(
+			3, Vector2(0.90, 0.62), positions
+		),
+		"crossing the right-front player is identified as an overlap fault",
+	)
 
 
 func _make_play() -> OffensivePlay:

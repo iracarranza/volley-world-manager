@@ -3,6 +3,7 @@ extends Control
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const RotationLegalityModel := preload("res://scripts/simulation/rotation_legality.gd")
 
 signal player_selected(player_id: int)
 signal assignment_dragged(player_id: int, lane_name: String, marker_position: Vector2)
@@ -524,6 +525,7 @@ func _draw() -> void:
 		)
 	_draw_lane_guides()
 	_draw_assignments()
+	_draw_serve_receive_legality()
 	_draw_defensive_zones()
 	_draw_assignment_drag()
 	_draw_movement_trails()
@@ -589,6 +591,73 @@ func _draw_defensive_zones() -> void:
 			"P%d · %.1fm" % [int(zone.priority), float(zone.radius_meters)],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, outline_color,
 		)
+
+
+func _draw_serve_receive_legality() -> void:
+	if not defensive_mode or defensive_plan == null or lineup == null:
+		return
+	if defensive_zone_type != DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
+		return
+	var selected_slot := lineup.slot_for_player(selected_player_id)
+	if selected_slot < 1:
+		return
+	var reception_zones: Dictionary = defensive_plan.zones_for(
+		DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+	)
+	var positions_by_slot := {}
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		var zone: Resource = reception_zones.get(player_id) as Resource
+		positions_by_slot[slot_number] = Vector2(zone.center) \
+			if zone != null else CourtConstants.slot_position(slot_number)
+	var bounds: Rect2 = RotationLegalityModel.legal_bounds(
+		selected_slot, positions_by_slot
+	)
+	var selected_position: Vector2 = positions_by_slot[selected_slot]
+	var legal := RotationLegalityModel.is_position_legal(
+		selected_slot, selected_position, positions_by_slot
+	)
+	var legality_color := Color("52c781") if legal else Color("ef6461")
+	var bounds_points := PackedVector2Array([
+		_court_to_local(bounds.position),
+		_court_to_local(Vector2(bounds.end.x, bounds.position.y)),
+		_court_to_local(bounds.end),
+		_court_to_local(Vector2(bounds.position.x, bounds.end.y)),
+	])
+	var fill_color := legality_color
+	fill_color.a = 0.075
+	draw_colored_polygon(bounds_points, fill_color)
+	var constraint_color := legality_color
+	constraint_color.a = 0.82
+	var related: Dictionary = RotationLegalityModel.related_slots(selected_slot)
+	for relation_name in ["left", "right", "counterpart"]:
+		var related_slot := int(related[relation_name])
+		if related_slot < 0:
+			continue
+		var related_position: Vector2 = positions_by_slot[related_slot]
+		if relation_name == "counterpart":
+			draw_dashed_line(
+				_court_to_local(Vector2(0.06, related_position.y)),
+				_court_to_local(Vector2(0.94, related_position.y)),
+				constraint_color, 2.0, 8.0,
+			)
+		else:
+			draw_dashed_line(
+				_court_to_local(Vector2(related_position.x, 0.53)),
+				_court_to_local(Vector2(related_position.x, 0.96)),
+				constraint_color, 2.0, 8.0,
+			)
+		draw_dashed_line(
+			_court_to_local(related_position),
+			_court_to_local(selected_position),
+			_with_alpha(constraint_color, 0.62), 1.5, 6.0,
+		)
+	var label_position := _court_to_local(bounds.position) + Vector2(8, 18)
+	draw_string(
+		ThemeDB.fallback_font, label_position,
+		"LEGAL AT SERVE" if legal else "ROTATION OVERLAP",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, constraint_color,
+	)
 
 
 func _draw_assignment_drag() -> void:

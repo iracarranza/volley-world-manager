@@ -20,6 +20,8 @@
   metre-based responsibility radius, priority, activity and zone type.
 - `scripts/simulation/coverage_calculator.gd`: pure court-distance, reaction,
   travel, reach and zone-claim calculations shared by reception and defense.
+- `scripts/simulation/rotation_legality.gd`: pure serve-contact overlap bounds
+  derived from same-row neighbors and each front/back counterpart.
 - `scripts/models/opponent_team.gd`: opponent roster, real player attributes,
   tendencies and scouting confidence.
 - `scenes/main/main.gd`: presentation coordinator. It requests a completed
@@ -123,6 +125,12 @@ The tactical radius therefore describes responsibility rather than granting
 extra physical ability. Rally events retain landing, flight-time and arrival
 metadata so explanations and future animation can show why a player did or did
 not reach the ball.
+
+Serve-reception editing separately visualizes rotational legality. Selecting a
+player derives their current legal rectangle from the other five reception
+positions: 4–3–2 and 5–6–1 retain left-to-right order, while 4/5, 3/6 and 2/1
+retain front/back order. This overlay guides positioning but does not alter the
+physical coverage calculation.
 
 ## Block closing
 
