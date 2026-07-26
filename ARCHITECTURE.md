@@ -31,6 +31,8 @@
   effects for volleyball training and recovery.
 - `scripts/systems/attribute_profile_system.gd`: stateless detailed/summative
   player profiles, D-S grading and serve-style proficiency calculations.
+- `scripts/systems/familiarity_system.gd`: stateless position suitability,
+  cross-training, handed geometry, sparse situation exposure and read preparation.
 - `scripts/models/match_statistics.gd`: derives persistent team and player
   contact totals from authoritative rally events.
 - `scripts/data/rally_explanations.gd`: all current player-facing rally result

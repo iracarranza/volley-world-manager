@@ -49,9 +49,10 @@ static func detailed_profile(player: VolleyballPlayer, profile_name: String) -> 
 				"Serve Placement": player.serve_placement, "Serve Consistency": player.serve_consistency,
 				"Serve Aggression": player.serve_aggression, "Serve Variation": player.serve_variation}
 		"Mental & Tactical":
-			return {"Court Vision": player.court_vision, "Anticipation": player.anticipation,
+			return {"Reading": roundi((player.court_vision + player.anticipation) / 2.0),
 				"Decision Making": player.decision_making, "Composure": player.composure,
-				"Tactical Discipline": player.tactical_discipline, "Improvisation": player.improvisation}
+				"Tactical Discipline": player.tactical_discipline,
+				"Improvisation": player.improvisation, "Adaptability": player.adaptability}
 		_:
 			return {"Power": player.usable_attack_power(), "Tooling": player.tooling,
 				"Feinting": player.feinting, "Finesse": player.finesse,

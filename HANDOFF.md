@@ -24,6 +24,14 @@
   derive from power, technique, placement, consistency, aggression, variation
   and supporting physical/mental attributes, then influence rally pressure,
   error risk, placement, server selection, event text and flight time.
+- Track handedness, rare functional weak-hand/ambidextrous traits, adaptability,
+  natural positions, current position, familiarity with all five positions and
+  sparse experience with meaningful rally situations. Players can be assigned
+  individual cross-training, gain familiarity each week and be deployed once
+  emergency-ready; unfamiliarity affects tactical execution rather than raw skills.
+- Calculate position suitability from actual attributes and derived reach rather
+  than height restrictions. Exceptional wingspan, jump capacity and explosiveness
+  can therefore make an unconventional libero-to-middle/opposite conversion viable.
 - Review team identity, tactical familiarity, captain/libero hierarchy and the
   position depth chart. Select one of seven weekly training focuses with visible
   attribute, fatigue, morale and familiarity effects.
@@ -241,7 +249,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 171 passing headless foundation checks and UI-binding validation, including a
+- 177 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet

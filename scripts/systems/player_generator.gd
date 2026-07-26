@@ -2,6 +2,7 @@ class_name VolleyballPlayerGenerator
 extends RefCounted
 
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 
 const POSITIONS: Array[Dictionary] = [
 	{"role": "Setter", "code": "S"},
@@ -41,6 +42,7 @@ static func generate_roster(
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
 		player.potential = rng.randi_range(74, 94) if academy else rng.randi_range(64, 88)
 		_apply_attributes(player, region, rng, academy)
+		Familiarity.initialize_player(player, rng)
 		AttributeProfiles.assign_serve_style(player)
 		result.append(player)
 	return result
@@ -70,8 +72,8 @@ static func _apply_attributes(
 		"set_stability", "tempo_control", "set_disguise", "hand_control",
 		"attack_power", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety",
 		"block_timing", "ball_control", "dig_control", "court_vision", "anticipation",
-		"decision_making", "composure", "tactical_discipline", "improvisation"]:
+		"decision_making", "composure", "tactical_discipline", "improvisation", "adaptability"]:
 		var modifier := int(region.physical) if property_name in ["acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness", "stamina"] else (
-			int(region.mental) if property_name in ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"] else int(region.technical)
+			int(region.mental) if property_name in ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation", "adaptability"] else int(region.technical)
 		)
 		player.set(property_name, clampi(base + modifier + rng.randi_range(-8, 8), 20, 92))

@@ -65,6 +65,13 @@ extends Resource
 @export var traits: Array[String] = []
 @export_enum("Standing", "Jump Topspin", "Jump Float", "Hybrid", "Sky Ball") var primary_serve_style: String = "Standing"
 @export var serve_style_proficiencies: Dictionary = {}
+@export_enum("Right", "Left") var dominant_hand: String = "Right"
+@export_range(1, 100) var adaptability: int = 50
+@export var primary_position: String = "Outside Hitter"
+@export var natural_positions: Array[String] = []
+@export var position_familiarity: Dictionary = {}
+@export var situation_experience: Dictionary = {}
+@export var position_training_target: String = ""
 
 const ABILITY_ATTRIBUTES: Array[String] = [
 	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
@@ -73,7 +80,7 @@ const ABILITY_ATTRIBUTES: Array[String] = [
 	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
 	"set_disguise", "hand_control", "attack_power", "attack_accuracy", "approach_timing",
 	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
-	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
+	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation", "adaptability",
 ]
 
 const POSITION_WEIGHTS := {
@@ -187,6 +194,11 @@ func to_dict() -> Dictionary:
 		"traits": traits.duplicate(),
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
+		"dominant_hand": dominant_hand, "adaptability": adaptability,
+		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
+		"position_familiarity": position_familiarity.duplicate(true),
+		"situation_experience": situation_experience.duplicate(true),
+		"position_training_target": position_training_target,
 	}
 
 
@@ -223,6 +235,13 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.serve_style_proficiencies = Dictionary(
 		data.get("serve_style_proficiencies", {})
 	).duplicate(true)
+	player.dominant_hand = str(data.get("dominant_hand", "Right"))
+	player.adaptability = clampi(int(data.get("adaptability", 50)), 1, 100)
+	player.primary_position = str(data.get("primary_position", player.position_role))
+	player.natural_positions = Array(data.get("natural_positions", [player.primary_position]), TYPE_STRING, "", null)
+	player.position_familiarity = Dictionary(data.get("position_familiarity", {player.primary_position: 90})).duplicate(true)
+	player.situation_experience = Dictionary(data.get("situation_experience", {})).duplicate(true)
+	player.position_training_target = str(data.get("position_training_target", ""))
 	player.fatigue = clampf(float(data.get("fatigue", 0.0)), 0.0, 1.0)
 	player.current_form = clampf(float(data.get("current_form", 0.0)), -1.0, 1.0)
 	player.traits = Array(data.get("traits", []), TYPE_STRING, "", null)

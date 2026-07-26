@@ -2,6 +2,7 @@ class_name VolleyballTrainingSystem
 extends RefCounted
 
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 
 const ACTIVITIES := {
 	"Team Practice": {"attributes": ["tactical_discipline", "court_vision"], "fatigue": 0.05, "morale": 0.01, "familiarity": 0.035,
@@ -41,6 +42,7 @@ static func apply_week(
 ) -> Dictionary:
 	var activity := description(activity_name)
 	var improved := 0
+	var position_progress := 0.0
 	for player in players:
 		if player.availability in ["Injured", "Suspended"]:
 			continue
@@ -53,8 +55,10 @@ static func apply_week(
 		player.fatigue = clampf(player.fatigue + float(activity.fatigue), 0.0, 1.0)
 		player.morale = clampf(player.morale + float(activity.morale), 0.0, 1.0)
 		AttributeProfiles.assign_serve_style(player)
+		position_progress += Familiarity.train_position(player)
 	team.tactical_familiarity = clampf(
 		float(team.tactical_familiarity) + float(activity.familiarity), 0.0, 1.0
 	)
 	return {"activity": activity_name, "attribute_improvements": improved,
+		"position_familiarity_progress": position_progress,
 		"description": activity.description}

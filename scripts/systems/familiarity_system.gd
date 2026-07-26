@@ -1,0 +1,91 @@
+class_name VolleyballFamiliaritySystem
+extends RefCounted
+
+const POSITIONS: Array[String] = ["Setter", "Outside Hitter", "Middle Blocker", "Opposite", "Libero"]
+const SIMILARITY := {
+	"Setter": {"Opposite": 0.58, "Outside Hitter": 0.42, "Libero": 0.52, "Middle Blocker": 0.25},
+	"Outside Hitter": {"Opposite": 0.82, "Libero": 0.62, "Setter": 0.38, "Middle Blocker": 0.42},
+	"Middle Blocker": {"Opposite": 0.62, "Outside Hitter": 0.42, "Setter": 0.22, "Libero": 0.18},
+	"Opposite": {"Outside Hitter": 0.82, "Middle Blocker": 0.62, "Setter": 0.55, "Libero": 0.28},
+	"Libero": {"Outside Hitter": 0.62, "Setter": 0.55, "Opposite": 0.28, "Middle Blocker": 0.18},
+}
+
+static func initialize_player(player: VolleyballPlayer, rng: RandomNumberGenerator = null) -> void:
+	player.primary_position = player.position_role
+	player.natural_positions = [player.position_role]
+	player.position_familiarity.clear()
+	for position_name in POSITIONS:
+		player.position_familiarity[position_name] = 92 if position_name == player.position_role else roundi(18.0 + 35.0 * similarity(player.position_role, position_name))
+	if rng != null:
+		player.dominant_hand = "Left" if rng.randf() < 0.12 else "Right"
+		if player.improvisation >= 82 and player.hand_control >= 75 and rng.randf() < 0.16:
+			player.traits.append("Ambidextrous")
+		elif player.improvisation >= 65 and rng.randf() < 0.18:
+			player.traits.append("Functional Weak Hand")
+
+static func similarity(from_position: String, to_position: String) -> float:
+	if from_position == to_position:
+		return 1.0
+	return float(Dictionary(SIMILARITY.get(from_position, {})).get(to_position, 0.20))
+
+static func suitability(player: VolleyballPlayer, position_name: String) -> int:
+	var values: Array[float]
+	match position_name:
+		"Setter": values = [player.set_accuracy, player.hand_control, player.court_vision, player.decision_making]
+		"Outside Hitter": values = [player.usable_attack_power(), player.reception, player.approach_timing, player.transition_speed]
+		"Middle Blocker": values = [effective_reach(player), player.explosiveness, player.block_timing, player.lateral_speed, player.approach_timing]
+		"Opposite": values = [player.usable_attack_power(), effective_reach(player), player.block_timing, player.serve_power]
+		_: values = [player.reception, player.dig_control, player.anticipation, player.lateral_speed, player.ball_control]
+	var total := 0.0
+	for value in values: total += value
+	return roundi(total / values.size())
+
+static func effective_reach(player: VolleyballPlayer) -> float:
+	var physical_reach := clampf(inverse_lerp(205.0, 300.0, player.standing_reach_cm()) * 100.0, 1.0, 100.0)
+	return clampf(physical_reach * 0.42 + player.jump_reach * 0.38 + player.explosiveness * 0.20, 1.0, 100.0)
+
+static func train_position(player: VolleyballPlayer) -> float:
+	var target := player.position_training_target
+	if target.is_empty() or target not in POSITIONS: return 0.0
+	var current := float(player.position_familiarity.get(target, 0.0))
+	var gain := 2.4 * (0.65 + player.adaptability / 100.0 * 0.90) \
+		* lerpf(0.55, 1.0, similarity(player.primary_position, target)) \
+		* lerpf(0.65, 1.10, suitability(player, target) / 100.0) * (1.0 - current / 125.0)
+	player.position_familiarity[target] = clampf(current + gain, 0.0, 100.0)
+	player.fatigue = clampf(player.fatigue + 0.02, 0.0, 1.0)
+	return gain
+
+static func familiarity_label(value: float) -> String:
+	if value >= 90: return "Natural"
+	if value >= 75: return "Accomplished"
+	if value >= 60: return "Functional"
+	if value >= 40: return "Developing"
+	if value >= 20: return "Emergency"
+	return "Untrained"
+
+static func execution_modifier(player: VolleyballPlayer) -> float:
+	return 0.82 + float(player.position_familiarity.get(player.position_role, 0.0)) / 100.0 * 0.18
+
+static func record_exposure(player: VolleyballPlayer, tags: Array[String], amount: float = 1.0) -> void:
+	var modifier := 0.65 + player.adaptability / 100.0 * 0.90
+	for tag in tags: player.situation_experience[tag] = float(player.situation_experience.get(tag, 0.0)) + amount * modifier
+
+static func familiarity(player: VolleyballPlayer, tags: Array[String]) -> float:
+	if tags.is_empty(): return 0.5
+	var total := 0.0
+	for tag in tags: total += 1.0 - exp(-float(player.situation_experience.get(tag, 0.0)) / 18.0)
+	return clampf(total / tags.size(), 0.0, 1.0)
+
+static func attack_geometry(player: VolleyballPlayer, lane: String) -> float:
+	var right_side := lane in ["Right Pin", "Inside Right", "Right Quick"]
+	var natural := (player.dominant_hand == "Left" and right_side) or (player.dominant_hand == "Right" and not right_side)
+	var base := 0.035 if natural else -0.035
+	if "Ambidextrous" in player.traits: return 0.025
+	if "Functional Weak Hand" in player.traits and not natural: return -0.012
+	return base * lerpf(1.25, 0.45, (player.finesse + player.improvisation + player.approach_timing) / 300.0)
+
+static func read_modifier(player: VolleyballPlayer, tags: Array[String], scouting: float = 0.0) -> float:
+	var known := familiarity(player, tags)
+	var mental := (player.anticipation * 0.35 + player.court_vision * 0.25 \
+		+ player.tactical_discipline * 0.20 + player.adaptability * 0.20) / 100.0
+	return clampf((known * 0.55 + scouting * 0.25 + mental * 0.20) - 0.50, -0.10, 0.10)

@@ -7,6 +7,7 @@ signal title_requested
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const ATTRIBUTE_GROUPS := {
 	"Physical": ["acceleration", "lateral_speed", "transition_speed", "explosiveness", "jump_reach", "stamina"],
 	"Serving": ["serve_power", "serve_technique", "serve_placement", "serve_consistency", "serve_aggression", "serve_variation"],
@@ -14,7 +15,7 @@ const ATTRIBUTE_GROUPS := {
 	"Setting and Hand Control": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control"],
 	"Attacking": ["attack_power", "arm_speed", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety"],
 	"Defense": ["block_timing", "dig_control"],
-	"Mental and Tactical": ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation"],
+	"Mental and Tactical": ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation", "adaptability"],
 }
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const WHEEL_TOOLTIPS := {
@@ -61,6 +62,8 @@ const WHEEL_TOOLTIPS := {
 @onready var raw_attributes: RichTextLabel = %RawAttributes
 @onready var player_attribute_wheel: Control = %PlayerAttributeWheel
 @onready var wheel_profile_option: OptionButton = %WheelProfileOption
+@onready var position_training_option: OptionButton = %PositionTrainingOption
+@onready var position_training_summary: Label = %PositionTrainingSummary
 @onready var team_summary: RichTextLabel = %TeamSummary
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
@@ -87,6 +90,9 @@ func _ready() -> void:
 	training_option.item_selected.connect(_training_selected)
 	roster_list.item_selected.connect(_roster_selected)
 	wheel_profile_option.item_selected.connect(_wheel_profile_selected)
+	%AssignPositionTrainingButton.pressed.connect(_assign_position_training)
+	%UsePositionButton.pressed.connect(_use_trained_position)
+	position_training_option.item_selected.connect(_position_training_preview)
 	transfer_list.item_selected.connect(_transfer_selected)
 	sign_button.pressed.connect(_sign_transfer)
 	fixture_list.item_selected.connect(_fixture_selected)
@@ -98,6 +104,8 @@ func _ready() -> void:
 		training_option.add_item(activity_name)
 	for profile_name in WHEEL_PROFILES:
 		wheel_profile_option.add_item(profile_name)
+	position_training_option.add_item("None")
+	for position_name in Familiarity.POSITIONS: position_training_option.add_item(position_name)
 	for card in [%RosterCard, %TeamCard, %TransfersCard, %CompetitionCard]:
 		card.section_requested.connect(_navigate)
 	refresh()
@@ -197,12 +205,46 @@ func _roster_selected(index: int) -> void:
 		player.current_ability_stars(), player.potential_ability_stars(),
 		key_attributes, player.height_cm, player.mass_kg, player.wingspan_cm,
 		"Slot %d" % GameManager.current_lineup().slot_for_player(player.id) if GameManager.current_lineup().slot_for_player(player.id) >= 1 else "Bench"]
-	roster_detail.text += "\n\n[b]Serve repertoire[/b]\n%s · %s proficiency" % [
+	roster_detail.text += "\n\n[b]Profile[/b]\n%s-handed · Adaptability %d\nNatural: %s\n\n[b]Serve repertoire[/b]\n%s · %s proficiency" % [
+		player.dominant_hand, player.adaptability, ", ".join(player.natural_positions),
 		player.primary_serve_style,
 		AttributeProfiles.grade(float(player.active_serve_style_score())),
 	]
 	_refresh_player_wheel(player)
+	_refresh_position_training(player)
 	raw_attributes.text = _raw_attribute_text(player)
+
+
+func _refresh_position_training(player: VolleyballPlayer) -> void:
+	var target := player.position_training_target if not player.position_training_target.is_empty() else "None"
+	for index in range(position_training_option.item_count):
+		if position_training_option.get_item_text(index) == target: position_training_option.select(index)
+	_position_training_preview(position_training_option.selected)
+
+
+func _position_training_preview(_index: int) -> void:
+	var player := GameManager.player_by_id(selected_roster_id)
+	if player == null: return
+	var target := position_training_option.get_item_text(position_training_option.selected)
+	if target == "None":
+		position_training_summary.text = "No individual position training assigned."
+		return
+	var familiarity := float(player.position_familiarity.get(target, 0.0))
+	position_training_summary.text = "%s: %s (%d%%) · suitability %d%% · adaptability %d" % [target,
+		Familiarity.familiarity_label(familiarity), roundi(familiarity),
+		Familiarity.suitability(player, target), player.adaptability]
+
+
+func _assign_position_training() -> void:
+	var target := position_training_option.get_item_text(position_training_option.selected)
+	var error: String = GameManager.set_position_training(selected_roster_id, target)
+	_set_status(error if not error.is_empty() else "Position training assignment saved.", not error.is_empty())
+
+func _use_trained_position() -> void:
+	var target := position_training_option.get_item_text(position_training_option.selected)
+	var error: String = GameManager.assign_player_position(selected_roster_id, target)
+	_set_status(error if not error.is_empty() else "Roster position updated; rotation sheets remain separate.", not error.is_empty())
+	refresh()
 
 
 func _wheel_profile_selected(_index: int) -> void:

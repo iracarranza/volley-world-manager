@@ -7,6 +7,7 @@ const OpponentTeamScript := preload("res://scripts/models/opponent_team.gd")
 const TeamScript := preload("res://scripts/models/team.gd")
 const MatchFormatScript := preload("res://scripts/models/match_format.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 
 signal rotation_changed(rotation_number: int)
 signal playbook_changed
@@ -260,7 +261,34 @@ func _make_player(
 	if not overrides.has("serve_variation"):
 		player.serve_variation = player.serve_accuracy
 	AttributeProfiles.assign_serve_style(player)
+	Familiarity.initialize_player(player)
 	return player
+
+
+func set_position_training(player_id: int, position_name: String) -> String:
+	var player := player_by_id(player_id)
+	if player == null: return "Player not found."
+	if position_name != "None" and position_name not in Familiarity.POSITIONS:
+		return "Unknown training position."
+	player.position_training_target = "" if position_name == "None" else position_name
+	roster_changed.emit()
+	return ""
+
+func assign_player_position(player_id: int, position_name: String) -> String:
+	var player := player_by_id(player_id)
+	if player == null or position_name not in Familiarity.POSITIONS: return "Invalid position assignment."
+	if float(player.position_familiarity.get(position_name, 0.0)) < 20.0: return "The player is not yet emergency-ready there."
+	for role_name in team.depth_chart:
+		var ids: Array = team.depth_chart[role_name]
+		ids.erase(player_id)
+		team.depth_chart[role_name] = ids
+	if position_name not in team.depth_chart: team.depth_chart[position_name] = []
+	team.depth_chart[position_name].append(player_id)
+	player.position_role = position_name
+	player.position_code = {"Setter": "S", "Outside Hitter": "OH", "Middle Blocker": "M", "Opposite": "OP", "Libero": "L"}.get(position_name, "P")
+	if position_name != "Libero": team.libero_ids.erase(player_id)
+	roster_changed.emit()
+	return ""
 
 
 func select_rotation(rotation_number: int) -> String:

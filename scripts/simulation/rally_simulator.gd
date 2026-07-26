@@ -8,6 +8,7 @@ const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd"
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -210,7 +211,7 @@ func resolve(
 		+ _rating(setter, "composure") * 0.10 \
 		+ result.reception_quality * 0.28 - tempo_demand \
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
-		- float(set_geometry.difficulty)
+		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
 	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
 	var set_flight_time: float = float(
 		[0.34, 0.48, 0.70, 1.02][clampi(assignment.tempo, 0, 3)]
@@ -261,7 +262,9 @@ func resolve(
 		+ _power_rating(hitter, "attack_power") * 0.24 \
 		+ _rating(hitter, "decision_making") * 0.13 \
 		+ approach_fit + result.set_quality * 0.25 - tempo_demand \
-		+ clampf(hitter_arrival_margin * 0.22, -0.58, 0.08)
+		+ clampf(hitter_arrival_margin * 0.22, -0.58, 0.08) \
+		+ Familiarity.attack_geometry(hitter, assignment.lane) \
+		+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14
 	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
 	var hit_type := _hit_type(assignment, hitter)
 	var attack_choice := _choose_home_attack_target(
@@ -401,12 +404,18 @@ func resolve(
 		opponent_team, attack_target, attack_flight
 	)
 	var opponent_defender := opponent_defense.player as VolleyballPlayer
+	var read_tags: Array[String] = ["hand:%s" % hitter.dominant_hand.to_lower(),
+		"attack:%s" % str(attack_choice.direction).to_lower().replace("-", "_")]
+	var read_modifier := Familiarity.read_modifier(
+		opponent_defender, read_tags, float(opponent_team.scouting_confidence)
+	)
 	var defense_strength := clampf(
 		_rating(opponent_defender, "reception") * 0.46
 		+ _rating(opponent_defender, "anticipation") * 0.38
 		+ clampf(float(opponent_defense.arrival_margin) * 0.08, -0.18, 0.10)
-		+ rng.randf_range(-0.16, 0.16), 0.1, 0.9
+		+ read_modifier + rng.randf_range(-0.16, 0.16), 0.1, 0.9
 	)
+	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = defense_strength > float(result.attack_quality) \
 		+ rng.randf_range(-0.20, 0.12)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,

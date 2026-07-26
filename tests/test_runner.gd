@@ -12,6 +12,7 @@ const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
+const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 
 var checks: int = 0
 var failures: int = 0
@@ -187,10 +188,32 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_check(club_roster[0].serve_style_proficiencies.size() == 5 \
 			and club_roster[0].primary_serve_style in club_roster[0].serve_style_proficiencies,
 		"generated players receive a five-style serving repertoire and primary style")
+	_check(club_roster[0].dominant_hand in ["Right", "Left"] \
+			and club_roster[0].natural_positions.has(club_roster[0].primary_position),
+		"generated players receive handedness and natural-position identity")
+	_check(club_roster[0].position_familiarity.size() == 5,
+		"generated players track familiarity for every core position")
 	var summary_profile: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.summary_profile(club_roster[0])
 	_check(summary_profile.size() == 6 and ATTRIBUTE_PROFILE_SCRIPT.grade(85.0) == "S" \
 			and ATTRIBUTE_PROFILE_SCRIPT.grade(39.0) == "D",
 		"player profile summarizes six graded categories from detailed wheels")
+	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 6,
+		"Mental and Tactical remains a six-point wheel with derived Reading and Adaptability")
+	var conversion_player := academy_roster[6]
+	conversion_player.wingspan_cm = 205.0
+	conversion_player.jump_reach = 95
+	conversion_player.explosiveness = 96
+	var middle_suitability := FAMILIARITY_SCRIPT.suitability(conversion_player, "Middle Blocker")
+	_check(middle_suitability >= 50,
+		"unusual reach and explosiveness can make a short libero viable for middle training")
+	conversion_player.position_training_target = "Middle Blocker"
+	var familiarity_before := float(conversion_player.position_familiarity["Middle Blocker"])
+	_check(FAMILIARITY_SCRIPT.train_position(conversion_player) > 0.0 \
+			and float(conversion_player.position_familiarity["Middle Blocker"]) > familiarity_before,
+		"adaptability-driven cross-training increases target-position familiarity")
+	FAMILIARITY_SCRIPT.record_exposure(conversion_player, ["hand:left", "attack:cross"])
+	_check(not conversion_player.situation_experience.is_empty(),
+		"meaningful situations accumulate sparse player familiarity experience")
 	var restored_server := VolleyballPlayer.from_dict(club_roster[0].to_dict())
 	_check(restored_server.serve_technique == club_roster[0].serve_technique \
 			and restored_server.primary_serve_style == club_roster[0].primary_serve_style \
