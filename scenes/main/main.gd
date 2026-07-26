@@ -119,6 +119,7 @@ func _ready() -> void:
 	rotation_option.item_selected.connect(_select_rotation)
 	tactical_court.player_selected.connect(_select_hitter)
 	tactical_court.player_instruction_requested.connect(_open_player_instructions)
+	tactical_court.player_drag_started.connect(_player_drag_started)
 	tactical_court.assignment_dragged.connect(_open_assignment_popup)
 	lane_option.item_selected.connect(_preview_demand)
 	tempo_option.item_selected.connect(_preview_demand)
@@ -405,7 +406,7 @@ func _load_defender_assignment(player_id: int) -> void:
 	emergency_pursuit_check.button_pressed = bool(assignment.emergency_pursuit)
 	short_ball_priority_option.select(clampi(int(assignment.short_ball_priority), 0, 3))
 	deflection_priority_option.select(clampi(int(assignment.deflection_priority), 0, 3))
-	setter_release_help.visible = defense_section_option.selected == 3 \
+	setter_release_help.visible = defense_section_option.selected == 0 \
 		and player_id == GameManager.current_lineup().active_setter_id()
 	if blocking_phase and not front_row:
 		selected_defender_label.text = "%s is back row · no blocking instructions" % player.position_code
@@ -721,17 +722,29 @@ func _open_player_instructions(player_id: int, marker_screen_position: Vector2) 
 	selected_player_id = player_id
 	_load_defender_assignment(player_id)
 	var phase := defense_section_option.selected
-	var popup_size := Vector2(270.0, [245.0, 210.0, 315.0, 330.0][phase])
-	var local_marker := marker_screen_position - Vector2(tactical_workspace_popup.position)
-	var workspace_size := Vector2(tactical_workspace_popup.size)
-	var popup_position := local_marker + Vector2(28.0, -popup_size.y * 0.52)
-	if popup_position.x + popup_size.x > workspace_size.x - 12.0:
-		popup_position.x = local_marker.x - popup_size.x - 28.0
-	popup_position.x = clampf(popup_position.x, 12.0, workspace_size.x - popup_size.x - 12.0)
-	popup_position.y = clampf(popup_position.y, 54.0, workspace_size.y - popup_size.y - 12.0)
+	var popup_size := Vector2(270.0, [265.0, 210.0, 315.0, 300.0][phase])
+	var court_origin := tactical_court.get_screen_position()
+	var court_end := court_origin + tactical_court.size
+	var popup_screen_position := marker_screen_position + Vector2(28.0, -popup_size.y * 0.52)
+	if popup_screen_position.x + popup_size.x > court_end.x - 8.0:
+		popup_screen_position.x = marker_screen_position.x - popup_size.x - 28.0
+	popup_screen_position.x = clampf(
+		popup_screen_position.x, court_origin.x + 8.0, court_end.x - popup_size.x - 8.0
+	)
+	popup_screen_position.y = clampf(
+		popup_screen_position.y, court_origin.y + 8.0, court_end.y - popup_size.y - 8.0
+	)
+	var popup_position := popup_screen_position - Vector2(tactical_workspace_popup.position)
 	defender_popup.position = Vector2i(popup_position)
 	defender_popup.size = Vector2i(popup_size)
 	defender_popup.show()
+	defender_popup.move_to_front()
+
+
+func _player_drag_started(_player_id: int) -> void:
+	# A press may become either a click or a drag. Hide the old panel immediately;
+	# a true click release reopens it at the marker's current position.
+	defender_popup.hide()
 
 
 func _open_tactical_workspace() -> void:
@@ -930,7 +943,7 @@ func _update_defense_section_visibility(index: int) -> void:
 	%OpponentAdaptationRateLabel.visible = blocking
 	opponent_adaptation_rate_slider.visible = blocking
 	court_instructions.text = (
-		"Drag passer zones, set their radius and establish seam priority."
+		"Drag passer zones and the independent S→ release target; click a marker for priorities."
 		if serve_receive else (
 			"Select a blocker to set read and seam responsibility."
 			if blocking else (

@@ -211,8 +211,9 @@ setter attack-eligible. Emergency setters remain a separate broken-play path.
 The active setter's saved release target shapes the preferred reception vector;
 the simulator then grades the real set from its contact distance, direction,
 body orientation and displacement from that release region.
-The court renders that target as an independent draggable handle connected to
-the active setter. Click-release opens contextual instructions; exceeding the
+During Serve Receive, the court renders that target as an independent draggable
+handle connected to the active setter. Click-release opens contextual
+instructions above the court; exceeding the
 drag threshold edits spatial state without creating a modal popup mid-drag.
 
 Floor systems are presets, not outcome bonuses disguised as labels. Applying

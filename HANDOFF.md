@@ -72,9 +72,9 @@
 - Apply Perimeter, Middle-Up and Rotation Defense as functional position/zone
   presets, then customize the resulting plan as a modified preset.
 - Edit Attack Coverage and Transition separately from Floor Defense, including
-  block-rebound priority, emergency setting and a draggable active-setter
-  release path.
-- Drag an independent `S→` release destination rather than the setter marker.
+  block-rebound priority and emergency setting.
+- In Serve Receive, drag an independent `S→` release destination rather than
+  the setter marker.
   A solid setter-to-target line and midpoint arrow keep the direction visible
   while the setter and preferred setting destination remain separate state.
 - Choose a 5-1 or 6-2 setting system. A 6-2 derives its active setter from the

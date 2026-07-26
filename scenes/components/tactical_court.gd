@@ -7,6 +7,7 @@ const RotationLegalityModel := preload("res://scripts/simulation/rotation_legali
 
 signal player_selected(player_id: int)
 signal player_instruction_requested(player_id: int, marker_screen_position: Vector2)
+signal player_drag_started(player_id: int)
 signal assignment_dragged(player_id: int, lane_name: String, marker_position: Vector2)
 signal defender_position_changed(player_id: int, court_position: Vector2)
 signal coverage_zone_position_changed(
@@ -122,6 +123,17 @@ func set_landscape_orientation(enabled: bool) -> void:
 func select_player(player_id: int) -> void:
 	selected_player_id = player_id
 	queue_redraw()
+
+
+func player_marker_screen_position(player_id: int) -> Vector2:
+	if lineup == null:
+		return get_screen_position()
+	var slot_number := lineup.slot_for_player(player_id)
+	if slot_number < 0:
+		return get_screen_position()
+	return get_screen_position() + _court_to_local(
+		_player_court_position(player_id, slot_number)
+	)
 
 
 func animate_event(event: Resource, duration: float) -> void:
@@ -504,6 +516,7 @@ func _gui_input(event: InputEvent) -> void:
 			drag_position = mouse_event.position
 			select_player(dragging_player_id)
 			player_selected.emit(dragging_player_id)
+			player_drag_started.emit(dragging_player_id)
 			accept_event()
 		return
 	if dragging_release_target:
@@ -539,7 +552,7 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _release_target_at_local_position(local_position: Vector2) -> bool:
-	if not defensive_mode or defensive_phase != 3 or defensive_plan == null or lineup == null:
+	if not defensive_mode or defensive_phase != 0 or defensive_plan == null or lineup == null:
 		return false
 	var target: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id())
 	return local_position.distance_to(_court_to_local(target)) <= 22.0
@@ -736,7 +749,7 @@ func _draw_serve_receive_legality() -> void:
 
 
 func _draw_setter_release_path() -> void:
-	if not defensive_mode or defensive_phase != 3 or defensive_plan == null or lineup == null:
+	if not defensive_mode or defensive_phase != 0 or defensive_plan == null or lineup == null:
 		return
 	var setter_id := lineup.active_setter_id()
 	var setter_slot := lineup.slot_for_player(setter_id)
