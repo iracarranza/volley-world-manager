@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://da5m8yst4evu4"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_p7tlo"]
+radius = 0.11
+height = 0.22
+
+[node name="BallActor3D" type="Node3D" unique_id=1640107401]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1768730557]
+mesh = SubResource("SphereMesh_p7tlo")

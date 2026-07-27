@@ -1,0 +1,51 @@
+[gd_scene format=3 uid="uid://dwitl3atsqyfv"]
+
+[ext_resource type="Script" uid="uid://dnwa621e3ojc0" path="res://scenes/components/match_court_3d.gd" id="1_b773v"]
+[ext_resource type="PackedScene" uid="uid://da5m8yst4evu4" path="res://scenes/components/ball_actor_3d.tscn" id="1_dqg5w"]
+[ext_resource type="Script" uid="uid://dwnrf8u6h6i33" path="res://scenes/components/ball_actor_3d.gd" id="3_ducuk"]
+[ext_resource type="PackedScene" uid="uid://7pan3nabw3c3" path="res://scenes/components/player_actor_3d.tscn" id="4_nvcsd"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4javv"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_bim5j"]
+material = SubResource("StandardMaterial3D_4javv")
+size = Vector2(9, 18)
+
+[sub_resource type="BoxMesh" id="BoxMesh_lgs6n"]
+size = Vector3(9.5, 1, 0.05)
+
+[sub_resource type="Environment" id="Environment_p7tlo"]
+background_mode = 1
+background_color = Color(0.101960786, 0.101960786, 0.14117648, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.53333336, 0.53333336, 0.53333336, 1)
+
+[node name="MatchCourt3D" type="Node3D" unique_id=649354656]
+script = ExtResource("1_b773v")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1418727656]
+transform = Transform3D(0.25881907, -0.4082179, 0.87542605, 0, 0.90630776, 0.42261827, -0.9659258, -0.10938167, 0.23456973, 12, 8, 6)
+current = true
+fov = 55.0
+near = 0.022
+far = 376.63
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1336076783]
+transform = Transform3D(0.8660254, 0.35355338, -0.35355338, 0, 0.70710677, 0.70710677, 0.5, -0.6123724, 0.6123724, 0, 0, 0)
+
+[node name="CourtMesh" type="MeshInstance3D" parent="." unique_id=1682955738]
+mesh = SubResource("PlaneMesh_bim5j")
+
+[node name="NetMesh" type="MeshInstance3D" parent="." unique_id=1602953857]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.93, 0)
+mesh = SubResource("BoxMesh_lgs6n")
+
+[node name="BallActor3D" parent="." unique_id=1640107401 instance=ExtResource("1_dqg5w")]
+script = ExtResource("3_ducuk")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1492118023]
+environment = SubResource("Environment_p7tlo")
+
+[node name="Players" type="Node3D" parent="." unique_id=1984352263]
+
+[node name="PlayerActor3D" parent="Players" unique_id=1561609154 instance=ExtResource("4_nvcsd")]

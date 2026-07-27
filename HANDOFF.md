@@ -71,6 +71,9 @@
   block, defense and point events. Terminal failures naturally shorten the chain.
 - Watch the result on the tactical court using primitive ball paths, actor
   highlights and a block envelope, with 0.5×/1×/2× playback and skip.
+- Treat the tactical court as the editable top-down planning view. The future
+  match presentation is intended to become a separate FM-style stationary-camera
+  3D playback scene driven by the same rally events.
 - Watch home markers move toward reception, setting, approach, blocking and
   defensive contact positions while events play.
 - Watch the ball follow continuous contact-to-contact trajectories while the
@@ -242,6 +245,7 @@
 - Use rotation sheets that automatically replace the back-row middle with the
   libero while preventing front-row libero placement and attack assignment.
 - Toggle between Molten Light and Mikasa Dark themes.
+- Add 0.1× rally playback as the slowest available speed option.
 
 ## Implemented underneath
 
@@ -267,9 +271,12 @@
 - Opponent substitutions, opponent timeouts and a second-libero ruleset.
 - Unlimited continuation contacts; rallies intentionally use a four-exchange
   safety bound to prevent pathological simulation loops.
+- The FM-style stationary-camera 3D match view, placeholder player actors and
+  ball actor. The current tactical court remains the match playback surface for
+  now.
 
 The next pass should deepen calendar competition, multi-session training and
 player development feedback while opponent substitutions and tactical
-counter-adjustments can remain match-engine follow-up.
-Marker movement is intentionally schematic; future 2.5D
-work can replace the presenter without changing rally outcomes.
+counter-adjustments can remain match-engine follow-up. Match presentation work
+should move toward a separate 3D scene that reuses the rally event stream
+without replacing the tactical board.

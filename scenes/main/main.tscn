@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cwvn821kr6lok" path="res://scenes/main/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/components/tactical_court.tscn" id="2_court"]
 [ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="3_theme"]
+[ext_resource type="PackedScene" uid="uid://c5dfblsc38oqe" path="res://scenes/screens/match_screen.tscn" id="4_l3cfh"]
 
 [node name="Main" type="Control" unique_id=564539663]
 layout_mode = 3
@@ -896,3 +897,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(640, 24)
 layout_mode = 2
 text = "Tactical editor ready."
+
+[node name="MatchScreen" parent="." unique_id=1408541162 instance=ExtResource("4_l3cfh")]
+visible = false
+z_index = 10
+layout_mode = 1

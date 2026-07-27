@@ -13,3 +13,4 @@ extends Resource
 @export var key_factors: Array[String] = []
 @export var analysis: Dictionary = {}
 @export var explanation: String = ""
+@export var ending_reason: StringName = &""

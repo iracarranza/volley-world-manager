@@ -113,6 +113,7 @@ const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 @onready var set_captain_button: Button = %SetCaptainButton
 @onready var set_libero_button: Button = %SetLiberoButton
 @onready var depth_chart_label: Label = %DepthChartLabel
+@onready var match_screen: MatchScreen = $MatchScreen  # Or %MatchScreen if using unique names
 
 var selected_player_id: int = -1
 var draft_play: OffensivePlay
@@ -186,6 +187,8 @@ func _ready() -> void:
 	GameManager.playbook_changed.connect(_refresh_saved_plays)
 	GameManager.rotation_changed.connect(_rotation_changed)
 	GameManager.roster_changed.connect(_refresh_roster_popup)
+	if GameManager.has_signal("rally_completed"):
+		GameManager.rally_completed.connect(_on_rally_completed)
 	rotation_option.select(GameManager.selected_rotation - 1)
 	_setup_tactical_workspace()
 	_setup_defender_popup()
@@ -255,12 +258,12 @@ func _populate_static_options() -> void:
 		popup_tempo_option.add_item("T%d" % tempo)
 		popup_tempo_option.set_item_metadata(popup_tempo_option.item_count - 1, tempo)
 	playback_speed_option.clear()
-	for speed_data in [["0.5×", 0.5], ["1×", 1.0], ["2×", 2.0]]:
+	for speed_data in [["0.1×", 0.1], ["0.5×", 0.5], ["1×", 1.0], ["2×", 2.0]]:
 		playback_speed_option.add_item(str(speed_data[0]))
 		playback_speed_option.set_item_metadata(
 			playback_speed_option.item_count - 1, float(speed_data[1])
 		)
-	playback_speed_option.select(1)
+	playback_speed_option.select(2)
 	court_mode_option.clear()
 	court_mode_option.add_item("Offensive Play")
 	court_mode_option.add_item("Defensive Plan")
@@ -1214,16 +1217,21 @@ func _select_option_text(option: OptionButton, value: String) -> void:
 			option.select(item_index)
 			return
 
-
 func _resolve_rally() -> void:
 	if rally_playback_active:
 		return
 	_capture_match_preview_snapshot()
+
+	# 1. Resolve rally using the seed (1 argument required)
 	var result: Resource = GameManager.resolve_active_rally(rally_seed)
 	rally_seed += 1
 	last_rally_result = result
+
+	# 2. Play existing 2D playback / updates
 	await _play_rally(result, true)
 
+	# 3. Pass the result directly to your new 3D match view trigger
+	_on_rally_completed(result)
 
 func _replay_last_rally() -> void:
 	if rally_playback_active or last_rally_result == null:
@@ -1743,3 +1751,15 @@ func _update_status_color() -> void:
 		status_label.modulate = Color("a92121") if light_mode_enabled else Color("ff7777")
 	else:
 		status_label.modulate = Color("176b45") if light_mode_enabled else Color("8ee5aa")
+
+## Called when a rally finishes simulation to trigger 3D playback
+func _on_rally_completed(rally_result: RallyResult) -> void:
+	print("--- DEBUG 1: _on_rally_completed called ---")
+	print("match_screen reference: ", match_screen)
+
+	if match_screen != null:
+		print("--- DEBUG 2: Calling load_and_play_rally ---")
+		await match_screen.load_and_play_rally(rally_result)
+		print("--- DEBUG 3: load_and_play_rally finished ---")
+	else:
+		print("ERROR: match_screen is NULL!")

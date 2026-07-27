@@ -12,8 +12,9 @@
 - `scripts/tactics`: pure validation and tactical-demand calculations.
 - `scripts/simulation`: seeded discrete rally resolution. It does not use scene
   nodes, timers or animation state.
-- `scenes/components/tactical_court.gd`: presentation and input only. It draws
-  normalized tactical data and never determines whether a contact succeeds.
+- `scenes/components/tactical_court.gd`: tactical-board presentation and input
+  only. It draws normalized planning data and never determines whether a
+  contact succeeds.
 - `scripts/managers/game_manager.gd`: coordinates the managed team, players,
   rotations, saved
   plays, active plays, match state, rally-resolution entry point and serialization.
@@ -54,7 +55,8 @@
   current on-court personnel, real player attributes, tendencies and scouting
   confidence.
 - `scenes/main/main.gd`: presentation coordinator. It requests a completed
-  result from the manager, then controls event playback speed and skipping.
+  result from the manager, then controls tactical-board playback speed,
+  skipping and the future match-view switch.
 
 ## Data flow
 
@@ -105,16 +107,19 @@ board without changing saved tactics or simulation data.
 
 `main.tscn` now has two presentation surfaces backed by the same state:
 
-- A read-only landscape match preview that receives rally playback.
 - A dedicated popup tactical workspace containing the existing interactive
   court and coaching editor.
+- A separate match presentation surface that will become the FM-style
+  stationary-camera 3D playback view.
 
 The workspace node is reparented into the popup at runtime. This avoids a second
 copy of editor logic and makes the change straightforward to revert.
-The Match Center preview receives a deep snapshot of the lineup, active play and
+The tactical court receives a deep snapshot of the lineup, active play and
 defensive plan when a point begins. It retains that completed-point context
 while the player edits future tactics. Replay reuses the stored `RallyResult`
-without invoking `GameManager.record_rally()` again.
+without invoking `GameManager.record_rally()` again. The future match-view
+surface will consume the same rally events without taking over simulation
+authority.
 The simulator completes the result before the first animation begins, so visual
 timing cannot change a point.
 The court presenter maintains temporary live marker positions during playback.
@@ -122,7 +127,7 @@ Those positions are discarded before the next rally and never feed back into
 simulation probability.
 `TacticalCourt.set_lineup()` is also a hard reset boundary: changing rotation
 clears its event, live positions, movement trails, tween targets and captions
-before accepting the new lineup. `main.gd` applies the same reset to both court
+before accepting the new lineup. `main.gd` applies the same reset to the court
 surfaces after scoring and through the manual Reset Positions control.
 For each rally event, the presenter derives normalized pre-contact and
 post-contact movement phases. `main.gd` sequences those phases around the ball
@@ -134,6 +139,25 @@ coverage, setter support, block closing and floor-defense movement happen as a
 coordinated presentation phase. Only normalized defensive-plan state—not these
 temporary animated positions—is read by the simulator.
 
+## Presentation split
+
+The tactical board remains the editable top-down planning layer. The future
+match view will be a separate FM-style stationary-camera 3D scene with its own
+court, player actors and ball actor, driven by the same rally-event timeline.
+The intended scene file map is:
+
+- `scenes/screens/match_screen.tscn` and `scenes/screens/match_screen.gd` for
+  the playback screen shell.
+- `scenes/components/match_court_3d.tscn` and `scenes/components/match_court_3d.gd`
+  for the fixed 3D court and camera.
+- `scenes/components/player_actor_3d.tscn` and `scenes/components/player_actor_3d.gd`
+  for on-court player visuals.
+- `scenes/components/ball_actor_3d.tscn` and `scenes/components/ball_actor_3d.gd`
+  for the ball visualization.
+
+The 3D view should stay event-driven and never replace the tactical board as
+the editable source of truth.
+
 ## Adaptation flow
 
 Home attack and serve events carry compact tactical metadata. After the rally
@@ -142,6 +166,10 @@ targets and advances an adjustable adaptation strength. The next rally may use
 that learned pattern as a bounded block bonus. Updating after resolution avoids
 changing an outcome retroactively, and the adaptation state is serialized by
 `GameManager`.
+
+The opponent model now tracks separate adaptation tracks for block, floor
+defense and serve receive. `RallySimulator` reads the relevant track for each
+phase so future opponent learning can remain spatially specific.
 
 ## Theme ownership
 

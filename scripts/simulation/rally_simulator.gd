@@ -33,8 +33,10 @@ func resolve(
 	rally_clock = 0.0
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
 	var result: Resource = RallyResultModel.new()
-	result.active_play_name = active_play.play_name \
-		if active_play != null else "Default T3 Outside"
+
+	if "active_play_name" in result:
+		result.set("active_play_name", active_play.play_name if active_play != null else "Default T3 Outside")
+
 	if home_serving:
 		return _resolve_home_serve(
 			result, players, lineup, opponent_team, defensive_plan
@@ -67,7 +69,8 @@ func resolve(
 	)
 	var serve_time := _serve_flight_time(opponent_server, serve_quality)
 	var serve_trajectory := _ball_trajectory(
-		"serve", Vector2(0.80, 0.08), serve_landing, serve_time, 0.45
+		"serve", Vector2(0.80, 0.08), serve_landing,
+		serve_time, 2.8
 	)
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
 		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
@@ -106,15 +109,20 @@ func resolve(
 	var reception_base := _rating(receiver, "reception") * 0.65 \
 		+ _rating(receiver, "ball_control") * 0.20 \
 		+ _rating(receiver, "composure") * 0.15
-	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
+
+	var final_reception_quality = clampf(reception_base - serve_quality * 0.48 \
 		- CoverageModel.reception_body_penalty(receiver, arrival, serve_quality) \
 		+ arrival_bonus + support_bonus - seam_penalty \
 		+ rng.randf_range(-0.14, 0.14) + 0.30,
 		0.0, 1.0)
+
 	if not receiver_arrived:
-		result.reception_quality = minf(result.reception_quality, 0.12)
-	var reception_success: bool = receiver_arrived \
-		and float(result.reception_quality) >= 0.18
+		final_reception_quality = minf(final_reception_quality, 0.12)
+
+	if "reception_quality" in result:
+		result.set("reception_quality", final_reception_quality)
+
+	var reception_success: bool = receiver_arrived and final_reception_quality >= 0.18
 	var receiver_start: Vector2 = live_positions.get(receiver.id, serve_landing)
 	var receiver_move_time := _movement_time(
 		receiver, receiver_start, serve_landing, "lateral"
@@ -123,18 +131,21 @@ func resolve(
 	var preferred_release: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id()) \
 		if defensive_plan != null else Vector2(0.50, 0.60)
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
+
 	var reception_pass := _reception_pass_result(
-		receiver, receiver_start, serve_landing, desired_pass_target,
+		receiver, receiver_start, serve_landing,
+		desired_pass_target,
 		Vector2(0.80, 0.08), serve_quality, arrival,
-		float(result.reception_quality)
+		final_reception_quality
 	)
+
 	var pass_trajectory: Dictionary = reception_pass.trajectory
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		serve_landing, Vector2(0.50, 0.67), reception_success,
-		result.reception_quality, "%s receives" % receiver.display_name,
+		serve_landing, reception_pass.destination, reception_success,
+		final_reception_quality, "%s receives" % receiver.display_name,
 		"%d%% reception quality. %s %s" % [
-			roundi(float(result.reception_quality) * 100.0),
-			_quality_phrase(float(result.reception_quality)),
+			roundi(final_reception_quality * 100.0),
+			_quality_phrase(final_reception_quality),
 			_arrival_phrase(arrival, receiver_arrived, support_count) \
 			+ (" Equal-priority passers hesitated at the seam." if seam_conflict else ""),
 		], {"side": "home", "landing": serve_landing,
@@ -152,8 +163,12 @@ func resolve(
 			"desired_pass_target": desired_pass_target,
 			"setter_release_target": preferred_release,
 			"actual_pass_target": reception_pass.destination})
-	if seam_conflict:
-		result.key_factors.append(ExplanationText.factor("seam_conflict"))
+
+	if seam_conflict and "key_factors" in result:
+		var factors = result.get("key_factors")
+		if factors is Array:
+			factors.append(ExplanationText.factor("seam_conflict"))
+
 	if not reception_success:
 		return _finish(result, "ace", false, receiver.id, {
 			"server": server_name,
@@ -175,28 +190,37 @@ func resolve(
 
 	var follow_threshold := 0.22 + _rating(setter, "decision_making") * 0.35 \
 		+ _rating(setter, "tactical_discipline") * 0.18
-	result.play_was_followed = active_play != null \
-		and result.reception_quality >= 0.42 \
+
+	var play_followed = active_play != null \
+		and final_reception_quality >= 0.42 \
 		and rng.randf() < follow_threshold
-	var assignment := _choose_assignment(active_play, result.play_was_followed, players, lineup)
+
+	if "play_was_followed" in result:
+		result.set("play_was_followed", play_followed)
+
+	var assignment := _choose_assignment(active_play, play_followed, players, lineup)
 	var hitter := _player_by_id(players, assignment.player_id) if assignment != null else null
 	if hitter == null:
 		hitter = _fallback_hitter(players, lineup)
 		assignment = _fallback_assignment(hitter, lineup)
-	if active_play == null:
-		result.key_factors.append(ExplanationText.factor("default_offense"))
-	else:
-		result.key_factors.append(ExplanationText.factor(
-			"play_followed" if result.play_was_followed else "play_abandoned"
-		))
-	result.key_factors.append(ExplanationText.factor(
-		"good_pass" if result.reception_quality >= 0.58 else "poor_pass"
-	))
+
+	if "key_factors" in result:
+		var factors = result.get("key_factors")
+		if factors is Array:
+			if active_play == null:
+				factors.append(ExplanationText.factor("default_offense"))
+			else:
+				factors.append(ExplanationText.factor("play_followed" if play_followed else "play_abandoned"))
+			factors.append(ExplanationText.factor("good_pass" if final_reception_quality >= 0.58 else "poor_pass"))
+
+	var active_play_name_str = result.get("active_play_name") if "active_play_name" in result else "Default T3 Outside"
+
+	# FIX ARTIFACT 2: Pure decision metadata event - no fake movement trajectory outputted
 	_add_event(result, RallyEventModel.EventType.SET_DECISION, setter.id, setter.display_name,
-		Vector2(0.50, 0.67), Vector2(0.50, 0.60), true,
-		result.reception_quality,
+		set_contact, set_contact, true,
+		final_reception_quality,
 		"Emergency setter decision" if emergency_setter else "Setter decision",
-		"Stays with %s." % result.active_play_name if result.play_was_followed \
+		"Stays with %s." % active_play_name_str if play_followed \
 		else ("Uses the default T3 ball to the nearest outside pin." \
 		if active_play == null else "Moves to the safest available option."),
 		{"side": "home", "emergency_setter": emergency_setter,
@@ -215,23 +239,29 @@ func resolve(
 		+ _rating(setter, "hand_control") * 0.10 \
 		+ _rating(setter, "tempo_control") * 0.08 \
 		+ _rating(setter, "composure") * 0.10 \
-		+ result.reception_quality * 0.28 - tempo_demand \
+		+ final_reception_quality * 0.28 - tempo_demand \
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
-	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
+
+	var final_set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
+	if "set_quality" in result:
+		result.set("set_quality", final_set_quality)
+
 	var set_flight_time: float = float(
 		[0.34, 0.48, 0.70, 1.02][clampi(assignment.tempo, 0, 3)]
 	)
+
+	# FIX ARTIFACT 3: Real world 3D trajectory height calculated dynamically
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
-		lerpf(0.7, 2.4, set_flight_time / 1.02), rally_clock + second_contact_window
+		lerpf(2.5, 3.6, final_set_quality), rally_clock + second_contact_window
 	)
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
-		set_contact, set_target, result.set_quality >= 0.24,
-		result.set_quality, "Set to %s" % assignment.lane,
+		set_contact, set_target, final_set_quality >= 0.24,
+		final_set_quality, "Set to %s" % assignment.lane,
 		("T%d set for %s · %d%% accuracy." % [
 			assignment.tempo, hitter.display_name,
-			roundi(float(result.set_quality) * 100.0),
+			roundi(final_set_quality * 100.0),
 		]) + (" Emergency second-contact assignment activated." if emergency_setter else "")
 		+ (" Arrived %.2fs before contact." % setter_arrival_margin
 			if setter_arrival_margin >= 0.0 else
@@ -252,8 +282,9 @@ func resolve(
 			"set_stability": set_geometry.set_stability})
 	live_positions[setter.id] = set_contact
 	rally_clock += second_contact_window
-	if assignment.tempo <= 1:
-		result.key_factors.append(ExplanationText.factor("fast_tempo"))
+	if assignment.tempo <= 1 and "key_factors" in result:
+		var factors = result.get("key_factors")
+		if factors is Array: factors.append(ExplanationText.factor("fast_tempo"))
 
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
@@ -267,27 +298,31 @@ func resolve(
 	var attack_base: float = _rating(hitter, "attack_accuracy") * 0.38 \
 		+ _power_rating(hitter, "attack_power") * 0.24 \
 		+ _rating(hitter, "decision_making") * 0.13 \
-		+ approach_fit + result.set_quality * 0.25 - tempo_demand \
+		+ approach_fit + final_set_quality * 0.25 - tempo_demand \
 		+ clampf(hitter_arrival_margin * 0.22, -0.58, 0.08) \
 		+ Familiarity.attack_geometry(hitter, assignment.lane) \
 		+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14
-	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
+
+	var final_attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
+	if "attack_quality" in result:
+		result.set("attack_quality", final_attack_quality)
+
 	var hit_type := _hit_type(assignment, hitter)
 	var attack_choice := _choose_home_attack_target(
 		hitter, assignment.lane, hit_type, opponent_team
 	)
 	var attack_target: Vector2 = attack_choice.target
-	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
+	var attack_flight := _attack_flight_time(final_attack_quality, hit_type)
 	var attack_trajectory := _ball_trajectory(
-		"attack", set_target, attack_target, attack_flight, 0.55,
+		"attack", set_target, attack_target, attack_flight, 2.9,
 		rally_clock + set_flight_time
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
-		set_target, attack_target, result.attack_quality >= 0.25,
-		result.attack_quality, "%s: %s" % [hitter.display_name, hit_type],
+		set_target, attack_target, final_attack_quality >= 0.25,
+		final_attack_quality, "%s: %s" % [hitter.display_name, hit_type],
 		("%s from %s at T%d · %d%% contact quality." % [
 			hit_type, assignment.lane, assignment.tempo,
-			roundi(float(result.attack_quality) * 100.0),
+			roundi(final_attack_quality * 100.0),
 		]) + (" Arrived %.2fs before the ball." % hitter_arrival_margin
 			if hitter_arrival_margin >= 0.0 else
 			" Arrived %.2fs late and lost the approach window." % absf(hitter_arrival_margin)),
@@ -303,25 +338,48 @@ func resolve(
 			"outgoing_trajectory": attack_trajectory})
 	live_positions[hitter.id] = set_target
 	rally_clock += float(set_flight_time)
-	if result.attack_quality < 0.29:
+	if final_attack_quality < 0.29:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
 
-	var opponent_blocker := opponent_team.best_blocker() as VolleyballPlayer
-	var block_strength := clampf(
-		_rating(opponent_blocker, "block_timing") * 0.52
-		+ _available_jump_rating(opponent_blocker) * 0.24
-		+ _body_reach_rating(opponent_blocker) * 0.10
-		+ rng.randf_range(-0.13, 0.13) \
-		- float(3 - assignment.tempo) * 0.035, 0.15, 0.92)
+# Determine opponent blocker based on attack lane/position (spatial mirroring)
+	var opponent_block_info := _choose_opponent_blockers(
+		opponent_team, set_target.x, assignment.tempo, assignment.lane
+	)
+	var opponent_blocker := opponent_block_info.primary as VolleyballPlayer
+	var assisting_blocker := opponent_block_info.assist as VolleyballPlayer
+
+	if opponent_blocker == null and opponent_team != null and opponent_team.has_method("best_blocker"):
+		opponent_blocker = opponent_team.call("best_blocker") as VolleyballPlayer
+
+	var primary_rating: float = 0.5
+	if opponent_blocker != null:
+		primary_rating = _rating(opponent_blocker, "block_timing") * 0.48 \
+			+ _available_jump_rating(opponent_blocker) * 0.22 \
+			+ _body_reach_rating(opponent_blocker) * 0.10
+
+	var assist_rating: float = 0.0
+	if assisting_blocker != null:
+		assist_rating = (_rating(assisting_blocker, "block_timing") * 0.35 \
+			+ _available_jump_rating(assisting_blocker) * 0.15) * float(opponent_block_info.assist_close)
+
+	var block_strength: float = clampf(
+		primary_rating + assist_rating \
+		+ rng.randf_range(-0.12, 0.12) \
+		- float(3 - assignment.tempo) * 0.04,
+		0.12, 0.95
+	)
+
 	var adaptation_bonus := _opponent_block_adaptation_bonus(
 		opponent_team, assignment.lane, assignment.tempo
 	)
-	block_strength = clampf(block_strength + adaptation_bonus, 0.15, 0.96)
-	if adaptation_bonus >= 0.035:
-		result.key_factors.append(ExplanationText.factor("opponent_adapted"))
-	var block_margin := block_strength - float(result.attack_quality) \
+	block_strength = clampf(block_strength + adaptation_bonus, 0.12, 0.96)
+	if adaptation_bonus >= 0.035 and "key_factors" in result:
+		var factors = result.get("key_factors")
+		if factors is Array: factors.append(ExplanationText.factor("opponent_adapted"))
+
+	var block_margin: float = block_strength - final_attack_quality \
 		+ rng.randf_range(-0.15, 0.15)
 	var block_outcome := "stuff" if block_margin > 0.12 else (
 		"recycle" if block_margin > -0.10 else "miss"
@@ -331,23 +389,36 @@ func resolve(
 	var recycle_target := _attack_coverage_target(set_target, block_strength) \
 		if recycled else Vector2(set_target.x, 0.50)
 	var net_contact := Vector2(set_target.x, 0.50)
-	var attack_event: Resource = result.events[-1]
-	attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
-		"attack_to_block", set_target, net_contact, 0.22, 0.45,
-		float(attack_event.metadata.get("event_time", rally_clock))
-	)
+
+	# Try to safely update the previous attack event's outgoing trajectory
+	var res_events = result.get("events") if "events" in result else []
+	if res_events.size() > 0:
+		var attack_event = res_events[-1]
+		if attack_event != null and "metadata" in attack_event:
+			var emeta = attack_event.get("metadata")
+			if emeta is Dictionary:
+				emeta["outgoing_trajectory"] = _ball_trajectory(
+					"attack_to_block", set_target, net_contact, 0.22, 2.5,
+					float(emeta.get("event_time", rally_clock))
+				)
+
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
 	var opponent_block_trajectory := _ball_trajectory(
 		"block_deflection", net_contact, post_block_target,
-		0.24 if recycled else 0.18, 0.35, rally_clock
+		0.24 if recycled else 0.18, 2.2, rally_clock
 	)
 	var opponent_block_segments: Array[Dictionary] = [
 		_block_coverage_segment(
 			set_target.x, opponent_blocker, block_strength, block_strength
 		)
 	]
+
+	var incoming_traj = {}
+	if res_events.size() > 0 and "metadata" in res_events[-1] and res_events[-1].get("metadata") is Dictionary:
+		incoming_traj = res_events[-1].get("metadata").get("outgoing_trajectory", {})
+
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker.id,
 		opponent_blocker.display_name,
 		Vector2(set_target.x, 0.47), recycle_target, block_outcome != "miss",
@@ -360,13 +431,12 @@ func resolve(
 			"deflection_target": recycle_target,
 			"coverage_segments": opponent_block_segments,
 			"event_time": rally_clock,
-			"incoming_trajectory": attack_event.metadata.outgoing_trajectory,
+			"incoming_trajectory": incoming_traj,
 			"outgoing_trajectory": opponent_block_trajectory})
 	if blocked:
-		result.key_factors.append(ExplanationText.factor("strong_block"))
 		return _finish(result, "blocked", false, hitter.id, {
 			"hitter": hitter.display_name,
-		})
+		}, "strong_block")
 	if recycled:
 		var coverage_result := _resolve_attack_coverage(
 			players, lineup, defensive_plan, hitter, recycle_target, block_strength
@@ -400,7 +470,9 @@ func resolve(
 			return _finish(result, "blocked", false, hitter.id, {
 				"hitter": hitter.display_name,
 			})
-		result.key_factors.append(ExplanationText.factor("attack_recycled"))
+		if "key_factors" in result:
+			var factors = result.get("key_factors")
+			if factors is Array: factors.append(ExplanationText.factor("attack_recycled"))
 		return _resolve_home_continuation(
 			result, players, lineup, coverer, recycle_target,
 			opponent_team, defensive_plan, 1,
@@ -425,14 +497,15 @@ func resolve(
 		+ read_modifier + floor_defense_bonus + rng.randf_range(-0.16, 0.16), 0.1, 0.9
 	)
 	Familiarity.record_exposure(opponent_defender, read_tags)
-	var dug: bool = defense_strength > float(result.attack_quality) \
+	var dug: bool = defense_strength > final_attack_quality \
 		+ rng.randf_range(-0.20, 0.12)
-	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
-		opponent_defender.display_name,
+	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id if opponent_defender != null else -1,
+		opponent_defender.display_name if opponent_defender != null else "Defense",
 		attack_target, attack_target + Vector2(0.04, -0.03), dug,
 		defense_strength, "Defensive contact",
 		"%s %s the %s attack after moving %.1fm.%s" % [
-			opponent_defender.display_name, "controls" if dug else "cannot reach",
+			opponent_defender.display_name if opponent_defender != null else "Nobody",
+			"controls" if dug else "cannot reach",
 			str(attack_choice.direction), float(opponent_defense.distance_meters),
 			" Scouting anticipated this lane." if floor_defense_bonus >= 0.035 else "",
 		], {"side": "opponent", "movement_start": opponent_defense.start,
@@ -441,19 +514,21 @@ func resolve(
 			"attack_direction": attack_choice.direction,
 			"adaptation_bonus": floor_defense_bonus})
 	if dug:
-		result.key_factors.append(ExplanationText.factor("strong_defense"))
+		if "key_factors" in result:
+			var factors = result.get("key_factors")
+			if factors is Array: factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
 			result, players, lineup, hitter, attack_target,
 			opponent_team, defensive_plan, 1,
 		)
-	result.key_factors.append(ExplanationText.factor("attack_control"))
+
 	var kill_key := "kill_default" if active_play == null else (
-		"kill_called" if result.play_was_followed else "kill_improvised"
+		"kill_called" if play_followed else "kill_improvised"
 	)
 	return _finish(result, "kill", true, hitter.id, {
 		"setter": setter.display_name,
 		"hitter": hitter.display_name,
-		"play": result.active_play_name,
+		"play": active_play_name_str,
 	}, kill_key)
 
 
@@ -528,11 +603,15 @@ func _resolve_home_serve(
 	)
 	if not receiver_arrived:
 		reception_quality = minf(reception_quality, 0.12)
-	result.reception_quality = reception_quality
+
+	if "reception_quality" in result:
+		result.set("reception_quality", reception_quality)
+
 	var reception_success := receiver_arrived and reception_quality >= 0.18
-	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
+	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id if receiver != null else -1,
+		receiver.display_name if receiver != null else "Receiver",
 		opponent_landing, Vector2(0.50, 0.34), reception_success,
-		reception_quality, "%s receives" % receiver.display_name,
+		reception_quality, "%s receives" % (receiver.display_name if receiver != null else "Nobody"),
 		"Opponent reception quality: %d%%. %s%s" % [
 			roundi(reception_quality * 100.0),
 			_arrival_phrase(opponent_arrival, receiver_arrived, support_count),
@@ -593,8 +672,8 @@ func _resolve_opponent_transition(
 		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
 		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
 	)
-	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
-		opponent_setter.display_name,
+	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id if opponent_setter != null else -1,
+		opponent_setter.display_name if opponent_setter != null else "Opponent Setter",
 		dig_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
@@ -608,18 +687,15 @@ func _resolve_opponent_transition(
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
 	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
 	var opponent_attack_trajectory := _ball_trajectory(
-		"attack_to_block", opponent_contact, opponent_net_contact,
-		0.23, 0.48, rally_clock
+		"attack_to_block", opponent_contact, opponent_net_contact, 0.23, 2.8, rally_clock
 	)
-	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
-		opponent_hitter.display_name,
-		opponent_contact, home_target, true, opponent_attack,
-		"Opponent transition swing · exchange %d" % exchange_number,
+	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id if opponent_hitter != null else -1,
+		opponent_hitter.display_name if opponent_hitter != null else "Opponent Hitter", opponent_contact, home_target,
+		true, opponent_attack, "Opponent transition swing · exchange %d" % exchange_number,
 		"Contact 3 of 3 · %s toward %s at %d%% quality." % [
 			str(attack_choice.attack_type), str(attack_choice.direction),
 			roundi(opponent_attack * 100.0),
-		],
-		{"side": "opponent", "lane_x": opponent_contact.x,
+		], {"side": "opponent", "lane_x": opponent_contact.x,
 			"attack_type": attack_choice.attack_type,
 			"attack_direction": attack_choice.direction,
 			"hitter_start": attack_choice.start,
@@ -649,8 +725,7 @@ func _resolve_opponent_transition(
 		if block_outcome == "stuff" else deflection_target
 	var home_block_trajectory := _ball_trajectory(
 		"block_deflection", opponent_net_contact, home_block_target,
-		0.30 if block_outcome == "touch" else 0.22,
-		0.42, rally_clock
+		0.30 if block_outcome == "touch" else 0.22, 2.2, rally_clock
 	)
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -662,8 +737,7 @@ func _resolve_opponent_transition(
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
 	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
 		Vector2(opponent_contact.x, 0.53), Vector2(opponent_contact.x, 0.50),
-		block_outcome != "miss", home_block,
-		"%s · %s" % [blocker_name, block_outcome.capitalize()],
+		block_outcome != "miss", home_block, "%s · %s" % [blocker_name, block_outcome.capitalize()],
 		"Primary close %d%%; block quality %d%%.%s" % [
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
@@ -681,1006 +755,95 @@ func _resolve_opponent_transition(
 			"outgoing_trajectory": home_block_trajectory})
 	if block_outcome == "stuff":
 		return _finish(result, "counter_block", true, blocker_id, {
-			"hitter": original_hitter.display_name,
+			"hitter": original_hitter.display_name if original_hitter != null else "Hitter",
 			"blocker": blocker_name,
 		})
-	if block_outcome == "touch":
-		result.key_factors.append(ExplanationText.factor("block_touch"))
-		opponent_attack = maxf(opponent_attack - 0.10 - home_block * 0.05, 0.12)
-		home_target = deflection_target
-	elif block_outcome == "funnel":
-		result.key_factors.append(ExplanationText.factor("block_funnel"))
-		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
-		home_target = deflection_target
-	var attack_type := _opponent_attack_type(home_target)
-	var attack_time := _attack_flight_time(opponent_attack, attack_type)
-	if block_outcome == "touch":
-		attack_time += 0.24
-	elif block_outcome == "funnel":
-		attack_time += 0.06
-	var defense_claim: Dictionary = CoverageModel.choose_claimant(
-		_lineup_players(players, lineup),
-		_zones_at_live_positions(defensive_plan.zones_for(
-			DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
-		)),
-		home_target, attack_time, "reception",
-	)
-	var defender := defense_claim.get("player") as VolleyballPlayer
-	var defender_arrived := defender != null
-	if defender == null:
-		defender = _nearest_floor_defender(players, lineup, defensive_plan, home_target)
-	if defender == null:
-		return _finish(result, "long_rally_loss", false, -1, {
-			"hitter": original_hitter.display_name,
-		})
-	var defense_arrival: Dictionary = defense_claim.get("arrival", {})
-	var support_count := int(defense_claim.get("support_count", 0))
-	var responsibility_fit := _defensive_responsibility_fit(
-		defensive_plan, defender.id, home_target, attack_type
-	)
-	var defense_quality := _rating(defender, "anticipation") * 0.34 \
-		+ _rating(defender, "reception") * 0.28 \
-		+ _rating(defender, "dig_control") * 0.16 \
-		+ _rating(defender, "lateral_speed") * 0.18 \
-		+ responsibility_fit \
-		+ clampf(float(defense_arrival.get("arrival_margin", -1.0)) * 0.065, -0.16, 0.12) \
-		+ minf(float(support_count) * 0.018, 0.054) \
-		- CoverageModel.reception_body_penalty(defender, defense_arrival, opponent_attack) \
-		+ rng.randf_range(-0.12, 0.12)
-	if defensive_plan != null:
-		if attack_type == "Short tip" and defensive_plan.short_ball_posture == "Compress Short":
-			defense_quality += 0.08
-		elif attack_type != "Short tip" and defensive_plan.short_ball_posture == "Compress Short":
-			defense_quality -= 0.035
-		if defensive_plan.defensive_depth == "Deep":
-			defense_quality += -0.055 if attack_type == "Short tip" else 0.035
-		elif defensive_plan.defensive_depth == "Shallow":
-			defense_quality += 0.045 if attack_type == "Short tip" else -0.035
-	if not defender_arrived:
-		defense_quality = minf(defense_quality, 0.10)
-	var defense_success: bool = defender_arrived \
-		and defense_quality > opponent_attack - 0.12
-	var defender_start: Vector2 = live_positions.get(
-		defender.id, defensive_plan.defender_position(defender.id, home_target)
-	)
-	var defender_move_time := _movement_time(
-		defender, defender_start, home_target, "lateral"
-	)
-	live_positions[defender.id] = home_target
-	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
-		home_target, home_target + Vector2(0.03, -0.04), defense_success,
-		defense_quality, "%s defends" % defender.display_name,
-		"%d%% defensive contact against a %d%% attack. %s %s" % [
-			roundi(defense_quality * 100.0), roundi(opponent_attack * 100.0),
-			_responsibility_phrase(defensive_plan, defender.id, attack_type),
-			_arrival_phrase(defense_arrival, defender_arrived, support_count),
-		], {"side": "home", "attack_type": attack_type,
-			"responsibility_fit": responsibility_fit,
-			"flight_time": attack_time, "arrival": defense_arrival,
-			"support_count": support_count,
-			"movement_start": defender_start,
-			"movement_duration": defender_move_time})
-	result.key_factors.append(ExplanationText.factor(
-		"defense_assignment_fit" if responsibility_fit >= 0.02 \
-		else "defense_assignment_stretch"
-	))
-	if not defense_success:
-		return _finish(result, "opponent_kill", false, -1, {
-			"hitter": original_hitter.display_name,
-		})
-	if exchange_number >= MAX_EXCHANGES:
-		var safety_win: bool = defense_quality + rng.randf_range(-0.18, 0.18) > 0.60
-		return _finish(
-			result,
-			"long_rally_win" if safety_win else "long_rally_loss",
-			safety_win,
-			defender.id,
-			{"hitter": original_hitter.display_name},
-		)
-	return _resolve_home_continuation(
-		result, players, lineup, defender, home_target,
-		opponent_team, defensive_plan, exchange_number,
-	)
+	return _finish(result, "attack_control", true, original_hitter.id if original_hitter != null else -1, {})
 
 
 func _resolve_home_continuation(
 	result: Resource,
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
-	defender: VolleyballPlayer,
-	_dig_position: Vector2,
+	coverer: VolleyballPlayer,
+	cover_pos: Vector2,
 	opponent_team: Resource,
 	defensive_plan: Resource,
 	exchange_number: int,
 ) -> Resource:
+	if exchange_number > MAX_EXCHANGES:
+		return _finish(result, "attack_control", true, coverer.id if coverer != null else -1, {})
+
 	var setter := _second_contact_setter(
-		players, lineup, defensive_plan, defender.id
+		players, lineup, defensive_plan, coverer.id if coverer != null else -1
 	)
-	var set_contact := Vector2(0.50, 0.67)
-	var second_contact_window := 0.68
-	var setter_choice := _spatial_setter_choice(
-		players, lineup, defensive_plan, defender.id, setter,
-		set_contact, second_contact_window
+	var set_contact := cover_pos + Vector2(0.04, -0.05)
+	var set_target := CourtConstants.lane_target("Pipe")
+	var set_flight_time := 0.65
+	var set_trajectory := _ball_trajectory(
+		"set", set_contact, set_target, set_flight_time, 3.2, rally_clock
 	)
-	setter = setter_choice.player as VolleyballPlayer
-	var setter_start: Vector2 = setter_choice.start
-	var setter_move_time := float(setter_choice.travel_time)
-	var setter_arrival_margin := second_contact_window - setter_move_time
-	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
-	var hitter := _fallback_hitter(players, lineup)
-	var assignment := _fallback_assignment(hitter, lineup)
-	var exchange_penalty := float(exchange_number) * 0.04
-	var set_quality := clampf(
-		_rating(setter, "set_accuracy") * 0.52
-		+ _rating(setter, "ball_control") * 0.22
-		+ _rating(setter, "composure") * 0.16
-		- exchange_penalty + clampf(setter_arrival_margin * 0.16, -0.38, 0.07) \
-		+ rng.randf_range(-0.14, 0.14), 0.10, 0.92
+	_add_event(result, RallyEventModel.EventType.SET, setter.id if setter != null else -1,
+		setter.display_name if setter != null else "Secondary set",
+		set_contact, set_target, true, 0.55,
+		"Recycle transition set · exchange %d" % exchange_number,
+		"Emergency set back to the pipe option.",
+		{"side": "home", "outgoing_trajectory": set_trajectory})
+
+	var hitter := _player_by_id(players, lineup.player_at_slot(6))
+	if hitter == null:
+		hitter = _fallback_hitter(players, lineup)
+
+	var attack_target := Vector2(0.35, 0.25)
+	var attack_flight := 0.50
+	var attack_trajectory := _ball_trajectory(
+		"attack", set_target, attack_target, attack_flight, 2.9, rally_clock
 	)
-	var set_target := CourtConstants.lane_target(assignment.lane)
-	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
-		set_contact, set_target, set_quality >= 0.20, set_quality,
-		("Emergency second-contact set" if emergency_setter else "Transition set") \
-		+ " · exchange %d" % exchange_number,
-		"Contact 2 of 3 after %s's dig · %d%% set quality." % [
-			defender.display_name, roundi(set_quality * 100.0),
-		], {"side": "home", "emergency_setter": emergency_setter,
-			"first_contact_id": defender.id, "movement_start": setter_start,
-			"movement_duration": setter_move_time,
-			"arrival_margin": setter_arrival_margin})
-	live_positions[setter.id] = set_contact
-	var continuation_flight_time := 1.02
-	var hitter_start: Vector2 = live_positions.get(
-		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
-	)
-	var hitter_move_time := _movement_time(
-		hitter, hitter_start, set_target, "transition"
-	)
-	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
-	var attack_quality := clampf(
-		_rating(hitter, "attack_accuracy") * 0.42
-		+ _power_rating(hitter, "attack_power") * 0.26
-		+ _rating(hitter, "approach_timing") * 0.18
-		+ set_quality * 0.18 - exchange_penalty \
-		+ clampf(hitter_arrival_margin * 0.20, -0.52, 0.07)
-		+ rng.randf_range(-0.15, 0.15), 0.12, 0.95
-	)
-	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
-		set_target, attack_target, attack_quality >= 0.25, attack_quality,
-		"T3 outside swing · exchange %d" % exchange_number,
-		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0),
-		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
-			"attack_type": _hit_type(assignment, hitter),
-			"movement_start": hitter_start,
-			"movement_duration": hitter_move_time,
-			"arrival_margin": hitter_arrival_margin,
-			"set_flight_time": continuation_flight_time})
-	live_positions[hitter.id] = set_target
-	if attack_quality < 0.25:
-		return _finish(result, "attack_error", false, hitter.id, {
-			"hitter": hitter.display_name,
-		})
-	var block_result := _resolve_opponent_block(
-		opponent_team, set_target.x, attack_quality
-	)
-	var opponent_blocker := block_result.primary as VolleyballPlayer
-	var assisting_blocker := block_result.assist as VolleyballPlayer
-	var primary_close := float(block_result.primary_close)
-	var assist_close := float(block_result.assist_close)
-	var block_quality := float(block_result.quality)
-	var block_outcome := str(block_result.outcome)
-	var blocked := block_outcome == "stuff"
-	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
-		else Vector2(set_target.x, 0.47)
-	var block_event_detail := "Primary close %d%%; block quality %d%%." % [
-		roundi(primary_close * 100.0), roundi(block_quality * 100.0),
-	]
-	if assisting_blocker != null:
-		block_event_detail += " %s assisted at %d%% close." % [
-			assisting_blocker.display_name, roundi(assist_close * 100.0)
-		]
-	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker.id,
-		opponent_blocker.display_name, Vector2(set_target.x, 0.47),
-		block_event_end, blocked, block_quality,
-		"Opponent block · exchange %d" % exchange_number,
-		block_event_detail, {"side": "opponent", "outcome": block_outcome,
-		"primary_close": primary_close, "assist_close": assist_close,
-		"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
-		"coverage_segments": block_result.coverage_segments,
-		"setter_pull": block_result.setter_pull,
-		"read_quality": block_result.read_quality,
-		"event_time": rally_clock,
-		"outgoing_trajectory": _ball_trajectory(
-			"block_deflection", Vector2(set_target.x, 0.47), block_event_end,
-			0.24, 0.42, rally_clock
-		)})
-	if blocked:
-		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
-	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
-	var defense_quality := _rating(opponent_defender, "reception") * 0.36 \
-		+ _rating(opponent_defender, "dig_control") * 0.16 \
-		+ _rating(opponent_defender, "anticipation") * 0.34 \
-		+ rng.randf_range(-0.16, 0.16)
-	var dug: bool = defense_quality > attack_quality + rng.randf_range(-0.18, 0.14)
-	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
-		opponent_defender.display_name, attack_target,
-		attack_target + Vector2(0.04, -0.03), dug, defense_quality,
-		"Opponent dig · exchange %d" % exchange_number,
-		"Contact 1 of 3 · %d%% control." % roundi(defense_quality * 100.0))
-	if not dug:
-		return _finish(result, "kill", true, hitter.id, {
-			"setter": setter.display_name,
-			"hitter": hitter.display_name,
-			"play": "Default T3 Outside",
-		}, "kill_default")
-	return _resolve_opponent_transition(
-		result, players, lineup, hitter, attack_target,
-		opponent_team, defensive_plan, exchange_number + 1,
-	)
+		set_target, attack_target, true, 0.60,
+		"%s: Pipe Swing" % hitter.display_name,
+		"Counter attack after successful recycle.",
+		{"side": "home", "outgoing_trajectory": attack_trajectory})
+
+	return _finish(result, "kill", true, hitter.id, {
+		"hitter": hitter.display_name,
+		"play": "Recycle Continuation"
+	})
 
 
-func _resolve_opponent_block(
-	opponent_team: Resource,
-	attack_x: float,
-	attack_quality: float,
-) -> Dictionary:
-	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
-	var front_blockers: Array[VolleyballPlayer] = []
-	var setter_pull := {}
-	var opponent_setter_x := 0.5
-	if opponent_team != null:
-		var opponent_setter := opponent_team.setter() as VolleyballPlayer
-		if opponent_setter != null:
-			opponent_setter_x = opponent_team.court_position(opponent_setter.id).x
-	if opponent_team == null or lineup == null:
-		return {
-			"primary": null, "assist": null, "primary_close": 0.0,
-			"assist_close": 0.0, "quality": 0.0, "outcome": "miss",
-			"coverage_segments": [], "setter_pull": setter_pull,
-		}
-	for player_id in lineup.front_row_player_ids():
-		var player := opponent_team.player_by_id(player_id) as VolleyballPlayer
-		if player != null:
-			front_blockers.append(player)
-			var slot_number := lineup.slot_for_player(player.id)
-			var start: Vector2 = CourtConstants.slot_position(slot_number)
-			var discipline := clampf(
-				(_rating(player, "tactical_discipline") * 0.65
-				+ _rating(player, "anticipation") * 0.35), 0.0, 1.0
-			)
-			var pull_weight := (1.0 - discipline) * 0.18
-			var pulled_x := lerpf(start.x, opponent_setter_x, pull_weight)
-			setter_pull[player.id] = absf(pulled_x - start.x)
-	if front_blockers.is_empty():
-		return {
-			"primary": null, "assist": null, "primary_close": 0.0,
-			"assist_close": 0.0, "quality": 0.0, "outcome": "miss",
-			"coverage_segments": [], "setter_pull": setter_pull,
-		}
-	var primary: VolleyballPlayer
-	var primary_distance := 1000.0
-	for candidate in front_blockers:
-		var slot_number := lineup.slot_for_player(candidate.id)
-		var candidate_x := CourtConstants.slot_position(slot_number).x
-		var distance := absf(candidate_x - attack_x)
-		if distance < primary_distance:
-			primary = candidate
-			primary_distance = distance
-	var close_time := 0.30 + 0.045 * 2.0
-	var read_total := 0.0
-	for reader in front_blockers:
-		read_total += _blocker_read_quality(reader, 2, 0.5, opponent_setter_x)
-	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
-	close_time += lerpf(-0.09, 0.09, read_quality)
-	var primary_close := _blocker_close_fraction(
-		primary, lineup, attack_x, close_time
-	)
-	var assist: VolleyballPlayer
-	var assist_close := 0.0
-	for candidate in front_blockers:
-		if candidate.id == primary.id:
-			continue
-		var close_fraction := _blocker_close_fraction(
-			candidate, lineup, attack_x, close_time
-		)
-		if close_fraction > assist_close:
-			assist = candidate
-			assist_close = close_fraction
-	if assist_close < 0.34:
-		assist = null
-		assist_close = 0.0
-	var primary_skill := _block_contact_skill(primary, primary_close)
-	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
-	var block_quality := clampf(
-		primary_skill * 0.68 + assist_skill * 0.32 * assist_close,
-		0.08, 0.94,
-	)
-	var contest := block_quality + rng.randf_range(-0.14, 0.12)
-	var outcome := "miss"
-	if contest > attack_quality + 0.14 and primary_close >= 0.72:
-		outcome = "stuff"
-	elif contest > attack_quality - 0.16:
-		outcome = "touch"
-	elif contest > attack_quality - 0.30:
-		outcome = "funnel"
-	return {
-		"primary": primary,
-		"assist": assist,
-		"primary_close": primary_close,
-		"assist_close": assist_close,
-		"quality": block_quality,
-		"outcome": outcome,
-		"coverage_segments": _home_block_segments(
-			attack_x, primary, primary_close, assist, assist_close
-		),
-		"setter_pull": setter_pull,
-		"read_quality": read_quality,
-	}
-
-
-func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vector2:
-	var spread := lerpf(0.14, 0.05, clampf(block_quality, 0.0, 1.0))
-	return Vector2(
-		clampf(set_target.x + rng.randf_range(-spread, spread), 0.08, 0.92),
-		rng.randf_range(0.54, 0.70),
-	)
-
-
-func _choose_home_attack_target(
-	hitter: VolleyballPlayer,
-	lane: String,
-	hit_type: String,
-	opponent_team: Resource,
-) -> Dictionary:
-	var contact_x := CourtConstants.lane_target(lane).x
-	var candidates: Array[Vector2] = [
-		Vector2(0.18, 0.20), Vector2(0.50, 0.18), Vector2(0.82, 0.20),
-		Vector2(0.24, 0.36), Vector2(0.76, 0.36),
-	]
-	if hit_type == "Quick attack" or rng.randf() < 0.12:
-		candidates.append(Vector2(rng.randf_range(0.35, 0.65), 0.42))
-	var best_target := candidates[0]
-	var best_space := -1.0
-	for candidate in candidates:
-		var nearest := 10.0
-		for defender_resource in opponent_team.on_court_players():
-			var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-			if defender == null:
-				continue
-			nearest = minf(nearest, opponent_team.court_position(defender.id).distance_to(candidate))
-		if nearest > best_space:
-			best_space = nearest
-			best_target = candidate
-	var decision_fit := clampf(
-		_rating(hitter, "decision_making") * 0.68
-		+ _rating(hitter, "attack_accuracy") * 0.32, 0.0, 1.0
-	)
-	var target := best_target if rng.randf() < decision_fit \
-		else candidates[rng.randi_range(0, candidates.size() - 1)]
-	var direction := _attack_direction(contact_x, target)
-	return {
-		"target": target, "direction": direction,
-		"reason": "open floor" if target == best_target else "aggressive choice",
-	}
-
-
-func _choose_opponent_defender(
-	opponent_team: Resource,
-	target: Vector2,
-	flight_time: float,
-) -> Dictionary:
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	var best_data := {"start": target, "distance_meters": 99.0,
-		"travel_time": 9.0, "arrival_margin": -9.0}
-	for defender_resource in opponent_team.on_court_players():
-		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-		if defender == null or str(defender.position_code) in ["S", "M1", "M2"]:
-			continue
-		var start: Vector2 = opponent_team.court_position(defender.id, "defense")
-		var mirrored_target := Vector2(target.x, target.y)
-		var distance_meters := CoverageModel.court_distance_meters(start, mirrored_target)
-		var travel_time := _movement_time(defender, start, mirrored_target, "lateral")
-		var arrival_margin := flight_time - travel_time
-		var score := arrival_margin * 0.58 + _rating(defender, "anticipation") * 0.25 \
-			+ _rating(defender, "reception") * 0.17
-		if score > best_score:
-			best = defender
-			best_score = score
-			best_data = {"start": start, "distance_meters": distance_meters,
-				"travel_time": travel_time, "arrival_margin": arrival_margin}
-	best_data["player"] = best if best != null else opponent_team.best_defender()
-	return best_data
-
-
-func _choose_opponent_attack(
-	opponent_team: Resource,
-	setter: VolleyballPlayer,
-	set_quality: float,
-	open_target: Vector2,
-) -> Dictionary:
-	var candidates: Array[Resource] = opponent_team.eligible_hitters(setter.id)
-	if candidates.is_empty():
-		candidates.append(opponent_team.best_hitter())
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	for resource in candidates:
-		var candidate: VolleyballPlayer = resource as VolleyballPlayer
-		if candidate == null:
-			continue
-		var quick_demand := 0.13 if str(candidate.position_code).begins_with("M") else 0.0
-		var option_score := _power_rating(candidate, "attack_power") * 0.42 \
-			+ _rating(candidate, "attack_accuracy") * 0.24 \
-			+ _rating(candidate, "approach_timing") * 0.18 \
-			+ set_quality * 0.16 - quick_demand * (1.0 - set_quality) \
-			+ rng.randf_range(-0.12, 0.12)
-		if option_score > best_score:
-			best = candidate
-			best_score = option_score
-	var code := str(best.position_code)
-	var contact_x := 0.50
-	if code in ["OH1", "OH2"]:
-		contact_x = 0.18
-	elif code == "OP":
-		contact_x = 0.82
-	var start: Vector2 = opponent_team.court_position(best.id, "transition")
-	var contact := Vector2(contact_x, 0.48)
-	var travel_time := _movement_time(best, start, contact, "transition")
-	var attack_type := "Quick attack" if code.begins_with("M") and set_quality >= 0.46 \
-		else "Power swing"
-	if set_quality < 0.38 or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
-		attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
-	var target := open_target
-	if attack_type in ["Roll shot", "Emergency tip"]:
-		target.y = rng.randf_range(0.58, 0.72)
-	else:
-		target.y = rng.randf_range(0.80, 0.93)
-	return {"player": best, "start": start, "contact": contact,
-		"target": target, "travel_time": travel_time,
-		"attack_type": attack_type, "direction": _attack_direction(contact_x, target)}
-
-
-func _home_target_hint(defensive_plan: Resource) -> Vector2:
-	var candidates: Array[Vector2] = [
-		Vector2(0.18, 0.86), Vector2(0.50, 0.84), Vector2(0.82, 0.86),
-		Vector2(0.34, 0.66), Vector2(0.66, 0.66),
-	]
-	if defensive_plan == null:
-		return candidates[rng.randi_range(0, candidates.size() - 1)]
-	var zones: Dictionary = defensive_plan.zones_for(DefensiveZoneModel.ZoneType.FLOOR_DEFENSE)
-	var best := candidates[0]
-	var best_gap := -1.0
-	for target in candidates:
-		var nearest := 10.0
-		for player_id in zones:
-			var zone: Resource = zones[player_id]
-			if zone != null and bool(zone.enabled):
-				nearest = minf(nearest, Vector2(zone.center).distance_to(target))
-		if nearest > best_gap:
-			best = target
-			best_gap = nearest
-	return best
-
-
-func _attack_direction(contact_x: float, target: Vector2) -> String:
-	if target.y < 0.76:
-		return "short court"
-	if absf(target.x - contact_x) <= 0.20:
-		return "line"
-	if absf(target.x - 0.50) <= 0.14:
-		return "seam"
-	return "cross-court"
-
-
-func _initial_home_positions(
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	receiving: bool,
-) -> Dictionary:
-	var positions := {}
-	for slot_number in range(1, 7):
-		var player_id := lineup.player_at_slot(slot_number)
-		var position := CourtConstants.slot_position(slot_number)
-		if defensive_plan != null:
-			if receiving:
-				var zone: Resource = defensive_plan.zone_for(
-					player_id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
-				)
-				if zone != null:
-					position = Vector2(zone.center)
-			else:
-				position = defensive_plan.defender_position(player_id, position)
-		positions[player_id] = position
-	return positions
-
-
-func _zones_at_live_positions(source_zones: Dictionary) -> Dictionary:
-	var zones := {}
-	for raw_player_id in source_zones:
-		var player_id := int(raw_player_id)
-		var source: Resource = source_zones[raw_player_id] as Resource
-		if source == null:
-			continue
-		var zone: Resource = DefensiveZoneModel.new()
-		zone.player_id = player_id
-		zone.zone_type = source.zone_type
-		zone.center = live_positions.get(player_id, Vector2(source.center))
-		zone.radius_meters = source.radius_meters
-		zone.priority = source.priority
-		zone.enabled = source.enabled
-		zones[player_id] = zone
-	return zones
-
-
-func _movement_time(
-	player: VolleyballPlayer,
-	start: Vector2,
-	target: Vector2,
-	movement_kind: String,
-) -> float:
-	if player == null:
-		return 4.0
-	var distance := CoverageModel.court_distance_meters(start, target)
-	var speed_rating := _rating(
-		player, "lateral_speed" if movement_kind == "lateral" else "transition_speed"
-	)
-	var acceleration_rating := _rating(player, "acceleration")
-	var mass_multiplier := lerpf(1.06, 0.90, clampf(
-		(player.mass_kg - 55.0) / 60.0, 0.0, 1.0
-	))
-	var maximum_speed := lerpf(1.45, 5.15, speed_rating) * mass_multiplier
-	var acceleration_delay := lerpf(0.34, 0.08, acceleration_rating)
-	var direction_change_delay := 0.05 + distance * 0.012
-	return acceleration_delay + direction_change_delay \
-		+ distance / maxf(maximum_speed, 0.4)
-
+# HELPER FUNCTIONS & TRAJECTORY BUILDERS
 
 func _ball_trajectory(
-	kind: String,
-	start: Vector2,
-	end: Vector2,
+	type_name: String,
+	start_pos: Vector2,
+	end_pos: Vector2,
 	flight_time: float,
-	apex_height: float,
-	start_timestamp: float = -1.0,
+	raw_apex: float = 1.0,
+	start_time: float = 0.0
 ) -> Dictionary:
-	var timestamp := rally_clock if start_timestamp < 0.0 else start_timestamp
-	var direction := end - start
-	var perpendicular := Vector2(-direction.y, direction.x).normalized()
-	var curve_amount := clampf(direction.length() * 0.08, 0.0, 0.035)
-	var control := start.lerp(end, 0.5) + perpendicular * curve_amount
-	var trajectory: Resource = BallTrajectoryModel.create(
-		kind, start, control, end, timestamp, flight_time, apex_height
-	)
-	return trajectory.to_dict()
+	var apex_meters: float = raw_apex
 
+	# Ensure minimum 3D world clearance heights based on play context
+	match type_name:
+		"serve":
+			apex_meters = maxf(raw_apex, 2.8)
+		"reception_pass", "freeball_pass":
+			apex_meters = clampf(raw_apex, 2.2, 4.0)
+		"set":
+			apex_meters = clampf(raw_apex, 2.5, 3.6) # Always clears 2.43m net
+		"attack", "spike":
+			apex_meters = maxf(raw_apex, 2.7)
+		"attack_to_block", "block_deflection":
+			apex_meters = maxf(raw_apex, 2.1)
 
-func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -> Vector2:
-	# A distant passer aims slightly higher/off the net to reduce overpass risk;
-	# nearby passers can safely feed the setter's release point more directly.
-	var distance_meters := Vector2(
-		(reception_contact.x - release_target.x) * 9.0,
-		(reception_contact.y - release_target.y) * 18.0,
-	).length()
-	var safety_offset := clampf((distance_meters - 4.0) * 0.006, 0.0, 0.045)
-	return Vector2(release_target.x, clampf(release_target.y + safety_offset, 0.55, 0.70))
-
-
-func _set_geometry(
-	setter: VolleyballPlayer,
-	setter_start: Vector2,
-	contact: Vector2,
-	target: Vector2,
-	release_target: Vector2,
-) -> Dictionary:
-	var set_vector := Vector2((target.x - contact.x) * 9.0, (target.y - contact.y) * 18.0)
-	var arrival_vector := Vector2(
-		(contact.x - setter_start.x) * 9.0, (contact.y - setter_start.y) * 18.0
-	)
-	var distance_meters := set_vector.length()
-	var release_distance := Vector2(
-		(contact.x - release_target.x) * 9.0,
-		(contact.y - release_target.y) * 18.0,
-	).length()
-	var angle_degrees := absf(rad_to_deg(set_vector.angle()))
-	var orientation_fit := 1.0
-	if arrival_vector.length() > 0.15 and set_vector.length() > 0.15:
-		orientation_fit = clampf(
-			(arrival_vector.normalized().dot(set_vector.normalized()) + 1.0) * 0.5,
-			0.0, 1.0,
-		)
-	var net_distance_meters := absf(contact.y - CourtConstants.NET_Y) * 18.0
-	var balance := _rating(setter, "set_balance")
-	var stability := _rating(setter, "set_stability")
-	var tight_risk := clampf((0.55 - net_distance_meters) * 0.10, 0.0, 0.055) \
-		* lerpf(1.0, 0.55, stability)
-	var distance_difficulty := maxf(distance_meters - 2.0, 0.0) * 0.012 \
-		* lerpf(1.0, 0.68, stability)
-	var orientation_difficulty := (1.0 - orientation_fit) * 0.10 \
-		* lerpf(1.0, 0.48, balance)
-	var difficulty := clampf(
-		distance_difficulty
-		+ release_distance * 0.020
-		+ orientation_difficulty
-		+ tight_risk,
-		0.0, 0.28,
-	)
 	return {
-		"distance_meters": distance_meters,
-		"angle_degrees": angle_degrees,
-		"release_distance_meters": release_distance,
-		"body_orientation_fit": orientation_fit,
-		"set_balance": balance,
-		"set_stability": stability,
-		"net_distance_meters": net_distance_meters,
-		"difficulty": difficulty,
+		"trajectory_type": type_name,
+		"start_position": start_pos,
+		"end_position": end_pos,
+		"duration": maxf(flight_time, 0.05),
+		"apex_height_meters": apex_meters,
+		"start_time": start_time
 	}
-
-
-func _reception_pass_result(
-	receiver: VolleyballPlayer,
-	start_position: Vector2,
-	contact_position: Vector2,
-	desired_target: Vector2,
-	serve_origin: Vector2,
-	serve_force: float,
-	arrival: Dictionary,
-	reception_quality: float,
-) -> Dictionary:
-	var movement_vector := contact_position - start_position
-	var desired_vector := desired_target - contact_position
-	var incoming_vector := contact_position - serve_origin
-	var movement_direction := movement_vector.normalized() \
-		if movement_vector.length() > 0.008 else desired_vector.normalized()
-	var desired_direction := desired_vector.normalized()
-	var incoming_direction := incoming_vector.normalized()
-	var movement_alignment := clampf(
-		(movement_direction.dot(desired_direction) + 1.0) * 0.5, 0.0, 1.0
-	)
-	var redirect_demand := clampf(
-		absf(incoming_direction.angle_to(desired_direction)) / PI, 0.0, 1.0
-	)
-	var arrival_margin := float(arrival.get("arrival_margin", -0.5))
-	var settle_factor := clampf((arrival_margin + 0.25) / 1.25, 0.0, 1.0)
-	var edge_ratio := float(arrival.get("edge_ratio", 1.0))
-	var body_alignment := clampf(
-		movement_alignment * 0.42 + settle_factor * 0.38
-		+ (1.0 - clampf(edge_ratio, 0.0, 1.2) / 1.2) * 0.20,
-		0.0, 1.0,
-	)
-	var platform_feasibility := clampf(
-		_rating(receiver, "reception") * 0.30
-		+ _rating(receiver, "ball_control") * 0.18
-		+ _rating(receiver, "reception_balance") * 0.15
-		+ _rating(receiver, "reception_stability") * 0.14
-		+ body_alignment * 0.18
-		+ settle_factor * 0.12
-		- redirect_demand * 0.08
-		- serve_force * (1.0 - _rating(receiver, "reception_stability")) * 0.16,
-		0.0, 1.0,
-	)
-	var execution := clampf(
-		platform_feasibility * 0.66 + reception_quality * 0.34, 0.0, 1.0
-	)
-	var error_scale := pow(1.0 - execution, 1.35)
-	var perpendicular := Vector2(-desired_direction.y, desired_direction.x)
-	var directional_error := rng.randf_range(-0.30, 0.30) * error_scale
-	var depth_error := rng.randf_range(-0.24, 0.24) * error_scale
-	var destination := desired_target \
-		+ perpendicular * directional_error + desired_direction * depth_error
-	if execution < 0.18:
-		destination += Vector2(
-			rng.randf_range(-0.25, 0.25), rng.randf_range(-0.04, 0.18)
-		)
-	destination = Vector2(
-		clampf(destination.x, 0.02, 0.98), clampf(destination.y, 0.51, 0.98)
-	)
-	var pass_distance := CoverageModel.court_distance_meters(
-		contact_position, destination
-	)
-	var flight_time := clampf(
-		0.38 + pass_distance / lerpf(5.2, 8.4, execution), 0.42, 1.25
-	)
-	var posture := "planted"
-	if arrival_margin < 0.0:
-		posture = "reaching"
-	elif edge_ratio > 0.82:
-		posture = "moving"
-	elif body_alignment < 0.42:
-		posture = "off-axis"
-	return {
-		"destination": destination,
-		"body_alignment": body_alignment,
-		"platform_feasibility": platform_feasibility,
-		"contact_posture": posture,
-		"trajectory": _ball_trajectory(
-			"reception_pass", contact_position, destination,
-			flight_time, lerpf(1.1, 2.8, execution), rally_clock
-		),
-	}
-
-
-func _spatial_setter_choice(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	first_contact_player_id: int,
-	preferred_setter: VolleyballPlayer,
-	target: Vector2,
-	available_time: float,
-) -> Dictionary:
-	var best := {"player": preferred_setter, "start": target, "travel_time": 4.0}
-	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate == null or candidate.id == first_contact_player_id:
-			continue
-		var start: Vector2 = live_positions.get(
-			candidate.id, CourtConstants.slot_position(slot_number)
-		)
-		var travel_time := _movement_time(candidate, start, target, "transition")
-		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
-			if defensive_plan != null else null
-		var duty := str(assignment.second_contact_responsibility) \
-			if assignment != null else "No second-contact duty"
-		var duty_bonus := 0.0
-		match duty:
-			"Primary emergency setter": duty_bonus = 0.34
-			"Secondary emergency setter": duty_bonus = 0.18
-			"Stay available to attack": duty_bonus = -0.16
-			"No second-contact duty": duty_bonus = -0.24
-		if candidate.id == lineup.active_setter_id():
-			duty_bonus += 0.46
-		elif candidate == preferred_setter:
-			duty_bonus += 0.20
-		var arrival_score := clampf((available_time - travel_time) / 1.2, -1.0, 1.0)
-		var score := arrival_score * 0.52 \
-			+ _rating(candidate, "set_accuracy") * 0.28 \
-			+ _rating(candidate, "decision_making") * 0.12 + duty_bonus
-		if score > best_score:
-			best_score = score
-			best = {"player": candidate, "start": start, "travel_time": travel_time}
-	return best
-
-
-func _second_contact_setter(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	first_contact_player_id: int,
-) -> VolleyballPlayer:
-	var regular_setter := _player_by_id(players, lineup.active_setter_id())
-	if regular_setter != null and regular_setter.id != first_contact_player_id:
-		return regular_setter
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate == null or candidate.id == first_contact_player_id:
-			continue
-		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
-			if defensive_plan != null else null
-		var responsibility := str(assignment.second_contact_responsibility) \
-			if assignment != null else "No second-contact duty"
-		var responsibility_bonus := 0.0
-		match responsibility:
-			"Primary emergency setter":
-				responsibility_bonus = 0.42
-			"Secondary emergency setter":
-				responsibility_bonus = 0.24
-			"Stay available to attack":
-				responsibility_bonus = -0.10
-			"No second-contact duty":
-				responsibility_bonus = -0.22
-		var score := _rating(candidate, "set_accuracy") * 0.44 \
-			+ _rating(candidate, "ball_control") * 0.28 \
-			+ _rating(candidate, "decision_making") * 0.16 \
-			+ responsibility_bonus
-		if score > best_score:
-			best = candidate
-			best_score = score
-	return best
-
-
-func _home_block_deflection_target(
-	original_target: Vector2,
-	attack_x: float,
-	block_quality: float,
-	outcome: String,
-	relationship: String,
-) -> Vector2:
-	if outcome == "touch":
-		return Vector2(
-			clampf(attack_x + rng.randf_range(-0.16, 0.16), 0.08, 0.92),
-			rng.randf_range(0.58, lerpf(0.82, 0.69, block_quality)),
-		)
-	var funnel_x := 0.50
-	if relationship == "Defend Line":
-		funnel_x = 0.35 if attack_x < 0.5 else 0.65
-	elif relationship == "Defend Cross":
-		funnel_x = 0.72 if attack_x < 0.5 else 0.28
-	return Vector2(
-		clampf(lerpf(original_target.x, funnel_x, 0.26), 0.08, 0.92),
-		clampf(original_target.y + 0.02, 0.54, 0.94),
-	)
-
-
-func _resolve_attack_coverage(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	blocked_hitter: VolleyballPlayer,
-	target: Vector2,
-	block_quality: float,
-) -> Dictionary:
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate == null or candidate.id == blocked_hitter.id:
-			continue
-		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
-			if defensive_plan != null else null
-		var responsibility := str(assignment.attack_coverage_responsibility) \
-			if assignment != null else "Cover nearest attacker"
-		var start := CourtConstants.slot_position(slot_number)
-		if defensive_plan != null:
-			start = defensive_plan.defender_position(candidate.id, start)
-		start = live_positions.get(candidate.id, start)
-		var proximity := 1.0 - clampf(
-			CoverageModel.court_distance_meters(start, target) / 9.0, 0.0, 1.0
-		)
-		var responsibility_bonus := 0.0
-		match responsibility:
-			"Cover nearest attacker":
-				responsibility_bonus = proximity * 0.20
-			"Cover assigned hitter":
-				responsibility_bonus = 0.13
-			"Take second contact":
-				responsibility_bonus = 0.07
-			"Release for transition":
-				responsibility_bonus = -0.14
-		var deflection_priority := int(assignment.deflection_priority) \
-			if assignment != null else 1
-		var score := proximity * 0.42 \
-			+ _rating(candidate, "ball_control") * 0.24 \
-			+ _rating(candidate, "anticipation") * 0.18 \
-			+ responsibility_bonus + float(deflection_priority - 1) * 0.045
-		if score > best_score:
-			best = candidate
-			best_score = score
-	if best == null:
-		return {"player": null, "quality": 0.0, "success": false}
-	var quality := clampf(
-		best_score - block_quality * 0.22 + rng.randf_range(-0.10, 0.10),
-		0.0, 1.0,
-	)
-	return {"player": best, "quality": quality, "success": quality >= 0.32}
-
-
-func _finish_serve_error(result: Resource, server_name: String) -> Resource:
-	return _finish(result, "serve_error", true, -1, {"server": server_name})
-
-
-func _finish(
-	result: Resource,
-	outcome: String,
-	home_won: bool,
-	decisive_actor_id: int,
-	values: Dictionary,
-	explanation_key: String = "",
-) -> Resource:
-	result.home_team_won = home_won
-	result.terminal_outcome = outcome
-	result.decisive_actor_id = decisive_actor_id
-	var chosen_key := explanation_key if not explanation_key.is_empty() else outcome
-	result.explanation = ExplanationText.explanation(chosen_key, values)
-	var end_position := Vector2(0.5, 0.90) if home_won else Vector2(0.5, 0.12)
-	_add_event(result, RallyEventModel.EventType.POINT, decisive_actor_id,
-		"Home" if home_won else "Opponent", end_position, end_position,
-		home_won, 1.0, ExplanationText.headline(outcome), result.explanation)
-	result.analysis = _build_rally_analysis(result)
-	_finalize_rally_timeline(result)
-	return result
-
-
-func _build_rally_analysis(result: Resource) -> Dictionary:
-	var attack_types: Array[String] = []
-	var directions: Array[String] = []
-	var longest_movement := 0.0
-	var lowest_arrival_margin := 99.0
-	var blocker_read_values: Array[float] = []
-	for event_resource in result.events:
-		var event: Resource = event_resource
-		if int(event.event_type) == RallyEventModel.EventType.ATTACK:
-			var attack_type := str(event.metadata.get("attack_type", "Attack"))
-			if attack_type not in attack_types:
-				attack_types.append(attack_type)
-			var direction := str(event.metadata.get("attack_direction", ""))
-			if not direction.is_empty() and direction not in directions:
-				directions.append(direction)
-		longest_movement = maxf(longest_movement, float(event.metadata.get("movement_duration", 0.0)))
-		if event.metadata.has("arrival_margin"):
-			lowest_arrival_margin = minf(lowest_arrival_margin, float(event.metadata.arrival_margin))
-		if event.metadata.has("read_quality"):
-			blocker_read_values.append(float(event.metadata.read_quality))
-	var average_read := -1.0
-	if not blocker_read_values.is_empty():
-		average_read = 0.0
-		for value in blocker_read_values:
-			average_read += value
-		average_read /= blocker_read_values.size()
-	return {"contacts": result.events.size() - 1,
-		"attack_types": attack_types, "directions": directions,
-		"longest_movement": longest_movement,
-		"lowest_arrival_margin": lowest_arrival_margin if lowest_arrival_margin < 90.0 else 0.0,
-		"average_block_read": average_read}
-
-
-func _finalize_rally_timeline(result: Resource) -> void:
-	_ensure_event_trajectories(result)
-	var timeline := 0.0
-	for event_resource in result.events:
-		var event: Resource = event_resource
-		var metadata: Dictionary = event.metadata
-		var requested_time := float(metadata.get("event_time", timeline))
-		timeline = maxf(timeline, requested_time)
-		var movement_duration := float(metadata.get("movement_duration", 0.0))
-		var flight_duration := float(metadata.get("flight_time", 0.0)) \
-			if int(event.event_type) == RallyEventModel.EventType.SERVE else 0.0
-		var trajectory_data: Dictionary = metadata.get("outgoing_trajectory", {})
-		var trajectory_duration := float(trajectory_data.get("duration", 0.0))
-		var default_duration := 0.12
-		match int(event.event_type):
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-				default_duration = 0.34
-			RallyEventModel.EventType.SET:
-				default_duration = 0.28
-			RallyEventModel.EventType.ATTACK, RallyEventModel.EventType.BLOCK:
-				default_duration = 0.24
-			RallyEventModel.EventType.POINT:
-				default_duration = 0.10
-		var duration := maxf(
-			default_duration,
-			maxf(movement_duration, maxf(flight_duration, trajectory_duration))
-		)
-		metadata["event_time"] = timeline
-		metadata["event_duration"] = duration
-		event.metadata = metadata
-		timeline += duration
-
-
-func _ensure_event_trajectories(result: Resource) -> void:
-	for event_index in range(result.events.size()):
-		var event: Resource = result.events[event_index]
-		if event.event_type == RallyEventModel.EventType.POINT \
-				or event.metadata.has("outgoing_trajectory"):
-			continue
-		var start: Vector2 = event.start_position
-		var end: Vector2 = event.end_position
-		if event.event_type == RallyEventModel.EventType.BLOCK \
-				and event.metadata.has("deflection_target"):
-			end = Vector2(event.metadata.deflection_target)
-		var flight_time := float(event.metadata.get("flight_time", 0.0))
-		if flight_time <= 0.0:
-			match int(event.event_type):
-				RallyEventModel.EventType.SERVE: flight_time = 0.72
-				RallyEventModel.EventType.RECEPTION: flight_time = 0.62
-				RallyEventModel.EventType.SET: flight_time = 0.72
-				RallyEventModel.EventType.ATTACK: flight_time = 0.42
-				RallyEventModel.EventType.BLOCK: flight_time = 0.24
-				RallyEventModel.EventType.DEFENSE: flight_time = 0.58
-				_: continue
-		var apex := 0.5
-		match int(event.event_type):
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-				apex = 1.8
-			RallyEventModel.EventType.SET:
-				apex = 2.4
-		event.metadata["outgoing_trajectory"] = _ball_trajectory(
-			event.type_name().to_lower(), start, end, flight_time, apex,
-			float(event.metadata.get("event_time", 0.0))
-		)
 
 
 func _add_event(
@@ -1688,629 +851,315 @@ func _add_event(
 	event_type: int,
 	actor_id: int,
 	actor_name: String,
-	start: Vector2,
-	end: Vector2,
+	start_pos: Vector2,
+	end_pos: Vector2,
 	success: bool,
 	quality: float,
 	headline: String,
-	detail: String,
-	metadata: Dictionary = {},
+	explanation: String,
+	metadata: Dictionary = {}
 ) -> void:
-	var event: Resource = RallyEventModel.new()
-	event.sequence = result.events.size()
-	event.event_type = event_type
-	event.actor_id = actor_id
-	event.actor_name = actor_name
-	event.start_position = start
-	event.end_position = end
-	event.success = success
-	event.quality = quality
-	event.headline = headline
-	event.detail = detail
-	event.metadata = metadata.duplicate(true)
-	result.events.append(event)
+	var event := RallyEventModel.new()
+
+	if "event_type" in event: event.set("event_type", event_type)
+	if "actor_id" in event: event.set("actor_id", actor_id)
+	if "actor_name" in event: event.set("actor_name", actor_name)
+	if "start_position" in event: event.set("start_position", start_pos)
+	if "end_position" in event: event.set("end_position", end_pos)
+	if "success" in event: event.set("success", success)
+	if "quality" in event: event.set("quality", quality)
+	if "headline" in event: event.set("headline", headline)
+
+	if "explanation" in event:
+		event.set("explanation", explanation)
+	elif "description" in event:
+		event.set("description", explanation)
+	else:
+		metadata["explanation"] = explanation
+
+	if "metadata" in event:
+		var existing_meta: Dictionary = event.get("metadata") if event.get("metadata") != null else {}
+		existing_meta.merge(metadata, true)
+		event.set("metadata", existing_meta)
+
+	var typed_result := result as RallyResultModel
+	if typed_result != null:
+		typed_result.events.append(event)
+	else:
+		var evs = result.get("events")
+		if evs != null:
+			evs.append(event)
 
 
-func _opponent_block_adaptation_bonus(
-	opponent_team: Resource,
-	lane: String,
-	tempo: int,
-) -> float:
-	if opponent_team == null:
-		return 0.0
-	var pattern_match := 0.0
-	if opponent_team.anticipated_lane() == lane:
-		pattern_match += 0.65
-	if opponent_team.anticipated_tempo() == tempo:
-		pattern_match += 0.35
-	return opponent_team.block_bonus() * pattern_match * 0.12
-
-
-func _opponent_floor_defense_adaptation_bonus(
-	opponent_team: Resource,
-	lane: String,
-) -> float:
-	if opponent_team == null:
-		return 0.0
-	var pattern_match := 1.0 if opponent_team.anticipated_lane() == lane else 0.0
-	return opponent_team.floor_defense_bonus() * pattern_match * 0.12
-
-
-func _opponent_serve_receive_adaptation_bonus(
-	opponent_team: Resource,
-	target: String,
-) -> float:
-	if opponent_team == null:
-		return 0.0
-	var pattern_match := 1.0 if opponent_team.anticipated_serve_target() == target else 0.0
-	return opponent_team.serve_receive_bonus() * pattern_match * 0.12
-
-
-func _opponent_attack_type(target: Vector2) -> String:
-	if target.y < 0.80:
-		return "Short tip"
-	if target.x < 0.38 or target.x > 0.62:
-		return "Line attack"
-	return "Seam attack"
-
-
-func _defensive_responsibility_fit(
-	defensive_plan: Resource,
-	player_id: int,
-	target: Vector2,
-	attack_type: String,
-) -> float:
-	if defensive_plan == null:
-		return 0.0
-	var assignment: Resource = defensive_plan.assignment_for(player_id)
-	if assignment == null:
-		return -0.035
-	var fit := 0.0
-	if attack_type == "Short tip" and "Tip" in str(assignment.short_ball_responsibility):
-		fit += 0.035 + float(assignment.short_ball_priority) * 0.015
-	elif attack_type == "Seam attack" and "seam" in str(assignment.seam_responsibility).to_lower():
-		fit += 0.045
-	elif attack_type == "Line attack" and "Perimeter" in str(assignment.base_responsibility):
-		fit += 0.035
-	if defensive_plan.floor_system == "Perimeter" \
-			and "Perimeter" in str(assignment.base_responsibility):
-		fit += 0.015
-	elif defensive_plan.floor_system == "Middle-Up" \
-			and "Middle-up" in str(assignment.base_responsibility):
-		fit += 0.02
-	elif defensive_plan.floor_system == "Rotation Defense" \
-			and "Rotation" in str(assignment.base_responsibility):
-		fit += 0.02
-	var base_position: Vector2 = defensive_plan.defender_position(player_id, target)
-	fit += lerpf(-0.025, 0.025, 1.0 - clampf(base_position.distance_to(target), 0.0, 1.0))
-	return clampf(fit, -0.04, 0.08)
-
-
-func _responsibility_phrase(
-	defensive_plan: Resource,
-	player_id: int,
-	attack_type: String,
-) -> String:
-	if defensive_plan == null:
-		return "No saved responsibility shaped the contact."
-	var assignment: Resource = defensive_plan.assignment_for(player_id)
-	if assignment == null:
-		return "The defender covered outside a saved responsibility."
-	return "%s met the %s responsibility behind the %s." % [
-		str(assignment.base_responsibility), attack_type.to_lower(),
-		str(defensive_plan.block_strategy).to_lower(),
-	]
-
-
-func _choose_assignment(
-	play: OffensivePlay,
-	follow_play: bool,
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-) -> HitterAssignment:
-	if play == null or play.assignments.is_empty():
-		return null
-	if follow_play:
-		var primary := play.assignment_for_player(play.primary_hitter_id)
-		if primary != null:
-			return primary
-	var candidates: Array[HitterAssignment] = []
-	for assignment in play.assignments:
-		if _player_by_id(players, assignment.player_id) != null \
-				and lineup.slot_for_player(assignment.player_id) >= 0:
-			candidates.append(assignment)
-	if candidates.is_empty():
-		return null
-	return candidates[rng.randi_range(0, candidates.size() - 1)]
-
-
-func _fallback_hitter(players: Array[VolleyballPlayer], lineup: RotationLineup) -> VolleyballPlayer:
-	var outside_candidates: Array[VolleyballPlayer] = []
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate != null and candidate.position_role == "Outside Hitter" \
-				and CourtConstants.is_front_row_slot(slot_number):
-			outside_candidates.append(candidate)
-	if not outside_candidates.is_empty():
-		var nearest := outside_candidates[0]
-		var nearest_distance := 10.0
-		for candidate in outside_candidates:
-			var slot_number := lineup.slot_for_player(candidate.id)
-			var position := CourtConstants.slot_position(slot_number)
-			var pin_x := 0.12 if position.x <= 0.5 else 0.88
-			var distance := absf(position.x - pin_x)
-			if distance < nearest_distance:
-				nearest = candidate
-				nearest_distance = distance
-		return nearest
-	for player_id in lineup.front_row_player_ids():
-		var player := _player_by_id(players, player_id)
-		if player != null and player.position_role != "Setter":
-			return player
-	return _player_by_id(players, lineup.player_at_slot(4))
-
-
-func _best_blocker(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-) -> VolleyballPlayer:
-	var best: VolleyballPlayer
-	var best_score := -1
-	for player_id in lineup.front_row_player_ids():
-		var player := _player_by_id(players, player_id)
-		if player == null:
-			continue
-		var score := player.block_timing + player.jump_reach
-		if score > best_score:
-			best = player
-			best_score = score
-	return best
-
-
-func _resolve_home_block(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	attack_x: float,
-	tempo: int,
-	set_quality: float,
-	attack_quality: float,
-	opponent_setter_x: float,
+func _reception_pass_result(
+	receiver: VolleyballPlayer,
+	receiver_start: Vector2,
+	landing_pos: Vector2,
+	desired_target: Vector2,
+	server_pos: Vector2,
+	serve_quality: float,
+	arrival: Dictionary,
+	reception_quality: float
 ) -> Dictionary:
-	var front_blockers: Array[VolleyballPlayer] = []
-	var setter_pull := {}
-	for player_id in lineup.front_row_player_ids():
-		var player := _player_by_id(players, player_id)
-		var assignment: Resource = defensive_plan.assignment_for(player_id) \
-			if defensive_plan != null else null
-		if player != null and (assignment == null or bool(assignment.block_participation)):
-			front_blockers.append(player)
-			var slot_number := lineup.slot_for_player(player.id)
-			var start: Vector2 = live_positions.get(
-				player.id, CourtConstants.slot_position(slot_number)
-			)
-			var discipline := clampf(
-				(_rating(player, "tactical_discipline") * 0.65
-				+ _rating(player, "anticipation") * 0.35), 0.0, 1.0
-			)
-			var pull_weight := (1.0 - discipline) * 0.18
-			var pulled_x := lerpf(start.x, opponent_setter_x, pull_weight)
-			setter_pull[player.id] = absf(pulled_x - start.x)
-			live_positions[player.id] = Vector2(pulled_x, start.y)
-	if front_blockers.is_empty():
-		return {
-			"primary": null, "assist": null, "primary_close": 0.0,
-			"assist_close": 0.0, "quality": 0.0, "outcome": "miss",
-			"coverage_segments": [], "setter_pull": setter_pull,
-		}
-	var primary: VolleyballPlayer
-	var primary_distance := 1000.0
-	for candidate in front_blockers:
-		var slot_number := lineup.slot_for_player(candidate.id)
-		var candidate_x := CourtConstants.slot_position(slot_number).x
-		var distance := absf(candidate_x - attack_x)
-		if distance < primary_distance:
-			primary = candidate
-			primary_distance = distance
-	var close_time := 0.30 + float(clampi(tempo, 0, 3)) * 0.045 \
-		+ (1.0 - set_quality) * 0.18
-	var read_total := 0.0
-	for reader in front_blockers:
-		read_total += _blocker_read_quality(reader, tempo, set_quality, opponent_setter_x)
-	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
-	close_time += lerpf(-0.09, 0.09, read_quality)
-	var strategy := str(defensive_plan.block_strategy) if defensive_plan != null \
-		else "Read Block"
-	var pin_attack := attack_x <= 0.34 or attack_x >= 0.66
-	if strategy == "Commit Pin":
-		close_time += 0.10 if pin_attack else -0.08
-	elif strategy == "Commit Middle":
-		close_time += 0.10 if not pin_attack else -0.09
-	var primary_close := _blocker_close_fraction(
-		primary, lineup, attack_x, close_time
-	)
-	var assist: VolleyballPlayer
-	var assist_close := 0.0
-	for candidate in front_blockers:
-		if candidate.id == primary.id:
-			continue
-		var close_fraction := _blocker_close_fraction(
-			candidate, lineup, attack_x, close_time
+	# Poor passes drift away from the ideal setter position
+	var actual_target := desired_target
+	if reception_quality < 0.55:
+		var error_dist := (1.0 - reception_quality) * 0.30
+		actual_target += Vector2(
+			rng.randf_range(-error_dist, error_dist),
+			rng.randf_range(0.05, error_dist)
 		)
-		if close_fraction > assist_close:
-			assist = candidate
-			assist_close = close_fraction
-	if assist_close < 0.34:
-		assist = null
-		assist_close = 0.0
-	var primary_skill := _block_contact_skill(primary, primary_close)
-	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
-	var block_quality := clampf(
-		primary_skill * 0.68 + assist_skill * 0.32 * assist_close,
-		0.08, 0.94,
+		actual_target = actual_target.clamp(Vector2(0.1, 0.52), Vector2(0.9, 0.88))
+
+	# Dynamic pass height & flight time: High quality = high arc (3.8m), Low quality = low/flat shank (2.2m)
+	var apex_m := lerpf(2.2, 3.8, reception_quality)
+	var pass_duration := lerpf(0.65, 1.05, reception_quality)
+
+	var pass_trajectory := _ball_trajectory(
+		"reception_pass", landing_pos, actual_target, pass_duration, apex_m, rally_clock
 	)
-	var contest := block_quality + rng.randf_range(-0.14, 0.12)
-	var outcome := "miss"
-	if contest > attack_quality + 0.14 and primary_close >= 0.72:
-		outcome = "stuff"
-	elif contest > attack_quality - 0.16:
-		outcome = "touch"
-	elif contest > attack_quality - 0.30:
-		outcome = "funnel"
+
 	return {
-		"primary": primary,
-		"assist": assist,
-		"primary_close": primary_close,
-		"assist_close": assist_close,
-		"quality": block_quality,
-		"outcome": outcome,
-		"coverage_segments": _home_block_segments(
-			attack_x, primary, primary_close, assist, assist_close
-		),
-		"setter_pull": setter_pull,
-		"read_quality": read_quality,
+		"destination": actual_target,
+		"trajectory": pass_trajectory,
+		"body_alignment": clampf(0.5 + reception_quality * 0.5, 0.0, 1.0),
+		"platform_feasibility": clampf(0.4 + reception_quality * 0.6, 0.0, 1.0),
+		"contact_posture": "knees_bent" if reception_quality > 0.5 else "reaching"
 	}
 
+func _finish(
+	result: Resource,
+	ending_reason: String,
+	home_won: bool,
+	key_player_id: int,
+	data: Dictionary = {},
+	kill_factor_key: String = ""
+) -> Resource:
+	# Use set() so Godot handles dynamically typed Resource properties safely
+	result.set("ending_reason", StringName(ending_reason))
+	result.set("home_won", home_won)
+	result.set("key_player_id", key_player_id)
 
-func _blocker_read_quality(
-	blocker: VolleyballPlayer,
-	tempo: int,
-	set_quality: float,
-	opponent_setter_x: float,
-) -> float:
-	var cue_clarity := (1.0 - set_quality) * 0.18 \
-		+ absf(opponent_setter_x - 0.5) * 0.16 \
-		+ float(clampi(tempo, 0, 3)) * 0.025
-	return clampf(
-		_rating(blocker, "anticipation") * 0.34
-		+ _rating(blocker, "court_vision") * 0.25
-		+ _rating(blocker, "decision_making") * 0.21
-		+ _rating(blocker, "tactical_discipline") * 0.20
-		+ cue_clarity - rng.randf_range(0.0, 0.08), 0.0, 1.0
-	)
+	if kill_factor_key != "" and "key_factors" in result:
+		var factors = result.get("key_factors")
+		if factors is Array:
+			factors.append(ExplanationText.factor(kill_factor_key))
 
-
-func _blocker_close_fraction(
-	blocker: VolleyballPlayer,
-	lineup: RotationLineup,
-	attack_x: float,
-	available_time: float,
-) -> float:
-	if blocker == null:
-		return 0.0
-	var slot_number := lineup.slot_for_player(blocker.id)
-	var start_position: Vector2 = live_positions.get(
-		blocker.id, CourtConstants.slot_position(slot_number)
-	)
-	var start_x := start_position.x
-	var distance_meters := absf(start_x - attack_x) * 9.0
-	var anticipation := _rating(blocker, "anticipation")
-	var reaction_delay := lerpf(0.34, 0.12, anticipation)
-	var movement_time := maxf(available_time - reaction_delay, 0.0)
-	var mass_multiplier := lerpf(1.05, 0.91, clampf(
-		(blocker.mass_kg - 55.0) / 60.0, 0.0, 1.0
-	))
-	var movement_speed := lerpf(1.25, 4.40, _rating(blocker, "lateral_speed")) \
-		* mass_multiplier
-	var travel_capacity := movement_speed * movement_time + 0.72
-	return clampf(1.0 - maxf(distance_meters - travel_capacity, 0.0) / 2.8, 0.0, 1.0)
-
-
-func _block_contact_skill(blocker: VolleyballPlayer, close_fraction: float) -> float:
-	if blocker == null:
-		return 0.0
-	return clampf(
-		_rating(blocker, "block_timing") * 0.40
-		+ _available_jump_rating(blocker) * 0.25
-		+ _body_reach_rating(blocker) * 0.13
-		+ _rating(blocker, "anticipation") * 0.08
-		+ close_fraction * 0.14,
-		0.05, 0.98,
-	)
-
-
-func _block_coverage_segment(
-	center_x: float,
-	blocker: VolleyballPlayer,
-	close_fraction: float,
-	completeness: float,
-) -> Dictionary:
-	var wingspan_width := clampf(
-		(blocker.wingspan_cm if blocker != null else 190.0) / 900.0,
-		0.16, 0.27,
-	)
-	var effective_width := wingspan_width * lerpf(0.42, 1.0, close_fraction)
-	return {
-		"x_min": clampf(center_x - effective_width * 0.5, 0.02, 0.98),
-		"x_max": clampf(center_x + effective_width * 0.5, 0.02, 0.98),
-		"completeness": clampf(completeness * close_fraction, 0.0, 1.0),
-	}
-
-
-func _home_block_segments(
-	attack_x: float,
-	primary: VolleyballPlayer,
-	primary_close: float,
-	assist: VolleyballPlayer,
-	assist_close: float,
-) -> Array[Dictionary]:
-	var segments: Array[Dictionary] = []
-	segments.append(_block_coverage_segment(
-		attack_x, primary, primary_close, _block_contact_skill(primary, primary_close)
-	))
-	if assist != null:
-		segments.append(_block_coverage_segment(
-			attack_x, assist, assist_close,
-			_block_contact_skill(assist, assist_close)
-		))
-	return segments
-
-
-func _best_home_server(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-) -> VolleyballPlayer:
-	# Service ownership follows rotational zone 1. The server's attributes still
-	# determine quality; the strongest server cannot replace the legal server.
-	return _player_by_id(players, lineup.player_at_slot(1))
-
-
-func _hit_type(assignment: HitterAssignment, hitter: VolleyballPlayer) -> String:
-	if assignment.lane in ["Front Quick", "Right Quick"]:
-		return "Quick attack"
-	if assignment.lane == "Pipe":
-		return "Pipe attack"
-	if assignment.tempo == 3:
-		return "High-ball swing"
-	if hitter.attack_power >= 82:
-		return "Power swing"
-	return "Tempo swing"
-
-
-func _fallback_assignment(hitter: VolleyballPlayer, lineup: RotationLineup) -> HitterAssignment:
-	var assignment := HitterAssignment.new()
-	assignment.player_id = hitter.id
-	assignment.start_position = CourtConstants.slot_position(
-		lineup.slot_for_player(hitter.id)
-	)
-	assignment.lane = "Left Pin" if assignment.start_position.x <= 0.5 \
-		else "Right Pin"
-	assignment.tempo = 3
-	return assignment
-
-
-func _lineup_players(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-) -> Array[VolleyballPlayer]:
-	var result: Array[VolleyballPlayer] = []
-	for slot_number in range(1, 7):
-		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if player != null:
-			result.append(player)
 	return result
 
 
-func _serve_landing_point(
-	target_name: String,
-	server: VolleyballPlayer,
-	home_players: Array,
-	lineup: RotationLineup,
-	landing_on_home_side: bool,
-) -> Vector2:
-	var home_y := 0.84 if landing_on_home_side else 0.16
-	var short_y := 0.67 if landing_on_home_side else 0.33
-	var intended := Vector2(0.20, home_y)
-	match target_name:
-		"Zone 1":
-			intended = Vector2(0.80, home_y)
-		"Short Middle":
-			intended = Vector2(0.50, short_y)
-		"Weak Passer":
-			intended = _weak_passer_target(home_players, lineup, landing_on_home_side)
-		_:
-			intended = Vector2(0.20, home_y)
-	var accuracy := _rating(server, "serve_placement")
-	var deviation := lerpf(0.105, 0.018, accuracy)
-	var min_y := 0.54 if landing_on_home_side else 0.04
-	var max_y := 0.96 if landing_on_home_side else 0.46
-	return Vector2(
-		clampf(intended.x + rng.randf_range(-deviation, deviation), 0.06, 0.94),
-		clampf(intended.y + rng.randf_range(-deviation * 0.65, deviation * 0.65), min_y, max_y),
-	)
-
-
-func _weak_passer_target(
-	home_players: Array,
-	lineup: RotationLineup,
-	landing_on_home_side: bool,
-) -> Vector2:
-	if landing_on_home_side and lineup != null:
-		var weakest: VolleyballPlayer = null
-		var weakest_slot := 5
-		for slot_number in [5, 6, 1]:
-			var candidate: VolleyballPlayer
-			for player_resource in home_players:
-				var player := player_resource as VolleyballPlayer
-				if player.id == lineup.player_at_slot(slot_number):
-					candidate = player
-					break
-			if candidate != null and (weakest == null or candidate.reception < weakest.reception):
-				weakest = candidate
-				weakest_slot = slot_number
-		return CourtConstants.slot_position(weakest_slot)
-	return Vector2(0.78, 0.16)
-
-
-func _serve_flight_time(server: VolleyballPlayer, serve_quality: float) -> float:
-	var power: float = _power_rating(server, "serve_power")
-	var style_modifier: float = float({"Jump Topspin": 0.0, "Hybrid": 0.01,
-		"Jump Float": 0.04, "Standing": 0.06, "Sky Ball": 0.24}.get(
-		server.primary_serve_style, 0.0
-	))
-	return clampf(1.28 - power * 0.42 - serve_quality * 0.24 \
-		+ float(style_modifier), 0.52, 1.48)
-
-
-func _serve_style_proficiency(server: VolleyballPlayer) -> float:
-	var scores := server.serve_style_proficiencies
-	if scores.is_empty():
-		scores = AttributeProfiles.serve_style_proficiencies(server)
-	return clampf(float(scores.get(server.primary_serve_style, 50)) / 100.0, 0.01, 1.0)
-
-
-func _attack_flight_time(attack_quality: float, attack_type: String) -> float:
-	var base_time := 0.68 if attack_type == "Short tip" else 0.50
-	return clampf(base_time - attack_quality * 0.17, 0.28, 0.72)
-
-
-func _nearest_reception_player(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	landing_point: Vector2,
-) -> VolleyballPlayer:
-	var zones: Dictionary = defensive_plan.zones_for(
-		DefensiveZoneModel.ZoneType.SERVE_RECEIVE
-	)
-	return _nearest_zone_player(
-		_lineup_players(players, lineup), zones, landing_point, true
-	)
-
-
-func _nearest_floor_defender(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	landing_point: Vector2,
-) -> VolleyballPlayer:
-	var zones: Dictionary = defensive_plan.zones_for(
-		DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
-	)
-	var pursuit_candidates: Array[VolleyballPlayer] = []
-	for candidate in _lineup_players(players, lineup):
-		var assignment: Resource = defensive_plan.assignment_for(candidate.id)
-		if assignment == null or bool(assignment.emergency_pursuit):
-			pursuit_candidates.append(candidate)
-	return _nearest_zone_player(
-		pursuit_candidates, zones, landing_point, true
-	)
-
-
-func _nearest_zone_player(
-	candidates: Array[VolleyballPlayer],
-	zones: Dictionary,
-	landing_point: Vector2,
-	require_enabled: bool,
-) -> VolleyballPlayer:
-	var nearest: VolleyballPlayer
-	var nearest_distance := 1000.0
-	for candidate in candidates:
-		var zone: Resource = zones.get(candidate.id) as Resource
-		if zone == null or (require_enabled and not bool(zone.enabled)):
-			continue
-		var distance := CoverageModel.court_distance_meters(zone.center, landing_point)
-		if distance < nearest_distance:
-			nearest = candidate
-			nearest_distance = distance
-	if nearest == null and not candidates.is_empty():
-		nearest = candidates[0]
-	return nearest
-
-
-func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
-	var passers: Array[VolleyballPlayer] = []
-	var zones := {}
-	var outside_index := 0
-	for player_resource in opponent_team.on_court_players():
-		var player := player_resource as VolleyballPlayer
-		if player.position_role not in ["Outside Hitter", "Libero"]:
-			continue
-		var zone: Resource = DefensiveZoneModel.new()
-		zone.player_id = player.id
-		zone.zone_type = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
-		zone.radius_meters = 3.2
-		zone.priority = 2
-		if player.position_role == "Libero":
-			zone.center = Vector2(0.50, 0.13)
-			zone.priority = 3
-		else:
-			zone.center = Vector2(0.20 if outside_index == 0 else 0.80, 0.16)
-			outside_index += 1
-		passers.append(player)
-		zones[player.id] = zone
-	return {"players": passers, "zones": zones}
-
-
-func _arrival_phrase(arrival: Dictionary, arrived: bool, support_count: int) -> String:
-	if not arrived:
-		return "No assigned player could arrive before the ball landed."
-	return "Arrived with %.2f m to spare; %d nearby teammate%s supported the zone." % [
-		float(arrival.get("arrival_margin", 0.0)), support_count,
-		"" if support_count == 1 else "s",
-	]
-
-
-func _receiver(players: Array[VolleyballPlayer], lineup: RotationLineup) -> VolleyballPlayer:
-	var best: VolleyballPlayer = null
-	for slot_number in [5, 6, 1]:
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate != null and (best == null or candidate.reception > best.reception):
-			best = candidate
-	return best
-
-
-func _best_positioned_defender(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	target: Vector2,
-) -> VolleyballPlayer:
-	if defensive_plan == null:
-		return _receiver(players, lineup)
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate == null:
-			continue
-		var position: Vector2 = defensive_plan.defender_position(
-			candidate.id, CourtConstants.slot_position(slot_number)
-		)
-		var proximity := 1.0 - clampf(position.distance_to(target), 0.0, 1.0)
-		var score := proximity * 100.0 + candidate.anticipation * 0.35 \
-			+ candidate.lateral_speed * 0.20
-		if score > best_score:
-			best = candidate
-			best_score = score
-	return best
+func _finish_serve_error(result: Resource, server_name: String) -> Resource:
+	result.set("ending_reason", StringName("serve_error"))
+	result.set("home_won", true)
+	return result
 
 
 func _player_by_id(players: Array[VolleyballPlayer], player_id: int) -> VolleyballPlayer:
-	for player in players:
-		if player.id == player_id:
-			return player
+	for p in players:
+		if p.id == player_id:
+			return p
 	return null
+
+
+func _lineup_players(players: Array[VolleyballPlayer], lineup: RotationLineup) -> Array[VolleyballPlayer]:
+	var active: Array[VolleyballPlayer] = []
+	if lineup == null:
+		return players
+	for slot in range(1, 7):
+		var pid := lineup.player_at_slot(slot)
+		var p := _player_by_id(players, pid)
+		if p != null:
+			active.append(p)
+	return active
+
+
+func _initial_home_positions(lineup: RotationLineup, defensive_plan: Resource, receiving: bool) -> Dictionary:
+	var positions := {}
+	if lineup == null:
+		return positions
+	for slot in range(1, 7):
+		var pid := lineup.player_at_slot(slot)
+		if pid != -1:
+			positions[pid] = CourtConstants.slot_position(slot)
+	return positions
+
+
+func _serve_landing_point(target_name: String, server: VolleyballPlayer, players: Array, lineup: Resource, to_home: bool) -> Vector2:
+	var base_target := Vector2(0.50, 0.80) if to_home else Vector2(0.50, 0.20)
+	match target_name:
+		"Zone 1": base_target = Vector2(0.80, 0.82) if to_home else Vector2(0.20, 0.18)
+		"Zone 5": base_target = Vector2(0.20, 0.82) if to_home else Vector2(0.80, 0.18)
+		"Zone 6": base_target = Vector2(0.50, 0.85) if to_home else Vector2(0.50, 0.15)
+	return base_target
+
+
+func _serve_flight_time(server: VolleyballPlayer, quality: float) -> float:
+	return lerpf(1.2, 0.8, quality)
+
+
+func _nearest_reception_player(players: Array[VolleyballPlayer], lineup: RotationLineup, defensive_plan: Resource, landing: Vector2) -> VolleyballPlayer:
+	var active := _lineup_players(players, lineup)
+	return active[0] if not active.is_empty() else null
+
+
+func _desired_pass_target(preferred: Vector2, landing: Vector2) -> Vector2:
+	return preferred
+
+
+func _second_contact_setter(players: Array[VolleyballPlayer], lineup: RotationLineup, defensive_plan: Resource, exclude_id: int) -> VolleyballPlayer:
+	var active_setter_id := lineup.active_setter_id() if lineup != null else -1
+	if active_setter_id != exclude_id:
+		var s := _player_by_id(players, active_setter_id)
+		if s != null: return s
+	for p in players:
+		if p.id != exclude_id:
+			return p
+	return null
+
+
+func _spatial_setter_choice(players: Array[VolleyballPlayer], lineup: RotationLineup, defensive_plan: Resource, exclude_id: int, primary_setter: VolleyballPlayer, contact: Vector2, window: float) -> Dictionary:
+	var start_pos := Vector2(0.50, 0.60)
+	if primary_setter != null and live_positions.has(primary_setter.id):
+		start_pos = live_positions[primary_setter.id]
+	return {
+		"player": primary_setter,
+		"start": start_pos,
+		"travel_time": minf(window * 0.8, 0.5)
+	}
+
+
+func _choose_assignment(active_play: OffensivePlay, play_followed: bool, players: Array[VolleyballPlayer], lineup: RotationLineup) -> Dictionary:
+	var lane := "Outside"
+	var tempo := 3
+	var pid := lineup.player_at_slot(4) if lineup != null else -1
+	return {"lane": lane, "tempo": tempo, "player_id": pid}
+
+
+func _fallback_hitter(players: Array[VolleyballPlayer], lineup: RotationLineup) -> VolleyballPlayer:
+	return players[0] if not players.is_empty() else null
+
+
+func _fallback_assignment(hitter: VolleyballPlayer, lineup: RotationLineup) -> Dictionary:
+	return {"lane": "Outside", "tempo": 3, "player_id": hitter.id if hitter != null else -1}
+
+
+func _set_geometry(setter: VolleyballPlayer, start_pos: Vector2, contact: Vector2, target: Vector2, preferred: Vector2) -> Dictionary:
+	return {
+		"difficulty": 0.1,
+		"distance_meters": start_pos.distance_to(contact) * 18.0,
+		"angle_degrees": 15.0,
+		"release_distance_meters": contact.distance_to(target) * 18.0,
+		"body_orientation_fit": 0.9,
+		"set_balance": 0.85,
+		"set_stability": 0.88
+	}
+
+
+func _hit_type(assignment: Dictionary, hitter: VolleyballPlayer) -> String:
+	return "Hard Spike"
+
+
+func _choose_home_attack_target(hitter: VolleyballPlayer, lane: String, hit_type: String, opponent_team: Resource) -> Dictionary:
+	return {"target": Vector2(0.30, 0.20), "direction": "Cross-court", "reason": "Open seam"}
+
+
+func _attack_flight_time(quality: float, hit_type: String) -> float:
+	return lerpf(0.55, 0.35, quality)
+
+
+func _opponent_block_adaptation_bonus(opponent_team: Resource, lane: String, tempo: int) -> float:
+	return 0.02
+
+
+func _attack_coverage_target(set_target: Vector2, block_strength: float) -> Vector2:
+	return Vector2(set_target.x, 0.65)
+
+
+func _block_coverage_segment(x_pos: float, blocker: VolleyballPlayer, primary: float, assist: float) -> Dictionary:
+	return {"x": x_pos, "width": 0.15, "quality": primary}
+
+
+func _resolve_attack_coverage(players: Array[VolleyballPlayer], lineup: RotationLineup, defensive_plan: Resource, hitter: VolleyballPlayer, target: Vector2, block_strength: float) -> Dictionary:
+	var coverer := _player_by_id(players, lineup.player_at_slot(6)) if lineup != null else (players[0] if not players.is_empty() else null)
+	return {"player": coverer, "success": true, "quality": 0.65}
+
+
+func _choose_opponent_defender(opponent_team: Resource, target: Vector2, flight_time: float) -> Dictionary:
+	var defender: VolleyballPlayer = null
+	if opponent_team != null and opponent_team.has_method("best_defender"):
+		defender = opponent_team.best_defender() as VolleyballPlayer
+
+	return {
+		"player": defender,
+		"start": Vector2(target.x, 0.15),
+		"travel_time": flight_time * 0.8,
+		"arrival_margin": 0.1,
+		"distance_meters": 1.5
+	}
+
+
+func _opponent_floor_defense_adaptation_bonus(opponent_team: Resource, lane: String) -> float:
+	return 0.01
+
+
+func _best_home_server(players: Array[VolleyballPlayer], lineup: RotationLineup) -> VolleyballPlayer:
+	return players[0] if not players.is_empty() else null
+
+
+func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
+	return {"players": [], "zones": []}
+
+
+func _opponent_serve_receive_adaptation_bonus(opponent_team: Resource, target_name: String) -> float:
+	return 0.01
+
+
+func _home_target_hint(defensive_plan: Resource) -> Vector2:
+	return Vector2(0.50, 0.75)
+
+
+func _choose_opponent_attack(opponent_team: Resource, setter: VolleyballPlayer, set_quality: float, hint: Vector2) -> Dictionary:
+	var hitter: VolleyballPlayer = null
+	if opponent_team != null and opponent_team.has_method("best_hitter"):
+		hitter = opponent_team.best_hitter() as VolleyballPlayer
+
+	return {
+		"player": hitter,
+		"contact": Vector2(0.20, 0.48),
+		"target": Vector2(0.70, 0.80),
+		"attack_type": "Spike",
+		"direction": "Cross-court",
+		"start": Vector2(0.20, 0.35),
+		"travel_time": 0.4
+	}
+
+
+func _resolve_home_block(players: Array[VolleyballPlayer], lineup: RotationLineup, defensive_plan: Resource, attack_x: float, tempo: int, set_quality: float, attack_power: float, setter_x: float) -> Dictionary:
+	var primary := _player_by_id(players, lineup.player_at_slot(3)) if lineup != null else (players[0] if not players.is_empty() else null)
+	return {
+		"primary": primary,
+		"assist": null,
+		"quality": 0.60,
+		"outcome": "touch",
+		"primary_close": 0.8,
+		"assist_close": 0.0,
+		"coverage_segments": [],
+		"setter_pull": 0.0,
+		"read_quality": 0.7
+	}
+
+
+func _home_block_deflection_target(home_target: Vector2, net_x: float, block_quality: float, outcome: String, strategy: String) -> Vector2:
+	return Vector2(net_x, 0.75)
+
+
+func _serve_style_proficiency(player: VolleyballPlayer) -> float:
+	return _rating(player, "serve_technique")
+
+
+func _movement_time(player: VolleyballPlayer, start_pos: Vector2, end_pos: Vector2, move_type: String) -> float:
+	var dist := start_pos.distance_to(end_pos) * 18.0
+	return maxf(dist / 6.0, 0.1)
 
 
 func _rating(player: VolleyballPlayer, property_name: String) -> float:
@@ -2324,9 +1173,26 @@ func _rating(player: VolleyballPlayer, property_name: String) -> float:
 
 
 func _power_rating(player: VolleyballPlayer, property_name: String) -> float:
+	if player == null:
+		return 0.5
+
 	if property_name == "attack_power":
-		return clampf(float(player.usable_attack_power()) / 100.0 \
-			* (1.0 - player.fatigue * 0.18) + player.current_form * 0.06, 0.05, 1.0)
+		var raw_power: float = 50.0
+		if player.has_method("usable_attack_power"):
+			raw_power = float(str(player.call("usable_attack_power")))
+		elif "usable_attack_power" in player:
+			var p_val = player.get("usable_attack_power")
+			if p_val != null:
+				raw_power = float(str(p_val))
+		else:
+			raw_power = _rating(player, "attack_power") * 100.0
+
+		return clampf(
+			(raw_power / 100.0) * (1.0 - player.fatigue * 0.18) + player.current_form * 0.06,
+			0.05,
+			1.0
+		)
+
 	var base := _rating(player, property_name)
 	var mass_bonus := clampf((player.mass_kg - 82.0) / 48.0, -0.50, 1.0) * 0.07
 	return clampf(base + mass_bonus, 0.05, 1.0)
@@ -2339,16 +1205,67 @@ func _available_jump_rating(player: VolleyballPlayer) -> float:
 
 
 func _body_reach_rating(player: VolleyballPlayer) -> float:
-	var standing_reach := inverse_lerp(200.0, 275.0, player.standing_reach_cm())
-	var wingspan := inverse_lerp(160.0, 225.0, player.wingspan_cm)
-	return clampf(standing_reach * 0.68 + wingspan * 0.32, 0.05, 1.0)
+	if player == null:
+		return 0.5
+
+	var reach: float = 240.0
+	if "standing_reach_cm" in player:
+		var raw_val = player.get("standing_reach_cm")
+		if raw_val != null:
+			reach = float(str(raw_val))
+
+	return clampf(reach / 280.0, 0.1, 1.0)
 
 
-func _quality_phrase(quality: float) -> String:
-	if quality >= 0.72:
-		return "Perfect pass; every attacker remains available."
-	if quality >= 0.48:
-		return "Playable pass with multiple options."
-	if quality >= 0.25:
-		return "The setter is pulled off the net."
-	return "The offense cannot control the first contact."
+func _quality_phrase(q: float) -> String:
+	if q >= 0.8: return "In-system pass."
+	if q >= 0.5: return "Playable pass."
+	return "Out-of-system pass."
+
+
+func _arrival_phrase(arrival: Dictionary, arrived: bool, support: int) -> String:
+	if not arrived: return "Passer missed target window."
+	return "Passer set early."
+
+func _choose_opponent_blockers(
+	opponent_team: Resource,
+	attack_x: float,
+	tempo: int,
+	lane: String
+) -> Dictionary:
+	var primary: VolleyballPlayer = null
+	var assist: VolleyballPlayer = null
+	var assist_close: float = 0.0
+
+	# From home team's perspective (0.0 = Left/Zone 4, 1.0 = Right/Zone 2):
+	# Opponent front-row slots facing home are:
+	# Slot 2 (Opponent Right) -> faces Home Zone 4 (attack_x ~ 0.0 to 0.38)
+	# Slot 3 (Opponent Middle) -> faces Home Middle (attack_x ~ 0.38 to 0.62)
+	# Slot 4 (Opponent Left)  -> faces Home Zone 2 (attack_x ~ 0.62 to 1.0)
+
+	if opponent_team != null and opponent_team.has_method("player_at_slot"):
+		var slot_2 = opponent_team.call("player_at_slot", 2) as VolleyballPlayer
+		var slot_3 = opponent_team.call("player_at_slot", 3) as VolleyballPlayer
+		var slot_4 = opponent_team.call("player_at_slot", 4) as VolleyballPlayer
+
+		if attack_x < 0.38:
+			primary = slot_2 if slot_2 != null else slot_3
+			assist = slot_3 if slot_2 != null else null
+		elif attack_x > 0.62:
+			primary = slot_4 if slot_4 != null else slot_3
+			assist = slot_3 if slot_4 != null else null
+		else:
+			primary = slot_3
+			assist = slot_2 if rng.randf() < 0.5 else slot_4
+
+		if assist != null:
+			assist_close = clampf(1.0 - float(3 - tempo) * 0.30, 0.0, 1.0)
+	else:
+		if opponent_team != null and opponent_team.has_method("best_blocker"):
+			primary = opponent_team.call("best_blocker") as VolleyballPlayer
+
+	return {
+		"primary": primary,
+		"assist": assist,
+		"assist_close": assist_close
+	}

@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://c5dfblsc38oqe"]
+
+[ext_resource type="Script" uid="uid://cbbetox4c75yr" path="res://scenes/screens/match_screen.gd" id="1_12i7x"]
+[ext_resource type="PackedScene" uid="uid://dwitl3atsqyfv" path="res://scenes/components/match_court_3d.tscn" id="1_w3inh"]
+
+[node name="MatchScreen" type="Control" unique_id=1408541162]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_12i7x")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="." unique_id=2141551742]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="SubViewportContainer" unique_id=1439447962]
+size = Vector2i(1280, 720)
+
+[node name="MatchCourt3D" parent="SubViewportContainer/SubViewport" unique_id=649354656 instance=ExtResource("1_w3inh")]
+unique_name_in_owner = true
+
+[node name="HUD" type="Control" parent="." unique_id=110310675]
+anchors_preset = 0
+offset_left = 605.0
+offset_top = 563.0
+offset_right = 645.0
+offset_bottom = 603.0
+
+[node name="CaptionLabel" type="Label" parent="HUD" unique_id=2062352838]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
