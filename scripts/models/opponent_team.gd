@@ -23,6 +23,18 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 @export var observed_serve_targets: Dictionary = {}
 @export var rallies_observed: int = 0
 
+## Compatibility summary for UI/tests that predate phase-specific adaptation.
+var adaptation_strength: float:
+	get:
+		return maxf(
+			block_adaptation_strength,
+			maxf(floor_defense_adaptation_strength, serve_receive_adaptation_strength),
+		)
+	set(value):
+		block_adaptation_strength = clampf(value, 0.0, 0.85)
+		floor_defense_adaptation_strength = clampf(value, 0.0, 0.85)
+		serve_receive_adaptation_strength = clampf(value, 0.0, 0.85)
+
 
 func player_by_id(player_id: int) -> Resource:
 	for player in players:
@@ -33,6 +45,11 @@ func player_by_id(player_id: int) -> Resource:
 
 func current_lineup() -> RotationLineup:
 	return rotations.get(current_rotation) as RotationLineup
+
+
+func player_at_slot(slot_number: int) -> Resource:
+	var lineup := current_lineup()
+	return player_by_id(lineup.player_at_slot(slot_number)) if lineup != null else null
 
 
 func on_court_players() -> Array[Resource]:

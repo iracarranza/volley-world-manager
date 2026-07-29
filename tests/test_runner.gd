@@ -884,7 +884,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 			home_block_events += 1
 			opponent_setter_pull_observed = opponent_setter_pull_observed or (
 				event.metadata.has("opponent_setter_position")
-				and not Dictionary(event.metadata.get("setter_pull", {})).is_empty()
+				and not (event.metadata.get("setter_pull", {}) as Dictionary).is_empty()
 			)
 			block_segments_observed = block_segments_observed or not Array(
 				event.metadata.get("coverage_segments", [])
