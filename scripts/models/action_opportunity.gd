@@ -34,6 +34,13 @@ var direction_change_delay_seconds: float = 0.0
 var modeled_start_speed_mps: float = 0.0
 var directional_start_speed_mps: float = 0.0
 var directional_velocity_overcredit_mps: float = 0.0
+## Attack-only takeoff evidence. These are resolved from the actual run-up,
+## not copied from static player ratings.
+var approach_speed_mps: float = 0.0
+var approach_quality: float = 0.0
+var approach_alignment: float = 1.0
+var lateral_control: float = 1.0
+var jump_multiplier: float = 1.0
 
 var reachable: bool = false
 var arrival_balance: float = 0.0

@@ -38,9 +38,11 @@ stores the authoritative destination and arrival time. `BallReadSystem` produces
 a player-specific `BallFlightEstimate` containing perceived destination,
 perceived arrival, recognition time, confidence, and novelty.
 
-This foundation is deterministic and tested, but it operates only in tests and
-shadow calculations. It selects a diagnostic shadow receiver, not the receiver
-used by the live rally.
+This foundation is deterministic and tested. Reception, setter, and attack use
+it in shadow calculations and may promote audited contacts only in an explicitly
+requested development fixture. Their ordinary production flags remain off.
+Approach mechanics also consume persistent-style movement evidence in normal
+home attacks, but the complete rally is not yet one persistent loop.
 
 ## Verified development effect
 
@@ -67,22 +69,31 @@ Every contact should satisfy:
 
 If playback invents a different trajectory, visible motion and simulated reality diverge.
 
-## Needed systems
+## Implemented and needed systems
 
-**Partially implemented in shadow reception:**
+**Partially integrated:**
 
-- `RallyOpportunitySystem`: schedules reception windows in a copied rally state.
-- `RallyDecisionSystem`: ranks open reception options and grades the selected contact against ball truth.
+- `RallyOpportunitySystem` schedules reception windows in copied rally state.
+- `RallyDecisionSystem` ranks perceived reception options.
+- `ShadowSetterResponseSystem` and `ShadowAttackSystem` extend observation and
+  movement through second and third contacts.
+- `RallyContactSystem`, `RallyPlaybackAdapter`, and `RallyTrace` exist for
+  bounded slices; they are not yet universal rally services.
+- `ApproachMechanicsSystem` makes responsibility release and run-up evidence
+  causal for home attack availability and quality.
 
-**Still proposed:**
+**Still required:**
 
-- `RallyContactSystem`: resolves contact quality and launches the next ball.
-- `RallyRuleSystem`: enforces three contacts, double contacts, eligibility, rotation, net/out boundaries, and terminal outcomes.
-- `RallyEventAdapter`: converts resolved state transitions to the existing playback contract.
-- `RallyTrace`: records state, candidates, decisions, and reasons for debugging and user-facing analysis.
+- player-specific, coordinated block observations and commitments;
+- persistent opponent-side reception, offense, and transition decisions;
+- a universal rule system for contacts, eligibility, rotation, net/out
+  boundaries, and terminal outcomes;
+- a single scheduler-driven resolver that replaces the remaining phase flow;
+- user-facing explanations derived from decision evidence rather than inferred
+  afterward.
 
-`BallReadSystem` is now a partially implemented foundation rather than a purely
-proposed system. Its scalar familiarity argument must eventually be replaced by
-experience with learned signature regions.
+`BallReadSystem` is a partially integrated foundation. Its scalar familiarity
+argument must eventually be replaced by experience with learned signature
+regions.
 
 Keep these separate so movement does not quietly decide tactics and playback does not decide physics.

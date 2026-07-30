@@ -12,5 +12,9 @@ extends Resource
 @export_range(0.0, 1.0) var attack_quality: float = 0.0
 @export var key_factors: Array[String] = []
 @export var analysis: Dictionary = {}
+## Authoritative home-player locations at t=0. Playback must begin from this
+## snapshot instead of whichever tactical-planner view happens to be open.
+@export var initial_home_positions: Dictionary = {}
+@export var initial_opponent_positions: Dictionary = {}
 @export var explanation: String = ""
 @export var ending_reason: StringName = &""

@@ -4,6 +4,7 @@ This ledger connects important statements to stable source locations.
 
 | Claim | Status | Source file | Symbol or property |
 |---|---|---|---|
+| A context-free developer has one authoritative continuation contract | VERIFIED DOCUMENTATION | `docs/textbook/FRESH_AGENT_HANDOFF.md` | `What is authoritative today`, `The one current next objective`, `Gate 44 acceptance contract` |
 | Application starts from the application scene | VERIFIED | `project.godot` | `run/main_scene` |
 | Game and career state are globally available | VERIFIED | `project.godot` | `[autoload]` |
 | UI navigation begins in one application controller | VERIFIED | `scenes/application.gd` | `_ready`, `_show_title`, `_show_dashboard`, `_show_match` |
@@ -41,4 +42,12 @@ This ledger connects important statements to stable source locations.
 | Weekly training changes players | VERIFIED | `scripts/systems/training_system.gd` | `apply_week` |
 | Player generation is region- and seed-aware | VERIFIED | `scripts/systems/player_generator.gd` | `generate_roster`, `generate_market` |
 | 2D match playback is present | VERIFIED | `scenes/main/main.gd` | `_play_rally` |
+| Completed rally history and analysis remain inside scrollable dashboard regions | VERIFIED | `scenes/main/main.tscn`; `scenes/main/main.gd` | `DashboardPlaybackHistoryLabel`, `DashboardExplanationLabel`, `_append_playback_history` |
+| Planner serve-receive centers affect resolved reception geometry | VERIFIED | `scripts/simulation/rally_simulator.gd`; `tests/test_runner.gd` | `planner_zone_center`, `_test_seeded_rally_resolution` |
+| Players can independently toggle major 2D visualization layers | VERIFIED | `scenes/components/tactical_court.gd`; `scenes/main/main.gd` | `VISUAL_ALL`, `set_visualization_layers`, `_setup_visualization_controls` |
+| Normal match playback does not automatically expose shadow timing diagnostics | VERIFIED | `scenes/main/main.gd` | `_play_rally`, `_show_shadow_reception_debug` |
+| Saved floor positions and block instructions drive resolved defensive phase geometry | VERIFIED | `scripts/simulation/rally_simulator.gd`; `tests/test_runner.gd` | `_home_floor_phase_positions`, `_test_seeded_floor_defense_geometry` |
+| Hitters stage and run through an explicit approach waypoint | VERIFIED | `scripts/simulation/rally_simulator.gd`; `scenes/components/tactical_court.gd` | `_approach_start_position`, `unit_movement_waypoints` |
+| Defensive responsibility and release timing causally shape attack preparation | VERIFIED HOME ATTACK | `scripts/simulation/approach_mechanics_system.gd`; `scripts/simulation/rally_simulator.gd` | `prepare_for_attack`, `transition_preparation` |
+| Resolved approach speed, alignment, and lateral control alter jump access, quality, and available attacks | VERIFIED HOME ATTACK | `scripts/simulation/approach_mechanics_system.gd`; `scripts/simulation/contact_envelope_system.gd`; `scripts/simulation/shadow_attack_system.gd` | `evaluate_takeoff`, `jump_multiplier`, `available_attack_families`, `_attack_actions` |
 | 3D work is paused | PROJECT DECISION | User direction | Not a source-code fact |

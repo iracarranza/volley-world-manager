@@ -30,6 +30,7 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var resolve_rally_button: Button = %ResolveRallyButton
 @onready var replay_rally_button: Button = %ReplayRallyButton
 @onready var playback_speed_option: OptionButton = %PlaybackSpeedOption
+@onready var visualization_menu: MenuButton = %VisualizationMenu
 @onready var skip_playback_button: Button = %SkipPlaybackButton
 @onready var reset_positions_button: Button = %ResetPositionsButton
 @onready var auto_rallies_toggle: CheckButton = %AutoRalliesToggle
@@ -98,7 +99,8 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var close_tactical_workspace_button: Button = %CloseTacticalWorkspaceButton
 @onready var match_preview_court: TacticalCourt = %MatchPreviewCourt
 @onready var dashboard_event_label: Label = %DashboardEventLabel
-@onready var dashboard_explanation_label: Label = %DashboardExplanationLabel
+@onready var dashboard_playback_history_label: RichTextLabel = %DashboardPlaybackHistoryLabel
+@onready var dashboard_explanation_label: RichTextLabel = %DashboardExplanationLabel
 @onready var substitution_confirmation: ConfirmationDialog = %SubstitutionConfirmation
 @onready var undo_substitution_button: Button = %UndoSubstitutionButton
 @onready var tactical_modal_underlay: ColorRect = %TacticalModalUnderlay
@@ -142,6 +144,7 @@ var match_preview_zone_type: int = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 var match_preview_phase: int = 0
 var last_rally_result: Resource
 var shadow_overlay_layers: int = TacticalCourt.SHADOW_LAYER_DEFAULT
+var visualization_layers: int = TacticalCourt.VISUAL_ALL
 
 
 func _ready() -> void:
@@ -204,6 +207,7 @@ func _ready() -> void:
 	rotation_option.select(GameManager.selected_rotation - 1)
 	_setup_tactical_workspace()
 	_setup_shadow_debug_controls()
+	_setup_visualization_controls()
 	_setup_defender_popup()
 	defender_popup_close_button.pressed.connect(_close_player_instructions)
 	_capture_match_preview_snapshot()
@@ -271,7 +275,10 @@ func _populate_static_options() -> void:
 		popup_tempo_option.add_item("T%d" % tempo)
 		popup_tempo_option.set_item_metadata(popup_tempo_option.item_count - 1, tempo)
 	playback_speed_option.clear()
-	for speed_data in [["0.1×", 0.1], ["0.5×", 0.5], ["1×", 1.0], ["2×", 2.0]]:
+	for speed_data in [
+		["0.25×", 0.25], ["0.5×", 0.5], ["0.75×", 0.75],
+		["1×", 1.0], ["1.5×", 1.5], ["2×", 2.0],
+	]:
 		playback_speed_option.add_item(str(speed_data[0]))
 		playback_speed_option.set_item_metadata(
 			playback_speed_option.item_count - 1, float(speed_data[1])
@@ -358,12 +365,55 @@ func _setup_shadow_debug_controls() -> void:
 	_apply_shadow_overlay_layers()
 
 
+func _setup_visualization_controls() -> void:
+	var popup := visualization_menu.get_popup()
+	popup.clear()
+	for layer in [
+		["Ball path", TacticalCourt.VISUAL_BALL_PATH],
+		["Player paths", TacticalCourt.VISUAL_PLAYER_PATHS],
+		["Tactical guides", TacticalCourt.VISUAL_TACTICAL_GUIDES],
+		["Coverage zones", TacticalCourt.VISUAL_COVERAGE_ZONES],
+		["Contact overlays", TacticalCourt.VISUAL_CONTACT_OVERLAYS],
+	]:
+		popup.add_check_item(str(layer[0]), int(layer[1]))
+	popup.id_pressed.connect(_visualization_layer_toggled)
+	_refresh_visualization_menu()
+	_apply_visualization_layers()
+
+
+func _visualization_layer_toggled(layer_id: int) -> void:
+	visualization_layers ^= layer_id
+	_refresh_visualization_menu()
+	_apply_visualization_layers()
+
+
+func _refresh_visualization_menu() -> void:
+	var popup := visualization_menu.get_popup()
+	for layer_id in [
+		TacticalCourt.VISUAL_BALL_PATH,
+		TacticalCourt.VISUAL_PLAYER_PATHS,
+		TacticalCourt.VISUAL_TACTICAL_GUIDES,
+		TacticalCourt.VISUAL_COVERAGE_ZONES,
+		TacticalCourt.VISUAL_CONTACT_OVERLAYS,
+	]:
+		var item_index := popup.get_item_index(layer_id)
+		if item_index >= 0:
+			popup.set_item_checked(
+				item_index, bool(visualization_layers & layer_id)
+			)
+
+
+func _apply_visualization_layers() -> void:
+	tactical_court.set_visualization_layers(visualization_layers)
+	match_preview_court.set_visualization_layers(visualization_layers)
+
+
 func _shadow_overlay_layer_toggled(layer_id: int) -> void:
 	shadow_overlay_layers ^= layer_id
 	_refresh_shadow_overlay_menu()
 	_apply_shadow_overlay_layers()
 	if last_rally_result != null:
-		_show_shadow_reception_debug(last_rally_result)
+		_show_shadow_reception_debug(last_rally_result, true)
 
 
 func _refresh_shadow_overlay_menu() -> void:
@@ -410,7 +460,7 @@ func _run_shadow_debug_fixture() -> void:
 	plan.load_dict(saved_plan)
 	_refresh_defensive_plan()
 	last_rally_result = result
-	await _play_rally(result, false)
+	await _play_rally(result, false, true)
 	run_shadow_debug_button.disabled = false
 	var debug_trace: Dictionary = result.analysis.get("shadow_reception", {})
 	var debug_summary: Dictionary = debug_trace.get("summary", {})
@@ -1383,10 +1433,26 @@ func _replay_last_rally() -> void:
 	await _play_rally(last_rally_result, false)
 
 
-func _play_rally(result: Resource, record_result: bool) -> void:
+func _play_rally(
+	result: Resource,
+	record_result: bool,
+	show_shadow_diagnostics: bool = false,
+) -> void:
 	rally_playback_active = true
 	_reset_tactical_positions(false)
-	_show_shadow_reception_debug(result)
+	var initial_home_positions: Dictionary = result.get("initial_home_positions") \
+		if result != null and result.get("initial_home_positions") is Dictionary \
+		else {}
+	var initial_opponent_positions: Dictionary = result.get("initial_opponent_positions") \
+		if result != null and result.get("initial_opponent_positions") is Dictionary \
+		else {}
+	tactical_court.begin_rally_playback(
+		initial_home_positions, initial_opponent_positions
+	)
+	match_preview_court.begin_rally_playback(
+		initial_home_positions, initial_opponent_positions
+	)
+	_show_shadow_reception_debug(result, show_shadow_diagnostics)
 	tactical_court.set_coverage_zones_visible(false)
 	match_preview_court.set_coverage_zones_visible(false)
 	skip_rally_playback = false
@@ -1398,11 +1464,17 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 	rally_result_title.text = "Rally in progress…"
 	rally_result_explanation.text = ""
 	rally_result_factors.text = ""
+	dashboard_explanation_label.text = "The current contact is shown in full. Earlier contacts are summarized below it."
+	dashboard_playback_history_label.text = "No earlier events."
 	var playback_speed := float(_selected_metadata(playback_speed_option))
+	var last_displayed_event: Resource = null
 	for event_index in range(result.events.size()):
 		var event: Resource = result.events[event_index]
 		if skip_rally_playback:
 			break
+		if last_displayed_event != null:
+			_append_playback_history(last_displayed_event)
+		last_displayed_event = event
 		var playback_headline := _playback_event_headline(event)
 		var playback_detail := _playback_event_detail(event)
 		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
@@ -1417,7 +1489,7 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 		var next_contact := _next_contact_event(result.events, event_index + 1)
 		if not outgoing_trajectory.is_empty() and next_contact != null:
 			var trajectory_duration := clampf(
-				float(outgoing_trajectory.get("duration", 0.5)), 0.20, 2.20
+				float(outgoing_trajectory.get("duration", 0.5)), 0.28, 2.60
 			) / maxf(playback_speed, 0.1)
 			tactical_court.animate_spatial_transition(
 				event, next_contact, trajectory_duration
@@ -1437,7 +1509,7 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 			"event_duration",
 			maxf(0.46, simulated_movement + simulated_flight * 0.55),
 		))
-		var event_duration := clampf(simulated_duration, 0.42, 2.20) \
+		var event_duration := clampf(simulated_duration, 0.55, 2.60) \
 			/ maxf(playback_speed, 0.1)
 		var pre_targets: Array[Vector2] = tactical_court.movement_phase_targets(event)
 		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
@@ -1445,7 +1517,7 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 			simulated_movement / maxf(simulated_duration, 0.1), 0.30, 0.72
 		)
 		var pre_budget := event_duration * movement_share if has_movement else 0.0
-		var contact_pause := event_duration * 0.07 if has_movement else 0.0
+		var contact_pause := event_duration * 0.10 if has_movement else 0.0
 		var post_budget := event_duration * 0.18 if has_movement else 0.0
 		var ball_duration := event_duration - pre_budget - contact_pause - post_budget
 		if has_movement:
@@ -1503,6 +1575,8 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 				match_preview_court.finish_event_animation()
 	tactical_court.finish_event_animation()
 	match_preview_court.finish_event_animation()
+	if last_displayed_event != null:
+		_append_playback_history(last_displayed_event)
 	_show_rally_result(result)
 	var match_update: Dictionary = {}
 	if record_result:
@@ -1525,7 +1599,7 @@ func _play_rally(result: Resource, record_result: bool) -> void:
 	if record_result and auto_rallies_toggle.button_pressed \
 			and not (pause_key_moments_toggle.button_pressed and key_moment) \
 			and not resolve_rally_button.disabled:
-		await get_tree().create_timer(0.65).timeout
+		await get_tree().create_timer(1.0).timeout
 		_resolve_rally.call_deferred()
 	elif bool(GameManager.match_state.match_complete):
 		rally_result_title.text = "MATCH COMPLETE · %s" % (
@@ -1563,6 +1637,22 @@ func _skip_rally_playback() -> void:
 func _set_playback_caption(value: String) -> void:
 	rally_event_label.text = value
 	dashboard_event_label.text = value
+
+
+func _append_playback_history(event: Resource) -> void:
+	if event == null:
+		return
+	var summary := "• %.2fs · %s — %s" % [
+		float(event.metadata.get("event_time", 0.0)),
+		event.type_name(),
+		_playback_event_headline(event),
+	]
+	var history_lines := dashboard_playback_history_label.text.split("\n")
+	if history_lines.size() == 1 and history_lines[0] == "No earlier events.":
+		history_lines.clear()
+	history_lines.insert(0, summary)
+	dashboard_playback_history_label.text = "\n".join(history_lines)
+	dashboard_playback_history_label.scroll_to_line(0)
 
 
 func _playback_event_headline(event: Resource) -> String:
@@ -1611,8 +1701,11 @@ func _reset_tactical_positions(show_status: bool = true) -> void:
 		_set_status("Tactical markers returned to saved rotation positions.")
 
 
-func _show_shadow_reception_debug(result: Resource) -> void:
-	if not OS.is_debug_build():
+func _show_shadow_reception_debug(
+	result: Resource,
+	show_diagnostics: bool = false,
+) -> void:
+	if not OS.is_debug_build() or not show_diagnostics:
 		shadow_reception_label.visible = false
 		tactical_court.clear_shadow_reception_trace()
 		match_preview_court.clear_shadow_reception_trace()

@@ -57,6 +57,14 @@ const SHADOW_LAYER_DEFAULT: int = \
 	| SHADOW_LAYER_ENVELOPES
 const SHADOW_LAYER_ALL: int = SHADOW_LAYER_DEFAULT \
 	| SHADOW_LAYER_READS | SHADOW_LAYER_OPPORTUNITIES
+const VISUAL_BALL_PATH: int = 1
+const VISUAL_PLAYER_PATHS: int = 2
+const VISUAL_TACTICAL_GUIDES: int = 4
+const VISUAL_COVERAGE_ZONES: int = 8
+const VISUAL_CONTACT_OVERLAYS: int = 16
+const VISUAL_ALL: int = VISUAL_BALL_PATH | VISUAL_PLAYER_PATHS \
+	| VISUAL_TACTICAL_GUIDES | VISUAL_COVERAGE_ZONES \
+	| VISUAL_CONTACT_OVERLAYS
 
 var lineup: RotationLineup
 var players_by_id: Dictionary = {}
@@ -82,6 +90,7 @@ var defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
 var defensive_phase: int = 0
 var landscape_orientation: bool = false
 var live_player_positions: Dictionary = {}
+var opponent_live_player_positions: Dictionary = {}
 var movement_player_id: int = -1
 var movement_start: Vector2 = Vector2.ZERO
 var movement_target: Vector2 = Vector2.ZERO
@@ -91,8 +100,11 @@ var movement_trails: Dictionary = {}
 var movement_phase_caption: String = ""
 var unit_movement_starts: Dictionary = {}
 var unit_movement_targets: Dictionary = {}
+var unit_movement_waypoints: Dictionary = {}
+var playback_continuity_mismatches: Array[Dictionary] = []
 var shadow_reception_trace: Dictionary = {}
 var shadow_overlay_layers: int = SHADOW_LAYER_DEFAULT
+var visualization_layers: int = VISUAL_ALL
 
 
 func _ready() -> void:
@@ -172,6 +184,11 @@ func set_shadow_overlay_layers(layers: int) -> void:
 	queue_redraw()
 
 
+func set_visualization_layers(layers: int) -> void:
+	visualization_layers = layers & VISUAL_ALL
+	queue_redraw()
+
+
 func set_landscape_orientation(enabled: bool) -> void:
 	landscape_orientation = enabled
 	queue_redraw()
@@ -200,6 +217,7 @@ func animate_event(event: Resource, duration: float) -> void:
 	movement_player_id = -1
 	unit_movement_starts.clear()
 	unit_movement_targets.clear()
+	unit_movement_waypoints.clear()
 	_start_playback_tween(duration)
 
 
@@ -214,6 +232,11 @@ func animate_spatial_transition(
 	playback_ball_visible = true
 	_prepare_player_movement(next_contact_event)
 	unit_movement_starts.clear()
+	unit_movement_waypoints.clear()
+	## The whole unit reads and adjusts while the ball travels. Targets are
+	## phase-aware visual intentions, but their starts always come from the
+	## previous resolved playback position so support movement never becomes a
+	## hidden reset or a later teleport.
 	unit_movement_targets = _unit_support_targets(
 		next_contact_event, _movement_action_target(next_contact_event)
 	)
@@ -221,18 +244,32 @@ func animate_spatial_transition(
 		unit_movement_targets[movement_player_id] = _movement_action_target(
 			next_contact_event
 		)
+		if int(next_contact_event.event_type) == RallyEventModel.EventType.ATTACK \
+				and next_contact_event.metadata.has("approach_start_position"):
+			unit_movement_waypoints[movement_player_id] = Vector2(
+				next_contact_event.metadata["approach_start_position"]
+			)
 	for raw_player_id in unit_movement_targets:
 		var player_id := int(raw_player_id)
-		var slot_number := lineup.slot_for_player(player_id)
-		var start: Vector2 = live_player_positions.get(
-			player_id, _player_court_position(player_id, slot_number)
-		)
+		var start := _live_playback_position(player_id)
 		if player_id == movement_player_id \
 				and next_contact_event.metadata.has("movement_start"):
-			start = Vector2(next_contact_event.metadata["movement_start"])
-			live_player_positions[player_id] = start
+			var reported_start := Vector2(next_contact_event.metadata["movement_start"])
+			if not _has_live_playback_position(player_id):
+				start = reported_start
+				_set_live_playback_position(player_id, start)
+			elif start.distance_to(reported_start) > 0.015:
+				playback_continuity_mismatches.append({
+					"player_id": player_id,
+					"event_type": int(next_contact_event.event_type),
+					"visible_start": start,
+					"reported_start": reported_start,
+					"distance": start.distance_to(reported_start),
+				})
 		unit_movement_starts[player_id] = start
 		_append_movement_trail(player_id, start)
+		if unit_movement_waypoints.has(player_id):
+			_append_movement_trail(player_id, unit_movement_waypoints[player_id])
 		_append_movement_trail(player_id, unit_movement_targets[player_id])
 	movement_phase_caption = "Tracking live ball"
 	_start_playback_tween(duration)
@@ -257,6 +294,7 @@ func animate_player_to(
 	playback_ball_visible = false
 	_prepare_player_movement(event)
 	unit_movement_starts.clear()
+	unit_movement_waypoints.clear()
 	unit_movement_targets = _unit_support_targets(event, target)
 	if movement_player_id >= 0:
 		movement_target = target
@@ -264,10 +302,7 @@ func animate_player_to(
 	movement_phase_caption = phase_caption
 	for raw_player_id in unit_movement_targets:
 		var player_id := int(raw_player_id)
-		var slot_number := lineup.slot_for_player(player_id)
-		var start: Vector2 = live_player_positions.get(
-			player_id, _player_court_position(player_id, slot_number)
-		)
+		var start := _live_playback_position(player_id)
 		unit_movement_starts[player_id] = start
 		_append_movement_trail(player_id, start)
 		_append_movement_trail(player_id, unit_movement_targets[player_id])
@@ -279,20 +314,29 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 	if not has_player_movement(event):
 		return targets
 	var player_id := int(event.actor_id)
-	var slot_number := lineup.slot_for_player(player_id)
+	var opponent_actor := _is_opponent_player(player_id)
+	var actor_lineup: RotationLineup = opponent_team.current_lineup() \
+		if opponent_actor and opponent_team != null else lineup
+	var slot_number := actor_lineup.slot_for_player(player_id) \
+		if actor_lineup != null else -1
 	if slot_number < 0:
 		if not after_contact:
 			targets.append(event.end_position)
 		return targets
-	var current: Vector2 = live_player_positions.get(
-		player_id, _player_court_position(player_id, slot_number)
-	)
+	var current := _live_playback_position(player_id)
 	var action_target := _movement_action_target(event)
-	var base_target := _base_or_defensive_position(player_id, slot_number)
+	var base_target := _playback_base_position(player_id, slot_number)
 	if not after_contact:
+		if opponent_actor:
+			targets.append(current.lerp(action_target, 0.35))
+			targets.append(action_target)
+			return targets
 		match int(event.event_type):
 			RallyEventModel.EventType.ATTACK:
-				targets.append(current.lerp(action_target, 0.42))
+				var approach_start: Vector2 = event.metadata.get(
+					"approach_start_position", current.lerp(action_target, 0.42)
+				)
+				targets.append(approach_start)
 				targets.append(action_target)
 			RallyEventModel.EventType.BLOCK:
 				targets.append(_defensive_read_position(
@@ -308,6 +352,19 @@ func movement_phase_targets(event: Resource, after_contact: bool = false) -> Arr
 				targets.append(current.lerp(action_target, 0.35))
 				targets.append(action_target)
 	else:
+		if opponent_actor:
+			match int(event.event_type):
+				RallyEventModel.EventType.ATTACK, RallyEventModel.EventType.BLOCK:
+					var landing := action_target + Vector2(0.0, -0.045)
+					targets.append(landing)
+					targets.append(landing.lerp(base_target, 0.38))
+				RallyEventModel.EventType.DEFENSE:
+					var recovery_weight := 0.18 \
+						if action_target.distance_to(current) > 0.20 else 0.32
+					targets.append(action_target.lerp(base_target, recovery_weight))
+				RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.SET:
+					targets.append(action_target.lerp(base_target, 0.16))
+			return targets
 		match int(event.event_type):
 			RallyEventModel.EventType.ATTACK, RallyEventModel.EventType.BLOCK:
 				var landing := action_target + Vector2(0.0, 0.045)
@@ -359,11 +416,14 @@ func movement_phase_caption_for(
 		]:
 			return "Landing" if phase_index == 0 else "Recovery"
 		return "Recovery"
-	if lineup == null or lineup.slot_for_player(int(event.actor_id)) < 0:
+	var actor_id := int(event.actor_id)
+	if lineup == null or (
+		lineup.slot_for_player(actor_id) < 0 and not _is_opponent_player(actor_id)
+	):
 		return "Unit defensive read"
 	match int(event.event_type):
 		RallyEventModel.EventType.ATTACK:
-			return "Transition" if phase_index == 0 else "Approach"
+			return "Approach setup" if phase_index == 0 else "Approach run"
 		RallyEventModel.EventType.BLOCK:
 			return "Read step" if phase_index == 0 else "Block close"
 		RallyEventModel.EventType.RECEPTION:
@@ -378,12 +438,10 @@ func movement_phase_caption_for(
 
 
 func has_player_movement(event: Resource) -> bool:
-	if lineup == null:
+	if lineup == null or event.actor_id < 0:
 		return false
-	if str(event.metadata.get("side", "")) == "opponent" \
-			and int(event.event_type) == RallyEventModel.EventType.ATTACK:
-		return true
-	if event.actor_id < 0 or lineup.slot_for_player(int(event.actor_id)) < 0:
+	var actor_id := int(event.actor_id)
+	if lineup.slot_for_player(actor_id) < 0 and not _is_opponent_player(actor_id):
 		return false
 	return int(event.event_type) in [
 		RallyEventModel.EventType.RECEPTION,
@@ -410,7 +468,7 @@ func finish_event_animation() -> void:
 		playback_tween.kill()
 	playback_progress = 1.0
 	for player_id in unit_movement_targets:
-		live_player_positions[player_id] = unit_movement_targets[player_id]
+		_set_live_playback_position(player_id, unit_movement_targets[player_id])
 	queue_redraw()
 
 
@@ -422,11 +480,48 @@ func clear_rally_playback() -> void:
 	playback_ball_visible = true
 	movement_phase_caption = ""
 	live_player_positions.clear()
+	opponent_live_player_positions.clear()
 	movement_trails.clear()
-	movement_player_id = -1
 	unit_movement_starts.clear()
 	unit_movement_targets.clear()
+	unit_movement_waypoints.clear()
+	movement_player_id = -1
+	playback_continuity_mismatches.clear()
 	playback_progress = 1.0
+	queue_redraw()
+
+
+## Starts playback from the simulator's t=0 player snapshot. This deliberately
+## ignores the editor's current tactical view, which may show another phase or
+## a release target rather than the rally's actual starting locations.
+func begin_rally_playback(
+	initial_positions: Dictionary,
+	initial_opponent_positions: Dictionary = {},
+) -> void:
+	live_player_positions.clear()
+	opponent_live_player_positions.clear()
+	movement_trails.clear()
+	unit_movement_starts.clear()
+	unit_movement_targets.clear()
+	unit_movement_waypoints.clear()
+	playback_continuity_mismatches.clear()
+	if lineup == null:
+		queue_redraw()
+		return
+	for raw_player_id in initial_positions:
+		var player_id := int(raw_player_id)
+		if lineup.slot_for_player(player_id) < 0:
+			continue
+		var position := Vector2(initial_positions[raw_player_id])
+		live_player_positions[player_id] = position
+		_append_movement_trail(player_id, position)
+	for raw_player_id in initial_opponent_positions:
+		var player_id := int(raw_player_id)
+		if not opponent_players_by_id.has(player_id):
+			continue
+		var position := Vector2(initial_opponent_positions[raw_player_id])
+		opponent_live_player_positions[player_id] = position
+		_append_movement_trail(player_id, position)
 	queue_redraw()
 
 
@@ -435,17 +530,29 @@ func _set_playback_progress(value: float) -> void:
 	for player_id in unit_movement_targets:
 		var start: Vector2 = unit_movement_starts[player_id]
 		var target: Vector2 = unit_movement_targets[player_id]
-		live_player_positions[player_id] = start.lerp(target, value)
+		if unit_movement_waypoints.has(player_id):
+			var waypoint: Vector2 = unit_movement_waypoints[player_id]
+			var waypoint_share := 0.46
+			var staged_position := start.lerp(
+				waypoint, value / waypoint_share
+			) if value <= waypoint_share else waypoint.lerp(
+				target, (value - waypoint_share) / (1.0 - waypoint_share)
+			)
+			_set_live_playback_position(player_id, staged_position)
+		else:
+			_set_live_playback_position(player_id, start.lerp(target, value))
 	queue_redraw()
 
 
 func reset_live_positions() -> void:
 	live_player_positions.clear()
+	opponent_live_player_positions.clear()
 	movement_trails.clear()
 	movement_phase_caption = ""
 	movement_player_id = -1
 	unit_movement_starts.clear()
 	unit_movement_targets.clear()
+	unit_movement_waypoints.clear()
 	queue_redraw()
 
 
@@ -453,17 +560,20 @@ func _prepare_player_movement(event: Resource) -> void:
 	movement_player_id = -1
 	if lineup == null or event.actor_id < 0:
 		return
-	var slot_number := lineup.slot_for_player(int(event.actor_id))
+	var player_id := int(event.actor_id)
+	var opponent_actor := _is_opponent_player(player_id)
+	var actor_lineup: RotationLineup = opponent_team.current_lineup() \
+		if opponent_actor and opponent_team != null else lineup
+	var slot_number := actor_lineup.slot_for_player(player_id) \
+		if actor_lineup != null else -1
 	if slot_number < 0:
 		return
-	movement_player_id = int(event.actor_id)
-	movement_start = live_player_positions.get(
-		movement_player_id, _player_court_position(movement_player_id, slot_number)
-	)
+	movement_player_id = player_id
+	movement_start = _live_playback_position(movement_player_id)
 	if event.metadata.has("movement_start") \
-			and movement_player_id not in live_player_positions:
+			and not _has_live_playback_position(movement_player_id):
 		movement_start = Vector2(event.metadata["movement_start"])
-		live_player_positions[movement_player_id] = movement_start
+		_set_live_playback_position(movement_player_id, movement_start)
 	match int(event.event_type):
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
 			movement_target = event.start_position
@@ -472,19 +582,21 @@ func _prepare_player_movement(event: Resource) -> void:
 		RallyEventModel.EventType.ATTACK:
 			movement_target = event.start_position
 		RallyEventModel.EventType.BLOCK:
-			movement_target = event.end_position + Vector2(0.0, 0.035)
+			movement_target = event.start_position
 		_:
 			movement_player_id = -1
 
 
 func _movement_action_target(event: Resource) -> Vector2:
+	if event.metadata.has("movement_target"):
+		return Vector2(event.metadata["movement_target"])
 	match int(event.event_type):
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
 			return event.start_position
 		RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
 			return event.start_position
 		RallyEventModel.EventType.BLOCK:
-			return event.end_position + Vector2(0.0, 0.035)
+			return event.start_position
 	return event.start_position
 
 
@@ -493,6 +605,39 @@ func _base_or_defensive_position(player_id: int, slot_number: int) -> Vector2:
 	if defensive_plan != null:
 		return defensive_plan.defender_position(player_id, fallback)
 	return fallback
+
+
+func _is_opponent_player(player_id: int) -> bool:
+	return opponent_players_by_id.has(player_id)
+
+
+func _has_live_playback_position(player_id: int) -> bool:
+	return opponent_live_player_positions.has(player_id) \
+		if _is_opponent_player(player_id) else live_player_positions.has(player_id)
+
+
+func _live_playback_position(player_id: int) -> Vector2:
+	if _is_opponent_player(player_id):
+		return opponent_live_player_positions.get(
+			player_id, opponent_team.court_position(player_id, "defense")
+		)
+	var slot_number := lineup.slot_for_player(player_id) if lineup != null else -1
+	return live_player_positions.get(
+		player_id, _player_court_position(player_id, slot_number)
+	)
+
+
+func _set_live_playback_position(player_id: int, position: Vector2) -> void:
+	if _is_opponent_player(player_id):
+		opponent_live_player_positions[player_id] = position
+	else:
+		live_player_positions[player_id] = position
+
+
+func _playback_base_position(player_id: int, slot_number: int) -> Vector2:
+	if _is_opponent_player(player_id):
+		return opponent_team.court_position(player_id, "defense")
+	return _base_or_defensive_position(player_id, slot_number)
 
 
 func _append_movement_trail(player_id: int, point: Vector2) -> void:
@@ -513,44 +658,93 @@ func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionar
 	if lineup == null:
 		return targets
 	var event_type := int(event.event_type)
-	var opponent_attack := str(event.metadata.get("side", "")) == "opponent" \
-		and event_type == RallyEventModel.EventType.ATTACK
+	var event_side_opponent := str(event.metadata.get("side", "")) == "opponent"
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id == movement_player_id:
 			continue
 		var base := _base_or_defensive_position(player_id, slot_number)
-		var target := base
-		if opponent_attack:
-			if CourtConstants.is_front_row_slot(slot_number):
-				target.x = lerpf(base.x, action_target.x, 0.38)
-				target.y = 0.54
-			else:
-				target.x = lerpf(base.x, action_target.x, 0.20)
-				target.y = clampf(base.y, 0.70, 0.92)
-		elif event_type == RallyEventModel.EventType.ATTACK:
-			var distance := 0.10 + float(slot_number % 3) * 0.035
-			target = action_target.lerp(base, 0.52) + Vector2(
-				-distance if slot_number % 2 == 0 else distance, 0.08
-			)
-		elif event_type == RallyEventModel.EventType.SET:
-			target = base.lerp(
-				Vector2(action_target.x, maxf(base.y - 0.05, 0.56)), 0.22
-			)
-		elif event_type in [
-			RallyEventModel.EventType.RECEPTION,
-			RallyEventModel.EventType.DEFENSE,
-		]:
-			target = base.lerp(
-				action_target,
-				0.10 if CourtConstants.is_front_row_slot(slot_number) else 0.18,
-			)
-		elif event_type == RallyEventModel.EventType.BLOCK:
-			target = base.lerp(Vector2(action_target.x, base.y), 0.22)
-		targets[player_id] = Vector2(
-			clampf(target.x, 0.06, 0.94), clampf(target.y, 0.53, 0.96)
+		targets[player_id] = _support_target_for_side(
+			base, action_target, event_type, slot_number,
+			false, event_side_opponent,
 		)
+	if opponent_team != null:
+		var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+		if opponent_lineup != null:
+			for slot_number in range(1, 7):
+				var player_id := opponent_lineup.player_at_slot(slot_number)
+				if player_id == movement_player_id:
+					continue
+				var base: Vector2 = opponent_live_player_positions.get(
+					player_id, opponent_team.court_position(player_id, "defense")
+				)
+				targets[player_id] = _support_target_for_side(
+					base, action_target, event_type, slot_number,
+					true, event_side_opponent,
+				)
+	var home_phase_targets: Dictionary = event.metadata.get("home_phase_targets", {})
+	for raw_player_id in home_phase_targets:
+		var player_id := int(raw_player_id)
+		if player_id != movement_player_id and players_by_id.has(player_id):
+			targets[player_id] = Vector2(home_phase_targets[raw_player_id])
+	var opponent_phase_targets: Dictionary = event.metadata.get(
+		"opponent_phase_targets", {}
+	)
+	for raw_player_id in opponent_phase_targets:
+		var player_id := int(raw_player_id)
+		if player_id != movement_player_id and opponent_players_by_id.has(player_id):
+			targets[player_id] = Vector2(opponent_phase_targets[raw_player_id])
 	return targets
+
+
+func _support_target_for_side(
+	base: Vector2,
+	action_target: Vector2,
+	event_type: int,
+	slot_number: int,
+	team_is_opponent: bool,
+	event_side_opponent: bool,
+) -> Vector2:
+	## Work in a shared orientation where each team's net is toward decreasing
+	## Y, then mirror the opponent result back into whole-court coordinates.
+	var local_base := Vector2(base.x, 1.0 - base.y) if team_is_opponent else base
+	var local_action := Vector2(action_target.x, 1.0 - action_target.y) \
+		if team_is_opponent else action_target
+	var target := local_base
+	var own_phase := team_is_opponent == event_side_opponent
+	var front_row := CourtConstants.is_front_row_slot(slot_number)
+	if own_phase:
+		match event_type:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+				target = local_base.lerp(local_action, 0.10 if front_row else 0.18)
+			RallyEventModel.EventType.SET:
+				target = local_base.lerp(Vector2(
+					local_action.x, maxf(local_base.y - 0.05, 0.56)
+				), 0.22)
+			RallyEventModel.EventType.ATTACK:
+				var distance := 0.10 + float(slot_number % 3) * 0.035
+				target = local_action.lerp(local_base, 0.52) + Vector2(
+					-distance if slot_number % 2 == 0 else distance, 0.08
+				)
+			RallyEventModel.EventType.BLOCK:
+				target = local_base.lerp(Vector2(local_action.x, local_base.y), 0.22)
+	else:
+		match event_type:
+			RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
+				if front_row:
+					target.x = lerpf(local_base.x, local_action.x, 0.30)
+					target.y = lerpf(local_base.y, 0.54, 0.55)
+				else:
+					target.x = lerpf(local_base.x, local_action.x, 0.16)
+					target.y = clampf(local_base.y, 0.70, 0.92)
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+				target = local_base.lerp(Vector2(local_action.x, local_base.y), 0.05)
+			RallyEventModel.EventType.BLOCK:
+				target = local_base.lerp(local_action, 0.10)
+	target = Vector2(
+		clampf(target.x, 0.06, 0.94), clampf(target.y, 0.53, 0.96)
+	)
+	return Vector2(target.x, 1.0 - target.y) if team_is_opponent else target
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -676,13 +870,16 @@ func _draw() -> void:
 			_court_to_local(Vector2(1.0, attack_y)),
 			palette["line"], 2.0,
 		)
-	_draw_lane_guides()
-	_draw_assignments()
-	_draw_serve_receive_legality()
-	_draw_defensive_zones()
-	_draw_setter_release_path()
-	_draw_assignment_drag()
-	_draw_movement_trails()
+	if bool(visualization_layers & VISUAL_TACTICAL_GUIDES):
+		_draw_lane_guides()
+		_draw_setter_release_path()
+	if bool(visualization_layers & VISUAL_PLAYER_PATHS):
+		_draw_assignments()
+		_draw_assignment_drag()
+		_draw_movement_trails()
+	if bool(visualization_layers & VISUAL_COVERAGE_ZONES):
+		_draw_serve_receive_legality()
+		_draw_defensive_zones()
 	_draw_shadow_reception_trace()
 	_draw_opponents()
 	_draw_players()
@@ -1294,20 +1491,9 @@ func _draw_opponents() -> void:
 		var player: VolleyballPlayer = player_resource as VolleyballPlayer
 		if player == null:
 			continue
-		var court_position: Vector2 = opponent_team.court_position(player.id, "defense")
-		if playback_event != null \
-				and str(playback_event.metadata.get("side", "")) == "opponent" \
-				and int(playback_event.actor_id) == player.id:
-			var movement_origin: Vector2 = playback_event.metadata.get(
-				"movement_start",
-				playback_event.metadata.get("hitter_start", court_position),
-			)
-			var action_target: Vector2 = playback_event.start_position
-			if int(playback_event.event_type) == RallyEventModel.EventType.SET:
-				action_target = playback_event.metadata.get(
-					"setter_position", playback_event.start_position
-				)
-			court_position = movement_origin.lerp(action_target, playback_progress)
+		var court_position: Vector2 = opponent_live_player_positions.get(
+			player.id, opponent_team.court_position(player.id, "defense")
+		)
 		var center := _court_to_local(court_position)
 		var active := playback_event != null \
 			and str(playback_event.metadata.get("side", "")) == "opponent" \
@@ -1366,7 +1552,8 @@ func _draw_rally_playback() -> void:
 		+ 2.0 * inverse * playback_progress * control \
 		+ playback_progress * playback_progress * finish
 	var event_color: Color = _playback_event_color(followup_block)
-	if playback_event.actor_id >= 0 and lineup != null:
+	if bool(visualization_layers & VISUAL_CONTACT_OVERLAYS) \
+			and playback_event.actor_id >= 0 and lineup != null:
 		var slot_number := lineup.slot_for_player(playback_event.actor_id)
 		if slot_number >= 0:
 			var actor_position := _court_to_local(_player_court_position(
@@ -1376,7 +1563,9 @@ func _draw_rally_playback() -> void:
 	if not playback_ball_visible:
 		return
 	if trajectory.is_empty():
-		if followup_block != null and int(playback_event.event_type) == RallyEventModel.EventType.ATTACK:
+		if bool(visualization_layers & VISUAL_CONTACT_OVERLAYS) \
+				and followup_block != null \
+				and int(playback_event.event_type) == RallyEventModel.EventType.ATTACK:
 			_draw_block_reach_marker(followup_block)
 		return
 	var path_points := PackedVector2Array()
@@ -1388,11 +1577,12 @@ func _draw_rally_playback() -> void:
 			+ 2.0 * path_inverse * path_t * control
 			+ path_t * path_t * finish
 		)
-	draw_polyline(path_points, _with_alpha(event_color, 0.34), 2.0)
+	if bool(visualization_layers & VISUAL_BALL_PATH):
+		draw_polyline(path_points, _with_alpha(event_color, 0.34), 2.0)
 	var block_event: Resource = followup_block
 	if block_event == null and playback_event.event_type == RallyEventModel.EventType.BLOCK:
 		block_event = playback_event
-	if block_event != null:
+	if block_event != null and bool(visualization_layers & VISUAL_CONTACT_OVERLAYS):
 		_draw_block_coverage(block_event)
 	var shadow_position := ball_position + Vector2(3.0, 5.0)
 	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))

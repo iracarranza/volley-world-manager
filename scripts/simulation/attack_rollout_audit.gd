@@ -85,6 +85,21 @@ static func evaluate(
 		"arrival_margin": float(response.get("true_arrival_margin", -9.0)),
 		"arrival_balance": float(response.get("true_arrival_balance", 0.0)),
 		"requires_jump": bool(response.get("requires_jump", false)),
+		"maximum_contact_height_meters": float(response.get(
+			"maximum_contact_height_meters", 0.0
+		)),
+		"vertical_margin_meters": float(response.get(
+			"vertical_margin_meters", 0.0
+		)),
+		"transition_preparation": Dictionary(response.get(
+			"transition_preparation", {}
+		)).duplicate(true),
+		"perceived_approach": Dictionary(response.get(
+			"perceived_approach", {}
+		)).duplicate(true),
+		"resolved_approach": Dictionary(response.get(
+			"resolved_approach", {}
+		)).duplicate(true),
 		"quality": float(response.get("quality", 0.0)),
 		"target": Vector2(response.get("target", Vector2(0.5, 0.2))),
 		"direction": str(response.get("direction", "line")),

@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://cwvn821kr6lok" path="res://scenes/main/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/components/tactical_court.tscn" id="2_court"]
 [ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="3_theme"]
-[ext_resource type="PackedScene" uid="uid://c5dfblsc38oqe" path="res://scenes/screens/match_screen.tscn" id="4_l3cfh"]
 
 [node name="Main" type="Control" unique_id=564539663]
 layout_mode = 3
@@ -348,6 +347,13 @@ custom_minimum_size = Vector2(72, 0)
 layout_mode = 2
 tooltip_text = "Change rally event playback speed."
 
+[node name="VisualizationMenu" type="MenuButton" parent="Margin/Content/QuickRallyBar" unique_id=2021254257]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(92, 0)
+layout_mode = 2
+tooltip_text = "Choose which tactical and playback visualizers appear on both courts."
+text = "Visuals"
+
 [node name="SkipPlaybackButton" type="Button" parent="Margin/Content/QuickRallyBar" unique_id=1207876122]
 unique_name_in_owner = true
 layout_mode = 2
@@ -429,35 +435,39 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/separation = 8
 
+[node name="DashboardCurrentEventTitle" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=962282415]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.72, 0.84, 1)
+theme_override_font_sizes/font_size = 12
+text = "CURRENT EVENT"
+
 [node name="DashboardEventLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1297078735]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(330, 74)
+custom_minimum_size = Vector2(330, 112)
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "Ready for the next rally."
 autowrap_mode = 2
-clip_text = true
-text_overrun_behavior = 3
-max_lines_visible = 4
 
-[node name="DashboardExplanationLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1704552373]
+[node name="DashboardRecentEventsTitle" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1116334401]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.72, 0.84, 1)
+theme_override_font_sizes/font_size = 12
+text = "RECENT EVENTS"
+
+[node name="DashboardPlaybackHistoryLabel" type="RichTextLabel" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1133215419]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 96)
+layout_mode = 2
+size_flags_vertical = 3
+text = "Earlier contacts will appear here as the rally unfolds."
+
+[node name="DashboardExplanationLabel" type="RichTextLabel" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=1704552373]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(330, 100)
 layout_mode = 2
+size_flags_vertical = 3
 text = "Rally explanations and tactical observations appear here."
-autowrap_mode = 2
-clip_text = true
-text_overrun_behavior = 3
-max_lines_visible = 7
-
-[node name="DashboardInstructionLabel" type="Label" parent="Margin/Content/MatchDashboard/MatchSummaryPanel/MatchSummaryContent" unique_id=761893219]
-custom_minimum_size = Vector2(330, 72)
-layout_mode = 2
-text = "Click the tactical view to edit rotations, offensive plays, defensive positioning and scouting plans."
-autowrap_mode = 2
-clip_text = true
-text_overrun_behavior = 3
-max_lines_visible = 4
 
 [node name="Workspace" type="HSplitContainer" parent="Margin/Content" unique_id=212129950]
 unique_name_in_owner = true
@@ -883,23 +893,23 @@ layout_mode = 2
 text = "Key factors"
 autowrap_mode = 2
 
-[node name="ShadowDebugControls" type="VBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor"]
+[node name="ShadowDebugControls" type="VBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1498778937]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="ControlRow" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls"]
+[node name="ControlRow" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls" unique_id=1251183933]
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="ShadowOverlayMenu" type="MenuButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+[node name="ShadowOverlayMenu" type="MenuButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=355052672]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Choose which developer evidence is drawn over the 2D court."
 text = "Overlay Layers"
 
-[node name="ShadowDebugSeedEdit" type="LineEdit" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+[node name="ShadowDebugSeedEdit" type="LineEdit" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=1830132776]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(76, 0)
 layout_mode = 2
@@ -907,25 +917,25 @@ tooltip_text = "Fixed deterministic rally seed."
 text = "1001"
 placeholder_text = "Seed"
 
-[node name="ShadowDebugFixtureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+[node name="ShadowDebugFixtureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=1962756674]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
 tooltip_text = "Temporarily applies a deterministic diagnostic setup without saving it."
 
-[node name="RunShadowDebugButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+[node name="RunShadowDebugButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=1872930465]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Run Debug Seed"
 
-[node name="ShadowOverlayLegend" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls"]
+[node name="ShadowOverlayLegend" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls" unique_id=1849707946]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.65, 0.72, 0.82, 1)
 text = "Purple: pass/target · Green: intended preparation · Cyan: actual response · Yellow: ownership handoff"
 autowrap_mode = 2
 
-[node name="ShadowReceptionLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor"]
+[node name="ShadowReceptionLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=404857191]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(330, 132)
@@ -950,7 +960,7 @@ custom_minimum_size = Vector2(640, 24)
 layout_mode = 2
 text = "Tactical editor ready."
 
-[node name="MatchScreen" parent="." unique_id=1408541162 instance=ExtResource("4_l3cfh")]
+[node name="MatchScreen" parent="." unique_id=1408541162]
 visible = false
 z_index = 10
 layout_mode = 1

@@ -1,7 +1,7 @@
 # P4-C5 — Migration Plan and Visible Proof
 
-Status: shadow reception and its 2D inspector are **PARTIALLY IMPLEMENTED**;
-live replacement remains **PROPOSED**
+Status: reception, setter, and attack have **DEVELOPMENT-ONLY GUARDED SLICES**;
+production replacement remains off; attack-to-block perception is **NEXT**
 Keywords: migration, reception slice, debug overlay, visible sign, acceptance tests
 Primary sources: `scripts/simulation/rally_state_builder.gd`; `scripts/simulation/rally_movement_system.gd`; `scripts/simulation/rally_scheduler.gd`; `scenes/main/main.gd`
 
@@ -41,6 +41,24 @@ perceived defensive targeting, candidate audit, guarded rollout, and a
 development-only live contact through Gate 42. Block and later contacts remain
 on the legacy continuation.
 
+Gate 43 additionally makes responsibility-driven approach preparation active in
+ordinary home attacks and defense-to-counterattack continuations. It changes
+run-up speed, lateral control, jump conversion, quality, and attack availability;
+it does not enable the production continuous-attack flag.
+
+## Slice 4: attack to block — current next work
+
+Blockers must not receive the resolver's selected lane as private foreknowledge.
+They should observe setter, ball, and hitter cues over time; form individual
+hypotheses; coordinate primary and assisting commitments; and then resolve their
+movement and contact against authoritative attack truth.
+
+The first implementation must be shadow-only and preserve official block event
+identity. Wrong commits, hesitation, solo blocks, coordinated assists, and late
+closes must remain possible and visible. The complete input boundary, test list,
+and proposed Gate 44–49 sequence are in the
+[Fresh-Agent Handoff](../FRESH_AGENT_HANDOFF.md#the-one-current-next-objective).
+
 ## Visible signs that it works
 
 A correct implementation should make these observable in 2D playback and debug output:
@@ -63,6 +81,9 @@ shadow claimant, contact signature, and comparison reason.
 
 This is stronger evidence than animation alone. Animation can look smooth while displaying an inconsistent simulation.
 
-## Acceptance scenario: seed 1001
+## Historical manual continuity scenario: seed 1001
 
 Keep seed 1001 as a manual continuity scenario because transition set and pipe movement were previously reported as suspicious after roughly ten seconds. Record the first inconsistent event rather than depending on elapsed visual time alone.
+
+This scenario is regression evidence, not the current roadmap. Current roadmap
+work starts from the attack-to-block observation contract in the handoff.

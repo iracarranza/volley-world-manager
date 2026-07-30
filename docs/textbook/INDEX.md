@@ -6,6 +6,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 
 | Search phrase | Read |
 |---|---|
+| I am a fresh coding model or developer; where do I start? | [Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md) |
 | What is this game? | [P1-C1](part_01_project/01_what_you_are_building.md) |
 | Where does the game start? | [P1-C2](part_01_project/02_godot_project_and_runtime.md) |
 | Where should a new file go? | [P1-C3](part_01_project/03_repository_map.md) |
@@ -19,8 +20,12 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | What is the proposed persistent simulation? | [P4-C2](part_04_match_engine/02_persistent_rally_state.md) |
 | How do ball time and movement interact? | [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | How should tactics, information, and growth connect? | [P4-C4](part_04_match_engine/04_tactics_information_and_progression.md) |
+| How do I adjust playback, planner geometry, or visualizers? | [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
+| How do I implement a new tactical or rally system? | [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | How do careers, rosters, and training work? | [P5-C1](part_05_management/01_career_roster_and_training.md) |
-| What should I build next? | [P6-C1](part_06_exercises/01_guided_exercises.md) |
+| What are development projects and latent-role projections? | [P5-C2](part_05_management/02_development_to_match_options.md) |
+| What should I build next? | [Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md#the-one-current-next-objective) |
+| What is historical practice rather than current roadmap work? | [P6-C2](part_06_exercises/02_beginner_project_ladder.md) |
 
 ## Symbols
 
@@ -28,6 +33,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 |---|---|
 | `GameManager.resolve_active_rally` | Entry into live rally resolution; [P1-C4](part_01_project/04_following_a_user_action.md) |
 | `RallySimulator.resolve` | Current whole-rally resolver; [P4-C1](part_04_match_engine/01_current_rally_pipeline.md) |
+| `RallyFeatureFlags` | Production-off and explicit development rollout switches; [Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md#what-is-authoritative-today) |
 | `RallyEvent` | Playback record of an action; [P4-C1](part_04_match_engine/01_current_rally_pipeline.md) |
 | `RallyResult` | Completed rally result; [P4-C1](part_04_match_engine/01_current_rally_pipeline.md) |
 | `RallyState` | Persistent rally snapshot foundation; [P4-C2](part_04_match_engine/02_persistent_rally_state.md) |
@@ -43,10 +49,12 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `ActionOpportunity` | A possible action with timing and feasibility; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `ActionOpportunityWindow` | The interval during which a projected action remains available; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyMovementSystem` | Movement estimates and reception opportunities; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
+| `ApproachMechanicsSystem` | Responsibility release, approach staging, takeoff physics, and attack availability; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecision` | Structured evidence for one selected shadow action; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecisionSystem` | Comparison of open receiver choices and grading against ball truth; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `CoverageCalculator` | Arrival and claimant calculations; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
+| `TacticalCourt.set_visualization_layers` | Shared court-overlay visibility mask; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | `CareerManager` | Stateful career lifecycle; [P5-C1](part_05_management/01_career_roster_and_training.md) |
 | `VolleyballTrainingSystem` | Weekly player changes; [P5-C1](part_05_management/01_career_roster_and_training.md) |
 
@@ -59,5 +67,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `Attempt to call function on a null instance` | Trace where the player, lineup, or plan can be null; [P2-C3](part_02_gdscript/03_collections_types_and_null.md) |
 | Ball teleports or starts at the wrong point | Inspect `outgoing_trajectory` and event continuity; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | Player appears to reset unexpectedly | Compare simulator state with playback-only position resets; [P4-C1](part_04_match_engine/01_current_rally_pipeline.md) |
+| Long rally text moves or enlarges the dashboard | Keep history and analysis in non-fitting scrollable `RichTextLabel` nodes; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
+| Planner marker moves but the rally does not change | Trace the model value into a seeded event decision; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | New persistent code does not change a live rally | It is not wired into `RallySimulator.resolve`; [STATUS.md](STATUS.md) |
 | Test output changes with the same seed | Look for unseeded randomness or mutable state outside the resolver; [P3-C2](part_03_workflow/02_debugging_testing_and_git.md) |

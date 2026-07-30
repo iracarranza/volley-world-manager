@@ -26,6 +26,9 @@ const ShadowAttackSystemModel := preload(
 const LiveAttackIntegratorModel := preload(
 	"res://scripts/simulation/live_attack_integrator.gd"
 )
+const ApproachMechanicsModel := preload(
+	"res://scripts/simulation/approach_mechanics_system.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -35,6 +38,7 @@ const OPPONENT_DEFENSE: float = 0.58
 var rng := RandomNumberGenerator.new()
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
+var opponent_live_positions: Dictionary = {}
 var shadow_reception_trace: RallyTrace
 
 
@@ -52,7 +56,10 @@ func resolve(
 	rally_clock = 0.0
 	shadow_reception_trace = null
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
+	opponent_live_positions = _initial_opponent_positions(opponent_team, home_serving)
 	var result: Resource = RallyResultModel.new()
+	result.initial_home_positions = live_positions.duplicate(true)
+	result.initial_opponent_positions = opponent_live_positions.duplicate(true)
 	result.active_play_name = active_play.play_name \
 		if active_play != null else "Default T3 Outside"
 	if home_serving:
@@ -115,6 +122,9 @@ func resolve(
 	var receiver_arrived := receiver != null
 	if receiver == null:
 		receiver = _nearest_reception_player(players, lineup, defensive_plan, serve_landing)
+	var receiver_zone: Resource = defensive_plan.zone_for(
+		receiver.id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+	) if defensive_plan != null and receiver != null else null
 	shadow_reception_trace = ShadowReceptionSystemModel.evaluate(
 		players, lineup, defensive_plan, opponent_team,
 		opponent_server, opponent_server.primary_serve_style,
@@ -271,10 +281,17 @@ func resolve(
 			_arrival_phrase(arrival, receiver_arrived, support_count) \
 			+ (" Equal-priority passers hesitated at the seam." if seam_conflict else ""),
 		], {"side": "home", "landing": serve_landing,
+			"planner_zone_center": Vector2(receiver_zone.center) \
+				if receiver_zone != null else receiver_start,
+			"planner_zone_radius_meters": float(receiver_zone.radius_meters) \
+				if receiver_zone != null else 0.0,
+			"planner_zone_priority": int(receiver_zone.priority) \
+				if receiver_zone != null else 0,
 			"flight_time": serve_time, "arrival": arrival,
 			"support_count": support_count, "seam_conflict": seam_conflict,
 			"claim_margin": float(reception_claim.get("claim_margin", 1.0)),
 			"movement_start": receiver_start,
+			"movement_target": serve_landing if receiver_arrived else receiver_start,
 			"movement_duration": receiver_move_time,
 			"event_time": rally_clock,
 			"incoming_trajectory": serve_trajectory,
@@ -410,14 +427,30 @@ func resolve(
 	result.play_was_followed = active_play != null \
 		and result.reception_quality >= 0.42 \
 		and rng.randf() < follow_threshold
-	var assignment := _choose_assignment(active_play, result.play_was_followed, players, lineup)
+	var assignment := _choose_assignment(
+		active_play, result.play_was_followed, players, lineup, setter.id
+	)
 	if using_live_attack:
 		assignment = _assignment_from_dict(Dictionary(selected_live_attack.get(
 			"assignment", {}
 		)))
+		## A player may attack after receiving, but cannot make the second and
+		## third contacts consecutively. Reject an otherwise valid live candidate
+		## if emergency setting made its assigned hitter the last toucher.
+		if assignment != null and assignment.player_id == setter.id:
+			using_live_attack = false
+			selected_live_attack = {}
+			attack_rollout_evidence["selected_source"] = "official"
+			attack_rollout_evidence["fallback_reason"] = \
+				"selected hitter made second contact"
+			shadow_summary["attack_rollout"] = attack_rollout_evidence
+			shadow_reception_trace.summary = shadow_summary
+			assignment = _choose_assignment(
+				active_play, false, players, lineup, setter.id
+			)
 	var hitter := _player_by_id(players, assignment.player_id) if assignment != null else null
-	if hitter == null:
-		hitter = _fallback_hitter(players, lineup)
+	if hitter == null or hitter.id == setter.id:
+		hitter = _fallback_hitter(players, lineup, setter.id)
 		assignment = _fallback_assignment(hitter, lineup)
 	if active_play == null:
 		result.key_factors.append(ExplanationText.factor("default_offense"))
@@ -523,6 +556,8 @@ func resolve(
 		hitter, hitter_start, set_target, "transition"
 	)
 	var hitter_arrival_margin := float(set_flight_time) - hitter_move_time
+	var approach_preparation: Dictionary = {}
+	var resolved_approach: Dictionary = {}
 	if using_live_attack:
 		hitter_start = Vector2(selected_live_attack.get(
 			"source_position", hitter_start
@@ -533,8 +568,39 @@ func resolve(
 		hitter_arrival_margin = float(selected_live_attack.get(
 			"arrival_margin", hitter_arrival_margin
 		))
-	var approach_fit := _rating(hitter, "approach_timing") * 0.32 \
-		+ _rating(hitter, "transition_speed") * 0.18
+		approach_preparation = Dictionary(selected_live_attack.get(
+			"transition_preparation", {}
+		)).duplicate(true)
+		resolved_approach = Dictionary(selected_live_attack.get(
+			"resolved_approach", {}
+		)).duplicate(true)
+	else:
+		var hitter_actor := attack_state.player_state(&"home", hitter.id) \
+			if attack_state != null else null
+		if hitter_actor != null:
+			hitter_actor = hitter_actor.snapshot()
+			hitter_actor.apply_position(hitter_start, hitter_actor.velocity)
+			var assignment_data := {
+				"player_id": assignment.player_id,
+				"lane": assignment.lane,
+				"tempo": assignment.tempo,
+				"priority": assignment.priority,
+				"target": set_target,
+			}
+			approach_preparation = ApproachMechanicsModel.prepare_for_attack(
+				attack_state, hitter_actor, assignment_data, receiver.id, rally_clock
+			)
+			var prepared_actor := approach_preparation.get("actor") as RallyPlayerState
+			approach_preparation.erase("actor")
+			if prepared_actor != null:
+				hitter_start = prepared_actor.position
+				resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
+					prepared_actor, set_target, set_flight_time
+				)
+	var approach_fit := _rating(hitter, "approach_timing") * 0.12 \
+		+ float(resolved_approach.get("runup_quality", 0.5)) * 0.24 \
+		+ float(resolved_approach.get("lateral_control", 0.5)) * 0.08 \
+		+ float(resolved_approach.get("approach_speed_fraction", 0.5)) * 0.06
 	var attack_base: float = _rating(hitter, "attack_accuracy") * 0.38 \
 		+ _power_rating(hitter, "attack_power") * 0.24 \
 		+ _rating(hitter, "decision_making") * 0.13 \
@@ -544,6 +610,13 @@ func resolve(
 		+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14
 	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
 	var hit_type := _hit_type(assignment, hitter)
+	var available_attacks := ApproachMechanicsModel.available_attack_families(
+		hitter, resolved_approach, hitter_arrival_margin
+	)
+	if "power_attack" not in available_attacks \
+			and hit_type in ["Quick attack", "Pipe attack", "High-ball swing", "Power swing", "Tempo swing"]:
+		hit_type = "Controlled roll" if "controlled_roll" in available_attacks \
+			else "Emergency tip"
 	var attack_choice := _choose_home_attack_target(
 		hitter, assignment.lane, hit_type, opponent_team
 	)
@@ -566,6 +639,10 @@ func resolve(
 			)),
 		}
 	var attack_target: Vector2 = attack_choice.target
+	var approach_start := Vector2(approach_preparation.get(
+		"approach_start_position",
+		_approach_start_position(set_target, hitter_start, false)
+	))
 	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
 	var attack_trajectory := _ball_trajectory(
 		"attack", set_target, attack_target, attack_flight, 0.55,
@@ -599,6 +676,14 @@ func resolve(
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
 			"target_reason": attack_choice.reason, "movement_start": hitter_start,
+			"approach_start_position": approach_start,
+			"transition_preparation": approach_preparation.duplicate(true),
+			"resolved_approach": resolved_approach.duplicate(true),
+			"available_attack_actions": available_attacks.duplicate(),
+			"approach_speed_mps": float(resolved_approach.get("approach_speed_mps", 0.0)),
+			"approach_quality": float(resolved_approach.get("runup_quality", 0.0)),
+			"jump_multiplier": float(resolved_approach.get("jump_multiplier", 1.0)),
+			"lateral_control": float(resolved_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
 			"arrival_margin": hitter_arrival_margin,
 			"deadline": rally_clock + float(set_flight_time),
@@ -719,10 +804,11 @@ func resolve(
 		) if coverer != null else 4.0
 		if coverer != null:
 			live_positions[coverer.id] = recycle_target
+		var coverage_pass_target := recycle_target + Vector2(0.04, -0.05)
 		_add_event(result, RallyEventModel.EventType.DEFENSE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Attack coverage",
-			recycle_target, recycle_target + Vector2(0.04, -0.05),
+			recycle_target, coverage_pass_target,
 			coverage_success, coverage_quality,
 			"%s covers the block touch" % (
 				coverer.display_name if coverer != null else "Nobody"
@@ -739,7 +825,7 @@ func resolve(
 			})
 		result.key_factors.append(ExplanationText.factor("attack_recycled"))
 		return _resolve_home_continuation(
-			result, players, lineup, coverer, recycle_target,
+			result, players, lineup, coverer, coverage_pass_target,
 			opponent_team, defensive_plan, 1,
 		)
 
@@ -764,9 +850,10 @@ func resolve(
 	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = defense_strength > float(result.attack_quality) \
 		+ rng.randf_range(-0.20, 0.12)
+	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
-		attack_target, attack_target + Vector2(0.04, -0.03), dug,
+		attack_target, opponent_pass_target, dug,
 		defense_strength, "Defensive contact",
 		"%s %s the %s attack after moving %.1fm.%s" % [
 			opponent_defender.display_name, "controls" if dug else "cannot reach",
@@ -777,10 +864,11 @@ func resolve(
 			"arrival_margin": opponent_defense.arrival_margin,
 			"attack_direction": attack_choice.direction,
 			"adaptation_bonus": floor_defense_bonus})
+	opponent_live_positions[opponent_defender.id] = attack_target
 	if dug:
 		result.key_factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
-			result, players, lineup, hitter, attack_target,
+			result, players, lineup, hitter, opponent_pass_target,
 			opponent_team, defensive_plan, 1,
 		)
 	result.key_factors.append(ExplanationText.factor("attack_control"))
@@ -849,6 +937,15 @@ func _resolve_home_serve(
 	if receiver == null:
 		receiver = opponent_team.best_defender() as VolleyballPlayer
 	var opponent_arrival: Dictionary = opponent_claim.get("arrival", {})
+	var receiver_zone: Resource = opponent_coverage.zones.get(receiver.id) as Resource
+	var receiver_start: Vector2 = opponent_live_positions.get(
+		receiver.id,
+		Vector2(receiver_zone.center) if receiver_zone != null \
+		else opponent_team.court_position(receiver.id, "serve_receive"),
+	)
+	var receiver_move_time := _movement_time(
+		receiver, receiver_start, opponent_landing, "lateral"
+	)
 	var support_count := int(opponent_claim.get("support_count", 0))
 	var serve_receive_bonus := _opponent_serve_receive_adaptation_bonus(
 		opponent_team, target_name
@@ -867,6 +964,7 @@ func _resolve_home_serve(
 		reception_quality = minf(reception_quality, 0.12)
 	result.reception_quality = reception_quality
 	var reception_success := receiver_arrived and reception_quality >= 0.18
+	opponent_live_positions[receiver.id] = opponent_landing
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		opponent_landing, Vector2(0.50, 0.34), reception_success,
 		reception_quality, "%s receives" % receiver.display_name,
@@ -876,7 +974,10 @@ func _resolve_home_serve(
 			" Scouting anticipated this target." if serve_receive_bonus >= 0.035 else "",
 		], {"side": "opponent", "landing": opponent_landing,
 			"flight_time": serve_time, "arrival": opponent_arrival,
-			"support_count": support_count, "adaptation_bonus": serve_receive_bonus})
+			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
+			"movement_start": receiver_start,
+			"movement_target": opponent_landing if receiver_arrived else receiver_start,
+			"movement_duration": receiver_move_time})
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
 	return _resolve_opponent_transition(
@@ -897,11 +998,16 @@ func _resolve_opponent_transition(
 ) -> Resource:
 	var opponent_setter := opponent_team.setter() as VolleyballPlayer
 	var transition_penalty := float(exchange_number - 1) * 0.035
-	var opponent_setter_position := Vector2(
-		clampf(lerpf(dig_position.x, 0.50, 0.66), 0.24, 0.76),
-		0.48,
+	## The pass destination is the setter's physical contact point. Keeping a
+	## separate display-only setter coordinate made the ball originate away from
+	## the marker and introduced a visible snap at every opponent set.
+	var opponent_setter_position := dig_position
+	var setter_start: Vector2 = opponent_live_positions.get(
+		opponent_setter.id, opponent_team.court_position(opponent_setter.id, "transition")
 	)
-	var setter_start: Vector2 = opponent_team.court_position(opponent_setter.id, "transition")
+	var setter_move_time := _movement_time(
+		opponent_setter, setter_start, opponent_setter_position, "lateral"
+	)
 	var set_geometry := _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
@@ -913,8 +1019,13 @@ func _resolve_opponent_transition(
 		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
 		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
 	)
+	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
+	var set_flight_time: float = float(
+		[0.34, 0.48, 0.70, 1.02][clampi(opponent_tempo, 0, 3)]
+	)
 	var attack_choice := _choose_opponent_attack(
-		opponent_team, opponent_setter, opponent_set_quality, _home_target_hint(defensive_plan)
+		opponent_team, opponent_setter, opponent_set_quality,
+		_home_target_hint(defensive_plan), set_flight_time,
 	)
 	var opponent_hitter := attack_choice.player as VolleyballPlayer
 	var opponent_contact: Vector2 = attack_choice.contact
@@ -936,17 +1047,29 @@ func _resolve_opponent_transition(
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
 		{"side": "opponent", "setter_position": opponent_setter_position,
-			"movement_start": setter_start, "set_distance_meters": set_geometry.distance_meters,
+			"movement_start": setter_start, "movement_duration": setter_move_time,
+			"set_distance_meters": set_geometry.distance_meters,
 			"set_angle_degrees": set_geometry.angle_degrees,
-			"body_orientation_fit": set_geometry.body_orientation_fit})
+			"body_orientation_fit": set_geometry.body_orientation_fit,
+			"outgoing_trajectory": _ball_trajectory(
+				"opponent_set", opponent_setter_position, opponent_contact,
+				set_flight_time, lerpf(0.7, 2.4, set_flight_time / 1.02),
+				rally_clock
+			)})
+	opponent_live_positions[opponent_setter.id] = opponent_setter_position
+	var hitter_arrival_margin := set_flight_time - float(attack_choice.travel_time)
 	var opponent_attack := clampf(
 		_power_rating(opponent_hitter, "attack_power") * 0.62 \
 		+ opponent_set_quality * 0.20 + 0.08 \
+		- clampf(-hitter_arrival_margin / 1.2, 0.0, 1.0) * 0.10 \
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
 	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
 	var opponent_attack_trajectory := _ball_trajectory(
 		"attack_to_block", opponent_contact, opponent_net_contact,
 		0.23, 0.48, rally_clock
+	)
+	var opponent_approach_start := _approach_start_position(
+		opponent_contact, Vector2(attack_choice.start), true
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
@@ -961,8 +1084,13 @@ func _resolve_opponent_transition(
 			"attack_direction": attack_choice.direction,
 			"hitter_start": attack_choice.start,
 			"hitter_travel_time": attack_choice.travel_time,
+			"arrival_margin": hitter_arrival_margin,
+			"movement_start": attack_choice.start,
+			"approach_start_position": opponent_approach_start,
+			"movement_duration": attack_choice.travel_time,
 			"outgoing_trajectory": opponent_attack_trajectory})
-	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
+	var opponent_attack_event := result.events[-1] as RallyEvent
+	opponent_live_positions[opponent_hitter.id] = opponent_contact
 	var block_result := _resolve_home_block(
 		players, lineup, defensive_plan, opponent_contact.x,
 		opponent_tempo, opponent_set_quality, opponent_attack,
@@ -996,6 +1124,19 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.assist_close) * 100.0),
 		]
 	var blocker_id := blocker.id if blocker != null else -1
+	var assisting_blocker_id := assisting_blocker.id \
+		if assisting_blocker != null else -1
+	var floor_phase_positions := _home_floor_phase_positions(
+		lineup, defensive_plan, opponent_contact.x,
+		blocker_id, assisting_blocker_id
+	)
+	for raw_player_id in floor_phase_positions:
+		live_positions[int(raw_player_id)] = Vector2(
+			floor_phase_positions[raw_player_id]
+		)
+	if opponent_attack_event != null:
+		opponent_attack_event.metadata["home_phase_targets"] = \
+			floor_phase_positions.duplicate(true)
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
 	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
 		Vector2(opponent_contact.x, 0.53), Vector2(opponent_contact.x, 0.50),
@@ -1005,6 +1146,7 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
 		], {"side": "home", "outcome": block_outcome,
+			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"primary_close": block_result.primary_close,
 			"assist_close": block_result.assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
@@ -1037,9 +1179,10 @@ func _resolve_opponent_transition(
 		attack_time += 0.06
 	var defense_claim: Dictionary = CoverageModel.choose_claimant(
 		_lineup_players(players, lineup),
-		_zones_at_live_positions(defensive_plan.zones_for(
-			DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
-		)),
+		_zones_at_phase_positions(
+			defensive_plan.zones_for(DefensiveZoneModel.ZoneType.FLOOR_DEFENSE),
+			floor_phase_positions,
+		),
 		home_target, attack_time, "reception",
 	)
 	var defender := defense_claim.get("player") as VolleyballPlayer
@@ -1084,14 +1227,19 @@ func _resolve_opponent_transition(
 		defender, defender_start, home_target, "lateral"
 	)
 	live_positions[defender.id] = home_target
+	var defense_pass_target := home_target + Vector2(0.03, -0.04)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
-		home_target, home_target + Vector2(0.03, -0.04), defense_success,
+		home_target, defense_pass_target, defense_success,
 		defense_quality, "%s defends" % defender.display_name,
 		"%d%% defensive contact against a %d%% attack. %s %s" % [
 			roundi(defense_quality * 100.0), roundi(opponent_attack * 100.0),
 			_responsibility_phrase(defensive_plan, defender.id, attack_type),
 			_arrival_phrase(defense_arrival, defender_arrived, support_count),
 		], {"side": "home", "attack_type": attack_type,
+			"planner_floor_center": Vector2(floor_phase_positions.get(
+				defender.id, defender_start
+			)),
+			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"responsibility_fit": responsibility_fit,
 			"flight_time": attack_time, "arrival": defense_arrival,
 			"support_count": support_count,
@@ -1115,7 +1263,7 @@ func _resolve_opponent_transition(
 			{"hitter": original_hitter.display_name},
 		)
 	return _resolve_home_continuation(
-		result, players, lineup, defender, home_target,
+		result, players, lineup, defender, defense_pass_target,
 		opponent_team, defensive_plan, exchange_number,
 	)
 
@@ -1146,7 +1294,7 @@ func _resolve_home_continuation(
 	var setter_move_time := float(setter_choice.travel_time)
 	var setter_arrival_margin := second_contact_window - setter_move_time
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
-	var hitter := _fallback_hitter(players, lineup)
+	var hitter := _fallback_hitter(players, lineup, setter.id)
 	var assignment := _fallback_assignment(hitter, lineup)
 	var exchange_penalty := float(exchange_number) * 0.04
 	var set_quality := clampf(
@@ -1172,26 +1320,75 @@ func _resolve_home_continuation(
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
 	)
+	var transition_state := RallyStateBuilderModel.build(
+		players, lineup, defensive_plan, opponent_team, null, true,
+		rng.seed + exchange_number * 1009,
+	)
+	transition_state.simulation_time = maxf(rally_clock - 0.55, 0.0)
+	for raw_player_id in transition_state.home_players:
+		var phase_actor := transition_state.player_state(&"home", int(raw_player_id))
+		if phase_actor != null:
+			phase_actor.apply_position(Vector2(live_positions.get(
+				int(raw_player_id), phase_actor.position
+			)), phase_actor.velocity)
+	var hitter_actor := transition_state.player_state(&"home", hitter.id)
+	var continuation_assignment := {
+		"player_id": hitter.id, "lane": assignment.lane,
+		"tempo": assignment.tempo, "priority": assignment.priority,
+		"target": set_target,
+	}
+	var transition_preparation := ApproachMechanicsModel.prepare_for_attack(
+		transition_state, hitter_actor, continuation_assignment, defender.id,
+		rally_clock + second_contact_window,
+	)
+	var prepared_hitter := transition_preparation.get("actor") as RallyPlayerState
+	transition_preparation.erase("actor")
+	if prepared_hitter != null:
+		hitter_start = prepared_hitter.position
 	var hitter_move_time := _movement_time(
 		hitter, hitter_start, set_target, "transition"
 	)
 	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
+	var continuation_approach := ApproachMechanicsModel.evaluate_takeoff(
+		prepared_hitter, set_target, continuation_flight_time
+	) if prepared_hitter != null else {}
+	var continuation_actions := ApproachMechanicsModel.available_attack_families(
+		hitter, continuation_approach, hitter_arrival_margin
+	)
 	var attack_quality := clampf(
 		_rating(hitter, "attack_accuracy") * 0.42
 		+ _power_rating(hitter, "attack_power") * 0.26
-		+ _rating(hitter, "approach_timing") * 0.18
+		+ _rating(hitter, "approach_timing") * 0.05
+		+ float(continuation_approach.get("runup_quality", 0.5)) * 0.08
+		+ float(continuation_approach.get("lateral_control", 0.5)) * 0.03
+		+ float(continuation_approach.get("approach_speed_fraction", 0.5)) * 0.02
 		+ set_quality * 0.18 - exchange_penalty \
 		+ clampf(hitter_arrival_margin * 0.20, -0.52, 0.07)
 		+ rng.randf_range(-0.15, 0.15), 0.12, 0.95
 	)
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
+	var continuation_approach_start := Vector2(transition_preparation.get(
+		"approach_start_position",
+		_approach_start_position(set_target, hitter_start, false)
+	))
+	var continuation_hit_type := _hit_type(assignment, hitter)
+	if "power_attack" not in continuation_actions:
+		continuation_hit_type = "Controlled roll"
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, attack_quality >= 0.25, attack_quality,
 		"T3 outside swing · exchange %d" % exchange_number,
 		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0),
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
-			"attack_type": _hit_type(assignment, hitter),
+			"attack_type": continuation_hit_type,
 			"movement_start": hitter_start,
+			"approach_start_position": continuation_approach_start,
+			"transition_preparation": transition_preparation.duplicate(true),
+			"resolved_approach": continuation_approach.duplicate(true),
+			"available_attack_actions": continuation_actions.duplicate(),
+			"approach_speed_mps": float(continuation_approach.get("approach_speed_mps", 0.0)),
+			"approach_quality": float(continuation_approach.get("runup_quality", 0.0)),
+			"jump_multiplier": float(continuation_approach.get("jump_multiplier", 1.0)),
+			"lateral_control": float(continuation_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
 			"arrival_margin": hitter_arrival_margin,
 			"set_flight_time": continuation_flight_time})
@@ -1419,7 +1616,9 @@ func _choose_opponent_defender(
 		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
 		if defender == null or str(defender.position_code) in ["S", "M1", "M2"]:
 			continue
-		var start: Vector2 = opponent_team.court_position(defender.id, "defense")
+		var start: Vector2 = opponent_live_positions.get(
+			defender.id, opponent_team.court_position(defender.id, "defense")
+		)
 		var mirrored_target := Vector2(target.x, target.y)
 		var distance_meters := CoverageModel.court_distance_meters(start, mirrored_target)
 		var travel_time := _movement_time(defender, start, mirrored_target, "lateral")
@@ -1440,6 +1639,7 @@ func _choose_opponent_attack(
 	setter: VolleyballPlayer,
 	set_quality: float,
 	open_target: Vector2,
+	set_flight_time: float,
 ) -> Dictionary:
 	var candidates: Array[Resource] = opponent_team.eligible_hitters(setter.id)
 	if candidates.is_empty():
@@ -1451,10 +1651,24 @@ func _choose_opponent_attack(
 		if candidate == null:
 			continue
 		var quick_demand := 0.13 if str(candidate.position_code).begins_with("M") else 0.0
+		var candidate_contact_x := 0.50
+		if str(candidate.position_code) in ["OH1", "OH2"]:
+			candidate_contact_x = 0.18
+		elif str(candidate.position_code) == "OP":
+			candidate_contact_x = 0.82
+		var candidate_start: Vector2 = opponent_live_positions.get(
+			candidate.id, opponent_team.court_position(candidate.id, "transition")
+		)
+		var candidate_contact := Vector2(candidate_contact_x, 0.48)
+		var candidate_travel := _movement_time(
+			candidate, candidate_start, candidate_contact, "transition"
+		)
+		var lateness := maxf(candidate_travel - set_flight_time, 0.0)
 		var option_score := _power_rating(candidate, "attack_power") * 0.42 \
 			+ _rating(candidate, "attack_accuracy") * 0.24 \
 			+ _rating(candidate, "approach_timing") * 0.18 \
 			+ set_quality * 0.16 - quick_demand * (1.0 - set_quality) \
+			- clampf(lateness / 1.2, 0.0, 1.0) * 0.12 \
 			+ rng.randf_range(-0.12, 0.12)
 		if option_score > best_score:
 			best = candidate
@@ -1465,7 +1679,9 @@ func _choose_opponent_attack(
 		contact_x = 0.18
 	elif code == "OP":
 		contact_x = 0.82
-	var start: Vector2 = opponent_team.court_position(best.id, "transition")
+	var start: Vector2 = opponent_live_positions.get(
+		best.id, opponent_team.court_position(best.id, "transition")
+	)
 	var contact := Vector2(contact_x, 0.48)
 	var travel_time := _movement_time(best, start, contact, "transition")
 	var attack_type := "Quick attack" if code.begins_with("M") and set_quality >= 0.46 \
@@ -1536,7 +1752,32 @@ func _initial_home_positions(
 	return positions
 
 
-func _zones_at_live_positions(source_zones: Dictionary) -> Dictionary:
+func _initial_opponent_positions(
+	opponent_team: Resource,
+	receiving: bool,
+) -> Dictionary:
+	var positions := {}
+	if opponent_team == null:
+		return positions
+	var reception_zones: Dictionary = {}
+	if receiving:
+		reception_zones = _opponent_reception_coverage(opponent_team).zones
+	for player_resource in opponent_team.on_court_players():
+		var player := player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		var position: Vector2 = opponent_team.court_position(player.id, "defense")
+		var zone: Resource = reception_zones.get(player.id) as Resource
+		if zone != null and bool(zone.enabled):
+			position = Vector2(zone.center)
+		positions[player.id] = position
+	return positions
+
+
+func _zones_at_phase_positions(
+	source_zones: Dictionary,
+	phase_positions: Dictionary,
+) -> Dictionary:
 	var zones := {}
 	for raw_player_id in source_zones:
 		var player_id := int(raw_player_id)
@@ -1546,12 +1787,94 @@ func _zones_at_live_positions(source_zones: Dictionary) -> Dictionary:
 		var zone: Resource = DefensiveZoneModel.new()
 		zone.player_id = player_id
 		zone.zone_type = source.zone_type
-		zone.center = live_positions.get(player_id, Vector2(source.center))
+		zone.center = phase_positions.get(player_id, Vector2(source.center))
 		zone.radius_meters = source.radius_meters
 		zone.priority = source.priority
 		zone.enabled = source.enabled
 		zones[player_id] = zone
 	return zones
+
+
+func _home_floor_phase_positions(
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	attack_x: float,
+	primary_blocker_id: int,
+	assisting_blocker_id: int,
+) -> Dictionary:
+	var positions := {}
+	if lineup == null:
+		return positions
+	var relationship := str(defensive_plan.block_defense_relationship) \
+		if defensive_plan != null else "Balanced"
+	var depth := str(defensive_plan.defensive_depth) \
+		if defensive_plan != null else "Balanced"
+	var short_posture := str(defensive_plan.short_ball_posture) \
+		if defensive_plan != null else "Standard"
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		if player_id in [primary_blocker_id, assisting_blocker_id]:
+			positions[player_id] = Vector2(attack_x, 0.54)
+			continue
+		var fallback := CourtConstants.slot_position(slot_number)
+		var target: Vector2 = defensive_plan.defender_position(player_id, fallback) \
+			if defensive_plan != null else fallback
+		var zone: Resource = defensive_plan.zone_for(
+			player_id, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+		) if defensive_plan != null else null
+		if zone != null and bool(zone.enabled):
+			target = Vector2(zone.center)
+		var coverage_focus := 0.50
+		if relationship == "Defend Line":
+			coverage_focus = attack_x
+		elif relationship == "Defend Cross":
+			coverage_focus = 1.0 - attack_x
+		var front_row := CourtConstants.is_front_row_slot(slot_number)
+		target.x = lerpf(target.x, coverage_focus, 0.09 if front_row else 0.18)
+		if depth == "Deep":
+			target.y += 0.035
+		elif depth == "Shallow":
+			target.y -= 0.035
+		if short_posture == "Compress Short":
+			target.y = lerpf(target.y, 0.68, 0.18)
+		var assignment: Resource = defensive_plan.assignment_for(player_id) \
+			if defensive_plan != null else null
+		if assignment != null \
+				and "inside seam" in str(assignment.seam_responsibility).to_lower():
+			target.x = lerpf(target.x, 0.50, 0.08)
+		positions[player_id] = Vector2(
+			clampf(target.x, 0.06, 0.94),
+			clampf(target.y, 0.56, 0.96),
+		)
+	return positions
+
+
+func _approach_start_position(
+	contact_position: Vector2,
+	current_position: Vector2,
+	opponent_side: bool,
+) -> Vector2:
+	var local_contact := Vector2(
+		contact_position.x, 1.0 - contact_position.y
+	) if opponent_side else contact_position
+	var local_current := Vector2(
+		current_position.x, 1.0 - current_position.y
+	) if opponent_side else current_position
+	var pin_distance := absf(local_contact.x - 0.50)
+	var approach_depth := lerpf(0.10, 0.17, clampf(pin_distance / 0.34, 0.0, 1.0))
+	var outward_offset := 0.0
+	if local_contact.x < 0.35:
+		outward_offset = -0.055
+	elif local_contact.x > 0.65:
+		outward_offset = 0.055
+	var approach := Vector2(
+		clampf(local_contact.x + outward_offset, 0.06, 0.94),
+		clampf(local_contact.y + approach_depth, 0.56, 0.94),
+	)
+	## Do not send a hitter backward across the whole court merely to draw a
+	## textbook approach. Preserve the resolved side of their current route.
+	approach.x = lerpf(local_current.x, approach.x, 0.78)
+	return Vector2(approach.x, 1.0 - approach.y) if opponent_side else approach
 
 
 func _movement_time(
@@ -2168,16 +2491,18 @@ func _choose_assignment(
 	follow_play: bool,
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
+	excluded_player_id: int = -1,
 ) -> HitterAssignment:
 	if play == null or play.assignments.is_empty():
 		return null
 	if follow_play:
 		var primary := play.assignment_for_player(play.primary_hitter_id)
-		if primary != null:
+		if primary != null and primary.player_id != excluded_player_id:
 			return primary
 	var candidates: Array[HitterAssignment] = []
 	for assignment in play.assignments:
-		if _player_by_id(players, assignment.player_id) != null \
+		if assignment.player_id != excluded_player_id \
+				and _player_by_id(players, assignment.player_id) != null \
 				and lineup.slot_for_player(assignment.player_id) >= 0:
 			candidates.append(assignment)
 	if candidates.is_empty():
@@ -2185,11 +2510,16 @@ func _choose_assignment(
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
-func _fallback_hitter(players: Array[VolleyballPlayer], lineup: RotationLineup) -> VolleyballPlayer:
+func _fallback_hitter(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	excluded_player_id: int = -1,
+) -> VolleyballPlayer:
 	var outside_candidates: Array[VolleyballPlayer] = []
 	for slot_number in range(1, 7):
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate != null and candidate.position_role == "Outside Hitter" \
+		if candidate != null and candidate.id != excluded_player_id \
+				and candidate.position_role == "Outside Hitter" \
 				and CourtConstants.is_front_row_slot(slot_number):
 			outside_candidates.append(candidate)
 	if not outside_candidates.is_empty():
@@ -2206,9 +2536,15 @@ func _fallback_hitter(players: Array[VolleyballPlayer], lineup: RotationLineup) 
 		return nearest
 	for player_id in lineup.front_row_player_ids():
 		var player := _player_by_id(players, player_id)
-		if player != null and player.position_role != "Setter":
+		if player != null and player.id != excluded_player_id:
 			return player
-	return _player_by_id(players, lineup.player_at_slot(4))
+	for slot_number in range(1, 7):
+		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if player != null and player.id != excluded_player_id \
+				and lineup.is_attack_eligible(player.id) \
+				and player.position_role != "Libero":
+			return player
+	return null
 
 
 func _best_blocker(
@@ -2629,7 +2965,9 @@ func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
 		zone.priority = 2
 		if player.position_role == "Libero":
 			zone.center = Vector2(0.50, 0.13)
-			zone.priority = 3
+			## The libero's skill already influences the claim. A blanket priority
+			## advantage made them cross the full court ahead of a nearby outside.
+			zone.radius_meters = 2.7
 		else:
 			zone.center = Vector2(0.20 if outside_index == 0 else 0.80, 0.16)
 			outside_index += 1

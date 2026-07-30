@@ -2,6 +2,9 @@ class_name ShadowAttackSystem
 extends RefCounted
 
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
+const ApproachMechanicsModel := preload(
+	"res://scripts/simulation/approach_mechanics_system.gd"
+)
 const READ_PROGRESS: Array[float] = [0.15, 0.45, 0.72]
 const SET_DURATIONS: Array[float] = [0.34, 0.48, 0.70, 1.02]
 
@@ -49,7 +52,7 @@ static func evaluate(
 	var selected: Dictionary = options[0]
 	var flight := _set_flight(set_contact, set_contact_time, selected)
 	var hitter_response := _evaluate_hitter(
-		state, selected, flight, seed_value + 410003
+		state, selected, flight, first_contact_player_id, seed_value + 410003
 	)
 	return {
 		"available": true,
@@ -95,24 +98,38 @@ static func _setter_options(
 		var target := CourtConstants.lane_target(str(assignment.get(
 			"lane", "Left Pin"
 		)))
+		assignment["target"] = target
 		var tempo := clampi(int(assignment.get("tempo", 2)), 0, 3)
 		var contact_time := set_contact_time + SET_DURATIONS[tempo]
-		var perceived_actor := actor.snapshot()
+		var preparation := ApproachMechanicsModel.prepare_for_attack(
+			state, actor, assignment, first_contact_player_id, set_contact_time
+		)
+		var prepared_actor := preparation.get("actor") as RallyPlayerState
+		if prepared_actor == null:
+			continue
+		var perceived_actor := prepared_actor.snapshot()
 		var error := _position_error(
 			lerpf(1.35, 0.10, setter_reading),
 			seed_value + player_id * 193 + index * 17,
 		)
 		perceived_actor.apply_position(
-			_clamp_point(actor.position + error), actor.velocity
+			_clamp_point(prepared_actor.position + error), prepared_actor.velocity
 		)
 		var priority := float(assignment.get("priority", 1)) / 6.0
+		var truth_profile := ApproachMechanicsModel.evaluate_takeoff(
+			prepared_actor, target, maxf(contact_time - set_contact_time, 0.0)
+		)
+		var perceived_profile := ApproachMechanicsModel.evaluate_takeoff(
+			perceived_actor, target, maxf(contact_time - set_contact_time, 0.0)
+		)
 		var perceived := RallyMovementSystem.evaluate_opportunity(
 			perceived_actor, &"attack", target, contact_time,
-			set_contact_time, priority, 2.55, true,
+			set_contact_time, priority, 2.55, true, perceived_profile,
 		)
 		var truth := RallyMovementSystem.evaluate_opportunity(
-			actor, &"attack", target, contact_time,
+			prepared_actor, &"attack", target, contact_time,
 			set_contact_time, priority, 2.55, true,
+			truth_profile,
 		)
 		var attack_fit := (
 			float(actor.player.attack_accuracy) * 0.42
@@ -140,6 +157,8 @@ static func _setter_options(
 			"set_contact_time": set_contact_time,
 			"attack_contact_time": contact_time,
 			"perceived_start_position": perceived_actor.position,
+			"preparation": _public_preparation(preparation),
+			"perceived_approach": perceived_profile,
 			"perceived_reachable": perceived.reachable,
 			"perceived_arrival_margin": perceived.arrival_margin,
 			"perceived_arrival_balance": perceived.arrival_balance,
@@ -156,18 +175,27 @@ static func _evaluate_hitter(
 	state: RallyState,
 	assignment: Dictionary,
 	flight: BallFlight,
+	first_contact_player_id: int,
 	seed_value: int,
 ) -> Dictionary:
 	var player_id := int(assignment.get("player_id", -1))
 	var source_actor := state.player_state(&"home", player_id)
 	if source_actor == null or source_actor.player == null:
 		return {"available": false, "reason": "selected hitter missing"}
+	var preparation := ApproachMechanicsModel.prepare_for_attack(
+		state, source_actor, assignment, first_contact_player_id, flight.start_time
+	)
+	var prepared_actor := preparation.get("actor") as RallyPlayerState
+	if prepared_actor == null:
+		return {"available": false, "reason": "hitter could not prepare"}
 	var estimates := BallReadSystem.estimate_sequence(
 		flight, source_actor.player, 0.45, READ_PROGRESS, seed_value
 	)
-	var actor := source_actor.snapshot()
+	var actor := prepared_actor.snapshot()
 	var previous_time := flight.start_time
-	var previous_target := actor.position
+	## The called lane is known at setter contact. Ball reads refine that target;
+	## they do not make a hitter wait motionless for the first visual sample.
+	var previous_target := Vector2(assignment.get("target", flight.destination))
 	var moments: Array[Dictionary] = []
 	var final_estimate: BallFlightEstimate = null
 	var final_perceived: ActionOpportunity = null
@@ -178,11 +206,15 @@ static func _evaluate_hitter(
 			RallyPlayerState.MovementMode.APPROACH,
 		)
 		actor = projection.get("actor") as RallyPlayerState
+		var approach_profile := ApproachMechanicsModel.evaluate_takeoff(
+			actor, estimate.perceived_destination,
+			maxf(estimate.perceived_arrival_time - decision_time, 0.0)
+		)
 		var opportunity := RallyMovementSystem.evaluate_opportunity(
 			actor, &"attack", estimate.perceived_destination,
 			estimate.perceived_arrival_time, decision_time,
 			float(assignment.get("priority", 1)) / 6.0,
-			estimate.perceived_contact_height_meters, true,
+			estimate.perceived_contact_height_meters, true, approach_profile,
 		)
 		moments.append({
 			"decision_time": decision_time,
@@ -192,6 +224,9 @@ static func _evaluate_hitter(
 			"confidence": estimate.confidence,
 			"reachable": opportunity.reachable,
 			"arrival_margin": opportunity.arrival_margin,
+			"approach_speed_mps": opportunity.approach_speed_mps,
+			"approach_quality": opportunity.approach_quality,
+			"lateral_control": opportunity.lateral_control,
 		})
 		previous_time = decision_time
 		previous_target = estimate.perceived_destination
@@ -199,16 +234,24 @@ static func _evaluate_hitter(
 		final_perceived = opportunity
 	if final_estimate == null or final_perceived == null:
 		return {"available": false, "reason": "hitter received no set observations"}
+	var true_approach := ApproachMechanicsModel.evaluate_takeoff(
+		actor, flight.destination, maxf(flight.arrival_time - previous_time, 0.0)
+	)
+	var perceived_approach := ApproachMechanicsModel.evaluate_takeoff(
+		actor, final_estimate.perceived_destination,
+		maxf(final_estimate.perceived_arrival_time - previous_time, 0.0)
+	)
 	var truth := RallyMovementSystem.evaluate_opportunity(
 		actor, &"attack", flight.destination, flight.arrival_time,
 		previous_time, float(assignment.get("priority", 1)) / 6.0,
-		flight.contact_height_meters, true,
+		flight.contact_height_meters, true, true_approach,
 	)
 	var perceived_actions := _attack_actions(
-		source_actor.player, final_perceived, final_estimate.confidence
+		source_actor.player, final_perceived, final_estimate.confidence,
+		perceived_approach
 	)
 	var physical_actions := _attack_actions(
-		source_actor.player, truth, final_estimate.confidence
+		source_actor.player, truth, final_estimate.confidence, true_approach
 	)
 	var observed_opponents := _observe_opponents(
 		state, source_actor.player, seed_value + 9001
@@ -219,7 +262,12 @@ static func _evaluate_hitter(
 	var observation := PlayerObservation.create_attack_observation(
 		player_id, final_estimate, final_perceived, perceived_actions,
 		observed_opponents, Vector2(shot.get("target", Vector2(0.5, 0.2))),
-		{"lane": assignment.get("lane", ""), "tempo": assignment.get("tempo", 2)},
+		{
+			"lane": assignment.get("lane", ""),
+			"tempo": assignment.get("tempo", 2),
+			"transition_preparation": _public_preparation(preparation),
+			"perceived_approach": perceived_approach.duplicate(true),
+		},
 	)
 	var selected_action := _best_common_action(perceived_actions, physical_actions)
 	var contact_projection := RallyMovementSystem.project_toward(
@@ -227,6 +275,12 @@ static func _evaluate_hitter(
 		RallyPlayerState.MovementMode.APPROACH,
 	)
 	var resolved_actor := contact_projection.get("actor") as RallyPlayerState
+	var approach_direction := RallyKinematics.court_delta_meters(
+		actor.position, flight.destination
+	).normalized()
+	var takeoff_velocity := approach_direction * float(true_approach.get(
+		"approach_speed_mps", 0.0
+	))
 	var expected_quality := truth.expected_quality
 	var quality := clampf(
 		(expected_quality.x + expected_quality.y) * 0.5 * 0.62
@@ -262,7 +316,12 @@ static func _evaluate_hitter(
 		"contact_time": flight.arrival_time,
 		"source_position": source_actor.position,
 		"resolved_center_position": resolved_actor.position,
-		"resolved_velocity_mps": resolved_actor.velocity,
+		"resolved_velocity_mps": takeoff_velocity,
+		"transition_preparation": _public_preparation(preparation),
+		"perceived_approach": perceived_approach,
+		"resolved_approach": true_approach,
+		"maximum_contact_height_meters": truth.maximum_contact_height_meters,
+		"vertical_margin_meters": truth.vertical_margin_meters,
 		"quality": quality,
 		"target": Vector2(shot.target),
 		"direction": str(shot.direction),
@@ -398,6 +457,7 @@ static func _attack_actions(
 	player: VolleyballPlayer,
 	opportunity: ActionOpportunity,
 	confidence: float,
+	approach_profile: Dictionary = {},
 ) -> Array[String]:
 	var actions: Array[String] = []
 	if opportunity == null or not opportunity.reachable:
@@ -405,13 +465,24 @@ static func _attack_actions(
 	actions.append("controlled_roll")
 	if player.finesse >= 45 and confidence >= 0.38:
 		actions.append("tip")
-	if player.attack_accuracy >= 48 and opportunity.arrival_balance >= 0.34:
+	var approach_quality := float(approach_profile.get("runup_quality", 0.0))
+	var lateral_control := float(approach_profile.get("lateral_control", 0.0))
+	if player.attack_accuracy >= 48 and opportunity.arrival_balance >= 0.34 \
+			and lateral_control >= 0.36:
 		actions.append("placed_attack")
-	if player.attack_power >= 52 and opportunity.arrival_balance >= 0.42:
+	if player.attack_power >= 52 and opportunity.arrival_balance >= 0.42 \
+			and bool(approach_profile.get("power_access", false)):
 		actions.append("power_attack")
-	if player.tooling >= 58 and confidence >= 0.50:
+	if player.tooling >= 58 and confidence >= 0.50 \
+			and approach_quality >= 0.46 and lateral_control >= 0.48:
 		actions.append("tool_block")
 	return actions
+
+
+static func _public_preparation(preparation: Dictionary) -> Dictionary:
+	var result := preparation.duplicate(true)
+	result.erase("actor")
+	return result
 
 
 static func _best_common_action(perceived: Array, physical: Array) -> String:

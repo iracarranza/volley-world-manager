@@ -2,6 +2,10 @@
 
 Last reviewed: 2026-07-30
 
+Fresh developers and coding models should begin with
+[FRESH_AGENT_HANDOFF.md](FRESH_AGENT_HANDOFF.md). It is the authoritative
+continuation contract; this page is the detailed implementation ledger.
+
 This page is the quickest defense against confusing source-code existence with active gameplay behavior.
 
 ## Verified and active
@@ -12,6 +16,18 @@ This page is the quickest defense against confusing source-code existence with a
 - `GameManager.resolve_active_rally()` calls `RallySimulator.resolve()`.
 - `RallySimulator` currently computes the rally and returns a `RallyResult` containing ordered `RallyEvent` resources.
 - The main match screen has 2D tactical playback code in `scenes/main/main.gd`.
+- The match dashboard keeps the full current event visible and contains prior
+  events and post-point analysis in independent scrollable regions.
+- Serve-receive planner centers drive starting positions and claimant arrival
+  geometry; reception events retain the responsible planner-zone evidence.
+- The main-screen Visuals menu independently controls ball paths, player paths,
+  tactical guides, coverage zones, and contact overlays on both 2D courts.
+- Normal match playback clears shadow timing and contact-envelope diagnostics;
+  the dedicated debug fixture must explicitly request them.
+- Saved floor-defense geometry now produces an instruction-aware phase shape
+  behind the resolved block and drives floor claimant arrival calculations.
+- Attack events carry approach-start waypoints, and 2D playback stages hitters
+  before animating their approach run to contact.
 - The automated test runner currently contains checks for the persistent-state foundation.
 - Opponent serves run a shadow reception comparison and attach it to
   `RallyResult.analysis["shadow_reception"]`; it cannot replace the official
@@ -34,7 +50,7 @@ This page is the quickest defense against confusing source-code existence with a
   superseded by Gate 20.
 - Gate 6 records three deterministic observations during a serve and exposes
   the receiver's target-correction trail. Its stationary late-read reachability
-  is diagnostic only; persistent projected movement is the next required gate.
+  is diagnostic only; Gate 7 subsequently supplied persistent projected movement.
 - Gate 7 carries a copied receiver position and velocity between those reads.
   This restores most stationary-model reachability while leaving official
   rallies and live player state unchanged.
@@ -43,7 +59,7 @@ This page is the quickest defense against confusing source-code existence with a
   until ball arrival; none choose the official receiver yet.
 - Gate 9 selects a shadow receiver from open windows and grades the perceived
   contact against ball truth. The controlled fixture validates safe and
-  emergency choices but has not yet exercised quick-release passing.
+  emergency choices; Gate 10 subsequently exercised quick-release passing.
 - Gate 10 verifies with paired fixtures that developing, established, and elite
   reception profiles receive progressively longer windows, more contact
   choices, and better outcomes. Elite profiles exercise quick-release passing.
@@ -115,10 +131,16 @@ This page is the quickest defense against confusing source-code existence with a
 - Gate 42 promotes one audited attack after promoted reception and setter
   contacts in an explicitly requested development fixture. Blocking and later
   phases remain legacy-controlled.
+- Gate 43 makes transition preparation causal in normal home attack resolution.
+  Perceived responsibility and tactical duties set release time; the resulting
+  runway changes approach speed, lateral control, usable jump height, attack
+  quality, and the actions physically available at third contact.
 
 ## Partially implemented
 
-The following classes exist and have tests, but do not yet drive live rally resolution:
+The following classes exist and have tests but are not yet one universal,
+production-authoritative rally loop. Some already contribute to shadow,
+development, or bounded normal-match slices as described above:
 
 - `RallyState`
 - `RallyPlayerState`
@@ -130,6 +152,7 @@ The following classes exist and have tests, but do not yet drive live rally reso
 - `RallyStateBuilder`
 - `RallyScheduler`
 - `RallyMovementSystem`
+- `ApproachMechanicsSystem` beyond the current home-attack slice
 - `RallyOpportunitySystem`
 - `RallyContactSystem`
 - `ShadowSetterResponseSystem`
@@ -169,7 +192,8 @@ integration have not been implemented.
 ## Proposed next integration
 
 Migrate one contact at a time. Opponent serve through home attack now has a
-guarded development-only vertical slice. The next slice is attack to block:
+guarded development-only vertical slice. The only current next slice is the
+shadow-only attack-to-block observation boundary:
 
 1. Generate block hypotheses from pass, setter, hitter, and tempo cues.
 2. Give each blocker a player-specific observation rather than the true lane.
@@ -177,8 +201,13 @@ guarded development-only vertical slice. The next slice is attack to block:
 4. Resolve the chosen block movement against the authoritative attack flight.
 5. Audit and compare fixed-seed behavior before adding a guarded rollout.
 
+Do not enable production contact flags, rewrite the whole scheduler, or mirror
+home attack logic onto the opponent side as a substitute. The complete Gate 44
+acceptance contract and proposed Gate 44–49 sequence are in the
+[Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md#the-one-current-next-objective).
+
 ## Validation baseline
 
-The current foundation validation reports 322 passing checks. Treat that number
+The current foundation validation reports 355 passing checks. Treat that number
 as a point-in-time result, not a permanent guarantee. Run
 [VALIDATION.md](VALIDATION.md) to establish the current result.

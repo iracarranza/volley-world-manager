@@ -14,6 +14,7 @@ static func evaluate(
 	contact_height_meters: float,
 	available_time: float,
 	allow_jump: bool = false,
+	approach_profile: Dictionary = {},
 ) -> Dictionary:
 	if actor == null or actor.player == null:
 		return {"physically_reachable": false}
@@ -28,17 +29,26 @@ static func evaluate(
 	var readiness_factor := clampf(actor.readiness, 0.0, 1.0)
 	var takeoff_time := lerpf(0.34, 0.13, explosiveness) \
 		* lerpf(1.18, 0.92, readiness_factor)
+	if action_type == &"attack" and not approach_profile.is_empty():
+		## An approach already contains the loading steps for takeoff. A clean
+		## run-up therefore reserves less additional stationary preparation time.
+		takeoff_time *= lerpf(
+			1.0, 0.38,
+			clampf(float(approach_profile.get("runup_quality", 0.0)), 0.0, 1.0)
+		)
 	var can_take_off := allow_jump \
 		and actor.body_state not in [
 			RallyPlayerState.BodyState.DIVING,
 			RallyPlayerState.BodyState.RECOVERING,
 		] \
 		and available_time >= takeoff_time
+	var jump_multiplier := float(approach_profile.get("jump_multiplier", 1.0)) \
+		if action_type == &"attack" else 1.0
 	var accessible_jump := lerpf(
 		MIN_JUMP_DISPLACEMENT_METERS,
 		MAX_JUMP_DISPLACEMENT_METERS,
 		jump_rating,
-	) * lerpf(0.72, 1.0, explosiveness) * fatigue_factor \
+	) * lerpf(0.72, 1.0, explosiveness) * fatigue_factor * jump_multiplier \
 		* readiness_factor if can_take_off else 0.0
 	var maximum_height := standing_reach + accessible_jump
 	var standing_possible := contact_height_meters <= standing_reach
@@ -69,6 +79,8 @@ static func evaluate(
 	var vertical_pressure := clampf(
 		contact_height_meters / maxf(maximum_height, 0.05), 0.0, 1.2
 	)
+	var approach_balance := float(approach_profile.get("balance_multiplier", 1.0)) \
+		if action_type == &"attack" else 1.0
 	return {
 		"physically_reachable": standing_possible or jump_possible,
 		"horizontal_reach_meters": horizontal_reach,
@@ -83,8 +95,11 @@ static func evaluate(
 		"recovery_time_seconds": lerpf(0.36, 0.18, action_balance) \
 			if jump_possible else 0.0,
 		"balance_factor": clampf(
-			action_balance * lerpf(1.0, 0.62, vertical_pressure), 0.0, 1.0
+			action_balance * lerpf(1.0, 0.62, vertical_pressure) * approach_balance,
+			0.0, 1.0
 		),
+		"approach_jump_multiplier": jump_multiplier,
+		"approach_balance_multiplier": approach_balance,
 	}
 
 

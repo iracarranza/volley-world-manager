@@ -63,6 +63,9 @@ const ATTACK_ROLLOUT_AUDIT_SCRIPT := preload(
 const ATTACK_PROGRESSION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/attack_progression_calibration.gd"
 )
+const APPROACH_MECHANICS_SCRIPT := preload(
+	"res://scripts/simulation/approach_mechanics_system.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -99,6 +102,7 @@ func _initialize() -> void:
 	_test_gate_thirty_six_development_live_setter()
 	_test_gate_thirty_seven_to_forty_one_attack_boundary()
 	_test_gate_forty_two_development_live_attack()
+	_test_transition_preparation_and_approach_mechanics()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -106,6 +110,7 @@ func _initialize() -> void:
 	_test_tactical_demand()
 	_test_manager_playbook_and_serialization()
 	_test_seeded_rally_resolution()
+	_test_seeded_floor_defense_geometry()
 	_test_match_scoring_and_rotation()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
@@ -267,6 +272,9 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 	var direction_observed := false
 	var spatial_defense_observed := false
 	var graded_set_observed := false
+	var set_contact_alignment_observed := false
+	var opponent_reception_movement_observed := false
+	var opponent_attack_movement_observed := false
 	var blocker_read_observed := false
 	var analysis_observed := false
 	for seed_value in range(7600, 7720):
@@ -278,16 +286,39 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 		)
 		for event_resource in result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+					and str(event.metadata.get("side", "")) == "opponent":
+				opponent_reception_movement_observed = \
+					opponent_reception_movement_observed or (
+						event.metadata.has("movement_start")
+						and event.metadata.has("movement_target")
+						and event.metadata.has("movement_duration")
+					)
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
 					and str(event.metadata.get("side", "")) == "opponent":
 				graded_set_observed = graded_set_observed or (
 					event.metadata.has("set_distance_meters")
 					and event.metadata.has("body_orientation_fit")
 				)
+				var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
+				set_contact_alignment_observed = set_contact_alignment_observed or (
+					Vector2(event.metadata.get(
+						"setter_position", Vector2.ZERO
+					)).is_equal_approx(event.start_position)
+					and Vector2(trajectory.get(
+						"start_position", Vector2.ZERO
+					)).is_equal_approx(event.start_position)
+				)
 			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
 					and str(event.metadata.get("side", "")) == "opponent":
 				opponent_hitter_ids[event.actor_id] = true
 				direction_observed = direction_observed or event.metadata.has("attack_direction")
+				opponent_attack_movement_observed = \
+					opponent_attack_movement_observed or (
+						event.metadata.has("movement_start")
+						and event.metadata.has("movement_duration")
+						and event.metadata.has("arrival_margin")
+					)
 			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
 					and str(event.metadata.get("side", "")) == "opponent":
 				spatial_defense_observed = spatial_defense_observed or (
@@ -301,6 +332,12 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 	_check(direction_observed, "attacks expose line, seam, cross-court, or short direction")
 	_check(spatial_defense_observed, "opponent floor defense records travel and arrival")
 	_check(graded_set_observed, "opponent setting exposes target-specific geometry")
+	_check(set_contact_alignment_observed,
+		"opponent set ball flight begins at the displayed setter contact")
+	_check(opponent_reception_movement_observed,
+		"opponent receivers expose continuous start, target, and duration data")
+	_check(opponent_attack_movement_observed,
+		"opponent hitters expose approach timing and arrival evidence")
 	_check(blocker_read_observed, "home block records attribute-driven read quality")
 	_check(analysis_observed, "completed rallies expose concise replay analysis")
 
@@ -309,12 +346,62 @@ func _test_match_court_opponent_layer() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	var court := TACTICAL_COURT_SCRIPT.new()
+	court.set_lineup(manager.current_lineup(), manager.players)
 	court.set_opponent_team(manager.opponent_team, true)
 	_check(court.show_opponents, "Match Center court enables persistent opponent markers")
 	_check(
 		court.opponent_players_by_id.size() == 6,
 		"opponent marker layer receives all six opponent players",
 	)
+	var opponent_setter_id := int(manager.opponent_team.setter_id)
+	var opponent_setter_start := Vector2(0.70, 0.20)
+	var opponent_set_contact := Vector2(0.54, 0.34)
+	court.begin_rally_playback({}, {
+		opponent_setter_id: opponent_setter_start,
+	})
+	var reception_event := RALLY_EVENT_SCRIPT.new()
+	reception_event.event_type = RALLY_EVENT_SCRIPT.EventType.RECEPTION
+	reception_event.actor_id = 105
+	reception_event.start_position = Vector2(0.42, 0.16)
+	reception_event.end_position = opponent_set_contact
+	reception_event.metadata = {"side": "opponent"}
+	var set_event := RALLY_EVENT_SCRIPT.new()
+	set_event.event_type = RALLY_EVENT_SCRIPT.EventType.SET
+	set_event.actor_id = opponent_setter_id
+	set_event.start_position = opponent_set_contact
+	set_event.end_position = Vector2(0.18, 0.48)
+	set_event.metadata = {
+		"side": "opponent",
+		"movement_start": opponent_setter_start,
+	}
+	court.animate_spatial_transition(reception_event, set_event, 0.01)
+	_check(
+		Vector2(court.unit_movement_starts.get(
+			opponent_setter_id, Vector2.ZERO
+		)).is_equal_approx(opponent_setter_start),
+		"opponent setters begin movement from their persistent displayed position",
+	)
+	_check(
+		Vector2(court.unit_movement_targets.get(
+			opponent_setter_id, Vector2.ZERO
+		)).is_equal_approx(opponent_set_contact),
+		"opponent setters move to the ball's physical set origin",
+	)
+	court.finish_event_animation()
+	_check(
+		Vector2(court.opponent_live_player_positions.get(
+			opponent_setter_id, Vector2.ZERO
+		)).is_equal_approx(opponent_set_contact),
+		"opponent positions persist after their contact animation finishes",
+	)
+	court.animate_event(set_event, 0.01)
+	_check(
+		Vector2(court.opponent_live_player_positions.get(
+			opponent_setter_id, Vector2.ZERO
+		)).is_equal_approx(set_event.start_position),
+		"drawing the set does not return the opponent setter to formation",
+	)
+	court.finish_event_animation()
 	court.free()
 
 
@@ -869,6 +956,23 @@ func _test_shadow_reception_trace() -> void:
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
 	var result: Resource = manager.resolve_active_rally(1001)
+	var seed_1001_contacts_legal := true
+	for event_index in range(result.events.size() - 1):
+		var event: Resource = result.events[event_index]
+		if event.event_type != RALLY_EVENT_SCRIPT.EventType.SET:
+			continue
+		for next_index in range(event_index + 1, result.events.size()):
+			var next_event: Resource = result.events[next_index]
+			if next_event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and str(next_event.metadata.get("side", "")) == str(
+						event.metadata.get("side", "")
+					):
+				seed_1001_contacts_legal = next_event.actor_id != event.actor_id
+				break
+	_check(
+		seed_1001_contacts_legal,
+		"seed 1001 never lets a setter attack their own second contact",
+	)
 	var trace: Dictionary = result.analysis.get("shadow_reception", {})
 	var summary: Dictionary = trace.get("summary", {})
 	var entries: Array = trace.get("entries", [])
@@ -2171,6 +2275,118 @@ func _test_gate_forty_two_development_live_attack() -> void:
 	)
 
 
+func _test_transition_preparation_and_approach_mechanics() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup, manager.current_defensive_plan(),
+		manager.opponent_team, manager.called_play(), false, 430001,
+	)
+	var hitter_id := lineup.player_at_slot(4)
+	var actor := state.player_state(&"home", hitter_id)
+	var duty: Resource = state.home_plan.assignment_for(hitter_id)
+	var original_coverage := str(duty.attack_coverage_responsibility)
+	var assignment := {
+		"player_id": hitter_id, "lane": "Left Pin", "tempo": 2,
+		"priority": 2, "target": Vector2(0.12, 0.53),
+	}
+	duty.attack_coverage_responsibility = "Cover nearest attacker"
+	var held := APPROACH_MECHANICS_SCRIPT.prepare_for_attack(
+		state, actor, assignment, -1, 1.2
+	)
+	duty.attack_coverage_responsibility = "Release for transition"
+	var released := APPROACH_MECHANICS_SCRIPT.prepare_for_attack(
+		state, actor, assignment, -1, 1.2
+	)
+	var receiver_delayed := APPROACH_MECHANICS_SCRIPT.prepare_for_attack(
+		state, actor, assignment, hitter_id, 1.2
+	)
+	duty.attack_coverage_responsibility = original_coverage
+	_check(
+		float(released.get("release_time", 9.0)) < float(held.get("release_time", -1.0))
+			and float(receiver_delayed.get("release_time", -1.0))
+				> float(released.get("release_time", 9.0)),
+		"Perceived ownership and tactical release duties causally change attack preparation time",
+	)
+
+	var athlete := VolleyballPlayer.new()
+	athlete.id = 9901
+	athlete.height_cm = 190.0
+	athlete.wingspan_cm = 198.0
+	athlete.mass_kg = 82.0
+	athlete.transition_speed = 84
+	athlete.lateral_speed = 82
+	athlete.acceleration = 86
+	athlete.jump_reach = 82
+	athlete.explosiveness = 84
+	athlete.approach_timing = 86
+	athlete.attack_power = 84
+	athlete.attack_accuracy = 78
+	athlete.tooling = 70
+	athlete.finesse = 65
+	var target := Vector2(0.18, 0.53)
+	var clean_actor := RALLY_PLAYER_STATE_SCRIPT.create(
+		athlete, &"home", 4, Vector2(0.25, 0.66)
+	)
+	clean_actor.facing = RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+		clean_actor.position, target
+	).normalized()
+	var broken_actor := clean_actor.snapshot()
+	broken_actor.facing = -clean_actor.facing
+	broken_actor.balance = 0.55
+	var clean_profile := APPROACH_MECHANICS_SCRIPT.evaluate_takeoff(
+		clean_actor, target, 0.62
+	)
+	var broken_profile := APPROACH_MECHANICS_SCRIPT.evaluate_takeoff(
+		broken_actor, target, 0.24
+	)
+	var clean_envelope := CONTACT_ENVELOPE_SCRIPT.evaluate(
+		clean_actor, &"attack", 2.45, 0.62, true, clean_profile
+	)
+	var broken_envelope := CONTACT_ENVELOPE_SCRIPT.evaluate(
+		broken_actor, &"attack", 2.45, 0.24, true, broken_profile
+	)
+	_check(
+		float(clean_profile.get("approach_speed_mps", 0.0))
+			> float(broken_profile.get("approach_speed_mps", 9.0))
+			and float(clean_envelope.get("maximum_contact_height_meters", 0.0))
+				> float(broken_envelope.get("maximum_contact_height_meters", 9.0)),
+		"Run-up time and alignment alter approach speed and usable jump height",
+	)
+	var clean_actions := APPROACH_MECHANICS_SCRIPT.available_attack_families(
+		athlete, clean_profile, 0.12
+	)
+	var broken_actions := APPROACH_MECHANICS_SCRIPT.available_attack_families(
+		athlete, broken_profile, -0.10
+	)
+	_check(
+		"power_attack" in clean_actions and "power_attack" not in broken_actions
+			and "controlled_roll" in broken_actions,
+		"Resolved approach mechanics expand or constrain the attacks a hitter can execute",
+	)
+
+	var attack_event: RallyEvent = null
+	for seed_value in range(430100, 430140):
+		manager.match_state.serving_home = false
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for raw_event in result.events:
+			var event := raw_event as RallyEvent
+			if event != null and event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == "home":
+				attack_event = event
+				break
+		if attack_event != null:
+			break
+	_check(
+		attack_event != null
+			and not Dictionary(attack_event.metadata.get("resolved_approach", {})).is_empty()
+			and not Array(attack_event.metadata.get("available_attack_actions", [])).is_empty()
+			and attack_event.metadata.has("jump_multiplier"),
+		"Normal rally attack events expose the causal preparation, takeoff, and action menu",
+	)
+
+
 func _test_gate_twenty_one_setter_handoffs() -> void:
 	var report: Dictionary = SETTER_HANDOFF_CALIBRATION_SCRIPT.run(6, 210000)
 	var fixtures: Dictionary = report.get("by_fixture", {})
@@ -2321,12 +2537,99 @@ func _test_manager_playbook_and_serialization() -> void:
 func _test_seeded_rally_resolution() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
+	var lineup := manager.current_lineup()
+	var setter_id := lineup.active_setter_id()
+	var setter_receive_zone: Resource = manager.current_defensive_plan().zone_for(
+		setter_id, DefensiveZone.ZoneType.SERVE_RECEIVE
+	)
+	var adjusted_setter_start := Vector2(0.31, 0.73)
+	setter_receive_zone.enabled = true
+	setter_receive_zone.center = adjusted_setter_start
 	var play := _make_play()
 	var save_result := manager.save_offensive_play(play)
 	var saved_play := save_result.get("play") as OffensivePlay
 	manager.call_play(saved_play.id)
 	var first: Resource = manager.resolve_active_rally(90210)
 	var second: Resource = manager.resolve_active_rally(90210)
+	_check(
+		Vector2(first.initial_home_positions.get(
+			setter_id, Vector2.ZERO
+		)).is_equal_approx(adjusted_setter_start),
+		"rally results preserve the adjusted tactical starting position for playback",
+	)
+	_check(
+		first.initial_home_positions == second.initial_home_positions,
+		"identical rally inputs preserve an identical initial playback snapshot",
+	)
+	_check(
+		first.initial_opponent_positions.size() == 6 \
+			and first.initial_opponent_positions == second.initial_opponent_positions,
+		"rally results preserve deterministic starting positions for all opponents",
+	)
+	var baseline_reception: Resource = null
+	for event_resource in first.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+				and str(event.metadata.get("side", "")) == "home":
+			baseline_reception = event
+			break
+	_check(
+		baseline_reception != null,
+		"the seeded planner fixture reaches a home reception contact",
+	)
+	if baseline_reception != null:
+		var plan: Resource = manager.current_defensive_plan()
+		var moved_index := 0
+		for raw_player_id in plan.reception_zones:
+			var zone: Resource = plan.reception_zones[raw_player_id] as Resource
+			if zone == null or not bool(zone.enabled):
+				continue
+			plan.set_zone_center(
+				int(raw_player_id), DefensiveZone.ZoneType.SERVE_RECEIVE,
+				Vector2(0.82 - float(moved_index) * 0.06, 0.91),
+			)
+			moved_index += 1
+		var moved_result: Resource = manager.resolve_active_rally(90210)
+		var moved_reception: Resource = null
+		for event_resource in moved_result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+					and str(event.metadata.get("side", "")) == "home":
+				moved_reception = event
+				break
+		_check(
+			moved_reception != null,
+			"moving the serve-receive formation still produces a resolved contact",
+		)
+		if moved_reception != null:
+			var moved_zone_center := Vector2(moved_reception.metadata.get(
+				"planner_zone_center", Vector2.ZERO
+			))
+			var event_geometry_changed := \
+				int(moved_reception.actor_id) != int(baseline_reception.actor_id) \
+				or not moved_zone_center.is_equal_approx(Vector2(
+					baseline_reception.metadata.get(
+						"planner_zone_center", Vector2.ZERO
+					)
+				)) \
+				or not Vector2(moved_reception.metadata.get(
+					"movement_start", Vector2.ZERO
+				)).is_equal_approx(Vector2(baseline_reception.metadata.get(
+					"movement_start", Vector2.ZERO
+				)))
+			_check(
+				event_geometry_changed,
+				"moving planner positions changes the same seeded rally's contact geometry",
+			)
+			var moved_actor_zone: Resource = plan.zone_for(
+				int(moved_reception.actor_id), DefensiveZone.ZoneType.SERVE_RECEIVE
+			)
+			_check(
+				moved_actor_zone != null and moved_zone_center.is_equal_approx(
+					Vector2(moved_actor_zone.center)
+				),
+				"reception events retain the planner zone that drove their decision",
+			)
 	_check(first.events.size() >= 2, "rally resolution produces discrete events")
 	_check(
 		first.events[0].event_type == RALLY_EVENT_SCRIPT.EventType.SERVE,
@@ -2341,6 +2644,96 @@ func _test_seeded_rally_resolution() -> void:
 		"identical rally seeds produce identical outcomes",
 	)
 	_check(not first.explanation.is_empty(), "rally result includes an explanation")
+
+
+func _test_seeded_floor_defense_geometry() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var baseline_result: Resource = null
+	var baseline_defense: Resource = null
+	var selected_seed := -1
+	for seed_value in range(8400, 8660):
+		manager.match_state.serving_home = false
+		var candidate_result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in candidate_result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+					and str(event.metadata.get("side", "")) == "home" \
+					and Vector2(event.metadata.get(
+						"planner_floor_center", Vector2.ZERO
+					)).y > 0.56:
+				baseline_result = candidate_result
+				baseline_defense = event
+				selected_seed = seed_value
+				break
+		if baseline_defense != null:
+			break
+	_check(
+		baseline_defense != null,
+		"a deterministic fixture reaches non-blocker home floor defense",
+	)
+	if baseline_defense == null:
+		return
+	var baseline_attack: Resource = null
+	for event_resource in baseline_result.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+				and str(event.metadata.get("side", "")) == "opponent" \
+				and event.metadata.has("home_phase_targets"):
+			baseline_attack = event
+	var plan: Resource = manager.current_defensive_plan()
+	var moved_index := 0
+	for raw_player_id in plan.floor_defense_zones:
+		plan.set_zone_center(
+			int(raw_player_id), DefensiveZone.ZoneType.FLOOR_DEFENSE,
+			Vector2(0.14 + float(moved_index) * 0.11, 0.91),
+		)
+		moved_index += 1
+	plan.block_defense_relationship = "Defend Cross"
+	plan.defensive_depth = "Shallow"
+	manager.match_state.serving_home = false
+	var moved_result: Resource = manager.resolve_active_rally(selected_seed)
+	var moved_defense: Resource = null
+	var moved_attack: Resource = null
+	for event_resource in moved_result.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+				and str(event.metadata.get("side", "")) == "home":
+			moved_defense = event
+		elif int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+				and str(event.metadata.get("side", "")) == "opponent" \
+				and event.metadata.has("home_phase_targets"):
+			moved_attack = event
+	_check(
+		moved_attack != null and baseline_attack != null \
+			and Dictionary(moved_attack.metadata.get(
+				"home_phase_targets", {}
+			)) != Dictionary(baseline_attack.metadata.get(
+				"home_phase_targets", {}
+			)),
+		"floor-plan edits change the same seeded attack's defensive phase shape",
+	)
+	_check(
+		moved_defense != null,
+		"the changed floor plan still resolves a home defensive contact",
+	)
+	if moved_defense != null:
+		var baseline_center := Vector2(baseline_defense.metadata.get(
+			"planner_floor_center", Vector2.ZERO
+		))
+		var moved_center := Vector2(moved_defense.metadata.get(
+			"planner_floor_center", Vector2.ZERO
+		))
+		var baseline_arrival: Dictionary = baseline_defense.metadata.get("arrival", {})
+		var moved_arrival: Dictionary = moved_defense.metadata.get("arrival", {})
+		_check(
+			int(moved_defense.actor_id) != int(baseline_defense.actor_id) \
+				or not moved_center.is_equal_approx(baseline_center) \
+				or not is_equal_approx(float(moved_arrival.get(
+					"distance_meters", -1.0
+				)), float(baseline_arrival.get("distance_meters", -1.0))),
+			"floor-plan edits change claimant or arrival geometry under a fixed seed",
+		)
 
 
 func _test_match_scoring_and_rotation() -> void:
@@ -2574,19 +2967,31 @@ func _test_second_contact_ownership() -> void:
 				assignment.second_contact_responsibility = "Primary emergency setter"
 			plan.set_assignment(player_id, assignment)
 	var emergency_assignment_observed := false
+	var emergency_set_followed_by_legal_hitter := false
 	for seed_value in range(8100, 8300):
 		var result: Resource = manager.resolve_active_rally(seed_value)
-		for event_resource in result.events:
-			var event: Resource = event_resource
+		for event_index in range(result.events.size()):
+			var event: Resource = result.events[event_index]
 			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
 					and bool(event.metadata.get("emergency_setter", false)):
 				emergency_assignment_observed = event.actor_id == emergency_setter_id
+				for next_index in range(event_index + 1, result.events.size()):
+					var next_event: Resource = result.events[next_index]
+					if next_event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+							and str(next_event.metadata.get("side", "")) == "home":
+						emergency_set_followed_by_legal_hitter = \
+							next_event.actor_id != event.actor_id
+						break
 				break
-		if emergency_assignment_observed:
+		if emergency_assignment_observed and emergency_set_followed_by_legal_hitter:
 			break
 	_check(
 		emergency_assignment_observed,
 		"the designated emergency setter takes second contact after the setter receives",
+	)
+	_check(
+		emergency_set_followed_by_legal_hitter,
+		"an emergency setter cannot attack their own second contact",
 	)
 
 
@@ -2939,11 +3344,95 @@ func _test_tactical_playback_reset_on_lineup_change() -> void:
 	court.set_coverage_zones_visible(false)
 	_check(not court.coverage_zones_visible,
 		"match playback can suppress editable coverage-zone overlays")
+	court.set_visualization_layers(
+		TacticalCourt.VISUAL_PLAYER_PATHS | TacticalCourt.VISUAL_CONTACT_OVERLAYS
+	)
+	_check(
+		court.visualization_layers == (
+			TacticalCourt.VISUAL_PLAYER_PATHS | TacticalCourt.VISUAL_CONTACT_OVERLAYS
+		),
+		"court visualization layers can independently hide ball and tactical paths",
+	)
+	var adjusted_setter_start := Vector2(0.31, 0.73)
+	var emergency_setter_start := Vector2(0.74, 0.78)
+	court.begin_rally_playback({
+		1: adjusted_setter_start,
+		2: emergency_setter_start,
+	})
+	_check(
+		Vector2(court.live_player_positions.get(1, Vector2.ZERO)).is_equal_approx(
+			adjusted_setter_start
+		),
+		"2D playback starts the setter at the simulator's tactical snapshot",
+	)
+	var pass_event := RALLY_EVENT_SCRIPT.new()
+	pass_event.event_type = RALLY_EVENT_SCRIPT.EventType.RECEPTION
+	pass_event.actor_id = 6
+	pass_event.start_position = Vector2(0.42, 0.82)
+	pass_event.end_position = Vector2(0.56, 0.61)
+	var emergency_set_event := RALLY_EVENT_SCRIPT.new()
+	emergency_set_event.event_type = RALLY_EVENT_SCRIPT.EventType.SET
+	emergency_set_event.actor_id = 2
+	emergency_set_event.start_position = Vector2(0.56, 0.61)
+	emergency_set_event.end_position = Vector2(0.22, 0.52)
+	emergency_set_event.metadata = {
+		"side": "home",
+		"emergency_setter": true,
+		"movement_start": emergency_setter_start,
+	}
+	court.animate_spatial_transition(pass_event, emergency_set_event, 0.01)
+	_check(
+		Vector2(court.unit_movement_starts.get(2, Vector2.ZERO)).is_equal_approx(
+			emergency_setter_start
+		),
+		"emergency setters move continuously from the initial rally snapshot",
+	)
+	_check(
+		court.unit_movement_targets.size() == 6 \
+			and court.unit_movement_targets.has(1) \
+			and court.unit_movement_targets.has(2),
+		"ball-flight playback moves the contact actor and supporting teammates",
+	)
+	court.finish_event_animation()
+	var established_position := Vector2(0.49, 0.64)
+	court.live_player_positions[2] = established_position
+	emergency_set_event.metadata["movement_start"] = emergency_setter_start
+	court.animate_spatial_transition(pass_event, emergency_set_event, 0.01)
+	_check(
+		Vector2(court.unit_movement_starts.get(2, Vector2.ZERO)).is_equal_approx(
+			established_position
+		),
+		"later event metadata cannot teleport an emergency setter from established state",
+	)
+	_check(
+		not court.playback_continuity_mismatches.is_empty(),
+		"playback records a continuity mismatch instead of hiding it with a teleport",
+	)
+	court.finish_event_animation()
 	var attack_event := RALLY_EVENT_SCRIPT.new()
 	attack_event.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
 	attack_event.actor_id = 2
 	attack_event.start_position = Vector2(0.2, 0.65)
 	attack_event.end_position = Vector2(0.2, 0.48)
+	attack_event.metadata = {
+		"side": "home",
+		"movement_start": established_position,
+		"approach_start_position": Vector2(0.14, 0.80),
+	}
+	var set_flight_event := RALLY_EVENT_SCRIPT.new()
+	set_flight_event.event_type = RALLY_EVENT_SCRIPT.EventType.SET
+	set_flight_event.actor_id = 1
+	set_flight_event.start_position = Vector2(0.50, 0.61)
+	set_flight_event.end_position = attack_event.start_position
+	set_flight_event.metadata = {"side": "home"}
+	court.animate_spatial_transition(set_flight_event, attack_event, 0.01)
+	_check(
+		Vector2(court.unit_movement_waypoints.get(
+			2, Vector2.ZERO
+		)).is_equal_approx(Vector2(0.14, 0.80)),
+		"hitters stage at the resolved approach start before running to contact",
+	)
+	court.finish_event_animation()
 	var block_event := RALLY_EVENT_SCRIPT.new()
 	block_event.event_type = RALLY_EVENT_SCRIPT.EventType.BLOCK
 	block_event.actor_id = 3
@@ -2982,6 +3471,7 @@ func _test_default_offense_without_saved_play() -> void:
 			"rotation %d keeps the libero in the back row" % rotation_number,
 		)
 	var continuation_seen := false
+	var causal_continuation_seen := false
 	var safety_limit_respected := true
 	for seed_value in range(1, 80):
 		var seeded_result: Resource = manager.resolve_active_rally(seed_value)
@@ -2989,9 +3479,26 @@ func _test_default_offense_without_saved_play() -> void:
 			safety_limit_respected = false
 		if seeded_result.events.size() >= 12:
 			continuation_seen = true
+		for raw_event in seeded_result.events:
+			var event := raw_event as RallyEvent
+			if event != null and event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and "exchange" in event.headline.to_lower() \
+					and not Dictionary(event.metadata.get(
+						"transition_preparation", {}
+					)).is_empty() \
+					and not Dictionary(event.metadata.get(
+						"resolved_approach", {}
+					)).is_empty():
+				causal_continuation_seen = true
+				break
+		if continuation_seen and causal_continuation_seen:
 			break
 	_check(safety_limit_respected, "bounded rally loop respects its event safety limit")
 	_check(continuation_seen, "seeded simulation produces multi-exchange rallies")
+	_check(
+		causal_continuation_seen,
+		"defense-to-counterattack rallies preserve early release and resolved approach evidence",
+	)
 
 
 func _test_defensive_presets_release_and_setting_systems() -> void:
@@ -3011,6 +3518,25 @@ func _test_defensive_presets_release_and_setting_systems() -> void:
 	var front_setter := 4 if active_setter == 1 else 1
 	_check(lineup.is_attack_eligible(front_setter), "the front-row 6-2 setter may attack")
 	_check(not lineup.is_attack_eligible(active_setter), "the active setter may not attack")
+	var setter_attack_assignment := HitterAssignment.new()
+	setter_attack_assignment.player_id = front_setter
+	setter_attack_assignment.start_position = CourtConstants.slot_position(
+		lineup.slot_for_player(front_setter)
+	)
+	setter_attack_assignment.lane = "Right Pin"
+	setter_attack_assignment.tempo = 2
+	var setter_attack_play := OffensivePlay.new()
+	setter_attack_play.rotation_number = lineup.rotation_number
+	setter_attack_play.primary_hitter_id = front_setter
+	setter_attack_play.assignments = [setter_attack_assignment]
+	var setter_attack_choice: HitterAssignment = RallySimulator.new()._choose_assignment(
+		setter_attack_play, true, manager.players, lineup, active_setter
+	)
+	_check(
+		setter_attack_choice != null \
+			and setter_attack_choice.player_id == front_setter,
+		"a front-row 6-2 setter remains a terminal attacker when another setter takes second contact",
+	)
 	var plan: Resource = manager.current_defensive_plan()
 	plan.apply_floor_preset("Middle-Up", lineup)
 	var middle_back_id := lineup.player_at_slot(6)

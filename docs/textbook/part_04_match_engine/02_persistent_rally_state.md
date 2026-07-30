@@ -45,6 +45,22 @@ A moment represents a future occurrence. The scheduler orders moments determinis
 
 The builder translates match inputs—players, lineups, opponent state, and defensive plan—into initial persistent state. Translation belongs here so the simulation loop does not need to know every storage detail of every manager.
 
-## What is still missing
+## Current integration boundary
 
-The live `RallySimulator.resolve()` does not yet use these objects as its main loop. Opportunity generation currently focuses on a reception foundation. Contact resolution, decision policies, rule enforcement, event conversion, and migration across all phases still need integration.
+The live `RallySimulator.resolve()` does not yet use these objects as one
+authoritative scheduler-driven loop. Integration is deliberately proceeding one
+contact at a time:
+
+- reception, setter, and attack each have persistent shadow decisions, candidate
+  audits, guarded rollout policies, and explicit development-only promotion;
+- their production flags remain disabled, so ordinary contact ownership still
+  comes from the phase resolver;
+- home attack preparation now consumes persistent-style position, velocity,
+  responsibility, approach, and contact-envelope evidence in ordinary rallies;
+- floor-defense phase positions affect normal claimant geometry;
+- attack-to-block perception has not migrated yet.
+
+Rule enforcement, coordinated blocker observations, opponent-side persistent
+decisions, and one scheduler-driven loop remain incomplete. See the
+[Fresh-Agent Handoff](../FRESH_AGENT_HANDOFF.md) for the single current next
+slice and its acceptance contract.

@@ -15,6 +15,7 @@ static func evaluate_opportunity(
 	tactical_priority: float = 0.0,
 	contact_height_meters: float = 1.0,
 	allow_jump: bool = false,
+	approach_profile: Dictionary = {},
 ) -> ActionOpportunity:
 	var opportunity := ActionOpportunity.new()
 	if actor == null or actor.player == null:
@@ -30,7 +31,8 @@ static func evaluate_opportunity(
 		contact_time - maxf(current_time, actor.committed_until), 0.0
 	)
 	var envelope := ContactEnvelopeModel.evaluate(
-		actor, action_type, contact_height_meters, available_time, allow_jump
+		actor, action_type, contact_height_meters, available_time, allow_jump,
+		approach_profile
 	)
 	var contact_reach := float(envelope.get("horizontal_reach_meters", 0.0))
 	var standing_movement := estimate_movement(
@@ -134,6 +136,11 @@ static func evaluate_opportunity(
 		* float(envelope.get("balance_factor", 1.0))
 	opportunity.physical_feasibility = float(movement.get("feasibility", 0.0)) \
 		if opportunity.reachable else 0.0
+	opportunity.approach_speed_mps = float(approach_profile.get("approach_speed_mps", 0.0))
+	opportunity.approach_quality = float(approach_profile.get("runup_quality", 0.0))
+	opportunity.approach_alignment = float(approach_profile.get("approach_alignment", 1.0))
+	opportunity.lateral_control = float(approach_profile.get("lateral_control", 1.0))
+	opportunity.jump_multiplier = float(approach_profile.get("jump_multiplier", 1.0))
 
 	var technique := _action_technique(actor.player, action_type)
 	opportunity.technical_difficulty = clampf(

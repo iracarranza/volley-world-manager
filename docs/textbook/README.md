@@ -2,18 +2,21 @@
 
 Book ID: `VWM-TEXTBOOK`
 Audience: a beginner with intuitive Godot experience and minimal programming experience
-Project root: `/Users/iracarranza/volley-world-manager`
+Repository: `https://github.com/iracarranza/volley-world-manager`
 
 This book explains the project that actually exists. It also explains the persistent rally architecture currently being built, but it never presents unfinished work as live gameplay.
 
 ## How to use this book
 
-1. Start with [Part 1](part_01_project/01_what_you_are_building.md).
-2. Keep [INDEX.md](INDEX.md) open when searching for a feature, error, class, or method.
-3. Use [GLOSSARY.md](GLOSSARY.md) whenever a term is unfamiliar.
-4. Read the status label at the top of every chapter.
-5. Follow source links and inspect the named class or function before changing code.
-6. Run the checks in [VALIDATION.md](VALIDATION.md) after making changes.
+1. A developer or coding model continuing active work should start with
+   [FRESH_AGENT_HANDOFF.md](FRESH_AGENT_HANDOFF.md).
+2. A beginner reading from the beginning should start with
+   [Part 1](part_01_project/01_what_you_are_building.md).
+3. Keep [INDEX.md](INDEX.md) open when searching for a feature, error, class, or method.
+4. Use [GLOSSARY.md](GLOSSARY.md) whenever a term is unfamiliar.
+5. Read the status label at the top of every chapter.
+6. Follow source links and inspect the named class or function before changing code.
+7. Run the checks in [VALIDATION.md](VALIDATION.md) after making changes.
 
 ## Truth labels
 
@@ -37,10 +40,11 @@ See [VERIFICATION_RULES.md](VERIFICATION_RULES.md) for the rules behind these la
 
 ## Important current boundary
 
-The live `RallySimulator` still computes a complete rally and emits a sequence of `RallyEvent` resources. The newer `RallyState`, `RallyPlayerState`, `RallyBallState`, `RallyScheduler`, and `RallyMovementSystem` form a tested foundation for a persistent simulation, but they are not yet the resolver used by match play.
-
-Opponent-serve rallies now also run a deterministic shadow reception comparison.
-It records how the persistent perception and movement model would rank receivers,
-but the legacy receiver remains authoritative.
+The live `RallySimulator` still computes a complete rally phase by phase and
+emits `RallyEvent` resources. Persistent reception, setter, and attack contacts
+have audited, guarded, development-only promotion paths, but all production
+rollout flags remain off. Gate 43's approach mechanics are active in ordinary
+home attack and counterattack calculation. Blocking remains legacy-controlled
+and is the next perception migration slice.
 
 The 3D match code still exists, but current development is focused on simulation and 2D playback. Treat 3D work as paused.
