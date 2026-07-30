@@ -102,8 +102,19 @@ This page is the quickest defense against confusing source-code existence with a
   contact continuity, state immutability, and deterministic identity.
 - Gate 35 adds a guarded setter rollout branch with its production flag off.
 - Gate 36 promotes one audited setter contact after a promoted reception in an
-  explicitly requested development fixture. Attack and later phases remain
-  legacy-controlled.
+  explicitly requested development fixture.
+- Gate 37 generates legal hitter approach opportunities and action-specific
+  attack jump envelopes from persistent state.
+- Gate 38 lets setters rank perceived hitter windows and lets hitters target
+  noisy observed defenders rather than exact coordinates or `DefensivePlan`.
+- Gate 39 proves monotonic confidence, reachability, action count, and executable
+  attack progression across developing, established, and elite hitters.
+- Gate 40 audits attack legality, information boundaries, physical execution,
+  trajectory continuity, state immutability, and deterministic identity.
+- Gate 41 adds a guarded attack rollout branch with its production flag off.
+- Gate 42 promotes one audited attack after promoted reception and setter
+  contacts in an explicitly requested development fixture. Blocking and later
+  phases remain legacy-controlled.
 
 ## Partially implemented
 
@@ -136,12 +147,13 @@ The following classes exist and have tests, but do not yet drive live rally reso
 - `RallyKinematics`
 - `RallyCalibrationReport`
 - `ServeStyleCalibration`
-- `PlayerObservation` beyond the setter slice
+- `PlayerObservation` beyond reception, setter, and attack slices
 
-`SetterFailureClassifier`, `ReceptionRolloutAudit`, `SetterRolloutAudit`,
-`LiveReceptionIntegrator`, and `LiveSetterIntegrator` are active at the
-development rollout boundary. The normal match path still selects official
-reception and setter behavior because both production flags are disabled.
+`ReceptionRolloutAudit`, `SetterRolloutAudit`, `AttackRolloutAudit`,
+`LiveReceptionIntegrator`, `LiveSetterIntegrator`, and `LiveAttackIntegrator`
+are active at the development rollout boundary. The normal match path still
+selects official reception, setter, and attack behavior because all three
+production flags are disabled.
 
 Their purpose is to support a rally in which current position, velocity, ball flight, time, player intent, and availability continuously constrain future actions.
 
@@ -156,17 +168,17 @@ integration have not been implemented.
 
 ## Proposed next integration
 
-Migrate one contact at a time. Opponent serve through home setter contact now
-has a guarded development-only vertical slice. The next slice is set to attack:
+Migrate one contact at a time. Opponent serve through home attack now has a
+guarded development-only vertical slice. The next slice is attack to block:
 
-1. Generate approach opportunities from persistent hitter state.
-2. Give the hitter a player-specific observation of the set and defense.
-3. Select an action from perceived information only.
-4. Resolve the chosen contact against authoritative ball and player state.
+1. Generate block hypotheses from pass, setter, hitter, and tempo cues.
+2. Give each blocker a player-specific observation rather than the true lane.
+3. Allow wrong commits, hesitation, solo closes, and coordinated assists.
+4. Resolve the chosen block movement against the authoritative attack flight.
 5. Audit and compare fixed-seed behavior before adding a guarded rollout.
 
 ## Validation baseline
 
-The current foundation validation reports 313 passing checks. Treat that number
+The current foundation validation reports 322 passing checks. Treat that number
 as a point-in-time result, not a permanent guarantee. Run
 [VALIDATION.md](VALIDATION.md) to establish the current result.

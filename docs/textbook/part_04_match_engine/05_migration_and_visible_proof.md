@@ -36,6 +36,11 @@ later contacts remain on the legacy continuation.
 
 Attack options arise from hitter approach state, set trajectory, eligibility, tempo familiarity, and opponent geometry. A pipe attack must begin from the hitter's actual back-row state and meet its contact window.
 
+This slice now has perceived setter option ranking, repeated hitter reads,
+perceived defensive targeting, candidate audit, guarded rollout, and a
+development-only live contact through Gate 42. Block and later contacts remain
+on the legacy continuation.
+
 ## Visible signs that it works
 
 A correct implementation should make these observable in 2D playback and debug output:

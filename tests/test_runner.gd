@@ -57,6 +57,12 @@ const PLAYER_OBSERVATION_SCRIPT := preload(
 const SETTER_ROLLOUT_AUDIT_SCRIPT := preload(
 	"res://scripts/simulation/setter_rollout_audit.gd"
 )
+const ATTACK_ROLLOUT_AUDIT_SCRIPT := preload(
+	"res://scripts/simulation/attack_rollout_audit.gd"
+)
+const ATTACK_PROGRESSION_CALIBRATION_SCRIPT := preload(
+	"res://scripts/simulation/attack_progression_calibration.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -91,6 +97,8 @@ func _initialize() -> void:
 	_test_gate_thirty_development_live_reception()
 	_test_gate_thirty_one_to_thirty_five_setter_boundary()
 	_test_gate_thirty_six_development_live_setter()
+	_test_gate_thirty_seven_to_forty_one_attack_boundary()
+	_test_gate_forty_two_development_live_attack()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -2006,6 +2014,160 @@ func _test_gate_thirty_six_development_live_setter() -> void:
 	_check(
 		not official_continuous_set_seen,
 		"Gate 36 keeps ordinary match resolution on the production-off setter path",
+	)
+
+
+func _test_gate_thirty_seven_to_forty_one_attack_boundary() -> void:
+	var selected_summary: Dictionary = {}
+	var selected_audit: Dictionary = {}
+	var selected_lineup: RotationLineup = null
+	for seed_value in range(300000, 300360):
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		manager.match_state.serving_home = false
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var trace: Dictionary = result.analysis.get("shadow_reception", {})
+		var summary: Dictionary = trace.get("summary", {})
+		var audit := ATTACK_ROLLOUT_AUDIT_SCRIPT.evaluate(
+			summary, manager.current_lineup()
+		)
+		if bool(audit.get("eligible", false)):
+			selected_summary = summary
+			selected_audit = audit
+			selected_lineup = manager.current_lineup()
+			break
+	_check(
+		not selected_summary.is_empty()
+			and bool(selected_audit.get("observation_boundary_valid", false)),
+		"Gates 37 and 40 produce an auditable attack opportunity from perceived information",
+	)
+	var shadow: Dictionary = selected_summary.get("shadow_attack", {})
+	var selected_assignment: Dictionary = shadow.get("selected_assignment", {})
+	var setter_observation: Dictionary = shadow.get("setter_observation", {})
+	var hitter_response: Dictionary = shadow.get("hitter_response", {})
+	var hitter_observation: Dictionary = hitter_response.get("observation", {})
+	var observed_opponents: Array = hitter_observation.get("perceived_opponents", [])
+	var observations_are_perceived := not observed_opponents.is_empty()
+	for raw_opponent in observed_opponents:
+		var opponent: Dictionary = raw_opponent
+		observations_are_perceived = observations_are_perceived \
+			and opponent.has("perceived_position") \
+			and not opponent.has("true_position") \
+			and not opponent.has("authoritative_position")
+	_check(
+		not selected_assignment.is_empty()
+			and not bool(selected_assignment.get(
+				"decision_uses_authoritative_truth", true
+			))
+			and not bool(setter_observation.get(
+				"decision_uses_authoritative_truth", true
+			)),
+		"Gate 38 ranks setter attack options without authoritative hitter geometry",
+	)
+	_check(
+		observations_are_perceived
+			and str(hitter_response.get("target_reason", "")) \
+				== "largest perceived gap"
+			and not bool(hitter_response.get(
+				"decision_uses_authoritative_truth", true
+			)),
+		"Gate 38 removes exact opponent coordinates from hitter shot selection",
+	)
+	var progression := ATTACK_PROGRESSION_CALIBRATION_SCRIPT.run(12, 420000)
+	var progression_checks: Dictionary = progression.get("progression", {})
+	_check(
+		bool(progression.get("fixture_valid", false))
+			and bool(progression_checks.get("confidence_monotonic", false))
+			and bool(progression_checks.get("perceived_reach_monotonic", false))
+			and bool(progression_checks.get("true_reach_monotonic", false))
+			and bool(progression_checks.get("action_count_monotonic", false))
+			and bool(progression_checks.get("executable_action_monotonic", false)),
+		"Gate 39 preserves monotonic hitter perception, access, and action progression",
+	)
+	var disabled_rollout := RALLY_ROLLOUT_POLICY_SCRIPT.select_attack_source(
+		selected_summary, selected_lineup, false
+	)
+	_check(
+		str(disabled_rollout.get("selected_source", "")) == "official"
+			and bool(disabled_rollout.get("candidate_available", false))
+			and bool(disabled_rollout.get("official_identity_preserved", false)),
+		"Gate 41 keeps eligible attacks behind the disabled production boundary",
+	)
+
+
+func _test_gate_forty_two_development_live_attack() -> void:
+	const LIVE_ATTACK_SEED := 300469
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var result: Resource = manager.resolve_active_rally(LIVE_ATTACK_SEED, true)
+	var trace: Dictionary = result.analysis.get("shadow_reception", {})
+	var summary: Dictionary = trace.get("summary", {})
+	var rollout: Dictionary = summary.get("attack_rollout", {})
+	var integration: Dictionary = summary.get("live_attack_integration", {})
+	var live_attack: RallyEvent = null
+	var legacy_block_seen := false
+	for raw_event in result.events:
+		var event := raw_event as RallyEvent
+		if event == null:
+			continue
+		if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+				and bool(event.metadata.get("continuous_attack", false)):
+			live_attack = event
+		elif event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+				and str(event.metadata.get("side", "")) == "opponent":
+			legacy_block_seen = true
+	_check(
+		str(rollout.get("selected_source", "")) == "continuous_attack"
+			and live_attack != null
+			and bool(integration.get("applied", false))
+			and int(integration.get("contact_number", 0)) == 3
+			and str(integration.get("ball_status", "")) == "IN_FLIGHT",
+		"Gate 42 promotes one audited hitter contact and outgoing attack flight",
+	)
+	_check(
+		legacy_block_seen,
+		"Gate 42 leaves blocking and later contacts on the legacy continuation",
+	)
+	var repeat_manager := GAME_MANAGER_SCRIPT.new()
+	repeat_manager.seed_vertical_slice_data()
+	repeat_manager.match_state.serving_home = false
+	var repeat_result: Resource = repeat_manager.resolve_active_rally(
+		LIVE_ATTACK_SEED, true
+	)
+	var repeat_attack: RallyEvent = null
+	for raw_event in repeat_result.events:
+		var event := raw_event as RallyEvent
+		if event != null and event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+				and bool(event.metadata.get("continuous_attack", false)):
+			repeat_attack = event
+			break
+	_check(
+		live_attack != null and repeat_attack != null
+			and live_attack.actor_id == repeat_attack.actor_id
+			and live_attack.start_position.is_equal_approx(repeat_attack.start_position)
+			and live_attack.end_position.is_equal_approx(repeat_attack.end_position)
+			and is_equal_approx(
+				float(live_attack.metadata.get("event_time", -1.0)),
+				float(repeat_attack.metadata.get("event_time", -2.0))
+			),
+		"Gate 42 live hitter ownership, timing, and target are deterministic",
+	)
+	var official_manager := GAME_MANAGER_SCRIPT.new()
+	official_manager.seed_vertical_slice_data()
+	official_manager.match_state.serving_home = false
+	var official_result: Resource = official_manager.resolve_active_rally(
+		LIVE_ATTACK_SEED
+	)
+	var official_continuous_attack_seen := false
+	for raw_event in official_result.events:
+		var event := raw_event as RallyEvent
+		if event != null and bool(event.metadata.get("continuous_attack", false)):
+			official_continuous_attack_seen = true
+			break
+	_check(
+		not official_continuous_attack_seen,
+		"Gate 42 keeps ordinary match resolution on the production-off attack path",
 	)
 
 

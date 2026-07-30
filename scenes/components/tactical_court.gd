@@ -943,6 +943,11 @@ func _draw_shadow_reception_trace() -> void:
 		_draw_shadow_contact_envelope(
 			setter_response, outgoing_flight, show_labels
 		)
+	var shadow_attack: Dictionary = summary.get("shadow_attack", {})
+	if show_intent or show_reads:
+		_draw_shadow_attack(
+			shadow_attack, show_reads, show_labels
+		)
 	if not show_reads and not show_opportunities:
 		return
 	for raw_candidate in candidates:
@@ -1106,6 +1111,61 @@ func _draw_shadow_setter_intent(
 					"selected_setter_name", actual_id
 				)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("f2c94c"),
 			)
+
+
+func _draw_shadow_attack(
+	shadow_attack: Dictionary,
+	show_reads: bool,
+	show_labels: bool,
+) -> void:
+	if not bool(shadow_attack.get("available", false)):
+		return
+	var assignment: Dictionary = shadow_attack.get("selected_assignment", {})
+	var response: Dictionary = shadow_attack.get("hitter_response", {})
+	if assignment.is_empty() or not bool(response.get("available", false)):
+		return
+	var perceived_start := _court_to_local(Vector2(assignment.get(
+		"perceived_start_position", response.get("source_position", Vector2.ZERO)
+	)))
+	var contact := _court_to_local(Vector2(response.get(
+		"contact_position", assignment.get("target", Vector2.ZERO)
+	)))
+	var target := _court_to_local(Vector2(response.get(
+		"target", Vector2(0.5, 0.2)
+	)))
+	var approach_color := Color("ff9f43")
+	var shot_color := Color("62b4ff")
+	draw_dashed_line(perceived_start, contact, approach_color, 3.0, 6.0)
+	draw_circle(contact, 9.0, approach_color, false, 2.5)
+	draw_dashed_line(contact, target, shot_color, 3.0, 7.0)
+	draw_circle(target, 8.0, shot_color, false, 2.5)
+	if show_reads:
+		var observation: Dictionary = response.get("observation", {})
+		for raw_opponent in observation.get("perceived_opponents", []):
+			var opponent: Dictionary = raw_opponent
+			var perceived := _court_to_local(Vector2(opponent.get(
+				"perceived_position", Vector2.ZERO
+			)))
+			draw_circle(perceived, 5.0, Color("ef6461"), false, 1.5)
+		for raw_moment in response.get("moments", []):
+			var moment: Dictionary = raw_moment
+			var read_target := _court_to_local(Vector2(moment.get(
+				"perceived_destination", Vector2.ZERO
+			)))
+			draw_circle(read_target, 3.5, approach_color)
+	if show_labels:
+		draw_string(
+			ThemeDB.fallback_font, contact + Vector2(12.0, -12.0),
+			"%s · %s · %+.2fs" % [
+				str(response.get("player_name", "Hitter")),
+				str(response.get("selected_action", "no action")),
+				float(response.get("true_arrival_margin", 0.0)),
+			], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, approach_color,
+		)
+		draw_string(
+			ThemeDB.fallback_font, target + Vector2(10.0, 14.0),
+			"PERCEIVED GAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, shot_color,
+		)
 
 
 func _draw_shadow_contact_envelope(

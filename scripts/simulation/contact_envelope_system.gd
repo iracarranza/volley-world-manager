@@ -42,19 +42,30 @@ static func evaluate(
 		* readiness_factor if can_take_off else 0.0
 	var maximum_height := standing_reach + accessible_jump
 	var standing_possible := contact_height_meters <= standing_reach
-	var jump_possible := can_take_off \
-		and action_type == &"set" \
-		and contact_height_meters >= 1.55 \
+	var jump_action := action_type in [&"set", &"attack", &"block", &"assist_block"]
+	var minimum_jump_height := 1.55 if action_type == &"set" else 1.85
+	var jump_possible := can_take_off and jump_action \
+		and contact_height_meters >= minimum_jump_height \
 		and contact_height_meters <= maximum_height
 	var set_balance := float(player.set_balance) / 100.0
 	var set_stability := float(player.set_stability) / 100.0
 	var reception_balance := float(player.reception_balance) / 100.0
 	var reception_stability := float(player.reception_stability) / 100.0
-	var action_balance := (
-		set_balance * 0.48 + set_stability * 0.52
-		if action_type == &"set"
-		else reception_balance * 0.48 + reception_stability * 0.52
-	)
+	var action_balance := reception_balance * 0.48 + reception_stability * 0.52
+	if action_type == &"set":
+		action_balance = set_balance * 0.48 + set_stability * 0.52
+	elif action_type == &"attack":
+		action_balance = (
+			float(player.approach_timing) * 0.58
+			+ float(player.explosiveness) * 0.22
+			+ float(player.attack_accuracy) * 0.20
+		) / 100.0
+	elif action_type in [&"block", &"assist_block"]:
+		action_balance = (
+			float(player.block_timing) * 0.62
+			+ float(player.explosiveness) * 0.20
+			+ float(player.tactical_discipline) * 0.18
+		) / 100.0
 	var vertical_pressure := clampf(
 		contact_height_meters / maxf(maximum_height, 0.05), 0.0, 1.2
 	)
@@ -85,9 +96,13 @@ static func _horizontal_reach(
 ) -> float:
 	var span_factor := clampf(inverse_lerp(160.0, 225.0, player.wingspan_cm), 0.0, 1.0)
 	var base := lerpf(0.30, 0.62, span_factor)
-	var stability := float(
-		player.set_stability if action_type == &"set" else player.reception_stability
-	) / 100.0
+	var stability := float(player.reception_stability) / 100.0
+	if action_type == &"set":
+		stability = float(player.set_stability) / 100.0
+	elif action_type == &"attack":
+		stability = float(player.approach_timing) / 100.0
+	elif action_type in [&"block", &"assist_block"]:
+		stability = float(player.block_timing) / 100.0
 	var posture_factor := 1.0
 	match body_state:
 		RallyPlayerState.BodyState.MOVING:

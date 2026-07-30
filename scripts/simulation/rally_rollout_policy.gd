@@ -8,6 +8,9 @@ const ReceptionRolloutAuditModel := preload(
 const SetterRolloutAuditModel := preload(
 	"res://scripts/simulation/setter_rollout_audit.gd"
 )
+const AttackRolloutAuditModel := preload(
+	"res://scripts/simulation/attack_rollout_audit.gd"
+)
 
 
 ## Central source-selection boundary. Gate 15 intentionally has no shadow-event
@@ -55,6 +58,31 @@ static func select_setter_source(
 		"candidate_available": bool(audit.get("eligible", false)),
 		"candidate_audit": audit,
 		"selected_setter": selected_setter,
+		"official_identity_preserved": not use_candidate,
+		"activation_implemented": true,
+		"fallback_reason": "" if use_candidate else (
+			"rollout_disabled" if not rollout_enabled else ";".join(
+				Array(audit.get("failure_reasons", []))
+			)
+		),
+	}
+
+
+static func select_attack_source(
+	shadow_summary: Dictionary,
+	home_lineup: RotationLineup = null,
+	rollout_enabled: bool = FeatureFlags.ENABLE_CONTINUOUS_ATTACK_EVENTS,
+) -> Dictionary:
+	var audit := AttackRolloutAuditModel.evaluate(shadow_summary, home_lineup)
+	var use_candidate := rollout_enabled and bool(audit.get("eligible", false))
+	var selected_attack: Dictionary = audit.get("attack_candidate", {}) \
+		if use_candidate else {}
+	return {
+		"flag_enabled": rollout_enabled,
+		"selected_source": "continuous_attack" if use_candidate else "official",
+		"candidate_available": bool(audit.get("eligible", false)),
+		"candidate_audit": audit,
+		"selected_attack": selected_attack,
 		"official_identity_preserved": not use_candidate,
 		"activation_implemented": true,
 		"fallback_reason": "" if use_candidate else (

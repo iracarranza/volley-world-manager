@@ -9,8 +9,9 @@ audited setter contact. Promotion applies the selected owner, resolved center
 position and velocity, body state, balance, recovery, simulation time, second
 contact count, and outgoing set trajectory to persistent rally state.
 
-Set destination, quality, hitter choice, attack, and every later phase remain
-legacy-controlled. Equal seeds reproduce equal owner, action, contact position,
+At the time of this gate, set destination, quality, hitter choice, attack, and
+every later phase remained legacy-controlled. Gate 42 now supersedes that
+development-only boundary for audited attack candidates. Equal seeds reproduce equal owner, action, contact position,
 contact time, and observation fingerprint. Ordinary match resolution never
 requests this promotion.
 

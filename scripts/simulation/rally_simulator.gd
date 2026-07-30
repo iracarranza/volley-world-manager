@@ -20,6 +20,12 @@ const LiveReceptionIntegratorModel := preload(
 const LiveSetterIntegratorModel := preload(
 	"res://scripts/simulation/live_setter_integrator.gd"
 )
+const ShadowAttackSystemModel := preload(
+	"res://scripts/simulation/shadow_attack_system.gd"
+)
+const LiveAttackIntegratorModel := preload(
+	"res://scripts/simulation/live_attack_integrator.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -320,6 +326,47 @@ func resolve(
 	shadow_reception_trace.summary = shadow_summary
 	var using_live_setter := not selected_live_setter.is_empty() \
 		and bool(live_setter_integration.get("applied", false))
+	var attack_state := live_state
+	if attack_state == null:
+		attack_state = RallyStateBuilderModel.build(
+			players, lineup, defensive_plan, opponent_team,
+			active_play, false, seed_value
+		)
+	var shadow_attack := ShadowAttackSystemModel.evaluate(
+		attack_state,
+		Dictionary(shadow_summary.get("shadow_setter_response", {})),
+		receiver.id, seed_value + 1700003,
+	)
+	shadow_summary["shadow_attack"] = shadow_attack
+	var attack_rollout_requested := using_live_setter \
+		and development_continuous_reception and OS.is_debug_build() \
+		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_ATTACK_OVERRIDE
+	var attack_rollout := RallyRolloutPolicyModel.select_attack_source(
+		shadow_summary, lineup, attack_rollout_requested
+	)
+	var selected_live_attack: Dictionary = attack_rollout.get(
+		"selected_attack", {}
+	)
+	var attack_rollout_evidence := attack_rollout.duplicate(true)
+	attack_rollout_evidence.erase("selected_attack")
+	shadow_summary["attack_rollout"] = attack_rollout_evidence
+	shadow_reception_trace.summary = shadow_summary
+	var using_live_attack := not selected_live_attack.is_empty() \
+		and str(attack_rollout.get("selected_source", "official")) \
+			== "continuous_attack"
+	if using_live_attack and not bool(LiveAttackIntegratorModel.validate(
+		live_state, selected_live_attack
+	).get("valid", false)):
+		attack_rollout = RallyRolloutPolicyModel.select_attack_source(
+			shadow_summary, lineup, false
+		)
+		selected_live_attack = {}
+		using_live_attack = false
+		attack_rollout_evidence = attack_rollout.duplicate(true)
+		attack_rollout_evidence.erase("selected_attack")
+		shadow_summary["attack_rollout"] = attack_rollout_evidence
+		shadow_reception_trace.summary = shadow_summary
+	var live_attack_integration: Dictionary = {}
 	setter = _second_contact_setter(
 		players, lineup, defensive_plan, receiver.id
 	)
@@ -364,6 +411,10 @@ func resolve(
 		and result.reception_quality >= 0.42 \
 		and rng.randf() < follow_threshold
 	var assignment := _choose_assignment(active_play, result.play_was_followed, players, lineup)
+	if using_live_attack:
+		assignment = _assignment_from_dict(Dictionary(selected_live_attack.get(
+			"assignment", {}
+		)))
 	var hitter := _player_by_id(players, assignment.player_id) if assignment != null else null
 	if hitter == null:
 		hitter = _fallback_hitter(players, lineup)
@@ -411,6 +462,13 @@ func resolve(
 		"set", set_contact, set_target, set_flight_time,
 		lerpf(0.7, 2.4, set_flight_time / 1.02), rally_clock + second_contact_window
 	)
+	if using_live_attack:
+		set_trajectory = Dictionary(selected_live_attack.get(
+			"set_trajectory", set_trajectory
+		)).duplicate(true)
+		set_flight_time = float(set_trajectory.get(
+			"duration", set_flight_time
+		))
 	if using_live_setter:
 		live_setter_integration["outgoing_set_state"] = \
 			LiveSetterIntegratorModel.launch_set(
@@ -465,6 +523,16 @@ func resolve(
 		hitter, hitter_start, set_target, "transition"
 	)
 	var hitter_arrival_margin := float(set_flight_time) - hitter_move_time
+	if using_live_attack:
+		hitter_start = Vector2(selected_live_attack.get(
+			"source_position", hitter_start
+		))
+		hitter_move_time = maxf(float(selected_live_attack.get(
+			"contact_time", rally_clock + set_flight_time
+		)) - rally_clock, 0.0)
+		hitter_arrival_margin = float(selected_live_attack.get(
+			"arrival_margin", hitter_arrival_margin
+		))
 	var approach_fit := _rating(hitter, "approach_timing") * 0.32 \
 		+ _rating(hitter, "transition_speed") * 0.18
 	var attack_base: float = _rating(hitter, "attack_accuracy") * 0.38 \
@@ -479,12 +547,46 @@ func resolve(
 	var attack_choice := _choose_home_attack_target(
 		hitter, assignment.lane, hit_type, opponent_team
 	)
+	if using_live_attack:
+		result.attack_quality = clampf(float(selected_live_attack.get(
+			"quality", result.attack_quality
+		)), 0.0, 1.0)
+		hit_type = str(selected_live_attack.get(
+			"selected_action", hit_type
+		)).replace("_", " ").capitalize()
+		attack_choice = {
+			"target": Vector2(selected_live_attack.get(
+				"target", attack_choice.target
+			)),
+			"direction": str(selected_live_attack.get(
+				"direction", attack_choice.direction
+			)),
+			"reason": str(selected_live_attack.get(
+				"target_reason", "largest perceived gap"
+			)),
+		}
 	var attack_target: Vector2 = attack_choice.target
 	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
 	var attack_trajectory := _ball_trajectory(
 		"attack", set_target, attack_target, attack_flight, 0.55,
 		rally_clock + set_flight_time
 	)
+	if using_live_attack:
+		attack_trajectory = Dictionary(selected_live_attack.get(
+			"attack_trajectory", attack_trajectory
+		)).duplicate(true)
+		attack_flight = float(attack_trajectory.get(
+			"duration", attack_flight
+		))
+		live_attack_integration = LiveAttackIntegratorModel.apply(
+			live_state, selected_live_attack
+		)
+		if not bool(live_attack_integration.get("applied", false)):
+			using_live_attack = false
+		else:
+			shadow_summary["live_attack_integration"] = \
+				live_attack_integration.duplicate(true)
+			shadow_reception_trace.summary = shadow_summary
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, result.attack_quality >= 0.25,
 		result.attack_quality, "%s: %s" % [hitter.display_name, hit_type],
@@ -504,7 +606,15 @@ func resolve(
 			"set_flight_time": float(set_flight_time),
 			"incoming_trajectory": set_trajectory,
 			"outgoing_trajectory": attack_trajectory})
-	live_positions[hitter.id] = set_target
+	var live_attack_event := result.events[-1] as RallyEvent
+	if using_live_attack and live_attack_event != null:
+		live_attack_event.metadata["continuous_attack"] = true
+		live_attack_event.metadata["observation_targeting"] = true
+		live_attack_event.metadata["persistent_state_update"] = \
+			live_attack_integration.duplicate(true)
+	live_positions[hitter.id] = Vector2(live_attack_integration.get(
+		"hitter_center_position", set_target
+	)) if using_live_attack else set_target
 	rally_clock += float(set_flight_time)
 	if result.attack_quality < 0.29:
 		return _finish(result, "attack_error", false, hitter.id, {
@@ -2347,6 +2457,21 @@ func _fallback_assignment(hitter: VolleyballPlayer, lineup: RotationLineup) -> H
 	assignment.lane = "Left Pin" if assignment.start_position.x <= 0.5 \
 		else "Right Pin"
 	assignment.tempo = 3
+	return assignment
+
+
+func _assignment_from_dict(data: Dictionary) -> HitterAssignment:
+	if data.is_empty():
+		return null
+	var assignment := HitterAssignment.new()
+	assignment.player_id = int(data.get("player_id", -1))
+	assignment.start_position = Vector2(data.get(
+		"perceived_start_position", Vector2(0.5, 0.75)
+	))
+	assignment.lane = str(data.get("lane", "Left Pin"))
+	assignment.tempo = clampi(int(data.get("tempo", 2)), 0, 3)
+	assignment.priority = clampi(int(data.get("priority", 1)), 1, 6)
+	assignment.is_decoy = false
 	return assignment
 
 
