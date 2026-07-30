@@ -461,11 +461,15 @@ func called_play() -> OffensivePlay:
 	return null
 
 
-func resolve_active_rally(seed_value: int) -> Resource:
+func resolve_active_rally(
+	seed_value: int,
+	development_continuous_reception: bool = false,
+) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
 	return simulator.resolve(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,
+		development_continuous_reception,
 	)
 
 

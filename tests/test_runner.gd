@@ -13,6 +13,44 @@ const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
+const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
+const RALLY_MOMENT_SCRIPT := preload("res://scripts/models/rally_moment.gd")
+const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_state_builder.gd")
+const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
+const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
+const CONTACT_ENVELOPE_SCRIPT := preload(
+	"res://scripts/simulation/contact_envelope_system.gd"
+)
+const SETTER_FAILURE_CLASSIFIER_SCRIPT := preload(
+	"res://scripts/simulation/setter_failure_classifier.gd"
+)
+const RECEPTION_ROLLOUT_AUDIT_SCRIPT := preload(
+	"res://scripts/simulation/reception_rollout_audit.gd"
+)
+const RALLY_ROLLOUT_POLICY_SCRIPT := preload(
+	"res://scripts/simulation/rally_rollout_policy.gd"
+)
+const BALL_CONTACT_SIGNATURE_SCRIPT := preload("res://scripts/models/ball_contact_signature.gd")
+const BALL_FLIGHT_SCRIPT := preload("res://scripts/models/ball_flight.gd")
+const BALL_READ_SCRIPT := preload("res://scripts/simulation/ball_read_system.gd")
+const RALLY_KINEMATICS_SCRIPT := preload("res://scripts/simulation/rally_kinematics.gd")
+const RALLY_CALIBRATION_REPORT_SCRIPT := preload("res://scripts/simulation/rally_calibration_report.gd")
+const SERVE_STYLE_CALIBRATION_SCRIPT := preload("res://scripts/simulation/serve_style_calibration.gd")
+const RECEPTION_PROGRESSION_CALIBRATION_SCRIPT := preload("res://scripts/simulation/reception_progression_calibration.gd")
+const ACTION_OPPORTUNITY_WINDOW_SCRIPT := preload("res://scripts/models/action_opportunity_window.gd")
+const RALLY_OPPORTUNITY_SCRIPT := preload("res://scripts/simulation/rally_opportunity_system.gd")
+const RALLY_DECISION_SCRIPT := preload("res://scripts/simulation/rally_decision_system.gd")
+const RECEPTION_DECISION_PROGRESSION_SCRIPT := preload("res://scripts/simulation/reception_decision_progression_calibration.gd")
+const RALLY_CONTACT_SCRIPT := preload("res://scripts/simulation/rally_contact_system.gd")
+const SHADOW_SETTER_RESPONSE_SCRIPT := preload(
+	"res://scripts/simulation/shadow_setter_response_system.gd"
+)
+const SETTER_HANDOFF_CALIBRATION_SCRIPT := preload(
+	"res://scripts/simulation/setter_handoff_calibration.gd"
+)
+const SETTER_PROGRESSION_CALIBRATION_SCRIPT := preload(
+	"res://scripts/simulation/setter_progression_calibration.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -23,6 +61,30 @@ func _initialize() -> void:
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
 	_test_ball_trajectory_geometry()
+	_test_rally_state_foundations()
+	_test_ball_read_foundations()
+	_test_rally_kinematics()
+	_test_contact_envelopes_and_vertical_setting()
+	_test_setter_failure_taxonomy()
+	_test_shadow_reception_trace()
+	_test_gate_one_calibration_batch()
+	_test_gate_two_serve_style_fixtures()
+	_test_gate_three_derived_speed()
+	_test_gate_four_reader_and_formation_matrix()
+	_test_gate_six_repeated_reads()
+	_test_gate_seven_projected_movement()
+	_test_gate_eight_opportunity_windows()
+	_test_gate_nine_shadow_decisions()
+	_test_gate_ten_decision_progression()
+	_test_gate_eleven_outgoing_reception_flight()
+	_test_gate_twelve_shadow_setter_response()
+	_test_gate_thirteen_shadow_playback_adapter()
+	_test_gate_fourteen_serve_to_set_comparison()
+	_test_gate_fifteen_disabled_rollout()
+	_test_gate_twenty_eight_and_twenty_nine_rollout_boundary()
+	_test_gate_thirty_development_live_reception()
+	_test_gate_twenty_one_setter_handoffs()
+	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -55,6 +117,130 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+func _test_contact_envelopes_and_vertical_setting() -> void:
+	var setter := VolleyballPlayer.new()
+	setter.id = 901
+	setter.position_role = "Setter"
+	setter.height_cm = 188.0
+	setter.wingspan_cm = 191.0
+	setter.jump_reach = 88
+	setter.explosiveness = 90
+	setter.set_balance = 82
+	setter.set_stability = 84
+	setter.set_accuracy = 80
+	setter.hand_control = 80
+	var actor := RALLY_PLAYER_STATE_SCRIPT.create(
+		setter, &"home", 2, Vector2(0.50, 0.60)
+	)
+	var standing := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		actor, &"set", actor.position, 0.50, 0.0, 1.0, 2.20, true
+	)
+	var jumping := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		actor, &"set", actor.position, 0.50, 0.0, 1.0, 2.65, true
+	)
+	_check(
+		standing.standing_reachable and standing.jump_reachable
+			and not standing.requires_jump,
+		"A prepared setter can choose standing or jump access below standing reach",
+	)
+	_check(
+		jumping.jump_reachable and jumping.requires_jump
+			and jumping.maximum_contact_height_meters > jumping.standing_reach_meters
+			and jumping.takeoff_time_seconds > 0.0
+			and jumping.recovery_time_seconds > 0.0,
+		"Jump setting extends vertical access while reserving takeoff and recovery time",
+	)
+	var unstable_setter := setter.duplicate(true) as VolleyballPlayer
+	unstable_setter.id = 905
+	unstable_setter.set_balance = 20
+	unstable_setter.set_stability = 20
+	unstable_setter.hand_control = 20
+	var unstable_actor := RALLY_PLAYER_STATE_SCRIPT.create(
+		unstable_setter, &"home", 2, actor.position
+	)
+	var unstable_set := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		unstable_actor, &"set", actor.position, 0.50, 0.0, 1.0, 2.20, true
+	)
+	_check(
+		standing.expected_quality.x > unstable_set.expected_quality.x
+			and standing.arrival_balance > unstable_set.arrival_balance,
+		"Set balance, stability, and hand control improve execution after access",
+	)
+	var near_reach_target := actor.position + Vector2(
+		(standing.contact_reach_meters + 0.03) / 9.0, 0.0
+	)
+	var reaching_set := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		actor, &"set", near_reach_target, 0.0, 0.0, 1.0, 2.20, false
+	)
+	_check(
+		reaching_set.used_reaching_extension and reaching_set.reachable,
+		"Gate 27 lets an otherwise prepared setter finish a narrow hand-access gap",
+	)
+
+	var low_explosive := setter.duplicate(true) as VolleyballPlayer
+	low_explosive.id = 902
+	low_explosive.explosiveness = 10
+	low_explosive.jump_reach = 10
+	var low_actor := RALLY_PLAYER_STATE_SCRIPT.create(
+		low_explosive, &"home", 2, actor.position
+	)
+	var low_jump := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		low_actor, &"set", low_actor.position, 0.20, 0.0, 1.0, 2.65, true
+	)
+	var quick_jump := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		actor, &"set", actor.position, 0.20, 0.0, 1.0, 2.65, true
+	)
+	_check(
+		quick_jump.jump_reachable and not low_jump.jump_reachable,
+		"Explosiveness and jump reach determine whether a setter can access a fast high ball",
+	)
+
+	var short_span := setter.duplicate(true) as VolleyballPlayer
+	short_span.id = 903
+	short_span.wingspan_cm = 160.0
+	var long_span := setter.duplicate(true) as VolleyballPlayer
+	long_span.id = 904
+	long_span.wingspan_cm = 225.0
+	var short_actor := RALLY_PLAYER_STATE_SCRIPT.create(
+		short_span, &"home", 2, Vector2(0.50, 0.60)
+	)
+	var long_actor := RALLY_PLAYER_STATE_SCRIPT.create(
+		long_span, &"home", 2, Vector2(0.50, 0.60)
+	)
+	var short_reach: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+		short_actor, &"set", 2.10, 0.50, false
+	)
+	var long_reach: Dictionary = CONTACT_ENVELOPE_SCRIPT.evaluate(
+		long_actor, &"set", 2.10, 0.50, false
+	)
+	_check(
+		float(long_reach.get("horizontal_reach_meters", 0.0))
+			> float(short_reach.get("horizontal_reach_meters", 0.0))
+			and float(long_reach.get("standing_reach_meters", 0.0))
+				> float(short_reach.get("standing_reach_meters", 0.0)),
+		"Wingspan changes both lateral contact access and derived standing reach",
+	)
+
+	var signature := BALL_CONTACT_SIGNATURE_SCRIPT.create(
+		&"safe_center_pass", 5.5, 0.0, 34.0, 0.5, 0.0, 0.8
+	)
+	var flight := BALL_FLIGHT_SCRIPT.create(
+		Vector2(0.3, 0.8), Vector2(0.5, 0.6), 0.0, 0.7,
+		signature, 2.42
+	)
+	var estimate := BALL_READ_SCRIPT.estimate(
+		flight, setter, 0.5, 0.2, 991
+	)
+	_check(
+		is_equal_approx(float(flight.to_dict().get(
+			"contact_height_meters", 0.0
+		)), 2.42)
+			and is_equal_approx(estimate.true_contact_height_meters, 2.42)
+			and estimate.perceived_contact_height_meters > 0.0,
+		"BallFlight carries authoritative contact height while readers form estimates",
+	)
 
 
 func _test_spatial_opponent_and_replay_analysis() -> void:
@@ -398,6 +584,1315 @@ func _test_ball_trajectory_geometry() -> void:
 		is_equal_approx(float(trajectory.duration()), 0.8)
 			and is_equal_approx(float(trajectory.apex_height_meters), 2.4),
 		"ball trajectory preserves timing and apex height",
+	)
+	_check(
+		Vector2(trajectory.position_at_time(2.0)).is_equal_approx(Vector2(0.1, 0.2))
+			and Vector2(trajectory.position_at_time(2.8)).is_equal_approx(Vector2(0.9, 0.8))
+			and is_equal_approx(float(trajectory.height_at_time(2.4)), 2.4),
+		"ball trajectory supports deterministic absolute-time position and height queries",
+	)
+
+
+func _test_rally_state_foundations() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var state = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players,
+		manager.current_lineup(),
+		manager.current_defensive_plan(),
+		manager.opponent_team,
+		null,
+		false,
+		1234,
+	)
+	_check(
+		state.home_players.size() == 6 and state.opponent_players.size() == 6,
+		"rally state builds persistent on-court state for both teams",
+	)
+	var home_player_id := manager.current_lineup().player_at_slot(5)
+	var actor = state.player_state(&"home", home_player_id)
+	var tactical_home: Vector2 = actor.tactical_home
+	actor.apply_position(Vector2(0.72, 0.91), Vector2(1.2, 0.0))
+	_check(
+		actor.position.is_equal_approx(Vector2(0.72, 0.91))
+			and actor.tactical_home.is_equal_approx(tactical_home),
+		"actual rally position persists independently from tactical home",
+	)
+
+	var serve = BALL_TRAJECTORY_SCRIPT.create(
+		"serve", Vector2(0.80, 0.08), Vector2(0.55, 0.48),
+		Vector2(0.22, 0.84), 0.0, 1.1, 2.8, 2.3, 0.45,
+	)
+	state.ball.launch(serve, &"opponent", 1001, 1)
+	state.advance_to(0.55)
+	_check(
+		state.ball.status == RallyBallState.Status.IN_FLIGHT
+			and state.ball.position.distance_to(serve.start_position) > 0.01,
+		"persistent ball state follows the shared trajectory as simulation time advances",
+	)
+
+	var scheduler = RALLY_SCHEDULER_SCRIPT.new()
+	scheduler.schedule(RALLY_MOMENT_SCRIPT.create(
+		1.0, RallyMoment.Kind.BALL_CONTACT
+	))
+	scheduler.schedule(RALLY_MOMENT_SCRIPT.create(
+		0.4, RallyMoment.Kind.PERCEPTION
+	))
+	_check(
+		is_equal_approx(float(scheduler.next().time), 0.4)
+			and is_equal_approx(float(scheduler.next().time), 1.0),
+		"rally scheduler advances through deterministic meaningful moments",
+	)
+
+	var fast_player := VolleyballPlayer.new()
+	fast_player.id = 9901
+	fast_player.acceleration = 90
+	fast_player.lateral_speed = 90
+	fast_player.transition_speed = 90
+	fast_player.reception = 75
+	fast_player.composure = 75
+	var slow_player := VolleyballPlayer.new()
+	slow_player.id = 9902
+	slow_player.acceleration = 25
+	slow_player.lateral_speed = 25
+	slow_player.transition_speed = 25
+	slow_player.reception = 75
+	slow_player.composure = 75
+	var fast_actor = RALLY_PLAYER_STATE_SCRIPT.create(
+		fast_player, &"home", 5, Vector2(0.20, 0.84)
+	)
+	var slow_actor = RALLY_PLAYER_STATE_SCRIPT.create(
+		slow_player, &"home", 5, Vector2(0.20, 0.84)
+	)
+	var fast_option = RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		fast_actor, &"receive", Vector2(0.52, 0.84), 1.2, 0.0, 1.0
+	)
+	var slow_option = RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		slow_actor, &"receive", Vector2(0.52, 0.84), 1.2, 0.0, 1.0
+	)
+	_check(
+		fast_option.travel_time < slow_option.travel_time
+			and fast_option.physical_feasibility > slow_option.physical_feasibility,
+		"movement opportunities derive available actions from persistent position and speed",
+	)
+	var reception_options: Array = RALLY_MOVEMENT_SCRIPT.generate_reception_opportunities(state)
+	_check(
+		not reception_options.is_empty(),
+		"ball flight and tactical zones generate reception opportunities without choosing an action",
+	)
+	var snapshot := state.snapshot()
+	var snapshot_actor := snapshot.player_state(&"home", home_player_id)
+	snapshot_actor.apply_position(Vector2(0.10, 0.70), Vector2.ZERO)
+	_check(
+		not snapshot_actor.position.is_equal_approx(actor.position)
+			and actor.position.is_equal_approx(Vector2(0.72, 0.91)),
+		"rally-state snapshots isolate scheduled shadow movement from source state",
+	)
+	var sample_window = ACTION_OPPORTUNITY_WINDOW_SCRIPT.create(
+		&"receive", &"home", home_player_id, 0.30, 1.10,
+		&"test_reachable",
+	)
+	sample_window.record_sample({"arrival_margin": 0.12})
+	sample_window.close(0.85, &"test_late")
+	_check(
+		is_equal_approx(sample_window.duration(), 0.55)
+			and is_equal_approx(sample_window.best_arrival_margin, 0.12)
+			and str(sample_window.to_dict().get("close_reason", "")) == "test_late",
+		"opportunity windows preserve opening, evidence, and closing contracts",
+	)
+
+
+func _test_ball_read_foundations() -> void:
+	var common_signature = BALL_CONTACT_SIGNATURE_SCRIPT.create(
+		&"topspin_serve", 16.0, 4.0, -12.0, 4.0, 1.0, 0.94,
+	)
+	var unusual_signature = BALL_CONTACT_SIGNATURE_SCRIPT.create(
+		&"topspin_serve", 30.0, -48.0, -42.0, 17.0, -12.0, 0.42,
+	)
+	var float_signature = BALL_CONTACT_SIGNATURE_SCRIPT.create(
+		&"float_serve", 18.0, -6.0, -8.0, 0.2, -0.3, 0.30,
+	)
+	_check(
+		unusual_signature.topspin_rps > 0.0
+			and unusual_signature.sidespin_rps < 0.0,
+		"ball contact signatures preserve signed topspin and sidespin",
+	)
+	_check(
+		float_signature.is_float_contact()
+			and float_signature.flight_stability < common_signature.flight_stability,
+		"float contacts use near-zero spin and explicitly lower flight stability",
+	)
+	_check(
+		unusual_signature.baseline_novelty() > common_signature.baseline_novelty(),
+		"normalized speed, angle, spin, and stability contribute to signature novelty",
+	)
+
+	var flight = BALL_FLIGHT_SCRIPT.create(
+		Vector2(0.80, 0.08), Vector2(0.22, 0.84),
+		2.0, 1.1, unusual_signature,
+	)
+	_check(
+		flight.origin.is_equal_approx(Vector2(0.80, 0.08))
+			and flight.destination.is_equal_approx(Vector2(0.22, 0.84))
+			and is_equal_approx(flight.arrival_time, 3.1),
+		"authoritative ball flights preserve calculated endpoints and arrival time",
+	)
+
+	var developing_reader := VolleyballPlayer.new()
+	developing_reader.id = 8801
+	developing_reader.anticipation = 30
+	developing_reader.court_vision = 30
+	developing_reader.decision_making = 30
+	developing_reader.composure = 30
+	var expert_reader := VolleyballPlayer.new()
+	expert_reader.id = 8802
+	expert_reader.anticipation = 90
+	expert_reader.court_vision = 90
+	expert_reader.decision_making = 90
+	expert_reader.composure = 90
+	var developing_estimate = BALL_READ_SCRIPT.estimate(
+		flight, developing_reader, 0.10, 2.25, 44001,
+	)
+	var repeated_estimate = BALL_READ_SCRIPT.estimate(
+		flight, developing_reader, 0.10, 2.25, 44001,
+	)
+	var expert_estimate = BALL_READ_SCRIPT.estimate(
+		flight, expert_reader, 0.10, 2.25, 44001,
+	)
+	_check(
+		developing_estimate.perceived_destination.is_equal_approx(
+			repeated_estimate.perceived_destination
+		)
+			and is_equal_approx(
+				developing_estimate.perceived_arrival_time,
+				repeated_estimate.perceived_arrival_time,
+			),
+		"ball reading is reproducible for identical inputs and seed",
+	)
+	_check(
+		expert_estimate.recognition_time < developing_estimate.recognition_time
+			and expert_estimate.destination_error_meters()
+				< developing_estimate.destination_error_meters(),
+		"better anticipation and reading attributes improve recognition and spatial estimates",
+	)
+	var familiar_estimate = BALL_READ_SCRIPT.estimate(
+		flight, developing_reader, 0.95, 2.25, 44001,
+	)
+	_check(
+		familiar_estimate.novelty < developing_estimate.novelty
+			and familiar_estimate.recognition_time < developing_estimate.recognition_time
+			and familiar_estimate.destination_error_meters()
+				< developing_estimate.destination_error_meters(),
+		"temporary familiarity reduces novelty, recognition delay, and prediction error",
+	)
+	_check(
+		CourtConstants.is_normalized(developing_estimate.perceived_destination)
+			and developing_estimate.perceived_arrival_time >= developing_estimate.observed_at,
+		"perceived flights remain inside bounded court and timing contracts",
+	)
+	var read_sequence: Array[BallFlightEstimate] = BALL_READ_SCRIPT.estimate_sequence(
+		flight, developing_reader, 0.10, [0.12, 0.32, 0.52], 44001,
+	)
+	_check(
+		read_sequence.size() == 3
+			and read_sequence[0].observed_at < read_sequence[1].observed_at
+			and read_sequence[1].observed_at < read_sequence[2].observed_at,
+		"repeated reads produce three deterministic observations in flight order",
+	)
+	_check(
+		read_sequence[-1].destination_error_meters()
+			< read_sequence[0].destination_error_meters()
+			and read_sequence[-1].confidence > read_sequence[0].confidence,
+		"later observations improve destination accuracy and confidence",
+	)
+
+	var reading_actor = RALLY_PLAYER_STATE_SCRIPT.create(
+		developing_reader, &"home", 5, Vector2(0.20, 0.86),
+	)
+	developing_reader.acceleration = 70
+	developing_reader.lateral_speed = 70
+	developing_reader.reception = 70
+	var perceived_option = RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
+		reading_actor,
+		&"receive",
+		developing_estimate.perceived_destination,
+		developing_estimate.perceived_arrival_time,
+		developing_estimate.recognition_time,
+		1.0,
+	)
+	_check(
+		perceived_option.player_id == developing_reader.id
+			and perceived_option.contact_position.is_equal_approx(
+				developing_estimate.perceived_destination
+			),
+		"perceived destination and recognition time can drive shadow reception movement",
+	)
+	var original_position: Vector2 = reading_actor.position
+	var projected: Dictionary = RALLY_MOVEMENT_SCRIPT.project_toward(
+		reading_actor,
+		developing_estimate.perceived_destination,
+		0.30,
+		RallyPlayerState.MovementMode.LATERAL,
+	)
+	var projected_actor := projected.get("actor") as RallyPlayerState
+	_check(
+		projected_actor != null
+			and projected_actor.position != original_position
+			and reading_actor.position == original_position,
+		"movement projection advances a temporary snapshot without mutating live state",
+	)
+	_check(
+		float(projected.get("distance_meters", 0.0)) > 0.0
+			and projected_actor.velocity.length() > 0.0,
+		"projected movement carries measured distance and velocity into the next read",
+	)
+
+
+func _test_shadow_reception_trace() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var result: Resource = manager.resolve_active_rally(1001)
+	var trace: Dictionary = result.analysis.get("shadow_reception", {})
+	var summary: Dictionary = trace.get("summary", {})
+	var entries: Array = trace.get("entries", [])
+	var timing: Dictionary = summary.get("timing_diagnostics", {})
+	var timing_candidates: Dictionary = summary.get("timing_candidates", {})
+	var speed_candidates: Dictionary = summary.get("speed_candidates", {})
+	var perception_candidates: Dictionary = summary.get("perception_candidates", {})
+	var shadow_decision: Dictionary = summary.get("shadow_decision", {})
+	_check(
+		bool(summary.get("available", false)) and not entries.is_empty(),
+		"opponent serves attach a developer-only shadow reception trace",
+	)
+	_check(
+		float(timing.get("distance_meters", 0.0)) > 0.0
+			and float(timing.get("signature_speed_mps", 0.0)) > 0.0
+			and float(timing.get("recorded_duration_seconds", 0.0)) > 0.0
+			and float(timing.get("implied_duration_seconds", 0.0)) > 0.0,
+		"shadow reception exposes complete speed-distance-duration diagnostics",
+	)
+	_check(
+		Dictionary(timing_candidates.get("legacy_duration", {})).has(
+			"selected_arrival_margin"
+		)
+			and Dictionary(timing_candidates.get("signature_duration", {})).has(
+				"selected_arrival_margin"
+			)
+			and timing_candidates.has("claimant_changed"),
+		"shadow reception compares action availability under both timing candidates",
+	)
+	var derived_speed: Dictionary = speed_candidates.get("derived_speed", {})
+	var calculated_speed: Dictionary = speed_candidates.get("independent_speed", {})
+	_check(
+		is_equal_approx(
+			float(derived_speed.get("speed_mps", -1.0)),
+			float(timing.get("effective_recorded_speed_mps", 0.0))
+		)
+			and derived_speed.has("selected_destination_error_meters")
+			and speed_candidates.has("claimant_changed"),
+		"derived-speed shadow evidence uses legacy distance and duration consistently",
+	)
+	_check(
+		str(summary.get("canonical_signature_source", ""))
+			== "calculated_speed_derived_duration"
+			and int(summary.get("shadow_claimant_id", -1))
+				== int(calculated_speed.get("shadow_claimant_id", -2))
+			and bool(Dictionary(summary.get(
+				"canonical_timing_diagnostics", {}
+			)).get("within_tolerance", false)),
+		"calculated serve speed and its derived duration are canonical in shadow reception",
+	)
+	_check(
+		Array(perception_candidates.get("observation_progresses", [])).size() == 3
+			and Dictionary(perception_candidates.get("repeated_read", {})).has(
+				"total_correction_distance_meters"
+			),
+		"shadow reception compares a three-observation read against the single read",
+	)
+	var decision_options: Array = shadow_decision.get("options", [])
+	var selected_decision_id := int(shadow_decision.get("selected_player_id", -1))
+	var shadow_contact: Dictionary = shadow_decision.get("contact_result", {})
+	_check(
+		int(shadow_decision.get("option_count", -1)) == decision_options.size()
+			and (selected_decision_id < 0 or bool(shadow_contact.get(
+				"attempted", false
+			))),
+		"shadow decisions expose open receiver options and a graded contact attempt",
+	)
+	var official_receiver_id := -1
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+				and str(event.metadata.get("side", "")) == "home":
+			official_receiver_id = int(event.actor_id)
+			break
+	_check(
+		official_receiver_id == int(summary.get("legacy_claimant_id", -2)),
+		"shadow diagnostics preserve the legacy reception claimant as official",
+	)
+	_check(
+		selected_decision_id != official_receiver_id
+			or int(shadow_contact.get("actor_id", -1)) == official_receiver_id,
+		"shadow contact evidence never changes which receiver owns the official event",
+	)
+	var shadow_selected_count := 0
+	var legacy_selected_count := 0
+	var bounded_trace := true
+	var repeated_trace_valid := true
+	var projected_movement_seen := false
+	var scheduled_windows_valid := true
+	for raw_entry in entries:
+		var entry: Dictionary = raw_entry
+		shadow_selected_count += 1 if bool(entry.get("shadow_selected", false)) else 0
+		legacy_selected_count += 1 if bool(entry.get("legacy_selected", false)) else 0
+		bounded_trace = bounded_trace \
+			and CourtConstants.is_normalized(Vector2(entry.perceived_destination)) \
+			and float(entry.recognition_time) <= float(entry.perceived_arrival_time)
+		var repeated: Dictionary = entry.get("repeated_read_candidate", {})
+		var moments: Array = repeated.get("moments", [])
+		repeated_trace_valid = repeated_trace_valid and moments.size() == 3
+		if moments.size() == 3:
+			repeated_trace_valid = repeated_trace_valid \
+				and float(Dictionary(moments[0]).get("observed_at", 0.0)) \
+					< float(Dictionary(moments[1]).get("observed_at", 0.0)) \
+				and float(Dictionary(moments[1]).get("observed_at", 0.0)) \
+					< float(Dictionary(moments[2]).get("observed_at", 0.0)) \
+				and float(Dictionary(moments[2]).get(
+					"destination_error_meters", 99.0
+				)) < float(Dictionary(moments[0]).get(
+					"destination_error_meters", 0.0
+				))
+			projected_movement_seen = projected_movement_seen or float(
+				repeated.get("projected_distance_meters", 0.0)
+			) > 0.0
+		var opportunity_timeline: Dictionary = repeated.get(
+			"opportunity_timeline", {}
+		)
+		var scheduled_timeline: Array = opportunity_timeline.get("timeline", [])
+		scheduled_windows_valid = scheduled_windows_valid \
+			and bool(opportunity_timeline.get("available", false)) \
+			and bool(opportunity_timeline.get("source_state_unchanged", false)) \
+			and scheduled_timeline.size() == 4
+		var previous_scheduled_time := -INF
+		for raw_scheduled in scheduled_timeline:
+			var scheduled: Dictionary = raw_scheduled
+			scheduled_windows_valid = scheduled_windows_valid \
+				and float(scheduled.get("time", -INF)) >= previous_scheduled_time
+			previous_scheduled_time = float(scheduled.get("time", -INF))
+	_check(
+		shadow_selected_count == 1 and legacy_selected_count == 1 and bounded_trace,
+		"shadow trace identifies both claimants and keeps estimates bounded",
+	)
+	_check(
+		repeated_trace_valid,
+		"every shadow candidate records ordered, improving repeated-read evidence",
+	)
+	_check(
+		projected_movement_seen
+			and str(Dictionary(perception_candidates.get(
+				"repeated_read", {}
+			)).get("projection_model", "")) == "read_only_persistent_movement",
+		"repeated reads carry a projected receiver position between observations",
+	)
+	_check(
+		scheduled_windows_valid,
+		"scheduled shadow reads produce chronological windows without mutating source state",
+	)
+	var repeated_manager := GAME_MANAGER_SCRIPT.new()
+	repeated_manager.seed_vertical_slice_data()
+	repeated_manager.match_state.serving_home = false
+	var repeated_result: Resource = repeated_manager.resolve_active_rally(1001)
+	var repeated_trace: Dictionary = repeated_result.analysis.get("shadow_reception", {})
+	_check(
+		trace == repeated_trace,
+		"shadow reception traces are deterministic for identical match inputs and seed",
+	)
+	var court := TACTICAL_COURT_SCRIPT.new()
+	court.set_shadow_reception_trace(trace)
+	_check(
+		court.shadow_reception_trace == trace,
+		"2D tactical courts accept the same trace used by the developer inspector",
+	)
+	court.clear_shadow_reception_trace()
+	_check(
+		court.shadow_reception_trace.is_empty(),
+		"2D shadow reception overlays can be cleared between rallies",
+	)
+	court.free()
+
+
+func _test_rally_kinematics() -> void:
+	var full_court_distance := RALLY_KINEMATICS_SCRIPT.court_distance_meters(
+		Vector2.ZERO, Vector2.ONE
+	)
+	_check(
+		is_equal_approx(full_court_distance, sqrt(9.0 * 9.0 + 18.0 * 18.0)),
+		"shared rally kinematics converts normalized court coordinates to meters",
+	)
+	var duration := RALLY_KINEMATICS_SCRIPT.flight_duration(18.0, 18.0)
+	var speed := RALLY_KINEMATICS_SCRIPT.effective_speed(18.0, duration)
+	_check(
+		is_equal_approx(duration, 1.0) and is_equal_approx(speed, 18.0),
+		"shared flight duration and effective speed are reversible",
+	)
+	var diagnostics: Dictionary = RALLY_KINEMATICS_SCRIPT.timing_diagnostics(
+		Vector2(0.5, 0.0), Vector2(0.5, 1.0), 18.0, 1.0
+	)
+	_check(
+		bool(diagnostics.get("within_tolerance", false))
+			and is_equal_approx(
+				float(diagnostics.get("relative_duration_error", 1.0)), 0.0
+			),
+		"timing diagnostics identify a self-consistent speed-distance-duration set",
+	)
+
+
+func _test_gate_one_calibration_batch() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var report := RALLY_CALIBRATION_REPORT_SCRIPT.new()
+	for seed_value in range(12000, 12048):
+		manager.match_state.serving_home = false
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		report.add_shadow_trace(result.analysis.get("shadow_reception", {}))
+	var summary: Dictionary = report.build_summary()
+	var distributions: Dictionary = summary.get("distributions", {})
+	var timing_distribution: Dictionary = distributions.get(
+		"relative_duration_error", {}
+	)
+	_check(
+		int(summary.get("requested_samples", 0)) == 48
+			and int(summary.get("available_samples", 0))
+				+ int(summary.get("skipped_samples", 0)) == 48
+			and int(summary.get("invalid_samples", 1)) == 0,
+		"Gate 1 batch calibration accounts for eligible receptions and serve-error skips",
+	)
+	_check(
+		int(timing_distribution.get("count", 0))
+			== int(summary.get("available_samples", 0))
+			and is_finite(float(timing_distribution.get("mean", NAN)))
+			and float(timing_distribution.get("minimum", -1.0)) >= 0.0,
+		"Gate 1 timing distributions are complete, finite, and non-negative",
+	)
+	_check(
+		bool(summary.get("shadow_only", false))
+			and summary.has("claimant_agreement_rate")
+			and summary.has("shadow_reachable_rate")
+			and summary.has("by_serve_style"),
+		"Gate 1 reports behavior evidence without activating shadow decisions",
+	)
+
+
+func _test_gate_two_serve_style_fixtures() -> void:
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(4, 13000)
+	var styles: Dictionary = summary.get("by_serve_style", {})
+	var accounted := int(summary.get("available_samples", 0)) \
+		+ int(summary.get("skipped_samples", 0)) \
+		+ int(summary.get("invalid_samples", 0))
+	_check(
+		bool(summary.get("style_coverage_complete", false))
+			and styles.size() == SERVE_STYLE_CALIBRATION_SCRIPT.SERVE_STYLES.size(),
+		"Gate 2 controlled fixtures cover every supported primary serve style",
+	)
+	_check(
+		int(summary.get("requested_samples", 0)) == 20
+			and accounted == 20
+			and int(summary.get("invalid_samples", 1)) == 0,
+		"Gate 2 accounts for every paired fixture without malformed evidence",
+	)
+	_check(
+		summary.has("signature_duration_reachable_rate")
+			and summary.has("timing_candidate_claimant_change_rate")
+			and Dictionary(summary.get("distributions", {})).has(
+				"candidate_arrival_margin_delta_seconds"
+			),
+		"Gate 2 reports how timing candidates change available reception actions",
+	)
+
+
+func _test_gate_three_derived_speed() -> void:
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 14000, "derived_speed_calibration_gate_3"
+	)
+	var distributions: Dictionary = summary.get("distributions", {})
+	var speed_distribution: Dictionary = distributions.get("derived_speed_mps", {})
+	var error_delta: Dictionary = distributions.get(
+		"derived_speed_destination_error_delta_meters", {}
+	)
+	_check(
+		int(speed_distribution.get("count", 0))
+			== int(summary.get("available_samples", 0))
+			and float(speed_distribution.get("minimum", 0.0)) > 0.0,
+		"Gate 3 derives one finite positive speed for every eligible serve",
+	)
+	_check(
+		summary.has("derived_speed_reachable_rate")
+			and summary.has("derived_speed_claimant_change_rate")
+			and int(error_delta.get("count", 0))
+				== int(summary.get("available_samples", 0)),
+		"Gate 3 measures derived-speed effects on perception and action selection",
+	)
+	_check(
+		is_equal_approx(
+			float(summary.get("canonical_calculated_speed_rate", 0.0)), 1.0
+		),
+		"calibration confirms every eligible trace uses canonical calculated speed",
+	)
+	_check(
+		bool(summary.get("shadow_only", false))
+			and str(summary.get("gate", "")) == "derived_speed_calibration_gate_3"
+			and int(summary.get("invalid_samples", 1)) == 0,
+		"Gate 3 remains shadow-only and produces no malformed fixture evidence",
+	)
+
+
+func _test_gate_four_reader_and_formation_matrix() -> void:
+	var summary: Dictionary = RECEPTION_PROGRESSION_CALIBRATION_SCRIPT.run(
+		2, 15000
+	)
+	var overall: Dictionary = summary.get("overall", {})
+	var progression: Dictionary = summary.get("reader_progression", {})
+	var tiers: Dictionary = summary.get("by_reader_tier", {})
+	_check(
+		bool(summary.get("fixture_valid", false))
+			and bool(summary.get("style_coverage_complete", false))
+			and int(overall.get("requested", 0)) == 90
+			and int(overall.get("invalid", 1)) == 0,
+		"Gate 4 covers every reader-tier, formation, style, and paired-seed fixture",
+	)
+	_check(
+		bool(progression.get("destination_error_monotonic", false))
+			and bool(progression.get("recognition_delay_monotonic", false)),
+		"Gate 4 confirms stronger readers receive monotonically better information",
+	)
+	_check(
+		float(Dictionary(tiers.get("elite", {})).get(
+			"confidence_mean", 0.0
+		)) > float(Dictionary(tiers.get("weak", {})).get(
+			"confidence_mean", 1.0
+		))
+			and float(summary.get("formation_reachability_spread", 0.0)) > 0.0,
+		"Gate 4 exposes both player-development and formation effects",
+	)
+
+
+func _test_gate_six_repeated_reads() -> void:
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 16000, "repeated_read_calibration_gate_6"
+	)
+	var distributions: Dictionary = summary.get("distributions", {})
+	var error_delta: Dictionary = distributions.get(
+		"repeated_read_destination_error_delta_meters", {}
+	)
+	var confidence_delta: Dictionary = distributions.get(
+		"repeated_read_confidence_delta", {}
+	)
+	_check(
+		int(summary.get("invalid_samples", 1)) == 0
+			and int(error_delta.get("count", 0))
+				== int(summary.get("available_samples", 0))
+			and int(confidence_delta.get("count", 0))
+				== int(summary.get("available_samples", 0)),
+		"Gate 6 accounts for repeated-read error and confidence on every eligible serve",
+	)
+	_check(
+		float(error_delta.get("maximum", 1.0)) < 0.0
+			and float(confidence_delta.get("minimum", -1.0)) > 0.0,
+		"Gate 6 repeated observations consistently improve information quality",
+	)
+	_check(
+		bool(summary.get("shadow_only", false))
+			and summary.has("repeated_read_reachable_rate")
+			and summary.has("repeated_read_claimant_change_rate"),
+		"Gate 6 remains shadow-only while measuring changed action availability",
+	)
+
+
+func _test_gate_seven_projected_movement() -> void:
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 17000, "projected_movement_calibration_gate_7"
+	)
+	var distributions: Dictionary = summary.get("distributions", {})
+	var movement: Dictionary = distributions.get(
+		"repeated_read_projected_distance_meters", {}
+	)
+	var margin_gain: Dictionary = distributions.get(
+		"repeated_read_arrival_margin_gain_vs_stationary_seconds", {}
+	)
+	_check(
+		int(summary.get("invalid_samples", 1)) == 0
+			and int(movement.get("count", 0))
+				== int(summary.get("available_samples", 0))
+			and float(movement.get("minimum", -1.0)) >= 0.0,
+		"Gate 7 records bounded projected movement for every eligible serve",
+	)
+	_check(
+		float(margin_gain.get("mean", 0.0)) > 0.0
+			and float(summary.get("repeated_read_reachable_rate", 0.0))
+				>= float(summary.get(
+					"stationary_repeated_read_reachable_rate", 1.0
+				)),
+		"Gate 7 projected movement restores time and actions lost by stationary reads",
+	)
+	_check(
+		bool(summary.get("shadow_only", false))
+			and str(summary.get("gate", ""))
+				== "projected_movement_calibration_gate_7",
+		"Gate 7 movement remains a read-only shadow candidate",
+	)
+
+
+func _test_gate_eight_opportunity_windows() -> void:
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 18000, "opportunity_window_calibration_gate_8"
+	)
+	var distributions: Dictionary = summary.get("distributions", {})
+	var window_count: Dictionary = distributions.get("opportunity_window_count", {})
+	var open_duration: Dictionary = distributions.get(
+		"opportunity_open_duration_seconds", {}
+	)
+	var intent_changes: Dictionary = distributions.get(
+		"scheduled_intent_change_count", {}
+	)
+	_check(
+		int(summary.get("invalid_samples", 1)) == 0
+			and int(window_count.get("count", 0))
+				== int(summary.get("available_samples", 0))
+			and int(open_duration.get("count", 0))
+				== int(summary.get("available_samples", 0)),
+		"Gate 8 records opportunity-window evidence for every eligible serve",
+	)
+	_check(
+		float(summary.get("scheduled_opportunity_rate", 0.0)) > 0.0
+			and float(open_duration.get("mean", 0.0)) > 0.0
+			and float(intent_changes.get("mean", 0.0)) >= 1.0,
+		"Gate 8 exposes options opening over time and corrected movement intents",
+	)
+	_check(
+		bool(summary.get("shadow_only", false))
+			and str(summary.get("gate", ""))
+				== "opportunity_window_calibration_gate_8",
+		"Gate 8 scheduled decisions remain shadow-only",
+	)
+
+
+func _test_gate_nine_shadow_decisions() -> void:
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 19000, "shadow_decision_calibration_gate_9"
+	)
+	var distributions: Dictionary = summary.get("distributions", {})
+	var option_count: Dictionary = distributions.get(
+		"shadow_decision_option_count", {}
+	)
+	var contact_quality: Dictionary = distributions.get(
+		"shadow_contact_quality", {}
+	)
+	_check(
+		int(summary.get("invalid_samples", 1)) == 0
+			and int(option_count.get("count", 0))
+				== int(summary.get("available_samples", 0))
+			and int(contact_quality.get("count", 0))
+				== int(summary.get("available_samples", 0)),
+		"Gate 9 grades options and contacts for every eligible serve",
+	)
+	_check(
+		float(summary.get("shadow_decision_rate", 0.0)) > 0.0
+			and float(summary.get("shadow_contact_success_rate", 0.0)) >= 0.0
+			and summary.has("shadow_decision_conflict_rate"),
+		"Gate 9 reports selection, teammate conflict, and true-ball contact outcomes",
+	)
+	_check(
+		bool(summary.get("shadow_only", false))
+			and str(summary.get("gate", ""))
+				== "shadow_decision_calibration_gate_9",
+		"Gate 9 decisions remain evidence rather than official rally events",
+	)
+
+
+func _test_gate_ten_decision_progression() -> void:
+	var summary: Dictionary = RECEPTION_DECISION_PROGRESSION_SCRIPT.run(
+		4, 100000
+	)
+	var overall: Dictionary = summary.get("overall", {})
+	var progression: Dictionary = summary.get("progression", {})
+	var tiers: Dictionary = summary.get("by_player_tier", {})
+	var developing: Dictionary = tiers.get("developing", {})
+	var established: Dictionary = tiers.get("established", {})
+	var elite: Dictionary = tiers.get("elite", {})
+	_check(
+		bool(summary.get("fixture_valid", false))
+			and bool(summary.get("style_coverage_complete", false))
+			and int(overall.get("requested", 0)) == 180
+			and int(overall.get("invalid", 1)) == 0,
+		"Gate 10 covers paired tiers, formations, serve styles, and seeds",
+	)
+	_check(
+		bool(progression.get("decision_rate_monotonic", false))
+			and bool(progression.get("contact_success_monotonic", false))
+			and bool(progression.get("window_duration_monotonic", false))
+			and bool(progression.get("contact_choices_monotonic", false)),
+		"Gate 10 converts player development into monotonically stronger choices",
+	)
+	_check(
+		float(elite.get("contact_choices_mean", 0.0))
+			> float(established.get("contact_choices_mean", 0.0))
+			and float(established.get("contact_choices_mean", 0.0))
+				> float(developing.get("contact_choices_mean", 0.0))
+			and float(elite.get("quick_release_available_rate", 0.0))
+				> float(developing.get("quick_release_available_rate", 0.0)),
+		"Gate 10 verifies elite receivers gain options unavailable to developing players",
+	)
+
+
+func _test_gate_eleven_outgoing_reception_flight() -> void:
+	var contact := {
+		"attempted": true, "success": true, "quality": 0.72,
+		"action": "safe_center_pass",
+		"contact_position": Vector2(0.22, 0.84),
+		"contact_time": 1.14,
+		"outgoing_target": Vector2(0.50, 0.67),
+	}
+	var candidate: Dictionary = RALLY_CONTACT_SCRIPT.resolve_shadow_reception(contact)
+	var flight: Dictionary = candidate.get("flight", {})
+	var signature: Dictionary = flight.get("signature", {})
+	var continuity: Dictionary = candidate.get("continuity", {})
+	_check(
+		bool(candidate.get("available", false))
+			and Vector2(flight.get("origin", Vector2.ZERO)) == contact.contact_position
+			and Vector2(flight.get("destination", Vector2.ZERO)) == contact.outgoing_target
+			and is_equal_approx(float(flight.get("start_time", 0.0)), contact.contact_time),
+		"Gate 11 outgoing flight begins exactly at the resolved contact",
+	)
+	_check(
+		bool(continuity.get("valid", false))
+			and float(flight.get("duration", 0.0)) > 0.0
+			and float(signature.get("speed_mps", 0.0)) > 0.0
+			and float(signature.get("flight_stability", -1.0)) >= 0.0
+			and float(signature.get("flight_stability", 2.0)) <= 1.0,
+		"Gate 11 creates a bounded signature with consistent speed and duration",
+	)
+	var failed := contact.duplicate(true)
+	failed["success"] = false
+	_check(
+		not bool(RALLY_CONTACT_SCRIPT.resolve_shadow_reception(failed).get(
+			"available", true
+		)),
+		"Gate 11 never launches an outgoing flight after a failed contact",
+	)
+	var summary: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 110000, "outgoing_flight_calibration_gate_11"
+	)
+	_check(
+		int(summary.get("invalid_samples", 1)) == 0
+			and float(summary.get("outgoing_flight_candidate_rate", 0.0)) > 0.0
+			and is_equal_approx(
+				float(summary.get("outgoing_continuity_valid_rate", 0.0)), 1.0
+			),
+		"Gate 11 batch produces only contact-continuous outgoing candidates",
+	)
+
+
+func _test_gate_twelve_shadow_setter_response() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var response: Dictionary = {}
+	var outgoing: Dictionary = {}
+	var decision: Dictionary = {}
+	var expected_intent: Dictionary = {}
+	for offset in range(40):
+		var result: Resource = manager.resolve_active_rally(120000 + offset)
+		var trace: Dictionary = result.analysis.get("shadow_reception", {})
+		var summary: Dictionary = trace.get("summary", {})
+		response = summary.get("shadow_setter_response", {})
+		outgoing = summary.get("outgoing_flight_candidate", {})
+		decision = summary.get("shadow_decision", {})
+		expected_intent = summary.get("expected_second_contact_intent", {})
+		if bool(response.get("available", false)):
+			break
+	_check(
+		bool(outgoing.get("available", false))
+			and bool(response.get("available", false))
+			and int(response.get("candidate_count", 0)) > 0,
+		"Gate 12 gives eligible second-contact players the outgoing pass to read",
+	)
+	var candidates: Array = response.get("candidates", [])
+	var moments_valid := true
+	for raw_candidate in candidates:
+		var candidate: Dictionary = raw_candidate
+		moments_valid = moments_valid \
+			and Array(candidate.get("moments", [])).size() == 3 \
+			and candidate.has("true_arrival_margin") \
+			and candidate.has("set_options")
+	_check(
+		moments_valid and bool(response.get("source_state_unchanged", false)),
+		"Gate 12 projects three setter reads without mutating source positions",
+	)
+	_check(
+		response.has("selected_final_target_distance_meters")
+			and response.has("selected_final_movement_capacity_meters")
+			and response.has("selected_final_center_distance_deficit_meters")
+			and float(response.get("selected_contact_reach_meters", 0.0)) > 0.0
+			and response.has("selected_actions"),
+		"Reach diagnostics use the setter's physical contact envelope",
+	)
+	_check(
+		response.has("selected_perceived_actions")
+			and response.has("selected_physically_executable_actions"),
+		"Setter evidence separates perceived choices from executable choices",
+	)
+	_check(
+		response.has("ownership_changed")
+			and not str(response.get("handoff_reason", "")).is_empty()
+			and not str(response.get("expected_setter_name", "")).is_empty()
+			and not str(response.get("selected_setter_name", "")).is_empty(),
+		"Gate 17 explains intended-versus-actual second-contact ownership",
+	)
+	var contact: Dictionary = decision.get("contact_result", {})
+	var expected_setter_id := int(expected_intent.get("player_id", -1))
+	var expected_target := Vector2(expected_intent.get("target", Vector2.ZERO))
+	var plan: Resource = manager.current_defensive_plan()
+	var expected_candidate: Dictionary = {}
+	for raw_candidate in candidates:
+		var candidate: Dictionary = raw_candidate
+		if int(candidate.get("player_id", -1)) == expected_setter_id:
+			expected_candidate = candidate
+			break
+	_check(
+		expected_setter_id >= 0
+			and expected_setter_id != int(contact.get("actor_id", -1))
+			and expected_target.is_equal_approx(
+				plan.setter_release_target(expected_setter_id)
+			)
+			and Vector2(expected_candidate.get(
+				"preparation_target", Vector2.ZERO
+			)).is_equal_approx(expected_target),
+		"Gate 12 aims reception at the expected second-contact owner's tactical release",
+	)
+	var lateral_release := Vector2(0.64, 0.59)
+	_check(
+		RALLY_DECISION_SCRIPT.pass_target_for_action(
+			lateral_release, &"safe_center_pass"
+		).is_equal_approx(Vector2(0.64, 0.67))
+			and RALLY_DECISION_SCRIPT.pass_target_for_action(
+				lateral_release, &"emergency_keep_alive"
+			).is_equal_approx(Vector2(0.64, 0.78)),
+		"Gate 12 safety passes preserve the tactical path's lateral destination",
+	)
+	var lineup := manager.current_lineup()
+	var active_setter_id := lineup.active_setter_id()
+	var emergency_setter_id := lineup.player_at_slot(2)
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		if player_id == active_setter_id:
+			continue
+		var assignment: Resource = plan.assignment_for(player_id)
+		assignment.second_contact_responsibility = \
+			"Primary emergency setter" if player_id == emergency_setter_id \
+			else "No second-contact duty"
+	var emergency_target := Vector2(0.62, 0.64)
+	plan.set_setter_release_target(emergency_setter_id, emergency_target)
+	var emergency_state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup, plan, manager.opponent_team,
+		null, false, 120999,
+	)
+	var emergency_intent: Dictionary = \
+		SHADOW_SETTER_RESPONSE_SCRIPT.expected_second_contact_intent(
+			emergency_state, active_setter_id
+		)
+	_check(
+		int(emergency_intent.get("player_id", -1)) == emergency_setter_id
+			and Vector2(emergency_intent.get(
+				"target", Vector2.ZERO
+			)).is_equal_approx(emergency_target),
+		"Gate 12 redirects a setter's first contact to the assigned emergency setter",
+	)
+	var default_layers := TacticalCourt.SHADOW_LAYER_DEFAULT
+	_check(
+		bool(default_layers & TacticalCourt.SHADOW_LAYER_CORE)
+			and bool(default_layers & TacticalCourt.SHADOW_LAYER_INTENT)
+			and bool(default_layers & TacticalCourt.SHADOW_LAYER_LABELS)
+			and bool(default_layers & TacticalCourt.SHADOW_LAYER_ENVELOPES)
+			and not bool(default_layers & TacticalCourt.SHADOW_LAYER_READS)
+			and not bool(default_layers & TacticalCourt.SHADOW_LAYER_OPPORTUNITIES),
+		"Gate 18 defaults to readable ball and setter intent layers",
+	)
+	var overlay_court := TACTICAL_COURT_SCRIPT.new()
+	overlay_court.set_shadow_overlay_layers(TacticalCourt.SHADOW_LAYER_ALL)
+	_check(
+		overlay_court.shadow_overlay_layers == TacticalCourt.SHADOW_LAYER_ALL,
+		"Gate 19 overlay layers can be independently enabled for verification",
+	)
+	_check(
+		bool(TacticalCourt.SHADOW_LAYER_ALL & TacticalCourt.SHADOW_LAYER_ENVELOPES),
+		"Gate 25 includes physical contact envelopes in full diagnostics",
+	)
+	overlay_court.free()
+	var batch: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		8, 120000, "setter_response_calibration_gate_12"
+	)
+	_check(
+		int(batch.get("invalid_samples", 1)) == 0
+			and float(batch.get("setter_response_rate", 0.0)) > 0.0
+			and batch.has("setter_reachable_given_response_rate"),
+		"Gate 12 reports setter response and second-contact reachability",
+	)
+	var counterfactuals: Dictionary = batch.get("reach_counterfactuals", {})
+	var receiver_reach_rates: Dictionary = counterfactuals.get(
+		"receiver_contact_reach_rates", {}
+	)
+	var setter_time_rates: Dictionary = counterfactuals.get(
+		"setter_time_buffer_rates", {}
+	)
+	_check(
+		float(receiver_reach_rates.get("0.60", 0.0))
+			>= float(receiver_reach_rates.get("0.00", 0.0))
+			and float(setter_time_rates.get("0.15", 0.0))
+				>= float(setter_time_rates.get("0.00", 0.0)),
+		"Reach diagnostics compare contact radius and time buffers without mutation",
+	)
+
+
+func _test_gate_thirteen_shadow_playback_adapter() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var playback: Dictionary = {}
+	var official_result: Resource = null
+	for offset in range(250):
+		official_result = manager.resolve_active_rally(130000 + offset)
+		var trace: Dictionary = official_result.analysis.get("shadow_reception", {})
+		playback = Dictionary(trace.get("summary", {})).get(
+			"shadow_playback_candidate", {}
+		)
+		if bool(playback.get("available", false)):
+			break
+	var events: Array = playback.get("events", [])
+	var reception: Dictionary = events[0] if not events.is_empty() else {}
+	var trajectory: Dictionary = Dictionary(reception.get(
+		"metadata", {}
+	)).get("outgoing_trajectory", {})
+	_check(
+		bool(playback.get("available", false))
+			and bool(playback.get("trajectory_contract_valid", false))
+			and events.size() >= 1,
+		"Gate 13 adapts successful shadow evidence into playback events",
+	)
+	_check(
+		int(reception.get("event_type", -1)) == RALLY_EVENT_SCRIPT.EventType.RECEPTION
+			and trajectory.has("start_position")
+			and trajectory.has("end_position")
+			and trajectory.has("apex_height_meters")
+			and trajectory.has("duration"),
+		"Gate 13 emits the exact outgoing_trajectory playback keys",
+	)
+	var official_unchanged := official_result != null
+	for event_resource in official_result.events:
+		official_unchanged = official_unchanged \
+			and not bool(event_resource.metadata.get("shadow_only", false))
+	_check(
+		official_unchanged and not bool(playback.get("official_events_mutated", true)),
+		"Gate 13 keeps adapted events outside the official rally result",
+	)
+	var batch: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 130000, "playback_adapter_calibration_gate_13"
+	)
+	_check(
+		int(batch.get("invalid_samples", 1)) == 0
+			and float(batch.get("shadow_playback_candidate_rate", 0.0)) > 0.0
+			and is_equal_approx(float(batch.get(
+				"shadow_playback_contract_valid_rate", 0.0
+			)), 1.0),
+		"Gate 13 batch keeps every adapted trajectory contract-valid",
+	)
+
+
+func _test_gate_fourteen_serve_to_set_comparison() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var comparison: Dictionary = {}
+	for offset in range(50):
+		var result: Resource = manager.resolve_active_rally(140000 + offset)
+		var trace: Dictionary = result.analysis.get("shadow_reception", {})
+		comparison = Dictionary(trace.get("summary", {})).get(
+			"serve_to_set_comparison", {}
+		)
+		if bool(comparison.get("available", false)):
+			break
+	_check(
+		bool(comparison.get("available", false))
+			and comparison.has("receiver_agreement")
+			and comparison.has("setter_agreement")
+			and comparison.has("official_path_complete"),
+		"Gate 14 compares actor ownership across the complete first-contact path",
+	)
+	_check(
+		float(comparison.get("pass_destination_delta_meters", -1.0)) >= 0.0
+			and comparison.has("pass_duration_delta_seconds")
+			and not bool(comparison.get("official_events_mutated", true)),
+		"Gate 14 measures pass spatial and timing differences without mutation",
+	)
+	var batch: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 140000, "serve_to_set_comparison_gate_14"
+	)
+	_check(
+		int(batch.get("invalid_samples", 1)) == 0
+			and float(batch.get("serve_to_set_comparison_rate", 0.0)) > 0.0
+			and batch.has("serve_to_set_receiver_agreement_rate")
+			and batch.has("serve_to_set_setter_agreement_rate"),
+		"Gate 14 batch reports full-path agreement and divergence",
+	)
+
+
+func _test_gate_fifteen_disabled_rollout() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var result: Resource = manager.resolve_active_rally(150000)
+	var trace: Dictionary = result.analysis.get("shadow_reception", {})
+	var rollout: Dictionary = Dictionary(trace.get("summary", {})).get(
+		"reception_rollout", {}
+	)
+	_check(
+		not bool(rollout.get("flag_enabled", true))
+			and str(rollout.get("selected_source", "")) == "official"
+			and bool(rollout.get("activation_implemented", false)),
+		"Gate 29 retains Gate 15's disabled default around an implemented branch",
+	)
+	_check(
+		bool(rollout.get("official_identity_preserved", false))
+			and int(rollout.get("selected_event_count", -1)) == result.events.size(),
+		"Gate 15 preserves the complete official event identity and count",
+	)
+	var batch: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
+		3, 150000, "disabled_rollout_gate_15"
+	)
+	_check(
+		int(batch.get("invalid_samples", 1)) == 0
+			and is_equal_approx(float(batch.get(
+				"rollout_official_source_rate", 0.0
+			)), 1.0)
+			and is_zero_approx(float(batch.get(
+				"rollout_flag_enabled_rate", 1.0
+			)))
+			and is_equal_approx(float(batch.get(
+				"rollout_official_identity_preserved_rate", 0.0
+			)), 1.0),
+		"Gate 15 batch always selects untouched official events",
+	)
+
+
+func _test_gate_twenty_eight_and_twenty_nine_rollout_boundary() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var result: Resource = null
+	var summary: Dictionary = {}
+	var audit: Dictionary = {}
+	for offset in range(120):
+		result = manager.resolve_active_rally(280000 + offset)
+		var trace: Dictionary = result.analysis.get("shadow_reception", {})
+		summary = trace.get("summary", {})
+		audit = RECEPTION_ROLLOUT_AUDIT_SCRIPT.evaluate(
+			summary, manager.current_lineup()
+		)
+		if bool(audit.get("eligible", false)):
+			break
+	_check(
+		bool(audit.get("eligible", false))
+			and not str(audit.get("fingerprint", "")).is_empty()
+			and not bool(audit.get("official_events_mutated", true))
+			and bool(audit.get("source_state_unchanged", false)),
+		"Gate 28 certifies a legal, continuous, state-safe reception candidate",
+	)
+	var invalid_summary := summary.duplicate(true)
+	var invalid_playback: Dictionary = invalid_summary.get(
+		"shadow_playback_candidate", {}
+	)
+	var invalid_events: Array = invalid_playback.get("events", [])
+	if not invalid_events.is_empty():
+		var invalid_reception: Dictionary = invalid_events[0]
+		invalid_reception["actor_id"] = 999999
+		invalid_events[0] = invalid_reception
+		invalid_playback["events"] = invalid_events
+		invalid_summary["shadow_playback_candidate"] = invalid_playback
+	var invalid_audit := RECEPTION_ROLLOUT_AUDIT_SCRIPT.evaluate(
+		invalid_summary, manager.current_lineup()
+	)
+	_check(
+		not bool(invalid_audit.get("eligible", true))
+			and "receiver_not_in_lineup" in Array(invalid_audit.get(
+				"failure_reasons", []
+			)),
+		"Gate 28 rejects an otherwise valid candidate with illegal ownership",
+	)
+	var disabled := RALLY_ROLLOUT_POLICY_SCRIPT.select_reception_source(
+		result.events, summary, manager.current_lineup(), false
+	)
+	var enabled := RALLY_ROLLOUT_POLICY_SCRIPT.select_reception_source(
+		result.events, summary, manager.current_lineup(), true
+	)
+	_check(
+		str(disabled.get("selected_source", "")) == "official"
+			and str(enabled.get("selected_source", "")) \
+				== "continuous_reception"
+			and not Dictionary(enabled.get("selected_reception", {})).is_empty(),
+		"Gate 29 promotes only an audited candidate when explicitly enabled",
+	)
+
+
+func _test_gate_thirty_development_live_reception() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var live_result: Resource = null
+	var selected_seed := -1
+	var live_summary: Dictionary = {}
+	for offset in range(120):
+		selected_seed = 300000 + offset
+		live_result = manager.resolve_active_rally(selected_seed, true)
+		var trace: Dictionary = live_result.analysis.get("shadow_reception", {})
+		live_summary = trace.get("summary", {})
+		if str(Dictionary(live_summary.get(
+			"reception_rollout", {}
+		)).get("selected_source", "")) == "continuous_reception":
+			break
+	var integration: Dictionary = live_summary.get(
+		"live_reception_integration", {}
+	)
+	var live_reception: RallyEvent = null
+	var later_home_set_seen := false
+	for raw_event in live_result.events:
+		var event := raw_event as RallyEvent
+		if event == null:
+			continue
+		if event.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+				and str(event.metadata.get("side", "")) == "home":
+			live_reception = event
+		elif event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
+				and str(event.metadata.get("side", "")) == "home":
+			later_home_set_seen = true
+	_check(
+		live_reception != null
+			and bool(live_reception.metadata.get("continuous_reception", false))
+			and bool(integration.get("applied", false))
+			and str(integration.get("ball_status", "")) == "IN_FLIGHT"
+			and float(integration.get("receiver_recovery_until", 0.0)) \
+				> float(integration.get("simulation_time", 0.0)),
+		"Gate 30 applies receiver, clock, recovery, and outgoing ball state",
+	)
+	_check(
+		later_home_set_seen,
+		"Gate 30 leaves setter and later contacts on legacy continuation",
+	)
+	var live_serve := live_result.events[0] as RallyEvent
+	_check(
+		live_serve != null
+			and bool(live_serve.metadata.get(
+				"continuous_reception_timing", false
+			))
+			and is_equal_approx(
+				float(live_serve.metadata.get("contact_time", -1.0)),
+				float(integration.get("simulation_time", -2.0))
+			),
+		"Gate 30 promotes canonical serve timing with the live reception clock",
+	)
+	var repeat_manager := GAME_MANAGER_SCRIPT.new()
+	repeat_manager.seed_vertical_slice_data()
+	repeat_manager.match_state.serving_home = false
+	var repeat_result: Resource = repeat_manager.resolve_active_rally(
+		selected_seed, true
+	)
+	var repeat_reception: RallyEvent = null
+	for raw_event in repeat_result.events:
+		var event := raw_event as RallyEvent
+		if event != null \
+				and event.event_type == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+				and str(event.metadata.get("side", "")) == "home":
+			repeat_reception = event
+			break
+	_check(
+		live_reception != null and repeat_reception != null
+			and live_reception.actor_id == repeat_reception.actor_id
+			and is_equal_approx(live_reception.quality, repeat_reception.quality)
+			and Dictionary(live_reception.metadata.get(
+				"outgoing_trajectory", {}
+			)) == Dictionary(repeat_reception.metadata.get(
+				"outgoing_trajectory", {}
+			)),
+		"Gate 30 development rollout is deterministic for an equal seed",
+	)
+	var official_manager := GAME_MANAGER_SCRIPT.new()
+	official_manager.seed_vertical_slice_data()
+	official_manager.match_state.serving_home = false
+	var official_result: Resource = official_manager.resolve_active_rally(selected_seed)
+	var official_trace: Dictionary = official_result.analysis.get(
+		"shadow_reception", {}
+	)
+	var official_summary: Dictionary = official_trace.get("summary", {})
+	_check(
+		str(Dictionary(official_summary.get(
+			"reception_rollout", {}
+		)).get("selected_source", "")) == "official",
+		"Gate 30 keeps ordinary match resolution on the production-off path",
+	)
+
+
+func _test_gate_twenty_one_setter_handoffs() -> void:
+	var report: Dictionary = SETTER_HANDOFF_CALIBRATION_SCRIPT.run(6, 210000)
+	var fixtures: Dictionary = report.get("by_fixture", {})
+	var natural: Dictionary = fixtures.get("natural", {})
+	var forced: Dictionary = fixtures.get("forced_setter_first_contact", {})
+	var forced_late: Dictionary = fixtures.get("forced_late_intended_setter", {})
+	_check(
+		bool(report.get("fixture_valid", false))
+			and int(natural.get("available", 0)) > 0
+			and int(forced.get("available", 0)) > 0
+			and int(forced_late.get("available", 0)) > 0,
+		"Gate 21 audits natural and forced second-contact ownership",
+	)
+	_check(
+		is_equal_approx(float(report.get("forced_emergency_intent_rate", 0.0)), 1.0)
+			and not Dictionary(forced.get("handoff_reasons", {})).is_empty(),
+		"Gate 21 proves setter first contact transfers tactical intent",
+	)
+	_check(
+		float(report.get("forced_late_handoff_rate", 0.0)) > 0.0
+			and is_equal_approx(float(report.get(
+				"forced_late_handoff_valid_rate", 0.0
+			)), 1.0)
+			and int(Dictionary(report.get("overall", {})).get("invalid", 1)) == 0,
+		"Gate 21 validates every selected owner against the action candidates",
+	)
+
+
+func _test_gate_twenty_two_setter_progression() -> void:
+	var report: Dictionary = SETTER_PROGRESSION_CALIBRATION_SCRIPT.run(8, 220000)
+	var tiers: Dictionary = report.get("by_setter_tier", {})
+	var developing: Dictionary = tiers.get("developing", {})
+	var elite: Dictionary = tiers.get("elite", {})
+	var progression: Dictionary = report.get("progression", {})
+	_check(
+		bool(report.get("fixture_valid", false))
+			and int(developing.get("available", 0)) > 0
+			and int(elite.get("available", 0)) > 0,
+		"Gate 22 compares setter tiers over identical serves and passes",
+	)
+	_check(
+		bool(progression.get("confidence_monotonic", false))
+			and bool(progression.get("action_count_monotonic", false))
+			and bool(progression.get("controlled_set_rate_monotonic", false))
+			and bool(progression.get("quick_tempo_rate_monotonic", false))
+			and bool(progression.get("jump_set_rate_monotonic", false)),
+		"Gate 22 makes setter development preserve or expand usable options",
+	)
+	_check(
+		bool(progression.get("elite_has_more_options_than_developing", false))
+			and float(elite.get("confidence_mean", 0.0))
+				> float(developing.get("confidence_mean", 0.0)),
+		"Gate 22 proves elite setters read better and own more actions",
 	)
 
 
@@ -1007,6 +2502,28 @@ func _test_physical_body_attributes() -> void:
 		float(long_arrival.physical_reach_meters) > float(short_arrival.physical_reach_meters),
 		"longer wingspan increases physical defensive reach",
 	)
+	var generated_a := PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"North America", "Club", 73001
+	)
+	var generated_b := PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"North America", "Club", 73001
+	)
+	var distinct_bodies := {}
+	var deterministic_bodies := generated_a.size() == generated_b.size()
+	for index in range(generated_a.size()):
+		var first := generated_a[index]
+		var second := generated_b[index]
+		distinct_bodies["%.1f:%.1f:%.1f" % [
+			first.height_cm, first.mass_kg, first.wingspan_cm,
+		]] = true
+		deterministic_bodies = deterministic_bodies \
+			and is_equal_approx(first.height_cm, second.height_cm) \
+			and is_equal_approx(first.mass_kg, second.mass_kg) \
+			and is_equal_approx(first.wingspan_cm, second.wingspan_cm)
+	_check(
+		deterministic_bodies and distinct_bodies.size() > 5,
+		"seeded roster generation creates reproducible individual body dimensions",
+	)
 	var light_player := VolleyballPlayer.new()
 	light_player.mass_kg = 60.0
 	var heavy_player := VolleyballPlayer.new()
@@ -1035,6 +2552,50 @@ func _test_physical_body_attributes() -> void:
 			unstable, edge_arrival, 0.90
 		),
 		"balance and stability reduce edge-and-pace reception penalties",
+	)
+
+
+func _test_setter_failure_taxonomy() -> void:
+	var recognition := SETTER_FAILURE_CLASSIFIER_SCRIPT.classify({
+		"true_reachable": false,
+		"perceived_reachable": false,
+		"vertical_margin_meters": 0.20,
+		"contact_height_meters": 2.10,
+		"standing_reach_meters": 2.30,
+		"required_takeoff_time_seconds": 0.20,
+		"final_available_time_seconds": 0.18,
+		"first_decision_delay_seconds": 0.35,
+		"time_remaining_after_first_decision_seconds": 0.30,
+		"final_center_distance_deficit_meters": 0.48,
+		"contact_reach_meters": 0.42,
+		"final_readiness": 1.0,
+		"final_balance": 1.0,
+	})
+	_check(
+		str(recognition.get("primary_cause", "")) == "recognition_delay"
+			and "insufficient_movement_time" in Array(recognition.get(
+				"contributing_causes", []
+			)),
+		"Gate 26 separates recognition delay from its movement consequence",
+	)
+	var vertical := SETTER_FAILURE_CLASSIFIER_SCRIPT.classify({
+		"true_reachable": false,
+		"perceived_reachable": false,
+		"vertical_margin_meters": -0.12,
+		"contact_height_meters": 2.70,
+		"standing_reach_meters": 2.30,
+		"required_takeoff_time_seconds": 0.18,
+		"final_available_time_seconds": 0.40,
+		"first_decision_delay_seconds": 0.08,
+		"time_remaining_after_first_decision_seconds": 0.50,
+		"final_center_distance_deficit_meters": 0.0,
+		"contact_reach_meters": 0.45,
+		"final_readiness": 1.0,
+		"final_balance": 1.0,
+	})
+	_check(
+		str(vertical.get("primary_cause", "")) == "vertical_access",
+		"Gate 26 identifies a vertical envelope failure independently",
 	)
 
 

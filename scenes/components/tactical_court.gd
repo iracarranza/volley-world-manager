@@ -46,6 +46,18 @@ const DARK_PALETTE := {
 	"secondary_path": Color("62b4ff"),
 }
 
+const SHADOW_LAYER_CORE: int = 1
+const SHADOW_LAYER_INTENT: int = 2
+const SHADOW_LAYER_READS: int = 4
+const SHADOW_LAYER_OPPORTUNITIES: int = 8
+const SHADOW_LAYER_LABELS: int = 16
+const SHADOW_LAYER_ENVELOPES: int = 32
+const SHADOW_LAYER_DEFAULT: int = \
+	SHADOW_LAYER_CORE | SHADOW_LAYER_INTENT | SHADOW_LAYER_LABELS \
+	| SHADOW_LAYER_ENVELOPES
+const SHADOW_LAYER_ALL: int = SHADOW_LAYER_DEFAULT \
+	| SHADOW_LAYER_READS | SHADOW_LAYER_OPPORTUNITIES
+
 var lineup: RotationLineup
 var players_by_id: Dictionary = {}
 var opponent_team: Resource
@@ -79,6 +91,8 @@ var movement_trails: Dictionary = {}
 var movement_phase_caption: String = ""
 var unit_movement_starts: Dictionary = {}
 var unit_movement_targets: Dictionary = {}
+var shadow_reception_trace: Dictionary = {}
+var shadow_overlay_layers: int = SHADOW_LAYER_DEFAULT
 
 
 func _ready() -> void:
@@ -93,6 +107,7 @@ func set_theme_mode(light_mode: bool) -> void:
 
 func set_lineup(p_lineup: RotationLineup, players: Array[VolleyballPlayer]) -> void:
 	clear_rally_playback()
+	shadow_reception_trace.clear()
 	lineup = p_lineup
 	players_by_id.clear()
 	for player in players:
@@ -139,6 +154,21 @@ func set_defensive_view(
 
 func set_coverage_zones_visible(visible: bool) -> void:
 	coverage_zones_visible = visible
+	queue_redraw()
+
+
+func set_shadow_reception_trace(trace: Dictionary) -> void:
+	shadow_reception_trace = trace.duplicate(true)
+	queue_redraw()
+
+
+func clear_shadow_reception_trace() -> void:
+	shadow_reception_trace.clear()
+	queue_redraw()
+
+
+func set_shadow_overlay_layers(layers: int) -> void:
+	shadow_overlay_layers = layers
 	queue_redraw()
 
 
@@ -653,6 +683,7 @@ func _draw() -> void:
 	_draw_setter_release_path()
 	_draw_assignment_drag()
 	_draw_movement_trails()
+	_draw_shadow_reception_trace()
 	_draw_opponents()
 	_draw_players()
 	_draw_rally_playback()
@@ -851,6 +882,295 @@ func _draw_movement_trails() -> void:
 			movement_phase_caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
 			palette["text"],
 		)
+
+
+func _draw_shadow_reception_trace() -> void:
+	if shadow_reception_trace.is_empty():
+		return
+	var summary: Dictionary = shadow_reception_trace.get("summary", {})
+	if not bool(summary.get("available", false)):
+		return
+	var show_core := bool(shadow_overlay_layers & SHADOW_LAYER_CORE)
+	var show_intent := bool(shadow_overlay_layers & SHADOW_LAYER_INTENT)
+	var show_reads := bool(shadow_overlay_layers & SHADOW_LAYER_READS)
+	var show_opportunities := bool(
+		shadow_overlay_layers & SHADOW_LAYER_OPPORTUNITIES
+	)
+	var show_labels := bool(shadow_overlay_layers & SHADOW_LAYER_LABELS)
+	var show_envelopes := bool(shadow_overlay_layers & SHADOW_LAYER_ENVELOPES)
+	var true_destination := Vector2(
+		summary.get("true_destination", Vector2.ZERO)
+	)
+	if show_reads:
+		var true_local := _court_to_local(true_destination)
+		var truth_color := Color("ff5fd1")
+		draw_circle(true_local, 13.0, _with_alpha(truth_color, 0.18))
+		draw_circle(true_local, 13.0, truth_color, false, 3.0)
+		draw_line(
+			true_local + Vector2(-8.0, 0.0),
+			true_local + Vector2(8.0, 0.0), truth_color, 2.0,
+		)
+		draw_line(
+			true_local + Vector2(0.0, -8.0),
+			true_local + Vector2(0.0, 8.0), truth_color, 2.0,
+		)
+		if show_labels:
+			draw_string(
+				ThemeDB.fallback_font, true_local + Vector2(15.0, -10.0),
+				"TRUE LANDING", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, truth_color,
+			)
+	var candidates: Array = shadow_reception_trace.get("entries", [])
+	var shadow_decision: Dictionary = summary.get("shadow_decision", {})
+	var decision_player_id := int(shadow_decision.get("selected_player_id", -1))
+	var outgoing_candidate: Dictionary = summary.get("outgoing_flight_candidate", {})
+	var outgoing_flight: Dictionary = outgoing_candidate.get("flight", {})
+	if show_core and bool(outgoing_candidate.get("available", false)):
+		var outgoing_origin := _court_to_local(Vector2(
+			outgoing_flight.get("origin", true_destination)
+		))
+		var outgoing_local := _court_to_local(Vector2(
+			outgoing_flight.get("destination", true_destination)
+		))
+		draw_dashed_line(
+			outgoing_origin, outgoing_local, Color("b388ff"), 2.5, 6.0,
+		)
+		draw_circle(outgoing_local, 6.0, Color("b388ff"), false, 2.0)
+	var setter_response: Dictionary = summary.get("shadow_setter_response", {})
+	var selected_setter_id := int(setter_response.get("selected_setter_id", -1))
+	if show_intent:
+		_draw_shadow_setter_intent(setter_response, show_labels)
+	if show_envelopes:
+		_draw_shadow_contact_envelope(
+			setter_response, outgoing_flight, show_labels
+		)
+	if not show_reads and not show_opportunities:
+		return
+	for raw_candidate in candidates:
+		var candidate: Dictionary = raw_candidate
+		var start := _court_to_local(Vector2(
+			candidate.get("start_position", Vector2.ZERO)
+		))
+		var perceived := _court_to_local(Vector2(
+			candidate.get("perceived_destination", Vector2.ZERO)
+		))
+		var shadow_selected := bool(candidate.get("shadow_selected", false))
+		var legacy_selected := bool(candidate.get("legacy_selected", false))
+		var decision_selected := int(candidate.get("player_id", -1)) \
+			== decision_player_id
+		var reachable := bool(candidate.get("reachable", false))
+		var candidate_color := Color("53d769") if reachable else Color("ef6461")
+		if shadow_selected:
+			candidate_color = Color("62b4ff")
+		if show_reads:
+			draw_dashed_line(
+				start, perceived, _with_alpha(candidate_color, 0.60),
+				3.0 if shadow_selected else 1.5, 7.0,
+			)
+			draw_circle(
+				perceived, 10.0 if shadow_selected else 7.0,
+				candidate_color, false, 3.0 if shadow_selected else 2.0,
+			)
+			if legacy_selected:
+				draw_arc(perceived, 14.0, 0.0, TAU, 20, Color("f2c94c"), 2.5)
+			if decision_selected:
+				draw_arc(perceived, 18.0, 0.0, TAU, 24, Color("b388ff"), 3.0)
+		if bool(candidate.get("repeated_read_selected", false)):
+			var repeated: Dictionary = candidate.get("repeated_read_candidate", {})
+			var read_points := PackedVector2Array()
+			var movement_points := PackedVector2Array([start])
+			for raw_moment in repeated.get("moments", []):
+				var moment: Dictionary = raw_moment
+				var read_local := _court_to_local(Vector2(
+					moment.get("perceived_destination", Vector2.ZERO)
+				))
+				read_points.append(read_local)
+				if show_reads:
+					draw_circle(read_local, 4.0, Color("ff9f43"))
+				var projected_local := _court_to_local(Vector2(
+					moment.get("projected_position", candidate.get(
+						"start_position", Vector2.ZERO
+					))
+				))
+				movement_points.append(projected_local)
+				if show_reads:
+					draw_circle(projected_local, 3.5, Color("8ee3c7"))
+			if show_reads and read_points.size() > 1:
+				draw_polyline(read_points, Color("ff9f43"), 2.0)
+			if show_reads and movement_points.size() > 1:
+				draw_polyline(movement_points, Color("8ee3c7"), 3.0)
+			var opportunity_timeline: Dictionary = repeated.get(
+				"opportunity_timeline", {}
+			)
+			if show_opportunities:
+				for raw_transition in opportunity_timeline.get("timeline", []):
+					var transition: Dictionary = raw_transition
+					var read_index := int(transition.get("read_index", -1))
+					if read_index < 0 or read_index >= read_points.size():
+						continue
+					var transition_name := str(transition.get(
+						"window_transition", "sample"
+					))
+					if transition_name == "opened":
+						draw_arc(
+							read_points[read_index], 9.0, 0.0, TAU, 16,
+							Color("53d769"), 2.5,
+						)
+					elif transition_name == "closed":
+						draw_arc(
+							read_points[read_index], 9.0, 0.0, TAU, 16,
+							Color("ef6461"), 2.5,
+						)
+		var label := "%s %+.2fs" % [
+			str(candidate.get("player_name", candidate.get("player_id", "?"))),
+			float(candidate.get("arrival_margin", 0.0)),
+		]
+		if shadow_selected:
+			label += " · SHADOW"
+		if legacy_selected:
+			label += " · LEGACY"
+		if decision_selected:
+			label += " · DECISION"
+		if show_labels and show_reads:
+			draw_string(
+				ThemeDB.fallback_font, perceived + Vector2(12.0, 14.0),
+				label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, candidate_color,
+			)
+
+
+func _draw_shadow_setter_intent(
+	setter_response: Dictionary,
+	show_labels: bool,
+) -> void:
+	var intended_id := int(setter_response.get("expected_setter_id", -1))
+	var actual_id := int(setter_response.get("selected_setter_id", -1))
+	var intended_target := _court_to_local(Vector2(setter_response.get(
+		"expected_setter_target", Vector2(0.50, 0.60)
+	)))
+	var intent_color := Color("b388ff")
+	var diamond := PackedVector2Array([
+		intended_target + Vector2(0.0, -10.0),
+		intended_target + Vector2(10.0, 0.0),
+		intended_target + Vector2(0.0, 10.0),
+		intended_target + Vector2(-10.0, 0.0),
+	])
+	draw_colored_polygon(diamond, _with_alpha(intent_color, 0.22))
+	draw_polyline(PackedVector2Array([
+		diamond[0], diamond[1], diamond[2], diamond[3], diamond[0],
+	]), intent_color, 2.5)
+	var intended_candidate := _shadow_setter_candidate(
+		setter_response.get("candidates", []), intended_id
+	)
+	if not intended_candidate.is_empty():
+		var source_local := _court_to_local(Vector2(intended_candidate.get(
+			"source_position", Vector2.ZERO
+		)))
+		var prepared_local := _court_to_local(Vector2(intended_candidate.get(
+			"prepared_position", Vector2.ZERO
+		)))
+		draw_dashed_line(
+			source_local, prepared_local, Color("53d769"), 3.0, 6.0,
+		)
+	var actual_candidate := _shadow_setter_candidate(
+		setter_response.get("candidates", []), actual_id
+	)
+	if not actual_candidate.is_empty():
+		var actual_start := _court_to_local(Vector2(actual_candidate.get(
+			"prepared_position", Vector2.ZERO
+		)))
+		var actual_final := _court_to_local(Vector2(actual_candidate.get(
+			"final_position", Vector2.ZERO
+		)))
+		draw_dashed_line(
+			actual_start, actual_final, Color("55e6c1"), 3.0, 5.0,
+		)
+		draw_circle(actual_final, 8.0, Color("55e6c1"), false, 2.5)
+		if bool(setter_response.get("ownership_changed", false)):
+			draw_dashed_line(
+				intended_target, actual_final, Color("f2c94c"), 2.5, 5.0,
+			)
+			draw_circle(
+				intended_target.lerp(actual_final, 0.5), 7.0,
+				Color("f2c94c"), false, 2.5,
+			)
+	if show_labels:
+		draw_string(
+			ThemeDB.fallback_font, intended_target + Vector2(13.0, -9.0),
+			"TARGET: %s" % str(setter_response.get(
+				"expected_setter_name", intended_id
+			)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, intent_color,
+		)
+		if bool(setter_response.get("ownership_changed", false)):
+			draw_string(
+				ThemeDB.fallback_font, intended_target + Vector2(13.0, 8.0),
+				"ACTUAL: %s · HANDOFF" % str(setter_response.get(
+					"selected_setter_name", actual_id
+				)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("f2c94c"),
+			)
+
+
+func _draw_shadow_contact_envelope(
+	setter_response: Dictionary,
+	outgoing_flight: Dictionary,
+	show_labels: bool,
+) -> void:
+	if not bool(setter_response.get("available", false)):
+		return
+	var selected_id := int(setter_response.get("selected_setter_id", -1))
+	var candidate := _shadow_setter_candidate(
+		setter_response.get("candidates", []), selected_id
+	)
+	if candidate.is_empty():
+		return
+	var final_position := Vector2(candidate.get("final_position", Vector2.ZERO))
+	var contact_position := Vector2(outgoing_flight.get(
+		"destination", final_position
+	))
+	var reach_meters := maxf(float(candidate.get(
+		"contact_reach_meters", 0.0
+	)), 0.0)
+	var reachable := bool(candidate.get("true_reachable", false))
+	var envelope_color := Color("55e6c1") if reachable else Color("ef6461")
+	var points := PackedVector2Array()
+	for point_index in range(41):
+		var angle := TAU * float(point_index) / 40.0
+		points.append(_court_to_local(final_position + Vector2(
+			cos(angle) * reach_meters / 9.0,
+			sin(angle) * reach_meters / 18.0,
+		)))
+	if points.size() > 1:
+		draw_colored_polygon(points, _with_alpha(envelope_color, 0.10))
+		draw_polyline(points, _with_alpha(envelope_color, 0.90), 2.5)
+	var final_local := _court_to_local(final_position)
+	var contact_local := _court_to_local(contact_position)
+	draw_dashed_line(final_local, contact_local, envelope_color, 2.0, 4.0)
+	draw_circle(contact_local, 8.0, envelope_color, false, 2.5)
+	if not show_labels:
+		return
+	var contact_height := float(candidate.get("contact_height_meters", 0.0))
+	var standing_reach := float(candidate.get("standing_reach_meters", 0.0))
+	var maximum_height := float(candidate.get(
+		"maximum_contact_height_meters", standing_reach
+	))
+	var access_mode := "LATE"
+	if bool(candidate.get("requires_jump", false)):
+		access_mode = "JUMP"
+	elif bool(candidate.get("standing_reachable", false)):
+		access_mode = "STAND"
+	draw_string(
+		ThemeDB.fallback_font, contact_local + Vector2(12.0, 26.0),
+		"%s · reach %.2fm · ball %.2fm / stand %.2fm / max %.2fm" % [
+			access_mode, reach_meters, contact_height, standing_reach,
+			maximum_height,
+		], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, envelope_color,
+	)
+
+
+func _shadow_setter_candidate(candidates: Array, player_id: int) -> Dictionary:
+	for raw_candidate in candidates:
+		var candidate: Dictionary = raw_candidate
+		if int(candidate.get("player_id", -1)) == player_id:
+			return candidate
+	return {}
 
 
 func _draw_players() -> void:

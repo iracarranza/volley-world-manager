@@ -9,6 +9,14 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
+const ShadowReceptionSystemModel := preload("res://scripts/simulation/shadow_reception_system.gd")
+const RallyShadowComparisonModel := preload("res://scripts/simulation/rally_shadow_comparison.gd")
+const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout_policy.gd")
+const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
+const RallyStateBuilderModel := preload("res://scripts/simulation/rally_state_builder.gd")
+const LiveReceptionIntegratorModel := preload(
+	"res://scripts/simulation/live_reception_integrator.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -18,6 +26,7 @@ const OPPONENT_DEFENSE: float = 0.58
 var rng := RandomNumberGenerator.new()
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
+var shadow_reception_trace: RallyTrace
 
 
 func resolve(
@@ -28,9 +37,11 @@ func resolve(
 	defensive_plan: Resource,
 	home_serving: bool,
 	seed_value: int,
+	development_continuous_reception: bool = false,
 ) -> Resource:
 	rng.seed = seed_value
 	rally_clock = 0.0
+	shadow_reception_trace = null
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
 	var result: Resource = RallyResultModel.new()
 	result.active_play_name = active_play.play_name \
@@ -95,13 +106,86 @@ func resolve(
 	var receiver_arrived := receiver != null
 	if receiver == null:
 		receiver = _nearest_reception_player(players, lineup, defensive_plan, serve_landing)
+	shadow_reception_trace = ShadowReceptionSystemModel.evaluate(
+		players, lineup, defensive_plan, opponent_team,
+		opponent_server, opponent_server.primary_serve_style,
+		serve_quality, serve_trajectory,
+		receiver.id if receiver != null else -1,
+		seed_value,
+	)
+	var shadow_summary: Dictionary = shadow_reception_trace.summary
+	shadow_summary["rollout_entries"] = shadow_reception_trace.entries.duplicate(true)
+	var rollout_requested := development_continuous_reception \
+		and OS.is_debug_build() \
+		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_RECEPTION_OVERRIDE
+	var reception_rollout := RallyRolloutPolicyModel.select_reception_source(
+		result.events, shadow_summary, lineup, rollout_requested
+	)
+	var selected_live_reception: Dictionary = reception_rollout.get(
+		"selected_reception", {}
+	)
+	var live_reception_integration: Dictionary = {}
+	if str(reception_rollout.get("selected_source", "official")) \
+			== "continuous_reception":
+		var live_state := RallyStateBuilderModel.build(
+			players, lineup, defensive_plan, opponent_team,
+			active_play, false, seed_value
+		)
+		live_reception_integration = LiveReceptionIntegratorModel.apply(
+			live_state, shadow_summary, selected_live_reception
+		)
+		if not bool(live_reception_integration.get("applied", false)):
+			reception_rollout = RallyRolloutPolicyModel.select_reception_source(
+				result.events, shadow_summary, lineup, false
+			)
+			selected_live_reception = {}
+		else:
+			shadow_summary["live_reception_integration"] = \
+				live_reception_integration
+			var canonical_serve_duration := maxf(
+				float(shadow_summary.get("true_arrival_time", serve_time))
+					- float(shadow_summary.get("flight_start_time", 0.0)),
+				0.01,
+			)
+			var serve_event := result.events[0] as RallyEvent
+			if serve_event != null:
+				serve_event.metadata["flight_time"] = canonical_serve_duration
+				serve_event.metadata["contact_time"] = float(shadow_summary.get(
+					"true_arrival_time", canonical_serve_duration
+				))
+				serve_event.metadata["outgoing_trajectory"] = _ball_trajectory(
+					"continuous_serve", serve_event.start_position,
+					serve_event.end_position, canonical_serve_duration, 0.45,
+					float(shadow_summary.get("flight_start_time", 0.0)),
+				)
+				serve_event.metadata["continuous_reception_timing"] = true
+	var rollout_evidence := reception_rollout.duplicate(true)
+	rollout_evidence.erase("selected_events")
+	rollout_evidence.erase("selected_reception")
+	shadow_summary["reception_rollout"] = rollout_evidence
+	shadow_summary.erase("rollout_entries")
+	shadow_reception_trace.summary = shadow_summary
+	var using_live_reception := not selected_live_reception.is_empty() \
+		and bool(live_reception_integration.get("applied", false))
+	if using_live_reception:
+		var live_receiver_id := int(selected_live_reception.get("actor_id", -1))
+		var live_receiver := _player_by_id(players, live_receiver_id)
+		if live_receiver != null:
+			receiver = live_receiver
+			receiver_arrived = true
 	var arrival: Dictionary = reception_claim.get("arrival", {})
+	if using_live_reception:
+		arrival = live_reception_integration.get("arrival", {})
 	var arrival_bonus := clampf(
 		float(arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12
 	)
 	var support_count := int(reception_claim.get("support_count", 0))
 	var support_bonus := minf(float(support_count) * 0.025, 0.075)
 	var seam_conflict := bool(reception_claim.get("seam_conflict", false))
+	if using_live_reception:
+		support_count = 0
+		support_bonus = 0.0
+		seam_conflict = false
 	var seam_penalty := 0.09 if seam_conflict else 0.0
 	var reception_base := _rating(receiver, "reception") * 0.65 \
 		+ _rating(receiver, "ball_control") * 0.20 \
@@ -111,6 +195,10 @@ func resolve(
 		+ arrival_bonus + support_bonus - seam_penalty \
 		+ rng.randf_range(-0.14, 0.14) + 0.30,
 		0.0, 1.0)
+	if using_live_reception:
+		result.reception_quality = clampf(float(selected_live_reception.get(
+			"quality", 0.0
+		)), 0.0, 1.0)
 	if not receiver_arrived:
 		result.reception_quality = minf(result.reception_quality, 0.12)
 	var reception_success: bool = receiver_arrived \
@@ -119,7 +207,22 @@ func resolve(
 	var receiver_move_time := _movement_time(
 		receiver, receiver_start, serve_landing, "lateral"
 	)
-	live_positions[receiver.id] = serve_landing
+	if using_live_reception:
+		var live_metadata: Dictionary = selected_live_reception.get("metadata", {})
+		receiver_start = Vector2(live_metadata.get(
+			"movement_start", receiver_start
+		))
+		receiver_move_time = float(live_metadata.get(
+			"movement_duration", receiver_move_time
+		))
+		live_positions[receiver.id] = Vector2(live_reception_integration.get(
+			"receiver_center_position", serve_landing
+		))
+		rally_clock = float(live_reception_integration.get(
+			"simulation_time", rally_clock
+		))
+	else:
+		live_positions[receiver.id] = serve_landing
 	var preferred_release: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id()) \
 		if defensive_plan != null else Vector2(0.50, 0.60)
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
@@ -128,9 +231,29 @@ func resolve(
 		Vector2(0.80, 0.08), serve_quality, arrival,
 		float(result.reception_quality)
 	)
+	if using_live_reception:
+		var selected_metadata: Dictionary = selected_live_reception.get(
+			"metadata", {}
+		)
+		var selected_trajectory: Dictionary = selected_metadata.get(
+			"outgoing_trajectory", {}
+		)
+		reception_pass = {
+			"trajectory": selected_trajectory,
+			"destination": Vector2(selected_trajectory.get(
+				"end_position", desired_pass_target
+			)),
+			"body_alignment": 1.0,
+			"platform_feasibility": float(arrival.get(
+				"physical_feasibility", 1.0
+			)),
+			"contact_posture": str(Dictionary(shadow_summary.get(
+				"shadow_decision", {}
+			)).get("selected_action", "continuous reception")),
+		}
 	var pass_trajectory: Dictionary = reception_pass.trajectory
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		serve_landing, Vector2(0.50, 0.67), reception_success,
+		serve_landing, Vector2(reception_pass.destination), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
 		"%d%% reception quality. %s %s" % [
 			roundi(float(result.reception_quality) * 100.0),
@@ -151,7 +274,13 @@ func resolve(
 			"contact_posture": reception_pass.contact_posture,
 			"desired_pass_target": desired_pass_target,
 			"setter_release_target": preferred_release,
-			"actual_pass_target": reception_pass.destination})
+			"actual_pass_target": reception_pass.destination,
+			"continuous_reception": using_live_reception,
+			"rollout_source": str(reception_rollout.get(
+				"selected_source", "official"
+			)),
+			"persistent_state_update": live_reception_integration.duplicate(true) \
+				if using_live_reception else {}})
 	if seam_conflict:
 		result.key_factors.append(ExplanationText.factor("seam_conflict"))
 	if not reception_success:
@@ -1608,6 +1737,26 @@ func _finish(
 		"Home" if home_won else "Opponent", end_position, end_position,
 		home_won, 1.0, ExplanationText.headline(outcome), result.explanation)
 	result.analysis = _build_rally_analysis(result)
+	if shadow_reception_trace != null:
+		var existing_rollout: Dictionary = shadow_reception_trace.summary.get(
+			"reception_rollout", {}
+		)
+		if str(existing_rollout.get("selected_source", "official")) == "official":
+			existing_rollout["selected_event_count"] = result.events.size()
+			existing_rollout["official_identity_preserved"] = true
+			shadow_reception_trace.summary["reception_rollout"] = existing_rollout
+		shadow_reception_trace.summary["serve_to_set_comparison"] = \
+			RallyShadowComparisonModel.compare_serve_to_set(
+				result.events, shadow_reception_trace.summary
+			)
+		if not shadow_reception_trace.summary.has("reception_rollout"):
+			var rollout := RallyRolloutPolicyModel.select_reception_source(
+				result.events, shadow_reception_trace.summary
+			)
+			rollout.erase("selected_events")
+			rollout.erase("selected_reception")
+			shadow_reception_trace.summary["reception_rollout"] = rollout
+		result.analysis["shadow_reception"] = shadow_reception_trace.to_dict()
 	_finalize_rally_timeline(result)
 	return result
 

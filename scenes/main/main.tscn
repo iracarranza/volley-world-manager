@@ -883,6 +883,58 @@ layout_mode = 2
 text = "Key factors"
 autowrap_mode = 2
 
+[node name="ShadowDebugControls" type="VBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ControlRow" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ShadowOverlayMenu" type="MenuButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose which developer evidence is drawn over the 2D court."
+text = "Overlay Layers"
+
+[node name="ShadowDebugSeedEdit" type="LineEdit" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(76, 0)
+layout_mode = 2
+tooltip_text = "Fixed deterministic rally seed."
+text = "1001"
+placeholder_text = "Seed"
+
+[node name="ShadowDebugFixtureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+tooltip_text = "Temporarily applies a deterministic diagnostic setup without saving it."
+
+[node name="RunShadowDebugButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Debug Seed"
+
+[node name="ShadowOverlayLegend" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.72, 0.82, 1)
+text = "Purple: pass/target · Green: intended preparation · Cyan: actual response · Yellow: ownership handoff"
+autowrap_mode = 2
+
+[node name="ShadowReceptionLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(330, 132)
+layout_mode = 2
+tooltip_text = "Developer-only comparison between legacy reception ownership and the persistent perception/movement model."
+theme_override_colors/font_color = Color(0.38, 0.71, 1, 1)
+text = "SHADOW RECEPTION · Run an opponent serve rally."
+autowrap_mode = 2
+
 [node name="PhysicalDebugLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=370526365]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(330, 92)

@@ -37,6 +37,7 @@ static func generate_roster(
 		player.position_role = str(position.role)
 		player.position_code = str(position.code)
 		player.apply_role_physical_defaults()
+		_apply_body_variation(player, rng)
 		var academy := organization_type == "Academy"
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
@@ -46,6 +47,30 @@ static func generate_roster(
 		AttributeProfiles.assign_serve_style(player)
 		result.append(player)
 	return result
+
+
+## Produces correlated individual bodies around role templates. These are
+## roster-generation ranges for gameplay variety, not anatomical claims.
+static func _apply_body_variation(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+) -> void:
+	var height_spread := float({
+		"Setter": 7.0,
+		"Outside Hitter": 7.5,
+		"Middle Blocker": 8.0,
+		"Opposite": 7.5,
+		"Libero": 6.0,
+	}.get(player.position_role, 7.0))
+	var height_delta := (
+		rng.randf_range(-height_spread, height_spread)
+		+ rng.randf_range(-height_spread, height_spread)
+	) * 0.5
+	var mass_delta := height_delta * 0.55 + rng.randf_range(-5.0, 5.0)
+	var span_delta := height_delta * 0.70 + rng.randf_range(-4.0, 5.0)
+	player.height_cm = clampf(player.height_cm + height_delta, 150.0, 220.0)
+	player.mass_kg = clampf(player.mass_kg + mass_delta, 50.0, 130.0)
+	player.wingspan_cm = clampf(player.wingspan_cm + span_delta, 150.0, 235.0)
 
 
 static func generate_market(region_name: String, seed_value: int, first_id: int = 1000, count: int = 120) -> Array[Resource]:

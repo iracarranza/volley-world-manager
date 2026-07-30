@@ -1,0 +1,434 @@
+class_name RallyMovementSystem
+extends RefCounted
+
+const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const RallyKinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
+const ContactEnvelopeModel := preload("res://scripts/simulation/contact_envelope_system.gd")
+
+
+static func evaluate_opportunity(
+	actor: RallyPlayerState,
+	action_type: StringName,
+	target: Vector2,
+	contact_time: float,
+	current_time: float,
+	tactical_priority: float = 0.0,
+	contact_height_meters: float = 1.0,
+	allow_jump: bool = false,
+) -> ActionOpportunity:
+	var opportunity := ActionOpportunity.new()
+	if actor == null or actor.player == null:
+		return opportunity
+	opportunity.action_type = action_type
+	opportunity.side = actor.team_side
+	opportunity.player_id = actor.player_id
+	opportunity.contact_position = target
+	opportunity.contact_time = contact_time
+	opportunity.tactical_priority = tactical_priority
+
+	var available_time := maxf(
+		contact_time - maxf(current_time, actor.committed_until), 0.0
+	)
+	var envelope := ContactEnvelopeModel.evaluate(
+		actor, action_type, contact_height_meters, available_time, allow_jump
+	)
+	var contact_reach := float(envelope.get("horizontal_reach_meters", 0.0))
+	var standing_movement := estimate_movement(
+		actor, target, available_time, _movement_mode_for(action_type), contact_reach
+	)
+	var used_reaching_extension := false
+	var baseline_deficit := float(standing_movement.get(
+		"center_distance_deficit_meters", 99.0
+	))
+	## Gate 27: a setter who has already moved within a narrow hand-access gap
+	## may finish in a reaching posture. This is action-specific and does not
+	## add movement time, speed, or a universal distance allowance.
+	if action_type == &"set" and baseline_deficit > 0.001 \
+			and baseline_deficit <= 0.18:
+		var reaching_actor := actor.snapshot()
+		reaching_actor.body_state = RallyPlayerState.BodyState.REACHING
+		var reaching_envelope := ContactEnvelopeModel.evaluate(
+			reaching_actor, action_type, contact_height_meters,
+			available_time, allow_jump
+		)
+		var reaching_contact_reach := float(reaching_envelope.get(
+			"horizontal_reach_meters", contact_reach
+		))
+		var reaching_movement := estimate_movement(
+			reaching_actor, target, available_time,
+			_movement_mode_for(action_type), reaching_contact_reach
+		)
+		if float(reaching_movement.get(
+			"center_distance_deficit_meters", 99.0
+		)) < baseline_deficit:
+			envelope = reaching_envelope
+			contact_reach = reaching_contact_reach
+			standing_movement = reaching_movement
+			used_reaching_extension = true
+	var standing_horizontal_reachable := float(standing_movement.get(
+		"center_distance_deficit_meters", 99.0
+	)) <= 0.001
+	var standing_reachable := bool(envelope.get("standing_reachable", false)) \
+		and standing_horizontal_reachable
+	var takeoff_time := float(envelope.get("takeoff_time_seconds", 0.0))
+	var jump_movement := estimate_movement(
+		actor, target, maxf(available_time - takeoff_time, 0.0),
+		_movement_mode_for(action_type), contact_reach
+	)
+	var jump_reachable := bool(envelope.get("jump_reachable", false)) \
+		and float(jump_movement.get("center_distance_deficit_meters", 99.0)) <= 0.001
+	var use_jump := not standing_reachable and jump_reachable
+	var movement: Dictionary = jump_movement if use_jump else standing_movement
+	var movement_available_time := maxf(available_time - takeoff_time, 0.0) \
+		if use_jump else available_time
+	opportunity.travel_time = float(movement.get("travel_time", 99.0))
+	opportunity.arrival_margin = movement_available_time - opportunity.travel_time
+	opportunity.available_time = available_time
+	opportunity.target_distance_meters = float(movement.get(
+		"distance_meters", 99.0
+	))
+	opportunity.movement_capacity_meters = float(movement.get(
+		"movement_capacity_meters", 0.0
+	))
+	opportunity.center_distance_deficit_meters = float(movement.get(
+		"center_distance_deficit_meters", 99.0
+	))
+	opportunity.contact_reach_meters = contact_reach
+	opportunity.contact_height_meters = contact_height_meters
+	opportunity.standing_reach_meters = float(envelope.get(
+		"standing_reach_meters", 0.0
+	))
+	opportunity.maximum_contact_height_meters = float(envelope.get(
+		"maximum_contact_height_meters", 0.0
+	))
+	opportunity.vertical_margin_meters = float(envelope.get(
+		"vertical_margin_meters", -99.0
+	))
+	opportunity.standing_reachable = standing_reachable
+	opportunity.jump_reachable = jump_reachable
+	opportunity.requires_jump = use_jump
+	opportunity.required_takeoff_time_seconds = float(envelope.get(
+		"required_takeoff_time_seconds", 0.0
+	))
+	opportunity.takeoff_time_seconds = takeoff_time if jump_reachable else 0.0
+	opportunity.recovery_time_seconds = float(envelope.get(
+		"recovery_time_seconds", 0.0
+	)) if jump_reachable else 0.0
+	opportunity.used_reaching_extension = used_reaching_extension
+	opportunity.maximum_speed_mps = float(movement.get("maximum_speed", 0.0))
+	opportunity.acceleration_mps2 = float(movement.get("acceleration", 0.0))
+	opportunity.direction_change_delay_seconds = float(movement.get(
+		"direction_change_delay", 0.0
+	))
+	opportunity.modeled_start_speed_mps = float(movement.get(
+		"modeled_start_speed_mps", 0.0
+	))
+	opportunity.directional_start_speed_mps = float(movement.get(
+		"directional_start_speed_mps", 0.0
+	))
+	opportunity.directional_velocity_overcredit_mps = float(movement.get(
+		"directional_velocity_overcredit_mps", 0.0
+	))
+	opportunity.reachable = standing_reachable or jump_reachable
+	opportunity.arrival_balance = float(movement.get("arrival_balance", 0.0)) \
+		* float(envelope.get("balance_factor", 1.0))
+	opportunity.physical_feasibility = float(movement.get("feasibility", 0.0)) \
+		if opportunity.reachable else 0.0
+
+	var technique := _action_technique(actor.player, action_type)
+	opportunity.technical_difficulty = clampf(
+		1.0 - technique * 0.55 \
+		- opportunity.arrival_balance * 0.30 \
+		- opportunity.physical_feasibility * 0.15,
+		0.0, 1.0,
+	)
+	var expected_center := clampf(
+		technique * 0.45 \
+		+ opportunity.arrival_balance * 0.30 \
+		+ opportunity.physical_feasibility * 0.25,
+		0.0, 1.0,
+	)
+	var uncertainty := lerpf(
+		0.22, 0.06, float(actor.player.composure) / 100.0
+	)
+	opportunity.expected_quality = Vector2(
+		clampf(expected_center - uncertainty, 0.0, 1.0),
+		clampf(expected_center + uncertainty, 0.0, 1.0),
+	)
+	return opportunity
+
+
+static func estimate_movement(
+	actor: RallyPlayerState,
+	target: Vector2,
+	available_time: float,
+	mode: RallyPlayerState.MovementMode,
+	contact_reach_meters: float = 0.0,
+) -> Dictionary:
+	if actor == null or actor.player == null:
+		return {
+			"distance_meters": 99.0, "travel_time": 99.0,
+			"arrival_balance": 0.0, "feasibility": 0.0,
+			"maximum_speed": 0.0, "direction": Vector2.ZERO,
+		}
+	var meter_delta := RallyKinematicsModel.court_delta_meters(
+		actor.position, target
+	)
+	var distance := meter_delta.length()
+	var movement_distance := maxf(distance - maxf(contact_reach_meters, 0.0), 0.0)
+	var direction := meter_delta.normalized() if distance > 0.001 else Vector2.ZERO
+	## RallyPlayerState velocity is expressed in court meters per second.
+	var raw_speed := actor.velocity.length()
+	var directional_start_speed := maxf(actor.velocity.dot(direction), 0.0)
+	## Only velocity already aimed toward the new target reduces travel time.
+	## Sideways or opposite momentum must not be credited as forward speed.
+	var current_speed := directional_start_speed
+	var speed_rating := _speed_rating(actor.player, mode)
+	var acceleration_rating := float(actor.player.acceleration) / 100.0
+	var mass_factor := lerpf(
+		1.06, 0.90,
+		clampf((actor.player.mass_kg - 55.0) / 60.0, 0.0, 1.0),
+	)
+	var fatigue_factor := 1.0 - actor.player.fatigue * 0.30
+	var maximum_speed := lerpf(1.35, 5.25, speed_rating) \
+		* mass_factor * fatigue_factor
+	var acceleration := lerpf(2.2, 6.8, acceleration_rating) * fatigue_factor
+
+	var facing_fit := 1.0
+	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
+		facing_fit = clampf(
+			(actor.facing.normalized().dot(direction) + 1.0) * 0.5,
+			0.0, 1.0,
+		)
+	var direction_change_delay := lerpf(0.20, 0.02, facing_fit)
+	var acceleration_time := maxf(
+		(maximum_speed - current_speed) / maxf(acceleration, 0.1), 0.0
+	)
+	var acceleration_distance := current_speed * acceleration_time \
+		+ 0.5 * acceleration * acceleration_time * acceleration_time
+
+	var movement_time := 0.0
+	if movement_distance > 0.001:
+		if movement_distance <= acceleration_distance:
+			movement_time = (
+				-current_speed
+				+ sqrt(maxf(current_speed * current_speed + 2.0 * acceleration * movement_distance, 0.0))
+			) / maxf(acceleration, 0.1)
+		else:
+			movement_time = acceleration_time \
+				+ (movement_distance - acceleration_distance) / maxf(maximum_speed, 0.1)
+	var travel_time := direction_change_delay + movement_time \
+		if movement_distance > 0.001 else 0.0
+	var usable_time := maxf(available_time - direction_change_delay, 0.0)
+	var capacity_acceleration_time := minf(usable_time, acceleration_time)
+	var movement_capacity := current_speed * capacity_acceleration_time \
+		+ 0.5 * acceleration * capacity_acceleration_time \
+			* capacity_acceleration_time
+	if usable_time > acceleration_time:
+		movement_capacity += maximum_speed * (usable_time - acceleration_time)
+	var arrival_margin := available_time - travel_time
+	var edge_pressure := clampf(-arrival_margin / 0.65, 0.0, 1.0)
+	var arrival_balance := clampf(
+		actor.balance * lerpf(1.0, 0.45, edge_pressure) \
+		* lerpf(0.76, 1.0, facing_fit),
+		0.0, 1.0,
+	)
+	var feasibility := clampf(
+		available_time / maxf(travel_time, 0.05), 0.0, 1.0
+	)
+	return {
+		"distance_meters": distance,
+		"travel_time": travel_time,
+		"arrival_balance": arrival_balance,
+		"feasibility": feasibility,
+		"maximum_speed": maximum_speed,
+		"acceleration": acceleration,
+		"direction_change_delay": direction_change_delay,
+		"modeled_start_speed_mps": current_speed,
+		"directional_start_speed_mps": directional_start_speed,
+		"directional_velocity_overcredit_mps": maxf(
+			raw_speed - directional_start_speed, 0.0
+		),
+		"movement_capacity_meters": movement_capacity,
+		"center_distance_deficit_meters": maxf(
+			distance - movement_capacity - maxf(contact_reach_meters, 0.0), 0.0
+		),
+		"direction": direction,
+	}
+
+
+## Advances a temporary actor snapshot toward a target without mutating the
+## supplied rally state. Velocity is carried into the returned snapshot so a
+## later perception update can redirect movement already underway.
+static func project_toward(
+	actor: RallyPlayerState,
+	target: Vector2,
+	duration: float,
+	mode: RallyPlayerState.MovementMode,
+) -> Dictionary:
+	if actor == null or actor.player == null:
+		return {"actor": null, "distance_meters": 0.0, "elapsed": 0.0}
+	var projected := actor.snapshot()
+	var elapsed := maxf(duration, 0.0)
+	var meter_delta := RallyKinematicsModel.court_delta_meters(
+		actor.position, target
+	)
+	var distance := meter_delta.length()
+	if elapsed <= 0.0 or distance <= 0.001:
+		return {
+			"actor": projected, "distance_meters": 0.0,
+			"elapsed": elapsed, "reached_target": distance <= 0.001,
+		}
+	var direction := meter_delta.normalized()
+	var profile := _movement_profile(actor, direction, mode)
+	var direction_change_delay := float(profile.direction_change_delay)
+	var movement_duration := maxf(elapsed - direction_change_delay, 0.0)
+	var maximum_speed := float(profile.maximum_speed)
+	var acceleration := float(profile.acceleration)
+	var forward_speed := maxf(actor.velocity.dot(direction), 0.0)
+	var acceleration_time := maxf(
+		(maximum_speed - forward_speed) / maxf(acceleration, 0.1), 0.0
+	)
+	var capacity := 0.0
+	var ending_speed := forward_speed
+	if movement_duration <= acceleration_time:
+		capacity = forward_speed * movement_duration \
+			+ 0.5 * acceleration * movement_duration * movement_duration
+		ending_speed = minf(
+			forward_speed + acceleration * movement_duration, maximum_speed
+		)
+	else:
+		capacity = forward_speed * acceleration_time \
+			+ 0.5 * acceleration * acceleration_time * acceleration_time \
+			+ maximum_speed * (movement_duration - acceleration_time)
+		ending_speed = maximum_speed
+	var traveled := minf(capacity, distance)
+	var court_delta := Vector2(
+		direction.x * traveled / RallyKinematicsModel.COURT_WIDTH_METERS,
+		direction.y * traveled / RallyKinematicsModel.COURT_LENGTH_METERS,
+	)
+	var reached_target := traveled >= distance - 0.001
+	projected.apply_position(
+		target if reached_target else actor.position + court_delta,
+		Vector2.ZERO if reached_target else direction * ending_speed,
+	)
+	projected.movement_mode = mode
+	projected.intent = &"receive"
+	projected.intent_target = target
+	return {
+		"actor": projected,
+		"distance_meters": traveled,
+		"elapsed": elapsed,
+		"movement_duration": movement_duration,
+		"direction_change_delay": direction_change_delay,
+		"ending_speed_mps": projected.velocity.length(),
+		"reached_target": reached_target,
+	}
+
+
+static func generate_reception_opportunities(
+	state: RallyState,
+) -> Array[ActionOpportunity]:
+	var opportunities: Array[ActionOpportunity] = []
+	if state == null or state.ball.trajectory == null or state.home_plan == null:
+		return opportunities
+	var trajectory := state.ball.trajectory
+	var contact_time := trajectory.earliest_contact_time(
+		state.simulation_time, 0.15, 1.40
+	)
+	if contact_time < 0.0:
+		contact_time = trajectory.end_time
+	var target := trajectory.position_at_time(contact_time)
+	for value in state.home_players.values():
+		var actor := value as RallyPlayerState
+		if actor == null:
+			continue
+		var zone: Resource = state.home_plan.zone_for(
+			actor.player_id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+		)
+		if zone == null or not bool(zone.enabled):
+			continue
+		opportunities.append(evaluate_opportunity(
+			actor, &"receive", target, contact_time,
+			state.simulation_time, float(zone.priority) / 3.0,
+		))
+	return opportunities
+
+
+static func _speed_rating(
+	player: VolleyballPlayer,
+	mode: RallyPlayerState.MovementMode,
+) -> float:
+	if mode in [
+		RallyPlayerState.MovementMode.LATERAL,
+		RallyPlayerState.MovementMode.BLOCK_CLOSE,
+	]:
+		return float(player.lateral_speed) / 100.0
+	return float(player.transition_speed) / 100.0
+
+
+static func _movement_profile(
+	actor: RallyPlayerState,
+	direction: Vector2,
+	mode: RallyPlayerState.MovementMode,
+) -> Dictionary:
+	var speed_rating := _speed_rating(actor.player, mode)
+	var acceleration_rating := float(actor.player.acceleration) / 100.0
+	var mass_factor := lerpf(
+		1.06, 0.90,
+		clampf((actor.player.mass_kg - 55.0) / 60.0, 0.0, 1.0),
+	)
+	var fatigue_factor := 1.0 - actor.player.fatigue * 0.30
+	var maximum_speed := lerpf(1.35, 5.25, speed_rating) \
+		* mass_factor * fatigue_factor
+	var acceleration := lerpf(2.2, 6.8, acceleration_rating) * fatigue_factor
+	var facing_fit := 1.0
+	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
+		facing_fit = clampf(
+			(actor.facing.normalized().dot(direction) + 1.0) * 0.5,
+			0.0, 1.0,
+		)
+	return {
+		"maximum_speed": maximum_speed,
+		"acceleration": acceleration,
+		"facing_fit": facing_fit,
+		"direction_change_delay": lerpf(0.20, 0.02, facing_fit),
+	}
+
+
+
+
+static func _movement_mode_for(
+	action_type: StringName,
+) -> RallyPlayerState.MovementMode:
+	match action_type:
+		&"receive", &"dig":
+			return RallyPlayerState.MovementMode.LATERAL
+		&"block", &"assist_block":
+			return RallyPlayerState.MovementMode.BLOCK_CLOSE
+		&"attack":
+			return RallyPlayerState.MovementMode.APPROACH
+	return RallyPlayerState.MovementMode.TRANSITION
+
+
+static func _action_technique(
+	player: VolleyballPlayer,
+	action_type: StringName,
+) -> float:
+	match action_type:
+		&"receive":
+			return float(player.reception) / 100.0
+		&"dig":
+			return float(player.dig_control) / 100.0
+		&"set":
+			return clampf(
+				float(player.set_accuracy) / 100.0 * 0.55
+				+ float(player.hand_control) / 100.0 * 0.30
+				+ float(player.tempo_control) / 100.0 * 0.15,
+				0.0, 1.0,
+			)
+		&"attack":
+			return float(player.attack_accuracy) / 100.0
+		&"block", &"assist_block":
+			return float(player.block_timing) / 100.0
+	return float(player.ball_control) / 100.0

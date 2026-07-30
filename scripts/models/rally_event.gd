@@ -28,3 +28,20 @@ enum EventType {
 
 func type_name() -> String:
 	return EventType.keys()[event_type].capitalize()
+
+
+func to_dict() -> Dictionary:
+	return {
+		"sequence": sequence,
+		"event_type": event_type,
+		"actor_id": actor_id,
+		"secondary_actor_id": secondary_actor_id,
+		"actor_name": actor_name,
+		"start_position": start_position,
+		"end_position": end_position,
+		"success": success,
+		"quality": quality,
+		"headline": headline,
+		"detail": detail,
+		"metadata": metadata.duplicate(true),
+	}

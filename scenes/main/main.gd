@@ -7,6 +7,7 @@ const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+const ENABLE_3D_MATCH_PLAYBACK: bool = false
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var background: ColorRect = %Background
@@ -37,6 +38,13 @@ const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 @onready var rally_result_title: Label = %RallyResultTitle
 @onready var rally_result_explanation: Label = %RallyResultExplanation
 @onready var rally_result_factors: Label = %RallyResultFactors
+@onready var shadow_reception_label: Label = %ShadowReceptionLabel
+@onready var shadow_debug_controls: VBoxContainer = %ShadowDebugControls
+@onready var shadow_overlay_menu: MenuButton = %ShadowOverlayMenu
+@onready var shadow_debug_seed_edit: LineEdit = %ShadowDebugSeedEdit
+@onready var shadow_debug_fixture_option: OptionButton = %ShadowDebugFixtureOption
+@onready var run_shadow_debug_button: Button = %RunShadowDebugButton
+@onready var shadow_overlay_legend: Label = %ShadowOverlayLegend
 @onready var status_label: Label = %StatusLabel
 @onready var assignment_popup: PopupPanel = %AssignmentPopup
 @onready var popup_assignment_label: Label = %PopupAssignmentLabel
@@ -133,9 +141,12 @@ var match_preview_play: OffensivePlay
 var match_preview_zone_type: int = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 var match_preview_phase: int = 0
 var last_rally_result: Resource
+var shadow_overlay_layers: int = TacticalCourt.SHADOW_LAYER_DEFAULT
 
 
 func _ready() -> void:
+	shadow_reception_label.visible = OS.is_debug_build()
+	shadow_debug_controls.visible = OS.is_debug_build()
 	get_viewport().size_changed.connect(_update_interface_scale)
 	_populate_static_options()
 	theme_toggle.toggled.connect(_apply_light_mode)
@@ -153,6 +164,7 @@ func _ready() -> void:
 	call_play_button.pressed.connect(_call_selected_play)
 	resolve_rally_button.pressed.connect(_resolve_rally)
 	replay_rally_button.pressed.connect(_replay_last_rally)
+	run_shadow_debug_button.pressed.connect(_run_shadow_debug_fixture)
 	skip_playback_button.pressed.connect(_skip_rally_playback)
 	reset_positions_button.pressed.connect(_reset_tactical_positions)
 	popup_apply_button.pressed.connect(_apply_popup_assignment)
@@ -191,6 +203,7 @@ func _ready() -> void:
 		GameManager.rally_completed.connect(_on_rally_completed)
 	rotation_option.select(GameManager.selected_rotation - 1)
 	_setup_tactical_workspace()
+	_setup_shadow_debug_controls()
 	_setup_defender_popup()
 	defender_popup_close_button.pressed.connect(_close_player_instructions)
 	_capture_match_preview_snapshot()
@@ -315,6 +328,135 @@ func _populate_static_options() -> void:
 	floor_section_option.clear()
 	floor_section_option.add_item("Positioning & Zones")
 	floor_section_option.add_item("Player Duties")
+
+
+func _setup_shadow_debug_controls() -> void:
+	shadow_debug_seed_edit.text = str(rally_seed)
+	shadow_debug_fixture_option.clear()
+	for fixture in [
+		["Normal reception", "normal"],
+		["Off-center setter path", "off_center"],
+		["Setter takes first contact", "setter_first_contact"],
+	]:
+		shadow_debug_fixture_option.add_item(str(fixture[0]))
+		shadow_debug_fixture_option.set_item_metadata(
+			shadow_debug_fixture_option.item_count - 1, fixture[1]
+		)
+	var popup := shadow_overlay_menu.get_popup()
+	popup.clear()
+	for layer in [
+		["Ball path", TacticalCourt.SHADOW_LAYER_CORE],
+		["Setter intent / response", TacticalCourt.SHADOW_LAYER_INTENT],
+		["Receiver reads", TacticalCourt.SHADOW_LAYER_READS],
+		["Opportunity windows", TacticalCourt.SHADOW_LAYER_OPPORTUNITIES],
+		["Contact envelopes", TacticalCourt.SHADOW_LAYER_ENVELOPES],
+		["Labels", TacticalCourt.SHADOW_LAYER_LABELS],
+	]:
+		popup.add_check_item(str(layer[0]), int(layer[1]))
+	popup.id_pressed.connect(_shadow_overlay_layer_toggled)
+	_refresh_shadow_overlay_menu()
+	_apply_shadow_overlay_layers()
+
+
+func _shadow_overlay_layer_toggled(layer_id: int) -> void:
+	shadow_overlay_layers ^= layer_id
+	_refresh_shadow_overlay_menu()
+	_apply_shadow_overlay_layers()
+	if last_rally_result != null:
+		_show_shadow_reception_debug(last_rally_result)
+
+
+func _refresh_shadow_overlay_menu() -> void:
+	var popup := shadow_overlay_menu.get_popup()
+	for layer_id in [
+		TacticalCourt.SHADOW_LAYER_CORE,
+		TacticalCourt.SHADOW_LAYER_INTENT,
+		TacticalCourt.SHADOW_LAYER_READS,
+		TacticalCourt.SHADOW_LAYER_OPPORTUNITIES,
+		TacticalCourt.SHADOW_LAYER_ENVELOPES,
+		TacticalCourt.SHADOW_LAYER_LABELS,
+	]:
+		var item_index := popup.get_item_index(layer_id)
+		if item_index >= 0:
+			popup.set_item_checked(
+				item_index, bool(shadow_overlay_layers & layer_id)
+			)
+
+
+func _apply_shadow_overlay_layers() -> void:
+	tactical_court.set_shadow_overlay_layers(shadow_overlay_layers)
+	match_preview_court.set_shadow_overlay_layers(shadow_overlay_layers)
+
+
+func _run_shadow_debug_fixture() -> void:
+	if rally_playback_active:
+		return
+	var seed_text := shadow_debug_seed_edit.text.strip_edges()
+	if not seed_text.is_valid_int():
+		_set_status("Debug seed must be a whole number.", true)
+		return
+	var seed_value := int(seed_text)
+	var fixture_key := str(shadow_debug_fixture_option.get_item_metadata(
+		shadow_debug_fixture_option.selected
+	))
+	var plan: Resource = GameManager.current_defensive_plan()
+	var saved_plan: Dictionary = plan.to_dict().duplicate(true)
+	var saved_serving_home := bool(GameManager.match_state.serving_home)
+	_apply_shadow_debug_fixture(fixture_key, plan)
+	GameManager.match_state.serving_home = false
+	run_shadow_debug_button.disabled = true
+	var result: Resource = GameManager.resolve_active_rally(seed_value, true)
+	GameManager.match_state.serving_home = saved_serving_home
+	plan.load_dict(saved_plan)
+	_refresh_defensive_plan()
+	last_rally_result = result
+	await _play_rally(result, false)
+	run_shadow_debug_button.disabled = false
+	var debug_trace: Dictionary = result.analysis.get("shadow_reception", {})
+	var debug_summary: Dictionary = debug_trace.get("summary", {})
+	var debug_rollout: Dictionary = debug_summary.get("reception_rollout", {})
+	_set_status(
+		"Debug fixture replayed seed %d via %s without recording the point." % [
+			seed_value,
+			str(debug_rollout.get("selected_source", "official")).replace(
+				"_", " "
+			),
+		]
+	)
+
+
+func _apply_shadow_debug_fixture(fixture_key: String, plan: Resource) -> void:
+	if plan == null:
+		return
+	var lineup := GameManager.current_lineup()
+	var active_setter_id := lineup.active_setter_id()
+	if fixture_key == "off_center":
+		plan.set_setter_release_target(active_setter_id, Vector2(0.66, 0.59))
+		return
+	if fixture_key != "setter_first_contact":
+		return
+	var emergency_setter_id := lineup.player_at_slot(2)
+	for slot_number in range(1, 7):
+		var player_id := lineup.player_at_slot(slot_number)
+		var zone: Resource = plan.zone_for(
+			player_id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+		)
+		if zone != null:
+			zone.enabled = player_id == active_setter_id
+			if player_id == active_setter_id:
+				zone.center = Vector2(0.20, 0.84)
+				zone.radius_meters = 6.0
+				zone.priority = 3
+		if player_id == active_setter_id:
+			continue
+		var assignment: Resource = plan.assignment_for(player_id)
+		if assignment != null:
+			assignment.second_contact_responsibility = (
+				"Primary emergency setter"
+				if player_id == emergency_setter_id
+				else "No second-contact duty"
+			)
+	plan.set_setter_release_target(emergency_setter_id, Vector2(0.62, 0.64))
 	floor_section_option.select(0)
 	zone_type_option.clear()
 	zone_type_option.add_item("Floor Defense")
@@ -1230,8 +1372,10 @@ func _resolve_rally() -> void:
 	# 2. Play existing 2D playback / updates
 	await _play_rally(result, true)
 
-	# 3. Pass the result directly to your new 3D match view trigger
-	_on_rally_completed(result)
+	# 3D playback is preserved but paused while the persistent 2D simulation
+	# and its developer diagnostics are being validated.
+	if ENABLE_3D_MATCH_PLAYBACK:
+		_on_rally_completed(result)
 
 func _replay_last_rally() -> void:
 	if rally_playback_active or last_rally_result == null:
@@ -1242,6 +1386,7 @@ func _replay_last_rally() -> void:
 func _play_rally(result: Resource, record_result: bool) -> void:
 	rally_playback_active = true
 	_reset_tactical_positions(false)
+	_show_shadow_reception_debug(result)
 	tactical_court.set_coverage_zones_visible(false)
 	match_preview_court.set_coverage_zones_visible(false)
 	skip_rally_playback = false
@@ -1464,6 +1609,248 @@ func _reset_tactical_positions(show_status: bool = true) -> void:
 	match_preview_court.clear_rally_playback()
 	if show_status:
 		_set_status("Tactical markers returned to saved rotation positions.")
+
+
+func _show_shadow_reception_debug(result: Resource) -> void:
+	if not OS.is_debug_build():
+		shadow_reception_label.visible = false
+		tactical_court.clear_shadow_reception_trace()
+		match_preview_court.clear_shadow_reception_trace()
+		return
+	shadow_reception_label.visible = true
+	var trace: Dictionary = {}
+	if result != null and result.analysis is Dictionary:
+		trace = Dictionary(result.analysis.get("shadow_reception", {}))
+	if trace.is_empty():
+		shadow_reception_label.text = "SHADOW RECEPTION · Not evaluated on this rally."
+		tactical_court.clear_shadow_reception_trace()
+		match_preview_court.clear_shadow_reception_trace()
+		return
+	tactical_court.set_shadow_reception_trace(trace)
+	match_preview_court.set_shadow_reception_trace(trace)
+	var summary: Dictionary = trace.get("summary", {})
+	var signature: Dictionary = summary.get("signature", {})
+	var timing: Dictionary = summary.get("timing_diagnostics", {})
+	var timing_candidates: Dictionary = summary.get("timing_candidates", {})
+	var legacy_timing: Dictionary = timing_candidates.get("legacy_duration", {})
+	var signature_timing: Dictionary = timing_candidates.get("signature_duration", {})
+	var speed_candidates: Dictionary = summary.get("speed_candidates", {})
+	var independent_speed: Dictionary = speed_candidates.get("independent_speed", {})
+	var derived_speed: Dictionary = speed_candidates.get("derived_speed", {})
+	var perception_candidates: Dictionary = summary.get("perception_candidates", {})
+	var single_read: Dictionary = perception_candidates.get("single_read", {})
+	var repeated_read: Dictionary = perception_candidates.get("repeated_read", {})
+	var shadow_decision: Dictionary = summary.get("shadow_decision", {})
+	var contact_result: Dictionary = shadow_decision.get("contact_result", {})
+	var outgoing_candidate: Dictionary = summary.get("outgoing_flight_candidate", {})
+	var outgoing_flight: Dictionary = outgoing_candidate.get("flight", {})
+	var outgoing_signature: Dictionary = outgoing_flight.get("signature", {})
+	var setter_response: Dictionary = summary.get("shadow_setter_response", {})
+	var serve_to_set: Dictionary = summary.get("serve_to_set_comparison", {})
+	var reception_rollout: Dictionary = summary.get("reception_rollout", {})
+	var expected_intent: Dictionary = summary.get(
+		"expected_second_contact_intent", {}
+	)
+	var agreement_text := "AGREE" if bool(summary.get("agreement", false)) else "DIFFER"
+	var lines: Array[String] = [
+		"SHADOW RECEPTION · %s · legacy %d / shadow %d" % [
+			agreement_text,
+			int(summary.get("legacy_claimant_id", -1)),
+			int(summary.get("shadow_claimant_id", -1)),
+		],
+		"CANONICAL %s · %.1fm/s · top %+.1frps · side %+.1frps · stability %.2f" % [
+			str(signature.get("action_type", "serve")),
+			float(signature.get("speed_mps", 0.0)),
+			float(signature.get("topspin_rps", 0.0)),
+			float(signature.get("sidespin_rps", 0.0)),
+			float(signature.get("flight_stability", 0.0)),
+		],
+		"timing · legacy %.2fs / implied %.2fs · effective %.1fm/s · %s" % [
+			float(timing.get("recorded_duration_seconds", 0.0)),
+			float(timing.get("implied_duration_seconds", 0.0)),
+			float(timing.get("effective_recorded_speed_mps", 0.0)),
+			"within gate" if bool(timing.get("within_tolerance", false)) else "MISMATCH",
+		],
+		"candidate actions · legacy #%d %+.2fs / signature #%d %+.2fs%s" % [
+			int(legacy_timing.get("shadow_claimant_id", -1)),
+			float(legacy_timing.get("selected_arrival_margin", 0.0)),
+			int(signature_timing.get("shadow_claimant_id", -1)),
+			float(signature_timing.get("selected_arrival_margin", 0.0)),
+			" · CLAIMANT CHANGES" \
+				if bool(timing_candidates.get("claimant_changed", false)) else "",
+		],
+		"speed evidence · canonical calculated %.1fm/s / legacy-implied %.1fm/s · receiver #%d%s" % [
+			float(independent_speed.get("speed_mps", 0.0)),
+			float(derived_speed.get("speed_mps", 0.0)),
+			int(independent_speed.get("shadow_claimant_id", -1)),
+			" · CLAIMANT CHANGES" \
+				if bool(speed_candidates.get("claimant_changed", false)) else "",
+		],
+		"reads · single #%d err %.2fm / projected #%d err %.2fm · moved %.2fm / corrected %.2fm%s" % [
+			int(single_read.get("shadow_claimant_id", -1)),
+			float(single_read.get("selected_destination_error_meters", 0.0)),
+			int(repeated_read.get("shadow_claimant_id", -1)),
+			float(repeated_read.get("selected_destination_error_meters", 0.0)),
+			float(repeated_read.get("projected_distance_meters", 0.0)),
+			float(repeated_read.get("total_correction_distance_meters", 0.0)),
+			" · CLAIMANT CHANGES" \
+				if bool(perception_candidates.get("claimant_changed", false)) else "",
+		],
+		"opportunity windows · %d · open %.2fs · %d intent corrections · %s" % [
+			int(repeated_read.get("opportunity_window_count", 0)),
+			float(repeated_read.get("opportunity_open_duration_seconds", 0.0)),
+			int(repeated_read.get("intent_change_count", 0)),
+			"AVAILABLE" if bool(repeated_read.get(
+				"scheduled_ever_reachable", false
+			)) else "NEVER OPENED",
+		],
+		"window state · %s" % (
+			"CLOSED BEFORE CONTACT" if bool(repeated_read.get(
+				"opportunity_closed_early", false
+			)) else "HELD TO CONTACT OR NEVER OPENED"
+		),
+		"shadow decision · #%d · %s · %d options · ambiguity %.2f%s" % [
+			int(shadow_decision.get("selected_player_id", -1)),
+			str(shadow_decision.get("selected_action", "no_action")),
+			int(shadow_decision.get("option_count", 0)),
+			float(shadow_decision.get("ambiguity", 0.0)),
+			" · TEAMMATE CONFLICT" if bool(shadow_decision.get(
+				"conflict", false
+			)) else "",
+		],
+		"shadow contact · %s · quality %.2f · true margin %+.2fs" % [
+			str(contact_result.get("outcome", "no_action")),
+			float(contact_result.get("quality", 0.0)),
+			float(contact_result.get("true_arrival_margin", 0.0)),
+		],
+		"contact choices · %s" % ", ".join(Array(
+			contact_result.get("available_actions", [])
+		)),
+		"outgoing flight · %s · %.1fm/s · %.2fs · spin %+.1f/%+.1f · stability %.2f" % [
+			"CONTINUOUS" if bool(Dictionary(outgoing_candidate.get(
+				"continuity", {}
+			)).get("valid", false)) else "NONE",
+			float(outgoing_signature.get("speed_mps", 0.0)),
+			float(outgoing_flight.get("duration", 0.0)),
+			float(outgoing_signature.get("topspin_rps", 0.0)),
+			float(outgoing_signature.get("sidespin_rps", 0.0)),
+			float(outgoing_signature.get("flight_stability", 0.0)),
+		],
+		"setter response · #%d · %s · %d choices · moved %.2fm · margin %+.2fs" % [
+			int(setter_response.get("selected_setter_id", -1)),
+			"BALANCED WINDOW" if bool(setter_response.get(
+				"selected_reachable", false
+			)) else "EMERGENCY/LATE",
+			int(setter_response.get("selected_action_count", 0)),
+			float(setter_response.get("selected_projected_distance_meters", 0.0)),
+			float(setter_response.get("selected_true_arrival_margin", 0.0)),
+		],
+		"serve→set comparison · receiver %s / setter %s · target Δ %.2fm · time Δ %+.2fs" % [
+			"AGREE" if bool(serve_to_set.get("receiver_agreement", false)) else "DIFFER",
+			"AGREE" if bool(serve_to_set.get("setter_agreement", false)) else "DIFFER",
+			float(serve_to_set.get("pass_destination_delta_meters", 0.0)),
+			float(serve_to_set.get("pass_duration_delta_seconds", 0.0)),
+		],
+		"rollout · %s · flag %s · activation branch %s" % [
+			str(reception_rollout.get("selected_source", "official")).to_upper(),
+			"ON" if bool(reception_rollout.get("flag_enabled", false)) else "OFF",
+			"PRESENT" if bool(reception_rollout.get(
+				"activation_implemented", false
+			)) else "ABSENT",
+		],
+		str(summary.get("reason", "No comparison reason.")),
+	]
+	if shadow_overlay_layers != TacticalCourt.SHADOW_LAYER_ALL:
+		lines = ["SHADOW RECEPTION · seed %d" % int(trace.get("seed_value", -1))]
+		if bool(shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_CORE):
+			lines.append("contact · #%d · %s · quality %.2f" % [
+				int(shadow_decision.get("selected_player_id", -1)),
+				str(shadow_decision.get("selected_action", "no_action")),
+				float(contact_result.get("quality", 0.0)),
+			])
+			lines.append("pass · %.1fm/s · %.2fs · target (%.2f, %.2f)" % [
+				float(outgoing_signature.get("speed_mps", 0.0)),
+				float(outgoing_flight.get("duration", 0.0)),
+				float(Vector2(outgoing_flight.get(
+					"destination", Vector2.ZERO
+				)).x),
+				float(Vector2(outgoing_flight.get(
+					"destination", Vector2.ZERO
+				)).y),
+			])
+		if bool(shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_INTENT):
+			lines.append("second contact · intended %s (#%d) → actual %s (#%d)" % [
+				str(expected_intent.get("player_name", "Unassigned")),
+				int(setter_response.get("expected_setter_id", -1)),
+				str(setter_response.get("selected_setter_name", "Unassigned")),
+				int(setter_response.get("selected_setter_id", -1)),
+			])
+			lines.append("ownership · %s · %s" % [
+				"HANDOFF" if bool(setter_response.get(
+					"ownership_changed", false
+				)) else "RETAINED",
+				str(setter_response.get("handoff_reason", "not evaluated")),
+			])
+		if bool(shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_READS):
+			lines.append("reads · receiver error %.2fm · setter confidence %.2f" % [
+				float(repeated_read.get(
+					"selected_destination_error_meters", 0.0
+				)),
+				float(setter_response.get("selected_confidence", 0.0)),
+			])
+		if bool(shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_OPPORTUNITIES):
+			lines.append("windows · receive %d / %.2fs · set margin %+.2fs · %d actions" % [
+				int(repeated_read.get("opportunity_window_count", 0)),
+				float(repeated_read.get(
+					"opportunity_open_duration_seconds", 0.0
+				)),
+				float(setter_response.get("selected_true_arrival_margin", 0.0)),
+				int(setter_response.get("selected_action_count", 0)),
+			])
+		if bool(shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_ENVELOPES):
+			var envelope_candidate: Dictionary = {}
+			for raw_candidate in setter_response.get("candidates", []):
+				var candidate: Dictionary = raw_candidate
+				if int(candidate.get("player_id", -1)) == int(setter_response.get(
+					"selected_setter_id", -1
+				)):
+					envelope_candidate = candidate
+					break
+			if not envelope_candidate.is_empty():
+				var access_mode := "LATE"
+				if bool(envelope_candidate.get("requires_jump", false)):
+					access_mode = "JUMP"
+				elif bool(envelope_candidate.get("standing_reachable", false)):
+					access_mode = "STAND"
+				lines.append(
+					"envelope · reach %.2fm · contact %.2fm · stand %.2fm · max %.2fm · %s" % [
+						float(envelope_candidate.get("contact_reach_meters", 0.0)),
+						float(envelope_candidate.get("contact_height_meters", 0.0)),
+						float(envelope_candidate.get("standing_reach_meters", 0.0)),
+						float(envelope_candidate.get(
+							"maximum_contact_height_meters", 0.0
+						)),
+						access_mode,
+					]
+				)
+		if lines.size() == 1:
+			lines.append("All overlay layers are hidden.")
+	var append_receiver_labels := bool(
+		shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_READS
+	) and bool(shadow_overlay_layers & TacticalCourt.SHADOW_LAYER_LABELS)
+	if append_receiver_labels:
+		for raw_entry in trace.get("entries", []):
+			var entry: Dictionary = raw_entry
+			lines.append("%s · read %.2fs · err %.2fm · margin %+.2fs · %s%s%s" % [
+				str(entry.get("player_name", entry.get("player_id", "?"))),
+				float(entry.get("recognition_time", 0.0)),
+				float(entry.get("destination_error_meters", 0.0)),
+				float(entry.get("arrival_margin", 0.0)),
+				"reachable" if bool(entry.get("reachable", false)) else "late",
+				" · LEGACY" if bool(entry.get("legacy_selected", false)) else "",
+				" · SHADOW" if bool(entry.get("shadow_selected", false)) else "",
+			])
+	shadow_reception_label.text = "\n".join(lines)
 
 
 func _show_rally_result(result: Resource) -> void:
