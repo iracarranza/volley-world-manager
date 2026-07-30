@@ -51,6 +51,12 @@ const SETTER_HANDOFF_CALIBRATION_SCRIPT := preload(
 const SETTER_PROGRESSION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/setter_progression_calibration.gd"
 )
+const PLAYER_OBSERVATION_SCRIPT := preload(
+	"res://scripts/models/player_observation.gd"
+)
+const SETTER_ROLLOUT_AUDIT_SCRIPT := preload(
+	"res://scripts/simulation/setter_rollout_audit.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -83,6 +89,8 @@ func _initialize() -> void:
 	_test_gate_fifteen_disabled_rollout()
 	_test_gate_twenty_eight_and_twenty_nine_rollout_boundary()
 	_test_gate_thirty_development_live_reception()
+	_test_gate_thirty_one_to_thirty_five_setter_boundary()
+	_test_gate_thirty_six_development_live_setter()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -1837,6 +1845,167 @@ func _test_gate_thirty_development_live_reception() -> void:
 			"reception_rollout", {}
 		)).get("selected_source", "")) == "official",
 		"Gate 30 keeps ordinary match resolution on the production-off path",
+	)
+
+
+func _test_gate_thirty_one_to_thirty_five_setter_boundary() -> void:
+	var selected_summary: Dictionary = {}
+	var selected_audit: Dictionary = {}
+	var selected_lineup: RotationLineup = null
+	for seed_value in range(300000, 300180):
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		manager.match_state.serving_home = false
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var trace: Dictionary = result.analysis.get("shadow_reception", {})
+		var summary: Dictionary = trace.get("summary", {})
+		var response: Dictionary = summary.get("shadow_setter_response", {})
+		if not bool(response.get("available", false)):
+			continue
+		var audit := SETTER_ROLLOUT_AUDIT_SCRIPT.evaluate(
+			summary, manager.current_lineup()
+		)
+		if bool(audit.get("eligible", false)):
+			selected_summary = summary
+			selected_audit = audit
+			selected_lineup = manager.current_lineup()
+			break
+	_check(
+		not selected_summary.is_empty() and bool(selected_audit.get(
+			"observation_boundary_valid", false
+		)),
+		"Gates 31 and 34 find an auditable setter candidate with a clean observation boundary",
+	)
+	var response: Dictionary = selected_summary.get("shadow_setter_response", {})
+	var selected_id := int(response.get("selected_setter_id", -1))
+	var selected_candidate: Dictionary = {}
+	for raw_candidate in response.get("candidates", []):
+		var candidate: Dictionary = raw_candidate
+		if int(candidate.get("player_id", -1)) == selected_id:
+			selected_candidate = candidate
+			break
+	var observation: Dictionary = selected_candidate.get("observation", {})
+	var decision_score := PLAYER_OBSERVATION_SCRIPT.score_from_dict(observation)
+	var changed_truth := selected_candidate.duplicate(true)
+	changed_truth["true_arrival_margin"] = 999.0
+	changed_truth["true_reachable"] = not bool(changed_truth.get(
+		"true_reachable", false
+	))
+	_check(
+		not observation.is_empty()
+			and is_equal_approx(decision_score, float(selected_candidate.get(
+				"selection_score", -1.0
+			)))
+			and is_equal_approx(
+				PLAYER_OBSERVATION_SCRIPT.score_from_dict(observation),
+				decision_score
+			),
+		"Gate 31 keeps setter selection invariant when hidden truth changes outside the observation",
+	)
+	_check(
+		bool(response.get("selection_observation_only", false))
+			and not str(response.get(
+				"selected_observation_fingerprint", ""
+			)).is_empty(),
+		"Gate 32 records an observation-only setter decision fingerprint",
+	)
+	var disabled_rollout := RALLY_ROLLOUT_POLICY_SCRIPT.select_setter_source(
+		selected_summary, selected_lineup, false
+	)
+	_check(
+		str(disabled_rollout.get("selected_source", "")) == "official"
+			and bool(disabled_rollout.get("candidate_available", false))
+			and bool(disabled_rollout.get("official_identity_preserved", false)),
+		"Gate 35 keeps an eligible setter candidate behind the disabled production boundary",
+	)
+
+
+func _test_gate_thirty_six_development_live_setter() -> void:
+	var selected_seed := -1
+	var live_result: Resource = null
+	var live_summary: Dictionary = {}
+	for seed_value in range(300000, 300240):
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		manager.match_state.serving_home = false
+		var candidate_result: Resource = manager.resolve_active_rally(seed_value, true)
+		var trace: Dictionary = candidate_result.analysis.get(
+			"shadow_reception", {}
+		)
+		var summary: Dictionary = trace.get("summary", {})
+		if str(Dictionary(summary.get("setter_rollout", {})).get(
+			"selected_source", "official"
+		)) == "continuous_setter":
+			selected_seed = seed_value
+			live_result = candidate_result
+			live_summary = summary
+			break
+	var integration: Dictionary = live_summary.get(
+		"live_setter_integration", {}
+	)
+	var live_set: RallyEvent = null
+	var later_attack_seen := false
+	if live_result != null:
+		for raw_event in live_result.events:
+			var event := raw_event as RallyEvent
+			if event == null:
+				continue
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
+					and str(event.metadata.get("side", "")) == "home" \
+					and bool(event.metadata.get("continuous_setter", false)):
+				live_set = event
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+					and str(event.metadata.get("side", "")) == "home":
+				later_attack_seen = true
+	_check(
+		selected_seed >= 0 and live_set != null
+			and bool(integration.get("applied", false))
+			and int(integration.get("contact_number", 0)) == 2
+			and bool(Dictionary(integration.get(
+				"outgoing_set_state", {}
+			)).get("applied", false)),
+		"Gate 36 promotes one audited setter contact into persistent state",
+	)
+	_check(
+		later_attack_seen,
+		"Gate 36 leaves attack and later contacts on the legacy continuation",
+	)
+	var repeat_manager := GAME_MANAGER_SCRIPT.new()
+	repeat_manager.seed_vertical_slice_data()
+	repeat_manager.match_state.serving_home = false
+	var repeat_result: Resource = repeat_manager.resolve_active_rally(
+		selected_seed, true
+	)
+	var repeat_set: RallyEvent = null
+	for raw_event in repeat_result.events:
+		var event := raw_event as RallyEvent
+		if event != null and event.event_type == RALLY_EVENT_SCRIPT.EventType.SET \
+				and bool(event.metadata.get("continuous_setter", false)):
+			repeat_set = event
+			break
+	_check(
+		live_set != null and repeat_set != null
+			and live_set.actor_id == repeat_set.actor_id
+			and live_set.start_position.is_equal_approx(repeat_set.start_position)
+			and is_equal_approx(
+				float(live_set.metadata.get("event_time", -1.0)),
+				float(repeat_set.metadata.get("event_time", -2.0))
+			),
+		"Gate 36 live setter ownership and contact are deterministic",
+	)
+	var official_manager := GAME_MANAGER_SCRIPT.new()
+	official_manager.seed_vertical_slice_data()
+	official_manager.match_state.serving_home = false
+	var official_result: Resource = official_manager.resolve_active_rally(selected_seed)
+	var official_continuous_set_seen := false
+	for raw_event in official_result.events:
+		var event := raw_event as RallyEvent
+		if event != null and bool(event.metadata.get("continuous_setter", false)):
+			official_continuous_set_seen = true
+			break
+	_check(
+		not official_continuous_set_seen,
+		"Gate 36 keeps ordinary match resolution on the production-off setter path",
 	)
 
 

@@ -10,6 +10,9 @@ const SetterProgressionCalibrationModel := preload("res://scripts/simulation/set
 const ReceptionRolloutCalibrationModel := preload(
 	"res://scripts/simulation/reception_rollout_calibration.gd"
 )
+const SetterRolloutCalibrationModel := preload(
+	"res://scripts/simulation/setter_rollout_calibration.gd"
+)
 
 
 func _initialize() -> void:
@@ -33,6 +36,7 @@ func _initialize() -> void:
 	var setter_handoffs := false
 	var setter_progression := false
 	var live_reception_rollout := false
+	var live_setter_rollout := false
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--samples="):
 			sample_count = maxi(int(argument.trim_prefix("--samples=")), 1)
@@ -74,6 +78,15 @@ func _initialize() -> void:
 			setter_progression = true
 		elif argument == "--live-reception-rollout":
 			live_reception_rollout = true
+		elif argument == "--live-setter-rollout":
+			live_setter_rollout = true
+
+	if live_setter_rollout:
+		print(JSON.stringify(SetterRolloutCalibrationModel.run(
+			sample_count, start_seed
+		), "\t"))
+		quit(0)
+		return
 
 	if live_reception_rollout:
 		print(JSON.stringify(ReceptionRolloutCalibrationModel.run(

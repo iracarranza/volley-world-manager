@@ -91,7 +91,19 @@ This page is the quickest defense against confusing source-code existence with a
 - Gate 29 implements the guarded selection branch while leaving the production
   feature flag disabled.
 - Gate 30 promotes canonical serve timing and one reception contact only in an
-  explicitly requested development fixture. Later contacts remain official.
+  explicitly requested development fixture.
+- Gate 31 defines a setter-scoped `PlayerObservation` that excludes
+  authoritative flight and contact truth from decision inputs.
+- Gate 32 removes authoritative arrival margin from setter ownership scoring;
+  true opportunity data is now resolver and diagnostic evidence only.
+- Gate 33 revalidates monotonic setter progression after the information-boundary
+  change without adding universal movement or reach bonuses.
+- Gate 34 audits setter ownership, observation purity, action feasibility,
+  contact continuity, state immutability, and deterministic identity.
+- Gate 35 adds a guarded setter rollout branch with its production flag off.
+- Gate 36 promotes one audited setter contact after a promoted reception in an
+  explicitly requested development fixture. Attack and later phases remain
+  legacy-controlled.
 
 ## Partially implemented
 
@@ -124,11 +136,12 @@ The following classes exist and have tests, but do not yet drive live rally reso
 - `RallyKinematics`
 - `RallyCalibrationReport`
 - `ServeStyleCalibration`
+- `PlayerObservation` beyond the setter slice
 
-`SetterFailureClassifier`, `ReceptionRolloutAudit`, and
-`LiveReceptionIntegrator` are active at the development rollout boundary. The
-normal match path still selects official reception because the production flag
-is disabled.
+`SetterFailureClassifier`, `ReceptionRolloutAudit`, `SetterRolloutAudit`,
+`LiveReceptionIntegrator`, and `LiveSetterIntegrator` are active at the
+development rollout boundary. The normal match path still selects official
+reception and setter behavior because both production flags are disabled.
 
 Their purpose is to support a rally in which current position, velocity, ball flight, time, player intent, and availability continuously constrain future actions.
 
@@ -143,17 +156,17 @@ integration have not been implemented.
 
 ## Proposed next integration
 
-Migrate one contact at a time. The safest first vertical slice is opponent serve to home reception:
+Migrate one contact at a time. Opponent serve through home setter contact now
+has a guarded development-only vertical slice. The next slice is set to attack:
 
-1. Build a `RallyState` from the lineup and plan.
-2. Launch the serve through `RallyBallState`.
-3. generate reception opportunities from actual positions and ball arrival time.
-4. select and resolve one opportunity.
-5. convert the resolved contact to the existing `RallyEvent` playback contract.
-6. compare deterministic results with the legacy resolver before replacing more phases.
+1. Generate approach opportunities from persistent hitter state.
+2. Give the hitter a player-specific observation of the set and defense.
+3. Select an action from perceived information only.
+4. Resolve the chosen contact against authoritative ball and player state.
+5. Audit and compare fixed-seed behavior before adding a guarded rollout.
 
 ## Validation baseline
 
-The current foundation validation reports 305 passing checks. Treat that number
+The current foundation validation reports 313 passing checks. Treat that number
 as a point-in-time result, not a permanent guarantee. Run
 [VALIDATION.md](VALIDATION.md) to establish the current result.

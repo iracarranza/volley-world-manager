@@ -15,7 +15,9 @@ then applies:
 - the outgoing pass trajectory in `RallyBallState`.
 
 The calculated pass destination and duration feed the existing setter
-continuation. Setter contact and every later phase remain legacy-controlled.
+continuation. At the time of this gate, setter contact and every later phase
+remained legacy-controlled; Gate 36 now supersedes that development-only
+boundary for audited setter candidates.
 Equal seeds reproduce equal receiver ownership, quality, and trajectory.
 Ordinary `resolve_active_rally(seed)` calls do not request promotion and remain
 on official reception.

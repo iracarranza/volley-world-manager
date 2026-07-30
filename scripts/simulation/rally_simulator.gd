@@ -17,6 +17,9 @@ const RallyStateBuilderModel := preload("res://scripts/simulation/rally_state_bu
 const LiveReceptionIntegratorModel := preload(
 	"res://scripts/simulation/live_reception_integrator.gd"
 )
+const LiveSetterIntegratorModel := preload(
+	"res://scripts/simulation/live_setter_integrator.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -125,9 +128,10 @@ func resolve(
 		"selected_reception", {}
 	)
 	var live_reception_integration: Dictionary = {}
+	var live_state: RallyState = null
 	if str(reception_rollout.get("selected_source", "official")) \
 			== "continuous_reception":
-		var live_state := RallyStateBuilderModel.build(
+		live_state = RallyStateBuilderModel.build(
 			players, lineup, defensive_plan, opponent_team,
 			active_play, false, seed_value
 		)
@@ -287,6 +291,35 @@ func resolve(
 		return _finish(result, "ace", false, receiver.id, {
 			"server": server_name,
 		})
+	var setter_rollout_requested := using_live_reception \
+		and development_continuous_reception and OS.is_debug_build() \
+		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_SETTER_OVERRIDE
+	var setter_rollout := RallyRolloutPolicyModel.select_setter_source(
+		shadow_summary, lineup, setter_rollout_requested
+	)
+	var selected_live_setter: Dictionary = setter_rollout.get(
+		"selected_setter", {}
+	)
+	var live_setter_integration: Dictionary = {}
+	if str(setter_rollout.get("selected_source", "official")) \
+			== "continuous_setter":
+		live_setter_integration = LiveSetterIntegratorModel.apply(
+			live_state, selected_live_setter
+		)
+		if not bool(live_setter_integration.get("applied", false)):
+			setter_rollout = RallyRolloutPolicyModel.select_setter_source(
+				shadow_summary, lineup, false
+			)
+			selected_live_setter = {}
+		else:
+			shadow_summary["live_setter_integration"] = \
+				live_setter_integration
+	var setter_rollout_evidence := setter_rollout.duplicate(true)
+	setter_rollout_evidence.erase("selected_setter")
+	shadow_summary["setter_rollout"] = setter_rollout_evidence
+	shadow_reception_trace.summary = shadow_summary
+	var using_live_setter := not selected_live_setter.is_empty() \
+		and bool(live_setter_integration.get("applied", false))
 	setter = _second_contact_setter(
 		players, lineup, defensive_plan, receiver.id
 	)
@@ -300,6 +333,29 @@ func resolve(
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
 	var setter_arrival_margin := second_contact_window - setter_move_time
+	if using_live_setter:
+		var promoted_setter := _player_by_id(
+			players, int(selected_live_setter.get("actor_id", -1))
+		)
+		if promoted_setter != null:
+			setter = promoted_setter
+		set_contact = Vector2(selected_live_setter.get(
+			"contact_position", set_contact
+		))
+		setter_start = Vector2(selected_live_setter.get(
+			"movement_start", setter_start
+		))
+		setter_move_time = float(selected_live_setter.get(
+			"movement_duration", setter_move_time
+		))
+		setter_arrival_margin = float(selected_live_setter.get(
+			"arrival_margin", setter_arrival_margin
+		))
+		second_contact_window = maxf(
+			float(selected_live_setter.get("contact_time", rally_clock))
+				- rally_clock,
+			0.0,
+		)
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 
 	var follow_threshold := 0.22 + _rating(setter, "decision_making") * 0.35 \
@@ -355,6 +411,14 @@ func resolve(
 		"set", set_contact, set_target, set_flight_time,
 		lerpf(0.7, 2.4, set_flight_time / 1.02), rally_clock + second_contact_window
 	)
+	if using_live_setter:
+		live_setter_integration["outgoing_set_state"] = \
+			LiveSetterIntegratorModel.launch_set(
+				live_state, set_trajectory, setter.id
+			)
+		shadow_summary["live_setter_integration"] = \
+			live_setter_integration.duplicate(true)
+		shadow_reception_trace.summary = shadow_summary
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, result.set_quality >= 0.24,
 		result.set_quality, "Set to %s" % assignment.lane,
@@ -379,7 +443,17 @@ func resolve(
 			"body_orientation_fit": set_geometry.body_orientation_fit,
 			"set_balance": set_geometry.set_balance,
 			"set_stability": set_geometry.set_stability})
-	live_positions[setter.id] = set_contact
+	var set_event := result.events[-1] as RallyEvent
+	if using_live_setter and set_event != null:
+		set_event.metadata["continuous_setter"] = true
+		set_event.metadata["setter_action"] = str(selected_live_setter.get(
+			"selected_action", ""
+		))
+		set_event.metadata["persistent_state_update"] = \
+			live_setter_integration.duplicate(true)
+	live_positions[setter.id] = Vector2(live_setter_integration.get(
+		"setter_center_position", set_contact
+	)) if using_live_setter else set_contact
 	rally_clock += second_contact_window
 	if assignment.tempo <= 1:
 		result.key_factors.append(ExplanationText.factor("fast_tempo"))

@@ -68,7 +68,9 @@ static func build_shadow_reception_events(
 			"prepared_position", flight.get("origin", Vector2.ZERO)
 		))
 		setter.end_position = Vector2(setter_candidate.get(
-			"final_position", flight.get("destination", Vector2.ZERO)
+			"resolved_center_position", setter_candidate.get(
+				"final_position", flight.get("destination", Vector2.ZERO)
+			)
 		))
 		setter.success = int(setter_response.get("selected_action_count", 0)) > 0
 		setter.quality = clampf(float(setter_response.get(
@@ -93,8 +95,17 @@ static func build_shadow_reception_events(
 				"expected_setter_target", Vector2(0.50, 0.60)
 			),
 			"movement_start": setter.start_position,
-			"movement_duration": float(flight.get("duration", 0.0)),
-			"event_time": float(flight.get("arrival_time", 0.0)),
+			"movement_duration": maxf(
+				float(setter_candidate.get("resolved_contact_time", 0.0))
+					- float(flight.get("start_time", 0.0)),
+				0.0,
+			),
+			"event_time": float(setter_candidate.get(
+				"resolved_contact_time", flight.get("arrival_time", 0.0)
+			)),
+			"contact_position": Vector2(setter_candidate.get(
+				"resolved_contact_position", flight.get("destination", Vector2.ZERO)
+			)),
 			"contact_height_meters": float(setter_candidate.get(
 				"contact_height_meters", flight.get("contact_height_meters", 1.0)
 			)),
@@ -109,6 +120,12 @@ static func build_shadow_reception_events(
 			"set_options": Array(setter_response.get(
 				"selected_actions", []
 			)).duplicate(),
+			"observation_only_decision": not bool(setter_candidate.get(
+				"decision_uses_authoritative_truth", true
+			)),
+			"observation_fingerprint": str(setter_candidate.get(
+				"observation_fingerprint", ""
+			)),
 		}
 		events.append(setter)
 

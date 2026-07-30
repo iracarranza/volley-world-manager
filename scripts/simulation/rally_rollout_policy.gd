@@ -5,6 +5,9 @@ const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
 const ReceptionRolloutAuditModel := preload(
 	"res://scripts/simulation/reception_rollout_audit.gd"
 )
+const SetterRolloutAuditModel := preload(
+	"res://scripts/simulation/setter_rollout_audit.gd"
+)
 
 
 ## Central source-selection boundary. Gate 15 intentionally has no shadow-event
@@ -27,6 +30,31 @@ static func select_reception_source(
 		"selected_reception": selected_reception,
 		"selected_events": [selected_reception] if use_candidate else official_events,
 		"selected_event_count": 1 if use_candidate else official_events.size(),
+		"official_identity_preserved": not use_candidate,
+		"activation_implemented": true,
+		"fallback_reason": "" if use_candidate else (
+			"rollout_disabled" if not rollout_enabled else ";".join(
+				Array(audit.get("failure_reasons", []))
+			)
+		),
+	}
+
+
+static func select_setter_source(
+	shadow_summary: Dictionary,
+	home_lineup: RotationLineup = null,
+	rollout_enabled: bool = FeatureFlags.ENABLE_CONTINUOUS_SETTER_EVENTS,
+) -> Dictionary:
+	var audit := SetterRolloutAuditModel.evaluate(shadow_summary, home_lineup)
+	var use_candidate := rollout_enabled and bool(audit.get("eligible", false))
+	var selected_setter: Dictionary = audit.get("setter_candidate", {}) \
+		if use_candidate else {}
+	return {
+		"flag_enabled": rollout_enabled,
+		"selected_source": "continuous_setter" if use_candidate else "official",
+		"candidate_available": bool(audit.get("eligible", false)),
+		"candidate_audit": audit,
+		"selected_setter": selected_setter,
 		"official_identity_preserved": not use_candidate,
 		"activation_implemented": true,
 		"fallback_reason": "" if use_candidate else (

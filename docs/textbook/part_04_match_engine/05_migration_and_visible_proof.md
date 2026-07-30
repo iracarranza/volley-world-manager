@@ -21,13 +21,16 @@ Migrate one closed vertical slice while preserving the event playback contract.
 8. emit serve and reception `RallyEvent` records.
 9. compare with legacy behavior using fixed seeds.
 
-Steps 1–5 and 9 now run as a non-authoritative shadow comparison on opponent
-serves. `ShadowReceptionSystem` records candidates in `RallyTrace`, and debug
-builds display the comparison. Replacing the live contact has not begun.
+The complete reception slice now runs behind an audited development-only
+rollout. Production remains disabled.
 
 ## Slice 2: reception to set
 
 The pass destination and arrival time must define second-contact opportunities. The setter is not automatically placed at a traditional spot. An emergency setter becomes possible when the normal setter cannot arrive or took first contact.
+
+This slice now has an observation-only ownership decision, candidate audit,
+guarded rollout, and development-only live contact through Gate 36. Attack and
+later contacts remain on the legacy continuation.
 
 ## Slice 3: set to attack
 

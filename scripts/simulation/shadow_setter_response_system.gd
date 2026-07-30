@@ -151,6 +151,15 @@ static func evaluate(
 			"projected_distance_meters", 0.0
 		)),
 		"selected_confidence": float(selected.get("confidence", 0.0)),
+		"selected_observation": Dictionary(selected.get(
+			"observation", {}
+		)).duplicate(true),
+		"selected_observation_fingerprint": str(selected.get(
+			"observation_fingerprint", ""
+		)),
+		"selection_observation_only": not bool(selected.get(
+			"decision_uses_authoritative_truth", true
+		)),
 		"selected_true_arrival_margin": float(selected.get(
 			"true_arrival_margin", -9.0
 		)),
@@ -220,6 +229,7 @@ static func _evaluate_candidate(
 	var windows: Array[ActionOpportunityWindow] = []
 	var active_window: ActionOpportunityWindow = null
 	var final_opportunity: ActionOpportunity = null
+	var final_estimate: BallFlightEstimate = null
 	var final_confidence := 0.0
 	var first_decision_time := flight.arrival_time
 	for estimate_index in range(estimates.size()):
@@ -275,6 +285,7 @@ static func _evaluate_candidate(
 		previous_time = decision_time
 		previous_target = estimate.perceived_destination
 		final_opportunity = opportunity
+		final_estimate = estimate
 		final_confidence = estimate.confidence
 	if active_window != null:
 		active_window.close(contact_deadline, &"contact_window_closed")
@@ -288,25 +299,36 @@ static func _evaluate_candidate(
 	var physically_executable_set_options := _set_options(
 		source_actor.player, true_opportunity, final_confidence
 	)
+	var observation := PlayerObservation.create_setter_observation(
+		source_actor.player_id, final_estimate, final_opportunity,
+		duty, duty_priority, perceived_set_options,
+	)
+	var observation_data := observation.to_dict()
+	var contact_time := _resolved_contact_time(
+		flight, previous_time, contact_deadline, true_opportunity
+	)
+	var contact_projection := RallyMovementSystem.project_toward(
+		actor, flight.destination, maxf(contact_time - previous_time, 0.0),
+		RallyPlayerState.MovementMode.TRANSITION,
+	)
+	var resolved_actor := contact_projection.get("actor") as RallyPlayerState
 	var total_window_duration := 0.0
 	var window_dicts: Array[Dictionary] = []
 	for window in windows:
 		total_window_duration += window.duration()
 		window_dicts.append(window.to_dict())
-	var expected_quality := Vector2(
-		final_opportunity.expected_quality if final_opportunity != null \
-		else Vector2.ZERO
-	)
-	var quality_center := (expected_quality.x + expected_quality.y) * 0.5
+	var expected_quality := observation.perceived_expected_quality
 	return {
 		"player_id": source_actor.player_id,
 		"player_name": source_actor.player.display_name,
 		"duty": duty,
 		"duty_priority": duty_priority,
-		"selection_score": quality_center * 0.34 + final_confidence * 0.22 \
-			+ duty_priority * 0.24 \
-			+ clampf(true_opportunity.arrival_margin + 0.25, 0.0, 0.75) \
-				/ 0.75 * 0.20,
+		## Gate 31: ownership selection is derived only from the player's
+		## observation. True opportunity fields below are resolver evidence.
+		"selection_score": observation.selection_score(),
+		"observation": observation_data,
+		"observation_fingerprint": observation.decision_fingerprint(),
+		"decision_uses_authoritative_truth": false,
 		"confidence": final_confidence,
 		"perceived_reachable": final_opportunity.reachable \
 			if final_opportunity != null else false,
@@ -356,6 +378,10 @@ static func _evaluate_candidate(
 			Dictionary(preparation).get("actor", source_actor).position
 		),
 		"final_position": actor.position,
+		"resolved_center_position": resolved_actor.position,
+		"resolved_velocity_mps": resolved_actor.velocity,
+		"resolved_contact_position": flight.destination,
+		"resolved_contact_time": contact_time,
 		"true_arrival_balance": true_opportunity.arrival_balance,
 		"true_physical_feasibility": true_opportunity.physical_feasibility,
 		"final_readiness": actor.readiness,
@@ -363,6 +389,22 @@ static func _evaluate_candidate(
 		"moments": moments,
 		"windows": window_dicts,
 	}
+
+
+static func _resolved_contact_time(
+	flight: BallFlight,
+	decision_time: float,
+	contact_deadline: float,
+	opportunity: ActionOpportunity,
+) -> float:
+	if opportunity == null:
+		return flight.arrival_time
+	var actor_arrival := decision_time + maxf(opportunity.travel_time, 0.0)
+	return clampf(
+		maxf(flight.arrival_time, actor_arrival),
+		flight.arrival_time,
+		contact_deadline,
+	)
 
 
 static func _set_options(
