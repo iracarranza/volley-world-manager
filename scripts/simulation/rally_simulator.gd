@@ -29,6 +29,9 @@ const LiveAttackIntegratorModel := preload(
 const ApproachMechanicsModel := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
+const ShadowBlockSystemModel := preload(
+	"res://scripts/simulation/shadow_block_system.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -355,6 +358,13 @@ func resolve(
 		receiver.id, seed_value + 1700003,
 	)
 	shadow_summary["shadow_attack"] = shadow_attack
+	## Gate 44: shadow-only attack-to-block observation. Always evaluated
+	## alongside the shadow attack it observes; never promoted into an
+	## official BLOCK event and never gated by a rollout flag.
+	shadow_summary["shadow_block"] = ShadowBlockSystemModel.evaluate(
+		attack_state, shadow_attack, seed_value + 1900007,
+	)
+	shadow_reception_trace.summary = shadow_summary
 	var attack_rollout_requested := using_live_setter \
 		and development_continuous_reception and OS.is_debug_build() \
 		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_ATTACK_OVERRIDE

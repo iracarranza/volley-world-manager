@@ -71,7 +71,7 @@ the full development-project feature. Preserve the product contract in
 | Attack ownership/contact | Official phase resolver | May be promoted only after promoted reception and setter |
 | Home attack preparation | `ApproachMechanicsSystem` affects normal attack quality, jump conversion, and available attack families | Same evidence passes through the attack audit and live candidate |
 | Home floor-defense geometry | Saved plan and block relationship drive phase positions and claimant geometry | Same |
-| Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; no persistent blocker-observation slice yet |
+| Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a shadow-only blocker-observation slice (Gate 44) now runs alongside it as evidence but does not decide or feed the official block |
 | 2D display | Consumes `RallyEvent` and trajectory metadata | May additionally show explicitly requested diagnostics |
 | 3D display | Paused | Paused |
 
@@ -91,42 +91,69 @@ they are not production activation.
   defense-to-counterattack continuations. Responsibility changes release time;
   the resulting run-up changes speed, lateral control, usable jump, quality,
   and available attacks.
+- Gate 44 gives every opponent front-row blocker an independent, decision-safe
+  observation of the shadow attack (perceived setter cues, a progressive set
+  read, a degraded hitter-approach cue, known rotation, and the called block
+  strategy) and a commitment chosen from that perception alone, resolved
+  against authoritative contact truth only afterward. It never touches the
+  official `BLOCK` event. See
+  [Gate 44](../calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md).
 
 The detailed gate records are in `docs/calibration/`. They are evidence and
 history, not a license to enable production flags.
 
 ## The one current next objective
 
-Build the **attack-to-block observation slice**. Do not start a scheduler rewrite,
-production rollout, opponent-attack mirror, or user-interface redesign as a
-substitute for this slice.
+Gate 44, the **attack-to-block observation slice**, is complete; see
+[Gate 44](../calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md) and
+`scripts/simulation/shadow_block_system.gd`. The current next objective is
+**Gate 45: individual and coordinated block decisions from observations**. Do
+not start a scheduler rewrite, production rollout, opponent-attack mirror, or
+user-interface redesign as a substitute for this slice.
 
-The current block resolver receives the already-resolved attacking lane and
-then calculates blocker read, close, assist, reach, and outcome. The missing
-step is allowing blockers to form and revise hypotheses from information they
-could plausibly observe before authoritative attack truth is applied.
+The current block resolver still receives the already-resolved attacking lane
+and calculates blocker read, close, assist, reach, and outcome directly
+(`RallySimulator._resolve_home_block`); Gate 44 did not change it. What Gate 44
+added is a shadow-only per-blocker hypothesis with no coordination between
+blockers -- `ShadowBlockSystem.evaluate()` resolves primary and assist roles
+only after every blocker has already independently committed, by comparing
+each blocker's own perception-driven target against authoritative truth. Two
+blockers can therefore commit to different zones with nothing reconciling
+them beforehand. Gate 45's job is to let blockers actually coordinate: a
+tentative commitment should be revisable when a teammate's cue changes what
+this blocker should do, before either commitment is graded.
 
-### Required first gate: shadow block hypotheses
+### Historical record: the shadow block hypotheses gate (Gate 44, complete)
 
-Create a shadow-only system that:
+Gate 44 built a shadow-only system that:
 
 1. starts from the authoritative attack flight and player state only at the
-   resolver boundary;
-2. constructs a separate player-specific observation for each blocker;
+   resolver boundary; **done** -- `ShadowBlockSystem.evaluate(state, shadow_attack, seed_value)`
+   is called immediately after `shadow_attack` is resolved in `RallySimulator.resolve()`;
+2. constructs a separate player-specific observation for each blocker; **done** --
+   one independent `_evaluate_blocker()` call per opponent front-row player;
 3. exposes perceived setter position/body cues, set trajectory estimates,
    hitter approach cues, known rotation, and tactical blocking instructions;
+   **done**, see the "What each blocker perceives" section of the Gate 44 record;
 4. never exposes keys beginning with `true_` or `authoritative_` to the blocker
-   decision function;
+   decision function; **done and enforced** by `BlockRolloutAudit.evaluate()`
+   and Gate 44 test 2;
 5. produces possible commitments such as hold/read, commit middle, close left,
-   close right, assist, or release from the block;
-6. projects movement from persistent position and velocity;
+   close right, assist, or release from the block; **done** --
+   `ShadowBlockSystem._choose_commitment()`;
+6. projects movement from persistent position and velocity; **done** via
+   `RallyMovementSystem.evaluate_opportunity()` and `ContactEnvelopeSystem`;
 7. resolves the selected perceived commitment against authoritative contact
-   truth afterward;
+   truth afterward; **done** -- `wrong_read`, `true_reachable`, and
+   `true_arrival_margin` are computed only after the commitment is fixed;
 8. records wrong reads, hesitation, solo closes, coordinated assists, arrival
-   margins, and rejection reasons;
-9. leaves official block events and results unchanged.
+   margins, and rejection reasons; **done** -- `wrong_read`, `hesitated`,
+   `solo_close`, `coordinated_assist`, and the reachability fields on every
+   blocker record;
+9. leaves official block events and results unchanged. **done and verified**
+   -- Gate 44 test 9, and the full regression suite (364/364).
 
-Use the existing attack architecture as a pattern:
+Use the existing attack architecture as a pattern for Gate 45 as well:
 
 - `PlayerObservation` for decision-safe data;
 - `RallyMovementSystem` and `ContactEnvelopeSystem` for physical feasibility;
@@ -141,20 +168,25 @@ actors, commitment timing, possible conflicting reads, and net-position rules.
 
 ### Suggested gate sequence
 
-| Gate | Deliverable | Authority |
-|---|---|---|
-| 44 | Deterministic block hypotheses and repeated perceived cues | Shadow only |
-| 45 | Individual and coordinated block decisions from observations | Shadow only |
-| 46 | Blocker progression fixtures and wrong-read calibration | Shadow only |
-| 47 | Candidate audit: legality, information purity, movement, contact and state immutability | Shadow only |
-| 48 | Guarded block rollout policy with production flag off | Official remains authoritative |
-| 49 | Explicit debug-only promoted block contact | Development fixture only |
+| Gate | Deliverable | Authority | Status |
+|---|---|---|---|
+| 44 | Deterministic block hypotheses and repeated perceived cues | Shadow only | **Complete** -- `shadow_block_system.gd` |
+| 45 | Individual and coordinated block decisions from observations | Shadow only | Not started |
+| 46 | Blocker progression fixtures and wrong-read calibration | Shadow only | Partial -- `block_progression_calibration.gd` covers reading-tier confidence and recognition timing only; wrong-read-rate calibration across scenarios is not built |
+| 47 | Candidate audit: legality, information purity, movement, contact and state immutability | Shadow only | Partial -- Gate 44's `block_rollout_audit.gd` covers legality, information purity, and state immutability only; movement- and contact-envelope-specific candidate auditing is not built |
+| 48 | Guarded block rollout policy with production flag off | Official remains authoritative | Not started |
+| 49 | Explicit debug-only promoted block contact | Development fixture only | Not started |
 
 Gate numbers are sequencing aids. Do not mark a gate complete merely because a
-class exists; its stated tests and authority boundary must pass.
+class exists; its stated tests and authority boundary must pass. The Gate 46
+and 47 "Partial" rows above are exactly that caution in practice: `block_rollout_audit.gd`
+and `block_progression_calibration.gd` exist and their own tests pass, but
+neither one satisfies its full named gate yet.
 
 ## Gate 44 acceptance contract
 
+Complete as of 2026-07-31; verified by `_test_gate_forty_four_shadow_block_hypotheses`
+in `tests/test_runner.gd` and `docs/calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md`.
 The first block gate is complete only when all of these are true:
 
 - equal seed and inputs produce equal observations, commitments, and evidence;
@@ -174,7 +206,8 @@ The first block gate is complete only when all of these are true:
 
 ## Tests to add with Gate 44
 
-Add focused tests before broad calibration:
+Added; all nine pass inside `_test_gate_forty_four_shadow_block_hypotheses`
+in `tests/test_runner.gd`. Kept here as the acceptance record:
 
 1. identical observation and seed produce an identical commitment fingerprint;
 2. observation dictionaries contain no truth-prefixed fields;
@@ -188,7 +221,10 @@ Add focused tests before broad calibration:
 9. with rollout disabled, official event identity is preserved.
 
 After focused tests pass, add a paired multi-seed calibration report. Do not tune
-from one visually convenient rally.
+from one visually convenient rally. `BlockerProgressionCalibration.run()` adds
+this for reading-tier confidence and recognition timing (30 seeds per tier by
+default); it does not yet cover wrong-read rate or coordinated-outcome
+calibration -- that is part of Gate 46's remaining scope.
 
 ## Invariants that must survive every match-engine change
 
@@ -235,8 +271,9 @@ Before ending work:
 ```text
 Read docs/textbook/FRESH_AGENT_HANDOFF.md and the files it names. Verify all
 claims against source before editing. Continue only the current next objective:
-the shadow-only attack-to-block observation slice. Preserve the dirty worktree,
-production-off rollout flags, player-information boundary, deterministic seeds,
-source-state immutability, and RallyEvent playback contract. Run the complete
-validation guide and update textbook evidence before handing off.
+Gate 45, individual and coordinated block decisions from the Gate 44 shadow
+block observations. Preserve the dirty worktree, production-off rollout flags,
+player-information boundary, deterministic seeds, source-state immutability,
+and RallyEvent playback contract. Run the complete validation guide and update
+textbook evidence before handing off.
 ```

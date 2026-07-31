@@ -135,6 +135,12 @@ This page is the quickest defense against confusing source-code existence with a
   Perceived responsibility and tactical duties set release time; the resulting
   runway changes approach speed, lateral control, usable jump height, attack
   quality, and the actions physically available at third contact.
+- Gate 44 gives every opponent front-row blocker an independent, decision-safe
+  observation of the shadow attack (perceived setter cues, a progressive set
+  read, a degraded hitter-approach cue, known rotation, and the called block
+  strategy) and a commitment chosen from that perception alone. It never
+  promotes into the official `BLOCK` event; it is evaluated as shadow evidence
+  alongside `shadow_attack` on every rally.
 
 ## Partially implemented
 
@@ -192,14 +198,19 @@ integration have not been implemented.
 ## Proposed next integration
 
 Migrate one contact at a time. Opponent serve through home attack now has a
-guarded development-only vertical slice. The only current next slice is the
-shadow-only attack-to-block observation boundary:
+guarded development-only vertical slice, and the attack-to-block observation
+boundary (Gate 44) is in place as shadow-only evidence. The current next slice
+is individual and coordinated block decisions from those observations (Gate 45):
 
-1. Generate block hypotheses from pass, setter, hitter, and tempo cues.
-2. Give each blocker a player-specific observation rather than the true lane.
-3. Allow wrong commits, hesitation, solo closes, and coordinated assists.
-4. Resolve the chosen block movement against the authoritative attack flight.
-5. Audit and compare fixed-seed behavior before adding a guarded rollout.
+1. Reconcile two blockers who committed to different zones into one team
+   decision, rather than resolving primary/assist only after the fact.
+2. Extend `BlockerProgressionCalibration` to cover coordinated outcomes, not
+   only individual reads.
+3. Build the Gate 47 candidate audit (legality, information purity, movement,
+   contact, and state immutability) as a promotion boundary, distinct from the
+   lighter `BlockRolloutAudit` Gate 44 already ships.
+4. Only then add a guarded block rollout policy (Gate 48) with its production
+   flag off, mirroring `RallyRolloutPolicy.select_attack_source()`.
 
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
 home attack logic onto the opponent side as a substitute. The complete Gate 44
@@ -208,6 +219,7 @@ acceptance contract and proposed Gate 44–49 sequence are in the
 
 ## Validation baseline
 
-The current foundation validation reports 355 passing checks. Treat that number
-as a point-in-time result, not a permanent guarantee. Run
-[VALIDATION.md](VALIDATION.md) to establish the current result.
+The current foundation validation reports 364 passing checks (355 plus the
+nine focused Gate 44 checks). Treat that number as a point-in-time result, not
+a permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the
+current result.

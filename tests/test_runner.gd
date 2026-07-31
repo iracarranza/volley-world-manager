@@ -66,6 +66,15 @@ const ATTACK_PROGRESSION_CALIBRATION_SCRIPT := preload(
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
+const SHADOW_BLOCK_SCRIPT := preload(
+	"res://scripts/simulation/shadow_block_system.gd"
+)
+const BLOCK_ROLLOUT_AUDIT_SCRIPT := preload(
+	"res://scripts/simulation/block_rollout_audit.gd"
+)
+const BLOCKER_PROGRESSION_CALIBRATION_SCRIPT := preload(
+	"res://scripts/simulation/block_progression_calibration.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -103,6 +112,7 @@ func _initialize() -> void:
 	_test_gate_thirty_seven_to_forty_one_attack_boundary()
 	_test_gate_forty_two_development_live_attack()
 	_test_transition_preparation_and_approach_mechanics()
+	_test_gate_forty_four_shadow_block_hypotheses()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -2388,6 +2398,271 @@ func _test_transition_preparation_and_approach_mechanics() -> void:
 			and not Array(attack_event.metadata.get("available_attack_actions", [])).is_empty()
 			and attack_event.metadata.has("jump_multiplier"),
 		"Normal rally attack events expose the causal preparation, takeoff, and action menu",
+	)
+
+
+func _synthetic_block_flight(destination_x: float = 0.50) -> BallFlight:
+	var signature := BallContactSignature.create(
+		&"set", 8.0, 0.0, 0.0, 0.0, 0.0, 0.82,
+	)
+	return BallFlight.create(
+		Vector2(0.50, 0.60), Vector2(destination_x, 0.53), 0.0, 0.48, signature, 2.55,
+	)
+
+
+func _synthetic_shadow_attack(
+	setter_id: int,
+	hitter_id: int,
+	contact_position: Vector2,
+	contact_time: float,
+) -> Dictionary:
+	return {
+		"available": true,
+		"setter_id": setter_id,
+		"set_flight": _synthetic_block_flight().to_dict(),
+		"hitter_response": {
+			"available": true,
+			"player_id": hitter_id,
+			"contact_position": contact_position,
+			"contact_time": contact_time,
+			"resolved_approach": {"runup_quality": 0.70},
+		},
+	}
+
+
+func _test_gate_forty_four_shadow_block_hypotheses() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var lineup: RotationLineup = manager.current_lineup()
+	var state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup, manager.current_defensive_plan(),
+		manager.opponent_team, manager.called_play(), false, 440001,
+	)
+	var opponent_lineup: RotationLineup = state.opponent_lineup
+	var setter_id := lineup.active_setter_id()
+	var hitter_id := lineup.player_at_slot(4)
+	var shadow_attack := _synthetic_shadow_attack(
+		setter_id, hitter_id, Vector2(0.82, 0.62), 1.30,
+	)
+
+	## Test 1: identical seed and inputs produce an identical commitment
+	## fingerprint for every blocker.
+	var run_a := SHADOW_BLOCK_SCRIPT.evaluate(state, shadow_attack, 550001)
+	var run_b := SHADOW_BLOCK_SCRIPT.evaluate(state, shadow_attack, 550001)
+	var blockers_a: Array = run_a.get("blockers", [])
+	var blockers_b: Array = run_b.get("blockers", [])
+	var fingerprints_match := bool(run_a.get("available", false)) \
+		and bool(run_b.get("available", false)) \
+		and not blockers_a.is_empty() and blockers_a.size() == blockers_b.size()
+	for index in range(blockers_a.size()):
+		if str(Dictionary(blockers_a[index]).get("commitment_fingerprint", "")) \
+				!= str(Dictionary(blockers_b[index]).get("commitment_fingerprint", "1")):
+			fingerprints_match = false
+	_check(
+		fingerprints_match,
+		"Gate 44 identical seed and inputs produce an identical commitment fingerprint",
+	)
+
+	## Test 2: no blocker's observation carries a truth-prefixed key, and every
+	## blocker plus the resolved primary/assist roles are legally front-row.
+	var audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(run_a, opponent_lineup)
+	_check(
+		bool(audit.get("eligible", false))
+			and bool(audit.get("observation_boundary_valid", false)),
+		"Gate 44 observation dictionaries contain no truth-prefixed fields",
+	)
+
+	## Test 3: a later read of the same set sharpens the perceived picture
+	## without ever moving the authoritative contact truth each blocker is
+	## later graded against.
+	var sample_blocker: Dictionary = blockers_a[0]
+	var sample_observation: Dictionary = sample_blocker.get("observation", {})
+	var early_destination := Vector2(sample_observation.get(
+		"perceived_set_destination_early", Vector2.ZERO
+	))
+	var late_destination := Vector2(sample_observation.get(
+		"perceived_set_destination_late", Vector2.ZERO
+	))
+	var confidence_early := float(sample_observation.get("confidence_early", 0.0))
+	var confidence_late := float(sample_observation.get("confidence_late", 0.0))
+	_check(
+		not early_destination.is_equal_approx(late_destination)
+			and confidence_late > confidence_early
+			and is_equal_approx(
+				float(sample_blocker.get("true_contact_x", -1.0)), 0.82
+			),
+		"Gate 44 a late setter cue changes perceived probabilities, not authoritative truth",
+	)
+
+	## Tests 4-6 use hand-built actors so movement attributes, reading
+	## attributes, and facing can be isolated one at a time.
+	var minimal_state := RallyState.new()
+	var setter_profile := VolleyballPlayer.new()
+	setter_profile.id = 9001
+	var setter_actor := RallyPlayerState.create(
+		setter_profile, &"home", 6, Vector2(0.70, 0.62)
+	)
+	## Destination matches the true_contact_position used below (slot 4's own
+	## zone, x=0.18) so a converged read reliably lands in the same zone the
+	## blocker is standing in -- otherwise a "correct" read of a target that
+	## truly is in a different zone would show up as a deliberate assist, not
+	## as the direction/positioning effect these tests isolate.
+	var set_flight := _synthetic_block_flight(0.18)
+	var hitter_response := {"resolved_approach": {"runup_quality": 0.70}}
+	var teammate_slots: Array[int] = [2, 3]
+
+	## Test 4: an elite reader recognizes no later and moves no faster than a
+	## developing reader under otherwise identical (paired) inputs.
+	var elite_profile := VolleyballPlayer.new()
+	elite_profile.id = 9101
+	elite_profile.anticipation = 95
+	elite_profile.court_vision = 95
+	elite_profile.decision_making = 95
+	elite_profile.tactical_discipline = 95
+	elite_profile.composure = 95
+	elite_profile.lateral_speed = 55
+	elite_profile.acceleration = 55
+	elite_profile.mass_kg = 82.0
+	var developing_profile := VolleyballPlayer.new()
+	developing_profile.id = 9102
+	developing_profile.anticipation = 20
+	developing_profile.court_vision = 20
+	developing_profile.decision_making = 20
+	developing_profile.tactical_discipline = 20
+	developing_profile.composure = 20
+	developing_profile.lateral_speed = 55
+	developing_profile.acceleration = 55
+	developing_profile.mass_kg = 82.0
+	var elite_actor := RallyPlayerState.create(elite_profile, &"opponent", 4, Vector2(0.18, 0.30))
+	var developing_actor := RallyPlayerState.create(
+		developing_profile, &"opponent", 4, Vector2(0.18, 0.30)
+	)
+	var elite_result := SHADOW_BLOCK_SCRIPT._evaluate_blocker(
+		minimal_state, elite_actor, setter_actor, set_flight, hitter_response,
+		"Read Block", teammate_slots, Vector2(0.18, 0.50), 1.30, 2.55, 660001,
+	)
+	var developing_result := SHADOW_BLOCK_SCRIPT._evaluate_blocker(
+		minimal_state, developing_actor, setter_actor, set_flight, hitter_response,
+		"Read Block", teammate_slots, Vector2(0.18, 0.50), 1.30, 2.55, 660001,
+	)
+	var elite_observation: Dictionary = elite_result.get("observation", {})
+	var developing_observation: Dictionary = developing_result.get("observation", {})
+	_check(
+		float(elite_observation.get("confidence_late", 0.0))
+				>= float(developing_observation.get("confidence_late", 0.0))
+			and float(elite_observation.get("recognition_delay_seconds", 99.0))
+				<= float(developing_observation.get("recognition_delay_seconds", -1.0))
+			and is_equal_approx(
+				float(elite_result.get("maximum_speed_mps", 0.0)),
+				float(developing_result.get("maximum_speed_mps", -1.0)),
+			),
+		"Gate 44 an elite reader recognizes no later and moves no faster than a developing reader",
+	)
+
+	## Test 5: with identical attributes and an identical implied commitment,
+	## only the correctly positioned blocker can actually close in time; a
+	## displaced blocker loses the same close.
+	var near_actor := RallyPlayerState.create(elite_profile, &"opponent", 4, Vector2(0.18, 0.40))
+	var far_actor := RallyPlayerState.create(elite_profile, &"opponent", 4, Vector2(0.92, 0.90))
+	var near_result := SHADOW_BLOCK_SCRIPT._evaluate_blocker(
+		minimal_state, near_actor, setter_actor, set_flight, hitter_response,
+		"Read Block", teammate_slots, Vector2(0.18, 0.50), 1.30, 2.55, 660002,
+	)
+	var far_result := SHADOW_BLOCK_SCRIPT._evaluate_blocker(
+		minimal_state, far_actor, setter_actor, set_flight, hitter_response,
+		"Read Block", teammate_slots, Vector2(0.18, 0.50), 1.30, 2.55, 660002,
+	)
+	_check(
+		is_equal_approx(
+			float(near_result.get("commitment_target_x", -1.0)),
+			float(far_result.get("commitment_target_x", -2.0)),
+		)
+			and bool(near_result.get("commitment_reachable", false))
+			and not bool(far_result.get("commitment_reachable", true)),
+		"Gate 44 a displaced blocker loses a close that the correctly positioned blocker has",
+	)
+
+	## Test 6: with position, attributes, and target held equal, only facing
+	## differs -- the blocker facing away from the target pays a larger
+	## direction-change cost than the one already facing toward it.
+	## Same Y as the commitment target (0.18, NET_Y) so the required movement
+	## is pure lateral -- otherwise a facing vector that only varies in X
+	## can be equally (mis)aligned with a movement direction that is mostly Y.
+	var facing_toward := RallyPlayerState.create(
+		elite_profile, &"opponent", 4, Vector2(0.30, CourtConstants.NET_Y)
+	)
+	facing_toward.facing = Vector2(-1.0, 0.0)
+	var facing_away := RallyPlayerState.create(
+		elite_profile, &"opponent", 4, Vector2(0.30, CourtConstants.NET_Y)
+	)
+	facing_away.facing = Vector2(1.0, 0.0)
+	var toward_result := SHADOW_BLOCK_SCRIPT._evaluate_blocker(
+		minimal_state, facing_toward, setter_actor, set_flight, hitter_response,
+		"Commit Pin", teammate_slots, Vector2(0.18, 0.50), 1.30, 2.55, 660003,
+	)
+	var away_result := SHADOW_BLOCK_SCRIPT._evaluate_blocker(
+		minimal_state, facing_away, setter_actor, set_flight, hitter_response,
+		"Commit Pin", teammate_slots, Vector2(0.18, 0.50), 1.30, 2.55, 660003,
+	)
+	_check(
+		is_equal_approx(
+			float(toward_result.get("commitment_target_x", -1.0)),
+			float(away_result.get("commitment_target_x", -2.0)),
+		)
+			and float(away_result.get("direction_change_delay_seconds", 0.0))
+				> float(toward_result.get("direction_change_delay_seconds", 0.0)),
+		"Gate 44 a blocker moving the wrong direction pays the direction-change cost",
+	)
+
+	## Test 7: the resolved primary and assist roles are deterministic and
+	## both legally occupy a front-row slot.
+	var primary_id := int(run_a.get("primary_id", -1))
+	var assist_id := int(run_a.get("assist_id", -1))
+	_check(
+		primary_id == int(run_b.get("primary_id", -2))
+			and assist_id == int(run_b.get("assist_id", -3))
+			and (primary_id < 0 or CourtConstants.is_front_row_slot(
+				opponent_lineup.slot_for_player(primary_id)
+			))
+			and (assist_id < 0 or CourtConstants.is_front_row_slot(
+				opponent_lineup.slot_for_player(assist_id)
+			)),
+		"Gate 44 primary and assist roles are deterministic and legally front-row",
+	)
+
+	## Test 8: evaluating a copied RallyState leaves that copy's fingerprint
+	## unchanged -- the shadow system never mutates source state, whether it
+	## is the original or a snapshot.
+	var state_copy := state.snapshot()
+	var fingerprint_before := SHADOW_BLOCK_SCRIPT._state_fingerprint(state_copy)
+	var copy_result := SHADOW_BLOCK_SCRIPT.evaluate(state_copy, shadow_attack, 550001)
+	var fingerprint_after := SHADOW_BLOCK_SCRIPT._state_fingerprint(state_copy)
+	_check(
+		fingerprint_before == fingerprint_after
+			and bool(copy_result.get("source_state_unchanged", false)),
+		"Gate 44 copied shadow state has the same fingerprint before and after evaluation",
+	)
+
+	## Test 9: Gate 44 has no rollout policy and no production flag -- the
+	## shadow block evaluation runs every rally, so the only thing to verify
+	## is that it never contaminates the official BLOCK event's identity.
+	var official_manager := GAME_MANAGER_SCRIPT.new()
+	official_manager.seed_vertical_slice_data()
+	official_manager.match_state.serving_home = false
+	var official_result: Resource = official_manager.resolve_active_rally(300062)
+	var official_block_seen := false
+	var official_block_contaminated := false
+	for raw_event in official_result.events:
+		var event := raw_event as RallyEvent
+		if event != null and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+			official_block_seen = true
+			if event.metadata.has("commitment_fingerprint") \
+					or event.metadata.has("shadow_block"):
+				official_block_contaminated = true
+	_check(
+		official_block_seen and not official_block_contaminated,
+		"Gate 44 official block event identity is preserved with no rollout policy active",
 	)
 
 

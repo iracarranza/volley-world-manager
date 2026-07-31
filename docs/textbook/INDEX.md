@@ -50,6 +50,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `ActionOpportunityWindow` | The interval during which a projected action remains available; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyMovementSystem` | Movement estimates and reception opportunities; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `ApproachMechanicsSystem` | Responsibility release, approach staging, takeoff physics, and attack availability; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
+| `ShadowBlockSystem` | Gate 44 attack-to-block observation: per-blocker decision-safe hypotheses and commitments, resolved against truth only afterward; [Gate 44](../calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md) |
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecision` | Structured evidence for one selected shadow action; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecisionSystem` | Comparison of open receiver choices and grading against ball truth; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
