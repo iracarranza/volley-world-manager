@@ -356,6 +356,7 @@ func _setup_shadow_debug_controls() -> void:
 		["Setter intent / response", TacticalCourt.SHADOW_LAYER_INTENT],
 		["Receiver reads", TacticalCourt.SHADOW_LAYER_READS],
 		["Opportunity windows", TacticalCourt.SHADOW_LAYER_OPPORTUNITIES],
+		["Continuous reachability", TacticalCourt.SHADOW_LAYER_CONTINUOUS],
 		["Contact envelopes", TacticalCourt.SHADOW_LAYER_ENVELOPES],
 		["Labels", TacticalCourt.SHADOW_LAYER_LABELS],
 	]:
@@ -423,6 +424,7 @@ func _refresh_shadow_overlay_menu() -> void:
 		TacticalCourt.SHADOW_LAYER_INTENT,
 		TacticalCourt.SHADOW_LAYER_READS,
 		TacticalCourt.SHADOW_LAYER_OPPORTUNITIES,
+		TacticalCourt.SHADOW_LAYER_CONTINUOUS,
 		TacticalCourt.SHADOW_LAYER_ENVELOPES,
 		TacticalCourt.SHADOW_LAYER_LABELS,
 	]:

@@ -3520,6 +3520,76 @@ func _test_gate_fifty_continuous_reachability_timeline() -> void:
 	)
 
 
+	## The continuous read must judge against the receiver's *perceived* arrival
+	## time, not the authoritative contact time, and being committed to
+	## receiving must not be what makes them unable to receive. Both are checked
+	## with one pair of fixtures: a long traversal with plenty of authoritative
+	## time, where only the perceived deadline differs.
+	var far_actor = state.player_state(&"home", player_id)
+	far_actor.apply_position(Vector2(0.5, 0.92), Vector2.ZERO)
+	var generous: Array[Dictionary] = [{
+		"decision_time": 0.1, "perceived_destination": Vector2(0.52, 0.80),
+		"perceived_arrival_time": 2.6,
+		"projected_position": Vector2(0.5, 0.92),
+		"projected_velocity_mps": Vector2.ZERO, "reachable": false,
+	}]
+	var generous_result: Dictionary = RallyOpportunitySystem.evaluate_reception_timeline(
+		state, player_id, generous, 3.0, 0.0,
+	)
+	## The window must open as soon as the traversal is genuinely makeable --
+	## roughly 0.15s here. If the receive commitment is left charged against
+	## available time, reachability instead only "opens" at the instant the
+	## player physically lands on the target, about 1.0s in, so the timestamp is
+	## what discriminates rather than the boolean.
+	_check(
+		bool(generous_result.get("continuous_ever_reachable", false))
+			and float(generous_result.get("continuous_opened_at", -1.0)) >= 0.0
+			and float(generous_result.get("continuous_opened_at", 99.0)) < 0.5,
+		"a receiver with real time to spare opens continuously reachable immediately, not only once they have arrived",
+	)
+
+	far_actor = state.player_state(&"home", player_id)
+	far_actor.apply_position(Vector2(0.5, 0.92), Vector2.ZERO)
+	var panicked: Array[Dictionary] = generous.duplicate(true)
+	panicked[0]["perceived_arrival_time"] = 0.16
+	var panicked_result: Dictionary = RallyOpportunitySystem.evaluate_reception_timeline(
+		state, player_id, panicked, 3.0, 0.0,
+	)
+	_check(
+		not bool(panicked_result.get("continuous_ever_reachable", false)),
+		"the continuous read judges against the perceived arrival time, not the authoritative contact time",
+	)
+
+
+	## Gate 51: the trail has to survive the trip into RallyResult.analysis for
+	## the court overlay to have anything to draw, and it has to stay bounded --
+	## this candidate is built on every rally, and a raw 30 Hz sample set per
+	## gap is far more dictionaries than a debug overlay needs.
+	var manager_for_transport := GAME_MANAGER_SCRIPT.new()
+	manager_for_transport.seed_vertical_slice_data()
+	manager_for_transport.match_state.serving_home = false
+	var transported: Resource = manager_for_transport.resolve_active_rally(1002)
+	var transported_repeated: Dictionary = Dictionary(Dictionary(Dictionary(
+		transported.analysis.get("shadow_reception", {})
+	).get("summary", {})).get("perception_candidates", {})).get("repeated_read", {})
+	var transported_trail: Array = transported_repeated.get("continuous_trail", [])
+	var trail_well_formed := not transported_trail.is_empty() \
+		and transported_trail.size() <= ShadowReceptionSystem.CONTINUOUS_TRAIL_MAX_POINTS
+	var trail_times_ordered := true
+	var previous_trail_time := -INF
+	for raw_point in transported_trail:
+		var point: Dictionary = raw_point
+		trail_well_formed = trail_well_formed and point.has("position") \
+			and point.has("reachable") and point.has("time")
+		trail_times_ordered = trail_times_ordered \
+			and float(point.get("time", -INF)) >= previous_trail_time
+		previous_trail_time = float(point.get("time", -INF))
+	_check(
+		trail_well_formed and trail_times_ordered,
+		"the continuous trail reaches rally analysis bounded, ordered, and drawable",
+	)
+
+
 ## Two read-only diagnostics. Neither changes an outcome; both exist so that
 ## claims about the movement model rest on measurement.
 func _test_movement_timing_and_locomotion_diagnostics() -> void:

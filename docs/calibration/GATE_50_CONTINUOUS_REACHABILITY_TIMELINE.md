@@ -63,25 +63,50 @@ synthetic stand-in.
 | Metric | Result |
 |---|---|
 | Ever-reachable agreement (discrete vs. continuous) | 100% |
-| Mean window-open timing delta | 0.51 s |
-| Worst window-open timing delta | 1.02 s |
+| Mean window-open timing delta | 0.095 s |
+| Worst window-open timing delta | 0.220 s |
+| Mean window-close timing delta | 0.018 s |
+| Worst window-close timing delta | 0.211 s |
 | Source state left unmutated | 100% |
 
 The two models never disagree on *whether* a receiver is ever reachable. They
-disagree substantially on *when*: the discrete model can report a window
-opening up to a full second later (or earlier) than the actor's real,
-continuously-integrated position first crosses into reach. That gap is exactly
-the timing error a three-read-per-rally model carries by construction, made
-visible for the first time rather than assumed away.
+disagree on *when*, by up to about a fifth of a second at the extreme -- which
+is roughly the scale you would predict from a model that only looks three
+times per rally being compared against one that looks thirty times a second.
 
-**Known coverage gap in this sweep.** Every scenario uses one fixed target per
-read set; against a fixed target, distance closes monotonically and
-reachability never flips back to false once achieved, so both models always
-close their window at the contact deadline and `close_delta` is 0 in all 240
-cases where a window closed. Proving whether *closing* timing disagrees the
-same way `opening` timing does needs a scenario where the perceived
-destination itself corrects mid-flight -- a real Gate 7 case this sweep does
-not yet construct. Flagged rather than left silent.
+### Correction: the first published numbers for this gate were wrong
+
+This table replaces an earlier one reporting a 0.51 s mean and 1.02 s worst
+open delta, with close deltas identically zero and a note claiming closing
+timing could not be exercised. Those figures were artifacts of two defects in
+the first implementation, both found when the trail was first drawn on the
+court in Gate 51 and every real rally came back "never reachable":
+
+1. **The receive commitment zeroed its own available time.** `set_intent()`
+   sets `committed_until` to the deadline, and `evaluate_opportunity()`
+   subtracts `committed_until` from the time still available. That is correct
+   when asking whether a player could take up some *other* action, and wrong
+   for the action they are committed to: it left `available_time` at zero on
+   every sample, so a sample only ever read "reachable" once the player had
+   physically landed on the target. The measured delta was therefore not a
+   timing comparison at all -- it was time-to-arrival. The sample actor's
+   commitment is now cleared before evaluation.
+2. **The deadline was authoritative, not perceived.** The continuous read
+   judged against `contact_time`, the true flight arrival, where the discrete
+   read in `ShadowReceptionSystem` correctly uses
+   `estimate.perceived_arrival_time`. This was a real information-boundary
+   leak introduced by this gate, and the original fingerprint test did not
+   catch it because that test varied `state.ball` rather than the deadline
+   argument. The continuous read now uses the perceived arrival time carried
+   on each read, and sampling stops at that instant -- past it there is no
+   action left to be reachable for.
+
+The original calibration masked both because its target offsets were small
+enough that actors frequently arrived exactly on target, and a zero remaining
+distance reads as reachable even with zero time. Two regression checks now
+pin the corrected behaviour by *timestamp* rather than by boolean, because
+the boolean is what was insensitive: with the commitment reset removed, the
+fixture's window-open time moves from 0.15 s to 1.02 s and the check fails.
 
 ## Scope
 
@@ -112,15 +137,22 @@ not yet construct. Flagged rather than left silent.
    `state.ball` between two otherwise-identical calls -- changing
    authoritative truth while holding `read_moments` fixed -- produces
    byte-identical `continuous_samples`;
-3. the continuous read finds the same actor reachable the discrete windows
-   do, on a realistic short correction (the kinematics-driven check, not a
-   hand-set flag);
+3. the continuous read finds the same actor reachable the discrete windows do,
+   on a realistic short correction;
 4. the discrete-vs-continuous delta fields, when present, are bounded real
-   numbers rather than degenerate.
+   numbers rather than degenerate;
+5. a receiver with real time to spare opens continuously reachable at ~0.15 s
+   rather than ~1.0 s -- asserted on the *timestamp*, since that is what
+   discriminates the commitment defect above;
+6. the same fixture with only the perceived arrival time pulled earlier is
+   never continuously reachable, proving the deadline is the perceived value
+   and not the authoritative `contact_time`.
 
 A pre-existing check (`_test_shadow_reception_trace`) asserted the timeline's
 entry count was exactly 4 (3 reads + 1 deadline); it is now 7 (+1
 `MOVEMENT_UPDATE` per gap), updated rather than deleted, since the count
 changing is this gate's whole point.
 
-Full suite: 416 checks passing (411 before this gate).
+Both corrections above were driven to failure before being fixed: reverting
+the commitment reset fails check 5, and the original implementation fails
+check 6.

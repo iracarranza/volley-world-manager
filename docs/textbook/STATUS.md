@@ -180,7 +180,13 @@ This page is the quickest defense against confusing source-code existence with a
   function's existing discrete windows are unmodified, and the comparison is
   purely additive evidence. The two models never disagree on whether a
   receiver is ever reachable, but the discrete read-only model's window-open
-  timestamp can be off by up to a second against the continuous one.
+  timestamp is off by up to about 0.22s against the continuous one.
+- Gate 51 carries that continuous read onto the 2D court as a toggleable
+  shadow overlay layer, so the sampled traversal can be looked at beside the
+  discrete windows rather than only measured. Drawing it immediately exposed
+  two defects in Gate 50 (a receive commitment that zeroed its own available
+  time, and an authoritative rather than perceived deadline); both are fixed
+  and Gate 50's published numbers were corrected.
 
 ## Partially implemented
 
@@ -278,9 +284,9 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 416 passing checks (401 as of Gate
+The current foundation validation reports 419 passing checks (401 as of Gate
 49, plus playback-sequencing and approach-run regression checks, block
-visualization geometry checks, and five checks for Gate 50's continuous
-reachability timeline). Treat that number as a point-in-time result, not a
+visualization geometry checks, and eight checks across Gate 50's continuous
+reachability timeline and Gate 51's overlay transport). Treat that number as a point-in-time result, not a
 permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the
 current result.

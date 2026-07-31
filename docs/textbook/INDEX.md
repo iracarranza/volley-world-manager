@@ -26,6 +26,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | What are development projects and latent-role projections? | [P5-C2](part_05_management/02_development_to_match_options.md) |
 | What should I build next? | [Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md#the-one-current-next-objective) |
 | How does continuous movement fit the information boundary and opportunity windows? | [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |
+| How do I see continuous movement on the court and tune against it? | [Gate 51](../calibration/GATE_51_OBSERVABLE_CONTINUOUS_MOVEMENT.md) |
 | What is historical practice rather than current roadmap work? | [P6-C2](part_06_exercises/02_beginner_project_ladder.md) |
 
 ## Symbols
@@ -65,6 +66,8 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; now also schedules `RallyMoment.Kind.MOVEMENT_UPDATE` per Gate 50; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md); [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |
 | `RallyMoment.Kind.MOVEMENT_UPDATE` | Continuous reachability sampling across an inter-read gap, shadow-only; [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |
 | `ContinuousReachabilityCalibration` | Measures discrete-vs-continuous reachability timing disagreement across seeded fixtures; [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |
+| `TacticalCourt._draw_continuous_reachability` | Draws the continuously sampled traversal, coloured by reachability, beside the discrete windows; [Gate 51](../calibration/GATE_51_OBSERVABLE_CONTINUOUS_MOVEMENT.md) |
+| `SHADOW_LAYER_CONTINUOUS` | Shadow overlay toggle for the continuous reachability trail; [Gate 51](../calibration/GATE_51_OBSERVABLE_CONTINUOUS_MOVEMENT.md) |
 | `RallyDecision` | Structured evidence for one selected shadow action; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecisionSystem` | Comparison of open receiver choices and grading against ball truth; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `CoverageCalculator` | Arrival and claimant calculations; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |

@@ -134,6 +134,10 @@ static func _build_read_moments(
 		moments.append({
 			"decision_time": decision_time,
 			"perceived_destination": target,
+			## Stated rather than left to the fallback: this fixture models a
+			## receiver whose read of the arrival time is correct, so the
+			## comparison isolates discreteness from perception error.
+			"perceived_arrival_time": contact_time,
 			"projected_position": projected_actor.position,
 			"projected_velocity_mps": projected_actor.velocity,
 			"reachable": opportunity.reachable,

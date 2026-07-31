@@ -68,9 +68,13 @@ const SHADOW_LAYER_READS: int = 4
 const SHADOW_LAYER_OPPORTUNITIES: int = 8
 const SHADOW_LAYER_LABELS: int = 16
 const SHADOW_LAYER_ENVELOPES: int = 32
+## Gate 51: the continuously-sampled reachability traversal, drawn beside the
+## discrete windows it is compared against. On by default in the shadow
+## fixture -- the point of building it was to be able to look at it.
+const SHADOW_LAYER_CONTINUOUS: int = 64
 const SHADOW_LAYER_DEFAULT: int = \
 	SHADOW_LAYER_CORE | SHADOW_LAYER_INTENT | SHADOW_LAYER_LABELS \
-	| SHADOW_LAYER_ENVELOPES
+	| SHADOW_LAYER_ENVELOPES | SHADOW_LAYER_CONTINUOUS
 const SHADOW_LAYER_ALL: int = SHADOW_LAYER_DEFAULT \
 	| SHADOW_LAYER_READS | SHADOW_LAYER_OPPORTUNITIES
 const VISUAL_BALL_PATH: int = 1
@@ -1252,6 +1256,7 @@ func _draw_shadow_reception_trace() -> void:
 	)
 	var show_labels := bool(shadow_overlay_layers & SHADOW_LAYER_LABELS)
 	var show_envelopes := bool(shadow_overlay_layers & SHADOW_LAYER_ENVELOPES)
+	var show_continuous := bool(shadow_overlay_layers & SHADOW_LAYER_CONTINUOUS)
 	var true_destination := Vector2(
 		summary.get("true_destination", Vector2.ZERO)
 	)
@@ -1302,7 +1307,7 @@ func _draw_shadow_reception_trace() -> void:
 		_draw_shadow_attack(
 			shadow_attack, show_reads, show_labels
 		)
-	if not show_reads and not show_opportunities:
+	if not show_reads and not show_opportunities and not show_continuous:
 		return
 	for raw_candidate in candidates:
 		var candidate: Dictionary = raw_candidate
@@ -1379,6 +1384,8 @@ func _draw_shadow_reception_trace() -> void:
 							read_points[read_index], 9.0, 0.0, TAU, 16,
 							Color("ef6461"), 2.5,
 						)
+			if show_continuous:
+				_draw_continuous_reachability(repeated, show_labels)
 		var label := "%s %+.2fs" % [
 			str(candidate.get("player_name", candidate.get("player_id", "?"))),
 			float(candidate.get("arrival_margin", 0.0)),
@@ -1394,6 +1401,67 @@ func _draw_shadow_reception_trace() -> void:
 				ThemeDB.fallback_font, perceived + Vector2(12.0, 14.0),
 				label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, candidate_color,
 			)
+
+
+## Gate 51: draws the continuously-sampled reachability traversal.
+##
+## The discrete overlay above marks reachability only at the three perception
+## reads. This draws the same receiver's real integrated path between those
+## reads, segment-coloured by whether they could still make the contact at
+## that instant, plus a ring at the moment reachability actually opens. The
+## gap between that ring and the discrete "opened" arc is the timing error the
+## read-only model carries, made visible rather than reported as a number.
+func _draw_continuous_reachability(
+	repeated: Dictionary, show_labels: bool
+) -> void:
+	var trail: Array = repeated.get("continuous_trail", [])
+	if trail.size() < 2:
+		return
+	var reachable_color := Color("53d769")
+	var unreachable_color := Color("ef6461")
+	var opened_at := float(repeated.get("continuous_opened_at", -1.0))
+	var open_marker := Vector2.ZERO
+	var has_open_marker := false
+	for index in range(1, trail.size()):
+		var previous: Dictionary = trail[index - 1]
+		var current: Dictionary = trail[index]
+		var from_local := _court_to_local(Vector2(previous.get("position", Vector2.ZERO)))
+		var to_local := _court_to_local(Vector2(current.get("position", Vector2.ZERO)))
+		var reachable := bool(current.get("reachable", false))
+		draw_line(
+			from_local, to_local,
+			_with_alpha(reachable_color if reachable else unreachable_color, 0.85),
+			2.5,
+		)
+		if not has_open_marker and opened_at >= 0.0 \
+				and is_equal_approx(float(current.get("time", -1.0)), opened_at):
+			open_marker = to_local
+			has_open_marker = true
+	if has_open_marker:
+		draw_arc(open_marker, 11.0, 0.0, TAU, 20, reachable_color, 2.5)
+		draw_line(
+			open_marker + Vector2(0.0, -15.0),
+			open_marker + Vector2(0.0, 15.0),
+			_with_alpha(reachable_color, 0.55), 1.5,
+		)
+	if not show_labels:
+		return
+	var anchor := _court_to_local(Vector2(
+		Dictionary(trail[trail.size() - 1]).get("position", Vector2.ZERO)
+	))
+	var delta: Variant = repeated.get("continuous_open_delta_seconds")
+	var label := "continuous"
+	if delta != null:
+		## Negative means the continuous read found the receiver in reach
+		## before the discrete read noticed.
+		label = "continuous %+.2fs vs reads" % float(delta)
+	elif not bool(repeated.get("continuous_ever_reachable", false)):
+		label = "continuous · never in reach"
+	draw_string(
+		ThemeDB.fallback_font, anchor + Vector2(12.0, -10.0),
+		label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+		_with_alpha(reachable_color, 0.95),
+	)
 
 
 func _draw_shadow_setter_intent(

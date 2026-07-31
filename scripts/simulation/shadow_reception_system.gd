@@ -10,6 +10,9 @@ const RallyContactModel := preload("res://scripts/simulation/rally_contact_syste
 const ShadowSetterResponseModel := preload("res://scripts/simulation/shadow_setter_response_system.gd")
 const RallyPlaybackAdapterModel := preload("res://scripts/simulation/rally_playback_adapter.gd")
 const REPEATED_READ_PROGRESS: Array[float] = [0.12, 0.32, 0.52]
+## Enough points to read the shape of a traversal on a court-sized overlay
+## without carrying a 30 Hz sample set through every rally's analysis.
+const CONTINUOUS_TRAIL_MAX_POINTS: int = 24
 
 
 ## Evaluates reception from persistent positions and player-specific perceived
@@ -470,6 +473,31 @@ static func evaluate(
 						"scheduled_ever_reachable", false
 					)
 				),
+				## Gate 51: carried to the summary so the 2D court can draw the
+				## continuous read beside the discrete windows it is compared
+				## against.
+				"continuous_trail": selected_repeated_read_candidate.get(
+					"continuous_trail", []
+				),
+				"continuous_ever_reachable": bool(
+					selected_repeated_read_candidate.get(
+						"continuous_ever_reachable", false
+					)
+				),
+				"continuous_opened_at": float(
+					selected_repeated_read_candidate.get(
+						"continuous_opened_at", -1.0
+					)
+				),
+				"continuous_closed_at": float(
+					selected_repeated_read_candidate.get(
+						"continuous_closed_at", -1.0
+					)
+				),
+				"continuous_open_delta_seconds": \
+					selected_repeated_read_candidate.get(
+						"continuous_open_delta_seconds"
+					),
 				"opportunity_window_count": int(
 					selected_repeated_read_candidate.get(
 						"opportunity_window_count", 0
@@ -706,6 +734,27 @@ static func _repeated_read_candidate(
 		"scheduled_ever_reachable": bool(
 			scheduled_timeline.get("ever_reachable", false)
 		),
+		## Gate 51: the continuous reachability read, carried far enough to be
+		## drawn. The full-fidelity sample array stays inside
+		## `opportunity_timeline` for calibration; what travels here is a
+		## bounded trail, because this candidate is built on every rally and a
+		## 30 Hz sample set per inter-read gap is a lot of dictionaries to carry
+		## around for something only a debug overlay reads.
+		"continuous_trail": _decimate_continuous_trail(
+			Array(scheduled_timeline.get("continuous_samples", []))
+		),
+		"continuous_ever_reachable": bool(
+			scheduled_timeline.get("continuous_ever_reachable", false)
+		),
+		"continuous_opened_at": float(
+			scheduled_timeline.get("continuous_opened_at", -1.0)
+		),
+		"continuous_closed_at": float(
+			scheduled_timeline.get("continuous_closed_at", -1.0)
+		),
+		"continuous_open_delta_seconds": scheduled_timeline.get(
+			"discrete_vs_continuous_open_delta"
+		),
 		"opportunity_window_count": int(
 			scheduled_timeline.get("window_count", 0)
 		),
@@ -717,6 +766,35 @@ static func _repeated_read_candidate(
 		),
 		"opportunity_closed_early": opportunity_closed_early,
 	}
+
+
+## Gate 51: reduces the continuous sample set to a bounded drawable trail.
+##
+## Every point where reachability flips is kept unconditionally -- those are
+## the only samples that carry information the scalars do not already report,
+## since they are where the window actually opens and closes. The rest are
+## thinned evenly, so a long traversal costs the same to carry as a short one.
+static func _decimate_continuous_trail(
+	samples: Array, max_points: int = CONTINUOUS_TRAIL_MAX_POINTS
+) -> Array[Dictionary]:
+	var trail: Array[Dictionary] = []
+	if samples.is_empty():
+		return trail
+	var stride := maxi(int(ceil(float(samples.size()) / float(maxi(max_points, 1)))), 1)
+	var previous_reachable := bool(Dictionary(samples[0]).get("reachable", false))
+	for index in range(samples.size()):
+		var sample: Dictionary = samples[index]
+		var reachable := bool(sample.get("reachable", false))
+		var is_transition := index > 0 and reachable != previous_reachable
+		previous_reachable = reachable
+		if index == 0 or index == samples.size() - 1 \
+				or is_transition or index % stride == 0:
+			trail.append({
+				"time": float(sample.get("time", 0.0)),
+				"position": Vector2(sample.get("position", Vector2.ZERO)),
+				"reachable": reachable,
+			})
+	return trail
 
 
 static func _contact_options(

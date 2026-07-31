@@ -11,10 +11,11 @@ extends RefCounted
 ## between them. MOVEMENT_UPDATE consumes ShadowMovementSystem's already-proven
 ## stepper to continuously sample the actor's real traversal across each gap
 ## and evaluate reachability throughout it, then reports where that continuous
-## read disagrees with the discrete one. It reads only actor.intent_target,
-## which the preceding PERCEPTION moment just set from perceived data -- it
-## never touches ball truth, and it never mutates `actor`, so the discrete
-## computation this function already performed is unaffected.
+## read disagrees with the discrete one. It reads only what the preceding
+## PERCEPTION moment set from perceived data -- the intent target and that
+## read's perceived arrival time -- so it never consults ball truth, and it
+## never mutates `actor`, leaving the discrete computation this function
+## already performed unaffected.
 static func evaluate_reception_timeline(
 	source_state: RallyState,
 	player_id: int,
@@ -73,6 +74,12 @@ static func evaluate_reception_timeline(
 	var continuous_samples: Array[Dictionary] = []
 	var continuous_opened_at := -1.0
 	var continuous_closed_at := -1.0
+	## The deadline the continuous read judges against. It must be the
+	## receiver's *perceived* arrival time -- the same value the discrete read
+	## in `ShadowReceptionSystem` uses -- not `contact_time`, which is the
+	## authoritative flight arrival. A player deciding whether they can still
+	## get there reasons from when they think the ball lands.
+	var perceived_deadline := contact_time
 	while true:
 		var moment := scheduler.next()
 		if moment == null:
@@ -95,6 +102,9 @@ static func evaluate_reception_timeline(
 			)
 			previous_target = target
 			has_intent = true
+			perceived_deadline = float(sample.get(
+				"perceived_arrival_time", contact_time
+			))
 			var reachable := bool(sample.get("reachable", false))
 			var transition := "sample"
 			if reachable and active_window == null:
@@ -130,6 +140,13 @@ static func evaluate_reception_timeline(
 			})
 		elif moment.kind == RallyMoment.Kind.MOVEMENT_UPDATE:
 			var gap_end := float(moment.data.get("gap_end", moment.time))
+			## Never sample past the instant the receiver believes the ball
+			## arrives. Beyond it there is no action left to be reachable for, and
+			## an actor who has coasted onto their target would otherwise report
+			## "reachable" purely because the remaining distance is zero -- the
+			## same have-you-already-arrived degradation the commitment reset
+			## above avoids, arriving by a different route.
+			gap_end = minf(gap_end, perceived_deadline)
 			var gap_length := maxf(gap_end - moment.time, 0.0)
 			if gap_length > 0.0001 and has_intent:
 				var integration: Dictionary = ShadowMovementSystem.integrate(
@@ -151,9 +168,19 @@ static func evaluate_reception_timeline(
 							) / step_seconds
 						var sample_actor := actor.snapshot()
 						sample_actor.apply_position(Vector2(trail[sample_index]), sample_velocity)
+						## `set_intent` above committed this actor to receiving until
+						## the deadline, and `evaluate_opportunity` charges
+						## `committed_until` against the time still available. That is
+						## right when asking whether a player could take up some *other*
+						## action, and wrong here: being committed to receiving must not
+						## be what makes them unable to receive. Left in place it zeroes
+						## available time on every sample and the read silently degrades
+						## into "have you already arrived" rather than "can you still
+						## get there".
+						sample_actor.committed_until = 0.0
 						var opportunity := RallyMovementSystem.evaluate_opportunity(
 							sample_actor, &"receive", actor.intent_target,
-							contact_time, sample_time, tactical_priority,
+							perceived_deadline, sample_time, tactical_priority,
 						)
 						continuous_samples.append({
 							"time": sample_time,
