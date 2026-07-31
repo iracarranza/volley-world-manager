@@ -1600,12 +1600,19 @@ func _draw_rally_playback() -> void:
 		block_event = playback_event
 	if block_event != null and bool(visualization_layers & VISUAL_CONTACT_OVERLAYS):
 		_draw_block_coverage(block_event)
-	var shadow_position := ball_position + Vector2(3.0, 5.0)
-	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
 	var apex_height := float(trajectory.get("apex_height_meters", 0.0))
 	var height_scale := sin(PI * playback_progress) * apex_height
-	draw_circle(ball_position, 9.0 + height_scale * 0.8, Color("f5d328"))
-	draw_arc(ball_position, 6.0, 0.0, TAU, 16, Color("245ba7"), 2.0)
+	var perspective_progress := _perspective_adjusted_progress(playback_progress, height_scale, apex_height)
+	var perspective_inverse := 1.0 - perspective_progress
+	var perspective_ball_position := perspective_inverse * perspective_inverse * start \
+		+ 2.0 * perspective_inverse * perspective_progress * control \
+		+ perspective_progress * perspective_progress * finish
+	var perspective_height_scale := sin(PI * perspective_progress) * apex_height
+	var ball_radius_scale := 1.0 + (perspective_height_scale / max(apex_height, 0.1)) * 0.35
+	var shadow_position := perspective_ball_position + Vector2(3.0, 5.0)
+	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
+	draw_circle(perspective_ball_position, 9.0 * ball_radius_scale, Color("f5d328"))
+	draw_arc(perspective_ball_position, 6.0 * ball_radius_scale, 0.0, TAU, 16, Color("245ba7"), 2.0)
 
 
 func _draw_block_coverage(block_event: Resource) -> void:
@@ -1749,3 +1756,12 @@ func _with_alpha(raw_color: Variant, alpha: float) -> Color:
 	var result: Color = raw_color
 	result.a = alpha
 	return result
+
+
+func _perspective_adjusted_progress(nominal_progress: float, current_height: float, apex_height: float) -> float:
+	if apex_height <= 0.0:
+		return nominal_progress
+	var height_ratio := clampf(current_height / apex_height, 0.0, 1.0)
+	var speed_multiplier := lerp(1.15, 0.75, height_ratio)
+	var adjusted_progress := nominal_progress * speed_multiplier
+	return clampf(adjusted_progress, 0.0, 1.0)
