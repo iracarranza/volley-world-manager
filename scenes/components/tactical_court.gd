@@ -29,6 +29,14 @@ const LIGHT_PALETTE := {
 	"text": Color("10281d"),
 	"path": Color("d94343"),
 	"secondary_path": Color("c77b28"),
+	"serve": Color("8B0000"),
+	"reception": Color("00008B"),
+	"set": Color("6495ED"),
+	"attack": Color("228B22"),
+	"block_stuff": Color("8B0000"),
+	"block_deflect": Color("FF8C00"),
+	"block_miss": Color("32CD32"),
+	"defense": Color("FFBF00"),
 }
 
 const DARK_PALETTE := {
@@ -44,6 +52,14 @@ const DARK_PALETTE := {
 	"text": Color("f6f3d4"),
 	"path": Color("f4d329"),
 	"secondary_path": Color("62b4ff"),
+	"serve": Color("FF6B6B"),
+	"reception": Color("4ECDC4"),
+	"set": Color("95E1D3"),
+	"attack": Color("90EE90"),
+	"block_stuff": Color("FF6B6B"),
+	"block_deflect": Color("FFB366"),
+	"block_miss": Color("7FFF7F"),
+	"defense": Color("FFFF99"),
 }
 
 const SHADOW_LAYER_CORE: int = 1
@@ -1584,12 +1600,19 @@ func _draw_rally_playback() -> void:
 		block_event = playback_event
 	if block_event != null and bool(visualization_layers & VISUAL_CONTACT_OVERLAYS):
 		_draw_block_coverage(block_event)
-	var shadow_position := ball_position + Vector2(3.0, 5.0)
-	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
 	var apex_height := float(trajectory.get("apex_height_meters", 0.0))
 	var height_scale := sin(PI * playback_progress) * apex_height
-	draw_circle(ball_position, 9.0 + height_scale * 0.8, Color("f5d328"))
-	draw_arc(ball_position, 6.0, 0.0, TAU, 16, Color("245ba7"), 2.0)
+	var perspective_progress := _perspective_adjusted_progress(playback_progress, height_scale, apex_height)
+	var perspective_inverse := 1.0 - perspective_progress
+	var perspective_ball_position := perspective_inverse * perspective_inverse * start \
+		+ 2.0 * perspective_inverse * perspective_progress * control \
+		+ perspective_progress * perspective_progress * finish
+	var perspective_height_scale := sin(PI * perspective_progress) * apex_height
+	var ball_radius_scale := 1.0 + (perspective_height_scale / max(apex_height, 0.1)) * 0.35
+	var shadow_position := perspective_ball_position + Vector2(3.0, 5.0)
+	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
+	draw_circle(perspective_ball_position, 9.0 * ball_radius_scale, Color("f5d328"))
+	draw_arc(perspective_ball_position, 6.0 * ball_radius_scale, 0.0, TAU, 16, Color("245ba7"), 2.0)
 
 
 func _draw_block_coverage(block_event: Resource) -> void:
@@ -1620,34 +1643,51 @@ func _followup_block_event() -> Resource:
 
 func _playback_event_color(followup_block: Resource) -> Color:
 	var event_type := int(playback_event.event_type)
-	if event_type == RallyEventModel.EventType.BLOCK:
-		var block_outcome := str(playback_event.metadata.get("outcome", ""))
-		if block_outcome == "stuff":
-			return Color("e64f4f")
-		if block_outcome in ["touch", "funnel", "recycle"]:
-			return Color("f2c94c")
-		if block_outcome == "miss":
-			return Color("4ad66d")
-		return palette["path"] if playback_event.success else Color("e64f4f")
-	if followup_block == null or event_type != RallyEventModel.EventType.ATTACK:
-		return palette["path"] if playback_event.success else Color("e64f4f")
-	var block_outcome := str(followup_block.metadata.get("outcome", ""))
-	if block_outcome == "stuff":
-		return Color("e64f4f")
-	if block_outcome in ["touch", "funnel", "recycle"]:
-		return Color("f2c94c")
-	return Color("4ad66d")
+	match event_type:
+		RallyEventModel.EventType.SERVE:
+			return palette["serve"]
+		RallyEventModel.EventType.RECEPTION:
+			return palette["reception"]
+		RallyEventModel.EventType.SET_DECISION, RallyEventModel.EventType.SET:
+			return palette["set"]
+		RallyEventModel.EventType.ATTACK:
+			if followup_block == null:
+				return palette["attack"]
+			var block_outcome := str(followup_block.metadata.get("outcome", ""))
+			match block_outcome:
+				"stuff": return palette["block_stuff"]
+				"touch", "funnel", "recycle": return palette["block_deflect"]
+				_: return palette["block_miss"]
+		RallyEventModel.EventType.BLOCK:
+			var block_outcome := str(playback_event.metadata.get("outcome", ""))
+			match block_outcome:
+				"stuff": return palette["block_stuff"]
+				"touch", "funnel", "recycle": return palette["block_deflect"]
+				"miss": return palette["block_miss"]
+				_: return palette["block_miss"]
+		RallyEventModel.EventType.DEFENSE:
+			return palette["defense"]
+		RallyEventModel.EventType.POINT:
+			return palette["path"]
+		_:
+			return palette["path"]
 
 
 func _block_flash_color(block_event: Resource, completeness: float) -> Color:
 	var outcome := str(block_event.metadata.get("outcome", ""))
+	var base_color: Color
+	var dark_color: Color
 	match outcome:
 		"stuff":
-			return Color("e64f4f").lerp(Color("a60d22"), completeness)
+			base_color = palette["block_stuff"]
+			dark_color = palette["block_stuff"].darkened(0.5)
 		"touch", "funnel", "recycle":
-			return Color("f2c94c").lerp(Color("c18f1a"), completeness)
+			base_color = palette["block_deflect"]
+			dark_color = palette["block_deflect"].darkened(0.4)
 		_:
-			return Color("4ad66d").lerp(Color("1f8c4e"), completeness)
+			base_color = palette["block_miss"]
+			dark_color = palette["block_miss"].darkened(0.4)
+	return base_color.lerp(dark_color, completeness)
 
 
 func _draw_block_reach_marker(block_event: Resource) -> void:
@@ -1716,3 +1756,12 @@ func _with_alpha(raw_color: Variant, alpha: float) -> Color:
 	var result: Color = raw_color
 	result.a = alpha
 	return result
+
+
+func _perspective_adjusted_progress(nominal_progress: float, current_height: float, apex_height: float) -> float:
+	if apex_height <= 0.0:
+		return nominal_progress
+	var height_ratio := clampf(current_height / apex_height, 0.0, 1.0)
+	var speed_multiplier := lerp(1.15, 0.75, height_ratio)
+	var adjusted_progress := nominal_progress * speed_multiplier
+	return clampf(adjusted_progress, 0.0, 1.0)
