@@ -150,14 +150,16 @@ evidence.
 and then read by nothing. Smaller and safer than the first, and a reasonable
 warm-up, but it improves less.
 
-**3. Movement fluidity.** Drafted in
-[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) but not implemented.
-This is the most valuable and the most dangerous: it changes the persistent
-movement model that every gate above sits on, and it will move seeds across the
-whole suite. The draft proposes doing it in three independently shippable
-phases specifically so it does not have to land as one destabilizing change.
-Read the draft before starting, and do not begin it in the same change as
-anything else.
+**3. Movement fluidity, step 3.** See
+[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md). Steps 1 and 2 are
+done: `ShadowMovementSystem` produces sampled trails, and the agreement sweep
+proves stepping reproduces `project_toward()` exactly, so trails refine the
+existing model rather than replacing it. Step 3 ships those trails into
+`RallyEvent.metadata` and lets `TacticalCourt` sample them instead of guessing
+between endpoints -- visual only, no outcome change, and it is where the
+movement-fluidity complaint is actually answered. Step 4 (trails become
+authoritative for reachability) is the one that moves seeds; do not start it in
+the same change as anything else.
 
 Whatever is chosen, the invariants below still bind, and the block work must not
 be reopened casually: `RallySimulator._resolve_opponent_block` remains the

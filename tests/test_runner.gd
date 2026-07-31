@@ -78,8 +78,11 @@ const BLOCKER_PROGRESSION_CALIBRATION_SCRIPT := preload(
 const LIVE_BLOCK_INTEGRATOR_SCRIPT := preload(
 	"res://scripts/simulation/live_block_integrator.gd"
 )
-const MOVEMENT_CONTINUITY_DRAFT_SCRIPT := preload(
-	"res://scripts/simulation/movement_continuity_draft.gd"
+const SHADOW_MOVEMENT_SCRIPT := preload(
+	"res://scripts/simulation/shadow_movement_system.gd"
+)
+const MOVEMENT_INTEGRATION_CALIBRATION_SCRIPT := preload(
+	"res://scripts/simulation/movement_integration_calibration.gd"
 )
 
 var checks: int = 0
@@ -124,7 +127,7 @@ func _initialize() -> void:
 	_test_gate_forty_seven_block_candidate_audit()
 	_test_gate_forty_eight_block_rollout_boundary()
 	_test_gate_forty_nine_development_live_block()
-	_test_movement_continuity_draft()
+	_test_shadow_movement_integration()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3170,91 +3173,110 @@ func _test_gate_forty_nine_development_live_block() -> void:
 	)
 
 
-## The movement-fluidity draft is not wired into playback or the resolver. It is
-## still verified here so the proposal rests on measured behaviour rather than
-## on an argument, and so it does not rot before it is adopted.
-func _test_movement_continuity_draft() -> void:
-	var start := Vector2(0.20, 0.80)
-	var waypoint := Vector2(0.30, 0.62)
-	var target := Vector2(0.62, 0.55)
-	var duration := 1.20
-
-	## From rest to rest the path must start and end stationary -- the defect
-	## the current start.lerp(target, t) tween cannot express.
-	var resting := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
-		start, target, duration, waypoint, 0.0, 0.0
+## Shadow-only movement integration. Nothing calls it in the resolver or in
+## playback; it is verified here because it is the groundwork for making
+## playback a byproduct of the simulator rather than a guess between endpoints.
+func _test_shadow_movement_integration() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(), manager.current_defensive_plan(),
+		manager.opponent_team, manager.called_play(), false, 610777,
 	)
-	var at_start: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(resting, 0.0)
-	var at_end: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(resting, duration)
+	var actor: RallyPlayerState = state.home_players.values()[0]
+	var source_position := actor.position
+	var source_velocity := actor.velocity
+
+	## The stepper must reproduce the single-call projection every existing
+	## reachability and arrival-margin decision is already built on. If it did
+	## not, adopting trails would silently move all of them.
+	var agreement: Dictionary = MOVEMENT_INTEGRATION_CALIBRATION_SCRIPT.run(4, 610000)
+	var coverage: Dictionary = agreement.get("coverage", {})
 	_check(
-		float(at_start.get("speed", 1.0)) < 0.001
-			and float(at_end.get("speed", 1.0)) < 0.001
-			and Vector2(at_start.get("position", Vector2.ZERO)).distance_to(start) < 0.001
-			and Vector2(at_end.get("position", Vector2.ZERO)).distance_to(target) < 0.001,
-		"Movement draft leaves and reaches rest at the exact endpoints",
+		bool(agreement.get("fixture_valid", false))
+			and float(agreement.get("worst_disagreement_meters", 99.0)) < 0.01
+			and float(agreement.get("reach_agreement_rate", 0.0)) == 1.0
+			and float(agreement.get("source_immutable_rate", 0.0)) == 1.0,
+		"Stepped movement integration matches the single-call projection exactly",
+	)
+	## A sweep of only-completed or only-truncated traversals would say nothing
+	## about the other half, and an unsampled trail would make agreement trivial.
+	_check(
+		bool(coverage.get("completed_traversals_observed", false))
+			and bool(coverage.get("incomplete_traversals_observed", false))
+			and bool(coverage.get("trail_is_sampled", false)),
+		"Movement agreement sweep covers completed and truncated traversals",
 	)
 
-	## Monotonic progress and no velocity discontinuity anywhere, including
-	## across the waypoint where the current tween flips direction instantly.
-	var previous_fraction := -1.0
-	var previous_velocity := Vector2.ZERO
+	## An approach through a late waypoint. The retired draft, and the playback
+	## tween still in use, would both pivot at a fixed 0.46 of the phase; a
+	## player who has not physically arrived by then must not.
+	var late_waypoint := Vector2(0.62, 0.60)
+	var approach: Dictionary = SHADOW_MOVEMENT_SCRIPT.integrate(
+		actor, Vector2(0.72, 0.48), 1.30,
+		RallyPlayerState.MovementMode.APPROACH, 1.0 / 30.0, late_waypoint,
+	)
+	var trail: Array = approach.get("trail", [])
+	var sample_times: Array = approach.get("sample_times", [])
+	var closest := 99.0
+	var closest_index := -1
+	for index in range(trail.size()):
+		var gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+			Vector2(trail[index]), late_waypoint
+		).length()
+		if gap < closest:
+			closest = gap
+			closest_index = index
+	var arrival_fraction := float(sample_times[closest_index]) / 1.30 \
+		if closest_index >= 0 else -1.0
+	_check(
+		bool(approach.get("available", false))
+			and bool(approach.get("waypoint_reached", false))
+			and closest < 0.01
+			and arrival_fraction > 0.60,
+		"Waypoint arrival is driven by distance covered, not a fixed time share",
+	)
+
+	## Passing through a corner must not stop the player dead, and progress must
+	## never reverse.
+	var speeds: Array = approach.get("speeds_mps", [])
+	var stalled_mid_route := false
 	var monotonic := true
-	var continuous := true
-	var largest_jerk := 0.0
-	for step in range(0, 121):
-		var elapsed := duration * float(step) / 120.0
-		var probe: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(resting, elapsed)
-		var fraction := float(probe.get("distance_fraction", 0.0))
-		monotonic = monotonic and fraction >= previous_fraction - 0.000001
-		previous_fraction = fraction
-		var velocity := Vector2(probe.get("velocity", Vector2.ZERO))
-		if step > 0:
-			largest_jerk = maxf(largest_jerk, velocity.distance_to(previous_velocity))
-		previous_velocity = velocity
-	continuous = largest_jerk < 0.05
+	var travelled := 0.0
+	for index in range(1, trail.size()):
+		if index < trail.size() - 1 and float(speeds[index]) <= 0.001:
+			stalled_mid_route = true
+		var advance := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+			Vector2(trail[index - 1]), Vector2(trail[index])
+		).length()
+		monotonic = monotonic and advance >= -0.0001
+		travelled += advance
 	_check(
-		monotonic and continuous,
-		"Movement draft advances monotonically with no velocity discontinuity",
+		not stalled_mid_route
+			and monotonic
+			and trail.size() >= 30
+			and absf(travelled - float(approach.get("path_length_meters", 0.0))) < 0.001,
+		"A corner is carried through without stalling, sampled continuously",
 	)
 
-	## Carried speed is honoured exactly, so one phase can hand motion to the
-	## next instead of every phase restarting from a standstill.
-	var carried := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
-		start, target, duration, waypoint, 0.30, 0.18
-	)
-	var carried_start: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(carried, 0.0)
-	var carried_end: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(carried, duration)
+	## Shadow means shadow: the actor handed in is untouched.
 	_check(
-		absf(float(carried_start.get("speed", 0.0)) - 0.30) < 0.005
-			and absf(float(carried_end.get("speed", 0.0)) - 0.18) < 0.005,
-		"Movement draft preserves carried entry and exit speed",
+		bool(approach.get("source_state_unchanged", false))
+			and actor.position == source_position
+			and actor.velocity == source_velocity,
+		"Movement integration never mutates the source actor",
 	)
 
-	## Waypoint timing follows arc length. With the corner placed near the end
-	## of the route, the player must still be short of it at the fixed 0.46
-	## share the current tween would have used to pivot there.
-	var late_corner := Vector2(0.58, 0.57)
-	var late := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
-		start, target, duration, late_corner, 0.0, 0.0
+	## Degenerate inputs are refused rather than divided by.
+	var refused: Dictionary = SHADOW_MOVEMENT_SCRIPT.integrate(
+		actor, actor.position, 0.0, RallyPlayerState.MovementMode.LATERAL,
 	)
-	var midpoint: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample_progress(late, 0.46)
 	_check(
-		float(midpoint.get("distance_fraction", 1.0)) < 0.46
-			and Vector2(midpoint.get("position", Vector2.ZERO)).distance_to(late_corner)
-				> Vector2(late_corner).distance_to(target) * 0.25,
-		"Movement draft times the waypoint by distance, not a fixed share",
+		not bool(refused.get("available", true))
+			and str(refused.get("reason", "")) == "non-positive duration",
+		"Movement integration refuses a non-positive duration",
 	)
 
-	## Degenerate inputs must hold position rather than divide by zero.
-	var stationary := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
-		target, target, 0.0, null, 0.0, 0.0
-	)
-	var held: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(stationary, 0.5)
-	_check(
-		Vector2(held.get("position", Vector2.ZERO)).distance_to(target) < 0.001
-			and float(held.get("speed", 1.0)) == 0.0,
-		"Movement draft holds position for a zero-length route",
-	)
 
 
 func _test_gate_twenty_one_setter_handoffs() -> void:

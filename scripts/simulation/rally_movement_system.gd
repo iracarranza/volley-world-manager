@@ -374,6 +374,23 @@ static func _speed_rating(
 	return float(player.transition_speed) / 100.0
 
 
+## Public accessor for the rating-driven movement profile. Exposed so a stepped
+## integrator can share this exact tuning -- maximum speed, acceleration, and
+## direction-change delay all derive from player ratings, mass, and fatigue, and
+## must not be duplicated anywhere.
+static func movement_profile(
+	actor: RallyPlayerState,
+	direction: Vector2,
+	mode: RallyPlayerState.MovementMode,
+) -> Dictionary:
+	if actor == null or actor.player == null:
+		return {
+			"maximum_speed": 0.0, "acceleration": 0.0,
+			"facing_fit": 0.0, "direction_change_delay": 0.0,
+		}
+	return _movement_profile(actor, direction, mode)
+
+
 static func _movement_profile(
 	actor: RallyPlayerState,
 	direction: Vector2,

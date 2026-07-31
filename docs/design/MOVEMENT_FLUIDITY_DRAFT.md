@@ -1,139 +1,150 @@
-# Movement Fluidity: Draft Implementation
+# Movement Fluidity
 
 Review date: 2026-07-31
 
-Status: **DRAFT; MODULE VERIFIED BUT NOT WIRED**
+Status: **STEPS 1-2 BUILT AND MEASURED; SHADOW ONLY, NOT WIRED**
 
-This is not a gate. It proposes changing how player motion is expressed
-throughout the engine, which touches the persistent movement model every
-completed gate sits on. It is therefore drafted, tested in isolation, and left
-unwired so that adopting it is a separate, deliberate decision.
+The goal is for playback to be a byproduct of the simulator: the drawing layer
+should sample what the simulator computed, never invent anything, and therefore
+be innately accurate without visual tuning. Ball flight already works this way --
+`BallTrajectory` is a real function of time and playback merely samples it.
+Player movement does not: the simulator emits endpoints and playback guesses the
+path between them.
 
-`scripts/simulation/movement_continuity_draft.gd` exists and is exercised by
-five checks in `_test_movement_continuity_draft`. Nothing calls it.
+Steps 1 and 2 are now built. Nothing is wired into the resolver or playback, and
+no rally outcome changes.
 
-## The three defects
+## What was wrong
 
-**1. Motion is piecewise-linear.** `TacticalCourt._set_playback_progress()`
-drives players with `start.lerp(target, value)`. A player therefore leaves rest
-already at full speed, holds exactly that speed the whole way, and stops dead on
-arrival. No acceleration exists anywhere in the visual model.
+`TacticalCourt._set_playback_progress()` drives players with
+`start.lerp(target, value)`, so a player leaves rest at full speed, holds it,
+and stops dead. With an approach waypoint it splits the phase at a hard-coded
+`waypoint_share = 0.46` regardless of geometry, and flips direction instantly at
+that instant.
 
-**2. The waypoint split is a fixed constant.** With an approach waypoint the
-phase is cut at `waypoint_share = 0.46` regardless of geometry:
+None of those three numbers are simulator data. They are view-layer inventions
+filling a gap the simulator left open, which is exactly what makes playback feel
+like it needs tuning.
 
-```gdscript
-var staged_position := start.lerp(waypoint, value / waypoint_share) \
-    if value <= waypoint_share \
-    else waypoint.lerp(target, (value - waypoint_share) / (1.0 - waypoint_share))
-```
+## The correction to the first draft
 
-If the waypoint sits 80% of the way along the route, the player crawls to it
-across the first 46% of the phase and then sprints the remaining 20% of the
-distance in 54% of the time. The timing contradicts the geometry.
+The first version of this document proposed a closed-form replacement
+(`MovementContinuityDraft`: cubic Hermite speed curve, Bezier-rounded corner).
+**That module has been deleted.** It was written before finding that
+`RallyMovementSystem.project_toward()` already is a proper kinematic step
+function:
 
-**3. Direction changes instantaneously.** At `value == 0.46` the velocity vector
-flips from the first leg's direction to the second's in a single frame. This is
-the most visible defect and the one no real player produces.
+- it reads `actor.velocity.dot(direction)` as its starting speed, so carried
+  velocity was already handled;
+- `maximum_speed`, `acceleration`, and `direction_change_delay` all come from
+  `movement_profile()`, derived from player ratings, mass, and fatigue;
+- it operates on `actor.snapshot()` and returns a full `RallyPlayerState` with
+  position and velocity applied -- its output is its own input type.
 
-There is a fourth, structural issue behind all three: **every phase begins and
-ends at rest**, because each phase is an independent tween. A hitter who is
-already moving when their responsibility releases is redrawn as stationary at
-the start of the next phase.
+The Hermite curve was a geometric imitation, tuned by hand, of physics the
+engine already computed from ratings. The corner rounding likewise: because
+`forward_speed` is a dot product against the new heading, a player who re-aims
+automatically sheds the off-axis component of their speed and must re-accelerate.
+The curve and its speed dip are **emergent from the existing model**, not
+something to author.
 
-## What the draft changes
+## What is built
 
-Same inputs (start, optional waypoint, target, duration) plus two new ones:
-`entry_speed` and `exit_speed`.
+**`ShadowMovementSystem.integrate()`** loops `project_toward()` at a fixed step
+over a snapshot and records the sampled trail. Two adaptations were required,
+and both are physical rather than cosmetic.
 
-**Timing follows arc length.** The route is converted to a polyline with a
-cumulative distance table, and progress is computed in distance rather than in
-per-leg fractions. The waypoint is reached when the player has actually covered
-the distance to it. The 0.46 constant disappears.
+**1. The turn cost is a per-call constant.** `project_toward()` subtracts
+`direction_change_delay` (0.02-0.20 s) from *every call's* duration. That is
+correct when a call covers a whole phase and catastrophic when it covers 33 ms:
+a naive loop charges a player up to 0.20 s of turning thirty times a second, and
+they barely move. The delay is therefore paid **once**, from the actor's true
+starting facing; each subsequent step aligns facing with travel so the charge
+collapses to its 0.02 s floor, which is added back to the requested step so the
+effective moved time is exactly the step.
 
-**The corner is rounded.** Instead of pivoting on the waypoint, the path enters
-and leaves a quadratic Bezier whose control point is the waypoint, with a blend
-radius of `CORNER_BLEND` (0.35) times the shorter leg. The Bezier's tangent at
-its endpoints equals the adjoining straight legs' directions, so direction is
-continuous through the corner. The curve is sampled at `ARC_SAMPLES` (24)
-segments, which keeps the residual per-segment direction step near two degrees.
+This is the single most important finding here. `project_toward()` is a
+phase-scale projector, and it is not composable at small steps without this
+compensation.
 
-**Speed is a cubic Hermite on distance.** With `s(0)=0`, `s(T)=L`, `s'(0)=v_in`,
-and `s'(T)=v_out`:
+**2. Arrival zeroes velocity.** Correct for arriving at a contact, wrong for a
+waypoint, which is passed through. On reaching a waypoint the travel velocity is
+preserved and the next step's dot product sheds what does not carry over.
 
-```
-s(u) = (u³ - 2u² + u)·v_in·T + (3u² - 2u³)·L + (u³ - u²)·v_out·T
-```
+**`MovementIntegrationCalibration.run()`** answers the question that has to be
+settled before trails could ever become authoritative: does stepping land where
+the engine's existing projection lands? Every reachability, arrival-margin, and
+opportunity decision is built on `project_toward()`. If stepping disagreed,
+adopting trails would silently move all of them.
 
-From rest to rest this is a smooth ease-in-out. With carried speed it matches
-both endpoints exactly, which is what lets one phase hand its velocity to the
-next. Endpoint speeds are clamped to `3L/T` (`MONOTONIC_SPEED_LIMIT`) because
-above that a cubic Hermite stops being monotonic and the player would visibly
-reverse mid-phase to satisfy its endpoints.
+## Measured results
 
-The module is pure: no `RallyState`, no mutation, no RNG. That is deliberate --
-it means playback and the resolver can share it without disagreeing, which is
-the whole point of doing this once rather than twice.
+Over 576 comparisons per step size, harvested from real seeded rally states
+(real ratings, masses, fatigue, geometry):
 
-## Adoption in three phases
+| Step | Mean disagreement | Worst | Reach agreement |
+|---|---|---|---|
+| 60 Hz | 0.0000 m | 0.0000 m | 100% |
+| 30 Hz | 0.0000 m | 0.0000 m | 100% |
+| 15 Hz | 0.0000 m | 0.0000 m | 100% |
 
-Each phase is independently shippable. They are ordered by increasing risk, and
-**the first two do not change any rally outcome**.
+Exact, at every step size. That is the expected result rather than a lucky one:
+constant-acceleration kinematics compose exactly across sub-intervals, so a
+faithful stepper *should* reproduce the single-call projection to floating-point
+noise. Trails are a refinement of the existing model, not a replacement, and the
+whole existing calibration record survives adoption.
 
-### Phase 1 -- playback only (no simulation change, no seed movement)
+**The sweep was proved able to fail.** With the turn-delay compensation removed,
+the same sweep reports:
 
-Replace the body of `TacticalCourt._set_playback_progress()` with
-`sample_progress()` against a path built from the same
-`unit_movement_starts` / `unit_movement_waypoints` / `unit_movement_targets`
-already populated today, with `entry_speed` and `exit_speed` left at zero.
+| Step | Mean disagreement | Worst | Within tolerance |
+|---|---|---|---|
+| 60 Hz | 1.1336 m | 3.0092 m | 10.4% |
+| 30 Hz | 0.9212 m | 2.4316 m | 11.5% |
+| 15 Hz | 0.5090 m | 1.2824 m | 21.9% |
 
-Every rally outcome, event, and seed is untouched -- this changes only where a
-marker is drawn between two already-resolved endpoints. It fixes defects 1, 2
-and 3 visually and is safe to ship on its own.
+Note the error *grows as the step shrinks* -- the signature of a per-call cost
+being charged more often. Without this check the naive loop would have shipped
+players arriving up to three metres short, and it would have looked like a
+tuning problem rather than a composition bug.
 
-### Phase 2 -- carried speed across phases (still no outcome change)
+**The fixed waypoint share is gone by construction.** On an approach with a late
+waypoint, integration reaches it at **time fraction 0.844**, because that is
+when the player physically arrives. The playback tween would have pivoted at
+0.46. Measured speeds across that corner run 0.150 -> 1.393 m/s with no stall:
+the player carries through it rather than stopping.
 
-Record each phase's exit speed on the event metadata and feed it as the next
-phase's `entry_speed`. Players stop restarting from rest between phases. Still
-purely presentational; the resolved positions at phase boundaries are unchanged,
-only the speed profile between them.
+## Remaining steps
 
-This is where the user-visible complaint about hitters "already moving after the
-first contact" is genuinely answered, because a hitter whose previous phase
-ended with velocity now visibly carries it.
+**Step 3 -- ship trails to playback (visual only, no outcome change).**
+`tactical_court.gd` already has `movement_trails`, `_append_movement_trail()`,
+and `_draw_movement_trails()` wired into `_draw()`. They are currently fed three
+points: start, waypoint, target. Feed them the sampled trail instead and
+`_set_playback_progress()` becomes a sampler with no interpolation constants.
+This is where the fluidity complaint is actually answered, and it still changes
+no rally outcome.
 
-### Phase 3 -- continuous release timing (changes outcomes; will move seeds)
+The open question is transport: a 1.3 s phase at 30 Hz is ~39 samples per
+player. Record rate is a knob, but it is a **fidelity** knob with a computable
+error bound (about half a centimetre at 30 Hz), not an appearance knob -- nobody
+decides what looks right. The ideal survives discretization; what breaks it is
+view-layer invention, not finite sampling.
 
-The real change, and the one to do alone. Today
-`ApproachMechanicsSystem.prepare_for_attack()` computes a single `release_time`
-from perceived responsibility, and the hitter's motion is one
-start-waypoint-target triple resolved per event. Phase 3 replaces the discrete
-release with continuous availability: a player begins transitioning the moment
-their responsibility is perceptibly finished, sampled against the ball clock
-rather than at phase boundaries.
+**Step 4 -- trails become authoritative for reachability.** Audit, guarded
+boundary, development promotion, in the shape Gates 47-49 used. This is the step
+that moves seeds, and the exact-agreement result above is the evidence that it
+can be attempted at all.
 
-**This will change rally outcomes and move seeds across the entire suite.**
-Fixed-seed fixtures throughout the gate record -- Gate 42's promoted attack at
-seed 300062, Gate 49's promoted block on the same seed, and every calibration
-sweep -- will need re-selection, exactly as Gate 42's seed already had to be
-re-chosen once when serve-receive assignment changed.
+## Open questions before step 4
 
-Do not start Phase 3 in the same change as anything else, and do not start it
-without re-running every calibration record in `docs/calibration/`.
-
-## Open questions to settle before Phase 3
-
-1. **Where does acceleration come from?** The draft takes speeds as inputs and
-   says nothing about how fast a player can change them. `acceleration`,
-   `transition_speed`, and `explosiveness` already exist as ratings; the
-   monotonic-progression invariant means a better-rated player must not lose
-   options, so the mapping needs a progression fixture of its own.
-2. **Does the information boundary hold?** A continuously-releasing player is
-   reacting to something. Whatever that something is must be perceived, not
-   authoritative -- the same boundary Gates 31 to 47 defend. A player who begins
-   transitioning at the instant the ball's true destination is fixed would be
-   reading truth.
-3. **What happens to `ActionOpportunityWindow`?** Windows are currently opened
-   and closed at scheduled moments. Continuous movement makes reachability a
-   function of time rather than a per-window verdict, and the two models need
-   reconciling rather than coexisting.
+1. **Does the information boundary hold?** A continuously-moving player is
+   reacting to something, and that something must be perceived rather than
+   authoritative -- the boundary Gates 31 to 47 defend. A player who begins
+   transitioning at the instant the ball's true destination is fixed is reading
+   truth.
+2. **What happens to `ActionOpportunityWindow`?** Windows open and close at
+   scheduled moments. Continuous movement makes reachability a function of time,
+   and the two models need reconciling rather than coexisting.
+3. **Where does `RallyMoment.Kind.MOVEMENT_UPDATE` fit?** It is declared and
+   referenced nowhere else in the codebase. It is the natural scheduler hook for
+   step 4, and it is still empty.
