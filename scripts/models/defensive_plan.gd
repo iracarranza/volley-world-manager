@@ -30,11 +30,13 @@ func ensure_defaults(lineup: RotationLineup) -> void:
 			assignments[player_id] = _default_assignment(player_id, slot_number)
 		if player_id not in reception_zones:
 			reception_zones[player_id] = _default_zone(
-				player_id, slot_number, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
+				player_id, slot_number, DefensiveZoneModel.ZoneType.SERVE_RECEIVE,
+				lineup
 			)
 		if player_id not in floor_defense_zones:
 			floor_defense_zones[player_id] = _default_zone(
-				player_id, slot_number, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
+				player_id, slot_number, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE,
+				lineup
 			)
 		if player_id == lineup.active_setter_id() and player_id not in setter_release_targets:
 			setter_release_targets[player_id] = Vector2(0.50, 0.60)
@@ -260,14 +262,40 @@ func set_zone_center(player_id: int, zone_type: int, position: Vector2) -> void:
 		defender_positions[player_id] = zone.center
 
 
-func _default_zone(player_id: int, slot_number: int, zone_type: int) -> Resource:
+func _default_zone(
+	player_id: int,
+	slot_number: int,
+	zone_type: int,
+	lineup: RotationLineup = null,
+) -> Resource:
 	var zone: Resource = DefensiveZoneModel.new()
 	zone.player_id = player_id
 	zone.zone_type = zone_type
 	zone.center = CourtConstants.slot_position(slot_number)
 	var front_row := CourtConstants.is_front_row_slot(slot_number)
 	if zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
-		zone.enabled = not front_row
+		var setter_slot := -1
+		var libero_slot := -1
+		if lineup != null:
+			setter_slot = lineup.slot_for_player(lineup.active_setter_id())
+		var formation := CourtConstants.serve_receive_formation(
+			setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, libero_slot
+		)
+		zone.center = Vector2(formation.get(
+			slot_number, CourtConstants.slot_position(slot_number)
+		))
+		## The setter is shielded, never a primary passer, in either row. This is
+		## the whole point of the shield: previously a back-row setter was
+		## enrolled as a passer purely because they were not front row.
+		var is_setter := setter_slot >= 1 and slot_number == setter_slot
+		var passer_slots := CourtConstants.serve_receive_passer_slots(
+			setter_slot,
+			int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+				CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+			]["passer_count"]),
+			libero_slot,
+		)
+		zone.enabled = (not is_setter) and slot_number in passer_slots
 		zone.radius_meters = 3.2
 		zone.priority = 2 if slot_number in [5, 6] else 1
 	else:

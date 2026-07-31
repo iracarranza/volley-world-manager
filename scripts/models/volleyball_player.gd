@@ -22,6 +22,9 @@ extends Resource
 @export_range(1, 100) var explosiveness: int = 50
 @export_range(1, 100) var stamina: int = 50
 @export_range(1, 100) var arm_speed: int = 50
+## Length of one full approach stride. Correlates with height but is scouted
+## independently: two players of equal height can carry very different footwork.
+@export_range(0.55, 1.15, 0.01) var stride_length_m: float = 0.83
 
 @export_category("Technical")
 @export_range(1, 100) var serve_power: int = 50
@@ -91,6 +94,34 @@ const POSITION_WEIGHTS := {
 	"Libero": ["reception", "reception_balance", "reception_stability", "dig_control", "ball_control", "anticipation", "lateral_speed", "decision_making"],
 }
 
+## Tactical step-count scaling for the attack run-up. This is a system demand,
+## not a physical limit: a middle with elite acceleration still runs a compact
+## approach because quick-tempo offence needs them at the net early. Outsides and
+## opposites get the full four-step runway.
+const POSITION_APPROACH_STEP_MODIFIER := {
+	"Middle Blocker": 0.68,
+	"Setter": 0.75,
+	"Outside Hitter": 1.0,
+	"Opposite": 1.0,
+	"Libero": 1.0,
+}
+
+## Quick-tempo footwork punishes sloppiness harder than a slow high-ball
+## approach, so compact-approach roles also carry a tighter tolerance band.
+const POSITION_APPROACH_TOLERANCE_MODIFIER := {
+	"Middle Blocker": 0.80,
+	"Setter": 0.85,
+}
+
+const SYSTEM_FIT_APPROACH_DISTANCE := &"attack_approach_distance"
+const SYSTEM_FIT_SET_RELEASE := &"set_release_interval"
+const SYSTEM_FIT_BLOCK_ENGAGEMENT := &"block_engagement_distance"
+const SYSTEM_FIT_DEFENSIVE_DEPTH := &"defensive_depth"
+
+## Cache of derived system-fit bands. Rebuilt whenever career attributes change;
+## never serialised, because it is fully recoverable from the attributes.
+var _system_fit_profiles: Dictionary = {}
+
 
 func current_ability_score() -> int:
 	var role_attributes: Array = POSITION_WEIGHTS.get(position_role, ABILITY_ATTRIBUTES)
@@ -136,6 +167,95 @@ func baseline_defensive_range() -> int:
 		+ float(stamina) * 0.10), 1, 100)
 
 
+## Default stride for a player of this height. Roughly 0.43x standing height,
+## which is the middle of the observed range for an attacking approach.
+func default_stride_length_m() -> float:
+	return clampf(height_cm / 100.0 * 0.43, 0.55, 1.15)
+
+
+## How many strides this player needs before their run-up reaches usable speed.
+## Explosive players get there in three; slower builders need four and a half.
+func effective_approach_step_count() -> float:
+	var physical_steps := lerpf(4.5, 3.0, float(acceleration) / 100.0)
+	return physical_steps * float(
+		POSITION_APPROACH_STEP_MODIFIER.get(position_role, 1.0)
+	)
+
+
+## Rebuilds every derived system-fit band from current career attributes. Call
+## after generation, after training changes, and after deserialisation.
+func refresh_system_fit_profiles() -> void:
+	_system_fit_profiles = {}
+
+	## Attack approach: stride length x the strides this player actually needs.
+	var adaptability_fraction := float(adaptability) / 100.0
+	var approach_tolerance := lerpf(0.35, 1.10, adaptability_fraction) * float(
+		POSITION_APPROACH_TOLERANCE_MODIFIER.get(position_role, 1.0)
+	)
+	_system_fit_profiles[SYSTEM_FIT_APPROACH_DISTANCE] = SystemFitProfile.create(
+		SYSTEM_FIT_APPROACH_DISTANCE,
+		stride_length_m * effective_approach_step_count(),
+		approach_tolerance,
+		"Ideal approach distance",
+	)
+
+	## Setter release rhythm: how fast this setter naturally gets the ball out.
+	_system_fit_profiles[SYSTEM_FIT_SET_RELEASE] = SystemFitProfile.create(
+		SYSTEM_FIT_SET_RELEASE,
+		lerpf(0.55, 0.30, clampf(
+			(float(tempo_control) * 0.6 + float(hand_control) * 0.4) / 100.0, 0.0, 1.0
+		)),
+		lerpf(0.05, 0.16, adaptability_fraction),
+		"Preferred set release interval",
+	)
+
+	## Block engagement: how late this blocker can keep reading before they must
+	## commit to the closing burst. Better readers hold longer and telegraph less.
+	_system_fit_profiles[SYSTEM_FIT_BLOCK_ENGAGEMENT] = SystemFitProfile.create(
+		SYSTEM_FIT_BLOCK_ENGAGEMENT,
+		lerpf(1.8, 0.9, clampf((
+			float(anticipation) * 0.45 + float(block_timing) * 0.35
+			+ float(lateral_speed) * 0.20
+		) / 100.0, 0.0, 1.0)),
+		lerpf(0.30, 0.85, adaptability_fraction),
+		"Preferred block engagement distance",
+	)
+
+	## Defensive depth: gamblers read shallow, coverage defenders sit deep.
+	_system_fit_profiles[SYSTEM_FIT_DEFENSIVE_DEPTH] = SystemFitProfile.create(
+		SYSTEM_FIT_DEFENSIVE_DEPTH,
+		lerpf(2.2, 4.6, 1.0 - clampf((
+			float(anticipation) * 0.5 + float(reception) * 0.3
+			+ float(lateral_speed) * 0.2
+		) / 100.0, 0.0, 1.0)),
+		lerpf(0.45, 1.20, adaptability_fraction),
+		"Preferred defensive depth",
+	)
+
+
+## Lazily-initialised accessor. Returns null only for an unknown key.
+func system_fit(profile_key: StringName) -> SystemFitProfile:
+	if _system_fit_profiles.is_empty():
+		refresh_system_fit_profiles()
+	return _system_fit_profiles.get(profile_key, null) as SystemFitProfile
+
+
+func ideal_approach_distance_meters() -> float:
+	var profile := system_fit(SYSTEM_FIT_APPROACH_DISTANCE)
+	return profile.ideal_value if profile != null else 2.4
+
+
+func approach_tolerance_meters() -> float:
+	var profile := system_fit(SYSTEM_FIT_APPROACH_DISTANCE)
+	return profile.tolerance if profile != null else 0.7
+
+
+## Transient tolerance scaling. A tired player has less room to improvise their
+## way back onto their mark, so the in-system band tightens under fatigue.
+func system_fit_tolerance_scale() -> float:
+	return lerpf(1.0, 0.78, clampf(fatigue, 0.0, 1.0))
+
+
 func to_dict() -> Dictionary:
 	return {
 		"id": id,
@@ -157,6 +277,7 @@ func to_dict() -> Dictionary:
 		"explosiveness": explosiveness,
 		"stamina": stamina,
 		"arm_speed": arm_speed,
+		"stride_length_m": stride_length_m,
 		"serve_power": serve_power,
 		"serve_accuracy": serve_accuracy,
 		"serve_technique": serve_technique,
@@ -245,6 +366,12 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.fatigue = clampf(float(data.get("fatigue", 0.0)), 0.0, 1.0)
 	player.current_form = clampf(float(data.get("current_form", 0.0)), -1.0, 1.0)
 	player.traits = Array(data.get("traits", []), TYPE_STRING, "", null)
+	## Legacy saves have no stride length; derive it from height so existing
+	## players keep a sane approach instead of collapsing to the export default.
+	player.stride_length_m = clampf(float(
+		data.get("stride_length_m", player.default_stride_length_m())
+	), 0.55, 1.15)
+	player.refresh_system_fit_profiles()
 	return player
 
 
@@ -270,3 +397,5 @@ func apply_role_physical_defaults() -> void:
 	explosiveness = int(defaults[3])
 	reception_balance = int(defaults[4])
 	reception_stability = int(defaults[5])
+	stride_length_m = default_stride_length_m()
+	_system_fit_profiles = {}

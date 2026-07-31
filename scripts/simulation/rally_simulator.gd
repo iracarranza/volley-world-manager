@@ -641,7 +641,7 @@ func resolve(
 	var attack_target: Vector2 = attack_choice.target
 	var approach_start := Vector2(approach_preparation.get(
 		"approach_start_position",
-		_approach_start_position(set_target, hitter_start, false)
+		_approach_start_position(set_target, hitter_start, false, hitter)
 	))
 	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
 	var attack_trajectory := _ball_trajectory(
@@ -677,11 +677,21 @@ func resolve(
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
 			"target_reason": attack_choice.reason, "movement_start": hitter_start,
 			"approach_start_position": approach_start,
+			"approach_target_position": Vector2(approach_preparation.get(
+				"approach_target_position", approach_start
+			)),
+			"reached_approach_mark": bool(approach_preparation.get(
+				"reached_approach_start", true
+			)),
 			"transition_preparation": approach_preparation.duplicate(true),
 			"resolved_approach": resolved_approach.duplicate(true),
 			"available_attack_actions": available_attacks.duplicate(),
 			"approach_speed_mps": float(resolved_approach.get("approach_speed_mps", 0.0)),
 			"approach_quality": float(resolved_approach.get("runup_quality", 0.0)),
+			"approach_distance_meters": float(resolved_approach.get(
+				"approach_distance_meters", 0.0
+			)),
+			"approach_in_system": bool(resolved_approach.get("approach_in_system", false)),
 			"jump_multiplier": float(resolved_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(resolved_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
@@ -1069,7 +1079,7 @@ func _resolve_opponent_transition(
 		0.23, 0.48, rally_clock
 	)
 	var opponent_approach_start := _approach_start_position(
-		opponent_contact, Vector2(attack_choice.start), true
+		opponent_contact, Vector2(attack_choice.start), true, opponent_hitter
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
@@ -1369,7 +1379,7 @@ func _resolve_home_continuation(
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
-		_approach_start_position(set_target, hitter_start, false)
+		_approach_start_position(set_target, hitter_start, false, hitter)
 	))
 	var continuation_hit_type := _hit_type(assignment, hitter)
 	if "power_attack" not in continuation_actions:
@@ -1382,11 +1392,23 @@ func _resolve_home_continuation(
 			"attack_type": continuation_hit_type,
 			"movement_start": hitter_start,
 			"approach_start_position": continuation_approach_start,
+			"approach_target_position": Vector2(transition_preparation.get(
+				"approach_target_position", continuation_approach_start
+			)),
+			"reached_approach_mark": bool(transition_preparation.get(
+				"reached_approach_start", true
+			)),
 			"transition_preparation": transition_preparation.duplicate(true),
 			"resolved_approach": continuation_approach.duplicate(true),
 			"available_attack_actions": continuation_actions.duplicate(),
 			"approach_speed_mps": float(continuation_approach.get("approach_speed_mps", 0.0)),
 			"approach_quality": float(continuation_approach.get("runup_quality", 0.0)),
+			"approach_distance_meters": float(continuation_approach.get(
+				"approach_distance_meters", 0.0
+			)),
+			"approach_in_system": bool(continuation_approach.get(
+				"approach_in_system", false
+			)),
 			"jump_multiplier": float(continuation_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(continuation_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
@@ -1853,6 +1875,7 @@ func _approach_start_position(
 	contact_position: Vector2,
 	current_position: Vector2,
 	opponent_side: bool,
+	player: VolleyballPlayer = null,
 ) -> Vector2:
 	var local_contact := Vector2(
 		contact_position.x, 1.0 - contact_position.y
@@ -1861,7 +1884,15 @@ func _approach_start_position(
 		current_position.x, 1.0 - current_position.y
 	) if opponent_side else current_position
 	var pin_distance := absf(local_contact.x - 0.50)
-	var approach_depth := lerpf(0.10, 0.17, clampf(pin_distance / 0.34, 0.0, 1.0))
+	## Pin attacks still want marginally more runway than a middle-of-court swing,
+	## but that modulation now scales around this player's own ideal distance
+	## instead of a single league-wide band.
+	var ideal_depth := 0.135
+	if player != null:
+		ideal_depth = clampf(player.ideal_approach_distance_meters() / 18.0, 0.06, 0.22)
+	var approach_depth := ideal_depth * lerpf(
+		0.88, 1.12, clampf(pin_distance / 0.34, 0.0, 1.0)
+	)
 	var outward_offset := 0.0
 	if local_contact.x < 0.35:
 		outward_offset = -0.055
