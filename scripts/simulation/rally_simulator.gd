@@ -32,6 +32,9 @@ const ApproachMechanicsModel := preload(
 const ShadowBlockSystemModel := preload(
 	"res://scripts/simulation/shadow_block_system.gd"
 )
+const LiveBlockIntegratorModel := preload(
+	"res://scripts/simulation/live_block_integrator.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -364,17 +367,6 @@ func resolve(
 	shadow_summary["shadow_block"] = ShadowBlockSystemModel.evaluate(
 		attack_state, shadow_attack, seed_value + 1900007,
 	)
-	## Gate 48: the guarded block selection boundary. Evaluated on every rally
-	## so the audit verdict is visible as evidence, but it can never select a
-	## candidate -- the production flag is off and no promotion path exists
-	## until Gate 49. The official BLOCK event below is unaffected.
-	var block_rollout := RallyRolloutPolicyModel.select_block_source(
-		shadow_summary, attack_state.opponent_lineup
-	)
-	var block_rollout_evidence := block_rollout.duplicate(true)
-	block_rollout_evidence.erase("selected_block")
-	shadow_summary["block_rollout"] = block_rollout_evidence
-	shadow_reception_trace.summary = shadow_summary
 	var attack_rollout_requested := using_live_setter \
 		and development_continuous_reception and OS.is_debug_build() \
 		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_ATTACK_OVERRIDE
@@ -736,12 +728,72 @@ func resolve(
 			"hitter": hitter.display_name,
 		})
 
+	## Gates 48 and 49: the guarded block selection boundary, evaluated at the
+	## point of use so the promotion chain is definitively known. A block only
+	## makes sense against the attack the blockers actually read, so promotion
+	## requires the Gate 42 attack to have been promoted first -- otherwise the
+	## shadow block closed on a lane the official ball never went to.
+	var block_rollout_requested := using_live_attack \
+		and development_continuous_reception and OS.is_debug_build() \
+		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_BLOCK_OVERRIDE
+	var block_rollout := RallyRolloutPolicyModel.select_block_source(
+		shadow_summary, opponent_team.current_lineup(), block_rollout_requested
+	)
+	var selected_live_block: Dictionary = block_rollout.get("selected_block", {})
+	var using_live_block := not selected_live_block.is_empty() \
+		and str(block_rollout.get("selected_source", "official")) == "continuous_block"
+	if using_live_block and not bool(LiveBlockIntegratorModel.validate(
+		live_state, selected_live_block
+	).get("valid", false)):
+		block_rollout = RallyRolloutPolicyModel.select_block_source(
+			shadow_summary, opponent_team.current_lineup(), false
+		)
+		selected_live_block = {}
+		using_live_block = false
+	var block_rollout_evidence := block_rollout.duplicate(true)
+	block_rollout_evidence.erase("selected_block")
+	shadow_summary["block_rollout"] = block_rollout_evidence
+	shadow_reception_trace.summary = shadow_summary
+
 	# Resolve the block from the opponent's actual front-row geometry. A
 	# roster-wide best blocker must not cover every pin regardless of distance.
 	var block_resolution := _resolve_opponent_block(
 		opponent_team, set_target.x, assignment.tempo, float(result.set_quality),
 		float(result.attack_quality), live_positions.get(setter.id, Vector2(0.50, 0.60)).x
 	)
+	var live_block_integration: Dictionary = {}
+	if using_live_block:
+		live_block_integration = LiveBlockIntegratorModel.apply(
+			live_state, selected_live_block
+		)
+		if not bool(live_block_integration.get("applied", false)):
+			using_live_block = false
+			block_rollout_evidence["selected_source"] = "official"
+			block_rollout_evidence["fallback_reason"] = str(
+				live_block_integration.get("reason", "block integration failed")
+			)
+			shadow_summary["block_rollout"] = block_rollout_evidence
+			shadow_reception_trace.summary = shadow_summary
+		else:
+			## The promoted contact replaces who blocked and what happened, but
+			## not the coverage geometry the legacy resolver derived; that is
+			## still the official continuation, exactly as Gate 42 left blocking
+			## on the legacy path after promoting the attack.
+			var promoted_primary := opponent_team.player_by_id(
+				int(live_block_integration.get("primary_id", -1))
+			) as VolleyballPlayer
+			var promoted_assist := opponent_team.player_by_id(
+				int(live_block_integration.get("assist_id", -1))
+			) as VolleyballPlayer
+			if promoted_primary != null:
+				block_resolution["primary"] = promoted_primary
+				block_resolution["assist"] = promoted_assist
+				block_resolution["outcome"] = str(
+					live_block_integration.get("outcome", "recycle")
+				)
+			shadow_summary["live_block_integration"] = \
+				live_block_integration.duplicate(true)
+			shadow_reception_trace.summary = shadow_summary
 	var opponent_blocker := block_resolution.primary as VolleyballPlayer
 	var assisting_blocker := block_resolution.assist as VolleyballPlayer
 	var primary_close := float(block_resolution.primary_close)
@@ -804,6 +856,7 @@ func resolve(
 			" Scouting anticipated this pattern." if adaptation_bonus >= 0.035 else "",
 		], {"side": "opponent", "lane": assignment.lane,
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
+			"continuous_block": using_live_block,
 			"deflection_target": recycle_target,
 			"coverage_segments": opponent_block_segments,
 			"primary_close": primary_close,

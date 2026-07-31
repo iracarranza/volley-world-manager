@@ -75,6 +75,12 @@ const BLOCK_ROLLOUT_AUDIT_SCRIPT := preload(
 const BLOCKER_PROGRESSION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/block_progression_calibration.gd"
 )
+const LIVE_BLOCK_INTEGRATOR_SCRIPT := preload(
+	"res://scripts/simulation/live_block_integrator.gd"
+)
+const MOVEMENT_CONTINUITY_DRAFT_SCRIPT := preload(
+	"res://scripts/simulation/movement_continuity_draft.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -117,6 +123,8 @@ func _initialize() -> void:
 	_test_gate_forty_six_blocker_calibration()
 	_test_gate_forty_seven_block_candidate_audit()
 	_test_gate_forty_eight_block_rollout_boundary()
+	_test_gate_forty_nine_development_live_block()
+	_test_movement_continuity_draft()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3020,20 +3028,21 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 		repeat_signatures == official_block_signatures,
 		"Gate 48 leaves fixed-seed official block events byte-identical",
 	)
-	## Forcing the flag on must still not select a candidate: Gate 48 adds the
-	## boundary only, and the promotion path is Gate 49's reviewed work.
+	## Gate 48 held this shut with no activation behind it; Gate 49 opened it.
+	## Forcing the flag on with an eligible candidate must now select it, and
+	## must surrender official identity when it does.
 	var forced := RALLY_ROLLOUT_POLICY_SCRIPT.select_block_source(
 		selected_summary, selected_opponent_lineup, true
 	)
 	_check(
 		bool(forced.get("flag_enabled", false))
 			and bool(forced.get("candidate_available", false))
-			and str(forced.get("selected_source", "")) == "official"
-			and bool(forced.get("official_identity_preserved", false))
-			and Dictionary(forced.get("selected_block", {})).is_empty()
-			and not bool(forced.get("activation_implemented", true))
-			and str(forced.get("fallback_reason", "")) == "activation_not_implemented",
-		"Gate 48 refuses to promote a block even when the flag is forced on",
+			and str(forced.get("selected_source", "")) == "continuous_block"
+			and not bool(forced.get("official_identity_preserved", true))
+			and not Dictionary(forced.get("selected_block", {})).is_empty()
+			and bool(forced.get("activation_implemented", false))
+			and str(forced.get("fallback_reason", "x")).is_empty(),
+		"Gate 49 selects an eligible block candidate when the flag is forced on",
 	)
 	## Shape parity with the other three selectors, so a later gate can treat
 	## all four boundaries the same way.
@@ -3050,6 +3059,201 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 		shape_matches
 			and str(disabled.get("fallback_reason", "")) == "rollout_disabled",
 		"Gate 48 returns the same selector shape as reception, setter, and attack",
+	)
+
+
+func _test_gate_forty_nine_development_live_block() -> void:
+	## The same seed Gate 42 uses. A promoted block requires a promoted attack
+	## ahead of it, so the two fixtures necessarily share a chain and a seed.
+	const LIVE_BLOCK_SEED := 300062
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var result: Resource = manager.resolve_active_rally(LIVE_BLOCK_SEED, true)
+	var trace: Dictionary = result.analysis.get("shadow_reception", {})
+	var summary: Dictionary = trace.get("summary", {})
+	var rollout: Dictionary = summary.get("block_rollout", {})
+	var integration: Dictionary = summary.get("live_block_integration", {})
+	var promoted_block: RallyEvent = null
+	for raw_event in result.events:
+		var event := raw_event as RallyEvent
+		if event != null \
+				and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
+				and bool(event.metadata.get("continuous_block", false)):
+			promoted_block = event
+	_check(
+		str(rollout.get("selected_source", "")) == "continuous_block"
+			and promoted_block != null
+			and bool(integration.get("applied", false))
+			and int(promoted_block.actor_id) == int(integration.get("primary_id", -1)),
+		"Gate 49 promotes one audited block contact in the requested fixture",
+	)
+	## Rule 14.4.1: the block touch is not one of the blocking team's contacts.
+	_check(
+		int(integration.get("contact_number", -1)) == 0
+			and str(integration.get("ball_status", "")) == "IN_FLIGHT",
+		"Gate 49 leaves the block touch outside the blocking team's contact count",
+	)
+	var repeat_manager := GAME_MANAGER_SCRIPT.new()
+	repeat_manager.seed_vertical_slice_data()
+	repeat_manager.match_state.serving_home = false
+	var repeat_result: Resource = repeat_manager.resolve_active_rally(
+		LIVE_BLOCK_SEED, true
+	)
+	var repeat_integration: Dictionary = Dictionary(
+		Dictionary(repeat_result.analysis.get("shadow_reception", {})).get("summary", {})
+	).get("live_block_integration", {})
+	_check(
+		int(repeat_integration.get("primary_id", -2)) \
+				== int(integration.get("primary_id", -1))
+			and str(repeat_integration.get("outcome", "x")) \
+				== str(integration.get("outcome", "y"))
+			and Vector2(repeat_integration.get("deflection_target", Vector2.ZERO)) \
+				== Vector2(integration.get("deflection_target", Vector2.ONE))
+			and float(repeat_integration.get("ball_end_time", -1.0)) \
+				== float(integration.get("ball_end_time", -2.0)),
+		"Gate 49 promotes the same block twice for one seed",
+	)
+	## Ordinary resolution of the same seed must never promote.
+	var ordinary_manager := GAME_MANAGER_SCRIPT.new()
+	ordinary_manager.seed_vertical_slice_data()
+	ordinary_manager.match_state.serving_home = false
+	var ordinary_result: Resource = ordinary_manager.resolve_active_rally(
+		LIVE_BLOCK_SEED
+	)
+	var ordinary_promoted := false
+	var ordinary_block_seen := false
+	for raw_event in ordinary_result.events:
+		var event := raw_event as RallyEvent
+		if event != null \
+				and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+			ordinary_block_seen = true
+			if bool(event.metadata.get("continuous_block", false)):
+				ordinary_promoted = true
+	_check(
+		ordinary_block_seen and not ordinary_promoted,
+		"Gate 49 leaves ordinary resolution of the same seed on the official block",
+	)
+
+	## The terminal branch never fires in ordinary play -- every promoted block
+	## in the sweep is a single-blocker touch -- so exercise it directly rather
+	## than leaving it unverified.
+	var state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(), manager.current_defensive_plan(),
+		manager.opponent_team, manager.called_play(), false, 490001,
+	)
+	var opponent_lineup: RotationLineup = state.opponent_lineup
+	var sealed_candidate := {
+		"primary_id": opponent_lineup.player_at_slot(3),
+		"assist_id": opponent_lineup.player_at_slot(2),
+		"closer_count": 2,
+		"contact_time": state.simulation_time + 0.40,
+		"contact_height_meters": 2.90,
+		"primary_target_x": 0.50,
+		"primary_arrival_margin": 0.20,
+		"primary_requires_jump": true,
+		"assist_target_x": 0.56,
+		"assist_arrival_margin": 0.12,
+	}
+	## A block only exists in answer to a third-contact attack from the far side.
+	var premature := LIVE_BLOCK_INTEGRATOR_SCRIPT.validate(state, sealed_candidate)
+	for _contact in range(3):
+		state.register_contact(&"home", manager.current_lineup().player_at_slot(4))
+	var sealed_result := LIVE_BLOCK_INTEGRATOR_SCRIPT.apply(state, sealed_candidate)
+	_check(
+		not bool(premature.get("valid", true))
+			and str(premature.get("reason", "")) == "no home attack to block"
+			and bool(sealed_result.get("applied", false))
+			and str(sealed_result.get("outcome", "")) == "stuff"
+			and bool(sealed_result.get("terminal", false)),
+		"Gate 49 seals a two-blocker close and rejects a block with no attack",
+	)
+
+
+## The movement-fluidity draft is not wired into playback or the resolver. It is
+## still verified here so the proposal rests on measured behaviour rather than
+## on an argument, and so it does not rot before it is adopted.
+func _test_movement_continuity_draft() -> void:
+	var start := Vector2(0.20, 0.80)
+	var waypoint := Vector2(0.30, 0.62)
+	var target := Vector2(0.62, 0.55)
+	var duration := 1.20
+
+	## From rest to rest the path must start and end stationary -- the defect
+	## the current start.lerp(target, t) tween cannot express.
+	var resting := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
+		start, target, duration, waypoint, 0.0, 0.0
+	)
+	var at_start: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(resting, 0.0)
+	var at_end: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(resting, duration)
+	_check(
+		float(at_start.get("speed", 1.0)) < 0.001
+			and float(at_end.get("speed", 1.0)) < 0.001
+			and Vector2(at_start.get("position", Vector2.ZERO)).distance_to(start) < 0.001
+			and Vector2(at_end.get("position", Vector2.ZERO)).distance_to(target) < 0.001,
+		"Movement draft leaves and reaches rest at the exact endpoints",
+	)
+
+	## Monotonic progress and no velocity discontinuity anywhere, including
+	## across the waypoint where the current tween flips direction instantly.
+	var previous_fraction := -1.0
+	var previous_velocity := Vector2.ZERO
+	var monotonic := true
+	var continuous := true
+	var largest_jerk := 0.0
+	for step in range(0, 121):
+		var elapsed := duration * float(step) / 120.0
+		var probe: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(resting, elapsed)
+		var fraction := float(probe.get("distance_fraction", 0.0))
+		monotonic = monotonic and fraction >= previous_fraction - 0.000001
+		previous_fraction = fraction
+		var velocity := Vector2(probe.get("velocity", Vector2.ZERO))
+		if step > 0:
+			largest_jerk = maxf(largest_jerk, velocity.distance_to(previous_velocity))
+		previous_velocity = velocity
+	continuous = largest_jerk < 0.05
+	_check(
+		monotonic and continuous,
+		"Movement draft advances monotonically with no velocity discontinuity",
+	)
+
+	## Carried speed is honoured exactly, so one phase can hand motion to the
+	## next instead of every phase restarting from a standstill.
+	var carried := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
+		start, target, duration, waypoint, 0.30, 0.18
+	)
+	var carried_start: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(carried, 0.0)
+	var carried_end: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(carried, duration)
+	_check(
+		absf(float(carried_start.get("speed", 0.0)) - 0.30) < 0.005
+			and absf(float(carried_end.get("speed", 0.0)) - 0.18) < 0.005,
+		"Movement draft preserves carried entry and exit speed",
+	)
+
+	## Waypoint timing follows arc length. With the corner placed near the end
+	## of the route, the player must still be short of it at the fixed 0.46
+	## share the current tween would have used to pivot there.
+	var late_corner := Vector2(0.58, 0.57)
+	var late := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
+		start, target, duration, late_corner, 0.0, 0.0
+	)
+	var midpoint: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample_progress(late, 0.46)
+	_check(
+		float(midpoint.get("distance_fraction", 1.0)) < 0.46
+			and Vector2(midpoint.get("position", Vector2.ZERO)).distance_to(late_corner)
+				> Vector2(late_corner).distance_to(target) * 0.25,
+		"Movement draft times the waypoint by distance, not a fixed share",
+	)
+
+	## Degenerate inputs must hold position rather than divide by zero.
+	var stationary := MOVEMENT_CONTINUITY_DRAFT_SCRIPT.build_path(
+		target, target, 0.0, null, 0.0, 0.0
+	)
+	var held: Dictionary = MOVEMENT_CONTINUITY_DRAFT_SCRIPT.sample(stationary, 0.5)
+	_check(
+		Vector2(held.get("position", Vector2.ZERO)).distance_to(target) < 0.001
+			and float(held.get("speed", 1.0)) == 0.0,
+		"Movement draft holds position for a zero-length route",
 	)
 
 

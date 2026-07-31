@@ -166,6 +166,13 @@ This page is the quickest defense against confusing source-code existence with a
   and can never select a candidate even with the flag forced on, because no
   block integrator exists yet. Official block events are byte-identical across
   fixed seeds.
+- Gate 49 promotes one audited block contact in an explicitly requested
+  development fixture, closing the block slice. `LiveBlockIntegrator` applies
+  the touch, blocker body states, and outgoing deflection; promotion requires a
+  promoted attack ahead of it, since the shadow block reads the shadow attack.
+  A block touch does not consume one of the blocking team's three contacts, and
+  a promoted block cannot miss because the audit certified reach first.
+  Coverage and everything after remain the legacy continuation.
 
 ## Partially implemented
 
@@ -222,27 +229,27 @@ integration have not been implemented.
 
 ## Proposed next integration
 
-Migrate one contact at a time. Opponent serve through home attack now has a
-guarded development-only vertical slice, and the block slice is complete through
-its selection boundary (Gates 44 through 48): observation, coordination,
-calibration, candidate audit, and a production-off rollout policy. The current
-next slice is **Gate 49, an explicit debug-only promoted block contact**:
+Migrate one contact at a time. Opponent serve through home block now has a
+guarded development-only vertical slice, and the whole block slice is complete
+(Gates 44 through 49): observation, coordination, calibration, candidate audit,
+production-off rollout policy, and a development-only promoted contact. The
+documented gate sequence is finished; no gate is currently in flight.
 
-1. Build a `LiveBlockIntegrator` mirroring `LiveAttackIntegrator`: validate the
-   `block_candidate` against live state, then apply one audited block contact.
-2. Flip `ALLOW_DEVELOPMENT_BLOCK_OVERRIDE` to `true` and gate promotion on it
-   plus `OS.is_debug_build()` plus an explicitly requested development fixture,
-   exactly as Gate 42 did for the attack.
-3. Replace the unconditional `use_candidate := false` in
-   `select_block_source()` with the real selection branch, and set
-   `activation_implemented` to `true` only once that branch exists.
-4. Prove ordinary fixed-seed rallies still produce byte-identical official
-   block events, and that promotion happens only in the requested fixture.
+Two structural gaps are the strongest candidates for the next slice, and both
+now limit the block work that was just completed:
 
-Two structural gaps are worth knowing before starting Gate 49. The opponent
-attack path still never calls `ApproachMechanicsSystem`, so an opponent hitter
-has no causal approach for a blocker to read; and `set_release_interval` and
-`defensive_depth` remain derived but unconsumed. Neither blocks Gate 49.
+1. **The opponent attack path never calls `ApproachMechanicsSystem`.** Home
+   hitters have a causal approach (Gate 43); opponent hitters do not. The
+   shadow block therefore reads a hitter-approach cue with less behind it than
+   the home side would give it. Mirroring Gate 43 onto the opponent attack
+   would make that cue real.
+2. **`set_release_interval` and `defensive_depth` are derived but unconsumed.**
+   Both are computed and then read by nothing.
+
+Separately, movement fluidity is drafted but not implemented. See
+[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md); it is a persistent
+movement change rather than a gate, and it will move seeds across the whole
+suite when it lands.
 
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
 home attack logic onto the opponent side as a substitute. The gate sequence and
@@ -251,7 +258,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 385 passing checks (355 pre-block,
-plus nine Gate 44 checks, fifteen for Gates 45 through 47, and six for Gate 48).
-Treat that number as a point-in-time result, not a permanent guarantee. Run
-[VALIDATION.md](VALIDATION.md) to establish the current result.
+The current foundation validation reports 390 passing checks (355 pre-block,
+plus nine Gate 44 checks, fifteen for Gates 45 through 47, six for Gate 48, and
+five for Gate 49). Treat that number as a point-in-time result, not a permanent
+guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the current result.

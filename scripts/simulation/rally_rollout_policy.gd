@@ -71,10 +71,9 @@ static func select_setter_source(
 	}
 
 
-## Gate 48: the block selection boundary. Unlike the three selectors above,
-## this one has no activation branch behind it yet -- no LiveBlockIntegrator
-## exists, so `activation_implemented` is false and a candidate can never be
-## selected regardless of the flag. Building the promotion path is Gate 49.
+## Gate 48 added this boundary with no activation behind it; Gate 49 opened the
+## branch once `LiveBlockIntegrator` existed. It now behaves exactly like the
+## three selectors above.
 ##
 ## The lineup argument is the *opponent* lineup: blockers are opponents of the
 ## attacking home side, and the audit's front-row legality check is meaningless
@@ -86,21 +85,19 @@ static func select_block_source(
 ) -> Dictionary:
 	var shadow_block: Dictionary = shadow_summary.get("shadow_block", {})
 	var audit := BlockRolloutAuditModel.evaluate(shadow_block, opponent_lineup)
-	var candidate_available := bool(audit.get("eligible", false))
-	## Gate 48 deliberately never selects the candidate. `use_candidate` stays
-	## false even with the flag on, because promoting a block contact requires
-	## the reviewed Gate 49 integrator that does not exist yet.
-	var use_candidate := false
+	var use_candidate := rollout_enabled and bool(audit.get("eligible", false))
+	var selected_block: Dictionary = audit.get("block_candidate", {}) \
+		if use_candidate else {}
 	return {
 		"flag_enabled": rollout_enabled,
-		"selected_source": "official",
-		"candidate_available": candidate_available,
+		"selected_source": "continuous_block" if use_candidate else "official",
+		"candidate_available": bool(audit.get("eligible", false)),
 		"candidate_audit": audit,
-		"selected_block": {},
+		"selected_block": selected_block,
 		"official_identity_preserved": not use_candidate,
-		"activation_implemented": false,
-		"fallback_reason": "rollout_disabled" if not rollout_enabled else (
-			"activation_not_implemented" if candidate_available else ";".join(
+		"activation_implemented": true,
+		"fallback_reason": "" if use_candidate else (
+			"rollout_disabled" if not rollout_enabled else ";".join(
 				Array(audit.get("failure_reasons", []))
 			)
 		),

@@ -9,8 +9,7 @@ const ENABLE_CONTINUOUS_SETTER_EVENTS: bool = false
 const ALLOW_DEVELOPMENT_SETTER_OVERRIDE: bool = true
 const ENABLE_CONTINUOUS_ATTACK_EVENTS: bool = false
 const ALLOW_DEVELOPMENT_ATTACK_OVERRIDE: bool = true
-## Gate 48 adds only the selection boundary. No block contact is promotable
-## yet -- the development override stays false until Gate 49 reviews and
-## implements the promotion path behind an explicit debug fixture.
+## Gate 48 added the selection boundary; Gate 49 added the promotion path
+## behind an explicit development fixture and OS.is_debug_build().
 const ENABLE_CONTINUOUS_BLOCK_EVENTS: bool = false
-const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = false
+const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true

@@ -71,15 +71,14 @@ the full development-project feature. Preserve the product contract in
 | Attack ownership/contact | Official phase resolver | May be promoted only after promoted reception and setter |
 | Home attack preparation | `ApproachMechanicsSystem` affects normal attack quality, jump conversion, and available attack families | Same evidence passes through the attack audit and live candidate |
 | Home floor-defense geometry | Saved plan and block relationship drive phase positions and claimant geometry | Same |
-| Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a shadow-only block slice (Gates 44-48: observation, coordination, calibration, candidate audit, guarded selection boundary) runs alongside it as evidence but never decides or feeds the official block. Its production flag is off and no promotion path exists |
+| Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a shadow block slice (Gates 44-49) runs alongside it as evidence. One audited block contact may be promoted, but only in an explicitly requested development fixture, in a debug build, on top of a promoted attack |
 | 2D display | Consumes `RallyEvent` and trajectory metadata | May additionally show explicitly requested diagnostics |
 | 3D display | Paused | Paused |
 
 The four `ENABLE_CONTINUOUS_*` production flags in
-`scripts/simulation/rally_feature_flags.gd` are all `false`. Three of the
-`ALLOW_DEVELOPMENT_*` flags permit explicit debug fixtures; they are not
-production activation. `ALLOW_DEVELOPMENT_BLOCK_OVERRIDE` is the exception and
-is also `false`, because no block integrator exists for it to reach.
+`scripts/simulation/rally_feature_flags.gd` are all `false`. The four
+`ALLOW_DEVELOPMENT_*` flags are all `true`; they permit explicit debug fixtures
+and are not production activation.
 
 ## Implemented migration chain
 
@@ -103,9 +102,14 @@ is also `false`, because no block integrator exists for it to reach.
 - Gate 48 adds the fourth selection boundary,
   `RallyRolloutPolicy.select_block_source()`, with
   `ENABLE_CONTINUOUS_BLOCK_EVENTS` off. It records a verdict under
-  `shadow_summary["block_rollout"]` on every rally and holds every one of them
-  on the official block. See
-  [Gate 48](../calibration/GATE_48_BLOCK_ROLLOUT_POLICY.md).
+  `shadow_summary["block_rollout"]` and holds ordinary rallies on the official
+  block. See [Gate 48](../calibration/GATE_48_BLOCK_ROLLOUT_POLICY.md).
+- Gate 49 closes the slice by promoting one audited block contact and its
+  deflection flight through `LiveBlockIntegrator`, only in an explicitly
+  requested development fixture, in a debug build, and only on top of a
+  promoted attack. A block touch consumes no contact, and a promoted block
+  cannot miss. See
+  [Gate 49](../calibration/GATE_49_DEVELOPMENT_LIVE_BLOCK.md).
 - Gates 45 through 47 complete the shadow-only block slice: a coordination pass
   in which blockers revise commitments from teammates' visible body cues and
   roles are resolved without consulting authoritative truth
@@ -122,46 +126,43 @@ history, not a license to enable production flags.
 
 ## The one current next objective
 
-The block slice through its selection boundary, **Gates 44 through 48**, is
-complete: observation, coordination, calibration, candidate audit, and a
-production-off rollout policy. The current next objective is **Gate 49: an
-explicit debug-only promoted block contact**. Do not start a scheduler rewrite,
-production rollout, opponent-attack mirror, or user-interface redesign as a
-substitute for it.
+The whole block slice, **Gates 44 through 49**, is complete: observation,
+coordination, calibration, candidate audit, a production-off selection boundary,
+and a development-only promoted contact. **The documented gate sequence is
+finished. No gate is currently in flight.**
 
-The legacy block resolver still receives the already-resolved attacking lane and
-calculates blocker read, close, assist, reach, and outcome directly
-(`RallySimulator._resolve_home_block`); nothing in Gates 44 to 48 changed it.
-What exists alongside it is a complete shadow evaluation on every rally:
-`shadow_summary["shadow_block"]` carrying per-blocker observations and
-coordinated commitments and resolved roles; `BlockRolloutAudit` supplying an
-`eligible` verdict, an extractable `block_candidate`, and a deterministic
-`fingerprint`; and `shadow_summary["block_rollout"]` recording what the guarded
-boundary decided.
+That means the next objective is a judgement call rather than a lookup, and it
+should be made deliberately. Do not start a production rollout: every
+`ENABLE_CONTINUOUS_*` flag is still off, and turning one on is a separately
+reviewed decision that no completed gate authorizes.
 
-Gate 48 stopped one step short on purpose. `select_block_source()` computes
-`candidate_available` honestly but pins `use_candidate` to `false` and reports
-`activation_implemented` false, because unlike the three earlier boundaries
-there is no integrator behind it. Gate 49's job is to build that integrator and
-then, and only then, let the branch open:
+Three candidates, in the order this document recommends:
 
-1. Build a `LiveBlockIntegrator` mirroring `LiveAttackIntegrator`: a `validate()`
-   that checks the `block_candidate` against live rally state, and an `apply()`
-   that performs one audited block contact and its outgoing flight.
-2. Flip `ALLOW_DEVELOPMENT_BLOCK_OVERRIDE` to `true`, and gate promotion on it
-   plus `OS.is_debug_build()` plus an explicitly requested development fixture,
-   exactly as Gate 42 did for the attack. Leave
-   `ENABLE_CONTINUOUS_BLOCK_EVENTS` false.
-3. Replace the unconditional `use_candidate := false` in
-   `select_block_source()` with the real selection branch, and set
-   `activation_implemented` to `true` only once that branch genuinely exists.
-4. Prove ordinary fixed-seed rallies still produce byte-identical official block
-   events, and that a promoted block appears only inside the requested fixture.
+**1. Mirror Gate 43 onto the opponent attack (recommended).** The opponent
+attack path never calls `ApproachMechanicsSystem`, so opponent hitters have no
+causal approach. This is now the weakest link in work that was just completed:
+the shadow block reads a hitter-approach cue that, on the opponent side, has
+almost nothing behind it. Fixing it makes Gates 44 to 49 measure something
+sharper, and it is the smallest change with the largest effect on existing
+evidence.
 
-A promoted block requires a promoted attack before it, so the Gate 49 fixture
-builds on the Gate 42 chain (promoted reception, then setter, then attack).
-Expect to re-select a working seed if any upstream calibration shifts; Gate 42's
-own seed had to be re-chosen once already for exactly that reason.
+**2. Consume `set_release_interval` and `defensive_depth`.** Both are derived
+and then read by nothing. Smaller and safer than the first, and a reasonable
+warm-up, but it improves less.
+
+**3. Movement fluidity.** Drafted in
+[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) but not implemented.
+This is the most valuable and the most dangerous: it changes the persistent
+movement model that every gate above sits on, and it will move seeds across the
+whole suite. The draft proposes doing it in three independently shippable
+phases specifically so it does not have to land as one destabilizing change.
+Read the draft before starting, and do not begin it in the same change as
+anything else.
+
+Whatever is chosen, the invariants below still bind, and the block work must not
+be reopened casually: `RallySimulator._resolve_opponent_block` remains the
+official path for ordinary rallies, and `LiveBlockIntegrator` must stay behind
+its development fixture.
 
 ### Historical record: the shadow block hypotheses gate (Gate 44, complete)
 
@@ -215,20 +216,30 @@ actors, commitment timing, possible conflicting reads, and net-position rules.
 | 46 | Blocker progression fixtures and wrong-read calibration | Shadow only | **Complete** -- `block_progression_calibration.gd` |
 | 47 | Candidate audit: legality, information purity, movement, contact and state immutability | Shadow only | **Complete** -- `block_rollout_audit.gd` |
 | 48 | Guarded block rollout policy with production flag off | Official remains authoritative | **Complete** -- `select_block_source` |
-| 49 | Explicit debug-only promoted block contact | Development fixture only | Not started -- the current objective |
+| 49 | Explicit debug-only promoted block contact | Development fixture only | **Complete** -- `live_block_integrator.gd` |
 
 Gate numbers are sequencing aids. Do not mark a gate complete merely because a
-class exists; its stated tests and authority boundary must pass. Three habits
-from this slice are worth carrying into Gate 49. First, a monotonic rate over an
+class exists; its stated tests and authority boundary must pass. Four habits
+from this slice are worth carrying forward. First, a monotonic rate over an
 all-zero column proves nothing -- Gate 46 pairs every rate with a coverage flag
 asserting the sweep actually contains that outcome, after both a zero
 wrong-read column and a structurally unreachable `hesitated` flag passed their
 checks silently. Second, an audit that cannot fail certifies nothing -- Gate 47
 corrupts one property at a time and requires each to be caught by name. Third, a
 boundary that has never been pushed against has not been tested -- Gate 48
-forces its flag on and asserts the candidate is *still* refused, and separately
-asserts the sweep contained an eligible candidate at all, because "everything
-was held back" is vacuous when there was nothing to hold.
+forces its flag on, and separately asserts the sweep contained an eligible
+candidate at all, because "everything was held back" is vacuous when there was
+nothing to hold. Fourth, a branch that ordinary play never reaches is not
+verified by ordinary play -- every promoted block in the Gate 49 sweep was a
+single-blocker touch, so the terminal two-blocker seal is driven directly by a
+synthetic candidate rather than left as unexercised code.
+
+Gate 48's forced-flag check is also a worked example of updating a test for the
+right reason. It asserted the boundary refuses to promote *because no activation
+existed*; Gate 49 built the activation and made that false on purpose, so the
+check was rewritten to assert the opposite contract. Changing a test because the
+contract genuinely changed is correct; changing one because it started failing
+is not, and the commit message should make clear which happened.
 
 ## Gate 44 acceptance contract
 
@@ -317,9 +328,10 @@ Before ending work:
 
 ```text
 Read docs/textbook/FRESH_AGENT_HANDOFF.md and the files it names. Verify all
-claims against source before editing. Continue only the current next objective:
-Gate 49, an explicit debug-only promoted block contact, built on the completed
-Gate 44-48 block slice. Preserve the dirty worktree,
+claims against source before editing. The documented gate sequence (through Gate
+49) is complete, so read "The one current next objective" and pick one of the
+three candidates it lists before writing code; say which you picked and why.
+Preserve the dirty worktree,
 production-off rollout flags, player-information boundary, deterministic seeds,
 source-state immutability, and RallyEvent playback contract. Run the complete
 validation guide and update textbook evidence before handing off.
