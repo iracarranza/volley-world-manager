@@ -1761,7 +1761,7 @@ func _with_alpha(raw_color: Variant, alpha: float) -> Color:
 func _perspective_adjusted_progress(nominal_progress: float, current_height: float, apex_height: float) -> float:
 	if apex_height <= 0.0:
 		return nominal_progress
-	var height_ratio := clampf(current_height / apex_height, 0.0, 1.0)
-	var speed_multiplier := lerp(1.15, 0.75, height_ratio)
-	var adjusted_progress := nominal_progress * speed_multiplier
+	var height_ratio: float = clampf(current_height / apex_height, 0.0, 1.0)
+	var speed_multiplier: float = lerpf(1.15, 0.75, height_ratio)
+	var adjusted_progress: float = nominal_progress * speed_multiplier
 	return clampf(adjusted_progress, 0.0, 1.0)
