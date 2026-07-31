@@ -116,6 +116,7 @@ func _initialize() -> void:
 	_test_gate_forty_five_block_coordination()
 	_test_gate_forty_six_blocker_calibration()
 	_test_gate_forty_seven_block_candidate_audit()
+	_test_gate_forty_eight_block_rollout_boundary()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -2940,6 +2941,115 @@ func _test_gate_forty_seven_block_candidate_audit() -> void:
 	_check(
 		not bool(unreachable_audit.get("eligible", true)) and height_named,
 		"Gate 47 rejects a close that cannot reach the contact height",
+	)
+
+
+func _test_gate_forty_eight_block_rollout_boundary() -> void:
+	## Fixed seeds: every rally must carry the block rollout verdict as evidence
+	## and every one of them must stay on the official block.
+	var official_block_signatures: Array[String] = []
+	var rollout_recorded := true
+	var always_official := true
+	var never_leaks_candidate := true
+	var eligible_candidate_seen := false
+	var selected_summary: Dictionary = {}
+	var selected_opponent_lineup: RotationLineup = null
+	for seed_value in range(300000, 300040):
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		manager.match_state.serving_home = false
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var trace: Dictionary = result.analysis.get("shadow_reception", {})
+		var summary: Dictionary = trace.get("summary", {})
+		if not summary.has("block_rollout"):
+			continue
+		var rollout: Dictionary = summary.get("block_rollout", {})
+		rollout_recorded = rollout_recorded and not rollout.is_empty()
+		always_official = always_official \
+			and str(rollout.get("selected_source", "")) == "official" \
+			and not bool(rollout.get("flag_enabled", true)) \
+			and bool(rollout.get("official_identity_preserved", false))
+		## The evidence copy must never carry the promotable block itself.
+		never_leaks_candidate = never_leaks_candidate \
+			and not rollout.has("selected_block")
+		if bool(rollout.get("candidate_available", false)):
+			eligible_candidate_seen = true
+			if selected_summary.is_empty():
+				selected_summary = summary
+				selected_opponent_lineup = manager.opponent_team.current_lineup()
+		for raw_event in result.events:
+			var event := raw_event as RallyEvent
+			if event != null \
+					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				official_block_signatures.append(
+					"%d:%s" % [seed_value, var_to_str(event.to_dict())]
+				)
+	_check(
+		rollout_recorded and not official_block_signatures.is_empty(),
+		"Gate 48 records a block rollout verdict alongside the official block event",
+	)
+	_check(
+		always_official and never_leaks_candidate,
+		"Gate 48 keeps every rally on the official block with the production flag off",
+	)
+	## Coverage guard: a boundary that never sees an eligible candidate proves
+	## nothing about holding one back.
+	_check(
+		eligible_candidate_seen,
+		"Gate 48 sweep actually contains an audit-eligible block candidate",
+	)
+	## Byte-identical proof: the same seeds resolved again must produce exactly
+	## the same official BLOCK events now that the policy runs on every rally.
+	var repeat_signatures: Array[String] = []
+	for seed_value in range(300000, 300040):
+		var repeat_manager := GAME_MANAGER_SCRIPT.new()
+		repeat_manager.seed_vertical_slice_data()
+		repeat_manager.match_state.serving_home = false
+		var repeat_result: Resource = repeat_manager.resolve_active_rally(seed_value)
+		var repeat_trace: Dictionary = repeat_result.analysis.get("shadow_reception", {})
+		if not Dictionary(repeat_trace.get("summary", {})).has("block_rollout"):
+			continue
+		for raw_event in repeat_result.events:
+			var event := raw_event as RallyEvent
+			if event != null \
+					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				repeat_signatures.append(
+					"%d:%s" % [seed_value, var_to_str(event.to_dict())]
+				)
+	_check(
+		repeat_signatures == official_block_signatures,
+		"Gate 48 leaves fixed-seed official block events byte-identical",
+	)
+	## Forcing the flag on must still not select a candidate: Gate 48 adds the
+	## boundary only, and the promotion path is Gate 49's reviewed work.
+	var forced := RALLY_ROLLOUT_POLICY_SCRIPT.select_block_source(
+		selected_summary, selected_opponent_lineup, true
+	)
+	_check(
+		bool(forced.get("flag_enabled", false))
+			and bool(forced.get("candidate_available", false))
+			and str(forced.get("selected_source", "")) == "official"
+			and bool(forced.get("official_identity_preserved", false))
+			and Dictionary(forced.get("selected_block", {})).is_empty()
+			and not bool(forced.get("activation_implemented", true))
+			and str(forced.get("fallback_reason", "")) == "activation_not_implemented",
+		"Gate 48 refuses to promote a block even when the flag is forced on",
+	)
+	## Shape parity with the other three selectors, so a later gate can treat
+	## all four boundaries the same way.
+	var disabled := RALLY_ROLLOUT_POLICY_SCRIPT.select_block_source(
+		selected_summary, selected_opponent_lineup, false
+	)
+	var shape_matches := true
+	for key in [
+		"flag_enabled", "selected_source", "candidate_available", "candidate_audit",
+		"official_identity_preserved", "activation_implemented", "fallback_reason",
+	]:
+		shape_matches = shape_matches and disabled.has(key)
+	_check(
+		shape_matches
+			and str(disabled.get("fallback_reason", "")) == "rollout_disabled",
+		"Gate 48 returns the same selector shape as reception, setter, and attack",
 	)
 
 

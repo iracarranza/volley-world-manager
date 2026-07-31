@@ -364,6 +364,16 @@ func resolve(
 	shadow_summary["shadow_block"] = ShadowBlockSystemModel.evaluate(
 		attack_state, shadow_attack, seed_value + 1900007,
 	)
+	## Gate 48: the guarded block selection boundary. Evaluated on every rally
+	## so the audit verdict is visible as evidence, but it can never select a
+	## candidate -- the production flag is off and no promotion path exists
+	## until Gate 49. The official BLOCK event below is unaffected.
+	var block_rollout := RallyRolloutPolicyModel.select_block_source(
+		shadow_summary, attack_state.opponent_lineup
+	)
+	var block_rollout_evidence := block_rollout.duplicate(true)
+	block_rollout_evidence.erase("selected_block")
+	shadow_summary["block_rollout"] = block_rollout_evidence
 	shadow_reception_trace.summary = shadow_summary
 	var attack_rollout_requested := using_live_setter \
 		and development_continuous_reception and OS.is_debug_build() \

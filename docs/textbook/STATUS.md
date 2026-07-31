@@ -157,7 +157,15 @@ This page is the quickest defense against confusing source-code existence with a
 - Gate 47 turns the block audit into a promotion boundary: teammate-cue
   privacy, movement feasibility, contact-envelope reach including takeoff time
   and height, role consistency, plus an extractable candidate and deterministic
-  fingerprint. No rollout policy or production flag exists yet.
+  fingerprint.
+- Gate 48 adds the guarded block selection boundary with its production flag
+  off. `RallyRolloutPolicy.select_block_source()` takes the shadow summary and
+  the *opponent* lineup, calls `BlockRolloutAudit.evaluate()`, and records the
+  verdict under `shadow_summary["block_rollout"]` with the candidate erased.
+  Unlike the three earlier selectors it reports `activation_implemented` false
+  and can never select a candidate even with the flag forced on, because no
+  block integrator exists yet. Official block events are byte-identical across
+  fixed seeds.
 
 ## Partially implemented
 
@@ -215,28 +223,26 @@ integration have not been implemented.
 ## Proposed next integration
 
 Migrate one contact at a time. Opponent serve through home attack now has a
-guarded development-only vertical slice, and the whole shadow-only block slice
-(Gates 44 through 47) is in place: observation, coordination, calibration, and
-a promotion-ready candidate audit. The current next slice is **Gate 48, a
-guarded block rollout policy with its production flag off**:
+guarded development-only vertical slice, and the block slice is complete through
+its selection boundary (Gates 44 through 48): observation, coordination,
+calibration, candidate audit, and a production-off rollout policy. The current
+next slice is **Gate 49, an explicit debug-only promoted block contact**:
 
-1. Add `select_block_source()` to `RallyRolloutPolicy`, mirroring
-   `select_reception_source()` / `select_setter_source()` /
-   `select_attack_source()`, gated on a new production-off
-   `RallyFeatureFlags.ENABLE_CONTINUOUS_BLOCK_EVENTS`.
-2. Feed it `BlockRolloutAudit.evaluate()`; the audit already returns
-   `eligible`, an extractable `block_candidate`, and a deterministic
-   `fingerprint`, so the policy only has to choose a source and preserve
-   official event identity.
-3. Prove official identity is preserved with the flag off, exactly as Gate 15,
-   29, 35, and 41 did for their contacts.
-4. Only then (Gate 49) promote one audited block contact behind an explicit
-   development fixture.
+1. Build a `LiveBlockIntegrator` mirroring `LiveAttackIntegrator`: validate the
+   `block_candidate` against live state, then apply one audited block contact.
+2. Flip `ALLOW_DEVELOPMENT_BLOCK_OVERRIDE` to `true` and gate promotion on it
+   plus `OS.is_debug_build()` plus an explicitly requested development fixture,
+   exactly as Gate 42 did for the attack.
+3. Replace the unconditional `use_candidate := false` in
+   `select_block_source()` with the real selection branch, and set
+   `activation_implemented` to `true` only once that branch exists.
+4. Prove ordinary fixed-seed rallies still produce byte-identical official
+   block events, and that promotion happens only in the requested fixture.
 
-Two structural gaps are worth knowing before starting Gate 48. The opponent
+Two structural gaps are worth knowing before starting Gate 49. The opponent
 attack path still never calls `ApproachMechanicsSystem`, so an opponent hitter
 has no causal approach for a blocker to read; and `set_release_interval` and
-`defensive_depth` remain derived but unconsumed. Neither blocks Gate 48.
+`defensive_depth` remain derived but unconsumed. Neither blocks Gate 49.
 
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
 home attack logic onto the opponent side as a substitute. The gate sequence and
@@ -245,7 +251,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 379 passing checks (355 pre-block,
-plus nine Gate 44 checks and fifteen for Gates 45 through 47). Treat that number
-as a point-in-time result, not a permanent guarantee. Run
+The current foundation validation reports 385 passing checks (355 pre-block,
+plus nine Gate 44 checks, fifteen for Gates 45 through 47, and six for Gate 48).
+Treat that number as a point-in-time result, not a permanent guarantee. Run
 [VALIDATION.md](VALIDATION.md) to establish the current result.
