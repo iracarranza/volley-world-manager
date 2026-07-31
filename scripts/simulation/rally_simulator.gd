@@ -438,6 +438,16 @@ func resolve(
 				- rally_clock,
 			0.0,
 		)
+	## Playback draws support movement one ball-flight leg at a time. Without
+	## this hint the setter is drawn as a generic support player during the
+	## serve's flight, then snapped onto their real transition line once they
+	## become the set's actor -- visible as running backwards. Staging the
+	## target on the reception event lets that leg carry them to setter_start
+	## directly, so the following leg starts where it already expects.
+	var reception_event_for_staging := result.events[-1] as RallyEvent
+	if reception_event_for_staging != null:
+		reception_event_for_staging.metadata["staged_next_actor_id"] = setter.id
+		reception_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 
 	var follow_threshold := 0.22 + _rating(setter, "decision_making") * 0.35 \
@@ -630,6 +640,13 @@ func resolve(
 				resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
 					prepared_actor, set_target, set_flight_time
 				)
+	## Same staging leg as the setter's: the hitter should already be at
+	## hitter_start (their staged approach mark) by the time this set's flight
+	## finishes, not shown getting there and running the approach in one motion.
+	var set_event_for_staging := result.events[-1] as RallyEvent
+	if set_event_for_staging != null:
+		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
+		set_event_for_staging.metadata["staged_next_position"] = hitter_start
 	var approach_fit := _rating(hitter, "approach_timing") * 0.12 \
 		+ float(resolved_approach.get("runup_quality", 0.5)) * 0.24 \
 		+ float(resolved_approach.get("lateral_control", 0.5)) * 0.08 \
@@ -1397,6 +1414,10 @@ func _resolve_home_continuation(
 	var setter_start: Vector2 = setter_choice.start
 	var setter_move_time := float(setter_choice.travel_time)
 	var setter_arrival_margin := second_contact_window - setter_move_time
+	var defense_event_for_staging := result.events[-1] as RallyEvent
+	if defense_event_for_staging != null:
+		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
+		defense_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 	var hitter := _fallback_hitter(players, lineup, setter.id)
 	var assignment := _fallback_assignment(hitter, lineup)
@@ -1453,6 +1474,10 @@ func _resolve_home_continuation(
 		hitter, hitter_start, set_target, "transition"
 	)
 	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
+	var set_event_for_staging := result.events[-1] as RallyEvent
+	if set_event_for_staging != null:
+		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
+		set_event_for_staging.metadata["staged_next_position"] = hitter_start
 	var continuation_approach := ApproachMechanicsModel.evaluate_takeoff(
 		prepared_hitter, set_target, continuation_flight_time
 	) if prepared_hitter != null else {}

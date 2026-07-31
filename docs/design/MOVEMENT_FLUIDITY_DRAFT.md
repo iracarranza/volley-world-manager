@@ -191,6 +191,34 @@ the arrival margin are now recomputed once staging is known, over the real
 staged route via `traversal_seconds()`'s waypoint form. This is the same class
 of bug as the stale stride: a value computed before its input was final.
 
+## Step 4 follow-up: staged preparation drawn one leg early
+
+Unifying timing exposed a sequencing defect distinct from timing itself.
+Playback draws each player's motion as one animated leg per `RallyEvent`, keyed
+to *that event's* actor. A player who is not yet the actor -- the setter while
+the serve is still in flight, the hitter while the set is still in flight --
+was drawn with a generic side-lerp support target instead of toward the
+position the resolver had already staged them for. The correction only became
+visible once they *became* the actor: the setter appeared to run backwards
+during serve receive before snapping onto the real line to `set_contact`, and
+the hitter's approach-mark relocation and their approach run were drawn as one
+combined motion starting only after the set went up, because the waypoint to
+`approach_start_position` was never reachable before that leg began.
+
+The resolver already computes both staging positions before it needs them --
+`setter_start` from `_spatial_setter_choice()`, and the hitter's staged
+`hitter_start` from `ApproachMechanicsSystem.prepare_for_attack()` -- it simply
+had nowhere to put them early enough for playback to use. Both call sites (the
+serve-receive attack and the transition/continuation attack) now stamp
+`staged_next_actor_id` / `staged_next_position` onto the *preceding* event
+(`RECEPTION` for the setter, `SET` for the hitter). `TacticalCourt._unit_support_targets()`
+honors that hint ahead of the generic side lerp, so the preparatory leg carries
+the player to exactly where the following leg's `movement_start` expects them.
+Verified against seed 1001: the `RECEPTION` event's staged position for the
+setter now equals the `SET` event's `movement_start` exactly, and the `SET`
+event's staged position for the hitter equals the `ATTACK` event's
+`movement_start` exactly -- both legs now hand off with zero correction.
+
 ## Remaining
 
 Movement is now one model, but it is still *resolver-allotted* rather than

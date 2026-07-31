@@ -793,9 +793,21 @@ func _unit_support_targets(event: Resource, action_target: Vector2) -> Dictionar
 		return targets
 	var event_type := int(event.event_type)
 	var event_side_opponent := str(event.metadata.get("side", "")) == "opponent"
+	## The resolver stages the setter and hitter for their own upcoming contact
+	## one leg ahead (setter_start during the serve's flight, the hitter's
+	## approach mark during the set's flight). Without honoring that hint here,
+	## this leg draws them with the generic side lerp below, and the next leg
+	## has to visibly correct onto the real line instead of already being there.
+	var staged_actor_id := int(event.metadata.get("staged_next_actor_id", -1))
+	var staged_position := Vector2(event.metadata.get(
+		"staged_next_position", Vector2.ZERO
+	))
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id == movement_player_id:
+			continue
+		if player_id == staged_actor_id:
+			targets[player_id] = staged_position
 			continue
 		var base := _base_or_defensive_position(player_id, slot_number)
 		targets[player_id] = _support_target_for_side(
