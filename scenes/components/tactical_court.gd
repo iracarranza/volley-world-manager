@@ -1601,14 +1601,21 @@ func _draw_rally_playback() -> void:
 	if block_event != null and bool(visualization_layers & VISUAL_CONTACT_OVERLAYS):
 		_draw_block_coverage(block_event)
 	var apex_height := float(trajectory.get("apex_height_meters", 0.0))
-	var height_scale := sin(PI * playback_progress) * apex_height
-	var perspective_progress := _perspective_adjusted_progress(playback_progress, height_scale, apex_height)
+	var uses_arc_perspective := int(playback_event.event_type) in [
+		RallyEventModel.EventType.SET_DECISION, RallyEventModel.EventType.SET,
+	]
+	var perspective_progress := playback_progress
+	if uses_arc_perspective:
+		var height_scale := sin(PI * playback_progress) * apex_height
+		perspective_progress = _perspective_adjusted_progress(playback_progress, height_scale, apex_height)
 	var perspective_inverse := 1.0 - perspective_progress
 	var perspective_ball_position := perspective_inverse * perspective_inverse * start \
 		+ 2.0 * perspective_inverse * perspective_progress * control \
 		+ perspective_progress * perspective_progress * finish
-	var perspective_height_scale := sin(PI * perspective_progress) * apex_height
-	var ball_radius_scale: float = 1.0 + (perspective_height_scale / maxf(apex_height, 0.1)) * 0.35
+	var ball_radius_scale: float = 1.0
+	if uses_arc_perspective:
+		var perspective_height_scale := sin(PI * perspective_progress) * apex_height
+		ball_radius_scale = 1.0 + (perspective_height_scale / maxf(apex_height, 0.1)) * 0.35
 	var shadow_position := perspective_ball_position + Vector2(3.0, 5.0)
 	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
 	draw_circle(perspective_ball_position, 9.0 * ball_radius_scale, Color("f5d328"))
