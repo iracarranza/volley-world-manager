@@ -16,8 +16,13 @@ func _ready() -> void:
 	new_career_screen.career_created.connect(_show_dashboard)
 	career_dashboard.title_requested.connect(_show_title)
 	career_dashboard.play_match_requested.connect(_show_match)
-	match_center.career_exit_requested.connect(_show_dashboard)
+	call_deferred("_connect_match_center_signal")
 	_show_title()
+
+
+func _connect_match_center_signal() -> void:
+	if match_center:
+		match_center.career_exit_requested.connect(_show_dashboard)
 
 
 func _show_only(screen: Control) -> void:

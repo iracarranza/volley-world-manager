@@ -2,7 +2,8 @@
 
 [ext_resource type="Script" path="res://scenes/components/tactical_court.gd" id="1_court"]
 
-[node name="TacticalCourt" type="Control"]
+[node name="TacticalCourt" type="Control" unique_id=928208356]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(400, 500)
 layout_mode = 3
 anchors_preset = 15
