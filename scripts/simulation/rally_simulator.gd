@@ -29,6 +29,9 @@ const LiveAttackIntegratorModel := preload(
 const ApproachMechanicsModel := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
+const ShadowBlockSystemModel := preload(
+	"res://scripts/simulation/shadow_block_system.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -355,6 +358,13 @@ func resolve(
 		receiver.id, seed_value + 1700003,
 	)
 	shadow_summary["shadow_attack"] = shadow_attack
+	## Gate 44: shadow-only attack-to-block observation. Always evaluated
+	## alongside the shadow attack it observes; never promoted into an
+	## official BLOCK event and never gated by a rollout flag.
+	shadow_summary["shadow_block"] = ShadowBlockSystemModel.evaluate(
+		attack_state, shadow_attack, seed_value + 1900007,
+	)
+	shadow_reception_trace.summary = shadow_summary
 	var attack_rollout_requested := using_live_setter \
 		and development_continuous_reception and OS.is_debug_build() \
 		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_ATTACK_OVERRIDE
@@ -677,11 +687,21 @@ func resolve(
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
 			"target_reason": attack_choice.reason, "movement_start": hitter_start,
 			"approach_start_position": approach_start,
+			"approach_target_position": Vector2(approach_preparation.get(
+				"approach_target_position", approach_start
+			)),
+			"reached_approach_mark": bool(approach_preparation.get(
+				"reached_approach_start", true
+			)),
 			"transition_preparation": approach_preparation.duplicate(true),
 			"resolved_approach": resolved_approach.duplicate(true),
 			"available_attack_actions": available_attacks.duplicate(),
 			"approach_speed_mps": float(resolved_approach.get("approach_speed_mps", 0.0)),
 			"approach_quality": float(resolved_approach.get("runup_quality", 0.0)),
+			"approach_distance_meters": float(resolved_approach.get(
+				"approach_distance_meters", 0.0
+			)),
+			"approach_in_system": bool(resolved_approach.get("approach_in_system", false)),
 			"jump_multiplier": float(resolved_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(resolved_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
@@ -1382,11 +1402,23 @@ func _resolve_home_continuation(
 			"attack_type": continuation_hit_type,
 			"movement_start": hitter_start,
 			"approach_start_position": continuation_approach_start,
+			"approach_target_position": Vector2(transition_preparation.get(
+				"approach_target_position", continuation_approach_start
+			)),
+			"reached_approach_mark": bool(transition_preparation.get(
+				"reached_approach_start", true
+			)),
 			"transition_preparation": transition_preparation.duplicate(true),
 			"resolved_approach": continuation_approach.duplicate(true),
 			"available_attack_actions": continuation_actions.duplicate(),
 			"approach_speed_mps": float(continuation_approach.get("approach_speed_mps", 0.0)),
 			"approach_quality": float(continuation_approach.get("runup_quality", 0.0)),
+			"approach_distance_meters": float(continuation_approach.get(
+				"approach_distance_meters", 0.0
+			)),
+			"approach_in_system": bool(continuation_approach.get(
+				"approach_in_system", false
+			)),
 			"jump_multiplier": float(continuation_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(continuation_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
@@ -1861,7 +1893,9 @@ func _approach_start_position(
 		current_position.x, 1.0 - current_position.y
 	) if opponent_side else current_position
 	var pin_distance := absf(local_contact.x - 0.50)
-	var approach_depth := lerpf(0.10, 0.17, clampf(pin_distance / 0.34, 0.0, 1.0))
+	var approach_depth := 0.135 * lerpf(
+		0.88, 1.12, clampf(pin_distance / 0.34, 0.0, 1.0)
+	)
 	var outward_offset := 0.0
 	if local_contact.x < 0.35:
 		outward_offset = -0.055

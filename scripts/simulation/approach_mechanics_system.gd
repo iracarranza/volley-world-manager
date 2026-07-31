@@ -70,7 +70,15 @@ static func prepare_for_attack(
 		"duty_delay_seconds": duty_delay,
 		"defensive_duty": assignment_duty,
 		"zone_priority": zone_priority,
-		"approach_start_position": start,
+		## Playback must render where the hitter physically ended up, not where
+		## they were trying to get to. When preparation time is short (tight
+		## tempo, contested duty) these two positions diverge, and showing the
+		## aspirational mark would draw a run-up the player never actually made.
+		"approach_start_position": prepared.position if prepared != null else start,
+		## The ideal mark this player was working toward. Kept separately for
+		## scouting/debug overlays ("missed their spot by 0.4m") without ever
+		## feeding it into anything that draws a court position.
+		"approach_target_position": start,
 		"preparation_time_seconds": preparation_time,
 		"preparation_distance_meters": float(projection.get("distance_meters", 0.0)),
 		"reached_approach_start": bool(projection.get("reached_target", false)),
@@ -112,8 +120,19 @@ static func evaluate_takeoff(
 	var start_speed := maxf(actor.velocity.dot(direction), 0.0)
 	var ending_speed := minf(start_speed + acceleration * run_time, maximum_speed)
 	var capacity := (start_speed + ending_speed) * 0.5 * run_time
-	var distance_fit := clampf(distance / 2.4, 0.0, 1.0) \
-		* clampf((4.8 - distance) / 2.4, 0.0, 1.0)
+	## Approach distance is scored against this player's own preferred run-up
+	## rather than a league-wide constant. Middles want a compact approach, tall
+	## long-strided outsides want a full runway, and both are correct.
+	var approach_profile := actor.player.system_fit(
+		VolleyballPlayer.SYSTEM_FIT_APPROACH_DISTANCE
+	)
+	var tolerance_scale := actor.player.system_fit_tolerance_scale()
+	var distance_evaluation := {}
+	if approach_profile != null:
+		distance_evaluation = approach_profile.evaluate(distance, tolerance_scale)
+	var distance_fit := float(distance_evaluation.get("fit", 0.0))
+	var in_system := bool(distance_evaluation.get("in_system", false))
+	var system_bonus := float(distance_evaluation.get("bonus_multiplier", 1.0))
 	var speed_fraction := ending_speed / maxf(maximum_speed, 0.1)
 	var timing := float(actor.player.approach_timing) / 100.0
 	var lateral_control := clampf(
@@ -121,13 +140,34 @@ static func evaluate_takeoff(
 		* lerpf(0.72, 1.0, alignment), 0.0, 1.0
 	)
 	var runway_completion := 1.0 if distance <= 0.05 else clampf(capacity / distance, 0.0, 1.0)
+	## Distance fit carries real weight now (0.19, up from a token 0.09) because
+	## it is player-specific: missing your own mark is a genuine execution error.
 	var quality := clampf(
-		speed_fraction * 0.28 + timing * 0.25 + alignment * 0.17
-		+ lateral_control * 0.13 + distance_fit * 0.09
+		speed_fraction * 0.24 + timing * 0.22 + alignment * 0.15
+		+ lateral_control * 0.12 + distance_fit * 0.19
 		+ actor.balance * 0.08, 0.0, 1.0
 	) * lerpf(0.62, 1.0, runway_completion)
+	## Landing inside the tight rhythm band is a discrete reward on top of the
+	## continuous curve, and it eases the shot-menu gates: being in system can be
+	## the difference between having the full menu available and not.
+	quality = clampf(quality * system_bonus, 0.0, 1.0)
+	var power_threshold := 0.48 if in_system else 0.52
+	var menu_threshold := 0.61 if in_system else 0.66
 	return {
 		"approach_distance_meters": distance,
+		"ideal_approach_distance_meters": approach_profile.ideal_value \
+			if approach_profile != null else 0.0,
+		"approach_distance_tolerance_meters": float(
+			distance_evaluation.get("tolerance", 0.0)
+		),
+		"approach_distance_deviation_meters": float(
+			distance_evaluation.get("signed_deviation", 0.0)
+		),
+		"approach_distance_fit": distance_fit,
+		"approach_in_system": in_system,
+		"approach_undershot": bool(distance_evaluation.get("undershot", false)),
+		"approach_overshot": bool(distance_evaluation.get("overshot", false)),
+		"system_fit_bonus": system_bonus,
 		"available_run_time_seconds": run_time,
 		"approach_speed_mps": ending_speed,
 		"maximum_approach_speed_mps": maximum_speed,
@@ -141,8 +181,9 @@ static func evaluate_takeoff(
 		## available; it does not erase their standing two-foot jump.
 		"jump_multiplier": lerpf(0.90, 1.08, quality),
 		"balance_multiplier": lerpf(0.58, 1.04, quality * lateral_control),
-		"power_access": quality >= 0.52 and speed_fraction >= 0.42 and lateral_control >= 0.42,
-		"full_shot_menu": quality >= 0.66 and lateral_control >= 0.56,
+		"power_access": quality >= power_threshold and speed_fraction >= 0.42 \
+			and lateral_control >= 0.42,
+		"full_shot_menu": quality >= menu_threshold and lateral_control >= 0.56,
 	}
 
 

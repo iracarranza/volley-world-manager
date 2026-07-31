@@ -101,8 +101,21 @@ func court_position(player_id: int, phase: String = "defense") -> Vector2:
 	if lineup != null:
 		var slot_number := lineup.slot_for_player(player_id)
 		if slot_number >= 1:
-			var home_position := CourtConstants.slot_position(slot_number)
-			return Vector2(home_position.x, 1.0 - home_position.y)
+			## Same formation function the home side uses, mirrored. Keeping both
+			## sides on one code path is what makes a tactical change legible:
+			## it lands identically on each half of the court.
+			if phase == "serve_receive":
+				var formation := CourtConstants.serve_receive_formation(
+					lineup.slot_for_player(lineup.active_setter_id()),
+					CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
+					-1,
+					true,
+				)
+				if slot_number in formation:
+					return Vector2(formation[slot_number])
+			return CourtConstants.mirror_to_opponent(
+				CourtConstants.slot_position(slot_number)
+			)
 	var code := str(player.position_code)
 	var positions := {
 		"S": Vector2(0.70, 0.38), "M1": Vector2(0.50, 0.40),
