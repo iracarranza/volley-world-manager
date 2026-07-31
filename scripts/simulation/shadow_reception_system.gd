@@ -638,7 +638,7 @@ static func _repeated_read_candidate(
 	if final_estimate == null or final_opportunity == null:
 		return {"moments": moments, "selection_score": -1000.0}
 	var scheduled_timeline: Dictionary = RallyOpportunityModel.evaluate_reception_timeline(
-		state, actor.player_id, moments, flight.arrival_time
+		state, actor.player_id, moments, flight.arrival_time, priority
 	)
 	var final_decision_time := maxf(
 		final_estimate.observed_at, final_estimate.recognition_time

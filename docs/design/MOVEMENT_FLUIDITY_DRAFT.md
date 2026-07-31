@@ -2,7 +2,7 @@
 
 Review date: 2026-07-31
 
-Status: **STEPS 1-4 COMPLETE; ONE MOVEMENT MODEL**
+Status: **STEPS 1-3 COMPLETE; STEP 4 IN PROGRESS (GATE 50)**
 
 The goal is for playback to be a byproduct of the simulator: the drawing layer
 should sample what the simulator computed, never invent anything, and therefore
@@ -284,21 +284,38 @@ fix -- the general fix is the continuous clock described there.
 Movement is now one model, but it is still *resolver-allotted* rather than
 resolver-integrated: `_movement_time()` answers how long a traversal takes and
 the phase is built around that answer, rather than players being stepped
-continuously against a rally clock. Going further would mean scheduling
-`RallyMoment.Kind.MOVEMENT_UPDATE`, which remains declared and unused. That is a
-scheduler change, not a movement change, and is not required for playback to be
-faithful.
+continuously against a rally clock.
 
-## Open questions before step 4
+Status: **STEP 4 IN PROGRESS: GATE 50**. `RallyMoment.Kind.MOVEMENT_UPDATE` is
+no longer declared and unused -- see
+[Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md). It is
+scheduled inside `RallyOpportunitySystem.evaluate_reception_timeline()`,
+shadow-only, on reception's reachability windows specifically. Making movement
+itself resolver-owned -- the change that would actually move seeds -- is
+contingent on that shadow proof and is not yet built.
 
-1. **Does the information boundary hold?** A continuously-moving player is
-   reacting to something, and that something must be perceived rather than
-   authoritative -- the boundary Gates 31 to 47 defend. A player who begins
-   transitioning at the instant the ball's true destination is fixed is reading
-   truth.
-2. **What happens to `ActionOpportunityWindow`?** Windows open and close at
-   scheduled moments. Continuous movement makes reachability a function of time,
-   and the two models need reconciling rather than coexisting.
-3. **Where does `RallyMoment.Kind.MOVEMENT_UPDATE` fit?** It is declared and
-   referenced nowhere else in the codebase. It is the natural scheduler hook for
-   step 4, and it is still empty.
+## Open questions before step 4 -- answered by Gate 50
+
+1. **Does the information boundary hold?** Yes, and more strongly than
+   originally framed: `evaluate_reception_timeline()` never receives
+   authoritative `BallFlight` truth at all, only pre-built perceived
+   `read_moments`. A `MOVEMENT_UPDATE` tick reads exactly `actor.intent_target`,
+   set by the immediately preceding `PERCEPTION` moment from `sample.
+   perceived_destination` -- itself already whitelisted by Gate 31/32's
+   `PlayerObservation` contract. There is nothing to leak because truth was
+   never in the function's inputs to begin with.
+2. **What happens to `ActionOpportunityWindow`?** Perception stays discrete --
+   Gate 6's three reads plus a deadline, unchanged, because a player does not
+   re-perceive every tick. What changes is that reachability is now *also*
+   evaluated continuously between reads via `MOVEMENT_UPDATE`, and the two are
+   compared rather than one silently standing in for the other. Measured
+   result: the two never disagree on whether a receiver is ever reachable, but
+   the discrete model's window-open timestamp can be off by up to a second
+   against the continuous one -- real timing error the three-read model
+   carries, now visible instead of assumed away.
+3. **Where does `RallyMoment.Kind.MOVEMENT_UPDATE` fit?** One per inter-read
+   gap, scheduled at the same instant as the read that opens it. Consuming it
+   calls `ShadowMovementSystem.integrate()` for the gap's length -- reusing the
+   already-proven stepper rather than pushing one `RallyMoment` per physics
+   frame, which would re-derive `direction_change_delay` every call and
+   reintroduce the exact composability bug that stepper's header warns about.

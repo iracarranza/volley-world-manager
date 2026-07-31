@@ -66,7 +66,7 @@
     {"path": "scripts/simulation/shadow_movement_system.gd", "symbols": ["class_name ShadowMovementSystem", "static func integrate", "static func reference_projection", "ALIGNED_TURN_DELAY", "DEFAULT_STEP_SECONDS"]},
     {"path": "scripts/simulation/movement_integration_calibration.gd", "symbols": ["class_name MovementIntegrationCalibration", "static func run", "AGREEMENT_TOLERANCE_METERS"]},
     {"path": "scripts/simulation/block_progression_calibration.gd", "symbols": ["class_name BlockerProgressionCalibration", "TIERS", "SCENARIOS", "static func run"]},
-    {"path": "scripts/simulation/rally_opportunity_system.gd", "symbols": ["class_name RallyOpportunitySystem", "static func evaluate_reception_timeline"]},
+    {"path": "scripts/simulation/rally_opportunity_system.gd", "symbols": ["class_name RallyOpportunitySystem", "static func evaluate_reception_timeline", "RallyMoment.Kind.MOVEMENT_UPDATE"]},
     {"path": "scripts/simulation/rally_decision_system.gd", "symbols": ["class_name RallyDecisionSystem", "static func select_shadow_reception"]},
     {"path": "scripts/simulation/rally_contact_system.gd", "symbols": ["class_name RallyContactSystem", "static func resolve_shadow_reception"]},
     {"path": "scripts/simulation/shadow_setter_response_system.gd", "symbols": ["class_name ShadowSetterResponseSystem", "static func evaluate"]},
@@ -95,6 +95,7 @@
     {"path": "tests/test_runner.gd", "symbols": ["RALLY_STATE_BUILDER_SCRIPT", "RALLY_MOVEMENT_SCRIPT", "func _test_ball_read_foundations", "func _test_shadow_reception_trace", "func _test_seeded_floor_defense_geometry"]},
     {"path": "scripts/simulation/movement_timing_ratio_calibration.gd", "symbols": ["class_name MovementTimingRatioCalibration", "static func run", "PERCEPTIBLE_LOW"]},
     {"path": "scripts/simulation/locomotion_model.gd", "symbols": ["class_name LocomotionModel", "static func stride_meters", "static func cadence_hz", "static func maximum_speed", "MODE_STRIDE_SCALE"]},
-    {"path": "scripts/simulation/locomotion_granularity_calibration.gd", "symbols": ["class_name LocomotionGranularityCalibration", "static func run", "PLAUSIBLE_STRIDE"]}
+    {"path": "scripts/simulation/locomotion_granularity_calibration.gd", "symbols": ["class_name LocomotionGranularityCalibration", "static func run", "PLAUSIBLE_STRIDE"]},
+    {"path": "scripts/simulation/continuous_reachability_calibration.gd", "symbols": ["class_name ContinuousReachabilityCalibration", "static func run", "READ_PROGRESS"]}
   ]
 }

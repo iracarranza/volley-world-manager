@@ -136,6 +136,7 @@ func _initialize() -> void:
 	_test_shadow_movement_integration()
 	_test_playback_samples_resolved_movement()
 	_test_block_visualization_geometry()
+	_test_gate_fifty_continuous_reachability_timeline()
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
@@ -1124,10 +1125,12 @@ func _test_shadow_reception_trace() -> void:
 			"opportunity_timeline", {}
 		)
 		var scheduled_timeline: Array = opportunity_timeline.get("timeline", [])
+		## Gate 50 adds one MOVEMENT_UPDATE per inter-read gap: 3 reads produce
+		## 3 perception + 3 movement_update + 1 intent_deadline entries.
 		scheduled_windows_valid = scheduled_windows_valid \
 			and bool(opportunity_timeline.get("available", false)) \
 			and bool(opportunity_timeline.get("source_state_unchanged", false)) \
-			and scheduled_timeline.size() == 4
+			and scheduled_timeline.size() == 7
 		var previous_scheduled_time := -INF
 		for raw_scheduled in scheduled_timeline:
 			var scheduled: Dictionary = raw_scheduled
@@ -3427,6 +3430,94 @@ func _test_block_visualization_geometry() -> void:
 		"A poorly-coordinated double block leaves a visible gap instead of one sealed wall",
 	)
 	court.free()
+
+
+## Gate 50: RallyMoment.Kind.MOVEMENT_UPDATE is scheduled and consumed for the
+## first time, continuously sampling reachability across each inter-read gap
+## instead of leaving it defined only at the discrete perception reads.
+func _test_gate_fifty_continuous_reachability_timeline() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var state = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(), manager.current_defensive_plan(),
+		manager.opponent_team, null, false, 4200,
+	)
+	var player_id := manager.current_lineup().player_at_slot(5)
+	var actor = state.player_state(&"home", player_id)
+	actor.apply_position(Vector2(0.5, 0.9), Vector2.ZERO)
+	## A short, realistic correction (well under a metre) so the continuous
+	## model -- driven by real kinematics, unlike the hand-set discrete flags
+	## below -- agrees the actor can genuinely make it.
+	var read_moments: Array[Dictionary] = [
+		{
+			"decision_time": 0.1, "perceived_destination": Vector2(0.50, 0.88),
+			"projected_position": Vector2(0.5, 0.9),
+			"projected_velocity_mps": Vector2.ZERO, "reachable": false,
+		},
+		{
+			"decision_time": 0.4, "perceived_destination": Vector2(0.50, 0.88),
+			"projected_position": Vector2(0.50, 0.89),
+			"projected_velocity_mps": Vector2(0.0, -0.2), "reachable": true,
+		},
+	]
+	var contact_time := 0.9
+
+	var result: Dictionary = RallyOpportunitySystem.evaluate_reception_timeline(
+		state, player_id, read_moments, contact_time, 0.2,
+	)
+	var movement_update_entries := 0
+	for raw_entry in Array(result.get("timeline", [])):
+		if str(Dictionary(raw_entry).get("kind", "")) == "movement_update":
+			movement_update_entries += 1
+	_check(
+		bool(result.get("available", false)) and movement_update_entries == 2,
+		"MOVEMENT_UPDATE is scheduled once per inter-read gap, not left declared and unused",
+	)
+	var continuous_samples: Array = result.get("continuous_samples", [])
+	_check(
+		continuous_samples.size() > 10,
+		"reachability is continuously sampled across the gaps, not only at the discrete reads",
+	)
+
+	## Information boundary: a MOVEMENT_UPDATE tick may only read
+	## actor.intent_target, which the preceding PERCEPTION moment already set
+	## from perceived data. Changing authoritative ball truth while holding
+	## read_moments (the perceived data) fixed must not change one sampled
+	## position or reachability flag.
+	var launch := BALL_TRAJECTORY_SCRIPT.create(
+		"serve", Vector2(0.80, 0.08), Vector2(0.55, 0.48),
+		Vector2(0.22, 0.84), 0.0, 1.1, 2.8, 2.3, 0.45,
+	)
+	state.ball.launch(launch, &"opponent", 55, 1)
+	var retinted_actor = state.player_state(&"home", player_id)
+	retinted_actor.apply_position(Vector2(0.5, 0.9), Vector2.ZERO)
+	var result_after_truth_change: Dictionary = RallyOpportunitySystem.evaluate_reception_timeline(
+		state, player_id, read_moments, contact_time, 0.2,
+	)
+	var samples_after: Array = result_after_truth_change.get("continuous_samples", [])
+	var boundary_held := samples_after.size() == continuous_samples.size()
+	for index in range(min(continuous_samples.size(), samples_after.size())):
+		var before: Dictionary = continuous_samples[index]
+		var after: Dictionary = samples_after[index]
+		boundary_held = boundary_held \
+			and Vector2(before.get("position", Vector2.ZERO)).is_equal_approx(
+				Vector2(after.get("position", Vector2.ZERO))
+			) and bool(before.get("reachable", false)) == bool(after.get("reachable", false))
+	_check(
+		boundary_held,
+		"continuous reachability sampling is unaffected by authoritative ball truth it never reads",
+	)
+
+	_check(
+		bool(result.get("continuous_ever_reachable", false)) \
+			and float(result.get("continuous_opened_at", -1.0)) >= 0.0,
+		"the continuous read finds the same actor reachable that the discrete windows found",
+	)
+	var open_delta: Variant = result.get("discrete_vs_continuous_open_delta")
+	_check(
+		open_delta == null or (open_delta is float and absf(open_delta) < contact_time),
+		"the discrete-vs-continuous timing delta, when comparable, is a bounded real number",
+	)
 
 
 ## Two read-only diagnostics. Neither changes an outcome; both exist so that

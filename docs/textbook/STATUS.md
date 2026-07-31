@@ -173,6 +173,14 @@ This page is the quickest defense against confusing source-code existence with a
   A block touch does not consume one of the blocking team's three contacts, and
   a promoted block cannot miss because the audit certified reach first.
   Coverage and everything after remain the legacy continuation.
+- Gate 50 schedules `RallyMoment.Kind.MOVEMENT_UPDATE` for the first time,
+  inside `RallyOpportunitySystem.evaluate_reception_timeline()`, and
+  continuously samples reachability across each inter-read gap via the
+  already-proven `ShadowMovementSystem` stepper. It is shadow-only: the
+  function's existing discrete windows are unmodified, and the comparison is
+  purely additive evidence. The two models never disagree on whether a
+  receiver is ever reachable, but the discrete read-only model's window-open
+  timestamp can be off by up to a second against the continuous one.
 
 ## Partially implemented
 
@@ -232,8 +240,10 @@ integration have not been implemented.
 Migrate one contact at a time. Opponent serve through home block now has a
 guarded development-only vertical slice, and the whole block slice is complete
 (Gates 44 through 49): observation, coordination, calibration, candidate audit,
-production-off rollout policy, and a development-only promoted contact. The
-documented gate sequence is finished; no gate is currently in flight.
+production-off rollout policy, and a development-only promoted contact. Gate 50
+opened a new slice -- continuous, resolver-integrated movement -- and is
+shadow-only on reception's reachability windows; no rollout, audit, flag, or
+promotion exists yet for it.
 
 Two structural gaps are the strongest candidates for the next slice, and both
 now limit the block work that was just completed:
@@ -246,17 +256,20 @@ now limit the block work that was just completed:
 2. **`set_release_interval` and `defensive_depth` are derived but unconsumed.**
    Both are computed and then read by nothing.
 
-Separately, movement fluidity is complete outside the gate sequence (steps 1
-through 4). `ShadowMovementSystem` integrates movement at a fixed
-step, `MovementIntegrationCalibration` proves that stepping reproduces
-`RallyMovementSystem.project_toward()` exactly at 15, 30, and 60 Hz, and
-`TacticalCourt` now samples that traversal instead of interpolating between
-endpoints. Three view-layer inventions are gone: the fixed `0.46` waypoint
-share, the straight-line lerp, and the tween's `EASE_IN_OUT`, which had been
-warping every phase -- including the ball -- with a curve nothing in the
-simulation chose. No rally outcome changes. Step 4, in which movement becomes
-resolver-owned and authoritative for reachability, is the one that moves seeds.
-See [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md).
+Separately, movement fluidity's playback slice (steps 1 through 3) is
+complete outside the gate sequence. `ShadowMovementSystem` integrates movement
+at a fixed step, `MovementIntegrationCalibration` proves that stepping
+reproduces `RallyMovementSystem.project_toward()` exactly at 15, 30, and 60 Hz,
+and `TacticalCourt` now samples that traversal instead of interpolating
+between endpoints. Three view-layer inventions are gone: the fixed `0.46`
+waypoint share, the straight-line lerp, and the tween's `EASE_IN_OUT`, which
+had been warping every phase -- including the ball -- with a curve nothing in
+the simulation chose. No rally outcome changes. Step 4, in which movement
+becomes resolver-owned and authoritative for reachability, is the one that
+moves seeds -- Gate 50 is its first, shadow-only slice (reception reachability
+only; no rollout, audit, flag, or promotion). See
+[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) and
+[Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md).
 
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
 home attack logic onto the opponent side as a substitute. The gate sequence and
@@ -265,8 +278,9 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 401 passing checks (355 pre-block,
-plus nine Gate 44 checks, fifteen for Gates 45 through 47, six for Gate 48, five
-for Gate 49, six for shadow movement integration, and five for playback
-sampling). Treat that number as a point-in-time result, not a permanent
-guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the current result.
+The current foundation validation reports 416 passing checks (401 as of Gate
+49, plus playback-sequencing and approach-run regression checks, block
+visualization geometry checks, and five checks for Gate 50's continuous
+reachability timeline). Treat that number as a point-in-time result, not a
+permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the
+current result.
