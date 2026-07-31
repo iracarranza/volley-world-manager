@@ -1608,7 +1608,7 @@ func _draw_rally_playback() -> void:
 		+ 2.0 * perspective_inverse * perspective_progress * control \
 		+ perspective_progress * perspective_progress * finish
 	var perspective_height_scale := sin(PI * perspective_progress) * apex_height
-	var ball_radius_scale := 1.0 + (perspective_height_scale / max(apex_height, 0.1)) * 0.35
+	var ball_radius_scale: float = 1.0 + (perspective_height_scale / maxf(apex_height, 0.1)) * 0.35
 	var shadow_position := perspective_ball_position + Vector2(3.0, 5.0)
 	draw_circle(shadow_position, 9.0, Color(0, 0, 0, 0.3))
 	draw_circle(perspective_ball_position, 9.0 * ball_radius_scale, Color("f5d328"))
