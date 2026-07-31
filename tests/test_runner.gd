@@ -3387,23 +3387,46 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 			and bool(ratio_coverage.get("slower_than_allotted_observed", false)),
 		"Movement timing sweep covers traversals both faster and slower than allotted",
 	)
-	## The two paths disagree, and the disagreement is systematic by phase type
-	## rather than noise -- attacks run long against the clock while receptions,
-	## sets, and digs run short. Pinning it here means step 4 has a target and a
-	## regression guard if the gap widens.
+	## There is now one movement model, so the allotted duration and the model's
+	## own pace agree for every phase type. This previously asserted the
+	## opposite -- a systematic split with attacks at 0.852 against receptions at
+	## 1.153 -- because two formulas disagreed. That contract changed on purpose
+	## when `_movement_time()` was pointed at `traversal_seconds()`.
 	var per_type: Dictionary = ratio.get("by_event_type", {})
-	var attack_ratio := float(
-		Dictionary(per_type.get("ATTACK", {})).get("mean_ratio", -1.0)
+	var every_phase_agrees := not per_type.is_empty()
+	for type_name in per_type:
+		var mean_ratio := float(Dictionary(per_type[type_name]).get("mean_ratio", -1.0))
+		every_phase_agrees = every_phase_agrees \
+			and mean_ratio > 0.95 and mean_ratio < 1.06
+	_check(
+		every_phase_agrees
+			and float(ratio.get("mean_ratio", -1.0)) > 0.97
+			and float(ratio.get("mean_ratio", -1.0)) < 1.04
+			and float(ratio.get("perceptible_rate", 1.0)) == 0.0,
+		"Allotted duration and the movement model agree for every phase type",
 	)
-	var set_ratio := float(
-		Dictionary(per_type.get("SET", {})).get("mean_ratio", -1.0)
+	## The residual is discretisation, not disagreement: this sweep measures the
+	## stepped integrator while the resolver uses the closed form. They describe
+	## the same traversal, so they must land within a step of each other.
+	var timing_manager := GAME_MANAGER_SCRIPT.new()
+	timing_manager.seed_vertical_slice_data()
+	var closed_form_actor := RallyPlayerState.create(
+		timing_manager.players[0], &"home", -1, Vector2(0.20, 0.84)
+	)
+	var closed_form_target := Vector2(0.74, 0.54)
+	closed_form_actor.facing = RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+		closed_form_actor.position, closed_form_target
+	).normalized()
+	var closed_form: float = RALLY_MOVEMENT_SCRIPT.traversal_seconds(
+		closed_form_actor, closed_form_target, RallyPlayerState.MovementMode.LATERAL
+	)
+	var stepped: float = SHADOW_MOVEMENT_SCRIPT.natural_traversal_time(
+		closed_form_actor, closed_form_target, RallyPlayerState.MovementMode.LATERAL
 	)
 	_check(
-		attack_ratio > 0.0 and set_ratio > 0.0
-			and attack_ratio < 1.0 and set_ratio > 1.0
-			and float(ratio.get("mean_ratio", -1.0)) > 0.85
-			and float(ratio.get("mean_ratio", -1.0)) < 1.20,
-		"Movement timing disagreement is systematic by phase type, not noise",
+		closed_form > 0.0 and stepped > 0.0
+			and absf(closed_form - stepped) <= SHADOW_MOVEMENT_SCRIPT.DEFAULT_STEP_SECONDS,
+		"Closed-form and stepped traversal times describe the same journey",
 	)
 
 	## Can stride and cadence serve as the granulated form of the speed curve?

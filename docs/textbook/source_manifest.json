@@ -58,7 +58,7 @@
     {"path": "scripts/models/rally_trace.gd", "symbols": ["class_name RallyTrace", "func add_entry", "func to_dict"]},
     {"path": "scripts/simulation/rally_state_builder.gd", "symbols": ["class_name RallyStateBuilder", "static func build"]},
     {"path": "scripts/simulation/rally_scheduler.gd", "symbols": ["class_name RallyScheduler", "func schedule", "func next"]},
-    {"path": "scripts/simulation/rally_movement_system.gd", "symbols": ["class_name RallyMovementSystem", "static func evaluate_opportunity", "static func project_toward", "static func generate_reception_opportunities"]},
+    {"path": "scripts/simulation/rally_movement_system.gd", "symbols": ["class_name RallyMovementSystem", "static func evaluate_opportunity", "static func project_toward", "static func traversal_seconds", "static func movement_profile", "static func generate_reception_opportunities"]},
     {"path": "scripts/simulation/approach_mechanics_system.gd", "symbols": ["class_name ApproachMechanicsSystem", "static func prepare_for_attack", "static func evaluate_takeoff", "static func available_attack_families"]},
     {"path": "scripts/simulation/shadow_block_system.gd", "symbols": ["class_name ShadowBlockSystem", "static func evaluate", "static func _evaluate_blocker", "static func _choose_commitment", "static func _coordinate_blocker", "static func _observe_teammate_cues", "static func _coordinate_commitment", "static func _resolve_roles", "static func _block_engagement_fit"]},
     {"path": "scripts/simulation/block_rollout_audit.gd", "symbols": ["class_name BlockRolloutAudit", "static func evaluate", "static func candidate", "static func fingerprint"]},

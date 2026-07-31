@@ -246,8 +246,8 @@ now limit the block work that was just completed:
 2. **`set_release_interval` and `defensive_depth` are derived but unconsumed.**
    Both are computed and then read by nothing.
 
-Separately, movement fluidity is underway outside the gate sequence, and steps 1
-through 3 are complete. `ShadowMovementSystem` integrates movement at a fixed
+Separately, movement fluidity is complete outside the gate sequence (steps 1
+through 4). `ShadowMovementSystem` integrates movement at a fixed
 step, `MovementIntegrationCalibration` proves that stepping reproduces
 `RallyMovementSystem.project_toward()` exactly at 15, 30, and 60 Hz, and
 `TacticalCourt` now samples that traversal instead of interpolating between

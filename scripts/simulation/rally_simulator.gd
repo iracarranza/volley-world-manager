@@ -35,6 +35,12 @@ const ShadowBlockSystemModel := preload(
 const LiveBlockIntegratorModel := preload(
 	"res://scripts/simulation/live_block_integrator.gd"
 )
+const RallyMovementSystemModel := preload(
+	"res://scripts/simulation/rally_movement_system.gd"
+)
+const RallyKinematicsModel := preload(
+	"res://scripts/simulation/rally_kinematics.gd"
+)
 const MAX_EXCHANGES: int = 4
 
 const OPPONENT_SERVE: float = 0.63
@@ -605,7 +611,22 @@ func resolve(
 			var prepared_actor := approach_preparation.get("actor") as RallyPlayerState
 			approach_preparation.erase("actor")
 			if prepared_actor != null:
+				## Preparation relocates where this phase's run-up begins: the
+				## travel to the staging mark already happened while the hitter
+				## was released. The journey now drawn and timed is
+				## staged mark -> approach start -> contact, so both the duration
+				## and the arrival margin have to be recomputed. Leaving them
+				## stale pairs a staged start with the unstaged duration, and
+				## playback draws the short leg at the long leg's pace.
 				hitter_start = prepared_actor.position
+				hitter_move_time = _movement_time(
+					hitter, hitter_start, set_target, "transition",
+					Vector2(approach_preparation.get(
+						"approach_start_position",
+						_approach_start_position(set_target, hitter_start, false)
+					)),
+				)
+				hitter_arrival_margin = float(set_flight_time) - hitter_move_time
 				resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
 					prepared_actor, set_target, set_flight_time
 				)
@@ -1979,22 +2000,36 @@ func _movement_time(
 	start: Vector2,
 	target: Vector2,
 	movement_kind: String,
+	waypoint: Variant = null,
 ) -> float:
 	if player == null:
 		return 4.0
-	var distance := CoverageModel.court_distance_meters(start, target)
-	var speed_rating := _rating(
-		player, "lateral_speed" if movement_kind == "lateral" else "transition_speed"
+	## One movement model. This used to carry its own constant-velocity formula
+	## with a flat startup penalty, which disagreed with the kinematics every
+	## reachability decision is built on -- and disagreed in opposite directions
+	## by phase, because a flat penalty undercharges short traversals and
+	## amortises away on long ones. It now asks the same model.
+	var actor := RallyPlayerState.create(player, &"home", -1, start)
+	var opening := RallyKinematicsModel.court_delta_meters(start, target)
+	if opening.length() > 0.0001:
+		## The resolver does not track facing at this point, and charging a full
+		## reorientation the player may not need would reintroduce a second
+		## disagreement. Face the route; the turn floor still applies.
+		actor.facing = opening.normalized()
+	return RallyMovementSystemModel.traversal_seconds(
+		actor, target, _movement_mode_for_kind(movement_kind), waypoint
 	)
-	var acceleration_rating := _rating(player, "acceleration")
-	var mass_multiplier := lerpf(1.06, 0.90, clampf(
-		(player.mass_kg - 55.0) / 60.0, 0.0, 1.0
-	))
-	var maximum_speed := lerpf(1.45, 5.15, speed_rating) * mass_multiplier
-	var acceleration_delay := lerpf(0.34, 0.08, acceleration_rating)
-	var direction_change_delay := 0.05 + distance * 0.012
-	return acceleration_delay + direction_change_delay \
-		+ distance / maxf(maximum_speed, 0.4)
+
+
+static func _movement_mode_for_kind(
+	movement_kind: String,
+) -> RallyPlayerState.MovementMode:
+	match movement_kind:
+		"lateral":
+			return RallyPlayerState.MovementMode.LATERAL
+		"approach":
+			return RallyPlayerState.MovementMode.APPROACH
+	return RallyPlayerState.MovementMode.TRANSITION
 
 
 func _ball_trajectory(

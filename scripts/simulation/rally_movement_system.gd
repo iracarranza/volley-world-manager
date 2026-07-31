@@ -374,6 +374,98 @@ static func _speed_rating(
 	return float(player.transition_speed) / 100.0
 
 
+## How long this traversal takes, as the closed-form inverse of
+## `project_toward()`. That function answers "how far in a given time"; this one
+## answers "how long for a given distance" from the identical kinematics, so the
+## engine has one movement model rather than two that disagree.
+##
+## Before this existed, `RallySimulator._movement_time()` carried its own
+## formula -- a constant-velocity trip plus a flat startup penalty, with no
+## fatigue and a distance-scaled turn cost. Because a flat penalty undercharges
+## short traversals and amortises away on long ones, the two models disagreed in
+## opposite directions depending on phase: measured at 1.153 for receptions
+## against 0.852 for attacks. See `MovementTimingRatioCalibration`.
+## `waypoint` models a staged traversal -- a hitter reaching an approach start
+## before running through it to contact. The leg through the corner carries its
+## speed, so a staged route is not simply two standing starts.
+static func traversal_seconds(
+	actor: RallyPlayerState,
+	target: Vector2,
+	mode: RallyPlayerState.MovementMode,
+	waypoint: Variant = null,
+) -> float:
+	if actor == null or actor.player == null:
+		return 0.0
+	if waypoint == null:
+		return _leg_seconds(actor, actor.position, target, mode, 0.0)["seconds"]
+	var corner := Vector2(waypoint)
+	var first := _leg_seconds(actor, actor.position, corner, mode, 0.0)
+	## Only the component of the carried speed aligned with the new heading
+	## survives the corner; the rest has to be rebuilt.
+	var outgoing := RallyKinematicsModel.court_delta_meters(corner, target)
+	var carried := 0.0
+	if outgoing.length() > 0.0001:
+		var incoming := RallyKinematicsModel.court_delta_meters(actor.position, corner)
+		if incoming.length() > 0.0001:
+			carried = maxf(
+				incoming.normalized().dot(outgoing.normalized()), 0.0
+			) * float(first["exit_speed"])
+	var second := _leg_seconds(actor, corner, target, mode, carried)
+	return float(first["seconds"]) + float(second["seconds"])
+
+
+static func _leg_seconds(
+	actor: RallyPlayerState,
+	from: Vector2,
+	to: Vector2,
+	mode: RallyPlayerState.MovementMode,
+	entry_speed: float,
+) -> Dictionary:
+	var meter_delta := RallyKinematicsModel.court_delta_meters(from, to)
+	var distance := meter_delta.length()
+	if distance <= 0.001:
+		return {"seconds": 0.0, "exit_speed": entry_speed}
+	var direction := meter_delta.normalized()
+	var profile := _movement_profile(actor, direction, mode)
+	var maximum_speed := maxf(float(profile.maximum_speed), 0.05)
+	var acceleration := maxf(float(profile.acceleration), 0.1)
+	## A caller-supplied carried speed wins; otherwise read the actor's own.
+	var opening_speed := entry_speed if entry_speed > 0.0 \
+		else maxf(actor.velocity.dot(direction), 0.0)
+	var seconds := _accelerated_seconds(
+		distance, opening_speed, maximum_speed, acceleration
+	)
+	## Turning is only charged when the traversal actually starts from rest;
+	## a player already carrying speed into this leg has already turned.
+	if entry_speed <= 0.0:
+		seconds += float(profile.direction_change_delay)
+	return {
+		"seconds": seconds,
+		"exit_speed": minf(
+			opening_speed + acceleration * seconds, maximum_speed
+		),
+	}
+
+
+## Time to cover `distance` accelerating from `entry_speed` toward
+## `maximum_speed`. Exactly the traversal `project_toward()` integrates, solved
+## for time instead of distance.
+static func _accelerated_seconds(
+	distance: float,
+	entry_speed: float,
+	maximum_speed: float,
+	acceleration: float,
+) -> float:
+	var to_top_speed := maxf((maximum_speed - entry_speed) / acceleration, 0.0)
+	var distance_while_accelerating := entry_speed * to_top_speed \
+		+ 0.5 * acceleration * to_top_speed * to_top_speed
+	if distance <= distance_while_accelerating:
+		## Still accelerating on arrival: solve 0.5at^2 + v0t - d = 0.
+		var discriminant := entry_speed * entry_speed + 2.0 * acceleration * distance
+		return (sqrt(maxf(discriminant, 0.0)) - entry_speed) / acceleration
+	return to_top_speed + (distance - distance_while_accelerating) / maximum_speed
+
+
 ## Public accessor for the rating-driven movement profile. Exposed so a stepped
 ## integrator can share this exact tuning -- maximum speed, acceleration, and
 ## direction-change delay all derive from player ratings, mass, and fatigue, and

@@ -2,7 +2,7 @@
 
 Review date: 2026-07-31
 
-Status: **STEPS 1-3 COMPLETE; PLAYBACK NOW SAMPLES THE MOVEMENT MODEL**
+Status: **STEPS 1-4 COMPLETE; ONE MOVEMENT MODEL**
 
 The goal is for playback to be a byproduct of the simulator: the drawing layer
 should sample what the simulator computed, never invent anything, and therefore
@@ -11,8 +11,8 @@ be innately accurate without visual tuning. Ball flight already works this way -
 Player movement does not: the simulator emits endpoints and playback guesses the
 path between them.
 
-Steps 1 and 2 are now built. Nothing is wired into the resolver or playback, and
-no rally outcome changes.
+Steps 1 through 4 are built. Playback samples the movement model rather than
+interpolating, and the resolver and that model now share one clock.
 
 ## What was wrong
 
@@ -145,28 +145,61 @@ nothing to ship for them. Rather than run two different code paths, playback
 invokes the same shared, rating-driven model for every moving player. No
 metadata, no serialization cost, no record-rate decision.
 
-That is still a byproduct of the simulator in the sense that matters: the motion
-comes from `RallyMovementSystem`'s ratings-derived kinematics, and playback
-contributes no constants of its own. It is not yet the stronger form where the
-resolver computes motion and playback purely consumes it. That arrives with step
-4, when movement becomes resolver-owned.
+That is a byproduct of the simulator in the sense that matters: the motion comes
+from `RallyMovementSystem`'s ratings-derived kinematics, and playback
+contributes no constants of its own.
 
-**One honest compromise.** `RallySimulator._movement_time()` and
-`RallyMovementSystem.project_toward()` are different code paths and disagree on
-how long a traversal naturally takes. Playback must honour the resolved
-endpoints and the resolved duration or it would contradict the event it is
-drawing, so the integrated traversal is renormalised onto the phase: the
-*shape* is the model's, the *rate* is the resolver's. Reconciling those two
-timing paths is part of step 4.
+**The compromise step 3 carried has since been removed.** It renormalised the
+model's traversal onto the resolver's duration because the two disagreed. Step 4
+made them agree, so that renormalisation is now an identity in practice and
+survives only as a guarantee that playback ends exactly on the resolved
+endpoint.
 
-## Remaining step
+## Step 4, done: one movement model
 
-**Step 4 -- movement becomes resolver-owned and authoritative for
-reachability.** Audit, guarded boundary, development promotion, in the shape
-Gates 47-49 used. This is the step that moves seeds, and the exact-agreement
-result above is the evidence it can be attempted at all. It also subsumes the
-renormalisation compromise, because there would be one timing model rather than
-two.
+`RallySimulator._movement_time()` carried its own formula -- a constant-velocity
+trip plus a flat startup penalty, with no fatigue and a distance-scaled turn
+cost. It now calls `RallyMovementSystem.traversal_seconds()`, the closed-form
+inverse of `project_toward()`, so one model answers both *how far in a given
+time* and *how long for a given distance*.
+
+Measured across 40 seeds, before and after:
+
+| | before | after |
+|---|---|---|
+| mean ratio | 1.028 | 1.008 |
+| median | 1.088 | 1.007 |
+| range | 0.557 - 1.246 | 0.969 - 1.043 |
+| outside 0.70-1.40 | 15.3% | 0.0% |
+| RECEPTION | 1.153 | 1.010 |
+| SET | 1.093 | 1.007 |
+| DEFENSE | 1.109 | 1.011 |
+| ATTACK | 0.852 | 1.007 |
+
+The residual ~1% is discretisation, not disagreement: the sweep measures the
+stepped integrator while the resolver uses the closed form. A regression check
+asserts the two land within one step of each other.
+
+**A second defect surfaced while closing the gap.** Attacks did not converge
+with the others; pointing `_movement_time()` at the shared model moved them from
+0.852 to 0.794, the wrong way. The cause was not the timing model at all.
+`ApproachMechanicsSystem.prepare_for_attack()` relocates `hitter_start` to the
+staging mark *after* `hitter_move_time` was computed, so the attack event
+recorded a staged start paired with the unstaged duration -- and playback drew
+the hitter covering the short leg at the long leg's pace. Both the duration and
+the arrival margin are now recomputed once staging is known, over the real
+staged route via `traversal_seconds()`'s waypoint form. This is the same class
+of bug as the stale stride: a value computed before its input was final.
+
+## Remaining
+
+Movement is now one model, but it is still *resolver-allotted* rather than
+resolver-integrated: `_movement_time()` answers how long a traversal takes and
+the phase is built around that answer, rather than players being stepped
+continuously against a rally clock. Going further would mean scheduling
+`RallyMoment.Kind.MOVEMENT_UPDATE`, which remains declared and unused. That is a
+scheduler change, not a movement change, and is not required for playback to be
+faithful.
 
 ## Open questions before step 4
 

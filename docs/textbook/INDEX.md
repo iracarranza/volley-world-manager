@@ -59,6 +59,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `ShadowMovementSystem` | Fixed-step movement integration producing sampled traversals; consumed by 2D playback; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `TacticalCourt._build_movement_paths` | Builds each player's phase traversal from the movement model so playback samples rather than interpolates; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `MovementIntegrationCalibration` | Proves stepped integration reproduces `project_toward` exactly, and that the sweep can fail; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
+| `RallyMovementSystem.traversal_seconds` | Closed-form inverse of `project_toward`; the single answer to how long a traversal takes; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `RallyMovementSystem.movement_profile` | Public rating-driven speed, acceleration, and turn-delay profile, shared by the stepper; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecision` | Structured evidence for one selected shadow action; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
