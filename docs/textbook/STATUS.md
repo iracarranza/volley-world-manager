@@ -141,6 +141,23 @@ This page is the quickest defense against confusing source-code existence with a
   strategy) and a commitment chosen from that perception alone. It never
   promotes into the official `BLOCK` event; it is evaluated as shadow evidence
   alongside `shadow_attack` on every rally.
+- Gate 45 adds a coordination pass. Blockers observe teammates' visible body
+  cues -- the direction a teammate appears to drive and whether they look
+  committed -- and may join a closing zone owner, step up to an uncovered zone,
+  leave a zone the ball is not coming to, re-engage when nobody committed, or
+  decline a crowded seam. Primary and assist are resolved from those
+  coordinated commitments; Gate 44 had ranked them by nearness to the
+  authoritative contact, which scored a guess rather than describing a block.
+  `block_engagement_distance` is consumed here as the commitment threshold's
+  system-fit easing.
+- Gate 46 calibrates blocker outcomes across three reading tiers and four set
+  difficulties: misread rate, hesitation rate, and solo-versus-coordinated
+  closes, with coverage flags asserting the sweep actually contains each
+  outcome it rates.
+- Gate 47 turns the block audit into a promotion boundary: teammate-cue
+  privacy, movement feasibility, contact-envelope reach including takeoff time
+  and height, role consistency, plus an extractable candidate and deterministic
+  fingerprint. No rollout policy or production flag exists yet.
 
 ## Partially implemented
 
@@ -198,28 +215,37 @@ integration have not been implemented.
 ## Proposed next integration
 
 Migrate one contact at a time. Opponent serve through home attack now has a
-guarded development-only vertical slice, and the attack-to-block observation
-boundary (Gate 44) is in place as shadow-only evidence. The current next slice
-is individual and coordinated block decisions from those observations (Gate 45):
+guarded development-only vertical slice, and the whole shadow-only block slice
+(Gates 44 through 47) is in place: observation, coordination, calibration, and
+a promotion-ready candidate audit. The current next slice is **Gate 48, a
+guarded block rollout policy with its production flag off**:
 
-1. Reconcile two blockers who committed to different zones into one team
-   decision, rather than resolving primary/assist only after the fact.
-2. Extend `BlockerProgressionCalibration` to cover coordinated outcomes, not
-   only individual reads.
-3. Build the Gate 47 candidate audit (legality, information purity, movement,
-   contact, and state immutability) as a promotion boundary, distinct from the
-   lighter `BlockRolloutAudit` Gate 44 already ships.
-4. Only then add a guarded block rollout policy (Gate 48) with its production
-   flag off, mirroring `RallyRolloutPolicy.select_attack_source()`.
+1. Add `select_block_source()` to `RallyRolloutPolicy`, mirroring
+   `select_reception_source()` / `select_setter_source()` /
+   `select_attack_source()`, gated on a new production-off
+   `RallyFeatureFlags.ENABLE_CONTINUOUS_BLOCK_EVENTS`.
+2. Feed it `BlockRolloutAudit.evaluate()`; the audit already returns
+   `eligible`, an extractable `block_candidate`, and a deterministic
+   `fingerprint`, so the policy only has to choose a source and preserve
+   official event identity.
+3. Prove official identity is preserved with the flag off, exactly as Gate 15,
+   29, 35, and 41 did for their contacts.
+4. Only then (Gate 49) promote one audited block contact behind an explicit
+   development fixture.
+
+Two structural gaps are worth knowing before starting Gate 48. The opponent
+attack path still never calls `ApproachMechanicsSystem`, so an opponent hitter
+has no causal approach for a blocker to read; and `set_release_interval` and
+`defensive_depth` remain derived but unconsumed. Neither blocks Gate 48.
 
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
-home attack logic onto the opponent side as a substitute. The complete Gate 44
-acceptance contract and proposed Gate 44–49 sequence are in the
+home attack logic onto the opponent side as a substitute. The gate sequence and
+its current status are in the
 [Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md#the-one-current-next-objective).
 
 ## Validation baseline
 
-The current foundation validation reports 364 passing checks (355 plus the
-nine focused Gate 44 checks). Treat that number as a point-in-time result, not
-a permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the
-current result.
+The current foundation validation reports 379 passing checks (355 pre-block,
+plus nine Gate 44 checks and fifteen for Gates 45 through 47). Treat that number
+as a point-in-time result, not a permanent guarantee. Run
+[VALIDATION.md](VALIDATION.md) to establish the current result.

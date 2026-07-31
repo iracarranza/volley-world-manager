@@ -113,6 +113,9 @@ func _initialize() -> void:
 	_test_gate_forty_two_development_live_attack()
 	_test_transition_preparation_and_approach_mechanics()
 	_test_gate_forty_four_shadow_block_hypotheses()
+	_test_gate_forty_five_block_coordination()
+	_test_gate_forty_six_blocker_calibration()
+	_test_gate_forty_seven_block_candidate_audit()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -2663,6 +2666,280 @@ func _test_gate_forty_four_shadow_block_hypotheses() -> void:
 	_check(
 		official_block_seen and not official_block_contaminated,
 		"Gate 44 official block event identity is preserved with no rollout policy active",
+	)
+
+
+func _test_gate_forty_five_block_coordination() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var lineup: RotationLineup = manager.current_lineup()
+	var state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup, manager.current_defensive_plan(),
+		manager.opponent_team, manager.called_play(), false, 450001,
+	)
+	var setter_id := lineup.active_setter_id()
+	var hitter_id := lineup.player_at_slot(4)
+
+	## The decisive Gate 45 test. Roles used to be ranked by how near a
+	## blocker's target landed to the authoritative contact, which meant moving
+	## the truth alone reshuffled who was primary. Coordination now resolves
+	## roles from the blockers' own commitments, so holding every perception
+	## fixed and moving only the authoritative contact must change nothing.
+	var near_truth := _synthetic_shadow_attack(
+		setter_id, hitter_id, Vector2(0.20, 0.62), 1.60,
+	)
+	var far_truth := _synthetic_shadow_attack(
+		setter_id, hitter_id, Vector2(0.80, 0.62), 1.60,
+	)
+	var near_run := SHADOW_BLOCK_SCRIPT.evaluate(state, near_truth, 770001)
+	var far_run := SHADOW_BLOCK_SCRIPT.evaluate(state, far_truth, 770001)
+	var near_commitments: Array[String] = []
+	var far_commitments: Array[String] = []
+	for raw in near_run.get("blockers", []):
+		near_commitments.append(str(Dictionary(raw).get("commitment", "")))
+	for raw in far_run.get("blockers", []):
+		far_commitments.append(str(Dictionary(raw).get("commitment", "")))
+	_check(
+		bool(near_run.get("available", false))
+			and int(near_run.get("primary_id", -1)) == int(far_run.get("primary_id", -2))
+			and int(near_run.get("assist_id", -1)) == int(far_run.get("assist_id", -2))
+			and near_commitments == far_commitments,
+		"Gate 45 roles and commitments are resolved without authoritative contact truth",
+	)
+
+	## Coordination is deterministic and order-independent: every revision reads
+	## the same pass-one snapshot, so a repeat run must be identical.
+	var repeat_run := SHADOW_BLOCK_SCRIPT.evaluate(state, near_truth, 770001)
+	var coordination_stable := int(near_run.get("coordination_changes", -1)) \
+		== int(repeat_run.get("coordination_changes", -2))
+	for index in range(near_run.get("blockers", []).size()):
+		var a: Dictionary = near_run["blockers"][index]
+		var b: Dictionary = repeat_run["blockers"][index]
+		if str(a.get("commitment_fingerprint", "")) \
+				!= str(b.get("commitment_fingerprint", "x")):
+			coordination_stable = false
+	_check(
+		coordination_stable,
+		"Gate 45 coordinated commitments are deterministic for one seed",
+	)
+
+	## A teammate cue may carry only what is visible across a net. Anything
+	## resembling a private hypothesis would reintroduce the boundary break the
+	## whole slice exists to avoid.
+	var allowed_cue_keys := [
+		"teammate_slot", "teammate_home_zone", "perceived_movement_zone",
+		"perceived_committed", "cue_confidence",
+	]
+	var cues_are_public := false
+	for raw_blocker in near_run.get("blockers", []):
+		var blocker: Dictionary = raw_blocker
+		var cues: Array = blocker.get("observation", {}).get("perceived_teammate_cues", [])
+		if cues.is_empty():
+			continue
+		cues_are_public = true
+		for raw_cue in cues:
+			for key in Dictionary(raw_cue):
+				if str(key) not in allowed_cue_keys:
+					cues_are_public = false
+	_check(
+		cues_are_public,
+		"Gate 45 teammate cues expose only observable body language, never private state",
+	)
+
+	## The coordination rules themselves, exercised directly so each branch is
+	## proved rather than hoped for. The ordinary fixture is too easy to reach
+	## all three.
+	var holding := {
+		"commitment": "hold_read", "own_zone_x": 0.50,
+		"perceived_attack_x": 0.82, "confidence_late": 0.90,
+		"decisive_threshold": 0.50,
+	}
+	var owner_closing: Array[Dictionary] = [{
+		"teammate_slot": 2, "teammate_home_zone": "right",
+		"perceived_movement_zone": "right", "perceived_committed": true,
+	}]
+	var nobody_closing: Array[Dictionary] = [{
+		"teammate_slot": 2, "teammate_home_zone": "right",
+		"perceived_movement_zone": "right", "perceived_committed": false,
+	}]
+	var joined := SHADOW_BLOCK_SCRIPT._coordinate_commitment(holding, owner_closing)
+	var stepped_up := SHADOW_BLOCK_SCRIPT._coordinate_commitment(holding, nobody_closing)
+	_check(
+		bool(joined.get("changed", false))
+			and str(joined.get("commitment", "")) == "assist"
+			and str(joined.get("reason", "")).begins_with("joined")
+			and bool(stepped_up.get("changed", false))
+			and str(stepped_up.get("commitment", "")) == "assist"
+			and str(stepped_up.get("reason", "")).begins_with("stepped up"),
+		"Gate 45 a holding blocker joins a closing zone owner and steps up when nobody covers",
+	)
+
+	var assisting := {
+		"commitment": "assist", "own_zone_x": 0.18,
+		"perceived_attack_x": 0.50, "confidence_late": 0.90,
+		"decisive_threshold": 0.50,
+	}
+	var two_already_closing: Array[Dictionary] = [
+		{
+			"teammate_slot": 2, "teammate_home_zone": "right",
+			"perceived_movement_zone": "middle", "perceived_committed": true,
+		},
+		{
+			"teammate_slot": 3, "teammate_home_zone": "middle",
+			"perceived_movement_zone": "middle", "perceived_committed": true,
+		},
+	]
+	var declined := SHADOW_BLOCK_SCRIPT._coordinate_commitment(
+		assisting, two_already_closing
+	)
+	_check(
+		bool(declined.get("changed", false))
+			and str(declined.get("commitment", "")) == "close_left"
+			and str(declined.get("reason", "")).begins_with("declined third body"),
+		"Gate 45 a third blocker declines a crowded seam and holds its own zone",
+	)
+
+	## A deliberate coordinated move away from the ball is not a misread. The
+	## two must stay separately countable or calibration cannot tell a
+	## perception failure from a tactical choice.
+	var separates_misread_from_placement := true
+	for raw_blocker in near_run.get("blockers", []):
+		var blocker: Dictionary = raw_blocker
+		if not blocker.has("wrong_read") or not blocker.has("commitment_off_target"):
+			separates_misread_from_placement = false
+	_check(
+		separates_misread_from_placement,
+		"Gate 45 grades perception misreads separately from coordinated placement",
+	)
+
+
+func _test_gate_forty_six_blocker_calibration() -> void:
+	var report: Dictionary = BLOCKER_PROGRESSION_CALIBRATION_SCRIPT.run(8, 520000)
+	var progression: Dictionary = report.get("progression", {})
+	var coverage: Dictionary = report.get("coverage", {})
+	_check(
+		bool(report.get("fixture_valid", false))
+			and bool(progression.get("confidence_monotonic", false))
+			and bool(progression.get("earlier_recognition_monotonic", false))
+			and bool(progression.get("movement_speed_tier_independent", false)),
+		"Gate 46 stronger readers see more and earlier without moving faster",
+	)
+	_check(
+		bool(progression.get("wrong_read_monotonic", false))
+			and bool(progression.get("hesitation_monotonic", false)),
+		"Gate 46 stronger readers misread and hesitate less often",
+	)
+	## A monotonic rate over an all-zero column proves nothing. The sweep has to
+	## actually contain the outcomes it claims to be calibrating.
+	_check(
+		bool(coverage.get("wrong_reads_observed", false))
+			and bool(coverage.get("hesitation_observed", false))
+			and bool(coverage.get("solo_closes_observed", false))
+			and bool(coverage.get("coordinated_closes_observed", false))
+			and bool(coverage.get("coordination_revisions_observed", false)),
+		"Gate 46 the calibration sweep observes misreads, hesitation, solo and coordinated closes",
+	)
+
+
+func _test_gate_forty_seven_block_candidate_audit() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var lineup: RotationLineup = manager.current_lineup()
+	var state := RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, lineup, manager.current_defensive_plan(),
+		manager.opponent_team, manager.called_play(), false, 470001,
+	)
+	var opponent_lineup: RotationLineup = state.opponent_lineup
+	var shadow_attack := _synthetic_shadow_attack(
+		lineup.active_setter_id(), lineup.player_at_slot(4), Vector2(0.82, 0.62), 1.60,
+	)
+	var shadow_block := SHADOW_BLOCK_SCRIPT.evaluate(state, shadow_attack, 880001)
+	var audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(shadow_block, opponent_lineup)
+	var candidate: Dictionary = audit.get("block_candidate", {})
+	_check(
+		bool(audit.get("eligible", false))
+			and bool(audit.get("observation_boundary_valid", false))
+			and not str(audit.get("fingerprint", "")).is_empty()
+			and int(candidate.get("primary_id", -1)) == int(shadow_block.get("primary_id", -2)),
+		"Gate 47 a clean shadow block passes the full candidate audit",
+	)
+	_check(
+		str(audit.get("fingerprint", "")) == str(BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(
+			SHADOW_BLOCK_SCRIPT.evaluate(state, shadow_attack, 880001), opponent_lineup
+		).get("fingerprint", "x")),
+		"Gate 47 the candidate fingerprint is deterministic for one seed",
+	)
+
+	## An audit that cannot fail certifies nothing. Each negative case below
+	## corrupts exactly one property and must be caught by name.
+	var leaked := shadow_block.duplicate(true)
+	var leaked_blocker: Dictionary = leaked["blockers"][0]
+	var leaked_observation: Dictionary = leaked_blocker["observation"]
+	var leaked_cues: Array = leaked_observation.get("perceived_teammate_cues", [])
+	if not leaked_cues.is_empty():
+		leaked_cues[0]["confidence_late"] = 0.9
+	leaked_observation["perceived_teammate_cues"] = leaked_cues
+	leaked_blocker["observation"] = leaked_observation
+	leaked["blockers"][0] = leaked_blocker
+	var leaked_audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(leaked, opponent_lineup)
+	var leak_named := false
+	for reason in leaked_audit.get("failure_reasons", []):
+		if str(reason).begins_with("teammate_cue_leaks_private_state"):
+			leak_named = true
+	_check(
+		not bool(leaked_audit.get("eligible", true))
+			and not bool(leaked_audit.get("observation_boundary_valid", true))
+			and leak_named,
+		"Gate 47 rejects a teammate cue that leaks a private hypothesis",
+	)
+
+	var truthy := shadow_block.duplicate(true)
+	var truthy_blocker: Dictionary = truthy["blockers"][0]
+	var truthy_observation: Dictionary = truthy_blocker["observation"]
+	truthy_observation["true_contact_x"] = 0.82
+	truthy_blocker["observation"] = truthy_observation
+	truthy["blockers"][0] = truthy_blocker
+	var truthy_audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(truthy, opponent_lineup)
+	_check(
+		not bool(truthy_audit.get("eligible", true))
+			and not bool(truthy_audit.get("observation_boundary_valid", true)),
+		"Gate 47 rejects an observation carrying a truth-prefixed key",
+	)
+
+	var mutated := shadow_block.duplicate(true)
+	mutated["source_state_unchanged"] = false
+	var role_broken := shadow_block.duplicate(true)
+	role_broken["primary_id"] = 9999
+	var mutated_audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(mutated, opponent_lineup)
+	var role_audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(role_broken, opponent_lineup)
+	var role_named := false
+	for reason in role_audit.get("failure_reasons", []):
+		if str(reason) == "primary_not_in_blocker_set" \
+				or str(reason) == "primary_not_front_row":
+			role_named = true
+	_check(
+		not bool(mutated_audit.get("eligible", true))
+			and "source_state_mutated" in mutated_audit.get("failure_reasons", [])
+			and not bool(role_audit.get("eligible", true)) and role_named,
+		"Gate 47 rejects mutated source state and a role naming an absent blocker",
+	)
+
+	## Contact-envelope feasibility: a close certified reachable must actually
+	## get high enough to touch the ball.
+	var unreachable := shadow_block.duplicate(true)
+	unreachable["block_contact_height_meters"] = 9.0
+	var unreachable_audit := BLOCK_ROLLOUT_AUDIT_SCRIPT.evaluate(
+		unreachable, opponent_lineup
+	)
+	var height_named := false
+	for reason in unreachable_audit.get("failure_reasons", []):
+		if str(reason).begins_with("close_cannot_reach_contact_height"):
+			height_named = true
+	_check(
+		not bool(unreachable_audit.get("eligible", true)) and height_named,
+		"Gate 47 rejects a close that cannot reach the contact height",
 	)
 
 

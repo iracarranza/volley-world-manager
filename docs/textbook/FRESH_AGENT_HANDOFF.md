@@ -71,7 +71,7 @@ the full development-project feature. Preserve the product contract in
 | Attack ownership/contact | Official phase resolver | May be promoted only after promoted reception and setter |
 | Home attack preparation | `ApproachMechanicsSystem` affects normal attack quality, jump conversion, and available attack families | Same evidence passes through the attack audit and live candidate |
 | Home floor-defense geometry | Saved plan and block relationship drive phase positions and claimant geometry | Same |
-| Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a shadow-only blocker-observation slice (Gate 44) now runs alongside it as evidence but does not decide or feed the official block |
+| Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a complete shadow-only block slice (Gates 44-47: observation, coordination, calibration, candidate audit) runs alongside it as evidence but does not decide or feed the official block, and has no rollout policy |
 | 2D display | Consumes `RallyEvent` and trajectory metadata | May additionally show explicitly requested diagnostics |
 | 3D display | Paused | Paused |
 
@@ -98,30 +98,54 @@ they are not production activation.
   against authoritative contact truth only afterward. It never touches the
   official `BLOCK` event. See
   [Gate 44](../calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md).
+- Gates 45 through 47 complete the shadow-only block slice: a coordination pass
+  in which blockers revise commitments from teammates' visible body cues and
+  roles are resolved without consulting authoritative truth
+  ([Gate 45](../calibration/GATE_45_BLOCK_COORDINATION.md)); a reading-tier
+  sweep over set difficulties calibrating misread, hesitation, and
+  coordinated-close rates with coverage guards
+  ([Gate 46](../calibration/GATE_46_BLOCKER_CALIBRATION.md)); and a promotion-
+  ready candidate audit covering teammate-cue privacy, movement, contact
+  envelope, and role consistency
+  ([Gate 47](../calibration/GATE_47_BLOCK_CANDIDATE_AUDIT.md)).
 
 The detailed gate records are in `docs/calibration/`. They are evidence and
 history, not a license to enable production flags.
 
 ## The one current next objective
 
-Gate 44, the **attack-to-block observation slice**, is complete; see
-[Gate 44](../calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md) and
-`scripts/simulation/shadow_block_system.gd`. The current next objective is
-**Gate 45: individual and coordinated block decisions from observations**. Do
-not start a scheduler rewrite, production rollout, opponent-attack mirror, or
-user-interface redesign as a substitute for this slice.
+The whole shadow-only block slice, **Gates 44 through 47**, is complete:
+observation, coordination, calibration, and a promotion-ready candidate audit.
+The current next objective is **Gate 48: a guarded block rollout policy with its
+production flag off**. Do not start a scheduler rewrite, production rollout,
+opponent-attack mirror, or user-interface redesign as a substitute for it.
 
-The current block resolver still receives the already-resolved attacking lane
-and calculates blocker read, close, assist, reach, and outcome directly
-(`RallySimulator._resolve_home_block`); Gate 44 did not change it. What Gate 44
-added is a shadow-only per-blocker hypothesis with no coordination between
-blockers -- `ShadowBlockSystem.evaluate()` resolves primary and assist roles
-only after every blocker has already independently committed, by comparing
-each blocker's own perception-driven target against authoritative truth. Two
-blockers can therefore commit to different zones with nothing reconciling
-them beforehand. Gate 45's job is to let blockers actually coordinate: a
-tentative commitment should be revisable when a teammate's cue changes what
-this blocker should do, before either commitment is graded.
+The legacy block resolver still receives the already-resolved attacking lane and
+calculates blocker read, close, assist, reach, and outcome directly
+(`RallySimulator._resolve_home_block`); nothing in Gates 44 to 47 changed it,
+and Gate 48 must not change it either. What exists alongside it is a complete
+shadow evaluation on every rally: `shadow_summary["shadow_block"]`, carrying
+per-blocker observations and coordinated commitments, resolved roles, and --
+through `BlockRolloutAudit` -- an `eligible` verdict, an extractable
+`block_candidate`, and a deterministic `fingerprint`.
+
+Gate 48's job is only to add the selection boundary, mirroring what Gates 15,
+29, 35, and 41 did for reception, setter, and attack:
+
+1. Add `ENABLE_CONTINUOUS_BLOCK_EVENTS` (and, for Gate 49, an
+   `ALLOW_DEVELOPMENT_BLOCK_OVERRIDE`) to `RallyFeatureFlags`, both false.
+2. Add `RallyRolloutPolicy.select_block_source()` taking the shadow summary and
+   the opponent lineup, calling `BlockRolloutAudit.evaluate()`, and returning
+   `selected_source`, `candidate_available`, `official_identity_preserved`, and
+   a `fallback_reason` -- the same shape the other three selectors return.
+3. Record the policy result under `shadow_summary["block_rollout"]` next to
+   `attack_rollout`, with the selected candidate erased from the evidence copy.
+4. Prove with fixed seeds that official block events are byte-identical with
+   the flag off, exactly as the earlier rollout gates did.
+
+Do not promote a block contact in Gate 48. That is Gate 49, behind an explicit
+development fixture and `OS.is_debug_build()`, after the guarded boundary has
+been reviewed on its own.
 
 ### Historical record: the shadow block hypotheses gate (Gate 44, complete)
 
@@ -171,17 +195,20 @@ actors, commitment timing, possible conflicting reads, and net-position rules.
 | Gate | Deliverable | Authority | Status |
 |---|---|---|---|
 | 44 | Deterministic block hypotheses and repeated perceived cues | Shadow only | **Complete** -- `shadow_block_system.gd` |
-| 45 | Individual and coordinated block decisions from observations | Shadow only | Not started |
-| 46 | Blocker progression fixtures and wrong-read calibration | Shadow only | Partial -- `block_progression_calibration.gd` covers reading-tier confidence and recognition timing only; wrong-read-rate calibration across scenarios is not built |
-| 47 | Candidate audit: legality, information purity, movement, contact and state immutability | Shadow only | Partial -- Gate 44's `block_rollout_audit.gd` covers legality, information purity, and state immutability only; movement- and contact-envelope-specific candidate auditing is not built |
-| 48 | Guarded block rollout policy with production flag off | Official remains authoritative | Not started |
+| 45 | Individual and coordinated block decisions from observations | Shadow only | **Complete** -- `_coordinate_blocker`, `_resolve_roles` |
+| 46 | Blocker progression fixtures and wrong-read calibration | Shadow only | **Complete** -- `block_progression_calibration.gd` |
+| 47 | Candidate audit: legality, information purity, movement, contact and state immutability | Shadow only | **Complete** -- `block_rollout_audit.gd` |
+| 48 | Guarded block rollout policy with production flag off | Official remains authoritative | Not started -- the current objective |
 | 49 | Explicit debug-only promoted block contact | Development fixture only | Not started |
 
 Gate numbers are sequencing aids. Do not mark a gate complete merely because a
-class exists; its stated tests and authority boundary must pass. The Gate 46
-and 47 "Partial" rows above are exactly that caution in practice: `block_rollout_audit.gd`
-and `block_progression_calibration.gd` exist and their own tests pass, but
-neither one satisfies its full named gate yet.
+class exists; its stated tests and authority boundary must pass. Two habits from
+this slice are worth carrying into Gate 48. First, a monotonic rate over an
+all-zero column proves nothing -- Gate 46 pairs every rate with a coverage flag
+asserting the sweep actually contains that outcome, after both a zero
+wrong-read column and a structurally unreachable `hesitated` flag passed their
+checks silently. Second, an audit that cannot fail certifies nothing -- Gate 47
+corrupts one property at a time and requires each to be caught by name.
 
 ## Gate 44 acceptance contract
 
@@ -271,9 +298,9 @@ Before ending work:
 ```text
 Read docs/textbook/FRESH_AGENT_HANDOFF.md and the files it names. Verify all
 claims against source before editing. Continue only the current next objective:
-Gate 45, individual and coordinated block decisions from the Gate 44 shadow
-block observations. Preserve the dirty worktree, production-off rollout flags,
-player-information boundary, deterministic seeds, source-state immutability,
-and RallyEvent playback contract. Run the complete validation guide and update
-textbook evidence before handing off.
+Gate 48, a guarded block rollout policy with its production flag off, built on
+the completed Gate 44-47 shadow block slice. Preserve the dirty worktree,
+production-off rollout flags, player-information boundary, deterministic seeds,
+source-state immutability, and RallyEvent playback contract. Run the complete
+validation guide and update textbook evidence before handing off.
 ```

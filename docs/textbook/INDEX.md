@@ -51,6 +51,9 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `RallyMovementSystem` | Movement estimates and reception opportunities; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `ApproachMechanicsSystem` | Responsibility release, approach staging, takeoff physics, and attack availability; [P4-C6](part_04_match_engine/06_adjusting_and_extending_live_systems.md) |
 | `ShadowBlockSystem` | Gate 44 attack-to-block observation: per-blocker decision-safe hypotheses and commitments, resolved against truth only afterward; [Gate 44](../calibration/GATE_44_SHADOW_BLOCK_HYPOTHESES.md) |
+| `ShadowBlockSystem._coordinate_blocker` | Gate 45 coordination pass: revising a commitment from teammates' visible body cues; [Gate 45](../calibration/GATE_45_BLOCK_COORDINATION.md) |
+| `BlockerProgressionCalibration` | Gate 46 reading-tier sweep over set difficulties: misread, hesitation, and coordinated-close rates; [Gate 46](../calibration/GATE_46_BLOCKER_CALIBRATION.md) |
+| `BlockRolloutAudit` | Gate 47 block promotion boundary: information purity, teammate-cue privacy, movement, contact envelope, role consistency; [Gate 47](../calibration/GATE_47_BLOCK_CANDIDATE_AUDIT.md) |
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecision` | Structured evidence for one selected shadow action; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyDecisionSystem` | Comparison of open receiver choices and grading against ball truth; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
