@@ -2,7 +2,7 @@
 
 Review date: 2026-07-31
 
-Status: **STEPS 1-2 BUILT AND MEASURED; SHADOW ONLY, NOT WIRED**
+Status: **STEPS 1-3 COMPLETE; PLAYBACK NOW SAMPLES THE MOVEMENT MODEL**
 
 The goal is for playback to be a byproduct of the simulator: the drawing layer
 should sample what the simulator computed, never invent anything, and therefore
@@ -114,26 +114,59 @@ when the player physically arrives. The playback tween would have pivoted at
 0.46. Measured speeds across that corner run 0.150 -> 1.393 m/s with no stall:
 the player carries through it rather than stopping.
 
-## Remaining steps
+## Step 3, done: playback samples instead of interpolating
 
-**Step 3 -- ship trails to playback (visual only, no outcome change).**
-`tactical_court.gd` already has `movement_trails`, `_append_movement_trail()`,
-and `_draw_movement_trails()` wired into `_draw()`. They are currently fed three
-points: start, waypoint, target. Feed them the sampled trail instead and
-`_set_playback_progress()` becomes a sampler with no interpolation constants.
-This is where the fluidity complaint is actually answered, and it still changes
-no rally outcome.
+`TacticalCourt._set_playback_progress()` no longer interpolates. At phase start,
+`_build_movement_paths()` integrates each moving player's traversal through
+`ShadowMovementSystem` and stores the sampled points; `_set_playback_progress()`
+then samples that. The `0.46` waypoint share is gone, and so is the
+straight-line lerp.
 
-The open question is transport: a 1.3 s phase at 30 Hz is ~39 samples per
-player. Record rate is a knob, but it is a **fidelity** knob with a computable
-error bound (about half a centimetre at 30 Hz), not an appearance knob -- nobody
-decides what looks right. The ideal survives discretization; what breaks it is
-view-layer invention, not finite sampling.
+**Three view-layer inventions were removed, not replaced with better ones.**
 
-**Step 4 -- trails become authoritative for reachability.** Audit, guarded
-boundary, development promotion, in the shape Gates 47-49 used. This is the step
-that moves seeds, and the exact-agreement result above is the evidence that it
-can be attempted at all.
+1. The fixed `waypoint_share = 0.46`. A waypoint is now reached when the player
+   has covered the distance to it. On the fixture geometry that lands past 0.55
+   of the phase, and on the earlier probe at 0.844.
+2. The straight-line interpolation between endpoints, replaced by the
+   rating-driven traversal.
+3. **The tween's `TRANS_QUAD` / `EASE_IN_OUT`.** This one was not in the
+   original list and is the subtler defect. The tween eased the *progress value
+   itself*, so it warped every phase with a curve nothing in the simulation
+   chose -- and it silently contradicted the ball work that had just made serves
+   and spikes constant-speed, because the ease was still bending them. The tween
+   is now `TRANS_LINEAR`. Acceleration comes from the traversal; ball flight,
+   being a function of time, advances at a constant rate.
+
+**Transport: none.** The original plan was to ship trails through
+`RallyEvent.metadata`. That turned out to be the wrong shape, because the
+simulator only knows the *actor's* movement -- the supporting players' targets
+are derived by `_unit_support_targets()` inside playback, so the resolver has
+nothing to ship for them. Rather than run two different code paths, playback
+invokes the same shared, rating-driven model for every moving player. No
+metadata, no serialization cost, no record-rate decision.
+
+That is still a byproduct of the simulator in the sense that matters: the motion
+comes from `RallyMovementSystem`'s ratings-derived kinematics, and playback
+contributes no constants of its own. It is not yet the stronger form where the
+resolver computes motion and playback purely consumes it. That arrives with step
+4, when movement becomes resolver-owned.
+
+**One honest compromise.** `RallySimulator._movement_time()` and
+`RallyMovementSystem.project_toward()` are different code paths and disagree on
+how long a traversal naturally takes. Playback must honour the resolved
+endpoints and the resolved duration or it would contradict the event it is
+drawing, so the integrated traversal is renormalised onto the phase: the
+*shape* is the model's, the *rate* is the resolver's. Reconciling those two
+timing paths is part of step 4.
+
+## Remaining step
+
+**Step 4 -- movement becomes resolver-owned and authoritative for
+reachability.** Audit, guarded boundary, development promotion, in the shape
+Gates 47-49 used. This is the step that moves seeds, and the exact-agreement
+result above is the evidence it can be attempted at all. It also subsumes the
+renormalisation compromise, because there would be one timing model rather than
+two.
 
 ## Open questions before step 4
 

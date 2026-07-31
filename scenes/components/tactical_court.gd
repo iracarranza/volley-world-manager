@@ -81,6 +81,10 @@ const VISUAL_CONTACT_OVERLAYS: int = 16
 const VISUAL_ALL: int = VISUAL_BALL_PATH | VISUAL_PLAYER_PATHS \
 	| VISUAL_TACTICAL_GUIDES | VISUAL_COVERAGE_ZONES \
 	| VISUAL_CONTACT_OVERLAYS
+## Generous window for integrating a traversal. The result is renormalised to
+## the phase, so this only has to be long enough for a player to finish; it
+## never sets how fast the drawing runs.
+const MOVEMENT_SAMPLE_WINDOW_SECONDS: float = 5.0
 
 var lineup: RotationLineup
 var players_by_id: Dictionary = {}
@@ -118,6 +122,10 @@ var unit_movement_starts: Dictionary = {}
 var unit_movement_targets: Dictionary = {}
 var unit_movement_waypoints: Dictionary = {}
 var playback_continuity_mismatches: Array[Dictionary] = []
+## Per-player sampled traversals for the current phase, built from the engine's
+## own movement model instead of interpolated by this script. See
+## `_build_movement_paths`.
+var movement_paths: Dictionary = {}
 var shadow_reception_trace: Dictionary = {}
 var shadow_overlay_layers: int = SHADOW_LAYER_DEFAULT
 var visualization_layers: int = VISUAL_ALL
@@ -472,10 +480,15 @@ func _start_playback_tween(duration: float) -> void:
 	if playback_tween != null and playback_tween.is_valid():
 		playback_tween.kill()
 	playback_progress = 0.0
+	_build_movement_paths()
 	queue_redraw()
 	playback_tween = create_tween()
-	playback_tween.set_trans(Tween.TRANS_QUAD)
-	playback_tween.set_ease(Tween.EASE_IN_OUT)
+	## Linear, deliberately. The acceleration a player shows now comes from the
+	## sampled traversal built by the engine's movement model; easing the
+	## progress value on top of it would warp physical timing with a curve
+	## nothing in the simulation chose. Ball flight is likewise a function of
+	## time, so it should advance at a constant rate through the phase too.
+	playback_tween.set_trans(Tween.TRANS_LINEAR)
 	playback_tween.tween_method(_set_playback_progress, 0.0, 1.0, duration)
 
 
@@ -502,6 +515,7 @@ func clear_rally_playback() -> void:
 	unit_movement_targets.clear()
 	unit_movement_waypoints.clear()
 	movement_player_id = -1
+	movement_paths.clear()
 	playback_continuity_mismatches.clear()
 	playback_progress = 1.0
 	queue_redraw()
@@ -544,20 +558,123 @@ func begin_rally_playback(
 func _set_playback_progress(value: float) -> void:
 	playback_progress = value
 	for player_id in unit_movement_targets:
+		if movement_paths.has(player_id):
+			_set_live_playback_position(
+				player_id, _sample_movement_path(movement_paths[player_id], value)
+			)
+			continue
+		## Fallback for a player whose profile could not be resolved. Straight
+		## interpolation, no waypoint staging -- the old fixed-share split is
+		## gone rather than preserved here, because there is no defensible
+		## constant to split at.
 		var start: Vector2 = unit_movement_starts[player_id]
 		var target: Vector2 = unit_movement_targets[player_id]
-		if unit_movement_waypoints.has(player_id):
-			var waypoint: Vector2 = unit_movement_waypoints[player_id]
-			var waypoint_share := 0.46
-			var staged_position := start.lerp(
-				waypoint, value / waypoint_share
-			) if value <= waypoint_share else waypoint.lerp(
-				target, (value - waypoint_share) / (1.0 - waypoint_share)
-			)
-			_set_live_playback_position(player_id, staged_position)
-		else:
-			_set_live_playback_position(player_id, start.lerp(target, value))
+		_set_live_playback_position(player_id, start.lerp(target, value))
 	queue_redraw()
+
+
+## Builds each moving player's traversal for this phase from the engine's own
+## movement model, so drawing samples resolved motion instead of inventing it.
+##
+## The rate is normalised to the phase: the resolver allots a duration from
+## `RallySimulator._movement_time()`, which is a different code path from
+## `RallyMovementSystem.project_toward()`, so the two disagree on how long a
+## traversal naturally takes. Playback must honour the resolved endpoints and
+## the resolved duration exactly or it would contradict the event it is drawing.
+## The shape between them -- acceleration, the corner, the speed carried through
+## it -- is the model's. Reconciling the two timing paths is step 4's job.
+func _build_movement_paths() -> void:
+	movement_paths.clear()
+	for raw_player_id in unit_movement_targets:
+		var player_id := int(raw_player_id)
+		var profile := _playback_player_profile(player_id)
+		if profile == null:
+			continue
+		var start: Vector2 = unit_movement_starts.get(
+			player_id, _live_playback_position(player_id)
+		)
+		var target: Vector2 = unit_movement_targets[player_id]
+		var waypoint: Variant = unit_movement_waypoints.get(player_id, null)
+		var path := _integrate_phase_path(profile, player_id, start, target, waypoint)
+		if not path.is_empty():
+			movement_paths[player_id] = path
+
+
+func _integrate_phase_path(
+	profile: VolleyballPlayer,
+	player_id: int,
+	start: Vector2,
+	target: Vector2,
+	waypoint: Variant,
+) -> Dictionary:
+	if start.distance_to(target) <= 0.0005 and waypoint == null:
+		return {}
+	var side: StringName = &"opponent" if _is_opponent_player(player_id) else &"home"
+	var actor := RallyPlayerState.create(profile, side, -1, start)
+	var first_leg: Vector2 = Vector2(waypoint) if waypoint != null else target
+	var opening := RallyKinematics.court_delta_meters(start, first_leg)
+	if opening.length() > 0.0001:
+		## Facing the route keeps the model's turn charge at its floor. The
+		## resolver already spent movement time deciding this traversal was
+		## possible; re-charging a full turn here would make the player miss the
+		## endpoint the event says they reached.
+		actor.facing = opening.normalized()
+	var mode := RallyPlayerState.MovementMode.APPROACH if waypoint != null \
+		else RallyPlayerState.MovementMode.TRANSITION
+	var integration: Dictionary = ShadowMovementSystem.integrate(
+		actor, target, MOVEMENT_SAMPLE_WINDOW_SECONDS, mode,
+		ShadowMovementSystem.DEFAULT_STEP_SECONDS, waypoint,
+	)
+	if not bool(integration.get("available", false)):
+		return {}
+	var points: Array = integration.get("trail", [])
+	var times: Array = integration.get("sample_times", [])
+	if points.size() < 2 or times.size() != points.size():
+		return {}
+	var arrival := points.size() - 1
+	for index in range(points.size()):
+		if Vector2(points[index]).distance_to(target) <= 0.002:
+			arrival = index
+			break
+	var span := float(times[arrival])
+	if span <= 0.0001 or arrival < 1:
+		return {}
+	var trimmed: Array[Vector2] = []
+	var normalized: Array[float] = []
+	for index in range(arrival + 1):
+		trimmed.append(Vector2(points[index]))
+		normalized.append(clampf(float(times[index]) / span, 0.0, 1.0))
+	## The event's endpoint is authoritative; end exactly on it.
+	trimmed[trimmed.size() - 1] = target
+	normalized[normalized.size() - 1] = 1.0
+	return {"points": trimmed, "times": normalized}
+
+
+func _sample_movement_path(path: Dictionary, progress: float) -> Vector2:
+	var points: Array = path.get("points", [])
+	var times: Array = path.get("times", [])
+	if points.is_empty():
+		return Vector2.ZERO
+	if points.size() < 2:
+		return Vector2(points[0])
+	var clamped := clampf(progress, 0.0, 1.0)
+	for index in range(1, times.size()):
+		var upper := float(times[index])
+		if clamped <= upper:
+			var lower := float(times[index - 1])
+			var span := maxf(upper - lower, 0.00001)
+			return Vector2(points[index - 1]).lerp(
+				Vector2(points[index]), (clamped - lower) / span
+			)
+	return Vector2(points[points.size() - 1])
+
+
+func _playback_player_profile(player_id: int) -> VolleyballPlayer:
+	if players_by_id.has(player_id):
+		return players_by_id[player_id] as VolleyballPlayer
+	if opponent_players_by_id.has(player_id):
+		return opponent_players_by_id[player_id] as VolleyballPlayer
+	return null
 
 
 func reset_live_positions() -> void:
@@ -569,6 +686,7 @@ func reset_live_positions() -> void:
 	unit_movement_starts.clear()
 	unit_movement_targets.clear()
 	unit_movement_waypoints.clear()
+	movement_paths.clear()
 	queue_redraw()
 
 

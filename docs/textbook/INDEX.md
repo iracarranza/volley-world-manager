@@ -56,7 +56,8 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `BlockRolloutAudit` | Gate 47 block promotion boundary: information purity, teammate-cue privacy, movement, contact envelope, role consistency; [Gate 47](../calibration/GATE_47_BLOCK_CANDIDATE_AUDIT.md) |
 | `RallyRolloutPolicy.select_block_source` | Gate 48 guarded block selection boundary; production flag off; [Gate 48](../calibration/GATE_48_BLOCK_ROLLOUT_POLICY.md) |
 | `LiveBlockIntegrator` | Gate 49 development-only promoted block contact and deflection flight; a block touch consumes no contact; [Gate 49](../calibration/GATE_49_DEVELOPMENT_LIVE_BLOCK.md) |
-| `ShadowMovementSystem` | Shadow-only fixed-step movement integration producing sampled trails; not wired; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
+| `ShadowMovementSystem` | Fixed-step movement integration producing sampled traversals; consumed by 2D playback; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
+| `TacticalCourt._build_movement_paths` | Builds each player's phase traversal from the movement model so playback samples rather than interpolates; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `MovementIntegrationCalibration` | Proves stepped integration reproduces `project_toward` exactly, and that the sweep can fail; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `RallyMovementSystem.movement_profile` | Public rating-driven speed, acceleration, and turn-delay profile, shared by the stepper; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |

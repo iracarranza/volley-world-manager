@@ -128,6 +128,7 @@ func _initialize() -> void:
 	_test_gate_forty_eight_block_rollout_boundary()
 	_test_gate_forty_nine_development_live_block()
 	_test_shadow_movement_integration()
+	_test_playback_samples_resolved_movement()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3276,6 +3277,92 @@ func _test_shadow_movement_integration() -> void:
 			and str(refused.get("reason", "")) == "non-positive duration",
 		"Movement integration refuses a non-positive duration",
 	)
+
+
+## Playback now samples a traversal built by the engine's movement model rather
+## than interpolating between endpoints. These checks pin the properties that
+## makes it a byproduct of the simulator: it honours the resolved endpoints, it
+## is genuinely sampled rather than straight-line, and it contains no fixed
+## share at which a waypoint is assumed to be reached.
+func _test_playback_samples_resolved_movement() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var court := TACTICAL_COURT_SCRIPT.new()
+	court.set_lineup(manager.current_lineup(), manager.players)
+	var mover_id := manager.current_lineup().player_at_slot(5)
+	var start := Vector2(0.18, 0.82)
+	var target := Vector2(0.74, 0.52)
+	var waypoint := Vector2(0.64, 0.62)
+
+	court.unit_movement_starts = {mover_id: start}
+	court.unit_movement_targets = {mover_id: target}
+	court.unit_movement_waypoints = {mover_id: waypoint}
+	court._build_movement_paths()
+	var path: Dictionary = court.movement_paths.get(mover_id, {})
+	var points: Array = path.get("points", [])
+	var times: Array = path.get("times", [])
+
+	## Endpoints are the event's; playback may shape the motion between them but
+	## never where it begins or ends.
+	_check(
+		not path.is_empty()
+			and Vector2(points[0]).distance_to(start) < 0.001
+			and Vector2(points[points.size() - 1]).distance_to(target) < 0.001
+			and float(times[0]) == 0.0
+			and float(times[times.size() - 1]) == 1.0,
+		"Playback traversal begins and ends exactly on the resolved endpoints",
+	)
+	## A straight two-point path would mean playback is still interpolating.
+	var strictly_increasing := true
+	for index in range(1, times.size()):
+		strictly_increasing = strictly_increasing \
+			and float(times[index]) > float(times[index - 1])
+	_check(
+		points.size() >= 20 and strictly_increasing,
+		"Playback traversal is sampled from the movement model, not interpolated",
+	)
+
+	## Sampling must be monotonic and must pass through the approach waypoint,
+	## and it must reach that waypoint on distance covered rather than at the
+	## 0.46 share the retired tween assumed.
+	var previous := Vector2(points[0])
+	var monotonic := true
+	var closest_to_waypoint := 99.0
+	var waypoint_progress := -1.0
+	for step in range(0, 101):
+		var progress := float(step) / 100.0
+		var sampled: Vector2 = court._sample_movement_path(path, progress)
+		monotonic = monotonic and sampled.distance_to(start) >= previous.distance_to(start) - 0.02
+		previous = sampled
+		var gap := sampled.distance_to(waypoint)
+		if gap < closest_to_waypoint:
+			closest_to_waypoint = gap
+			waypoint_progress = progress
+	_check(
+		monotonic and closest_to_waypoint < 0.02 and waypoint_progress > 0.55,
+		"Playback reaches the waypoint on distance covered, not a fixed share",
+	)
+
+	## Endpoint sampling must be exact at the boundaries the tween drives.
+	_check(
+		court._sample_movement_path(path, 0.0).distance_to(start) < 0.001
+			and court._sample_movement_path(path, 1.0).distance_to(target) < 0.001,
+		"Playback sampling is exact at both ends of the phase",
+	)
+
+	## A player with no resolvable profile must still be drawn, via the plain
+	## fallback, rather than vanishing or throwing.
+	court.unit_movement_starts = {-42: start}
+	court.unit_movement_targets = {-42: target}
+	court.unit_movement_waypoints = {}
+	court._build_movement_paths()
+	court._set_playback_progress(0.5)
+	_check(
+		court.movement_paths.is_empty()
+			and court._live_playback_position(-42).distance_to(start.lerp(target, 0.5)) < 0.001,
+		"Playback falls back to interpolation when no player profile resolves",
+	)
+	court.free()
 
 
 

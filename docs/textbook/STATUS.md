@@ -246,15 +246,17 @@ now limit the block work that was just completed:
 2. **`set_release_interval` and `defensive_depth` are derived but unconsumed.**
    Both are computed and then read by nothing.
 
-Separately, movement fluidity is underway outside the gate sequence. Steps 1 and
-2 are built and measured: `ShadowMovementSystem` integrates movement at a fixed
-step into sampled trails, and `MovementIntegrationCalibration` proves that
-stepping reproduces `RallyMovementSystem.project_toward()` exactly at 15, 30,
-and 60 Hz -- so trails refine the existing movement model rather than replacing
-it. Neither is wired into the resolver or playback and no rally outcome changes.
-Step 3 (ship trails to playback, still outcome-neutral) and step 4 (trails
-become authoritative for reachability, which moves seeds) remain. See
-[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md).
+Separately, movement fluidity is underway outside the gate sequence, and steps 1
+through 3 are complete. `ShadowMovementSystem` integrates movement at a fixed
+step, `MovementIntegrationCalibration` proves that stepping reproduces
+`RallyMovementSystem.project_toward()` exactly at 15, 30, and 60 Hz, and
+`TacticalCourt` now samples that traversal instead of interpolating between
+endpoints. Three view-layer inventions are gone: the fixed `0.46` waypoint
+share, the straight-line lerp, and the tween's `EASE_IN_OUT`, which had been
+warping every phase -- including the ball -- with a curve nothing in the
+simulation chose. No rally outcome changes. Step 4, in which movement becomes
+resolver-owned and authoritative for reachability, is the one that moves seeds.
+See [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md).
 
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
 home attack logic onto the opponent side as a substitute. The gate sequence and
@@ -263,8 +265,8 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 396 passing checks (355 pre-block,
+The current foundation validation reports 401 passing checks (355 pre-block,
 plus nine Gate 44 checks, fifteen for Gates 45 through 47, six for Gate 48, five
-for Gate 49, and six for shadow movement integration). Treat that number as a
-point-in-time result, not a permanent guarantee. Run
-[VALIDATION.md](VALIDATION.md) to establish the current result.
+for Gate 49, six for shadow movement integration, and five for playback
+sampling). Treat that number as a point-in-time result, not a permanent
+guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the current result.
