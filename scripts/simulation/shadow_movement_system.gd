@@ -136,6 +136,29 @@ static func integrate(
 	}
 
 
+## How long this traversal actually takes the movement model, as opposed to
+## however long a caller allotted for it. Returns -1.0 when the player cannot
+## finish inside `window_seconds`.
+static func natural_traversal_time(
+	actor: RallyPlayerState,
+	target: Vector2,
+	mode: RallyPlayerState.MovementMode,
+	waypoint: Variant = null,
+	window_seconds: float = 6.0,
+) -> float:
+	var integration := integrate(
+		actor, target, window_seconds, mode, DEFAULT_STEP_SECONDS, waypoint
+	)
+	if not bool(integration.get("available", false)):
+		return -1.0
+	var points: Array = integration.get("trail", [])
+	var times: Array = integration.get("sample_times", [])
+	for index in range(points.size()):
+		if Vector2(points[index]).distance_to(target) <= 0.002:
+			return float(times[index])
+	return -1.0
+
+
 ## The single-call projection this stepper refines, for direct comparison.
 static func reference_projection(
 	actor: RallyPlayerState,

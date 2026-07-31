@@ -92,6 +92,9 @@
     {"path": "scenes/main/main.gd", "symbols": ["func _show_shadow_reception_debug", "ShadowReceptionLabel"]},
     {"path": "scripts/systems/training_system.gd", "symbols": ["class_name VolleyballTrainingSystem", "static func apply_week"]},
     {"path": "scripts/systems/player_generator.gd", "symbols": ["class_name VolleyballPlayerGenerator", "static func generate_roster", "static func generate_market"]},
-    {"path": "tests/test_runner.gd", "symbols": ["RALLY_STATE_BUILDER_SCRIPT", "RALLY_MOVEMENT_SCRIPT", "func _test_ball_read_foundations", "func _test_shadow_reception_trace", "func _test_seeded_floor_defense_geometry"]}
+    {"path": "tests/test_runner.gd", "symbols": ["RALLY_STATE_BUILDER_SCRIPT", "RALLY_MOVEMENT_SCRIPT", "func _test_ball_read_foundations", "func _test_shadow_reception_trace", "func _test_seeded_floor_defense_geometry"]},
+    {"path": "scripts/simulation/movement_timing_ratio_calibration.gd", "symbols": ["class_name MovementTimingRatioCalibration", "static func run", "PERCEPTIBLE_LOW"]},
+    {"path": "scripts/simulation/locomotion_model.gd", "symbols": ["class_name LocomotionModel", "static func stride_meters", "static func cadence_hz", "static func maximum_speed", "MODE_STRIDE_SCALE"]},
+    {"path": "scripts/simulation/locomotion_granularity_calibration.gd", "symbols": ["class_name LocomotionGranularityCalibration", "static func run", "PLAUSIBLE_STRIDE"]}
   ]
 }

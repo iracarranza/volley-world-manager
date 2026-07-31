@@ -84,6 +84,12 @@ const SHADOW_MOVEMENT_SCRIPT := preload(
 const MOVEMENT_INTEGRATION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/movement_integration_calibration.gd"
 )
+const MOVEMENT_TIMING_RATIO_SCRIPT := preload(
+	"res://scripts/simulation/movement_timing_ratio_calibration.gd"
+)
+const LOCOMOTION_GRANULARITY_SCRIPT := preload(
+	"res://scripts/simulation/locomotion_granularity_calibration.gd"
+)
 
 var checks: int = 0
 var failures: int = 0
@@ -129,6 +135,7 @@ func _initialize() -> void:
 	_test_gate_forty_nine_development_live_block()
 	_test_shadow_movement_integration()
 	_test_playback_samples_resolved_movement()
+	_test_movement_timing_and_locomotion_diagnostics()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3363,6 +3370,69 @@ func _test_playback_samples_resolved_movement() -> void:
 		"Playback falls back to interpolation when no player profile resolves",
 	)
 	court.free()
+
+
+## Two read-only diagnostics. Neither changes an outcome; both exist so that
+## claims about the movement model rest on measurement.
+func _test_movement_timing_and_locomotion_diagnostics() -> void:
+	## How far apart are the resolver's allotted duration and the movement
+	## model's own pace? The gap is what 2D playback currently renormalises away.
+	var ratio: Dictionary = MOVEMENT_TIMING_RATIO_SCRIPT.run(6, 300000)
+	var ratio_coverage: Dictionary = ratio.get("coverage", {})
+	_check(
+		bool(ratio.get("fixture_valid", false))
+			and int(ratio.get("sample_count", 0)) >= 20
+			and bool(ratio_coverage.get("multiple_event_types_observed", false))
+			and bool(ratio_coverage.get("faster_than_allotted_observed", false))
+			and bool(ratio_coverage.get("slower_than_allotted_observed", false)),
+		"Movement timing sweep covers traversals both faster and slower than allotted",
+	)
+	## The two paths disagree, and the disagreement is systematic by phase type
+	## rather than noise -- attacks run long against the clock while receptions,
+	## sets, and digs run short. Pinning it here means step 4 has a target and a
+	## regression guard if the gap widens.
+	var per_type: Dictionary = ratio.get("by_event_type", {})
+	var attack_ratio := float(
+		Dictionary(per_type.get("ATTACK", {})).get("mean_ratio", -1.0)
+	)
+	var set_ratio := float(
+		Dictionary(per_type.get("SET", {})).get("mean_ratio", -1.0)
+	)
+	_check(
+		attack_ratio > 0.0 and set_ratio > 0.0
+			and attack_ratio < 1.0 and set_ratio > 1.0
+			and float(ratio.get("mean_ratio", -1.0)) > 0.85
+			and float(ratio.get("mean_ratio", -1.0)) < 1.20,
+		"Movement timing disagreement is systematic by phase type, not noise",
+	)
+
+	## Can stride and cadence serve as the granulated form of the speed curve?
+	var locomotion: Dictionary = LOCOMOTION_GRANULARITY_SCRIPT.run(4, 720000)
+	var modes: Dictionary = locomotion.get("by_mode", {})
+	var lateral: Dictionary = modes.get("LATERAL", {})
+	var transition: Dictionary = modes.get("TRANSITION", {})
+	_check(
+		bool(locomotion.get("fixture_valid", false))
+			and int(locomotion.get("player_count", 0)) >= 20
+			and not lateral.is_empty() and not transition.is_empty(),
+		"Locomotion granularity fixture generates a real roster across modes",
+	)
+	## The current single curve implies the same stride in every mode, which is
+	## defensible for a transition run and too long for a lateral shuffle. That
+	## is the inconsistency decomposing speed would correct.
+	_check(
+		float(lateral.get("within_plausible_rate", 1.0)) < 0.80
+			and float(transition.get("within_plausible_rate", 0.0)) > 0.90
+			and not bool(locomotion.get("decomposition_plausible", true)),
+		"Current speed curve implies an implausibly long lateral stride",
+	)
+	## Stride carries no per-player information today: it is set from the role's
+	## base height and never recomputed after generation perturbs real height.
+	_check(
+		float(locomotion.get("stale_stride_rate", 0.0)) > 0.5
+			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
+		"Stored stride is stale for most players despite real height spread",
+	)
 
 
 
