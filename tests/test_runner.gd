@@ -2200,7 +2200,11 @@ func _test_gate_thirty_seven_to_forty_one_attack_boundary() -> void:
 
 
 func _test_gate_forty_two_development_live_attack() -> void:
-	const LIVE_ATTACK_SEED := 300469
+	## Reselected after Gate 44's session: shielding the setter from serve
+	## receive (defensive_plan._default_zone) changes who receives serve and
+	## therefore which seeds produce an audited continuous attack. 300469 no
+	## longer promotes under the corrected passer assignment; 300062 does.
+	const LIVE_ATTACK_SEED := 300062
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false

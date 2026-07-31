@@ -51,7 +51,7 @@ static func prepare_for_attack(
 	)
 	var target := Vector2(assignment.get("target", Vector2(0.5, 0.53)))
 	var start := approach_start_position(
-		target, str(assignment.get("lane", "Left Pin")), actor.player
+		target, str(assignment.get("lane", "Left Pin"))
 	)
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
 	var projection := RallyMovementModel.project_toward(
@@ -187,29 +187,15 @@ static func evaluate_takeoff(
 	}
 
 
-## Where the hitter tries to start their run-up. The setback is the player's own
-## ideal approach distance, converted from metres into normalised court units, so
-## a compact middle stages closer to the net than a long-strided outside.
-static func approach_start_position(
-	target: Vector2,
-	lane: String,
-	player: VolleyballPlayer = null,
-) -> Vector2:
+static func approach_start_position(target: Vector2, lane: String) -> Vector2:
 	var lateral_offset := 0.0
 	if lane == "Left Pin":
 		lateral_offset = 0.07
 	elif lane == "Right Pin":
 		lateral_offset = -0.07
-	var setback := 0.11
-	if player != null:
-		setback = clampf(
-			player.ideal_approach_distance_meters()
-			/ RallyKinematicsModel.COURT_LENGTH_METERS,
-			0.06, 0.22
-		)
 	return Vector2(
 		clampf(target.x + lateral_offset, 0.06, 0.94),
-		clampf(target.y + setback, 0.54, 0.96),
+		clampf(target.y + 0.11, 0.54, 0.96),
 	)
 
 

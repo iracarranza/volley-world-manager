@@ -641,7 +641,7 @@ func resolve(
 	var attack_target: Vector2 = attack_choice.target
 	var approach_start := Vector2(approach_preparation.get(
 		"approach_start_position",
-		_approach_start_position(set_target, hitter_start, false, hitter)
+		_approach_start_position(set_target, hitter_start, false)
 	))
 	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
 	var attack_trajectory := _ball_trajectory(
@@ -1079,7 +1079,7 @@ func _resolve_opponent_transition(
 		0.23, 0.48, rally_clock
 	)
 	var opponent_approach_start := _approach_start_position(
-		opponent_contact, Vector2(attack_choice.start), true, opponent_hitter
+		opponent_contact, Vector2(attack_choice.start), true
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
@@ -1379,7 +1379,7 @@ func _resolve_home_continuation(
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
-		_approach_start_position(set_target, hitter_start, false, hitter)
+		_approach_start_position(set_target, hitter_start, false)
 	))
 	var continuation_hit_type := _hit_type(assignment, hitter)
 	if "power_attack" not in continuation_actions:
@@ -1875,7 +1875,6 @@ func _approach_start_position(
 	contact_position: Vector2,
 	current_position: Vector2,
 	opponent_side: bool,
-	player: VolleyballPlayer = null,
 ) -> Vector2:
 	var local_contact := Vector2(
 		contact_position.x, 1.0 - contact_position.y
@@ -1884,13 +1883,7 @@ func _approach_start_position(
 		current_position.x, 1.0 - current_position.y
 	) if opponent_side else current_position
 	var pin_distance := absf(local_contact.x - 0.50)
-	## Pin attacks still want marginally more runway than a middle-of-court swing,
-	## but that modulation now scales around this player's own ideal distance
-	## instead of a single league-wide band.
-	var ideal_depth := 0.135
-	if player != null:
-		ideal_depth = clampf(player.ideal_approach_distance_meters() / 18.0, 0.06, 0.22)
-	var approach_depth := ideal_depth * lerpf(
+	var approach_depth := 0.135 * lerpf(
 		0.88, 1.12, clampf(pin_distance / 0.34, 0.0, 1.0)
 	)
 	var outward_offset := 0.0
