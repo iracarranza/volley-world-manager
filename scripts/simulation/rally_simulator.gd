@@ -43,6 +43,13 @@ const RallyKinematicsModel := preload(
 )
 const MAX_EXCHANGES: int = 4
 
+## Contact-to-arrival time by tempo (0 = quick release, 3 = high ball).
+## Quick tempos stay tight -- widening them would blur the read a quick set is
+## supposed to force. 2nd and 3rd tempo are spread further apart from each
+## other and from the quicks, so a hitter has a real window to reposition
+## rather than a lightly-scaled quick set.
+const SET_FLIGHT_TIME_BY_TEMPO: Array[float] = [0.34, 0.50, 0.80, 1.20]
+
 const OPPONENT_SERVE: float = 0.63
 const OPPONENT_BLOCK: float = 0.61
 const OPPONENT_DEFENSE: float = 0.58
@@ -516,12 +523,11 @@ func resolve(
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
 	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
-	var set_flight_time: float = float(
-		[0.34, 0.48, 0.70, 1.02][clampi(assignment.tempo, 0, 3)]
-	)
+	var set_flight_time: float = SET_FLIGHT_TIME_BY_TEMPO[clampi(assignment.tempo, 0, 3)]
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
-		lerpf(0.7, 2.4, set_flight_time / 1.02), rally_clock + second_contact_window
+		lerpf(0.7, 2.4, set_flight_time / SET_FLIGHT_TIME_BY_TEMPO[3]),
+		rally_clock + second_contact_window
 	)
 	if using_live_attack:
 		set_trajectory = Dictionary(selected_live_attack.get(
@@ -1141,9 +1147,7 @@ func _resolve_opponent_transition(
 		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
 	)
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
-	var set_flight_time: float = float(
-		[0.34, 0.48, 0.70, 1.02][clampi(opponent_tempo, 0, 3)]
-	)
+	var set_flight_time: float = SET_FLIGHT_TIME_BY_TEMPO[clampi(opponent_tempo, 0, 3)]
 	var attack_choice := _choose_opponent_attack(
 		opponent_team, opponent_setter, opponent_set_quality,
 		_home_target_hint(defensive_plan), set_flight_time,
@@ -1174,7 +1178,8 @@ func _resolve_opponent_transition(
 			"body_orientation_fit": set_geometry.body_orientation_fit,
 			"outgoing_trajectory": _ball_trajectory(
 				"opponent_set", opponent_setter_position, opponent_contact,
-				set_flight_time, lerpf(0.7, 2.4, set_flight_time / 1.02),
+				set_flight_time,
+				lerpf(0.7, 2.4, set_flight_time / SET_FLIGHT_TIME_BY_TEMPO[3]),
 				rally_clock
 			)})
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
@@ -1441,7 +1446,7 @@ func _resolve_home_continuation(
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin})
 	live_positions[setter.id] = set_contact
-	var continuation_flight_time := 1.02
+	var continuation_flight_time := SET_FLIGHT_TIME_BY_TEMPO[3]
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
 	)

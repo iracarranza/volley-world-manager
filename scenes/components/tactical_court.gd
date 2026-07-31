@@ -1741,6 +1741,7 @@ func _draw_rally_playback() -> void:
 		block_event = playback_event
 	if block_event != null and bool(visualization_layers & VISUAL_CONTACT_OVERLAYS):
 		_draw_block_coverage(block_event)
+		_draw_block_players(block_event)
 	var apex_height := float(trajectory.get("apex_height_meters", 0.0))
 	var uses_arc_perspective := int(playback_event.event_type) in [
 		RallyEventModel.EventType.SET_DECISION, RallyEventModel.EventType.SET,
@@ -1780,6 +1781,91 @@ func _draw_block_coverage(block_event: Resource) -> void:
 			_court_to_local(Vector2(float(segment.get("x_max", 0.55)), CourtConstants.NET_Y)),
 			coverage_color, 7.0 + completeness * 4.0,
 		)
+
+
+## Per-blocker feedback, drawn over the ordinary circle marker while a block is
+## active: each blocker becomes a square whose opacity and redness track their
+## own close quality, rather than only the combined net-coverage bar above.
+## A double block additionally draws a bridging rectangle between the two
+## blockers -- solid when they closed together, split with a visible gap when
+## the assist did not actually seal the seam.
+func _draw_block_players(block_event: Resource) -> void:
+	var side := str(block_event.metadata.get("side", "opponent"))
+	var primary_close := clampf(
+		float(block_event.metadata.get("primary_close", block_event.quality)), 0.0, 1.0
+	)
+	var primary_position := _blocker_local_position(int(block_event.actor_id), side)
+	_draw_blocker_square(primary_position, primary_close)
+	var assist_id := int(block_event.metadata.get("assist_id", -1))
+	if assist_id < 0:
+		return
+	var assist_close := clampf(float(block_event.metadata.get("assist_close", 0.0)), 0.0, 1.0)
+	var assist_position := _blocker_local_position(assist_id, side)
+	_draw_blocker_square(assist_position, assist_close)
+	_draw_block_connection(primary_position, assist_position, assist_close)
+
+
+func _blocker_local_position(player_id: int, side: String) -> Vector2:
+	if side == "opponent" and opponent_team != null:
+		var court_position: Vector2 = opponent_live_player_positions.get(
+			player_id, opponent_team.court_position(player_id, "defense")
+		)
+		return _court_to_local(court_position)
+	if lineup != null:
+		var slot_number := lineup.slot_for_player(player_id)
+		if slot_number >= 0:
+			return _court_to_local(_player_court_position(player_id, slot_number))
+	return _court_to_local(Vector2(0.5, CourtConstants.NET_Y))
+
+
+## The block-together threshold a connection rect is judged against. Above it
+## a double block reads as one sealed wall; below it, a poor assist should not
+## imply a wall that was never actually closed.
+const BLOCK_TOGETHER_THRESHOLD := 0.45
+
+
+func _blocker_square_fill(strength: float) -> Color:
+	var fit := clampf(strength, 0.0, 1.0)
+	return _with_alpha(
+		Color.WHITE.lerp(palette["block_stuff"], fit), lerpf(0.22, 0.88, fit)
+	)
+
+
+func _draw_blocker_square(center: Vector2, strength: float) -> void:
+	var half := 16.0
+	var rect := Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0)
+	draw_rect(rect, _blocker_square_fill(strength))
+	draw_rect(rect, palette["line"], false, 2.0)
+
+
+## Returns the rect(s) a block connection should draw, in local screen space:
+## one continuous rect spanning both blockers when coordination clears
+## BLOCK_TOGETHER_THRESHOLD, or two shorter rects with a real empty gap between
+## them otherwise. Kept separate from drawing so the gap geometry is testable
+## without a live CanvasItem context.
+func _block_connection_rects(
+	primary: Vector2, assist: Vector2, coordination: float
+) -> Array[Rect2]:
+	var span := absf(assist.x - primary.x)
+	if span < 1.0:
+		return []
+	var bar_height := 12.0
+	var top := minf(primary.y, assist.y) - bar_height * 0.5
+	var left_x := minf(primary.x, assist.x)
+	if coordination >= BLOCK_TOGETHER_THRESHOLD:
+		return [Rect2(Vector2(left_x, top), Vector2(span, bar_height))]
+	var gap := lerpf(0.6, 0.2, coordination / BLOCK_TOGETHER_THRESHOLD) * span
+	var segment_width := maxf((span - gap) * 0.5, 3.0)
+	return [
+		Rect2(Vector2(left_x, top), Vector2(segment_width, bar_height)),
+		Rect2(Vector2(left_x + span - segment_width, top), Vector2(segment_width, bar_height)),
+	]
+
+
+func _draw_block_connection(primary: Vector2, assist: Vector2, coordination: float) -> void:
+	var color := _with_alpha(palette["block_stuff"], lerpf(0.16, 0.62, coordination))
+	for rect in _block_connection_rects(primary, assist, coordination):
+		draw_rect(rect, color)
 
 
 func _followup_block_event() -> Resource:

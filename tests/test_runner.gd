@@ -135,6 +135,7 @@ func _initialize() -> void:
 	_test_gate_forty_nine_development_live_block()
 	_test_shadow_movement_integration()
 	_test_playback_samples_resolved_movement()
+	_test_block_visualization_geometry()
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
@@ -3387,6 +3388,43 @@ func _test_playback_samples_resolved_movement() -> void:
 		court.movement_paths.is_empty()
 			and court._live_playback_position(-42).distance_to(start.lerp(target, 0.5)) < 0.001,
 		"Playback falls back to interpolation when no player profile resolves",
+	)
+	court.free()
+
+
+## Pure geometry/color checks for the per-blocker square and double-block
+## connection rect. Neither needs a live CanvasItem draw context, since the
+## interesting logic (opacity/redness by strength, gap by coordination) is
+## kept separate from the draw_rect calls themselves.
+func _test_block_visualization_geometry() -> void:
+	var court := TACTICAL_COURT_SCRIPT.new()
+
+	var weak_fill := court._blocker_square_fill(0.1)
+	var strong_fill := court._blocker_square_fill(0.95)
+	_check(
+		strong_fill.a > weak_fill.a and strong_fill.r > strong_fill.g \
+			and strong_fill.r >= weak_fill.r,
+		"A stronger individual block reads as a more opaque, redder square",
+	)
+
+	var primary := Vector2(300.0, 500.0)
+	var assist := Vector2(420.0, 505.0)
+	var together_rects := court._block_connection_rects(primary, assist, 0.90)
+	_check(
+		together_rects.size() == 1
+			and absf(together_rects[0].size.x - absf(assist.x - primary.x)) < 0.5,
+		"A well-coordinated double block draws one continuous connecting rectangle",
+	)
+
+	var apart_rects := court._block_connection_rects(primary, assist, 0.05)
+	var gap_start := 0.0
+	var gap_end := 0.0
+	if apart_rects.size() == 2:
+		gap_start = apart_rects[0].position.x + apart_rects[0].size.x
+		gap_end = apart_rects[1].position.x
+	_check(
+		apart_rects.size() == 2 and gap_end > gap_start,
+		"A poorly-coordinated double block leaves a visible gap instead of one sealed wall",
 	)
 	court.free()
 

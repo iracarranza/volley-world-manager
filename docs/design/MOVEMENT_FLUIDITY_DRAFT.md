@@ -255,6 +255,30 @@ leg's start, such as the live-attack path's fallback through
 points and both resolved endpoints; reverting the fix fails that check with a
 one-point aborted trail.
 
+## Playback loop follow-up: a contact event replayed its own arrival
+
+Attack and block resolve fractions of a second apart in the resolver, but
+playback drew them as two visibly sequential beats. The cause was in
+`_play_rally()` (`scenes/main/main.gd`), not in the timing values: an event
+consumed as another event's `next_contact` (e.g. `BLOCK` following `ATTACK`'s
+own ball-flight leg) already had its mover fully arrive and make contact
+during that leg. When the loop then reached that same event on its own turn,
+`has_movement` was still true, so it replayed the *entire* approach --
+`movement_phase_targets()` pre-positioning, a contact-window pause, then the
+contact flash -- a second time for a mover who was already there. That second,
+redundant beat is what read as "the block happens after the attack" instead of
+landing with it.
+
+The loop now remembers which event a spatial transition just delivered its
+mover to (`arrived_via_transition`). On that event's own turn, its pre-contact
+`movement_phase_targets()` is skipped -- no second approach, no repositioning
+-- while the contact-window pause and any post-contact recovery movement are
+unaffected. This generalizes past attack/block: any contact event that
+followed a preceding spatial transition gets the same treatment, since the
+redundant-arrival pattern was universal, not attack/block-specific.
+This is the stopgap called for in the open question above, not the general
+fix -- the general fix is the continuous clock described there.
+
 ## Remaining
 
 Movement is now one model, but it is still *resolver-allotted* rather than

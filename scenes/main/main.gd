@@ -1468,6 +1468,12 @@ func _play_rally(
 	dashboard_playback_history_label.text = "No earlier events."
 	var playback_speed := float(_selected_metadata(playback_speed_option))
 	var last_displayed_event: Resource = null
+	## The event a spatial transition just delivered its mover to (its
+	## next-contact partner). That mover already arrived and made contact
+	## during the leg just played; replaying the same approach on this event's
+	## own turn is what made e.g. a block read as a separate beat after the
+	## attack instead of the near-simultaneous contact it actually is.
+	var arrived_via_transition: Resource = null
 	for event_index in range(result.events.size()):
 		var event: Resource = result.events[event_index]
 		if skip_rally_playback:
@@ -1500,8 +1506,15 @@ func _play_rally(
 			await _wait_for_playback_phase(trajectory_duration)
 			tactical_court.finish_event_animation()
 			match_preview_court.finish_event_animation()
+			arrived_via_transition = next_contact
 			continue
 		var has_movement := tactical_court.has_player_movement(event)
+		## The mover already reached this event's action target during the
+		## previous leg's spatial transition; re-running the approach here would
+		## be the same journey twice and is what delayed a block's resolution
+		## behind the attack that fed it instead of landing with it.
+		var already_arrived := event == arrived_via_transition
+		arrived_via_transition = null
 		var simulated_movement := float(event.metadata.get("movement_duration", 0.0))
 		var simulated_flight := float(event.metadata.get("flight_time",
 			event.metadata.get("set_flight_time", 0.0)))
@@ -1511,16 +1524,18 @@ func _play_rally(
 		))
 		var event_duration := clampf(simulated_duration, 0.55, 2.60) \
 			/ maxf(playback_speed, 0.1)
-		var pre_targets: Array[Vector2] = tactical_court.movement_phase_targets(event)
+		var pre_targets: Array[Vector2] = [] if already_arrived \
+			else tactical_court.movement_phase_targets(event)
 		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
 		var movement_share := clampf(
 			simulated_movement / maxf(simulated_duration, 0.1), 0.30, 0.72
 		)
-		var pre_budget := event_duration * movement_share if has_movement else 0.0
+		var pre_budget := event_duration * movement_share \
+			if has_movement and not pre_targets.is_empty() else 0.0
 		var contact_pause := event_duration * 0.10 if has_movement else 0.0
 		var post_budget := event_duration * 0.18 if has_movement else 0.0
 		var ball_duration := event_duration - pre_budget - contact_pause - post_budget
-		if has_movement:
+		if has_movement and not pre_targets.is_empty():
 			var pre_phase_duration := pre_budget / maxf(float(pre_targets.size()), 1.0)
 			for phase_index in range(pre_targets.size()):
 				var caption := tactical_court.movement_phase_caption_for(
@@ -1541,14 +1556,14 @@ func _play_rally(
 				await _wait_for_playback_phase(pre_phase_duration)
 				tactical_court.finish_event_animation()
 				match_preview_court.finish_event_animation()
-			if not skip_rally_playback:
-				var event_headline := _playback_event_headline(event)
-				var event_detail := _playback_event_detail(event)
-				_set_playback_caption("t=%.2fs · Contact window · %s\n%s" % [
-					float(event.metadata.get("event_time", 0.0)),
-					event_headline, event_detail,
-				])
-				await _wait_for_playback_phase(contact_pause)
+		if has_movement and not skip_rally_playback:
+			var event_headline := _playback_event_headline(event)
+			var event_detail := _playback_event_detail(event)
+			_set_playback_caption("t=%.2fs · Contact window · %s\n%s" % [
+				float(event.metadata.get("event_time", 0.0)),
+				event_headline, event_detail,
+			])
+			await _wait_for_playback_phase(contact_pause)
 		if skip_rally_playback:
 			break
 		tactical_court.animate_event(event, ball_duration)
