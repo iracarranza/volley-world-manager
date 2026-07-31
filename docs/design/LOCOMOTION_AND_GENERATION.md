@@ -175,6 +175,10 @@ Attribute-first generation would also dissolve the stride bug in section 2 by
 construction: with no role-derived physique step, stride would derive from the
 height the player actually has.
 
+The full specification, including the talent-budget model, the separate physique
+stream, consumable potential, and region cluster biases, is in
+[Attribute-First Generation](ATTRIBUTE_FIRST_GENERATION.md).
+
 Three things need care before attempting it:
 
 1. **Role currently modifies physics, not just labels.**
