@@ -1526,8 +1526,9 @@ func _play_rally(
 		))
 		var event_duration := clampf(simulated_duration, 0.55, 2.60) \
 			/ maxf(playback_speed, 0.1)
-		var pre_targets: Array[Vector2] = [] if already_arrived \
-			else tactical_court.movement_phase_targets(event)
+		var pre_targets: Array[Vector2] = []
+		if not already_arrived:
+			pre_targets = tactical_court.movement_phase_targets(event)
 		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
 		var movement_share := clampf(
 			simulated_movement / maxf(simulated_duration, 0.1), 0.30, 0.72
