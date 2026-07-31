@@ -27,6 +27,7 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | What should I build next? | [Fresh-Agent Handoff](FRESH_AGENT_HANDOFF.md#the-one-current-next-objective) |
 | How does continuous movement fit the information boundary and opportunity windows? | [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |
 | How do I see continuous movement on the court and tune against it? | [Gate 51](../calibration/GATE_51_OBSERVABLE_CONTINUOUS_MOVEMENT.md) |
+| Why does a serve/set/attack take the time it does? | [Force-Derived Ball Flight Timing](../design/BALL_LAUNCH_KINEMATICS.md) |
 | What is historical practice rather than current roadmap work? | [P6-C2](part_06_exercises/02_beginner_project_ladder.md) |
 
 ## Symbols
@@ -62,6 +63,8 @@ Use editor search (`Cmd+Shift+F` or `Ctrl+Shift+F`) on this file. Entries includ
 | `TacticalCourt._build_movement_paths` | Builds each player's phase traversal from the movement model so playback samples rather than interpolates; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `MovementIntegrationCalibration` | Proves stepped integration reproduces `project_toward` exactly, and that the sweep can fail; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
 | `RallyMovementSystem.traversal_seconds` | Closed-form inverse of `project_toward`; the single answer to how long a traversal takes; [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) |
+| `RallyKinematics.solve_launch_arc` | Derives serve/set/attack flight duration and apex height from real distance and a launch angle via projectile motion; the launch angle is the only free input; [Force-Derived Ball Flight Timing](../design/BALL_LAUNCH_KINEMATICS.md) |
+| `_set_launch_angle_degrees` / `_serve_launch_angle_degrees` / `_attack_launch_angle_degrees` | Map tempo/style/attack-type to a shot-shape angle range, shifted by rating and jittered by quality; [Force-Derived Ball Flight Timing](../design/BALL_LAUNCH_KINEMATICS.md) |
 | `RallyMovementSystem.movement_profile` | Public rating-driven speed, acceleration, and turn-delay profile, shared by the stepper; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md) |
 | `RallyOpportunitySystem` | Shadow scheduling of receive-window opening and closure; now also schedules `RallyMoment.Kind.MOVEMENT_UPDATE` per Gate 50; [P4-C3](part_04_match_engine/03_ball_time_movement_and_actions.md); [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |
 | `RallyMoment.Kind.MOVEMENT_UPDATE` | Continuous reachability sampling across an inter-read gap, shadow-only; [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md) |

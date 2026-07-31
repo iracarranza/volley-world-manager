@@ -8,6 +8,15 @@ const COURT_LENGTH_METERS: float = 18.0
 const MIN_BALL_SPEED_MPS: float = 0.1
 const MIN_FLIGHT_DURATION: float = 0.01
 const DEFAULT_TIMING_TOLERANCE: float = 0.25
+const DEFAULT_GRAVITY_MPS2: float = 9.8
+## Below this, a shot is flat enough that tan(theta) collapses toward zero and
+## the required speed toward the distance/duration floor; above the max, apex
+## height blows up implausibly at real court distances (an unclamped 80 degree
+## shot over 9m implies a ~12.8m apex). Both bounds keep every derived value
+## finite and keep the shape of the arc inside what a volleyball rally
+## actually produces.
+const MIN_LAUNCH_ANGLE_DEGREES: float = 2.0
+const MAX_LAUNCH_ANGLE_DEGREES: float = 75.0
 
 
 static func court_delta_meters(start: Vector2, end: Vector2) -> Vector2:
@@ -28,6 +37,47 @@ static func path_length_factor(vertical_angle_degrees: float) -> float:
 		vertical_angle_degrees, -60.0, 60.0
 	))))
 	return clampf(1.0 / maxf(horizontal_fraction, 0.74), 1.0, 1.35)
+
+
+## Solves standard projectile motion (launched and landing at equal height, no
+## drag) for the flight duration and apex height a shot needs to cover the
+## given distance at the given launch angle. The launch angle is the only free
+## "shot shape" input; the resulting speed is always exactly what the geometry
+## requires to land on the known target -- that is what makes this force
+## derived rather than a chosen duration. Distance and angle are cleared and
+## clamped so no combination this is called with can produce NaN or Inf.
+##
+## v = sqrt(R*g / sin(2*theta))
+## T = sqrt(2*R*tan(theta) / g)
+## h = (R/4) * tan(theta)
+static func solve_launch_arc(
+	distance_meters: float,
+	launch_angle_degrees: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> Dictionary:
+	var distance := maxf(distance_meters, 0.0)
+	var gravity := maxf(gravity_mps2, 0.1)
+	var angle := clampf(
+		launch_angle_degrees, MIN_LAUNCH_ANGLE_DEGREES, MAX_LAUNCH_ANGLE_DEGREES
+	)
+	if distance <= 0.0001:
+		return {
+			"duration_seconds": MIN_FLIGHT_DURATION,
+			"apex_height_meters": 0.0,
+			"required_speed_mps": MIN_BALL_SPEED_MPS,
+			"launch_angle_degrees": angle,
+		}
+	var radians := deg_to_rad(angle)
+	var tangent := tan(radians)
+	var duration := sqrt(2.0 * distance * tangent / gravity)
+	var apex := (distance / 4.0) * tangent
+	var speed := sqrt(distance * gravity / sin(2.0 * radians))
+	return {
+		"duration_seconds": maxf(duration, MIN_FLIGHT_DURATION),
+		"apex_height_meters": maxf(apex, 0.0),
+		"required_speed_mps": maxf(speed, MIN_BALL_SPEED_MPS),
+		"launch_angle_degrees": angle,
+	}
 
 
 static func flight_duration(

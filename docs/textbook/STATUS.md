@@ -259,8 +259,12 @@ now limit the block work that was just completed:
    shadow block therefore reads a hitter-approach cue with less behind it than
    the home side would give it. Mirroring Gate 43 onto the opponent attack
    would make that cue real.
-2. **`set_release_interval` and `defensive_depth` are derived but unconsumed.**
-   Both are computed and then read by nothing.
+2. **`set_release_interval` is derived but unconsumed.** `VolleyballPlayer`
+   builds a `SystemFitProfile` for it and nothing queries that profile.
+   `defensive_depth` (the other half of this claim as originally written) is
+   no longer accurate: it is read in `rally_simulator.gd` to adjust
+   `defense_quality` and floor-defense positioning. Corrected here rather than
+   carried forward stale.
 
 Separately, movement fluidity's playback slice (steps 1 through 3) is
 complete outside the gate sequence. `ShadowMovementSystem` integrates movement
@@ -277,6 +281,15 @@ only; no rollout, audit, flag, or promotion). See
 [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md) and
 [Gate 50](../calibration/GATE_50_CONTINUOUS_REACHABILITY_TIMELINE.md).
 
+Separately, serve, set, and attack flight duration and apex height are no
+longer hardcoded tables. `RallyKinematics.solve_launch_arc()` derives both
+from real court distance and a launch angle (shot shape/tempo intent) via
+standard projectile motion; the launch angle is the only free input, and
+speed/duration/apex are always outputs. This is the first change in the
+project's session history to alter the official `RallySimulator.resolve()`
+path on purpose. See
+[Force-Derived Ball Flight Timing](../design/BALL_LAUNCH_KINEMATICS.md).
+
 Do not enable production contact flags, rewrite the whole scheduler, or mirror
 home attack logic onto the opponent side as a substitute. The gate sequence and
 its current status are in the
@@ -284,9 +297,10 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 419 passing checks (401 as of Gate
+The current foundation validation reports 424 passing checks (401 as of Gate
 49, plus playback-sequencing and approach-run regression checks, block
-visualization geometry checks, and eight checks across Gate 50's continuous
-reachability timeline and Gate 51's overlay transport). Treat that number as a point-in-time result, not a
-permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the
-current result.
+visualization geometry checks, eight checks across Gate 50's continuous
+reachability timeline and Gate 51's overlay transport, and five checks for
+force-derived ball flight timing). Treat that number as a point-in-time
+result, not a permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to
+establish the current result.

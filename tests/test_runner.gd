@@ -137,6 +137,7 @@ func _initialize() -> void:
 	_test_playback_samples_resolved_movement()
 	_test_block_visualization_geometry()
 	_test_gate_fifty_continuous_reachability_timeline()
+	_test_ball_kinematics_force_derived()
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
@@ -3587,6 +3588,98 @@ func _test_gate_fifty_continuous_reachability_timeline() -> void:
 	_check(
 		trail_well_formed and trail_times_ordered,
 		"the continuous trail reaches rally analysis bounded, ordered, and drawable",
+	)
+
+
+## Serve, set, and attack flight duration/apex used to come from tables
+## indexed by tempo/type/quality, with no connection to how far the ball
+## actually travels. RallyKinematics.solve_launch_arc() replaces that: launch
+## angle (shot shape/tempo intent) is the only free input, duration and apex
+## are derived from it and the real distance via standard projectile motion.
+func _test_ball_kinematics_force_derived() -> void:
+	## Spot-check against the hand-verified table: R=9m/8deg and R=9m/55deg
+	## are worked examples from the design discussion, not just re-runs of
+	## whatever the implementation happens to compute.
+	var flat := RallyKinematics.solve_launch_arc(9.0, 8.0)
+	_check(
+		absf(float(flat.duration_seconds) - 0.509) < 0.01
+			and absf(float(flat.apex_height_meters) - 0.316) < 0.01,
+		"solve_launch_arc matches the hand-verified formula at a flat 9m shot",
+	)
+	var lofted := RallyKinematics.solve_launch_arc(9.0, 55.0)
+	_check(
+		absf(float(lofted.duration_seconds) - 1.619) < 0.01
+			and absf(float(lofted.apex_height_meters) - 3.213) < 0.01,
+		"solve_launch_arc matches the hand-verified formula at a lofted 9m shot",
+	)
+
+	## The entire point: distance now actually changes duration at a fixed
+	## shot shape. Before this change, a short set and a long set at the same
+	## tempo took identically hardcoded time.
+	var short_arc := RallyKinematics.solve_launch_arc(3.0, 30.0)
+	var long_arc := RallyKinematics.solve_launch_arc(8.0, 30.0)
+	_check(
+		float(long_arc.duration_seconds) > float(short_arc.duration_seconds) * 1.5
+			and float(long_arc.apex_height_meters)
+				> float(short_arc.apex_height_meters) * 1.5,
+		"a longer shot takes measurably longer and arcs measurably higher at the same launch angle",
+	)
+
+	## No combination of angle (including deliberately out-of-domain input,
+	## which must clamp rather than propagate) or distance (including zero and
+	## very large) may produce NaN or Inf.
+	var degenerate_found := false
+	for angle in [-40.0, -0.001, 0.0, 2.0, 20.0, 55.0, 75.0, 89.9, 130.0]:
+		for distance in [0.0, 0.001, 3.0, 9.0, 40.0]:
+			var arc := RallyKinematics.solve_launch_arc(distance, angle)
+			var duration_value := float(arc.duration_seconds)
+			var apex_value := float(arc.apex_height_meters)
+			var speed_value := float(arc.required_speed_mps)
+			if is_nan(duration_value) or is_inf(duration_value) \
+					or is_nan(apex_value) or is_inf(apex_value) \
+					or is_nan(speed_value) or is_inf(speed_value) \
+					or duration_value <= 0.0 or apex_value < 0.0:
+				degenerate_found = true
+	_check(
+		not degenerate_found,
+		"solve_launch_arc never produces NaN, Inf, or a non-positive duration across the full domain",
+	)
+
+	## The invariant that ties duration and apex together algebraically
+	## (T = sqrt(8h/g), from eliminating theta between the two formulas) must
+	## hold for any real resolved event's outgoing_trajectory, not just for
+	## solve_launch_arc's own return value -- this is what actually proves the
+	## resolver is using the derived values rather than a leftover constant.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var checked_trajectories := 0
+	var invariant_held := true
+	for seed_value in range(4100, 4108):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if not int(event.event_type) in [
+				RALLY_EVENT_SCRIPT.EventType.SERVE, RALLY_EVENT_SCRIPT.EventType.SET,
+				RALLY_EVENT_SCRIPT.EventType.ATTACK,
+			]:
+				continue
+			var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if trajectory.is_empty():
+				continue
+			var kind := str(trajectory.get("kind", ""))
+			if kind in ["block_deflection"]:
+				continue
+			var duration := float(trajectory.get("duration", 0.0))
+			var apex := float(trajectory.get("apex_height_meters", 0.0))
+			if duration <= 0.0:
+				continue
+			checked_trajectories += 1
+			var implied_duration := sqrt(8.0 * apex / RallyKinematics.DEFAULT_GRAVITY_MPS2)
+			if absf(duration - implied_duration) > 0.02:
+				invariant_held = false
+	_check(
+		checked_trajectories >= 10 and invariant_held,
+		"every serve/set/attack trajectory in real resolved rallies satisfies the projectile duration-apex invariant",
 	)
 
 

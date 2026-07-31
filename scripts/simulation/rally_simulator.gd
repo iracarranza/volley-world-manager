@@ -43,13 +43,6 @@ const RallyKinematicsModel := preload(
 )
 const MAX_EXCHANGES: int = 4
 
-## Contact-to-arrival time by tempo (0 = quick release, 3 = high ball).
-## Quick tempos stay tight -- widening them would blur the read a quick set is
-## supposed to force. 2nd and 3rd tempo are spread further apart from each
-## other and from the quicks, so a hitter has a real window to reposition
-## rather than a lightly-scaled quick set.
-const SET_FLIGHT_TIME_BY_TEMPO: Array[float] = [0.34, 0.50, 0.80, 1.20]
-
 const OPPONENT_SERVE: float = 0.63
 const OPPONENT_BLOCK: float = 0.61
 const OPPONENT_DEFENSE: float = 0.58
@@ -111,9 +104,14 @@ func resolve(
 	var serve_landing := _serve_landing_point(
 		intended_target, opponent_server, players, lineup, true
 	)
-	var serve_time := _serve_flight_time(opponent_server, serve_quality)
+	var serve_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(Vector2(0.80, 0.08), serve_landing),
+		_serve_launch_angle_degrees(opponent_server, serve_quality),
+	)
+	var serve_time := float(serve_arc.duration_seconds)
 	var serve_trajectory := _ball_trajectory(
-		"serve", Vector2(0.80, 0.08), serve_landing, serve_time, 0.45
+		"serve", Vector2(0.80, 0.08), serve_landing, serve_time,
+		float(serve_arc.apex_height_meters),
 	)
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
 		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
@@ -523,10 +521,16 @@ func resolve(
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
 	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
-	var set_flight_time: float = SET_FLIGHT_TIME_BY_TEMPO[clampi(assignment.tempo, 0, 3)]
+	var set_angle := _set_launch_angle_degrees(
+		setter, assignment.tempo, float(result.set_quality)
+	)
+	var set_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(set_contact, set_target), set_angle
+	)
+	var set_flight_time: float = float(set_arc.duration_seconds)
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
-		lerpf(0.7, 2.4, set_flight_time / SET_FLIGHT_TIME_BY_TEMPO[3]),
+		float(set_arc.apex_height_meters),
 		rally_clock + second_contact_window
 	)
 	if using_live_attack:
@@ -699,9 +703,16 @@ func resolve(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
 	))
-	var attack_flight := _attack_flight_time(float(result.attack_quality), hit_type)
+	var attack_angle := _attack_launch_angle_degrees(
+		hitter, hit_type, float(result.attack_quality)
+	)
+	var attack_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(set_target, attack_target), attack_angle
+	)
+	var attack_flight := float(attack_arc.duration_seconds)
 	var attack_trajectory := _ball_trajectory(
-		"attack", set_target, attack_target, attack_flight, 0.55,
+		"attack", set_target, attack_target, attack_flight,
+		float(attack_arc.apex_height_meters),
 		rally_clock + set_flight_time
 	)
 	if using_live_attack:
@@ -876,8 +887,17 @@ func resolve(
 		if recycled else Vector2(set_target.x, 0.50)
 	var net_contact := Vector2(set_target.x, 0.50)
 	var attack_event: Resource = result.events[-1]
+	## Same shot as attack_trajectory above, re-sliced to where it actually
+	## crosses the net rather than where it was originally headed -- same
+	## launch angle, shorter distance, so duration/apex still fall out of
+	## the geometry instead of being a separate hardcoded segment.
+	var attack_to_block_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(set_target, net_contact), attack_angle
+	)
 	attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
-		"attack_to_block", set_target, net_contact, 0.22, 0.45,
+		"attack_to_block", set_target, net_contact,
+		float(attack_to_block_arc.duration_seconds),
+		float(attack_to_block_arc.apex_height_meters),
 		float(attack_event.metadata.get("event_time", rally_clock))
 	)
 	var post_block_target := recycle_target if recycled else attack_target
@@ -1041,7 +1061,11 @@ func _resolve_home_serve(
 	var opponent_landing := _serve_landing_point(
 		target_name, server, [], null, false
 	)
-	var serve_time := _serve_flight_time(server, serve_quality)
+	var serve_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(Vector2(0.82, 0.92), opponent_landing),
+		_serve_launch_angle_degrees(server, serve_quality),
+	)
+	var serve_time := float(serve_arc.duration_seconds)
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
 		Vector2(0.82, 0.92), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
@@ -1049,7 +1073,11 @@ func _resolve_home_serve(
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
 		], {"side": "home", "target": target_name, "flight_time": serve_time,
 			"server_id": server.id, "server_slot": 1,
-			"serve_style": server.primary_serve_style})
+			"serve_style": server.primary_serve_style,
+			"outgoing_trajectory": _ball_trajectory(
+				"serve", Vector2(0.82, 0.92), opponent_landing, serve_time,
+				float(serve_arc.apex_height_meters),
+			)})
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
 			"server": server.display_name,
@@ -1147,10 +1175,20 @@ func _resolve_opponent_transition(
 		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
 	)
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
-	var set_flight_time: float = SET_FLIGHT_TIME_BY_TEMPO[clampi(opponent_tempo, 0, 3)]
+	## _choose_opponent_attack needs a flight-time estimate before the real set
+	## target is known. Estimate it against the same placeholder target
+	## set_geometry's first pass already uses above; the real distance-based
+	## value is recomputed below once opponent_contact is final, mirroring how
+	## opponent_set_quality is already computed twice in this function.
+	var estimated_set_flight_time: float = float(RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(
+			opponent_setter_position, Vector2(0.50, 0.48)
+		),
+		_set_launch_angle_degrees(opponent_setter, opponent_tempo, opponent_set_quality),
+	).duration_seconds)
 	var attack_choice := _choose_opponent_attack(
 		opponent_team, opponent_setter, opponent_set_quality,
-		_home_target_hint(defensive_plan), set_flight_time,
+		_home_target_hint(defensive_plan), estimated_set_flight_time,
 	)
 	var opponent_hitter := attack_choice.player as VolleyballPlayer
 	var opponent_contact: Vector2 = attack_choice.contact
@@ -1166,6 +1204,11 @@ func _resolve_opponent_transition(
 		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
 		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
 	)
+	var set_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(opponent_setter_position, opponent_contact),
+		_set_launch_angle_degrees(opponent_setter, opponent_tempo, opponent_set_quality),
+	)
+	var set_flight_time: float = float(set_arc.duration_seconds)
 	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
 		opponent_setter.display_name,
 		dig_position, opponent_contact, true, opponent_set_quality,
@@ -1178,8 +1221,7 @@ func _resolve_opponent_transition(
 			"body_orientation_fit": set_geometry.body_orientation_fit,
 			"outgoing_trajectory": _ball_trajectory(
 				"opponent_set", opponent_setter_position, opponent_contact,
-				set_flight_time,
-				lerpf(0.7, 2.4, set_flight_time / SET_FLIGHT_TIME_BY_TEMPO[3]),
+				set_flight_time, float(set_arc.apex_height_meters),
 				rally_clock
 			)})
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
@@ -1190,9 +1232,17 @@ func _resolve_opponent_transition(
 		- clampf(-hitter_arrival_margin / 1.2, 0.0, 1.0) * 0.10 \
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
 	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
+	var opponent_attack_angle := _attack_launch_angle_degrees(
+		opponent_hitter, str(attack_choice.attack_type), opponent_attack
+	)
+	var opponent_attack_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(opponent_contact, opponent_net_contact),
+		opponent_attack_angle,
+	)
 	var opponent_attack_trajectory := _ball_trajectory(
 		"attack_to_block", opponent_contact, opponent_net_contact,
-		0.23, 0.48, rally_clock
+		float(opponent_attack_arc.duration_seconds),
+		float(opponent_attack_arc.apex_height_meters), rally_clock
 	)
 	var opponent_approach_start := _approach_start_position(
 		opponent_contact, Vector2(attack_choice.start), true
@@ -1298,7 +1348,10 @@ func _resolve_opponent_transition(
 		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
 		home_target = deflection_target
 	var attack_type := _opponent_attack_type(home_target)
-	var attack_time := _attack_flight_time(opponent_attack, attack_type)
+	var attack_time := float(RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(opponent_contact, home_target),
+		_attack_launch_angle_degrees(opponent_hitter, attack_type, opponent_attack),
+	).duration_seconds)
 	if block_outcome == "touch":
 		attack_time += 0.24
 	elif block_outcome == "funnel":
@@ -1435,6 +1488,11 @@ func _resolve_home_continuation(
 		+ rng.randf_range(-0.14, 0.14), 0.10, 0.92
 	)
 	var set_target := CourtConstants.lane_target(assignment.lane)
+	var continuation_set_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(set_contact, set_target),
+		_set_launch_angle_degrees(setter, assignment.tempo, set_quality),
+	)
+	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds)
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, set_quality >= 0.20, set_quality,
 		("Emergency second-contact set" if emergency_setter else "Transition set") \
@@ -1444,9 +1502,13 @@ func _resolve_home_continuation(
 		], {"side": "home", "emergency_setter": emergency_setter,
 			"first_contact_id": defender.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
-			"arrival_margin": setter_arrival_margin})
+			"arrival_margin": setter_arrival_margin,
+			"flight_time": continuation_flight_time,
+			"outgoing_trajectory": _ball_trajectory(
+				"set", set_contact, set_target, continuation_flight_time,
+				float(continuation_set_arc.apex_height_meters), rally_clock
+			)})
 	live_positions[setter.id] = set_contact
-	var continuation_flight_time := SET_FLIGHT_TIME_BY_TEMPO[3]
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
 	)
@@ -1508,6 +1570,11 @@ func _resolve_home_continuation(
 	var continuation_hit_type := _hit_type(assignment, hitter)
 	if "power_attack" not in continuation_actions:
 		continuation_hit_type = "Controlled roll"
+	var continuation_attack_arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(set_target, attack_target),
+		_attack_launch_angle_degrees(hitter, continuation_hit_type, attack_quality),
+	)
+	var continuation_attack_flight: float = float(continuation_attack_arc.duration_seconds)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, attack_quality >= 0.25, attack_quality,
 		"T3 outside swing · exchange %d" % exchange_number,
@@ -1537,7 +1604,12 @@ func _resolve_home_continuation(
 			"lateral_control": float(continuation_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
 			"arrival_margin": hitter_arrival_margin,
-			"set_flight_time": continuation_flight_time})
+			"set_flight_time": continuation_flight_time,
+			"flight_time": continuation_attack_flight,
+			"outgoing_trajectory": _ball_trajectory(
+				"attack", set_target, attack_target, continuation_attack_flight,
+				float(continuation_attack_arc.apex_height_meters), rally_clock
+			)})
 	live_positions[hitter.id] = set_target
 	if attack_quality < 0.25:
 		return _finish(result, "attack_error", false, hitter.id, {
@@ -3036,14 +3108,29 @@ func _weak_passer_target(
 	return Vector2(0.78, 0.16)
 
 
-func _serve_flight_time(server: VolleyballPlayer, serve_quality: float) -> float:
-	var power: float = _power_rating(server, "serve_power")
-	var style_modifier: float = float({"Jump Topspin": 0.0, "Hybrid": 0.01,
-		"Jump Float": 0.04, "Standing": 0.06, "Sky Ball": 0.24}.get(
-		server.primary_serve_style, 0.0
-	))
-	return clampf(1.28 - power * 0.42 - serve_quality * 0.24 \
-		+ float(style_modifier), 0.52, 1.48)
+## Intended shot shape for a serve: how lofted the launch is, by style. This is
+## the free "tempo/force intent" input; RallyKinematics.solve_launch_arc()
+## derives the resulting duration and apex from it and the real distance to
+## the landing point, rather than either being chosen directly.
+func _serve_launch_angle_degrees(server: VolleyballPlayer, serve_quality: float) -> float:
+	var angle_min := 16.0
+	var angle_max := 24.0
+	match server.primary_serve_style:
+		"Jump Topspin":
+			angle_min = 10.0
+			angle_max = 16.0
+		"Hybrid":
+			angle_min = 12.0
+			angle_max = 18.0
+		"Jump Float":
+			angle_min = 14.0
+			angle_max = 20.0
+		"Sky Ball":
+			angle_min = 55.0
+			angle_max = 65.0
+	return _jittered_launch_angle(
+		angle_min, angle_max, _power_rating(server, "serve_power"), serve_quality
+	)
 
 
 func _serve_style_proficiency(server: VolleyballPlayer) -> float:
@@ -3053,9 +3140,75 @@ func _serve_style_proficiency(server: VolleyballPlayer) -> float:
 	return clampf(float(scores.get(server.primary_serve_style, 50)) / 100.0, 0.01, 1.0)
 
 
-func _attack_flight_time(attack_quality: float, attack_type: String) -> float:
-	var base_time := 0.68 if attack_type == "Short tip" else 0.50
-	return clampf(base_time - attack_quality * 0.17, 0.28, 0.72)
+## Intended shot shape for a set, by tempo. `tempo` is already the real
+## tactical input (chosen by the called offensive play, not hardcoded); this
+## only changes what a tempo *means physically*, from a table lookup to a
+## shape that a real distance is then flown at.
+func _set_launch_angle_degrees(
+	setter: VolleyballPlayer, tempo: int, set_quality: float
+) -> float:
+	var angle_min := 6.0
+	var angle_max := 10.0
+	match clampi(tempo, 0, 3):
+		1:
+			angle_min = 12.0
+			angle_max = 18.0
+		2:
+			angle_min = 25.0
+			angle_max = 35.0
+		3:
+			angle_min = 45.0
+			angle_max = 55.0
+	var touch := (_rating(setter, "tempo_control") + _rating(setter, "hand_control")) * 0.5
+	return _jittered_launch_angle(angle_min, angle_max, touch, set_quality)
+
+
+## Intended shot shape for an attack, by the hitter's chosen action. Covers
+## both the home-side hit_type vocabulary (_hit_type()) and the opponent-side
+## attack_type vocabulary (_opponent_attack_type()), since both currently feed
+## the same trajectory construction.
+func _attack_launch_angle_degrees(
+	hitter: VolleyballPlayer, attack_type: String, attack_quality: float
+) -> float:
+	var angle_min := 8.0
+	var angle_max := 12.0
+	match attack_type:
+		"Quick attack":
+			angle_min = 5.0
+			angle_max = 8.0
+		"Power swing":
+			angle_min = 6.0
+			angle_max = 10.0
+		"Pipe attack", "Line attack", "Seam attack":
+			angle_min = 8.0
+			angle_max = 14.0
+		"High-ball swing":
+			angle_min = 10.0
+			angle_max = 16.0
+		"Controlled roll", "Roll shot":
+			angle_min = 20.0
+			angle_max = 30.0
+		"Emergency tip", "Short tip":
+			angle_min = 22.0
+			angle_max = 32.0
+	return _jittered_launch_angle(
+		angle_min, angle_max, _power_rating(hitter, "attack_power"), attack_quality
+	)
+
+
+## Shared shape for every launch-angle helper above: a better-executed shot
+## (higher rating) reliably flattens toward the harder-to-defend end of its
+## action's range; a worse-executed one (lower quality) drifts away from
+## whatever was intended, within the same safe range. Skill changes which
+## angle is chosen; contact quality changes how well that choice is executed
+## -- neither ever escapes the range RallyKinematics.solve_launch_arc() was
+## calibrated against.
+func _jittered_launch_angle(
+	angle_min: float, angle_max: float, skill: float, quality: float
+) -> float:
+	var intended := lerpf(angle_max, angle_min, clampf(skill, 0.0, 1.0))
+	var jitter := (1.0 - clampf(quality, 0.0, 1.0)) * (angle_max - angle_min) * 0.4
+	return clampf(intended + rng.randf_range(-jitter, jitter), angle_min, angle_max)
 
 
 func _nearest_reception_player(

@@ -32,7 +32,8 @@
     "docs/textbook/part_05_management/02_development_to_match_options.md",
     "docs/textbook/part_06_exercises/README.md",
     "docs/textbook/part_06_exercises/01_guided_exercises.md",
-    "docs/textbook/part_06_exercises/02_beginner_project_ladder.md"
+    "docs/textbook/part_06_exercises/02_beginner_project_ladder.md",
+    "docs/design/BALL_LAUNCH_KINEMATICS.md"
   ],
   "sources": [
     {"path": "project.godot", "symbols": ["run/main_scene", "[autoload]"]},
@@ -40,7 +41,7 @@
     {"path": "scenes/main/main.gd", "symbols": ["func _resolve_rally", "func _play_rally", "func _append_playback_history", "func _setup_visualization_controls", "func _apply_visualization_layers"]},
     {"path": "scripts/managers/game_manager.gd", "symbols": ["func resolve_active_rally"]},
     {"path": "scripts/managers/career_manager.gd", "symbols": ["func create_career", "func advance_week", "func save_career", "func load_career"]},
-    {"path": "scripts/simulation/rally_simulator.gd", "symbols": ["class_name RallySimulator", "func resolve", "func _add_event", "func _finish", "planner_zone_center", "func _home_floor_phase_positions", "func _approach_start_position"]},
+    {"path": "scripts/simulation/rally_simulator.gd", "symbols": ["class_name RallySimulator", "func resolve", "func _add_event", "func _finish", "planner_zone_center", "func _home_floor_phase_positions", "func _approach_start_position", "func _set_launch_angle_degrees", "func _serve_launch_angle_degrees", "func _attack_launch_angle_degrees"]},
     {"path": "scripts/simulation/coverage_calculator.gd", "symbols": ["class_name CoverageCalculator", "static func choose_claimant"]},
     {"path": "scripts/models/rally_event.gd", "symbols": ["class_name RallyEvent", "actor_id", "metadata", "func to_dict"]},
     {"path": "scripts/models/rally_result.gd", "symbols": ["class_name RallyResult", "events", "terminal_outcome"]},
@@ -80,7 +81,7 @@
     {"path": "scripts/simulation/reception_rollout_calibration.gd", "symbols": ["class_name ReceptionRolloutCalibration", "static func run"]},
     {"path": "scripts/simulation/ball_read_system.gd", "symbols": ["class_name BallReadSystem", "static func estimate", "static func estimate_sequence"]},
     {"path": "scripts/simulation/shadow_reception_system.gd", "symbols": ["class_name ShadowReceptionSystem", "static func evaluate", "CONTINUOUS_TRAIL_MAX_POINTS"]},
-    {"path": "scripts/simulation/rally_kinematics.gd", "symbols": ["class_name RallyKinematics", "static func court_distance_meters", "static func flight_duration", "static func timing_diagnostics"]},
+    {"path": "scripts/simulation/rally_kinematics.gd", "symbols": ["class_name RallyKinematics", "static func court_distance_meters", "static func flight_duration", "static func timing_diagnostics", "static func solve_launch_arc", "DEFAULT_GRAVITY_MPS2", "MIN_LAUNCH_ANGLE_DEGREES", "MAX_LAUNCH_ANGLE_DEGREES"]},
     {"path": "scripts/simulation/rally_calibration_report.gd", "symbols": ["class_name RallyCalibrationReport", "func add_shadow_trace", "func build_summary"]},
     {"path": "scripts/simulation/serve_style_calibration.gd", "symbols": ["class_name ServeStyleCalibration", "SERVE_STYLES", "static func run"]},
     {"path": "scripts/simulation/reception_progression_calibration.gd", "symbols": ["class_name ReceptionProgressionCalibration", "READER_TIERS", "FORMATIONS", "static func run"]},
