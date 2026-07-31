@@ -609,9 +609,20 @@ func _integrate_phase_path(
 ) -> Dictionary:
 	if start.distance_to(target) <= 0.0005 and waypoint == null:
 		return {}
+	## ApproachMechanicsSystem.prepare_for_attack() reports approach_start_position
+	## as wherever the hitter's staging run actually left them -- deliberately the
+	## same point this leg's own start, not an aspirational mark the player never
+	## reached. Fed through as a distinct leg, the stepper's first direction is
+	## zero-length and it aborts before moving at all, silently falling back to a
+	## raw lerp for the whole approach. A waypoint already coincident with start
+	## is not a corner; treat it as absent so the model steps toward the real
+	## target from the first sample.
+	var effective_waypoint: Variant = waypoint
+	if waypoint != null and start.distance_to(Vector2(waypoint)) <= 0.0005:
+		effective_waypoint = null
 	var side: StringName = &"opponent" if _is_opponent_player(player_id) else &"home"
 	var actor := RallyPlayerState.create(profile, side, -1, start)
-	var first_leg: Vector2 = Vector2(waypoint) if waypoint != null else target
+	var first_leg: Vector2 = Vector2(effective_waypoint) if effective_waypoint != null else target
 	var opening := RallyKinematics.court_delta_meters(start, first_leg)
 	if opening.length() > 0.0001:
 		## Facing the route keeps the model's turn charge at its floor. The
@@ -619,11 +630,11 @@ func _integrate_phase_path(
 		## possible; re-charging a full turn here would make the player miss the
 		## endpoint the event says they reached.
 		actor.facing = opening.normalized()
-	var mode := RallyPlayerState.MovementMode.APPROACH if waypoint != null \
+	var mode := RallyPlayerState.MovementMode.APPROACH if effective_waypoint != null \
 		else RallyPlayerState.MovementMode.TRANSITION
 	var integration: Dictionary = ShadowMovementSystem.integrate(
 		actor, target, MOVEMENT_SAMPLE_WINDOW_SECONDS, mode,
-		ShadowMovementSystem.DEFAULT_STEP_SECONDS, waypoint,
+		ShadowMovementSystem.DEFAULT_STEP_SECONDS, effective_waypoint,
 	)
 	if not bool(integration.get("available", false)):
 		return {}

@@ -3357,6 +3357,25 @@ func _test_playback_samples_resolved_movement() -> void:
 		"Playback sampling is exact at both ends of the phase",
 	)
 
+	## A waypoint coincident with the leg's own start is how
+	## ApproachMechanicsSystem reports a hitter's actual staged position -- not
+	## an aspirational mark, and not a real corner. It must not give the
+	## stepper a zero-length first direction and silently discard the sampled
+	## traversal for a raw fallback lerp.
+	court.unit_movement_starts = {mover_id: start}
+	court.unit_movement_targets = {mover_id: target}
+	court.unit_movement_waypoints = {mover_id: start}
+	court._build_movement_paths()
+	var degenerate_path: Dictionary = court.movement_paths.get(mover_id, {})
+	var degenerate_points: Array = degenerate_path.get("points", [])
+	_check(
+		degenerate_points.size() >= 20
+			and Vector2(degenerate_points[0]).distance_to(start) < 0.001
+			and Vector2(degenerate_points[degenerate_points.size() - 1])
+				.distance_to(target) < 0.001,
+		"A waypoint coincident with the start is treated as absent, not an aborted traversal",
+	)
+
 	## A player with no resolvable profile must still be drawn, via the plain
 	## fallback, rather than vanishing or throwing.
 	court.unit_movement_starts = {-42: start}

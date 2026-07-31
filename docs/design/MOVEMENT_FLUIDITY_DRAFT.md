@@ -219,6 +219,42 @@ setter now equals the `SET` event's `movement_start` exactly, and the `SET`
 event's staged position for the hitter equals the `ATTACK` event's
 `movement_start` exactly -- both legs now hand off with zero correction.
 
+## Step 4 follow-up: the approach run was silently falling back to a raw lerp
+
+Fixing the handoff above exposed a second, independent defect in the leg it
+handed off *into*. The hitter's approach run to contact was still drawn
+unevenly -- accelerating oddly rather than running the model's real curve --
+and the cause was structural, not cosmetic.
+
+`ApproachMechanicsSystem.prepare_for_attack()` reports `approach_start_position`
+as wherever the hitter's preparation window actually left them, by deliberate
+design (its own comment: "playback must render where the hitter physically
+ended up, not where they were trying to get to"). That means the value is
+always identical to `hitter_start` -- the same point the approach leg already
+starts from, not a distinct corner partway to contact.
+
+`TacticalCourt._integrate_phase_path()` fed that value through to
+`ShadowMovementSystem.integrate()` as a real waypoint regardless. The stepper's
+first move is toward the waypoint; when the waypoint *is* the start, that first
+direction is a zero-length vector, and the loop's `if direction == Vector2.ZERO:
+break` fires on step one. The traversal aborts with a single-point trail,
+`_build_movement_paths()` discards it, and playback falls back to
+`start.lerp(target, value)` -- the exact straight, unaccelerated interpolation
+steps 1 through 4 were built to retire, reintroduced silently for every normal
+attack's approach run, because the fallback path has no error to surface.
+
+The fix treats a waypoint coincident with its own leg's start as absent:
+`_integrate_phase_path()` now checks `start.distance_to(waypoint) <= 0.0005`
+before deciding whether there is a real corner, so a degenerate waypoint drops
+the leg to `MovementMode.TRANSITION` and the stepper moves toward the actual
+target from its first sample. A genuine waypoint -- one that differs from the
+leg's start, such as the live-attack path's fallback through
+`_approach_start_position()` -- is unaffected. A regression check
+(`tests/test_runner.gd`) sets `unit_movement_waypoints` equal to
+`unit_movement_starts` directly and asserts the sampled path still reaches 20+
+points and both resolved endpoints; reverting the fix fails that check with a
+one-point aborted trail.
+
 ## Remaining
 
 Movement is now one model, but it is still *resolver-allotted* rather than
