@@ -38,6 +38,9 @@ const LiveBlockIntegratorModel := preload(
 const RallyMovementSystemModel := preload(
 	"res://scripts/simulation/rally_movement_system.gd"
 )
+const SetterCapabilityModel := preload(
+	"res://scripts/simulation/setter_capability_system.gd"
+)
 const RallyKinematicsModel := preload(
 	"res://scripts/simulation/rally_kinematics.gd"
 )
@@ -514,18 +517,40 @@ func resolve(
 			"event_time": rally_clock, "deadline": rally_clock + second_contact_window,
 			"incoming_trajectory": pass_trajectory})
 
-	var tempo_demand := float(3 - assignment.tempo) * 0.055 \
+	## What this setter can physically and technically do with the ball they are
+	## about to receive. A tempo they cannot command is unavailable rather than
+	## merely expensive, and a ball above their reach cannot be set at all.
+	var setter_capability := SetterCapabilityModel.evaluate(
+		setter, assignment.tempo, float(result.reception_quality),
+		SetterCapabilityModel.pass_contact_height_meters(
+			float(result.reception_quality), rng.randf()
+		),
+	)
+	var resolved_tempo := int(setter_capability.resolved_tempo)
+	if bool(setter_capability.tempo_downgraded):
+		assignment = _downgraded_assignment(assignment, resolved_tempo)
+		result.key_factors.append(ExplanationText.factor("play_abandoned"))
+	var tempo_demand := float(3 - resolved_tempo) * 0.055 \
 		* lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
 	var set_target := CourtConstants.lane_target(assignment.lane)
 	var set_geometry := _set_geometry(
 		setter, setter_start, set_contact, set_target, preferred_release
 	)
+	## A jump set is a working solution to a high ball; a ball past jump reach is
+	## not a set at all, which is what makes height a real setter attribute.
+	var reach_penalty := 0.0
+	match str(setter_capability.reach_state):
+		"jump":
+			reach_penalty = 0.08
+		"unreachable":
+			reach_penalty = 0.55
 	var set_base: float = _rating(setter, "set_accuracy") * 0.42 \
 		+ _rating(setter, "court_vision") * 0.20 \
 		+ _rating(setter, "hand_control") * 0.10 \
 		+ _rating(setter, "tempo_control") * 0.08 \
 		+ _rating(setter, "composure") * 0.10 \
-		+ result.reception_quality * 0.28 - tempo_demand \
+		+ float(setter_capability.effective_pass_quality) * 0.28 - tempo_demand \
+		- reach_penalty \
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
 	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
@@ -578,6 +603,10 @@ func resolve(
 			"deadline": set_contact_time,
 			"event_time": set_contact_time,
 			"release_interval": release_interval,
+			## Why this setter could run this ball and not another one. Carried
+			## on the event so the limit is readable in the rally record rather
+			## than only visible as a lower quality number.
+			"setter_capability": setter_capability.duplicate(true),
 			"incoming_trajectory": pass_trajectory,
 			"outgoing_trajectory": set_trajectory,
 			"set_distance_meters": set_geometry.distance_meters,
@@ -2792,6 +2821,20 @@ func _choose_assignment(
 	if candidates.is_empty():
 		return null
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
+
+
+## A copy of the called assignment at a tempo the setter can actually run. The
+## original play resource is left untouched: the offence still called what it
+## called, and the record should show the call and the downgrade separately.
+func _downgraded_assignment(
+	assignment: HitterAssignment,
+	tempo: int,
+) -> HitterAssignment:
+	if assignment == null:
+		return assignment
+	var adjusted := assignment.duplicate(true) as HitterAssignment
+	adjusted.tempo = clampi(tempo, 0, 3)
+	return adjusted
 
 
 func _fallback_hitter(

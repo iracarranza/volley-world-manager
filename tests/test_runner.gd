@@ -19,6 +19,7 @@ const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_stat
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
 const LOCOMOTION_MODEL_SCRIPT := preload("res://scripts/simulation/locomotion_model.gd")
+const SETTER_CAPABILITY_SCRIPT := preload("res://scripts/simulation/setter_capability_system.gd")
 const CONTACT_ENVELOPE_SCRIPT := preload(
 	"res://scripts/simulation/contact_envelope_system.gd"
 )
@@ -142,6 +143,7 @@ func _initialize() -> void:
 	_test_set_release_interval_consumption()
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_stride_and_cadence_locomotion()
+	_test_setter_capability_gates()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -198,8 +200,12 @@ func _test_contact_envelopes_and_vertical_setting() -> void:
 	var standing := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
 		actor, &"set", actor.position, 0.50, 0.0, 1.0, 2.20, true
 	)
+	## 2.50 m is above this setter's 2.29 m standing reach and inside what a jump
+	## *set* reaches. It used to read 2.65 m, which only cleared because setting
+	## was being given a full attacking jump; the contract asserted below is
+	## unchanged, the height it is asserted at is now one a set can occur at.
 	var jumping := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
-		actor, &"set", actor.position, 0.50, 0.0, 1.0, 2.65, true
+		actor, &"set", actor.position, 0.50, 0.0, 1.0, 2.50, true
 	)
 	_check(
 		standing.standing_reachable and standing.jump_reachable
@@ -248,10 +254,10 @@ func _test_contact_envelopes_and_vertical_setting() -> void:
 		low_explosive, &"home", 2, actor.position
 	)
 	var low_jump := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
-		low_actor, &"set", low_actor.position, 0.20, 0.0, 1.0, 2.65, true
+		low_actor, &"set", low_actor.position, 0.20, 0.0, 1.0, 2.50, true
 	)
 	var quick_jump := RALLY_MOVEMENT_SCRIPT.evaluate_opportunity(
-		actor, &"set", actor.position, 0.20, 0.0, 1.0, 2.65, true
+		actor, &"set", actor.position, 0.20, 0.0, 1.0, 2.50, true
 	)
 	_check(
 		quick_jump.jump_reachable and not low_jump.jump_reachable,
@@ -3927,6 +3933,123 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 		float(locomotion.get("stale_stride_rate", 1.0)) < 0.05
 			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
 		"Generation fix: stride_length_m is derived from each player's actual post-variation height",
+	)
+
+
+## Attributes must produce limits a rally can show, not just quality nudges.
+## Each check below is one of the three families: technical command over tempo,
+## command buying back a bad pass, and physical reach.
+func _test_setter_capability_gates() -> void:
+	var elite: VolleyballPlayer = VolleyballPlayer.new()
+	elite.tempo_control = 92
+	elite.hand_control = 88
+	elite.composure = 85
+	var weak: VolleyballPlayer = VolleyballPlayer.new()
+	weak.tempo_control = 32
+	weak.hand_control = 30
+	weak.composure = 35
+
+	## 1. A quick set is not merely expensive for a weak setter, it is absent.
+	##    The high ball always remains, because a team out of system still has
+	##    to put the ball somewhere.
+	var weak_best: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(weak, 1.0)
+	var elite_best: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(elite, 1.0)
+	_check(
+		not weak_best.has(0) and weak_best.has(3)
+			and elite_best.has(0),
+		"a weak setter cannot run a quick set off any pass, while an elite setter can",
+	)
+
+	## 2. A worsening pass removes tempos, and removes them from the weaker
+	##    setter first. This is the interaction a flat quality penalty cannot
+	##    express.
+	var elite_poor: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(elite, 0.25)
+	var elite_clean: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(elite, 1.0)
+	_check(
+		elite_poor.size() < elite_clean.size() and elite_poor.size() >= 1,
+		"a poor pass takes fast tempos away even from an elite setter, without leaving them optionless",
+	)
+
+	## 3. Command buys back part of a bad pass, so the gap between setters is
+	##    widest exactly when the pass is worst.
+	var clean_gap := SETTER_CAPABILITY_SCRIPT.effective_pass_quality(elite, 0.95) \
+		- SETTER_CAPABILITY_SCRIPT.effective_pass_quality(weak, 0.95)
+	var scramble_gap := SETTER_CAPABILITY_SCRIPT.effective_pass_quality(elite, 0.15) \
+		- SETTER_CAPABILITY_SCRIPT.effective_pass_quality(weak, 0.15)
+	_check(
+		scramble_gap > clean_gap + 0.10,
+		"setter skill matters most when the pass is worst",
+	)
+
+	## 4. Height is a hard wall. Two setters identical but for build, one ball:
+	##    the taller one gets a hand to it and the shorter one cannot.
+	var tall: VolleyballPlayer = VolleyballPlayer.new()
+	tall.height_cm = 200.0
+	tall.wingspan_cm = 204.0
+	tall.jump_reach = 75
+	tall.explosiveness = 75
+	var short_setter: VolleyballPlayer = VolleyballPlayer.new()
+	short_setter.height_cm = 178.0
+	short_setter.wingspan_cm = 182.0
+	short_setter.jump_reach = 75
+	short_setter.explosiveness = 75
+	var tall_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(tall, 2, 0.5, 2.60)
+	var short_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
+		short_setter, 2, 0.5, 2.60
+	)
+	_check(
+		str(tall_read.reach_state) == "jump"
+			and str(short_read.reach_state) == "unreachable",
+		"a tall setter reaches a high pass that a short setter physically cannot",
+	)
+
+	## 5. A pass that sails is what puts the ball out of reach, so pass quality
+	##    has to move the arrival height at all.
+	_check(
+		SETTER_CAPABILITY_SCRIPT.pass_contact_height_meters(0.2, 1.0)
+			> SETTER_CAPABILITY_SCRIPT.pass_contact_height_meters(0.95, 1.0) + 0.5,
+		"a poor pass can sail well above a controlled one",
+	)
+
+	## 6. A setter asked for a tempo above their command downgrades to the
+	##    fastest one they can actually run, rather than running the called one
+	##    badly. Checked directly, because the default offence never calls a fast
+	##    tempo -- see the rally-level check below.
+	var forced: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(weak, 0, 0.9, 2.10)
+	var unforced: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(elite, 0, 0.9, 2.10)
+	_check(
+		bool(forced.tempo_downgraded)
+			and int(forced.resolved_tempo) > int(forced.requested_tempo)
+			and not bool(unforced.tempo_downgraded)
+			and int(unforced.resolved_tempo) == 0,
+		"a setter who cannot command the called tempo is downgraded to one they can run",
+	)
+
+	## 7. The limit has to be legible in the rally record, which is the whole
+	##    point of modelling it as a limit rather than a quality roll. Reach is
+	##    the family that bites in ordinary play: the offence currently calls
+	##    only T3, so the tempo gate is live but unexercised until a play asks
+	##    for a quick set. Asserting a downgrade rate here would be asserting
+	##    over an all-zero column.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var capability_events := 0
+	var reach_states := {}
+	for seed_value in range(12000, 12040):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+				continue
+			var capability: Dictionary = event.metadata.get("setter_capability", {})
+			if capability.is_empty():
+				continue
+			capability_events += 1
+			reach_states[str(capability.get("reach_state", ""))] = true
+	_check(
+		capability_events >= 20
+			and reach_states.has("standing") and reach_states.has("jump"),
+		"every resolved set carries the setter's capability read, and reach genuinely varies in ordinary rallies",
 	)
 
 

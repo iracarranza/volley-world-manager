@@ -218,6 +218,34 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
+- **Setter attributes now produce limits, not just quality nudges.**
+  `SetterCapabilitySystem` is consulted on every official second contact and its
+  read is attached to the SET event, so the limit is legible in the rally record
+  rather than buried in a quality roll. Three families:
+  - *Technical command over tempo.* A fast set demands more command
+    (`tempo_control`/`hand_control`/`composure`) than a slow one, and a poor
+    pass raises that demand further. A setter without the command does not run
+    the called tempo badly -- the tempo is absent from `available_tempos` and
+    the offence is downgraded to the fastest one they can run. A weak setter
+    cannot run a quick set off *any* pass; an elite setter can run one off a
+    pass down to about 0.6 quality. Previously a quick set cost a weak setter
+    0.165 quality, a rounding error in a rally.
+  - *Pass recovery.* Command buys back part of what a bad pass costs, so skill
+    matters most exactly when the pass is worst: the elite-to-weak gap in
+    effective pass quality runs 0.000 off a perfect pass and 0.218 off a 0.15
+    pass. The retired linear `reception_quality * 0.28` term charged a novice
+    and an elite setter the same for a bad pass.
+  - *Reach.* A ball above standing reach must be jump-set and one above jump
+    reach cannot be set at all. At identical jump ratings a 200 cm setter meets
+    a 2.60 m ball while a 178 cm setter physically cannot. Measured over 40
+    ordinary rallies: 26 standing, 13 jump, 1 unreachable.
+- A jump *set* now gets 50% of a full attacking jump's displacement
+  (`ContactEnvelopeSystem.ACTION_JUMP_SHARE`), where every action previously
+  received the full spike-approach band. That band let a 178 cm setter meet a
+  ball at 2.75 m, which erased height as a setter attribute entirely.
+- **The tempo gate is live but unexercised in ordinary play**: the default
+  offence calls only T3, which every setter can run. It takes effect as soon as
+  a called play asks for a quick set.
 - **Ground speed is now stride x cadence, not a lookup curve.**
   `RallyMovementSystem.movement_profile()` -- the single chokepoint every
   reachability, arrival-margin, traversal, and playback decision reads -- derives
@@ -369,7 +397,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 445 passing checks (424 as of Gate
+The current foundation validation reports 452 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

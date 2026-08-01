@@ -7,6 +7,45 @@ extends RefCounted
 const MIN_JUMP_DISPLACEMENT_METERS: float = 0.12
 const MAX_JUMP_DISPLACEMENT_METERS: float = 0.78
 
+## Lowest contact a player would bother leaving the floor for. Setting overhead
+## starts lower than swinging at a ball does.
+const SET_MINIMUM_JUMP_HEIGHT_METERS: float = 1.55
+const ATTACK_MINIMUM_JUMP_HEIGHT_METERS: float = 1.85
+
+
+## Share of a full attacking jump each action actually gets off the floor.
+##
+## The displacement band above is calibrated for a spike approach, and applying
+## it to every action was quietly generous: it let a 178 cm setter meet a ball
+## at 2.75 m, which erased height as a setter attribute entirely. Setting
+## overhead is a small hop taken from a standstill, blocking is close to a full
+## jump but without the run-up.
+const ACTION_JUMP_SHARE := {
+	&"set": 0.50,
+	&"attack": 1.00,
+	&"block": 0.85,
+	&"assist_block": 0.85,
+}
+
+
+## How high this player can add to their standing reach for this action, before
+## live body state is considered. Exposed because reach is a question the
+## resolver needs to ask outside a full `RallyPlayerState` -- notably of a setter
+## about to receive a pass -- and answering it with a second copy of this
+## arithmetic is how the two would drift apart.
+static func nominal_jump_displacement_meters(
+	player: VolleyballPlayer,
+	action_type: StringName = &"attack",
+) -> float:
+	if player == null:
+		return 0.0
+	var jump_rating := float(player.jump_reach) / 100.0
+	var explosiveness := float(player.explosiveness) / 100.0
+	return lerpf(
+		MIN_JUMP_DISPLACEMENT_METERS, MAX_JUMP_DISPLACEMENT_METERS, jump_rating
+	) * lerpf(0.72, 1.0, explosiveness) * (1.0 - player.fatigue * 0.35) \
+		* float(ACTION_JUMP_SHARE.get(action_type, 1.0))
+
 
 static func evaluate(
 	actor: RallyPlayerState,
@@ -24,8 +63,6 @@ static func evaluate(
 		player, action_type, actor.body_state, actor.balance
 	)
 	var explosiveness := float(player.explosiveness) / 100.0
-	var jump_rating := float(player.jump_reach) / 100.0
-	var fatigue_factor := 1.0 - player.fatigue * 0.35
 	var readiness_factor := clampf(actor.readiness, 0.0, 1.0)
 	var takeoff_time := lerpf(0.34, 0.13, explosiveness) \
 		* lerpf(1.18, 0.92, readiness_factor)
@@ -44,16 +81,13 @@ static func evaluate(
 		and available_time >= takeoff_time
 	var jump_multiplier := float(approach_profile.get("jump_multiplier", 1.0)) \
 		if action_type == &"attack" else 1.0
-	var accessible_jump := lerpf(
-		MIN_JUMP_DISPLACEMENT_METERS,
-		MAX_JUMP_DISPLACEMENT_METERS,
-		jump_rating,
-	) * lerpf(0.72, 1.0, explosiveness) * fatigue_factor * jump_multiplier \
-		* readiness_factor if can_take_off else 0.0
+	var accessible_jump := nominal_jump_displacement_meters(player, action_type) \
+		* jump_multiplier * readiness_factor if can_take_off else 0.0
 	var maximum_height := standing_reach + accessible_jump
 	var standing_possible := contact_height_meters <= standing_reach
 	var jump_action := action_type in [&"set", &"attack", &"block", &"assist_block"]
-	var minimum_jump_height := 1.55 if action_type == &"set" else 1.85
+	var minimum_jump_height := SET_MINIMUM_JUMP_HEIGHT_METERS \
+		if action_type == &"set" else ATTACK_MINIMUM_JUMP_HEIGHT_METERS
 	var jump_possible := can_take_off and jump_action \
 		and contact_height_meters >= minimum_jump_height \
 		and contact_height_meters <= maximum_height
