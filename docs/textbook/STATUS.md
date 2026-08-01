@@ -259,12 +259,13 @@ now limit the block work that was just completed:
    shadow block therefore reads a hitter-approach cue with less behind it than
    the home side would give it. Mirroring Gate 43 onto the opponent attack
    would make that cue real.
-2. **`set_release_interval` is derived but unconsumed.** `VolleyballPlayer`
-   builds a `SystemFitProfile` for it and nothing queries that profile.
-   `defensive_depth` (the other half of this claim as originally written) is
-   no longer accurate: it is read in `rally_simulator.gd` to adjust
-   `defense_quality` and floor-defense positioning. Corrected here rather than
-   carried forward stale.
+2. **`set_release_interval` is now consumed.** The main home set path and
+   the continuation set path both query the setter's `SYSTEM_FIT_SET_RELEASE`
+   profile and advance the rally clock by `second_contact_window +
+   release_interval`, widening the hitter's approach window by the setter's
+   handling time (0.15–0.75 s, jittered by set quality). `defensive_depth` is
+   also consumed -- it adjusts `defense_quality` and floor-defense positioning
+   in `rally_simulator.gd`; the stale "read by nothing" claim was an error.
 
 Separately, movement fluidity's playback slice (steps 1 through 3) is
 complete outside the gate sequence. `ShadowMovementSystem` integrates movement

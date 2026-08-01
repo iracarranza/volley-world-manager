@@ -146,9 +146,11 @@ almost nothing behind it. Fixing it makes Gates 44 to 49 measure something
 sharper, and it is the smallest change with the largest effect on existing
 evidence.
 
-**2. Consume `set_release_interval` and `defensive_depth`.** Both are derived
-and then read by nothing. Smaller and safer than the first, and a reasonable
-warm-up, but it improves less.
+**2. ~~Consume `set_release_interval` and `defensive_depth`~~ (complete).**
+`set_release_interval` now widens the hitter's approach window in both the
+main home set path and the continuation set path. `defensive_depth` was
+already consumed in `rally_simulator.gd` before this document was last
+updated; the stale "read by nothing" claim has been corrected.
 
 **3. Movement fluidity, step 4.** See
 [Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md). Steps 1 to 3 are

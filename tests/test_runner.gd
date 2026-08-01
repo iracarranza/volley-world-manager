@@ -138,6 +138,7 @@ func _initialize() -> void:
 	_test_block_visualization_geometry()
 	_test_gate_fifty_continuous_reachability_timeline()
 	_test_ball_kinematics_force_derived()
+	_test_set_release_interval_consumption()
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
@@ -3680,6 +3681,97 @@ func _test_ball_kinematics_force_derived() -> void:
 	_check(
 		checked_trajectories >= 10 and invariant_held,
 		"every serve/set/attack trajectory in real resolved rallies satisfies the projectile duration-apex invariant",
+	)
+
+
+func _test_set_release_interval_consumption() -> void:
+	## 1. Every resolved SET event carries a release_interval in its metadata,
+	##    and that value is inside the clamped domain (0.15–0.75 s).
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var set_events_found := 0
+	var all_in_range := true
+	for seed_value in range(4200, 4210):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+				continue
+			if str(event.metadata.get("side", "")) != "home":
+				continue
+			set_events_found += 1
+			var ri := float(event.metadata.get("release_interval", -1.0))
+			if ri < 0.15 or ri > 0.75:
+				all_in_range = false
+	_check(
+		set_events_found >= 8 and all_in_range,
+		"every home SET event carries a release_interval in [0.15, 0.75]",
+	)
+
+	## 2. A quick setter (high tempo_control + hand_control) yields a shorter
+	##    release_interval than a slow setter at equal set quality. Build a
+	##    minimal fixture: two players identical except for those ratings.
+	var quick_setter: VolleyballPlayer = VolleyballPlayer.new()
+	quick_setter.tempo_control = 92
+	quick_setter.hand_control = 88
+	quick_setter.adaptability = 60
+	quick_setter.height_cm = 195.0
+	quick_setter.position_role = "Setter"
+	quick_setter.refresh_system_fit_profiles()
+	var slow_setter: VolleyballPlayer = VolleyballPlayer.new()
+	slow_setter.tempo_control = 28
+	slow_setter.hand_control = 32
+	slow_setter.adaptability = 60
+	slow_setter.height_cm = 195.0
+	slow_setter.position_role = "Setter"
+	slow_setter.refresh_system_fit_profiles()
+	var quick_profile: SystemFitProfile = \
+		quick_setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
+	var slow_profile: SystemFitProfile = \
+		slow_setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
+	_check(
+		quick_profile != null and slow_profile != null
+			and float(quick_profile.ideal_value) < float(slow_profile.ideal_value),
+		"quick setter has a shorter ideal release_interval than a slow setter",
+	)
+	var quality := 0.60
+	var quick_ri := clampf(
+		float(quick_profile.ideal_value) + lerpf(0.10, -0.05, quality), 0.15, 0.75
+	)
+	var slow_ri := clampf(
+		float(slow_profile.ideal_value) + lerpf(0.10, -0.05, quality), 0.15, 0.75
+	)
+	_check(
+		quick_ri < slow_ri,
+		"quick setter's computed release_interval is shorter than slow setter's at equal quality",
+	)
+
+	## 3. The algebraic invariant T=sqrt(8h/g) from the ball-kinematics check
+	##    still holds for set trajectories after the clock-advance change:
+	##    the set flight arc is unaffected, only its start_time shifted.
+	var inv_manager := GAME_MANAGER_SCRIPT.new()
+	inv_manager.seed_vertical_slice_data()
+	var inv_held := true
+	var inv_checked := 0
+	for seed_value in range(4200, 4206):
+		var result: Resource = inv_manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+				continue
+			var traj: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if traj.is_empty():
+				continue
+			var dur := float(traj.get("duration", 0.0))
+			var apex := float(traj.get("apex_height_meters", 0.0))
+			if dur <= 0.0:
+				continue
+			inv_checked += 1
+			if absf(dur - sqrt(8.0 * apex / RallyKinematics.DEFAULT_GRAVITY_MPS2)) > 0.02:
+				inv_held = false
+	_check(
+		inv_checked >= 4 and inv_held,
+		"set trajectory arcs still satisfy the projectile invariant after release_interval clock shift",
 	)
 
 

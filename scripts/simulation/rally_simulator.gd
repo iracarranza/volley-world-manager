@@ -528,10 +528,21 @@ func resolve(
 		RallyKinematics.court_distance_meters(set_contact, set_target), set_angle
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
+	## Setter release interval: the time between ball arriving and ball leaving
+	## the setter's hands. Derived from the setter's tempo_control/hand_control
+	## profile (quick setters release faster), jittered by set quality (poor
+	## handling takes longer). This is the first place SYSTEM_FIT_SET_RELEASE is
+	## consumed; it widens the hitter's approach window via the clock advance.
+	var release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
+	var release_interval := clampf(
+		(release_profile.ideal_value if release_profile != null else 0.42) \
+		+ lerpf(0.10, -0.05, float(result.set_quality)),
+		0.15, 0.75
+	)
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
 		float(set_arc.apex_height_meters),
-		rally_clock + second_contact_window
+		rally_clock + second_contact_window + release_interval
 	)
 	if using_live_attack:
 		set_trajectory = Dictionary(selected_live_attack.get(
@@ -562,8 +573,9 @@ func resolve(
 			"first_contact_id": receiver.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
-			"deadline": rally_clock + second_contact_window,
-			"event_time": rally_clock + second_contact_window,
+			"deadline": rally_clock + second_contact_window + release_interval,
+			"event_time": rally_clock + second_contact_window + release_interval,
+			"release_interval": release_interval,
 			"incoming_trajectory": pass_trajectory,
 			"outgoing_trajectory": set_trajectory,
 			"set_distance_meters": set_geometry.distance_meters,
@@ -583,7 +595,7 @@ func resolve(
 	live_positions[setter.id] = Vector2(live_setter_integration.get(
 		"setter_center_position", set_contact
 	)) if using_live_setter else set_contact
-	rally_clock += second_contact_window
+	rally_clock += second_contact_window + release_interval
 	if assignment.tempo <= 1:
 		result.key_factors.append(ExplanationText.factor("fast_tempo"))
 
@@ -1493,6 +1505,12 @@ func _resolve_home_continuation(
 		_set_launch_angle_degrees(setter, assignment.tempo, set_quality),
 	)
 	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds)
+	var cont_release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
+	var cont_release_interval := clampf(
+		(cont_release_profile.ideal_value if cont_release_profile != null else 0.42) \
+		+ lerpf(0.10, -0.05, set_quality),
+		0.15, 0.75
+	)
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, set_quality >= 0.20, set_quality,
 		("Emergency second-contact set" if emergency_setter else "Transition set") \
@@ -1504,9 +1522,10 @@ func _resolve_home_continuation(
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
 			"flight_time": continuation_flight_time,
+			"release_interval": cont_release_interval,
 			"outgoing_trajectory": _ball_trajectory(
 				"set", set_contact, set_target, continuation_flight_time,
-				float(continuation_set_arc.apex_height_meters), rally_clock
+				float(continuation_set_arc.apex_height_meters), rally_clock + cont_release_interval
 			)})
 	live_positions[setter.id] = set_contact
 	var hitter_start: Vector2 = live_positions.get(
@@ -1531,7 +1550,7 @@ func _resolve_home_continuation(
 	}
 	var transition_preparation := ApproachMechanicsModel.prepare_for_attack(
 		transition_state, hitter_actor, continuation_assignment, defender.id,
-		rally_clock + second_contact_window,
+		rally_clock + second_contact_window + cont_release_interval,
 	)
 	var prepared_hitter := transition_preparation.get("actor") as RallyPlayerState
 	transition_preparation.erase("actor")
