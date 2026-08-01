@@ -61,6 +61,14 @@ const OPPONENT_DEFENSE: float = 0.58
 const BLOCK_SHOULDER_OFFSET: float = 0.085
 const BLOCK_NET_DEPTH: float = 0.032
 
+## How much a formed block takes off the swing hit into it. The primary carries
+## most of it; a sealed assist adds the rest of the wall.
+const BLOCK_PRIMARY_PRESSURE: float = 0.20
+const BLOCK_ASSIST_PRESSURE: float = 0.08
+
+## Sum of the opponent serve-quality weights, used to normalise them.
+const OPPONENT_SERVE_WEIGHT_TOTAL: float = 0.72
+
 const DEFAULT_SET_RELEASE_SECONDS: float = 0.42
 const DEFAULT_SET_RELEASE_TOLERANCE: float = 0.105
 const MINIMUM_SET_RELEASE_SECONDS: float = 0.15
@@ -105,13 +113,21 @@ func resolve(
 		opponent_server = opponent_team.best_server() as VolleyballPlayer
 	var server_name := opponent_server.display_name
 	var setter := _player_by_id(players, lineup.active_setter_id())
-	var serve_quality := clampf(
-		_power_rating(opponent_server, "serve_power") * 0.28
-		+ _rating(opponent_server, "serve_technique") * 0.13
-		+ _rating(opponent_server, "serve_placement") * 0.07
-		+ _rating(opponent_server, "serve_consistency") * 0.12
-		+ _rating(opponent_server, "serve_aggression") * 0.04
+	## Weights are relative importance and are normalised by their own total, so
+	## this is a genuine 0-1 quality rather than one capped at the coefficient
+	## sum. They previously added to 0.72, which meant an opponent server with
+	## every rating at 100 produced 0.72 -- and since reception subtracts
+	## `serve_quality * 0.48`, the most dangerous serve in the game could apply
+	## only 0.35 of pressure. The home formula already spans the full range
+	## because its tactical risk term makes up the remainder.
+	var opponent_serve_weighted := _power_rating(opponent_server, "serve_power") * 0.28 \
+		+ _rating(opponent_server, "serve_technique") * 0.13 \
+		+ _rating(opponent_server, "serve_placement") * 0.07 \
+		+ _rating(opponent_server, "serve_consistency") * 0.12 \
+		+ _rating(opponent_server, "serve_aggression") * 0.04 \
 		+ _serve_style_proficiency(opponent_server) * 0.08
+	var serve_quality := clampf(
+		opponent_serve_weighted / OPPONENT_SERVE_WEIGHT_TOTAL
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
 	var opponent_risk := _rating(opponent_server, "serve_aggression")
@@ -246,10 +262,16 @@ func resolve(
 	var reception_base := _rating(receiver, "reception") * 0.65 \
 		+ _rating(receiver, "ball_control") * 0.20 \
 		+ _rating(receiver, "composure") * 0.15
+	## No flat bonus. A `+ 0.30` term used to sit at the end of this sum and it
+	## almost exactly cancelled the best serve in the game: serve pressure is
+	## `serve_quality * 0.48` and serve quality never exceeded 0.645, so the most
+	## dangerous serve possible subtracted 0.31 while every reception was handed
+	## 0.30 back unconditionally. Reception quality never fell below 0.387 against
+	## an ace threshold of 0.18, which is why the engine produced no aces at all.
 	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
 		- CoverageModel.reception_body_penalty(receiver, arrival, serve_quality) \
 		+ arrival_bonus + support_bonus - seam_penalty \
-		+ rng.randf_range(-0.14, 0.14) + 0.30,
+		+ rng.randf_range(-0.14, 0.14),
 		0.0, 1.0)
 	if using_live_reception:
 		result.reception_quality = clampf(float(selected_live_reception.get(
@@ -718,10 +740,40 @@ func resolve(
 		+ float(resolved_approach.get("runup_quality", 0.5)) * 0.24 \
 		+ float(resolved_approach.get("lateral_control", 0.5)) * 0.08 \
 		+ float(resolved_approach.get("approach_speed_fraction", 0.5)) * 0.06
+	## The block this swing is actually hit into. Attack quality had no opposing
+	## term at all: it summed roughly 1.5 of positive coefficients against
+	## penalties that rarely reached 0.2, so it never fell below 0.310 against an
+	## error threshold of 0.29 and the engine produced no attack errors. Hitting
+	## into a sealed block is the risk that was missing, and the block's
+	## formation is knowable before the contest is settled.
+	var opponent_block_formation := _form_opponent_block(
+		opponent_team, set_target.x, assignment.tempo,
+		float(result.set_quality), set_contact.x,
+	)
+	var block_pressure := float(opponent_block_formation.get("primary_close", 0.0)) \
+		* BLOCK_PRIMARY_PRESSURE \
+		+ float(opponent_block_formation.get("assist_close", 0.0)) \
+		* BLOCK_ASSIST_PRESSURE
+	## NOT normalised by its weight total, unlike the serve.
+	##
+	## The positive coefficients here add to 1.50, so an ordinary hitter scores
+	## about 0.84 before penalties and the distribution sits well above the 0.29
+	## error threshold. Dividing by 1.50 -- the fix that worked for the opponent
+	## serve -- was measured and overshot catastrophically: attack quality fell
+	## below the block's `contest > attack_quality - 0.30` funnel test almost
+	## every swing, so nearly every attack was touched into a continuation and
+	## rally length exploded past the exchange limit. The measured symptom was a
+	## tenfold slowdown of the calibration sweep.
+	##
+	## Attack errors therefore remain unreachable, and closing that gap needs the
+	## block contest thresholds re-derived alongside the execution scale rather
+	## than either changed alone. Recorded rather than left as a silent
+	## near-miss.
 	var attack_base: float = _rating(hitter, "attack_accuracy") * 0.38 \
 		+ _power_rating(hitter, "attack_power") * 0.24 \
 		+ _rating(hitter, "decision_making") * 0.13 \
 		+ approach_fit + result.set_quality * 0.25 - tempo_demand \
+		- block_pressure \
 		+ clampf(hitter_arrival_margin * 0.22, -0.58, 0.08) \
 		+ Familiarity.attack_geometry(hitter, assignment.lane) \
 		+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14
@@ -869,10 +921,10 @@ func resolve(
 
 	# Resolve the block from the opponent's actual front-row geometry. A
 	# roster-wide best blocker must not cover every pin regardless of distance.
-	var block_resolution := _resolve_opponent_block(
-		opponent_team, set_target.x, assignment.tempo, float(result.set_quality),
-		float(result.attack_quality), live_positions.get(setter.id, Vector2(0.50, 0.60)).x
+	var block_resolution := _contest_opponent_block(
+		opponent_block_formation, float(result.attack_quality)
 	)
+
 	var live_block_integration: Dictionary = {}
 	if using_live_block:
 		live_block_integration = LiveBlockIntegratorModel.apply(
@@ -1185,7 +1237,7 @@ func _resolve_home_serve(
 	var reception_quality := clampf(
 		_rating(receiver, "reception") * 0.58
 		+ _rating(receiver, "ball_control") * 0.24
-		- serve_quality * 0.44 + 0.27
+		- serve_quality * 0.44
 		- CoverageModel.reception_body_penalty(receiver, opponent_arrival, serve_quality)
 		+ clampf(float(opponent_arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12)
 		+ minf(float(support_count) * 0.025, 0.075)
@@ -1309,7 +1361,8 @@ func _resolve_opponent_transition(
 				rally_clock
 			)})
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
-	var hitter_arrival_margin := set_flight_time - float(attack_choice.travel_time)
+	## Provisional: recomputed below once preparation has staged the hitter.
+	var hitter_arrival_margin: float = set_flight_time - float(attack_choice.travel_time)
 	var opponent_attack := clampf(
 		_power_rating(opponent_hitter, "attack_power") * 0.62 \
 		+ opponent_set_quality * 0.20 + 0.08 \
@@ -1351,6 +1404,17 @@ func _resolve_opponent_transition(
 	)
 	if opponent_prepared != null:
 		opponent_approach_start = opponent_prepared.position
+	## Recompute over the route the hitter actually runs. `attack_choice` timed
+	## the trip from where the hitter stood before preparation relocated them to
+	## their approach mark, so reporting the staged start with the unstaged
+	## duration describes them covering a short leg at a long leg's pace. This is
+	## the same defect the movement-fluidity work fixed on the home side, and it
+	## only surfaced here once block pressure made continuations common enough to
+	## shift the ATTACK phase's timing ratio to 1.083.
+	var opponent_move_time := _movement_time(
+		opponent_hitter, opponent_approach_start, opponent_contact, "transition"
+	)
+	hitter_arrival_margin = set_flight_time - opponent_move_time
 	var opponent_approach := ApproachMechanicsModel.evaluate_takeoff(
 		opponent_prepared, opponent_contact, set_flight_time
 	) if opponent_prepared != null else {}
@@ -1429,7 +1493,7 @@ func _resolve_opponent_transition(
 			"lateral_control": float(opponent_approach.get("lateral_control", 0.0)),
 			"event_time": rally_clock + set_flight_time,
 			"launch_angle_degrees": opponent_attack_angle,
-			"movement_duration": attack_choice.travel_time,
+			"movement_duration": opponent_move_time,
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_hitter.id] = opponent_contact
@@ -1916,12 +1980,18 @@ func _resolve_home_continuation(
 	)
 
 
-func _resolve_opponent_block(
+## The block that forms against this attack, before the swing is contested.
+##
+## Split out because attack quality needs to know what it is hitting into. The
+## close fractions depend on the lane, the tempo and the set -- none of which
+## need the attack's own quality -- so the formation can be resolved first and
+## the contest settled afterwards with the same numbers, rather than the swing
+## being scored against nothing and the block appearing only after the fact.
+func _form_opponent_block(
 	opponent_team: Resource,
 	attack_x: float,
 	tempo: int,
 	set_quality: float,
-	attack_quality: float,
 	setter_x: float,
 ) -> Dictionary:
 	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
@@ -1991,6 +2061,30 @@ func _resolve_opponent_block(
 		primary_skill * 0.68 + assist_skill * 0.32 * assist_close,
 		0.08, 0.94,
 	)
+	return {
+		"primary": primary,
+		"assist": assist,
+		"primary_close": primary_close,
+		"assist_close": assist_close,
+		"quality": block_quality,
+		"coverage_segments": _home_block_segments(
+			attack_x, primary, primary_close, assist, assist_close
+		),
+		"setter_pull": setter_pull,
+		"read_quality": read_quality,
+	}
+
+
+## Settles a formed block against the swing that was actually hit at it.
+func _contest_opponent_block(
+	formation: Dictionary,
+	attack_quality: float,
+) -> Dictionary:
+	var resolved := formation.duplicate(true)
+	resolved["primary"] = formation.get("primary")
+	resolved["assist"] = formation.get("assist")
+	var block_quality := float(formation.get("quality", 0.0))
+	var primary_close := float(formation.get("primary_close", 0.0))
 	var contest := block_quality + rng.randf_range(-0.14, 0.12)
 	var outcome := "miss"
 	if contest > attack_quality + 0.14 and primary_close >= 0.72:
@@ -1999,19 +2093,24 @@ func _resolve_opponent_block(
 		outcome = "touch"
 	elif contest > attack_quality - 0.30:
 		outcome = "funnel"
-	return {
-		"primary": primary,
-		"assist": assist,
-		"primary_close": primary_close,
-		"assist_close": assist_close,
-		"quality": block_quality,
-		"outcome": outcome,
-		"coverage_segments": _home_block_segments(
-			attack_x, primary, primary_close, assist, assist_close
-		),
-		"setter_pull": setter_pull,
-		"read_quality": read_quality,
-	}
+	resolved["outcome"] = outcome
+	return resolved
+
+
+## Formation and contest together, for callers that do not need to score an
+## attack against the block first.
+func _resolve_opponent_block(
+	opponent_team: Resource,
+	attack_x: float,
+	tempo: int,
+	set_quality: float,
+	attack_quality: float,
+	setter_x: float,
+) -> Dictionary:
+	return _contest_opponent_block(
+		_form_opponent_block(opponent_team, attack_x, tempo, set_quality, setter_x),
+		attack_quality,
+	)
 
 
 func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vector2:

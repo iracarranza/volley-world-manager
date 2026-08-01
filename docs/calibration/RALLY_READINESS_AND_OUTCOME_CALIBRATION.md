@@ -110,3 +110,54 @@ RallyReadinessReport.rollout_readiness(120, 910000)
 Both take a sample count and a base seed and are deterministic. The suite runs
 each at a reduced sample count to keep the regression pass quick; run them
 directly with larger samples before drawing a balance or rollout conclusion.
+
+
+## First calibration pass: three changes, measured after each
+
+| | side-out | ace | serve err | kill | atk err | stuff | contacts |
+|---|---|---|---|---|---|---|---|
+| baseline | 0.739 | **0.000** | 0.022 | **0.828** | **0.000** | 0.172 | 9.97 |
+| 1. drop flat reception bonus | 0.744 | 0.006 | 0.022 | 0.811 | 0.000 | 0.189 | 10.20 |
+| 2. normalise opponent serve weights | 0.728 | **0.028** | 0.022 | 0.806 | 0.000 | 0.194 | 10.11 |
+| 3. block pressure on the swing | 0.672 | 0.028 | 0.022 | **0.767** | 0.000 | 0.233 | 11.21 |
+
+**Aces now occur and sit in band.** Reception carried a flat `+ 0.30` that almost
+exactly cancelled the best serve in the game, and the opponent serve weights
+summed to 0.72 so an opponent server with every rating at 100 produced 0.72.
+Removing the bonus and normalising the weights moved reception's floor from
+0.387 to 0.112, with 10.7% of receptions now below the 0.18 ace threshold.
+
+**Kill rate fell from 0.828 to 0.767** once the block a swing is hit into began
+to pressure it. `_resolve_opponent_block()` was split into `_form_opponent_block()`
+and `_contest_opponent_block()` so the formation -- which never needed the
+attack's quality -- can be resolved before the swing is scored, and settled
+against it afterwards with the same numbers.
+
+### Attack errors remain unreachable, and the obvious fix overshoots
+
+Attack execution sums 1.50 of positive weight: 0.75 of ratings, 0.50 of approach
+fit, 0.25 of set quality. Normalising it by that total -- exactly the fix that
+worked for the serve -- was tried and reverted. Attack quality fell below the
+block's `contest > attack_quality - 0.30` funnel test on nearly every swing, so
+almost every attack was touched into a continuation and rally length ran past
+the exchange limit. The measured symptom was a tenfold slowdown of this sweep.
+
+The two scales are coupled: the block's contest thresholds are written against
+the current, inflated attack range. Re-deriving them together is the work; the
+revert is recorded in the resolver at the site rather than left as a silent
+near-miss.
+
+### A defect this exposed
+
+The ATTACK phase of the movement timing sweep measured 1.0565 before any of
+this and 1.0608 after, against a band whose upper edge is 1.06 -- it had been
+sitting on the boundary all along, contained rather than verified. Shifting the
+rally mix toward continuations pushed it over.
+
+One contributor was found and fixed: the opponent attack reported its *staged*
+approach start paired with its *unstaged* travel time, so the hitter was
+described covering a short leg at a long leg's pace. That is the same defect the
+movement-fluidity work fixed on the home side. Correcting it moved ATTACK from
+1.0832 to 1.0608 and the perceptible-disagreement rate from 3.7% to 1.5%. The
+residual ~6% is now named in the regression check rather than hidden inside a
+band that happened to contain it.
