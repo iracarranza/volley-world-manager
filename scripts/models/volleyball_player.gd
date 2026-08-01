@@ -18,6 +18,12 @@ extends Resource
 @export_range(1, 100) var acceleration: int = 50
 @export_range(1, 100) var lateral_speed: int = 50
 @export_range(1, 100) var transition_speed: int = 50
+## Leap capacity: how high this player drives off the floor. It is NOT a reach
+## height despite the name, which is retained only because saves carry it.
+## Reach is derived -- see `jumping_reach_cm()` -- because how high a player
+## can touch is a product of three separate things: how tall they stand, how
+## long their arms are, and how well they jump. A short player with a huge leap
+## and a tall player who barely leaves the floor can touch the same ball.
 @export_range(1, 100) var jump_reach: int = 50
 @export_range(1, 100) var explosiveness: int = 50
 @export_range(1, 100) var stamina: int = 50
@@ -381,6 +387,21 @@ func active_serve_style_score() -> int:
 
 func standing_reach_cm() -> float:
 	return height_cm * 1.215 + (wingspan_cm - height_cm) * 0.32
+
+
+## How high this player can actually touch a ball, in centimetres: standing
+## reach (height plus arm length) plus what their leap adds.
+##
+## `effort` scales the leap between a standing hop (0.0) and a full committed
+## jump off an approach (1.0), because the same player reaches very different
+## heights setting off their back foot and swinging off a four-step run-up.
+## This is the single place the three inputs are combined; callers that need a
+## reach must ask here rather than re-adding height and leap themselves.
+func jumping_reach_cm(effort: float = 1.0) -> float:
+	var leap := lerpf(12.0, 78.0, float(jump_reach) / 100.0) \
+		* lerpf(0.72, 1.0, float(explosiveness) / 100.0) \
+		* (1.0 - fatigue * 0.35)
+	return standing_reach_cm() + leap * clampf(effort, 0.0, 1.0)
 
 
 func apply_role_physical_defaults() -> void:

@@ -2,7 +2,7 @@
 
 Status: **AUTHORITATIVE PROJECT HANDOFF**
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-08-01
 
 Repository: `https://github.com/iracarranza/volley-world-manager`
 
@@ -57,8 +57,8 @@ The management-game fantasy that this simulation must eventually support is:
 
 Player development should be expressed as tactical projects built from
 `Tactical Need + Latent Potential + Opportunity`, not as an instant position
-switch. The current engine task is still Gate 44; do not divert into building
-the full development-project feature. Preserve the product contract in
+switch. No gate is currently in flight; do not divert into building the full
+development-project feature. Preserve the product contract in
 [Connecting Development to Match Options](part_05_management/02_development_to_match_options.md).
 
 ## What is authoritative today
@@ -72,6 +72,10 @@ the full development-project feature. Preserve the product contract in
 | Home attack preparation | `ApproachMechanicsSystem` affects normal attack quality, jump conversion, and available attack families | Same evidence passes through the attack audit and live candidate |
 | Home floor-defense geometry | Saved plan and block relationship drive phase positions and claimant geometry | Same |
 | Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a shadow block slice (Gates 44-49) runs alongside it as evidence. One audited block contact may be promoted, but only in an explicitly requested development fixture, in a debug build, on top of a promoted attack |
+| Serve/set/attack flight timing | Derived from real distance and a launch angle by `RallyKinematics.solve_launch_arc()`; no duration tables remain | Same |
+| Ground speed | `stride x cadence x mass`, per-mode, via `LocomotionModel`; the single rating curve is retired | Same |
+| Second-contact capability | `SetterCapabilitySystem` sets tempo command, pass recovery, and reach on every official set | Same |
+| Player generation | Attribute-first: ceiling, then an age-driven growth reserve, then role and region tiers | Same |
 | 2D display | Consumes `RallyEvent` and trajectory metadata | May additionally show explicitly requested diagnostics |
 | 3D display | Paused | Paused |
 
@@ -124,50 +128,149 @@ and are not production activation.
 The detailed gate records are in `docs/calibration/`. They are evidence and
 history, not a license to enable production flags.
 
+## Work completed after the gate sequence
+
+The documented gate sequence ends at Gate 49, and Gates 50-51 added a
+shadow-only continuous-movement slice. Everything below happened after that, is
+**live in ordinary matches**, and is not gated. Each entry moved seeds on
+purpose.
+
+- **Force-derived ball flight.** Serve, set and attack duration and apex are no
+  longer table lookups. `RallyKinematics.solve_launch_arc()` derives both from
+  real court distance and a launch angle via projectile motion; the angle
+  (shot shape / tempo intent) is the only free input.
+  See [Ball Launch Kinematics](../design/BALL_LAUNCH_KINEMATICS.md).
+- **`set_release_interval` consumed.** Both home set paths query the setter's
+  `SYSTEM_FIT_SET_RELEASE` profile through `RallySimulator._release_interval()`,
+  using *both* halves of it: `ideal_value` is the setter's natural rhythm and
+  `tolerance` how far off it they can work. `defensive_depth` was already
+  consumed; the old "read by nothing" claim was simply wrong.
+- **The continuation path gained a real timeline.** It had never advanced its
+  rally clock, so every contact in a defence-to-counterattack carried the dig's
+  timestamp and the transition attack began at the same instant as the set that
+  fed it. Set contact, set flight, then attack now chain correctly.
+- **Attribute-first generation.** Potential is a ceiling set before attributes;
+  a growth reserve driven by *age alone* decides how much is expressed. Role
+  tiers read `VolleyballPlayer.POSITION_WEIGHTS` rather than a second copy, and
+  region specialty and physique biases give the four regions distinct identities.
+  See [Attribute-First Generation](../design/ATTRIBUTE_FIRST_GENERATION.md).
+- **Stride x cadence locomotion.** The single speed curve
+  `lerpf(1.35, 5.25, rating)` is retired. Speed is stride x cadence x mass, both
+  factors with per-mode tables, and long limbs cost turnover so archetypes
+  diverge by build. This was a deliberate rebalance: lateral -24%, transition
+  +43%. See [Locomotion](../design/LOCOMOTION_AND_GENERATION.md).
+- **Setter capability.** `SetterCapabilitySystem` gives tempo command, pass
+  recovery, and reach real consequences on every official second contact, and
+  attaches its read to the SET event.
+
 ## The one current next objective
 
-The whole block slice, **Gates 44 through 49**, is complete: observation,
-coordination, calibration, candidate audit, a production-off selection boundary,
-and a development-only promoted contact. **The documented gate sequence is
-finished. No gate is currently in flight.**
+**No gate is in flight, and the documented sequence is finished.** The next
+objective is a judgement call rather than a lookup. Do not start a production
+rollout: every `ENABLE_CONTINUOUS_*` flag is still off, and turning one on is a
+separately reviewed decision that no completed gate authorizes.
 
-That means the next objective is a judgement call rather than a lookup, and it
-should be made deliberately. Do not start a production rollout: every
-`ENABLE_CONTINUOUS_*` flag is still off, and turning one on is a separately
-reviewed decision that no completed gate authorizes.
+**1. Mirror Gate 43 onto the opponent attack (recommended, and now overdue).**
+The opponent attack path never calls `ApproachMechanicsSystem`, so opponent
+hitters have no causal approach. Two separate pieces of work now depend on it:
+the shadow block (Gates 44-49) reads a hitter-approach cue that has almost
+nothing behind it on the opponent side, and **spikes are unclear in 2D playback**
+because there is no staged approach to draw. It is the smallest change with the
+largest effect on existing evidence.
 
-Three candidates, in the order this document recommends:
+**2. Carry the capability pattern to attacking and blocking.**
+`SetterCapabilitySystem` is a worked example of the contract described under
+"Capability is not permission" below. Attacking and blocking have the same
+shape -- an action family, a physical reach, a technical demand -- and neither
+currently expresses it. Attack families are partly there already through
+`ApproachMechanicsSystem`'s available actions.
 
-**1. Mirror Gate 43 onto the opponent attack (recommended).** The opponent
-attack path never calls `ApproachMechanicsSystem`, so opponent hitters have no
-causal approach. This is now the weakest link in work that was just completed:
-the shadow block reads a hitter-approach cue that, on the opponent side, has
-almost nothing behind it. Fixing it makes Gates 44 to 49 measure something
-sharper, and it is the smallest change with the largest effect on existing
-evidence.
+**3. Academy power normalisation (design direction, partly specified).** The
+intended product is an elite academy rather than a national league pyramid, with
+power normalised so a gifted fifteen-year-old and a settled thirty-year-old are
+both worth picking. Generation already supports this: potential no longer
+declines with age, so a veteran is a *developed* player rather than a better
+one. Two decisions remain open and should be taken with the project owner:
+whether physical attributes decline after a peak age, and whether `potential`
+becomes per-attribute rather than scalar. See the open decision recorded at the
+end of [Attribute-First Generation](../design/ATTRIBUTE_FIRST_GENERATION.md).
 
-**2. ~~Consume `set_release_interval` and `defensive_depth`~~ (complete).**
-`set_release_interval` now widens the hitter's approach window in both the
-main home set path and the continuation set path. `defensive_depth` was
-already consumed in `rally_simulator.gd` before this document was last
-updated; the stale "read by nothing" claim has been corrected.
-
-**3. Movement fluidity, step 4.** See
-[Movement Fluidity](../design/MOVEMENT_FLUIDITY_DRAFT.md). Steps 1 to 3 are
-done: playback now samples a traversal built by the engine's movement model and
-contributes no timing constants of its own. Step 4 makes movement
-resolver-owned and authoritative for reachability, in the audit / guarded
-boundary / development promotion shape Gates 47-49 used. It is the one that
-moves seeds, and it also subsumes the compromise step 3 had to make --
-`RallySimulator._movement_time()` and `RallyMovementSystem.project_toward()` are
-separate timing paths that disagree, so playback currently renormalises the
-model's traversal onto the resolver's duration. Do not start this in the same
+**4. Movement fluidity, step 4.** Steps 1-3 are done and step 4 is partly done:
+`_movement_time()` and `project_toward()` now share one model, and Gates 50-51
+added a shadow-only continuous reachability slice. What remains is making
+movement resolver-owned and authoritative, in the audit / guarded boundary /
+development promotion shape Gates 47-49 used. Do not start this in the same
 change as anything else.
 
-Whatever is chosen, the invariants below still bind, and the block work must not
-be reopened casually: `RallySimulator._resolve_opponent_block` remains the
-official path for ordinary rallies, and `LiveBlockIntegrator` must stay behind
-its development fixture.
+Whatever is chosen, the invariants below still bind:
+`RallySimulator._resolve_opponent_block` remains the official path for ordinary
+rallies, and `LiveBlockIntegrator` must stay behind its development fixture.
+
+## Capability is not permission
+
+This is a design contract, stated here because it was implemented wrongly once
+and the wrong version looked reasonable.
+
+A player may attempt **any** action, for any reason -- the play called for it,
+they misread their own limits, they were out of options, they gambled. What
+their attributes decide is not *whether* an action is available but *how it
+goes*. An earlier `SetterCapabilitySystem` removed tempos a setter could not
+command from the option list, which reads as a clean "explicitly could not" and
+is wrong: it makes a limit into a rule and takes the decision away from the
+player.
+
+The correct shape, which that system now implements:
+
+- capability sets a *requirement*, and the shortfall against it is measured;
+- the action stays selectable regardless of the shortfall;
+- attempting past capability carries a penalty that scales with how far past;
+- a separate **judgment** attribute family decides whether the player recognises
+  the overreach and takes the safer option, so a disciplined player backs off
+  and a reckless one does not;
+- the rally record shows which happened.
+
+Physical impossibility is not an exception to this. A ball above a player's
+reach is still reached *for*; it simply does not become a usable contact.
+
+Two consequences worth carrying to other actions. **Reach is a product of three
+independent things** -- standing height, arm length, and leap -- so a short
+player with a real jump out-reaches a tall one who cannot get off the floor;
+`VolleyballPlayer.jumping_reach_cm()` is the single place they are combined, and
+nothing may re-add them itself. **Reach is not fixed per action**, because how
+much of a run-up a player could afford changes how much of their leap is
+available: a setter who arrives early takes a short approach into a jump set and
+buys the height a sailing pass demands, while one still scrambling takes it
+flat-footed and loses the same ball.
+
+## Lessons that cost real debugging time
+
+Carry these forward; each was found the expensive way.
+
+- **A duplicated formula is a defect, not a style problem.** Found three times in
+  one session: `estimate_movement()` restated the whole movement profile,
+  the generator kept its own copy of the role tiers that had already drifted
+  from `POSITION_WEIGHTS`, and `ShadowMovementSystem` hard-coded a turn-delay
+  floor that stopped being constant. Each would have silently disagreed with its
+  original after the next change.
+- **A test that restates the formula it checks passes whenever both copies are
+  wrong together.** Call the real helper.
+- **A rate over an all-zero column proves nothing.** Gate 46 pairs every rate
+  with a coverage flag. The same trap reappeared with setter tempo downgrades,
+  which never occur in ordinary play because the default offence only ever calls
+  T3 -- so the rally-level check asserts reach variation instead, and the
+  downgrade is verified directly.
+- **An audit that cannot fail certifies nothing.** Gate 47 corrupts one property
+  at a time. New checks should be confirmed falsifiable by breaking the thing
+  they guard and watching them fail.
+- **Changing a test because the contract changed is correct; changing one
+  because it started failing is not.** The commit message must make clear which
+  happened. Worked examples: Gate 48's forced-flag check, and the jump-set
+  fixtures that asserted a real contract at a height only reachable under an
+  assumption that had just been removed.
+- **A derived value computed before its input is final is a bug that hides.**
+  `stride_length_m` was set from the role's base height and never recomputed
+  after generation perturbed the real height; `hitter_move_time` was computed
+  before staging relocated the hitter. Both looked like tuning problems.
 
 ### Historical record: the shadow block hypotheses gate (Gate 44, complete)
 
@@ -197,7 +300,7 @@ Gate 44 built a shadow-only system that:
    `solo_close`, `coordinated_assist`, and the reachability fields on every
    blocker record;
 9. leaves official block events and results unchanged. **done and verified**
-   -- Gate 44 test 9, and the full regression suite (364/364).
+   -- Gate 44 test 9, and the full regression suite as it stood at that gate.
 
 Use the existing attack architecture as a pattern for Gate 45 as well:
 
@@ -304,6 +407,14 @@ calibration -- that is part of Gate 46's remaining scope.
   activation.
 - Home and opponent orientation must be explicit; do not silently reflect one
   side's coordinates and assume equivalent decisions.
+- Attributes constrain how an action turns out, never whether a player is
+  allowed to attempt it. See "Capability is not permission".
+- A quantity derived from several attributes has exactly one function that
+  combines them; callers ask that function rather than re-deriving it.
+- Potential is a ceiling and must actually bound current ability. Age decides
+  how much of a ceiling is expressed, never how high the ceiling is.
+- In-rally physical quantities are derived from real distances, masses and
+  times, not chosen from tuned tables.
 
 ## Known warnings and non-blockers
 
@@ -322,7 +433,8 @@ as blockers.
 Before ending work:
 
 1. run every command in [VALIDATION.md](VALIDATION.md);
-2. update `STATUS.md`, `EVIDENCE.md`, `INDEX.md`, and `source_manifest.json`;
+2. update `STATUS.md`, `EVIDENCE.md`, `INDEX.md`, `source_manifest.json`, and
+   any `docs/design/*.md` whose status line your change invalidates;
 3. add or update the relevant `docs/calibration/GATE_*.md` record;
 4. state which behavior is normal, development-only, shadow-only, or proposed;
 5. report known warnings separately from failures;
@@ -332,12 +444,14 @@ Before ending work:
 ## Copyable prompt for another coding model
 
 ```text
-Read docs/textbook/FRESH_AGENT_HANDOFF.md and the files it names. Verify all
-claims against source before editing. The documented gate sequence (through Gate
-49) is complete, so read "The one current next objective" and pick one of the
-three candidates it lists before writing code; say which you picked and why.
-Preserve the dirty worktree,
-production-off rollout flags, player-information boundary, deterministic seeds,
-source-state immutability, and RallyEvent playback contract. Run the complete
-validation guide and update textbook evidence before handing off.
+Read docs/textbook/FRESH_AGENT_HANDOFF.md and the files it names. Verify every
+claim against source before editing; several textbook statements have been
+stale in the past. The documented gate sequence is complete and no gate is in
+flight, so read "The one current next objective", pick one candidate, and say
+which you picked and why before writing code. Read "Capability is not
+permission" and "Lessons that cost real debugging time" first -- both encode
+mistakes already made here. Preserve the dirty worktree, production-off rollout
+flags, the player-information boundary, deterministic seeds, source-state
+immutability, and the RallyEvent playback contract. Run the complete validation
+guide and update textbook evidence before handing off.
 ```

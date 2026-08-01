@@ -100,16 +100,23 @@ static func generate_roster(
 	return result
 
 
+## The ceiling this player could reach, independent of how old they are.
+##
+## Age must not set the ceiling. Doing so conflates being old with being
+## untalented, and it quietly guarantees that veterans are the weaker players --
+## the opposite of a roster where a gifted teenager and a settled thirty-year-old
+## are both worth picking. Age decides only how much of this ceiling is already
+## expressed, which `_growth_reserve()` handles.
+##
+## Academies scout for ceiling, so their intake skews higher than the open
+## market; that is a selection effect, not an age effect.
 static func _generate_potential(
 	player: VolleyballPlayer,
 	rng: RandomNumberGenerator,
 	academy: bool,
 ) -> void:
-	if academy:
-		player.potential = rng.randi_range(68, 96)
-	else:
-		var ceiling := clampi(94 - (player.age - 21) * 2, 70, 94)
-		player.potential = rng.randi_range(52, ceiling)
+	player.potential = rng.randi_range(68, 96) if academy \
+		else rng.randi_range(52, 94)
 
 
 ## Produces correlated individual bodies around role templates, shifted by

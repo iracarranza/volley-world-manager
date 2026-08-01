@@ -3949,25 +3949,66 @@ func _test_setter_capability_gates() -> void:
 	weak.hand_control = 30
 	weak.composure = 35
 
-	## 1. A quick set is not merely expensive for a weak setter, it is absent.
-	##    The high ball always remains, because a team out of system still has
-	##    to put the ball somewhere.
-	var weak_best: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(weak, 1.0)
-	var elite_best: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(elite, 1.0)
+	## 1. A quick set is outside a weak setter's command and inside an elite
+	##    setter's. This bounds capability; it does not bound what may be tried.
+	var weak_best: Array[int] = \
+		SETTER_CAPABILITY_SCRIPT.tempos_within_capability(weak, 1.0)
+	var elite_best: Array[int] = \
+		SETTER_CAPABILITY_SCRIPT.tempos_within_capability(elite, 1.0)
 	_check(
-		not weak_best.has(0) and weak_best.has(3)
-			and elite_best.has(0),
-		"a weak setter cannot run a quick set off any pass, while an elite setter can",
+		not weak_best.has(0) and weak_best.has(3) and elite_best.has(0),
+		"a quick set sits outside a weak setter's command and inside an elite setter's",
 	)
 
-	## 2. A worsening pass removes tempos, and removes them from the weaker
-	##    setter first. This is the interaction a flat quality penalty cannot
-	##    express.
-	var elite_poor: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(elite, 0.25)
-	var elite_clean: Array[int] = SETTER_CAPABILITY_SCRIPT.available_tempos(elite, 1.0)
+	## 2. Capability is not permission. A reckless setter asked for a quick set
+	##    they cannot command still attempts it, and pays for it -- the action is
+	##    never removed from them. A player may try anything; attributes decide
+	##    how it goes, not whether it is allowed.
+	var reckless: VolleyballPlayer = VolleyballPlayer.new()
+	reckless.tempo_control = 32
+	reckless.hand_control = 30
+	reckless.composure = 30
+	reckless.decision_making = 12
+	reckless.tactical_discipline = 10
+	var reckless_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
+		reckless, 0, 0.9, 2.10
+	)
+	_check(
+		int(reckless_read.resolved_tempo) == 0
+			and bool(reckless_read.attempted_beyond_capability)
+			and float(reckless_read.quality_penalty) > 0.3,
+		"a reckless setter attempts a tempo beyond their command and is penalised, not prevented",
+	)
+
+	## 3. Judgment is what makes it a decision. Identical technical limits, but
+	##    a disciplined setter recognises the overreach and takes the ball they
+	##    can actually put up.
+	var disciplined: VolleyballPlayer = VolleyballPlayer.new()
+	disciplined.tempo_control = 32
+	disciplined.hand_control = 30
+	disciplined.composure = 30
+	disciplined.decision_making = 92
+	disciplined.tactical_discipline = 90
+	var disciplined_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
+		disciplined, 0, 0.9, 2.10
+	)
+	_check(
+		bool(disciplined_read.tempo_downgraded)
+			and int(disciplined_read.resolved_tempo) > 0
+			and float(disciplined_read.quality_penalty)
+				< float(reckless_read.quality_penalty),
+		"judgment, not technique, decides whether a setter backs off a ball beyond them",
+	)
+
+	## 4. A worsening pass pushes tempos outside command, and pushes them out of
+	##    the weaker setter's reach first.
+	var elite_poor: Array[int] = \
+		SETTER_CAPABILITY_SCRIPT.tempos_within_capability(elite, 0.25)
+	var elite_clean: Array[int] = \
+		SETTER_CAPABILITY_SCRIPT.tempos_within_capability(elite, 1.0)
 	_check(
 		elite_poor.size() < elite_clean.size() and elite_poor.size() >= 1,
-		"a poor pass takes fast tempos away even from an elite setter, without leaving them optionless",
+		"a poor pass pushes fast tempos outside even an elite setter's command",
 	)
 
 	## 3. Command buys back part of a bad pass, so the gap between setters is
@@ -3993,14 +4034,55 @@ func _test_setter_capability_gates() -> void:
 	short_setter.wingspan_cm = 182.0
 	short_setter.jump_reach = 75
 	short_setter.explosiveness = 75
-	var tall_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(tall, 2, 0.5, 2.60)
+	var tall_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
+		tall, 2, 0.5, 2.60, 1.0
+	)
 	var short_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
-		short_setter, 2, 0.5, 2.60
+		short_setter, 2, 0.5, 2.60, 1.0
 	)
 	_check(
 		str(tall_read.reach_state) == "jump"
-			and str(short_read.reach_state) == "unreachable",
-		"a tall setter reaches a high pass that a short setter physically cannot",
+			and str(short_read.reach_state) == "beyond_reach"
+			and float(short_read.quality_penalty)
+				> float(tall_read.quality_penalty) + 0.2,
+		"a tall setter meets a high pass a short setter can only flail at",
+	)
+
+	## 4b. Reach is not fixed: a setter who arrives early takes a short approach
+	##     into the jump and buys the height a sailing pass needs. The same
+	##     setter scrambling to the ball takes it flat-footed and cannot.
+	## 2.75 m sits between this setter's flat-footed ceiling (2.64 m) and their
+	## approached one (2.86 m), which is the band where the approach decides it.
+	var loaded: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
+		tall, 2, 0.5, 2.75, 1.0
+	)
+	var scrambling: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
+		tall, 2, 0.5, 2.75, 0.0
+	)
+	_check(
+		float(loaded.maximum_reach_meters)
+			> float(scrambling.maximum_reach_meters) + 0.1
+			and str(scrambling.reach_state) == "beyond_reach",
+		"an approach into the jump set raises reach, so a scrambling setter loses a ball they would otherwise have",
+	)
+
+	## 4c. Reach is a product of three separate things. A short player with a
+	##     huge leap and a tall one who barely jumps can meet the same ball, so
+	##     none of height, arm length, or leap may stand in for the whole.
+	var springy: VolleyballPlayer = VolleyballPlayer.new()
+	springy.height_cm = 182.0
+	springy.wingspan_cm = 192.0
+	springy.jump_reach = 99
+	springy.explosiveness = 95
+	var grounded: VolleyballPlayer = VolleyballPlayer.new()
+	grounded.height_cm = 200.0
+	grounded.wingspan_cm = 202.0
+	grounded.jump_reach = 8
+	grounded.explosiveness = 10
+	_check(
+		springy.standing_reach_cm() < grounded.standing_reach_cm()
+			and springy.jumping_reach_cm(1.0) > grounded.jumping_reach_cm(1.0),
+		"a shorter player with a real leap out-reaches a taller one who cannot jump",
 	)
 
 	## 5. A pass that sails is what puts the ball out of reach, so pass quality

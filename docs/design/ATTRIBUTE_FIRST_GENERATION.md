@@ -1,8 +1,10 @@
 # Attribute-First Generation
 
-Review date: 2026-07-31
+Review date: 2026-08-01
 
-Status: **SPECIFICATION; NOT IMPLEMENTED**
+Status: **IMPLEMENTED** -- see "As built" at the end of this document for
+where the shipped generator differs from this specification, and for the one
+open decision it deliberately deferred.
 
 This is the definition for phase 2 of the change order in
 [Locomotion and Generation](LOCOMOTION_AND_GENERATION.md). It is written down
@@ -177,3 +179,42 @@ Generation feeds every fixture. Implementing this requires:
 
 None of that is a regression. All of it must be expected rather than
 discovered.
+
+
+## As built
+
+`VolleyballPlayerGenerator` implements this specification with three
+clarifications worth recording, because each was arrived at by measurement
+rather than by reading the spec.
+
+**The growth reserve is age-driven and independent of the ceiling.** The spec's
+"gap measures undevelopment, not talent" is implemented as `_growth_reserve()`,
+which depends on age alone. The obvious implementation -- `potential x
+development_fraction` -- was written first and was wrong: it makes the gap
+*proportional to the ceiling*, so a wide gap becomes a reliable tell for high
+potential and a scout can read potential off a subtraction. Measured after the
+correction, the mean gap for young academy players differs by 1.2 points between
+sub-78 and over-88 potential, and falls monotonically from 38.3 at age 16 to 2.2
+at age 31.
+
+**Potential genuinely bounds current ability, and that required an explicit
+correction.** The role tier adds its bonus to exactly the attributes
+`current_ability_score()` weights at 75%, so applying the tiers naively lifted
+the displayed score about eleven points and pushed settled players *past* their
+own ceiling -- measured at a mean gap of -3.5 at age 31 before the fix.
+`_ability_score_offset()` measures that inflation with the same weighting the
+score itself uses and removes it up front, so the tiers redistribute ability
+across a role's profile without inflating its total.
+
+**The primary tier is not defined in the generator.** It is read from
+`VolleyballPlayer.POSITION_WEIGHTS`, which is already the single source of truth
+for what each role is scored on. A separate copy existed briefly and had already
+drifted: `reception_balance` was scored for Outside Hitters but generated in the
+tertiary tier, so their displayed ability was partly computed from an attribute
+generation was suppressing. Only the secondary tier is generator-specific.
+
+**Still open: per-attribute ceilings.** `potential` remains a scalar, as this
+document's open decision anticipated. Nothing in the shipped generator prevents
+a player from being simultaneously near their ceiling in every attribute, which
+is the thing per-attribute caps would express. This is the natural next step if
+archetype identity needs to survive training as well as generation.

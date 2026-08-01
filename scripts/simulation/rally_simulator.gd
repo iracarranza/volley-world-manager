@@ -517,14 +517,24 @@ func resolve(
 			"event_time": rally_clock, "deadline": rally_clock + second_contact_window,
 			"incoming_trajectory": pass_trajectory})
 
-	## What this setter can physically and technically do with the ball they are
-	## about to receive. A tempo they cannot command is unavailable rather than
-	## merely expensive, and a ball above their reach cannot be set at all.
+	## What this setter can do with the ball they are about to receive, and what
+	## it costs them if they try for more. Nothing is forbidden here: a setter
+	## may attempt a tempo beyond their command or reach for a ball above their
+	## jump, and the penalty scales with how far outside they went.
+	##
+	## A setter who arrives early can take a short approach into a jump set,
+	## which is exactly how they buy the height a sailing pass demands; one who
+	## is still scrambling takes it flat-footed. Arrival margin is already the
+	## measure of that, so it becomes the approach the jump gets.
+	var setter_approach_quality := clampf(
+		inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0
+	)
 	var setter_capability := SetterCapabilityModel.evaluate(
 		setter, assignment.tempo, float(result.reception_quality),
 		SetterCapabilityModel.pass_contact_height_meters(
 			float(result.reception_quality), rng.randf()
 		),
+		setter_approach_quality,
 	)
 	var resolved_tempo := int(setter_capability.resolved_tempo)
 	if bool(setter_capability.tempo_downgraded):
@@ -536,21 +546,17 @@ func resolve(
 	var set_geometry := _set_geometry(
 		setter, setter_start, set_contact, set_target, preferred_release
 	)
-	## A jump set is a working solution to a high ball; a ball past jump reach is
-	## not a set at all, which is what makes height a real setter attribute.
-	var reach_penalty := 0.0
-	match str(setter_capability.reach_state):
-		"jump":
-			reach_penalty = 0.08
-		"unreachable":
-			reach_penalty = 0.55
+	## One number carrying both the overreach and the reach cost, so the severity
+	## of attempting something beyond a setter lives with the model that decides
+	## what "beyond" means rather than being restated here.
+	var capability_penalty := float(setter_capability.quality_penalty)
 	var set_base: float = _rating(setter, "set_accuracy") * 0.42 \
 		+ _rating(setter, "court_vision") * 0.20 \
 		+ _rating(setter, "hand_control") * 0.10 \
 		+ _rating(setter, "tempo_control") * 0.08 \
 		+ _rating(setter, "composure") * 0.10 \
 		+ float(setter_capability.effective_pass_quality) * 0.28 - tempo_demand \
-		- reach_penalty \
+		- capability_penalty \
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
 	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
