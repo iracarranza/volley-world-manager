@@ -489,6 +489,54 @@ ratings -- is what would let a standout register through a chain, and it is the
 mechanism behind "standout players should have a consistent high impact" rather
 than a merely higher average one.
 
+### Ninth pass: consistency as an attribute, and a third failed hypothesis
+
+Every contact carried a flat execution spread -- the same noise for a
+world-class player and a replacement-level one -- so consistency was not an
+attribute. `_execution_spread()` now scales it by composure plus the technical
+rating governing the act, with a floor share so nobody executes identically
+twice. Applied at the swing, the dig, the block contest and all three sets.
+
+A defect was found while wiring it. `_resolve_opponent_transition()` computes
+its set quality **twice** -- once provisionally to estimate flight time, once
+authoritatively after the hitter and contact point are known -- and the previous
+pass moved only the first onto the shared model. The propagation link and the
+aligned attribute list reached the estimate and never reached the ball. That
+means the eighth pass's conclusion was drawn against a half-wired link.
+
+With both computations on the model and consistency live:
+
+| | side-out | kill | stuff | touch | contacts |
+|---|---|---|---|---|---|
+| before | 0.528 | 0.154 | 0.074 | 0.369 | 10.48 |
+| after | **0.567** | 0.140 | 0.098 | **0.499** | **9.76** |
+
+Side-out and rally length both moved toward their bands. Block touch left its
+band, and the cause is known: symmetrising the block contest noise from
+`(-0.14, +0.12)` to `±0.13` raised its mean by 0.01, and tighter spreads for
+good blockers make their wins more reliable.
+
+**Role sensitivity still did not move.** Middle blocker and setter rose from
+0.2-0.3 SE to 0.8 SE, but with incoherent signs -- the setter reads −0.036 at
++15 and −0.021 at −15 -- which is noise presenting as a larger number, not
+signal.
+
+Three hypotheses have now been tested and rejected against the same measurement:
+propagation of contact quality, the strength of the set-to-swing coupling, and
+per-contact consistency. The arithmetic behind the third explains why it could
+not have worked: a setter's own consistency narrows the setter's variance, but
+the signal still has to survive the hitter's ±0.10 and the block's ±0.13, and
+boosting the setter does nothing to either.
+
+What is left is not a tuning question. **A setter's real value is decisions --
+which hitter, which tempo, what the block is shown -- and this engine gives
+those no outcome channel.** The play chooses the tempo, `_choose_opponent_attack`
+picks the hitter by ratings, and the setter's attributes only nudge the quality
+of a decision someone else made. The same is true of a middle blocker, whose
+value is committing and reading rather than the height of their hands. Until a
+decision made well beats a decision made badly, those roles cannot register, and
+no execution-side change will make them.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error

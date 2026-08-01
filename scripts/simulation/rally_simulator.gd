@@ -145,6 +145,12 @@ const TRANSITION_BALL_RECOVERY: float = 0.40
 ## worth nothing unless they stuffed it outright.
 const BLOCK_DEFLECTION_CARRY: float = 0.55
 
+## How much of a contact's spread is temperament rather than technique, and what
+## share of the base spread a perfectly reliable player still carries. The floor
+## is not zero: nobody executes identically twice.
+const CONSISTENCY_COMPOSURE_WEIGHT: float = 0.40
+const CONSISTENCY_FLOOR_SHARE: float = 0.30
+
 ## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
 ## so the result can be compared with an attack quality that is also a fraction
 ## of an ideal, which is the whole point of a contest between them.
@@ -703,7 +709,9 @@ func resolve(
 		- capability_penalty \
 		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
 		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
-	result.set_quality = clampf(set_base + rng.randf_range(-0.12, 0.12), 0.0, 1.0)
+	result.set_quality = clampf(
+		set_base + _execution_error(setter, "set_accuracy", 0.12), 0.0, 1.0
+	)
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
 	)
@@ -885,7 +893,7 @@ func resolve(
 			tempo_demand, block_pressure,
 			Familiarity.attack_geometry(hitter, assignment.lane)
 			+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14,
-		) + rng.randf_range(-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE),
+		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
 	var hit_type := _hit_type(assignment, hitter)
@@ -1248,7 +1256,7 @@ func resolve(
 		read_modifier + floor_defense_bonus, 0.0, 0,
 	)
 	Familiarity.record_exposure(opponent_defender, read_tags)
-	var dug: bool = _dig_contest(defense_strength, float(result.attack_quality))
+	var dug: bool = _dig_contest(opponent_defender, defense_strength, float(result.attack_quality))
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
@@ -1439,7 +1447,7 @@ func _resolve_opponent_transition(
 		opponent_set_capability
 		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - opponent_usable_ball))
 		- float(set_geometry.difficulty) - transition_penalty
-		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
+		+ _execution_error(opponent_setter, "set_accuracy", 0.12), 0.08, 0.94,
 	)
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
 	## _choose_opponent_attack needs a flight-time estimate before the real set
@@ -1464,12 +1472,16 @@ func _resolve_opponent_transition(
 		opponent_setter, setter_start, opponent_setter_position,
 		opponent_contact, Vector2(0.50, 0.48)
 	)
+	## The authoritative value, once the real hitter and contact point are known.
+	## This is the one that feeds the swing, and it kept the retired formula
+	## after the provisional computation above was moved onto the shared model --
+	## so the propagation link and the aligned attribute list reached the
+	## estimate and never reached the ball.
 	opponent_set_quality = clampf(
-		_rating(opponent_setter, "set_accuracy") * 0.48
-		+ _rating(opponent_setter, "court_vision") * 0.22
-		+ _rating(opponent_setter, "decision_making") * 0.16
-		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
-		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
+		opponent_set_capability
+		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - opponent_usable_ball))
+		- float(set_geometry.difficulty) - transition_penalty
+		+ _execution_error(opponent_setter, "set_accuracy", 0.12), 0.08, 0.94,
 	)
 	var set_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(opponent_setter_position, opponent_contact),
@@ -1513,8 +1525,8 @@ func _resolve_opponent_transition(
 	## hitter, and a setter who commands tempo asks less of them.
 	var opponent_tempo_demand := float(3 - clampi(opponent_tempo, 0, 3)) * 0.055 \
 		* lerpf(1.0, 0.65, _rating(opponent_setter, "tempo_control"))
-	var opponent_attack_noise := rng.randf_range(
-		-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE
+	var opponent_attack_noise := _execution_error(
+		opponent_hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE
 	)
 	## Provisional: the run-up has not been evaluated yet, so this scores the
 	## swing as if the approach were merely adequate. Recomputed below once the
@@ -1848,7 +1860,7 @@ func _resolve_opponent_transition(
 	if not defender_arrived:
 		defense_quality = minf(defense_quality, 0.10)
 	var defense_success: bool = defender_arrived \
-		and _dig_contest(defense_quality, opponent_attack)
+		and _dig_contest(defender, defense_quality, opponent_attack)
 	var defender_start: Vector2 = live_positions.get(
 		defender.id, defensive_plan.defender_position(defender.id, home_target)
 	)
@@ -2033,7 +2045,7 @@ func _resolve_home_continuation(
 			hitter, set_quality,
 			_approach_execution_fit(hitter, continuation_approach),
 			hitter_arrival_margin, exchange_penalty, 0.0,
-		) + rng.randf_range(-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE),
+		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
@@ -2181,7 +2193,7 @@ func _resolve_home_continuation(
 	## A transition dig is the same act as any other; the defender is simply
 	## already in the rally rather than reading a first-ball swing.
 	var defense_quality := _defense_execution(opponent_defender, 0.0, 0.0, 0.0, 0)
-	var dug: bool = _dig_contest(defense_quality, attack_quality)
+	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
 		attack_target + Vector2(0.04, -0.03), dug, defense_quality,
@@ -2319,7 +2331,9 @@ func _contest_block(
 	## against a block whose quality sat in a 0.04-wide band; once quality spread
 	## across 0.43-0.77 the old +0.14 margin turned a third of all attacks into
 	## stuff blocks.
-	var contest := block_quality + rng.randf_range(-0.14, 0.12)
+	var contest := block_quality + _execution_error(
+		formation.get("primary") as VolleyballPlayer, "block_timing", 0.13
+	)
 	var outcome := "miss"
 	if contest > attack_quality + BLOCK_STUFF_MARGIN and primary_close >= 0.78:
 		outcome = "stuff"
@@ -3841,6 +3855,48 @@ func _usable_transition_ball(incoming_quality: float, capability: float) -> floa
 	return usable + (1.0 - usable) * capability * TRANSITION_BALL_RECOVERY
 
 
+## How widely a player's execution scatters around what they are capable of.
+##
+## Every contact in the engine carried a flat spread -- the same +/-0.10 for a
+## world-class hitter and a replacement-level one -- so consistency was not an
+## attribute. That is why only the hitter registered in results: a +15 change one
+## contact upstream moves the ball it feeds by about 0.02, against a shared
+## +/-0.10 of noise on that contact and another fresh term on the next. Anything
+## more than one link from the terminal act was drowned before it could reach
+## the scoreboard.
+##
+## Reliability is composure -- holding technique together under rally pressure --
+## plus the technical rating that governs the act itself. An elite player does
+## not merely average better; their bad contact is much closer to their good one,
+## which is what makes them felt through a chain rather than only at its end.
+func _execution_spread(
+	player: VolleyballPlayer,
+	control_attribute: String,
+	base_spread: float,
+) -> float:
+	if player == null:
+		return base_spread
+	var reliability := clampf(
+		_rating(player, "composure") * CONSISTENCY_COMPOSURE_WEIGHT
+		+ _rating(player, control_attribute)
+		* (1.0 - CONSISTENCY_COMPOSURE_WEIGHT),
+		0.0, 1.0,
+	)
+	return base_spread * lerpf(1.0, CONSISTENCY_FLOOR_SHARE, reliability)
+
+
+## A symmetric execution error for one contact, already scaled by who is making
+## it. Callers that need the same draw twice keep the value rather than calling
+## this again.
+func _execution_error(
+	player: VolleyballPlayer,
+	control_attribute: String,
+	base_spread: float,
+) -> float:
+	var spread := _execution_spread(player, control_attribute, base_spread)
+	return rng.randf_range(-spread, spread)
+
+
 ## One dig, wherever in the rally it happens.
 ##
 ## The engine carried three of these too. Home defence summed 0.96 of weight
@@ -3891,9 +3947,13 @@ func _defense_execution(
 ## One contest, all three places a ball is dug. The attacker's advantage is
 ## explicit rather than hidden in three different random offsets, so it can be
 ## calibrated in one place and read in one place.
-func _dig_contest(defense_quality: float, attack_quality: float) -> bool:
-	return defense_quality + rng.randf_range(
-		-DIG_EXECUTION_NOISE, DIG_EXECUTION_NOISE
+func _dig_contest(
+	defender: VolleyballPlayer,
+	defense_quality: float,
+	attack_quality: float,
+) -> bool:
+	return defense_quality + _execution_error(
+		defender, "dig_control", DIG_EXECUTION_NOISE
 	) > attack_quality + DIG_ATTACKER_ADVANTAGE
 
 
