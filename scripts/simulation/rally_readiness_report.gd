@@ -34,6 +34,12 @@ const REFERENCE_BANDS := {
 	"kill_rate": [0.38, 0.60],
 	"attack_error_rate": [0.06, 0.20],
 	"stuff_rate": [0.03, 0.14],
+	## Share of swings the block gets any hand on -- stuffed, touched back, or
+	## deflected into defence. Added after a sweep found the block touching 82%
+	## of all attacks: a rate nothing measured, because `stuff_rate` only ever
+	## saw the swings the block ended outright, and every touch that recycled
+	## the ball was invisible to it. Rally length was the only symptom.
+	"block_touch_rate": [0.15, 0.45],
 	"mean_contacts": [4.0, 9.0],
 }
 
@@ -74,6 +80,8 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 				continue
 			var contacts := 0
 			var attack_attempts := 0
+			var block_outcomes := {}
+			var block_closes: Array[float] = []
 			for event_resource in result.events:
 				var event: Resource = event_resource
 				if int(event.event_type) in [
@@ -92,6 +100,16 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 				## makes the kill rate rise whenever errors and stuffs fall.
 				if int(event.event_type) == RallyEventModel.EventType.ATTACK:
 					attack_attempts += 1
+				## A block that formed but never reached the ball still emits an
+				## event, so the outcome tally is the only way to tell how often
+				## the wall is actually in the way.
+				if int(event.event_type) == RallyEventModel.EventType.BLOCK:
+					var outcome := str(event.metadata.get("outcome", "miss"))
+					block_outcomes[outcome] = int(
+						block_outcomes.get(outcome, 0)
+					) + 1
+					if event.metadata.has("primary_close"):
+						block_closes.append(float(event.metadata["primary_close"]))
 			var trace: Dictionary = result.analysis.get("shadow_reception", {})
 			records.append({
 				"serving_home": serving_home,
@@ -99,6 +117,8 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 				"home_won": bool(result.home_team_won),
 				"contacts": contacts,
 				"attack_attempts": attack_attempts,
+				"block_outcomes": block_outcomes,
+				"block_closes": block_closes,
 				"shadow_summary": Dictionary(trace.get("summary", {})),
 			})
 	return records
@@ -124,7 +144,25 @@ static func outcome_calibration(
 	var attack_errors := 0
 	var stuffs := 0
 	var receiving_team_won := 0
+	var block_outcomes := {}
+	var blocks_formed := 0
+	var blocks_touching := 0
+	var closes_sealed := 0
+	var closes_measured := 0
 	for record in records:
+		for outcome_key in Dictionary(record["block_outcomes"]):
+			var count := int(record["block_outcomes"][outcome_key])
+			block_outcomes[outcome_key] = int(
+				block_outcomes.get(outcome_key, 0)
+			) + count
+			blocks_formed += count
+			## "miss" is the only outcome where no hand reaches the ball.
+			if str(outcome_key) != "miss":
+				blocks_touching += count
+		for close in Array(record["block_closes"]):
+			closes_measured += 1
+			if float(close) >= 0.995:
+				closes_sealed += 1
 		var outcome := str(record["outcome"])
 		outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
 		contact_total += int(record["contacts"])
@@ -161,6 +199,7 @@ static func outcome_calibration(
 		"kill_rate": float(kills) / maxf(float(attacks), 1.0),
 		"attack_error_rate": float(attack_errors) / maxf(float(attacks), 1.0),
 		"stuff_rate": float(stuffs) / maxf(float(attacks), 1.0),
+		"block_touch_rate": float(blocks_touching) / maxf(float(attacks), 1.0),
 		"mean_contacts": float(contact_total) / float(serves),
 	}
 	var within := {}
@@ -180,6 +219,15 @@ static func outcome_calibration(
 		"terminal_outcomes": outcomes,
 		"attack_attempts": attacks,
 		"terminal_attacks": terminal_attacks,
+		"blocks_formed": blocks_formed,
+		"block_outcomes": block_outcomes,
+		## Share of formed blocks whose primary sealed the lane completely. A
+		## value near 1.0 means closing is not being decided by anything: the
+		## blocker always gets there, so tempo, distance and footspeed cannot
+		## matter. That was true of every block in the engine until closing
+		## started running through the shared traversal solver.
+		"block_close_saturation": float(closes_sealed)
+			/ maxf(float(closes_measured), 1.0),
 		"measured": measured,
 		"reference_bands": REFERENCE_BANDS.duplicate(true),
 		"within_reference": within,

@@ -4103,6 +4103,16 @@ func _test_readiness_and_calibration_reports() -> void:
 			and int(calibration.get("terminal_attacks", 0)) > 0,
 		"attack rates are scored against every swing, not only the terminal ones",
 	)
+	## Closing used to resolve at exactly 1.0 for every blocker in every rally,
+	## and 477 mechanism checks could not see it: each one asked whether the
+	## formula responded to its input, never whether the input varied in play.
+	## A saturated close means tempo, distance and footspeed decide nothing at
+	## the net.
+	_check(
+		int(calibration.get("blocks_formed", 0)) > 0
+			and float(calibration.get("block_close_saturation", 1.0)) < 0.90,
+		"blockers do not all seal the lane -- closing is decided by the close",
+	)
 	## Every metric must be a rate the caller can compare against its band, not
 	## a NaN from an empty denominator.
 	var finite := true

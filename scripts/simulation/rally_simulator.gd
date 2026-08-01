@@ -66,8 +66,11 @@ const BLOCK_NET_DEPTH: float = 0.032
 
 ## Lane a blocker covers with their arms without moving their feet.
 const BLOCK_LATERAL_REACH_METERS: float = 0.45
-## How far short of the ball a blocker must be for the close to fail entirely.
-const BLOCK_CLOSE_FAILURE_METERS: float = 1.60
+## Loading and leaving the ground. A blocker still shuffling when the ball
+## arrives has not blocked it, so this comes off the end of the closing window.
+const BLOCK_PLANT_SECONDS: float = 0.26
+## How late a blocker must be for the lane to be completely open.
+const BLOCK_CLOSE_FAILURE_SECONDS: float = 0.45
 
 ## How much a formed block takes off the swing hit into it. The primary carries
 ## most of it; a sealed assist adds the rest of the wall.
@@ -3515,7 +3518,6 @@ func _blocker_close_fraction(
 		blocker.id, CourtConstants.slot_position(slot_number)
 	)
 	var start_x := start_position.x
-	var distance_meters := absf(start_x - attack_x) * 9.0
 	var anticipation := _rating(blocker, "anticipation")
 	var reaction_delay := lerpf(0.34, 0.12, anticipation)
 	var movement_time := maxf(available_time - reaction_delay, 0.0)
@@ -3528,17 +3530,32 @@ func _blocker_close_fraction(
 	var closing_actor := RallyPlayerState.create(
 		blocker, &"home", slot_number, start_position
 	)
-	var movement_speed := float(RallyMovementSystemModel.movement_profile(
-		closing_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.BLOCK_CLOSE
-	).get("maximum_speed", 0.0))
 	## A blocker covers some of the lane with their arms without moving their
 	## feet, but nothing like the 0.72 m this used to grant. That constant
-	## swamped the 0.135 s a slow tempo actually buys the block, so 99.5% of
-	## closes resolved at exactly 1.0 and neither tempo choice nor blocker
-	## quality could change anything.
-	var travel_capacity := movement_speed * movement_time + BLOCK_LATERAL_REACH_METERS
+	## swamped the 0.135 s a slow tempo actually buys the block.
+	var lane_delta := attack_x - start_x
+	var footwork_x := start_x + signf(lane_delta) * maxf(
+		absf(lane_delta) - BLOCK_LATERAL_REACH_METERS / 9.0, 0.0
+	)
+	## How long the close actually takes, through the shared model, from a
+	## standstill.
+	##
+	## This used to be `maximum_speed * movement_time`: the blocker left the
+	## ready stance already at top speed, never decelerated, and was credited
+	## with shuffling until the instant of contact. Every close in the game
+	## resolved at exactly 1.0 as a result -- a middle covered three metres to
+	## the pin and sealed it every time, so "late block" described nothing.
+	## Acceleration comes from the same traversal solver every other movement
+	## uses, and the block jump has to be loaded before the ball arrives rather
+	## than after it.
+	var required_seconds := RallyMovementSystemModel.traversal_seconds(
+		closing_actor,
+		Vector2(footwork_x, start_position.y),
+		RallyPlayerState.MovementMode.BLOCK_CLOSE,
+	)
+	var usable_time := maxf(movement_time - BLOCK_PLANT_SECONDS, 0.0)
 	return clampf(
-		1.0 - maxf(distance_meters - travel_capacity, 0.0) / BLOCK_CLOSE_FAILURE_METERS,
+		1.0 - maxf(required_seconds - usable_time, 0.0) / BLOCK_CLOSE_FAILURE_SECONDS,
 		0.0, 1.0,
 	)
 

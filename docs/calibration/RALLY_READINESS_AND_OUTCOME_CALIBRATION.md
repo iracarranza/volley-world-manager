@@ -226,6 +226,36 @@ The margins are not independently fixable, because `block_quality` and
 1.50 against penalties, and they are compared with margins of 0.06. A margin
 only means something once both are fractions of the same ideal.
 
+### Third pass: a late block is now actually late
+
+| | side-out | ace | serve err | kill | atk err | stuff | contacts |
+|---|---|---|---|---|---|---|---|
+| capability at contact 3 | 0.594 | 0.028 | 0.022 | 0.316 | 0.000 | 0.072 | 11.38 |
+| 6. closing through the traversal solver | 0.656 | 0.028 | 0.022 | 0.369 | 0.000 | 0.021 | 11.37 |
+
+`primary_close` resolved at **exactly 1.0 on every block in the game**, and had
+done so through all of the work above. The earlier claim that unsaturating the
+block spread its quality was true of the quality but not of the close: the
+spread came from assists appearing, not from anyone failing to get there.
+
+The cause was that the closing budget was `maximum_speed × available_time`. The
+blocker left the ready stance already at top speed, never decelerated, and was
+credited with shuffling right up to the instant of contact. A middle covering
+three metres to the pin sealed it every time, so "late block" described nothing
+and neither tempo nor footspeed could change an outcome at the net.
+
+Closing now asks the shared traversal solver how long the move actually takes
+from a standstill, and takes the block jump off the end of the window -- a
+blocker still moving when the ball arrives has not blocked it. Closes now range
+0.00-1.00 with a mean of 0.92, and the stuff rate fell below its band, which is
+the honest consequence: the block was collecting stuffs it had not earned.
+
+`block_touch_rate` and `block_close_saturation` are now reported, the first
+against a band. A saturated close is exactly the kind of defect 477 mechanism
+checks cannot see -- each asks whether a formula responds to its input, never
+whether the input varies in play -- so a regression check fails when saturation
+returns. Setting the arm reach to the full court width was confirmed to trip it.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error

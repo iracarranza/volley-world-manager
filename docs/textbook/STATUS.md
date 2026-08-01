@@ -249,6 +249,14 @@ This page is the quickest defense against confusing source-code existence with a
   ceiling because it had been written against a saturated `primary_close`.
   Scouting now sharpens the formation before the contest and the extra roll is
   gone. Rally length fell from 12.26 contacts to 11.29.
+- **A late block is now actually late.** `primary_close` resolved at exactly 1.0
+  for every blocker in every rally, because the closing budget was
+  `maximum_speed × available_time`: the blocker left the ready stance at top
+  speed, never decelerated, and was credited with shuffling until the instant of
+  contact. Closing now asks the shared traversal solver how long the move takes
+  from a standstill and takes the block jump off the end of the window. Closes
+  range 0.00-1.00, and `block_close_saturation` is reported with a regression
+  check that fails if they ever all seal again.
 - **Capability stopped removing options at the third contact.** A hitter whose
   run-up had not unlocked power had their swing silently rewritten into a roll
   shot; because the substitute was always executable, no swing could be bad
