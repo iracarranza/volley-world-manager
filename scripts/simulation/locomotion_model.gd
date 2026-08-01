@@ -34,23 +34,78 @@ extends RefCounted
 ## `LocomotionGranularityCalibration` measures whether this can reproduce the
 ## existing speed curve before anything is changed.
 
-## Realistic human turnover. Sprinters reach roughly 4.5-5 Hz; court movement
-## sits below that because steps are rarely free.
+## Fallback turnover band, used only for a mode with no entry below.
 const CADENCE_MINIMUM_HZ: float = 2.40
 const CADENCE_MAXIMUM_HZ: float = 4.40
 
 ## Stride length per movement mode, relative to the player's approach stride --
-## which is what `VolleyballPlayer.stride_length_m` already measures. A running
-## transition stride is roughly twice an approach step; a lateral shuffle is
-## shorter than one.
+## which is what `VolleyballPlayer.stride_length_m` already measures.
 const MODE_STRIDE_SCALE := {
 	RallyPlayerState.MovementMode.APPROACH: 1.00,
-	RallyPlayerState.MovementMode.TRANSITION: 1.90,
-	RallyPlayerState.MovementMode.LATERAL: 0.80,
+	RallyPlayerState.MovementMode.TRANSITION: 1.55,
+	RallyPlayerState.MovementMode.LATERAL: 0.78,
 	RallyPlayerState.MovementMode.BLOCK_CLOSE: 0.85,
-	RallyPlayerState.MovementMode.RECOVERY: 0.90,
+	RallyPlayerState.MovementMode.RECOVERY: 1.10,
 	RallyPlayerState.MovementMode.IDLE: 0.90,
 }
+
+## Turnover band per mode, in steps per second, from worst to best mover.
+##
+## Cadence is mode-specific for the same reason stride is, and leaving it global
+## was the flaw that made the decomposition look impossible. A defensive shuffle
+## is *short steps at high frequency*; a transition run is *long steps at
+## moderate frequency*. One shared band forced a shuffle to turn over no faster
+## than a sprint, so the only way to reach a plausible shuffle speed was to give
+## it a near-running stride -- which is precisely the implausibility
+## `LocomotionGranularityCalibration` was reporting.
+const MODE_CADENCE_BAND := {
+	RallyPlayerState.MovementMode.APPROACH: [3.00, 4.80],
+	RallyPlayerState.MovementMode.TRANSITION: [2.60, 4.40],
+	RallyPlayerState.MovementMode.LATERAL: [3.00, 5.00],
+	RallyPlayerState.MovementMode.BLOCK_CLOSE: [3.00, 4.80],
+	RallyPlayerState.MovementMode.RECOVERY: [2.40, 3.80],
+	RallyPlayerState.MovementMode.IDLE: [2.40, 3.80],
+}
+
+## Reference build, and how strongly long limbs cost turnover in each mode.
+##
+## This is the coupling that makes stride a *tradeoff* rather than a free gift.
+## A long limb is a heavier lever: it covers more ground per step but cannot be
+## swung, planted, and re-planted as often. Without this, stride multiplies into
+## every mode linearly and a tall player is simply faster everywhere, which
+## erases the libero and hands the sport to whoever is biggest.
+##
+## The cost is mode-specific because it physically is: rapid direction-changing
+## footwork re-accelerates the limb many times a second, where steady running
+## swings it near its natural period. An exponent above 1.0 means turnover loses
+## more than stride gains, so the shorter player is faster in that mode.
+##
+## Net height exponent per mode is `1 - cost`:
+##   LATERAL -0.35 (short wins), BLOCK_CLOSE -0.10 (near neutral),
+##   APPROACH +0.40, TRANSITION +0.65 (tall wins).
+const REFERENCE_STRIDE_M: float = 0.8299  ## a 193 cm player, the roster centre
+const MODE_LIMB_TURNOVER_COST := {
+	RallyPlayerState.MovementMode.APPROACH: 0.60,
+	RallyPlayerState.MovementMode.TRANSITION: 0.35,
+	RallyPlayerState.MovementMode.LATERAL: 1.35,
+	RallyPlayerState.MovementMode.BLOCK_CLOSE: 1.10,
+	RallyPlayerState.MovementMode.RECOVERY: 0.80,
+	RallyPlayerState.MovementMode.IDLE: 0.80,
+}
+
+
+## How much this player's build slows their turnover in this mode, centred on
+## 1.0 for a reference-sized athlete.
+static func limb_turnover_factor(
+	player: VolleyballPlayer,
+	mode: RallyPlayerState.MovementMode,
+) -> float:
+	if player == null or player.stride_length_m <= 0.01:
+		return 1.0
+	return pow(
+		REFERENCE_STRIDE_M / player.stride_length_m,
+		float(MODE_LIMB_TURNOVER_COST.get(mode, 0.80)),
+	)
 
 
 ## The stride this player actually uses in this mode, in metres.
@@ -79,9 +134,26 @@ static func cadence_hz(
 ) -> float:
 	if player == null:
 		return 0.0
+	var band := cadence_band(mode)
 	var rating := _speed_rating(player, mode)
 	var fatigue_factor := 1.0 - player.fatigue * 0.30
-	return lerpf(CADENCE_MINIMUM_HZ, CADENCE_MAXIMUM_HZ, rating) * fatigue_factor
+	return lerpf(float(band[0]), float(band[1]), rating) \
+		* fatigue_factor * limb_turnover_factor(player, mode)
+
+
+static func cadence_band(mode: RallyPlayerState.MovementMode) -> Array:
+	return Array(MODE_CADENCE_BAND.get(
+		mode, [CADENCE_MINIMUM_HZ, CADENCE_MAXIMUM_HZ]
+	))
+
+
+## Turnover of a mid-scale mover in this mode. Turn cost is expressed against
+## this so that an average player is charged the geometric cost unmodified in
+## every mode, rather than a shuffle looking permanently quick against a
+## running reference.
+static func reference_cadence_hz(mode: RallyPlayerState.MovementMode) -> float:
+	var band := cadence_band(mode)
+	return (float(band[0]) + float(band[1])) * 0.5
 
 
 static func maximum_speed(
@@ -104,58 +176,7 @@ static func implied_stride_meters(
 	return observed_speed / cadence if cadence > 0.01 else 0.0
 
 
-## Stride of a player at the roster's central height, in metres. Everything
-## below is expressed relative to this so that an average-sized player is
-## unaffected and the population's mean speed is exactly where the existing
-## curve put it. Physique changes who is faster than whom, not how fast
-## volleyball is.
-const REFERENCE_HEIGHT_CM: float = 193.0
-const REFERENCE_STRIDE_M: float = 0.8299  ## REFERENCE_HEIGHT_CM / 100 * 0.43
-
-## How much of a mode's speed actually comes from leg length. A transition run
-## is close to pure stride; a lateral shuffle is mostly turnover, which is why a
-## short libero is not punished for being short when moving sideways. Blocking
-## footwork sits between the two.
-const MODE_STRIDE_SENSITIVITY := {
-	RallyPlayerState.MovementMode.APPROACH: 0.80,
-	RallyPlayerState.MovementMode.TRANSITION: 1.00,
-	RallyPlayerState.MovementMode.LATERAL: 0.35,
-	RallyPlayerState.MovementMode.BLOCK_CLOSE: 0.45,
-	RallyPlayerState.MovementMode.RECOVERY: 0.70,
-	RallyPlayerState.MovementMode.IDLE: 0.70,
-}
-
-## Bounds on the physique term, so an outlier body cannot dominate ratings.
-const MINIMUM_STRIDE_FACTOR: float = 0.86
-const MAXIMUM_STRIDE_FACTOR: float = 1.14
-
-
-## Speed multiplier this player's build earns in this mode, centred on 1.0.
-##
-## Height has until now been a pure cost in movement: it raises mass, mass
-## lowers top speed, and nothing gave any of it back. That is not a tradeoff,
-## just a penalty, and it made the taller regions strictly worse at moving. This
-## is the compensating term -- longer legs cover more ground per step -- and it
-## is deliberately weakest in the lateral mode, where turnover dominates and a
-## big frame genuinely is a liability.
-static func stride_factor(
-	player: VolleyballPlayer,
-	mode: RallyPlayerState.MovementMode,
-) -> float:
-	if player == null:
-		return 1.0
-	var sensitivity := float(MODE_STRIDE_SENSITIVITY.get(mode, 0.70))
-	var ratio := player.stride_length_m / REFERENCE_STRIDE_M
-	return clampf(
-		1.0 + (ratio - 1.0) * sensitivity,
-		MINIMUM_STRIDE_FACTOR, MAXIMUM_STRIDE_FACTOR,
-	)
-
-
-## Cadence of a player at the middle of the rating scale, in steps per second.
-const REFERENCE_CADENCE_HZ: float = (CADENCE_MINIMUM_HZ + CADENCE_MAXIMUM_HZ) * 0.5
-
-## Bounds on the turnover term for the same reason as the stride bounds.
+## Bounds on the turnover term, so an outlier cannot dominate the turn cost.
 const MINIMUM_TURN_FACTOR: float = 0.72
 const MAXIMUM_TURN_FACTOR: float = 1.30
 
@@ -183,7 +204,8 @@ static func direction_change_seconds(
 	if cadence <= 0.01:
 		return geometric
 	return geometric * clampf(
-		REFERENCE_CADENCE_HZ / cadence, MINIMUM_TURN_FACTOR, MAXIMUM_TURN_FACTOR
+		reference_cadence_hz(mode) / cadence,
+		MINIMUM_TURN_FACTOR, MAXIMUM_TURN_FACTOR,
 	)
 
 

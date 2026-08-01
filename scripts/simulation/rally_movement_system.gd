@@ -484,20 +484,21 @@ static func _movement_profile(
 	direction: Vector2,
 	mode: RallyPlayerState.MovementMode,
 ) -> Dictionary:
-	var speed_rating := _speed_rating(actor.player, mode)
 	var acceleration_rating := float(actor.player.acceleration) / 100.0
 	var mass_factor := lerpf(
 		1.06, 0.90,
 		clampf((actor.player.mass_kg - 55.0) / 60.0, 0.0, 1.0),
 	)
 	var fatigue_factor := 1.0 - actor.player.fatigue * 0.30
-	## Physique enters movement from both sides now. Mass has always been the
-	## cost; stride is the return on the same build, so height is a tradeoff
-	## rather than a flat penalty. Both terms are centred on an average body, so
-	## the population's mean speed is unchanged and only the spread is new.
-	var stride_factor := LocomotionModel.stride_factor(actor.player, mode)
-	var maximum_speed := lerpf(1.35, 5.25, speed_rating) \
-		* mass_factor * fatigue_factor * stride_factor
+	## Top speed is the product of the two things that physically produce it:
+	## how far a step carries this player in this mode, and how often they take
+	## one. The single `lerpf(1.35, 5.25, rating)` curve this replaces could not
+	## be the product of any plausible pair -- it spanned 3.89x worst-to-best
+	## where human turnover spans about 1.8x -- and its floor described a walk.
+	## Fatigue is applied inside `cadence_hz()`, because tired legs stop turning
+	## over before they stop reaching; it must not be charged again here.
+	var maximum_speed := LocomotionModel.maximum_speed(actor.player, mode) \
+		* mass_factor
 	var acceleration := lerpf(2.2, 6.8, acceleration_rating) * fatigue_factor
 	var facing_fit := 1.0
 	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
@@ -509,7 +510,8 @@ static func _movement_profile(
 		"maximum_speed": maximum_speed,
 		"acceleration": acceleration,
 		"facing_fit": facing_fit,
-		"stride_factor": stride_factor,
+		"stride_meters": LocomotionModel.stride_meters(actor.player, mode),
+		"cadence_hz": LocomotionModel.cadence_hz(actor.player, mode),
 		## Turnover, not just geometry: a player who turns their legs over faster
 		## spends less time planting and redirecting.
 		"direction_change_delay": LocomotionModel.direction_change_seconds(

@@ -218,23 +218,33 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
-- Physique and turnover are consumed by live movement.
+- **Ground speed is now stride x cadence, not a lookup curve.**
   `RallyMovementSystem.movement_profile()` -- the single chokepoint every
-  reachability, arrival-margin, traversal, and playback decision reads -- now
-  applies `LocomotionModel.stride_factor()` to top speed and
-  `LocomotionModel.direction_change_seconds()` to the turn cost. Height used to
-  be a pure movement penalty (mass lowered speed and nothing returned it), which
-  made the taller regions strictly worse at moving; stride is the compensating
-  term, so a 210 cm player is now about 10% faster in a transition run and
-  slightly slower laterally than a 181 cm player with identical ratings. Turn
-  cost was previously pure geometry -- a libero reversed exactly as slowly as a
-  middle blocker -- and now scales with cadence, from 0.243 s at 20 lateral
-  speed to 0.158 s at 95. Both terms are centred on an average body and an
-  average rating, so the population's mean speed moves by under 0.7% in every
-  mode and no existing calibration is silently rebalanced. Replacing the speed
-  curve itself with stride x cadence is deliberately **not** done -- it would
-  move mean transition speed from 2.9 to 5.2 m/s and lateral from 3.3 to 2.3,
-  which is a rebalance needing its own sweep. See
+  reachability, arrival-margin, traversal, and playback decision reads -- derives
+  top speed from how far a step carries this player in this mode and how often
+  they take one. The retired `lerpf(1.35, 5.25, rating)` curve spanned a 3.89x
+  ratio from worst mover to best, which no pair of human factors can produce
+  (turnover spans about 1.8x), and its floor described a professional walking at
+  1.35 m/s. Both stride and cadence carry per-mode tables, because a defensive
+  shuffle is short steps at high frequency and a transition run is long steps at
+  moderate frequency; giving cadence that second dimension is what made the
+  decomposition fit at all.
+- This was a deliberate **rebalance**, not a refactor: lateral -24.0%,
+  transition +42.7%, approach +2.8%, block close -19.3%. Defenders cover roughly
+  a quarter less ground sideways while transition running is roughly 40% faster,
+  so the gate record's absolute reachability numbers are re-baselined. Every
+  implied stride now lands inside the range humans use for that movement, where
+  the lateral mode previously satisfied it only 35% of the time.
+- The rating span collapsed from 3.89x to about 1.67x, so **raw speed is no
+  longer where player differentiation lives**. Differentiation has to come from
+  reach, timing, and which actions a player's attributes make available.
+- Long limbs cost turnover (`LocomotionModel.limb_turnover_factor()`), which is
+  what keeps archetypes apart. Without it, stride multiplies into every mode and
+  the tallest player is fastest everywhere including sideways, which erases the
+  libero. With it, at identical ratings a 181 cm build is 12% quicker laterally
+  while a 208 cm build is faster in a straight line. Turn cost also scales with
+  cadence -- previously pure geometry, so a libero reversed exactly as slowly as
+  a middle blocker. See
   [Locomotion](../design/LOCOMOTION_AND_GENERATION.md).
 
 ## Partially implemented
@@ -359,11 +369,13 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 443 passing checks (424 as of Gate
+The current foundation validation reports 445 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
-generation, six added when reviewing that work, and five for stride-and-cadence
-locomotion: the population mean surviving the physique term, a taller player
-running faster, a shorter one keeping the lateral edge, turnover shortening a
-reversal, and `estimate_movement()` agreeing with `movement_profile()`). Treat
+generation, six added when reviewing that work, and seven for stride-and-cadence
+locomotion: speed being a genuine product with distinct per-mode ranges, an
+athletic floor and a humanly possible rating span, a taller player running
+faster, a shorter one keeping the lateral edge, long limbs costing more turnover
+in footwork than in a run, turnover shortening a reversal, and
+`estimate_movement()` agreeing with `movement_profile()`). Treat
 that number as a point-in-time result, not a permanent guarantee. Run
 [VALIDATION.md](VALIDATION.md) to establish the current result.

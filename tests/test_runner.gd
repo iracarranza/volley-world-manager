@@ -18,6 +18,7 @@ const RALLY_MOMENT_SCRIPT := preload("res://scripts/models/rally_moment.gd")
 const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_state_builder.gd")
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
+const LOCOMOTION_MODEL_SCRIPT := preload("res://scripts/simulation/locomotion_model.gd")
 const CONTACT_ENVELOPE_SCRIPT := preload(
 	"res://scripts/simulation/contact_envelope_system.gd"
 )
@@ -3909,15 +3910,16 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 			and not lateral.is_empty() and not transition.is_empty(),
 		"Locomotion granularity fixture generates a real roster across modes",
 	)
-	## The current single speed curve is internally inconsistent: the lateral mode
-	## implies strides that exceed the [0.45, 1.00] m human shuffle range for a
-	## meaningful share of players. decomposition_plausible aggregates all modes;
-	## at least one mode outside its plausible range is a sign the curve conflates
-	## speed components that stride × cadence would separate.
+	## Speed is now the product of stride and cadence, so inverting it recovers
+	## the stride that was actually used. Every mode must land inside the range
+	## humans use for that movement -- the lateral shuffle especially, which was
+	## the mode the single shared curve got wrong, implying players slid sideways
+	## at close to running stride length.
 	_check(
-		float(lateral.get("within_plausible_rate", 1.0)) < 0.80
-			and not bool(locomotion.get("decomposition_plausible", true)),
-		"Current speed curve implies an implausibly long lateral stride",
+		float(lateral.get("within_plausible_rate", 0.0)) > 0.95
+			and float(transition.get("within_plausible_rate", 0.0)) > 0.95
+			and bool(locomotion.get("decomposition_plausible", false)),
+		"decomposed speed implies a physically plausible stride in every mode",
 	)
 	## Generation now recalculates stride_length_m after body variation so the
 	## stored value matches the height-derived default for every player.
@@ -3932,19 +3934,20 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 ## two properties that make that safe: the population's mean speed did not move,
 ## and the new spread runs the direction physique and turnover imply.
 func _test_stride_and_cadence_locomotion() -> void:
-	## 1. Adding physique must not rebalance the sport. Every profile reports the
-	##    stride multiplier it applied, so dividing it back out recovers the
-	##    pre-change speed exactly; the two means must agree closely.
+	## 1. Speed is genuinely a product now: every profile reports the stride and
+	##    cadence it used, and they must multiply back to the speed it reported
+	##    (mass is the only other term). A mode's ranges must also be distinct --
+	##    a shuffle and a run drawing from one shared band was the original
+	##    defect, and it would silently return if the mode tables were flattened.
 	var modes := {
 		"LATERAL": RallyPlayerState.MovementMode.LATERAL,
 		"TRANSITION": RallyPlayerState.MovementMode.TRANSITION,
 		"APPROACH": RallyPlayerState.MovementMode.APPROACH,
 	}
-	var mean_preserved := true
-	var factor_seen := false
+	var product_holds := true
+	var mode_means := {}
 	for mode_name in modes:
-		var with_stride := 0.0
-		var without_stride := 0.0
+		var speed_total := 0.0
 		var sampled := 0
 		for region_name in ["Pāwa Hitō", "Spëddigh", "Landavol"]:
 			for seed_offset in range(4):
@@ -3959,17 +3962,49 @@ func _test_stride_and_cadence_locomotion() -> void:
 					var profile: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
 						actor, Vector2(1.0, 0.0), modes[mode_name]
 					)
-					var factor := float(profile.get("stride_factor", 1.0))
-					if absf(factor - 1.0) > 0.005:
-						factor_seen = true
-					with_stride += float(profile.maximum_speed)
-					without_stride += float(profile.maximum_speed) / factor
+					var mass_factor := lerpf(
+						1.06, 0.90,
+						clampf((player.mass_kg - 55.0) / 60.0, 0.0, 1.0),
+					)
+					var rebuilt := float(profile.stride_meters) \
+						* float(profile.cadence_hz) * mass_factor
+					if absf(rebuilt - float(profile.maximum_speed)) > 0.0005:
+						product_holds = false
+					speed_total += float(profile.maximum_speed)
 					sampled += 1
-		if sampled == 0 or absf(with_stride / without_stride - 1.0) > 0.02:
-			mean_preserved = false
+		mode_means[mode_name] = speed_total / maxf(float(sampled), 1.0)
 	_check(
-		mean_preserved and factor_seen,
-		"stride factor shifts individual players without moving the population's mean speed",
+		product_holds
+			and float(mode_means["TRANSITION"]) > float(mode_means["APPROACH"]) + 0.5
+			and float(mode_means["APPROACH"]) > float(mode_means["LATERAL"]) + 0.2,
+		"top speed is stride times cadence, and a run, an approach, and a shuffle have distinct ranges",
+	)
+
+	## 2. The retired curve spanned a 3.89x ratio from worst mover to best, which
+	##    no pair of human factors can produce, and its floor described a walk.
+	##    Both ends must now be athletic.
+	var floor_player: VolleyballPlayer = VolleyballPlayer.new()
+	floor_player.lateral_speed = 1
+	floor_player.transition_speed = 1
+	var ceiling_player: VolleyballPlayer = VolleyballPlayer.new()
+	ceiling_player.lateral_speed = 100
+	ceiling_player.transition_speed = 100
+	var span_sane := true
+	for mode_name in modes:
+		var slow: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+			RallyPlayerState.create(floor_player, &"home", -1, Vector2(0.5, 0.5)),
+			Vector2(1.0, 0.0), modes[mode_name],
+		)
+		var fast: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+			RallyPlayerState.create(ceiling_player, &"home", -1, Vector2(0.5, 0.5)),
+			Vector2(1.0, 0.0), modes[mode_name],
+		)
+		if float(slow.maximum_speed) < 1.8 \
+				or float(fast.maximum_speed) / float(slow.maximum_speed) > 2.2:
+			span_sane = false
+	_check(
+		span_sane,
+		"the slowest professional still moves athletically, and the rating span is humanly possible",
 	)
 
 	## 2. Height finally pays for itself. Two players identical but for build:
@@ -4010,9 +4045,22 @@ func _test_stride_and_cadence_locomotion() -> void:
 		float(tall_run.maximum_speed) > float(short_run.maximum_speed),
 		"a longer stride makes the taller player faster in a transition run",
 	)
+	## The other half of the tradeoff, and the one that keeps the libero in the
+	## sport. A long limb is a heavier lever: it cannot be planted and replanted
+	## as often, and rapid shuffling footwork re-accelerates it many times a
+	## second. Without this coupling stride multiplies into every mode and the
+	## biggest player is simply fastest everywhere.
 	_check(
 		float(short_shuffle.maximum_speed) > float(tall_shuffle.maximum_speed),
 		"the shorter player keeps the advantage laterally, where turnover beats leg length",
+	)
+	_check(
+		LOCOMOTION_MODEL_SCRIPT.limb_turnover_factor(
+			tall, RallyPlayerState.MovementMode.LATERAL
+		) < LOCOMOTION_MODEL_SCRIPT.limb_turnover_factor(
+			tall, RallyPlayerState.MovementMode.TRANSITION
+		),
+		"long limbs cost more turnover in shuffling footwork than in a steady run",
 	)
 
 	## 3. Turnover is the frequency at which a player can change where they are

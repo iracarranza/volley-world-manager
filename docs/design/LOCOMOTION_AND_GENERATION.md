@@ -2,12 +2,13 @@
 
 Review date: 2026-08-01
 
-Status: **PHYSIQUE AND TURNOVER WIRED; THE SPEED-CURVE REPLACEMENT IS NOT**
+Status: **WIRED: STRIDE x CADENCE IS THE SPEED MODEL**
 
-Findings 1 and 2 below are now fixed. Finding 3 -- replacing the single speed
-curve with stride x cadence outright -- remains deliberately unwired, and the
-reason is recorded in "What was wired, and what was not" at the end of this
-document. Read that section before changing `MODE_STRIDE_SCALE`.
+All three findings below are now addressed, and the single speed curve has been
+retired. Read "What was wired, and what was not" at the end of this document
+before changing `MODE_STRIDE_SCALE`, `MODE_CADENCE_BAND`, or
+`MODE_LIMB_TURNOVER_COST`: those three tables are coupled, and the sections
+above record what each was measured against.
 
 ## 1. The two timing paths, measured
 
@@ -278,27 +279,75 @@ That is the property that made this safe to wire without reopening the gate
 record: no existing reachability, arrival-margin, or progression calibration is
 rebalanced, because the average player moves as they always did.
 
-### Not wired: replacing the speed curve
+### Wired: the speed curve itself
 
-Swapping `lerpf(1.35, 5.25, rating)` for `stride_meters() * cadence_hz()`
-outright would rebalance the game rather than re-express it, and the obstacle is
-arithmetic rather than taste.
+The single curve `lerpf(1.35, 5.25, rating)` is gone. Top speed is now
+`stride_meters(mode) x cadence_hz(mode) x mass_factor`, and the two factors have
+per-mode tables because both physically differ by mode: a defensive shuffle is
+**short steps at high frequency**, a transition run is **long steps at moderate
+frequency**.
 
-The existing curve spans a **3.89x** ratio from the worst mover to the best.
-Human cadence spans about 1.8x, and stride varies only a few percent across a
-roster of athletes. No plausible pair of physical factors multiplies out to
-3.89x, which means something in the current curve is not physical -- and it is
-the floor. A professional moving at 1.35 m/s is walking; no rating should
-describe that.
+Giving cadence a mode band was the step that made the decomposition possible at
+all. While turnover was global, the only way to reach a plausible shuffle speed
+was to give the shuffle a near-running stride -- which is precisely the
+implausibility the calibration had been reporting, and it read as "the
+decomposition does not fit" when the real message was "one of the two factors is
+missing a dimension".
 
-Adopting the decomposition wholesale moves mean transition speed from about 2.9
-to about 5.2 m/s and mean lateral speed from about 3.3 down to about 2.3 -- in
-opposite directions, per mode. Every reachability and arrival-margin number in
-the gate record rests on those speeds.
+| Mode | old mean | new mean | shift | stride | cadence |
+|---|---|---|---|---|---|
+| LATERAL | 3.378 | 2.568 | -24.0% | 0.651 m | 4.07 Hz |
+| TRANSITION | 2.980 | 4.253 | +42.7% | 1.294 m | 3.39 Hz |
+| APPROACH | 2.980 | 3.062 | +2.8% | 0.835 m | 3.78 Hz |
+| BLOCK_CLOSE | 3.378 | 2.726 | -19.3% | 0.710 m | 3.96 Hz |
 
-So that change is a deliberate rebalance and belongs in its own commit, with its
-own before-and-after sweep, exactly as the movement-fluidity record demands of
-step 4. It is the remaining half of this work, not an oversight.
+Every implied stride now lands inside the range humans use for that movement,
+where the lateral mode previously satisfied it only 35% of the time.
+
+**This is a real rebalance, not a refactor.** Defenders cover roughly a quarter
+less ground sideways while transition running is roughly 40% faster, so offence
+gains against defence and the gate record's absolute reachability numbers are
+re-baselined. That was the accepted cost of the change, not a surprise.
+
+**The rating span collapsed from 3.89x to about 1.67x**, and that is the
+headline correction. No pair of human factors can produce a 3.89x spread --
+turnover spans about 1.8x and roster stride a few percent -- so the old curve's
+floor was never physical. It described a professional walking at 1.35 m/s. The
+floor is now 1.93 m/s laterally and 3.33 m/s in transition: slow for an athlete,
+but athletic.
+
+The consequence is deliberate and worth stating plainly: **raw speed is no
+longer where player differentiation lives.** A 1-rated and a 100-rated mover are
+separated by two thirds, not four times. Differentiation has to come from what a
+player can legally and physically *do* -- reach, timing, and the actions their
+attributes make available -- rather than from implausible speed gaps.
+
+### Wired: long limbs cost turnover
+
+Adopting the decomposition initially broke the archetype split, and the failure
+is instructive. With stride multiplying into every mode linearly and mass
+costing only about 5%, the tallest player became fastest *everywhere*, including
+sideways. That erases the libero.
+
+The missing term is the tradeoff the model's own header had claimed from the
+start: a long limb is a heavier lever, covering more ground per step but unable
+to be planted and replanted as often. `limb_turnover_factor()` applies it as
+`(reference_stride / stride) ^ cost`, with the cost mode-specific because
+rapid direction-changing footwork re-accelerates the limb many times a second
+while steady running swings it near its natural period.
+
+Net height exponent per mode is `1 - cost`: LATERAL -0.35, BLOCK_CLOSE -0.10,
+APPROACH +0.40, TRANSITION +0.65. Identical ratings, three builds:
+
+| Build | transition | lateral | block |
+|---|---|---|---|
+| 181 cm / 68 kg | 4.655 | **2.851** | **2.970** |
+| 193 cm / 80 kg | 4.702 | 2.701 | 2.859 |
+| 208 cm / 92 kg | **4.778** | 2.546 | 2.746 |
+
+The libero is 12% quicker sideways; the middle is faster in a straight line.
+That crossover is the point of the whole model, and it exists only because
+turnover and stride are coupled.
 
 ### Two defects this exposed
 
