@@ -1,6 +1,6 @@
 # Current Implementation Status
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-08-01
 
 Fresh developers and coding models should begin with
 [FRESH_AGENT_HANDOFF.md](FRESH_AGENT_HANDOFF.md). It is the authoritative
@@ -187,6 +187,22 @@ This page is the quickest defense against confusing source-code existence with a
   two defects in Gate 50 (a receive commitment that zeroed its own available
   time, and an authoritative rather than perceived deadline); both are fixed
   and Gate 50's published numbers were corrected.
+- `VolleyballPlayerGenerator` now uses attribute-first generation. Potential
+  (ceiling score 68–96 for academy, age-adjusted 52–94 for club) is set
+  before attributes. A development fraction derived from age determines how
+  much of that ceiling is currently expressed, producing a measurable gap
+  between potential and current ability for young players. Role-specific
+  attribute tiers (+15 primary, +5 secondary, −8 tertiary) create observable
+  specialisation: setters have markedly higher set_accuracy than liberos, and
+  liberos have markedly higher reception than set_accuracy. Region specialty
+  lists give each of the four regions a +8 bonus on five thematically
+  consistent attributes (Pāwa Hitō: attack/block; Spëddigh: floor defence and
+  lateral speed; Bloc du Larg: blocking, ball control, and mental discipline;
+  Landavol: mental and setting). Region physique biases shift height, mass,
+  and wingspan before individual variation so Pāwa Hitō rosters are measurably
+  taller than Landavol rosters. `stride_length_m` is now recalculated from
+  the player's actual post-variation height immediately after `_apply_body_variation`,
+  eliminating the stale-stride defect the locomotion calibration had recorded.
 
 ## Partially implemented
 
@@ -298,10 +314,8 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 424 passing checks (401 as of Gate
-49, plus playback-sequencing and approach-run regression checks, block
-visualization geometry checks, eight checks across Gate 50's continuous
-reachability timeline and Gate 51's overlay transport, and five checks for
-force-derived ball flight timing). Treat that number as a point-in-time
-result, not a permanent guarantee. Run [VALIDATION.md](VALIDATION.md) to
-establish the current result.
+The current foundation validation reports 433 passing checks (428 as of
+set_release_interval consumption, plus four checks for attribute-first
+generation: role specialisation, region physique, development gap, and the
+stride fix). Treat that number as a point-in-time result, not a permanent
+guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the current result.

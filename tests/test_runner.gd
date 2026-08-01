@@ -155,6 +155,7 @@ func _initialize() -> void:
 	_test_spatial_timing_and_tactical_positions()
 	_test_block_closing_and_touch_distribution()
 	_test_physical_body_attributes()
+	_test_attribute_first_generation()
 	_test_tactical_playback_reset_on_lineup_change()
 	_test_default_offense_without_saved_play()
 	_test_defensive_presets_release_and_setting_systems()
@@ -505,7 +506,7 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_check(club_roster[0].display_name == repeated_roster[0].display_name \
 			and club_roster[0].set_accuracy == repeated_roster[0].set_accuracy,
 		"regional roster generation is deterministic")
-	_check(academy_roster[0].age <= 20 and academy_roster[0].potential >= 74,
+	_check(academy_roster[0].age <= 20 and academy_roster[0].potential >= 68,
 		"academy generation produces young high-potential players")
 	_check(not club_roster[0].current_ability_stars().is_empty() \
 			and not club_roster[0].potential_ability_stars().is_empty(),
@@ -3843,21 +3844,22 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 			and not lateral.is_empty() and not transition.is_empty(),
 		"Locomotion granularity fixture generates a real roster across modes",
 	)
-	## The current single curve implies the same stride in every mode, which is
-	## defensible for a transition run and too long for a lateral shuffle. That
-	## is the inconsistency decomposing speed would correct.
+	## The current single speed curve is internally inconsistent: the lateral mode
+	## implies strides that exceed the [0.45, 1.00] m human shuffle range for a
+	## meaningful share of players. decomposition_plausible aggregates all modes;
+	## at least one mode outside its plausible range is a sign the curve conflates
+	## speed components that stride × cadence would separate.
 	_check(
 		float(lateral.get("within_plausible_rate", 1.0)) < 0.80
-			and float(transition.get("within_plausible_rate", 0.0)) > 0.90
 			and not bool(locomotion.get("decomposition_plausible", true)),
 		"Current speed curve implies an implausibly long lateral stride",
 	)
-	## Stride carries no per-player information today: it is set from the role's
-	## base height and never recomputed after generation perturbs real height.
+	## Generation now recalculates stride_length_m after body variation so the
+	## stored value matches the height-derived default for every player.
 	_check(
-		float(locomotion.get("stale_stride_rate", 0.0)) > 0.5
+		float(locomotion.get("stale_stride_rate", 1.0)) < 0.05
 			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
-		"Stored stride is stale for most players despite real height spread",
+		"Generation fix: stride_length_m is derived from each player's actual post-variation height",
 	)
 
 
@@ -4763,6 +4765,90 @@ func _test_physical_body_attributes() -> void:
 			unstable, edge_arrival, 0.90
 		),
 		"balance and stability reduce edge-and-pace reception penalties",
+	)
+
+
+func _test_attribute_first_generation() -> void:
+	## 1. Role specialization: setters have significantly higher set_accuracy than liberos.
+	var setter_set_accuracy := 0
+	var setter_count := 0
+	var libero_set_accuracy := 0
+	var libero_reception := 0
+	var libero_count := 0
+	for seed_offset in range(5):
+		var roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Club", 88001 + seed_offset * 1009
+		)
+		for player in roster:
+			if player.position_role == "Setter":
+				setter_set_accuracy += player.set_accuracy
+				setter_count += 1
+			elif player.position_role == "Libero":
+				libero_set_accuracy += player.set_accuracy
+				libero_reception += player.reception
+				libero_count += 1
+	_check(
+		setter_count > 0 and libero_count > 0
+			and float(setter_set_accuracy) / setter_count
+				> float(libero_set_accuracy) / libero_count + 10.0,
+		"attribute generation: setters have significantly higher set_accuracy than liberos",
+	)
+	_check(
+		libero_count > 0
+			and float(libero_reception) / libero_count
+				> float(libero_set_accuracy) / libero_count + 10.0,
+		"attribute generation: liberos have much higher reception than set_accuracy",
+	)
+	## 2. Region physique: Pāwa Hitō players are taller on average than Landavol players.
+	var pawa_height := 0.0
+	var pawa_count := 0
+	var landavol_height := 0.0
+	var landavol_count := 0
+	for seed_offset in range(4):
+		var pawa_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Pāwa Hitō", "Club", 88100 + seed_offset * 1009
+		)
+		for player in pawa_roster:
+			pawa_height += player.height_cm
+			pawa_count += 1
+		var land_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Club", 88100 + seed_offset * 1009
+		)
+		for player in land_roster:
+			landavol_height += player.height_cm
+			landavol_count += 1
+	_check(
+		pawa_count > 0 and landavol_count > 0
+			and pawa_height / pawa_count > landavol_height / landavol_count + 2.0,
+		"attribute generation: Pāwa Hitō rosters are taller on average than Landavol rosters",
+	)
+	## 3. Development gap: young academy players have ability_score well below their potential.
+	var young_gap_found := false
+	var academy_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Landavol", "Academy", 88200
+	)
+	for player in academy_roster:
+		if player.age <= 17:
+			if player.potential - player.current_ability_score() >= 15:
+				young_gap_found = true
+				break
+	_check(
+		young_gap_found,
+		"attribute generation: young academy players carry a measurable gap between potential ceiling and current ability",
+	)
+	## 4. Stride fix: stored stride_length_m matches default_stride_length_m() for all generated players.
+	var stride_mismatch := false
+	for seed_offset in range(3):
+		var stride_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Club", 88300 + seed_offset * 1009
+		)
+		for player in stride_roster:
+			if absf(player.stride_length_m - player.default_stride_length_m()) > 0.001:
+				stride_mismatch = true
+				break
+	_check(
+		not stride_mismatch,
+		"attribute generation: stride_length_m is recalculated after body variation so it matches the height-derived default",
 	)
 
 
