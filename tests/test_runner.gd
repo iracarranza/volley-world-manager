@@ -3735,16 +3735,40 @@ func _test_set_release_interval_consumption() -> void:
 			and float(quick_profile.ideal_value) < float(slow_profile.ideal_value),
 		"quick setter has a shorter ideal release_interval than a slow setter",
 	)
+	## Call the resolver's own helper rather than restating its arithmetic here.
+	## A test that recomputes the formula it is checking passes whenever both
+	## copies are wrong together, which is exactly the failure it should catch.
 	var quality := 0.60
-	var quick_ri := clampf(
-		float(quick_profile.ideal_value) + lerpf(0.10, -0.05, quality), 0.15, 0.75
-	)
-	var slow_ri := clampf(
-		float(slow_profile.ideal_value) + lerpf(0.10, -0.05, quality), 0.15, 0.75
-	)
+	var quick_ri: float = RallySimulator._release_interval(quick_profile, quality)
+	var slow_ri: float = RallySimulator._release_interval(slow_profile, quality)
 	_check(
 		quick_ri < slow_ri,
 		"quick setter's computed release_interval is shorter than slow setter's at equal quality",
+	)
+	## A mishandled ball is released later than a clean one by the same setter,
+	## and the spread between those two is the setter's own tolerance band --
+	## not a constant the resolver picked. An adaptable setter varies more.
+	var rigid: VolleyballPlayer = VolleyballPlayer.new()
+	rigid.tempo_control = 60
+	rigid.hand_control = 60
+	rigid.adaptability = 5
+	rigid.refresh_system_fit_profiles()
+	var fluid: VolleyballPlayer = VolleyballPlayer.new()
+	fluid.tempo_control = 60
+	fluid.hand_control = 60
+	fluid.adaptability = 95
+	fluid.refresh_system_fit_profiles()
+	var rigid_profile: SystemFitProfile = \
+		rigid.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
+	var fluid_profile: SystemFitProfile = \
+		fluid.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
+	var rigid_spread: float = RallySimulator._release_interval(rigid_profile, 0.0) \
+		- RallySimulator._release_interval(rigid_profile, 1.0)
+	var fluid_spread: float = RallySimulator._release_interval(fluid_profile, 0.0) \
+		- RallySimulator._release_interval(fluid_profile, 1.0)
+	_check(
+		rigid_spread > 0.0 and fluid_spread > rigid_spread,
+		"release timing spreads by the setter's own tolerance band, wider for an adaptable setter",
 	)
 
 	## 3. The algebraic invariant T=sqrt(8h/g) from the ball-kinematics check
@@ -3773,6 +3797,46 @@ func _test_set_release_interval_consumption() -> void:
 	_check(
 		inv_checked >= 4 and inv_held,
 		"set trajectory arcs still satisfy the projectile invariant after release_interval clock shift",
+	)
+
+	## 4. The defence-to-counterattack continuation owns a real timeline. It used
+	##    to stamp every contact with the dig's clock, so the transition attack
+	##    began at the same instant as the set that fed it; adding a release
+	##    interval to the set alone then pushed the set to start *after* its own
+	##    attack. Both are trajectory-continuity violations. The transition
+	##    attack must begin exactly when the set flight lands.
+	var chain_manager := GAME_MANAGER_SCRIPT.new()
+	chain_manager.seed_vertical_slice_data()
+	var continuations_seen := 0
+	var chain_breaks := 0
+	for seed_value in range(9000, 9200):
+		var result: Resource = chain_manager.resolve_active_rally(seed_value)
+		var continuation_set: Resource = null
+		var continuation_attack: Resource = null
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			var metadata: Dictionary = event.metadata
+			if continuation_set == null and metadata.has("release_interval") \
+					and metadata.has("flight_time"):
+				continuation_set = event
+			elif continuation_set != null and continuation_attack == null \
+					and metadata.has("set_flight_time"):
+				continuation_attack = event
+		if continuation_set == null or continuation_attack == null:
+			continue
+		var set_flight: Dictionary = continuation_set.metadata.get("outgoing_trajectory", {})
+		var attack_flight: Dictionary = continuation_attack.metadata.get(
+			"outgoing_trajectory", {}
+		)
+		if set_flight.is_empty() or attack_flight.is_empty():
+			continue
+		continuations_seen += 1
+		if absf(float(attack_flight.get("start_time", 0.0))
+				- float(set_flight.get("end_time", -1.0))) > 0.001:
+			chain_breaks += 1
+	_check(
+		continuations_seen >= 20 and chain_breaks == 0,
+		"continuation set and transition attack trajectories meet at one contact time",
 	)
 
 
@@ -4849,6 +4913,62 @@ func _test_attribute_first_generation() -> void:
 	_check(
 		not stride_mismatch,
 		"attribute generation: stride_length_m is recalculated after body variation so it matches the height-derived default",
+	)
+	## 5. Potential is a ceiling, so it must actually bound current ability. The
+	##    role tier adds its bonus to exactly the attributes current_ability_score()
+	##    weights most, so without correcting for that inflation a settled player
+	##    scores past the limit that is supposed to cap them.
+	var over_ceiling := 0
+	var ceiling_sampled := 0
+	var oldest_gap_total := 0
+	var oldest_sampled := 0
+	for seed_offset in range(8):
+		for organization in ["Academy", "Club"]:
+			var ceiling_roster: Array[VolleyballPlayer] = \
+				PLAYER_GENERATOR_SCRIPT.generate_roster(
+					"Landavol", organization, 88400 + seed_offset * 1009
+				)
+			for player in ceiling_roster:
+				ceiling_sampled += 1
+				if player.current_ability_score() > player.potential:
+					over_ceiling += 1
+				if player.age >= 29:
+					oldest_gap_total += player.potential - player.current_ability_score()
+					oldest_sampled += 1
+	_check(
+		ceiling_sampled >= 100 and over_ceiling == 0,
+		"attribute generation: no generated player's current ability exceeds their potential ceiling",
+	)
+	_check(
+		oldest_sampled > 0 and float(oldest_gap_total) / oldest_sampled < 8.0,
+		"attribute generation: players near the end of their career sit close to their ceiling",
+	)
+	## 6. The current-to-potential gap must not encode potential. A wide gap
+	##    should mean "young", never "secretly elite" -- otherwise the scouting
+	##    fantasy is given away by subtraction.
+	var modest_gap_total := 0
+	var modest_count := 0
+	var elite_gap_total := 0
+	var elite_count := 0
+	for seed_offset in range(24):
+		var gap_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Academy", 88500 + seed_offset * 1009
+		)
+		for player in gap_roster:
+			if player.age > 17:
+				continue
+			var gap := player.potential - player.current_ability_score()
+			if player.potential < 78:
+				modest_gap_total += gap
+				modest_count += 1
+			elif player.potential > 88:
+				elite_gap_total += gap
+				elite_count += 1
+	_check(
+		modest_count >= 10 and elite_count >= 10
+			and absf(float(modest_gap_total) / modest_count
+				- float(elite_gap_total) / elite_count) < 5.0,
+		"attribute generation: development gap tracks age, not potential, so it cannot be read as a potential tell",
 	)
 
 

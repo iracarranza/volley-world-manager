@@ -37,32 +37,33 @@ const REGION_SPECIALTY := {
 	"Landavol": ["decision_making", "composure", "set_accuracy", "reception", "adaptability"],
 }
 
-## Primary role attributes receive a +15 bonus above the development target.
-const ROLE_PRIMARY := {
-	"Setter": ["set_accuracy", "tempo_control", "hand_control", "set_balance", "set_stability",
-			"set_disguise", "court_vision", "decision_making"],
-	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "reception",
-			"serve_consistency", "block_timing", "lateral_speed"],
-	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "attack_power",
-			"approach_timing", "transition_speed", "arm_speed"],
-	"Opposite": ["attack_power", "attack_accuracy", "approach_timing", "block_timing",
-			"jump_reach", "serve_power", "arm_speed"],
-	"Libero": ["reception", "dig_control", "reception_balance", "reception_stability",
-			"lateral_speed", "acceleration", "anticipation"],
-}
-
-## Secondary role attributes receive a +5 bonus. Everything else falls to tertiary (-8).
+## Secondary role attributes receive a +5 bonus: the supporting skills a role
+## leans on without being judged by them. The *primary* tier is deliberately not
+## defined here -- it is read from `VolleyballPlayer.POSITION_WEIGHTS`, which is
+## already the single source of truth for what each role is scored on. Keeping a
+## second copy here let generation and `current_ability_score()` disagree about
+## what a role is for. Everything in neither tier falls to tertiary (-8).
 const ROLE_SECONDARY := {
 	"Setter": ["composure", "adaptability", "tactical_discipline", "anticipation",
 			"serve_technique", "serve_consistency", "serve_placement", "ball_control"],
-	"Outside Hitter": ["tooling", "feinting", "finesse", "shot_variety", "court_vision",
-			"composure", "serve_technique", "explosiveness", "jump_reach"],
+	"Outside Hitter": ["feinting", "court_vision", "composure", "serve_technique",
+			"serve_consistency", "explosiveness", "jump_reach", "block_timing",
+			"lateral_speed", "reception_stability"],
 	"Middle Blocker": ["attack_accuracy", "tooling", "feinting", "shot_variety",
-			"ball_control", "serve_technique", "stamina"],
-	"Opposite": ["tooling", "feinting", "finesse", "shot_variety", "serve_technique",
-			"serve_aggression", "serve_variation", "explosiveness"],
-	"Libero": ["ball_control", "court_vision", "adaptability", "composure",
-			"transition_speed", "stamina", "tactical_discipline"],
+			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed"],
+	"Opposite": ["feinting", "finesse", "serve_technique", "serve_aggression",
+			"serve_variation", "explosiveness", "arm_speed"],
+	"Libero": ["court_vision", "adaptability", "composure", "transition_speed",
+			"stamina", "tactical_discipline", "acceleration"],
+}
+
+## Height variation band per role, in centimetres.
+const ROLE_HEIGHT_SPREAD := {
+	"Setter": 7.0,
+	"Outside Hitter": 7.5,
+	"Middle Blocker": 8.0,
+	"Opposite": 7.5,
+	"Libero": 6.0,
 }
 
 
@@ -118,13 +119,7 @@ static func _apply_body_variation(
 	rng: RandomNumberGenerator,
 	region_name: String,
 ) -> void:
-	var height_spread := float({
-		"Setter": 7.0,
-		"Outside Hitter": 7.5,
-		"Middle Blocker": 8.0,
-		"Opposite": 7.5,
-		"Libero": 6.0,
-	}.get(player.position_role, 7.0))
+	var height_spread := float(ROLE_HEIGHT_SPREAD.get(player.position_role, 7.0))
 	var height_delta := (
 		rng.randf_range(-height_spread, height_spread)
 		+ rng.randf_range(-height_spread, height_spread)
@@ -139,46 +134,108 @@ static func _apply_body_variation(
 	player.wingspan_cm = clampf(player.wingspan_cm + span_delta + wingspan_bias, 150.0, 235.0)
 
 
-static func _development_fraction(
+## Attribute points still available for this player to grow into, in raw rating
+## points. This is the literal reading of potential: the reserve is the distance
+## between what a player expresses now and the ceiling they could reach.
+##
+## It depends on age alone, never on the size of the ceiling. That independence
+## is the point -- a 16-year-old with a modest ceiling is just as undeveloped as
+## a 16-year-old with a huge one, so a wide current-to-potential gap says the
+## player is young, not that they are a future star. Scaling the reserve by
+## potential instead would make every large gap a tell for high potential and
+## give the gap away for free.
+static func _growth_reserve(
 	age: int,
 	rng: RandomNumberGenerator,
 	academy: bool,
 ) -> float:
-	var base: float
 	if academy:
-		base = 0.40 + float(age - 16) * 0.0625
-		return clampf(base + rng.randf_range(-0.08, 0.08), 0.30, 0.75)
-	else:
-		base = 0.65 + float(age - 21) * 0.027
-		return clampf(base + rng.randf_range(-0.05, 0.05), 0.55, 0.98)
+		var academy_base := lerpf(38.0, 18.0, clampf(float(age - 16) / 4.0, 0.0, 1.0))
+		return maxf(academy_base + rng.randf_range(-6.0, 6.0), 4.0)
+	var club_base := lerpf(16.0, 2.0, clampf(float(age - 21) / 10.0, 0.0, 1.0))
+	return maxf(club_base + rng.randf_range(-4.0, 4.0), 0.0)
 
 
-## Derives each attribute from potential × development_fraction, then applies
-## role-tier bonuses (+15 primary, +5 secondary, -8 tertiary) and a regional
-## specialty bonus (+8). Potential is the ceiling; development fraction from
-## age determines how much of that ceiling is currently expressed.
+const PRIMARY_TIER_BONUS: int = 15
+const SECONDARY_TIER_BONUS: int = 5
+const TERTIARY_TIER_PENALTY: int = -8
+const SPECIALTY_BONUS: int = 8
+
+
+static func _tier_bonus(
+	property_name: String,
+	primary_list: Array,
+	secondary_list: Array,
+	specialty_list: Array,
+) -> int:
+	var bonus := TERTIARY_TIER_PENALTY
+	if property_name in primary_list:
+		bonus = PRIMARY_TIER_BONUS
+	elif property_name in secondary_list:
+		bonus = SECONDARY_TIER_BONUS
+	return bonus + (SPECIALTY_BONUS if property_name in specialty_list else 0)
+
+
+## How far the tier and specialty bonuses lift `current_ability_score()` above
+## the flat base every attribute starts from.
+##
+## Without this, potential does not bound anything: the role tier adds +15 to
+## exactly the attributes `current_ability_score()` weights at 75%, so a
+## generated player's displayed ability lands roughly eleven points above the
+## level intended, and any player near their ceiling scores *past* it. Measuring
+## the inflation with the same weighting the score itself uses lets it be
+## removed up front, and keeps the correction honest if the tier constants or
+## the role lists ever change.
+static func _ability_score_offset(
+	primary_list: Array,
+	secondary_list: Array,
+	specialty_list: Array,
+) -> float:
+	var scored: Array = primary_list if not primary_list.is_empty() \
+		else VolleyballPlayer.ABILITY_ATTRIBUTES
+	var role_total := 0.0
+	for property_name in scored:
+		role_total += float(_tier_bonus(
+			str(property_name), primary_list, secondary_list, specialty_list
+		))
+	var complete_total := 0.0
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		complete_total += float(_tier_bonus(
+			property_name, primary_list, secondary_list, specialty_list
+		))
+	return (role_total / maxf(float(scored.size()), 1.0)) * 0.75 \
+		+ (complete_total / float(VolleyballPlayer.ABILITY_ATTRIBUTES.size())) * 0.25
+
+
+## Derives each attribute from the ceiling minus the still-unrealised growth
+## reserve, then applies role-tier bonuses (+15 primary, +5 secondary, -8
+## tertiary) and a regional specialty bonus (+8). The bonuses redistribute
+## ability across a role's profile; they do not inflate its total, so
+## `current_ability_score()` lands at the intended level and stays under
+## `potential`.
 static func _apply_attributes(
 	player: VolleyballPlayer,
 	region_name: String,
 	rng: RandomNumberGenerator,
 	academy: bool,
 ) -> void:
-	var dev_fraction := _development_fraction(player.age, rng, academy)
-	var target := float(player.potential) * dev_fraction
-	var primary_list: Array = Array(ROLE_PRIMARY.get(player.position_role, []))
+	var primary_list: Array = Array(
+		VolleyballPlayer.POSITION_WEIGHTS.get(player.position_role, [])
+	)
 	var secondary_list: Array = Array(ROLE_SECONDARY.get(player.position_role, []))
 	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, []))
+	## The ability score this player should currently display, and the flat
+	## level each attribute starts from to produce it.
+	var target_score := float(player.potential) \
+		- _growth_reserve(player.age, rng, academy)
+	var base := target_score - _ability_score_offset(
+		primary_list, secondary_list, specialty_list
+	)
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
-		var tier_bonus: int
-		if property_name in primary_list:
-			tier_bonus = 15
-		elif property_name in secondary_list:
-			tier_bonus = 5
-		else:
-			tier_bonus = -8
-		var specialty_bonus: int = 8 if property_name in specialty_list else 0
 		player.set(property_name, clampi(
-			roundi(target) + tier_bonus + specialty_bonus + rng.randi_range(-8, 8),
+			roundi(base) + _tier_bonus(
+				property_name, primary_list, secondary_list, specialty_list
+			) + rng.randi_range(-8, 8),
 			20, 92
 		))
 

@@ -188,21 +188,36 @@ This page is the quickest defense against confusing source-code existence with a
   time, and an authoritative rather than perceived deadline); both are fixed
   and Gate 50's published numbers were corrected.
 - `VolleyballPlayerGenerator` now uses attribute-first generation. Potential
-  (ceiling score 68–96 for academy, age-adjusted 52–94 for club) is set
-  before attributes. A development fraction derived from age determines how
-  much of that ceiling is currently expressed, producing a measurable gap
-  between potential and current ability for young players. Role-specific
-  attribute tiers (+15 primary, +5 secondary, −8 tertiary) create observable
-  specialisation: setters have markedly higher set_accuracy than liberos, and
-  liberos have markedly higher reception than set_accuracy. Region specialty
-  lists give each of the four regions a +8 bonus on five thematically
-  consistent attributes (Pāwa Hitō: attack/block; Spëddigh: floor defence and
-  lateral speed; Bloc du Larg: blocking, ball control, and mental discipline;
-  Landavol: mental and setting). Region physique biases shift height, mass,
-  and wingspan before individual variation so Pāwa Hitō rosters are measurably
-  taller than Landavol rosters. `stride_length_m` is now recalculated from
-  the player's actual post-variation height immediately after `_apply_body_variation`,
-  eliminating the stale-stride defect the locomotion calibration had recorded.
+  (ceiling score 68–96 for academy, age-adjusted 52–94 for club) is set before
+  attributes, and each attribute is derived from that ceiling minus a *growth
+  reserve*: the rating points the player has not yet realised. The reserve is a
+  function of age alone and never of the ceiling's size, so a wide
+  current-to-potential gap means the player is young and says nothing about how
+  good they will become. Scaling the gap by potential — the obvious
+  implementation — would have let any scout read potential off a subtraction,
+  destroying the product's central fantasy.
+- Potential genuinely bounds current ability. The role tier adds its bonus to
+  exactly the attributes `current_ability_score()` weights at 75%, so applying
+  the tiers naively lifted the displayed score about eleven points above the
+  intended level and pushed settled players *past* their own ceiling.
+  `_ability_score_offset()` measures that inflation with the same weighting the
+  score itself uses and removes it up front, so the tiers redistribute ability
+  across a role's profile without inflating its total.
+- Role tiers create observable specialisation: setters have markedly higher
+  `set_accuracy` than liberos, and liberos markedly higher `reception` than
+  `set_accuracy`. The primary tier is read from
+  `VolleyballPlayer.POSITION_WEIGHTS` rather than restated in the generator, so
+  generation and `current_ability_score()` cannot disagree about what a role is
+  for; only the secondary tier is generator-specific.
+- Region specialty lists give each of the four regions a +8 bonus on five
+  thematically consistent attributes (Pāwa Hitō: attack/block; Spëddigh: floor
+  defence and lateral speed; Bloc du Larg: blocking, ball control, and mental
+  discipline; Landavol: mental and setting). Region physique biases shift
+  height, mass, and wingspan before individual variation so Pāwa Hitō rosters
+  are measurably taller than Landavol rosters.
+- `stride_length_m` is recalculated from the player's actual post-variation
+  height, eliminating the stale-stride defect the locomotion calibration had
+  recorded (`stale_stride_rate` is now 0.0).
 
 ## Partially implemented
 
@@ -275,13 +290,25 @@ now limit the block work that was just completed:
    shadow block therefore reads a hitter-approach cue with less behind it than
    the home side would give it. Mirroring Gate 43 onto the opponent attack
    would make that cue real.
-2. **`set_release_interval` is now consumed.** The main home set path and
-   the continuation set path both query the setter's `SYSTEM_FIT_SET_RELEASE`
-   profile and advance the rally clock by `second_contact_window +
-   release_interval`, widening the hitter's approach window by the setter's
-   handling time (0.15–0.75 s, jittered by set quality). `defensive_depth` is
-   also consumed -- it adjusts `defense_quality` and floor-defense positioning
-   in `rally_simulator.gd`; the stale "read by nothing" claim was an error.
+2. **`set_release_interval` is now consumed.** The main home set path and the
+   continuation set path both query the setter's `SYSTEM_FIT_SET_RELEASE`
+   profile through `RallySimulator._release_interval()` and advance the rally
+   clock by `second_contact_window + release_interval`, widening the hitter's
+   approach window by the setter's handling time. Both halves of the profile
+   are used: `ideal_value` is the setter's natural rhythm and `tolerance` is
+   how far off it they can work, so a clean ball goes out at the fast edge of
+   their band and a mishandled one at the slow edge. The spread is therefore
+   the player's, not a tuned constant. `defensive_depth` is also consumed -- it
+   adjusts `defense_quality` and floor-defense positioning in
+   `rally_simulator.gd`; the stale "read by nothing" claim was an error.
+
+   Wiring this exposed a timing defect in the defence-to-counterattack
+   continuation, which had never advanced its rally clock: every contact there
+   carried the dig's timestamp, so the transition attack began at the same
+   instant as the set that fed it. Adding a release interval to the set alone
+   then pushed the set to start *after* its own attack. The continuation now
+   advances the clock the way the main path does -- set contact, set flight,
+   attack -- and the two trajectories meet at exactly one contact time.
 
 Separately, movement fluidity's playback slice (steps 1 through 3) is
 complete outside the gate sequence. `ShadowMovementSystem` integrates movement
@@ -314,8 +341,11 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 433 passing checks (428 as of
-set_release_interval consumption, plus four checks for attribute-first
-generation: role specialisation, region physique, development gap, and the
-stride fix). Treat that number as a point-in-time result, not a permanent
-guarantee. Run [VALIDATION.md](VALIDATION.md) to establish the current result.
+The current foundation validation reports 438 passing checks (424 as of Gate
+51, plus four for `set_release_interval` consumption, four for attribute-first
+generation, and six added when reviewing that work: release spread from the
+setter's own tolerance band, continuation trajectory continuity, the potential
+ceiling actually bounding current ability, veterans sitting near their ceiling,
+and the development gap not encoding potential). Treat that number as a
+point-in-time result, not a permanent guarantee. Run
+[VALIDATION.md](VALIDATION.md) to establish the current result.

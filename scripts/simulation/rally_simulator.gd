@@ -47,6 +47,14 @@ const OPPONENT_SERVE: float = 0.63
 const OPPONENT_BLOCK: float = 0.61
 const OPPONENT_DEFENSE: float = 0.58
 
+## Fallbacks for a setter with no derived release profile. These are the
+## midpoints of the bands `VolleyballPlayer.refresh_system_fit_profiles()`
+## produces, so a profile-less setter behaves like an average one.
+const DEFAULT_SET_RELEASE_SECONDS: float = 0.42
+const DEFAULT_SET_RELEASE_TOLERANCE: float = 0.105
+const MINIMUM_SET_RELEASE_SECONDS: float = 0.15
+const MAXIMUM_SET_RELEASE_SECONDS: float = 0.75
+
 var rng := RandomNumberGenerator.new()
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
@@ -528,21 +536,15 @@ func resolve(
 		RallyKinematics.court_distance_meters(set_contact, set_target), set_angle
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
-	## Setter release interval: the time between ball arriving and ball leaving
-	## the setter's hands. Derived from the setter's tempo_control/hand_control
-	## profile (quick setters release faster), jittered by set quality (poor
-	## handling takes longer). This is the first place SYSTEM_FIT_SET_RELEASE is
-	## consumed; it widens the hitter's approach window via the clock advance.
 	var release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
-	var release_interval := clampf(
-		(release_profile.ideal_value if release_profile != null else 0.42) \
-		+ lerpf(0.10, -0.05, float(result.set_quality)),
-		0.15, 0.75
-	)
+	var release_interval := _release_interval(release_profile, float(result.set_quality))
+	## The instant the ball leaves the setter's hands. The set flight, the SET
+	## event, and the hitter's approach window are all timed from this one value.
+	var set_contact_time := rally_clock + second_contact_window + release_interval
 	var set_trajectory := _ball_trajectory(
 		"set", set_contact, set_target, set_flight_time,
 		float(set_arc.apex_height_meters),
-		rally_clock + second_contact_window + release_interval
+		set_contact_time
 	)
 	if using_live_attack:
 		set_trajectory = Dictionary(selected_live_attack.get(
@@ -573,8 +575,8 @@ func resolve(
 			"first_contact_id": receiver.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
-			"deadline": rally_clock + second_contact_window + release_interval,
-			"event_time": rally_clock + second_contact_window + release_interval,
+			"deadline": set_contact_time,
+			"event_time": set_contact_time,
 			"release_interval": release_interval,
 			"incoming_trajectory": pass_trajectory,
 			"outgoing_trajectory": set_trajectory,
@@ -595,7 +597,7 @@ func resolve(
 	live_positions[setter.id] = Vector2(live_setter_integration.get(
 		"setter_center_position", set_contact
 	)) if using_live_setter else set_contact
-	rally_clock += second_contact_window + release_interval
+	rally_clock = set_contact_time
 	if assignment.tempo <= 1:
 		result.key_factors.append(ExplanationText.factor("fast_tempo"))
 
@@ -1506,11 +1508,12 @@ func _resolve_home_continuation(
 	)
 	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds)
 	var cont_release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
-	var cont_release_interval := clampf(
-		(cont_release_profile.ideal_value if cont_release_profile != null else 0.42) \
-		+ lerpf(0.10, -0.05, set_quality),
-		0.15, 0.75
-	)
+	var cont_release_interval := _release_interval(cont_release_profile, set_quality)
+	## The transition set leaves the setter's hands once they have travelled to
+	## the dig, taken the ball, and released it. Every later contact in this
+	## continuation is timed from that instant, mirroring the main set path --
+	## without it the set flight would start after the attack flight it feeds.
+	var cont_set_contact_time := rally_clock + second_contact_window + cont_release_interval
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, set_quality >= 0.20, set_quality,
 		("Emergency second-contact set" if emergency_setter else "Transition set") \
@@ -1523,9 +1526,11 @@ func _resolve_home_continuation(
 			"arrival_margin": setter_arrival_margin,
 			"flight_time": continuation_flight_time,
 			"release_interval": cont_release_interval,
+			"deadline": cont_set_contact_time,
+			"event_time": cont_set_contact_time,
 			"outgoing_trajectory": _ball_trajectory(
 				"set", set_contact, set_target, continuation_flight_time,
-				float(continuation_set_arc.apex_height_meters), rally_clock + cont_release_interval
+				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
 			)})
 	live_positions[setter.id] = set_contact
 	var hitter_start: Vector2 = live_positions.get(
@@ -1550,7 +1555,7 @@ func _resolve_home_continuation(
 	}
 	var transition_preparation := ApproachMechanicsModel.prepare_for_attack(
 		transition_state, hitter_actor, continuation_assignment, defender.id,
-		rally_clock + second_contact_window + cont_release_interval,
+		cont_set_contact_time,
 	)
 	var prepared_hitter := transition_preparation.get("actor") as RallyPlayerState
 	transition_preparation.erase("actor")
@@ -1625,11 +1630,17 @@ func _resolve_home_continuation(
 			"arrival_margin": hitter_arrival_margin,
 			"set_flight_time": continuation_flight_time,
 			"flight_time": continuation_attack_flight,
+			"event_time": cont_set_contact_time + continuation_flight_time,
 			"outgoing_trajectory": _ball_trajectory(
 				"attack", set_target, attack_target, continuation_attack_flight,
-				float(continuation_attack_arc.apex_height_meters), rally_clock
+				float(continuation_attack_arc.apex_height_meters),
+				cont_set_contact_time + continuation_flight_time
 			)})
 	live_positions[hitter.id] = set_target
+	## The continuation now owns a real timeline instead of stamping every
+	## contact with the dig's clock: set contact, then the set flight, then the
+	## attack. Later contacts read `rally_clock` and inherit it.
+	rally_clock = cont_set_contact_time + continuation_flight_time
 	if attack_quality < 0.25:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
@@ -2151,6 +2162,26 @@ static func _movement_mode_for_kind(
 		"approach":
 			return RallyPlayerState.MovementMode.APPROACH
 	return RallyPlayerState.MovementMode.TRANSITION
+
+
+## Time between the ball reaching the setter's hands and leaving them.
+##
+## Both halves of the setter's `SYSTEM_FIT_SET_RELEASE` profile are consumed:
+## `ideal_value` is their natural rhythm (quick setters release sooner) and
+## `tolerance` is how far off it they can work. A clean ball goes out at the
+## fast edge of that band and a mishandled one at the slow edge, so an
+## adaptable setter genuinely varies tempo with the ball they get while a rigid
+## one clusters on their ideal. The band belongs to the player, not to a tuned
+## constant here.
+static func _release_interval(profile: SystemFitProfile, set_quality: float) -> float:
+	var ideal := profile.ideal_value if profile != null \
+		else DEFAULT_SET_RELEASE_SECONDS
+	var band := profile.tolerance if profile != null \
+		else DEFAULT_SET_RELEASE_TOLERANCE
+	return clampf(
+		ideal + lerpf(band, -band, clampf(set_quality, 0.0, 1.0)),
+		MINIMUM_SET_RELEASE_SECONDS, MAXIMUM_SET_RELEASE_SECONDS,
+	)
 
 
 func _ball_trajectory(
