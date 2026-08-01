@@ -574,6 +574,58 @@ different from a quick one. The realised spread will be smaller than 0.258 and
 larger than zero, and it is worth measuring on the real block geometry before
 committing to a design.
 
+### The realised spread, measured on the real block
+
+Forming the actual opponent block against every lane a setter could choose, at
+the flight time each lane implies:
+
+| tempo | spread across lanes | openest lane | set flight |
+|---|---|---|---|
+| 0 (quick) | 0.380 | **0.058** | 0.23 s |
+| 1 | 0.380 | **0.058** | 0.33 s |
+| 2 | 0.385 | **0.058** | 0.48 s |
+| 3 (high ball) | 0.419 | **0.093** | 0.69 s |
+
+The realised spread is 0.38-0.42, **larger** than the 0.258 quoted as its own
+upper bound. That is not a contradiction but a mislabel: 0.258 came from
+`block_values()`, which evaluates a *solo* wall, and a real formation can add an
+assist. It should have been described as a solo-wall figure, not a bound.
+
+The number that matters is the other column. **The openest lane sits at 0.058,
+which is the block-quality clamp floor** -- at every tempo there is a lane with
+effectively no block on it at all. The lanes tested are 0.9 m from the nearest
+blocker, which is a quarter of the distance a real middle covers on a high ball.
+
+The cause is the closing window. `close_time` starts at **set contact**:
+
+```gdscript
+var close_time := maxf(set_flight_time, 0.0) + (1.0 - set_quality) * 0.10
+```
+
+Reaction costs about 0.23 s of that and `BLOCK_PLANT_SECONDS` another 0.26, so a
+high ball's 0.69 s leaves roughly 0.24 s of actual movement, and a quick set
+leaves none. From a standstill that is about 0.2 m of footwork. **The block
+cannot cover one metre of net at any tempo.**
+
+Real blockers do not start at set contact. They read the pass and the setter's
+body and are already moving before the ball leaves the setter's hands; the set's
+flight is the last part of their window, not all of it.
+
+So the decision channel is large, but currently for the wrong reason: a setter
+who could see the block's starting position would find an open lane every time,
+because the block is very nearly static. Fixing the window's origin is a
+prerequisite -- it will shrink this spread toward something a real setter has to
+work for, and it is also what would give a middle blocker's commit decision the
+leverage it should have. The spread should be re-measured afterwards, because
+the number that justifies building a decision channel is the one measured
+against a block that can actually move.
+
+A smaller defect found alongside it: `_blocker_close_fraction()` reads
+`live_positions` for its starting point, which is the *home* dictionary, so
+opponent blockers are always placed from static rotation slots rather than where
+the rally actually left them. Harmless today only because the two id ranges do
+not overlap.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error
