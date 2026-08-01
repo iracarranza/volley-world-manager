@@ -78,8 +78,44 @@ const BLOCK_CLOSE_FAILURE_SECONDS: float = 0.45
 ## here and then contests it. At 0.20/0.08 -- values set while the block was
 ## still saturated and therefore constant -- the two compounded into a 0.386
 ## stuff rate once closes actually varied.
-const BLOCK_PRIMARY_PRESSURE: float = 0.11
-const BLOCK_ASSIST_PRESSURE: float = 0.05
+const BLOCK_PRIMARY_PRESSURE: float = 0.06
+const BLOCK_ASSIST_PRESSURE: float = 0.03
+
+## What a hitter brings to a swing, as a fraction of an ideal one. These sum to
+## 1.0 on purpose: a quality that is a fraction of an ideal can be compared with
+## a block quality that is also a fraction of an ideal, and a margin of 0.06
+## between them means something.
+const ATTACK_ACCURACY_WEIGHT: float = 0.50
+const ATTACK_POWER_WEIGHT: float = 0.32
+const ATTACK_DECISION_WEIGHT: float = 0.18
+
+## How much of the swing each dimension of the opportunity can take away. They
+## multiply rather than add, because a swing is only as good as the worst thing
+## about it.
+const SET_OPPORTUNITY_WEIGHT: float = 0.40
+const APPROACH_OPPORTUNITY_WEIGHT: float = 0.26
+const TIMING_OPPORTUNITY_WEIGHT: float = 0.45
+
+## Arriving this far behind the ball costs the whole timing dimension.
+const LATE_ARRIVAL_SECONDS: float = 0.60
+
+## Execution spread that is not attributable to anything modelled.
+const ATTACK_EXECUTION_NOISE: float = 0.10
+
+## A swing that kept less than this fraction of an ideal one does not land in.
+## It is a boundary on the execution scale rather than a rate to hit, and it is
+## reachable for the first time: the additive form floored attack quality at
+## 0.321 against a threshold of 0.29, so no swing in the engine could ever be an
+## error.
+const ATTACK_ERROR_THRESHOLD: float = 0.24
+
+## How decisively the block has to beat the swing for each outcome. A block that
+## loses the airspace does not get a hand on the ball, so none of these is
+## negative by much: at -0.06 and -0.24 the block touched 82% of all attacks and
+## rallies never ended.
+const BLOCK_STUFF_MARGIN: float = 0.14
+const BLOCK_TOUCH_MARGIN: float = 0.06
+const BLOCK_FUNNEL_MARGIN: float = -0.02
 
 ## How hard a swing attempted outside the approach's capability bites. Mirrors
 ## `SetterCapabilitySystem.OVERREACH_SEVERITY` at the second contact: a hitter a
@@ -757,10 +793,7 @@ func resolve(
 	if set_event_for_staging != null:
 		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
 		set_event_for_staging.metadata["staged_next_position"] = hitter_start
-	var approach_fit := _rating(hitter, "approach_timing") * 0.12 \
-		+ float(resolved_approach.get("runup_quality", 0.5)) * 0.24 \
-		+ float(resolved_approach.get("lateral_control", 0.5)) * 0.08 \
-		+ float(resolved_approach.get("approach_speed_fraction", 0.5)) * 0.06
+	var approach_fit := _approach_execution_fit(hitter, resolved_approach)
 	## The block this swing is actually hit into. Attack quality had no opposing
 	## term at all: it summed roughly 1.5 of positive coefficients against
 	## penalties that rarely reached 0.2, so it never fell below 0.310 against an
@@ -789,30 +822,15 @@ func resolve(
 		* BLOCK_PRIMARY_PRESSURE \
 		+ float(opponent_block_formation.get("assist_close", 0.0)) \
 		* BLOCK_ASSIST_PRESSURE
-	## NOT normalised by its weight total, unlike the serve.
-	##
-	## The positive coefficients here add to 1.50, so an ordinary hitter scores
-	## about 0.84 before penalties and the distribution sits well above the 0.29
-	## error threshold. Dividing by 1.50 -- the fix that worked for the opponent
-	## serve -- was measured and overshot catastrophically: attack quality fell
-	## below the block's `contest > attack_quality - 0.30` funnel test almost
-	## every swing, so nearly every attack was touched into a continuation and
-	## rally length exploded past the exchange limit. The measured symptom was a
-	## tenfold slowdown of the calibration sweep.
-	##
-	## Attack errors therefore remain unreachable, and closing that gap needs the
-	## block contest thresholds re-derived alongside the execution scale rather
-	## than either changed alone. Recorded rather than left as a silent
-	## near-miss.
-	var attack_base: float = _rating(hitter, "attack_accuracy") * 0.38 \
-		+ _power_rating(hitter, "attack_power") * 0.24 \
-		+ _rating(hitter, "decision_making") * 0.13 \
-		+ approach_fit + result.set_quality * 0.25 - tempo_demand \
-		- block_pressure \
-		+ clampf(hitter_arrival_margin * 0.22, -0.58, 0.08) \
-		+ Familiarity.attack_geometry(hitter, assignment.lane) \
-		+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14
-	result.attack_quality = clampf(attack_base + rng.randf_range(-0.16, 0.16), 0.0, 1.0)
+	result.attack_quality = clampf(
+		_attack_execution(
+			hitter, float(result.set_quality), approach_fit, hitter_arrival_margin,
+			tempo_demand, block_pressure,
+			Familiarity.attack_geometry(hitter, assignment.lane)
+			+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14,
+		) + rng.randf_range(-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE),
+		0.0, 1.0,
+	)
 	var hit_type := _hit_type(assignment, hitter)
 	var available_attacks := ApproachMechanicsModel.available_attack_families(
 		hitter, resolved_approach, hitter_arrival_margin
@@ -944,7 +962,7 @@ func resolve(
 		"hitter_center_position", set_target
 	)) if using_live_attack else set_target
 	rally_clock += float(set_flight_time)
-	if result.attack_quality < 0.29:
+	if result.attack_quality < ATTACK_ERROR_THRESHOLD:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
@@ -978,7 +996,7 @@ func resolve(
 
 	# Resolve the block from the opponent's actual front-row geometry. A
 	# roster-wide best blocker must not cover every pin regardless of distance.
-	var block_resolution := _contest_opponent_block(
+	var block_resolution := _contest_block(
 		opponent_block_formation, float(result.attack_quality)
 	)
 
@@ -1407,11 +1425,34 @@ func _resolve_opponent_transition(
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
 	## Provisional: recomputed below once preparation has staged the hitter.
 	var hitter_arrival_margin: float = set_flight_time - float(attack_choice.travel_time)
+	## The wall this swing is hit into, formed before it is scored -- the same
+	## order the home attack uses. The opponent swing used to be
+	## `attack_power * 0.62 + set_quality * 0.20 + 0.08`: a third execution scale,
+	## with no approach term and no opposing block, compared against the same
+	## contest and the same error threshold as the home side's.
+	var home_block_formation := _form_home_block(
+		players, lineup, defensive_plan, opponent_contact.x,
+		opponent_tempo, opponent_set_quality,
+		opponent_setter_position.x, set_flight_time,
+	)
+	var home_block_pressure := float(
+		home_block_formation.get("primary_close", 0.0)
+	) * BLOCK_PRIMARY_PRESSURE + float(
+		home_block_formation.get("assist_close", 0.0)
+	) * BLOCK_ASSIST_PRESSURE
+	var opponent_attack_noise := rng.randf_range(
+		-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE
+	)
+	## Provisional: the run-up has not been evaluated yet, so this scores the
+	## swing as if the approach were merely adequate. Recomputed below once the
+	## real approach exists.
 	var opponent_attack := clampf(
-		_power_rating(opponent_hitter, "attack_power") * 0.62 \
-		+ opponent_set_quality * 0.20 + 0.08 \
-		- clampf(-hitter_arrival_margin / 1.2, 0.0, 1.0) * 0.10 \
-		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
+		_attack_execution(
+			opponent_hitter, opponent_set_quality, 0.5, hitter_arrival_margin,
+			0.0, home_block_pressure,
+		) + opponent_attack_noise,
+		0.0, 1.0,
+	)
 	## Gate 43, mirrored. The opponent hitter now has a causal approach instead
 	## of a purely geometric mark: responsibility sets their release time, and
 	## the resulting run-up changes approach speed, lateral control, usable jump,
@@ -1467,13 +1508,17 @@ func _resolve_opponent_transition(
 			opponent_hitter, opponent_approach, hitter_arrival_margin
 		) if not opponent_approach.is_empty() else ([] as Array[String])
 	## A run-up that never happened cannot lend its quality to the swing. This
-	## is the same coupling Gate 43 gave the home side.
+	## is the same coupling Gate 43 gave the home side, and it now feeds the
+	## same execution model rather than a bolt-on adjustment.
 	if not opponent_approach.is_empty():
 		opponent_attack = clampf(
-			opponent_attack
-			+ (float(opponent_approach.get("runup_quality", 0.0)) - 0.5) * 0.14
-			+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
-			0.2, 0.96,
+			_attack_execution(
+				opponent_hitter, opponent_set_quality,
+				_approach_execution_fit(opponent_hitter, opponent_approach),
+				hitter_arrival_margin, 0.0, home_block_pressure,
+				(float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
+			) + opponent_attack_noise,
+			0.0, 1.0,
 		)
 	## Let playback walk the hitter to their approach mark during the set,
 	## instead of teleporting them into a swing when the attack event begins.
@@ -1488,7 +1533,7 @@ func _resolve_opponent_transition(
 	var opponent_attack_angle := _attack_launch_angle_degrees(
 		opponent_hitter, str(attack_choice.attack_type), opponent_attack
 	)
-	## The full shot, to where it is actually aimed. `_resolve_home_block()`
+	## The full shot, to where it is actually aimed. `_contest_block()`
 	## re-slices this to the net if the block touches it; truncating here
 	## unconditionally made every opponent spike travel about three percent of
 	## the court and the rest arrive as a "deflection".
@@ -1541,11 +1586,7 @@ func _resolve_opponent_transition(
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_hitter.id] = opponent_contact
-	var block_result := _resolve_home_block(
-		players, lineup, defensive_plan, opponent_contact.x,
-		opponent_tempo, opponent_set_quality, opponent_attack,
-		opponent_setter_position.x, set_flight_time,
-	)
+	var block_result := _contest_block(home_block_formation, opponent_attack)
 	var blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var home_block := float(block_result.quality)
@@ -1865,25 +1906,42 @@ func _resolve_home_continuation(
 	var continuation_actions := ApproachMechanicsModel.available_attack_families(
 		hitter, continuation_approach, hitter_arrival_margin
 	)
+	## The third copy of the execution scale, now the same model as the other
+	## two. A transition swing is harder than one off a served ball, and
+	## `exchange_penalty` is what carries that -- as a demand on the swing, the
+	## same slot tempo occupies in the first-ball case.
 	var attack_quality := clampf(
-		_rating(hitter, "attack_accuracy") * 0.42
-		+ _power_rating(hitter, "attack_power") * 0.26
-		+ _rating(hitter, "approach_timing") * 0.05
-		+ float(continuation_approach.get("runup_quality", 0.5)) * 0.08
-		+ float(continuation_approach.get("lateral_control", 0.5)) * 0.03
-		+ float(continuation_approach.get("approach_speed_fraction", 0.5)) * 0.02
-		+ set_quality * 0.18 - exchange_penalty \
-		+ clampf(hitter_arrival_margin * 0.20, -0.52, 0.07)
-		+ rng.randf_range(-0.15, 0.15), 0.12, 0.95
+		_attack_execution(
+			hitter, set_quality,
+			_approach_execution_fit(hitter, continuation_approach),
+			hitter_arrival_margin, exchange_penalty, 0.0,
+		) + rng.randf_range(-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE),
+		0.0, 1.0,
 	)
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
 	))
+	## Same rule as the first-ball swing: capability shapes the outcome, it does
+	## not remove the option.
 	var continuation_hit_type := _hit_type(assignment, hitter)
-	if "power_attack" not in continuation_actions:
-		continuation_hit_type = "Controlled roll"
+	var continuation_deficit := ApproachMechanicsModel.attack_family_deficit(
+		hitter, continuation_approach, hitter_arrival_margin,
+		ApproachMechanicsModel.attack_family_for_hit_type(continuation_hit_type),
+	)
+	if AttemptJudgmentModel.backs_off(hitter, continuation_deficit):
+		continuation_hit_type = "Controlled roll" \
+			if "controlled_roll" in continuation_actions else "Emergency tip"
+		continuation_deficit = ApproachMechanicsModel.attack_family_deficit(
+			hitter, continuation_approach, hitter_arrival_margin,
+			ApproachMechanicsModel.attack_family_for_hit_type(continuation_hit_type),
+		)
+	if continuation_deficit > 0.0:
+		attack_quality = clampf(
+			attack_quality - continuation_deficit * ATTACK_OVERREACH_SEVERITY,
+			0.0, 1.0,
+		)
 	## One shot shape, used both for the full flight and -- if a block touches
 	## it -- for the re-sliced leg to the net, so the two describe the same ball.
 	var continuation_attack_angle := _attack_launch_angle_degrees(
@@ -1936,7 +1994,7 @@ func _resolve_home_continuation(
 	## contact with the dig's clock: set contact, then the set flight, then the
 	## attack. Later contacts read `rally_clock` and inherit it.
 	rally_clock = cont_set_contact_time + continuation_flight_time
-	if attack_quality < 0.25:
+	if attack_quality < ATTACK_ERROR_THRESHOLD:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
@@ -2136,8 +2194,9 @@ func _form_opponent_block(
 	}
 
 
-## Settles a formed block against the swing that was actually hit at it.
-func _contest_opponent_block(
+## Settles a formed block against the swing that was actually hit at it. One
+## copy, both sides of the net, every exchange.
+func _contest_block(
 	formation: Dictionary,
 	attack_quality: float,
 ) -> Dictionary:
@@ -2153,11 +2212,11 @@ func _contest_opponent_block(
 	## stuff blocks.
 	var contest := block_quality + rng.randf_range(-0.14, 0.12)
 	var outcome := "miss"
-	if contest > attack_quality + 0.22 and primary_close >= 0.78:
+	if contest > attack_quality + BLOCK_STUFF_MARGIN and primary_close >= 0.78:
 		outcome = "stuff"
-	elif contest > attack_quality - 0.06:
+	elif contest > attack_quality + BLOCK_TOUCH_MARGIN:
 		outcome = "touch"
-	elif contest > attack_quality - 0.24:
+	elif contest > attack_quality + BLOCK_FUNNEL_MARGIN:
 		outcome = "funnel"
 	resolved["outcome"] = outcome
 	return resolved
@@ -2174,7 +2233,7 @@ func _resolve_opponent_block(
 	setter_x: float,
 	set_flight_time: float,
 ) -> Dictionary:
-	return _contest_opponent_block(
+	return _contest_block(
 		_form_opponent_block(
 			opponent_team, attack_x, tempo, set_quality, setter_x, set_flight_time
 		),
@@ -3361,14 +3420,19 @@ func _best_blocker(
 
 ## `set_flight_time` is the opponent set's own flight, for the same reason the
 ## opponent block uses it: it is how long home blockers actually have.
-func _resolve_home_block(
+## The home wall as it forms, before the swing it will face is scored. Both
+## sides now form first and contest afterwards, through the same
+## `_contest_block()`: the home block used to carry its own copy of the margins,
+## and when the opponent side was retuned the two immediately diverged -- the
+## home block stuffed 36 attacks in a sweep where the opponent block stuffed
+## none. A second copy of a contest is a second balance to maintain.
+func _form_home_block(
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
 	defensive_plan: Resource,
 	attack_x: float,
 	tempo: int,
 	set_quality: float,
-	attack_quality: float,
 	opponent_setter_x: float,
 	set_flight_time: float,
 ) -> Dictionary:
@@ -3460,25 +3524,13 @@ func _resolve_home_block(
 		primary_skill * 0.78 + assist_skill * 0.30,
 		0.05, 0.98,
 	)
-	## Same margins as `_contest_opponent_block()`. They were left behind when the
-	## opponent side was retuned, and the two sides immediately diverged: the home
-	## block stuffed 36 attacks in a sweep where the opponent block stuffed none.
-	## A second copy of a contest is a second balance to maintain.
-	var contest := block_quality + rng.randf_range(-0.14, 0.12)
-	var outcome := "miss"
-	if contest > attack_quality + 0.22 and primary_close >= 0.78:
-		outcome = "stuff"
-	elif contest > attack_quality - 0.06:
-		outcome = "touch"
-	elif contest > attack_quality - 0.24:
-		outcome = "funnel"
 	return {
 		"primary": primary,
 		"assist": assist,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
 		"quality": block_quality,
-		"outcome": outcome,
+		"outcome": "miss",
 		"coverage_segments": _home_block_segments(
 			attack_x, primary, primary_close, assist, assist_close
 		),
@@ -3558,6 +3610,73 @@ func _blocker_close_fraction(
 		1.0 - maxf(required_seconds - usable_time, 0.0) / BLOCK_CLOSE_FAILURE_SECONDS,
 		0.0, 1.0,
 	)
+
+
+## How well this hitter's run-up served the swing, as a fraction of an ideal
+## approach. Their own approach timing is part of it: the profile measures the
+## run-up they produced, not how well they habitually produce one.
+func _approach_execution_fit(
+	hitter: VolleyballPlayer,
+	approach_profile: Dictionary,
+) -> float:
+	return clampf(
+		_rating(hitter, "approach_timing") * 0.24
+		+ float(approach_profile.get("runup_quality", 0.5)) * 0.48
+		+ float(approach_profile.get("lateral_control", 0.5)) * 0.16
+		+ float(approach_profile.get("approach_speed_fraction", 0.5)) * 0.12,
+		0.0, 1.0,
+	)
+
+
+## One swing, wherever in the rally it happens.
+##
+## The engine carried three copies of this. The home attack summed 1.50 of
+## positive weight across ratings, approach and set quality; the opponent attack
+## used `attack_power * 0.62 + set_quality * 0.20 + 0.08`; the continuation used
+## a third set of weights again. All three were then compared against the same
+## block contest and the same error threshold, which only made sense for one of
+## them at a time.
+##
+## Capability is what the hitter brings, normalised to a fraction of an ideal
+## hitter. Opportunity is what the rally handed them, and it is a **product**:
+## a great hitter off a terrible set, with no run-up, arriving late, should put
+## the ball in the stands. Summing those terms instead put roughly 0.75 of
+## rating weight under every swing in the game, so attack quality never fell
+## below 0.321 against a 0.29 error threshold and the engine produced no attack
+## errors at all -- not few, none, across 180 rallies.
+func _attack_execution(
+	hitter: VolleyballPlayer,
+	set_quality: float,
+	approach_fit: float,
+	arrival_margin: float,
+	tempo_demand: float,
+	block_pressure: float,
+	familiarity_bonus: float = 0.0,
+) -> float:
+	if hitter == null:
+		return 0.0
+	var capability := clampf(
+		_rating(hitter, "attack_accuracy") * ATTACK_ACCURACY_WEIGHT
+		+ _power_rating(hitter, "attack_power") * ATTACK_POWER_WEIGHT
+		+ _rating(hitter, "decision_making") * ATTACK_DECISION_WEIGHT
+		+ familiarity_bonus,
+		0.0, 1.0,
+	)
+	## Arriving early is worth nothing extra -- the ball still has to come down
+	## -- so this saturates at the margin rather than rewarding it.
+	var timing := clampf(
+		(arrival_margin + LATE_ARRIVAL_SECONDS) / LATE_ARRIVAL_SECONDS, 0.0, 1.0
+	)
+	var opportunity := (
+		1.0 - SET_OPPORTUNITY_WEIGHT * (1.0 - clampf(set_quality, 0.0, 1.0))
+	) * (
+		1.0 - APPROACH_OPPORTUNITY_WEIGHT * (1.0 - clampf(approach_fit, 0.0, 1.0))
+	) * (
+		1.0 - TIMING_OPPORTUNITY_WEIGHT * (1.0 - timing)
+	) * (
+		1.0 - clampf(tempo_demand, 0.0, 0.60)
+	)
+	return clampf(capability * opportunity - block_pressure, 0.0, 1.0)
 
 
 func _block_contact_skill(blocker: VolleyballPlayer, close_fraction: float) -> float:
