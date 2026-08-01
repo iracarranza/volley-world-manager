@@ -69,7 +69,7 @@ development-project feature. Preserve the product contract in
 | Reception ownership/contact | Official phase resolver | Audited persistent candidate may be promoted |
 | Setter ownership/contact | Official phase resolver | May be promoted only after promoted reception |
 | Attack ownership/contact | Official phase resolver | May be promoted only after promoted reception and setter |
-| Home attack preparation | `ApproachMechanicsSystem` affects normal attack quality, jump conversion, and available attack families | Same evidence passes through the attack audit and live candidate |
+| Attack preparation, both sides | `ApproachMechanicsSystem` affects normal attack quality, jump conversion, and available attack families; the opponent path mirrors it with explicit side orientation | Same evidence passes through the attack audit and live candidate |
 | Home floor-defense geometry | Saved plan and block relationship drive phase positions and claimant geometry | Same |
 | Block decision | Legacy resolver reads resolved attack geometry | Legacy resolver; a shadow block slice (Gates 44-49) runs alongside it as evidence. One audited block contact may be promoted, but only in an explicitly requested development fixture, in a debug build, on top of a promoted attack |
 | Serve/set/attack flight timing | Derived from real distance and a launch angle by `RallyKinematics.solve_launch_arc()`; no duration tables remain | Same |
@@ -161,7 +161,14 @@ purpose.
   +43%. See [Locomotion](../design/LOCOMOTION_AND_GENERATION.md).
 - **Setter capability.** `SetterCapabilitySystem` gives tempo command, pass
   recovery, and reach real consequences on every official second contact, and
-  attaches its read to the SET event.
+  attaches its read to the SET event. Capability constrains outcomes, never
+  permission -- see below.
+- **Gate 43 mirrored onto the opponent attack.** Opponent hitters now have a
+  causal approach feeding attack quality, the swing arc, and available attack
+  families, and the opponent set stages them at their approach mark for
+  playback. `approach_start_position()` and `prepare_for_attack()` take an
+  explicit side: the approach depth offset is signed by side, and the home
+  defensive-duty lookup is gated so it can never be consulted for an opponent.
 
 ## The one current next objective
 
@@ -170,13 +177,14 @@ objective is a judgement call rather than a lookup. Do not start a production
 rollout: every `ENABLE_CONTINUOUS_*` flag is still off, and turning one on is a
 separately reviewed decision that no completed gate authorizes.
 
-**1. Mirror Gate 43 onto the opponent attack (recommended, and now overdue).**
-The opponent attack path never calls `ApproachMechanicsSystem`, so opponent
-hitters have no causal approach. Two separate pieces of work now depend on it:
-the shadow block (Gates 44-49) reads a hitter-approach cue that has almost
-nothing behind it on the opponent side, and **spikes are unclear in 2D playback**
-because there is no staged approach to draw. It is the smallest change with the
-largest effect on existing evidence.
+**1. Confirm opponent spikes now read correctly in 2D playback.** The engine
+side of this is done -- the opponent attack path mirrors Gate 43, and the
+opponent SET event stages the hitter at their approach mark so playback can
+animate the run-up rather than teleporting them into a swing. What has not been
+done is *looking at it*: the original complaint was that spikes were unclear on
+the 2D court, and that should now be re-checked against a real rally before
+anything else is built on top of it. If it still reads poorly, the remaining
+fault is in `scenes/main/main.gd` playback rather than in the resolver.
 
 **2. Carry the capability pattern to attacking and blocking.**
 `SetterCapabilitySystem` is a worked example of the contract described under

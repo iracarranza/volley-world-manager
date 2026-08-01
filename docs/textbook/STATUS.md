@@ -218,6 +218,26 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
+- **Opponent hitters now have a causal approach (Gate 43 mirrored).**
+  `_resolve_opponent_transition()` builds an opponent-side rally state, runs
+  `ApproachMechanicsSystem.prepare_for_attack(..., &"opponent")`, and feeds the
+  resulting run-up into attack quality, the swing's launch arc, and the attack
+  families physically available. Two things had depended on its absence: the
+  shadow block (Gates 44-49) read a hitter-approach cue with almost nothing
+  behind it on the opponent side, and 2D playback had no staged run-up to draw,
+  which is why opponent spikes were unreadable. The opponent SET event now
+  stamps `staged_next_actor_id`/`staged_next_position`, so playback walks the
+  hitter to their mark during the set instead of teleporting them into a swing.
+  Measured over 80 opponent attacks: every one carries a resolved approach and a
+  non-empty attack-family list, and every preceding set stages the hitter.
+- **Approach orientation is explicit rather than inherited.**
+  `approach_start_position()` takes a side, because a hitter approaches the net
+  from behind it and "behind" is +y for home and -y for the opponent; the home
+  offset would have placed an opponent's mark across the net in home territory.
+  `prepare_for_attack()` also gates the `home_plan` duty lookup on side. That
+  lookup is keyed by player id and contains only home players, so it worked for
+  opponents purely because the two id ranges (1-8 and 101-107) happen not to
+  overlap -- an assumption nothing enforced.
 - **Setter attributes decide how an action turns out, not whether it is
   allowed.** `SetterCapabilitySystem` is consulted on every official second
   contact and its read is attached to the SET event. Nothing is filtered away:
@@ -403,7 +423,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 456 passing checks (424 as of Gate
+The current foundation validation reports 459 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

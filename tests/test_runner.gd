@@ -144,6 +144,7 @@ func _initialize() -> void:
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
+	_test_opponent_approach_mirror()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3933,6 +3934,84 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 		float(locomotion.get("stale_stride_rate", 1.0)) < 0.05
 			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
 		"Generation fix: stride_length_m is derived from each player's actual post-variation height",
+	)
+
+
+## Gate 43 mirrored onto the opponent. The opponent hitter had no causal
+## approach, which left the shadow block reading a cue with nothing behind it
+## and left 2D playback with no staged run-up to draw for an opponent spike.
+func _test_opponent_approach_mirror() -> void:
+	## 1. Orientation is explicit, not inherited. A hitter approaches the net
+	##    from behind it, and "behind" is +y for home and -y for the opponent.
+	##    Taking the home offset would place the opponent's mark across the net.
+	var home_mark: Vector2 = APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		Vector2(0.20, 0.53), "Left Pin", &"home"
+	)
+	var opponent_mark: Vector2 = APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		Vector2(0.20, 0.47), "Left Pin", &"opponent"
+	)
+	_check(
+		home_mark.y > 0.5 and opponent_mark.y < 0.5,
+		"each side's approach mark sits behind its own net, not across it",
+	)
+
+	## 2. Home defensive duties are keyed by player id and contain only home
+	##    players. That an opponent id never collides with a home one is a
+	##    coincidence nothing enforces, so the lookup is gated on side instead.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var duty_state: RallyState = RALLY_STATE_BUILDER_SCRIPT.build(
+		manager.players, manager.current_lineup(),
+		manager.current_defensive_plan(), manager.opponent_team,
+		manager.called_play(), false, 5150,
+	)
+	duty_state.simulation_time = 0.4
+	var home_actor := duty_state.player_state(&"home", manager.players[0].id)
+	var opponent_actor := duty_state.player_state(
+		&"opponent", manager.opponent_team.players[0].id
+	)
+	var assignment := {"lane": "Left Pin", "tempo": 2, "target": Vector2(0.2, 0.5)}
+	var home_prep: Dictionary = APPROACH_MECHANICS_SCRIPT.prepare_for_attack(
+		duty_state, home_actor, assignment, -1, 1.2, &"home"
+	)
+	var opponent_prep: Dictionary = APPROACH_MECHANICS_SCRIPT.prepare_for_attack(
+		duty_state, opponent_actor, assignment, -1, 1.2, &"opponent"
+	)
+	_check(
+		duty_state.home_plan != null
+			and bool(home_prep.get("available", false))
+			and bool(opponent_prep.get("available", false))
+			and int(opponent_prep.get("zone_priority", -1)) == 0
+			and str(opponent_prep.get("defensive_duty", "x")) == "",
+		"an opponent hitter draws no duty from the home defensive plan",
+	)
+
+	## 3. In ordinary rallies the opponent attack now carries the same approach
+	##    evidence the home side does, and the preceding set stages the hitter so
+	##    playback can animate the run-up instead of teleporting them into it.
+	var attacks := 0
+	var with_actions := 0
+	var staged := 0
+	var wrong_side := 0
+	for seed_value in range(20000, 20080):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			var metadata: Dictionary = event.metadata
+			if str(metadata.get("side", "")) != "opponent":
+				continue
+			if metadata.has("staged_next_actor_id"):
+				staged += 1
+			if not metadata.has("resolved_approach"):
+				continue
+			attacks += 1
+			if Array(metadata.get("available_attack_actions", [])).size() > 0:
+				with_actions += 1
+			if Vector2(metadata.get("approach_start_position", Vector2.ZERO)).y >= 0.5:
+				wrong_side += 1
+	_check(
+		attacks >= 20 and with_actions == attacks and wrong_side == 0 and staged >= 20,
+		"opponent attacks carry a resolved approach, legal attack families, and a staged run-up",
 	)
 
 

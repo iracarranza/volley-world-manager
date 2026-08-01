@@ -1280,6 +1280,67 @@ func _resolve_opponent_transition(
 		+ opponent_set_quality * 0.20 + 0.08 \
 		- clampf(-hitter_arrival_margin / 1.2, 0.0, 1.0) * 0.10 \
 		+ rng.randf_range(-0.16, 0.16), 0.2, 0.96)
+	## Gate 43, mirrored. The opponent hitter now has a causal approach instead
+	## of a purely geometric mark: responsibility sets their release time, and
+	## the resulting run-up changes approach speed, lateral control, usable jump,
+	## and which attack families are physically available. Two things depended on
+	## this being absent -- the shadow block was reading a hitter-approach cue
+	## with nothing behind it, and 2D playback had no staged approach to draw,
+	## which is why opponent spikes were unreadable.
+	var opponent_state := RallyStateBuilderModel.build(
+		players, lineup, defensive_plan, opponent_team, null, true,
+		rng.seed + exchange_number * 2411,
+	)
+	opponent_state.simulation_time = maxf(rally_clock - 0.55, 0.0)
+	var opponent_hitter_actor := opponent_state.player_state(
+		&"opponent", opponent_hitter.id
+	)
+	if opponent_hitter_actor != null:
+		opponent_hitter_actor.apply_position(
+			Vector2(attack_choice.start), opponent_hitter_actor.velocity
+		)
+	var opponent_preparation := ApproachMechanicsModel.prepare_for_attack(
+		opponent_state, opponent_hitter_actor,
+		{
+			"player_id": opponent_hitter.id,
+			"lane": str(attack_choice.get("lane", "Left Pin")),
+			"tempo": opponent_tempo,
+			"target": opponent_contact,
+		},
+		opponent_setter.id, rally_clock + set_flight_time, &"opponent",
+	)
+	var opponent_prepared := opponent_preparation.get("actor") as RallyPlayerState
+	opponent_preparation.erase("actor")
+	var opponent_approach_start := _approach_start_position(
+		opponent_contact, Vector2(attack_choice.start), true
+	)
+	if opponent_prepared != null:
+		opponent_approach_start = opponent_prepared.position
+	var opponent_approach := ApproachMechanicsModel.evaluate_takeoff(
+		opponent_prepared, opponent_contact, set_flight_time
+	) if opponent_prepared != null else {}
+	var opponent_attack_actions: Array[String] = \
+		ApproachMechanicsModel.available_attack_families(
+			opponent_hitter, opponent_approach, hitter_arrival_margin
+		) if not opponent_approach.is_empty() else ([] as Array[String])
+	## A run-up that never happened cannot lend its quality to the swing. This
+	## is the same coupling Gate 43 gave the home side.
+	if not opponent_approach.is_empty():
+		opponent_attack = clampf(
+			opponent_attack
+			+ (float(opponent_approach.get("runup_quality", 0.0)) - 0.5) * 0.14
+			+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
+			0.2, 0.96,
+		)
+	## Let playback walk the hitter to their approach mark during the set,
+	## instead of teleporting them into a swing when the attack event begins.
+	var opponent_set_event := result.events[-1] as RallyEvent
+	if opponent_set_event != null:
+		opponent_set_event.metadata["staged_next_actor_id"] = opponent_hitter.id
+		opponent_set_event.metadata["staged_next_position"] = opponent_approach_start
+
+	## The swing's shape is solved only now, so the run-up that just adjusted
+	## `opponent_attack` also shapes the arc it produces.
 	var opponent_net_contact := Vector2(opponent_contact.x, 0.50)
 	var opponent_attack_angle := _attack_launch_angle_degrees(
 		opponent_hitter, str(attack_choice.attack_type), opponent_attack
@@ -1291,10 +1352,8 @@ func _resolve_opponent_transition(
 	var opponent_attack_trajectory := _ball_trajectory(
 		"attack_to_block", opponent_contact, opponent_net_contact,
 		float(opponent_attack_arc.duration_seconds),
-		float(opponent_attack_arc.apex_height_meters), rally_clock
-	)
-	var opponent_approach_start := _approach_start_position(
-		opponent_contact, Vector2(attack_choice.start), true
+		float(opponent_attack_arc.apex_height_meters),
+		rally_clock + set_flight_time
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
@@ -1310,8 +1369,26 @@ func _resolve_opponent_transition(
 			"hitter_start": attack_choice.start,
 			"hitter_travel_time": attack_choice.travel_time,
 			"arrival_margin": hitter_arrival_margin,
-			"movement_start": attack_choice.start,
+			"movement_start": opponent_approach_start,
 			"approach_start_position": opponent_approach_start,
+			"approach_target_position": Vector2(opponent_preparation.get(
+				"approach_target_position", opponent_approach_start
+			)),
+			"reached_approach_start": bool(opponent_preparation.get(
+				"reached_approach_start", true
+			)),
+			"transition_preparation": opponent_preparation.duplicate(true),
+			"resolved_approach": opponent_approach.duplicate(true),
+			"available_attack_actions": opponent_attack_actions.duplicate(),
+			"approach_speed_mps": float(opponent_approach.get("approach_speed_mps", 0.0)),
+			"approach_quality": float(opponent_approach.get("runup_quality", 0.0)),
+			"approach_distance_meters": float(opponent_approach.get(
+				"approach_distance_meters", 0.0
+			)),
+			"approach_in_system": bool(opponent_approach.get("approach_in_system", false)),
+			"jump_multiplier": float(opponent_approach.get("jump_multiplier", 1.0)),
+			"lateral_control": float(opponent_approach.get("lateral_control", 0.0)),
+			"event_time": rally_clock + set_flight_time,
 			"movement_duration": attack_choice.travel_time,
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent

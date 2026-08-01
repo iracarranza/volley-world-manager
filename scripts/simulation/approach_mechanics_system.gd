@@ -15,6 +15,7 @@ static func prepare_for_attack(
 	assignment: Dictionary,
 	first_contact_player_id: int,
 	set_contact_time: float,
+	side: StringName = &"home",
 ) -> Dictionary:
 	if state == null or actor == null or actor.player == null:
 		return {"available": false}
@@ -24,7 +25,11 @@ static func prepare_for_attack(
 	var release_reason := "recognized teammate ownership"
 	var assignment_duty := ""
 	var zone_priority := 0
-	if state.home_plan != null:
+	## `home_plan` is keyed by player id, and only home players appear in it.
+	## Consulting it for an opponent works today only because the two id ranges
+	## happen not to overlap, which is an assumption nothing enforces. Gate the
+	## lookup on side so the coincidence can never become a duty leak.
+	if side == &"home" and state.home_plan != null:
 		var duty: Resource = state.home_plan.assignment_for(actor.player_id)
 		if duty != null:
 			assignment_duty = str(duty.attack_coverage_responsibility)
@@ -51,7 +56,7 @@ static func prepare_for_attack(
 	)
 	var target := Vector2(assignment.get("target", Vector2(0.5, 0.53)))
 	var start := approach_start_position(
-		target, str(assignment.get("lane", "Left Pin"))
+		target, str(assignment.get("lane", "Left Pin")), side
 	)
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
 	var projection := RallyMovementModel.project_toward(
@@ -187,12 +192,27 @@ static func evaluate_takeoff(
 	}
 
 
-static func approach_start_position(target: Vector2, lane: String) -> Vector2:
+## Where a hitter starts their run-up for a ball at `target`.
+##
+## The depth offset is signed by side and must be: a hitter approaches the net
+## from behind it, and "behind" is +y for the home side and -y for the opponent.
+## Taking the home offset for an opponent would place their approach mark across
+## the net, inside home territory.
+static func approach_start_position(
+	target: Vector2,
+	lane: String,
+	side: StringName = &"home",
+) -> Vector2:
 	var lateral_offset := 0.0
 	if lane == "Left Pin":
 		lateral_offset = 0.07
 	elif lane == "Right Pin":
 		lateral_offset = -0.07
+	if side == &"opponent":
+		return Vector2(
+			clampf(target.x + lateral_offset, 0.06, 0.94),
+			clampf(target.y - 0.11, 0.04, 0.46),
+		)
 	return Vector2(
 		clampf(target.x + lateral_offset, 0.06, 0.94),
 		clampf(target.y + 0.11, 0.54, 0.96),
