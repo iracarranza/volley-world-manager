@@ -1872,18 +1872,15 @@ func _draw_rally_playback() -> void:
 	var followup_block := _followup_block_event()
 	var trajectory: Dictionary = playback_event.metadata.get("outgoing_trajectory", {})
 	if followup_block != null and int(playback_event.event_type) == RallyEventModel.EventType.ATTACK:
-		var block_outcome := str(followup_block.metadata.get("outcome", ""))
-		if block_outcome == "stuff":
+		## The resolver re-slices the attack's own flight to the net whenever the
+		## block actually touches it, and emits the deflection as the block's own
+		## trajectory. Playback used to rebuild that first leg here instead --
+		## fabricating a path with no timing on it, which is a ball trajectory
+		## decided by the view rather than the resolver. Only the terminal stuff
+		## is still special-cased, because a stuffed ball has no onward flight
+		## for this leg to draw.
+		if str(followup_block.metadata.get("outcome", "")) == "stuff":
 			trajectory = {}
-		elif block_outcome in ["touch", "funnel", "recycle"]:
-			var deflection_target: Vector2 = followup_block.metadata.get(
-				"deflection_target", followup_block.end_position
-			)
-			trajectory = {
-				"start_position": playback_event.start_position,
-				"control_position": playback_event.start_position.lerp(deflection_target, 0.5),
-				"end_position": deflection_target,
-			}
 	var trajectory_start: Vector2 = trajectory.get(
 		"start_position", playback_event.start_position
 	)

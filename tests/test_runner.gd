@@ -145,6 +145,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
 	_test_attack_targets_are_continuous()
+	_test_post_block_trajectory_chain()
 	_test_opponent_approach_mirror()
 	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
@@ -4053,6 +4054,57 @@ func _test_playback_elevation_and_hand_posture() -> void:
 		"a jump is drawn across the approach and the landing, not for the contact frame alone",
 	)
 	court.queue_free()
+
+
+## The ball's described path must be one continuous chain. A block that never
+## touched the ball must not shorten the shot, and must not emit a deflection
+## leg that puts the ball in two places at once.
+func _test_post_block_trajectory_chain() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var pairs := 0
+	var chain_breaks := 0
+	var truncated_misses := 0
+	var missing_flight := 0
+	for seed_value in range(60000, 60160):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for index in range(result.events.size() - 1):
+			var attack: Resource = result.events[index]
+			var block: Resource = result.events[index + 1]
+			if int(attack.event_type) != RALLY_EVENT_SCRIPT.EventType.ATTACK:
+				continue
+			if int(block.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				continue
+			var attack_flight: Dictionary = attack.metadata.get("outgoing_trajectory", {})
+			if attack_flight.is_empty():
+				continue
+			pairs += 1
+			var outcome := str(block.metadata.get("outcome", ""))
+			var touched := outcome != "miss"
+			var flight_start: Vector2 = attack_flight["start_position"]
+			var flight_end: Vector2 = attack_flight["end_position"]
+			## An untouched attack keeps its full arc. Truncating it to the net
+			## drew the spike barely moving and made the block's deflection look
+			## like the ball teleporting onto whoever dug it.
+			if not touched and flight_start.distance_to(flight_end) < 0.08:
+				truncated_misses += 1
+			var block_flight: Dictionary = block.metadata.get("outgoing_trajectory", {})
+			if touched:
+				if block_flight.is_empty():
+					missing_flight += 1
+				elif flight_end.distance_to(Vector2(block_flight["start_position"])) > 0.01:
+					chain_breaks += 1
+			elif not block_flight.is_empty():
+				## Nothing touched the ball, so nothing deflected it.
+				chain_breaks += 1
+	_check(
+		pairs >= 100 and chain_breaks == 0 and missing_flight == 0,
+		"a deflected ball leaves the block exactly where the attack delivered it, and an untouched one deflects nowhere",
+	)
+	_check(
+		pairs >= 100 and truncated_misses == 0,
+		"an attack the block never touched keeps its full flight to the floor",
+	)
 
 
 ## Attacks used to land on one of five hardcoded coordinates regardless of where

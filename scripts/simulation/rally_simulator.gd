@@ -944,33 +944,47 @@ func resolve(
 		if recycled else Vector2(set_target.x, 0.50)
 	var net_contact := Vector2(set_target.x, 0.50)
 	var attack_event: Resource = result.events[-1]
-	## Same shot as attack_trajectory above, re-sliced to where it actually
-	## crosses the net rather than where it was originally headed -- same
-	## launch angle, shorter distance, so duration/apex still fall out of
-	## the geometry instead of being a separate hardcoded segment.
-	var attack_to_block_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(set_target, net_contact), attack_angle
-	)
-	attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
-		"attack_to_block", set_target, net_contact,
-		float(attack_to_block_arc.duration_seconds),
-		float(attack_to_block_arc.apex_height_meters),
-		float(attack_event.metadata.get("event_time", rally_clock))
-	)
+	## A block that never touches the ball must not shorten the shot.
+	##
+	## This truncation used to be unconditional, so every attack resolved
+	## against a block ended at the net -- about three percent of the court from
+	## where it started. The spike was drawn barely moving, and the rest of the
+	## distance arrived as the block's "deflection", which read as the ball
+	## teleporting onto whoever dug it. Re-slicing is correct only when the
+	## block actually intercepts; otherwise the shot keeps its full arc and
+	## chains straight into the defence.
+	var block_contacts_ball := blocked or recycled
+	if block_contacts_ball:
+		## Same shot as attack_trajectory above, re-sliced to where it actually
+		## crosses the net rather than where it was originally headed -- same
+		## launch angle, shorter distance, so duration/apex still fall out of
+		## the geometry instead of being a separate hardcoded segment.
+		var attack_to_block_arc := RallyKinematics.solve_launch_arc(
+			RallyKinematics.court_distance_meters(set_target, net_contact), attack_angle
+		)
+		attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
+			"attack_to_block", set_target, net_contact,
+			float(attack_to_block_arc.duration_seconds),
+			float(attack_to_block_arc.apex_height_meters),
+			float(attack_event.metadata.get("event_time", rally_clock))
+		)
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
+	## An untouched ball carries no deflection segment: the attack's own flight
+	## already reaches the floor, and emitting a second overlapping path is what
+	## made the ball appear twice in two places.
 	var opponent_block_trajectory := _ball_trajectory(
 		"block_deflection", net_contact, post_block_target,
 		0.24 if recycled else 0.18, 0.35, rally_clock
-	)
+	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
 	var opponent_blocker_name := opponent_blocker.display_name \
 		if opponent_blocker != null else "Open block"
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker_id,
 		opponent_blocker_name,
-		Vector2(set_target.x, 0.47), recycle_target, block_outcome != "miss",
+		Vector2(set_target.x, 0.47), post_block_target, block_outcome != "miss",
 		block_strength, "Block forms at %s" % assignment.lane,
 		"%d%% close speed; the blockers seal the chosen lane.%s" % [
 			roundi(block_strength * 100.0),
@@ -978,7 +992,7 @@ func resolve(
 		], {"side": "opponent", "lane": assignment.lane,
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
 			"continuous_block": using_live_block,
-			"deflection_target": recycle_target,
+			"deflection_target": post_block_target,
 			"coverage_segments": opponent_block_segments,
 			"primary_close": primary_close,
 			"assist_close": assist_close,
@@ -1359,12 +1373,16 @@ func _resolve_opponent_transition(
 	var opponent_attack_angle := _attack_launch_angle_degrees(
 		opponent_hitter, str(attack_choice.attack_type), opponent_attack
 	)
+	## The full shot, to where it is actually aimed. `_resolve_home_block()`
+	## re-slices this to the net if the block touches it; truncating here
+	## unconditionally made every opponent spike travel about three percent of
+	## the court and the rest arrive as a "deflection".
 	var opponent_attack_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(opponent_contact, opponent_net_contact),
+		RallyKinematics.court_distance_meters(opponent_contact, home_target),
 		opponent_attack_angle,
 	)
 	var opponent_attack_trajectory := _ball_trajectory(
-		"attack_to_block", opponent_contact, opponent_net_contact,
+		"attack", opponent_contact, home_target,
 		float(opponent_attack_arc.duration_seconds),
 		float(opponent_attack_arc.apex_height_meters),
 		rally_clock + set_flight_time
@@ -1403,6 +1421,7 @@ func _resolve_opponent_transition(
 			"jump_multiplier": float(opponent_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(opponent_approach.get("lateral_control", 0.0)),
 			"event_time": rally_clock + set_flight_time,
+			"launch_angle_degrees": opponent_attack_angle,
 			"movement_duration": attack_choice.travel_time,
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
@@ -1428,11 +1447,35 @@ func _resolve_opponent_transition(
 		)
 	var home_block_target := Vector2(opponent_contact.x, 0.43) \
 		if block_outcome == "stuff" else deflection_target
+	## Same contract as the two home-attack block paths: only a block that
+	## actually touches the ball shortens the shot or deflects it.
+	var home_block_contacts := block_outcome != "miss"
+	if home_block_contacts and opponent_attack_event != null:
+		var opponent_flight: Dictionary = opponent_attack_event.metadata.get(
+			"outgoing_trajectory", {}
+		)
+		var opponent_angle := float(opponent_attack_event.metadata.get(
+			"launch_angle_degrees", 12.0
+		))
+		var opponent_start: Vector2 = Vector2(opponent_flight.get(
+			"start_position", opponent_net_contact
+		))
+		var to_block_arc := RallyKinematics.solve_launch_arc(
+			RallyKinematics.court_distance_meters(
+				opponent_start, opponent_net_contact
+			), opponent_angle,
+		)
+		opponent_attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
+			"attack_to_block", opponent_start, opponent_net_contact,
+			float(to_block_arc.duration_seconds),
+			float(to_block_arc.apex_height_meters),
+			float(opponent_flight.get("start_time", rally_clock)),
+		)
 	var home_block_trajectory := _ball_trajectory(
 		"block_deflection", opponent_net_contact, home_block_target,
 		0.30 if block_outcome == "touch" else 0.22,
 		0.42, rally_clock
-	)
+	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
 		assist_text = " %s assisted at %d%% close." % [
@@ -1726,9 +1769,14 @@ func _resolve_home_continuation(
 	var continuation_hit_type := _hit_type(assignment, hitter)
 	if "power_attack" not in continuation_actions:
 		continuation_hit_type = "Controlled roll"
+	## One shot shape, used both for the full flight and -- if a block touches
+	## it -- for the re-sliced leg to the net, so the two describe the same ball.
+	var continuation_attack_angle := _attack_launch_angle_degrees(
+		hitter, continuation_hit_type, attack_quality
+	)
 	var continuation_attack_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(set_target, attack_target),
-		_attack_launch_angle_degrees(hitter, continuation_hit_type, attack_quality),
+		continuation_attack_angle,
 	)
 	var continuation_attack_flight: float = float(continuation_attack_arc.duration_seconds)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
@@ -1788,8 +1836,28 @@ func _resolve_home_continuation(
 	var block_quality := float(block_result.quality)
 	var block_outcome := str(block_result.outcome)
 	var blocked := block_outcome == "stuff"
+	## Same contract as the main attack path: a block only shortens the shot if
+	## it actually touches it, and an untouched ball carries no deflection leg.
+	## Without this the continuation attack flew its full arc *and* the block
+	## emitted an overlapping path from the net, so the ball was described in
+	## two places at once.
+	var cont_block_contacts := blocked \
+		or block_outcome in ["recycle", "touch", "funnel"]
+	var cont_net_contact := Vector2(set_target.x, 0.50)
 	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
 		else Vector2(set_target.x, 0.47)
+	if cont_block_contacts:
+		var cont_attack_event: Resource = result.events[-1]
+		var cont_to_block_arc := RallyKinematics.solve_launch_arc(
+			RallyKinematics.court_distance_meters(set_target, cont_net_contact),
+			continuation_attack_angle,
+		)
+		cont_attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
+			"attack_to_block", set_target, cont_net_contact,
+			float(cont_to_block_arc.duration_seconds),
+			float(cont_to_block_arc.apex_height_meters),
+			cont_set_contact_time + continuation_flight_time,
+		)
 	var block_event_detail := "Primary close %d%%; block quality %d%%." % [
 		roundi(primary_close * 100.0), roundi(block_quality * 100.0),
 	]
@@ -1813,9 +1881,9 @@ func _resolve_home_continuation(
 		"read_quality": block_result.read_quality,
 		"event_time": rally_clock,
 		"outgoing_trajectory": _ball_trajectory(
-			"block_deflection", Vector2(set_target.x, 0.47), block_event_end,
+			"block_deflection", cont_net_contact, block_event_end,
 			0.24, 0.42, rally_clock
-		)})
+		) if cont_block_contacts else {}})
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
 	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
