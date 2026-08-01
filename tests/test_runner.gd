@@ -19,6 +19,7 @@ const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_stat
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
 const LOCOMOTION_MODEL_SCRIPT := preload("res://scripts/simulation/locomotion_model.gd")
+const READINESS_REPORT_SCRIPT := preload("res://scripts/simulation/rally_readiness_report.gd")
 const SETTER_CAPABILITY_SCRIPT := preload("res://scripts/simulation/setter_capability_system.gd")
 const CONTACT_ENVELOPE_SCRIPT := preload(
 	"res://scripts/simulation/contact_envelope_system.gd"
@@ -147,6 +148,7 @@ func _initialize() -> void:
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
+	_test_readiness_and_calibration_reports()
 	_test_opponent_approach_mirror()
 	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
@@ -4055,6 +4057,81 @@ func _test_playback_elevation_and_hand_posture() -> void:
 		"a jump is drawn across the approach and the landing, not for the contact frame alone",
 	)
 	court.queue_free()
+
+
+## Two read-only sweeps that answer questions the rest of the suite cannot:
+## whether the assembled engine plays like volleyball, and what is actually
+## blocking the persistent engine from taking over. Neither may change a rally.
+func _test_readiness_and_calibration_reports() -> void:
+	var calibration: Dictionary = READINESS_REPORT_SCRIPT.outcome_calibration(
+		40, 900000
+	)
+	var measured: Dictionary = calibration.get("measured", {})
+	_check(
+		bool(calibration.get("fixture_valid", false))
+			and int(calibration.get("rally_count", 0)) >= 60
+			and measured.has("kill_rate") and measured.has("side_out_rate")
+			and int(calibration.get("resolved_attacks", 0)) > 0,
+		"outcome calibration measures a real sample of resolved rallies",
+	)
+	## Every metric must be a rate the caller can compare against its band, not
+	## a NaN from an empty denominator.
+	var finite := true
+	for metric in measured:
+		var value := float(measured[metric])
+		if is_nan(value) or is_inf(value) or value < 0.0:
+			finite = false
+	_check(
+		finite and calibration.get("within_reference", {}).size()
+			== READINESS_REPORT_SCRIPT.REFERENCE_BANDS.size(),
+		"every calibrated metric is finite and judged against a reference band",
+	)
+
+	var readiness: Dictionary = READINESS_REPORT_SCRIPT.rollout_readiness(
+		40, 910000
+	)
+	var boundaries: Dictionary = readiness.get("by_boundary", {})
+	var accounted := true
+	var reached_any := false
+	for key in boundaries:
+		var row: Dictionary = boundaries[key]
+		var reached := int(row["reached"])
+		if reached > 0:
+			reached_any = true
+		## Every rally that reached a boundary is either eligible, had no
+		## candidate to judge, or had one the audit turned down. If these do not
+		## sum, the report is losing rallies and its rates mean nothing.
+		if int(row["eligible"]) + int(row["no_candidate"]) + int(row["rejected"]) \
+				!= reached:
+			accounted = false
+	_check(
+		bool(readiness.get("fixture_valid", false)) and reached_any and accounted,
+		"every rally reaching a rollout boundary is accounted as eligible, candidate-less, or rejected",
+	)
+	## A candidate that never existed must not be reported as fifteen separate
+	## defects. Blocker reasons are only counted for rallies that produced a
+	## candidate the audit then rejected.
+	var blockers_bounded := true
+	for key in boundaries:
+		var row: Dictionary = boundaries[key]
+		for blocker in row["blockers"]:
+			if int(blocker["count"]) > int(row["rejected"]):
+				blockers_bounded = false
+	_check(
+		blockers_bounded,
+		"no failure reason is counted more often than there were candidates to reject",
+	)
+	## The whole point is that this is evidence for a rollout decision, never a
+	## rollout. Running it must leave every production flag off.
+	var flags: Array = readiness.get("production_flags_enabled", [true])
+	var any_enabled := false
+	for flag in flags:
+		if bool(flag):
+			any_enabled = true
+	_check(
+		flags.size() == 4 and not any_enabled,
+		"the readiness sweep reports on production flags without enabling any of them",
+	)
 
 
 ## The opponent setter released to a hardcoded court centre during serve

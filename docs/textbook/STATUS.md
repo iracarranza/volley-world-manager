@@ -226,6 +226,18 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
+- **The engine can now be measured as a sport, and the migration as a
+  decision.** `RallyReadinessReport` adds two read-only sweeps.
+  `outcome_calibration()` reports side-out, ace, serve-error, kill, attack-error,
+  stuff and rally-length distributions against reference bands; it immediately
+  found that the engine produces **zero aces and zero attack errors** across 180
+  rallies and an **0.828 kill rate**, so offence is dominant and unforced error
+  does not exist. `rollout_readiness()` aggregates the audit reasons behind every
+  rollout verdict and shows the migration is blocked by candidate *production*
+  (86% of rallies produce nothing to audit) rather than candidate quality -- the
+  information-boundary and state-mutation checks the gate sequence concentrated
+  on reject almost nothing. Neither sweep changes an outcome or enables a flag.
+  See [Rally Readiness and Outcome Calibration](../calibration/RALLY_READINESS_AND_OUTCOME_CALIBRATION.md).
 - **Attacks are aimed at the open floor, not at a table.**
   `_choose_home_attack_target()` scanned five hardcoded coordinates, so every
   attack in the game landed on one of five spots regardless of where the defence
@@ -478,7 +490,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 471 passing checks (424 as of Gate
+The current foundation validation reports 476 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an
