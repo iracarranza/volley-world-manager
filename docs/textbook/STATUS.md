@@ -226,6 +226,29 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
+- **Attacks are aimed at the open floor, not at a table.**
+  `_choose_home_attack_target()` scanned five hardcoded coordinates, so every
+  attack in the game landed on one of five spots regardless of where the defence
+  stood. The floor is now scanned continuously, scored by distance to the
+  nearest actual defender, how well the depth suits the shot family, and how far
+  the hitter must swing off their approach line; the winner is then displaced by
+  an aiming error that shrinks with `attack_accuracy`. Measured over 342 home
+  attacks: 306 distinct landing points across 8 of 24 court cells.
+- **Only a block that touches the ball shortens or deflects the shot.** All
+  three block sites re-sliced the attack's flight to end at the net
+  unconditionally. Because a hitter contacts the ball about 3% of the court from
+  the net, the spike was drawn barely moving and the rest of the distance
+  arrived as a "deflection" -- which read as the ball teleporting onto whoever
+  dug it. An untouched ball now keeps its full arc and the block emits no
+  deflection leg, where previously two overlapping paths described the same
+  ball. Playback also no longer fabricates trajectories: it had been rebuilding
+  the attack's first leg itself, producing a path with no timing on it. Measured
+  over ~300 attack-to-block pairs: zero chain breaks.
+- **The opponent setter releases onto clear floor.** Their serve-receive release
+  was the hardcoded court centre `(0.50, 0.34)`, which put the setter marker
+  inside whoever covered the middle and had them setting from a spot no setter
+  takes. They now use `CourtConstants.setter_serve_receive_position()` mirrored
+  -- the same function the home side uses -- so the release tracks the rotation.
 - **2D playback shows height and hand posture.** A top-down court has no
   natural way to express elevation, which is why spikes and blocks read as flat
   slides. `TacticalCourt._draw_player_body()` separates the floor shadow from
@@ -455,7 +478,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 465 passing checks (424 as of Gate
+The current foundation validation reports 471 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

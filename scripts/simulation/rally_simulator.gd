@@ -1198,7 +1198,8 @@ func _resolve_home_serve(
 	var reception_success := receiver_arrived and reception_quality >= 0.18
 	opponent_live_positions[receiver.id] = opponent_landing
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		opponent_landing, Vector2(0.50, 0.34), reception_success,
+		opponent_landing, _opponent_setter_release_target(opponent_team),
+		reception_success,
 		reception_quality, "%s receives" % receiver.display_name,
 		"Opponent reception quality: %d%%. %s%s" % [
 			roundi(reception_quality * 100.0),
@@ -1212,8 +1213,14 @@ func _resolve_home_serve(
 			"movement_duration": receiver_move_time})
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
+	## The opponent setter releases to the same place a home setter would,
+	## mirrored. This used to be the hardcoded court centre (0.50, 0.34), which
+	## put the setter directly on top of whoever was covering the middle -- the
+	## setter marker visibly vanished inside another opponent's during serve
+	## receive -- and had them setting from a position no setter takes.
+	var opponent_setter_release := _opponent_setter_release_target(opponent_team)
 	return _resolve_opponent_transition(
-		result, players, lineup, server, Vector2(0.50, 0.34),
+		result, players, lineup, server, opponent_setter_release,
 		opponent_team, defensive_plan, 1,
 	)
 
@@ -2467,6 +2474,23 @@ static func _block_wall_positions(
 			clampf(lane_x + BLOCK_SHOULDER_OFFSET * inward, 0.05, 0.95), wall_y
 		),
 	}
+
+
+## Where this opponent setter takes the ball in serve receive: the same release
+## the home side uses, mirrored, rather than a fixed point in the middle of the
+## court. Shared so the reception's pass target and the setter's own position
+## cannot drift apart and leave the ball landing somewhere the setter is not.
+static func _opponent_setter_release_target(opponent_team: Resource) -> Vector2:
+	if opponent_team == null:
+		return Vector2(0.62, 0.34)
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	if opponent_lineup == null:
+		return Vector2(0.62, 0.34)
+	return CourtConstants.mirror_to_opponent(
+		CourtConstants.setter_serve_receive_position(
+			opponent_lineup.slot_for_player(opponent_lineup.active_setter_id())
+		)
+	)
 
 
 ## Time between the ball reaching the setter's hands and leaving them.

@@ -146,6 +146,7 @@ func _initialize() -> void:
 	_test_setter_capability_gates()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
+	_test_opponent_setter_release_is_clear()
 	_test_opponent_approach_mirror()
 	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
@@ -4054,6 +4055,54 @@ func _test_playback_elevation_and_hand_posture() -> void:
 		"a jump is drawn across the approach and the landing, not for the contact frame alone",
 	)
 	court.queue_free()
+
+
+## The opponent setter released to a hardcoded court centre during serve
+## receive, which sat on top of whoever covered the middle -- their marker
+## visibly vanished inside a team-mate's -- and had them setting from a spot no
+## setter takes. They now use the same release the home side does, mirrored.
+func _test_opponent_setter_release_is_clear() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var release: Vector2 = RallySimulator._opponent_setter_release_target(
+		manager.opponent_team
+	)
+	## On the opponent half, and out of the middle of the court where the old
+	## hardcoded (0.50, 0.34) put them.
+	var on_own_half := release.y < 0.5 and release.y > 0.0
+	var closest := 9.0
+	var lineup: RotationLineup = manager.opponent_team.current_lineup()
+	for player_resource in manager.opponent_team.on_court_players():
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null or player.id == lineup.active_setter_id():
+			continue
+		closest = minf(closest, release.distance_to(
+			manager.opponent_team.court_position(player.id, "serve_receive")
+		))
+	_check(
+		on_own_half and closest > 0.06,
+		"the opponent setter releases onto clear floor rather than into a team-mate",
+	)
+	## Every rotation, not just the one the fixture happens to start in. The
+	## release must also track the setter rather than being a fixed point.
+	var distinct := {}
+	var all_clear := true
+	for setter_slot in range(1, 7):
+		var formation: Dictionary = CourtConstants.serve_receive_formation(
+			setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
+			-1, true,
+		)
+		var setter_spot: Vector2 = formation[setter_slot]
+		distinct["%.3f,%.3f" % [setter_spot.x, setter_spot.y]] = true
+		for slot_number in formation:
+			if int(slot_number) == setter_slot:
+				continue
+			if setter_spot.distance_to(Vector2(formation[slot_number])) < 0.06:
+				all_clear = false
+	_check(
+		all_clear and distinct.size() >= 4,
+		"the setter's serve-receive spot is clear of team-mates and moves with the rotation",
+	)
 
 
 ## The ball's described path must be one continuous chain. A block that never
