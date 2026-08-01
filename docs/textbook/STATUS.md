@@ -187,22 +187,30 @@ This page is the quickest defense against confusing source-code existence with a
   two defects in Gate 50 (a receive commitment that zeroed its own available
   time, and an authoritative rather than perceived deadline); both are fixed
   and Gate 50's published numbers were corrected.
-- `VolleyballPlayerGenerator` now uses attribute-first generation. Potential
-  (ceiling score 68–96 for academy, age-adjusted 52–94 for club) is set before
-  attributes, and each attribute is derived from that ceiling minus a *growth
-  reserve*: the rating points the player has not yet realised. The reserve is a
-  function of age alone and never of the ceiling's size, so a wide
-  current-to-potential gap means the player is young and says nothing about how
-  good they will become. Scaling the gap by potential — the obvious
-  implementation — would have let any scout read potential off a subtraction,
-  destroying the product's central fantasy.
-- Potential genuinely bounds current ability. The role tier adds its bonus to
-  exactly the attributes `current_ability_score()` weights at 75%, so applying
-  the tiers naively lifted the displayed score about eleven points above the
-  intended level and pushed settled players *past* their own ceiling.
-  `_ability_score_offset()` measures that inflation with the same weighting the
-  score itself uses and removes it up front, so the tiers redistribute ability
-  across a role's profile without inflating its total.
+- `VolleyballPlayerGenerator` builds **per-attribute ceilings**, not one scalar.
+  Each attribute's ceiling is the player's general talent shifted by role tier,
+  region specialty, and an innate deviation that is usually small and
+  occasionally extreme (6% standout, 6% deficiency, magnitude 14-30). That last
+  term is what allows a teenager with a freakish leap and nothing else, or a
+  veteran with one glaring hole. Measured: 5.5% of attribute slots sit more than
+  22 points above the player's own mean and 3.9% more than 22 below.
+- **`potential` is derived from those ceilings**, not rolled and then
+  approximated. It is the ability score the player would display with every
+  attribute at its ceiling, computed with the same weighting
+  `current_ability_score()` uses -- so current ability is the same function of
+  strictly smaller numbers and cannot exceed it. The bound is exact by
+  construction; the `_ability_score_offset()` correction this replaces is gone.
+  Measured over 1,320 generated players: zero exceed their potential.
+- **Age produces a differently-shaped player, not a better or worse one.** Power
+  and turnover peak at `PHYSICAL_PEAK_AGE` (24) and fade afterwards, while
+  reading keeps improving for as long as a player keeps playing. Mean physical
+  rating runs 64.7 at 16, peaks near 69.7 at 19-20, and falls to 55.5 by 30;
+  mean mental runs 42.3 at 16 to 66.4 at 31, **crossing over at 29**. A gifted
+  teenager and a settled veteran are therefore both worth picking, which is what
+  the academy premise requires.
+- The same `_attribute_reserve()` covers two different causes and says so: for a
+  young player the gap to their ceiling is undevelopment, for an old player in a
+  physical attribute it is decline.
 - Role tiers create observable specialisation: setters have markedly higher
   `set_accuracy` than liberos, and liberos markedly higher `reception` than
   `set_accuracy`. The primary tier is read from
@@ -423,7 +431,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 459 passing checks (424 as of Gate
+The current foundation validation reports 461 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

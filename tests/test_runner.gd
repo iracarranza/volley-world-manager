@@ -5439,6 +5439,79 @@ func _test_attribute_first_generation() -> void:
 				- float(elite_gap_total) / elite_count) < 5.0,
 		"attribute generation: development gap tracks age, not potential, so it cannot be read as a potential tell",
 	)
+	## 7. Age produces a differently-shaped player, not a better or worse one.
+	##    Power and turnover peak in the early twenties and fade; reading keeps
+	##    improving. Without the fade a veteran keeps peak mentals *and* equal
+	##    physicals, and no teenager is ever worth picking over them.
+	var physical_by_age := {}
+	var mental_by_age := {}
+	for seed_offset in range(30):
+		for organization in ["Academy", "Club"]:
+			var aged_roster: Array[VolleyballPlayer] = \
+				PLAYER_GENERATOR_SCRIPT.generate_roster(
+					"Landavol", organization, 88600 + seed_offset * 1009
+				)
+			for player in aged_roster:
+				var physical_total := 0.0
+				for property_name in PLAYER_GENERATOR_SCRIPT.PHYSICAL_ATTRIBUTES:
+					physical_total += float(player.get(property_name))
+				var mental_total := 0.0
+				for property_name in PLAYER_GENERATOR_SCRIPT.MENTAL_ATTRIBUTES:
+					mental_total += float(player.get(property_name))
+				if not physical_by_age.has(player.age):
+					physical_by_age[player.age] = []
+					mental_by_age[player.age] = []
+				physical_by_age[player.age].append(
+					physical_total / PLAYER_GENERATOR_SCRIPT.PHYSICAL_ATTRIBUTES.size()
+				)
+				mental_by_age[player.age].append(
+					mental_total / PLAYER_GENERATOR_SCRIPT.MENTAL_ATTRIBUTES.size()
+				)
+	var young_physical := _mean_of(physical_by_age.get(19, []))
+	var old_physical := _mean_of(physical_by_age.get(30, []))
+	var young_mental := _mean_of(mental_by_age.get(19, []))
+	var old_mental := _mean_of(mental_by_age.get(30, []))
+	_check(
+		young_physical > old_physical + 5.0 and old_mental > young_mental + 5.0,
+		"attribute generation: a teenager out-performs a veteran physically while the veteran reads the game better",
+	)
+	## 8. Innate ability is spiky. A player whose every attribute sits at their
+	##    own average is not worth scouting; the outliers are the reason to look.
+	var standouts := 0
+	var deficiencies := 0
+	var attribute_slots := 0
+	for seed_offset in range(12):
+		var spiky_roster: Array[VolleyballPlayer] = \
+			PLAYER_GENERATOR_SCRIPT.generate_roster(
+				"Landavol", "Academy", 88700 + seed_offset * 1009
+			)
+		for player in spiky_roster:
+			var total := 0.0
+			for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+				total += float(player.get(property_name))
+			var own_mean := total / VolleyballPlayer.ABILITY_ATTRIBUTES.size()
+			for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+				attribute_slots += 1
+				var deviation := float(player.get(property_name)) - own_mean
+				if deviation > 22.0:
+					standouts += 1
+				elif deviation < -22.0:
+					deficiencies += 1
+	_check(
+		attribute_slots > 2000
+			and standouts > attribute_slots / 50
+			and deficiencies > attribute_slots / 80,
+		"attribute generation: players carry genuinely outstanding and genuinely poor innate qualities",
+	)
+
+
+func _mean_of(values: Array) -> float:
+	if values.is_empty():
+		return 0.0
+	var total := 0.0
+	for value in values:
+		total += float(value)
+	return total / values.size()
 
 
 func _test_setter_failure_taxonomy() -> void:

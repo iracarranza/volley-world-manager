@@ -90,9 +90,9 @@ static func generate_roster(
 		player.apply_role_physical_defaults()
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
-		_generate_potential(player, rng, academy)
 		_apply_body_variation(player, rng, canonical_region)
 		player.stride_length_m = player.default_stride_length_m()
+		## Sets every attribute and derives `potential` from the ceilings it built.
 		_apply_attributes(player, canonical_region, rng, academy)
 		Familiarity.initialize_player(player, rng)
 		AttributeProfiles.assign_serve_style(player)
@@ -100,23 +100,87 @@ static func generate_roster(
 	return result
 
 
-## The ceiling this player could reach, independent of how old they are.
+## Attributes that fade with age rather than keep developing. Power and
+## turnover peak in the early twenties and go backwards afterwards; technique
+## and reading do not.
+const PHYSICAL_ATTRIBUTES: Array[String] = [
+	"acceleration", "lateral_speed", "transition_speed", "jump_reach",
+	"explosiveness", "stamina", "arm_speed", "serve_power", "attack_power",
+]
+
+## Attributes that keep improving for as long as a player keeps playing.
+const MENTAL_ATTRIBUTES: Array[String] = [
+	"court_vision", "anticipation", "decision_making", "composure",
+	"tactical_discipline", "improvisation", "adaptability",
+]
+
+## Age at which physical qualities stop improving and begin to fade.
+const PHYSICAL_PEAK_AGE: int = 24
+
+## Chance an attribute is innately far from the player's general level, and how
+## far. Most attributes sit near it; a minority do not, and those are what make
+## a player worth scouting rather than a uniform block of numbers. A teenager
+## with a freakish leap and no reading, or a veteran with one glaring hole, both
+## come from here.
+const STANDOUT_CHANCE: float = 0.06
+const DEFICIENCY_CHANCE: float = 0.06
+const ORDINARY_SPREAD: float = 6.0
+const OUTLIER_MINIMUM: float = 14.0
+const OUTLIER_MAXIMUM: float = 30.0
+
+
+## How far a single attribute sits from the player's general level, innately.
+static func _innate_deviation(rng: RandomNumberGenerator) -> float:
+	var roll := rng.randf()
+	if roll < STANDOUT_CHANCE:
+		return rng.randf_range(OUTLIER_MINIMUM, OUTLIER_MAXIMUM)
+	if roll < STANDOUT_CHANCE + DEFICIENCY_CHANCE:
+		return -rng.randf_range(OUTLIER_MINIMUM, OUTLIER_MAXIMUM)
+	return rng.randf_range(-ORDINARY_SPREAD, ORDINARY_SPREAD)
+
+
+## Rating points still separating this attribute from its own ceiling.
 ##
-## Age must not set the ceiling. Doing so conflates being old with being
-## untalented, and it quietly guarantees that veterans are the weaker players --
-## the opposite of a roster where a gifted teenager and a settled thirty-year-old
-## are both worth picking. Age decides only how much of this ceiling is already
-## expressed, which `_growth_reserve()` handles.
+## The same number covers two different causes, which is why it is one function.
+## For a young player it is undevelopment: they have not grown into the quality
+## yet. For an old player in a physical attribute it is decline: they had it and
+## are losing it. Both are honestly described as "distance from your ceiling",
+## and the cause is recorded separately so scouting can tell them apart.
 ##
-## Academies scout for ceiling, so their intake skews higher than the open
-## market; that is a selection effect, not an age effect.
-static func _generate_potential(
-	player: VolleyballPlayer,
+## The three categories age on genuinely different curves. A seventeen-year-old
+## is already close to their physical ceiling and nowhere near their tactical
+## one, which is exactly what lets a gifted teenager compete with a veteran:
+## they are not a worse player, they are a differently-shaped one.
+static func _attribute_reserve(
+	property_name: String,
+	age: int,
 	rng: RandomNumberGenerator,
-	academy: bool,
-) -> void:
-	player.potential = rng.randi_range(68, 96) if academy \
-		else rng.randi_range(52, 94)
+) -> float:
+	var jitter := rng.randf_range(-3.0, 3.0)
+	if property_name in PHYSICAL_ATTRIBUTES:
+		if age <= PHYSICAL_PEAK_AGE:
+			return maxf(lerpf(
+				12.0, 1.5,
+				clampf(float(age - 15) / float(PHYSICAL_PEAK_AGE - 15), 0.0, 1.0)
+			) + jitter, 0.0)
+		## Past peak the gap reopens, and this time it is loss rather than youth.
+		return maxf(1.5 + float(age - PHYSICAL_PEAK_AGE) * 1.9 + jitter, 0.0)
+	if property_name in MENTAL_ATTRIBUTES:
+		return maxf(lerpf(
+			38.0, 1.0, clampf(float(age - 15) / 19.0, 0.0, 1.0)
+		) + jitter, 0.0)
+	return maxf(lerpf(
+		28.0, 1.0, clampf(float(age - 15) / 15.0, 0.0, 1.0)
+	) + jitter, 0.0)
+
+
+## The general level this player was born with, before role, region, and innate
+## per-attribute variation shape it. Age must not touch it: doing so conflates
+## being old with being untalented and guarantees veterans are the weaker
+## players. Academies scout for ceiling, so their intake skews high -- that is a
+## selection effect, not an age effect.
+static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
+	return rng.randi_range(62, 92) if academy else rng.randi_range(48, 90)
 
 
 ## Produces correlated individual bodies around role templates, shifted by
@@ -141,28 +205,6 @@ static func _apply_body_variation(
 	player.wingspan_cm = clampf(player.wingspan_cm + span_delta + wingspan_bias, 150.0, 235.0)
 
 
-## Attribute points still available for this player to grow into, in raw rating
-## points. This is the literal reading of potential: the reserve is the distance
-## between what a player expresses now and the ceiling they could reach.
-##
-## It depends on age alone, never on the size of the ceiling. That independence
-## is the point -- a 16-year-old with a modest ceiling is just as undeveloped as
-## a 16-year-old with a huge one, so a wide current-to-potential gap says the
-## player is young, not that they are a future star. Scaling the reserve by
-## potential instead would make every large gap a tell for high potential and
-## give the gap away for free.
-static func _growth_reserve(
-	age: int,
-	rng: RandomNumberGenerator,
-	academy: bool,
-) -> float:
-	if academy:
-		var academy_base := lerpf(38.0, 18.0, clampf(float(age - 16) / 4.0, 0.0, 1.0))
-		return maxf(academy_base + rng.randf_range(-6.0, 6.0), 4.0)
-	var club_base := lerpf(16.0, 2.0, clampf(float(age - 21) / 10.0, 0.0, 1.0))
-	return maxf(club_base + rng.randf_range(-4.0, 4.0), 0.0)
-
-
 const PRIMARY_TIER_BONUS: int = 15
 const SECONDARY_TIER_BONUS: int = 5
 const TERTIARY_TIER_PENALTY: int = -8
@@ -183,43 +225,21 @@ static func _tier_bonus(
 	return bonus + (SPECIALTY_BONUS if property_name in specialty_list else 0)
 
 
-## How far the tier and specialty bonuses lift `current_ability_score()` above
-## the flat base every attribute starts from.
+## Builds this player's per-attribute ceilings and the current values that sit
+## below them, then derives `potential` from the ceilings themselves.
 ##
-## Without this, potential does not bound anything: the role tier adds +15 to
-## exactly the attributes `current_ability_score()` weights at 75%, so a
-## generated player's displayed ability lands roughly eleven points above the
-## level intended, and any player near their ceiling scores *past* it. Measuring
-## the inflation with the same weighting the score itself uses lets it be
-## removed up front, and keeps the correction honest if the tier constants or
-## the role lists ever change.
-static func _ability_score_offset(
-	primary_list: Array,
-	secondary_list: Array,
-	specialty_list: Array,
-) -> float:
-	var scored: Array = primary_list if not primary_list.is_empty() \
-		else VolleyballPlayer.ABILITY_ATTRIBUTES
-	var role_total := 0.0
-	for property_name in scored:
-		role_total += float(_tier_bonus(
-			str(property_name), primary_list, secondary_list, specialty_list
-		))
-	var complete_total := 0.0
-	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
-		complete_total += float(_tier_bonus(
-			property_name, primary_list, secondary_list, specialty_list
-		))
-	return (role_total / maxf(float(scored.size()), 1.0)) * 0.75 \
-		+ (complete_total / float(VolleyballPlayer.ABILITY_ATTRIBUTES.size())) * 0.25
-
-
-## Derives each attribute from the ceiling minus the still-unrealised growth
-## reserve, then applies role-tier bonuses (+15 primary, +5 secondary, -8
-## tertiary) and a regional specialty bonus (+8). The bonuses redistribute
-## ability across a role's profile; they do not inflate its total, so
-## `current_ability_score()` lands at the intended level and stays under
-## `potential`.
+## Potential is no longer rolled and then approximated. It is the ability score
+## this player *would* display with every attribute at its own ceiling, computed
+## with the same weighting `current_ability_score()` uses. That makes the bound
+## exact by construction rather than by correction: current ability is the same
+## function of strictly smaller numbers, so it cannot exceed potential, and the
+## offset hack this replaces is gone.
+##
+## Each ceiling is the player's general talent shifted by what their role
+## demands, what their region produces, and an innate per-attribute deviation
+## that is usually small and occasionally extreme. That last term is what allows
+## a teenager with a freakish leap and nothing else, or a veteran with one
+## glaring hole.
 static func _apply_attributes(
 	player: VolleyballPlayer,
 	region_name: String,
@@ -231,20 +251,48 @@ static func _apply_attributes(
 	)
 	var secondary_list: Array = Array(ROLE_SECONDARY.get(player.position_role, []))
 	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, []))
-	## The ability score this player should currently display, and the flat
-	## level each attribute starts from to produce it.
-	var target_score := float(player.potential) \
-		- _growth_reserve(player.age, rng, academy)
-	var base := target_score - _ability_score_offset(
-		primary_list, secondary_list, specialty_list
-	)
+	var talent := float(_talent_level(rng, academy))
+
+	var ceilings := {}
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
-		player.set(property_name, clampi(
-			roundi(base) + _tier_bonus(
+		ceilings[property_name] = clampf(
+			talent
+			+ float(_tier_bonus(
 				property_name, primary_list, secondary_list, specialty_list
-			) + rng.randi_range(-8, 8),
-			20, 92
+			))
+			+ _innate_deviation(rng),
+			1.0, 99.0,
+		)
+
+	## Potential is what those ceilings are worth, scored exactly as current
+	## ability will be scored.
+	player.potential = _weighted_score(ceilings, primary_list)
+
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		var ceiling := float(ceilings[property_name])
+		var reserve := _attribute_reserve(property_name, player.age, rng)
+		player.set(property_name, clampi(
+			roundi(ceiling - reserve), 1, roundi(ceiling)
 		))
+
+
+## The role-weighted ability score of an attribute set. Mirrors
+## `VolleyballPlayer.current_ability_score()`; if that weighting changes, this
+## must follow, and the regression check comparing a fully-developed player's
+## score against their potential is what catches it.
+static func _weighted_score(values: Dictionary, primary_list: Array) -> int:
+	var scored: Array = primary_list if not primary_list.is_empty() \
+		else VolleyballPlayer.ABILITY_ATTRIBUTES
+	var role_total := 0.0
+	for property_name in scored:
+		role_total += float(values.get(str(property_name), 0.0))
+	var role_score := role_total / maxf(float(scored.size()), 1.0)
+	var complete_total := 0.0
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		complete_total += float(values.get(property_name, 0.0))
+	var complete_score := complete_total \
+		/ float(VolleyballPlayer.ABILITY_ATTRIBUTES.size())
+	return clampi(roundi(role_score * 0.75 + complete_score * 0.25), 1, 100)
 
 
 static func generate_market(
