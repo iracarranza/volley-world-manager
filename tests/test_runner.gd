@@ -3966,13 +3966,15 @@ func _test_playback_elevation_and_hand_posture() -> void:
 	var attacker_lift := 0.0
 	var bystander_lift := 1.0
 	if attack_event != null:
-		court.playback_event = attack_event
 		var side := str(attack_event.metadata.get("side", ""))
-		attacker_lift = court._contact_elevation(int(attack_event.actor_id), side)
+		attacker_lift = court._event_elevation(
+			attack_event, int(attack_event.actor_id), side
+		)
 		for player in manager.players:
 			if player.id != int(attack_event.actor_id):
 				bystander_lift = minf(
-					bystander_lift, court._contact_elevation(player.id, side)
+					bystander_lift,
+					court._event_elevation(attack_event, player.id, side)
 				)
 	_check(
 		attack_event != null and attacker_lift > 0.3 and bystander_lift == 0.0,
@@ -3983,12 +3985,13 @@ func _test_playback_elevation_and_hand_posture() -> void:
 	var primary_lift := 0.0
 	var assist_lift := 0.0
 	if block_event != null:
-		court.playback_event = block_event
 		var block_side := str(block_event.metadata.get("side", ""))
-		primary_lift = court._contact_elevation(int(block_event.actor_id), block_side)
+		primary_lift = court._event_elevation(
+			block_event, int(block_event.actor_id), block_side
+		)
 		var assist_id := int(block_event.metadata.get("assist_id", -1))
-		assist_lift = court._contact_elevation(assist_id, block_side) if assist_id >= 0 \
-			else primary_lift
+		assist_lift = court._event_elevation(block_event, assist_id, block_side) \
+			if assist_id >= 0 else primary_lift
 	_check(
 		block_event != null and primary_lift > 0.5 and assist_lift > 0.5,
 		"a block lifts the assisting blocker as well as the primary",
@@ -4009,6 +4012,34 @@ func _test_playback_elevation_and_hand_posture() -> void:
 	_check(
 		attack_event != null and hand.length() > 0.9 and idle_hand == Vector2.ZERO,
 		"only the contacting player carries a hand direction, and it is a unit heading",
+	)
+
+	## 4. A jump has to last long enough to see. Reading only the contact event
+	##    showed the lift for that event alone, which barely registered even at
+	##    half speed; the player must now rise through the ball flight preceding
+	##    the contact and come down after it.
+	var airborne_samples := 0
+	var total_samples := 0
+	if attack_event != null:
+		var side := str(attack_event.metadata.get("side", ""))
+		var actor_id := int(attack_event.actor_id)
+		court.pending_contact_event = attack_event
+		court.playback_event = null
+		for step in range(21):
+			court.playback_progress = float(step) / 20.0
+			total_samples += 1
+			if court._contact_elevation(actor_id, side) > 0.05:
+				airborne_samples += 1
+		court.pending_contact_event = null
+		court.playback_event = attack_event
+		for step in range(21):
+			court.playback_progress = float(step) / 20.0
+			total_samples += 1
+			if court._contact_elevation(actor_id, side) > 0.05:
+				airborne_samples += 1
+	_check(
+		total_samples > 0 and float(airborne_samples) / total_samples > 0.4,
+		"a jump is drawn across the approach and the landing, not for the contact frame alone",
 	)
 	court.queue_free()
 

@@ -236,7 +236,20 @@ This page is the quickest defense against confusing source-code existence with a
   setter's own `reach_state` for a jump set, including the straining posture for
   a ball past their reach. Two small marks orbit the marker toward the contact
   being made, so a swing and a dig are distinguishable at this zoom. Both sides
-  draw through the one helper.
+  draw through the one helper. The lift spans the ball flight *preceding* the
+  contact as well as the contact itself, because reading only `playback_event`
+  showed it for the contact event alone -- which barely registered even at half
+  speed, since during a ball flight `playback_event` is the ball's event rather
+  than the upcoming contact.
+- **A double block is drawn as a wall.** `RallySimulator._block_wall_positions()`
+  records where the two blockers actually stand -- pressed to the net on their
+  own side, the assist closing inward from centre -- on every block event.
+  Playback had been reading each blocker's individual defensive position, which
+  for a block resolves both onto the attack lane and drew them stacked on one
+  another. Measured over 245 block events (116 doubles): none stacked.
+- The planning court now receives the opponent team. Without it `show_opponents`
+  stayed false, so no opponent markers were drawn and the block rectangle had
+  nothing to anchor to.
 - **Opponent hitters now have a causal approach (Gate 43 mirrored).**
   `_resolve_opponent_transition()` builds an opponent-side rally state, runs
   `ApproachMechanicsSystem.prepare_for_attack(..., &"opponent")`, and feeds the
@@ -442,7 +455,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 464 passing checks (424 as of Gate
+The current foundation validation reports 465 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

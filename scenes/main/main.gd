@@ -586,6 +586,11 @@ func _refresh_rotation() -> void:
 	_reset_tactical_positions(false)
 	var lineup := GameManager.current_lineup()
 	tactical_court.set_lineup(lineup, GameManager.players)
+	## The planning court needs the opponent too. Without it `show_opponents`
+	## stays false, so no opponent markers are drawn -- and the block rectangle,
+	## which is anchored to blocker positions, has nothing to attach to and
+	## silently fails to appear.
+	tactical_court.set_opponent_team(GameManager.opponent_team, true)
 	match_preview_court.set_lineup(
 		match_preview_lineup if match_preview_lineup != null else lineup,
 		GameManager.players,

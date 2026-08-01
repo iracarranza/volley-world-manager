@@ -101,6 +101,7 @@ var secondary_hitter_id: int = -1
 var selected_player_id: int = -1
 var palette: Dictionary = DARK_PALETTE
 var playback_event: Resource
+var pending_contact_event: Resource
 var contact_overlay_event: Resource
 var playback_progress: float = 1.0
 var playback_tween: Tween
@@ -240,6 +241,7 @@ func player_marker_screen_position(player_id: int) -> Vector2:
 
 func animate_event(event: Resource, duration: float) -> void:
 	playback_event = event
+	pending_contact_event = null
 	contact_overlay_event = null
 	playback_ball_visible = true
 	movement_player_id = -1
@@ -255,6 +257,10 @@ func animate_spatial_transition(
 	duration: float,
 ) -> void:
 	playback_event = ball_event
+	## The upcoming contact, kept so a jumping player can be drawn rising during
+	## the ball flight that precedes it rather than popping up for the single
+	## frame of the contact itself.
+	pending_contact_event = next_contact_event
 	contact_overlay_event = next_contact_event \
 		if int(next_contact_event.event_type) == RallyEventModel.EventType.BLOCK else null
 	playback_ball_visible = true
@@ -509,6 +515,7 @@ func clear_rally_playback() -> void:
 	if playback_tween != null and playback_tween.is_valid():
 		playback_tween.kill()
 	playback_event = null
+	pending_contact_event = null
 	contact_overlay_event = null
 	playback_ball_visible = true
 	movement_phase_caption = ""
@@ -1662,13 +1669,29 @@ func _shadow_setter_candidate(candidates: Array, player_id: int) -> Dictionary:
 ## and how well -- `jump_multiplier` for a hitter, the setter's own reach state
 ## for a jump set -- so the drawing layer reads that rather than inventing it.
 func _contact_elevation(player_id: int, side: String) -> float:
-	if playback_event == null or player_id < 0:
+	if player_id < 0:
 		return 0.0
-	var metadata: Dictionary = playback_event.metadata
+	## A jump is not an instant. While the ball is still travelling the upcoming
+	## contactor is already gathering and rising; during the contact itself they
+	## hang and come down. Reading only `playback_event` showed the lift for the
+	## contact frame alone, which is why it barely registered even at half speed.
+	if pending_contact_event != null:
+		var rising := _event_elevation(pending_contact_event, player_id, side)
+		if rising > 0.0:
+			return rising * smoothstep(0.45, 1.0, playback_progress)
+	var landing := _event_elevation(playback_event, player_id, side)
+	return landing * (1.0 - smoothstep(0.55, 1.0, playback_progress))
+
+
+## Peak elevation this player reaches for a given event, ignoring timing.
+func _event_elevation(event: Resource, player_id: int, side: String) -> float:
+	if event == null:
+		return 0.0
+	var metadata: Dictionary = event.metadata
 	if str(metadata.get("side", "")) != side:
 		return 0.0
-	var is_actor := int(playback_event.actor_id) == player_id
-	match int(playback_event.event_type):
+	var is_actor := int(event.actor_id) == player_id
+	match int(event.event_type):
 		RallyEventModel.EventType.ATTACK:
 			if is_actor:
 				## A poor run-up converts to less height, which is the whole
@@ -1696,14 +1719,19 @@ func _contact_elevation(player_id: int, side: String) -> float:
 ## Which way this player's hands are working, in local draw space. Zero when
 ## they are not the one touching the ball.
 func _hand_direction(player_id: int, side: String) -> Vector2:
-	if playback_event == null or player_id < 0:
+	if player_id < 0:
 		return Vector2.ZERO
-	if int(playback_event.actor_id) != player_id:
+	## Hands come up with the jump, so they follow the same two-phase read.
+	var source: Resource = playback_event
+	if pending_contact_event != null \
+			and int(pending_contact_event.actor_id) == player_id:
+		source = pending_contact_event
+	if source == null or int(source.actor_id) != player_id:
 		return Vector2.ZERO
-	if str(playback_event.metadata.get("side", "")) != side:
+	if str(source.metadata.get("side", "")) != side:
 		return Vector2.ZERO
-	var travel := _court_to_local(playback_event.end_position) \
-		- _court_to_local(playback_event.start_position)
+	var travel := _court_to_local(source.end_position) \
+		- _court_to_local(source.start_position)
 	return travel.normalized() if travel.length() > 0.001 else Vector2.ZERO
 
 
@@ -1958,18 +1986,34 @@ func _draw_block_players(block_event: Resource) -> void:
 	var primary_close := clampf(
 		float(block_event.metadata.get("primary_close", block_event.quality)), 0.0, 1.0
 	)
-	var primary_position := _blocker_local_position(int(block_event.actor_id), side)
+	var primary_position := _blocker_local_position(
+		int(block_event.actor_id), side, block_event, "primary_position"
+	)
 	_draw_blocker_square(primary_position, primary_close)
 	var assist_id := int(block_event.metadata.get("assist_id", -1))
 	if assist_id < 0:
 		return
 	var assist_close := clampf(float(block_event.metadata.get("assist_close", 0.0)), 0.0, 1.0)
-	var assist_position := _blocker_local_position(assist_id, side)
+	var assist_position := _blocker_local_position(
+		assist_id, side, block_event, "assist_position"
+	)
 	_draw_blocker_square(assist_position, assist_close)
 	_draw_block_connection(primary_position, assist_position, assist_close)
 
 
-func _blocker_local_position(player_id: int, side: String) -> Vector2:
+## Where to draw one blocker. The resolver records the wall it actually formed,
+## because a block is two players shoulder to shoulder at the net rather than
+## wherever each happens to defend from -- reading their individual defensive
+## positions put both markers on the attack lane and drew them stacked.
+func _blocker_local_position(
+	player_id: int,
+	side: String,
+	block_event: Resource = null,
+	position_key: String = "",
+) -> Vector2:
+	if block_event != null and position_key != "" \
+			and block_event.metadata.has(position_key):
+		return _court_to_local(Vector2(block_event.metadata[position_key]))
 	if side == "opponent" and opponent_team != null:
 		var court_position: Vector2 = opponent_live_player_positions.get(
 			player_id, opponent_team.court_position(player_id, "defense")

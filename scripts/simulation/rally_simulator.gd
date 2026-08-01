@@ -53,6 +53,14 @@ const OPPONENT_DEFENSE: float = 0.58
 ## Fallbacks for a setter with no derived release profile. These are the
 ## midpoints of the bands `VolleyballPlayer.refresh_system_fit_profiles()`
 ## produces, so a profile-less setter behaves like an average one.
+## Where the two blockers stand when a wall forms. A double block is two players
+## shoulder to shoulder at the net, not two markers at one coordinate: playback
+## had been placing each blocker at their own defensive court position, which for
+## a block resolves both onto the attack lane and draws them stacked. Geometry is
+## the resolver's to own, so the pair is recorded on the event.
+const BLOCK_SHOULDER_OFFSET: float = 0.085
+const BLOCK_NET_DEPTH: float = 0.032
+
 const DEFAULT_SET_RELEASE_SECONDS: float = 0.42
 const DEFAULT_SET_RELEASE_TOLERANCE: float = 0.105
 const MINIMUM_SET_RELEASE_SECONDS: float = 0.15
@@ -975,6 +983,12 @@ func resolve(
 			"primary_close": primary_close,
 			"assist_close": assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
+			"primary_position": _block_wall_positions(
+				set_target.x, true
+			).primary_position,
+			"assist_position": _block_wall_positions(
+				set_target.x, true
+			).assist_position,
 			"setter_pull": block_resolution.setter_pull,
 			"read_quality": block_resolution.read_quality,
 			"event_time": rally_clock,
@@ -1452,6 +1466,12 @@ func _resolve_opponent_transition(
 			"primary_close": block_result.primary_close,
 			"assist_close": block_result.assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
+			"primary_position": _block_wall_positions(
+				opponent_contact.x, false
+			).primary_position,
+			"assist_position": _block_wall_positions(
+				opponent_contact.x, false
+			).assist_position,
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
 			"setter_pull": block_result.setter_pull,
@@ -1786,6 +1806,8 @@ func _resolve_home_continuation(
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
 		"primary_close": primary_close, "assist_close": assist_close,
 		"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
+		"primary_position": _block_wall_positions(set_target.x, true).primary_position,
+		"assist_position": _block_wall_positions(set_target.x, true).assist_position,
 		"coverage_segments": block_result.coverage_segments,
 		"setter_pull": block_result.setter_pull,
 		"read_quality": block_result.read_quality,
@@ -2274,6 +2296,24 @@ static func _movement_mode_for_kind(
 		"approach":
 			return RallyPlayerState.MovementMode.APPROACH
 	return RallyPlayerState.MovementMode.TRANSITION
+
+
+## The two positions a block wall occupies, pressed to the net on the blocking
+## team's own side. The assist closes inward from the middle of the court, so
+## the wall extends toward centre rather than off the sideline.
+static func _block_wall_positions(
+	lane_x: float,
+	opponent_side: bool,
+) -> Dictionary:
+	var wall_y := CourtConstants.NET_Y - BLOCK_NET_DEPTH if opponent_side \
+		else CourtConstants.NET_Y + BLOCK_NET_DEPTH
+	var inward := 1.0 if lane_x < 0.5 else -1.0
+	return {
+		"primary_position": Vector2(clampf(lane_x, 0.05, 0.95), wall_y),
+		"assist_position": Vector2(
+			clampf(lane_x + BLOCK_SHOULDER_OFFSET * inward, 0.05, 0.95), wall_y
+		),
+	}
 
 
 ## Time between the ball reaching the setter's hands and leaving them.
