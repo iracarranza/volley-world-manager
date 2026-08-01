@@ -134,6 +134,17 @@ const SERVE_ERROR_CEILING: float = 0.52
 const SERVE_BASE_DEMAND: float = 0.42
 const SERVE_RISK_DEMAND: float = 0.58
 
+## How much of a transition set the arriving ball can take away, and how much
+## of a bad ball a commanding setter buys back. Recovery is what makes a
+## setter's attributes matter most exactly when the ball is worst.
+const TRANSITION_BALL_WEIGHT: float = 0.62
+const TRANSITION_BALL_RECOVERY: float = 0.40
+
+## What a ball off the block is worth relative to a clean one, at a fully formed
+## wall. Without this a block touch recycled at full quality and a blocker was
+## worth nothing unless they stuffed it outright.
+const BLOCK_DEFLECTION_CARRY: float = 0.55
+
 ## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
 ## so the result can be compared with an attack quality that is also a fraction
 ## of an ideal, which is the whole point of a contest between them.
@@ -1208,9 +1219,16 @@ func resolve(
 				"hitter": hitter.display_name,
 			})
 		result.key_factors.append(ExplanationText.factor("attack_recycled"))
+		## A ball that came off the block is not a clean one. The coverage
+		## contact's own control is what the setter has to work with, and a
+		## formed wall degrades it further -- which is the only channel a
+		## blocker has to the result other than a stuff.
 		return _resolve_home_continuation(
 			result, players, lineup, coverer, coverage_pass_target,
 			opponent_team, defensive_plan, 1,
+			coverage_quality * lerpf(
+				1.0, BLOCK_DEFLECTION_CARRY, clampf(block_strength, 0.0, 1.0)
+			),
 		)
 
 	var opponent_defense := _choose_opponent_defender(
@@ -1862,7 +1880,7 @@ func _resolve_opponent_transition(
 		)
 	return _resolve_home_continuation(
 		result, players, lineup, defender, defense_pass_target,
-		opponent_team, defensive_plan, exchange_number,
+		opponent_team, defensive_plan, exchange_number, defense_quality,
 	)
 
 
@@ -1875,6 +1893,14 @@ func _resolve_home_continuation(
 	opponent_team: Resource,
 	defensive_plan: Resource,
 	exchange_number: int,
+	## How good the ball arriving at this setter is. A dig that barely stays up
+	## and a block touch clawed off the floor are not the same ball as a clean
+	## one, and until this existed they were: the transition set read only the
+	## setter's own attributes, so a shanked dig produced exactly the set a
+	## perfect one did. Every non-terminal contact reset the rally to neutral,
+	## which is why only the swing -- the contact that ends a rally -- had any
+	## measurable effect on who won it.
+	incoming_quality: float = 1.0,
 ) -> Resource:
 	var setter := _second_contact_setter(
 		players, lineup, defensive_plan, defender.id
@@ -1899,11 +1925,22 @@ func _resolve_home_continuation(
 	var hitter := _fallback_hitter(players, lineup, setter.id)
 	var assignment := _fallback_assignment(hitter, lineup)
 	var exchange_penalty := float(exchange_number) * 0.04
+	## Same shape as the swing and the dig: what the setter brings, times what
+	## the arriving ball allowed. Command buys back part of a bad ball, so the
+	## gap between setters is widest when the ball is worst -- which is also
+	## what makes a setter's attributes visible in the result at all.
+	var set_capability := clampf(
+		_rating(setter, "set_accuracy") * 0.55
+		+ _rating(setter, "ball_control") * 0.27
+		+ _rating(setter, "composure") * 0.18,
+		0.0, 1.0,
+	)
+	var usable_ball := clampf(incoming_quality, 0.0, 1.0)
+	usable_ball += (1.0 - usable_ball) * set_capability * TRANSITION_BALL_RECOVERY
 	var set_quality := clampf(
-		_rating(setter, "set_accuracy") * 0.52
-		+ _rating(setter, "ball_control") * 0.22
-		+ _rating(setter, "composure") * 0.16
-		- exchange_penalty + clampf(setter_arrival_margin * 0.16, -0.38, 0.07) \
+		set_capability
+		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - usable_ball))
+		- exchange_penalty + clampf(setter_arrival_margin * 0.16, -0.38, 0.07)
 		+ rng.randf_range(-0.14, 0.14), 0.10, 0.92
 	)
 	var set_target := CourtConstants.lane_target(assignment.lane)

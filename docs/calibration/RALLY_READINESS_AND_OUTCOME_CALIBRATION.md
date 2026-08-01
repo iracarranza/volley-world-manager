@@ -403,6 +403,46 @@ suggested the engine was less responsive than it is: boosting the home squad
 helps them whether they serve or receive, so side-out counts the same effect
 with each sign and the two nearly cancel.
 
+### Seventh pass: propagation, and two negative results
+
+Every non-terminal contact reset the rally to neutral. The transition set read
+only the setter's own attributes, so a dig that barely stayed up produced
+exactly the set a perfect one did, and a ball clawed off the block recycled at
+full quality. That is why only the swing -- the contact that ends a rally --
+had any measurable effect on who won it.
+
+Three links were built. `_resolve_home_continuation()` now takes an
+`incoming_quality`, the dig's own quality feeds it, and a block touch degrades
+it further through `BLOCK_DEFLECTION_CARRY`. The transition set became
+capability times what the arriving ball allowed, with command buying part of a
+bad ball back so the gap between setters is widest when the ball is worst.
+
+**Two of the three did not do what was predicted, and the measurements say so.**
+
+*Link 3 was reverted.* Raising `SET_OPPORTUNITY_WEIGHT` from 0.40 to 0.58 -- so
+that a shanked set no longer leaves 60% of the swing intact -- was meant to make
+the setter visible. Measured, the setter moved from 0.5 SE to 0.5 SE: nothing.
+It cost real attack quality, pushed attack errors from 0.103 to 0.182, put the
+home stuff-block rate back over its ceiling, and broke three trajectory coverage
+windows. A change that does not achieve its stated purpose and has a cost is not
+a close call.
+
+*Links 1 and 2 are wired and almost inert.* With the set weight back at 0.40 the
+sweep returns **436 attempts, 134 terminal, 10.8889 contacts** -- identical to
+the run before propagation existed, on every metric except block touch, which
+differs by exactly one event in 180 rallies.
+
+The reason is path frequency, not the links. `_resolve_home_continuation()` has
+two callers: the home block-recycle coverage, and the home dig of an opponent
+*transition* attack. When the opponent digs a home attack the rally goes to
+`_resolve_opponent_transition()`, whose set quality has no propagation at all.
+Most continuations live on that side, so the links were built on the rarer of
+the two paths. The symmetric opponent link is the next thing to build, and until
+it exists this work should be read as scaffolding rather than a result.
+
+The rally-length improvement seen at set weight 0.58 (10.89 to 9.15 contacts)
+came from that weight, not from propagation.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error
