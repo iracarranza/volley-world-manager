@@ -76,7 +76,7 @@ development-project feature. Preserve the product contract in
 | Ground speed | `stride x cadence x mass`, per-mode, via `LocomotionModel`; the single rating curve is retired | Same |
 | Second-contact capability | `SetterCapabilitySystem` sets tempo command, pass recovery, and reach on every official set | Same |
 | Player generation | Attribute-first: ceiling, then an age-driven growth reserve, then role and region tiers | Same |
-| 2D display | Consumes `RallyEvent` and trajectory metadata | May additionally show explicitly requested diagnostics |
+| 2D display | Consumes `RallyEvent` and trajectory metadata, including jump elevation and hand posture read from resolved events | May additionally show explicitly requested diagnostics |
 | 3D display | Paused | Paused |
 
 The four `ENABLE_CONTINUOUS_*` production flags in
@@ -177,14 +177,14 @@ objective is a judgement call rather than a lookup. Do not start a production
 rollout: every `ENABLE_CONTINUOUS_*` flag is still off, and turning one on is a
 separately reviewed decision that no completed gate authorizes.
 
-**1. Confirm opponent spikes now read correctly in 2D playback.** The engine
-side of this is done -- the opponent attack path mirrors Gate 43, and the
-opponent SET event stages the hitter at their approach mark so playback can
-animate the run-up rather than teleporting them into a swing. What has not been
-done is *looking at it*: the original complaint was that spikes were unclear on
-the 2D court, and that should now be re-checked against a real rally before
-anything else is built on top of it. If it still reads poorly, the remaining
-fault is in `scenes/main/main.gd` playback rather than in the resolver.
+**1. Confirm spikes now read correctly in 2D playback.** Both halves are built
+and neither has been *looked at*. The engine side: the opponent attack path
+mirrors Gate 43 and the opponent set stages the hitter at their approach mark.
+The view side: `_draw_player_body()` lifts a jumping player off their own
+shadow and orbits hand marks toward the contact. The original complaint was
+that spikes were unclear on the 2D court, and that should be re-checked against
+a real rally before anything else is built on top of it. Headless tests can
+assert the geometry but cannot tell you whether it reads.
 
 **2. Carry the capability pattern to attacking and blocking.**
 `SetterCapabilitySystem` is a worked example of the contract described under

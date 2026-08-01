@@ -226,6 +226,17 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
+- **2D playback shows height and hand posture.** A top-down court has no
+  natural way to express elevation, which is why spikes and blocks read as flat
+  slides. `TacticalCourt._draw_player_body()` separates the floor shadow from
+  the marker: the shadow stays down and spreads while the marker lifts and grows,
+  and that separation is what reads as height. Elevation comes from the resolved
+  event and is never invented by the view -- a hitter's `jump_multiplier`, so a
+  poor run-up visibly converts to less height; both blockers on a block; and the
+  setter's own `reach_state` for a jump set, including the straining posture for
+  a ball past their reach. Two small marks orbit the marker toward the contact
+  being made, so a swing and a dig are distinguishable at this zoom. Both sides
+  draw through the one helper.
 - **Opponent hitters now have a causal approach (Gate 43 mirrored).**
   `_resolve_opponent_transition()` builds an opponent-side rally state, runs
   `ApproachMechanicsSystem.prepare_for_attack(..., &"opponent")`, and feeds the
@@ -431,7 +442,7 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 461 passing checks (424 as of Gate
+The current foundation validation reports 464 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

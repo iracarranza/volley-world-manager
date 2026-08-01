@@ -1655,6 +1655,98 @@ func _shadow_setter_candidate(candidates: Array, player_id: int) -> Dictionary:
 	return {}
 
 
+## How far off the floor this player is at the moment being drawn, 0 to 1.
+##
+## A 2D top-down court has no natural way to show height, which is why spikes
+## and blocks read as flat slides. The resolver already knows who left the floor
+## and how well -- `jump_multiplier` for a hitter, the setter's own reach state
+## for a jump set -- so the drawing layer reads that rather than inventing it.
+func _contact_elevation(player_id: int, side: String) -> float:
+	if playback_event == null or player_id < 0:
+		return 0.0
+	var metadata: Dictionary = playback_event.metadata
+	if str(metadata.get("side", "")) != side:
+		return 0.0
+	var is_actor := int(playback_event.actor_id) == player_id
+	match int(playback_event.event_type):
+		RallyEventModel.EventType.ATTACK:
+			if is_actor:
+				## A poor run-up converts to less height, which is the whole
+				## point of the approach model being causal.
+				return clampf(
+					inverse_lerp(0.55, 1.25, float(metadata.get("jump_multiplier", 1.0))),
+					0.35, 1.0,
+				)
+		RallyEventModel.EventType.BLOCK:
+			if is_actor or int(metadata.get("assist_id", -1)) == player_id:
+				return 0.85
+		RallyEventModel.EventType.SET:
+			if is_actor:
+				match str(Dictionary(
+					metadata.get("setter_capability", {})
+				).get("reach_state", "")):
+					"jump":
+						return 0.55
+					"beyond_reach":
+						## Straining at a ball they cannot actually reach.
+						return 0.70
+	return 0.0
+
+
+## Which way this player's hands are working, in local draw space. Zero when
+## they are not the one touching the ball.
+func _hand_direction(player_id: int, side: String) -> Vector2:
+	if playback_event == null or player_id < 0:
+		return Vector2.ZERO
+	if int(playback_event.actor_id) != player_id:
+		return Vector2.ZERO
+	if str(playback_event.metadata.get("side", "")) != side:
+		return Vector2.ZERO
+	var travel := _court_to_local(playback_event.end_position) \
+		- _court_to_local(playback_event.start_position)
+	return travel.normalized() if travel.length() > 0.001 else Vector2.ZERO
+
+
+const JUMP_LIFT_PIXELS: float = 15.0
+const HAND_SPREAD_RADIANS: float = 0.62
+
+
+## One player body: floor shadow, marker, and hand posture.
+##
+## Both sides draw through here so the two can never drift apart, which is the
+## defect this session found three times in the simulation code.
+func _draw_player_body(
+	center: Vector2,
+	radius: float,
+	fill: Color,
+	elevation: float,
+	hand_direction: Vector2,
+) -> Vector2:
+	var lift := clampf(elevation, 0.0, 1.0) * JUMP_LIFT_PIXELS
+	## The shadow stays on the floor and spreads as the player rises; only the
+	## marker leaves the ground. That separation is what reads as height.
+	var shadow_center := center + Vector2(3.0, 4.0 + lift * 0.55)
+	draw_circle(
+		shadow_center, radius * (1.0 + clampf(elevation, 0.0, 1.0) * 0.18),
+		Color(0, 0, 0, 0.28 - clampf(elevation, 0.0, 1.0) * 0.10),
+	)
+	var body_center := center - Vector2(0.0, lift)
+	var body_radius := radius * (1.0 + clampf(elevation, 0.0, 1.0) * 0.12)
+	draw_circle(body_center, body_radius, fill)
+	draw_circle(body_center, body_radius, palette["line"], false, 2.0)
+	if hand_direction != Vector2.ZERO:
+		## Two small marks orbiting toward the work: which way the hands are
+		## facing is the difference between a swing and a dig at this zoom.
+		var hand_color: Color = _with_alpha(palette["text"], 0.92)
+		for sign_value in [-1.0, 1.0]:
+			var offset := hand_direction.rotated(
+				HAND_SPREAD_RADIANS * sign_value
+			) * (body_radius + 5.0)
+			draw_circle(body_center + offset, 3.4, hand_color)
+			draw_circle(body_center + offset, 3.4, palette["line"], false, 1.0)
+	return body_center
+
+
 func _draw_players() -> void:
 	if lineup == null:
 		return
@@ -1666,12 +1758,14 @@ func _draw_players() -> void:
 			palette["marker_selected"]
 			if player_id == selected_player_id else palette["marker"]
 		)
-		draw_circle(center + Vector2(3, 4), 20.0, Color(0, 0, 0, 0.28))
-		draw_circle(center, 20.0, marker_color)
-		draw_circle(center, 20.0, palette["line"], false, 2.0)
+		var body_center := _draw_player_body(
+			center, 20.0, marker_color,
+			_contact_elevation(player_id, "home"),
+			_hand_direction(player_id, "home"),
+		)
 		var short_name := player.position_code if player != null else "?"
 		draw_string(
-			ThemeDB.fallback_font, center + Vector2(-14, 5), short_name,
+			ThemeDB.fallback_font, body_center + Vector2(-14, 5), short_name,
 			HORIZONTAL_ALIGNMENT_CENTER, 28, 14, palette["text"],
 		)
 		draw_string(
@@ -1724,15 +1818,17 @@ func _draw_opponents() -> void:
 			and str(playback_event.metadata.get("side", "")) == "opponent" \
 			and int(playback_event.actor_id) == player.id
 		var radius := 19.0 if active else 16.0
-		draw_circle(center + Vector2(3, 4), radius, Color(0, 0, 0, 0.30))
-		draw_circle(center, radius, palette["opponent_marker"])
-		draw_circle(center, radius, palette["line"], false, 2.0)
+		var body_center := _draw_player_body(
+			center, radius, palette["opponent_marker"],
+			_contact_elevation(player.id, "opponent"),
+			_hand_direction(player.id, "opponent"),
+		)
 		draw_string(
-			ThemeDB.fallback_font, center + Vector2(-14, 5), player.position_code,
+			ThemeDB.fallback_font, body_center + Vector2(-14, 5), player.position_code,
 			HORIZONTAL_ALIGNMENT_CENTER, 28, 12, palette["opponent_text"],
 		)
 		draw_string(
-			ThemeDB.fallback_font, center + Vector2(-38, -24), player.display_name,
+			ThemeDB.fallback_font, body_center + Vector2(-38, -24), player.display_name,
 			HORIZONTAL_ALIGNMENT_CENTER, 76, 10,
 			_with_alpha(palette["text"], 0.82),
 		)

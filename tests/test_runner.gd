@@ -145,6 +145,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
 	_test_opponent_approach_mirror()
+	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3935,6 +3936,81 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
 		"Generation fix: stride_length_m is derived from each player's actual post-variation height",
 	)
+
+
+## Jump and hand posture are the two things a top-down court cannot show without
+## being told. Both are read from resolved events, never invented by the view,
+## so both are assertable without rendering anything.
+func _test_playback_elevation_and_hand_posture() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var court := TacticalCourt.new()
+	get_root().add_child(court)
+	court.set_lineup(manager.rotations[1], manager.players)
+
+	var result: Resource = manager.resolve_active_rally(31000)
+	var attack_event: Resource = null
+	var block_event: Resource = null
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		if attack_event == null \
+				and int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK:
+			attack_event = event
+		elif block_event == null \
+				and int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+			block_event = event
+
+	## 1. The player making a jumping contact leaves the floor; everyone else
+	##    stays on it. Without the second half this would "pass" by lifting the
+	##    whole team every time anyone swung.
+	var attacker_lift := 0.0
+	var bystander_lift := 1.0
+	if attack_event != null:
+		court.playback_event = attack_event
+		var side := str(attack_event.metadata.get("side", ""))
+		attacker_lift = court._contact_elevation(int(attack_event.actor_id), side)
+		for player in manager.players:
+			if player.id != int(attack_event.actor_id):
+				bystander_lift = minf(
+					bystander_lift, court._contact_elevation(player.id, side)
+				)
+	_check(
+		attack_event != null and attacker_lift > 0.3 and bystander_lift == 0.0,
+		"the player making a jumping contact is drawn off the floor and nobody else is",
+	)
+
+	## 2. Both blockers rise, not just the one who owns the event.
+	var primary_lift := 0.0
+	var assist_lift := 0.0
+	if block_event != null:
+		court.playback_event = block_event
+		var block_side := str(block_event.metadata.get("side", ""))
+		primary_lift = court._contact_elevation(int(block_event.actor_id), block_side)
+		var assist_id := int(block_event.metadata.get("assist_id", -1))
+		assist_lift = court._contact_elevation(assist_id, block_side) if assist_id >= 0 \
+			else primary_lift
+	_check(
+		block_event != null and primary_lift > 0.5 and assist_lift > 0.5,
+		"a block lifts the assisting blocker as well as the primary",
+	)
+
+	## 3. Hands point along the contact the player is actually making, and only
+	##    the player making it has a hand posture at all.
+	var hand := Vector2.ZERO
+	var idle_hand := Vector2.ONE
+	if attack_event != null:
+		court.playback_event = attack_event
+		var side := str(attack_event.metadata.get("side", ""))
+		hand = court._hand_direction(int(attack_event.actor_id), side)
+		for player in manager.players:
+			if player.id != int(attack_event.actor_id):
+				idle_hand = court._hand_direction(player.id, side)
+				break
+	_check(
+		attack_event != null and hand.length() > 0.9 and idle_hand == Vector2.ZERO,
+		"only the contacting player carries a hand direction, and it is a unit heading",
+	)
+	court.queue_free()
 
 
 ## Gate 43 mirrored onto the opponent. The opponent hitter had no causal
