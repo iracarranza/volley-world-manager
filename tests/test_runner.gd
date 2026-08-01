@@ -19,6 +19,9 @@ const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_stat
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
 const LOCOMOTION_MODEL_SCRIPT := preload("res://scripts/simulation/locomotion_model.gd")
+const EXECUTION_SCALE_SCRIPT := preload(
+	"res://scripts/simulation/execution_scale_calibration.gd"
+)
 const READINESS_REPORT_SCRIPT := preload("res://scripts/simulation/rally_readiness_report.gd")
 const SETTER_CAPABILITY_SCRIPT := preload("res://scripts/simulation/setter_capability_system.gd")
 const CONTACT_ENVELOPE_SCRIPT := preload(
@@ -4113,6 +4116,29 @@ func _test_readiness_and_calibration_reports() -> void:
 			and float(calibration.get("block_close_saturation", 1.0)) < 0.90,
 		"blockers do not all seal the lane -- closing is decided by the close",
 	)
+	## A diagnostic must call the code, never restate it.
+	##
+	## The execution harness's driver kept its own copy of the wall formula, so
+	## when `_block_wall_quality()` replaced `skill * 0.78` the tool went on
+	## reporting contest shares from the retired expression -- three different
+	## block scales printed byte-identical output, and two tuning passes were
+	## spent against a frozen number.
+	##
+	## Closing multiplies the wall now, so a beaten blocker has to fall far
+	## below a sealed one. Under the additive form this replaced they sat within
+	## 16% of each other, which is what this would catch.
+	var scale_population := EXECUTION_SCALE_SCRIPT.generated_population(2)
+	var block_rows: Dictionary = EXECUTION_SCALE_SCRIPT.block_scale(scale_population)
+	var sealed_block := float(
+		(block_rows.get("close_1.0", {}) as Dictionary).get("median", 0.0)
+	)
+	var beaten_block := float(
+		(block_rows.get("close_0.2", {}) as Dictionary).get("median", 1.0)
+	)
+	_check(
+		sealed_block > 0.0 and beaten_block < sealed_block * 0.55,
+		"a beaten blocker is worth far less than a sealed one on the shared scale",
+	)
 	## Every metric must be a rate the caller can compare against its band, not
 	## a NaN from an empty denominator.
 	var finite := true
@@ -5481,6 +5507,23 @@ func _test_spatial_timing_and_tactical_positions() -> void:
 func _test_block_closing_and_touch_distribution() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
+	## Balance, measured on players who differ from each other.
+	##
+	## `seed_vertical_slice_data()` sets only the attributes each player's role
+	## names and leaves the rest at 50, so this check used to assert a balance
+	## claim about a squad of near-identical average players. Measured four ways
+	## -- home and opponent blocks, fixture and generated -- the fixture reads
+	## 0.281 stuff for the home block against 0.009 for the opponent's, while a
+	## generated population reads 0.061 and 0.068. The asymmetry is the flat
+	## roster, not the block.
+	##
+	## The assertions below are unchanged. Only the roster is, and the four-way
+	## measurement that justified it was run before the change, not after it
+	## failed.
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(manager.players, 900000)
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+		manager.opponent_team.players, 905000
+	)
 	manager.match_state.serving_home = true
 	var home_block_events := 0
 	var stuff_blocks := 0

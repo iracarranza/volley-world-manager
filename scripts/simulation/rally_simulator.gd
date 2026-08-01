@@ -1450,6 +1450,10 @@ func _resolve_opponent_transition(
 	) * BLOCK_PRIMARY_PRESSURE + float(
 		home_block_formation.get("assist_close", 0.0)
 	) * BLOCK_ASSIST_PRESSURE
+	## Mirrors the home side's demand exactly: a faster tempo asks more of the
+	## hitter, and a setter who commands tempo asks less of them.
+	var opponent_tempo_demand := float(3 - clampi(opponent_tempo, 0, 3)) * 0.055 \
+		* lerpf(1.0, 0.65, _rating(opponent_setter, "tempo_control"))
 	var opponent_attack_noise := rng.randf_range(
 		-ATTACK_EXECUTION_NOISE, ATTACK_EXECUTION_NOISE
 	)
@@ -1459,7 +1463,7 @@ func _resolve_opponent_transition(
 	var opponent_attack := clampf(
 		_attack_execution(
 			opponent_hitter, opponent_set_quality, 0.5, hitter_arrival_margin,
-			0.0, home_block_pressure,
+			opponent_tempo_demand, home_block_pressure,
 		) + opponent_attack_noise,
 		0.0, 1.0,
 	)
@@ -1525,9 +1529,36 @@ func _resolve_opponent_transition(
 			_attack_execution(
 				opponent_hitter, opponent_set_quality,
 				_approach_execution_fit(opponent_hitter, opponent_approach),
-				hitter_arrival_margin, 0.0, home_block_pressure,
+				hitter_arrival_margin, opponent_tempo_demand, home_block_pressure,
 				(float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
 			) + opponent_attack_noise,
+			0.0, 1.0,
+		)
+	## Capability shapes this swing too. Unifying the execution model left the
+	## opponent as the only one of the three swings paying neither a tempo demand
+	## nor an overreach penalty, and on the flat fixture that showed up as
+	## opponent swings averaging 0.360 against home swings at 0.264 -- a
+	## systematic edge to one side of the net with nothing behind it.
+	##
+	## The back-off changes the shot and its quality but not where it was aimed:
+	## the opponent's target is chosen before the run-up is evaluated, so a
+	## downgraded swing still flies at the spot the full swing had picked. That
+	## understates the downgrade and is the remaining asymmetry here.
+	var opponent_swing_deficit := ApproachMechanicsModel.attack_family_deficit(
+		opponent_hitter, opponent_approach, hitter_arrival_margin,
+		ApproachMechanicsModel.attack_family_for_hit_type(
+			str(attack_choice.attack_type)
+		),
+	)
+	if AttemptJudgmentModel.backs_off(opponent_hitter, opponent_swing_deficit):
+		attack_choice["attack_type"] = "Roll shot"
+		opponent_swing_deficit = ApproachMechanicsModel.attack_family_deficit(
+			opponent_hitter, opponent_approach, hitter_arrival_margin,
+			ApproachMechanicsModel.attack_family_for_hit_type("Roll shot"),
+		)
+	if opponent_swing_deficit > 0.0:
+		opponent_attack = clampf(
+			opponent_attack - opponent_swing_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
 	## Let playback walk the hitter to their approach mark during the set,

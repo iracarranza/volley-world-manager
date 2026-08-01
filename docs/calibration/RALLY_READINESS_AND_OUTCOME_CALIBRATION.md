@@ -301,6 +301,32 @@ blocker ordinary and a formed double the thing a hitter has to solve.
 
 Stuff rate, attack errors, aces and close saturation are now all in band.
 
+### The four-cell test that settled a failing check
+
+The home stuff-block balance check read 0.379 against its 0.22 ceiling, and the
+tempting move -- rerun it on a population where it passes -- is indistinguishable
+from tuning until the rule is fixed in advance. So it was: measure home-block
+and opponent-block stuff rates on both populations, and let the four cells
+decide. Home high on both means a code asymmetry, home high only on the fixture
+means the roster is the artefact, high everywhere means the block rebalance is
+wrong and gets reverted.
+
+| | home block stuff | opponent block stuff |
+|---|---|---|
+| fixture | **0.281** | 0.009 |
+| generated | 0.061 | 0.068 |
+
+Home high only on the fixture. The check moved to a generated roster with its
+assertion untouched.
+
+The fixture cell also exposed something real: home swings averaged 0.264 against
+opponent swings at 0.360. Unifying the three execution formulas had left the
+opponent as the only swing of the three paying neither a tempo demand nor an
+overreach penalty -- a systematic edge to one side of the net with nothing
+behind it. Both now apply. The opponent's back-off still cannot re-aim the shot,
+because its target is chosen before the run-up is evaluated; that is the
+remaining asymmetry and it is named at the site.
+
 ### The next binding constraint is the dig, and it is a fourth scale
 
 Kill rate is 0.048 and rallies run to 14.4 contacts. 599 swings produced 127
