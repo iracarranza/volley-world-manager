@@ -71,6 +71,16 @@ const BLOCK_LATERAL_REACH_METERS: float = 0.45
 const BLOCK_PLANT_SECONDS: float = 0.26
 ## How late a blocker must be for the lane to be completely open.
 const BLOCK_CLOSE_FAILURE_SECONDS: float = 0.45
+## What a completely beaten blocker still contributes -- a hand in the air near
+## the ball, not a wall. Zero would say a late blocker is not on the court.
+const BLOCK_UNCLOSED_SHARE: float = 0.18
+
+## One blocker against a hitter with the whole court is not most of a wall. At
+## 0.78 a solo block outscored a typical swing, so the engine stuffed 28% of
+## attacks and produced fifteen kills in three hundred and fifty swings.
+const BLOCK_SOLO_SHARE: float = 0.62
+## How much of what the primary left open a sealed assist covers.
+const BLOCK_ASSIST_SHARE: float = 0.55
 
 ## How much a formed block takes off the swing hit into it. The primary carries
 ## most of it; a sealed assist adds the rest of the wall.
@@ -2171,15 +2181,7 @@ func _form_opponent_block(
 		assist_close = 0.0
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
-	## `assist_close` is already inside `assist_skill`; multiplying by it again
-	## squared the assist's contribution and, with the solo weighting at 0.68,
-	## capped even a perfect unassisted blocker at 0.67. Block quality sat in a
-	## 0.04-wide interquartile band as a result -- every block in the game was
-	## the same block.
-	var block_quality := clampf(
-		primary_skill * 0.78 + assist_skill * 0.30,
-		0.05, 0.98,
-	)
+	var block_quality := _block_wall_quality(primary_skill, assist_skill)
 	return {
 		"primary": primary,
 		"assist": assist,
@@ -3515,15 +3517,7 @@ func _form_home_block(
 		assist_close = 0.0
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
-	## `assist_close` is already inside `assist_skill`; multiplying by it again
-	## squared the assist's contribution and, with the solo weighting at 0.68,
-	## capped even a perfect unassisted blocker at 0.67. Block quality sat in a
-	## 0.04-wide interquartile band as a result -- every block in the game was
-	## the same block.
-	var block_quality := clampf(
-		primary_skill * 0.78 + assist_skill * 0.30,
-		0.05, 0.98,
-	)
+	var block_quality := _block_wall_quality(primary_skill, assist_skill)
 	return {
 		"primary": primary,
 		"assist": assist,
@@ -3679,15 +3673,41 @@ func _attack_execution(
 	return clampf(capability * opportunity - block_pressure, 0.0, 1.0)
 
 
+## The wall two blockers make, from what each of them brings.
+##
+## Written out twice, once per side of the net, until this: `assist_close` was
+## already inside `assist_skill` and was multiplied in again, which squared the
+## assist's contribution and capped even a perfect unassisted blocker at 0.67.
+##
+## The assist closes part of what the primary leaves open rather than adding a
+## flat share, so a second blocker matters most when the first is beaten and
+## least when they already sealed it. That is the shape of a real double block,
+## and it makes beating one blocker ordinary while a well-formed double is the
+## thing a hitter genuinely has to solve.
+func _block_wall_quality(primary_skill: float, assist_skill: float) -> float:
+	var solo := clampf(primary_skill, 0.0, 1.0) * BLOCK_SOLO_SHARE
+	return clampf(
+		solo + (1.0 - solo) * clampf(assist_skill, 0.0, 1.0) * BLOCK_ASSIST_SHARE,
+		0.05, 0.98,
+	)
+
+
 func _block_contact_skill(blocker: VolleyballPlayer, close_fraction: float) -> float:
 	if blocker == null:
 		return 0.0
+	var technique := clampf(
+		_rating(blocker, "block_timing") * 0.46
+		+ _available_jump_rating(blocker) * 0.29
+		+ _body_reach_rating(blocker) * 0.15
+		+ _rating(blocker, "anticipation") * 0.10,
+		0.0, 1.0,
+	)
+	## Closing multiplies the block rather than adding to it. As a 0.14 additive
+	## term a blocker who reached only a fifth of the lane still scored 84% of a
+	## sealed block's quality, so making the close physical changed the number
+	## and not the outcome. A blocker who did not get there does not block.
 	return clampf(
-		_rating(blocker, "block_timing") * 0.40
-		+ _available_jump_rating(blocker) * 0.25
-		+ _body_reach_rating(blocker) * 0.13
-		+ _rating(blocker, "anticipation") * 0.08
-		+ close_fraction * 0.14,
+		technique * lerpf(BLOCK_UNCLOSED_SHARE, 1.0, clampf(close_fraction, 0.0, 1.0)),
 		0.05, 0.98,
 	)
 

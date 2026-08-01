@@ -22,6 +22,20 @@ extends RefCounted
 
 const GameManagerModel := preload("res://scripts/managers/game_manager.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const ExecutionScaleModel := preload(
+	"res://scripts/simulation/execution_scale_calibration.gd"
+)
+
+## Which roster the sweeps measure.
+##
+## `fixture` is the hand-authored vertical slice, where every attribute a
+## player's role does not name sits at the default 50. `generated` keeps that
+## fixture's ids, positions, rotations and plays but replaces the ability
+## attributes with a generated player's, which is the population a real league
+## is built from. The reference bands describe the sport, so `generated` is what
+## they should be judged against; `fixture` is kept because every other
+## regression check in the suite runs on it.
+const DEFAULT_POPULATION: StringName = &"generated"
 
 ## Approximate rates in elite indoor volleyball, used as tuning reference bands
 ## rather than as truth. They are wide on purpose: the point is to catch a
@@ -68,11 +82,24 @@ const ABSENCE_MARKERS := {
 ## per-rally records both reports are built from. Driving both serving sides
 ## matters: the shadow pipeline only runs on opponent serves, so a sweep that
 ## forgets to alternate silently measures half the engine.
-static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
+static func _sweep(
+	sample_count: int,
+	base_seed: int,
+	population: StringName = DEFAULT_POPULATION,
+) -> Array[Dictionary]:
 	var records: Array[Dictionary] = []
 	for serving_home in [true, false]:
 		var manager := GameManagerModel.new()
 		manager.seed_vertical_slice_data()
+		if population == &"generated":
+			## Both sides, or the measurement compares a real squad against a
+			## squad of clones and reads the difference as a balance finding.
+			ExecutionScaleModel.apply_generated_attributes(
+				manager.players, base_seed
+			)
+			ExecutionScaleModel.apply_generated_attributes(
+				manager.opponent_team.players, base_seed + 5000
+			)
 		manager.match_state.serving_home = serving_home
 		for index in range(maxi(sample_count, 1)):
 			var result: Resource = manager.resolve_active_rally(base_seed + index)
@@ -82,6 +109,9 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 			var attack_attempts := 0
 			var block_outcomes := {}
 			var block_closes: Array[float] = []
+			var set_qualities: Array[float] = []
+			var approach_fits: Array[float] = []
+			var arrival_margins: Array[float] = []
 			for event_resource in result.events:
 				var event: Resource = event_resource
 				if int(event.event_type) in [
@@ -108,8 +138,28 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 					block_outcomes[outcome] = int(
 						block_outcomes.get(outcome, 0)
 					) + 1
+					## Both blockers, not just the primary. The primary is by
+					## definition the one already nearest the attacked lane, so
+					## it seals in most rallies and a saturation figure built on
+					## it alone reads as a defect when it is geometry. The
+					## assist is the blocker who has to travel, and whether the
+					## wall closes is really a question about them.
 					if event.metadata.has("primary_close"):
 						block_closes.append(float(event.metadata["primary_close"]))
+					if event.metadata.has("assist_close"):
+						block_closes.append(float(event.metadata["assist_close"]))
+				## The situation a swing was actually hit from. The execution
+				## harness needs these to know what "typical" means; taken from
+				## the flat fixture they described a rally nobody plays.
+				if int(event.event_type) == RallyEventModel.EventType.SET:
+					set_qualities.append(float(event.quality))
+				if int(event.event_type) == RallyEventModel.EventType.ATTACK \
+						and event.metadata.has("arrival_margin"):
+					arrival_margins.append(float(event.metadata["arrival_margin"]))
+					if event.metadata.has("approach_quality"):
+						approach_fits.append(float(
+							event.metadata["approach_quality"]
+						))
 			var trace: Dictionary = result.analysis.get("shadow_reception", {})
 			records.append({
 				"serving_home": serving_home,
@@ -119,6 +169,9 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 				"attack_attempts": attack_attempts,
 				"block_outcomes": block_outcomes,
 				"block_closes": block_closes,
+				"set_qualities": set_qualities,
+				"approach_fits": approach_fits,
+				"arrival_margins": arrival_margins,
 				"shadow_summary": Dictionary(trace.get("summary", {})),
 			})
 	return records
@@ -128,8 +181,9 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 static func outcome_calibration(
 	sample_count: int = 120,
 	base_seed: int = 900000,
+	population: StringName = DEFAULT_POPULATION,
 ) -> Dictionary:
-	var records := _sweep(sample_count, base_seed)
+	var records := _sweep(sample_count, base_seed, population)
 	if records.is_empty():
 		return {"fixture_valid": false}
 
@@ -149,6 +203,9 @@ static func outcome_calibration(
 	var blocks_touching := 0
 	var closes_sealed := 0
 	var closes_measured := 0
+	var set_qualities: Array = []
+	var approach_fits: Array = []
+	var arrival_margins: Array = []
 	for record in records:
 		for outcome_key in Dictionary(record["block_outcomes"]):
 			var count := int(record["block_outcomes"][outcome_key])
@@ -159,6 +216,9 @@ static func outcome_calibration(
 			## "miss" is the only outcome where no hand reaches the ball.
 			if str(outcome_key) != "miss":
 				blocks_touching += count
+		set_qualities.append_array(Array(record["set_qualities"]))
+		approach_fits.append_array(Array(record["approach_fits"]))
+		arrival_margins.append_array(Array(record["arrival_margins"]))
 		for close in Array(record["block_closes"]):
 			closes_measured += 1
 			if float(close) >= 0.995:
@@ -215,6 +275,7 @@ static func outcome_calibration(
 			])
 	return {
 		"fixture_valid": true,
+		"population": str(population),
 		"rally_count": serves,
 		"terminal_outcomes": outcomes,
 		"attack_attempts": attacks,
@@ -228,6 +289,13 @@ static func outcome_calibration(
 		## started running through the shared traversal solver.
 		"block_close_saturation": float(closes_sealed)
 			/ maxf(float(closes_measured), 1.0),
+		## What the rally actually hands a hitter, for the execution harness to
+		## calibrate its named situations against instead of guessing them.
+		"situation_inputs": {
+			"set_quality": ExecutionScaleModel.summarise(set_qualities),
+			"approach_fit": ExecutionScaleModel.summarise(approach_fits),
+			"arrival_margin": ExecutionScaleModel.summarise(arrival_margins),
+		},
 		"measured": measured,
 		"reference_bands": REFERENCE_BANDS.duplicate(true),
 		"within_reference": within,
@@ -245,8 +313,9 @@ static func outcome_calibration(
 static func rollout_readiness(
 	sample_count: int = 120,
 	base_seed: int = 910000,
+	population: StringName = DEFAULT_POPULATION,
 ) -> Dictionary:
-	var records := _sweep(sample_count, base_seed)
+	var records := _sweep(sample_count, base_seed, population)
 	if records.is_empty():
 		return {"fixture_valid": false}
 

@@ -256,6 +256,64 @@ checks cannot see -- each asks whether a formula responds to its input, never
 whether the input varies in play -- so a regression check fails when saturation
 returns. Setting the arm reach to the full court width was confirmed to trip it.
 
+### Fourth pass: the sweeps were measuring a squad of clones
+
+`seed_vertical_slice_data()` sets only the attributes each player's role names;
+every other one stays at `VolleyballPlayer`'s default of 50. Across the eight
+fixture players, attack_accuracy runs 0.50/0.50/0.50/0.68/0.76 and block_timing
+is 0.50 at every quartile. A generated population spreads those same attributes
+0.61 to 0.94.
+
+**Every outcome calibration in this project had therefore been measured on a
+roster of near-identical average players**, which is why no sweep could ever
+have answered the question of whether a standout hitter feels like one. The
+sweeps now re-attribute both rosters from `PlayerGenerator` before measuring,
+keeping every id, position, rotation and play intact. `fixture` remains
+available because the rest of the suite runs on it.
+
+The sweeps also record the situation a swing was actually hit from, which
+immediately corrected an assumption: **the hitter is late at the median**, with
+an arrival margin of −0.115 s and a quarter of swings more than half a second
+late. The execution harness had assumed an on-time median, and every constant
+sized against that came out wrong.
+
+| | measured on generated population |
+|---|---|
+| set quality | min 0.124 · p25 0.476 · med 0.597 · p75 0.717 · max 0.945 |
+| approach fit | min 0.207 · p25 0.354 · med 0.548 · p75 0.674 · max 0.736 |
+| arrival margin | min −1.392 · p25 −0.365 · med −0.252 · p75 +0.255 |
+
+### Fifth pass: the block, on a real population
+
+| | side-out | ace | serve err | kill | atk err | stuff | touch | contacts |
+|---|---|---|---|---|---|---|---|---|
+| generated, before | 0.272 | 0.039 | 0.022 | 0.043 | 0.145 | **0.281** | **0.677** | 8.71 |
+| generated, after | 0.306 | 0.039 | 0.022 | 0.048 | 0.097 | **0.067** | 0.459 | 14.42 |
+
+Two structural defects, both invisible until the scales were printed side by
+side. Closing was a **0.14 additive term** inside the block's contact skill, so
+a blocker who reached a fifth of the lane still scored 84% of a sealed block --
+making the close physical had changed the number and not the outcome. And a
+solo block was weighted at **0.78 of a full wall**, so one blocker outscored a
+typical swing. Closing now multiplies, and the assist closes part of what the
+primary leaves open rather than adding a flat share, which makes beating one
+blocker ordinary and a formed double the thing a hitter has to solve.
+
+Stuff rate, attack errors, aces and close saturation are now all in band.
+
+### The next binding constraint is the dig, and it is a fourth scale
+
+Kill rate is 0.048 and rallies run to 14.4 contacts. 599 swings produced 127
+terminal outcomes: the block no longer ends rallies, and nothing else does
+either. The three dig contests -- home defence, opponent defence, continuation
+-- are three more formulas with three more weight totals (0.96, 0.84, 0.86) and
+three different offsets, all comparing a defender composite against an attack
+quality that has just been rescaled. Defence strength sits near 0.61 against a
+typical swing of 0.42, so almost everything is dug.
+
+This is the same defect the block and the attack each had, in the one place it
+has not yet been fixed. It was not part of the block work and is not fixed here.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error

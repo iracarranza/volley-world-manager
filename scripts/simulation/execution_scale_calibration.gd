@@ -40,23 +40,72 @@ const BLOCK_RATINGS: Array[String] = [
 	"block_timing", "jump_reach", "anticipation", "explosiveness",
 ]
 
-## Representative situations, from a swing that had everything to one that had
-## nothing. These are named points on the opportunity axes, not a claim about
-## how often each occurs -- frequency is the sweep's job.
+## Named points on the opportunity axes, taken from the quantiles a sweep over
+## the generated population actually measured. `RallyReadinessReport` reports
+## these as `situation_inputs`; when they move, these move.
 ##
-## `set_quality` spans the range the last full sweep measured (median 0.55,
-## quartiles 0.41 and 0.70). `arrival_margin` is seconds of slack against the
-## ball; negative means the hitter is still arriving as it comes down.
+## Reading them changed what "typical" means. The hitter is **late** at the
+## median -- an arrival margin of -0.115 s -- and a quarter of all swings are
+## more than half a second late. An earlier version of this table assumed the
+## hitter arrived on time at the median, which is a rally nobody in this engine
+## plays, and every constant sized against it came out wrong.
+##
+## `arrival_margin` is seconds of slack against the ball; negative means the
+## hitter is still arriving as it comes down.
 const SITUATIONS := {
-	"ideal": {"set_quality": 0.90, "approach_fit": 0.90, "arrival_margin": 0.25},
-	"good": {"set_quality": 0.70, "approach_fit": 0.72, "arrival_margin": 0.10},
-	"typical": {"set_quality": 0.55, "approach_fit": 0.58, "arrival_margin": 0.00},
-	"poor": {"set_quality": 0.41, "approach_fit": 0.45, "arrival_margin": -0.20},
-	"scramble": {"set_quality": 0.15, "approach_fit": 0.30, "arrival_margin": -0.45},
+	"ideal": {"set_quality": 0.945, "approach_fit": 0.736, "arrival_margin": 0.686},
+	"good": {"set_quality": 0.771, "approach_fit": 0.667, "arrival_margin": -0.006},
+	"typical": {"set_quality": 0.652, "approach_fit": 0.568, "arrival_margin": -0.115},
+	"poor": {"set_quality": 0.495, "approach_fit": 0.412, "arrival_margin": -0.522},
+	"scramble": {"set_quality": 0.285, "approach_fit": 0.213, "arrival_margin": -1.392},
 }
 
 ## Close fractions to evaluate the block at: sealed, half-closed, beaten.
 const CLOSE_FRACTIONS: Array[float] = [1.0, 0.6, 0.2]
+
+
+## Gives a hand-authored roster a generated player's attributes, in place.
+##
+## `GameManager.seed_vertical_slice_data()` sets only the attributes each
+## player's role cares about; every other one stays at `VolleyballPlayer`'s
+## default of 50. Across the eight fixture players that leaves attack_accuracy
+## at 0.50 for the median and block_timing at 0.50 for every quartile, so a
+## sweep over that fixture measures a squad of near-identical average players.
+## Standout impact cannot be observed in a population that contains no
+## standouts, and a margin tuned there does not survive a real league.
+##
+## Ids, names, position codes, physique and every structural relationship --
+## rotations, plays, defensive assignments -- are left exactly as they were.
+## Only the ability attributes are replaced, drawn from `PlayerGenerator` and
+## matched by position role so a middle still gets a middle's profile.
+static func apply_generated_attributes(
+	players: Array,
+	base_seed: int,
+) -> void:
+	var donors_by_role := {}
+	var donors: Array[VolleyballPlayer] = PlayerGeneratorModel.generate_roster(
+		"Pāwa Hitō", "Club", base_seed
+	)
+	for donor in donors:
+		var role := str(donor.position_role)
+		if not donors_by_role.has(role):
+			donors_by_role[role] = []
+		donors_by_role[role].append(donor)
+	var used_by_role := {}
+	for player_resource in players:
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		var role := str(player.position_role)
+		var pool: Array = donors_by_role.get(role, donors)
+		if pool.is_empty():
+			continue
+		var index := int(used_by_role.get(role, 0))
+		used_by_role[role] = index + 1
+		var donor: VolleyballPlayer = pool[index % pool.size()]
+		for attribute in VolleyballPlayer.ABILITY_ATTRIBUTES:
+			player.set(attribute, donor.get(attribute))
+		player.potential = donor.potential
 
 
 ## Quantiles of a sample, plus the spread that decides whether a standout can
@@ -131,41 +180,66 @@ static func rating_spread(players: Array[VolleyballPlayer]) -> Dictionary:
 	return rows
 
 
+## One swing per player in a named situation, and one solo wall per player at a
+## given close. Everything that needs these values calls these functions.
+##
+## They exist because the driver tool kept its own copy of the wall formula, and
+## the moment `_block_wall_quality()` replaced `skill * 0.78` the tool went on
+## reporting contest shares from the retired expression -- three different block
+## scales produced byte-identical output. That is the same duplicated-formula
+## defect this harness was built to find, reproduced inside the harness.
+static func attack_values(
+	players: Array,
+	situation_name: String,
+) -> Array[float]:
+	var simulator := RallySimulatorModel.new()
+	var situation: Dictionary = SITUATIONS.get(situation_name, {})
+	var values: Array[float] = []
+	for player_resource in players:
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		values.append(simulator._attack_execution(
+			player,
+			float(situation.get("set_quality", 0.5)),
+			float(situation.get("approach_fit", 0.5)),
+			float(situation.get("arrival_margin", 0.0)),
+			0.0, 0.0,
+		))
+	return values
+
+
+static func block_values(players: Array, close_fraction: float) -> Array[float]:
+	var simulator := RallySimulatorModel.new()
+	var values: Array[float] = []
+	for player_resource in players:
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		values.append(simulator._block_wall_quality(
+			simulator._block_contact_skill(player, close_fraction), 0.0
+		))
+	return values
+
+
 ## Attack quality for every player in every named situation.
 ##
 ## No block pressure and no overreach: this is the swing the execution model
 ## produces before anything is taken off it, which is what the capability
 ## weights have to be sized against.
 static func attack_scale(players: Array[VolleyballPlayer]) -> Dictionary:
-	var simulator := RallySimulatorModel.new()
 	var rows := {}
 	for situation_name in SITUATIONS:
-		var situation: Dictionary = SITUATIONS[situation_name]
-		var values: Array[float] = []
-		for player in players:
-			values.append(simulator._attack_execution(
-				player,
-				float(situation["set_quality"]),
-				float(situation["approach_fit"]),
-				float(situation["arrival_margin"]),
-				0.0, 0.0,
-			))
-		rows[situation_name] = summarise(values)
+		rows[situation_name] = summarise(attack_values(players, str(situation_name)))
 	return rows
 
 
 ## Block quality at each close fraction, through the same wall formula the
 ## resolver uses for a solo block.
 static func block_scale(players: Array[VolleyballPlayer]) -> Dictionary:
-	var simulator := RallySimulatorModel.new()
 	var rows := {}
 	for close in CLOSE_FRACTIONS:
-		var values: Array[float] = []
-		for player in players:
-			values.append(clampf(
-				simulator._block_contact_skill(player, close) * 0.78, 0.05, 0.98
-			))
-		rows["close_%.1f" % close] = summarise(values)
+		rows["close_%.1f" % close] = summarise(block_values(players, close))
 	return rows
 
 

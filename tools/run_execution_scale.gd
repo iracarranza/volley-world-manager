@@ -43,7 +43,8 @@ func _initialize() -> void:
 		_row("%s effective" % attribute, row["effective"])
 
 	print("\n=== SAME RATINGS, HAND-AUTHORED FIXTURE (n=%d) ===" % fixture.size())
-	print("This is the roster every calibration sweep actually runs on.\n")
+	print("Every attribute a player's role does not name sits at the default 50.")
+	print("The readiness sweeps now re-attribute this fixture before measuring.\n")
 	var fixture_spread: Dictionary = CalibrationModel.rating_spread(fixture)
 	for attribute in fixture_spread:
 		var row: Dictionary = fixture_spread[attribute]
@@ -78,20 +79,12 @@ func _initialize() -> void:
 		RallySimulatorModel.BLOCK_TOUCH_MARGIN,
 		RallySimulatorModel.BLOCK_FUNNEL_MARGIN,
 	])
-	var simulator := RallySimulatorModel.new()
-	var typical: Dictionary = CalibrationModel.SITUATIONS["typical"]
-	var attack_values: Array[float] = []
-	var block_values: Array[float] = []
-	for player in population:
-		attack_values.append(simulator._attack_execution(
-			player, float(typical["set_quality"]), float(typical["approach_fit"]),
-			float(typical["arrival_margin"]), 0.0, 0.0,
-		))
-		block_values.append(clampf(
-			simulator._block_contact_skill(player, 1.0) * 0.78, 0.05, 0.98
-		))
+	## Both arrays come from the calibration model, never from a copy of the
+	## formula written out here. A copy is what made three different block
+	## scales print byte-identical contest shares.
 	var shares: Dictionary = CalibrationModel.contest_shares(
-		attack_values, block_values
+		CalibrationModel.attack_values(population, "typical"),
+		CalibrationModel.block_values(population, 1.0),
 	)
 	for key in ["stuff", "touch", "funnel", "miss", "touched"]:
 		print("%-10s %.3f" % [key, float(shares.get(key, 0.0))])
