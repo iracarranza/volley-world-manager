@@ -2998,7 +2998,7 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 	var eligible_candidate_seen := false
 	var selected_summary: Dictionary = {}
 	var selected_opponent_lineup: RotationLineup = null
-	for seed_value in range(300000, 300040):
+	for seed_value in range(300000, 300140):
 		var manager := GAME_MANAGER_SCRIPT.new()
 		manager.seed_vertical_slice_data()
 		manager.match_state.serving_home = false
@@ -3045,7 +3045,7 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 	## Byte-identical proof: the same seeds resolved again must produce exactly
 	## the same official BLOCK events now that the policy runs on every rally.
 	var repeat_signatures: Array[String] = []
-	for seed_value in range(300000, 300040):
+	for seed_value in range(300000, 300140):
 		var repeat_manager := GAME_MANAGER_SCRIPT.new()
 		repeat_manager.seed_vertical_slice_data()
 		repeat_manager.match_state.serving_home = false
@@ -4397,7 +4397,7 @@ func _test_opponent_approach_mirror() -> void:
 	var with_actions := 0
 	var staged := 0
 	var wrong_side := 0
-	for seed_value in range(20000, 20080):
+	for seed_value in range(20000, 20240):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource

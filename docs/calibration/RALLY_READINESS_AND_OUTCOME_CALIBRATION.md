@@ -340,6 +340,69 @@ typical swing of 0.42, so almost everything is dug.
 This is the same defect the block and the attack each had, in the one place it
 has not yet been fixed. It was not part of the block work and is not fixed here.
 
+### Sixth pass: the dig and the serve, and a readiness verdict
+
+The dig carried three formulas -- home defence summing 0.96 of weight across
+four attributes, the opponent's 0.84 across two, the continuation 0.86 across
+three -- all compared against an attack quality on a fourth scale with three
+different offsets. They are now one `_defense_execution()` of the same shape as
+the swing: capability normalised to 1.0, opportunity as a product, and a single
+`_dig_contest()` carrying one explicit attacker advantage instead of three
+hidden random offsets. `DIG_SOLO_SHARE` says what `BLOCK_SOLO_SHARE` says on the
+other side of the net: one defender is not a whole defence.
+
+The serve error rate could not reach its band because it could not reach its
+band. Both sites summed small offsets -- `0.025 + risk * 0.07 + aggression *
+0.025 - consistency * 0.065 - style * 0.02` and a near-twin -- whose **maximum**
+value was 0.12 at maximum aggression against a server of zero consistency. A
+rate that cannot enter its own range is not a low rate, it is an absent
+mechanism. A serve now misses when the server asks more of it than their control
+supports.
+
+| | side-out | ace | serve err | kill | atk err | stuff | touch | contacts |
+|---|---|---|---|---|---|---|---|---|
+| before dig work | 0.317 | 0.039 | **0.022** | 0.063 | 0.118 | 0.098 | **0.504** | 12.37 |
+| after dig, serve, margins | 0.472 | 0.039 | **0.094** | 0.119 | 0.103 | 0.085 | **0.372** | 10.89 |
+
+Six of eight metrics are in band. Kill rate and rally length are not, and both
+say the same thing: swings still lose more often than they win.
+
+### Can the engine feel a better player?
+
+The readiness question for leaving the rally simulator is not whether every
+metric is in band -- it is whether an attribute change is visible in results at
+all. If it is not, a training system has nothing to move. Each starter in a role
+was given +15 across the four attributes that role is built on, and the home win
+rate measured over 140 rallies (standard error ≈ 0.042).
+
+| change | home win rate | delta |
+|---|---|---|
+| baseline | 0.500 | — |
+| Outside Hitter +15 | 0.729 | **+0.229** |
+| Outside Hitter −15 | 0.293 | **−0.207** |
+| Middle Blocker +15 | 0.514 | +0.014 |
+| Setter +15 | 0.514 | +0.014 |
+| Libero +15 | −0.007 | −0.007 |
+
+**Partial pass.** The hitter registers strongly and symmetrically -- five
+standard errors, and the two directions nearly mirror each other, which is what
+a well-behaved response looks like. The middle blocker, the setter and the
+libero are indistinguishable from noise.
+
+The reason is structural rather than a tuning miss: **only the attack terminates
+a rally.** Kills, attack errors and stuffs are all scored off the swing, so
+every other role reaches the result only through attack quality, and that
+channel is heavily damped. A +15 setter moves set quality by perhaps 0.10, which
+moves the opportunity factor by 0.04, which moves attack quality by under 0.02
+-- below the noise the swing already carries.
+
+This is the finding that should shape what happens next, and it was worth
+getting before building anything on top of the engine. A first measurement
+using side-out rather than home win rate showed the hitter at +0.14 and
+suggested the engine was less responsive than it is: boosting the home squad
+helps them whether they serve or receive, so side-out counts the same effect
+with each sign and the two nearly cancel.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error

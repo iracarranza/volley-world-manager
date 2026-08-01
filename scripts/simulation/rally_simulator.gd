@@ -124,8 +124,46 @@ const ATTACK_ERROR_THRESHOLD: float = 0.24
 ## negative by much: at -0.06 and -0.24 the block touched 82% of all attacks and
 ## rallies never ended.
 const BLOCK_STUFF_MARGIN: float = 0.14
-const BLOCK_TOUCH_MARGIN: float = 0.06
-const BLOCK_FUNNEL_MARGIN: float = -0.02
+const BLOCK_TOUCH_MARGIN: float = 0.10
+const BLOCK_FUNNEL_MARGIN: float = 0.02
+
+## A serve is missed when the server asks more of it than their control
+## supports. `SERVE_ERROR_CEILING` is the miss rate of a server with no control
+## at all asking everything of the ball.
+const SERVE_ERROR_CEILING: float = 0.52
+const SERVE_BASE_DEMAND: float = 0.42
+const SERVE_RISK_DEMAND: float = 0.58
+
+## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
+## so the result can be compared with an attack quality that is also a fraction
+## of an ideal, which is the whole point of a contest between them.
+const DIG_RECEPTION_WEIGHT: float = 0.34
+const DIG_ANTICIPATION_WEIGHT: float = 0.30
+const DIG_CONTROL_WEIGHT: float = 0.22
+const DIG_LATERAL_WEIGHT: float = 0.14
+
+## How much of the dig each dimension of the opportunity can take away. Getting
+## there is most of it: a defender who is not at the ball has no technique to
+## apply, which is why this multiplies rather than adds.
+const DIG_TIMING_WEIGHT: float = 0.75
+const DIG_POSTURE_WEIGHT: float = 0.55
+
+## Arriving this far behind the ball costs the whole timing dimension. Shorter
+## than the hitter's window because the ball is already travelling at attack
+## speed when a defender has to move to it.
+const DIG_LATE_ARRIVAL_SECONDS: float = 0.45
+
+## How much the attacker is favoured when swing and dig are equally good. A
+## clean swing beats a set defence more often than not, so an even contest is
+## not a coin flip.
+const DIG_ATTACKER_ADVANTAGE: float = 0.09
+
+## One defender is not a whole defence. The attacker picks where the ball goes;
+## a defender covers the zone they were assigned. Without this the dig scale
+## centred above the swing scale -- exactly the mismatch a solo block had at
+## 0.78 -- and 470 swings produced 42 kills against 63 errors and 44 stuffs.
+const DIG_SOLO_SHARE: float = 0.75
+const DIG_EXECUTION_NOISE: float = 0.10
 
 ## How hard a swing attempted outside the approach's capability bites. Mirrors
 ## `SetterCapabilitySystem.OVERREACH_SEVERITY` at the second contact: a hitter a
@@ -198,9 +236,7 @@ func resolve(
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
 	var opponent_risk := _rating(opponent_server, "serve_aggression")
-	var serve_error_chance := clampf(0.025 + opponent_risk * 0.08 \
-		- _rating(opponent_server, "serve_consistency") * 0.055 \
-		- _serve_style_proficiency(opponent_server) * 0.02, 0.01, 0.15)
+	var serve_error_chance := _serve_error_chance(opponent_server, opponent_risk)
 	var serve_error := rng.randf() < serve_error_chance
 	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_landing := _serve_landing_point(
@@ -1189,15 +1225,12 @@ func resolve(
 	var floor_defense_bonus := _opponent_floor_defense_adaptation_bonus(
 		opponent_team, assignment.lane
 	)
-	var defense_strength := clampf(
-		_rating(opponent_defender, "reception") * 0.46
-		+ _rating(opponent_defender, "anticipation") * 0.38
-		+ clampf(float(opponent_defense.arrival_margin) * 0.08, -0.18, 0.10)
-		+ read_modifier + floor_defense_bonus + rng.randf_range(-0.16, 0.16), 0.1, 0.9
+	var defense_strength := _defense_execution(
+		opponent_defender, float(opponent_defense.arrival_margin),
+		read_modifier + floor_defense_bonus, 0.0, 0,
 	)
 	Familiarity.record_exposure(opponent_defender, read_tags)
-	var dug: bool = defense_strength > float(result.attack_quality) \
-		+ rng.randf_range(-0.20, 0.12)
+	var dug: bool = _dig_contest(defense_strength, float(result.attack_quality))
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
@@ -1249,12 +1282,7 @@ func _resolve_home_serve(
 		+ _serve_style_proficiency(server) * 0.13
 		+ serve_risk * 0.15 + rng.randf_range(-0.14, 0.14), 0.05, 0.98
 	)
-	var error_chance := clampf(
-		0.025 + serve_risk * 0.07 + _rating(server, "serve_aggression") * 0.025 \
-		- _rating(server, "serve_consistency") * 0.065 \
-		- _serve_style_proficiency(server) * 0.02,
-		0.01, 0.14,
-	)
+	var error_chance := _serve_error_chance(server, serve_risk)
 	var serve_error := rng.randf() < error_chance
 	var target_name := str(
 		defensive_plan.serve_target if defensive_plan != null else "Zone 5"
@@ -1763,28 +1791,33 @@ func _resolve_opponent_transition(
 	var responsibility_fit := _defensive_responsibility_fit(
 		defensive_plan, defender.id, home_target, attack_type
 	)
-	var defense_quality := _rating(defender, "anticipation") * 0.34 \
-		+ _rating(defender, "reception") * 0.28 \
-		+ _rating(defender, "dig_control") * 0.16 \
-		+ _rating(defender, "lateral_speed") * 0.18 \
-		+ responsibility_fit \
-		+ clampf(float(defense_arrival.get("arrival_margin", -1.0)) * 0.065, -0.16, 0.12) \
-		+ minf(float(support_count) * 0.018, 0.054) \
-		- CoverageModel.reception_body_penalty(defender, defense_arrival, opponent_attack) \
-		+ rng.randf_range(-0.12, 0.12)
+	## The plan's posture is a read, not a bonus bolted onto the result: it tells
+	## the defender where the ball is going before it goes there, which is
+	## exactly what `read_bonus` carries on the other two dig sites.
+	var posture_read := responsibility_fit
 	if defensive_plan != null:
-		if attack_type == "Short tip" and defensive_plan.short_ball_posture == "Compress Short":
-			defense_quality += 0.08
-		elif attack_type != "Short tip" and defensive_plan.short_ball_posture == "Compress Short":
-			defense_quality -= 0.035
+		var short_ball := attack_type == "Short tip"
+		if defensive_plan.short_ball_posture == "Compress Short":
+			posture_read += 0.08 if short_ball else -0.035
 		if defensive_plan.defensive_depth == "Deep":
-			defense_quality += -0.055 if attack_type == "Short tip" else 0.035
+			posture_read += -0.055 if short_ball else 0.035
 		elif defensive_plan.defensive_depth == "Shallow":
-			defense_quality += 0.045 if attack_type == "Short tip" else -0.035
+			posture_read += 0.045 if short_ball else -0.035
+	var defense_quality := _defense_execution(
+		defender,
+		float(defense_arrival.get("arrival_margin", -1.0)),
+		posture_read,
+		CoverageModel.reception_body_penalty(
+			defender, defense_arrival, opponent_attack
+		),
+		support_count,
+	)
+	## Never reaching the ball is already most of what the timing term says; this
+	## keeps the hard floor the arrival model asserts separately.
 	if not defender_arrived:
 		defense_quality = minf(defense_quality, 0.10)
 	var defense_success: bool = defender_arrived \
-		and defense_quality > opponent_attack - 0.12
+		and _dig_contest(defense_quality, opponent_attack)
 	var defender_start: Vector2 = live_positions.get(
 		defender.id, defensive_plan.defender_position(defender.id, home_target)
 	)
@@ -2101,11 +2134,10 @@ func _resolve_home_continuation(
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
 	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
-	var defense_quality := _rating(opponent_defender, "reception") * 0.36 \
-		+ _rating(opponent_defender, "dig_control") * 0.16 \
-		+ _rating(opponent_defender, "anticipation") * 0.34 \
-		+ rng.randf_range(-0.16, 0.16)
-	var dug: bool = defense_quality > attack_quality + rng.randf_range(-0.18, 0.14)
+	## A transition dig is the same act as any other; the defender is simply
+	## already in the rally rather than reading a first-ball swing.
+	var defense_quality := _defense_execution(opponent_defender, 0.0, 0.0, 0.0, 0)
+	var dug: bool = _dig_contest(defense_quality, attack_quality)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
 		attack_target + Vector2(0.04, -0.03), dug, defense_quality,
@@ -3702,6 +3734,94 @@ func _attack_execution(
 		1.0 - clampf(tempo_demand, 0.0, 0.60)
 	)
 	return clampf(capability * opportunity - block_pressure, 0.0, 1.0)
+
+
+## How often this serve misses, given how much the server is asking of it.
+##
+## Both serve sites carried their own sum of small offsets --
+## `0.025 + risk * 0.07 + aggression * 0.025 - consistency * 0.065 - style * 0.02`
+## and a near-twin -- and neither could reach the sport. The maximum either
+## expression could return was 0.12, at maximum aggression against a server with
+## zero consistency; a typical server produced 0.022. A rate that cannot enter
+## its own band is not a low rate, it is an absent mechanism, and serve
+## aggression was therefore free.
+##
+## A serve misses when the server asks more of it than their control supports.
+## Demand comes from the tactical risk and the server's own aggression; control
+## is technique and consistency, normalised. Neither term is an offset, so the
+## rate spans the range instead of resting on its floor.
+func _serve_error_chance(server: VolleyballPlayer, tactical_risk: float) -> float:
+	if server == null:
+		return SERVE_BASE_DEMAND * SERVE_ERROR_CEILING
+	var control := clampf(
+		_rating(server, "serve_consistency") * 0.45
+		+ _rating(server, "serve_technique") * 0.30
+		+ _serve_style_proficiency(server) * 0.25,
+		0.0, 1.0,
+	)
+	var demand := clampf(
+		SERVE_BASE_DEMAND
+		+ clampf(tactical_risk, 0.0, 1.0) * SERVE_RISK_DEMAND * 0.6
+		+ _rating(server, "serve_aggression") * SERVE_RISK_DEMAND * 0.4,
+		0.0, 1.0,
+	)
+	return clampf(SERVE_ERROR_CEILING * demand * (1.0 - control), 0.005, 0.45)
+
+
+## One dig, wherever in the rally it happens.
+##
+## The engine carried three of these too. Home defence summed 0.96 of weight
+## across four attributes, the opponent's summed 0.84 across two, and the
+## continuation summed 0.86 across three -- and all three were compared against
+## an attack quality on a fourth scale, with three different offsets. Once the
+## swing became a fraction of an ideal swing, none of them meant anything: a
+## defender composite near 0.61 against a typical swing of 0.42 dug almost
+## everything, and rallies stopped ending.
+##
+## Same shape as the swing. Capability is what the defender brings, normalised.
+## Opportunity is what the rally gave them, as a product, because a defender who
+## did not get there has no technique to apply. `read_bonus` carries scouting,
+## responsibility fit and defensive-plan posture -- the things that tell a
+## defender where the ball is going before it goes there.
+func _defense_execution(
+	defender: VolleyballPlayer,
+	arrival_margin: float,
+	read_bonus: float,
+	posture_penalty: float,
+	support_count: int,
+) -> float:
+	if defender == null:
+		return 0.0
+	var capability := clampf(
+		_rating(defender, "reception") * DIG_RECEPTION_WEIGHT
+		+ _rating(defender, "anticipation") * DIG_ANTICIPATION_WEIGHT
+		+ _rating(defender, "dig_control") * DIG_CONTROL_WEIGHT
+		+ _rating(defender, "lateral_speed") * DIG_LATERAL_WEIGHT
+		+ read_bonus,
+		0.0, 1.0,
+	)
+	var timing := clampf(
+		(arrival_margin + DIG_LATE_ARRIVAL_SECONDS) / DIG_LATE_ARRIVAL_SECONDS,
+		0.0, 1.0,
+	)
+	## A covered defender is playing a ball someone else could also reach, which
+	## is worth something but cannot exceed being in position for it.
+	var support := minf(float(maxi(support_count, 0)) * 0.03, 0.09)
+	var opportunity := (1.0 - DIG_TIMING_WEIGHT * (1.0 - timing)) \
+		* (1.0 - DIG_POSTURE_WEIGHT * clampf(posture_penalty, 0.0, 1.0)) \
+		* (1.0 + support)
+	return clampf(capability * opportunity * DIG_SOLO_SHARE, 0.0, 1.0)
+
+
+## Whether this dig comes up, against the swing that was actually hit.
+##
+## One contest, all three places a ball is dug. The attacker's advantage is
+## explicit rather than hidden in three different random offsets, so it can be
+## calibrated in one place and read in one place.
+func _dig_contest(defense_quality: float, attack_quality: float) -> bool:
+	return defense_quality + rng.randf_range(
+		-DIG_EXECUTION_NOISE, DIG_EXECUTION_NOISE
+	) > attack_quality + DIG_ATTACKER_ADVANTAGE
 
 
 ## The wall two blockers make, from what each of them brings.

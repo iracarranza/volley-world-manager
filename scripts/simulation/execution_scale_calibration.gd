@@ -209,6 +209,49 @@ static func attack_values(
 	return values
 
 
+## One dig per player, at a given arrival margin. Zero read bonus and no
+## posture penalty: this is the defender's own contribution, which is what a
+## contest constant has to be sized against.
+static func defense_values(
+	players: Array,
+	arrival_margin: float,
+) -> Array[float]:
+	var simulator := RallySimulatorModel.new()
+	var values: Array[float] = []
+	for player_resource in players:
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		values.append(simulator._defense_execution(
+			player, arrival_margin, 0.0, 0.0, 0
+		))
+	return values
+
+
+## Share of swings that get dug, given a swing scale and a dig scale. The number
+## that sets `DIG_ATTACKER_ADVANTAGE`, and it costs microseconds.
+static func dig_share(
+	attack_values_in: Array,
+	defense_values_in: Array,
+	sample_count: int = 20000,
+	base_seed: int = 20250802,
+) -> float:
+	if attack_values_in.is_empty() or defense_values_in.is_empty():
+		return 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = base_seed
+	var dug := 0
+	for index in range(maxi(sample_count, 1)):
+		var attack := float(attack_values_in[rng.randi() % attack_values_in.size()])
+		var defense := float(defense_values_in[rng.randi() % defense_values_in.size()])
+		if defense + rng.randf_range(
+			-RallySimulatorModel.DIG_EXECUTION_NOISE,
+			RallySimulatorModel.DIG_EXECUTION_NOISE,
+		) > attack + RallySimulatorModel.DIG_ATTACKER_ADVANTAGE:
+			dug += 1
+	return float(dug) / float(maxi(sample_count, 1))
+
+
 static func block_values(players: Array, close_fraction: float) -> Array[float]:
 	var simulator := RallySimulatorModel.new()
 	var values: Array[float] = []

@@ -88,5 +88,16 @@ func _initialize() -> void:
 	)
 	for key in ["stuff", "touch", "funnel", "miss", "touched"]:
 		print("%-10s %.3f" % [key, float(shares.get(key, 0.0))])
+
+	print("\n=== DIG SHARE: typical swing vs a defender at each arrival ===")
+	print("attacker advantage %+.2f\n" % RallySimulatorModel.DIG_ATTACKER_ADVANTAGE)
+	var typical_swing: Array = CalibrationModel.attack_values(population, "typical")
+	for margin in [0.20, 0.0, -0.20, -0.40]:
+		var dig_values: Array = CalibrationModel.defense_values(population, margin)
+		print("margin %+.2f  dig med=%.3f  dug=%.3f" % [
+			margin,
+			float(CalibrationModel.summarise(dig_values).get("median", 0.0)),
+			CalibrationModel.dig_share(typical_swing, dig_values),
+		])
 	print("")
 	quit()
