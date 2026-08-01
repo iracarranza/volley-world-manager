@@ -537,6 +537,43 @@ value is committing and reading rather than the height of their hands. Until a
 decision made well beats a decision made badly, those roles cannot register, and
 no execution-side change will make them.
 
+### The arithmetic on a decision channel, checked before building it
+
+Three execution-side hypotheses failed in a row, each after being built. This
+one was measured first.
+
+A decision channel is worth building only if the options differ. The gain from
+choosing well is bounded by the spread between the best option and the average
+one; a setter's judgement can only ever capture a fraction of that.
+
+| axis | spread | vs the yardstick |
+|---|---|---|
+| **who to set** -- best hitter vs mean hitter, one team | **0.109** | 1.8x |
+| **where to set** -- block quality at a sealed lane vs a beaten one | **0.258** | 4.2x |
+| a setter's execution nudge, as tried three times | ~0.02 | 0.3x |
+
+The yardstick is the hitter's own +15, which raises attack quality by **0.061**
+and measured 5.8 SE. Both decision axes are larger than the change that is
+already clearly visible; the execution nudge is a third of it, which is why
+propagation, coupling strength and consistency all failed to move the number.
+
+This also explains the middle blocker and the libero without needing separate
+theories. A blocker's decision is whether to commit, and its payoff is the same
+0.258 -- a sealed lane against a beaten one. A defender's decision is where to
+stand, and the dig is steeply sensitive to arrival: 0.63 dug at an even margin
+against 0.02 dug two tenths of a second late. **All three invisible roles have
+large decision channels and negligible execution channels.**
+
+One correction to the upper bound, which matters for how much of it is real. The
+block re-forms around whichever lane is attacked, and the primary blocker is by
+definition the one nearest it, so 0.258 is only realised when the ball goes
+somewhere the blockers cannot reach within the set's flight time. That makes the
+channel a function of tempo -- which is the same mechanism as a quick set
+beating a block, and the reason a high ball into a formed block should feel
+different from a quick one. The realised spread will be smaller than 0.258 and
+larger than zero, and it is worth measuring on the real block geometry before
+committing to a design.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error
