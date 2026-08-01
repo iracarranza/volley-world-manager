@@ -140,6 +140,7 @@ func _initialize() -> void:
 	_test_ball_kinematics_force_derived()
 	_test_set_release_interval_consumption()
 	_test_movement_timing_and_locomotion_diagnostics()
+	_test_stride_and_cadence_locomotion()
 	_test_gate_twenty_one_setter_handoffs()
 	_test_gate_twenty_two_setter_progression()
 	_test_play_validation_and_serialization()
@@ -3924,6 +3925,142 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 		float(locomotion.get("stale_stride_rate", 1.0)) < 0.05
 			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
 		"Generation fix: stride_length_m is derived from each player's actual post-variation height",
+	)
+
+
+## Stride and cadence are now consumed by live movement. These checks pin the
+## two properties that make that safe: the population's mean speed did not move,
+## and the new spread runs the direction physique and turnover imply.
+func _test_stride_and_cadence_locomotion() -> void:
+	## 1. Adding physique must not rebalance the sport. Every profile reports the
+	##    stride multiplier it applied, so dividing it back out recovers the
+	##    pre-change speed exactly; the two means must agree closely.
+	var modes := {
+		"LATERAL": RallyPlayerState.MovementMode.LATERAL,
+		"TRANSITION": RallyPlayerState.MovementMode.TRANSITION,
+		"APPROACH": RallyPlayerState.MovementMode.APPROACH,
+	}
+	var mean_preserved := true
+	var factor_seen := false
+	for mode_name in modes:
+		var with_stride := 0.0
+		var without_stride := 0.0
+		var sampled := 0
+		for region_name in ["Pāwa Hitō", "Spëddigh", "Landavol"]:
+			for seed_offset in range(4):
+				var roster: Array[VolleyballPlayer] = \
+					PLAYER_GENERATOR_SCRIPT.generate_roster(
+						region_name, "Club", 91000 + seed_offset * 1009
+					)
+				for player in roster:
+					var actor := RallyPlayerState.create(
+						player, &"home", -1, Vector2(0.5, 0.5)
+					)
+					var profile: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+						actor, Vector2(1.0, 0.0), modes[mode_name]
+					)
+					var factor := float(profile.get("stride_factor", 1.0))
+					if absf(factor - 1.0) > 0.005:
+						factor_seen = true
+					with_stride += float(profile.maximum_speed)
+					without_stride += float(profile.maximum_speed) / factor
+					sampled += 1
+		if sampled == 0 or absf(with_stride / without_stride - 1.0) > 0.02:
+			mean_preserved = false
+	_check(
+		mean_preserved and factor_seen,
+		"stride factor shifts individual players without moving the population's mean speed",
+	)
+
+	## 2. Height finally pays for itself. Two players identical but for build:
+	##    the taller one covers more ground per step and runs faster, while the
+	##    shorter one keeps the advantage sideways, where turnover dominates.
+	##    Before this, height was a pure penalty through mass and returned nothing.
+	var tall: VolleyballPlayer = VolleyballPlayer.new()
+	tall.lateral_speed = 60
+	tall.transition_speed = 60
+	tall.acceleration = 60
+	tall.height_cm = 208.0
+	tall.mass_kg = 88.0
+	tall.stride_length_m = tall.default_stride_length_m()
+	var short_player: VolleyballPlayer = VolleyballPlayer.new()
+	short_player.lateral_speed = 60
+	short_player.transition_speed = 60
+	short_player.acceleration = 60
+	short_player.height_cm = 181.0
+	short_player.mass_kg = 68.0
+	short_player.stride_length_m = short_player.default_stride_length_m()
+	var tall_actor := RallyPlayerState.create(tall, &"home", -1, Vector2(0.5, 0.5))
+	var short_actor := RallyPlayerState.create(
+		short_player, &"home", -1, Vector2(0.5, 0.5)
+	)
+	var tall_run: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		tall_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.TRANSITION
+	)
+	var short_run: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		short_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.TRANSITION
+	)
+	var tall_shuffle: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		tall_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.LATERAL
+	)
+	var short_shuffle: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		short_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.LATERAL
+	)
+	_check(
+		float(tall_run.maximum_speed) > float(short_run.maximum_speed),
+		"a longer stride makes the taller player faster in a transition run",
+	)
+	_check(
+		float(short_shuffle.maximum_speed) > float(tall_shuffle.maximum_speed),
+		"the shorter player keeps the advantage laterally, where turnover beats leg length",
+	)
+
+	## 3. Turnover is the frequency at which a player can change where they are
+	##    going. Direction change used to read the facing dot product alone, so a
+	##    libero reversed exactly as slowly as a middle blocker.
+	var quick: VolleyballPlayer = VolleyballPlayer.new()
+	quick.lateral_speed = 95
+	var sluggish: VolleyballPlayer = VolleyballPlayer.new()
+	sluggish.lateral_speed = 20
+	var quick_actor := RallyPlayerState.create(quick, &"home", -1, Vector2(0.5, 0.5))
+	var sluggish_actor := RallyPlayerState.create(
+		sluggish, &"home", -1, Vector2(0.5, 0.5)
+	)
+	quick_actor.facing = Vector2(-1.0, 0.0)
+	sluggish_actor.facing = Vector2(-1.0, 0.0)
+	var quick_turn: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		quick_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.LATERAL
+	)
+	var sluggish_turn: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		sluggish_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.LATERAL
+	)
+	_check(
+		float(quick_turn.direction_change_delay)
+			< float(sluggish_turn.direction_change_delay) - 0.02,
+		"higher turnover reverses direction sooner, so turn cost is a player property",
+	)
+
+	## 4. `estimate_movement()` used to restate the whole profile inline, so it
+	##    could silently disagree with `movement_profile()`. It must not.
+	var agreement := RALLY_MOVEMENT_SCRIPT.estimate_movement(
+		tall_actor, Vector2(0.8, 0.3), 1.2, RallyPlayerState.MovementMode.TRANSITION
+	)
+	var direct: Dictionary = RALLY_MOVEMENT_SCRIPT.movement_profile(
+		tall_actor,
+		RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+			tall_actor.position, Vector2(0.8, 0.3)
+		).normalized(),
+		RallyPlayerState.MovementMode.TRANSITION,
+	)
+	_check(
+		is_equal_approx(
+			float(agreement.get("maximum_speed", -1.0)),
+			float(direct.maximum_speed)
+		) and is_equal_approx(
+			float(agreement.get("direction_change_delay", -1.0)),
+			float(direct.direction_change_delay)
+		),
+		"movement estimation and the movement profile report one speed and one turn cost",
 	)
 
 

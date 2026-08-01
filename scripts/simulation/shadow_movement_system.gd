@@ -42,9 +42,9 @@ const KinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
 ## half a centimetre at human accelerations, which is far below one screen pixel
 ## at any sane court scale.
 const DEFAULT_STEP_SECONDS: float = 1.0 / 30.0
-## `direction_change_delay` is `lerpf(0.20, 0.02, facing_fit)`, so a perfectly
-## aligned actor is charged exactly this. Steps are requested with this added so
-## the moved time is the step itself.
+## Fallback aligned turn charge, used only when no profile can be read. The real
+## value is measured per player: turn cost scales with the athlete's turnover, so
+## an aligned stride no longer costs everyone the same fixed floor.
 const ALIGNED_TURN_DELAY: float = 0.02
 const MAXIMUM_STEPS: int = 512
 
@@ -77,6 +77,16 @@ static func integrate(
 		stepper, opening_direction, mode
 	).get("direction_change_delay", 0.0))
 	var moving_time := maxf(duration - turn_delay, 0.0)
+	## What an aligned step costs *this* player. Every step below sets facing to
+	## the direction of travel, so this is the charge `project_toward()` will
+	## apply, and handing exactly it back keeps each step moving for its full
+	## slice. Assuming a fixed floor here would silently shorten every traversal
+	## for a quick-turnover player and lengthen it for a slow one.
+	var aligned_probe := stepper.snapshot()
+	aligned_probe.facing = opening_direction
+	var aligned_turn_delay := float(MovementModel.movement_profile(
+		aligned_probe, opening_direction, mode
+	).get("direction_change_delay", ALIGNED_TURN_DELAY))
 
 	var trail: Array[Vector2] = [stepper.position]
 	var sample_times: Array[float] = [0.0]
@@ -95,7 +105,7 @@ static func integrate(
 		var slice := minf(step, moving_time - elapsed)
 		var carried_speed := stepper.velocity.length()
 		var projection: Dictionary = MovementModel.project_toward(
-			stepper, leg_target, slice + ALIGNED_TURN_DELAY, mode
+			stepper, leg_target, slice + aligned_turn_delay, mode
 		)
 		var advanced := projection.get("actor") as RallyPlayerState
 		if advanced == null:

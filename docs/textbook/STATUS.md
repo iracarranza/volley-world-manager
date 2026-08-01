@@ -218,6 +218,24 @@ This page is the quickest defense against confusing source-code existence with a
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
+- Physique and turnover are consumed by live movement.
+  `RallyMovementSystem.movement_profile()` -- the single chokepoint every
+  reachability, arrival-margin, traversal, and playback decision reads -- now
+  applies `LocomotionModel.stride_factor()` to top speed and
+  `LocomotionModel.direction_change_seconds()` to the turn cost. Height used to
+  be a pure movement penalty (mass lowered speed and nothing returned it), which
+  made the taller regions strictly worse at moving; stride is the compensating
+  term, so a 210 cm player is now about 10% faster in a transition run and
+  slightly slower laterally than a 181 cm player with identical ratings. Turn
+  cost was previously pure geometry -- a libero reversed exactly as slowly as a
+  middle blocker -- and now scales with cadence, from 0.243 s at 20 lateral
+  speed to 0.158 s at 95. Both terms are centred on an average body and an
+  average rating, so the population's mean speed moves by under 0.7% in every
+  mode and no existing calibration is silently rebalanced. Replacing the speed
+  curve itself with stride x cadence is deliberately **not** done -- it would
+  move mean transition speed from 2.9 to 5.2 m/s and lateral from 3.3 to 2.3,
+  which is a rebalance needing its own sweep. See
+  [Locomotion](../design/LOCOMOTION_AND_GENERATION.md).
 
 ## Partially implemented
 
@@ -341,11 +359,11 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 438 passing checks (424 as of Gate
+The current foundation validation reports 443 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
-generation, and six added when reviewing that work: release spread from the
-setter's own tolerance band, continuation trajectory continuity, the potential
-ceiling actually bounding current ability, veterans sitting near their ceiling,
-and the development gap not encoding potential). Treat that number as a
-point-in-time result, not a permanent guarantee. Run
+generation, six added when reviewing that work, and five for stride-and-cadence
+locomotion: the population mean surviving the physique term, a taller player
+running faster, a shorter one keeping the lateral edge, turnover shortening a
+reversal, and `estimate_movement()` agreeing with `movement_profile()`). Treat
+that number as a point-in-time result, not a permanent guarantee. Run
 [VALIDATION.md](VALIDATION.md) to establish the current result.

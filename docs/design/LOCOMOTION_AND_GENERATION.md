@@ -1,12 +1,13 @@
 # Locomotion Granularity, Timing Disagreement, and Role-First Generation
 
-Review date: 2026-07-31
+Review date: 2026-08-01
 
-Status: **MEASURED; NOTHING WIRED**
+Status: **PHYSIQUE AND TURNOVER WIRED; THE SPEED-CURVE REPLACEMENT IS NOT**
 
-Three related findings, all read-only. `LocomotionModel`,
-`LocomotionGranularityCalibration`, and `MovementTimingRatioCalibration` exist
-and are exercised by the suite; none of them changes an outcome.
+Findings 1 and 2 below are now fixed. Finding 3 -- replacing the single speed
+curve with stride x cadence outright -- remains deliberately unwired, and the
+reason is recorded in "What was wired, and what was not" at the end of this
+document. Read that section before changing `MODE_STRIDE_SCALE`.
 
 ## 1. The two timing paths, measured
 
@@ -49,7 +50,13 @@ worst case is drawn at 56% of the model's pace -- visible slow motion.
 This is the compromise 2D playback currently absorbs. It is also step 4's
 target: with one timing model the ratio is 1.0 by construction.
 
-## 2. Stride carries no per-player information today
+## 2. Stride carried no per-player information (fixed)
+
+**Fixed.** `generate_roster()` now recomputes `stride_length_m` from the
+player's real height immediately after `_apply_body_variation()`, and
+`LocomotionGranularityCalibration` reports a `stale_stride_rate` of 0.0 where it
+previously reported 75%. The rest of this section is the original diagnosis,
+kept because it explains what the attribute is for.
 
 `VolleyballPlayer.stride_length_m` is documented as correlating with height but
 being scouted independently. In practice it does neither, because of an ordering
@@ -140,6 +147,17 @@ tier differences would partly reflect roster height rather than reading skill.
 The assertions would still pass. They would just no longer mean what they say,
 which is worse than failing.
 
+**Checked when stride was wired: the leak does not materialise, for a reason
+worth stating.** `run()` builds a fresh `GameManager` and calls
+`seed_vertical_slice_data()` inside the loop for *every* tier, so all three
+tiers face the byte-identical opponent roster and therefore identical heights,
+masses, and strides. Physique is held constant across the comparison by
+construction rather than by the pin, so it cannot differentiate the tiers. What
+does change is the absolute reachability baseline, which is the separate,
+expected recalibration noted below -- not a contaminated comparison. The hazard
+would return the moment a tier is given its own generated roster, and this
+paragraph is the reason not to do that.
+
 **The genuine monotonicity break arrives only if stride becomes tier-varying or
 trainable.** Then a longer stride raises top speed and lowers turnover, so a
 "better" attribute produces worse short-adjustment reach. That is the documented
@@ -193,3 +211,109 @@ Three things need care before attempting it:
    for "how well does this player fit this role."
 3. **It moves every seed in the project.** Generation feeds every fixture. This
    is the same blast radius as step 4 and should not share a change with it.
+
+## What was wired, and what was not
+
+Two of the three factors above are now consumed by
+`RallyMovementSystem.movement_profile()`, which is the single chokepoint every
+movement decision passes through -- `project_toward()`, `traversal_seconds()`,
+`estimate_movement()`, the stepper, reachability, and arrival margins all read
+it. The third, replacing the speed curve itself, is not.
+
+### Wired: stride as the physique term
+
+`LocomotionModel.stride_factor(player, mode)` returns a multiplier centred on
+1.0, computed from the player's stride against `REFERENCE_STRIDE_M` (the stride
+of a 193 cm player, the roster's central height) and scaled by a per-mode
+sensitivity: a transition run is close to pure leg length (1.00), a lateral
+shuffle mostly turnover (0.35).
+
+This closes an asymmetry that had been in the engine from the start. Height
+raised mass, mass lowered top speed, and nothing anywhere gave any of it back --
+so being tall was a flat penalty in movement, and the region physique work made
+the taller regions strictly worse at moving. Measured before the change, Pāwa
+Hitō was the tallest region *and the slowest laterally*. Stride is the term real
+biomechanics supplies in return.
+
+Two players with identical ratings, differing only in build:
+
+| Build | stride | transition | lateral |
+|---|---|---|---|
+| 180 cm / 68 kg | 0.774 m | 3.533 | **3.699** |
+| 195 cm / 79 kg | 0.839 m | 3.716 | 3.691 |
+| 210 cm / 90 kg | 0.903 m | **3.881** | 3.677 |
+
+The crossover is the point. The tall player is about 10% faster in a straight
+line and slightly slower sideways; the short player is the reverse. That is the
+middle-blocker/libero distinction the single curve could not express at all.
+
+### Wired: cadence as the frequency of direction change
+
+`direction_change_delay` was `lerpf(0.20, 0.02, facing_fit)` -- pure geometry.
+A libero with 95 lateral speed and a middle blocker with 20 reversed direction
+in exactly the same 0.200 s. Turnover is literally the frequency at which a
+player can change where they are going, so
+`LocomotionModel.direction_change_seconds()` now scales that geometric cost by
+the player's cadence against a reference:
+
+| lateral speed | cadence | full reversal costs |
+|---|---|---|
+| 20 | 2.80 Hz | 0.243 s |
+| 50 | 3.40 Hz | 0.200 s |
+| 95 | 4.30 Hz | 0.158 s |
+
+### Neither moved the population's mean
+
+Both terms are centred on an average body and an average rating, so they change
+who is fast without changing how fast the sport is:
+
+| Mode | mean before | mean after | shift |
+|---|---|---|---|
+| LATERAL | 3.3675 | 3.3754 | +0.23% |
+| TRANSITION | 2.9807 | 3.0012 | +0.69% |
+| APPROACH | 2.9807 | 2.9971 | +0.55% |
+| BLOCK_CLOSE | 3.3675 | 3.3776 | +0.30% |
+
+That is the property that made this safe to wire without reopening the gate
+record: no existing reachability, arrival-margin, or progression calibration is
+rebalanced, because the average player moves as they always did.
+
+### Not wired: replacing the speed curve
+
+Swapping `lerpf(1.35, 5.25, rating)` for `stride_meters() * cadence_hz()`
+outright would rebalance the game rather than re-express it, and the obstacle is
+arithmetic rather than taste.
+
+The existing curve spans a **3.89x** ratio from the worst mover to the best.
+Human cadence spans about 1.8x, and stride varies only a few percent across a
+roster of athletes. No plausible pair of physical factors multiplies out to
+3.89x, which means something in the current curve is not physical -- and it is
+the floor. A professional moving at 1.35 m/s is walking; no rating should
+describe that.
+
+Adopting the decomposition wholesale moves mean transition speed from about 2.9
+to about 5.2 m/s and mean lateral speed from about 3.3 down to about 2.3 -- in
+opposite directions, per mode. Every reachability and arrival-margin number in
+the gate record rests on those speeds.
+
+So that change is a deliberate rebalance and belongs in its own commit, with its
+own before-and-after sweep, exactly as the movement-fluidity record demands of
+step 4. It is the remaining half of this work, not an oversight.
+
+### Two defects this exposed
+
+**`estimate_movement()` was a second copy of the profile.** It restated the
+speed curve, mass penalty, fatigue factor, facing fit, and turn delay inline, so
+wiring stride into `_movement_profile()` alone would have left the two silently
+disagreeing about how fast the same player moves. It now calls
+`_movement_profile()`. This is the same defect class as the generator's
+duplicated role tiers, found the same way.
+
+**The stepper assumed a fixed turn floor.** `ShadowMovementSystem` hard-coded
+`ALIGNED_TURN_DELAY = 0.02` and handed exactly that back to each step so the
+slice moved for its full duration. Once the aligned cost became a function of
+the player's cadence, that constant was wrong by up to 30% per step, thirty
+times a second -- which would have quietly broken the exact agreement between
+stepped and closed-form traversal that `MovementIntegrationCalibration` proves
+at 100%. The stepper now measures the aligned charge from the same profile
+instead of assuming it, and that calibration still reports exact agreement.

@@ -5,6 +5,11 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const RallyKinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
 const ContactEnvelopeModel := preload("res://scripts/simulation/contact_envelope_system.gd")
 
+## Seconds spent changing direction, before the player's own turnover scales it.
+## The worst case is a full reversal, the best an already-aligned stride.
+const TURN_DELAY_WORST_SECONDS: float = 0.20
+const TURN_DELAY_BEST_SECONDS: float = 0.02
+
 
 static func evaluate_opportunity(
 	actor: RallyPlayerState,
@@ -190,24 +195,15 @@ static func estimate_movement(
 	## Only velocity already aimed toward the new target reduces travel time.
 	## Sideways or opposite momentum must not be credited as forward speed.
 	var current_speed := directional_start_speed
-	var speed_rating := _speed_rating(actor.player, mode)
-	var acceleration_rating := float(actor.player.acceleration) / 100.0
-	var mass_factor := lerpf(
-		1.06, 0.90,
-		clampf((actor.player.mass_kg - 55.0) / 60.0, 0.0, 1.0),
-	)
-	var fatigue_factor := 1.0 - actor.player.fatigue * 0.30
-	var maximum_speed := lerpf(1.35, 5.25, speed_rating) \
-		* mass_factor * fatigue_factor
-	var acceleration := lerpf(2.2, 6.8, acceleration_rating) * fatigue_factor
-
-	var facing_fit := 1.0
-	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
-		facing_fit = clampf(
-			(actor.facing.normalized().dot(direction) + 1.0) * 0.5,
-			0.0, 1.0,
-		)
-	var direction_change_delay := lerpf(0.20, 0.02, facing_fit)
+	## Restating the speed curve, mass penalty, facing fit, and turn cost here is
+	## how this function and `_movement_profile()` drifted apart in the first
+	## place -- the copy had to be found and patched separately every time the
+	## model changed. One profile now answers for both.
+	var profile := _movement_profile(actor, direction, mode)
+	var maximum_speed := float(profile.maximum_speed)
+	var acceleration := float(profile.acceleration)
+	var facing_fit := float(profile.facing_fit)
+	var direction_change_delay := float(profile.direction_change_delay)
 	var acceleration_time := maxf(
 		(maximum_speed - current_speed) / maxf(acceleration, 0.1), 0.0
 	)
@@ -495,8 +491,13 @@ static func _movement_profile(
 		clampf((actor.player.mass_kg - 55.0) / 60.0, 0.0, 1.0),
 	)
 	var fatigue_factor := 1.0 - actor.player.fatigue * 0.30
+	## Physique enters movement from both sides now. Mass has always been the
+	## cost; stride is the return on the same build, so height is a tradeoff
+	## rather than a flat penalty. Both terms are centred on an average body, so
+	## the population's mean speed is unchanged and only the spread is new.
+	var stride_factor := LocomotionModel.stride_factor(actor.player, mode)
 	var maximum_speed := lerpf(1.35, 5.25, speed_rating) \
-		* mass_factor * fatigue_factor
+		* mass_factor * fatigue_factor * stride_factor
 	var acceleration := lerpf(2.2, 6.8, acceleration_rating) * fatigue_factor
 	var facing_fit := 1.0
 	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
@@ -508,7 +509,13 @@ static func _movement_profile(
 		"maximum_speed": maximum_speed,
 		"acceleration": acceleration,
 		"facing_fit": facing_fit,
-		"direction_change_delay": lerpf(0.20, 0.02, facing_fit),
+		"stride_factor": stride_factor,
+		## Turnover, not just geometry: a player who turns their legs over faster
+		## spends less time planting and redirecting.
+		"direction_change_delay": LocomotionModel.direction_change_seconds(
+			actor.player, mode, facing_fit, TURN_DELAY_WORST_SECONDS,
+			TURN_DELAY_BEST_SECONDS,
+		),
 	}
 
 
