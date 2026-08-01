@@ -443,6 +443,52 @@ it exists this work should be read as scaffolding rather than a result.
 The rally-length improvement seen at set weight 0.58 (10.89 to 9.15 contacts)
 came from that weight, not from propagation.
 
+### Eighth pass: the opponent link, and why propagation was the wrong hypothesis
+
+`_resolve_opponent_transition()` now takes the same `incoming_quality` the home
+side does, fed from all three of its callers -- the opponent's dig of a home
+swing, their serve reception, and their dig of a home continuation. Both
+transition sets also now read the same five attributes through
+`_transition_set_capability()`. They previously read different ones (this side
+set_accuracy, court_vision, decision_making; the home side set_accuracy,
+ball_control, composure), so a setter improved on one team's terms was not
+improved on the other's -- and neither formula referenced `hand_control` or
+`tempo_control` at all, so two of the four attributes a setter is built on
+reached nothing after the first contact.
+
+The link works. Unlike the home-only version, the sweep moved:
+
+| | kill | side-out | contacts | attempts |
+|---|---|---|---|---|
+| home link only | 0.119 | 0.472 | 10.89 | 436 |
+| both sides linked | **0.154** | **0.528** | 10.48 | 417 |
+
+**And role sensitivity did not move at all.** Middle blocker, libero and setter
+remain at 0.0-0.3 SE, with the setter now reading precisely the attributes the
+test boosts.
+
+That settles it: propagation was the wrong hypothesis, and the arithmetic says
+why. A setter at +15 raises transition capability by about 0.108. Through the
+ball-usability factor that is roughly +0.087 of set quality; through
+`SET_OPPORTUNITY_WEIGHT` at 0.40 that is about +0.035 of the swing's opportunity
+multiplier, and about **+0.021 of attack quality**. Attack execution carries
+±0.10 of its own noise, the block contest ±0.13, the dig ±0.10.
+
+**A +15 attribute change one contact upstream is worth a fifth of the noise on
+the contact it feeds.** Every contact adds a fresh random term of similar size,
+so any contribution more than one link from the terminal act is drowned before
+it reaches the scoreboard. The hitter registers because their attributes enter
+the terminating contact directly.
+
+The fix is therefore not another link. It is that **per-contact noise is a flat
+constant for every player**, so consistency is not an attribute. A great setter
+and a poor one have identical variance; only their means differ, and the means
+are separated by less than the shared noise. Making execution variance shrink
+with the attributes that should govern it -- composure, the technical control
+ratings -- is what would let a standout register through a chain, and it is the
+mechanism behind "standout players should have a consistent high impact" rather
+than a merely higher average one.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error

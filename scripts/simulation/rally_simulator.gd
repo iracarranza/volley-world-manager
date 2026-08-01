@@ -1268,7 +1268,7 @@ func resolve(
 		result.key_factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
 			result, players, lineup, hitter, opponent_pass_target,
-			opponent_team, defensive_plan, 1,
+			opponent_team, defensive_plan, 1, defense_strength,
 		)
 	result.key_factors.append(ExplanationText.factor("attack_control"))
 	var kill_key := "kill_default" if active_play == null else (
@@ -1391,7 +1391,7 @@ func _resolve_home_serve(
 	var opponent_setter_release := _opponent_setter_release_target(opponent_team)
 	return _resolve_opponent_transition(
 		result, players, lineup, server, opponent_setter_release,
-		opponent_team, defensive_plan, 1,
+		opponent_team, defensive_plan, 1, reception_quality,
 	)
 
 
@@ -1404,6 +1404,12 @@ func _resolve_opponent_transition(
 	opponent_team: Resource,
 	defensive_plan: Resource,
 	exchange_number: int,
+	## The ball this setter actually receives. The home side got this first and
+	## it changed almost nothing, because most continuations come through here:
+	## when the opponent digs a home swing the rally runs this path, not
+	## `_resolve_home_continuation()`. A propagation link on one side of the net
+	## is a link on the rarer half of the rallies.
+	incoming_quality: float = 1.0,
 ) -> Resource:
 	var opponent_setter := opponent_team.setter() as VolleyballPlayer
 	var transition_penalty := float(exchange_number - 1) * 0.035
@@ -1421,11 +1427,18 @@ func _resolve_opponent_transition(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
 	)
+	## Same model as the home transition set, and now the same attributes. The
+	## two sides read different ones -- this side set_accuracy, court_vision and
+	## decision_making, the home side set_accuracy, ball_control and composure --
+	## so a setter improved on one team's terms was not improved on the other's.
+	var opponent_set_capability := _transition_set_capability(opponent_setter)
+	var opponent_usable_ball := _usable_transition_ball(
+		incoming_quality, opponent_set_capability
+	)
 	var opponent_set_quality := clampf(
-		_rating(opponent_setter, "set_accuracy") * 0.48
-		+ _rating(opponent_setter, "court_vision") * 0.22
-		+ _rating(opponent_setter, "decision_making") * 0.16
-		+ 0.18 - float(set_geometry.difficulty) - transition_penalty
+		opponent_set_capability
+		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - opponent_usable_ball))
+		- float(set_geometry.difficulty) - transition_penalty
 		+ rng.randf_range(-0.12, 0.12), 0.08, 0.94,
 	)
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
@@ -1929,14 +1942,8 @@ func _resolve_home_continuation(
 	## the arriving ball allowed. Command buys back part of a bad ball, so the
 	## gap between setters is widest when the ball is worst -- which is also
 	## what makes a setter's attributes visible in the result at all.
-	var set_capability := clampf(
-		_rating(setter, "set_accuracy") * 0.55
-		+ _rating(setter, "ball_control") * 0.27
-		+ _rating(setter, "composure") * 0.18,
-		0.0, 1.0,
-	)
-	var usable_ball := clampf(incoming_quality, 0.0, 1.0)
-	usable_ball += (1.0 - usable_ball) * set_capability * TRANSITION_BALL_RECOVERY
+	var set_capability := _transition_set_capability(setter)
+	var usable_ball := _usable_transition_ball(incoming_quality, set_capability)
 	var set_quality := clampf(
 		set_capability
 		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - usable_ball))
@@ -2188,7 +2195,7 @@ func _resolve_home_continuation(
 		}, "kill_default")
 	return _resolve_opponent_transition(
 		result, players, lineup, hitter, attack_target,
-		opponent_team, defensive_plan, exchange_number + 1,
+		opponent_team, defensive_plan, exchange_number + 1, defense_quality,
 	)
 
 
@@ -3803,6 +3810,35 @@ func _serve_error_chance(server: VolleyballPlayer, tactical_risk: float) -> floa
 		0.0, 1.0,
 	)
 	return clampf(SERVE_ERROR_CEILING * demand * (1.0 - control), 0.005, 0.45)
+
+
+## What a setter brings to a ball played out of defence, as a fraction of an
+## ideal one. One list of attributes for both sides of the net.
+##
+## `hand_control` and `tempo_control` are in here because they are what
+## `SetterCapabilitySystem` reads at the first ball, and a setter who is better
+## at setting should be better at setting in transition too. Neither transition
+## formula referenced them before, on either side, so two of the four attributes
+## a setter is built on reached nothing after the first contact.
+func _transition_set_capability(setter: VolleyballPlayer) -> float:
+	if setter == null:
+		return 0.0
+	return clampf(
+		_rating(setter, "set_accuracy") * 0.34
+		+ _rating(setter, "hand_control") * 0.22
+		+ _rating(setter, "tempo_control") * 0.16
+		+ _rating(setter, "ball_control") * 0.15
+		+ _rating(setter, "composure") * 0.13,
+		0.0, 1.0,
+	)
+
+
+## How much of the arriving ball this setter can actually use. Command buys back
+## part of a bad one, so the gap between setters is widest when the ball is
+## worst -- which is the situation a good setter is for.
+func _usable_transition_ball(incoming_quality: float, capability: float) -> float:
+	var usable := clampf(incoming_quality, 0.0, 1.0)
+	return usable + (1.0 - usable) * capability * TRANSITION_BALL_RECOVERY
 
 
 ## One dig, wherever in the rally it happens.
