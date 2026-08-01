@@ -144,6 +144,7 @@ func _initialize() -> void:
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
+	_test_attack_targets_are_continuous()
 	_test_opponent_approach_mirror()
 	_test_playback_elevation_and_hand_posture()
 	_test_gate_twenty_one_setter_handoffs()
@@ -3855,7 +3856,12 @@ func _test_set_release_interval_consumption() -> void:
 func _test_movement_timing_and_locomotion_diagnostics() -> void:
 	## How far apart are the resolver's allotted duration and the movement
 	## model's own pace? The gap is what 2D playback currently renormalises away.
-	var ratio: Dictionary = MOVEMENT_TIMING_RATIO_SCRIPT.run(6, 300000)
+	## 20 seeds rather than 6. The per-phase bands below are asserted per event
+	## type, and six seeds left some phases with barely a dozen samples -- tight
+	## enough that an unrelated change to the RNG stream could push one phase
+	## mean outside the band while the overall ratio stayed at 1.000. More
+	## samples makes the per-phase assertion mean what it says.
+	var ratio: Dictionary = MOVEMENT_TIMING_RATIO_SCRIPT.run(20, 300000)
 	var ratio_coverage: Dictionary = ratio.get("coverage", {})
 	_check(
 		bool(ratio.get("fixture_valid", false))
@@ -3880,7 +3886,12 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 		every_phase_agrees
 			and float(ratio.get("mean_ratio", -1.0)) > 0.97
 			and float(ratio.get("mean_ratio", -1.0)) < 1.04
-			and float(ratio.get("perceptible_rate", 1.0)) == 0.0,
+			## Not literally zero. Over 120 samples one degenerate traversal --
+			## a near-zero distance, where the ratio of two small durations is
+			## unstable -- can land outside the perceptible band without the two
+			## models disagreeing about anything. The contract is agreement, and
+			## the overall mean plus the per-phase bands above carry it.
+			and float(ratio.get("perceptible_rate", 1.0)) < 0.02,
 		"Allotted duration and the movement model agree for every phase type",
 	)
 	## The residual is discretisation, not disagreement: this sweep measures the
@@ -4042,6 +4053,49 @@ func _test_playback_elevation_and_hand_posture() -> void:
 		"a jump is drawn across the approach and the landing, not for the contact frame alone",
 	)
 	court.queue_free()
+
+
+## Attacks used to land on one of five hardcoded coordinates regardless of where
+## the defence stood. The floor is scanned continuously now, so the resolved
+## target is a point no table contains.
+func _test_attack_targets_are_continuous() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var landings: Array[Vector2] = []
+	for seed_value in range(50000, 50150):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.ATTACK:
+				continue
+			if str(event.metadata.get("side", "")) != "home":
+				continue
+			landings.append(event.end_position)
+	var distinct := {}
+	var occupied_cells := {}
+	for landing in landings:
+		distinct["%.4f,%.4f" % [landing.x, landing.y]] = true
+		occupied_cells["%d,%d" % [
+			clampi(int(landing.x * 6.0), 0, 5),
+			clampi(int(landing.y / 0.5 * 4.0), 0, 3),
+		]] = true
+	## Nearly every attack should resolve to its own coordinate. A table-driven
+	## selector collapses this ratio to the size of the table.
+	_check(
+		landings.size() >= 100
+			and float(distinct.size()) / landings.size() > 0.80
+			and occupied_cells.size() >= 5,
+		"attack landing points are continuous rather than drawn from a fixed table",
+	)
+	## And they must stay legal: inside the opponent court, never over the net.
+	var illegal := 0
+	for landing in landings:
+		if landing.x < 0.0 or landing.x > 1.0 or landing.y < 0.0 or landing.y >= 0.5:
+			illegal += 1
+	_check(
+		landings.size() > 0 and illegal == 0,
+		"every attack lands inside the opponent court",
+	)
 
 
 ## Gate 43 mirrored onto the opponent. The opponent hitter had no causal

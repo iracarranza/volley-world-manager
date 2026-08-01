@@ -1947,41 +1947,126 @@ func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vecto
 	)
 
 
+## Search resolution for open-floor scanning. These are sample points for a
+## search across the whole legal court, NOT a menu of permitted targets: the
+## chosen point is continuously perturbed afterwards, so landing spots form a
+## distribution over the floor rather than clustering on a handful of dots.
+const ATTACK_SCAN_COLUMNS: int = 13
+const ATTACK_SCAN_ROWS: int = 9
+const ATTACK_COURT_MIN := Vector2(0.055, 0.055)
+const ATTACK_COURT_MAX := Vector2(0.945, 0.445)
+
+## Depth a shot family naturally wants, as a fraction from the net (0) to the
+## endline (1). Power swings drive deep; rolls and tips die short.
+const ATTACK_DEPTH_PREFERENCE := {
+	"Power swing": 0.70,
+	"Tempo swing": 0.60,
+	"Quick attack": 0.52,
+	"Pipe attack": 0.68,
+	"High-ball swing": 0.62,
+	"Controlled roll": 0.34,
+	"Emergency tip": 0.20,
+}
+
+
+## Where this hitter aims, chosen continuously from the actual open floor.
+##
+## This used to pick from five fixed coordinates, so every attack in the game
+## landed on one of five spots regardless of where the defence stood. The floor
+## is now scanned properly: each sample is scored by how far it sits from the
+## nearest defender, how naturally it fits the shot family being hit, and how
+## far the hitter has to swing away from their approach line to reach it -- a
+## sharp cross-court from a tight set is a harder ball than an easy line shot,
+## and only a hitter with the accuracy and shot variety to attempt it should.
+##
+## The winning sample is then displaced by an aiming error that shrinks with
+## `attack_accuracy`, so the resolved target is a continuous point that no
+## table contains.
 func _choose_home_attack_target(
 	hitter: VolleyballPlayer,
 	lane: String,
 	hit_type: String,
 	opponent_team: Resource,
 ) -> Dictionary:
-	var contact_x := CourtConstants.lane_target(lane).x
-	var candidates: Array[Vector2] = [
-		Vector2(0.18, 0.20), Vector2(0.50, 0.18), Vector2(0.82, 0.20),
-		Vector2(0.24, 0.36), Vector2(0.76, 0.36),
-	]
-	if hit_type == "Quick attack" or rng.randf() < 0.12:
-		candidates.append(Vector2(rng.randf_range(0.35, 0.65), 0.42))
-	var best_target := candidates[0]
-	var best_space := -1.0
-	for candidate in candidates:
-		var nearest := 10.0
-		for defender_resource in opponent_team.on_court_players():
-			var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-			if defender == null:
-				continue
-			nearest = minf(nearest, opponent_team.court_position(defender.id).distance_to(candidate))
-		if nearest > best_space:
-			best_space = nearest
-			best_target = candidate
-	var decision_fit := clampf(
-		_rating(hitter, "decision_making") * 0.68
-		+ _rating(hitter, "attack_accuracy") * 0.32, 0.0, 1.0
+	var contact := CourtConstants.lane_target(lane)
+	var accuracy := _rating(hitter, "attack_accuracy")
+	var variety := _rating(hitter, "shot_variety")
+	var reading := _rating(hitter, "decision_making")
+
+	var defenders: Array[Vector2] = []
+	for defender_resource in opponent_team.on_court_players():
+		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if defender == null:
+			continue
+		defenders.append(opponent_live_positions.get(
+			defender.id, opponent_team.court_position(defender.id, "defense")
+		))
+
+	## How far off their natural line this hitter can credibly swing. A narrow
+	## repertoire keeps them hitting where their approach already points.
+	var swing_range := lerpf(0.22, 0.62, variety * 0.6 + accuracy * 0.4)
+	var preferred_depth := float(ATTACK_DEPTH_PREFERENCE.get(hit_type, 0.6))
+
+	var best_target := Vector2(
+		clampf(1.0 - contact.x, ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x),
+		lerpf(ATTACK_COURT_MAX.y, ATTACK_COURT_MIN.y, preferred_depth),
 	)
-	var target := best_target if rng.randf() < decision_fit \
-		else candidates[rng.randi_range(0, candidates.size() - 1)]
-	var direction := _attack_direction(contact_x, target)
+	var best_score := -1.0e9
+	for column in range(ATTACK_SCAN_COLUMNS):
+		var x := lerpf(
+			ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x,
+			float(column) / float(ATTACK_SCAN_COLUMNS - 1)
+		)
+		if absf(x - contact.x) > swing_range:
+			continue
+		for row in range(ATTACK_SCAN_ROWS):
+			var y := lerpf(
+				ATTACK_COURT_MAX.y, ATTACK_COURT_MIN.y,
+				float(row) / float(ATTACK_SCAN_ROWS - 1)
+			)
+			var candidate := Vector2(x, y)
+			var nearest := 10.0
+			for defender_position in defenders:
+				nearest = minf(
+					nearest,
+					CoverageModel.court_distance_meters(defender_position, candidate)
+				)
+			var depth_fraction := inverse_lerp(
+				ATTACK_COURT_MAX.y, ATTACK_COURT_MIN.y, y
+			)
+			var score := nearest 				- absf(depth_fraction - preferred_depth) * 3.2 				- absf(x - contact.x) * 1.6
+			if score > best_score:
+				best_score = score
+				best_target = candidate
+
+	## A hitter who reads the floor well finds the gap; one who does not commits
+	## to their own line regardless of who is standing in it.
+	var instinctive := Vector2(
+		clampf(
+			contact.x + (0.5 - contact.x) * 0.7,
+			ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x
+		),
+		lerpf(ATTACK_COURT_MAX.y, ATTACK_COURT_MIN.y, preferred_depth),
+	)
+	var aim := best_target if rng.randf() < reading else instinctive
+
+	## Aiming error, continuous and shrinking with accuracy. This is what makes
+	## the resolved point one no table contains.
+	var spread := lerpf(0.115, 0.022, accuracy)
+	var target := Vector2(
+		clampf(
+			aim.x + rng.randf_range(-spread, spread),
+			ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x
+		),
+		clampf(
+			aim.y + rng.randf_range(-spread, spread) * 0.8,
+			ATTACK_COURT_MIN.y, ATTACK_COURT_MAX.y
+		),
+	)
 	return {
-		"target": target, "direction": direction,
-		"reason": "open floor" if target == best_target else "aggressive choice",
+		"target": target,
+		"direction": _attack_direction(contact.x, target),
+		"reason": "open floor" if aim == best_target else "hit their own line",
 	}
 
 
