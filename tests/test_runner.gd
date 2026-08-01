@@ -4397,7 +4397,7 @@ func _test_opponent_approach_mirror() -> void:
 	var with_actions := 0
 	var staged := 0
 	var wrong_side := 0
-	for seed_value in range(20000, 20240):
+	for seed_value in range(20000, 20420):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource

@@ -682,6 +682,57 @@ than four attributes chosen here. The previous list gave the middle blocker
 nothing their *read* runs through, so a change meant to make reading matter
 could not have registered however large it was.
 
+### Block margins re-derived, the dig re-derived, and a hollow result
+
+Re-deriving the margins against the mobile block (0.22 / 0.18 / 0.10) put block
+touch in band at 0.273 -- and rallies went to 14.9 contacts on 600 swings for
+109 terminal outcomes. The block outcome tally said why: the block was beaten on
+72% of swings, and **82% of the swings that reached the floor were dug**. The
+limiter had moved to the dig.
+
+`DIG_ATTACKER_ADVANTAGE` went 0.09 to 0.20 and `DIG_SOLO_SHARE` 0.75 to 0.62. A
+clean swing beating a set defence should not be the exception, and at 0.09 an
+even contest was near a coin flip on a scale where the two sides sit at parity.
+
+| | side-out | kill | atk err | stuff | touch | contacts | in band |
+|---|---|---|---|---|---|---|---|
+| before | 0.567 | 0.140 | 0.134 | 0.143 | 0.610 | 8.91 | 4 of 8 |
+| after | 0.500 | **0.542** | 0.075 | 0.033 | 0.354 | **6.99** | 7 of 8 |
+
+**Kill rate entered its band for the first time in the project**, and seven of
+eight metrics sit inside their references.
+
+### That 7 of 8 is hollow, and the reason matters more than the number
+
+The terminal outcomes across the same 180 rallies:
+
+```
+kill 117    opponent_kill 13
+```
+
+**The home attack wins nine times as often as the opponent's.** The aggregate
+distributions look like volleyball because one side is dominating, not because
+the sport is balanced -- side-out at exactly 0.500 is the tell, and the role
+sensitivity tool now reports a baseline home win rate of 0.779 where it read
+0.407 an hour earlier. Every per-rally rate above should be read as the average
+of a strong team and a weak one rather than as a description of the sport.
+
+Making the attack finally win exposed this. While kills were 12% of swings, an
+attack-side asymmetry was invisible; at 54% it dominates the match. The known
+differences are all on the attack path: the home swing receives
+`Familiarity.attack_geometry()` and an execution modifier that the opponent
+swing never gets, and the two sides choose their targets through different
+functions. The tempo demand and the overreach penalty were mirrored earlier in
+this session; the familiarity terms were not.
+
+One regression check fails with it -- opponent attacks no longer reach the
+sample count a fixed seed window expects, which is the same imbalance seen from
+another angle rather than a separate defect.
+
+**Nothing here should be treated as a calibration result until the two sides are
+symmetric.** The next task is to finish mirroring the attack path, not to tune
+anything.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error

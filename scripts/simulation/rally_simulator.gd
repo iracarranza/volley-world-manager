@@ -136,13 +136,18 @@ const ATTACK_EXECUTION_NOISE: float = 0.10
 ## error.
 const ATTACK_ERROR_THRESHOLD: float = 0.24
 
-## How decisively the block has to beat the swing for each outcome. A block that
-## loses the airspace does not get a hand on the ball, so none of these is
-## negative by much: at -0.06 and -0.24 the block touched 82% of all attacks and
-## rallies never ended.
-const BLOCK_STUFF_MARGIN: float = 0.14
-const BLOCK_TOUCH_MARGIN: float = 0.10
-const BLOCK_FUNNEL_MARGIN: float = 0.02
+## How decisively the block has to beat the swing for each outcome.
+##
+## Re-derived twice. At -0.06 and -0.24 the block touched 82% of all attacks and
+## rallies never ended. Tightening to positive margins fixed that against a
+## block that could not move; once closing began at the pass rather than at set
+## contact, blockers reached lanes they never used to and the touch rate went
+## back to 0.61 on the same numbers. A margin is a statement about how much the
+## block has to win by, and it only means something against a given amount of
+## block -- change what the wall can reach and it has to be restated.
+const BLOCK_STUFF_MARGIN: float = 0.22
+const BLOCK_TOUCH_MARGIN: float = 0.18
+const BLOCK_FUNNEL_MARGIN: float = 0.10
 
 ## A serve is missed when the server asks more of it than their control
 ## supports. `SERVE_ERROR_CEILING` is the miss rate of a server with no control
@@ -190,13 +195,17 @@ const DIG_LATE_ARRIVAL_SECONDS: float = 0.45
 ## How much the attacker is favoured when swing and dig are equally good. A
 ## clean swing beats a set defence more often than not, so an even contest is
 ## not a coin flip.
-const DIG_ATTACKER_ADVANTAGE: float = 0.09
+## Measured, not assumed: with the block re-derived, 416 swings reached the
+## floor and 82% of them came up. A clean swing beating a set defence should not
+## be the exception, and at 0.09 an even contest was close to a coin flip on a
+## scale where the two sides sit at parity.
+const DIG_ATTACKER_ADVANTAGE: float = 0.20
 
 ## One defender is not a whole defence. The attacker picks where the ball goes;
 ## a defender covers the zone they were assigned. Without this the dig scale
 ## centred above the swing scale -- exactly the mismatch a solo block had at
 ## 0.78 -- and 470 swings produced 42 kills against 63 errors and 44 stuffs.
-const DIG_SOLO_SHARE: float = 0.75
+const DIG_SOLO_SHARE: float = 0.62
 const DIG_EXECUTION_NOISE: float = 0.10
 
 ## How hard a swing attempted outside the approach's capability bites. Mirrors
