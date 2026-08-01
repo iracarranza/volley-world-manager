@@ -73,6 +73,7 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 			if result == null:
 				continue
 			var contacts := 0
+			var attack_attempts := 0
 			for event_resource in result.events:
 				var event: Resource = event_resource
 				if int(event.event_type) in [
@@ -84,12 +85,20 @@ static func _sweep(sample_count: int, base_seed: int) -> Array[Dictionary]:
 					RallyEventModel.EventType.DEFENSE,
 				]:
 					contacts += 1
+				## Every swing records an ATTACK event before its outcome is
+				## known, so this counts attempts -- including the swings that
+				## get dug and keep the rally alive. Without them the attack
+				## denominator is only the swings that ended a rally, which
+				## makes the kill rate rise whenever errors and stuffs fall.
+				if int(event.event_type) == RallyEventModel.EventType.ATTACK:
+					attack_attempts += 1
 			var trace: Dictionary = result.analysis.get("shadow_reception", {})
 			records.append({
 				"serving_home": serving_home,
 				"outcome": str(result.terminal_outcome),
 				"home_won": bool(result.home_team_won),
 				"contacts": contacts,
+				"attack_attempts": attack_attempts,
 				"shadow_summary": Dictionary(trace.get("summary", {})),
 			})
 	return records
@@ -110,6 +119,7 @@ static func outcome_calibration(
 	var aces := 0
 	var serve_errors := 0
 	var attacks := 0
+	var terminal_attacks := 0
 	var kills := 0
 	var attack_errors := 0
 	var stuffs := 0
@@ -118,16 +128,20 @@ static func outcome_calibration(
 		var outcome := str(record["outcome"])
 		outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
 		contact_total += int(record["contacts"])
+		attacks += int(record["attack_attempts"])
 		serves += 1
 		match outcome:
 			"ace":
 				aces += 1
 			"serve_error":
 				serve_errors += 1
-		## Terminal outcomes that resolve at the third contact. `blocked` and
-		## `counter_block` are the same event from the two sides.
+		## Terminal outcomes that resolve at a swing. `blocked` and
+		## `counter_block` are the same event from the two sides. These are
+		## scored against every attempt above, not against each other: the
+		## sport's kill and hitting-error rates are per attempt, and a
+		## terminal-only denominator makes each rate a function of the others.
 		if outcome in ["kill", "opponent_kill", "attack_error", "blocked", "counter_block"]:
-			attacks += 1
+			terminal_attacks += 1
 			match outcome:
 				"kill", "opponent_kill":
 					kills += 1
@@ -164,7 +178,8 @@ static func outcome_calibration(
 		"fixture_valid": true,
 		"rally_count": serves,
 		"terminal_outcomes": outcomes,
-		"resolved_attacks": attacks,
+		"attack_attempts": attacks,
+		"terminal_attacks": terminal_attacks,
 		"measured": measured,
 		"reference_bands": REFERENCE_BANDS.duplicate(true),
 		"within_reference": within,

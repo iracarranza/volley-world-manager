@@ -29,13 +29,17 @@ extends RefCounted
 ##    their leap is available. A ball above that is still reachable *for* -- it
 ##    is simply very unlikely to become a usable set.
 ##
-## Judgment (`decision_making`, `tactical_discipline`, `composure`) decides
-## whether the setter recognises the overreach and downgrades. A disciplined
-## setter takes the safer ball; a reckless one tries the quick anyway. Both are
-## legitimate, and the rally record shows which happened.
+## Judgment decides whether the setter recognises the overreach and downgrades.
+## A disciplined setter takes the safer ball; a reckless one tries the quick
+## anyway. Both are legitimate, and the rally record shows which happened. That
+## read is not setter-specific -- the third contact needs exactly the same one
+## -- so it lives in `AttemptJudgment` and is delegated to here.
 
 const ContactEnvelopeModel := preload(
 	"res://scripts/simulation/contact_envelope_system.gd"
+)
+const AttemptJudgmentModel := preload(
+	"res://scripts/simulation/attempt_judgment.gd"
 )
 
 ## Tempo indices run fast to slow: 0 is a quick set, 3 a high ball.
@@ -85,13 +89,7 @@ static func command(setter: VolleyballPlayer) -> float:
 ## safer option instead. This is what makes an overreach a decision rather than
 ## a dice roll.
 static func judgment(setter: VolleyballPlayer) -> float:
-	if setter == null:
-		return 0.0
-	return clampf((
-		float(setter.decision_making) * 0.50
-		+ float(setter.tactical_discipline) * 0.30
-		+ float(setter.composure) * 0.20
-	) / 100.0, 0.0, 1.0)
+	return AttemptJudgmentModel.judgment(setter)
 
 
 ## Command this tempo demands off a pass of this quality.
@@ -138,15 +136,8 @@ static func effective_pass_quality(
 
 
 ## Whether this setter backs off a tempo they cannot command.
-##
-## The threshold falls as the shortfall grows: almost anyone recognises a ball
-## hopelessly beyond them, while a marginal one gets chanced by all but the most
-## disciplined. A reckless setter attempts regardless, which is the point.
 static func backs_off(setter: VolleyballPlayer, deficit: float) -> bool:
-	if deficit <= 0.0:
-		return false
-	var threshold := lerpf(0.85, 0.25, clampf(deficit / 0.40, 0.0, 1.0))
-	return judgment(setter) >= threshold
+	return AttemptJudgmentModel.backs_off(setter, deficit)
 
 
 ## Full capability read for one second contact.

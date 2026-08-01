@@ -231,13 +231,32 @@ This page is the quickest defense against confusing source-code existence with a
   `outcome_calibration()` reports side-out, ace, serve-error, kill, attack-error,
   stuff and rally-length distributions against reference bands; it immediately
   found that the engine produces **zero aces and zero attack errors** across 180
-  rallies and an **0.828 kill rate**, so offence is dominant and unforced error
-  does not exist. `rollout_readiness()` aggregates the audit reasons behind every
+  rallies. The kill rate it first reported (0.828) was its own defect: the
+  attack rates were scored against terminal swings only, which makes each a
+  function of the others. Per attempt, as the sport scores them, the kill rate
+  is **0.316** and the engine's real problem is the opposite of the one first
+  reported -- rallies do not end. `rollout_readiness()` aggregates the audit reasons behind every
   rollout verdict and shows the migration is blocked by candidate *production*
   (86% of rallies produce nothing to audit) rather than candidate quality -- the
   information-boundary and state-mutation checks the gate sequence concentrated
   on reject almost nothing. Neither sweep changes an outcome or enables a flag.
   See [Rally Readiness and Outcome Calibration](../calibration/RALLY_READINESS_AND_OUTCOME_CALIBRATION.md).
+- **A block outcome is decided in exactly one place now.** The opponent block ran
+  its contest, then re-ran it under a scouting adaptation with a second stuff
+  margin and close threshold, then gave a beaten block a flat 18-48% roll at a
+  hand touch -- three mechanisms for one question, none of which existed on the
+  home side or the continuation path, and the last of which fired near its
+  ceiling because it had been written against a saturated `primary_close`.
+  Scouting now sharpens the formation before the contest and the extra roll is
+  gone. Rally length fell from 12.26 contacts to 11.29.
+- **Capability stopped removing options at the third contact.** A hitter whose
+  run-up had not unlocked power had their swing silently rewritten into a roll
+  shot; because the substitute was always executable, no swing could be bad
+  enough to be an error. `ApproachMechanicsSystem.attack_family_deficit()` now
+  grades how far outside the approach an attempt sits, the hitter's judgment
+  decides whether to take the safer ball, and swinging anyway costs quality in
+  proportion. `AttemptJudgment` holds the shared read so the setter's second
+  contact and the hitter's third use one curve rather than two copies.
 - **Attacks are aimed at the open floor, not at a table.**
   `_choose_home_attack_target()` scanned five hardcoded coordinates, so every
   attack in the game landed on one of five spots regardless of where the defence

@@ -5,6 +5,63 @@ const RallyKinematicsModel := preload("res://scripts/simulation/rally_kinematics
 const RallyMovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 
+## What a run-up has to deliver before a hitter can swing at full power, and
+## before the whole shot menu is open to them. Named because the requirement
+## table below has to agree with the profile that reports them; two copies of
+## `0.48` in one file is how the block ended up with three contests.
+const POWER_ACCESS_QUALITY_IN_SYSTEM: float = 0.48
+const POWER_ACCESS_QUALITY_OUT_OF_SYSTEM: float = 0.52
+const POWER_ACCESS_SPEED_FRACTION: float = 0.42
+const POWER_ACCESS_LATERAL_CONTROL: float = 0.42
+const FULL_MENU_QUALITY_IN_SYSTEM: float = 0.61
+const FULL_MENU_QUALITY_OUT_OF_SYSTEM: float = 0.66
+const FULL_MENU_LATERAL_CONTROL: float = 0.56
+
+## What each attack family demands of the hitter and of the approach they got
+## into it.
+##
+## **Capability is not permission.** `available_attack_families()` reports what
+## a hitter can do cleanly; `attack_family_deficit()` reports how far outside
+## that an attempt sits. Nothing here removes a swing from a hitter -- a player
+## may attempt anything, and their attributes decide how it goes, not whether
+## they are allowed. The second contact learned this first; this is the third
+## contact's version of the same rule.
+const ATTACK_FAMILY_REQUIREMENTS := {
+	## Always available. A hitter with nothing left can always roll one over.
+	"controlled_roll": {},
+	"tip": {"rating": "finesse", "rating_floor": 45.0},
+	"placed_attack": {
+		"rating": "attack_accuracy", "rating_floor": 48.0,
+		"lateral_control": 0.36, "arrival_margin": -0.12,
+	},
+	"power_attack": {
+		"rating": "attack_power", "rating_floor": 52.0,
+		"power_access": true, "arrival_margin": -0.06,
+	},
+	"tool_block": {
+		"rating": "tooling", "rating_floor": 58.0,
+		"runup_quality": 0.46, "lateral_control": 0.48,
+	},
+}
+
+## Which family a named hit type belongs to, so the simulator's shot vocabulary
+## and this system's capability vocabulary stay in one mapping rather than in a
+## membership test written out at each call site.
+const HIT_TYPE_FAMILY := {
+	"Quick attack": "power_attack",
+	"Power swing": "power_attack",
+	"Tempo swing": "power_attack",
+	"Pipe attack": "power_attack",
+	"High-ball swing": "power_attack",
+	"Controlled roll": "controlled_roll",
+	"Emergency tip": "tip",
+	"Short tip": "tip",
+}
+
+## Seconds of lateness that count as one full unit of shortfall, so a timing
+## deficit is comparable with a rating or run-up deficit.
+const ARRIVAL_DEFICIT_SCALE: float = 0.50
+
 
 ## Creates a decision-safe transition snapshot. A hitter releases only after
 ## recognizing that their current ball responsibility is finished; tactical
@@ -156,8 +213,10 @@ static func evaluate_takeoff(
 	## continuous curve, and it eases the shot-menu gates: being in system can be
 	## the difference between having the full menu available and not.
 	quality = clampf(quality * system_bonus, 0.0, 1.0)
-	var power_threshold := 0.48 if in_system else 0.52
-	var menu_threshold := 0.61 if in_system else 0.66
+	var power_threshold := POWER_ACCESS_QUALITY_IN_SYSTEM if in_system \
+		else POWER_ACCESS_QUALITY_OUT_OF_SYSTEM
+	var menu_threshold := FULL_MENU_QUALITY_IN_SYSTEM if in_system \
+		else FULL_MENU_QUALITY_OUT_OF_SYSTEM
 	return {
 		"approach_distance_meters": distance,
 		"ideal_approach_distance_meters": approach_profile.ideal_value \
@@ -186,9 +245,11 @@ static func evaluate_takeoff(
 		## available; it does not erase their standing two-foot jump.
 		"jump_multiplier": lerpf(0.90, 1.08, quality),
 		"balance_multiplier": lerpf(0.58, 1.04, quality * lateral_control),
-		"power_access": quality >= power_threshold and speed_fraction >= 0.42 \
-			and lateral_control >= 0.42,
-		"full_shot_menu": quality >= menu_threshold and lateral_control >= 0.56,
+		"power_access": quality >= power_threshold \
+			and speed_fraction >= POWER_ACCESS_SPEED_FRACTION \
+			and lateral_control >= POWER_ACCESS_LATERAL_CONTROL,
+		"full_shot_menu": quality >= menu_threshold \
+			and lateral_control >= FULL_MENU_LATERAL_CONTROL,
 	}
 
 
@@ -219,25 +280,88 @@ static func approach_start_position(
 	)
 
 
+## The families this hitter can execute cleanly off this approach. A family is
+## available exactly when it carries no deficit, so this and
+## `attack_family_deficit()` can never disagree about where the line is.
 static func available_attack_families(
 	player: VolleyballPlayer,
 	profile: Dictionary,
 	arrival_margin: float,
 ) -> Array[String]:
-	var actions: Array[String] = ["controlled_roll"]
-	var quality := float(profile.get("runup_quality", 0.0))
-	var lateral_control := float(profile.get("lateral_control", 0.0))
-	if player.finesse >= 45:
-		actions.append("tip")
-	if player.attack_accuracy >= 48 and lateral_control >= 0.36 \
-			and arrival_margin >= -0.12:
-		actions.append("placed_attack")
-	if player.attack_power >= 52 and bool(profile.get("power_access", false)) \
-			and arrival_margin >= -0.06:
-		actions.append("power_attack")
-	if player.tooling >= 58 and quality >= 0.46 and lateral_control >= 0.48:
-		actions.append("tool_block")
+	var actions: Array[String] = []
+	if player == null:
+		return ["controlled_roll"]
+	for family in ATTACK_FAMILY_REQUIREMENTS:
+		if attack_family_deficit(player, profile, arrival_margin, str(family)) <= 0.0:
+			actions.append(str(family))
 	return actions
+
+
+## The family a named hit type belongs to. Unknown names fall back to the roll
+## shot, which demands nothing and therefore never invents a penalty.
+static func attack_family_for_hit_type(hit_type: String) -> String:
+	return str(HIT_TYPE_FAMILY.get(hit_type, "controlled_roll"))
+
+
+## How far outside this hitter's clean capability an attempt at `family` sits,
+## as a sum of normalised shortfalls. Zero means they can execute it; larger
+## means they are reaching further past what the approach gave them.
+##
+## This never says no. It is the magnitude a caller feeds to
+## `AttemptJudgment.backs_off()` and, if the hitter swings anyway, to the
+## quality penalty the attempt carries.
+static func attack_family_deficit(
+	player: VolleyballPlayer,
+	profile: Dictionary,
+	arrival_margin: float,
+	family: String,
+) -> float:
+	if player == null:
+		return 0.0
+	var requirement: Dictionary = ATTACK_FAMILY_REQUIREMENTS.get(family, {})
+	if requirement.is_empty():
+		return 0.0
+	var deficit := 0.0
+	if requirement.has("rating"):
+		deficit += maxf(
+			float(requirement["rating_floor"])
+			- float(player.get(str(requirement["rating"]))),
+			0.0,
+		) / 100.0
+	if requirement.has("lateral_control"):
+		deficit += maxf(
+			float(requirement["lateral_control"])
+			- float(profile.get("lateral_control", 0.0)), 0.0
+		)
+	if requirement.has("runup_quality"):
+		deficit += maxf(
+			float(requirement["runup_quality"])
+			- float(profile.get("runup_quality", 0.0)), 0.0
+		)
+	if requirement.has("arrival_margin"):
+		deficit += maxf(
+			float(requirement["arrival_margin"]) - arrival_margin, 0.0
+		) / ARRIVAL_DEFICIT_SCALE
+	if bool(requirement.get("power_access", false)):
+		deficit += _power_access_deficit(profile)
+	return deficit
+
+
+## The run-up shortfall behind a failed `power_access`. The profile reports the
+## verdict as a single boolean; an overreach needs to know by how much.
+static func _power_access_deficit(profile: Dictionary) -> float:
+	var quality_floor := POWER_ACCESS_QUALITY_IN_SYSTEM \
+		if bool(profile.get("approach_in_system", false)) \
+		else POWER_ACCESS_QUALITY_OUT_OF_SYSTEM
+	return maxf(
+		quality_floor - float(profile.get("runup_quality", 0.0)), 0.0
+	) + maxf(
+		POWER_ACCESS_SPEED_FRACTION
+		- float(profile.get("approach_speed_fraction", 0.0)), 0.0
+	) + maxf(
+		POWER_ACCESS_LATERAL_CONTROL
+		- float(profile.get("lateral_control", 0.0)), 0.0
+	)
 
 
 static func _reading_quality(player: VolleyballPlayer) -> float:

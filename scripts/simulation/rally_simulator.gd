@@ -41,6 +41,9 @@ const RallyMovementSystemModel := preload(
 const SetterCapabilityModel := preload(
 	"res://scripts/simulation/setter_capability_system.gd"
 )
+const AttemptJudgmentModel := preload(
+	"res://scripts/simulation/attempt_judgment.gd"
+)
 const RallyKinematicsModel := preload(
 	"res://scripts/simulation/rally_kinematics.gd"
 )
@@ -61,10 +64,25 @@ const OPPONENT_DEFENSE: float = 0.58
 const BLOCK_SHOULDER_OFFSET: float = 0.085
 const BLOCK_NET_DEPTH: float = 0.032
 
+## Lane a blocker covers with their arms without moving their feet.
+const BLOCK_LATERAL_REACH_METERS: float = 0.45
+## How far short of the ball a blocker must be for the close to fail entirely.
+const BLOCK_CLOSE_FAILURE_METERS: float = 1.60
+
 ## How much a formed block takes off the swing hit into it. The primary carries
 ## most of it; a sealed assist adds the rest of the wall.
-const BLOCK_PRIMARY_PRESSURE: float = 0.20
-const BLOCK_ASSIST_PRESSURE: float = 0.08
+## Deliberately modest, because the block gets two bites: it lowers the swing
+## here and then contests it. At 0.20/0.08 -- values set while the block was
+## still saturated and therefore constant -- the two compounded into a 0.386
+## stuff rate once closes actually varied.
+const BLOCK_PRIMARY_PRESSURE: float = 0.11
+const BLOCK_ASSIST_PRESSURE: float = 0.05
+
+## How hard a swing attempted outside the approach's capability bites. Mirrors
+## `SetterCapabilitySystem.OVERREACH_SEVERITY` at the second contact: a hitter a
+## long way past what their run-up gave them does not merely hit worse, they put
+## the ball out.
+const ATTACK_OVERREACH_SEVERITY: float = 1.60
 
 ## Sum of the opponent serve-quality weights, used to normalise them.
 const OPPONENT_SERVE_WEIGHT_TOTAL: float = 0.72
@@ -748,8 +766,22 @@ func resolve(
 	## formation is knowable before the contest is settled.
 	var opponent_block_formation := _form_opponent_block(
 		opponent_team, set_target.x, assignment.tempo,
-		float(result.set_quality), set_contact.x,
+		float(result.set_quality), set_contact.x, set_flight_time,
 	)
+	## Scouting sharpens a block that has already formed, so it belongs to the
+	## formation. It used to be applied *after* the contest, with its own stuff
+	## margin, its own close threshold and its own recycle rule -- a second copy
+	## of the contest, on one side of the net only. Folding it into the
+	## formation's quality leaves exactly one place a block outcome is decided.
+	var block_adaptation := _opponent_block_adaptation_bonus(
+		opponent_team, assignment.lane, assignment.tempo
+	)
+	if block_adaptation > 0.0:
+		opponent_block_formation["quality"] = clampf(
+			float(opponent_block_formation.get("quality", 0.0)) + block_adaptation,
+			0.05, 0.98,
+		)
+	opponent_block_formation["adaptation_bonus"] = block_adaptation
 	var block_pressure := float(opponent_block_formation.get("primary_close", 0.0)) \
 		* BLOCK_PRIMARY_PRESSURE \
 		+ float(opponent_block_formation.get("assist_close", 0.0)) \
@@ -782,10 +814,32 @@ func resolve(
 	var available_attacks := ApproachMechanicsModel.available_attack_families(
 		hitter, resolved_approach, hitter_arrival_margin
 	)
-	if "power_attack" not in available_attacks \
-			and hit_type in ["Quick attack", "Pipe attack", "High-ball swing", "Power swing", "Tempo swing"]:
+	## Capability is not permission at the third contact either.
+	##
+	## This used to silently rewrite a power swing into a roll shot whenever the
+	## run-up had not unlocked power, so a hitter could never attempt more than
+	## the approach gave them -- and because the substitute was always
+	## executable, no swing in the game was ever bad enough to be an error. Now
+	## the hitter's own judgment decides whether to take the safer ball, and
+	## swinging anyway costs quality in proportion to how far outside their
+	## approach the swing sits.
+	var swing_deficit := ApproachMechanicsModel.attack_family_deficit(
+		hitter, resolved_approach, hitter_arrival_margin,
+		ApproachMechanicsModel.attack_family_for_hit_type(hit_type),
+	)
+	var swing_downgraded := AttemptJudgmentModel.backs_off(hitter, swing_deficit)
+	if swing_downgraded:
 		hit_type = "Controlled roll" if "controlled_roll" in available_attacks \
 			else "Emergency tip"
+		swing_deficit = ApproachMechanicsModel.attack_family_deficit(
+			hitter, resolved_approach, hitter_arrival_margin,
+			ApproachMechanicsModel.attack_family_for_hit_type(hit_type),
+		)
+	if swing_deficit > 0.0:
+		result.attack_quality = clampf(
+			float(result.attack_quality) - swing_deficit * ATTACK_OVERREACH_SEVERITY,
+			0.0, 1.0,
+		)
 	var attack_choice := _choose_home_attack_target(
 		hitter, assignment.lane, hit_type, opponent_team
 	)
@@ -963,31 +1017,18 @@ func resolve(
 	var primary_close := float(block_resolution.primary_close)
 	var assist_close := float(block_resolution.assist_close)
 	var block_strength := float(block_resolution.quality)
-	var adaptation_bonus := _opponent_block_adaptation_bonus(
-		opponent_team, assignment.lane, assignment.tempo
-	)
+	## Already folded into the formation's quality before the contest ran; read
+	## back here only to explain the rally.
+	var adaptation_bonus := float(block_resolution.get("adaptation_bonus", 0.0))
 	if adaptation_bonus >= 0.035:
 		result.key_factors.append(ExplanationText.factor("opponent_adapted"))
+	## The contest is the whole answer. A flat 18-48% "beaten block still gets a
+	## hand on it" roll used to run on top of it, on this side of the net only.
+	## It duplicated the contest's own `funnel` band, and because it was written
+	## against a `primary_close` that was 99.5% saturated it fired at close to
+	## its ceiling on almost every swing -- two thirds of all attacks recycled
+	## into a continuation and rallies never ended.
 	var block_outcome := str(block_resolution.outcome)
-	# Scouting can improve a formed block, but cannot turn a blocker who did
-	# not physically close into a stuff block.
-	if adaptation_bonus > 0.0:
-		block_strength = clampf(block_strength + adaptation_bonus, 0.08, 0.96)
-		var adapted_margin := block_strength - float(result.attack_quality) \
-			+ rng.randf_range(-0.12, 0.12)
-		if adapted_margin > 0.14 and primary_close >= 0.72:
-			block_outcome = "stuff"
-		elif adapted_margin > -0.12 and block_outcome == "miss":
-			block_outcome = "recycle"
-	# A well-closed but technically beaten block can still produce a playable
-	# hand touch. This preserves realistic continuations without inflating
-	# terminal stuff blocks.
-	if block_outcome == "miss" and primary_close >= 0.55:
-		var touch_chance := clampf(
-			0.18 + primary_close * 0.24 + assist_close * 0.12, 0.18, 0.48
-		)
-		if rng.randf() < touch_chance:
-			block_outcome = "recycle"
 	var blocked := block_outcome == "stuff"
 	# A positional partial block is the same continuation class as the older
 	# "recycle" result: the home attack-coverage unit must play the deflection.
@@ -1500,7 +1541,7 @@ func _resolve_opponent_transition(
 	var block_result := _resolve_home_block(
 		players, lineup, defensive_plan, opponent_contact.x,
 		opponent_tempo, opponent_set_quality, opponent_attack,
-		opponent_setter_position.x,
+		opponent_setter_position.x, set_flight_time,
 	)
 	var blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
@@ -1898,7 +1939,7 @@ func _resolve_home_continuation(
 		})
 	var block_result := _resolve_opponent_block(
 		opponent_team, set_target.x, assignment.tempo, set_quality,
-		attack_quality, set_contact.x
+		attack_quality, set_contact.x, continuation_flight_time
 	)
 	var opponent_blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
@@ -1993,6 +2034,7 @@ func _form_opponent_block(
 	tempo: int,
 	set_quality: float,
 	setter_x: float,
+	set_flight_time: float,
 ) -> Dictionary:
 	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
 	var front_blockers: Array[VolleyballPlayer] = []
@@ -2031,8 +2073,19 @@ func _form_opponent_block(
 		if distance < primary_distance:
 			primary = candidate
 			primary_distance = distance
-	var close_time := 0.30 + float(clampi(tempo, 0, 3)) * 0.045 \
-		+ (1.0 - set_quality) * 0.18
+	## How long the blockers actually have: the set's own flight time, which the
+	## kinematics solver already produced from real distance and launch angle.
+	##
+	## This used to be `0.30 + tempo * 0.045 + (1 - set_quality) * 0.18` -- a
+	## table that gave a middle blocker 0.30 s of movement to cover 2.9 m of net,
+	## which is physically impossible, so double blocks formed in 1% of rallies
+	## and tempo could not change the block. Flight time already encodes tempo: a
+	## quick set lands in a fraction of the time a high ball takes, so the middle
+	## closes on a high ball and does not on a quick one. That is the whole
+	## tempo-versus-block dynamic, and it now falls out of the ball's own physics
+	## rather than a constant.
+	var close_time := maxf(set_flight_time, 0.0) \
+		+ (1.0 - set_quality) * 0.10
 	var read_total := 0.0
 	for reader in front_blockers:
 		read_total += _blocker_read_quality(reader, tempo, set_quality, setter_x)
@@ -2057,9 +2110,14 @@ func _form_opponent_block(
 		assist_close = 0.0
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
+	## `assist_close` is already inside `assist_skill`; multiplying by it again
+	## squared the assist's contribution and, with the solo weighting at 0.68,
+	## capped even a perfect unassisted blocker at 0.67. Block quality sat in a
+	## 0.04-wide interquartile band as a result -- every block in the game was
+	## the same block.
 	var block_quality := clampf(
-		primary_skill * 0.68 + assist_skill * 0.32 * assist_close,
-		0.08, 0.94,
+		primary_skill * 0.78 + assist_skill * 0.30,
+		0.05, 0.98,
 	)
 	return {
 		"primary": primary,
@@ -2085,13 +2143,18 @@ func _contest_opponent_block(
 	resolved["assist"] = formation.get("assist")
 	var block_quality := float(formation.get("quality", 0.0))
 	var primary_close := float(formation.get("primary_close", 0.0))
+	## A terminal stuff needs the block to clearly beat the swing and to have
+	## sealed the lane, not merely to have edged it. These margins were set
+	## against a block whose quality sat in a 0.04-wide band; once quality spread
+	## across 0.43-0.77 the old +0.14 margin turned a third of all attacks into
+	## stuff blocks.
 	var contest := block_quality + rng.randf_range(-0.14, 0.12)
 	var outcome := "miss"
-	if contest > attack_quality + 0.14 and primary_close >= 0.72:
+	if contest > attack_quality + 0.22 and primary_close >= 0.78:
 		outcome = "stuff"
-	elif contest > attack_quality - 0.16:
+	elif contest > attack_quality - 0.06:
 		outcome = "touch"
-	elif contest > attack_quality - 0.30:
+	elif contest > attack_quality - 0.24:
 		outcome = "funnel"
 	resolved["outcome"] = outcome
 	return resolved
@@ -2106,9 +2169,12 @@ func _resolve_opponent_block(
 	set_quality: float,
 	attack_quality: float,
 	setter_x: float,
+	set_flight_time: float,
 ) -> Dictionary:
 	return _contest_opponent_block(
-		_form_opponent_block(opponent_team, attack_x, tempo, set_quality, setter_x),
+		_form_opponent_block(
+			opponent_team, attack_x, tempo, set_quality, setter_x, set_flight_time
+		),
 		attack_quality,
 	)
 
@@ -3290,6 +3356,8 @@ func _best_blocker(
 	return best
 
 
+## `set_flight_time` is the opponent set's own flight, for the same reason the
+## opponent block uses it: it is how long home blockers actually have.
 func _resolve_home_block(
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
@@ -3299,6 +3367,7 @@ func _resolve_home_block(
 	set_quality: float,
 	attack_quality: float,
 	opponent_setter_x: float,
+	set_flight_time: float,
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
 	var setter_pull := {}
@@ -3335,8 +3404,19 @@ func _resolve_home_block(
 		if distance < primary_distance:
 			primary = candidate
 			primary_distance = distance
-	var close_time := 0.30 + float(clampi(tempo, 0, 3)) * 0.045 \
-		+ (1.0 - set_quality) * 0.18
+	## How long the blockers actually have: the set's own flight time, which the
+	## kinematics solver already produced from real distance and launch angle.
+	##
+	## This used to be `0.30 + tempo * 0.045 + (1 - set_quality) * 0.18` -- a
+	## table that gave a middle blocker 0.30 s of movement to cover 2.9 m of net,
+	## which is physically impossible, so double blocks formed in 1% of rallies
+	## and tempo could not change the block. Flight time already encodes tempo: a
+	## quick set lands in a fraction of the time a high ball takes, so the middle
+	## closes on a high ball and does not on a quick one. That is the whole
+	## tempo-versus-block dynamic, and it now falls out of the ball's own physics
+	## rather than a constant.
+	var close_time := maxf(set_flight_time, 0.0) \
+		+ (1.0 - set_quality) * 0.10
 	var read_total := 0.0
 	for reader in front_blockers:
 		read_total += _blocker_read_quality(reader, tempo, set_quality, opponent_setter_x)
@@ -3368,17 +3448,26 @@ func _resolve_home_block(
 		assist_close = 0.0
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
+	## `assist_close` is already inside `assist_skill`; multiplying by it again
+	## squared the assist's contribution and, with the solo weighting at 0.68,
+	## capped even a perfect unassisted blocker at 0.67. Block quality sat in a
+	## 0.04-wide interquartile band as a result -- every block in the game was
+	## the same block.
 	var block_quality := clampf(
-		primary_skill * 0.68 + assist_skill * 0.32 * assist_close,
-		0.08, 0.94,
+		primary_skill * 0.78 + assist_skill * 0.30,
+		0.05, 0.98,
 	)
+	## Same margins as `_contest_opponent_block()`. They were left behind when the
+	## opponent side was retuned, and the two sides immediately diverged: the home
+	## block stuffed 36 attacks in a sweep where the opponent block stuffed none.
+	## A second copy of a contest is a second balance to maintain.
 	var contest := block_quality + rng.randf_range(-0.14, 0.12)
 	var outcome := "miss"
-	if contest > attack_quality + 0.14 and primary_close >= 0.72:
+	if contest > attack_quality + 0.22 and primary_close >= 0.78:
 		outcome = "stuff"
-	elif contest > attack_quality - 0.16:
+	elif contest > attack_quality - 0.06:
 		outcome = "touch"
-	elif contest > attack_quality - 0.30:
+	elif contest > attack_quality - 0.24:
 		outcome = "funnel"
 	return {
 		"primary": primary,
@@ -3430,13 +3519,28 @@ func _blocker_close_fraction(
 	var anticipation := _rating(blocker, "anticipation")
 	var reaction_delay := lerpf(0.34, 0.12, anticipation)
 	var movement_time := maxf(available_time - reaction_delay, 0.0)
-	var mass_multiplier := lerpf(1.05, 0.91, clampf(
-		(blocker.mass_kg - 55.0) / 60.0, 0.0, 1.0
-	))
-	var movement_speed := lerpf(1.25, 4.40, _rating(blocker, "lateral_speed")) \
-		* mass_multiplier
-	var travel_capacity := movement_speed * movement_time + 0.72
-	return clampf(1.0 - maxf(distance_meters - travel_capacity, 0.0) / 2.8, 0.0, 1.0)
+	## Blocking closes through the shared locomotion model like every other
+	## movement in the engine. It used to carry its own `lerpf(1.25, 4.40,
+	## lateral_speed)` -- a fourth private copy of the speed curve -- so none of
+	## the stride, cadence or limb-turnover work reached blocking at all. Side is
+	## irrelevant here: `movement_profile()` reads the player, facing and
+	## velocity, never which half of the court they stand on.
+	var closing_actor := RallyPlayerState.create(
+		blocker, &"home", slot_number, start_position
+	)
+	var movement_speed := float(RallyMovementSystemModel.movement_profile(
+		closing_actor, Vector2(1.0, 0.0), RallyPlayerState.MovementMode.BLOCK_CLOSE
+	).get("maximum_speed", 0.0))
+	## A blocker covers some of the lane with their arms without moving their
+	## feet, but nothing like the 0.72 m this used to grant. That constant
+	## swamped the 0.135 s a slow tempo actually buys the block, so 99.5% of
+	## closes resolved at exactly 1.0 and neither tempo choice nor blocker
+	## quality could change anything.
+	var travel_capacity := movement_speed * movement_time + BLOCK_LATERAL_REACH_METERS
+	return clampf(
+		1.0 - maxf(distance_meters - travel_capacity, 0.0) / BLOCK_CLOSE_FAILURE_METERS,
+		0.0, 1.0,
+	)
 
 
 func _block_contact_skill(blocker: VolleyballPlayer, close_fraction: float) -> float:

@@ -147,7 +147,100 @@ the current, inflated attack range. Re-deriving them together is the work; the
 revert is recorded in the resolver at the site rather than left as a silent
 near-miss.
 
-### A defect this exposed
+## The kill rate was measuring the wrong thing
+
+Every number above the line uses a broken denominator, and the correction
+changes what the first calibration pass appeared to achieve.
+
+`kill_rate`, `attack_error_rate` and `stuff_rate` were scored against *terminal*
+attacks only -- the swings that ended a rally. A swing that got dug, and every
+swing in a long rally except the last, was excluded from the denominator
+entirely. That makes the three rates functions of each other rather than
+independent measurements: when stuffs and errors fall, the kill rate rises even
+if not one extra ball hit the floor. The reported jump from 0.767 to 0.842
+across the block work was exactly that artefact.
+
+The sport scores all three per *attempt*, and so does the report now. Every
+swing records an ATTACK event before its outcome is known, so the attempt count
+was already sitting in the event stream. A regression check asserts the attempt
+count is never below the terminal count, so the denominator cannot quietly
+collapse back.
+
+Re-measured on both sides of the change, the correction rewrites the verdict:
+
+| | side-out | ace | serve err | kill | atk err | stuff | contacts | attempts |
+|---|---|---|---|---|---|---|---|---|
+| before block work (terminal denominator) | 0.672 | 0.028 | 0.022 | 0.767 | 0.000 | 0.233 | 11.21 | -- |
+| before block work (per attempt) | 0.672 | 0.028 | 0.022 | **0.294** | 0.000 | **0.089** | 11.21 | 425 |
+| after block work (per attempt) | 0.633 | 0.028 | 0.022 | **0.296** | 0.000 | 0.055 | 12.26 | 469 |
+
+The block work moved the kill rate by 0.002. It never was near 0.83; the stuff
+rate never was above its band. Both readings were the denominator. What the
+block work did do is real and separately measured -- block quality spread from a
+0.04 interquartile band to 0.23, and `close_time` became a consequence of the
+set's actual flight rather than a tempo lookup -- but it did not change the
+balance of the sport, and the earlier table said it had.
+
+## Second pass: one contest, and capability at the third contact
+
+| | side-out | ace | serve err | kill | atk err | stuff | contacts | attempts |
+|---|---|---|---|---|---|---|---|---|
+| after block work | 0.633 | 0.028 | 0.022 | 0.296 | 0.000 | 0.055 | 12.26 | 469 |
+| 4. one block contest | 0.656 | 0.028 | 0.022 | 0.339 | 0.000 | 0.054 | 11.29 | 425 |
+| 5. capability at contact 3 | 0.594 | 0.028 | 0.022 | 0.316 | 0.000 | 0.072 | 11.38 | 431 |
+
+**The opponent block was deciding its outcome three times.** The contest ran,
+then a scouting adaptation re-ran it with its own stuff margin and its own
+close threshold, then a flat 18-48% roll gave a beaten block another chance at a
+hand touch -- a roll that duplicated the contest's own `funnel` band and, having
+been written against a `primary_close` that was 99.5% saturated, fired near its
+ceiling on nearly every swing. None of the three existed on the home side or on
+the continuation path. Scouting now sharpens the formation before the contest,
+the extra roll is gone, and the contest is the whole answer.
+
+**Capability stopped removing options at the third contact.** A hitter whose
+run-up had not unlocked power had their power swing silently rewritten into a
+roll shot -- and because the substitute was always executable, no swing in the
+game could be bad enough to be an error. The hitter's judgment now decides
+whether to take the safer ball, and swinging anyway costs quality in proportion
+to how far outside the approach it sits. `AttemptJudgment` holds the shared
+read, so the setter's second contact and the hitter's third use one curve.
+
+### What is actually keeping rallies alive
+
+Measuring the block's outcome mix, which nothing had done:
+
+| stuff | funnel | touch | miss |
+|---|---|---|---|
+| 31 | 142 | 211 | 47 |
+
+**Only 11% of swings get past the block untouched.** `touch` and `funnel` both
+recycle the ball to the attacking team's coverage, so four swings in five come
+straight back and rallies run to 11.4 contacts against a 4-9 band. The margins
+that produce this were set while chasing the stuff rate, with no view of the
+touch and funnel shares -- the same blindness the terminal-denominator kill rate
+came from.
+
+The margins are not independently fixable, because `block_quality` and
+`attack_quality` are not on a common scale: one sums 1.08 of weight, the other
+1.50 against penalties, and they are compared with margins of 0.06. A margin
+only means something once both are fractions of the same ideal.
+
+### Attack errors: the floor is structural, not the threshold
+
+Attack quality measures min 0.321 and 5th percentile 0.383, against an error
+threshold of 0.29. The distribution cannot reach the threshold, and moving the
+threshold up to meet it would be picking an outcome rate directly.
+
+The cause is that execution is composed **additively**: ratings contribute
+roughly 0.75 before anything else happens, so a hitter's attributes put a floor
+under every swing they take regardless of the set, the approach, or the block.
+A great hitter off a terrible set with no run-up should produce a bad ball.
+Making opportunity multiplicative rather than additive is what gives the
+distribution a low tail -- and it is the same change that lets a standout hitter
+stay dominant when the opportunity is good.
+
+### A defect the first pass exposed
 
 The ATTACK phase of the movement timing sweep measured 1.0565 before any of
 this and 1.0608 after, against a band whose upper edge is 1.06 -- it had been
