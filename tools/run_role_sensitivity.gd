@@ -25,13 +25,16 @@ const CalibrationModel := preload(
 const BOOST: int = 15
 const SAMPLES_PER_SIDE: int = 70
 
-## The four attributes each role's contribution actually runs through.
-const ROLE_ATTRIBUTES := {
-	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "jump_reach"],
-	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed"],
-	"Libero": ["reception", "dig_control", "anticipation", "lateral_speed"],
-	"Setter": ["set_accuracy", "tempo_control", "hand_control", "court_vision"],
-}
+## The attributes each role is built on, taken from the game's own definition in
+## `VolleyballPlayer.POSITION_WEIGHTS` rather than a list chosen here.
+##
+## A hand-picked list is a way to get the answer you expected. The first version
+## of this tool boosted four attributes per role and gave the middle blocker
+## block_timing, jump_reach, explosiveness and lateral_speed -- none of which
+## a blocker's *read* runs through, so a change meant to make reading matter
+## could not have registered no matter how large it was.
+static func role_attributes(role: String) -> Array:
+	return Array(VolleyballPlayer.POSITION_WEIGHTS.get(role, []))
 
 
 static func home_win_rate(boost_role: String, delta: int, samples: int) -> float:
@@ -51,7 +54,7 @@ static func home_win_rate(boost_role: String, delta: int, samples: int) -> float
 				var player: VolleyballPlayer = player_resource as VolleyballPlayer
 				if player == null or str(player.position_role) != boost_role:
 					continue
-				for attribute in Array(ROLE_ATTRIBUTES.get(boost_role, [])):
+				for attribute in role_attributes(boost_role):
 					player.set(str(attribute), clampi(
 						int(player.get(str(attribute))) + delta, 1, 99
 					))
@@ -75,7 +78,7 @@ func _initialize() -> void:
 	print("\nbaseline home win rate  %.4f   (n=%d, SE=%.4f)\n" % [
 		baseline, rallies, standard_error,
 	])
-	for role in ROLE_ATTRIBUTES:
+	for role in VolleyballPlayer.POSITION_WEIGHTS:
 		for delta in [BOOST, -BOOST]:
 			var measured := home_win_rate(str(role), delta, SAMPLES_PER_SIDE)
 			var shift := measured - baseline

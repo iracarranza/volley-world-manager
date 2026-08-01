@@ -66,6 +66,23 @@ const BLOCK_NET_DEPTH: float = 0.032
 
 ## Lane a blocker covers with their arms without moving their feet.
 const BLOCK_LATERAL_REACH_METERS: float = 0.45
+## How much of the time between the pass and the set's release a blocker can
+## actually use to move.
+##
+## Closing used to begin at set contact, giving a high ball 0.69 s and a quick
+## set 0.23 s -- and reaction plus the block jump consume about 0.49 s of
+## either, so blockers had roughly 0.2 m of footwork at any tempo and could not
+## cover one metre of net. A lane 0.9 m from the nearest blocker sat at the
+## block-quality clamp floor. Real blockers read the pass and the setter's body
+## and are moving well before the ball leaves the hands.
+##
+## Not all of that window is usable: the set's direction is not certain until it
+## is released, and a blocker who commits early to the wrong lane is worse off
+## than one who waited. That uncertainty is what `read_quality` models, so this
+## is the share a blocker spends moving rather than waiting.
+const BLOCK_PRESET_SHARE_MISREAD: float = 0.26
+const BLOCK_PRESET_SHARE_READ: float = 0.72
+
 ## Loading and leaving the ground. A blocker still shuffling when the ball
 ## arrives has not blocked it, so this comes off the end of the closing window.
 const BLOCK_PLANT_SECONDS: float = 0.26
@@ -80,7 +97,7 @@ const BLOCK_UNCLOSED_SHARE: float = 0.18
 ## attacks and produced fifteen kills in three hundred and fifty swings.
 const BLOCK_SOLO_SHARE: float = 0.62
 ## How much of what the primary left open a sealed assist covers.
-const BLOCK_ASSIST_SHARE: float = 0.55
+const BLOCK_ASSIST_SHARE: float = 0.34
 
 ## How much a formed block takes off the swing hit into it. The primary carries
 ## most of it; a sealed assist adds the rest of the wall.
@@ -190,6 +207,10 @@ const ATTACK_OVERREACH_SEVERITY: float = 1.60
 
 ## Sum of the opponent serve-quality weights, used to normalise them.
 const OPPONENT_SERVE_WEIGHT_TOTAL: float = 0.72
+
+## Nominal pass-to-setter flight, for the opponent side where the real value is
+## not separately modelled. The home paths pass their measured window instead.
+const DEFAULT_SECOND_CONTACT_SECONDS: float = 0.68
 
 const DEFAULT_SET_RELEASE_SECONDS: float = 0.42
 const DEFAULT_SET_RELEASE_TOLERANCE: float = 0.105
@@ -868,6 +889,7 @@ func resolve(
 	var opponent_block_formation := _form_opponent_block(
 		opponent_team, set_target.x, assignment.tempo,
 		float(result.set_quality), set_contact.x, set_flight_time,
+		second_contact_window + release_interval,
 	)
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
@@ -1515,6 +1537,9 @@ func _resolve_opponent_transition(
 		players, lineup, defensive_plan, opponent_contact.x,
 		opponent_tempo, opponent_set_quality,
 		opponent_setter_position.x, set_flight_time,
+		## The opponent's own pass-to-release time. Mirrors what the home set
+		## gives the opponent block; the home block was reading this pass too.
+		DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS,
 	)
 	var home_block_pressure := float(
 		home_block_formation.get("primary_close", 0.0)
@@ -2130,7 +2155,8 @@ func _resolve_home_continuation(
 		})
 	var block_result := _resolve_opponent_block(
 		opponent_team, set_target.x, assignment.tempo, set_quality,
-		attack_quality, set_contact.x, continuation_flight_time
+		attack_quality, set_contact.x, continuation_flight_time,
+		second_contact_window + cont_release_interval,
 	)
 	var opponent_blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
@@ -2225,6 +2251,9 @@ func _form_opponent_block(
 	set_quality: float,
 	setter_x: float,
 	set_flight_time: float,
+	## Seconds between the pass and the set leaving the setter's hands. The
+	## block is already reading and moving through this.
+	preset_window_seconds: float = 0.0,
 ) -> Dictionary:
 	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
 	var front_blockers: Array[VolleyballPlayer] = []
@@ -2274,12 +2303,23 @@ func _form_opponent_block(
 	## closes on a high ball and does not on a quick one. That is the whole
 	## tempo-versus-block dynamic, and it now falls out of the ball's own physics
 	## rather than a constant.
-	var close_time := maxf(set_flight_time, 0.0) \
-		+ (1.0 - set_quality) * 0.10
 	var read_total := 0.0
 	for reader in front_blockers:
 		read_total += _blocker_read_quality(reader, tempo, set_quality, setter_x)
 	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
+	## The pre-set window is only worth what a blocker can do with it, and what
+	## they can do with it is decided by their read. During that time nobody
+	## knows where the set is going: a blocker who reads the pass and the
+	## setter's body moves early and moves the right way, while one who does not
+	## has to wait for the release. A flat share gave every blocker the good
+	## version of that and made the wall far too strong -- 0.19 stuffs and 0.64
+	## touched -- while leaving reading worth nothing.
+	var preset_share := lerpf(
+		BLOCK_PRESET_SHARE_MISREAD, BLOCK_PRESET_SHARE_READ, read_quality
+	)
+	var close_time := maxf(set_flight_time, 0.0) \
+		+ maxf(preset_window_seconds, 0.0) * preset_share \
+		+ (1.0 - set_quality) * 0.10
 	close_time += lerpf(-0.09, 0.09, read_quality)
 	var primary_close := _blocker_close_fraction(
 		primary, lineup, attack_x, close_time
@@ -2355,10 +2395,12 @@ func _resolve_opponent_block(
 	attack_quality: float,
 	setter_x: float,
 	set_flight_time: float,
+	preset_window_seconds: float = 0.0,
 ) -> Dictionary:
 	return _contest_block(
 		_form_opponent_block(
-			opponent_team, attack_x, tempo, set_quality, setter_x, set_flight_time
+			opponent_team, attack_x, tempo, set_quality, setter_x,
+			set_flight_time, preset_window_seconds,
 		),
 		attack_quality,
 	)
@@ -3558,6 +3600,7 @@ func _form_home_block(
 	set_quality: float,
 	opponent_setter_x: float,
 	set_flight_time: float,
+	preset_window_seconds: float = 0.0,
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
 	var setter_pull := {}
@@ -3605,12 +3648,23 @@ func _form_home_block(
 	## closes on a high ball and does not on a quick one. That is the whole
 	## tempo-versus-block dynamic, and it now falls out of the ball's own physics
 	## rather than a constant.
-	var close_time := maxf(set_flight_time, 0.0) \
-		+ (1.0 - set_quality) * 0.10
 	var read_total := 0.0
 	for reader in front_blockers:
 		read_total += _blocker_read_quality(reader, tempo, set_quality, opponent_setter_x)
 	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
+	## The pre-set window is only worth what a blocker can do with it, and what
+	## they can do with it is decided by their read. During that time nobody
+	## knows where the set is going: a blocker who reads the pass and the
+	## setter's body moves early and moves the right way, while one who does not
+	## has to wait for the release. A flat share gave every blocker the good
+	## version of that and made the wall far too strong -- 0.19 stuffs and 0.64
+	## touched -- while leaving reading worth nothing.
+	var preset_share := lerpf(
+		BLOCK_PRESET_SHARE_MISREAD, BLOCK_PRESET_SHARE_READ, read_quality
+	)
+	var close_time := maxf(set_flight_time, 0.0) \
+		+ maxf(preset_window_seconds, 0.0) * preset_share \
+		+ (1.0 - set_quality) * 0.10
 	close_time += lerpf(-0.09, 0.09, read_quality)
 	var strategy := str(defensive_plan.block_strategy) if defensive_plan != null \
 		else "Read Block"

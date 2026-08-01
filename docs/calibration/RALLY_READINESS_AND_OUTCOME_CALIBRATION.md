@@ -626,6 +626,62 @@ opponent blockers are always placed from static rotation slots rather than where
 the rally actually left them. Harmless today only because the two id ranges do
 not overlap.
 
+### The closing window fixed, and re-measured
+
+Blockers now read the pass. `close_time` gains the pre-set window --
+`second_contact_window + release_interval`, about 1.1 s -- of which a blocker
+spends a share moving rather than waiting.
+
+That share is not flat. During the pre-set window nobody knows where the set is
+going, so a blocker who reads the pass and the setter's body moves early *and*
+the right way, while one who does not has to wait for the release. A flat share
+was tried first and gave every blocker the good version of that: 0.19 stuffs and
+0.64 touched, with reading worth nothing. It now runs
+`lerp(0.26, 0.72, read_quality)`.
+
+**The realised lane spread, re-measured on the fixed block:**
+
+| tempo | spread before | spread after | openest lane before | after |
+|---|---|---|---|---|
+| 0 (quick) | 0.380 | 0.317 | **0.058** | 0.201 |
+| 2 | 0.385 | 0.194 | **0.058** | 0.324 |
+| 3 (high ball) | 0.419 | 0.323 | **0.093** | 0.324 |
+
+The openest lane is no longer empty -- it was at the block-quality clamp floor at
+every tempo, and now carries a real block. The spread narrowed to 0.19-0.32, and
+that is the honest number a decision channel has to be judged against. Against
+the yardstick (a hitter's +15 is 0.061 of attack quality and measures 5.5 SE), a
+setter capturing even a third of a 0.25 spread is still worth more than the
+change that is already clearly visible. **The decision channel survives its own
+re-measurement.**
+
+**Rally outcomes.** Side-out and rally length entered their bands for the first
+time in the project's history.
+
+| | side-out | kill | atk err | stuff | touch | contacts | in band |
+|---|---|---|---|---|---|---|---|
+| before | 0.567 | 0.140 | 0.124 | 0.098 | 0.499 | 9.76 | 4 of 8 |
+| after | 0.567 | 0.140 | 0.134 | 0.143 | **0.610** | **8.91** | 4 of 8 |
+
+`BLOCK_ASSIST_SHARE` came down from 0.55 to 0.34 because doubles now actually
+form -- it was set when they almost never did. The alternative was measured:
+leaving it at 0.55 puts five metrics in band rather than four, including
+side-out at 0.583, but fails the home stuff-block regression check. A failing
+check disqualifies a better-looking table.
+
+**Block touch at 0.610 is the outstanding regression.** The contest margins were
+derived against a block that could not move; now that it can, they need
+re-deriving, and that is a bounded piece of work with the harness rather than an
+open question.
+
+Role sensitivity moved but did not pass. The middle blocker reads +0.036 at +15
+and -0.029 at -15 -- coherent signs for the first time, at 0.9 and 0.7 SE. The
+role-boost list also changed: it now comes from
+`VolleyballPlayer.POSITION_WEIGHTS`, the game's own definition of a role, rather
+than four attributes chosen here. The previous list gave the middle blocker
+nothing their *read* runs through, so a change meant to make reading matter
+could not have registered however large it was.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error
