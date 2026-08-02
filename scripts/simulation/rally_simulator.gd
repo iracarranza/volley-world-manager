@@ -957,8 +957,16 @@ func resolve(
 			float(result.attack_quality) - swing_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
-	var attack_choice := _choose_home_attack_target(
-		hitter, assignment.lane, hit_type, opponent_team
+	var opponent_defenders: Array[Vector2] = []
+	for defender_resource in opponent_team.on_court_players():
+		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if defender != null:
+			opponent_defenders.append(opponent_live_positions.get(
+				defender.id, opponent_team.court_position(defender.id, "defense")
+			))
+	var attack_choice := _choose_attack_target(
+		hitter, CourtConstants.lane_target(assignment.lane), hit_type,
+		opponent_defenders,
 	)
 	if using_live_attack:
 		result.attack_quality = clampf(float(selected_live_attack.get(
@@ -1498,6 +1506,25 @@ func _resolve_opponent_transition(
 	)
 	var opponent_hitter := attack_choice.player as VolleyballPlayer
 	var opponent_contact: Vector2 = attack_choice.contact
+	## The opponent searches the floor for a gap through the same function the
+	## home side does. `_choose_opponent_attack()` still picks who swings and
+	## what shot; where the ball goes was a random depth band until now.
+	var home_defenders: Array[Vector2] = []
+	for defender in players:
+		if defender == null:
+			continue
+		var defender_slot := lineup.slot_for_player(defender.id)
+		if defender_slot <= 0:
+			continue
+		home_defenders.append(live_positions.get(
+			defender.id, CourtConstants.slot_position(defender_slot)
+		))
+	var opponent_aim := _choose_attack_target(
+		opponent_hitter, opponent_contact, str(attack_choice.attack_type),
+		home_defenders, true,
+	)
+	attack_choice["target"] = opponent_aim.target
+	attack_choice["direction"] = opponent_aim.direction
 	var home_target: Vector2 = attack_choice.target
 	set_geometry = _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
@@ -1635,7 +1662,13 @@ func _resolve_opponent_transition(
 				opponent_hitter, opponent_set_quality,
 				_approach_execution_fit(opponent_hitter, opponent_approach),
 				hitter_arrival_margin, opponent_tempo_demand, home_block_pressure,
-				(float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
+				## The same familiarity the home swing gets. Omitting it here was
+				## worth nine kills to one once the attack started winning.
+				Familiarity.attack_geometry(
+					opponent_hitter, str(attack_choice.get("lane", "Left Pin"))
+				)
+				+ (Familiarity.execution_modifier(opponent_hitter) - 1.0) * 0.14
+				+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
 			) + opponent_attack_noise,
 			0.0, 1.0,
 		)
@@ -2458,25 +2491,35 @@ const ATTACK_DEPTH_PREFERENCE := {
 ## The winning sample is then displaced by an aiming error that shrinks with
 ## `attack_accuracy`, so the resolved target is a continuous point that no
 ## table contains.
-func _choose_home_attack_target(
+## Where this swing is aimed, for either side of the net.
+##
+## Written for the home side only, which made the home attack the one that
+## searched the floor for a gap while the opponent's picked a depth band at
+## random. Invisible while kills were 12% of swings; at 54% it decided matches,
+## and 180 rallies produced 117 home kills against 13 opponent ones.
+##
+## `defenders` are the positions to hit away from, and `mirrored` flips the
+## result into the home half for an opponent swing. Everything else -- the swing
+## range, the read roll, the accuracy-shrinking aiming error -- is the same act
+## on both sides because it is the same act.
+func _choose_attack_target(
 	hitter: VolleyballPlayer,
-	lane: String,
+	contact: Vector2,
 	hit_type: String,
-	opponent_team: Resource,
+	defenders: Array[Vector2],
+	mirrored: bool = false,
 ) -> Dictionary:
-	var contact := CourtConstants.lane_target(lane)
 	var accuracy := _rating(hitter, "attack_accuracy")
 	var variety := _rating(hitter, "shot_variety")
 	var reading := _rating(hitter, "decision_making")
-
-	var defenders: Array[Vector2] = []
-	for defender_resource in opponent_team.on_court_players():
-		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-		if defender == null:
-			continue
-		defenders.append(opponent_live_positions.get(
-			defender.id, opponent_team.court_position(defender.id, "defense")
-		))
+	## Defender positions arrive in their own half; the scan happens in the
+	## attacked half, so an opponent swing compares against mirrored defenders.
+	if mirrored:
+		var flipped: Array[Vector2] = []
+		for defender_position in defenders:
+			flipped.append(Vector2(defender_position.x, 1.0 - defender_position.y))
+		defenders = flipped
+		contact = Vector2(contact.x, 1.0 - contact.y)
 
 	## How far off their natural line this hitter can credibly swing. A narrow
 	## repertoire keeps them hitting where their approach already points.
@@ -2539,8 +2582,9 @@ func _choose_home_attack_target(
 			ATTACK_COURT_MIN.y, ATTACK_COURT_MAX.y
 		),
 	)
+	var resolved_target := Vector2(target.x, 1.0 - target.y) if mirrored else target
 	return {
-		"target": target,
+		"target": resolved_target,
 		"direction": _attack_direction(contact.x, target),
 		"reason": "open floor" if aim == best_target else "hit their own line",
 	}

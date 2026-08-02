@@ -733,6 +733,41 @@ another angle rather than a separate defect.
 symmetric.** The next task is to finish mirroring the attack path, not to tune
 anything.
 
+### Mirroring the attack path did not fix the asymmetry
+
+Two differences were closed. `_choose_home_attack_target()` became
+`_choose_attack_target()`, taking defender positions and a mirror flag, so the
+opponent searches the floor for a gap through the same function instead of
+picking a depth band at random. And the opponent swing now receives the
+`Familiarity` geometry and execution terms the home swing always had.
+
+| | side-out | kill | atk err | stuff | touch | contacts | in band |
+|---|---|---|---|---|---|---|---|
+| before mirror | 0.500 | 0.542 | 0.075 | 0.033 | 0.354 | 6.99 | 7 of 8 |
+| after mirror | 0.539 | 0.522 | 0.079 | **0.016** | 0.237 | 7.28 | 6 of 8 |
+
+**The asymmetry barely moved: 115 home kills against 17 opponent ones, from
+117 against 13.** The sensitivity baseline came down from 0.779 to 0.707, so
+some of it was real, but the great majority was not these two differences.
+
+The remaining cause is structural rather than a constant, and it is now
+identified. **The opponent has no first-ball set path at all.** A home
+serve-receive set runs `SetterCapabilitySystem.evaluate()` -- tempo command
+against pass quality, pass recovery, contact height against reach, approach
+quality bought by arriving early. An opponent serve-receive set is resolved
+through `_resolve_opponent_transition()`, the same function used for a scramble
+three contacts into a rally, which subtracts `set_geometry.difficulty` and has
+no capability model. Every opponent attack in the game is therefore built off a
+transition set.
+
+That is not a coefficient to mirror. It is a missing path, and building it is
+the next task -- after which these numbers, and the role-sensitivity numbers,
+become worth reading for the first time.
+
+The failing regression check is the same imbalance from another angle: opponent
+attacks are too rare for a fixed seed window to sample the count it expects.
+Widening the window twice did not fix it, which is itself the evidence.
+
 ### Attack errors: the floor is structural, not the threshold
 
 Attack quality measures min 0.321 and 5th percentile 0.383, against an error
