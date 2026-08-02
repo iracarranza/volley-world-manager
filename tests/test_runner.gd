@@ -499,13 +499,19 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 
 func _test_career_calendar_generation_training_and_saves() -> void:
 	var fictional_regions := REGIONS_SCRIPT.names()
-	_check(fictional_regions.size() == 6 and "Landavol" in fictional_regions \
+	_check(fictional_regions.size() == 8 and "Landavol" in fictional_regions \
 			and "Spëddigh" in fictional_regions and "Pāwa Hitō" in fictional_regions \
 			and "Bloc du Larg" in fictional_regions and "Xérvu" in fictional_regions \
-			and "Taktikã" in fictional_regions,
-		"career creation exposes only the six confirmed fictional regions")
+			and "Taktikã" in fictional_regions and "Ispayk" in fictional_regions \
+			and "A'ace" in fictional_regions,
+		"career creation exposes only the eight confirmed fictional regions")
 	_check(REGIONS_SCRIPT.canonical_name("Europe") == "Landavol",
 		"legacy real-world region saves migrate to a fictional setting")
+	_check(
+		REGIONS_SCRIPT.canonical_name("Southeast Asia") == "Ispayk"
+			and REGIONS_SCRIPT.canonical_name("South America") == "Taktikã",
+		"legacy region labels migrate to the fictional region that actually matches them",
+	)
 	var second_year: Dictionary = CALENDAR_RULES_SCRIPT.state_for_week(49)
 	_check(int(second_year.year) == 2 and int(second_year.week_of_year) == 1,
 		"48-week calendar advances into a second career year")
@@ -5976,6 +5982,42 @@ func _test_attribute_first_generation() -> void:
 			and xervu_serve / xervu_count > landavol_serve / landavol_count_2 + 15.0
 			and taktika_tactical / taktika_count > landavol_tactical / landavol_count_2 + 15.0,
 		"attribute generation: Xérvu leads on serving and Taktikã on tactical attributes, both over Landavol",
+	)
+	## 2c. Ispayk specializes in setting (the one category no other region
+	## owned), A'ace spans a few glamour attributes across categories instead
+	## of one deep specialty -- both should still measurably lead Landavol.
+	var ispayk_setting := 0.0
+	var ispayk_count := 0
+	var aace_glamour := 0.0
+	var aace_count := 0
+	var landavol_setting := 0.0
+	var landavol_glamour := 0.0
+	var landavol_count_3 := 0
+	for seed_offset in range(4):
+		var ispayk_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Ispayk", "Club", 88250 + seed_offset * 1009
+		)
+		for player in ispayk_roster:
+			ispayk_setting += player.set_accuracy + player.set_disguise + player.tempo_control
+			ispayk_count += 1
+		var aace_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"A'ace", "Club", 88250 + seed_offset * 1009
+		)
+		for player in aace_roster:
+			aace_glamour += player.attack_power + player.serve_power + player.block_timing
+			aace_count += 1
+		var land_roster_3: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Club", 88250 + seed_offset * 1009
+		)
+		for player in land_roster_3:
+			landavol_setting += player.set_accuracy + player.set_disguise + player.tempo_control
+			landavol_glamour += player.attack_power + player.serve_power + player.block_timing
+			landavol_count_3 += 1
+	_check(
+		ispayk_count > 0 and aace_count > 0 and landavol_count_3 > 0
+			and ispayk_setting / ispayk_count > landavol_setting / landavol_count_3 + 15.0
+			and aace_glamour / aace_count > landavol_glamour / landavol_count_3 + 15.0,
+		"attribute generation: Ispayk leads on setting and A'ace on its glamour attributes, both over Landavol",
 	)
 	## 3. Development gap: young academy players have ability_score well below their potential.
 	var young_gap_found := false

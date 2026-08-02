@@ -30,9 +30,9 @@ Charter**. Volleyball was the sport chosen to anchor it, deliberately, because
 it was the sport that could actually meet the brief: a net, a ball, six
 players, and any reasonably flat surface -- no equipment barrier, no single
 nation's origin story to gatekeep it, playable competitively by very different
-bodies and climates. The Charter chartered one flagship academy per continent
-as a neutral, elite proving ground, and the sport grew into the role because
-it was built to fit it.
+bodies and climates. The Charter chartered six flagship academy slots, one
+per continent, as a neutral, elite proving ground, and the sport grew into the
+role because it was built to fit it.
 
 Academy managers being "arguably alien" predates and outlasts any single
 academy -- as far as anyone remembers, it's simply always been true of the
@@ -43,6 +43,14 @@ The Charter era's tournament is **the Sixnet Championship** (usually just
 the closest thing this world has to a World Cup. Winning it is the single
 biggest thing that can happen to a program; an up-and-coming academy's whole
 arc is measured by how far it is from Sixnet contention.
+
+**The six flagship slots aren't permanent.** They're contested, not owned --
+a legendary program can fall out of them, and a well-resourced newcomer can
+buy or work its way in. This is deliberate, established texture (see Ispayk
+and A'ace below), not an incidental detail: it means "region" and "current
+Sixnet flagship" are two different things, and the roster of eight playable
+regions doesn't need to shrink or grow in lockstep with who currently holds
+the six slots.
 
 ### Regional sporting culture
 
@@ -62,6 +70,17 @@ over, not anything modeled on real-world conflict:
 - **Landavol**, with no specialty, is chronically underestimated by scouts --
   and is where the circuit's most complete late bloomers tend to come from,
   since nobody trains them into one narrow box early.
+- **Ispayk vs. A'ace**: the circuit's other marquee rivalry, and its most
+  pointed -- old glory against new money. Ispayk invented the set-and-spike
+  and once held a flagship slot; it's since fallen out of Sixnet contention
+  and now competes on reputation, craft, and a threadbare budget, with a
+  crushing signature spike (a **bomba**, and the hitter who lands one a
+  **bomberino**) as the one thing that still travels. A'ace has existed for a
+  fraction of the time and already threatens to buy its way into the slot
+  Ispayk lost -- imported star talent across a few glamour positions,
+  essentially no homegrown tradition yet. Neither side is played as the
+  villain; it's a genuine, ongoing "does history or money deserve the last
+  flagship spot" argument the broadcasters never get tired of.
 
 ## What the manager actually does
 
@@ -126,21 +145,26 @@ whatever else gets invented later) are light-touch by design:
 ## Naming conventions already established
 
 Regions (`scripts/data/regions.gd`) follow a specific pattern, already applied
-to six regions (Pāwa Hitō, Spëddigh, Bloc du Larg, Landavol, Xérvu, Taktikã):
+to eight regions (Pāwa Hitō, Spëddigh, Bloc du Larg, Landavol, Xérvu, Taktikã,
+Ispayk, A'ace):
 
 - The **region name** is an English volleyball-related pun (Power Hitter,
-  Speed Dig, Block [the] Large, Land of Volleyball, Serve, Tactic[a])
-  respelled with foreign-looking diacritics or letters. It should look like a
-  different written language at a glance without borrowing real grammar,
-  prefixes, or suffixes from any actual language -- light cosmetic reskinning
-  of English, not a translation.
+  Speed Dig, Block [the] Large, Land of Volleyball, Serve, Tactic[a], Spike,
+  Ace) respelled with foreign-looking diacritics or letters. It should look
+  like a different written language at a glance without borrowing real
+  grammar, prefixes, or suffixes from any actual language -- light cosmetic
+  reskinning of English, not a translation. Ispayk is the one case that
+  borrows a real spelling *feature* rather than pure decoration -- the
+  epenthetic-i that Filipino English speakers themselves use affectionately
+  (iskul, istrart) -- but it's still a spelling quirk, not borrowed grammar.
 - The **people** from a region draw on a real, specific naming tradition
   matched to the region's flavor (Japanese for Pāwa Hitō, Nordic/Icelandic for
   Spëddigh, French for Bloc du Larg, a generic Northern/Central European blend
   for Landavol, West/Southern/East African for Xérvu, Quechua/Aymara/Mapuche
-  for Taktikã) -- real, respectful, attested given names, not invented
-  gibberish. This is where genuine cultural representation actually shows up
-  to the player, more than the place-name pun does.
+  for Taktikã, Filipino for Ispayk, Gulf Arab for A'ace) -- real, respectful,
+  attested given names, not invented gibberish. This is where genuine cultural
+  representation actually shows up to the player, more than the place-name
+  pun does.
 - Landavol is the deliberate no-lean region: flat ratings, no specialty bonus,
   zero physique bias. It exists so "generic/well-rounded" has a home instead
   of every region needing an identity.
@@ -168,9 +192,12 @@ depends on an answer, don't guess:
 - Is the Sixnet Championship annual or does it run on a longer cycle (some
   real elite tournaments are biennial or four-yearly)? Not needed until a
   feature actually models the competition calendar.
-- Below the six flagship academies, how does the regional-org-to-academy
-  pipeline actually work as a player-facing mechanic (is it visible at all
-  right now, or purely lore until recruitment/scouting needs it)?
-- Does every region eventually want a named signature rivalry pairing (Pāwa
-  Hitō/Bloc du Larg has one; the other four don't yet), or is an uneven spread
-  fine?
+- Below the flagship academies, how does the regional-org-to-academy pipeline
+  actually work as a player-facing mechanic (is it visible at all right now,
+  or purely lore until recruitment/scouting needs it)?
+- Now that flagship slots are established as contested rather than fixed
+  (see Ispayk/A'ace), does the player's own academy ever get a shot at
+  Sixnet contention as a mechanic, or does that stay aspirational flavor?
+- Spëddigh and Landavol don't have a named signature rival yet (Pāwa
+  Hitō/Bloc du Larg and Ispayk/A'ace do) -- worth inventing one each, or is
+  an uneven spread fine?

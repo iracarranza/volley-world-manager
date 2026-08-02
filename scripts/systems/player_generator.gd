@@ -27,18 +27,22 @@ const POSITIONS: Array[Dictionary] = [
 ## a slightly smaller-than-average profile reinforces that this specialty
 ## isn't won by size. Landavol stays at zero across the board: the one region
 ## with no physical lean at all, matching it now having no attribute
-## specialty either (see REGION_SPECIALTY below).
+## specialty either (see REGION_SPECIALTY below). Ispayk is lean rather than
+## bulky -- craft over size, matching a program built on setting touch and a
+## quick arm rather than raw mass. A'ace leans slightly positive across all
+## three: assembled, well-resourced athletes rather than a developed body
+## type of its own.
 const REGION_HEIGHT_BIAS := {
 	"Pāwa Hitō": 4.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
-	"Xérvu": 1.0, "Taktikã": -1.0,
+	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 0.0, "A'ace": 1.0,
 }
 const REGION_MASS_BIAS := {
 	"Pāwa Hitō": 5.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
-	"Xérvu": 0.0, "Taktikã": -1.0,
+	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": -1.0, "A'ace": 1.0,
 }
 const REGION_WINGSPAN_BIAS := {
 	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
-	"Xérvu": 2.0, "Taktikã": 0.0,
+	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 1.0, "A'ace": 1.0,
 }
 
 ## Attributes that receive a +8 specialty bonus for players from each region.
@@ -53,6 +57,15 @@ const REGION_WINGSPAN_BIAS := {
 ##
 ## Landavol has no specialty at all: it is deliberately the generic, no-lean
 ## region, so every attribute develops purely on role and talent there.
+##
+## Ispayk owns Setting & Ball Control -- the one wheel category that no
+## region specialized in before -- plus attack_power and shot_variety for the
+## "and spike" half of its set-and-spike identity. A'ace deliberately gets
+## only three attributes spanning three different categories (attack_power,
+## serve_power, block_timing) rather than one deep specialty: it represents
+## assembled star talent across a few glamour positions bought in with money,
+## not a systemic developmental identity the way every other region's
+## specialty represents an actual local training tradition.
 const REGION_SPECIALTY := {
 	"Pāwa Hitō": ["attack_power", "block_timing", "jump_reach", "explosiveness"],
 	"Spëddigh": ["acceleration", "lateral_speed", "reception_balance", "reception_stability", "dig_control"],
@@ -62,6 +75,9 @@ const REGION_SPECIALTY := {
 		"serve_aggression", "serve_variation"],
 	"Taktikã": ["decision_making", "composure", "tactical_discipline", "improvisation",
 		"adaptability", "unpredictability"],
+	"Ispayk": ["set_accuracy", "set_disguise", "tempo_control", "hand_control",
+		"attack_power", "shot_variety"],
+	"A'ace": ["attack_power", "serve_power", "block_timing"],
 }
 
 ## Secondary role attributes receive a +5 bonus: the supporting skills a role

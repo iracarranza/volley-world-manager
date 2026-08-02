@@ -14,12 +14,16 @@ const DEFINITIONS := {
 		"physical": 2, "technical": 4, "mental": 1, "names": ["Kofi", "Amara", "Zola", "Kwame", "Aziza", "Tendai", "Njeri", "Baraka"]},
 	"Taktikã": {"tagline": "Tactical schools reward game intelligence, adaptable systems and unpredictable distribution.",
 		"physical": 1, "technical": 1, "mental": 4, "names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"]},
+	"Ispayk": {"tagline": "Once a Sixnet flagship, now a proud, cash-strapped program clawing back toward relevance -- birthplace of the set-and-spike, where a crushing bomba can still turn a scrappy hitter into a bomberino overnight.",
+		"physical": 2, "technical": 4, "mental": 2, "names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"]},
+	"A'ace": {"tagline": "The circuit's newest flagship-in-waiting, buying in overnight the star talent a young program hasn't had time to grow -- all the resources, none of the history.",
+		"physical": 3, "technical": 2, "mental": 1, "names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"]},
 }
 
 const LEGACY_REGIONS := {
-	"East Asia": "Pāwa Hitō", "Southeast Asia": "Spëddigh",
+	"East Asia": "Pāwa Hitō", "Southeast Asia": "Ispayk",
 	"Europe": "Landavol", "North America": "Pāwa Hitō",
-	"South America": "Spëddigh",
+	"South America": "Taktikã",
 }
 
 
