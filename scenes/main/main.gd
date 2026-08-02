@@ -125,7 +125,7 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var set_captain_button: Button = %SetCaptainButton
 @onready var set_libero_button: Button = %SetLiberoButton
 @onready var depth_chart_label: Label = %DepthChartLabel
-@onready var match_screen: MatchScreen = $MatchScreen  # Or %MatchScreen if using unique names
+@onready var match_screen: MatchScreen = $MatchScreen
 
 var selected_player_id: int = -1
 var draft_play: OffensivePlay
@@ -2285,14 +2285,16 @@ func _update_status_color() -> void:
 	else:
 		status_label.modulate = Color("176b45") if light_mode_enabled else Color("8ee5aa")
 
-## Called when a rally finishes simulation to trigger 3D playback
+## Called when a rally finishes simulation to trigger 3D playback.
+##
+## The null guard stays because 3D playback is deprioritised rather than
+## removed (`docs/textbook/STATUS.md`), so this has to tolerate the screen
+## being absent. It no longer prints: the surrounding `DEBUG 1/2/3` traces
+## and an `ERROR: match_screen is NULL!` line fired on *every* rally, and
+## because the MatchScreen node was genuinely missing, the error branch was
+## the one that ran -- shipping a false alarm to the console for every point
+## played.
 func _on_rally_completed(rally_result: RallyResult) -> void:
-	print("--- DEBUG 1: _on_rally_completed called ---")
-	print("match_screen reference: ", match_screen)
-
-	if match_screen != null:
-		print("--- DEBUG 2: Calling load_and_play_rally ---")
-		await match_screen.load_and_play_rally(rally_result)
-		print("--- DEBUG 3: load_and_play_rally finished ---")
-	else:
-		print("ERROR: match_screen is NULL!")
+	if match_screen == null:
+		return
+	await match_screen.load_and_play_rally(rally_result)
