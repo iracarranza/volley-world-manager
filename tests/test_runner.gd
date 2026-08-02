@@ -550,11 +550,20 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_check(summary_profile.size() == 6 and ATTRIBUTE_PROFILE_SCRIPT.grade(85.0) == "S" \
 			and ATTRIBUTE_PROFILE_SCRIPT.grade(39.0) == "D",
 		"player profile summarizes six graded categories from detailed wheels")
-	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 6,
-		"Mental and Tactical remains a six-point wheel with derived Reading and Adaptability")
+	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 7
+			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical")
+				.has("Court Vision")
+			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical")
+				.has("Anticipation"),
+		"Mental and Tactical splits Court Vision and Anticipation into standalone axes")
 	_check(
 		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Attacking").has("Accuracy"),
 		"attack_accuracy is a visible axis, not an attribute added after the wheel existed",
+	)
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Attacking").has("Tooling")
+			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Attacking").has("Feinting"),
+		"Tooling and Feinting are standalone axes, not averaged into one Deception axis",
 	)
 	## `CATEGORY_ATTRIBUTES` is the one place every raw ability attribute is
 	## assigned a category, read by both the wheel and the raw-attribute text
@@ -582,20 +591,26 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 			and categorized.size() == VolleyballPlayer.ABILITY_ATTRIBUTES.size(),
 		"every ability attribute belongs to exactly one wheel category, and only one",
 	)
-	## Every detailed wheel has exactly six axes -- Attacking used to have
-	## seven until Tooling and Feinting were merged into one Deception axis to
-	## make room for Accuracy. A category-specific count check would not catch
-	## a future category quietly growing to seven again; this checks all of
-	## them by construction.
-	var all_profiles_have_six_axes := true
-	for profile_name in ATTRIBUTE_PROFILE_SCRIPT.PROFILE_NAMES:
-		if profile_name == "Player Profile":
-			continue
-		if ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], profile_name).size() != 6:
-			all_profiles_have_six_axes = false
+	## Six axes is the default per category, not a rule this enforces uniformly:
+	## Attacking and Mental & Tactical carry seven because Tooling/Feinting and
+	## Court Vision/Anticipation are each two independently-specializable
+	## skills that a single averaged axis would hide (a highly technical hitter
+	## can favor one of Tooling/Feinting over the other; a player can read the
+	## floor well without reliably anticipating one attacker, or vice versa).
+	## This pins the expected count per category so a future change that
+	## silently merges or splits an axis is caught either direction.
+	var expected_axis_counts := {
+		"Attacking": 7, "Defensive": 6, "Setting & Ball Control": 6,
+		"Physical": 6, "Serving": 6, "Mental & Tactical": 7,
+	}
+	var axis_counts_match_expected := true
+	for profile_name in expected_axis_counts:
+		if ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], profile_name).size() \
+				!= expected_axis_counts[profile_name]:
+			axis_counts_match_expected = false
 	_check(
-		all_profiles_have_six_axes,
-		"every detailed wheel category has exactly six axes",
+		axis_counts_match_expected,
+		"every detailed wheel category has its expected axis count",
 	)
 	## Ceilings are what a potential wheel reads. A freshly generated player is
 	## not fully developed (`_attribute_reserve()` subtracts a positive amount
@@ -5754,7 +5769,7 @@ func _test_physical_body_attributes() -> void:
 	broad_range.lateral_speed = 85
 	broad_range.anticipation = 85
 	_check(broad_range.baseline_defensive_range() > limited_range.baseline_defensive_range(),
-		"displayed defensive range is derived from movement, anticipation, and reach")
+		"displayed defensive range is derived from movement and reach, not anticipation")
 	var zone := DefensiveZone.new()
 	zone.center = Vector2(0.20, 0.84)
 	zone.radius_meters = 4.0

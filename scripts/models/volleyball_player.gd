@@ -166,14 +166,21 @@ func usable_attack_power(overrides: Dictionary = {}) -> int:
 		+ float(overrides.get("approach_timing", approach_timing)) * 0.15), 1, 100)
 
 
+## Deliberately excludes `anticipation`: reading the play is a mental skill
+## with its own axis on the Mental & Tactical wheel, and folding it in here
+## would hide a player who covers court well but reads poorly (or vice versa)
+## behind one blended number. What remains -- acceleration, lateral speed,
+## reach, ball control, stamina -- converges on a single physical question,
+## how much court this player can actually get to and keep in play, the same
+## way `usable_attack_power` converges several physical inputs into one
+## hitting-power reading, so it stays merged.
 func baseline_defensive_range(overrides: Dictionary = {}) -> int:
 	var reach := clampf(inverse_lerp(190.0, 280.0, standing_reach_cm()) * 100.0, 1.0, 100.0)
 	return clampi(roundi(
-		float(overrides.get("acceleration", acceleration)) * 0.22 \
-		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.24 \
-		+ float(overrides.get("anticipation", anticipation)) * 0.22 + reach * 0.14 \
-		+ float(overrides.get("ball_control", ball_control)) * 0.08 \
-		+ float(overrides.get("stamina", stamina)) * 0.10), 1, 100)
+		float(overrides.get("acceleration", acceleration)) * 0.28 \
+		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.31 + reach * 0.18 \
+		+ float(overrides.get("ball_control", ball_control)) * 0.10 \
+		+ float(overrides.get("stamina", stamina)) * 0.13), 1, 100)
 
 
 ## Default stride for a player of this height. Roughly 0.43x standing height,

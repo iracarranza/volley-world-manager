@@ -7,12 +7,12 @@ const PROFILE_NAMES: Array[String] = [
 ]
 
 const PROFILE_TOOLTIPS := {
-	"Attacking": "Power, accuracy, deception, finesse, approach timing and shot variety.",
+	"Attacking": "Power, accuracy, tooling, feinting, finesse, approach timing and shot variety.",
 	"Defensive": "Reception technique, balance, stability, range, block timing and dig control.",
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise and hand control.",
 	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity and stamina.",
 	"Serving": "Power, technique, placement, consistency, aggression and variation.",
-	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline and improvisation.",
+	"Mental / Tactical": "Court vision, anticipation, decision making, composure, discipline, improvisation and adaptability.",
 }
 
 ## The one place every raw ability attribute is assigned to a category. Every
@@ -72,10 +72,19 @@ static func grade(score: float) -> String:
 	return "D"
 
 
-## One raw attribute or one derived composite, per category, always exactly
-## six per category -- every detailed wheel view has the same number of axes,
-## which is what lets a player be compared across categories at a glance rather
-## than each one having its own irregular shape.
+## One raw attribute or one derived composite, per category. Six axes per
+## category is the default, not a rule enforced here: an axis only exists to
+## let a player be compared at a glance, and that only works if each axis
+## names one independently-variable skill. Attacking and Mental & Tactical
+## carry seven because splitting Tooling/Feinting and Court Vision/Anticipation
+## back into standalone axes takes priority over a uniform axis count --
+## averaging either pair hides a real specialization choice (a player can be
+## a highly technical hitter who tools well but rarely feints, or vice versa;
+## the same holds for reading the whole floor versus predicting one attacker's
+## next swing). Composites that remain -- Power, Defensive Range -- combine
+## several inputs into one physically-converged output (how hard the ball
+## comes off the hand, how much court gets covered and kept in play) rather
+## than standing in for two alternative skills, which is why those stay merged.
 ##
 ## `use_ceilings` reads this player's generated per-attribute ceilings
 ## (`VolleyballPlayer.attribute_ceilings`) instead of their current developed
@@ -123,7 +132,15 @@ static func detailed_profile(
 				"Serve Aggression": raw.call("serve_aggression"),
 				"Serve Variation": raw.call("serve_variation")}
 		"Mental & Tactical":
-			return {"Reading": roundi((raw.call("court_vision") + raw.call("anticipation")) / 2.0),
+			## Court Vision and Anticipation used to average into one "Reading"
+			## axis. Both are game-sense attributes, but not the same skill:
+			## court vision is spatial awareness of the whole floor, anticipation
+			## is predicting one opponent's next action. A player can read the
+			## floor well and still get sold on an attacker's shot, or vice
+			## versa -- averaging them hid that a player could specialize in
+			## either independently, so each gets its own axis.
+			return {"Court Vision": raw.call("court_vision"),
+				"Anticipation": raw.call("anticipation"),
 				"Decision Making": raw.call("decision_making"),
 				"Composure": raw.call("composure"),
 				"Tactical Discipline": raw.call("tactical_discipline"),
@@ -131,18 +148,22 @@ static func detailed_profile(
 				"Adaptability": raw.call("adaptability")}
 		_:
 			## "Power" replaces attack_power/arm_speed with the composite that
-			## actually reflects usable hitting power. "Deception" replaces
-			## the separate Tooling and Feinting axes with their average: both
-			## describe manipulating what the block reads before contact, and
-			## keeping them apart was the only reason this category had seven
-			## axes instead of six. Accuracy is a new axis, not folded into
-			## anything -- it did not exist as an attribute when this section
-			## was first built and was never added afterward, leaving it
-			## invisible despite being a primary attribute for three of the
-			## five positions.
+			## actually reflects usable hitting power -- several physical
+			## inputs converging on one measurable output, not two alternative
+			## skills, which is why it stays merged. Tooling and Feinting used
+			## to average into one "Deception" axis; both are about
+			## manipulating what the block reads before contact, but a highly
+			## technical hitter can lean on one and rarely use the other --
+			## averaging them hid that a player could specialize in either
+			## independently, so each is its own axis again. Accuracy is a new
+			## axis, not folded into anything -- it did not exist as an
+			## attribute when this section was first built and was never added
+			## afterward, leaving it invisible despite being a primary
+			## attribute for three of the five positions.
 			return {"Power": player.usable_attack_power(source),
 				"Accuracy": raw.call("attack_accuracy"),
-				"Deception": roundi((raw.call("tooling") + raw.call("feinting")) / 2.0),
+				"Tooling": raw.call("tooling"),
+				"Feinting": raw.call("feinting"),
 				"Finesse": raw.call("finesse"),
 				"Approach Timing": raw.call("approach_timing"),
 				"Shot Variety": raw.call("shot_variety")}

@@ -11,14 +11,15 @@ const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const WHEEL_TOOLTIPS := {
 	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
-	"Deception": "Selling a full attack before tipping, wiping, or rolling, and deliberately using blockers' hands to score or create an advantageous deflection.",
+	"Tooling": "Deliberately using a blocker's hands to score or create an advantageous deflection.",
+	"Feinting": "Selling a full attack before tipping, wiping, or rolling to disguise a soft shot.",
 	"Finesse": "Precise control of placement, depth, angle, and touch.",
 	"Approach Timing": "Arriving in a balanced hitting window relative to the set.",
 	"Shot Variety": "The number of credible attack solutions available to the player.",
 	"Reception Technique": "Platform angle and directional control on ordinary contacts.",
 	"Reception Balance": "Maintaining platform quality while moving, reaching, or contacting near the edge of range.",
 	"Reception Stability": "Withstanding high ball speed without the platform breaking down.",
-	"Defensive Range": "Baseline range derived from movement, anticipation, reach, control, and stamina; actual rally range also depends on ball-flight time and position.",
+	"Defensive Range": "Baseline range derived from movement, reach, ball control, and stamina; actual rally range also depends on ball-flight time, position, and reading the play (see Anticipation).",
 	"Block Timing": "Matching jump and hand penetration to the attacker's contact.",
 	"Dig Control": "Turning a defensive touch into a playable ball rather than merely making contact.",
 	"Set Accuracy": "Delivering the ball to the intended contact window.",
@@ -40,6 +41,13 @@ const WHEEL_TOOLTIPS := {
 	"Serve Aggression": "Natural willingness and ability to increase pressure at greater risk.",
 	"Serve Variation": "Ability to vary trajectory, pace, depth and serve type.",
 	"Accuracy": "Precision hitting the intended target rather than merely clearing the block.",
+	"Court Vision": "Spatial awareness of teammates, opponents, and open court.",
+	"Anticipation": "Predicting a specific opponent's next action before contact.",
+	"Decision Making": "Choosing the right option under time pressure.",
+	"Composure": "Maintaining execution quality under pressure or after a mistake.",
+	"Tactical Discipline": "Sticking to assignment and system rather than improvising off-plan.",
+	"Improvisation": "Generating an effective solution outside of trained patterns.",
+	"Adaptability": "Adjusting to an opponent's tendencies and in-match changes.",
 }
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
