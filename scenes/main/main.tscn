@@ -259,6 +259,91 @@ layout_mode = 2
 size_flags_vertical = 3
 autowrap_mode = 2
 
+[node name="DebugPopup" type="PopupPanel" parent="." unique_id=1774100211]
+unique_name_in_owner = true
+title = "Developer Diagnostics"
+size = Vector2i(760, 520)
+
+[node name="DebugMargin" type="MarginContainer" parent="DebugPopup" unique_id=1774100212]
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 756.0
+offset_bottom = 516.0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="DebugScroll" type="ScrollContainer" parent="DebugPopup/DebugMargin" unique_id=1774100213]
+layout_mode = 2
+
+[node name="DebugContent" type="VBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll" unique_id=1774100214]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+
+[node name="ShadowDebugControls" type="VBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent" unique_id=1498778937]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ControlRow" type="HBoxContainer" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls" unique_id=1251183933]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ShadowOverlayMenu" type="MenuButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/ControlRow" unique_id=355052672]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose which developer evidence is drawn over the 2D court."
+text = "Overlay Layers"
+
+[node name="ShadowDebugSeedEdit" type="LineEdit" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/ControlRow" unique_id=1830132776]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(76, 0)
+layout_mode = 2
+tooltip_text = "Fixed deterministic rally seed."
+text = "1001"
+placeholder_text = "Seed"
+
+[node name="ShadowDebugFixtureOption" type="OptionButton" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/ControlRow" unique_id=1962756674]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+tooltip_text = "Temporarily applies a deterministic diagnostic setup without saving it."
+
+[node name="RunShadowDebugButton" type="Button" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls/ControlRow" unique_id=1872930465]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Debug Seed"
+
+[node name="ShadowOverlayLegend" type="Label" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent/ShadowDebugControls" unique_id=1849707946]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.72, 0.82, 1)
+text = "Purple: pass/target · Green: intended preparation · Cyan: actual response · Yellow: ownership handoff"
+autowrap_mode = 2
+
+[node name="ShadowReceptionLabel" type="Label" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent" unique_id=404857191]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(330, 132)
+layout_mode = 2
+tooltip_text = "Developer-only comparison between legacy reception ownership and the persistent perception/movement model."
+theme_override_colors/font_color = Color(0.38, 0.71, 1, 1)
+text = "SHADOW RECEPTION · Run an opponent serve rally."
+autowrap_mode = 2
+
+[node name="PhysicalDebugLabel" type="Label" parent="DebugPopup/DebugMargin/DebugScroll/DebugContent" unique_id=370526365]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(330, 92)
+layout_mode = 2
+tooltip_text = "Temporary debug readout for body geometry, movement, jump and reception-body attributes."
+theme_override_colors/font_color = Color(0.62, 0.72, 0.84, 1)
+text = "PHYSICAL DEBUG · Select a player marker."
+autowrap_mode = 2
+
 [node name="Margin" type="MarginContainer" parent="." unique_id=1628029922]
 layout_mode = 1
 anchors_preset = 15
@@ -275,9 +360,10 @@ grow_vertical = 2
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Header" type="HBoxContainer" parent="Margin/Content" unique_id=878462249]
+[node name="Header" type="HFlowContainer" parent="Margin/Content" unique_id=878462249]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/h_separation = 14
+theme_override_constants/v_separation = 6
 
 [node name="Title" type="Label" parent="Margin/Content/Header" unique_id=266073820]
 layout_mode = 2
@@ -311,15 +397,24 @@ custom_minimum_size = Vector2(120, 36)
 layout_mode = 2
 text = "Team & Roster"
 
+[node name="DebugPopupButton" type="Button" parent="Margin/Content/Header" unique_id=1774100215]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(96, 36)
+layout_mode = 2
+tooltip_text = "Developer diagnostics. Debug builds only."
+text = "Debug"
+
 [node name="ReturnCareerButton" type="Button" parent="Margin/Content/Header" unique_id=1614843933]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 36)
 layout_mode = 2
 text = "Career Home"
 
-[node name="QuickRallyBar" type="HBoxContainer" parent="Margin/Content" unique_id=397876992]
+[node name="QuickRallyBar" type="HFlowContainer" parent="Margin/Content" unique_id=397876992]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 6
 
 [node name="QuickRallyLabel" type="Label" parent="Margin/Content/QuickRallyBar" unique_id=920228082]
 layout_mode = 2
@@ -897,67 +992,6 @@ visible = false
 custom_minimum_size = Vector2(330, 72)
 layout_mode = 2
 text = "Key factors"
-autowrap_mode = 2
-
-[node name="ShadowDebugControls" type="VBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=1498778937]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_constants/separation = 5
-
-[node name="ControlRow" type="HBoxContainer" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls" unique_id=1251183933]
-layout_mode = 2
-theme_override_constants/separation = 5
-
-[node name="ShadowOverlayMenu" type="MenuButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=355052672]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "Choose which developer evidence is drawn over the 2D court."
-text = "Overlay Layers"
-
-[node name="ShadowDebugSeedEdit" type="LineEdit" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=1830132776]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(76, 0)
-layout_mode = 2
-tooltip_text = "Fixed deterministic rally seed."
-text = "1001"
-placeholder_text = "Seed"
-
-[node name="ShadowDebugFixtureOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=1962756674]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 0)
-layout_mode = 2
-tooltip_text = "Temporarily applies a deterministic diagnostic setup without saving it."
-
-[node name="RunShadowDebugButton" type="Button" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls/ControlRow" unique_id=1872930465]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Run Debug Seed"
-
-[node name="ShadowOverlayLegend" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/ShadowDebugControls" unique_id=1849707946]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.65, 0.72, 0.82, 1)
-text = "Purple: pass/target · Green: intended preparation · Cyan: actual response · Yellow: ownership handoff"
-autowrap_mode = 2
-
-[node name="ShadowReceptionLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=404857191]
-unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(330, 132)
-layout_mode = 2
-tooltip_text = "Developer-only comparison between legacy reception ownership and the persistent perception/movement model."
-theme_override_colors/font_color = Color(0.38, 0.71, 1, 1)
-text = "SHADOW RECEPTION · Run an opponent serve rally."
-autowrap_mode = 2
-
-[node name="PhysicalDebugLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor" unique_id=370526365]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(330, 92)
-layout_mode = 2
-tooltip_text = "Temporary debug readout for body geometry, movement, jump and reception-body attributes."
-theme_override_colors/font_color = Color(0.62, 0.72, 0.84, 1)
-text = "PHYSICAL DEBUG · Select a player marker."
 autowrap_mode = 2
 
 [node name="StatusLabel" type="Label" parent="Margin/Content" unique_id=666777341]

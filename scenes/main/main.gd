@@ -40,6 +40,8 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var rally_result_explanation: Label = %RallyResultExplanation
 @onready var rally_result_factors: Label = %RallyResultFactors
 @onready var shadow_reception_label: Label = %ShadowReceptionLabel
+@onready var debug_popup: PopupPanel = %DebugPopup
+@onready var debug_popup_button: Button = %DebugPopupButton
 @onready var shadow_debug_controls: VBoxContainer = %ShadowDebugControls
 @onready var shadow_overlay_menu: MenuButton = %ShadowOverlayMenu
 @onready var shadow_debug_seed_edit: LineEdit = %ShadowDebugSeedEdit
@@ -148,8 +150,17 @@ var visualization_layers: int = TacticalCourt.VISUAL_ALL
 
 
 func _ready() -> void:
+	## Developer diagnostics live in their own window rather than inside the
+	## tactical planner. They were three panels deep in the editor scroll, which
+	## put shadow-overlay controls and a physical-attribute readout in the same
+	## column a coach uses to set a defensive plan.
 	shadow_reception_label.visible = OS.is_debug_build()
 	shadow_debug_controls.visible = OS.is_debug_build()
+	debug_popup_button.visible = OS.is_debug_build()
+	## Manual rotation selection is a debug affordance. In a match the rotation
+	## follows the score; being able to set it by hand mid-match is useful for
+	## reproducing a rally and is not something to ship.
+	rotation_option.visible = OS.is_debug_build()
 	get_viewport().size_changed.connect(_update_interface_scale)
 	_populate_static_options()
 	theme_toggle.toggled.connect(_apply_light_mode)
@@ -168,6 +179,7 @@ func _ready() -> void:
 	resolve_rally_button.pressed.connect(_resolve_rally)
 	replay_rally_button.pressed.connect(_replay_last_rally)
 	run_shadow_debug_button.pressed.connect(_run_shadow_debug_fixture)
+	debug_popup_button.pressed.connect(_open_debug_popup)
 	skip_playback_button.pressed.connect(_skip_rally_playback)
 	reset_positions_button.pressed.connect(_reset_tactical_positions)
 	popup_apply_button.pressed.connect(_apply_popup_assignment)
@@ -335,6 +347,12 @@ func _populate_static_options() -> void:
 	floor_section_option.clear()
 	floor_section_option.add_item("Positioning & Zones")
 	floor_section_option.add_item("Player Duties")
+
+
+## Centres the diagnostics window on the match screen rather than the desktop
+## origin, matching how the roster and tactical popups are placed.
+func _open_debug_popup() -> void:
+	debug_popup.popup_centered(Vector2i(760, 520))
 
 
 func _setup_shadow_debug_controls() -> void:
