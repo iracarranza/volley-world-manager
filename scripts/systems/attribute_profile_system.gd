@@ -9,7 +9,7 @@ const PROFILE_NAMES: Array[String] = [
 const PROFILE_TOOLTIPS := {
 	"Attacking": "Power, accuracy, tooling, feinting, finesse, approach timing and shot variety.",
 	"Defensive": "Reception technique, balance, stability, range, ball control, block timing and dig control.",
-	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise and hand control.",
+	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise, hand control and unpredictability.",
 	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity, stamina and reach.",
 	"Serving": "Power, technique, placement, consistency, aggression, variation and repertoire.",
 	"Mental / Tactical": "Court vision, anticipation, decision making, composure, discipline, improvisation and adaptability.",
@@ -43,7 +43,7 @@ const CATEGORY_ATTRIBUTES := {
 	],
 	"Setting & Ball Control": [
 		"set_accuracy", "set_balance", "set_stability", "tempo_control",
-		"set_disguise", "hand_control",
+		"set_disguise", "hand_control", "unpredictability",
 	],
 	"Physical": [
 		"acceleration", "lateral_speed", "transition_speed", "explosiveness",
@@ -83,11 +83,16 @@ static func grade(score: float) -> String:
 ## remain -- Power, Defensive Range -- combine several inputs into one
 ## physically-converged output (how hard the ball comes off the hand, how much
 ## court gets covered) rather than standing in for two alternative skills,
-## which is why those stay merged. Setting & Ball Control is the one holdout
-## at six: unlike the others, none of its six attributes are folded into a
-## composite and nothing else about a setter is already tracked anywhere else
-## in the game to surface as a seventh -- reaching seven there would mean
-## inventing a new attribute rather than exposing a real one.
+## which is why those stay merged. Setting & Ball Control reaches seven with
+## Unpredictability, a genuinely new attribute rather than exposed existing
+## data: every other category here reads as mostly physical or technical, and
+## setting is arguably the most cognitively demanding position on the floor,
+## so its wheel should reflect that. It is deliberately not folded into
+## Set Disguise (a single-contact skill masking one release's mechanics):
+## Unpredictability is a pattern read over many decisions across a match --
+## varying tempo and target selection rather than falling into readable
+## habits -- and ages like a Mental & Tactical attribute (grows with
+## experience) rather than a technical one.
 ##
 ## `use_ceilings` reads this player's generated per-attribute ceilings
 ## (`VolleyballPlayer.attribute_ceilings`) instead of their current developed
@@ -127,7 +132,8 @@ static func detailed_profile(
 				"Set Stability": raw.call("set_stability"),
 				"Tempo Control": raw.call("tempo_control"),
 				"Set Disguise": raw.call("set_disguise"),
-				"Hand Control": raw.call("hand_control")}
+				"Hand Control": raw.call("hand_control"),
+				"Unpredictability": raw.call("unpredictability")}
 		"Physical":
 			## Reach was never shown on this wheel even though it already
 			## feeds Power and Defensive Range as a normalized rating -- a

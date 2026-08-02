@@ -77,6 +77,12 @@ extends Resource
 @export_range(1, 100) var composure: int = 50
 @export_range(1, 100) var tactical_discipline: int = 50
 @export_range(1, 100) var improvisation: int = 50
+## How hard this setter's distribution pattern is to scout across a whole
+## match -- varying tempo and target selection rather than falling into
+## readable habits. A single-contact skill would live in the "Technical"
+## category above (see `set_disguise`, which masks one release's mechanics);
+## this is a pattern read over many decisions, so it belongs here instead.
+@export_range(1, 100) var unpredictability: int = 50
 
 @export_category("State")
 @export_range(0.0, 1.0) var fatigue: float = 0.0
@@ -97,13 +103,13 @@ const ABILITY_ATTRIBUTES: Array[String] = [
 	"stamina", "arm_speed", "serve_power", "serve_technique", "serve_placement",
 	"serve_consistency", "serve_aggression", "serve_variation", "reception", "reception_balance",
 	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
-	"set_disguise", "hand_control", "attack_power", "attack_accuracy", "approach_timing",
+	"set_disguise", "hand_control", "unpredictability", "attack_power", "attack_accuracy", "approach_timing",
 	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
 	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation", "adaptability",
 ]
 
 const POSITION_WEIGHTS := {
-	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "court_vision", "decision_making"],
+	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making"],
 	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance"],
 	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation"],
 	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "tooling", "shot_variety", "block_timing", "serve_power"],
@@ -318,6 +324,7 @@ func to_dict() -> Dictionary:
 		"tempo_control": tempo_control,
 		"set_disguise": set_disguise,
 		"hand_control": hand_control,
+		"unpredictability": unpredictability,
 		"attack_power": attack_power,
 		"attack_accuracy": attack_accuracy,
 		"approach_timing": approach_timing,
@@ -344,6 +351,7 @@ func to_dict() -> Dictionary:
 		"position_familiarity": position_familiarity.duplicate(true),
 		"situation_experience": situation_experience.duplicate(true),
 		"position_training_target": position_training_target,
+		"attribute_ceilings": attribute_ceilings.duplicate(true),
 	}
 
 
@@ -367,6 +375,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 		"stamina", "arm_speed", "serve_power", "serve_accuracy", "reception",
 		"reception_balance", "reception_stability",
 		"set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control",
+		"unpredictability",
 		"attack_power", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety",
 		"block_timing", "ball_control", "dig_control", "court_vision", "anticipation",
 		"decision_making", "composure", "tactical_discipline", "improvisation",
@@ -395,6 +404,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.stride_length_m = clampf(float(
 		data.get("stride_length_m", player.default_stride_length_m())
 	), 0.55, 1.15)
+	player.attribute_ceilings = Dictionary(data.get("attribute_ceilings", {})).duplicate(true)
 	player.refresh_system_fit_profiles()
 	return player
 

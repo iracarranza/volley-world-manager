@@ -29,6 +29,7 @@ const WHEEL_TOOLTIPS := {
 	"Tempo Control": "Controlling release timing and the attacker's contact rhythm.",
 	"Set Disguise": "Hiding the intended target and release direction.",
 	"Hand Control": "Fine manipulation of height, spin, and touch on overhead contacts.",
+	"Unpredictability": "Varying tempo and target selection across a match rather than falling into readable distribution patterns.",
 	"Acceleration": "How quickly the player reaches useful movement speed.",
 	"Lateral Speed": "Side-to-side movement speed used in blocking and floor defense.",
 	"Transition Speed": "Speed moving between phases and into an approach.",

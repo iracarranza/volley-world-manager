@@ -34,7 +34,8 @@ const REGION_SPECIALTY := {
 	"Pāwa Hitō": ["attack_power", "block_timing", "jump_reach", "explosiveness", "serve_power"],
 	"Spëddigh": ["acceleration", "lateral_speed", "reception_balance", "reception_stability", "dig_control"],
 	"Bloc du Larg": ["block_timing", "ball_control", "court_vision", "anticipation", "tactical_discipline"],
-	"Landavol": ["decision_making", "composure", "set_accuracy", "reception", "adaptability"],
+	"Landavol": ["decision_making", "composure", "set_accuracy", "reception", "adaptability",
+		"unpredictability"],
 }
 
 ## Secondary role attributes receive a +5 bonus: the supporting skills a role
@@ -111,7 +112,7 @@ const PHYSICAL_ATTRIBUTES: Array[String] = [
 ## Attributes that keep improving for as long as a player keeps playing.
 const MENTAL_ATTRIBUTES: Array[String] = [
 	"court_vision", "anticipation", "decision_making", "composure",
-	"tactical_discipline", "improvisation", "adaptability",
+	"tactical_discipline", "improvisation", "adaptability", "unpredictability",
 ]
 
 ## Age at which physical qualities stop improving and begin to fade.
