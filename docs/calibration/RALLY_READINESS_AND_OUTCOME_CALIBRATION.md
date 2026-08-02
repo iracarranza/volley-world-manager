@@ -16,21 +16,23 @@ current state; read the rest for why a constant is what it is.
 
 | metric | measured | band | |
 |---|---|---|---|
-| side-out rate | 0.539 | 0.58 – 0.78 | outside |
+| side-out rate | 0.578 | 0.58 – 0.78 | 0.002 short |
 | ace rate | 0.039 | 0.02 – 0.10 | ok |
 | serve error rate | 0.094 | 0.08 – 0.20 | ok |
-| kill rate | 0.522 | 0.38 – 0.60 | ok |
-| attack error rate | 0.079 | 0.06 – 0.20 | ok |
-| stuff rate | 0.016 | 0.03 – 0.14 | outside |
-| block touch rate | 0.237 | 0.15 – 0.45 | ok |
-| mean contacts | 7.28 | 4.0 – 9.0 | ok |
+| kill rate | 0.517 | 0.38 – 0.60 | ok |
+| attack error rate | 0.179 | 0.06 – 0.20 | ok |
+| stuff rate | 0.080 | 0.03 – 0.14 | ok |
+| block touch rate | 0.428 | 0.15 – 0.45 | ok |
+| mean contacts | 5.88 | 4.0 – 9.0 | ok |
 
-**Do not quote these as balance results.** The home attack wins 87% of the
-points (`home_attack_share` 0.871, 115 kills to 17). The distributions look like
-volleyball because one side is dominating, so every rate here is the average of
-a strong team and a weak one. The constants that produced them --
-`BLOCK_ASSIST_SHARE`, the three block contest margins, `DIG_ATTACKER_ADVANTAGE`,
-`DIG_SOLO_SHARE` -- were all fitted against that imbalance and are provisional.
+**Seven of eight, and the sides are even**: `home_attack_share` is 0.567, from
+59 home kills against 45 opponent ones. It was 0.871 before the opponent had a
+first-ball set path. These are the first numbers on this page that describe the
+sport rather than one team beating another.
+
+The block and dig constants were fitted while the imbalance existed and have not
+been re-derived since it was fixed. They land in band, so this is a refinement
+rather than a defect.
 
 ### Settled
 
@@ -53,26 +55,26 @@ a strong team and a weak one. The constants that produced them --
 
 ### Known broken, in priority order
 
-1. **The opponent has no first-ball set path.** Their serve-receive set runs
-   through `_resolve_opponent_transition()`, the scramble function, while the
-   home side runs `SetterCapabilitySystem.evaluate()`. This is the cause of the
-   87% imbalance and it is a missing path rather than a coefficient.
-2. **Only the outside hitter registers in results.** A +15 hitter moves the home
-   win rate by 4-9 SE; the setter, middle blocker, libero and opposite are all
-   under 2 SE. Three execution-side hypotheses were tested and rejected. The
-   measured cause is that those roles have large *decision* channels (0.19-0.32
-   of block quality for choosing a lane, 0.109 for choosing a hitter) and
-   negligible execution ones (~0.02), and the engine gives decisions no outcome
-   channel at all.
-3. Side-out and stuff rate sit outside their bands, and will move when 1 lands.
+1. **Only the outside hitter registers in results.** A +15 hitter moves the home
+   win rate by 3.7-5.4 SE. The setter now reads 2.7 SE on the downside -- the
+   first non-hitter signal in the project -- but its two directions disagree,
+   and the middle blocker, libero and opposite remain under 1 SE. Three
+   execution-side hypotheses were tested and rejected. The measured cause is
+   that those roles have large *decision* channels (0.19-0.32 of block quality
+   for choosing a lane, 0.109 for choosing a hitter) and negligible execution
+   ones (~0.02), and the engine gives decisions no outcome channel at all.
+2. Side-out sits 0.002 below its band floor.
+3. The block and dig constants deserve one re-derivation now that the sides are
+   even, using the 8-second harness.
 
-### Two ratchets in the suite
+### Symmetry is checked, not assumed
 
-Neither is a passing check. Both are pinned just past the current value so
-things cannot get worse, with the target named in the code:
-
-- `home_attack_share <= 0.90`, target 0.55.
-- The opponent-attack coverage floor is 5, target 20.
+`home_attack_share` must stay within 0.12 of even. Both squads are drawn from
+the same generator, so a persistent gap is an engine defect rather than a
+difference between teams. Eight asymmetries were found in one session, each the
+same defect -- the home team modelled fully, the opponent as a simplified
+parallel implementation -- and each found by accident hours after it was
+introduced. This check is what makes the ninth fail immediately.
 
 ### Tools
 

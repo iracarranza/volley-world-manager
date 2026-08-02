@@ -730,17 +730,14 @@ func resolve(
 	## of attempting something beyond a setter lives with the model that decides
 	## what "beyond" means rather than being restated here.
 	var capability_penalty := float(setter_capability.quality_penalty)
-	var set_base: float = _rating(setter, "set_accuracy") * 0.42 \
-		+ _rating(setter, "court_vision") * 0.20 \
-		+ _rating(setter, "hand_control") * 0.10 \
-		+ _rating(setter, "tempo_control") * 0.08 \
-		+ _rating(setter, "composure") * 0.10 \
-		+ float(setter_capability.effective_pass_quality) * 0.28 - tempo_demand \
-		- capability_penalty \
-		+ clampf(setter_arrival_margin * 0.18, -0.42, 0.08) \
-		- float(set_geometry.difficulty) + (Familiarity.execution_modifier(setter) - 1.0) * 0.16
 	result.set_quality = clampf(
-		set_base + _execution_error(setter, "set_accuracy", 0.12), 0.0, 1.0
+		_set_execution(
+			setter, float(setter_capability.effective_pass_quality),
+			tempo_demand, capability_penalty, setter_arrival_margin,
+			float(set_geometry.difficulty),
+			(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
+		) + _execution_error(setter, "set_accuracy", 0.12),
+		0.0, 1.0,
 	)
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
@@ -1438,7 +1435,7 @@ func _resolve_home_serve(
 	var opponent_setter_release := _opponent_setter_release_target(opponent_team)
 	return _resolve_opponent_transition(
 		result, players, lineup, server, opponent_setter_release,
-		opponent_team, defensive_plan, 1, reception_quality,
+		opponent_team, defensive_plan, 1, reception_quality, true,
 	)
 
 
@@ -1457,6 +1454,11 @@ func _resolve_opponent_transition(
 	## `_resolve_home_continuation()`. A propagation link on one side of the net
 	## is a link on the rarer half of the rallies.
 	incoming_quality: float = 1.0,
+	## True when this is a serve reception rather than a ball dug out of a
+	## rally. The opponent had no first-ball path at all: every attack they made
+	## in the game was built off a scramble set, including the one off their own
+	## serve receive, while the home side ran the full capability model.
+	first_ball: bool = false,
 ) -> Resource:
 	var opponent_setter := opponent_team.setter() as VolleyballPlayer
 	var transition_penalty := float(exchange_number - 1) * 0.035
@@ -1470,6 +1472,10 @@ func _resolve_opponent_transition(
 	var setter_move_time := _movement_time(
 		opponent_setter, setter_start, opponent_setter_position, "lateral"
 	)
+	## The same quantity the home setter is scored on: how much of the pass
+	## flight is left once they have reached the ball. A setter who arrives
+	## early can load a jump set; one still scrambling takes it flat-footed.
+	var setter_arrival_margin := DEFAULT_SECOND_CONTACT_SECONDS - setter_move_time
 	var set_geometry := _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
@@ -1478,15 +1484,35 @@ func _resolve_opponent_transition(
 	## two sides read different ones -- this side set_accuracy, court_vision and
 	## decision_making, the home side set_accuracy, ball_control and composure --
 	## so a setter improved on one team's terms was not improved on the other's.
-	var opponent_set_capability := _transition_set_capability(opponent_setter)
-	var opponent_usable_ball := _usable_transition_ball(
-		incoming_quality, opponent_set_capability
-	)
+	## The opponent's own capability read, run on a serve reception exactly as
+	## the home setter's is. On a dug ball there is no called play to overreach
+	## against, so the penalty is zero and the pass stands as it arrived.
+	var opponent_tempo_call := int(opponent_team.tendencies.get("tempo", 2))
+	var opponent_capability := {}
+	var opponent_pass_quality := incoming_quality
+	var opponent_capability_penalty := 0.0
+	if first_ball:
+		opponent_capability = SetterCapabilityModel.evaluate(
+			opponent_setter, opponent_tempo_call, incoming_quality,
+			SetterCapabilityModel.pass_contact_height_meters(
+				incoming_quality, rng.randf()
+			),
+			clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
+		)
+		opponent_pass_quality = float(
+			opponent_capability.get("effective_pass_quality", incoming_quality)
+		)
+		opponent_capability_penalty = float(
+			opponent_capability.get("quality_penalty", 0.0)
+		)
 	var opponent_set_quality := clampf(
-		opponent_set_capability
-		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - opponent_usable_ball))
-		- float(set_geometry.difficulty) - transition_penalty
-		+ _execution_error(opponent_setter, "set_accuracy", 0.12), 0.08, 0.94,
+		_set_execution(
+			opponent_setter, opponent_pass_quality, transition_penalty,
+			opponent_capability_penalty, setter_arrival_margin,
+			float(set_geometry.difficulty),
+			(Familiarity.execution_modifier(opponent_setter) - 1.0) * 0.16,
+		) + _execution_error(opponent_setter, "set_accuracy", 0.12),
+		0.08, 0.94,
 	)
 	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
 	## _choose_opponent_attack needs a flight-time estimate before the real set
@@ -1536,10 +1562,13 @@ func _resolve_opponent_transition(
 	## so the propagation link and the aligned attribute list reached the
 	## estimate and never reached the ball.
 	opponent_set_quality = clampf(
-		opponent_set_capability
-		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - opponent_usable_ball))
-		- float(set_geometry.difficulty) - transition_penalty
-		+ _execution_error(opponent_setter, "set_accuracy", 0.12), 0.08, 0.94,
+		_set_execution(
+			opponent_setter, opponent_pass_quality, transition_penalty,
+			opponent_capability_penalty, setter_arrival_margin,
+			float(set_geometry.difficulty),
+			(Familiarity.execution_modifier(opponent_setter) - 1.0) * 0.16,
+		) + _execution_error(opponent_setter, "set_accuracy", 0.12),
+		0.08, 0.94,
 	)
 	var set_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(opponent_setter_position, opponent_contact),
@@ -2021,13 +2050,12 @@ func _resolve_home_continuation(
 	## the arriving ball allowed. Command buys back part of a bad ball, so the
 	## gap between setters is widest when the ball is worst -- which is also
 	## what makes a setter's attributes visible in the result at all.
-	var set_capability := _transition_set_capability(setter)
-	var usable_ball := _usable_transition_ball(incoming_quality, set_capability)
 	var set_quality := clampf(
-		set_capability
-		* (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - usable_ball))
-		- exchange_penalty + clampf(setter_arrival_margin * 0.16, -0.38, 0.07)
-		+ rng.randf_range(-0.14, 0.14), 0.10, 0.92
+		_set_execution(
+			setter, incoming_quality, exchange_penalty, 0.0,
+			setter_arrival_margin, 0.0,
+		) + _execution_error(setter, "set_accuracy", 0.14),
+		0.10, 0.92,
 	)
 	var set_target := CourtConstants.lane_target(assignment.lane)
 	var continuation_set_arc := RallyKinematics.solve_launch_arc(
@@ -3931,6 +3959,42 @@ func _serve_error_chance(server: VolleyballPlayer, tactical_risk: float) -> floa
 		0.0, 1.0,
 	)
 	return clampf(SERVE_ERROR_CEILING * demand * (1.0 - control), 0.005, 0.45)
+
+
+## One set, wherever in the rally and whichever side of the net.
+##
+## There were two models. The home first ball summed 1.18 of un-normalised
+## weight -- 0.90 of ratings plus 0.28 of pass quality -- while the transition
+## set was a normalised capability times what the arriving ball allowed. A
+## typical home set scored about 0.75 and a typical opponent set about 0.48, and
+## since every opponent attack in the game was built off a transition set, that
+## 0.27 gap was worth roughly 0.11 of attack quality: twice what a +15 hitter is
+## worth, handed to one side of the net for free. It produced 115 home kills
+## against 17.
+##
+## `capability_penalty` carries what `SetterCapabilitySystem` charges for
+## attempting a tempo beyond command or reaching above the jump; it is zero for
+## a transition set, which has no play called on it to overreach.
+func _set_execution(
+	setter: VolleyballPlayer,
+	usable_pass_quality: float,
+	tempo_demand: float,
+	capability_penalty: float,
+	arrival_margin: float,
+	geometry_difficulty: float,
+	familiarity_bonus: float = 0.0,
+) -> float:
+	if setter == null:
+		return 0.0
+	var capability := _transition_set_capability(setter)
+	var usable := _usable_transition_ball(usable_pass_quality, capability)
+	return clampf(
+		capability * (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - usable))
+		- tempo_demand - capability_penalty - geometry_difficulty
+		+ clampf(arrival_margin * 0.18, -0.42, 0.08)
+		+ familiarity_bonus,
+		0.0, 1.0,
+	)
 
 
 ## What a setter brings to a ball played out of defence, as a fraction of an
