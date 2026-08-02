@@ -252,15 +252,32 @@ static func dig_share(
 	return float(dug) / float(maxi(sample_count, 1))
 
 
-static func block_values(players: Array, close_fraction: float) -> Array[float]:
+## `assist_close` of zero is a solo wall. It was the only thing this modelled,
+## and once blockers began reading the pass a second blocker reached the lane
+## often enough that the solo figure under-predicted the engine's block touch
+## rate by three times -- 0.133 against a measured 0.428. A predictor that far
+## out is worse than none, because a constant gets tuned against it.
+static func block_values(
+	players: Array,
+	close_fraction: float,
+	assist_close: float = 0.0,
+) -> Array[float]:
 	var simulator := RallySimulatorModel.new()
 	var values: Array[float] = []
-	for player_resource in players:
-		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+	for index in range(players.size()):
+		var player: VolleyballPlayer = players[index] as VolleyballPlayer
 		if player == null:
 			continue
+		var assist_skill := 0.0
+		if assist_close > 0.0:
+			## The assist is whoever else is on the court, not a second copy of
+			## the primary.
+			var partner: VolleyballPlayer = players[
+				(index + 1) % players.size()
+			] as VolleyballPlayer
+			assist_skill = simulator._block_contact_skill(partner, assist_close)
 		values.append(simulator._block_wall_quality(
-			simulator._block_contact_skill(player, close_fraction), 0.0
+			simulator._block_contact_skill(player, close_fraction), assist_skill
 		))
 	return values
 

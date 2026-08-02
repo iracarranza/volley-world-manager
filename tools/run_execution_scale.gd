@@ -62,6 +62,9 @@ func _initialize() -> void:
 	var block_rows: Dictionary = CalibrationModel.block_scale(population)
 	for close in block_rows:
 		_row(close, block_rows[close])
+	_row("sealed double", CalibrationModel.summarise(
+		CalibrationModel.block_values(population, 1.0, 0.85)
+	))
 
 	print("\n=== ERROR THRESHOLD (%.2f) ===" % RallySimulatorModel.ATTACK_ERROR_THRESHOLD)
 	var errors: Dictionary = CalibrationModel.error_shares(attack_rows)
@@ -82,9 +85,12 @@ func _initialize() -> void:
 	## Both arrays come from the calibration model, never from a copy of the
 	## formula written out here. A copy is what made three different block
 	## scales print byte-identical contest shares.
+	## Against a wall with an assist on it, which is what the engine forms now
+	## that blockers read the pass. The solo figure under-predicted the measured
+	## block touch rate by three times.
 	var shares: Dictionary = CalibrationModel.contest_shares(
 		CalibrationModel.attack_values(population, "typical"),
-		CalibrationModel.block_values(population, 1.0),
+		CalibrationModel.block_values(population, 1.0, 0.85),
 	)
 	for key in ["stuff", "touch", "funnel", "miss", "touched"]:
 		print("%-10s %.3f" % [key, float(shares.get(key, 0.0))])

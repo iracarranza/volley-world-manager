@@ -12,27 +12,47 @@ Everything below this section is a chronological record of how the engine got
 here, including attempts that were measured and reverted. Read this part for the
 current state; read the rest for why a constant is what it is.
 
-### Measured, on a generated population
+### Measured, on a generated population (400 rallies)
 
-| metric | measured | band | |
-|---|---|---|---|
-| side-out rate | 0.578 | 0.58 – 0.78 | 0.002 short |
-| ace rate | 0.039 | 0.02 – 0.10 | ok |
-| serve error rate | 0.094 | 0.08 – 0.20 | ok |
-| kill rate | 0.517 | 0.38 – 0.60 | ok |
-| attack error rate | 0.179 | 0.06 – 0.20 | ok |
-| stuff rate | 0.080 | 0.03 – 0.14 | ok |
-| block touch rate | 0.428 | 0.15 – 0.45 | ok |
-| mean contacts | 5.88 | 4.0 – 9.0 | ok |
+| metric | measured | SE | band | |
+|---|---|---|---|---|
+| side-out rate | 0.568 | 0.025 | 0.58 – 0.78 | 0.5 SE short |
+| ace rate | 0.038 | 0.010 | 0.02 – 0.10 | ok |
+| serve error rate | 0.140 | 0.017 | 0.08 – 0.20 | ok |
+| kill rate | 0.499 | 0.025 | 0.38 – 0.60 | ok |
+| attack error rate | 0.183 | 0.019 | 0.06 – 0.20 | ok |
+| stuff rate | 0.054 | 0.011 | 0.03 – 0.14 | ok |
+| block touch rate | 0.396 | 0.025 | 0.15 – 0.45 | ok |
+| mean contacts | 5.86 | — | 4.0 – 9.0 | ok |
 
-**Seven of eight, and the sides are even**: `home_attack_share` is 0.567, from
-59 home kills against 45 opponent ones. It was 0.871 before the opponent had a
-first-ball set path. These are the first numbers on this page that describe the
-sport rather than one team beating another.
+Seven of eight, with side-out half a standard error short of its floor.
 
-The block and dig constants were fitted while the imbalance existed and have not
-been re-derived since it was fixed. They land in band, so this is a refinement
-rather than a defect.
+**The sides are closer but not even.** `home_attack_share` is **0.632** at this
+sample size (141 kills to 82), which is 4 standard errors from even and
+therefore a real residual rather than noise. A 180-rally sweep read 0.567 and
+was reported as "even"; that was an overstatement drawn from a sample with too
+little power, and the larger measurement supersedes it. The first-ball set path
+moved the imbalance from 0.871 to 0.632, which is most of it, not all of it.
+
+Side-out sitting below its floor is likely the same fact seen from another
+angle: the receiving team's first-ball attack is not advantaged enough over the
+serving team's transition.
+
+### The block and dig constants were checked and left alone
+
+Re-derivation was attempted and found nothing to change. Every distribution the
+block and dig govern -- stuff 0.054, block touch 0.396, kill 0.499, rally length
+5.86 -- sits inside its band with standard errors an order of magnitude smaller
+than the distance to either edge. Moving a constant would trade one in-band
+value for another.
+
+What the attempt did fix was the instrument. `ExecutionScaleCalibration`
+modelled only a solo wall, and once blockers began reading the pass a second
+blocker reached the lane often enough that its predicted block touch rate was
+0.133 against a measured 0.428 -- three times out. A predictor that wrong is
+worse than none, because a constant gets tuned against it. `block_values()` now
+takes an assist and the tool reports a sealed double; the prediction is 0.390
+against 0.396 measured.
 
 ### Settled
 
@@ -55,7 +75,10 @@ rather than a defect.
 
 ### Known broken, in priority order
 
-1. **Only the outside hitter registers in results.** A +15 hitter moves the home
+1. **A residual home advantage of 0.632.** Down from 0.871, and the remaining
+   difference has not been located. The set path, the target scan, familiarity,
+   tempo demand and the overreach penalty are all mirrored now.
+2. **Only the outside hitter registers in results.** A +15 hitter moves the home
    win rate by 3.7-5.4 SE. The setter now reads 2.7 SE on the downside -- the
    first non-hitter signal in the project -- but its two directions disagree,
    and the middle blocker, libero and opposite remain under 1 SE. Three
@@ -63,18 +86,23 @@ rather than a defect.
    that those roles have large *decision* channels (0.19-0.32 of block quality
    for choosing a lane, 0.109 for choosing a hitter) and negligible execution
    ones (~0.02), and the engine gives decisions no outcome channel at all.
-2. Side-out sits 0.002 below its band floor.
-3. The block and dig constants deserve one re-derivation now that the sides are
-   even, using the 8-second harness.
+3. Side-out sits half a standard error below its band floor, probably as a
+   consequence of 1.
 
-### Symmetry is checked, not assumed
+### Symmetry is checked, with a caveat about its power
 
 `home_attack_share` must stay within 0.12 of even. Both squads are drawn from
 the same generator, so a persistent gap is an engine defect rather than a
 difference between teams. Eight asymmetries were found in one session, each the
 same defect -- the home team modelled fully, the opponent as a simplified
 parallel implementation -- and each found by accident hours after it was
-introduced. This check is what makes the ninth fail immediately.
+introduced.
+
+**The check runs at 80 rallies to keep the suite quick, where the share carries
+a standard error near 0.07.** It will catch a gross regression and will miss a
+subtle one; the 0.632 residual above was found by a 400-rally sweep, not by this
+check. Run `outcome_calibration()` directly at a larger sample before concluding
+the sides are even.
 
 ### Tools
 
