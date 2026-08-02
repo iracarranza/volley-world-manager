@@ -18,14 +18,8 @@ func _ready() -> void:
 	_apply_content()
 
 
-func configure(id_value: String, heading: String, summary: String, icon: String) -> void:
-	section_id = id_value
-	title_text = heading
-	summary_text = summary
-	icon_text = icon
-	tooltip_text = summary
-	if is_node_ready():
-		_apply_content()
+## `configure()` was the card's original setup entry point, superseded by the
+## per-field setters the dashboard actually calls. Uncalled.
 
 
 func set_summary(summary: String) -> void:

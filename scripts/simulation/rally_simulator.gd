@@ -3647,21 +3647,11 @@ func _fallback_hitter(
 	return null
 
 
-func _best_blocker(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-) -> VolleyballPlayer:
-	var best: VolleyballPlayer
-	var best_score := -1
-	for player_id in lineup.front_row_player_ids():
-		var player := _player_by_id(players, player_id)
-		if player == null:
-			continue
-		var score := player.block_timing + player.jump_reach
-		if score > best_score:
-			best = player
-			best_score = score
-	return best
+## `_best_blocker()` used to pick a blocker by `block_timing + jump_reach`.
+## It has had no callers since blocking moved to `ShadowBlockSystem` and the
+## coordinated form-then-contest path, which reads the whole front row rather
+## than crowning one player. Removed rather than kept as a second, cruder
+## answer to a question the block system now owns.
 
 
 ## `set_flight_time` is the opponent set's own flight, for the same reason the
@@ -4516,30 +4506,10 @@ func _receiver(players: Array[VolleyballPlayer], lineup: RotationLineup) -> Voll
 	return best
 
 
-func _best_positioned_defender(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
-	defensive_plan: Resource,
-	target: Vector2,
-) -> VolleyballPlayer:
-	if defensive_plan == null:
-		return _receiver(players, lineup)
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
-		if candidate == null:
-			continue
-		var position: Vector2 = defensive_plan.defender_position(
-			candidate.id, CourtConstants.slot_position(slot_number)
-		)
-		var proximity := 1.0 - clampf(position.distance_to(target), 0.0, 1.0)
-		var score := proximity * 100.0 + candidate.anticipation * 0.35 \
-			+ candidate.lateral_speed * 0.20
-		if score > best_score:
-			best = candidate
-			best_score = score
-	return best
+## `_best_positioned_defender()` used to score defenders on proximity plus
+## anticipation and lateral speed. `CoverageCalculator.choose_claimant()`
+## replaced it with zone-aware arrival evaluation and left this behind
+## uncalled; two defender selectors is one too many.
 
 
 func _player_by_id(players: Array[VolleyballPlayer], player_id: int) -> VolleyballPlayer:

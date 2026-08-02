@@ -1188,12 +1188,8 @@ func _refresh_defensive_plan() -> void:
 	_refresh_zone_formation_summary()
 
 
-func _defender_position_changed(player_id: int, court_position: Vector2) -> void:
-	GameManager.set_defender_position(player_id, court_position)
-	_refresh_defensive_plan()
-	tactical_court.queue_redraw()
-	match_preview_court.queue_redraw()
-	_set_status("Defensive position updated; save the plan when ready.")
+## `_defender_position_changed()` was a handler for a defender-drag signal
+## that is no longer emitted or connected anywhere. Uncalled.
 
 
 func _defensive_zone_type_changed(index: int) -> void:

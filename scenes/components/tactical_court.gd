@@ -1862,8 +1862,8 @@ func _draw_opponents() -> void:
 		)
 
 
-func _short_responsibility(value: String) -> String:
-	return value.replace(" defense", "").replace("Net ", "Block ")
+## `_short_responsibility()` abbreviated responsibility labels for a compact
+## overlay that no longer draws them. Uncalled.
 
 
 func _draw_rally_playback() -> void:
