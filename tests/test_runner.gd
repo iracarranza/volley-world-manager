@@ -526,9 +526,15 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"regional roster generation is deterministic")
 	_check(academy_roster[0].age <= 20 and academy_roster[0].potential >= 68,
 		"academy generation produces young high-potential players")
-	_check(not club_roster[0].current_ability_stars().is_empty() \
-			and not club_roster[0].potential_ability_stars().is_empty(),
-		"roster players expose current and potential star ratings")
+	_check(
+		not ATTRIBUTE_PROFILE_SCRIPT.grade(
+			float(club_roster[0].current_ability_score())
+		).is_empty()
+			and not ATTRIBUTE_PROFILE_SCRIPT.grade(
+				float(club_roster[0].potential)
+			).is_empty(),
+		"current ability and potential both grade to a letter",
+	)
 	_check(club_roster[0].current_ability_score() >= 1 \
 			and club_roster[0].current_ability_score() <= 100,
 		"position-weighted current ability remains within the attribute scale")
@@ -575,6 +581,46 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		not duplicated_or_unknown and every_attribute_categorized
 			and categorized.size() == VolleyballPlayer.ABILITY_ATTRIBUTES.size(),
 		"every ability attribute belongs to exactly one wheel category, and only one",
+	)
+	## Every detailed wheel has exactly six axes -- Attacking used to have
+	## seven until Tooling and Feinting were merged into one Deception axis to
+	## make room for Accuracy. A category-specific count check would not catch
+	## a future category quietly growing to seven again; this checks all of
+	## them by construction.
+	var all_profiles_have_six_axes := true
+	for profile_name in ATTRIBUTE_PROFILE_SCRIPT.PROFILE_NAMES:
+		if profile_name == "Player Profile":
+			continue
+		if ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], profile_name).size() != 6:
+			all_profiles_have_six_axes = false
+	_check(
+		all_profiles_have_six_axes,
+		"every detailed wheel category has exactly six axes",
+	)
+	## Ceilings are what a potential wheel reads. A freshly generated player is
+	## not fully developed (`_attribute_reserve()` subtracts a positive amount
+	## from most attributes at typical ages), so every category's potential
+	## score should sit at or above its current score -- never below, since a
+	## ceiling can never be lower than the value it bounds.
+	_check(
+		not club_roster[0].attribute_ceilings.is_empty(),
+		"generated players carry per-attribute ceilings for the potential wheel",
+	)
+	var potential_never_below_current := true
+	for profile_name in ["Attacking", "Defensive", "Setting & Ball Control",
+			"Physical", "Serving", "Mental & Tactical"]:
+		var current_axes := ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(
+			academy_roster[0], profile_name
+		)
+		var potential_axes := ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(
+			academy_roster[0], profile_name, true
+		)
+		for axis_name in current_axes:
+			if float(potential_axes.get(axis_name, 0)) < float(current_axes[axis_name]):
+				potential_never_below_current = false
+	_check(
+		potential_never_below_current,
+		"no axis reads a lower potential than its current value",
 	)
 	var conversion_player := academy_roster[6]
 	conversion_player.wingspan_cm = 205.0

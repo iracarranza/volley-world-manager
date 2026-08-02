@@ -268,6 +268,13 @@ static func _apply_attributes(
 	## ability will be scored.
 	player.potential = _weighted_score(ceilings, primary_list)
 
+	## Kept individually, not only as the aggregate above -- a potential
+	## attribute wheel reads this rather than approximating a shape from one
+	## number. Rounded to match every other attribute's integer scale.
+	player.attribute_ceilings.clear()
+	for property_name in ceilings:
+		player.attribute_ceilings[property_name] = roundi(float(ceilings[property_name]))
+
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
 		var ceiling := float(ceilings[property_name])
 		var reserve := _attribute_reserve(property_name, player.age, rng)

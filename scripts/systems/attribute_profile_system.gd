@@ -7,7 +7,7 @@ const PROFILE_NAMES: Array[String] = [
 ]
 
 const PROFILE_TOOLTIPS := {
-	"Attacking": "Power, accuracy, tooling, feinting, finesse, approach timing and shot variety.",
+	"Attacking": "Power, accuracy, deception, finesse, approach timing and shot variety.",
 	"Defensive": "Reception technique, balance, stability, range, block timing and dig control.",
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise and hand control.",
 	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity and stamina.",
@@ -72,52 +72,94 @@ static func grade(score: float) -> String:
 	return "D"
 
 
-static func detailed_profile(player: VolleyballPlayer, profile_name: String) -> Dictionary:
+## One raw attribute or one derived composite, per category, always exactly
+## six per category -- every detailed wheel view has the same number of axes,
+## which is what lets a player be compared across categories at a glance rather
+## than each one having its own irregular shape.
+##
+## `use_ceilings` reads this player's generated per-attribute ceilings
+## (`VolleyballPlayer.attribute_ceilings`) instead of their current developed
+## value, which is what a potential wheel is. It is the same category
+## structure either way -- a potential axis is a claim about the same skill,
+## not a different one -- so this is one function with a source flag rather
+## than a second copy that would drift the moment a category changed. Where a
+## player carries no ceiling data (hand-authored fixtures), the ceiling lookup
+## falls back to the current value, so their potential wheel is identical to
+## their current one rather than failing.
+static func detailed_profile(
+	player: VolleyballPlayer,
+	profile_name: String,
+	use_ceilings: bool = false,
+) -> Dictionary:
+	var source: Dictionary = player.attribute_ceilings if use_ceilings else {}
+	var raw := func(attribute_name: String) -> int:
+		return int(source.get(attribute_name, player.get(attribute_name)))
 	match profile_name:
 		"Defensive":
-			return {"Reception Technique": player.reception,
-				"Reception Balance": player.reception_balance,
-				"Reception Stability": player.reception_stability,
-				"Defensive Range": player.baseline_defensive_range(),
-				"Block Timing": player.block_timing, "Dig Control": player.dig_control}
+			return {"Reception Technique": raw.call("reception"),
+				"Reception Balance": raw.call("reception_balance"),
+				"Reception Stability": raw.call("reception_stability"),
+				"Defensive Range": player.baseline_defensive_range(source),
+				"Block Timing": raw.call("block_timing"),
+				"Dig Control": raw.call("dig_control")}
 		"Setting & Ball Control":
-			return {"Set Accuracy": player.set_accuracy, "Set Balance": player.set_balance,
-				"Set Stability": player.set_stability, "Tempo Control": player.tempo_control,
-				"Set Disguise": player.set_disguise, "Hand Control": player.hand_control}
+			return {"Set Accuracy": raw.call("set_accuracy"),
+				"Set Balance": raw.call("set_balance"),
+				"Set Stability": raw.call("set_stability"),
+				"Tempo Control": raw.call("tempo_control"),
+				"Set Disguise": raw.call("set_disguise"),
+				"Hand Control": raw.call("hand_control")}
 		"Physical":
-			return {"Acceleration": player.acceleration, "Lateral Speed": player.lateral_speed,
-				"Transition Speed": player.transition_speed, "Explosiveness": player.explosiveness,
-				"Jump Capacity": player.jump_reach, "Stamina": player.stamina}
+			return {"Acceleration": raw.call("acceleration"),
+				"Lateral Speed": raw.call("lateral_speed"),
+				"Transition Speed": raw.call("transition_speed"),
+				"Explosiveness": raw.call("explosiveness"),
+				"Jump Capacity": raw.call("jump_reach"), "Stamina": raw.call("stamina")}
 		"Serving":
-			return {"Serve Power": player.serve_power, "Serve Technique": player.serve_technique,
-				"Serve Placement": player.serve_placement, "Serve Consistency": player.serve_consistency,
-				"Serve Aggression": player.serve_aggression, "Serve Variation": player.serve_variation}
+			return {"Serve Power": raw.call("serve_power"),
+				"Serve Technique": raw.call("serve_technique"),
+				"Serve Placement": raw.call("serve_placement"),
+				"Serve Consistency": raw.call("serve_consistency"),
+				"Serve Aggression": raw.call("serve_aggression"),
+				"Serve Variation": raw.call("serve_variation")}
 		"Mental & Tactical":
-			return {"Reading": roundi((player.court_vision + player.anticipation) / 2.0),
-				"Decision Making": player.decision_making, "Composure": player.composure,
-				"Tactical Discipline": player.tactical_discipline,
-				"Improvisation": player.improvisation, "Adaptability": player.adaptability}
+			return {"Reading": roundi((raw.call("court_vision") + raw.call("anticipation")) / 2.0),
+				"Decision Making": raw.call("decision_making"),
+				"Composure": raw.call("composure"),
+				"Tactical Discipline": raw.call("tactical_discipline"),
+				"Improvisation": raw.call("improvisation"),
+				"Adaptability": raw.call("adaptability")}
 		_:
 			## "Power" replaces attack_power/arm_speed with the composite that
-			## actually reflects usable hitting power; attack_accuracy did not
-			## exist as an attribute when this section was first built and was
-			## never added as its own axis afterward, leaving it invisible on
-			## every wheel and profile screen despite being a primary attribute
-			## for three of the five positions.
-			return {"Power": player.usable_attack_power(),
-				"Accuracy": player.attack_accuracy, "Tooling": player.tooling,
-				"Feinting": player.feinting, "Finesse": player.finesse,
-				"Approach Timing": player.approach_timing, "Shot Variety": player.shot_variety}
+			## actually reflects usable hitting power. "Deception" replaces
+			## the separate Tooling and Feinting axes with their average: both
+			## describe manipulating what the block reads before contact, and
+			## keeping them apart was the only reason this category had seven
+			## axes instead of six. Accuracy is a new axis, not folded into
+			## anything -- it did not exist as an attribute when this section
+			## was first built and was never added afterward, leaving it
+			## invisible despite being a primary attribute for three of the
+			## five positions.
+			return {"Power": player.usable_attack_power(source),
+				"Accuracy": raw.call("attack_accuracy"),
+				"Deception": roundi((raw.call("tooling") + raw.call("feinting")) / 2.0),
+				"Finesse": raw.call("finesse"),
+				"Approach Timing": raw.call("approach_timing"),
+				"Shot Variety": raw.call("shot_variety")}
 
 
-static func summary_profile(player: VolleyballPlayer) -> Dictionary:
+static func summary_profile(player: VolleyballPlayer, use_ceilings: bool = false) -> Dictionary:
 	return {
-		"Attacking": category_score(detailed_profile(player, "Attacking")),
-		"Defensive": category_score(detailed_profile(player, "Defensive")),
-		"Setting / Control": category_score(detailed_profile(player, "Setting & Ball Control")),
-		"Physical": category_score(detailed_profile(player, "Physical")),
-		"Serving": category_score(detailed_profile(player, "Serving")),
-		"Mental / Tactical": category_score(detailed_profile(player, "Mental & Tactical")),
+		"Attacking": category_score(detailed_profile(player, "Attacking", use_ceilings)),
+		"Defensive": category_score(detailed_profile(player, "Defensive", use_ceilings)),
+		"Setting / Control": category_score(
+			detailed_profile(player, "Setting & Ball Control", use_ceilings)
+		),
+		"Physical": category_score(detailed_profile(player, "Physical", use_ceilings)),
+		"Serving": category_score(detailed_profile(player, "Serving", use_ceilings)),
+		"Mental / Tactical": category_score(
+			detailed_profile(player, "Mental & Tactical", use_ceilings)
+		),
 	}
 
 

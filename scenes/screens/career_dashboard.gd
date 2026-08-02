@@ -11,8 +11,7 @@ const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const WHEEL_TOOLTIPS := {
 	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
-	"Tooling": "Deliberately using blockers' hands to score or create an advantageous deflection.",
-	"Feinting": "Selling a full attack before tipping, wiping, rolling, or changing pace.",
+	"Deception": "Selling a full attack before tipping, wiping, or rolling, and deliberately using blockers' hands to score or create an advantageous deflection.",
 	"Finesse": "Precise control of placement, depth, angle, and touch.",
 	"Approach Timing": "Arriving in a balanced hitting window relative to the set.",
 	"Shot Variety": "The number of credible attack solutions available to the player.",
@@ -53,6 +52,7 @@ const WHEEL_TOOLTIPS := {
 @onready var roster_detail: RichTextLabel = %RosterDetail
 @onready var raw_attributes: RichTextLabel = %RawAttributes
 @onready var player_attribute_wheel: Control = %PlayerAttributeWheel
+@onready var transfer_player_attribute_wheel: Control = %TransferPlayerAttributeWheel
 @onready var wheel_profile_option: OptionButton = %WheelProfileOption
 @onready var position_training_option: OptionButton = %PositionTrainingOption
 @onready var position_training_summary: Label = %PositionTrainingSummary
@@ -196,8 +196,10 @@ func _refresh_roster() -> void:
 		if player == null:
 			continue
 		var marker := " · C" if player.id == GameManager.team.captain_id else ""
-		roster_list.add_item("%s  %s%s\n%s" % [player.position_code, player.display_name,
-			marker, player.current_ability_stars()])
+		roster_list.add_item("%s  %s%s\nAbility %s · Potential %s" % [
+			player.position_code, player.display_name, marker,
+			AttributeProfiles.grade(float(player.current_ability_score())),
+			AttributeProfiles.grade(float(player.potential))])
 		roster_list.set_item_metadata(roster_list.item_count - 1, player.id)
 	if roster_list.item_count > 0:
 		roster_list.select(0)
@@ -210,11 +212,12 @@ func _roster_selected(index: int) -> void:
 		return
 	selected_roster_id = player.id
 	var key_attributes := _key_attributes(player)
-	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]  %s\n%s · Age %d · %d pro seasons\nAvailability: %s · Morale %d%% · Fatigue %d%%\n\n[b]Ability[/b]\nCurrent: %s\nPotential: %s\n[color=#8294ad]Current stars are weighted for this player's position.[/color]\n\n[b]Key attributes[/b]\n%s\n\n[b]Measurements[/b]\n%.0f cm · %.0f kg · %.0f cm wingspan\n\nCurrent rotation: %s" % [
+	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]  %s\n%s · Age %d · %d pro seasons\nAvailability: %s · Morale %d%% · Fatigue %d%%\n\n[b]Ability[/b]\nCurrent: %s\nPotential: %s\n[color=#8294ad]Current grade is weighted for this player's position. The wheel's outer line shows potential on every axis.[/color]\n\n[b]Key attributes[/b]\n%s\n\n[b]Measurements[/b]\n%.0f cm · %.0f kg · %.0f cm wingspan\n\nCurrent rotation: %s" % [
 		player.display_name, player.position_code, player.position_role, player.age,
 		player.professional_experience, player.availability,
 		roundi(player.morale * 100.0), roundi(player.fatigue * 100.0),
-		player.current_ability_stars(), player.potential_ability_stars(),
+		AttributeProfiles.grade(float(player.current_ability_score())),
+		AttributeProfiles.grade(float(player.potential)),
 		key_attributes, player.height_cm, player.mass_kg, player.wingspan_cm,
 		"Slot %d" % GameManager.current_lineup().slot_for_player(player.id) if GameManager.current_lineup().slot_for_player(player.id) >= 1 else "Bench"]
 	roster_detail.text += "\n\n[b]Profile[/b]\n%s-handed · Adaptability %d\nNatural: %s\n\n[b]Serve repertoire[/b]\n%s · %s proficiency" % [
@@ -281,9 +284,18 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 		if wheel_profile_option.selected >= 0 else "Player Profile"
 	var profile := AttributeProfiles.summary_profile(player) if profile_name == "Player Profile" \
 		else AttributeProfiles.detailed_profile(player, profile_name)
+	## Fully accurate today: this reads the player's real generated ceilings,
+	## the same data `potential` is scored from. When scouting exists, an
+	## unscouted prospect's outer line should come from an estimate derived
+	## from this data (a range, a fogged band) rather than this data itself --
+	## the ceilings stay real; what changes is whether the viewer is shown them
+	## directly.
+	var potential_profile := AttributeProfiles.summary_profile(player, true) \
+		if profile_name == "Player Profile" \
+		else AttributeProfiles.detailed_profile(player, profile_name, true)
 	var tooltips := AttributeProfiles.PROFILE_TOOLTIPS if profile_name == "Player Profile" \
 		else WHEEL_TOOLTIPS
-	player_attribute_wheel.set_profile(profile, tooltips, true)
+	player_attribute_wheel.set_profile(profile, tooltips, true, potential_profile)
 
 
 func _raw_attribute_text(player: VolleyballPlayer) -> String:
@@ -363,9 +375,17 @@ func _transfer_selected(index: int) -> void:
 	var player := _market_player(selected_transfer_id)
 	if player == null:
 		return
-	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Potential %s\n%s\n\nPrototype testing: freely add this player to the roster." % [
+	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Ability %s · Potential %s\n%s\n\nPrototype testing: freely add this player to the roster." % [
 		player.display_name, player.position_role, player.age,
-		player.potential_ability_stars(), _key_attributes(player)]
+		AttributeProfiles.grade(float(player.current_ability_score())),
+		AttributeProfiles.grade(float(player.potential)), _key_attributes(player)]
+	## Same full-summary view as the roster's "Player Profile" wheel, with the
+	## same accurate potential outline -- see the note in
+	## `_refresh_player_wheel()` for what changes here once scouting exists.
+	transfer_player_attribute_wheel.set_profile(
+		AttributeProfiles.summary_profile(player), AttributeProfiles.PROFILE_TOOLTIPS,
+		true, AttributeProfiles.summary_profile(player, true),
+	)
 	sign_button.disabled = false
 	sign_button.text = "Add to Testing Roster"
 

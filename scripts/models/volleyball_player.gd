@@ -8,6 +8,16 @@ extends Resource
 @export_range(15, 45) var age: int = 24
 @export_range(0, 25) var professional_experience: int = 3
 @export_range(1, 100) var potential: int = 70
+## Per-attribute ceiling this player was generated with, keyed by attribute
+## name -- the same ceilings `potential` was scored from, kept individually
+## rather than only as their aggregate. `PlayerGenerator` populates this;
+## hand-authored fixture players (`GameManager._make_player()`) leave it empty,
+## which callers read as "no ceiling data, fall back to the current value."
+## This is what lets a potential-attribute wheel be exact today; when scouting
+## is implemented, obfuscating a prospect's potential means showing a range or
+## an estimate derived from this data rather than this data itself, not
+## changing what is stored here.
+@export var attribute_ceilings: Dictionary = {}
 @export_range(0.0, 1.0) var morale: float = 0.70
 @export_enum("Available", "Resting", "Injured", "Suspended") var availability: String = "Available"
 
@@ -142,35 +152,28 @@ func current_ability_score() -> int:
 	return clampi(roundi(role_score * 0.75 + complete_score * 0.25), 1, 100)
 
 
-func format_stars(score: int) -> String:
-	var rating := clampf(float(score) / 20.0, 0.5, 5.0)
-	var half_steps := clampi(roundi(rating * 2.0), 1, 10)
-	var full_stars := half_steps / 2
-	var has_half := half_steps % 2 == 1
-	return "%s%s%s" % ["★".repeat(full_stars), "½" if has_half else "",
-		"☆".repeat(5 - full_stars - (1 if has_half else 0))]
-
-
-func current_ability_stars() -> String:
-	return format_stars(current_ability_score())
-
-
-func potential_ability_stars() -> String:
-	return format_stars(potential)
-
-
-func usable_attack_power() -> int:
+## `overrides` lets a caller substitute individual attributes -- ceilings, for
+## a potential-power reading -- without a second copy of these weights. Body
+## measurements are never overridden: mass is physical geometry, not a skill
+## with a ceiling to develop toward.
+func usable_attack_power(overrides: Dictionary = {}) -> int:
 	var normalized_mass := clampf(inverse_lerp(55.0, 115.0, mass_kg) * 100.0, 1.0, 100.0)
-	return clampi(roundi(float(attack_power) * 0.25 + normalized_mass * 0.10 \
-		+ float(explosiveness) * 0.18 + float(transition_speed) * 0.12 \
-		+ float(arm_speed) * 0.20 + float(approach_timing) * 0.15), 1, 100)
+	return clampi(roundi(
+		float(overrides.get("attack_power", attack_power)) * 0.25 + normalized_mass * 0.10 \
+		+ float(overrides.get("explosiveness", explosiveness)) * 0.18 \
+		+ float(overrides.get("transition_speed", transition_speed)) * 0.12 \
+		+ float(overrides.get("arm_speed", arm_speed)) * 0.20 \
+		+ float(overrides.get("approach_timing", approach_timing)) * 0.15), 1, 100)
 
 
-func baseline_defensive_range() -> int:
+func baseline_defensive_range(overrides: Dictionary = {}) -> int:
 	var reach := clampf(inverse_lerp(190.0, 280.0, standing_reach_cm()) * 100.0, 1.0, 100.0)
-	return clampi(roundi(float(acceleration) * 0.22 + float(lateral_speed) * 0.24 \
-		+ float(anticipation) * 0.22 + reach * 0.14 + float(ball_control) * 0.08 \
-		+ float(stamina) * 0.10), 1, 100)
+	return clampi(roundi(
+		float(overrides.get("acceleration", acceleration)) * 0.22 \
+		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.24 \
+		+ float(overrides.get("anticipation", anticipation)) * 0.22 + reach * 0.14 \
+		+ float(overrides.get("ball_control", ball_control)) * 0.08 \
+		+ float(overrides.get("stamina", stamina)) * 0.10), 1, 100)
 
 
 ## Default stride for a player of this height. Roughly 0.43x standing height,
