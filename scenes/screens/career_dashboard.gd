@@ -82,6 +82,7 @@ const WHEEL_TOOLTIPS := {
 @onready var fixture_list: ItemList = %FixtureList
 @onready var fixture_detail: RichTextLabel = %FixtureDetail
 @onready var play_match_button: Button = %PlayMatchButton
+@onready var simulate_match_button: Button = %SimulateMatchButton
 @onready var status_label: Label = %StatusLabel
 @onready var sixnet_summary: RichTextLabel = %SixnetSummary
 
@@ -109,6 +110,7 @@ func _ready() -> void:
 	sign_button.pressed.connect(_sign_transfer)
 	fixture_list.item_selected.connect(_fixture_selected)
 	play_match_button.pressed.connect(_play_fixture)
+	simulate_match_button.pressed.connect(_simulate_fixture)
 	CareerManager.career_changed.connect(refresh)
 	CareerManager.week_advanced.connect(func(_report: Dictionary) -> void: refresh())
 	CareerManager.transfer_pool_changed.connect(refresh)
@@ -442,8 +444,10 @@ func _fixture_selected(index: int) -> void:
 		CareerManager.career.match_format.regular_set_target,
 		CareerManager.career.match_format.win_by,
 		"Ready" if GameManager.match_roster_errors().is_empty() else GameManager.match_roster_errors()[0]]
-	play_match_button.disabled = fixture.completed or not due \
-		or not GameManager.match_roster_errors().is_empty()
+	var fixture_ready: bool = not bool(fixture.completed) and due \
+		and GameManager.match_roster_errors().is_empty()
+	play_match_button.disabled = not fixture_ready
+	simulate_match_button.disabled = not fixture_ready
 
 
 func _play_fixture() -> void:
@@ -452,6 +456,12 @@ func _play_fixture() -> void:
 		_set_status(error, true)
 		return
 	play_match_requested.emit()
+
+
+func _simulate_fixture() -> void:
+	var error := CareerManager.simulate_fixture(selected_fixture_id)
+	_set_status(error if not error.is_empty() else "Match simulated.", not error.is_empty())
+	refresh()
 
 
 ## Read-only world state -- no selection, no actions, just what's happening

@@ -237,6 +237,12 @@ func _ready() -> void:
 func enter_career_match() -> void:
 	return_career_button.visible = true
 	last_rally_result = null
+	## Tied to this save and this fixture, so identical matchups on different
+	## careers no longer replay the same rally sequence -- previously this
+	## always restarted from the same literal regardless of which save or
+	## fixture was being played.
+	if CareerManager.has_career():
+		rally_seed = CareerManager.fixture_base_seed(int(CareerManager.career.active_fixture_id))
 	_capture_match_preview_snapshot()
 	_refresh_rotation()
 	_refresh_match_header()

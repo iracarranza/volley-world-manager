@@ -182,6 +182,7 @@ func _initialize() -> void:
 	_test_team_roster_statistics_and_opponent_rotation()
 	_test_career_calendar_generation_training_and_saves()
 	_test_sixnet_league()
+	_test_fixture_simulation_and_seeding()
 	_test_world_population()
 	_test_world_aging()
 	if failures == 0:
@@ -1031,6 +1032,63 @@ func _test_sixnet_league() -> void:
 		"advancing 96 weeks through the real career flow resolves exactly two Sixnet seasons",
 	)
 	integration_manager.free()
+
+
+## `CareerManager.simulate_fixture()` is the "instant result" path added
+## alongside a live match: it must reach the same completed state a live
+## match reaches, without ever touching `main.gd`'s playback. Its seeding
+## also has to be save-specific -- the bug being fixed here is a rally seed
+## that used to restart from the same literal on every save, so two careers
+## replayed an identical matchup identically.
+func _test_fixture_simulation_and_seeding() -> void:
+	var manager_a := CAREER_MANAGER_SCRIPT.new()
+	manager_a.game_manager_override = get_root().get_node("GameManager")
+	var create_error_a: String = manager_a.create_career(
+		"__Simulate Fixture Test A__", "Simulate FC A", "Landavol", "Club", "Balanced"
+	)
+	_check(create_error_a.is_empty(), "simulation test career A is created successfully")
+	_check(
+		manager_a.advance_week().is_empty(),
+		"career can advance before its opening fixture is due",
+	)
+	var simulate_error: String = manager_a.simulate_fixture(1)
+	_check(simulate_error.is_empty(), "simulate_fixture resolves a due fixture without error")
+	var simulated_fixture: Resource = manager_a.fixture_by_id(1)
+	_check(
+		simulated_fixture != null and bool(simulated_fixture.completed),
+		"simulate_fixture marks the fixture completed exactly as a live match would",
+	)
+	var format: Resource = manager_a.career.match_format
+	_check(
+		int(simulated_fixture.home_sets) >= format.sets_to_win()
+			or int(simulated_fixture.opponent_sets) >= format.sets_to_win(),
+		"simulate_fixture plays out a full match result, not a partial one",
+	)
+	_check(
+		int(manager_a.career.active_fixture_id) == -1,
+		"simulate_fixture clears the active fixture on completion, same as a live match",
+	)
+	_check(
+		manager_a.fixture_base_seed(1) == manager_a.fixture_base_seed(1),
+		"fixture_base_seed is deterministic for a given save and fixture",
+	)
+	_check(
+		manager_a.fixture_base_seed(1) != manager_a.fixture_base_seed(2),
+		"fixture_base_seed varies by fixture within the same save",
+	)
+
+	var manager_b := CAREER_MANAGER_SCRIPT.new()
+	manager_b.game_manager_override = get_root().get_node("GameManager")
+	var create_error_b: String = manager_b.create_career(
+		"__Simulate Fixture Test B__", "Simulate FC B", "Landavol", "Club", "Balanced"
+	)
+	_check(create_error_b.is_empty(), "simulation test career B is created successfully")
+	_check(
+		manager_a.fixture_base_seed(1) != manager_b.fixture_base_seed(1),
+		"two different saves no longer replay the same fixture from the same seed",
+	)
+	manager_a.free()
+	manager_b.free()
 
 
 func _test_world_population() -> void:

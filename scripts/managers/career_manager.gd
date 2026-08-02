@@ -183,6 +183,40 @@ func prepare_fixture(fixture_id: int) -> String:
 	return ""
 
 
+## Base seed for a fixture's rallies, tied to this save and this fixture --
+## not a fixed literal every match on every save shared, which is what let two
+## different careers replay an identical scoreline for the same matchup.
+func fixture_base_seed(fixture_id: int) -> int:
+	return absi(hash("%s|fixture|%d" % [str(career.career_name), fixture_id]))
+
+
+## Maximum rallies before giving up on a simulated match. A best-of-5 to 25
+## (win by 2) runs nowhere near this in practice; it exists only to keep a
+## genuine simulation bug from hanging rather than to bound a real match.
+const MAX_SIMULATED_RALLIES: int = 1000
+
+
+## Resolves an entire fixture in one batch -- an "instant result" rather than
+## playing it out rally by rally, for a manager who wants the outcome without
+## the live match screen. Uses the same rally simulator and the same
+## save-specific seeding as a live match; only the playback is skipped.
+func simulate_fixture(fixture_id: int) -> String:
+	var error := prepare_fixture(fixture_id)
+	if not error.is_empty():
+		return error
+	var manager := _game_manager()
+	var base_seed := fixture_base_seed(fixture_id)
+	var rallies := 0
+	while not bool(manager.match_state.match_complete) and rallies < MAX_SIMULATED_RALLIES:
+		var result: Resource = manager.resolve_active_rally(base_seed + rallies)
+		manager.record_rally(result)
+		rallies += 1
+	if not bool(manager.match_state.match_complete):
+		return "Match simulation did not resolve within the expected number of rallies."
+	complete_active_match()
+	return ""
+
+
 func complete_active_match() -> void:
 	if career == null or not bool(_game_manager().match_state.match_complete):
 		return
