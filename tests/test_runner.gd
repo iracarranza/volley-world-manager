@@ -546,6 +546,36 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"player profile summarizes six graded categories from detailed wheels")
 	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 6,
 		"Mental and Tactical remains a six-point wheel with derived Reading and Adaptability")
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Attacking").has("Accuracy"),
+		"attack_accuracy is a visible axis, not an attribute added after the wheel existed",
+	)
+	## `CATEGORY_ATTRIBUTES` is the one place every raw ability attribute is
+	## assigned a category, read by both the wheel and the raw-attribute text
+	## table. Before this existed, those two screens kept independent lists
+	## that could silently drift -- this asserts the union of all categories
+	## is exactly `ABILITY_ATTRIBUTES`, in both directions, so an attribute
+	## added to the player model without being placed in a category fails
+	## here instead of quietly missing from every screen that displays one.
+	var categorized: Array[String] = []
+	for category_name in ATTRIBUTE_PROFILE_SCRIPT.CATEGORY_ATTRIBUTES:
+		for attribute_name in ATTRIBUTE_PROFILE_SCRIPT.CATEGORY_ATTRIBUTES[category_name]:
+			categorized.append(str(attribute_name))
+	var duplicated_or_unknown := false
+	var seen := {}
+	for attribute_name in categorized:
+		if seen.has(attribute_name) or attribute_name not in VolleyballPlayer.ABILITY_ATTRIBUTES:
+			duplicated_or_unknown = true
+		seen[attribute_name] = true
+	var every_attribute_categorized := true
+	for attribute_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		if str(attribute_name) not in categorized:
+			every_attribute_categorized = false
+	_check(
+		not duplicated_or_unknown and every_attribute_categorized
+			and categorized.size() == VolleyballPlayer.ABILITY_ATTRIBUTES.size(),
+		"every ability attribute belongs to exactly one wheel category, and only one",
+	)
 	var conversion_player := academy_roster[6]
 	conversion_player.wingspan_cm = 205.0
 	conversion_player.jump_reach = 95

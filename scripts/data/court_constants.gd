@@ -132,8 +132,21 @@ static func is_front_row_slot(slot_number: int) -> bool:
 	return slot_number in [2, 3, 4]
 
 
+## Returned for a slot number this rotation does not have -- most commonly -1,
+## the result of `slot_for_player()` failing to find a player who has been
+## removed from the lineup. The old default, `Vector2(0.5, 0.85)`, was chosen
+## as "somewhere plausible near the back row" and landed 0.02 short of slot 6's
+## real position, `Vector2(0.50, 0.87)`. On a normalized 0-1 court that is
+## visually indistinguishable, so a player whose slot could not be resolved
+## rendered on top of whoever actually occupies slot 6 -- reported as one
+## player "attached" to another. This sentinel sits off the normalized court
+## entirely so an unresolved slot fails visibly instead of coinciding with a
+## real one.
+const UNRESOLVED_SLOT_POSITION := Vector2(-1.0, -1.0)
+
+
 static func slot_position(slot_number: int) -> Vector2:
-	return ROTATION_SLOT_POSITIONS.get(slot_number, Vector2(0.5, 0.85))
+	return ROTATION_SLOT_POSITIONS.get(slot_number, UNRESOLVED_SLOT_POSITION)
 
 
 static func lane_target(lane_name: String) -> Vector2:

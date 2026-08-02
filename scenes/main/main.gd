@@ -1437,6 +1437,22 @@ func _select_option_text(option: OptionButton, value: String) -> void:
 func _resolve_rally() -> void:
 	if rally_playback_active:
 		return
+	## No autofill exists for a vacated rotation slot, and none should: silently
+	## promoting a bench player is its own way to be surprised mid-match. The
+	## alternative is this -- a rally cannot start on a roster the simulator
+	## cannot field, and the reason is shown where the action was taken rather
+	## than discovered later as a stacked marker in playback (an unresolved
+	## slot used to fall back to a position that coincided with slot 6's real
+	## one; see CourtConstants.UNRESOLVED_SLOT_POSITION).
+	var roster_errors := GameManager.match_roster_errors()
+	if not roster_errors.is_empty():
+		auto_rallies_toggle.button_pressed = false
+		_set_status(
+			"Cannot start a rally: %s" % roster_errors[0]
+			+ (" (+%d more)" % (roster_errors.size() - 1) if roster_errors.size() > 1 else ""),
+			true,
+		)
+		return
 	_capture_match_preview_snapshot()
 
 	# 1. Resolve rally using the seed (1 argument required)

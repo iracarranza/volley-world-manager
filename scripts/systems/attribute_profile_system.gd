@@ -7,12 +7,56 @@ const PROFILE_NAMES: Array[String] = [
 ]
 
 const PROFILE_TOOLTIPS := {
-	"Attacking": "Power, tooling, feinting, finesse, approach timing and shot variety.",
+	"Attacking": "Power, accuracy, tooling, feinting, finesse, approach timing and shot variety.",
 	"Defensive": "Reception technique, balance, stability, range, block timing and dig control.",
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise and hand control.",
 	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity and stamina.",
 	"Serving": "Power, technique, placement, consistency, aggression and variation.",
 	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline and improvisation.",
+}
+
+## The one place every raw ability attribute is assigned to a category. Every
+## screen that needs to group `VolleyballPlayer.ABILITY_ATTRIBUTES` -- the
+## wheel's detailed view and the raw attribute-profile text -- reads this
+## rather than keeping its own list. Two independent copies used to exist
+## (this file's wheel categories and `career_dashboard.gd`'s `ATTRIBUTE_GROUPS`)
+## with different category names and no attribute-accuracy in either, which is
+## exactly the kind of thing that drifts silently: adding an attribute meant
+## updating two lists by hand, and nothing enforced that both were updated.
+##
+## Membership matches the wheel's 6 categories, not a 7th "Reception" bucket:
+## reception/reception_balance/reception_stability/ball_control belong to
+## Defensive, since a libero's defensive game is one thing on this wheel.
+##
+## A regression check sums these against `VolleyballPlayer.ABILITY_ATTRIBUTES`
+## in both directions, so an attribute added to the player model without being
+## placed here fails loudly instead of silently missing from every screen that
+## displays a category.
+const CATEGORY_ATTRIBUTES := {
+	"Attacking": [
+		"attack_power", "attack_accuracy", "arm_speed", "approach_timing",
+		"tooling", "feinting", "finesse", "shot_variety",
+	],
+	"Defensive": [
+		"reception", "reception_balance", "reception_stability",
+		"block_timing", "ball_control", "dig_control",
+	],
+	"Setting & Ball Control": [
+		"set_accuracy", "set_balance", "set_stability", "tempo_control",
+		"set_disguise", "hand_control",
+	],
+	"Physical": [
+		"acceleration", "lateral_speed", "transition_speed", "explosiveness",
+		"jump_reach", "stamina",
+	],
+	"Serving": [
+		"serve_power", "serve_technique", "serve_placement",
+		"serve_consistency", "serve_aggression", "serve_variation",
+	],
+	"Mental & Tactical": [
+		"court_vision", "anticipation", "decision_making", "composure",
+		"tactical_discipline", "improvisation", "adaptability",
+	],
 }
 
 
@@ -54,7 +98,14 @@ static func detailed_profile(player: VolleyballPlayer, profile_name: String) -> 
 				"Tactical Discipline": player.tactical_discipline,
 				"Improvisation": player.improvisation, "Adaptability": player.adaptability}
 		_:
-			return {"Power": player.usable_attack_power(), "Tooling": player.tooling,
+			## "Power" replaces attack_power/arm_speed with the composite that
+			## actually reflects usable hitting power; attack_accuracy did not
+			## exist as an attribute when this section was first built and was
+			## never added as its own axis afterward, leaving it invisible on
+			## every wheel and profile screen despite being a primary attribute
+			## for three of the five positions.
+			return {"Power": player.usable_attack_power(),
+				"Accuracy": player.attack_accuracy, "Tooling": player.tooling,
 				"Feinting": player.feinting, "Finesse": player.finesse,
 				"Approach Timing": player.approach_timing, "Shot Variety": player.shot_variety}
 

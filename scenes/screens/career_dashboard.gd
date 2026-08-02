@@ -8,15 +8,6 @@ const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
-const ATTRIBUTE_GROUPS := {
-	"Physical": ["acceleration", "lateral_speed", "transition_speed", "explosiveness", "jump_reach", "stamina"],
-	"Serving": ["serve_power", "serve_technique", "serve_placement", "serve_consistency", "serve_aggression", "serve_variation"],
-	"Reception": ["reception", "reception_balance", "reception_stability", "ball_control"],
-	"Setting and Hand Control": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control"],
-	"Attacking": ["attack_power", "arm_speed", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety"],
-	"Defense": ["block_timing", "dig_control"],
-	"Mental and Tactical": ["court_vision", "anticipation", "decision_making", "composure", "tactical_discipline", "improvisation", "adaptability"],
-}
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const WHEEL_TOOLTIPS := {
 	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
@@ -49,6 +40,7 @@ const WHEEL_TOOLTIPS := {
 	"Serve Consistency": "Ability to reproduce a legal controlled serve without errors.",
 	"Serve Aggression": "Natural willingness and ability to increase pressure at greater risk.",
 	"Serve Variation": "Ability to vary trajectory, pace, depth and serve type.",
+	"Accuracy": "Precision hitting the intended target rather than merely clearing the block.",
 }
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -65,6 +57,7 @@ const WHEEL_TOOLTIPS := {
 @onready var position_training_option: OptionButton = %PositionTrainingOption
 @onready var position_training_summary: Label = %PositionTrainingSummary
 @onready var lineup_status_option: OptionButton = %LineupStatusOption
+@onready var roster_status_label: Label = %RosterStatusLabel
 @onready var team_summary: RichTextLabel = %TeamSummary
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
@@ -180,7 +173,23 @@ func _refresh_home() -> void:
 	%CompetitionCard.set_summary("%s" % ("Week %d vs %s" % [fixture.week, fixture.opponent_name] if fixture != null else "Schedule complete"))
 
 
+## Live lineup completeness, shown where the edit happens rather than only
+## later on the fixture tab. Benching a starter clears their rotation slot
+## with no autofill -- deliberately, since silently promoting a bench player
+## is its own way to be surprised mid-match -- so the vacancy has to be visible
+## immediately or it goes unnoticed until "Run Rally" refuses to start.
+func _refresh_roster_status() -> void:
+	var errors := GameManager.match_roster_errors()
+	if errors.is_empty():
+		roster_status_label.text = "Lineup complete: six rotation slots filled, no conflicts."
+		roster_status_label.remove_theme_color_override("font_color")
+	else:
+		roster_status_label.text = "Lineup incomplete -- %s" % "; ".join(errors)
+		roster_status_label.add_theme_color_override("font_color", Color(0.95, 0.55, 0.35))
+
+
 func _refresh_roster() -> void:
+	_refresh_roster_status()
 	roster_list.clear()
 	for player_id in GameManager.team.player_ids:
 		var player := GameManager.player_by_id(player_id)
@@ -278,10 +287,16 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 
 
 func _raw_attribute_text(player: VolleyballPlayer) -> String:
+	## Reads `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than a second,
+	## hand-typed grouping. This table and the wheel used to keep independent
+	## category lists with different names and different membership -- this
+	## one had a "Reception" bucket the wheel didn't, and neither had
+	## attack_accuracy at all. One definition means an attribute added to the
+	## player model only needs placing once to appear correctly everywhere.
 	var result := "[table=3]"
-	for group_name in ATTRIBUTE_GROUPS:
+	for group_name in AttributeProfiles.CATEGORY_ATTRIBUTES:
 		var lines: Array[String] = ["[b]%s[/b]" % group_name]
-		for attribute_name in ATTRIBUTE_GROUPS[group_name]:
+		for attribute_name in AttributeProfiles.CATEGORY_ATTRIBUTES[group_name]:
 			var display_name := str(attribute_name).replace("_", " ").capitalize()
 			if str(attribute_name) == "reception":
 				display_name = "Reception Technique"
