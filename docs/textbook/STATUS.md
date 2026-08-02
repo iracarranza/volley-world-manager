@@ -249,6 +249,23 @@ This page is the quickest defense against confusing source-code existence with a
   ceiling because it had been written against a saturated `primary_close`.
   Scouting now sharpens the formation before the contest and the extra roll is
   gone. Rally length fell from 12.26 contacts to 11.29.
+- **The two sides of the net are not symmetric, and it is measured now.** The
+  home attack wins 87% of the points against an opponent squad drawn from the
+  same generator. The cause is that the opponent has no first-ball set path:
+  their serve-receive set runs through `_resolve_opponent_transition()`, the
+  scramble function, while the home side runs `SetterCapabilitySystem.evaluate()`.
+  Eight separate asymmetries were found and fixed this session, every one of
+  them an instance of the home team being modelled fully and the opponent as a
+  simplified parallel implementation, and every one found by accident hours
+  after it was introduced. `home_attack_share` is now reported by
+  `outcome_calibration()` with a suite ratchet at 0.90 (target 0.55), so the
+  next one fails immediately instead of hiding.
+- **Every contact resolves through one formula on one scale.** The serve, set,
+  swing, block and dig each carried two or three copies with different weight
+  totals, all compared against each other and against thresholds that could only
+  be right for one at a time. Execution is now capability -- a fraction of an
+  ideal player -- times opportunity, as a product rather than a sum, because an
+  act is only as good as the worst thing about it.
 - **A late block is now actually late.** `primary_close` resolved at exactly 1.0
   for every blocker in every rally, because the closing budget was
   `maximum_speed × available_time`: the blocker left the ready stance at top

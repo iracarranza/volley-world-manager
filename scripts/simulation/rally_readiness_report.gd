@@ -198,6 +198,8 @@ static func outcome_calibration(
 	var attack_errors := 0
 	var stuffs := 0
 	var receiving_team_won := 0
+	var home_attack_wins := 0
+	var opponent_attack_wins := 0
 	var block_outcomes := {}
 	var blocks_formed := 0
 	var blocks_touching := 0
@@ -247,6 +249,16 @@ static func outcome_calibration(
 					attack_errors += 1
 				"blocked", "counter_block":
 					stuffs += 1
+		## Which side's attack won the point. Every asymmetry found in this
+		## engine has been the same defect -- the home team is modelled fully
+		## and the opponent as a simplified parallel implementation -- and each
+		## was found by accident, hours after it was introduced, because nothing
+		## ever compared the two sides against each other.
+		match outcome:
+			"kill":
+				home_attack_wins += 1
+			"opponent_kill":
+				opponent_attack_wins += 1
 		## Side-out: the team that did not serve won the rally.
 		var served_by_home := bool(record["serving_home"])
 		if bool(record["home_won"]) != served_by_home:
@@ -280,6 +292,15 @@ static func outcome_calibration(
 		"terminal_outcomes": outcomes,
 		"attack_attempts": attacks,
 		"terminal_attacks": terminal_attacks,
+		"home_attack_wins": home_attack_wins,
+		"opponent_attack_wins": opponent_attack_wins,
+		## 0.5 is even. Above it the home side's attack is winning more, and
+		## since both squads are drawn from the same generator on the generated
+		## population, anything far from even is a defect in the engine rather
+		## than a difference between the teams.
+		"home_attack_share": float(home_attack_wins) / maxf(
+			float(home_attack_wins + opponent_attack_wins), 1.0
+		),
 		"blocks_formed": blocks_formed,
 		"block_outcomes": block_outcomes,
 		## Share of formed blocks whose primary sealed the lane completely. A
