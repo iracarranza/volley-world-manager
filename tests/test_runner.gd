@@ -14,6 +14,7 @@ const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
 const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
 const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
 const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population.gd")
+const WORLD_AGING_SCRIPT := preload("res://scripts/systems/world_aging.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
@@ -182,6 +183,7 @@ func _initialize() -> void:
 	_test_career_calendar_generation_training_and_saves()
 	_test_sixnet_league()
 	_test_world_population()
+	_test_world_aging()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -893,8 +895,22 @@ func _test_sixnet_league() -> void:
 		wins_total += int(record.get("wins", 0))
 		losses_total += int(record.get("losses", 0))
 	_check(
-		total_matches == 24 and wins_total == 12 and losses_total == 12,
-		"a full season is 12 matches (6 per 4-team bracket x 2 brackets), each with exactly one winner",
+		total_matches == 42 and wins_total == 21 and losses_total == 21,
+		"a season is 21 matches -- a 4-team qualifier plus a 6-team championship",
+	)
+	_check(
+		career.sixnet_qualified_slots.size()
+				== SIXNET_LEAGUE_SCRIPT.QUALIFIER_ADVANCE_COUNT
+			and career.sixnet_championship_standings.size() == 6
+			and career.sixnet_qualifier_standings.size() == 4,
+		"two lower-bracket teams join the seeded four, making the championship six",
+	)
+	_check(
+		not str(career.sixnet_champion_region).is_empty()
+			and career.sixnet_championship_standings.has(
+				SIXNET_LEAGUE_SCRIPT.AACE_FIXED_SLOT
+			),
+		"the championship crowns a region, and the seeded four all play in it",
 	)
 
 	## Power is smoothed toward a win-rate-implied target (25% of the way,
@@ -1030,10 +1046,15 @@ func _test_world_population() -> void:
 	## This is the check that stops the world from filling up with
 	## wonderkids -- if scarcity ever silently becomes a probability again,
 	## it fails here.
+	## Read through the same scaling helper generation uses, rather than the
+	## raw constant: generational is fixed world-wide while the other scarce
+	## tiers scale with population, so a hardcoded expectation here would
+	## silently only be right at the default size.
 	var expected_tier_totals := {}
 	for tier in WORLD_POPULATION_SCRIPT.TALENT_TIERS:
-		if int(tier.world_total) > 0:
-			expected_tier_totals[str(tier.key)] = int(tier.world_total)
+		var scaled: int = WORLD_POPULATION_SCRIPT.tier_world_total(tier, 1200)
+		if scaled > 0:
+			expected_tier_totals[str(tier.key)] = scaled
 	var allotments_exact := true
 	for tier_key in expected_tier_totals:
 		if int(summary.by_tier.get(tier_key, 0)) != int(expected_tier_totals[tier_key]):
@@ -1181,10 +1202,22 @@ func _test_world_population() -> void:
 			> world_top_share * 1.5,
 		"A'ace fields markedly more scoutable talent than the world average",
 	)
+	## The cleanest statement of "it signs talent rather than breeding it":
+	## count the same tier pool twice, once by where those players were
+	## raised and once by where they play. A'ace is the only region whose
+	## count *grows* between the two columns, and it roughly doubles;
+	## everywhere else holds level or loses.
+	##
+	## Deliberately a same-region ratio rather than a share of the world.
+	## Every region is guaranteed a young prospect regardless of how many
+	## players it raises, so a low-output region shows an inflated scoutable
+	## *share* -- an artifact of that floor, not of A'ace breeding
+	## champions. Comparing A'ace against itself cancels it out entirely.
+	## The claim that A'ace's birth rate carries no talent bias at all is
+	## asserted structurally above, which no sample this size could settle.
 	_check(
-		float(pooled.aace_born_top) / float(maxi(int(pooled.aace_born), 1))
-			< world_top_share * 1.5,
-		"A'ace does not raise more talent than anywhere else -- it signs it",
+		float(pooled.aace_club_top) > float(pooled.aace_born_top) * 1.5,
+		"A'ace fields far more top-tier players than it raised -- it signs them",
 	)
 	_check(
 		pooled.aace_club > pooled.aace_born,
@@ -1282,6 +1315,136 @@ func _test_world_population() -> void:
 	_check(
 		not generational_listed,
 		"generational talent is never simply listed on the open market",
+	)
+
+
+func _test_world_aging() -> void:
+	var career := CAREER_STATE_SCRIPT.new()
+	career.career_name = "Aging Test Academy"
+	var population: Array[VolleyballPlayer] = WORLD_POPULATION_SCRIPT.generate(4242, 1200)
+	career.world_population_size = population.size()
+	for golden_age in WORLD_POPULATION_SCRIPT.golden_cohorts(4242):
+		career.golden_birth_years.append(1 - int(golden_age))
+	var starting_size := population.size()
+	var starting_bands: Dictionary = WORLD_POPULATION_SCRIPT.summarize(population).by_band
+
+	## One season, watched closely.
+	var sample_id := int((population[0] as VolleyballPlayer).id)
+	var sample_age_before := int((population[0] as VolleyballPlayer).age)
+	var report: Dictionary = WORLD_AGING_SCRIPT.advance_year(population, career, 2, 991)
+	_check(
+		int(report.retired) > 0 and int(report.intake) > 0
+			and int(report.retired) == int(report.intake),
+		"a season retires players and replaces them with an intake of the same size",
+	)
+	_check(
+		population.size() == starting_size,
+		"the world neither grows nor shrinks as it turns over",
+	)
+	var sample_after: VolleyballPlayer = null
+	for player_resource in population:
+		if int((player_resource as VolleyballPlayer).id) == sample_id:
+			sample_after = player_resource as VolleyballPlayer
+	_check(
+		sample_after == null or int(sample_after.age) == sample_age_before + 1,
+		"a surviving player is exactly one year older",
+	)
+	var intake_all_fifteen := int(report.intake) > 0
+	for player_resource in report.intake_players:
+		var newcomer: VolleyballPlayer = player_resource as VolleyballPlayer
+		if int(newcomer.age) != WORLD_AGING_SCRIPT.INTAKE_AGE \
+				or str(newcomer.home_region).is_empty() \
+				or str(newcomer.club_region).is_empty():
+			intake_all_fifteen = false
+	_check(
+		intake_all_fifteen,
+		"every new intake player enters at the youngest age with a full biography",
+	)
+	var nobody_past_final := true
+	for player_resource in population:
+		if int((player_resource as VolleyballPlayer).age) > WORLD_AGING_SCRIPT.FINAL_AGE:
+			nobody_past_final = false
+	_check(nobody_past_final, "nobody plays on past the final age")
+
+	## Twenty more seasons. The shape of the world, the size of it and the
+	## scarcity of talent all have to survive a long career -- this is the
+	## check that a slow leak would show up in, and one did: an earlier
+	## intake formula floored its share to zero at every realistic shortfall,
+	## draining the standout tier from nineteen alive to thirteen over
+	## twenty years while every per-season assertion still passed.
+	for year in range(3, 23):
+		WORLD_AGING_SCRIPT.advance_year(
+			population, career, year, int(hash("aging|%d" % year))
+		)
+	var final_summary: Dictionary = WORLD_POPULATION_SCRIPT.summarize(population)
+	_check(
+		population.size() == starting_size,
+		"the population is still exactly its original size after twenty seasons",
+	)
+	var pyramid_held := true
+	for band_key in starting_bands:
+		if int(final_summary.by_band.get(band_key, 0)) != int(starting_bands[band_key]):
+			pyramid_held = false
+	_check(
+		pyramid_held,
+		"the age pyramid is unchanged after twenty seasons, because attrition is derived from it",
+	)
+	var scarcity_held := true
+	for tier in WORLD_POPULATION_SCRIPT.TALENT_TIERS:
+		var target: int = WORLD_POPULATION_SCRIPT.tier_world_total(tier, starting_size)
+		if target <= 0:
+			continue
+		var alive := int(final_summary.by_tier.get(str(tier.key), 0))
+		## Never over budget, and never drained to a fraction of it. Scarce
+		## tiers are meant to ebb between golden generations and refill when
+		## one arrives, so the floor is generous while the ceiling is exact.
+		if alive > target or alive < roundi(float(target) * 0.5):
+			scarcity_held = false
+	_check(
+		scarcity_held,
+		"talent stays inside its budget over twenty seasons -- never exceeded, never drained away",
+	)
+
+	## The golden cadence keeps running forward instead of stopping at the
+	## ages the world was born with.
+	var extended := 0
+	for birth_year in career.golden_birth_years:
+		if int(birth_year) > 1 - WORLD_POPULATION_SCRIPT.MIN_AGE:
+			extended += 1
+	_check(
+		extended >= 1,
+		"new golden generations keep arriving as the career runs, rather than only existing at world generation",
+	)
+	var cadence_spaced := true
+	var sorted_golden: Array = career.golden_birth_years.duplicate()
+	sorted_golden.sort()
+	for index in range(1, sorted_golden.size()):
+		if int(sorted_golden[index]) - int(sorted_golden[index - 1]) \
+				< WORLD_POPULATION_SCRIPT.GOLDEN_MIN_GAP:
+			cadence_spaced = false
+	_check(
+		cadence_spaced,
+		"golden generations added mid-career respect the same spacing as the original ones",
+	)
+
+	## Redevelopment reads a player's ceilings at a new age rather than
+	## inventing a second development model, so growth and decline both
+	## follow the curve that generated them.
+	var prospect: VolleyballPlayer = PLAYER_GENERATOR_SCRIPT.generate_prospect(
+		"Landavol", "Outside Hitter", "OH", 16, 88, 900500, "Redevelop Test", 4242,
+	)
+	var young_ability := int(prospect.current_ability_score())
+	var young_potential := int(prospect.potential)
+	PLAYER_GENERATOR_SCRIPT.redevelop_to_age(prospect, 25, 900500)
+	var peak_ability := int(prospect.current_ability_score())
+	PLAYER_GENERATOR_SCRIPT.redevelop_to_age(prospect, 37, 900500)
+	_check(
+		peak_ability > young_ability and int(prospect.potential) == young_potential,
+		"redeveloping a prospect toward their prime raises ability without moving their ceiling",
+	)
+	_check(
+		int(prospect.current_ability_score()) < peak_ability,
+		"a player past their peak declines rather than holding their best form forever",
 	)
 
 

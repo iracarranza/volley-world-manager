@@ -22,12 +22,18 @@ const ALL_SLOT_IDS: Array[String] = [
 	"lower_1", "lower_2", "lower_3", "lower_4",
 ]
 
-## Where the two non-core regions enter the bracket at world generation.
-## A'ace buys its way straight into the top table; Ispayk starts in the
-## lower bracket it fell into. Neither is pinned there afterward -- both
-## promote and relegate like any other participant.
-const AACE_FIXED_SLOT: String = "upper_1"
-const ISPAYK_FIXED_SLOT: String = "lower_1"
+## Where the two non-core regions enter at world generation, both at the
+## *bottom* of their bracket. A'ace bought a seat at the top table and is
+## the least established team sitting at it; Ispayk is rock bottom of
+## everything. Neither is pinned there afterward -- both promote and
+## relegate like any other participant.
+const AACE_FIXED_SLOT: String = "upper_4"
+const ISPAYK_FIXED_SLOT: String = "lower_4"
+
+## How many lower-bracket teams survive the qualifier and join the
+## championship proper. Four auto-qualified plus these two is what makes the
+## Sixnet six.
+const QUALIFIER_ADVANCE_COUNT: int = 2
 
 ## Rating gap at which a 1-vs-1 match is ~88% decisive -- decisive but never
 ## a certainty, so an underdog region's slot-team can still upset.
@@ -152,31 +158,102 @@ static func _empty_record() -> Dictionary:
 	return {"wins": 0, "losses": 0, "sets_won": 0, "sets_lost": 0}
 
 
-## Round-robin within each 4-team bracket (6 pairings x 2 brackets = 12
-## matches), resolved synchronously in one batch -- cheap enough (12 RNG
-## draws) that there's no need to spread this across the year's 48 weeks or
-## add background threading. Never touches the player's own `career.fixtures`;
-## this is a background league the player doesn't play in.
+## A season in two stages, which is what makes the name honest again.
+##
+## The four lower-bracket teams play a qualifying round robin first (6
+## matches). The best two survive and join the four auto-qualified upper
+## teams for the championship proper -- six teams, fifteen matches. That is
+## the Sixnet: the tournament has always been six, and the eight-team field
+## added earlier quietly made the name a lie until this stage existed.
+##
+## Both stages are recorded, separately as well as combined, because they
+## answer different questions: the qualifier decides who comes up, the
+## championship decides who is champion, and a team's power should move on
+## everything it played. Twenty-one matches resolve in one synchronous
+## batch; this never touches the player's own `career.fixtures`.
 static func resolve_full_season(career: Resource) -> Dictionary:
 	var standings := {}
 	for slot_id in ALL_SLOT_IDS:
 		standings[slot_id] = _empty_record()
+	var qualifier_standings := {}
+	for slot_id in LOWER_SLOT_IDS:
+		qualifier_standings[slot_id] = _empty_record()
 	var match_seed_base := int(career.sixnet_season_start_week) * 7919 \
 		+ int(hash(str(career.career_name)))
 	var match_index := 0
-	for slot_ids in [UPPER_SLOT_IDS, LOWER_SLOT_IDS]:
-		for pairing in _round_robin_pairings(slot_ids):
-			var slot_a: String = pairing[0]
-			var slot_b: String = pairing[1]
-			var region_a := str(career.sixnet_slots.get(slot_a, ""))
-			var region_b := str(career.sixnet_slots.get(slot_b, ""))
-			var rating_a := float(career.region_power.get(region_a, 50.0))
-			var rating_b := float(career.region_power.get(region_b, 50.0))
-			var result := resolve_match(rating_a, rating_b, match_seed_base + match_index)
-			match_index += 1
-			_record_result(standings, slot_a, slot_b, result)
+
+	## Stage one: the lower bracket plays for the two open championship places.
+	for pairing in _round_robin_pairings(LOWER_SLOT_IDS):
+		var result := _resolve_slot_pairing(
+			career, pairing[0], pairing[1], match_seed_base + match_index
+		)
+		match_index += 1
+		_record_result(standings, pairing[0], pairing[1], result)
+		_record_result(qualifier_standings, pairing[0], pairing[1], result)
+
+	## Stage two: the four seeded teams plus whoever came through.
+	var qualified: Array[String] = []
+	for slot_id in _rank_slots(qualifier_standings, LOWER_SLOT_IDS):
+		if qualified.size() < QUALIFIER_ADVANCE_COUNT:
+			qualified.append(slot_id)
+	var championship_slots: Array[String] = []
+	championship_slots.append_array(UPPER_SLOT_IDS)
+	championship_slots.append_array(qualified)
+	var championship_standings := {}
+	for slot_id in championship_slots:
+		championship_standings[slot_id] = _empty_record()
+	for pairing in _round_robin_pairings(championship_slots):
+		var result := _resolve_slot_pairing(
+			career, pairing[0], pairing[1], match_seed_base + match_index
+		)
+		match_index += 1
+		_record_result(standings, pairing[0], pairing[1], result)
+		_record_result(championship_standings, pairing[0], pairing[1], result)
+
+	var champion_slots := _rank_slots(championship_standings, championship_slots)
 	career.sixnet_standings = standings
-	return {"standings": standings}
+	career.sixnet_qualifier_standings = qualifier_standings
+	career.sixnet_championship_standings = championship_standings
+	career.sixnet_qualified_slots.assign(qualified)
+	career.sixnet_champion_region = str(
+		career.sixnet_slots.get(champion_slots[0], "")
+	) if not champion_slots.is_empty() else ""
+	return {
+		"standings": standings, "qualifier": qualifier_standings,
+		"championship": championship_standings, "qualified": qualified,
+		"champion": career.sixnet_champion_region,
+	}
+
+
+static func _resolve_slot_pairing(
+	career: Resource, slot_a: String, slot_b: String, seed_value: int,
+) -> Dictionary:
+	var region_a := str(career.sixnet_slots.get(slot_a, ""))
+	var region_b := str(career.sixnet_slots.get(slot_b, ""))
+	return resolve_match(
+		float(career.region_power.get(region_a, 50.0)),
+		float(career.region_power.get(region_b, 50.0)),
+		seed_value,
+	)
+
+
+## Orders slots best-first on wins, then set difference as the tiebreak, so
+## a qualifier that ends level does not resolve on dictionary order.
+static func _rank_slots(standings: Dictionary, slot_ids: Array) -> Array[String]:
+	var ranked: Array[String] = []
+	ranked.assign(slot_ids)
+	ranked.sort_custom(func(a, b):
+		var record_a: Dictionary = standings.get(a, _empty_record())
+		var record_b: Dictionary = standings.get(b, _empty_record())
+		var wins_a := int(record_a.get("wins", 0))
+		var wins_b := int(record_b.get("wins", 0))
+		if wins_a != wins_b:
+			return wins_a > wins_b
+		var diff_a := int(record_a.get("sets_won", 0)) - int(record_a.get("sets_lost", 0))
+		var diff_b := int(record_b.get("sets_won", 0)) - int(record_b.get("sets_lost", 0))
+		return diff_a > diff_b
+	)
+	return ranked
 
 
 static func _record_result(
@@ -232,34 +309,31 @@ static func apply_power_update(career: Resource) -> void:
 		)
 
 
-## A pure 1-for-1 slot-occupant swap between the worst-ranked upper-bracket
-## region and the best-ranked lower-bracket region -- never a slot
-## removal/addition, preserving the fixed 8-slot invariant the whole system
-## depends on.
+## A pure 1-for-1 slot-occupant swap -- never a slot removal or addition,
+## preserving the fixed 8-slot invariant the whole system depends on.
+##
+## Each stage judges its own teams: the relegated side is whoever finished
+## last *in the championship* among the seeded four, and the promoted side is
+## whoever won *the qualifier*. Judging both off one combined table would
+## punish an upper team for a stage it never played and reward a lower team
+## for beating opponents the upper teams never faced.
 static func apply_promotion_relegation(career: Resource) -> void:
-	var upper_ranked := _rank_slots_by_wins(career, UPPER_SLOT_IDS)
-	var lower_ranked := _rank_slots_by_wins(career, LOWER_SLOT_IDS)
-	if upper_ranked.is_empty() or lower_ranked.is_empty():
+	var championship: Dictionary = career.sixnet_championship_standings
+	var qualifier: Dictionary = career.sixnet_qualifier_standings
+	if championship.is_empty() or qualifier.is_empty():
 		return
-	var worst_upper_slot: String = upper_ranked[upper_ranked.size() - 1]
-	var best_lower_slot: String = lower_ranked[0]
+	var seeded_ranked := _rank_slots(championship, UPPER_SLOT_IDS)
+	var qualifier_ranked := _rank_slots(qualifier, LOWER_SLOT_IDS)
+	if seeded_ranked.is_empty() or qualifier_ranked.is_empty():
+		return
+	var worst_upper_slot: String = seeded_ranked[seeded_ranked.size() - 1]
+	var best_lower_slot: String = qualifier_ranked[0]
 	var worst_upper_region := str(career.sixnet_slots[worst_upper_slot])
 	var best_lower_region := str(career.sixnet_slots[best_lower_slot])
 	if worst_upper_region == best_lower_region:
-		return  ## same region already holds both slots -- nothing to swap
+		return
 	career.sixnet_slots[worst_upper_slot] = best_lower_region
 	career.sixnet_slots[best_lower_slot] = worst_upper_region
-
-
-static func _rank_slots_by_wins(career: Resource, slot_ids: Array) -> Array:
-	var ranked: Array = slot_ids.duplicate()
-	var standings: Dictionary = career.sixnet_standings
-	ranked.sort_custom(func(a, b):
-		var record_a: Dictionary = standings.get(a, _empty_record())
-		var record_b: Dictionary = standings.get(b, _empty_record())
-		return int(record_a.get("wins", 0)) > int(record_b.get("wins", 0))
-	)
-	return ranked
 
 
 ## The two-branch influence mechanic: a region with a meaningfully stronger

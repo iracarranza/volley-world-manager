@@ -9,6 +9,7 @@ const Training := preload("res://scripts/systems/training_system.gd")
 const Calendar := preload("res://scripts/data/calendar_rules.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const WorldPopulation := preload("res://scripts/systems/world_population.gd")
+const WorldAging := preload("res://scripts/systems/world_aging.gd")
 
 signal career_changed
 signal career_loaded
@@ -30,6 +31,10 @@ var game_manager_override: Node
 ## while the career file itself is rewritten every week.
 var world_population: Array[VolleyballPlayer] = []
 var _world_dirty: bool = false
+## What the last season's turnover did -- retirements, intake size, whether a
+## golden generation arrived. Raw material for a news feed; kept in memory
+## rather than saved, since it describes an event rather than a state.
+var last_world_report: Dictionary = {}
 
 
 func has_career() -> bool:
@@ -76,9 +81,15 @@ func create_career(
 	## slice taken out of it rather than a separate roll, so every player the
 	## manager can sign is a real person from somewhere with a real place in
 	## the world's talent distribution.
+	var world_seed := seed_value + 991
 	world_population = WorldPopulation.generate(
-		seed_value + 991, WorldPopulation.DEFAULT_POPULATION_SIZE, state.region_overlay
+		world_seed, WorldPopulation.DEFAULT_POPULATION_SIZE, state.region_overlay
 	)
+	## Golden years are recorded in the world's own calendar so the cadence
+	## can carry forward as the career runs, rather than being re-derived
+	## from ages that shift every season.
+	for golden_age in WorldPopulation.golden_cohorts(world_seed):
+		state.golden_birth_years.append(1 - int(golden_age))
 	state.transfer_pool.assign(
 		WorldPopulation.draw_market(world_population, 120, seed_value + 1777)
 	)
@@ -144,6 +155,11 @@ func advance_week() -> String:
 	var post_year: int = Calendar.state_for_week(career.absolute_week).year
 	if post_year != pre_year:
 		SixnetLeague.resolve_season_boundary(career)
+		## The world turns over once the season is settled: everyone ages and
+		## redevelops, the players the pyramid has no room for leave, and a
+		## new intake arrives. This is the only thing that makes the
+		## population a history rather than a snapshot.
+		_advance_world_year(post_year)
 	for player in _game_manager().players:
 		player.fatigue = maxf(player.fatigue - 0.04, 0.0)
 	save_career()
@@ -392,6 +408,65 @@ func _save_path(save_id: String) -> String:
 
 func _world_path(save_id: String) -> String:
 	return "%s/%s%s.json" % [SAVE_DIRECTORY, _safe_id(save_id), WORLD_FILE_SUFFIX]
+
+
+## Turns the world over for one season, transfer market included.
+##
+## The market is merged back into the population for the duration, because a
+## listed player is a person in the world like any other -- they should age,
+## and they should be able to retire unsigned rather than sitting on the
+## market forever at the same age. Afterwards the two are split apart again
+## by the ids that were listed, minus anyone who did not survive.
+func _advance_world_year(world_year: int) -> void:
+	var listed_ids := {}
+	var everyone: Array[VolleyballPlayer] = world_population.duplicate()
+	for listed in career.transfer_pool:
+		var player: VolleyballPlayer = listed as VolleyballPlayer
+		if player == null:
+			continue
+		listed_ids[int(player.id)] = true
+		everyone.append(player)
+
+	last_world_report = WorldAging.advance_year(
+		everyone, career, world_year,
+		int(hash("%s|world|%d" % [str(career.career_name), world_year])),
+	)
+
+	var surviving_market: Array[VolleyballPlayer] = []
+	var remaining: Array[VolleyballPlayer] = []
+	for player in everyone:
+		if listed_ids.has(int(player.id)):
+			surviving_market.append(player)
+		else:
+			remaining.append(player)
+	world_population = remaining
+	career.transfer_pool.assign(surviving_market)
+	_age_managed_roster()
+	_world_dirty = true
+
+
+## The managed roster ages too, but is deliberately *not* redeveloped from
+## its ceilings the way world players are: these players have been trained,
+## so recomputing them from age alone would silently delete every gain the
+## manager earned. They get a year older, lose a little of what fades with
+## age, and retire at the end of the same career span everyone else has.
+func _age_managed_roster() -> void:
+	var manager := _game_manager()
+	for player_resource in manager.players.duplicate():
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		player.age += 1
+		player.professional_experience = maxi(player.age - 20, 0)
+		if player.age > WorldAging.FINAL_AGE:
+			manager.clear_player_from_rotations(int(player.id))
+			manager.set_player_starting(int(player.id), false)
+			manager.unregister_player(int(player.id))
+			continue
+		if player.age <= Generator.PHYSICAL_PEAK_AGE:
+			continue
+		for property_name in Generator.PHYSICAL_ATTRIBUTES:
+			player.set(property_name, maxi(int(player.get(property_name)) - 1, 1))
 
 
 func _safe_id(value: String) -> String:

@@ -31,6 +31,13 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## dict) generates identically to before this feature existed.
 @export var region_overlay: Dictionary = {}
 @export var sixnet_standings: Dictionary = {}  ## slot_id -> {wins, losses, sets_won, sets_lost}
+## The two stages recorded separately as well as combined above: the
+## qualifier decides who comes up, the championship decides who is champion,
+## and promotion/relegation reads each stage against its own teams.
+@export var sixnet_qualifier_standings: Dictionary = {}
+@export var sixnet_championship_standings: Dictionary = {}
+@export var sixnet_qualified_slots: Array[String] = []
+@export var sixnet_champion_region: String = ""
 @export var sixnet_season_start_week: int = 0
 
 ## How many players this career's world was generated with. Metadata only --
@@ -39,6 +46,13 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## and almost never changes while the career file is rewritten every single
 ## week. `CareerManager` owns loading and saving it.
 @export var world_population_size: int = 0
+
+## Birth years that produced a golden generation, in this world's own
+## calendar (career year 1 minus the player's age at world generation).
+## Kept rather than re-derived so the cadence carries forward across a
+## career instead of restarting: `WorldAging` extends this list one year at
+## a time, respecting the same spacing rule that seeded it.
+@export var golden_birth_years: Array[int] = []
 
 ## Transfer-listed players, serialized as ids into the world population so a
 ## player is never stored twice. `CareerManager` resolves these back into
@@ -66,8 +80,13 @@ func to_dict() -> Dictionary:
 		"sixnet_slots": sixnet_slots.duplicate(true),
 		"region_overlay": region_overlay.duplicate(true),
 		"sixnet_standings": sixnet_standings.duplicate(true),
+		"sixnet_qualifier_standings": sixnet_qualifier_standings.duplicate(true),
+		"sixnet_championship_standings": sixnet_championship_standings.duplicate(true),
+		"sixnet_qualified_slots": sixnet_qualified_slots.duplicate(),
+		"sixnet_champion_region": sixnet_champion_region,
 		"sixnet_season_start_week": sixnet_season_start_week,
-		"world_population_size": world_population_size}
+		"world_population_size": world_population_size,
+		"golden_birth_years": golden_birth_years.duplicate()}
 
 
 static func from_dict(data: Dictionary) -> VolleyballCareerState:
@@ -98,6 +117,17 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.sixnet_slots = Dictionary(data.get("sixnet_slots", {})).duplicate(true)
 	state.region_overlay = Dictionary(data.get("region_overlay", {})).duplicate(true)
 	state.sixnet_standings = Dictionary(data.get("sixnet_standings", {})).duplicate(true)
+	state.sixnet_qualifier_standings = Dictionary(
+		data.get("sixnet_qualifier_standings", {})
+	).duplicate(true)
+	state.sixnet_championship_standings = Dictionary(
+		data.get("sixnet_championship_standings", {})
+	).duplicate(true)
+	for slot_id in data.get("sixnet_qualified_slots", []):
+		state.sixnet_qualified_slots.append(str(slot_id))
+	state.sixnet_champion_region = str(data.get("sixnet_champion_region", ""))
 	state.sixnet_season_start_week = maxi(int(data.get("sixnet_season_start_week", 0)), 0)
 	state.world_population_size = maxi(int(data.get("world_population_size", 0)), 0)
+	for birth_year in data.get("golden_birth_years", []):
+		state.golden_birth_years.append(int(birth_year))
 	return state

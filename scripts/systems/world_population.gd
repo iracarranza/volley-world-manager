@@ -34,7 +34,14 @@ extends RefCounted
 const PlayerGeneratorModel := preload("res://scripts/systems/player_generator.gd")
 const Regions := preload("res://scripts/data/regions.gd")
 
-const DEFAULT_POPULATION_SIZE: int = 1200
+## Sized so each of the eight regions supports a real club scene rather than
+## a single squad. At 1200 a region held ~150 players -- about one club plus
+## an academy, which cannot carry the "dense web of regional orgs and clubs"
+## the setting describes. At 4000 it is ~500, enough for a pipeline with
+## depth beneath it. Costs measured at this size: ~1.2s to generate once at
+## career creation, ~9MB on disk, ~1s to write -- and the world file is only
+## rewritten when the population actually changes, which is once a season.
+const DEFAULT_POPULATION_SIZE: int = 4000
 const FIRST_POPULATION_ID: int = 100000
 
 ## Age bands and their share of the world. Deliberately a pyramid: far more
@@ -59,14 +66,38 @@ const AGE_BANDS: Array[Dictionary] = [
 ##
 ## These totals are spread across single birth cohorts rather than broad age
 ## bands, which is what allows golden generations -- see `golden_cohorts()`.
+## `scales_with_population` decides whether a tier's total grows when the
+## world does. Generational talent deliberately does *not*: a larger world
+## should contain more journeymen, not more once-in-a-generation players, or
+## "generational" just means "rare in a small world". Elite and standout do
+## scale -- they are "very good", and a world with twice the players
+## plausibly has twice as many very good ones.
 const TALENT_TIERS: Array[Dictionary] = [
-	{"key": "generational", "pa_min": 92, "pa_max": 99, "world_total": 8, "remainder_weight": 0.0},
-	{"key": "elite", "pa_min": 84, "pa_max": 91, "world_total": 24, "remainder_weight": 0.0},
-	{"key": "standout", "pa_min": 76, "pa_max": 83, "world_total": 62, "remainder_weight": 0.0},
-	{"key": "solid", "pa_min": 66, "pa_max": 75, "world_total": 0, "remainder_weight": 0.30},
-	{"key": "squad", "pa_min": 54, "pa_max": 65, "world_total": 0, "remainder_weight": 0.44},
-	{"key": "fringe", "pa_min": 38, "pa_max": 53, "world_total": 0, "remainder_weight": 0.26},
+	{"key": "generational", "pa_min": 92, "pa_max": 99, "world_total": 8,
+		"scales_with_population": false, "remainder_weight": 0.0},
+	{"key": "elite", "pa_min": 84, "pa_max": 91, "world_total": 24,
+		"scales_with_population": true, "remainder_weight": 0.0},
+	{"key": "standout", "pa_min": 76, "pa_max": 83, "world_total": 62,
+		"scales_with_population": true, "remainder_weight": 0.0},
+	{"key": "solid", "pa_min": 66, "pa_max": 75, "world_total": 0,
+		"scales_with_population": true, "remainder_weight": 0.30},
+	{"key": "squad", "pa_min": 54, "pa_max": 65, "world_total": 0,
+		"scales_with_population": true, "remainder_weight": 0.44},
+	{"key": "fringe", "pa_min": 38, "pa_max": 53, "world_total": 0,
+		"scales_with_population": true, "remainder_weight": 0.26},
 ]
+
+
+## The scarce headcount for a tier at a given world size. Kept in one place
+## because both initial generation and the annual intake have to agree on it
+## exactly, or the world drifts away from its own budget over a career.
+static func tier_world_total(tier: Dictionary, population_size: int) -> int:
+	if int(tier.world_total) <= 0:
+		return 0
+	if not bool(tier.scales_with_population):
+		return int(tier.world_total)
+	var scale := float(population_size) / float(DEFAULT_POPULATION_SIZE)
+	return maxi(roundi(float(tier.world_total) * scale), 1)
 
 const MIN_AGE: int = 15
 const MAX_AGE: int = 38
@@ -291,7 +322,7 @@ static func _scarce_allotment(
 
 ## Where a player is born. Weighted only by how prolific each region is --
 ## never by how good the player is or how old they are.
-static func _birth_region(rng: RandomNumberGenerator) -> String:
+static func birth_region(rng: RandomNumberGenerator) -> String:
 	var total := 0.0
 	for region_name in Regions.SIXNET_PARTICIPANTS:
 		total += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0))
@@ -336,7 +367,7 @@ static func assign_club_region(player: VolleyballPlayer, rng: RandomNumberGenera
 			return
 
 
-static func _weighted_position(rng: RandomNumberGenerator) -> Dictionary:
+static func weighted_position(rng: RandomNumberGenerator) -> Dictionary:
 	var roll := rng.randf()
 	var cumulative := 0.0
 	for entry in POSITION_MIX:
@@ -346,7 +377,7 @@ static func _weighted_position(rng: RandomNumberGenerator) -> Dictionary:
 	return POSITION_MIX[POSITION_MIX.size() - 1]
 
 
-static func _display_name(region_name: String, rng: RandomNumberGenerator) -> String:
+static func display_name_for(region_name: String, rng: RandomNumberGenerator) -> String:
 	var names: Array = Regions.definition(region_name).names
 	var first := str(names[rng.randi_range(0, names.size() - 1)])
 	var second := str(names[rng.randi_range(0, names.size() - 1)])
@@ -363,8 +394,6 @@ static func generate(
 ) -> Array[VolleyballPlayer]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
-	var scale := float(population_size) / float(DEFAULT_POPULATION_SIZE)
-
 	var ages: Array = []
 	for age in range(MIN_AGE, MAX_AGE + 1):
 		ages.append(age)
@@ -379,12 +408,19 @@ static func generate(
 		if int(tier.world_total) <= 0:
 			continue
 		scarce_by_age[str(tier.key)] = _scarce_allotment(
-			maxi(roundi(float(tier.world_total) * scale), 1), ages, sizes, golden
+			tier_world_total(tier, population_size), ages, sizes, golden
 		)
 
-	## Every region is guaranteed a scoutable prospect in the youngest
-	## cohorts, so no save produces a region with nothing worth finding.
-	## Talent is scarce, not absent.
+	## Every region is guaranteed a scoutable prospect in each of the two
+	## youngest bands, so no save produces a region with nothing worth
+	## finding. Talent is scarce, not absent.
+	##
+	## One per region, claimed across ages 15-22 rather than per band.
+	## Golden cohorts deliberately hoard the scarce tiers, so the guarantee
+	## has to ask for as little as possible: demanding one per region in each
+	## young band wanted sixteen of the nineteen standouts a small world
+	## contains, and simply could not be met. Eight, spread over eight
+	## cohorts, leaves the golden mechanic intact.
 	var guaranteed_pending: Array[String] = []
 	for region_name in Regions.SIXNET_PARTICIPANTS:
 		guaranteed_pending.append(str(region_name))
@@ -422,12 +458,13 @@ static func generate(
 			var tier_key := str(tier.key)
 			for _index in range(int(counts.get(tier_key, 0))):
 				var region := ""
-				if band_key == "youth" and tier_key == GUARANTEED_YOUNG_TIER \
+				var young_band := band_key == "youth" or band_key == "emerging"
+				if young_band and tier_key == GUARANTEED_YOUNG_TIER \
 						and not guaranteed_pending.is_empty():
 					region = guaranteed_pending.pop_front()
 				else:
-					region = _birth_region(rng)
-				var position := _weighted_position(rng)
+					region = birth_region(rng)
+				var position := weighted_position(rng)
 				var player := PlayerGeneratorModel.generate_prospect(
 					region,
 					str(position.role),
@@ -435,7 +472,7 @@ static func generate(
 					age,
 					rng.randi_range(int(tier.pa_min), int(tier.pa_max)),
 					next_id,
-					_display_name(region, rng),
+					display_name_for(region, rng),
 					int(hash("%d|%s|%d" % [age, tier_key, next_id])),
 					Dictionary(overlay_by_region.get(region, {})),
 				)

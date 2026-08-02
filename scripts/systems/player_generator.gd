@@ -241,6 +241,43 @@ static func _build_prospect(
 	return player
 
 
+## Moves an existing player to a new age and recomputes what they can
+## currently do, from the ceilings they were built with.
+##
+## Development is not modelled as a separate system on purpose. A player's
+## current ability was already defined as "their ceiling, minus however far
+## from it their age leaves them" -- so aging them is the same statement
+## evaluated at a new age, using the identical curve. A season of growth for
+## a nineteen-year-old and a season of decline for a thirty-four-year-old
+## both fall out of that without a second model that could disagree with the
+## first.
+##
+## `seed_value` should be stable per player, so a career sees smooth
+## progression rather than the per-attribute jitter resampling every year.
+##
+## Two consequences worth being explicit about. Development is purely a
+## function of age here, with no path dependence -- nobody fails to reach
+## their ceiling through misfortune, and nobody exceeds it. And a player
+## with no stored ceilings (hand-authored fixtures) is treated as already
+## being at their ceiling, so they decline with age but never grow.
+static func redevelop_to_age(
+	player: VolleyballPlayer, new_age: int, seed_value: int,
+) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	player.age = clampi(new_age, 15, 45)
+	player.professional_experience = maxi(player.age - 20, 0)
+	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		var ceiling := float(player.attribute_ceilings.get(
+			property_name, player.get(property_name)
+		))
+		var reserve := _attribute_reserve(property_name, player.age, rng)
+		player.set(property_name, clampi(
+			roundi(ceiling - reserve), 1, maxi(roundi(ceiling), 1)
+		))
+	AttributeProfiles.assign_serve_style(player)
+
+
 ## Attributes that fade with age rather than keep developing. Power and
 ## turnover peak in the early twenties and go backwards afterwards; technique
 ## and reading do not.
@@ -257,6 +294,22 @@ const MENTAL_ATTRIBUTES: Array[String] = [
 
 ## Age at which physical qualities stop improving and begin to fade.
 const PHYSICAL_PEAK_AGE: int = 24
+
+## Age after which technique starts to erode too, and how fast.
+##
+## Only nine of the forty ability attributes are physical, so with technique
+## and reading both rising monotonically to their ceiling and then holding
+## there forever, a player's *overall* ability barely moved after thirty: a
+## thirty-eight-year-old setter measured exactly as good as they were at
+## thirty-three, and an outside hitter lost two points across five years.
+## That made retirement the only thing that ever removed a veteran from the
+## world, which is not how a career ends.
+##
+## Reading is deliberately left alone -- game sense genuinely does hold up,
+## and it is the reason an old setter stays useful long after the legs go.
+## The erosion here is technique: hands, timing, sharpness.
+const TECHNICAL_PEAK_AGE: int = 30
+const TECHNICAL_DECLINE_PER_YEAR: float = 0.9
 
 ## Chance an attribute is innately far from the player's general level, and how
 ## far. Most attributes sit near it; a minority do not, and those are what make
@@ -310,9 +363,12 @@ static func _attribute_reserve(
 		return maxf(lerpf(
 			38.0, 1.0, clampf(float(age - 15) / 19.0, 0.0, 1.0)
 		) + jitter, 0.0)
-	return maxf(lerpf(
+	var technical_reserve := lerpf(
 		28.0, 1.0, clampf(float(age - 15) / 15.0, 0.0, 1.0)
-	) + jitter, 0.0)
+	)
+	if age > TECHNICAL_PEAK_AGE:
+		technical_reserve += float(age - TECHNICAL_PEAK_AGE) * TECHNICAL_DECLINE_PER_YEAR
+	return maxf(technical_reserve + jitter, 0.0)
 
 
 ## The general level this player was born with, before role, region, and innate

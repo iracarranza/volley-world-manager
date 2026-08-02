@@ -53,14 +53,21 @@ regions doesn't need to shrink or grow in lockstep with who currently holds
 the six slots.
 
 This is now a real background mechanic, not only lore (`scripts/systems/
-sixnet_league.gd`): the Sixnet runs as an 8-slot competition, a 4-team upper
-bracket and a 4-team lower bracket, with all eight regions competing and
-holding exactly one slot each. A'ace and Ispayk take a *fixed starting*
-slot that states their situation rather than their form -- A'ace enters
-straight into the upper bracket, having bought its way to the top table
-without earning it, and Ispayk into the lower, where a fallen flagship
-begins its climb back. Neither is pinned there: from their first season on
-they promote and relegate like anybody else.
+sixnet_league.gd`), and it runs in two stages:
+
+- **The qualifier.** The four lower-bracket regions play a round robin for
+  two open places.
+- **The championship.** The four seeded regions plus the two who came
+  through -- **six teams**, which is what makes the name honest. Eight
+  regions compete for the Sixnet; six contest it.
+
+A'ace and Ispayk each take a *fixed starting* slot, both at the **bottom**
+of their bracket: A'ace is the least established team at a top table it
+bought its way onto, and Ispayk is rock bottom of everything, where a fallen
+flagship begins its climb back. Neither is pinned there -- from their first
+season on they promote and relegate like anybody else, and each stage judges
+its own teams (last in the championship goes down, the qualifier winner comes
+up).
 
 Every region carries a power level that genuinely evolves from a simulated
 background season each year -- the eight academies play a real, if
@@ -79,17 +86,20 @@ development tradition that could spread.
 ## The world's players
 
 The world is a fixed population rather than a stream of players invented
-whenever something needs them (`scripts/systems/world_population.gd`). Around
-twelve hundred players exist at career creation and are stored with the save;
-the transfer market is a slice taken out of that population, not a separate
-roll.
+whenever something needs them (`scripts/systems/world_population.gd`). Four
+thousand players exist at career creation and are stored with the save -- about
+five hundred per region, enough for a club scene with a pipeline beneath it
+rather than a single squad. The transfer market is a slice taken out of that
+population, not a separate roll.
 
 The reason is scarcity. Talent is an **allotted budget**, not a per-player
-dice roll: each age band gets a small fixed headcount of generational and
-elite players *for the entire world*, so only eight genuinely generational
-players are alive at any time no matter how large the population grows.
-A world where every age from fifteen to thirty is stocked with wonderkids
-has no wonderkids in it -- finding one has to be an event.
+dice roll: a small fixed headcount of generational and elite players exists
+*for the entire world*. Only eight genuinely generational players are alive
+at any time, and that number deliberately does **not** grow with the
+population -- a bigger world holds more journeymen, not more once-in-a-
+generation players, or "generational" would just mean "rare in a small
+world". A world where every age from fifteen to thirty is stocked with
+wonderkids has no wonderkids in it -- finding one has to be an event.
 
 Three rules follow from that, and between them they are what make the world
 feel like it has a past:
@@ -115,6 +125,34 @@ feel like it has a past:
 
 Every region is guaranteed prospects worth scouting, so no save produces a
 dead corner of the world.
+
+### The world ages
+
+The population turns over once a season (`scripts/systems/world_aging.gd`):
+everyone gets a year older and redevelops accordingly, the players the game
+has no room for drop out, and a new intake of fifteen-year-olds arrives.
+
+Attrition is **derived from the age pyramid rather than invented alongside
+it**. The population already states how many players of each age should
+exist, so the survival rate from one age to the next is just the ratio
+between consecutive cohorts. The pyramid therefore cannot drift over a long
+career, and there is no second set of retirement numbers to keep in step
+with the first. *Who* survives is decided by ability plus noise -- being good
+is a strong advantage, not a guarantee.
+
+Development is the same statement re-evaluated: a player's ability was always
+"their ceiling, minus how far their age leaves them from it", so aging them
+is that formula at a new age. Growth and decline both fall out of one curve
+instead of a second model that could disagree with the first. Players peak
+around thirty and decline after -- setters least, because reading holds up
+long after the legs go, which is exactly why an old setter stays useful.
+
+New golden generations keep arriving rather than the world filling a quota
+and stopping. The intake looks at how far the living world has fallen below
+its talent budget and fills toward it: golden years clear the shortfall in
+one go, ordinary years trickle. Scarce talent therefore ebbs between golden
+generations and refills when one lands, which is the wave that makes a
+golden generation feel like an event rather than a statistic.
 
 ### Regional sporting culture
 
@@ -263,16 +301,15 @@ depends on an answer, don't guess:
 - Now that flagship slots are established as contested rather than fixed
   (see Ispayk/A'ace), does the player's own academy ever get a shot at
   Sixnet contention as a mechanic, or does that stay aspirational flavor?
-- The world population is currently **static**: players are generated once
-  and never age, retire, or get replaced by a new youth intake. That is the
-  single biggest thing standing between "a world with a shape" and "a world
-  with a history" -- a career played over many seasons currently watches the
-  same twelve hundred people stay exactly the age they started at. Worth a
-  dedicated pass: aging, decline, retirement, and an annual intake that
-  respects the same talent allotments.
-- Only the player's own roster develops through training; the rest of the
-  world's players never improve. Same root cause as the above, and probably
-  the same pass.
+- World players develop purely as a function of age -- nobody fails to reach
+  their ceiling through injury, poor coaching or bad luck, and nobody exceeds
+  it. That is a deliberate simplification, not an oversight, but "a prospect
+  who never made it" is a story the world cannot currently tell.
+- Only the managed roster gains from training. World players follow the age
+  curve regardless of where they play, so a spell at a strong academy does
+  nothing for them.
+- Retirement is the only exit. Injuries, loss of form and players simply
+  falling out of the game are unmodelled.
 - Spëddigh and Landavol don't have a named signature rival yet (Pāwa
   Hitō/Bloc du Larg and Ispayk/A'ace do) -- worth inventing one each, or is
   an uneven spread fine?
