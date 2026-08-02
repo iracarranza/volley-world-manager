@@ -547,9 +547,10 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_check(club_roster[0].position_familiarity.size() == 5,
 		"generated players track familiarity for every core position")
 	var summary_profile: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.summary_profile(club_roster[0])
-	_check(summary_profile.size() == 6 and ATTRIBUTE_PROFILE_SCRIPT.grade(85.0) == "S" \
+	_check(summary_profile.size() == 7 and summary_profile.has("Overall") \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(85.0) == "S" \
 			and ATTRIBUTE_PROFILE_SCRIPT.grade(39.0) == "D",
-		"player profile summarizes six graded categories from detailed wheels")
+		"player profile summarizes six categories plus an aggregate Overall axis")
 	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 7
 			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical")
 				.has("Court Vision")
@@ -591,17 +592,21 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 			and categorized.size() == VolleyballPlayer.ABILITY_ATTRIBUTES.size(),
 		"every ability attribute belongs to exactly one wheel category, and only one",
 	)
-	## Six axes is the default per category, not a rule this enforces uniformly:
-	## Attacking and Mental & Tactical carry seven because Tooling/Feinting and
-	## Court Vision/Anticipation are each two independently-specializable
-	## skills that a single averaged axis would hide (a highly technical hitter
-	## can favor one of Tooling/Feinting over the other; a player can read the
-	## floor well without reliably anticipating one attacker, or vice versa).
+	## Seven axes is the target for every category, so no wheel reads as more
+	## or less detailed than any other. Attacking and Mental & Tactical reach
+	## it by splitting an averaged pair back into two standalone axes
+	## (Tooling/Feinting, Court Vision/Anticipation -- each half is an
+	## independently-specializable skill an average would hide); Defensive,
+	## Physical and Serving reach it by surfacing data already tracked per
+	## player but never shown on any wheel before (Ball Control, Reach,
+	## Repertoire). Setting & Ball Control is the one holdout at six: none of
+	## its six attributes are folded into a composite, and nothing else about
+	## a setter is tracked anywhere else in the game to surface as a seventh.
 	## This pins the expected count per category so a future change that
 	## silently merges or splits an axis is caught either direction.
 	var expected_axis_counts := {
-		"Attacking": 7, "Defensive": 6, "Setting & Ball Control": 6,
-		"Physical": 6, "Serving": 6, "Mental & Tactical": 7,
+		"Attacking": 7, "Defensive": 7, "Setting & Ball Control": 6,
+		"Physical": 7, "Serving": 7, "Mental & Tactical": 7,
 	}
 	var axis_counts_match_expected := true
 	for profile_name in expected_axis_counts:
@@ -611,6 +616,13 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_check(
 		axis_counts_match_expected,
 		"every detailed wheel category has its expected axis count",
+	)
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Defensive").has("Ball Control")
+			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Physical").has("Reach")
+			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Serving")
+				.has("Repertoire"),
+		"Ball Control, Reach and Repertoire surface data already tracked per player",
 	)
 	## Ceilings are what a potential wheel reads. A freshly generated player is
 	## not fully developed (`_attribute_reserve()` subtracts a positive amount

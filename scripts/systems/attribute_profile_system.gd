@@ -8,10 +8,10 @@ const PROFILE_NAMES: Array[String] = [
 
 const PROFILE_TOOLTIPS := {
 	"Attacking": "Power, accuracy, tooling, feinting, finesse, approach timing and shot variety.",
-	"Defensive": "Reception technique, balance, stability, range, block timing and dig control.",
+	"Defensive": "Reception technique, balance, stability, range, ball control, block timing and dig control.",
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise and hand control.",
-	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity and stamina.",
-	"Serving": "Power, technique, placement, consistency, aggression and variation.",
+	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity, stamina and reach.",
+	"Serving": "Power, technique, placement, consistency, aggression, variation and repertoire.",
 	"Mental / Tactical": "Court vision, anticipation, decision making, composure, discipline, improvisation and adaptability.",
 }
 
@@ -72,19 +72,22 @@ static func grade(score: float) -> String:
 	return "D"
 
 
-## One raw attribute or one derived composite, per category. Six axes per
-## category is the default, not a rule enforced here: an axis only exists to
-## let a player be compared at a glance, and that only works if each axis
-## names one independently-variable skill. Attacking and Mental & Tactical
-## carry seven because splitting Tooling/Feinting and Court Vision/Anticipation
-## back into standalone axes takes priority over a uniform axis count --
-## averaging either pair hides a real specialization choice (a player can be
-## a highly technical hitter who tools well but rarely feints, or vice versa;
-## the same holds for reading the whole floor versus predicting one attacker's
-## next swing). Composites that remain -- Power, Defensive Range -- combine
-## several inputs into one physically-converged output (how hard the ball
-## comes off the hand, how much court gets covered and kept in play) rather
-## than standing in for two alternative skills, which is why those stay merged.
+## One raw attribute or one derived composite, per category. Every category
+## targets seven axes so no wheel reads as more or less detailed than any
+## other -- Attacking and Mental & Tactical reach it by splitting an averaged
+## pair back into two standalone axes (Tooling/Feinting, Court Vision/
+## Anticipation: a player can specialize in either half of either pair
+## independently, and averaging hid that), while Defensive, Physical and
+## Serving reach it by surfacing data that was already tracked per player but
+## never shown on any wheel (Ball Control, Reach, Repertoire). Composites that
+## remain -- Power, Defensive Range -- combine several inputs into one
+## physically-converged output (how hard the ball comes off the hand, how much
+## court gets covered) rather than standing in for two alternative skills,
+## which is why those stay merged. Setting & Ball Control is the one holdout
+## at six: unlike the others, none of its six attributes are folded into a
+## composite and nothing else about a setter is already tracked anywhere else
+## in the game to surface as a seventh -- reaching seven there would mean
+## inventing a new attribute rather than exposing a real one.
 ##
 ## `use_ceilings` reads this player's generated per-attribute ceilings
 ## (`VolleyballPlayer.attribute_ceilings`) instead of their current developed
@@ -105,10 +108,17 @@ static func detailed_profile(
 		return int(source.get(attribute_name, player.get(attribute_name)))
 	match profile_name:
 		"Defensive":
+			## Ball Control used to only feed the Defensive Range composite.
+			## Turning a hard-driven touch into a playable ball is a hands
+			## skill, separate from the physical ability to get to the ball
+			## in the first place -- a rangy defender with poor hands and a
+			## slower defender with great hands are different players, and
+			## blending the two hid that. It gets its own axis instead.
 			return {"Reception Technique": raw.call("reception"),
 				"Reception Balance": raw.call("reception_balance"),
 				"Reception Stability": raw.call("reception_stability"),
 				"Defensive Range": player.baseline_defensive_range(source),
+				"Ball Control": raw.call("ball_control"),
 				"Block Timing": raw.call("block_timing"),
 				"Dig Control": raw.call("dig_control")}
 		"Setting & Ball Control":
@@ -119,18 +129,33 @@ static func detailed_profile(
 				"Set Disguise": raw.call("set_disguise"),
 				"Hand Control": raw.call("hand_control")}
 		"Physical":
+			## Reach was never shown on this wheel even though it already
+			## feeds Power and Defensive Range as a normalized rating -- a
+			## tall, rangy player and a shorter, bouncier one are different
+			## physical archetypes this wheel otherwise couldn't distinguish.
 			return {"Acceleration": raw.call("acceleration"),
 				"Lateral Speed": raw.call("lateral_speed"),
 				"Transition Speed": raw.call("transition_speed"),
 				"Explosiveness": raw.call("explosiveness"),
-				"Jump Capacity": raw.call("jump_reach"), "Stamina": raw.call("stamina")}
+				"Jump Capacity": raw.call("jump_reach"), "Stamina": raw.call("stamina"),
+				"Reach": player.reach_rating()}
 		"Serving":
+			## Repertoire was already computed for every player at generation
+			## (`serve_style_proficiencies`) and shown nowhere except which
+			## single style is "primary" -- a specialist with one lethal serve
+			## and an all-rounder competent in all five are different servers
+			## the six raw attributes alone can't tell apart.
+			var style_scores: Array = serve_style_proficiencies(player, source).values()
+			var style_total := 0.0
+			for score in style_scores:
+				style_total += float(score)
 			return {"Serve Power": raw.call("serve_power"),
 				"Serve Technique": raw.call("serve_technique"),
 				"Serve Placement": raw.call("serve_placement"),
 				"Serve Consistency": raw.call("serve_consistency"),
 				"Serve Aggression": raw.call("serve_aggression"),
-				"Serve Variation": raw.call("serve_variation")}
+				"Serve Variation": raw.call("serve_variation"),
+				"Repertoire": clampi(roundi(style_total / float(style_scores.size())), 1, 100)}
 		"Mental & Tactical":
 			## Court Vision and Anticipation used to average into one "Reading"
 			## axis. Both are game-sense attributes, but not the same skill:
@@ -169,8 +194,13 @@ static func detailed_profile(
 				"Shot Variety": raw.call("shot_variety")}
 
 
+## "Overall" is the seventh axis on the Player Profile wheel -- the same
+## `category_score` weighting applied one level up, to the six category
+## scores instead of six raw axes, rather than a new formula. It has to be
+## computed after the other six exist, so this builds them first and folds
+## the aggregate in afterward instead of returning one dictionary literal.
 static func summary_profile(player: VolleyballPlayer, use_ceilings: bool = false) -> Dictionary:
-	return {
+	var categories := {
 		"Attacking": category_score(detailed_profile(player, "Attacking", use_ceilings)),
 		"Defensive": category_score(detailed_profile(player, "Defensive", use_ceilings)),
 		"Setting / Control": category_score(
@@ -182,6 +212,8 @@ static func summary_profile(player: VolleyballPlayer, use_ceilings: bool = false
 			detailed_profile(player, "Mental & Tactical", use_ceilings)
 		),
 	}
+	categories["Overall"] = category_score(categories)
+	return categories
 
 
 static func category_score(profile: Dictionary) -> int:
@@ -199,21 +231,28 @@ static func category_score(profile: Dictionary) -> int:
 	return clampi(roundi(average * 0.70 + strongest * 0.20 + weakest * 0.10), 1, 100)
 
 
-static func serve_style_proficiencies(player: VolleyballPlayer) -> Dictionary:
+## `overrides` lets a caller substitute individual attributes -- ceilings, for
+## a potential-repertoire reading -- the same way `usable_attack_power` and
+## `baseline_defensive_range` do, without a second copy of these weights.
+static func serve_style_proficiencies(
+	player: VolleyballPlayer, overrides: Dictionary = {},
+) -> Dictionary:
+	var v := func(attribute_name: String) -> float:
+		return float(overrides.get(attribute_name, player.get(attribute_name)))
 	return {
-		"Standing": _weighted([player.serve_technique, player.serve_placement,
-			player.serve_consistency, player.composure], [0.25, 0.25, 0.35, 0.15]),
-		"Jump Topspin": _weighted([player.serve_power, player.serve_technique,
-			player.serve_aggression, player.explosiveness, player.arm_speed, player.stamina],
-			[0.25, 0.25, 0.15, 0.15, 0.10, 0.10]),
-		"Jump Float": _weighted([player.serve_technique, player.serve_placement,
-			player.serve_consistency, player.hand_control, player.composure],
+		"Standing": _weighted([v.call("serve_technique"), v.call("serve_placement"),
+			v.call("serve_consistency"), v.call("composure")], [0.25, 0.25, 0.35, 0.15]),
+		"Jump Topspin": _weighted([v.call("serve_power"), v.call("serve_technique"),
+			v.call("serve_aggression"), v.call("explosiveness"), v.call("arm_speed"),
+			v.call("stamina")], [0.25, 0.25, 0.15, 0.15, 0.10, 0.10]),
+		"Jump Float": _weighted([v.call("serve_technique"), v.call("serve_placement"),
+			v.call("serve_consistency"), v.call("hand_control"), v.call("composure")],
 			[0.30, 0.25, 0.20, 0.10, 0.15]),
-		"Hybrid": _weighted([player.serve_technique, player.serve_variation,
-			player.serve_power, player.serve_placement, player.decision_making,
-			player.serve_consistency], [0.25, 0.25, 0.15, 0.15, 0.10, 0.10]),
-		"Sky Ball": _weighted([player.serve_technique, player.serve_placement,
-			player.serve_variation, player.improvisation, player.serve_aggression],
+		"Hybrid": _weighted([v.call("serve_technique"), v.call("serve_variation"),
+			v.call("serve_power"), v.call("serve_placement"), v.call("decision_making"),
+			v.call("serve_consistency")], [0.25, 0.25, 0.15, 0.15, 0.10, 0.10]),
+		"Sky Ball": _weighted([v.call("serve_technique"), v.call("serve_placement"),
+			v.call("serve_variation"), v.call("improvisation"), v.call("serve_aggression")],
 			[0.20, 0.20, 0.25, 0.20, 0.15]),
 	}
 

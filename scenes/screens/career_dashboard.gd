@@ -19,7 +19,8 @@ const WHEEL_TOOLTIPS := {
 	"Reception Technique": "Platform angle and directional control on ordinary contacts.",
 	"Reception Balance": "Maintaining platform quality while moving, reaching, or contacting near the edge of range.",
 	"Reception Stability": "Withstanding high ball speed without the platform breaking down.",
-	"Defensive Range": "Baseline range derived from movement, reach, ball control, and stamina; actual rally range also depends on ball-flight time, position, and reading the play (see Anticipation).",
+	"Defensive Range": "Baseline range derived purely from movement, reach, and stamina; actual rally range also depends on ball-flight time, position, hands (see Ball Control) and reading the play (see Anticipation).",
+	"Ball Control": "Turning a hard-driven touch into a controlled, playable ball.",
 	"Block Timing": "Matching jump and hand penetration to the attacker's contact.",
 	"Dig Control": "Turning a defensive touch into a playable ball rather than merely making contact.",
 	"Set Accuracy": "Delivering the ball to the intended contact window.",
@@ -34,12 +35,14 @@ const WHEEL_TOOLTIPS := {
 	"Explosiveness": "How quickly the player accesses maximum jump capacity.",
 	"Jump Capacity": "The player's maximum available jumping reach rating.",
 	"Stamina": "Capacity to preserve physical execution through workload and fatigue.",
+	"Reach": "Standing reach rating derived from height and wingspan; a fixed physical trait, not a trainable skill.",
 	"Serve Power": "Maximum velocity and force available on a serve.",
 	"Serve Technique": "Contact quality and ability to create the intended spin or float.",
 	"Serve Placement": "Precision targeting zones, seams and individual receivers.",
 	"Serve Consistency": "Ability to reproduce a legal controlled serve without errors.",
 	"Serve Aggression": "Natural willingness and ability to increase pressure at greater risk.",
 	"Serve Variation": "Ability to vary trajectory, pace, depth and serve type.",
+	"Repertoire": "Breadth of competent serve styles rather than reliance on a single signature serve.",
 	"Accuracy": "Precision hitting the intended target rather than merely clearing the block.",
 	"Court Vision": "Spatial awareness of teammates, opponents, and open court.",
 	"Anticipation": "Predicting a specific opponent's next action before contact.",
@@ -48,6 +51,7 @@ const WHEEL_TOOLTIPS := {
 	"Tactical Discipline": "Sticking to assignment and system rather than improvising off-plan.",
 	"Improvisation": "Generating an effective solution outside of trained patterns.",
 	"Adaptability": "Adjusting to an opponent's tendencies and in-match changes.",
+	"Overall": "Aggregate across all six category scores, weighted toward the average with a bonus for a standout strength and a small penalty for a weak spot.",
 }
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")

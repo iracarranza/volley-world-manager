@@ -152,6 +152,14 @@ func current_ability_score() -> int:
 	return clampi(roundi(role_score * 0.75 + complete_score * 0.25), 1, 100)
 
 
+## Standing reach normalized to a 1-100 rating, shared by `usable_attack_power`,
+## `baseline_defensive_range`, and the Physical wheel's own "Reach" axis. Never
+## overridden by ceilings: reach is physical geometry, not a skill with a
+## ceiling to develop toward, so a potential reading equals the current one.
+func reach_rating() -> int:
+	return clampi(roundi(inverse_lerp(190.0, 280.0, standing_reach_cm()) * 100.0), 1, 100)
+
+
 ## `overrides` lets a caller substitute individual attributes -- ceilings, for
 ## a potential-power reading -- without a second copy of these weights. Body
 ## measurements are never overridden: mass is physical geometry, not a skill
@@ -166,21 +174,21 @@ func usable_attack_power(overrides: Dictionary = {}) -> int:
 		+ float(overrides.get("approach_timing", approach_timing)) * 0.15), 1, 100)
 
 
-## Deliberately excludes `anticipation`: reading the play is a mental skill
-## with its own axis on the Mental & Tactical wheel, and folding it in here
-## would hide a player who covers court well but reads poorly (or vice versa)
-## behind one blended number. What remains -- acceleration, lateral speed,
-## reach, ball control, stamina -- converges on a single physical question,
-## how much court this player can actually get to and keep in play, the same
-## way `usable_attack_power` converges several physical inputs into one
-## hitting-power reading, so it stays merged.
+## Deliberately excludes both `anticipation` and `ball_control`: reading the
+## play is a mental skill with its own axis on Mental & Tactical, and turning
+## a touch into a playable ball is a hands skill with its own axis on
+## Defensive -- folding either in here would hide a player who covers court
+## well but reads or converts poorly (or vice versa) behind one blended
+## number. What remains -- acceleration, lateral speed, reach, stamina --
+## converges on a single physical question, how much court this player can
+## physically get to, the same way `usable_attack_power` converges several
+## physical inputs into one hitting-power reading, so it stays merged.
 func baseline_defensive_range(overrides: Dictionary = {}) -> int:
-	var reach := clampf(inverse_lerp(190.0, 280.0, standing_reach_cm()) * 100.0, 1.0, 100.0)
 	return clampi(roundi(
-		float(overrides.get("acceleration", acceleration)) * 0.28 \
-		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.31 + reach * 0.18 \
-		+ float(overrides.get("ball_control", ball_control)) * 0.10 \
-		+ float(overrides.get("stamina", stamina)) * 0.13), 1, 100)
+		float(overrides.get("acceleration", acceleration)) * 0.31 \
+		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.35 \
+		+ float(reach_rating()) * 0.20 \
+		+ float(overrides.get("stamina", stamina)) * 0.14), 1, 100)
 
 
 ## Default stride for a player of this height. Roughly 0.43x standing height,
