@@ -2506,9 +2506,20 @@ const ATTACK_SCAN_ROWS: int = 9
 const ATTACK_COURT_MIN := Vector2(0.055, 0.055)
 const ATTACK_COURT_MAX := Vector2(0.945, 0.445)
 
-## How far past the line a missed attack lands, and how far below the error
-## threshold a swing has to be before it goes into the net instead of out.
-const ATTACK_ERROR_OVERSHOOT: float = 0.045
+## How far past the line a missed attack lands, how far onto the hitter's own
+## side a netted one drops, and how far below the error threshold a swing has
+## to be before it goes into the net rather than out.
+##
+## Stated in metres and converted per axis rather than kept as one normalized
+## number, because the two axes are not the same scale: the court is 9 m across
+## and 18 m deep, so a single normalized overshoot puts a wide ball twice as far
+## out as a long one. The first version of this used a flat 0.045 normalized
+## units and landed *inside* the painted lines -- 0.09 m in from the sideline,
+## 0.18 m in from the endline -- because the renderer maps normalized 0 and 1
+## onto the lines themselves. The ball was correctly ruled out and still drawn
+## in, which is the exact complaint this was meant to fix.
+const ATTACK_ERROR_OVERSHOOT_METERS: float = 0.60
+const ATTACK_NET_ERROR_DROP_METERS: float = 0.50
 const ATTACK_NET_ERROR_FRACTION: float = 0.5
 
 
@@ -2530,18 +2541,27 @@ const ATTACK_NET_ERROR_FRACTION: float = 0.5
 ## replayed seed still draws the identical miss.
 func _errant_attack_target(intended: Vector2, attack_quality: float) -> Vector2:
 	var lane_x := clampf(intended.x, ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x)
+	var wide_overshoot := ATTACK_ERROR_OVERSHOOT_METERS / CourtConstants.COURT_WIDTH_METERS
+	var deep_overshoot := ATTACK_ERROR_OVERSHOOT_METERS / CourtConstants.COURT_LENGTH_METERS
 	if attack_quality < ATTACK_ERROR_THRESHOLD * ATTACK_NET_ERROR_FRACTION:
-		## Into the net: short of it, on the attacker's own side of the tape.
-		return Vector2(lane_x, lerpf(ATTACK_COURT_MAX.y, CourtConstants.NET_Y, 0.65))
+		## Into the net: the ball is stopped by the tape and drops on the
+		## hitter's own side of it, which is past `NET_Y` rather than short of
+		## it -- the opponent's court is the half with the *smaller* y.
+		return Vector2(lane_x, CourtConstants.NET_Y
+			+ ATTACK_NET_ERROR_DROP_METERS / CourtConstants.COURT_LENGTH_METERS)
 	var to_left := intended.x - ATTACK_COURT_MIN.x
 	var to_right := ATTACK_COURT_MAX.x - intended.x
 	## Y decreases toward the opponent baseline, so the endline is the floor.
 	var to_endline := intended.y - ATTACK_COURT_MIN.y
+	## Measured from the court boundary the renderer actually paints -- 0 and 1,
+	## not `ATTACK_COURT_MIN`/`MAX`, which are the inset margin the targeting
+	## search aims within. Landing past the inset but inside the line is what
+	## made a called-out ball look in.
 	if to_endline <= to_left and to_endline <= to_right:
-		return Vector2(lane_x, ATTACK_COURT_MIN.y - ATTACK_ERROR_OVERSHOOT)
+		return Vector2(lane_x, -deep_overshoot)
 	if to_left <= to_right:
-		return Vector2(ATTACK_COURT_MIN.x - ATTACK_ERROR_OVERSHOOT, intended.y)
-	return Vector2(ATTACK_COURT_MAX.x + ATTACK_ERROR_OVERSHOOT, intended.y)
+		return Vector2(-wide_overshoot, intended.y)
+	return Vector2(1.0 + wide_overshoot, intended.y)
 
 ## Depth a shot family naturally wants, as a fraction from the net (0) to the
 ## endline (1). Power swings drive deep; rolls and tips die short.

@@ -1120,6 +1120,13 @@ func _test_errant_attacks_land_outside_the_court() -> void:
 
 	## Sampled across the whole legal court so the result isn't an accident of
 	## one target: every intended point, missed, must leave the court.
+	##
+	## Checked against the *painted* boundary -- normalized 0 and 1, which is
+	## where `MatchCourt3D.tactical_to_world()` puts the sidelines and endlines
+	## -- not against ATTACK_COURT_MIN/MAX, which are the inset the targeting
+	## search aims within. An earlier overshoot cleared the inset while landing
+	## 0.09-0.18 m *inside* the drawn line, so the ball was ruled out and drawn
+	## in, which is the bug the whole change exists to fix.
 	var all_out := true
 	var net_errors_stay_inbounds_laterally := true
 	for column in range(9):
@@ -1129,32 +1136,37 @@ func _test_errant_attacks_land_outside_the_court() -> void:
 				lerpf(minimum.y, maximum.y, float(row) / 6.0))
 			for quality in [0.0, 0.05, 0.12, 0.20, threshold - 0.001]:
 				var landing: Vector2 = simulator._errant_attack_target(intended, quality)
-				var out_of_court := landing.x < minimum.x or landing.x > maximum.x \
-					or landing.y < minimum.y or landing.y > maximum.y
-				if not out_of_court:
+				var netted := landing.y > CourtConstants.NET_Y
+				var past_painted_line := landing.x < 0.0 or landing.x > 1.0 \
+					or landing.y < 0.0
+				if not netted and not past_painted_line:
 					all_out = false
-				## A ball put into the net still has to be over the court
+				## A ball stopped by the net still has to be over the court
 				## laterally -- it drops at the tape, it doesn't leave sideways.
-				if landing.y > maximum.y \
-						and (landing.x < minimum.x or landing.x > maximum.x):
+				if netted and (landing.x < minimum.x or landing.x > maximum.x):
 					net_errors_stay_inbounds_laterally = false
-	_check(all_out, "a missed attack always lands outside the legal court, wherever it was aimed")
+	_check(
+		all_out,
+		"a missed attack lands beyond the painted line or in the net, wherever it was aimed",
+	)
 	_check(
 		net_errors_stay_inbounds_laterally,
-		"an attack put into the net drops at the tape rather than leaving sideways",
+		"an attack stopped by the net drops at the tape rather than leaving sideways",
 	)
 
 	## The lowest-quality swings go into the net; the rest sail out past a line.
+	## A netted ball drops on the hitter's own side, which is the half with the
+	## larger y -- the opponent's court is the smaller half.
 	var into_net: Vector2 = simulator._errant_attack_target(Vector2(0.5, 0.25), 0.0)
 	var sails_out: Vector2 = simulator._errant_attack_target(
 		Vector2(0.5, 0.25), threshold - 0.001)
 	_check(
-		into_net.y > maximum.y and into_net.y < CourtConstants.NET_Y,
-		"a swing with nothing behind it goes into the net, short of the tape",
+		into_net.y > CourtConstants.NET_Y and into_net.y < CourtConstants.HOME_BASELINE_Y,
+		"a swing with nothing behind it drops off the net on the hitter's own side",
 	)
 	_check(
-		sails_out.y < minimum.y or sails_out.x < minimum.x or sails_out.x > maximum.x,
-		"a swing that merely misses sails past a line rather than into the net",
+		sails_out.y < 0.0 or sails_out.x < 0.0 or sails_out.x > 1.0,
+		"a swing that merely misses sails past a painted line rather than into the net",
 	)
 
 	## The miss leaves by the line it was already nearest, so a wide swing goes
@@ -1166,8 +1178,7 @@ func _test_errant_attacks_land_outside_the_court() -> void:
 	var near_endline: Vector2 = simulator._errant_attack_target(
 		Vector2(0.5, minimum.y + 0.01), 0.20)
 	_check(
-		near_left.x < minimum.x and near_right.x > maximum.x
-			and near_endline.y < minimum.y,
+		near_left.x < 0.0 and near_right.x > 1.0 and near_endline.y < 0.0,
 		"a missed attack leaves by whichever line it was aimed nearest",
 	)
 
@@ -5527,15 +5538,28 @@ func _test_attack_targets_are_continuous() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	var landings: Array[Vector2] = []
-	for seed_value in range(50000, 50150):
+	var errant_landings: Array[Vector2] = []
+	## Widened from 150 seeds once errant swings stopped counting toward the
+	## continuity sample. On the hand-authored fixture roster -- every attribute
+	## a role doesn't name sits at 50 -- a large share of swings are errors, so
+	## 150 rallies no longer clears the 100-landing floor this check needs.
+	for seed_value in range(50000, 50300):
 		var result: Resource = manager.resolve_active_rally(seed_value)
+		var home_attacks: Array[Vector2] = []
 		for event_resource in result.events:
 			var event: Resource = event_resource
 			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.ATTACK:
 				continue
 			if str(event.metadata.get("side", "")) != "home":
 				continue
-			landings.append(event.end_position)
+			home_attacks.append(event.end_position)
+		## A rally that ends in an attack error ends on that swing, so its last
+		## home attack is the errant one. It is held out of the legality check
+		## below and asserted separately -- a missed attack is *required* to
+		## leave the court, which is the whole point of drawing it that way.
+		if str(result.terminal_outcome) == "attack_error" and not home_attacks.is_empty():
+			errant_landings.append(home_attacks.pop_back())
+		landings.append_array(home_attacks)
 	var distinct := {}
 	var occupied_cells := {}
 	for landing in landings:
@@ -5559,7 +5583,19 @@ func _test_attack_targets_are_continuous() -> void:
 			illegal += 1
 	_check(
 		landings.size() > 0 and illegal == 0,
-		"every attack lands inside the opponent court",
+		"every attack that stays in play lands inside the opponent court",
+	)
+	## The complement: a swing ruled an error is drawn missing, either past a
+	## painted line or stopped by the net on the hitter's own side.
+	var errant_still_in := 0
+	for landing in errant_landings:
+		var past_line := landing.x < 0.0 or landing.x > 1.0 or landing.y < 0.0
+		var netted := landing.y > CourtConstants.NET_Y
+		if not past_line and not netted:
+			errant_still_in += 1
+	_check(
+		errant_landings.size() > 0 and errant_still_in == 0,
+		"every attack ruled an error is drawn landing outside the court or in the net",
 	)
 
 
