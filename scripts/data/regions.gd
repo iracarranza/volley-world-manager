@@ -26,14 +26,26 @@ const LEGACY_REGIONS := {
 	"South America": "Taktikã",
 }
 
-## The six regions eligible for Sixnet flagship slots. Ispayk and A'ace are
-## deliberately excluded from bracket allocation, regional power, and
-## influence drift -- per the lore, they compete *for* a flagship slot from
-## outside this pool, not as members of it. Anything iterating regions for
-## Sixnet-league purposes must use this list, not `names()` (which returns
-## all eight).
+## The six regions with their own development identity -- REGION_ADJACENCY
+## and influence drift are scoped to exactly this list. Ispayk and A'ace are
+## deliberately excluded from *that* system (they don't have a development
+## tradition to spread or absorb; their identity comes from history and
+## money, not geography), even though both now play in the Sixnet bracket
+## itself -- see `SIXNET_PARTICIPANTS`.
 const CORE_REGIONS: Array[String] = [
 	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
+]
+
+## Every region that actually competes in the Sixnet's 8 bracket slots.
+## Ispayk and A'ace hold a fixed starting slot each (see
+## `SixnetLeague.ISPAYK_FIXED_SLOT`/`AACE_FIXED_SLOT`) -- lower for Ispayk
+## (fallen flagship, clawing back), upper for A'ace (bought its way straight
+## to the top) -- but afterward are subject to the same promotion/relegation
+## as everyone else; "always starts" is a starting condition, not a
+## permanent pin. The remaining 6 slots go to `CORE_REGIONS`, one each.
+const SIXNET_PARTICIPANTS: Array[String] = [
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
+	"Ispayk", "A'ace",
 ]
 
 ## Invented flavor geography for the influence-drift mechanic -- which core

@@ -22,6 +22,13 @@ const ALL_SLOT_IDS: Array[String] = [
 	"lower_1", "lower_2", "lower_3", "lower_4",
 ]
 
+## Where the two non-core regions enter the bracket at world generation.
+## A'ace buys its way straight into the top table; Ispayk starts in the
+## lower bracket it fell into. Neither is pinned there afterward -- both
+## promote and relegate like any other participant.
+const AACE_FIXED_SLOT: String = "upper_1"
+const ISPAYK_FIXED_SLOT: String = "lower_1"
+
 ## Rating gap at which a 1-vs-1 match is ~88% decisive -- decisive but never
 ## a certainty, so an underdog region's slot-team can still upset.
 const SIXNET_LOGISTIC_K: float = 0.08
@@ -52,12 +59,12 @@ static func ensure_bootstrapped(career: Resource) -> void:
 	if not career.sixnet_slots.is_empty():
 		return
 	var initial_power := {}
-	for region_name in Regions.CORE_REGIONS:
+	for region_name in Regions.SIXNET_PARTICIPANTS:
 		initial_power[region_name] = bootstrap_rating(
 			region_name, int(hash(str(career.career_name) + str(region_name)))
 		)
 	career.region_power = initial_power.duplicate(true)
-	career.sixnet_slots = allocate_slots(initial_power, int(hash(str(career.career_name))))
+	career.sixnet_slots = allocate_slots(initial_power)
 	career.sixnet_season_start_week = career.absolute_week
 
 
@@ -77,41 +84,38 @@ static func bootstrap_rating(region_name: String, seed_value: int) -> float:
 	return total / maxf(float(roster.size()), 1.0)
 
 
-## Every core region gets exactly one guaranteed slot (representation floor):
-## the strongest 4 by `initial_power` go to the upper bracket, the weakest 2
-## to the lower bracket. The two remaining lower-bracket slots are filled by
-## a seeded power-weighted draw over all 6 regions, so a dominant region is
-## likely -- never guaranteed -- to hold a second slot. Fixed for the life of
-## the save once returned; only individual slot *occupants* change later,
-## via promotion/relegation.
-static func allocate_slots(initial_power: Dictionary, seed_value: int) -> Dictionary:
+## Eight regions, eight slots, exactly one each -- no region ever holds two.
+##
+## A'ace and Ispayk take a *fixed starting* slot that expresses their story
+## rather than their measured strength: A'ace enters straight into the upper
+## bracket (it bought its way to the top table without earning it), Ispayk
+## into the lower (a fallen flagship clawing back). Both are ordinary
+## competitors from that point on -- promotion and relegation move them like
+## anyone else, so "always starts" is a starting condition, not a permanent
+## pin.
+##
+## The six core regions fill what's left strictly by power: the strongest
+## three take the remaining upper slots, the other three the remaining lower
+## slots.
+static func allocate_slots(initial_power: Dictionary, _seed_value: int = 0) -> Dictionary:
 	var ranked: Array = Regions.CORE_REGIONS.duplicate()
 	ranked.sort_custom(func(a, b):
 		return float(initial_power.get(a, 50.0)) > float(initial_power.get(b, 50.0))
 	)
-	var slots := {}
-	for index in range(4):
-		slots[UPPER_SLOT_IDS[index]] = ranked[index]
-	for index in range(2):
-		slots[LOWER_SLOT_IDS[index]] = ranked[4 + index]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
-	for index in range(2, 4):
-		slots[LOWER_SLOT_IDS[index]] = _weighted_draw(Regions.CORE_REGIONS, initial_power, rng)
+	var slots := {AACE_FIXED_SLOT: "A'ace", ISPAYK_FIXED_SLOT: "Ispayk"}
+	var open_upper: Array[String] = []
+	for slot_id in UPPER_SLOT_IDS:
+		if not slots.has(slot_id):
+			open_upper.append(slot_id)
+	var open_lower: Array[String] = []
+	for slot_id in LOWER_SLOT_IDS:
+		if not slots.has(slot_id):
+			open_lower.append(slot_id)
+	for index in range(open_upper.size()):
+		slots[open_upper[index]] = ranked[index]
+	for index in range(open_lower.size()):
+		slots[open_lower[index]] = ranked[open_upper.size() + index]
 	return slots
-
-
-static func _weighted_draw(regions: Array, power: Dictionary, rng: RandomNumberGenerator) -> String:
-	var total := 0.0
-	for region_name in regions:
-		total += float(power.get(region_name, 50.0))
-	var roll := rng.randf() * total
-	var cumulative := 0.0
-	for region_name in regions:
-		cumulative += float(power.get(region_name, 50.0))
-		if roll <= cumulative:
-			return str(region_name)
-	return str(regions[regions.size() - 1])
 
 
 static func win_probability(rating_a: float, rating_b: float) -> float:
@@ -210,9 +214,12 @@ static func _combined_record(career: Resource, region_name: String) -> Dictionar
 ## Smoothed toward this season's result, not snapped to it (see
 ## `POWER_SEASON_PULL`), and clamped to `[POWER_MIN, POWER_MAX]` so no region
 ## is ever permanently unbeatable or permanently dead across a long career.
-## A region holding two slots has its record combined across both first.
+## Covers all eight bracket participants, not just the six core regions:
+## Ispayk and A'ace play in the Sixnet and so their power moves with their
+## results too. (Influence *drift* below stays core-only -- that mechanic is
+## about geography, which those two deliberately sit outside of.)
 static func apply_power_update(career: Resource) -> void:
-	for region_name in Regions.CORE_REGIONS:
+	for region_name in Regions.SIXNET_PARTICIPANTS:
 		var record := _combined_record(career, region_name)
 		var games := int(record.get("wins", 0)) + int(record.get("losses", 0))
 		if games == 0:

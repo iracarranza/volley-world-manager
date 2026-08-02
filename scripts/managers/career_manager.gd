@@ -8,6 +8,7 @@ const Generator := preload("res://scripts/systems/player_generator.gd")
 const Training := preload("res://scripts/systems/training_system.gd")
 const Calendar := preload("res://scripts/data/calendar_rules.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
+const WorldPopulation := preload("res://scripts/systems/world_population.gd")
 
 signal career_changed
 signal career_loaded
@@ -15,10 +16,20 @@ signal week_advanced(report: Dictionary)
 signal transfer_pool_changed
 
 const SAVE_DIRECTORY := "user://careers"
+## Suffix marking a world-population sidecar. Save listing filters these out
+## so they never show up as selectable careers.
+const WORLD_FILE_SUFFIX := "__world"
 
 var career: Resource
 var last_training_report: Dictionary = {}
 var game_manager_override: Node
+
+## Every player in this career's world who is not on the managed roster.
+## Generated once at career creation and persisted alongside the career in
+## its own file, because it is megabytes of data that almost never changes
+## while the career file itself is rewritten every week.
+var world_population: Array[VolleyballPlayer] = []
+var _world_dirty: bool = false
 
 
 func has_career() -> bool:
@@ -59,9 +70,20 @@ func create_career(
 	var error: String = _game_manager().configure_managed_team(team, generated)
 	if not error.is_empty():
 		return error
-	state.transfer_pool = Generator.generate_market(region, seed_value + 991)
 	state.fixtures = _starting_fixtures(region)
 	SixnetLeague.ensure_bootstrapped(state)
+	## The world is built once, here, and then kept. The transfer market is a
+	## slice taken out of it rather than a separate roll, so every player the
+	## manager can sign is a real person from somewhere with a real place in
+	## the world's talent distribution.
+	world_population = WorldPopulation.generate(
+		seed_value + 991, WorldPopulation.DEFAULT_POPULATION_SIZE, state.region_overlay
+	)
+	state.transfer_pool.assign(
+		WorldPopulation.draw_market(world_population, 120, seed_value + 1777)
+	)
+	state.world_population_size = world_population.size() + state.transfer_pool.size()
+	_world_dirty = true
 	career = state
 	last_training_report = {}
 	save_career()
@@ -175,6 +197,12 @@ func sign_transfer(player_id: int) -> String:
 	if not error.is_empty():
 		return error
 	career.transfer_pool.erase(candidate)
+	## A signed player belongs to the roster now, not to the world. Leaving
+	## them in the population would write them into the world file as well
+	## and reload as two copies of the same person.
+	if world_population.has(candidate):
+		world_population.erase(candidate)
+		_world_dirty = true
 	save_career()
 	transfer_pool_changed.emit()
 	career_changed.emit()
@@ -187,7 +215,12 @@ func release_to_pool(player_id: int) -> String:
 	_game_manager().clear_player_from_rotations(player_id)
 	var error: String = _game_manager().unregister_player(player_id)
 	if not error.is_empty(): return error
+	## A released player becomes part of the world rather than vanishing from
+	## it: the transfer pool is written into the world file alongside the
+	## population, so listing them here is enough for them to persist.
 	career.transfer_pool.append(player)
+	_world_dirty = true
+	save_career()
 	transfer_pool_changed.emit()
 	career_changed.emit()
 	return ""
@@ -197,7 +230,12 @@ func delete_save(save_id: String) -> String:
 	if not FileAccess.file_exists(path): return "Career save not found."
 	var error := DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	if error != OK: return "Could not delete the career save."
-	if career != null and str(career.save_id) == _safe_id(save_id): career = null
+	var world_path := _world_path(save_id)
+	if FileAccess.file_exists(world_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(world_path))
+	if career != null and str(career.save_id) == _safe_id(save_id):
+		career = null
+		world_population = [] as Array[VolleyballPlayer]
 	return ""
 
 
@@ -216,6 +254,31 @@ func save_career() -> String:
 	if file == null:
 		return "Could not open the career save file."
 	file.store_string(JSON.stringify(payload, "\t"))
+	## The population is only rewritten when it actually changed. It is
+	## roughly two orders of magnitude larger than the career file, and the
+	## career file is written on every single week advance.
+	if _world_dirty:
+		save_world_population()
+	return ""
+
+
+func save_world_population() -> String:
+	if career == null:
+		return "No active career."
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_DIRECTORY))
+	var file := FileAccess.open(_world_path(career.save_id), FileAccess.WRITE)
+	if file == null:
+		return "Could not open the world population file."
+	## Transfer-listed players are written here too, not in the career file.
+	## The career only records their ids, so this file has to hold every
+	## person those ids could point at -- the world plus its shop window.
+	var everyone: Array[VolleyballPlayer] = world_population.duplicate()
+	for listed in career.transfer_pool:
+		everyone.append(listed as VolleyballPlayer)
+	file.store_string(JSON.stringify({
+		"save_version": 1, "players": WorldPopulation.to_dict_array(everyone),
+	}))
+	_world_dirty = false
 	return ""
 
 
@@ -229,9 +292,49 @@ func load_career(save_id: String) -> String:
 	var payload: Dictionary = parsed
 	career = CareerStateModel.from_dict(payload.get("career", {}))
 	_game_manager().from_dict(payload.get("game_state", {}))
+	_load_world_population(save_id)
 	career_loaded.emit()
 	career_changed.emit()
 	return ""
+
+
+## Reads the sidecar and turns the career's transfer-listed ids back into
+## player objects. A career saved before the world population existed has no
+## sidecar and carries its market inline instead, which `CareerState` has
+## already loaded by this point -- so that path simply leaves an empty world
+## rather than failing.
+func _load_world_population(save_id: String) -> void:
+	world_population = [] as Array[VolleyballPlayer]
+	_world_dirty = false
+	var file := FileAccess.open(_world_path(save_id), FileAccess.READ)
+	if file != null:
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		if parsed is Dictionary:
+			world_population = WorldPopulation.from_dict_array(
+				Array((parsed as Dictionary).get("players", []))
+			)
+	## Belt and braces: anyone already on the managed roster is not also a
+	## free agent in the world, whatever the files happen to say.
+	var rostered_ids := {}
+	for player in _game_manager().players:
+		rostered_ids[int(player.id)] = true
+	var world_free_agents: Array[VolleyballPlayer] = []
+	for player in world_population:
+		if not rostered_ids.has(int(player.id)):
+			world_free_agents.append(player)
+	world_population = world_free_agents
+	if career.transfer_pool_ids.is_empty():
+		return
+	var by_id := {}
+	for player in world_population:
+		by_id[int(player.id)] = player
+	var resolved: Array[VolleyballPlayer] = []
+	for player_id in career.transfer_pool_ids:
+		var player: VolleyballPlayer = by_id.get(int(player_id))
+		if player != null:
+			resolved.append(player)
+			world_population.erase(player)
+	career.transfer_pool.assign(resolved)
 
 
 func list_save_metadata() -> Array[Dictionary]:
@@ -242,7 +345,10 @@ func list_save_metadata() -> Array[Dictionary]:
 	directory.list_dir_begin()
 	var file_name := directory.get_next()
 	while not file_name.is_empty():
-		if file_name.ends_with(".json"):
+		## World-population sidecars live in the same directory but are not
+		## careers, so they must never appear in the save list.
+		if file_name.ends_with(".json") \
+				and not file_name.ends_with("%s.json" % WORLD_FILE_SUFFIX):
 			var file := FileAccess.open("%s/%s" % [SAVE_DIRECTORY, file_name], FileAccess.READ)
 			var parsed: Variant = JSON.parse_string(file.get_as_text()) if file != null else null
 			if parsed is Dictionary:
@@ -282,6 +388,10 @@ func _starting_fixtures(region: String) -> Array[Resource]:
 
 func _save_path(save_id: String) -> String:
 	return "%s/%s.json" % [SAVE_DIRECTORY, _safe_id(save_id)]
+
+
+func _world_path(save_id: String) -> String:
+	return "%s/%s%s.json" % [SAVE_DIRECTORY, _safe_id(save_id), WORLD_FILE_SUFFIX]
 
 
 func _safe_id(value: String) -> String:

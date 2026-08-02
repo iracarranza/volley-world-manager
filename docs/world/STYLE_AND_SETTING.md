@@ -54,19 +54,58 @@ the six slots.
 
 This is now a real background mechanic, not only lore (`scripts/systems/
 sixnet_league.gd`): the Sixnet runs as an 8-slot competition, a 4-team upper
-bracket and a 4-team lower bracket, filled from the 6 core regions (Ispayk
-and A'ace stay outside this pool entirely -- they compete *for* a slot, not
-within it). Since 6 regions fill 8 slots, a dominant region can hold two at
-once. Each core region carries a power level that genuinely evolves from a
-simulated background season every year -- the six flagship academies (plus
-whichever core regions hold a second slot) play a real, if abstracted,
-schedule the player never sees in match detail, and results promote/relegate
-occupants between the two brackets. A region's power, combined with which
-regions are geographically "near" it (invented world-map adjacency, not tied
-to any region's real-world naming tradition), also drives a slow influence
-drift: a dominant region's development traits partially spread to a weaker
-neighbor, while an isolated region with no dominant neighbor nearby instead
-intensifies its own specialty rather than being absorbed.
+bracket and a 4-team lower bracket, with all eight regions competing and
+holding exactly one slot each. A'ace and Ispayk take a *fixed starting*
+slot that states their situation rather than their form -- A'ace enters
+straight into the upper bracket, having bought its way to the top table
+without earning it, and Ispayk into the lower, where a fallen flagship
+begins its climb back. Neither is pinned there: from their first season on
+they promote and relegate like anybody else.
+
+Every region carries a power level that genuinely evolves from a simulated
+background season each year -- the eight academies play a real, if
+abstracted, schedule the player never sees in match detail, and the results
+move occupants between the two brackets. Regional power, combined with
+which regions are geographically "near" each other (invented world-map
+adjacency, not tied to any region's real-world naming tradition), also
+drives a slow influence drift: a dominant region's development traditions
+partially spread into a weaker neighbor, while an isolated region with no
+dominant neighbor nearby instead intensifies its own specialty rather than
+being absorbed. That drift covers the six core regions only -- Ispayk and
+A'ace compete in the bracket but sit outside the geography, since their
+identities come from history and money rather than from a local
+development tradition that could spread.
+
+## The world's players
+
+The world is a fixed population rather than a stream of players invented
+whenever something needs them (`scripts/systems/world_population.gd`). Around
+twelve hundred players exist at career creation and are stored with the save;
+the transfer market is a slice taken out of that population, not a separate
+roll.
+
+The reason is scarcity. Talent is an **allotted budget**, not a per-player
+dice roll: each age band gets a small fixed headcount of generational and
+elite players *for the entire world*, so only eight genuinely generational
+players are alive at any time no matter how large the population grows.
+A world where every age from fifteen to thirty is stocked with wonderkids
+has no wonderkids in it -- finding one has to be an event.
+
+Two rules follow from that and are worth stating plainly, because they are
+what make the world feel like it has a past:
+
+- **Current ability is never allotted.** It falls out of age through the
+  same development curve every player uses. One potential number plus an age
+  produces either a raw prospect or a finished star, which is exactly what
+  makes a "wonderkid" a coherent idea rather than a label.
+- **Region, age and talent are apportioned together.** A'ace is dense with
+  established stars and nearly empty of home-grown teenagers -- the shape of a
+  program that imports rather than raises. Ispayk is thick with veterans,
+  because a proud, cash-strapped academy keeps the players it already has.
+  Nobody wrote those stories into the data; they fall out of the weighting.
+
+Every region is guaranteed prospects worth scouting, so no save produces a
+dead corner of the world.
 
 ### Regional sporting culture
 
@@ -215,6 +254,16 @@ depends on an answer, don't guess:
 - Now that flagship slots are established as contested rather than fixed
   (see Ispayk/A'ace), does the player's own academy ever get a shot at
   Sixnet contention as a mechanic, or does that stay aspirational flavor?
+- The world population is currently **static**: players are generated once
+  and never age, retire, or get replaced by a new youth intake. That is the
+  single biggest thing standing between "a world with a shape" and "a world
+  with a history" -- a career played over many seasons currently watches the
+  same twelve hundred people stay exactly the age they started at. Worth a
+  dedicated pass: aging, decline, retirement, and an annual intake that
+  respects the same talent allotments.
+- Only the player's own roster develops through training; the rest of the
+  world's players never improve. Same root cause as the above, and probably
+  the same pass.
 - Spëddigh and Landavol don't have a named signature rival yet (Pāwa
   Hitō/Bloc du Larg and Ispayk/A'ace do) -- worth inventing one each, or is
   an uneven spread fine?

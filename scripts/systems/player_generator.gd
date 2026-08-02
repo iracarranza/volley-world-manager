@@ -141,6 +141,7 @@ static func generate_roster(
 		player.display_name = "%s %d" % [str(names[index % names.size()]), index + 1]
 		player.position_role = str(position.role)
 		player.position_code = str(position.code)
+		player.home_region = canonical_region
 		player.apply_role_physical_defaults()
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
@@ -152,6 +153,92 @@ static func generate_roster(
 		AttributeProfiles.assign_serve_style(player)
 		result.append(player)
 	return result
+
+
+## How many times `generate_prospect` may re-roll a player to land on the
+## requested potential. Absent attribute clamping the relationship between
+## general talent and resulting potential is exactly linear, so the first
+## correction is normally exact and this loop exits after two passes; the
+## extra attempts only matter at the very top of the scale, where individual
+## attribute ceilings saturate at 99 and the correction undershoots.
+const PROSPECT_CALIBRATION_ATTEMPTS: int = 4
+
+
+## Builds one player to order: a specific region, role, age and *potential*,
+## rather than whatever the dice happen to produce. This is what the world
+## population is built from -- talent has to be an allocated, scarce resource
+## for the world to have a believable shape, which means the generator has to
+## be able to fill a request rather than only roll freely.
+##
+## Current ability is deliberately *not* a parameter: it falls out of age via
+## the same `_attribute_reserve` curve every other generated player uses, so
+## a 16-year-old at potential 95 is a raw wonderkid and a 29-year-old at
+## potential 95 is an established star, from the same one input.
+static func generate_prospect(
+	region_name: String,
+	position_role: String,
+	position_code: String,
+	age: int,
+	target_potential: int,
+	player_id: int,
+	display_name: String,
+	seed_value: int,
+	overlay: Dictionary = {},
+) -> VolleyballPlayer:
+	var best: VolleyballPlayer = null
+	var best_error := 1000
+	## First guess: potential sits above raw talent by the role/specialty tier
+	## bonuses, which average out near this much across the attribute set.
+	var talent := float(target_potential) - 8.0
+	for _attempt in range(PROSPECT_CALIBRATION_ATTEMPTS):
+		var candidate := _build_prospect(
+			region_name, position_role, position_code, age,
+			talent, player_id, display_name, seed_value, overlay,
+		)
+		var error := int(candidate.potential) - target_potential
+		if absi(error) < best_error:
+			best_error = absi(error)
+			best = candidate
+		if error == 0:
+			break
+		talent = clampf(talent - float(error), 1.0, 99.0)
+	return best
+
+
+## One deterministic player at a fixed general-talent level. Every attempt in
+## `generate_prospect`'s calibration loop reseeds from the same
+## `seed_value`, so the innate per-attribute deviations are identical between
+## attempts and only the talent term moves -- which is exactly what makes the
+## correction exact rather than a search.
+static func _build_prospect(
+	region_name: String,
+	position_role: String,
+	position_code: String,
+	age: int,
+	talent: float,
+	player_id: int,
+	display_name: String,
+	seed_value: int,
+	overlay: Dictionary,
+) -> VolleyballPlayer:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var canonical_region := VolleyballRegions.canonical_name(region_name)
+	var player := VolleyballPlayer.new()
+	player.id = player_id
+	player.display_name = display_name
+	player.position_role = position_role
+	player.position_code = position_code
+	player.home_region = canonical_region
+	player.apply_role_physical_defaults()
+	player.age = age
+	player.professional_experience = maxi(age - 20, 0)
+	_apply_body_variation(player, rng, canonical_region, overlay)
+	player.stride_length_m = player.default_stride_length_m()
+	_apply_attributes(player, canonical_region, rng, age <= 20, overlay, talent)
+	Familiarity.initialize_player(player, rng)
+	AttributeProfiles.assign_serve_style(player)
+	return player
 
 
 ## Attributes that fade with age rather than keep developing. Power and
@@ -299,12 +386,19 @@ static func _tier_bonus(
 ## that is usually small and occasionally extreme. That last term is what allows
 ## a teenager with a freakish leap and nothing else, or a veteran with one
 ## glaring hole.
+## `talent_override` (>= 0) supplies the player's general level directly
+## instead of rolling it, which is what lets the world-population system ask
+## for a player of a *specific* calibre rather than accepting whatever the
+## dice produce. The roll is skipped entirely rather than rolled-and-ignored,
+## so the population path has its own rng stream; `generate_roster` never
+## passes it and its stream is untouched.
 static func _apply_attributes(
 	player: VolleyballPlayer,
 	region_name: String,
 	rng: RandomNumberGenerator,
 	academy: bool,
 	overlay: Dictionary = {},
+	talent_override: float = -1.0,
 ) -> void:
 	var primary_list: Array = Array(
 		VolleyballPlayer.POSITION_WEIGHTS.get(player.position_role, [])
@@ -316,7 +410,7 @@ static func _apply_attributes(
 	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, [])) \
 		+ Array(overlay.get("specialty_add", []))
 	var specialty_bonus := SPECIALTY_BONUS + int(overlay.get("specialty_bonus_delta", 0.0))
-	var talent := float(_talent_level(rng, academy))
+	var talent := talent_override if talent_override >= 0.0 else float(_talent_level(rng, academy))
 
 	var ceilings := {}
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
@@ -367,21 +461,9 @@ static func _weighted_score(values: Dictionary, primary_list: Array) -> int:
 	return clampi(roundi(role_score * 0.75 + complete_score * 0.25), 1, 100)
 
 
-static func generate_market(
-	region_name: String,
-	seed_value: int,
-	first_id: int = 1000,
-	count: int = 120,
-) -> Array[Resource]:
-	var result: Array[Resource] = []
-	var batch := 0
-	while result.size() < count:
-		var generated := generate_roster(region_name, "Club", seed_value + batch * 7919)
-		for player in generated:
-			if result.size() >= count:
-				break
-			player.id = first_id + result.size()
-			player.display_name = "%s %03d" % [player.display_name.get_slice(" ", 0), result.size() + 1]
-			result.append(player)
-		batch += 1
-	return result
+## `generate_market()` used to live here, rolling 120 fresh players from
+## nowhere every time a career needed a transfer list. It is gone rather than
+## deprecated: `WorldPopulation.draw_market()` replaces it by taking a slice
+## out of the world that already exists, which is the whole point of having
+## a population -- a market of players invented on the spot has no history,
+## no origin, and no relationship to how scarce talent actually is.

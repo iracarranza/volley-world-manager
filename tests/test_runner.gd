@@ -13,6 +13,7 @@ const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
 const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
 const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
+const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
@@ -180,6 +181,7 @@ func _initialize() -> void:
 	_test_team_roster_statistics_and_opponent_rotation()
 	_test_career_calendar_generation_training_and_saves()
 	_test_sixnet_league()
+	_test_world_population()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -548,8 +550,6 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	)
 	_check(club_roster.size() == 10 and academy_roster.size() == 12,
 		"club and academy starts create distinct roster sizes")
-	_check(PLAYER_GENERATOR_SCRIPT.generate_market("Landavol", 9898).size() == 120,
-		"testing recruitment generates a 120-player variance pool")
 	_check(club_roster[0].display_name == repeated_roster[0].display_name \
 			and club_roster[0].set_accuracy == repeated_roster[0].set_accuracy,
 		"regional roster generation is deterministic")
@@ -777,12 +777,29 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"due fixture prepares the configured Match Center state")
 	_check(game_autoload.match_state.match_format.best_of_sets == 3,
 		"fixture preparation passes career match format into MatchState")
-	var candidate := career_manager.career.transfer_pool[0] as VolleyballPlayer
+	## The market is a weighted slice of the world population rather than a
+	## fixed position cycle, so the first listed player can be anyone --
+	## including a libero, who legitimately cannot take an ordinary starting
+	## slot. Pick a court player deliberately instead of assuming index 0.
+	var candidate: VolleyballPlayer
+	for pool_player in career_manager.career.transfer_pool:
+		if (pool_player as VolleyballPlayer).position_role != "Libero":
+			candidate = pool_player as VolleyballPlayer
+			break
+	_check(candidate != null, "the world-drawn transfer market lists court players to sign")
+	_check(
+		not str(candidate.home_region).is_empty(),
+		"world-drawn transfer candidates carry the region that developed them",
+	)
 	var funds_before := int(career_manager.career.finances)
 	_check(career_manager.sign_transfer(candidate.id).is_empty(),
 		"regional transfer candidate can join an eligible roster")
 	_check(int(career_manager.career.finances) == funds_before,
 		"prototype roster additions are free for attribute testing")
+	_check(
+		not career_manager.world_population.has(candidate),
+		"signing a player removes them from the world population, never duplicating them",
+	)
 	var prior_starter := int(game_autoload.team.starting_player_ids[0])
 	_check(game_autoload.set_player_starting(prior_starter, false).is_empty() \
 			and game_autoload.set_player_starting(candidate.id, true).is_empty(),
@@ -793,6 +810,25 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"career save reloads through save-slot persistence")
 	_check(load_manager.career.organization_name == "Test Volley Academy",
 		"career organization metadata survives loading")
+	## The population is stored beside the career, not inside it, and the
+	## market resolves back out of it by id rather than being stored twice.
+	_check(
+		load_manager.world_population.size() > 500
+			and load_manager.career.transfer_pool.size()
+				== career_manager.career.transfer_pool.size(),
+		"the world population and its transfer-market slice both survive a save/load cycle",
+	)
+	var reloaded_ids := {}
+	var population_collision := false
+	for pool_player in load_manager.career.transfer_pool:
+		reloaded_ids[int((pool_player as VolleyballPlayer).id)] = true
+	for world_player in load_manager.world_population:
+		if reloaded_ids.has(int(world_player.id)):
+			population_collision = true
+	_check(
+		not population_collision,
+		"a transfer-listed player is never also left sitting in the world population",
+	)
 	_check(career_manager.delete_save(test_save_id).is_empty() \
 			and not FileAccess.file_exists(test_path), "selected career saves can be deleted")
 	career_manager.free()
@@ -815,8 +851,25 @@ func _test_sixnet_league() -> void:
 		"bootstrapping fills exactly 8 Sixnet slots, covering all 6 core regions",
 	)
 	_check(
-		career.region_power.size() == 6,
-		"every core region receives an initial power level, and only core regions",
+		career.region_power.size() == 8
+			and career.region_power.has("Ispayk") and career.region_power.has("A'ace"),
+		"all eight Sixnet participants receive a power level, including Ispayk and A'ace",
+	)
+	_check(
+		str(career.sixnet_slots.get(SIXNET_LEAGUE_SCRIPT.AACE_FIXED_SLOT, "")) == "A'ace"
+			and str(career.sixnet_slots.get(SIXNET_LEAGUE_SCRIPT.ISPAYK_FIXED_SLOT, "")) == "Ispayk",
+		"A'ace starts in the upper bracket and Ispayk in the lower, whatever their measured power",
+	)
+	var slot_occupants := {}
+	var duplicate_occupant := false
+	for slot_id in career.sixnet_slots:
+		var occupant := str(career.sixnet_slots[slot_id])
+		if slot_occupants.has(occupant):
+			duplicate_occupant = true
+		slot_occupants[occupant] = true
+	_check(
+		not duplicate_occupant and slot_occupants.size() == 8,
+		"all eight regions hold exactly one bracket slot each -- nobody doubles up",
 	)
 	var rebootstrap_slots: Dictionary = career.sixnet_slots.duplicate(true)
 	SIXNET_LEAGUE_SCRIPT.ensure_bootstrapped(career)
@@ -962,6 +1015,188 @@ func _test_sixnet_league() -> void:
 		"advancing 96 weeks through the real career flow resolves exactly two Sixnet seasons",
 	)
 	integration_manager.free()
+
+
+func _test_world_population() -> void:
+	var population := WORLD_POPULATION_SCRIPT.generate(4242, 1200)
+	var summary: Dictionary = WORLD_POPULATION_SCRIPT.summarize(population)
+	_check(
+		population.size() == 1200 and int(summary.total) == 1200,
+		"the world is generated at the requested population size",
+	)
+
+	## Talent is an allotted budget, not a per-player roll. These are exact
+	## counts, not tendencies: the sum of each tier's per-band allotment.
+	## This is the check that stops the world from filling up with
+	## wonderkids -- if scarcity ever silently becomes a probability again,
+	## it fails here.
+	var expected_tier_totals := {}
+	for tier in WORLD_POPULATION_SCRIPT.TALENT_TIERS:
+		var per_band: Dictionary = tier.per_band
+		if per_band.is_empty():
+			continue
+		var expected := 0
+		for band in WORLD_POPULATION_SCRIPT.AGE_BANDS:
+			expected += int(per_band.get(str(band.key), 0))
+		expected_tier_totals[str(tier.key)] = expected
+	var allotments_exact := true
+	for tier_key in expected_tier_totals:
+		if int(summary.by_tier.get(tier_key, 0)) != int(expected_tier_totals[tier_key]):
+			allotments_exact = false
+	_check(
+		allotments_exact and int(summary.by_tier.get("generational", 0)) == 8,
+		"scarce talent tiers hit their exact world-wide allotment, generational included",
+	)
+	## The same scarcity stated the other way round, since this is the
+	## property that actually matters: an overwhelming majority of the world
+	## is ordinary, at every age.
+	var scarce_total := 0
+	for tier_key in expected_tier_totals:
+		scarce_total += int(summary.by_tier.get(tier_key, 0))
+	_check(
+		float(scarce_total) / float(population.size()) < 0.10,
+		"under a tenth of the world sits in a scoutable talent tier",
+	)
+
+	## A pyramid, not a flat spread -- far more teenagers than veterans.
+	_check(
+		int(summary.by_band.get("youth", 0)) > int(summary.by_band.get("prime", 0)) * 0.8
+			and int(summary.by_band.get("youth", 0)) > int(summary.by_band.get("twilight", 0)) * 3,
+		"the world's age distribution is a pyramid rather than a flat spread",
+	)
+
+	## Every region has prospects worth finding. A save that produced a
+	## region with nothing to discover would be a dead corner of the world.
+	var wonderkids: Array = WORLD_POPULATION_SCRIPT.wonderkids(population)
+	var wonderkids_by_region := {}
+	for player in wonderkids:
+		var region := str((player as VolleyballPlayer).home_region)
+		wonderkids_by_region[region] = int(wonderkids_by_region.get(region, 0)) + 1
+	var every_region_has_prospects := true
+	for region_name in REGIONS_SCRIPT.SIXNET_PARTICIPANTS:
+		if int(wonderkids_by_region.get(region_name, 0)) < 1:
+			every_region_has_prospects = false
+	_check(
+		every_region_has_prospects and wonderkids.size() >= 8,
+		"every region has at least one wonderkid to discover",
+	)
+
+	## A'ace buys talent instead of raising it: denser in the top tiers than
+	## a region with no lean, and nearly empty of home-grown teenagers.
+	## Asserted as a share rather than a headcount, because with only eight
+	## generational players alive the placement of any individual one is
+	## genuinely noisy -- measured across seeds it swings 0-4.
+	var aace_top := 0
+	var landavol_top := 0
+	for tier_key in expected_tier_totals:
+		aace_top += int(summary.by_region_tier.get("A'ace|%s" % tier_key, 0))
+		landavol_top += int(summary.by_region_tier.get("Landavol|%s" % tier_key, 0))
+	var aace_total: int = maxi(int(summary.by_region.get("A'ace", 0)), 1)
+	var landavol_total: int = maxi(int(summary.by_region.get("Landavol", 0)), 1)
+	_check(
+		float(aace_top) / float(aace_total) > float(landavol_top) / float(landavol_total),
+		"A'ace is denser in scoutable talent than a region with no development lean",
+	)
+	_check(
+		float(int(summary.by_region_band.get("A'ace|youth", 0))) / float(aace_total)
+			< float(int(summary.by_region_band.get("Landavol|youth", 0)))
+				/ float(landavol_total),
+		"A'ace produces proportionally far fewer of its own teenagers than it fields stars",
+	)
+
+	## Ispayk keeps its old guard -- proportionally more veterans than a
+	## region with no age lean.
+	var ispayk_total: int = maxi(int(summary.by_region.get("Ispayk", 0)), 1)
+	var ispayk_old := int(summary.by_region_band.get("Ispayk|veteran", 0)) \
+		+ int(summary.by_region_band.get("Ispayk|twilight", 0))
+	var landavol_old := int(summary.by_region_band.get("Landavol|veteran", 0)) \
+		+ int(summary.by_region_band.get("Landavol|twilight", 0))
+	_check(
+		float(ispayk_old) / float(ispayk_total)
+			> float(landavol_old) / float(landavol_total),
+		"Ispayk carries proportionally more veterans than a region with no age lean",
+	)
+
+	## Current ability is never allotted -- it falls out of age. The same
+	## potential at 16 and at 30 has to read as a prospect and a finished
+	## player respectively, or the wonderkid concept has no meaning.
+	var youth_gap := 0.0
+	var youth_count := 0
+	var prime_gap := 0.0
+	var prime_count := 0
+	for player_resource in population:
+		var player: VolleyballPlayer = player_resource as VolleyballPlayer
+		var gap := float(player.potential - player.current_ability_score())
+		match WORLD_POPULATION_SCRIPT.band_for_age(int(player.age)):
+			"youth":
+				youth_gap += gap
+				youth_count += 1
+			"prime":
+				prime_gap += gap
+				prime_count += 1
+	_check(
+		youth_count > 0 and prime_count > 0
+			and youth_gap / float(youth_count) > prime_gap / float(prime_count) + 5.0,
+		"young players sit much further below their ceiling than players in their prime",
+	)
+
+	## Generation to order: the calibration loop has to actually land inside
+	## the tier band it was asked for, or the allotments above are fiction.
+	var on_target := true
+	for target_potential in [45, 62, 78, 88, 95]:
+		var made: VolleyballPlayer = PLAYER_GENERATOR_SCRIPT.generate_prospect(
+			"Landavol", "Outside Hitter", "OH", 21, target_potential,
+			900001, "Calibration Test", 5150,
+		)
+		if made == null or absi(int(made.potential) - target_potential) > 2:
+			on_target = false
+	_check(
+		on_target,
+		"generate_prospect lands on the requested potential across the whole scale",
+	)
+	_check(
+		PLAYER_GENERATOR_SCRIPT.generate_prospect(
+			"Xérvu", "Setter", "S", 19, 80, 900002, "Determinism Test", 777,
+		).to_dict() == PLAYER_GENERATOR_SCRIPT.generate_prospect(
+			"Xérvu", "Setter", "S", 19, 80, 900002, "Determinism Test", 777,
+		).to_dict(),
+		"generate_prospect is deterministic for a fixed seed",
+	)
+
+	## Everyone knows where they came from -- this is what lets a roster read
+	## as a story rather than a list of unrelated names.
+	var every_player_has_origin := true
+	for player_resource in population:
+		if str((player_resource as VolleyballPlayer).home_region).is_empty():
+			every_player_has_origin = false
+	_check(every_player_has_origin, "every generated player records the region that raised them")
+
+	## The market slice comes out of the world and takes its players with it,
+	## so nobody is ever in two places at once.
+	var market_source: Array[VolleyballPlayer] = WORLD_POPULATION_SCRIPT.generate(99, 400)
+	var source_size := market_source.size()
+	var market: Array = WORLD_POPULATION_SCRIPT.draw_market(market_source, 40, 12345)
+	var market_ids := {}
+	for player in market:
+		market_ids[int((player as VolleyballPlayer).id)] = true
+	var market_leak := false
+	for player in market_source:
+		if market_ids.has(int(player.id)):
+			market_leak = true
+	_check(
+		market.size() == 40 and market_source.size() == source_size - 40 and not market_leak,
+		"drawing a transfer market removes exactly those players from the population",
+	)
+	var generational_listed := false
+	for player in market:
+		if WORLD_POPULATION_SCRIPT.tier_for_potential(
+			int((player as VolleyballPlayer).potential)
+		) == "generational":
+			generational_listed = true
+	_check(
+		not generational_listed,
+		"generational talent is never simply listed on the open market",
+	)
 
 
 func _test_court_coordinates() -> void:

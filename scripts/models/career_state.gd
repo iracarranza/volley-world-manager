@@ -33,26 +33,41 @@ const Regions := preload("res://scripts/data/regions.gd")
 @export var sixnet_standings: Dictionary = {}  ## slot_id -> {wins, losses, sets_won, sets_lost}
 @export var sixnet_season_start_week: int = 0
 
+## How many players this career's world was generated with. Metadata only --
+## the players themselves live in a sidecar file (`<save_id>__world.json`)
+## rather than inside the career save, because the population is megabytes
+## and almost never changes while the career file is rewritten every single
+## week. `CareerManager` owns loading and saving it.
+@export var world_population_size: int = 0
+
+## Transfer-listed players, serialized as ids into the world population so a
+## player is never stored twice. `CareerManager` resolves these back into
+## `transfer_pool` objects once the population file has loaded. Careers saved
+## before the world population existed instead carry full player dictionaries
+## under the legacy `transfer_pool` key, which still load.
+@export var transfer_pool_ids: Array[int] = []
+
 
 func to_dict() -> Dictionary:
 	var fixture_data: Array[Dictionary] = []
 	for fixture in fixtures:
 		fixture_data.append(fixture.to_dict())
-	var market_data: Array[Dictionary] = []
+	var market_ids: Array[int] = []
 	for player in transfer_pool:
-		market_data.append(player.to_dict())
+		market_ids.append(int(player.id))
 	return {"save_id": save_id, "career_name": career_name,
 		"organization_name": organization_name, "organization_type": organization_type,
 		"region": region, "identity": identity, "absolute_week": absolute_week,
 		"reputation": reputation, "finances": finances,
 		"training_focus": training_focus, "fixtures": fixture_data,
-		"transfer_pool": market_data, "active_fixture_id": active_fixture_id,
+		"transfer_pool_ids": market_ids, "active_fixture_id": active_fixture_id,
 		"match_format": match_format.to_dict() if match_format != null else {},
 		"region_power": region_power.duplicate(true),
 		"sixnet_slots": sixnet_slots.duplicate(true),
 		"region_overlay": region_overlay.duplicate(true),
 		"sixnet_standings": sixnet_standings.duplicate(true),
-		"sixnet_season_start_week": sixnet_season_start_week}
+		"sixnet_season_start_week": sixnet_season_start_week,
+		"world_population_size": world_population_size}
 
 
 static func from_dict(data: Dictionary) -> VolleyballCareerState:
@@ -69,6 +84,12 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.training_focus = str(data.get("training_focus", "Team Practice"))
 	for fixture_data in data.get("fixtures", []):
 		state.fixtures.append(VolleyballFixture.from_dict(fixture_data))
+	## Current saves list transfer-listed players by id and let
+	## `CareerManager` resolve them out of the world population. Careers
+	## written before the population existed inlined the whole player, so
+	## those still load directly.
+	for player_id in data.get("transfer_pool_ids", []):
+		state.transfer_pool_ids.append(int(player_id))
 	for player_data in data.get("transfer_pool", []):
 		state.transfer_pool.append(VolleyballPlayer.from_dict(player_data))
 	state.active_fixture_id = int(data.get("active_fixture_id", -1))
@@ -78,4 +99,5 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.region_overlay = Dictionary(data.get("region_overlay", {})).duplicate(true)
 	state.sixnet_standings = Dictionary(data.get("sixnet_standings", {})).duplicate(true)
 	state.sixnet_season_start_week = maxi(int(data.get("sixnet_season_start_week", 0)), 0)
+	state.world_population_size = maxi(int(data.get("world_population_size", 0)), 0)
 	return state
