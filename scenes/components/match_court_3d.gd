@@ -1,67 +1,210 @@
 class_name MatchCourt3D
 extends Node3D
 
-# Default scene fallback
-const FALLBACK_PLAYER_SCENE = preload("res://scenes/components/player_actor_3d.tscn")
+const FALLBACK_PLAYER_SCENE := preload("res://scenes/components/player_actor_3d.tscn")
 
-@export var court_width: float = 9.0   # X-axis (-4.5 to 4.5 meters)
-@export var court_length: float = 18.0 # Z-axis (-9.0 to 9.0 meters)
-
-## Assign player_actor_3d.tscn in the Inspector (falls back to preload if null)
+@export var court_width: float = 9.0
+@export var court_length: float = 18.0
 @export var player_actor_scene: PackedScene
 
 @onready var camera_3d: Camera3D = $Camera3D
 @onready var ball_actor: BallActor3D = $BallActor3D
-@onready var players_container: Node3D = $Players if has_node("Players") else self
+@onready var players_container: Node3D = $Players
 
-var player_actors: Dictionary = {} # Maps player_id -> PlayerActor3D instance
+var player_actors: Dictionary = {}
+var live_positions: Dictionary = {}
+var home_player_ids: Dictionary = {}
+var camera_preset: int = 0
+
+const CAMERA_PRESETS: Array[Dictionary] = [
+	{"name": "Broadcast", "position": Vector3(12.5, 8.2, 10.8), "fov": 48.0},
+	{"name": "End line", "position": Vector3(0.0, 7.1, 15.8), "fov": 46.0},
+	{"name": "High tactical", "position": Vector3(0.0, 15.2, 9.4), "fov": 43.0},
+]
 
 
-## Converts 2D normalized tactical court coords (0.0 to 1.0) into 3D world meters
+func _ready() -> void:
+	_apply_camera_preset()
+	ball_actor.reset_flight()
+
+
 func tactical_to_world(tactical_x: float, tactical_y: float, height: float = 0.0) -> Vector3:
-	# Map (0.0 to 1.0) tactical space to 3D world centered at (0, 0, 0)
-	var world_x: float = (tactical_x - 0.5) * court_width
-	var world_z: float = (tactical_y - 0.5) * court_length
-	var world_y: float = height
+	return Vector3(
+		(tactical_x - 0.5) * court_width,
+		height,
+		(tactical_y - 0.5) * court_length,
+	)
 
-	return Vector3(world_x, world_y, world_z)
 
-
-## Clears existing player nodes and spawns actors for the current rotation lineup
-func setup_players_from_lineup(lineup: Variant) -> void:
-	# Clean existing player actors
+func setup_players(
+	initial_home_positions: Dictionary,
+	initial_opponent_positions: Dictionary,
+	player_names: Dictionary = {},
+	player_handedness: Dictionary = {},
+	player_physical_profiles: Dictionary = {},
+) -> void:
 	for child in players_container.get_children():
-		child.queue_free()
+		child.free()
 	player_actors.clear()
+	live_positions.clear()
+	home_player_ids.clear()
+	for raw_player_id in initial_home_positions:
+		_spawn_player(
+			int(raw_player_id), Vector2(initial_home_positions[raw_player_id]),
+			true, str(player_names.get(int(raw_player_id), "HOME %s" % raw_player_id)),
+			str(player_handedness.get(int(raw_player_id), "Right")),
+			Dictionary(player_physical_profiles.get(int(raw_player_id), {})),
+		)
+	for raw_player_id in initial_opponent_positions:
+		_spawn_player(
+			int(raw_player_id), Vector2(initial_opponent_positions[raw_player_id]),
+			false, str(player_names.get(int(raw_player_id), "AWAY %s" % raw_player_id)),
+			str(player_handedness.get(int(raw_player_id), "Right")),
+			Dictionary(player_physical_profiles.get(int(raw_player_id), {})),
+		)
 
-	var scene_to_use = player_actor_scene if player_actor_scene != null else FALLBACK_PLAYER_SCENE
 
-	# Default 12-player positions matching event actor_ids
-	var default_roster = {
-		# Home Team
-		"1": Vector2(0.5, 0.65), "2": Vector2(0.3, 0.65), "3": Vector2(0.2, 0.85),
-		"4": Vector2(0.5, 0.85), "5": Vector2(0.8, 0.85), "6": Vector2(0.7, 0.65),
+func ensure_player(
+	player_id: int,
+	position: Vector2,
+	home_team: bool,
+	display_name: String,
+	dominant_hand: String = "Right",
+	physical_profile: Dictionary = {},
+) -> PlayerActor3D:
+	if player_actors.has(player_id):
+		return player_actors[player_id] as PlayerActor3D
+	return _spawn_player(
+		player_id, position, home_team, display_name, dominant_hand, physical_profile
+	)
 
-		# Away / Opponent Team
-		"101": Vector2(0.8, 0.08), "102": Vector2(0.5, 0.15), "103": Vector2(0.4, 0.47),
-		"104": Vector2(0.2, 0.15), "105": Vector2(0.8, 0.35), "106": Vector2(0.2, 0.35)
-	}
 
-	var active_data: Dictionary = default_roster.duplicate()
-	if lineup is Dictionary and not lineup.is_empty():
-		for k in lineup:
-			active_data[str(k)] = lineup[k]
+func _spawn_player(
+	player_id: int,
+	position: Vector2,
+	home_team: bool,
+	display_name: String,
+	dominant_hand: String,
+	physical_profile: Dictionary,
+) -> PlayerActor3D:
+	var scene_to_use := player_actor_scene if player_actor_scene != null else FALLBACK_PLAYER_SCENE
+	var actor := scene_to_use.instantiate() as PlayerActor3D
+	players_container.add_child(actor)
+	actor.configure(
+		player_id, home_team, display_name, dominant_hand, physical_profile
+	)
+	player_actors[player_id] = actor
+	live_positions[player_id] = position
+	if home_team:
+		home_player_ids[player_id] = true
+	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
+	return actor
 
-	# Spawn player models
-	for p_id in active_data:
-		var pos_val = active_data[p_id]
-		var pos_2d: Vector2 = pos_val if pos_val is Vector2 else Vector2(0.5, 0.5)
 
-		var player_instance = scene_to_use.instantiate()
-		players_container.add_child(player_instance)
+func set_player_position(player_id: int, position: Vector2) -> void:
+	if not player_actors.has(player_id):
+		return
+	live_positions[player_id] = position
+	var actor := player_actors[player_id] as PlayerActor3D
+	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
 
-		var id_str: String = str(p_id)
-		player_actors[id_str] = player_instance
 
-		# Position actor on court floor (Y = 0)
-		player_instance.global_position = tactical_to_world(pos_2d.x, pos_2d.y, 0.0)
+func apply_movement_plan(plan: Dictionary, progress: float) -> void:
+	for raw_player_id in plan:
+		var player_id := int(raw_player_id)
+		var movement: Dictionary = plan[raw_player_id]
+		var start := Vector2(movement.get("start", live_positions.get(player_id, Vector2.ZERO)))
+		var target := Vector2(movement.get("target", start))
+		var waypoint: Variant = movement.get("waypoint", null)
+		var sample := start.lerp(target, progress)
+		if waypoint is Vector2:
+			var corner := Vector2(waypoint)
+			var first_distance := start.distance_to(corner)
+			var second_distance := corner.distance_to(target)
+			var corner_progress := first_distance / maxf(first_distance + second_distance, 0.0001)
+			if progress <= corner_progress:
+				sample = start.lerp(corner, progress / maxf(corner_progress, 0.0001))
+			else:
+				sample = corner.lerp(
+					target, (progress - corner_progress) / maxf(1.0 - corner_progress, 0.0001)
+				)
+		set_player_position(player_id, sample)
+
+
+func finish_movement_plan(plan: Dictionary) -> void:
+	for raw_player_id in plan:
+		var movement: Dictionary = plan[raw_player_id]
+		set_player_position(int(raw_player_id), Vector2(movement.get("target", Vector2.ZERO)))
+
+
+func set_player_pose(
+	player_id: int,
+	event_type: int,
+	elevation: float,
+	phase: float,
+	direction: Vector2,
+	highlighted: bool,
+) -> void:
+	if not player_actors.has(player_id):
+		return
+	var actor := player_actors[player_id] as PlayerActor3D
+	actor.set_highlighted(highlighted)
+	actor.set_pose(event_type, elevation, phase, direction, highlighted)
+
+
+func reset_player_poses() -> void:
+	for actor_resource in player_actors.values():
+		var actor := actor_resource as PlayerActor3D
+		actor.set_highlighted(false)
+		actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+
+
+func trajectory_world_position(trajectory: Dictionary, progress: float) -> Vector3:
+	var t := clampf(progress, 0.0, 1.0)
+	var start := Vector2(trajectory.get("start_position", Vector2(0.5, 0.5)))
+	var control := Vector2(trajectory.get("control_position", start.lerp(
+		Vector2(trajectory.get("end_position", start)), 0.5
+	)))
+	var end := Vector2(trajectory.get("end_position", start))
+	var inverse := 1.0 - t
+	var court_position := inverse * inverse * start \
+		+ 2.0 * inverse * t * control + t * t * end
+	var start_height := float(trajectory.get("start_height_meters", 1.0))
+	var end_height := float(trajectory.get("end_height_meters", 1.0))
+	var apex_height := float(trajectory.get("apex_height_meters", 1.0))
+	var base_height := lerpf(start_height, end_height, t)
+	var midpoint_height := lerpf(start_height, end_height, 0.5)
+	var arc_height := maxf(apex_height - midpoint_height, 0.0)
+	var height := base_height + 4.0 * arc_height * t * (1.0 - t)
+	return tactical_to_world(court_position.x, court_position.y, height)
+
+
+func trajectory_world_velocity(trajectory: Dictionary, progress: float) -> Vector3:
+	var lower := maxf(progress - 0.004, 0.0)
+	var upper := minf(progress + 0.004, 1.0)
+	if is_equal_approx(lower, upper):
+		return Vector3.ZERO
+	return (trajectory_world_position(trajectory, upper) \
+		- trajectory_world_position(trajectory, lower)) / (upper - lower)
+
+
+func set_ball_trajectory_sample(trajectory: Dictionary, progress: float) -> void:
+	ball_actor.set_flight_sample(
+		trajectory_world_position(trajectory, progress),
+		trajectory_world_velocity(trajectory, progress),
+	)
+
+
+func cycle_camera() -> String:
+	camera_preset = (camera_preset + 1) % CAMERA_PRESETS.size()
+	_apply_camera_preset()
+	return str(CAMERA_PRESETS[camera_preset]["name"])
+
+
+func _apply_camera_preset() -> void:
+	if camera_3d == null:
+		return
+	var preset: Dictionary = CAMERA_PRESETS[camera_preset]
+	camera_3d.position = Vector3(preset["position"])
+	camera_3d.fov = float(preset["fov"])
+	camera_3d.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)

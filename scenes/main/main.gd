@@ -29,6 +29,7 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var called_play_label: Label = %CalledPlayLabel
 @onready var resolve_rally_button: Button = %ResolveRallyButton
 @onready var replay_rally_button: Button = %ReplayRallyButton
+@onready var replay_3d_button: Button = %Replay3DButton
 @onready var playback_speed_option: OptionButton = %PlaybackSpeedOption
 @onready var visualization_menu: MenuButton = %VisualizationMenu
 @onready var skip_playback_button: Button = %SkipPlaybackButton
@@ -178,6 +179,7 @@ func _ready() -> void:
 	call_play_button.pressed.connect(_call_selected_play)
 	resolve_rally_button.pressed.connect(_resolve_rally)
 	replay_rally_button.pressed.connect(_replay_last_rally)
+	replay_3d_button.pressed.connect(_replay_last_rally_3d)
 	run_shadow_debug_button.pressed.connect(_run_shadow_debug_fixture)
 	debug_popup_button.pressed.connect(_open_debug_popup)
 	skip_playback_button.pressed.connect(_skip_rally_playback)
@@ -237,6 +239,8 @@ func _ready() -> void:
 func enter_career_match() -> void:
 	return_career_button.visible = true
 	last_rally_result = null
+	replay_3d_button.disabled = true
+	match_screen.visible = false
 	## Tied to this save and this fixture, so identical matchups on different
 	## careers no longer replay the same rally sequence -- previously this
 	## always restarted from the same literal regardless of which save or
@@ -1476,6 +1480,13 @@ func _replay_last_rally() -> void:
 	await _play_rally(last_rally_result, false)
 
 
+func _replay_last_rally_3d() -> void:
+	if rally_playback_active or last_rally_result == null:
+		return
+	var selected_speed := float(_selected_metadata(playback_speed_option))
+	await match_screen.load_and_play_rally(last_rally_result, selected_speed)
+
+
 func _play_rally(
 	result: Resource,
 	record_result: bool,
@@ -1501,6 +1512,7 @@ func _play_rally(
 	skip_rally_playback = false
 	resolve_rally_button.disabled = true
 	replay_rally_button.disabled = true
+	replay_3d_button.disabled = true
 	skip_playback_button.disabled = false
 	reset_positions_button.disabled = true
 	rotation_option.disabled = true
@@ -1649,6 +1661,7 @@ func _play_rally(
 	rally_playback_active = false
 	resolve_rally_button.disabled = bool(GameManager.match_state.match_complete)
 	replay_rally_button.disabled = last_rally_result == null
+	replay_3d_button.disabled = last_rally_result == null
 	skip_playback_button.disabled = true
 	reset_positions_button.disabled = false
 	rotation_option.disabled = false

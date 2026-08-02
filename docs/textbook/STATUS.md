@@ -461,9 +461,19 @@ player-specific perceived destination and arrival time. Its current familiarity
 input is a temporary normalized value; learned signature clusters and live-rally
 integration have not been implemented.
 
-## Paused
+## 3D replay presentation
 
-3D match playback code remains in the repository. It is not the current development priority. Do not use 3D behavior as the acceptance test for simulation changes unless that scope is explicitly resumed.
+Match Center exposes an explicit View 3D replay for the last completed rally.
+It spawns both teams from the authoritative rally snapshots, samples the same
+quadratic trajectory and resolved height contract as 2D, and reads resolved
+jump/block evidence. Playback controls include speed, pause, skip, replay and
+three fixed cameras. Player rigs use snapshotted handedness, height, wingspan
+and stride length for striking arm, body scale, arm reach and gait cadence. The
+renderer reconstructs absolute 3D contact height from snapshotted standing and
+jump reach while treating the launch solver's apex as relative rise. Sets and
+serves receive presentation-only vertical emphasis; duration and horizontal
+targets remain resolved simulation facts. Do not use 3D to decide simulation
+outcomes or make visual support shifts authoritative.
 
 ## Proposed next integration
 

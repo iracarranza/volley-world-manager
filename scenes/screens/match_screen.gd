@@ -3,177 +3,511 @@ extends Control
 
 signal close_requested
 
+const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const NET_HEIGHT_METERS: float = 2.43
+
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
-@onready var caption_label: Label = $HUD/CaptionLabel if has_node("HUD/CaptionLabel") else null
-@onready var close_button: Button = $HUD/CloseButton if has_node("HUD/CloseButton") else null
+@onready var caption_label: Label = %CaptionLabel
+@onready var detail_label: Label = %DetailLabel
+@onready var event_label: Label = %EventLabel
+@onready var progress_bar: ProgressBar = %ProgressBar
+@onready var pause_button: Button = %PauseButton
+@onready var replay_button: Button = %ReplayButton
+@onready var skip_button: Button = %SkipButton
+@onready var camera_button: Button = %CameraButton
+@onready var close_button: Button = %CloseButton
+@onready var speed_option: OptionButton = %SpeedOption
 
 var playback_speed: float = 1.0
-
-# Jump reach / block-and-attack contacts happen in the air; every other
-# contact (serve, pass, dig, set) happens with the player's feet on the
-# floor. Keep these two concerns (ball height vs. player root height)
-# separate -- the ball always arcs, the player model does not.
-const AERIAL_EVENT_TYPES: Array[int] = [
-	RallyEvent.EventType.ATTACK, RallyEvent.EventType.BLOCK,
-]
-const GROUND_PLAYER_HEIGHT: float = 0.0
-const AERIAL_PLAYER_HEIGHT: float = 0.42
-const GROUND_BALL_HEIGHT: float = 1.0
-const AERIAL_BALL_HEIGHT: float = 2.7
+var active_result: RallyResult
+var playback_generation: int = 0
+var playback_paused: bool = false
+var skip_requested: bool = false
+var playback_active: bool = false
+var player_names: Dictionary = {}
+var player_handedness: Dictionary = {}
+var player_physical_profiles: Dictionary = {}
 
 
 func _ready() -> void:
-	if close_button:
-		close_button.pressed.connect(_on_close_button_pressed)
+	pause_button.pressed.connect(_toggle_pause)
+	replay_button.pressed.connect(_replay)
+	skip_button.pressed.connect(_skip)
+	camera_button.pressed.connect(_cycle_camera)
+	close_button.pressed.connect(_close)
+	speed_option.item_selected.connect(_speed_changed)
+	_populate_speeds()
 
 
-func _on_close_button_pressed() -> void:
-	visible = false
-	close_requested.emit()
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not visible or not event.pressed or event.echo:
+		return
+	match event.keycode:
+		KEY_SPACE:
+			_toggle_pause()
+			get_viewport().set_input_as_handled()
+		KEY_ESCAPE:
+			_close()
+			get_viewport().set_input_as_handled()
+		KEY_C:
+			_cycle_camera()
+			get_viewport().set_input_as_handled()
 
 
-## Called by Main or GameManager when a rally result is ready to play
-func load_and_play_rally(rally_result: RallyResult) -> void:
+func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0) -> void:
 	if rally_result == null or rally_result.events.is_empty():
 		return
-
-	# 1. Bring MatchScreen UI to front
-	top_level = true
+	playback_generation += 1
+	var generation := playback_generation
+	active_result = rally_result
+	playback_speed = clampf(requested_speed, 0.1, 4.0)
+	_select_speed(playback_speed)
+	playback_paused = false
+	skip_requested = false
+	playback_active = true
+	pause_button.text = "Pause"
+	replay_button.disabled = true
+	skip_button.disabled = false
 	visible = true
-	z_index = 100
+	move_to_front()
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_build_player_names(rally_result.events)
+	player_handedness = rally_result.player_handedness.duplicate(true)
+	player_physical_profiles = rally_result.player_physical_profiles.duplicate(true)
+	var home_positions: Dictionary = rally_result.initial_home_positions
+	var opponent_positions: Dictionary = rally_result.initial_opponent_positions
+	if home_positions.is_empty() and opponent_positions.is_empty():
+		var fallback := _fallback_positions_from_events(rally_result.events)
+		home_positions = fallback["home"]
+		opponent_positions = fallback["opponent"]
+	match_court_3d.setup_players(
+		home_positions, opponent_positions, player_names, player_handedness,
+		player_physical_profiles,
+	)
+	match_court_3d.ball_actor.reset_flight()
+	progress_bar.value = 0.0
+	await _run_rally(generation)
+	if generation != playback_generation:
+		return
+	playback_active = false
+	replay_button.disabled = false
+	skip_button.disabled = true
+	pause_button.disabled = false
+	pause_button.text = "Pause"
+	match_court_3d.ball_actor.reset_flight()
+	match_court_3d.reset_player_poses()
+	event_label.text = "POINT COMPLETE"
+	caption_label.text = rally_result.terminal_outcome.replace("_", " ").to_upper()
+	detail_label.text = rally_result.explanation
+	progress_bar.value = 100.0
 
-	# 2. Setup initial lineup BEFORE playing event animations
-	var lineup: Dictionary = {}
-	if "initial_lineup" in rally_result and rally_result.initial_lineup != null:
-		lineup = rally_result.initial_lineup
-	elif GameManager.has_method("get_active_lineup"):
-		lineup = GameManager.get_active_lineup()
 
-	# Force setup players
-	match_court_3d.setup_players_from_lineup(lineup)
-
-	# 3. Play event sequence
-	for event in rally_result.events:
+func _run_rally(generation: int) -> void:
+	var events := active_result.events
+	for event_index in range(events.size()):
+		if generation != playback_generation or skip_requested:
+			break
+		var event := events[event_index] as RallyEvent
 		if event == null:
 			continue
-
-		var event_type := int(event.get("event_type"))
-		var meta = event.get("metadata") if event.get("metadata") is Dictionary else {}
-
-		# SET_DECISION shares its physical touch with the SET event that
-		# immediately follows it -- it is not a second contact. Only move
-		# the setter into position for the upcoming set and update the
-		# caption; do not play a ball arc for it (that was the source of
-		# the phantom double-contact, and of a spurious centered ball hop
-		# right before every real attack).
-		if event_type == RallyEvent.EventType.SET_DECISION:
-			_animate_primary_actor(
-				event, meta, event.get("start_position"),
-				GROUND_PLAYER_HEIGHT, 0.0,
-			)
-			if caption_label and event.get("headline") != null:
-				caption_label.text = str(event.get("headline"))
+		_show_event_text(event, event_index, events.size())
+		if event.event_type == RallyEventModel.EventType.SET_DECISION:
+			## Tactical choice, not a second physical touch. The preceding flight
+			## already delivered the setter to this instant; pausing here created a
+			## visible hitch immediately before every set.
 			continue
-
-		var trajectory = meta.get("outgoing_trajectory") if "outgoing_trajectory" in meta else null
-
-		# Extract positions
-		var start_p: Vector2 = Vector2(0.5, 0.5)
-		var end_p: Vector2 = Vector2(0.5, 0.5)
-		var apex_h: float = 1.5
-		var flight_d: float = 0.8
-		var ctrl_p: Vector2 = Vector2.ZERO
-		var has_ctrl: bool = false
-
-		if trajectory is Dictionary:
-			start_p = trajectory.get("start_position", Vector2(0.5, 0.5))
-			end_p = trajectory.get("end_position", Vector2(0.5, 0.5))
-			apex_h = trajectory.get("apex_height_meters", 1.5)
-			flight_d = trajectory.get("duration", 0.8)
-			if "control_position" in trajectory:
-				ctrl_p = trajectory.get("control_position")
-				has_ctrl = true
+		var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
+		var next_contact := _next_contact_event(events, event_index + 1)
+		if not trajectory.is_empty():
+			await _play_flight(event, next_contact, trajectory, event_index, events.size(), generation)
 		else:
-			start_p = event.get("start_position") if event.get("start_position") != null else Vector2(0.5, 0.5)
-			end_p = event.get("end_position") if event.get("end_position") != null else Vector2(0.5, 0.5)
-
-		# SKIP zero-movement rally end whistle events (Sequence 6 fix)
-		if start_p.distance_to(end_p) < 0.01 and flight_d < 0.2:
-			continue
-
-		var is_aerial := event_type in AERIAL_EVENT_TYPES
-		var ball_height := AERIAL_BALL_HEIGHT if is_aerial else GROUND_BALL_HEIGHT
-		var player_height := AERIAL_PLAYER_HEIGHT if is_aerial else GROUND_PLAYER_HEIGHT
-
-		# Convert 2D tactical positions to 3D World space (ball only -- the
-		# ball's own contact/arc height is independent of the player root).
-		var start_world = match_court_3d.tactical_to_world(start_p.x, start_p.y, ball_height)
-		var end_world = match_court_3d.tactical_to_world(end_p.x, end_p.y, ball_height)
-		var ctrl_world = match_court_3d.tactical_to_world(
-			ctrl_p.x, ctrl_p.y, ball_height + apex_h
-		) if has_ctrl else Vector3.ZERO
-
-		# Animate primary actor movement -- grounded contacts keep the
-		# player's feet on the floor; only ATTACK/BLOCK lift the root to
-		# simulate a jump. Uses the simulator's own movement_start /
-		# movement_duration when available so the player is seen actually
-		# closing the real distance in real time, rather than snapping to
-		# the contact point on the ball's flight timer.
-		_animate_primary_actor(event, meta, start_p, player_height, flight_d / playback_speed)
-
-		# Display Caption
-		if caption_label and event.get("headline") != null:
-			caption_label.text = str(event.get("headline"))
-
-		# Play Ball Arc
-		if has_ctrl:
-			await match_court_3d.ball_actor.play_bezier_trajectory(
-				start_world, ctrl_world, end_world, flight_d / playback_speed
-			)
-		else:
-			await match_court_3d.ball_actor.play_trajectory(
-				start_world, end_world, apex_h, flight_d / playback_speed
-			)
-
-	# 4. Hide ball or reset when finished
-	match_court_3d.ball_actor.visible = false
-
-	if close_button:
-		close_button.visible = true
-	else:
-		await get_tree().create_timer(1.5).timeout
-		visible = false
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
+			await _play_contact_pulse(event, 0.38, generation)
+	match_court_3d.ball_actor.reset_flight()
 
 
-## Moves the event's primary actor to their contact position. When the
-## simulator attached real movement data (movement_start / movement_duration),
-## the actor is placed at their actual starting point first and tweened in
-## over the real transit time, so the model is seen covering the court
-## between contacts instead of teleporting to each new contact point.
-func _animate_primary_actor(
-	event: Resource,
-	meta: Dictionary,
-	contact_pos: Vector2,
-	height: float,
-	fallback_duration: float,
+func _play_flight(
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	trajectory: Dictionary,
+	event_index: int,
+	event_count: int,
+	generation: int,
 ) -> void:
-	var raw_actor_id = event.get("actor_id")
-	var actor_id: String = str(raw_actor_id) if raw_actor_id != null else ""
-	if actor_id == "" or not match_court_3d.player_actors.has(actor_id):
-		return
-	var actor = match_court_3d.player_actors[actor_id]
+	var duration := clampf(float(trajectory.get("duration", 0.5)), 0.08, 3.5)
+	var display_trajectory := _display_trajectory(event, next_contact, trajectory)
+	var movement_plan := _build_movement_plan(event, next_contact)
+	var elapsed := 0.0
+	match_court_3d.ball_actor.reset_flight()
+	while elapsed < duration:
+		if generation != playback_generation or skip_requested:
+			break
+		if playback_paused:
+			await get_tree().process_frame
+			continue
+		elapsed += get_process_delta_time() * playback_speed
+		var progress := clampf(elapsed / duration, 0.0, 1.0)
+		match_court_3d.set_ball_trajectory_sample(display_trajectory, progress)
+		match_court_3d.apply_movement_plan(movement_plan, progress)
+		_apply_contact_poses(event, next_contact, progress)
+		progress_bar.value = (
+			(float(event_index) + progress) / maxf(float(event_count), 1.0)
+		) * 100.0
+		await get_tree().process_frame
+	match_court_3d.finish_movement_plan(movement_plan)
+	match_court_3d.reset_player_poses()
 
-	var move_start = meta.get("movement_start") if "movement_start" in meta else null
-	var move_duration := float(meta.get("movement_duration", 0.0)) / playback_speed \
-		if "movement_duration" in meta else 0.0
-	if move_start is Vector2 and move_duration > 0.0:
-		actor.global_position = match_court_3d.tactical_to_world(
-			move_start.x, move_start.y, height
+
+func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) -> void:
+	var elapsed := 0.0
+	while elapsed < duration:
+		if generation != playback_generation or skip_requested:
+			break
+		if playback_paused:
+			await get_tree().process_frame
+			continue
+		elapsed += get_process_delta_time() * playback_speed
+		var progress := clampf(elapsed / duration, 0.0, 1.0)
+		match_court_3d.reset_player_poses()
+		var peak := _event_elevation(event, int(event.actor_id))
+		match_court_3d.set_player_pose(
+			int(event.actor_id), int(event.event_type),
+			peak * sin(progress * PI), progress,
+			event.end_position - event.start_position, true,
+		)
+		await get_tree().process_frame
+
+
+func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress: float) -> void:
+	match_court_3d.reset_player_poses()
+	var event_actor := int(event.actor_id)
+	var event_peak := _event_elevation(event, event_actor)
+	var event_direction := event.end_position - event.start_position
+	match_court_3d.set_player_pose(
+		event_actor, int(event.event_type),
+		event_peak * (1.0 - smoothstep(0.18, 0.75, progress)),
+		progress, event_direction, true,
+	)
+	var event_assist := int(event.metadata.get("assist_id", -1))
+	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
+		match_court_3d.set_player_pose(
+			event_assist, int(event.event_type),
+			_event_elevation(event, event_assist) * (1.0 - smoothstep(0.18, 0.75, progress)),
+			progress, event_direction, true,
+		)
+	if next_contact == null:
+		return
+	var next_actor := int(next_contact.actor_id)
+	var next_peak := _event_elevation(next_contact, next_actor)
+	var next_direction := next_contact.end_position - next_contact.start_position
+	match_court_3d.set_player_pose(
+		next_actor, int(next_contact.event_type),
+		next_peak * smoothstep(0.48, 1.0, progress),
+		progress, next_direction, true,
+	)
+	var next_assist := int(next_contact.metadata.get("assist_id", -1))
+	if next_assist >= 0 and next_contact.event_type == RallyEventModel.EventType.BLOCK:
+		match_court_3d.set_player_pose(
+			next_assist, int(next_contact.event_type),
+			_event_elevation(next_contact, next_assist) * smoothstep(0.48, 1.0, progress),
+			progress, next_direction, true,
 		)
 
-	var target_world = match_court_3d.tactical_to_world(contact_pos.x, contact_pos.y, height)
-	actor.animate_to_event(
-		target_world, move_duration if move_duration > 0.0 else fallback_duration
-	)
+
+func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictionary:
+	var plan := {}
+	if next_contact == null:
+		return plan
+	var action_target := Vector2(next_contact.metadata.get(
+		"movement_target", next_contact.start_position
+	))
+	var event_is_home := _event_is_home(next_contact)
+	for raw_player_id in match_court_3d.live_positions:
+		var player_id := int(raw_player_id)
+		var start := Vector2(match_court_3d.live_positions[raw_player_id])
+		var home_team := match_court_3d.home_player_ids.has(player_id)
+		var target := _support_target(
+			start, action_target, int(next_contact.event_type), home_team, event_is_home
+		)
+		if start.distance_to(target) > 0.002:
+			plan[player_id] = {"start": start, "target": target}
+	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
+	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
+	var staged_id := int(event.metadata.get("staged_next_actor_id", -1))
+	if staged_id >= 0:
+		_set_plan_target(
+			plan, staged_id, Vector2(event.metadata.get("staged_next_position", action_target))
+		)
+	var next_actor_id := int(next_contact.actor_id)
+	if next_actor_id >= 0:
+		var actor_home := _event_is_home(next_contact)
+		var actor_start := Vector2(next_contact.metadata.get(
+			"movement_start", match_court_3d.live_positions.get(next_actor_id, action_target)
+		))
+		match_court_3d.ensure_player(
+			next_actor_id, actor_start, actor_home,
+			str(player_names.get(next_actor_id, next_contact.actor_name)),
+			str(player_handedness.get(next_actor_id, "Right")),
+			Dictionary(player_physical_profiles.get(next_actor_id, {})),
+		)
+		_set_plan_target(plan, next_actor_id, action_target)
+		if next_contact.metadata.has("approach_start_position"):
+			plan[next_actor_id]["waypoint"] = Vector2(
+				next_contact.metadata["approach_start_position"]
+			)
+	return plan
+
+
+func _apply_explicit_targets(plan: Dictionary, targets: Dictionary) -> void:
+	for raw_player_id in targets:
+		_set_plan_target(plan, int(raw_player_id), Vector2(targets[raw_player_id]))
+
+
+func _set_plan_target(plan: Dictionary, player_id: int, target: Vector2) -> void:
+	if not match_court_3d.live_positions.has(player_id):
+		return
+	var start := Vector2(match_court_3d.live_positions[player_id])
+	plan[player_id] = {"start": start, "target": target}
+
+
+func _support_target(
+	position: Vector2,
+	action_target: Vector2,
+	event_type: int,
+	home_team: bool,
+	event_is_home: bool,
+) -> Vector2:
+	var local_position := position if home_team else Vector2(position.x, 1.0 - position.y)
+	var local_action := action_target if home_team else Vector2(action_target.x, 1.0 - action_target.y)
+	var own_phase := home_team == event_is_home
+	var front_row := local_position.y < 0.72
+	var target := local_position
+	if own_phase:
+		match event_type:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+				target = local_position.lerp(local_action, 0.08 if front_row else 0.15)
+			RallyEventModel.EventType.SET:
+				target = local_position.lerp(Vector2(local_action.x, 0.62), 0.16)
+			RallyEventModel.EventType.ATTACK:
+				target = local_position.lerp(Vector2(local_action.x, 0.68), 0.12)
+			RallyEventModel.EventType.BLOCK:
+				target = local_position.lerp(Vector2(local_action.x, 0.54), 0.18)
+	else:
+		match event_type:
+			RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
+				var depth := 0.56 if front_row else clampf(local_position.y, 0.74, 0.92)
+				target = local_position.lerp(Vector2(local_action.x, depth), 0.18)
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+				target = local_position.lerp(Vector2(local_action.x, local_position.y), 0.04)
+	target = Vector2(clampf(target.x, 0.05, 0.95), clampf(target.y, 0.52, 0.97))
+	return target if home_team else Vector2(target.x, 1.0 - target.y)
+
+
+func _event_elevation(event: RallyEvent, player_id: int) -> float:
+	if event == null or player_id < 0:
+		return 0.0
+	var is_actor := int(event.actor_id) == player_id
+	match int(event.event_type):
+		RallyEventModel.EventType.ATTACK:
+			if is_actor:
+				return clampf(inverse_lerp(
+					0.55, 1.25, float(event.metadata.get("jump_multiplier", 1.0))
+				), 0.35, 1.0)
+		RallyEventModel.EventType.BLOCK:
+			if is_actor or int(event.metadata.get("assist_id", -1)) == player_id:
+				return 0.85
+		RallyEventModel.EventType.SET:
+			if is_actor:
+				var capability: Dictionary = event.metadata.get("setter_capability", {})
+				match str(capability.get("reach_state", "")):
+					"jump":
+						return 0.55
+					"beyond_reach":
+						return 0.70
+	return 0.0
+
+
+func _display_trajectory(
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	trajectory: Dictionary,
+) -> Dictionary:
+	var display := trajectory.duplicate(true)
+	var start_height := _event_contact_height(event)
+	var end_height := _event_contact_height(next_contact) \
+		if next_contact != null else 0.12
+	var rise := maxf(float(trajectory.get(
+		"apex_rise_meters", trajectory.get("apex_height_meters", 0.0)
+	)), 0.0)
+	var rise_scale := 1.0
+	var minimum_lift := 0.25
+	match int(event.event_type):
+		RallyEventModel.EventType.SERVE:
+			rise_scale = 1.35
+			minimum_lift = 0.42
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			rise_scale = 1.55
+			minimum_lift = 0.62
+		RallyEventModel.EventType.SET:
+			rise_scale = 1.75
+			minimum_lift = 0.90
+		RallyEventModel.EventType.ATTACK:
+			rise_scale = 0.35
+			minimum_lift = 0.12
+		RallyEventModel.EventType.BLOCK:
+			rise_scale = 0.45
+			minimum_lift = 0.16
+	var apex_height := maxf(start_height, end_height) \
+		+ maxf(rise * rise_scale, minimum_lift)
+	if event.event_type == RallyEventModel.EventType.SERVE:
+		apex_height = maxf(apex_height, NET_HEIGHT_METERS + 0.48)
+	elif event.event_type == RallyEventModel.EventType.SET:
+		apex_height = maxf(apex_height, NET_HEIGHT_METERS + 1.05)
+	elif event.event_type == RallyEventModel.EventType.ATTACK:
+		apex_height = maxf(apex_height, start_height + 0.08)
+	display["start_height_meters"] = start_height
+	display["end_height_meters"] = end_height
+	display["apex_height_meters"] = apex_height
+	display["height_contract"] = "absolute_3d_presentation"
+	return display
+
+
+func _event_contact_height(event: RallyEvent) -> float:
+	if event == null or event.actor_id < 0:
+		return 0.12
+	var profile: Dictionary = player_physical_profiles.get(int(event.actor_id), {})
+	var height_meters := float(profile.get("height_cm", 188.0)) / 100.0
+	var wingspan_meters := float(profile.get("wingspan_cm", 191.0)) / 100.0
+	var standing_reach := float(profile.get(
+		"standing_reach_meters",
+		height_meters * 1.215 + (wingspan_meters - height_meters) * 0.32,
+	))
+	var jumping_reach := float(profile.get(
+		"jumping_reach_meters", standing_reach + 0.52
+	))
+	match int(event.event_type):
+		RallyEventModel.EventType.SERVE:
+			var serve_style := str(event.metadata.get("serve_style", "Standing"))
+			return lerpf(standing_reach, jumping_reach, 0.68) \
+				if serve_style.contains("Jump") else standing_reach * 0.92
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			return clampf(height_meters * 0.52, 0.72, 1.16)
+		RallyEventModel.EventType.SET:
+			var capability: Dictionary = event.metadata.get("setter_capability", {})
+			var reach_state := str(capability.get("reach_state", "standing"))
+			if reach_state in ["jump", "beyond_reach"]:
+				return lerpf(standing_reach, jumping_reach, 0.58)
+			return standing_reach * 0.97
+		RallyEventModel.EventType.ATTACK:
+			var jump_effort := clampf(inverse_lerp(
+				0.55, 1.25, float(event.metadata.get("jump_multiplier", 1.0))
+			), 0.35, 1.0)
+			return lerpf(standing_reach, jumping_reach, jump_effort)
+		RallyEventModel.EventType.BLOCK:
+			return jumping_reach * 0.96
+	return float(event.metadata.get("contact_height_meters", 1.0))
+
+
+func _event_is_home(event: RallyEvent) -> bool:
+	var side := str(event.metadata.get("side", ""))
+	if side == "home":
+		return true
+	if side == "opponent":
+		return false
+	return match_court_3d.home_player_ids.has(int(event.actor_id))
+
+
+func _next_contact_event(events: Array[Resource], start_index: int) -> RallyEvent:
+	for index in range(start_index, events.size()):
+		var candidate := events[index] as RallyEvent
+		if candidate == null:
+			continue
+		if candidate.event_type in [
+			RallyEventModel.EventType.SET_DECISION,
+			RallyEventModel.EventType.POINT,
+		]:
+			continue
+		return candidate
+	return null
+
+
+func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> void:
+	event_label.text = "%02d / %02d   %s   t=%.2fs" % [
+		event_index + 1, event_count, event.type_name().to_upper(),
+		float(event.metadata.get("event_time", 0.0)),
+	]
+	caption_label.text = event.headline if not event.headline.is_empty() else event.type_name()
+	detail_label.text = event.detail
+
+
+func _build_player_names(events: Array[Resource]) -> void:
+	player_names.clear()
+	for event_resource in events:
+		var event := event_resource as RallyEvent
+		if event == null or event.actor_id < 0 or event.actor_name.is_empty():
+			continue
+		player_names[int(event.actor_id)] = event.actor_name
+
+
+func _fallback_positions_from_events(events: Array[Resource]) -> Dictionary:
+	var home := {}
+	var opponent := {}
+	for event_resource in events:
+		var event := event_resource as RallyEvent
+		if event == null or event.actor_id < 0:
+			continue
+		var target := opponent if str(event.metadata.get("side", "")) == "opponent" else home
+		if not target.has(int(event.actor_id)):
+			target[int(event.actor_id)] = event.start_position
+	return {"home": home, "opponent": opponent}
+
+
+func _populate_speeds() -> void:
+	speed_option.clear()
+	for speed in [0.25, 0.5, 1.0, 1.5, 2.0]:
+		speed_option.add_item("%s×" % str(speed))
+		speed_option.set_item_metadata(speed_option.item_count - 1, speed)
+	_select_speed(1.0)
+
+
+func _select_speed(speed: float) -> void:
+	for index in range(speed_option.item_count):
+		if is_equal_approx(float(speed_option.get_item_metadata(index)), speed):
+			speed_option.select(index)
+			return
+
+
+func _speed_changed(index: int) -> void:
+	playback_speed = float(speed_option.get_item_metadata(index))
+
+
+func _toggle_pause() -> void:
+	if not playback_active:
+		return
+	playback_paused = not playback_paused
+	pause_button.text = "Resume" if playback_paused else "Pause"
+
+
+func _skip() -> void:
+	skip_requested = true
+	playback_paused = false
+
+
+func _replay() -> void:
+	if active_result != null:
+		load_and_play_rally(active_result, playback_speed)
+
+
+func _cycle_camera() -> void:
+	camera_button.text = match_court_3d.cycle_camera()
+
+
+func _close() -> void:
+	playback_generation += 1
+	playback_active = false
+	playback_paused = false
+	skip_requested = true
+	match_court_3d.ball_actor.reset_flight()
+	match_court_3d.reset_player_poses()
+	visible = false
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	close_requested.emit()

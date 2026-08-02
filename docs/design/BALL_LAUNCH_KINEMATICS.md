@@ -124,12 +124,13 @@ is `SET_FLIGHT_TIME_BY_TEMPO` again, laundered through a fancier equation.
 The `θ`-based model's duration is an *output*; adopting the alternative would
 have quietly restored exactly the hardcoding this change exists to remove.
 
-If true 3D height modeling (real launch/landing heights, net clearance) is
-ever resumed -- currently paused per `docs/textbook/STATUS.md` -- the right
-extension is a hybrid: derive `T` from the `θ`+distance model first (duration
-stays force-derived), then use the `v_y` decomposition against that
-already-derived `T` to place the arc against real contact heights.
-Reconciliation, not a replacement source of truth for duration.
+3D replay now applies the hybrid presentation boundary without replacing this
+solver. The resolver exposes its result explicitly as `apex_rise_meters` and
+keeps duration force-derived. `MatchScreen._display_trajectory()` combines
+that rise with snapshotted player standing/jump reach to construct absolute
+launch, contact and apex heights for rendering. Event-specific vertical
+emphasis makes the compressed stationary camera readable, but never changes
+`T`, horizontal geometry, contact ownership or outcomes.
 
 ## Scope
 
@@ -147,8 +148,8 @@ explicitly, like every other site.
   short hardcoded durations. `solve_launch_arc()` is general enough to extend
   to them later, but a reactive touch is not a deliberately chosen shot shape,
   and that's a different problem than this one.
-- True 3D height/net-clearance modeling (see above) -- out of scope while 3D
-  playback is paused.
+- Authoritative asymmetric-height projectile resolution and net-collision
+  physics remain out of scope. Current absolute heights are presentation data.
 - Opponent attack's `ApproachMechanicsSystem` mirror (Gate 43) and
   `set_release_interval` wiring are unrelated pre-existing gaps, untouched
   here.

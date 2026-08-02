@@ -254,6 +254,8 @@ func resolve(
 	var result: Resource = RallyResultModel.new()
 	result.initial_home_positions = live_positions.duplicate(true)
 	result.initial_opponent_positions = opponent_live_positions.duplicate(true)
+	result.player_handedness = _playback_handedness(players, opponent_team)
+	result.player_physical_profiles = _playback_physical_profiles(players, opponent_team)
 	result.active_play_name = active_play.play_name \
 		if active_play != null else "Default T3 Outside"
 	if home_serving:
@@ -2792,6 +2794,46 @@ func _initial_opponent_positions(
 	return positions
 
 
+func _playback_handedness(
+	players: Array[VolleyballPlayer],
+	opponent_team: Resource,
+) -> Dictionary:
+	var handedness := {}
+	for player in players:
+		handedness[player.id] = player.dominant_hand
+	if opponent_team != null:
+		for player_resource in opponent_team.on_court_players():
+			var player := player_resource as VolleyballPlayer
+			if player != null:
+				handedness[player.id] = player.dominant_hand
+	return handedness
+
+
+func _playback_physical_profiles(
+	players: Array[VolleyballPlayer],
+	opponent_team: Resource,
+) -> Dictionary:
+	var profiles := {}
+	for player in players:
+		profiles[player.id] = _physical_playback_profile(player)
+	if opponent_team != null:
+		for player_resource in opponent_team.on_court_players():
+			var player := player_resource as VolleyballPlayer
+			if player != null:
+				profiles[player.id] = _physical_playback_profile(player)
+	return profiles
+
+
+func _physical_playback_profile(player: VolleyballPlayer) -> Dictionary:
+	return {
+		"height_cm": player.height_cm,
+		"wingspan_cm": player.wingspan_cm,
+		"stride_length_m": player.stride_length_m,
+		"standing_reach_meters": player.standing_reach_cm() / 100.0,
+		"jumping_reach_meters": player.jumping_reach_cm() / 100.0,
+	}
+
+
 func _zones_at_phase_positions(
 	source_zones: Dictionary,
 	phase_positions: Dictionary,
@@ -3005,7 +3047,13 @@ func _ball_trajectory(
 	var trajectory: Resource = BallTrajectoryModel.create(
 		kind, start, control, end, timestamp, flight_time, apex_height
 	)
-	return trajectory.to_dict()
+	var data: Dictionary = trajectory.to_dict()
+	## RallyKinematics solves vertical displacement above launch level. Preserve
+	## that contract explicitly; legacy `apex_height_meters` is retained because
+	## calibration reads it for the duration/rise invariant.
+	data["apex_rise_meters"] = apex_height
+	data["height_contract"] = "relative_rise"
+	return data
 
 
 func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -> Vector2:

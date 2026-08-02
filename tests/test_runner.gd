@@ -5,6 +5,7 @@ const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
+const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
@@ -145,6 +146,7 @@ func _initialize() -> void:
 	_test_gate_forty_nine_development_live_block()
 	_test_shadow_movement_integration()
 	_test_playback_samples_resolved_movement()
+	_test_3d_playback_contract()
 	_test_block_visualization_geometry()
 	_test_gate_fifty_continuous_reachability_timeline()
 	_test_ball_kinematics_force_derived()
@@ -4604,15 +4606,18 @@ func _test_ball_kinematics_force_derived() -> void:
 				continue
 			var duration := float(trajectory.get("duration", 0.0))
 			var apex := float(trajectory.get("apex_height_meters", 0.0))
+			var explicit_rise := float(trajectory.get("apex_rise_meters", -1.0))
 			if duration <= 0.0:
 				continue
 			checked_trajectories += 1
 			var implied_duration := sqrt(8.0 * apex / RallyKinematics.DEFAULT_GRAVITY_MPS2)
-			if absf(duration - implied_duration) > 0.02:
+			if absf(duration - implied_duration) > 0.02 \
+					or not is_equal_approx(explicit_rise, apex) \
+					or str(trajectory.get("height_contract", "")) != "relative_rise":
 				invariant_held = false
 	_check(
 		checked_trajectories >= 10 and invariant_held,
-		"every serve/set/attack trajectory in real resolved rallies satisfies the projectile duration-apex invariant",
+		"resolved flights expose relative rise and satisfy the projectile duration-apex invariant",
 	)
 
 
@@ -4886,6 +4891,147 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 			and float(locomotion.get("height_implied_stride_spread_m", 0.0)) > 0.05,
 		"Generation fix: stride_length_m is derived from each player's actual post-variation height",
 	)
+
+
+## The 3D renderer consumes the same snapshots, trajectory dictionary and
+## resolved contact evidence as 2D playback. These checks deliberately avoid a
+## rendered-frame comparison: they guard the data boundary that keeps 3D from
+## becoming a second simulation.
+func _test_3d_playback_contract() -> void:
+	var screen := MATCH_SCREEN_3D_SCENE.instantiate() as MatchScreen
+	get_root().add_child(screen)
+	## SceneTree initialization runs before the first idle frame, so @onready
+	## bindings have not fired yet in this headless harness. Bind the one node
+	## this contract test uses explicitly; normal scene startup binds it itself.
+	screen.match_court_3d = screen.get_node(
+		"SubViewportContainer/SubViewport/MatchCourt3D"
+	) as MatchCourt3D
+	screen.match_court_3d.camera_3d = screen.match_court_3d.get_node("Camera3D")
+	screen.match_court_3d.ball_actor = screen.match_court_3d.get_node("BallActor3D")
+	screen.match_court_3d.players_container = screen.match_court_3d.get_node("Players")
+	var home_positions := {
+		1: Vector2(0.30, 0.72),
+		2: Vector2(0.70, 0.82),
+	}
+	var opponent_positions := {
+		101: Vector2(0.32, 0.24),
+		102: Vector2(0.68, 0.16),
+	}
+	screen.player_names = {1: "Home One", 101: "Away One"}
+	screen.player_handedness = {1: "Left", 2: "Right", 101: "Right", 102: "Left"}
+	screen.player_physical_profiles = {
+		1: {"height_cm": 210.0, "wingspan_cm": 230.0, "stride_length_m": 1.10},
+		2: {"height_cm": 170.0, "wingspan_cm": 165.0, "stride_length_m": 0.60},
+		101: {"height_cm": 196.0, "wingspan_cm": 202.0, "stride_length_m": 0.90},
+		102: {"height_cm": 184.0, "wingspan_cm": 188.0, "stride_length_m": 0.80},
+	}
+	screen.match_court_3d.setup_players(
+		home_positions, opponent_positions, screen.player_names,
+		screen.player_handedness, screen.player_physical_profiles,
+	)
+	_check(
+		screen.match_court_3d.player_actors.size() == 4
+			and screen.match_court_3d.home_player_ids.size() == 2
+			and not screen.match_court_3d.home_player_ids.has(101),
+		"3D playback spawns exactly the players in the authoritative rally snapshots",
+	)
+	var left_actor := screen.match_court_3d.player_actors[1] as PlayerActor3D
+	var right_actor := screen.match_court_3d.player_actors[2] as PlayerActor3D
+	var left_start := left_actor.position
+	var right_start := right_actor.position
+	left_actor.set_tactical_position(Vector2(0.31, 0.72), left_start + Vector3(0.30, 0.0, 0.0))
+	right_actor.set_tactical_position(Vector2(0.71, 0.82), right_start + Vector3(0.30, 0.0, 0.0))
+	_check(
+		left_actor.body_height_scale > right_actor.body_height_scale
+			and left_actor.arm_length_scale > right_actor.arm_length_scale
+			and left_actor.stride_cycle < right_actor.stride_cycle,
+		"3D actors represent height, relative arm reach and distance-based stride length",
+	)
+	left_actor.set_pose(
+		RALLY_EVENT_SCRIPT.EventType.ATTACK, 1.0, 0.5, Vector2.UP, true
+	)
+	right_actor.set_pose(
+		RALLY_EVENT_SCRIPT.EventType.ATTACK, 1.0, 0.5, Vector2.UP, true
+	)
+	_check(
+		left_actor.dominant_hand == "Left" and right_actor.dominant_hand == "Right"
+			and left_actor.left_arm.rotation_degrees.x \
+				< left_actor.right_arm.rotation_degrees.x
+			and right_actor.right_arm.rotation_degrees.x \
+				< right_actor.left_arm.rotation_degrees.x,
+		"3D serve and attack poses select each player's actual dominant arm",
+	)
+
+	var trajectory := {
+		"start_position": Vector2(0.20, 0.80),
+		"control_position": Vector2(0.50, 0.50),
+		"end_position": Vector2(0.80, 0.20),
+		"start_height_meters": 1.10,
+		"end_height_meters": 1.30,
+		"apex_height_meters": 3.20,
+		"duration": 0.75,
+	}
+	var midpoint := screen.match_court_3d.trajectory_world_position(trajectory, 0.5)
+	_check(
+		is_equal_approx(midpoint.x, 0.0)
+			and is_equal_approx(midpoint.z, 0.0)
+			and is_equal_approx(midpoint.y, 3.20),
+		"3D ball sampling preserves authoritative Bezier position and apex height",
+	)
+
+	var attack := RALLY_EVENT_SCRIPT.new()
+	attack.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	attack.actor_id = 1
+	attack.actor_name = "Home One"
+	attack.start_position = Vector2(0.42, 0.57)
+	attack.end_position = Vector2(0.72, 0.22)
+	attack.metadata = {
+		"side": "home",
+		"jump_multiplier": 1.18,
+		"outgoing_trajectory": trajectory,
+	}
+	var set_event := RALLY_EVENT_SCRIPT.new()
+	set_event.event_type = RALLY_EVENT_SCRIPT.EventType.SET
+	set_event.actor_id = 2
+	set_event.start_position = Vector2(0.56, 0.61)
+	set_event.end_position = attack.start_position
+	set_event.metadata = {"side": "home", "setter_capability": {
+		"reach_state": "standing",
+	}}
+	var set_source := trajectory.duplicate(true)
+	set_source["apex_rise_meters"] = 0.48
+	var display_set := screen._display_trajectory(set_event, attack, set_source)
+	_check(
+		float(display_set.get("start_height_meters", 0.0)) > 1.90
+			and float(display_set.get("end_height_meters", 0.0)) > 2.43
+			and float(display_set.get("apex_height_meters", 0.0)) > 3.48,
+		"3D sets leave extended hands, arrive at attack reach and peak clearly above the net",
+	)
+	var block := RALLY_EVENT_SCRIPT.new()
+	block.event_type = RALLY_EVENT_SCRIPT.EventType.BLOCK
+	block.actor_id = 101
+	block.start_position = Vector2(0.52, 0.47)
+	block.end_position = Vector2(0.56, 0.55)
+	block.metadata = {
+		"side": "opponent",
+		"movement_start": Vector2(0.32, 0.24),
+		"movement_target": block.start_position,
+		"assist_id": 102,
+	}
+	var movement_plan := screen._build_movement_plan(attack, block)
+	_check(
+		movement_plan.has(101)
+			and Vector2(movement_plan[101]["target"]).is_equal_approx(block.start_position)
+			and movement_plan.has(102),
+		"3D transitions move the next contact actor and the reacting unit together",
+	)
+	_check(
+		screen._event_elevation(attack, 1) > 0.8
+			and screen._event_elevation(block, 101) == 0.85
+			and screen._event_elevation(block, 102) == 0.85,
+		"3D contact poses consume resolved attack and assisting-blocker elevation",
+	)
+	screen.free()
 
 
 ## Jump and hand posture are the two things a top-down court cannot show without
@@ -5902,6 +6048,7 @@ func _test_seeded_rally_resolution() -> void:
 	manager.seed_vertical_slice_data()
 	var lineup := manager.current_lineup()
 	var setter_id := lineup.active_setter_id()
+	manager.player_by_id(setter_id).dominant_hand = "Left"
 	var setter_receive_zone: Resource = manager.current_defensive_plan().zone_for(
 		setter_id, DefensiveZone.ZoneType.SERVE_RECEIVE
 	)
@@ -5914,6 +6061,32 @@ func _test_seeded_rally_resolution() -> void:
 	manager.call_play(saved_play.id)
 	var first: Resource = manager.resolve_active_rally(90210)
 	var second: Resource = manager.resolve_active_rally(90210)
+	_check(
+		str(first.player_handedness.get(setter_id, "")) == "Left"
+			and first.player_handedness == second.player_handedness,
+		"rally results preserve deterministic player handedness for replay",
+	)
+	var setter_profile: Dictionary = first.player_physical_profiles.get(setter_id, {})
+	var setter := manager.player_by_id(setter_id)
+	_check(
+		is_equal_approx(float(setter_profile.get("height_cm", 0.0)), setter.height_cm)
+			and is_equal_approx(
+				float(setter_profile.get("wingspan_cm", 0.0)), setter.wingspan_cm
+			)
+			and is_equal_approx(
+				float(setter_profile.get("stride_length_m", 0.0)), setter.stride_length_m
+			)
+			and is_equal_approx(
+				float(setter_profile.get("standing_reach_meters", 0.0)),
+				setter.standing_reach_cm() / 100.0,
+			)
+			and is_equal_approx(
+				float(setter_profile.get("jumping_reach_meters", 0.0)),
+				setter.jumping_reach_cm() / 100.0,
+			)
+			and first.player_physical_profiles == second.player_physical_profiles,
+		"rally results preserve deterministic physical profiles for replay",
+	)
 	_check(
 		Vector2(first.initial_home_positions.get(
 			setter_id, Vector2.ZERO

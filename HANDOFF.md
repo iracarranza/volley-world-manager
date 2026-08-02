@@ -271,12 +271,10 @@
 - Opponent substitutions, opponent timeouts and a second-libero ruleset.
 - Unlimited continuation contacts; rallies intentionally use a four-exchange
   safety bound to prevent pathological simulation loops.
-- The FM-style stationary-camera 3D match view, placeholder player actors and
-  ball actor. The current tactical court remains the match playback surface for
-  now.
 
 The next pass should deepen calendar competition, multi-session training and
 player development feedback while opponent substitutions and tactical
-counter-adjustments can remain match-engine follow-up. Match presentation work
-should move toward a separate 3D scene that reuses the rally event stream
-without replacing the tactical board.
+counter-adjustments can remain match-engine follow-up. The separate 3D replay
+is available from Match Center through View 3D. It reuses the completed rally
+event stream and player snapshots; it does not replace the tactical board or
+participate in simulation.

@@ -437,6 +437,13 @@ tooltip_text = "Replay the previous point without changing the score or simulati
 disabled = true
 text = "Replay Point"
 
+[node name="Replay3DButton" type="Button" parent="Margin/Content/QuickRallyBar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Replay the previous point in the event-driven 3D match engine."
+disabled = true
+text = "View 3D"
+
 [node name="PlaybackSpeedOption" type="OptionButton" parent="Margin/Content/QuickRallyBar" unique_id=1836883194]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(72, 0)

@@ -1,13 +1,13 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://dax4gq2b02827"]
 
-[ext_resource type="Script" path="res://scenes/application.gd" id="1"]
+[ext_resource type="Script" uid="uid://hdpgke72p25v" path="res://scenes/application.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/screens/title_screen.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/screens/new_career_screen.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/screens/career_dashboard.tscn" id="4"]
-[ext_resource type="PackedScene" path="res://scenes/main/main.tscn" id="5"]
-[ext_resource type="Theme" path="res://scenes/themes/dark_theme.tres" id="6"]
+[ext_resource type="PackedScene" uid="uid://cf25mxv5ivoek" path="res://scenes/main/main.tscn" id="5"]
+[ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="6"]
 
-[node name="Application" type="Control"]
+[node name="Application" type="Control" unique_id=1540949880]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -17,21 +17,21 @@ grow_vertical = 2
 theme = ExtResource("6")
 script = ExtResource("1")
 
-[node name="TitleScreen" parent="." instance=ExtResource("2")]
+[node name="TitleScreen" parent="." unique_id=1827983749 instance=ExtResource("2")]
 unique_name_in_owner = true
 layout_mode = 1
 
-[node name="NewCareerScreen" parent="." instance=ExtResource("3")]
-unique_name_in_owner = true
-visible = false
-layout_mode = 1
-
-[node name="CareerDashboard" parent="." instance=ExtResource("4")]
+[node name="NewCareerScreen" parent="." unique_id=1674958465 instance=ExtResource("3")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
-[node name="MatchCenter" parent="." instance=ExtResource("5")]
+[node name="CareerDashboard" parent="." unique_id=421942805 instance=ExtResource("4")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="MatchCenter" parent="." unique_id=1862099734 instance=ExtResource("5")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1

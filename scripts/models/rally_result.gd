@@ -16,5 +16,11 @@ extends Resource
 ## snapshot instead of whichever tactical-planner view happens to be open.
 @export var initial_home_positions: Dictionary = {}
 @export var initial_opponent_positions: Dictionary = {}
+## Presentation identity captured with the rally so replay does not depend on
+## whichever roster is active later (or mirror every attacker onto one arm).
+@export var player_handedness: Dictionary = {}
+## Height, wingspan and stride captured at resolution time. Presentation uses
+## these values for body proportions and gait without consulting live rosters.
+@export var player_physical_profiles: Dictionary = {}
 @export var explanation: String = ""
 @export var ending_reason: StringName = &""

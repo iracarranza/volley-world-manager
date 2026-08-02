@@ -47,4 +47,6 @@ rollout flags remain off. Gate 43's approach mechanics are active in ordinary
 home attack and counterattack calculation. Blocking remains legacy-controlled
 and is the next perception migration slice.
 
-The 3D match code still exists, but current development is focused on simulation and 2D playback. Treat 3D work as paused.
+The Match Center also offers a presentation-only 3D replay of the last point.
+It consumes the same rally snapshots and trajectory evidence as 2D playback;
+simulation and tactical editing remain authoritative elsewhere.

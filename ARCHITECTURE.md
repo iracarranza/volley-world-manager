@@ -109,17 +109,17 @@ board without changing saved tactics or simulation data.
 
 - A dedicated popup tactical workspace containing the existing interactive
   court and coaching editor.
-- A separate match presentation surface that will become the FM-style
-  stationary-camera 3D playback view.
+- A separate FM-style 3D replay surface with broadcast, end-line and high
+  tactical cameras.
 
 The workspace node is reparented into the popup at runtime. This avoids a second
 copy of editor logic and makes the change straightforward to revert.
 The tactical court receives a deep snapshot of the lineup, active play and
 defensive plan when a point begins. It retains that completed-point context
-while the player edits future tactics. Replay reuses the stored `RallyResult`
-without invoking `GameManager.record_rally()` again. The future match-view
-surface will consume the same rally events without taking over simulation
-authority.
+while the player edits future tactics. Both replay surfaces reuse the stored
+`RallyResult` without invoking `GameManager.record_rally()` again. The 3D view
+is opened explicitly through View 3D and consumes the same rally events without
+taking over simulation authority.
 The simulator completes the result before the first animation begins, so visual
 timing cannot change a point.
 The court presenter maintains temporary live marker positions during playback.
@@ -141,10 +141,9 @@ temporary animated positions—is read by the simulator.
 
 ## Presentation split
 
-The tactical board remains the editable top-down planning layer. The future
-match view will be a separate FM-style stationary-camera 3D scene with its own
-court, player actors and ball actor, driven by the same rally-event timeline.
-The intended scene file map is:
+The tactical board remains the editable top-down planning layer. The separate
+3D scene owns its court, player actors and ball actor and is driven by the same
+rally-event timeline. The scene file map is:
 
 - `scenes/screens/match_screen.tscn` and `scenes/screens/match_screen.gd` for
   the playback screen shell.
@@ -155,8 +154,18 @@ The intended scene file map is:
 - `scenes/components/ball_actor_3d.tscn` and `scenes/components/ball_actor_3d.gd`
   for the ball visualization.
 
-The 3D view should stay event-driven and never replace the tactical board as
-the editable source of truth.
+The 3D view samples authoritative trajectory timing and height, starts actors
+from the result's player-position snapshots, and reads resolved contact
+elevation. Rally snapshots also preserve handedness, height, wingspan and
+stride length: height scales the rig, wingspan changes arm reach, and stride
+length controls gait frequency per metre. None changes resolved travel timing.
+The launch solver's apex value is relative rise, not absolute world height.
+3D playback combines that rise with event contact height and restrained
+event-specific vertical emphasis; sets therefore leave extended hands and
+attacks begin above the net without changing the simulator's flight duration.
+Coordinated off-ball shifts are temporary presentation state. The view stays
+event-driven and never replaces the tactical board as the editable source of
+truth.
 
 ## Adaptation flow
 
