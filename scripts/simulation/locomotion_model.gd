@@ -163,6 +163,45 @@ static func maximum_speed(
 	return stride_meters(player, mode) * cadence_hz(player, mode)
 
 
+## The pre-decomposition speed curve, kept in one place instead of three.
+##
+## `maximum_speed()` above is the model the rally movement system now uses.
+## Two other systems were never migrated to it and still run the old
+## `lerpf(floor, ceiling, rating)` curve: `ApproachMechanicsSystem` for the
+## attack run-up, and `CoverageCalculator` for defensive reach. Both had their
+## own inline copy of this arithmetic *and* their own copy of the mass and
+## fatigue scaling, with two different ceilings (5.25 and 4.65) and no note
+## anywhere saying why they differed.
+##
+## Consolidating them here changes no behaviour -- each caller keeps its own
+## ceiling -- but it turns three scattered copies into one function with the
+## divergence stated out loud, so migrating them later is a single edit rather
+## than an archaeology exercise. The ceilings genuinely disagree with
+## `maximum_speed()`, which reads 3.96 m/s for a maximal approach against this
+## curve's 5.25 and 3.25 m/s laterally against 4.65; unifying them is a
+## deliberate rebalance, not a cleanup, so it is not done here.
+const LEGACY_SPEED_FLOOR_MPS: float = 1.35
+const LEGACY_APPROACH_CEILING_MPS: float = 5.25
+const LEGACY_COVERAGE_CEILING_MPS: float = 4.65
+
+
+static func mass_factor(player: VolleyballPlayer) -> float:
+	return lerpf(1.06, 0.90, clampf((player.mass_kg - 55.0) / 60.0, 0.0, 1.0))
+
+
+static func fatigue_factor(player: VolleyballPlayer) -> float:
+	return 1.0 - player.fatigue * 0.30
+
+
+static func legacy_maximum_speed(
+	player: VolleyballPlayer,
+	speed_rating: float,
+	ceiling_mps: float,
+) -> float:
+	return lerpf(LEGACY_SPEED_FLOOR_MPS, ceiling_mps, speed_rating) \
+		* mass_factor(player) * fatigue_factor(player)
+
+
 ## Inverts the relationship: given a speed the existing model produces, what
 ## stride would this player need at their cadence to achieve it? This is how the
 ## calibration checks whether the decomposition is physically plausible without

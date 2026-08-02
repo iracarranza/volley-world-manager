@@ -167,11 +167,10 @@ static func evaluate_takeoff(
 		float(actor.player.transition_speed),
 		float(actor.player.lateral_speed), lateral_share * 0.65
 	) / 100.0
-	var fatigue_factor := 1.0 - actor.player.fatigue * 0.30
-	var mass_factor := lerpf(1.06, 0.90, clampf(
-		(actor.player.mass_kg - 55.0) / 60.0, 0.0, 1.0
-	))
-	var maximum_speed := lerpf(1.35, 5.25, speed_rating) * mass_factor * fatigue_factor
+	var fatigue_factor := LocomotionModel.fatigue_factor(actor.player)
+	var maximum_speed := LocomotionModel.legacy_maximum_speed(
+		actor.player, speed_rating, LocomotionModel.LEGACY_APPROACH_CEILING_MPS
+	)
 	var acceleration := lerpf(2.2, 6.8, float(actor.player.acceleration) / 100.0) \
 		* fatigue_factor
 	var alignment := 1.0

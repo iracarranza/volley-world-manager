@@ -605,25 +605,21 @@ static func _grade_commitment(
 ## `set_flight` dictionary. ShadowAttackSystem keeps the live BallFlight
 ## internal; reconstructing it here lets blockers read the same flight with
 ## BallReadSystem without changing already-calibrated attack code.
+## Fallbacks describe a plausible *set* -- released near the setter, arriving
+## just off the net at hitting height. `BallFlight.from_dict()` owns the
+## reconstruction itself; only these context defaults live here.
+const SET_FLIGHT_DEFAULTS := {
+	"origin": Vector2(0.5, 0.6),
+	"destination": Vector2(0.5, 0.53),
+	"duration": 0.48,
+	"contact_height_meters": 2.55,
+	"action_type": "set",
+	"flight_stability": 0.82,
+}
+
+
 static func _reconstruct_set_flight(set_flight_dict: Dictionary) -> BallFlight:
-	var signature_dict: Dictionary = set_flight_dict.get("signature", {})
-	var signature := BallContactSignature.create(
-		StringName(str(signature_dict.get("action_type", "set"))),
-		float(signature_dict.get("speed_mps", 0.0)),
-		float(signature_dict.get("horizontal_angle_degrees", 0.0)),
-		float(signature_dict.get("vertical_angle_degrees", 0.0)),
-		float(signature_dict.get("topspin_rps", 0.0)),
-		float(signature_dict.get("sidespin_rps", 0.0)),
-		float(signature_dict.get("flight_stability", 0.82)),
-	)
-	return BallFlight.create(
-		Vector2(set_flight_dict.get("origin", Vector2(0.5, 0.6))),
-		Vector2(set_flight_dict.get("destination", Vector2(0.5, 0.53))),
-		float(set_flight_dict.get("start_time", 0.0)),
-		float(set_flight_dict.get("duration", 0.48)),
-		signature,
-		float(set_flight_dict.get("contact_height_meters", 2.55)),
-	)
+	return BallFlight.from_dict(set_flight_dict, SET_FLIGHT_DEFAULTS)
 
 
 static func _hitter_approach_cue(

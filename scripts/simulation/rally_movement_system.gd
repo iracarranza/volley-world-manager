@@ -358,16 +358,12 @@ static func generate_reception_opportunities(
 	return opportunities
 
 
-static func _speed_rating(
-	player: VolleyballPlayer,
-	mode: RallyPlayerState.MovementMode,
-) -> float:
-	if mode in [
-		RallyPlayerState.MovementMode.LATERAL,
-		RallyPlayerState.MovementMode.BLOCK_CLOSE,
-	]:
-		return float(player.lateral_speed) / 100.0
-	return float(player.transition_speed) / 100.0
+## `_speed_rating()` used to live here. It had no callers left once
+## `movement_profile()` started asking `LocomotionModel` for speed, and it had
+## quietly drifted from the surviving copy: this one never clamped its result,
+## so an out-of-range attribute would have produced a rating above 1.0 and a
+## speed past the top of the curve. Deleted rather than left as a second,
+## subtly different answer to a question `LocomotionModel` already owns.
 
 
 ## How long this traversal takes, as the closed-form inverse of

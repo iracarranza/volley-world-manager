@@ -3,8 +3,11 @@ extends RefCounted
 
 ## Shared unit conversions for calculated rally timing. This class does not
 ## simulate aerodynamics or mutate rally state.
-const COURT_WIDTH_METERS: float = 9.0
-const COURT_LENGTH_METERS: float = 18.0
+## Court geometry belongs to `CourtConstants`, which is where every other
+## consumer reads it. Re-declaring the numbers here meant a court that changed
+## size would silently change it in one place and not the other.
+const COURT_WIDTH_METERS: float = CourtConstants.COURT_WIDTH_METERS
+const COURT_LENGTH_METERS: float = CourtConstants.COURT_LENGTH_METERS
 const MIN_BALL_SPEED_MPS: float = 0.1
 const MIN_FLIGHT_DURATION: float = 0.01
 const DEFAULT_TIMING_TOLERANCE: float = 0.25

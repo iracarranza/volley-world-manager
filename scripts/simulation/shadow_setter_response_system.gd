@@ -519,27 +519,12 @@ static func _signature_tags(signature: BallContactSignature) -> Array[String]:
 	]
 
 
+## This system reads an incoming *pass*, not a set, so its fallbacks are the
+## model's own neutral ones rather than the set-shaped defaults
+## `ShadowBlockSystem` uses. Passing nothing here is deliberate and is why
+## `BallFlight.from_dict()` takes context defaults instead of assuming.
 static func _flight_from_dict(data: Dictionary) -> BallFlight:
-	if data.is_empty():
-		return null
-	var raw_signature: Dictionary = data.get("signature", {})
-	var signature := BallContactSignature.create(
-		StringName(raw_signature.get("action_type", "pass")),
-		float(raw_signature.get("speed_mps", 0.0)),
-		float(raw_signature.get("horizontal_angle_degrees", 0.0)),
-		float(raw_signature.get("vertical_angle_degrees", 0.0)),
-		float(raw_signature.get("topspin_rps", 0.0)),
-		float(raw_signature.get("sidespin_rps", 0.0)),
-		float(raw_signature.get("flight_stability", 1.0)),
-	)
-	return BallFlight.create(
-		Vector2(data.get("origin", Vector2.ZERO)),
-		Vector2(data.get("destination", Vector2.ZERO)),
-		float(data.get("start_time", 0.0)),
-		float(data.get("duration", 0.01)),
-		signature,
-		float(data.get("contact_height_meters", 1.0)),
-	)
+	return BallFlight.from_dict(data)
 
 
 static func _state_unchanged(state: RallyState) -> bool:

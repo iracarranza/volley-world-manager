@@ -1,16 +1,17 @@
 class_name CoverageCalculator
 extends RefCounted
 
-const COURT_WIDTH_METERS: float = 9.0
-const COURT_LENGTH_METERS: float = 18.0
+## Court geometry and normalised-to-metres conversion both live elsewhere:
+## `CourtConstants` owns the dimensions and `RallyKinematics` owns the
+## conversion. This file used to carry its own copy of each -- a third set of
+## the same two numbers, and a second identical distance function -- which is
+## exactly the kind of duplicate that survives a refactor of the original.
+const COURT_WIDTH_METERS: float = CourtConstants.COURT_WIDTH_METERS
+const COURT_LENGTH_METERS: float = CourtConstants.COURT_LENGTH_METERS
 
 
 static func court_distance_meters(from: Vector2, to: Vector2) -> float:
-	var delta := to - from
-	return Vector2(
-		delta.x * COURT_WIDTH_METERS,
-		delta.y * COURT_LENGTH_METERS,
-	).length()
+	return RallyKinematics.court_distance_meters(from, to)
 
 
 static func evaluate_arrival(
@@ -28,12 +29,9 @@ static func evaluate_arrival(
 	var available_time := maxf(ball_time_seconds - reaction_delay, 0.0)
 	var speed_rating := float(player.lateral_speed) / 100.0
 	var acceleration_rating := float(player.acceleration) / 100.0
-	var fatigue_multiplier := 1.0 - player.fatigue * 0.30
-	var mass_multiplier := lerpf(1.06, 0.90, clampf(
-		(player.mass_kg - 55.0) / 60.0, 0.0, 1.0
-	))
-	var movement_speed := lerpf(1.35, 4.65, speed_rating) \
-		* fatigue_multiplier * mass_multiplier
+	var movement_speed := LocomotionModel.legacy_maximum_speed(
+		player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
+	)
 	var acceleration_factor := lerpf(0.62, 1.0, acceleration_rating)
 	var travel_distance := movement_speed * available_time * acceleration_factor
 	var base_reach := _base_reach_meters(player, contact_skill)

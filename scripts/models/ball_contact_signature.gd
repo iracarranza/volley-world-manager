@@ -70,3 +70,18 @@ func to_dict() -> Dictionary:
 		"sidespin_rps": sidespin_rps,
 		"flight_stability": flight_stability,
 	}
+
+
+## Inverse of `to_dict()`. `defaults` supplies the caller's context fallbacks
+## -- `action_type` and `flight_stability` -- because what a missing signature
+## should be taken to mean depends on whether a set or a pass was expected.
+static func from_dict(data: Dictionary, defaults: Dictionary = {}) -> BallContactSignature:
+	return BallContactSignature.create(
+		StringName(str(data.get("action_type", defaults.get("action_type", "pass")))),
+		float(data.get("speed_mps", 0.0)),
+		float(data.get("horizontal_angle_degrees", 0.0)),
+		float(data.get("vertical_angle_degrees", 0.0)),
+		float(data.get("topspin_rps", 0.0)),
+		float(data.get("sidespin_rps", 0.0)),
+		float(data.get("flight_stability", defaults.get("flight_stability", 1.0))),
+	)
