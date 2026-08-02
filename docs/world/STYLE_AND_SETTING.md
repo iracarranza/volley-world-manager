@@ -14,10 +14,54 @@ academies, one surfacing on every continent, which regularly compete against
 each other at the top level.
 
 The player is the manager of an up-and-coming academy: arguably alien. What
-that means is deliberately never pinned down. The manager's nature is not a
-mystery to be solved or a joke to be explained -- it's just true, unremarked
-on by the human cast, and never confirmed or denied on the page. Every other
-character -- players, staff, rivals -- is human.
+that means is deliberately never pinned down. This isn't unique to the
+player -- it's true of academy managers generally, everywhere, always has
+been. It's not a mystery to be solved or a joke to be explained; it's just an
+accepted fact of the role, unremarked on by the human cast (players, staff,
+rivals -- everyone who isn't a manager is human) and never confirmed or
+denied on the page.
+
+## Why volleyball, and the Charter
+
+Volleyball's dominance isn't an ancient accident -- it's a founding choice.
+Generations back, the academy system was formalized by an agreement between
+the continents' governing sporting bodies, remembered now simply as **the
+Charter**. Volleyball was the sport chosen to anchor it, deliberately, because
+it was the sport that could actually meet the brief: a net, a ball, six
+players, and any reasonably flat surface -- no equipment barrier, no single
+nation's origin story to gatekeep it, playable competitively by very different
+bodies and climates. The Charter chartered one flagship academy per continent
+as a neutral, elite proving ground, and the sport grew into the role because
+it was built to fit it.
+
+Academy managers being "arguably alien" predates and outlasts any single
+academy -- as far as anyone remembers, it's simply always been true of the
+role, since the Charter era. Nobody treats it as news.
+
+The Charter era's tournament is **the Sixnet Championship** (usually just
+"the Sixnet") -- the annual competition between the six flagship academies,
+the closest thing this world has to a World Cup. Winning it is the single
+biggest thing that can happen to a program; an up-and-coming academy's whole
+arc is measured by how far it is from Sixnet contention.
+
+### Regional sporting culture
+
+Rivalries between academies are sporting and stylistic, not political --
+playful, longstanding, the kind of thing broadcasters replay highlight reels
+over, not anything modeled on real-world conflict:
+
+- **Pāwa Hitō vs. Bloc du Larg**: the marquee rivalry, power-and-pace against
+  patient structure -- the sport's version of a shootout offense against a
+  lockdown defense.
+- **Spëddigh** plays the disruptor: smaller budgets, faster systems, a
+  reputation for upsetting bigger programs on tempo alone.
+- **Xérvu** is high-risk, high-reward -- aggressive serving cultures that
+  either blow a match open early or implode trying.
+- **Taktikã** is the circuit's "chess players": unglamorous, deeply annoying
+  to prepare for, rarely the highlight reel but often the eventual winner.
+- **Landavol**, with no specialty, is chronically underestimated by scouts --
+  and is where the circuit's most complete late bloomers tend to come from,
+  since nobody trains them into one narrow box early.
 
 ## What the manager actually does
 
@@ -101,9 +145,13 @@ to six regions (Pāwa Hitō, Spëddigh, Bloc du Larg, Landavol, Xérvu, Taktikã
   zero physique bias. It exists so "generic/well-rounded" has a home instead
   of every region needing an identity.
 
-This pattern should extend to anything else that needs a fictionalized
-real-world flavor (leagues, competitions, sponsors, equipment brands) rather
-than each new one inventing its own convention.
+The diacritic-pun trick itself is specifically a **region**-naming device --
+it doesn't need to be forced onto everything else. Other flavor (the Sixnet
+Championship is the first example) can use its own invented-but-plainly-named
+style, the way real sports mix straightforward league names with regional
+club identities. Extend the region convention specifically when something is
+genuinely region-flavored; invent normally otherwise. No batch effort needed
+-- name things as a feature actually introduces them.
 
 ## Tone
 
@@ -117,12 +165,12 @@ satire of one.
 Deliberately unresolved -- surface these before building a feature that
 depends on an answer, don't guess:
 
-- Do rival academies' managers share the manager's unspecified nature, or is
-  the player's ambiguity unique to them?
-- Is there an in-universe name for the sport, the academy circuit, or the top
-  competition, or do we keep using "volleyball" plainly?
-- How much of the wider world (politics between regions, academy rivalries'
-  history, why volleyball specifically became this dominant) needs inventing
-  before it's needed by a feature, versus staying implicit?
-- Does the naming-convention pattern above extend to non-region flavor (kit
-  sponsors, broadcast partners, award names), and if so, on what cadence?
+- Is the Sixnet Championship annual or does it run on a longer cycle (some
+  real elite tournaments are biennial or four-yearly)? Not needed until a
+  feature actually models the competition calendar.
+- Below the six flagship academies, how does the regional-org-to-academy
+  pipeline actually work as a player-facing mechanic (is it visible at all
+  right now, or purely lore until recruitment/scouting needs it)?
+- Does every region eventually want a named signature rivalry pairing (Pāwa
+  Hitō/Bloc du Larg has one; the other four don't yet), or is an uneven spread
+  fine?
