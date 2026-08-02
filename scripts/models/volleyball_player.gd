@@ -92,11 +92,16 @@ extends Resource
 @export var serve_style_proficiencies: Dictionary = {}
 @export_enum("Right", "Left") var dominant_hand: String = "Right"
 @export_range(1, 100) var adaptability: int = 50
-## Where this player was developed. Blank for hand-authored fixture players
-## that predate the world population; every generated player carries one.
-## This is what lets a roster read as a story ("three of your starters came
-## up through Ispayk") rather than a list of unrelated names.
+## Where this player was raised, and where they actually play now. These are
+## deliberately separate: talent is *born* roughly evenly across the world but
+## *accumulates* wherever the money is, and collapsing the two would erase the
+## most interesting thing about a player's biography. A'ace's squads are full
+## of stars it did not produce; Ispayk raises players it cannot keep.
+##
+## Blank for hand-authored fixture players that predate the world population;
+## every generated player carries both.
 @export var home_region: String = ""
+@export var club_region: String = ""
 @export var primary_position: String = "Outside Hitter"
 @export var natural_positions: Array[String] = []
 @export var position_familiarity: Dictionary = {}
@@ -352,7 +357,7 @@ func to_dict() -> Dictionary:
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
 		"dominant_hand": dominant_hand, "adaptability": adaptability,
-		"home_region": home_region,
+		"home_region": home_region, "club_region": club_region,
 		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
 		"position_familiarity": position_familiarity.duplicate(true),
 		"situation_experience": situation_experience.duplicate(true),
@@ -397,6 +402,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	).duplicate(true)
 	player.dominant_hand = str(data.get("dominant_hand", "Right"))
 	player.home_region = str(data.get("home_region", ""))
+	player.club_region = str(data.get("club_region", player.home_region))
 	player.adaptability = clampi(int(data.get("adaptability", 50)), 1, 100)
 	player.primary_position = str(data.get("primary_position", player.position_role))
 	player.natural_positions = Array(data.get("natural_positions", [player.primary_position]), TYPE_STRING, "", null)

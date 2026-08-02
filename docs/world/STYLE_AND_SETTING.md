@@ -91,17 +91,26 @@ players are alive at any time no matter how large the population grows.
 A world where every age from fifteen to thirty is stocked with wonderkids
 has no wonderkids in it -- finding one has to be an event.
 
-Two rules follow from that and are worth stating plainly, because they are
-what make the world feel like it has a past:
+Three rules follow from that, and between them they are what make the world
+feel like it has a past:
 
 - **Current ability is never allotted.** It falls out of age through the
   same development curve every player uses. One potential number plus an age
   produces either a raw prospect or a finished star, which is exactly what
   makes a "wonderkid" a coherent idea rather than a label.
-- **Region, age and talent are apportioned together.** A'ace is dense with
-  established stars and nearly empty of home-grown teenagers -- the shape of a
-  program that imports rather than raises. Ispayk is thick with veterans,
-  because a proud, cash-strapped academy keeps the players it already has.
+- **Golden generations.** The scarce budget is apportioned across single
+  birth years rather than spread evenly, with enforced spacing, so most years
+  produce nobody special and once in a while one produces a real cluster. A
+  golden year *concentrates* the fixed budget; it never adds to it. Where the
+  golden years fall differs per world, so a career can't learn to predict
+  them, but they arrive reliably enough that every save has a few.
+- **Where a player is raised is not where they play.** Nowhere breeds
+  champions -- birth carries no talent or age bias at all, only how prolific
+  a region is. Talent then *accumulates* wherever the money is. A'ace fields
+  far more scoutable talent than the world average while raising no more than
+  anyone else; Ispayk raises plenty and cannot hold on to it. Ageing players
+  filter the other way, down to the programs still glad to have them, which
+  is why Ispayk fills with veterans and A'ace fields players at their peak.
   Nobody wrote those stories into the data; they fall out of the weighting.
 
 Every region is guaranteed prospects worth scouting, so no save produces a

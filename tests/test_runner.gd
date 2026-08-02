@@ -1032,13 +1032,8 @@ func _test_world_population() -> void:
 	## it fails here.
 	var expected_tier_totals := {}
 	for tier in WORLD_POPULATION_SCRIPT.TALENT_TIERS:
-		var per_band: Dictionary = tier.per_band
-		if per_band.is_empty():
-			continue
-		var expected := 0
-		for band in WORLD_POPULATION_SCRIPT.AGE_BANDS:
-			expected += int(per_band.get(str(band.key), 0))
-		expected_tier_totals[str(tier.key)] = expected
+		if int(tier.world_total) > 0:
+			expected_tier_totals[str(tier.key)] = int(tier.world_total)
 	var allotments_exact := true
 	for tier_key in expected_tier_totals:
 		if int(summary.by_tier.get(tier_key, 0)) != int(expected_tier_totals[tier_key]):
@@ -1056,6 +1051,51 @@ func _test_world_population() -> void:
 	_check(
 		float(scarce_total) / float(population.size()) < 0.10,
 		"under a tenth of the world sits in a scoutable talent tier",
+	)
+
+	## Golden generations. Scarce talent is apportioned per birth year rather
+	## than spread evenly, so some cohorts carry a real cluster and most
+	## carry almost nothing -- and crucially, a golden year concentrates the
+	## fixed budget rather than adding to it, which the exact-allotment check
+	## above already guarantees.
+	var golden: Dictionary = WORLD_POPULATION_SCRIPT.golden_cohorts(4242)
+	var golden_ages: Array = golden.keys()
+	golden_ages.sort()
+	_check(
+		golden_ages.size() >= 2 and golden_ages.size() <= 6,
+		"a world contains a handful of golden generations, not none and not every year",
+	)
+	var spacing_respected := true
+	for index in range(1, golden_ages.size()):
+		if int(golden_ages[index]) - int(golden_ages[index - 1]) \
+				< WORLD_POPULATION_SCRIPT.GOLDEN_MIN_GAP:
+			spacing_respected = false
+	_check(
+		spacing_respected,
+		"golden generations are never bunched closer together than the minimum gap",
+	)
+	var golden_scarce := 0
+	var ordinary_scarce := 0
+	var ordinary_cohorts := 0
+	for age in range(WORLD_POPULATION_SCRIPT.MIN_AGE, WORLD_POPULATION_SCRIPT.MAX_AGE + 1):
+		var scarce_here := int(summary.by_cohort_scarce.get(age, 0))
+		if golden.has(age):
+			golden_scarce += scarce_here
+		else:
+			ordinary_scarce += scarce_here
+			ordinary_cohorts += 1
+	_check(
+		float(golden_scarce) / float(maxi(golden_ages.size(), 1))
+			> float(ordinary_scarce) / float(maxi(ordinary_cohorts, 1)) * 2.0,
+		"a golden generation carries markedly more scoutable talent than an ordinary year",
+	)
+	## Different worlds put their golden years in different places, or the
+	## "once in a while, unpredictably" part is a lie.
+	var alternate_golden: Dictionary = WORLD_POPULATION_SCRIPT.golden_cohorts(99991)
+	_check(
+		alternate_golden.keys() != golden_ages
+			and WORLD_POPULATION_SCRIPT.golden_cohorts(4242).keys() == golden.keys(),
+		"golden generations land differently per world but are stable for a given one",
 	)
 
 	## A pyramid, not a flat spread -- far more teenagers than veterans.
@@ -1081,40 +1121,86 @@ func _test_world_population() -> void:
 		"every region has at least one wonderkid to discover",
 	)
 
-	## A'ace buys talent instead of raising it: denser in the top tiers than
-	## a region with no lean, and nearly empty of home-grown teenagers.
-	## Asserted as a share rather than a headcount, because with only eight
-	## generational players alive the placement of any individual one is
-	## genuinely noisy -- measured across seeds it swings 0-4.
-	var aace_top := 0
-	var landavol_top := 0
-	for tier_key in expected_tier_totals:
-		aace_top += int(summary.by_region_tier.get("A'ace|%s" % tier_key, 0))
-		landavol_top += int(summary.by_region_tier.get("Landavol|%s" % tier_key, 0))
-	var aace_total: int = maxi(int(summary.by_region.get("A'ace", 0)), 1)
-	var landavol_total: int = maxi(int(summary.by_region.get("Landavol", 0)), 1)
+	## Nowhere breeds champions. Birth is weighted only by how prolific a
+	## region is, never by talent or age -- asserted structurally, because a
+	## behavioural check on ~50 A'ace-born players is too noisy at one seed
+	## to distinguish "no bias" from "a small bias".
+	var birth_weights_are_flat := true
+	for region_name in WORLD_POPULATION_SCRIPT.REGION_BIRTH_WEIGHTS:
+		var weight: Variant = WORLD_POPULATION_SCRIPT.REGION_BIRTH_WEIGHTS[region_name]
+		if weight is Dictionary or weight is Array:
+			birth_weights_are_flat = false
 	_check(
-		float(aace_top) / float(aace_total) > float(landavol_top) / float(landavol_total),
-		"A'ace is denser in scoutable talent than a region with no development lean",
-	)
-	_check(
-		float(int(summary.by_region_band.get("A'ace|youth", 0))) / float(aace_total)
-			< float(int(summary.by_region_band.get("Landavol|youth", 0)))
-				/ float(landavol_total),
-		"A'ace produces proportionally far fewer of its own teenagers than it fields stars",
+		birth_weights_are_flat,
+		"where a player is born carries no talent or age structure, only prolificacy",
 	)
 
-	## Ispayk keeps its old guard -- proportionally more veterans than a
-	## region with no age lean.
-	var ispayk_total: int = maxi(int(summary.by_region.get("Ispayk", 0)), 1)
-	var ispayk_old := int(summary.by_region_band.get("Ispayk|veteran", 0)) \
-		+ int(summary.by_region_band.get("Ispayk|twilight", 0))
-	var landavol_old := int(summary.by_region_band.get("Landavol|veteran", 0)) \
-		+ int(summary.by_region_band.get("Landavol|twilight", 0))
+	## Where talent is raised versus where it ends up, pooled across two
+	## worlds and measured against the world's own averages.
+	##
+	## Both choices are deliberate. A'ace raises only ~50 players in a world,
+	## so its home-grown talent share swings between 5% and 18% on seed alone
+	## -- comparing that noisy figure against anything produces a test that
+	## passes or fails on the draw rather than on the mechanism. Pooling and
+	## comparing against a stable world-wide denominator tests the actual
+	## claim. Measured across eight seeds, Ispayk's veteran share runs 25-32%
+	## against a 23.1% world baseline, and A'ace's 7-20%.
+	var pooled := {
+		"total": 0, "old": 0, "top": 0,
+		"aace_club": 0, "aace_club_top": 0, "aace_born": 0, "aace_born_top": 0,
+		"aace_old": 0, "ispayk_club": 0, "ispayk_club_top": 0,
+		"ispayk_born": 0, "ispayk_born_top": 0, "ispayk_old": 0,
+	}
+	for pool_seed in [4242, 99991]:
+		var pooled_population := WORLD_POPULATION_SCRIPT.generate(pool_seed, 1200)
+		var view: Dictionary = WORLD_POPULATION_SCRIPT.summarize(pooled_population)
+		pooled.total += int(view.total)
+		pooled.old += int(view.by_band.get("veteran", 0)) \
+			+ int(view.by_band.get("twilight", 0))
+		pooled.aace_club += int(view.by_club.get("A'ace", 0))
+		pooled.aace_born += int(view.by_region.get("A'ace", 0))
+		pooled.ispayk_club += int(view.by_club.get("Ispayk", 0))
+		pooled.ispayk_born += int(view.by_region.get("Ispayk", 0))
+		pooled.aace_old += int(view.by_club_band.get("A'ace|veteran", 0)) \
+			+ int(view.by_club_band.get("A'ace|twilight", 0))
+		pooled.ispayk_old += int(view.by_club_band.get("Ispayk|veteran", 0)) \
+			+ int(view.by_club_band.get("Ispayk|twilight", 0))
+		for tier_key in expected_tier_totals:
+			pooled.top += int(view.by_tier.get(tier_key, 0))
+			pooled.aace_club_top += int(view.by_club_tier.get("A'ace|%s" % tier_key, 0))
+			pooled.aace_born_top += int(view.by_region_tier.get("A'ace|%s" % tier_key, 0))
+			pooled.ispayk_club_top += int(view.by_club_tier.get("Ispayk|%s" % tier_key, 0))
+			pooled.ispayk_born_top += int(view.by_region_tier.get("Ispayk|%s" % tier_key, 0))
+	var world_top_share := float(pooled.top) / float(maxi(int(pooled.total), 1))
+	var world_old_share := float(pooled.old) / float(maxi(int(pooled.total), 1))
+
+	## The two halves of the A'ace story, stated separately: it fields more
+	## talent than the world average, and it raises no more than anyone else.
 	_check(
-		float(ispayk_old) / float(ispayk_total)
-			> float(landavol_old) / float(landavol_total),
-		"Ispayk carries proportionally more veterans than a region with no age lean",
+		float(pooled.aace_club_top) / float(maxi(int(pooled.aace_club), 1))
+			> world_top_share * 1.5,
+		"A'ace fields markedly more scoutable talent than the world average",
+	)
+	_check(
+		float(pooled.aace_born_top) / float(maxi(int(pooled.aace_born), 1))
+			< world_top_share * 1.5,
+		"A'ace does not raise more talent than anywhere else -- it signs it",
+	)
+	_check(
+		pooled.aace_club > pooled.aace_born,
+		"A'ace's squads are bigger than its own output, because it signs from everywhere",
+	)
+
+	## Ispayk is the mirror image: prolific, and unable to hold what it makes.
+	_check(
+		float(pooled.ispayk_club_top) / float(maxi(int(pooled.ispayk_club), 1))
+			< float(pooled.ispayk_born_top) / float(maxi(int(pooled.ispayk_born), 1)),
+		"Ispayk loses a share of the talent it raises rather than keeping it",
+	)
+	_check(
+		float(pooled.ispayk_old) / float(maxi(int(pooled.ispayk_club), 1)) > world_old_share
+			and float(pooled.aace_old) / float(maxi(int(pooled.aace_club), 1)) < world_old_share,
+		"aging players filter down to Ispayk and away from A'ace, which fields players at their peak",
 	)
 
 	## Current ability is never allotted -- it falls out of age. The same
