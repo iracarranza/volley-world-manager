@@ -19,23 +19,49 @@ const POSITIONS: Array[Dictionary] = [
 
 ## Per-region physique offsets applied before individual random variation.
 ## These are roster-generation ranges for gameplay variety, not anatomical claims.
+##
+## Xérvu carries a wingspan-led bias rather than a height/mass one: serving
+## leans on arm swing and reach, not on being the tallest or heaviest player
+## on the court. Taktikã carries a small negative bias in all three -- a
+## tactical region's identity is game intelligence, not physical presence, and
+## a slightly smaller-than-average profile reinforces that this specialty
+## isn't won by size. Landavol stays at zero across the board: the one region
+## with no physical lean at all, matching it now having no attribute
+## specialty either (see REGION_SPECIALTY below).
 const REGION_HEIGHT_BIAS := {
 	"Pāwa Hitō": 4.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
+	"Xérvu": 1.0, "Taktikã": -1.0,
 }
 const REGION_MASS_BIAS := {
 	"Pāwa Hitō": 5.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
+	"Xérvu": 0.0, "Taktikã": -1.0,
 }
 const REGION_WINGSPAN_BIAS := {
 	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
+	"Xérvu": 2.0, "Taktikã": 0.0,
 }
 
 ## Attributes that receive a +8 specialty bonus for players from each region.
+##
+## Serving and the abstract mental/tactical attributes used to be scattered
+## across other regions with no home of their own (Pāwa Hitō carried
+## serve_power as one bonus among five; Bloc du Larg and Landavol both leaned
+## mental with overlapping attributes). Xérvu and Taktikã now own those
+## identities outright, which is also why Pāwa Hitō drops serve_power and
+## Bloc du Larg drops tactical_discipline -- each specialty lives in exactly
+## one region rather than being diluted across several.
+##
+## Landavol has no specialty at all: it is deliberately the generic, no-lean
+## region, so every attribute develops purely on role and talent there.
 const REGION_SPECIALTY := {
-	"Pāwa Hitō": ["attack_power", "block_timing", "jump_reach", "explosiveness", "serve_power"],
+	"Pāwa Hitō": ["attack_power", "block_timing", "jump_reach", "explosiveness"],
 	"Spëddigh": ["acceleration", "lateral_speed", "reception_balance", "reception_stability", "dig_control"],
-	"Bloc du Larg": ["block_timing", "ball_control", "court_vision", "anticipation", "tactical_discipline"],
-	"Landavol": ["decision_making", "composure", "set_accuracy", "reception", "adaptability",
-		"unpredictability"],
+	"Bloc du Larg": ["block_timing", "ball_control", "court_vision", "anticipation"],
+	"Landavol": [],
+	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
+		"serve_aggression", "serve_variation"],
+	"Taktikã": ["decision_making", "composure", "tactical_discipline", "improvisation",
+		"adaptability", "unpredictability"],
 }
 
 ## Secondary role attributes receive a +5 bonus: the supporting skills a role

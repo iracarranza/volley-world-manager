@@ -499,10 +499,11 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 
 func _test_career_calendar_generation_training_and_saves() -> void:
 	var fictional_regions := REGIONS_SCRIPT.names()
-	_check(fictional_regions.size() == 4 and "Landavol" in fictional_regions \
+	_check(fictional_regions.size() == 6 and "Landavol" in fictional_regions \
 			and "Spëddigh" in fictional_regions and "Pāwa Hitō" in fictional_regions \
-			and "Bloc du Larg" in fictional_regions,
-		"career creation exposes only the four confirmed fictional regions")
+			and "Bloc du Larg" in fictional_regions and "Xérvu" in fictional_regions \
+			and "Taktikã" in fictional_regions,
+		"career creation exposes only the six confirmed fictional regions")
 	_check(REGIONS_SCRIPT.canonical_name("Europe") == "Landavol",
 		"legacy real-world region saves migrate to a fictional setting")
 	var second_year: Dictionary = CALENDAR_RULES_SCRIPT.state_for_week(49)
@@ -5938,6 +5939,43 @@ func _test_attribute_first_generation() -> void:
 		pawa_count > 0 and landavol_count > 0
 			and pawa_height / pawa_count > landavol_height / landavol_count + 2.0,
 		"attribute generation: Pāwa Hitō rosters are taller on average than Landavol rosters",
+	)
+	## 2b. New regions: Xérvu specializes in serving, Taktikã in the abstract
+	## mental/tactical attributes, Landavol specializes in neither.
+	var xervu_serve := 0.0
+	var xervu_count := 0
+	var taktika_tactical := 0.0
+	var taktika_count := 0
+	var landavol_serve := 0.0
+	var landavol_tactical := 0.0
+	var landavol_count_2 := 0
+	for seed_offset in range(4):
+		var xervu_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Xérvu", "Club", 88150 + seed_offset * 1009
+		)
+		for player in xervu_roster:
+			xervu_serve += player.serve_power + player.serve_technique + player.serve_placement
+			xervu_count += 1
+		var taktika_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Taktikã", "Club", 88150 + seed_offset * 1009
+		)
+		for player in taktika_roster:
+			taktika_tactical += player.decision_making + player.tactical_discipline \
+				+ player.unpredictability
+			taktika_count += 1
+		var land_roster_2: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Club", 88150 + seed_offset * 1009
+		)
+		for player in land_roster_2:
+			landavol_serve += player.serve_power + player.serve_technique + player.serve_placement
+			landavol_tactical += player.decision_making + player.tactical_discipline \
+				+ player.unpredictability
+			landavol_count_2 += 1
+	_check(
+		xervu_count > 0 and taktika_count > 0 and landavol_count_2 > 0
+			and xervu_serve / xervu_count > landavol_serve / landavol_count_2 + 15.0
+			and taktika_tactical / taktika_count > landavol_tactical / landavol_count_2 + 15.0,
+		"attribute generation: Xérvu leads on serving and Taktikã on tactical attributes, both over Landavol",
 	)
 	## 3. Development gap: young academy players have ability_score well below their potential.
 	var young_gap_found := false
