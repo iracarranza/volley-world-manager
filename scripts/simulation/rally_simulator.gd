@@ -49,9 +49,12 @@ const RallyKinematicsModel := preload(
 )
 const MAX_EXCHANGES: int = 4
 
-const OPPONENT_SERVE: float = 0.63
-const OPPONENT_BLOCK: float = 0.61
-const OPPONENT_DEFENSE: float = 0.58
+## `OPPONENT_SERVE`, `OPPONENT_BLOCK` and `OPPONENT_DEFENSE` were flat
+## ratings standing in for the whole opponent side, from when that side was a
+## simplified parallel implementation rather than a real roster. Nothing has
+## read them since the opponent started being resolved through the same
+## systems as the home team; three unexplained magic floats were all that
+## remained of it.
 
 ## Fallbacks for a setter with no derived release profile. These are the
 ## midpoints of the bands `VolleyballPlayer.refresh_system_fit_profiles()`

@@ -4,9 +4,12 @@ extends RefCounted
 ## Game-balance mappings, not claims of biomechanical measurement. Body
 ## dimensions define the envelope; athletic and technical ratings determine
 ## how much of it is available for this action and body state.
-const MIN_JUMP_DISPLACEMENT_METERS: float = 0.12
-const MAX_JUMP_DISPLACEMENT_METERS: float = 0.78
-
+##
+## A fixed `MIN_JUMP_DISPLACEMENT_METERS`/`MAX_JUMP_DISPLACEMENT_METERS` band
+## used to live here. `nominal_jump_displacement_meters()` derives the same
+## quantity from the player's own reach instead, and the constants were left
+## behind unread -- describing a model the file had already outgrown.
+##
 ## Lowest contact a player would bother leaving the floor for. Setting overhead
 ## starts lower than swinging at a ball does.
 const SET_MINIMUM_JUMP_HEIGHT_METERS: float = 1.55
@@ -16,9 +19,9 @@ const ATTACK_MINIMUM_JUMP_HEIGHT_METERS: float = 1.85
 ## Effort each action can put into its jump, as a share of a full committed
 ## approach jump, when the player has no run-up at all.
 ##
-## The displacement band above is calibrated for a spike approach, and applying
-## it to every action was quietly generous: it let a 178 cm setter meet a ball
-## at 2.75 m, which erased height as a setter attribute entirely.
+## A single displacement band calibrated for a spike approach used to serve
+## every action, which was quietly generous: it let a 178 cm setter meet a
+## ball at 2.75 m, erasing height as a setter attribute entirely.
 ##
 ## A jump set is not a fixed hop, though. A setter with time takes a short
 ## approach into it precisely to gain the height and momentum a high ball needs,
