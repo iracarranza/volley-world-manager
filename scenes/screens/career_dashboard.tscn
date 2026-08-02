@@ -111,6 +111,12 @@ layout_mode = 2
 text = "Competition  [V]"
 metadata/section = "Competition"
 
+[node name="SixnetNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Sixnet  [X]"
+metadata/section = "Sixnet"
+
 [node name="Spacer" type="Control" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -182,6 +188,13 @@ section_id = "Competition"
 title_text = "Competition"
 summary_text = "Fixtures, results and match entry."
 icon_text = "V"
+
+[node name="SixnetCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+unique_name_in_owner = true
+section_id = "Sixnet"
+title_text = "Sixnet"
+summary_text = "World league standings and regional power."
+icon_text = "X"
 
 [node name="HomeSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
 unique_name_in_owner = true
@@ -402,6 +415,16 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 46)
 layout_mode = 2
 text = "Play Match"
+
+[node name="Sixnet" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+
+[node name="SixnetSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Sixnet"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_active = true
 
 [node name="StatusLabel" type="Label" parent="Margin/Root"]
 unique_name_in_owner = true

@@ -8,6 +8,8 @@ const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
+const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
+const Regions := preload("res://scripts/data/regions.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const WHEEL_TOOLTIPS := {
 	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
@@ -81,6 +83,7 @@ const WHEEL_TOOLTIPS := {
 @onready var fixture_detail: RichTextLabel = %FixtureDetail
 @onready var play_match_button: Button = %PlayMatchButton
 @onready var status_label: Label = %StatusLabel
+@onready var sixnet_summary: RichTextLabel = %SixnetSummary
 
 var selected_transfer_id: int = -1
 var selected_fixture_id: int = -1
@@ -88,7 +91,7 @@ var selected_roster_id: int = -1
 
 
 func _ready() -> void:
-	for button in [%HomeNav, %RosterNav, %TeamNav, %TransfersNav, %CompetitionNav]:
+	for button in [%HomeNav, %RosterNav, %TeamNav, %TransfersNav, %CompetitionNav, %SixnetNav]:
 		button.pressed.connect(_navigate.bind(button.get_meta("section")))
 	%SaveButton.pressed.connect(_save)
 	%TitleButton.pressed.connect(func() -> void: title_requested.emit())
@@ -115,7 +118,7 @@ func _ready() -> void:
 		wheel_profile_option.add_item(profile_name)
 	position_training_option.add_item("None")
 	for position_name in Familiarity.POSITIONS: position_training_option.add_item(position_name)
-	for card in [%RosterCard, %TeamCard, %TransfersCard, %CompetitionCard]:
+	for card in [%RosterCard, %TeamCard, %TransfersCard, %CompetitionCard, %SixnetCard]:
 		card.section_requested.connect(_navigate)
 	refresh()
 	_navigate("Home")
@@ -134,6 +137,8 @@ func _input(event: InputEvent) -> void:
 			_navigate("Transfers")
 		KEY_V:
 			_navigate("Competition")
+		KEY_X:
+			_navigate("Sixnet")
 		KEY_SPACE:
 			if sections.current_tab == 0:
 				_advance_week()
@@ -155,10 +160,11 @@ func refresh() -> void:
 	_refresh_team()
 	_refresh_transfers()
 	_refresh_competition()
+	_refresh_sixnet()
 
 
 func _navigate(section_name: String) -> void:
-	var names := ["Home", "Roster", "Team", "Transfers", "Competition"]
+	var names := ["Home", "Roster", "Team", "Transfers", "Competition", "Sixnet"]
 	sections.current_tab = maxi(names.find(section_name), 0)
 	section_title.text = section_name
 
@@ -184,6 +190,11 @@ func _refresh_home() -> void:
 	%TeamCard.set_summary("%s identity · %s training" % [CareerManager.career.identity, CareerManager.career.training_focus])
 	%TransfersCard.set_summary("%d regional candidates · $%d available" % [CareerManager.career.transfer_pool.size(), CareerManager.career.finances])
 	%CompetitionCard.set_summary("%s" % ("Week %d vs %s" % [fixture.week, fixture.opponent_name] if fixture != null else "Schedule complete"))
+	%SixnetCard.set_summary(
+		"Champion: %s" % CareerManager.career.sixnet_champion_region
+		if not CareerManager.career.sixnet_champion_region.is_empty()
+		else "%s tops regional power" % _sixnet_top_region()
+	)
 
 
 ## Live lineup completeness, shown where the edit happens rather than only
@@ -441,6 +452,64 @@ func _play_fixture() -> void:
 		_set_status(error, true)
 		return
 	play_match_requested.emit()
+
+
+## Read-only world state -- no selection, no actions, just what's happening
+## in the background league the player's own career sits alongside.
+func _refresh_sixnet() -> void:
+	var career := CareerManager.career
+	var lines: Array[String] = []
+	lines.append("[font_size=24][b]Sixnet World League[/b][/font_size]")
+	lines.append("Champion: %s" % (career.sixnet_champion_region
+		if not career.sixnet_champion_region.is_empty() else "Season in progress"))
+	lines.append("")
+	lines.append("[b]Championship Stage[/b] -- seeded upper bracket plus the qualifier's top two")
+	for slot_id in SixnetLeague.UPPER_SLOT_IDS:
+		lines.append(_sixnet_slot_line(career, slot_id, career.sixnet_championship_standings))
+	for slot_id in career.sixnet_qualified_slots:
+		lines.append(_sixnet_slot_line(career, slot_id, career.sixnet_championship_standings, true))
+	lines.append("")
+	lines.append("[b]Qualifier Stage[/b] -- lower bracket, top two advance")
+	for slot_id in SixnetLeague.LOWER_SLOT_IDS:
+		lines.append(_sixnet_slot_line(
+			career, slot_id, career.sixnet_qualifier_standings,
+			slot_id in career.sixnet_qualified_slots,
+		))
+	lines.append("")
+	lines.append("[b]Regional Power[/b]")
+	var ranked_regions: Array = Regions.SIXNET_PARTICIPANTS.duplicate()
+	ranked_regions.sort_custom(func(a, b) -> bool:
+		return float(career.region_power.get(a, 50.0)) > float(career.region_power.get(b, 50.0))
+	)
+	for region_name in ranked_regions:
+		lines.append("%s: %d" % [region_name, roundi(float(career.region_power.get(region_name, 50.0)))])
+	sixnet_summary.text = "\n".join(lines)
+
+
+func _sixnet_slot_line(
+	career: Resource, slot_id: String, standings: Dictionary, advanced: bool = false,
+) -> String:
+	var region_name := str(career.sixnet_slots.get(slot_id, "?"))
+	var record: Dictionary = standings.get(slot_id, {})
+	var record_text := "%d-%d (sets %d-%d)" % [
+		record.get("wins", 0), record.get("losses", 0),
+		record.get("sets_won", 0), record.get("sets_lost", 0),
+	] if not record.is_empty() else "not yet played"
+	var marker := "  [color=#62ffb4]-> advanced[/color]" if advanced else ""
+	return "%s -- %s: %s%s" % [
+		slot_id.replace("_", " ").capitalize(), region_name, record_text, marker,
+	]
+
+
+func _sixnet_top_region() -> String:
+	var top_region := ""
+	var top_power := -1.0
+	for region_name in Regions.SIXNET_PARTICIPANTS:
+		var power := float(CareerManager.career.region_power.get(region_name, 50.0))
+		if power > top_power:
+			top_power = power
+			top_region = region_name
+	return top_region
 
 
 func _advance_week() -> void:
