@@ -52,6 +52,22 @@ Sixnet flagship" are two different things, and the roster of eight playable
 regions doesn't need to shrink or grow in lockstep with who currently holds
 the six slots.
 
+This is now a real background mechanic, not only lore (`scripts/systems/
+sixnet_league.gd`): the Sixnet runs as an 8-slot competition, a 4-team upper
+bracket and a 4-team lower bracket, filled from the 6 core regions (Ispayk
+and A'ace stay outside this pool entirely -- they compete *for* a slot, not
+within it). Since 6 regions fill 8 slots, a dominant region can hold two at
+once. Each core region carries a power level that genuinely evolves from a
+simulated background season every year -- the six flagship academies (plus
+whichever core regions hold a second slot) play a real, if abstracted,
+schedule the player never sees in match detail, and results promote/relegate
+occupants between the two brackets. A region's power, combined with which
+regions are geographically "near" it (invented world-map adjacency, not tied
+to any region's real-world naming tradition), also drives a slow influence
+drift: a dominant region's development traits partially spread to a weaker
+neighbor, while an isolated region with no dominant neighbor nearby instead
+intensifies its own specialty rather than being absorbed.
+
 ### Regional sporting culture
 
 Rivalries between academies are sporting and stylistic, not political --
@@ -189,12 +205,13 @@ satire of one.
 Deliberately unresolved -- surface these before building a feature that
 depends on an answer, don't guess:
 
-- Is the Sixnet Championship annual or does it run on a longer cycle (some
-  real elite tournaments are biennial or four-yearly)? Not needed until a
-  feature actually models the competition calendar.
 - Below the flagship academies, how does the regional-org-to-academy pipeline
   actually work as a player-facing mechanic (is it visible at all right now,
   or purely lore until recruitment/scouting needs it)?
+- The Sixnet, standings, and region power now exist as real background state
+  (`career.sixnet_slots`/`region_power`/`region_overlay`), but the player has
+  no screen to see any of it yet -- worth a minimal standings/bracket view,
+  and if so, does it live in `career_dashboard.gd` or its own screen?
 - Now that flagship slots are established as contested rather than fixed
   (see Ispayk/A'ace), does the player's own academy ever get a shot at
   Sixnet contention as a mechanic, or does that stay aspirational flavor?

@@ -11,6 +11,8 @@ const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.g
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
+const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
+const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
@@ -177,6 +179,7 @@ func _initialize() -> void:
 	_test_match_court_opponent_layer()
 	_test_team_roster_statistics_and_opponent_rotation()
 	_test_career_calendar_generation_training_and_saves()
+	_test_sixnet_league()
 	if failures == 0:
 		print("PASS: %d volleyball foundation checks" % checks)
 		quit(0)
@@ -512,6 +515,25 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 			and REGIONS_SCRIPT.canonical_name("South America") == "Taktikã",
 		"legacy region labels migrate to the fictional region that actually matches them",
 	)
+	## Sixnet-league eligibility: exactly the six core regions, symmetric
+	## adjacency, and Ispayk/A'ace never appearing on either side of it.
+	_check(
+		REGIONS_SCRIPT.CORE_REGIONS.size() == 6
+			and not REGIONS_SCRIPT.CORE_REGIONS.has("Ispayk")
+			and not REGIONS_SCRIPT.CORE_REGIONS.has("A'ace"),
+		"Sixnet-eligible core regions exclude Ispayk and A'ace",
+	)
+	var adjacency_symmetric := true
+	for region_name in REGIONS_SCRIPT.REGION_ADJACENCY:
+		if str(region_name) == "Ispayk" or str(region_name) == "A'ace":
+			adjacency_symmetric = false
+		for neighbor in REGIONS_SCRIPT.REGION_ADJACENCY[region_name]:
+			if not Array(REGIONS_SCRIPT.REGION_ADJACENCY.get(neighbor, [])).has(region_name):
+				adjacency_symmetric = false
+	_check(
+		adjacency_symmetric,
+		"region adjacency is symmetric and excludes Ispayk/A'ace",
+	)
 	var second_year: Dictionary = CALENDAR_RULES_SCRIPT.state_for_week(49)
 	_check(int(second_year.year) == 2 and int(second_year.week_of_year) == 1,
 		"48-week calendar advances into a second career year")
@@ -775,6 +797,171 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 			and not FileAccess.file_exists(test_path), "selected career saves can be deleted")
 	career_manager.free()
 	load_manager.free()
+
+
+func _test_sixnet_league() -> void:
+	var career := CAREER_STATE_SCRIPT.new()
+	career.career_name = "Sixnet Test Academy"
+	career.absolute_week = 1
+	SIXNET_LEAGUE_SCRIPT.ensure_bootstrapped(career)
+	var slot_regions: Array = career.sixnet_slots.values()
+	var covers_every_core_region := true
+	for region_name in REGIONS_SCRIPT.CORE_REGIONS:
+		if not slot_regions.has(region_name):
+			covers_every_core_region = false
+	_check(
+		career.sixnet_slots.size() == 8 and slot_regions.size() == 8
+			and covers_every_core_region,
+		"bootstrapping fills exactly 8 Sixnet slots, covering all 6 core regions",
+	)
+	_check(
+		career.region_power.size() == 6,
+		"every core region receives an initial power level, and only core regions",
+	)
+	var rebootstrap_slots: Dictionary = career.sixnet_slots.duplicate(true)
+	SIXNET_LEAGUE_SCRIPT.ensure_bootstrapped(career)
+	_check(
+		career.sixnet_slots == rebootstrap_slots,
+		"ensure_bootstrapped is idempotent once a career already has Sixnet slots",
+	)
+	_check(
+		SIXNET_LEAGUE_SCRIPT.bootstrap_rating("Landavol", 5150) \
+			== SIXNET_LEAGUE_SCRIPT.bootstrap_rating("Landavol", 5150),
+		"team-rating bootstrap is deterministic for a fixed seed",
+	)
+
+	SIXNET_LEAGUE_SCRIPT.resolve_full_season(career)
+	var total_matches := 0
+	var wins_total := 0
+	var losses_total := 0
+	for slot_id in SIXNET_LEAGUE_SCRIPT.ALL_SLOT_IDS:
+		var record: Dictionary = career.sixnet_standings.get(slot_id, {})
+		total_matches += int(record.get("wins", 0)) + int(record.get("losses", 0))
+		wins_total += int(record.get("wins", 0))
+		losses_total += int(record.get("losses", 0))
+	_check(
+		total_matches == 24 and wins_total == 12 and losses_total == 12,
+		"a full season is 12 matches (6 per 4-team bracket x 2 brackets), each with exactly one winner",
+	)
+
+	## Power is smoothed toward a win-rate-implied target (25% of the way,
+	## never snapped straight to it) and stays within [10, 95], across many
+	## synthetic seasons. Verified by recomputing the exact formula from each
+	## season's actual standings, rather than a heuristic delta bound --
+	## `apply_power_update`'s own lerp can legitimately move a region's power
+	## by up to 0.25 * (90 - 10) = 20 in one season if it starts at the floor
+	## and sweeps a season, so any fixed "no more than N points" check would
+	## either be wrong or too loose to mean anything.
+	var formula_mismatch_found := false
+	var out_of_range_found := false
+	for _season in range(20):
+		SIXNET_LEAGUE_SCRIPT.resolve_full_season(career)
+		var expected := {}
+		for region_name in REGIONS_SCRIPT.CORE_REGIONS:
+			var record := SIXNET_LEAGUE_SCRIPT._combined_record(career, region_name)
+			var games := int(record.get("wins", 0)) + int(record.get("losses", 0))
+			var current := float(career.region_power.get(region_name, 50.0))
+			if games == 0:
+				expected[region_name] = current
+				continue
+			var win_rate := float(record.get("wins", 0)) / float(games)
+			var target := lerpf(30.0, 90.0, win_rate)
+			expected[region_name] = clampf(lerpf(current, target, 0.25), 10.0, 95.0)
+		SIXNET_LEAGUE_SCRIPT.apply_power_update(career)
+		for region_name in REGIONS_SCRIPT.CORE_REGIONS:
+			var power_after := float(career.region_power.get(region_name, 50.0))
+			if power_after < 10.0 - 0.001 or power_after > 95.0 + 0.001:
+				out_of_range_found = true
+			if not is_equal_approx(power_after, float(expected[region_name])):
+				formula_mismatch_found = true
+	_check(
+		not formula_mismatch_found and not out_of_range_found,
+		"region power update exactly matches the documented smoothing formula and stays within [10, 95]",
+	)
+
+	## Promotion/relegation is a pure occupant swap: always exactly 8 slots,
+	## always exactly the 6 core regions represented somewhere.
+	SIXNET_LEAGUE_SCRIPT.apply_promotion_relegation(career)
+	var post_swap_regions: Array = career.sixnet_slots.values()
+	var still_covers_every_region := true
+	for region_name in REGIONS_SCRIPT.CORE_REGIONS:
+		if not post_swap_regions.has(region_name):
+			still_covers_every_region = false
+	_check(
+		career.sixnet_slots.size() == 8 and still_covers_every_region,
+		"promotion/relegation swaps occupants without ever changing the fixed 8-slot invariant",
+	)
+
+	## Influence drift: a region with a strong neighbor and low power blends
+	## toward it; a region with low power and no strong neighbor intensifies
+	## its own specialty instead. Never both at once.
+	##
+	## Landavol (neighbors Bloc du Larg=90, Spëddigh=25): Bloc du Larg is 40
+	## above Landavol's own 50 -- past DOMINANCE_THRESHOLD -- so Landavol
+	## should blend toward it.
+	## Taktikã (neighbors Spëddigh=25, Xérvu=25): both neighbors sit only 5
+	## above Taktikã's own 20 -- no dominant neighbor -- while Taktikã's own
+	## power is below ISOLATION_THRESHOLD, so it should intensify instead.
+	var drift_career := CAREER_STATE_SCRIPT.new()
+	drift_career.career_name = "Drift Test Academy"
+	drift_career.region_power = {
+		"Landavol": 50.0, "Spëddigh": 25.0, "Pāwa Hitō": 25.0,
+		"Bloc du Larg": 90.0, "Xérvu": 25.0, "Taktikã": 20.0,
+	}
+	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(drift_career)
+	var landavol_overlay: Dictionary = drift_career.region_overlay.get("Landavol", {})
+	_check(
+		Array(landavol_overlay.get("specialty_add", [])).size() > 0
+			and not landavol_overlay.has("specialty_bonus_delta"),
+		"a region with a much stronger neighbor blends toward it rather than intensifying",
+	)
+	var taktika_overlay: Dictionary = drift_career.region_overlay.get("Taktikã", {})
+	_check(
+		float(taktika_overlay.get("specialty_bonus_delta", 0.0)) > 0.0
+			and Array(taktika_overlay.get("specialty_add", [])).is_empty(),
+		"an isolated region with no dominant neighbor intensifies its own specialty instead",
+	)
+
+	## Serialization: the four new fields survive a save/load round trip.
+	SIXNET_LEAGUE_SCRIPT.ensure_bootstrapped(drift_career)
+	var restored := CAREER_STATE_SCRIPT.from_dict(drift_career.to_dict())
+	_check(
+		restored.region_power == drift_career.region_power
+			and restored.sixnet_slots == drift_career.sixnet_slots
+			and restored.region_overlay == drift_career.region_overlay
+			and restored.sixnet_standings == drift_career.sixnet_standings
+			and restored.sixnet_season_start_week == drift_career.sixnet_season_start_week,
+		"Sixnet world-league state survives career serialization",
+	)
+
+	## Integration: the real season-boundary hook inside
+	## `CareerManager.advance_week()` actually fires once per year, not on
+	## every week, and never touches the player's own fixtures.
+	var integration_manager := CAREER_MANAGER_SCRIPT.new()
+	integration_manager.game_manager_override = get_root().get_node("GameManager")
+	var integration_error: String = integration_manager.create_career(
+		"__Sixnet Integration Test__", "Sixnet Integration FC", "Landavol", "Club", "Balanced"
+	)
+	_check(integration_error.is_empty(), "Sixnet integration test career is created successfully")
+	_check(
+		not integration_manager.career.sixnet_slots.is_empty(),
+		"career creation bootstraps Sixnet state immediately, not on first advance_week()",
+	)
+	## Isolate the season-boundary hook from fixture-gating.
+	integration_manager.career.fixtures = [] as Array[Resource]
+	var seasons_before := 0
+	var last_start_week := int(integration_manager.career.sixnet_season_start_week)
+	for _week in range(96):  ## two full 48-week years
+		integration_manager.advance_week()
+		var current_start_week := int(integration_manager.career.sixnet_season_start_week)
+		if current_start_week != last_start_week:
+			seasons_before += 1
+			last_start_week = current_start_week
+	_check(
+		seasons_before == 2,
+		"advancing 96 weeks through the real career flow resolves exactly two Sixnet seasons",
+	)
+	integration_manager.free()
 
 
 func _test_court_coordinates() -> void:
@@ -6018,6 +6205,44 @@ func _test_attribute_first_generation() -> void:
 			and ispayk_setting / ispayk_count > landavol_setting / landavol_count_3 + 15.0
 			and aace_glamour / aace_count > landavol_glamour / landavol_count_3 + 15.0,
 		"attribute generation: Ispayk leads on setting and A'ace on its glamour attributes, both over Landavol",
+	)
+	## 2d. The Sixnet influence-drift override seam: an empty overlay (the
+	## default every existing caller uses) must be byte-identical to omitting
+	## the parameter entirely, and a non-trivial overlay must actually move
+	## the numbers it targets.
+	var baseline_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Landavol", "Club", 90100
+	)
+	var explicit_empty_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Landavol", "Club", 90100, {}
+	)
+	var overlay_matches_baseline := baseline_roster.size() == explicit_empty_roster.size()
+	for index in range(baseline_roster.size()):
+		if baseline_roster[index].to_dict() != explicit_empty_roster[index].to_dict():
+			overlay_matches_baseline = false
+	_check(
+		overlay_matches_baseline,
+		"an empty influence-drift overlay produces output identical to omitting the parameter",
+	)
+	var drifted_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Landavol", "Club", 90100, {
+			"specialty_add": ["serve_power"],
+			"specialty_bonus_delta": 6.0,
+			"height_bias_delta": 5.0,
+		}
+	)
+	var baseline_serve_power := 0
+	var drifted_serve_power := 0
+	var baseline_height := 0.0
+	var drifted_height := 0.0
+	for index in range(baseline_roster.size()):
+		baseline_serve_power += baseline_roster[index].serve_power
+		drifted_serve_power += drifted_roster[index].serve_power
+		baseline_height += baseline_roster[index].height_cm
+		drifted_height += drifted_roster[index].height_cm
+	_check(
+		drifted_serve_power > baseline_serve_power and drifted_height > baseline_height,
+		"a non-trivial influence-drift overlay measurably shifts both specialty attributes and physique",
 	)
 	## 3. Development gap: young academy players have ability_score well below their potential.
 	var young_gap_found := false

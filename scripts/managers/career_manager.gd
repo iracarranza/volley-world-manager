@@ -7,6 +7,7 @@ const MatchFormatModel := preload("res://scripts/models/match_format.gd")
 const Generator := preload("res://scripts/systems/player_generator.gd")
 const Training := preload("res://scripts/systems/training_system.gd")
 const Calendar := preload("res://scripts/data/calendar_rules.gd")
+const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 
 signal career_changed
 signal career_loaded
@@ -60,6 +61,7 @@ func create_career(
 		return error
 	state.transfer_pool = Generator.generate_market(region, seed_value + 991)
 	state.fixtures = _starting_fixtures(region)
+	SixnetLeague.ensure_bootstrapped(state)
 	career = state
 	last_training_report = {}
 	save_career()
@@ -111,10 +113,15 @@ func advance_week() -> String:
 	if fixture != null and int(fixture.week) <= int(career.absolute_week) \
 			and not bool(fixture.completed):
 		return "Play the scheduled fixture before advancing the week."
+	SixnetLeague.ensure_bootstrapped(career)
 	last_training_report = Training.apply_week(
 		career.training_focus, _game_manager().players, _game_manager().team
 	)
+	var pre_year: int = Calendar.state_for_week(career.absolute_week).year
 	career.absolute_week += 1
+	var post_year: int = Calendar.state_for_week(career.absolute_week).year
+	if post_year != pre_year:
+		SixnetLeague.resolve_season_boundary(career)
 	for player in _game_manager().players:
 		player.fatigue = maxf(player.fatigue - 0.04, 0.0)
 	save_career()

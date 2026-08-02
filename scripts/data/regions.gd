@@ -26,6 +26,30 @@ const LEGACY_REGIONS := {
 	"South America": "Taktikã",
 }
 
+## The six regions eligible for Sixnet flagship slots. Ispayk and A'ace are
+## deliberately excluded from bracket allocation, regional power, and
+## influence drift -- per the lore, they compete *for* a flagship slot from
+## outside this pool, not as members of it. Anything iterating regions for
+## Sixnet-league purposes must use this list, not `names()` (which returns
+## all eight).
+const CORE_REGIONS: Array[String] = [
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
+]
+
+## Invented flavor geography for the influence-drift mechanic -- which core
+## regions are close enough to plausibly absorb (or resist) each other's
+## development traditions. Not tied to each region's real-world naming
+## culture (see `docs/world/STYLE_AND_SETTING.md`); this is a made-up world
+## map, symmetric by construction (every entry appears on both sides).
+const REGION_ADJACENCY := {
+	"Landavol": ["Bloc du Larg", "Spëddigh"],
+	"Spëddigh": ["Landavol", "Taktikã"],
+	"Pāwa Hitō": ["Xérvu"],
+	"Bloc du Larg": ["Landavol", "Xérvu"],
+	"Xérvu": ["Bloc du Larg", "Pāwa Hitō", "Taktikã"],
+	"Taktikã": ["Spëddigh", "Xérvu"],
+}
+
 
 static func names() -> Array[String]:
 	var result: Array[String] = []

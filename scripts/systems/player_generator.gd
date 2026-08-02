@@ -110,10 +110,21 @@ const ROLE_HEIGHT_SPREAD := {
 }
 
 
+## `overlay` is this region's Sixnet influence-drift shape for the current
+## save (see `career_state.gd`'s `region_overlay`, keyed by region name --
+## callers pass `region_overlay.get(region_name, {})`, not the whole
+## multi-region dict). Empty (the default) means "no drift yet" and produces
+## output byte-identical to before this parameter existed: every existing
+## caller passes 3 args and is unaffected. Recognized keys: `specialty_add`
+## (Array[String], extra attributes added to the region's own specialty
+## list), `specialty_bonus_delta` (float, added to the flat +8 specialty
+## bonus), `height_bias_delta`/`mass_bias_delta`/`wingspan_bias_delta`
+## (float, added to the region's physique bias).
 static func generate_roster(
 	region_name: String,
 	organization_type: String,
 	seed_value: int,
+	overlay: Dictionary = {},
 ) -> Array[VolleyballPlayer]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
@@ -133,10 +144,10 @@ static func generate_roster(
 		player.apply_role_physical_defaults()
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
-		_apply_body_variation(player, rng, canonical_region)
+		_apply_body_variation(player, rng, canonical_region, overlay)
 		player.stride_length_m = player.default_stride_length_m()
 		## Sets every attribute and derives `potential` from the ceilings it built.
-		_apply_attributes(player, canonical_region, rng, academy)
+		_apply_attributes(player, canonical_region, rng, academy, overlay)
 		Familiarity.initialize_player(player, rng)
 		AttributeProfiles.assign_serve_style(player)
 		result.append(player)
@@ -232,6 +243,7 @@ static func _apply_body_variation(
 	player: VolleyballPlayer,
 	rng: RandomNumberGenerator,
 	region_name: String,
+	overlay: Dictionary = {},
 ) -> void:
 	var height_spread := float(ROLE_HEIGHT_SPREAD.get(player.position_role, 7.0))
 	var height_delta := (
@@ -240,9 +252,12 @@ static func _apply_body_variation(
 	) * 0.5
 	var mass_delta := height_delta * 0.55 + rng.randf_range(-5.0, 5.0)
 	var span_delta := height_delta * 0.70 + rng.randf_range(-4.0, 5.0)
-	var height_bias := float(REGION_HEIGHT_BIAS.get(region_name, 0.0))
-	var mass_bias := float(REGION_MASS_BIAS.get(region_name, 0.0))
-	var wingspan_bias := float(REGION_WINGSPAN_BIAS.get(region_name, 0.0))
+	var height_bias := float(REGION_HEIGHT_BIAS.get(region_name, 0.0)) \
+		+ float(overlay.get("height_bias_delta", 0.0))
+	var mass_bias := float(REGION_MASS_BIAS.get(region_name, 0.0)) \
+		+ float(overlay.get("mass_bias_delta", 0.0))
+	var wingspan_bias := float(REGION_WINGSPAN_BIAS.get(region_name, 0.0)) \
+		+ float(overlay.get("wingspan_bias_delta", 0.0))
 	player.height_cm = clampf(player.height_cm + height_delta + height_bias, 150.0, 220.0)
 	player.mass_kg = clampf(player.mass_kg + mass_delta + mass_bias, 50.0, 130.0)
 	player.wingspan_cm = clampf(player.wingspan_cm + span_delta + wingspan_bias, 150.0, 235.0)
@@ -259,13 +274,14 @@ static func _tier_bonus(
 	primary_list: Array,
 	secondary_list: Array,
 	specialty_list: Array,
+	specialty_bonus: int = SPECIALTY_BONUS,
 ) -> int:
 	var bonus := TERTIARY_TIER_PENALTY
 	if property_name in primary_list:
 		bonus = PRIMARY_TIER_BONUS
 	elif property_name in secondary_list:
 		bonus = SECONDARY_TIER_BONUS
-	return bonus + (SPECIALTY_BONUS if property_name in specialty_list else 0)
+	return bonus + (specialty_bonus if property_name in specialty_list else 0)
 
 
 ## Builds this player's per-attribute ceilings and the current values that sit
@@ -288,12 +304,18 @@ static func _apply_attributes(
 	region_name: String,
 	rng: RandomNumberGenerator,
 	academy: bool,
+	overlay: Dictionary = {},
 ) -> void:
 	var primary_list: Array = Array(
 		VolleyballPlayer.POSITION_WEIGHTS.get(player.position_role, [])
 	)
 	var secondary_list: Array = Array(ROLE_SECONDARY.get(player.position_role, []))
-	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, []))
+	## `specialty_add` extends this region's own specialty list rather than
+	## replacing it -- influence drift broadens what a region is good at, it
+	## never takes away what it already had.
+	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, [])) \
+		+ Array(overlay.get("specialty_add", []))
+	var specialty_bonus := SPECIALTY_BONUS + int(overlay.get("specialty_bonus_delta", 0.0))
 	var talent := float(_talent_level(rng, academy))
 
 	var ceilings := {}
@@ -301,7 +323,7 @@ static func _apply_attributes(
 		ceilings[property_name] = clampf(
 			talent
 			+ float(_tier_bonus(
-				property_name, primary_list, secondary_list, specialty_list
+				property_name, primary_list, secondary_list, specialty_list, specialty_bonus
 			))
 			+ _innate_deviation(rng),
 			1.0, 99.0,

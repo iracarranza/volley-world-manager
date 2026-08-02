@@ -18,6 +18,21 @@ const Regions := preload("res://scripts/data/regions.gd")
 @export var active_fixture_id: int = -1
 @export var match_format: Resource
 
+## Sixnet world-league state. Populated once at career creation
+## (`SixnetLeague.ensure_bootstrapped()`) and updated at each season boundary
+## inside `CareerManager.advance_week()`. Saves from before this feature
+## existed load these as empty/zero, which `ensure_bootstrapped()` treats as
+## "not yet set up" and lazily backfills -- no migration step needed.
+@export var region_power: Dictionary = {}  ## region_name -> float (10-95)
+@export var sixnet_slots: Dictionary = {}  ## "upper_1".."lower_4" -> region_name
+## Per-region additive generation deltas from influence drift, layered on top
+## of `PlayerGenerator`'s static `REGION_SPECIALTY`/`REGION_*_BIAS` consts,
+## never replacing them. A region absent here (or present with an empty
+## dict) generates identically to before this feature existed.
+@export var region_overlay: Dictionary = {}
+@export var sixnet_standings: Dictionary = {}  ## slot_id -> {wins, losses, sets_won, sets_lost}
+@export var sixnet_season_start_week: int = 0
+
 
 func to_dict() -> Dictionary:
 	var fixture_data: Array[Dictionary] = []
@@ -32,7 +47,12 @@ func to_dict() -> Dictionary:
 		"reputation": reputation, "finances": finances,
 		"training_focus": training_focus, "fixtures": fixture_data,
 		"transfer_pool": market_data, "active_fixture_id": active_fixture_id,
-		"match_format": match_format.to_dict() if match_format != null else {}}
+		"match_format": match_format.to_dict() if match_format != null else {},
+		"region_power": region_power.duplicate(true),
+		"sixnet_slots": sixnet_slots.duplicate(true),
+		"region_overlay": region_overlay.duplicate(true),
+		"sixnet_standings": sixnet_standings.duplicate(true),
+		"sixnet_season_start_week": sixnet_season_start_week}
 
 
 static func from_dict(data: Dictionary) -> VolleyballCareerState:
@@ -53,4 +73,9 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 		state.transfer_pool.append(VolleyballPlayer.from_dict(player_data))
 	state.active_fixture_id = int(data.get("active_fixture_id", -1))
 	state.match_format = VolleyballMatchFormat.from_dict(data.get("match_format", {}))
+	state.region_power = Dictionary(data.get("region_power", {})).duplicate(true)
+	state.sixnet_slots = Dictionary(data.get("sixnet_slots", {})).duplicate(true)
+	state.region_overlay = Dictionary(data.get("region_overlay", {})).duplicate(true)
+	state.sixnet_standings = Dictionary(data.get("sixnet_standings", {})).duplicate(true)
+	state.sixnet_season_start_week = maxi(int(data.get("sixnet_season_start_week", 0)), 0)
 	return state
