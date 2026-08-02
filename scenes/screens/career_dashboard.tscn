@@ -61,75 +61,37 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Title Screen"
 
-[node name="Body" type="HBoxContainer" parent="Margin/Root"]
+[node name="Body" type="VBoxContainer" parent="Margin/Root"]
 layout_mode = 2
 size_flags_vertical = 3
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
-[node name="Navigation" type="PanelContainer" parent="Margin/Root/Body"]
-custom_minimum_size = Vector2(190, 0)
+[node name="NavStrip" type="PanelContainer" parent="Margin/Root/Body"]
 layout_mode = 2
 
-[node name="NavMargin" type="MarginContainer" parent="Margin/Root/Body/Navigation"]
+[node name="NavStripMargin" type="MarginContainer" parent="Margin/Root/Body/NavStrip"]
 layout_mode = 2
 theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 10
+theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
+theme_override_constants/margin_bottom = 6
 
-[node name="Nav" type="VBoxContainer" parent="Margin/Root/Body/Navigation/NavMargin"]
+[node name="NavStripRow" type="HBoxContainer" parent="Margin/Root/Body/NavStrip/NavStripMargin"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HomeNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
+[node name="CurrentSectionButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Home  [Space]"
-metadata/section = "Home"
-
-[node name="RosterNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Roster  [R]"
-metadata/section = "Roster"
-
-[node name="TeamNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Team / Training  [T]"
-metadata/section = "Team"
-
-[node name="TransfersNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Recruitment  [E]"
-metadata/section = "Transfers"
-
-[node name="CompetitionNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Competition  [V]"
-metadata/section = "Competition"
-
-[node name="SixnetNav" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Sixnet  [X]"
-metadata/section = "Sixnet"
-
-[node name="Spacer" type="Control" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="AdvanceWeekButton" type="Button" parent="Margin/Root/Body/Navigation/NavMargin/Nav"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Advance Week  [Space]"
+size_flags_horizontal = 3
+tooltip_text = "Open the navigation menu. Tab also opens and closes it."
+text = "Home   ▾   [Tab]"
+alignment = 0
 
 [node name="ContentPanel" type="PanelContainer" parent="Margin/Root/Body"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 3
 
 [node name="ContentMargin" type="MarginContainer" parent="Margin/Root/Body/ContentPanel"]
 layout_mode = 2
@@ -159,7 +121,7 @@ theme_override_constants/separation = 10
 
 [node name="HomeCards" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
 layout_mode = 2
-columns = 2
+columns = 5
 
 [node name="RosterCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
@@ -196,12 +158,34 @@ title_text = "Sixnet"
 summary_text = "World league standings and regional power."
 icon_text = "X"
 
-[node name="HomeSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+[node name="HomeBody" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="HomeSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="NewsColumn" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="NewsTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody/NewsColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "News"
+
+[node name="NewsPanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody/NewsColumn"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 bbcode_enabled = true
-fit_content = true
+scroll_active = true
 
 [node name="Roster" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
 layout_mode = 2
@@ -245,6 +229,36 @@ size_flags_vertical = 3
 mouse_filter = 1
 script = ExtResource("3_wheel")
 
+[node name="RosterExtra" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Placeholder3D" type="PanelContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra"]
+custom_minimum_size = Vector2(260, 220)
+layout_mode = 2
+
+[node name="Placeholder3DLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra/Placeholder3D"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45, 0.52, 0.62, 1)
+theme_override_font_sizes/font_size = 13
+text = "3D player visualizer
+(reserved)"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="BioTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Biography"
+
+[node name="BioPanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+
 [node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
@@ -252,37 +266,10 @@ text = "Complete Attribute Profile"
 
 [node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 185)
+custom_minimum_size = Vector2(0, 260)
 layout_mode = 2
 bbcode_enabled = true
 scroll_active = true
-
-[node name="PositionTraining" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
-layout_mode = 2
-
-[node name="PositionTrainingLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/PositionTraining"]
-layout_mode = 2
-text = "Cross-train position"
-
-[node name="PositionTrainingOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/PositionTraining"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="AssignPositionTrainingButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/PositionTraining"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Assign"
-
-[node name="UsePositionButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/PositionTraining"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Use at Position"
-
-[node name="PositionTrainingSummary" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
-unique_name_in_owner = true
-layout_mode = 2
-autowrap_mode = 2
 
 [node name="TestingRosterControls" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 layout_mode = 2
@@ -318,31 +305,155 @@ text = "Lineup complete."
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TeamSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+[node name="TeamSubTabs" type="TabContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Overview" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="OverviewRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="TeamSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+
+[node name="TeamWheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow"]
+custom_minimum_size = Vector2(400, 0)
+layout_mode = 2
+
+[node name="TeamWheelCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/TeamWheelPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Starting lineup average. Differences between axes are amplified so real strengths and weaknesses read clearly; a balanced squad still shows as balanced."
+autowrap_mode = 2
+
+[node name="TeamAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/TeamWheelPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(400, 285)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 1
+script = ExtResource("3_wheel")
+
+[node name="ClubColumn" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow"]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ClubTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/ClubColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Club"
+
+[node name="IdentityFinancePanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/ClubColumn"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 bbcode_enabled = true
 
-[node name="TrainingTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+[node name="StaffTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/ClubColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Staff"
+
+[node name="StaffPlaceholder" type="PanelContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/ClubColumn"]
+custom_minimum_size = Vector2(260, 90)
+layout_mode = 2
+
+[node name="StaffPlaceholderLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/Overview/OverviewRow/ClubColumn/StaffPlaceholder"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45, 0.52, 0.62, 1)
+theme_override_font_sizes/font_size = 13
+text = "Coaching staff
+(reserved)"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="IndividualTraining" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs"]
+layout_mode = 2
+split_offset = 330
+
+[node name="IndividualTrainingRosterList" type="ItemList" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="IndividualTrainingSide" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="IndividualTrainingTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Individual Position Training"
+
+[node name="PositionTraining" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide"]
+layout_mode = 2
+
+[node name="PositionTrainingLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide/PositionTraining"]
+layout_mode = 2
+text = "Cross-train position"
+
+[node name="PositionTrainingOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide/PositionTraining"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AssignPositionTrainingButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide/PositionTraining"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Assign"
+
+[node name="UsePositionButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide/PositionTraining"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Use at Position"
+
+[node name="PositionTrainingSummary" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/IndividualTraining/IndividualTrainingSide"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+
+[node name="TeamTraining" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TrainingTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/TeamTraining"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Weekly Training Focus"
 
-[node name="TrainingOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+[node name="TrainingOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/TeamTraining"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="TrainingDescription" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+[node name="TrainingDescription" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/TeamTraining"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 70)
 layout_mode = 2
 autowrap_mode = 2
 
-[node name="ApplyTrainingButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team"]
+[node name="ApplyTrainingButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/TeamTraining"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Save Weekly Training Focus"
+
+[node name="TeamTrainingSpacer" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Team/TeamSubTabs/TeamTraining"]
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="Transfers" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
 layout_mode = 2
@@ -442,3 +553,93 @@ scroll_active = true
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
+
+[node name="NavDropdown" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ClickCatcher" type="Control" parent="NavDropdown"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DropdownPanel" type="PanelContainer" parent="NavDropdown"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 380)
+layout_mode = 0
+offset_right = 240.0
+offset_bottom = 380.0
+
+[node name="NavMargin" type="MarginContainer" parent="NavDropdown/DropdownPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Nav" type="VBoxContainer" parent="NavDropdown/DropdownPanel/NavMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HomeNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "Home  [Space]"
+metadata/section = "Home"
+
+[node name="RosterNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "Roster  [R]"
+metadata/section = "Roster"
+
+[node name="TeamNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "Team / Training  [T]"
+metadata/section = "Team"
+
+[node name="TransfersNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "Recruitment  [E]"
+metadata/section = "Transfers"
+
+[node name="CompetitionNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "Competition  [V]"
+metadata/section = "Competition"
+
+[node name="SixnetNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+text = "Sixnet  [X]"
+metadata/section = "Sixnet"
+
+[node name="Spacer" type="Control" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AdvanceWeekButton" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Advance Week  [Space]"

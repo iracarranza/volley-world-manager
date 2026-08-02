@@ -183,6 +183,7 @@ func _initialize() -> void:
 	_test_career_calendar_generation_training_and_saves()
 	_test_sixnet_league()
 	_test_fixture_simulation_and_seeding()
+	_test_team_wheel_amplification()
 	_test_world_population()
 	_test_world_aging()
 	if failures == 0:
@@ -1032,6 +1033,71 @@ func _test_sixnet_league() -> void:
 		"advancing 96 weeks through the real career flow resolves exactly two Sixnet seasons",
 	)
 	integration_manager.free()
+
+
+## The Team tab's aggregated wheel exaggerates how far each axis sits from the
+## lineup's own mean so a squad's real identity is legible at a glance. The
+## guarantee that matters is the negative one: a squad that genuinely is an
+## all-rounder must still draw as an all-rounder. A min/max rescale to the full
+## ring would fail that -- it manufactures a maximum and a minimum out of noise.
+func _test_team_wheel_amplification() -> void:
+	var flat := {"Attacking": 60.0, "Defensive": 60.0, "Setting / Control": 60.0,
+		"Physical": 60.0, "Serving": 60.0, "Mental / Tactical": 60.0}
+	var flat_result: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.amplify_team_profile(flat)
+	var flat_spread := 0
+	for axis_name in flat:
+		flat_spread = maxi(flat_spread, absi(int(flat_result[axis_name]) - 60))
+	_check(
+		flat_spread == 0,
+		"a perfectly balanced lineup stays perfectly balanced -- no spikes are invented",
+	)
+
+	## A near-balanced squad must stay near-balanced: 4 points of real spread
+	## may not become a full-ring sweep the way a min/max rescale would make it.
+	var nearly_flat := {"Attacking": 62.0, "Defensive": 60.0, "Setting / Control": 61.0,
+		"Physical": 58.0, "Serving": 59.0, "Mental / Tactical": 60.0}
+	var nearly_flat_result: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.amplify_team_profile(nearly_flat)
+	var nearly_flat_low := 100
+	var nearly_flat_high := 0
+	for axis_name in nearly_flat:
+		nearly_flat_low = mini(nearly_flat_low, int(nearly_flat_result[axis_name]))
+		nearly_flat_high = maxi(nearly_flat_high, int(nearly_flat_result[axis_name]))
+	_check(
+		nearly_flat_high - nearly_flat_low <= 10,
+		"a near-balanced lineup stays visually near-balanced rather than sweeping the ring",
+	)
+
+	## A genuinely specialized squad must read as specialized: the gap between
+	## its best and worst axis has to grow, and ordering must be preserved.
+	var spiky := {"Attacking": 80.0, "Defensive": 45.0, "Setting / Control": 62.0,
+		"Physical": 70.0, "Serving": 50.0, "Mental / Tactical": 58.0}
+	var spiky_result: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.amplify_team_profile(spiky)
+	_check(
+		int(spiky_result["Attacking"]) - int(spiky_result["Defensive"]) > 80 - 45,
+		"a specialized lineup's strongest and weakest axes are pushed further apart",
+	)
+	var order_preserved := true
+	for axis_name in spiky:
+		for other_name in spiky:
+			if float(spiky[axis_name]) > float(spiky[other_name]) \
+					and int(spiky_result[axis_name]) < int(spiky_result[other_name]):
+				order_preserved = false
+	_check(order_preserved, "amplification never reorders which axes are a lineup's strengths")
+
+	## Extreme inputs must stay on the wheel rather than overshooting its ring.
+	var extreme := {"Attacking": 99.0, "Defensive": 2.0, "Setting / Control": 97.0,
+		"Physical": 3.0, "Serving": 98.0, "Mental / Tactical": 1.0}
+	var extreme_result: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.amplify_team_profile(extreme)
+	var in_range := true
+	for axis_name in extreme_result:
+		if int(extreme_result[axis_name]) < 1 or int(extreme_result[axis_name]) > 100:
+			in_range = false
+	_check(in_range, "amplified axes stay within the wheel's 1-100 range at extreme spreads")
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.amplify_team_profile({}).is_empty()
+			and extreme_result.has("Overall"),
+		"an empty lineup profile amplifies to nothing, and a real one regains its Overall axis",
+	)
 
 
 ## `CareerManager.simulate_fixture()` is the "instant result" path added

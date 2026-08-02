@@ -60,6 +60,39 @@ const CATEGORY_ATTRIBUTES := {
 }
 
 
+## How far each axis of an aggregated team profile is pushed away from that
+## profile's own mean. A plain average of six starters clusters every axis into
+## a narrow band, so a squad with a genuine attacking identity draws almost the
+## same hexagon as a balanced one. Multiplying each axis's *deviation from the
+## team's own mean* stretches real differences into something readable while
+## leaving a genuinely all-round squad round: a lineup whose axes already sit
+## close together has small deviations, and a small deviation times 1.6 is
+## still small. This exaggerates spread that exists; it never invents spread
+## that doesn't -- which a min/max rescale to the full ring would.
+const TEAM_WHEEL_AMPLIFICATION: float = 1.6
+
+
+## Shapes a team-level profile -- axis name to lineup-average score -- for the
+## wheel, then rebuilds "Overall" from the amplified axes using the same
+## `category_score()` weighting `summary_profile()` applies one level down.
+## Overall is recomputed rather than averaged across the starters' own Overall
+## figures: each of those already folds in a standout-strength bonus and
+## weak-spot penalty, so averaging them double-counts both.
+static func amplify_team_profile(averages: Dictionary) -> Dictionary:
+	if averages.is_empty():
+		return {}
+	var mean := 0.0
+	for axis_name in averages:
+		mean += float(averages[axis_name])
+	mean /= float(averages.size())
+	var amplified := {}
+	for axis_name in averages:
+		amplified[axis_name] = clampi(roundi(
+			mean + (float(averages[axis_name]) - mean) * TEAM_WHEEL_AMPLIFICATION), 1, 100)
+	amplified["Overall"] = category_score(amplified)
+	return amplified
+
+
 static func grade(score: float) -> String:
 	if score >= 85.0:
 		return "S"

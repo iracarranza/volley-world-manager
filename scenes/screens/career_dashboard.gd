@@ -62,18 +62,28 @@ const WHEEL_TOOLTIPS := {
 @onready var date_label: Label = %DateLabel
 @onready var section_title: Label = %SectionTitle
 @onready var sections: TabContainer = %Sections
+@onready var current_section_button: Button = %CurrentSectionButton
+@onready var nav_dropdown: Control = %NavDropdown
+@onready var dropdown_panel: PanelContainer = %DropdownPanel
+@onready var click_catcher: Control = %ClickCatcher
 @onready var home_summary: RichTextLabel = %HomeSummary
+@onready var news_panel: RichTextLabel = %NewsPanel
 @onready var roster_list: ItemList = %RosterList
 @onready var roster_detail: RichTextLabel = %RosterDetail
+@onready var bio_panel: RichTextLabel = %BioPanel
 @onready var raw_attributes: RichTextLabel = %RawAttributes
 @onready var player_attribute_wheel: Control = %PlayerAttributeWheel
 @onready var transfer_player_attribute_wheel: Control = %TransferPlayerAttributeWheel
+@onready var team_attribute_wheel: Control = %TeamAttributeWheel
+@onready var team_wheel_caption: Label = %TeamWheelCaption
 @onready var wheel_profile_option: OptionButton = %WheelProfileOption
+@onready var individual_training_roster_list: ItemList = %IndividualTrainingRosterList
 @onready var position_training_option: OptionButton = %PositionTrainingOption
 @onready var position_training_summary: Label = %PositionTrainingSummary
 @onready var lineup_status_option: OptionButton = %LineupStatusOption
 @onready var roster_status_label: Label = %RosterStatusLabel
 @onready var team_summary: RichTextLabel = %TeamSummary
+@onready var identity_finance_panel: RichTextLabel = %IdentityFinancePanel
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
 @onready var transfer_list: ItemList = %TransferList
@@ -89,17 +99,32 @@ const WHEEL_TOOLTIPS := {
 var selected_transfer_id: int = -1
 var selected_fixture_id: int = -1
 var selected_roster_id: int = -1
+## The individual-training tab carries its own selection rather than sharing
+## `selected_roster_id`: it is a separate list on a separate tab, and letting
+## one drive the other means clicking a name on Roster silently retargets the
+## Assign button somewhere the player can't see.
+var selected_individual_training_id: int = -1
+
+var _nav_buttons: Array[Button] = []
+var _nav_dropdown_open: bool = false
+var _nav_tween: Tween
 
 
 func _ready() -> void:
 	for button in [%HomeNav, %RosterNav, %TeamNav, %TransfersNav, %CompetitionNav, %SixnetNav]:
 		button.pressed.connect(_navigate.bind(button.get_meta("section")))
+		_nav_buttons.append(button)
+	current_section_button.pressed.connect(_toggle_nav_dropdown)
+	click_catcher.gui_input.connect(_click_catcher_input)
+	nav_dropdown.visible = false
+	dropdown_panel.modulate.a = 0.0
 	%SaveButton.pressed.connect(_save)
 	%TitleButton.pressed.connect(func() -> void: title_requested.emit())
 	%AdvanceWeekButton.pressed.connect(_advance_week)
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
 	training_option.item_selected.connect(_training_selected)
 	roster_list.item_selected.connect(_roster_selected)
+	individual_training_roster_list.item_selected.connect(_individual_training_selected)
 	wheel_profile_option.item_selected.connect(_wheel_profile_selected)
 	%AssignPositionTrainingButton.pressed.connect(_assign_position_training)
 	%UsePositionButton.pressed.connect(_use_trained_position)
@@ -131,6 +156,13 @@ func _input(event: InputEvent) -> void:
 		return
 	var key_event := event as InputEventKey
 	match key_event.keycode:
+		KEY_TAB:
+			## Shift+Tab keeps Godot's native reverse focus traversal -- keycode
+			## alone can't tell the two apart, so the modifier is checked here
+			## rather than claiming every Tab-shaped event.
+			if key_event.shift_pressed:
+				return
+			_toggle_nav_dropdown()
 		KEY_R:
 			_navigate("Roster")
 		KEY_T:
@@ -165,9 +197,65 @@ func refresh() -> void:
 	_refresh_sixnet()
 
 
+## The navigation menu lives in a floating overlay rather than a permanent
+## 190px column, which is where the content area's extra width came from. It
+## is parented directly to this Control (not to any Container) on purpose: a
+## Control inside a Container has its position rewritten on every layout pass,
+## which would fight the tween below and snap the panel back mid-slide.
+func _toggle_nav_dropdown() -> void:
+	if _nav_dropdown_open:
+		_close_nav_dropdown()
+	else:
+		_open_nav_dropdown()
+
+
+func _open_nav_dropdown() -> void:
+	if _nav_dropdown_open:
+		return
+	_nav_dropdown_open = true
+	var origin := current_section_button.global_position \
+		+ Vector2(0.0, current_section_button.size.y + 4.0)
+	nav_dropdown.visible = true
+	## The catcher only swallows clicks while the menu is actually open,
+	## otherwise it would sit invisibly over the whole dashboard eating every
+	## button press underneath it.
+	click_catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	dropdown_panel.position = origin - Vector2(0.0, 12.0)
+	dropdown_panel.modulate.a = 0.0
+	if _nav_tween != null:
+		_nav_tween.kill()
+	_nav_tween = create_tween().set_parallel(true) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_nav_tween.tween_property(dropdown_panel, "position", origin, 0.18)
+	_nav_tween.tween_property(dropdown_panel, "modulate:a", 1.0, 0.18)
+
+
+func _close_nav_dropdown() -> void:
+	if not _nav_dropdown_open:
+		return
+	_nav_dropdown_open = false
+	click_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _nav_tween != null:
+		_nav_tween.kill()
+	_nav_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_nav_tween.tween_property(dropdown_panel, "modulate:a", 0.0, 0.12)
+	_nav_tween.tween_callback(func() -> void: nav_dropdown.visible = false)
+
+
+func _click_catcher_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_close_nav_dropdown()
+
+
 func _navigate(section_name: String) -> void:
 	var names := ["Home", "Roster", "Team", "Transfers", "Competition", "Sixnet"]
 	sections.current_tab = maxi(names.find(section_name), 0)
+	current_section_button.text = "%s   ▾   [Tab]" % section_name
+	## Every nav button and every keyboard shortcut routes through here, so
+	## highlighting and dismissal both only need saying once.
+	for button in _nav_buttons:
+		button.button_pressed = str(button.get_meta("section")) == section_name
+	_close_nav_dropdown()
 	section_title.text = section_name
 
 
@@ -197,6 +285,32 @@ func _refresh_home() -> void:
 		if not CareerManager.career.sixnet_champion_region.is_empty()
 		else "%s tops regional power" % _sixnet_top_region()
 	)
+	_refresh_news()
+
+
+## The panel flavor events will eventually feed. Until they exist it carries
+## results that are already real -- completed fixtures and the reigning Sixnet
+## champion -- rather than sitting empty, so the layout is exercised by live
+## data and flavor events later become extra entries in the same feed instead
+## of the thing that makes it work at all.
+func _refresh_news() -> void:
+	var entries: Array[String] = []
+	if not str(CareerManager.career.sixnet_champion_region).is_empty():
+		entries.append("[b]Sixnet Championship[/b]\n%s are crowned champions of the Sixnet."
+			% CareerManager.career.sixnet_champion_region)
+	var completed: Array[Resource] = []
+	for fixture in CareerManager.career.fixtures:
+		if bool(fixture.completed):
+			completed.append(fixture)
+	completed.sort_custom(func(a: Resource, b: Resource) -> bool: return int(a.week) > int(b.week))
+	for fixture in completed.slice(0, 8):
+		var won := int(fixture.home_sets) > int(fixture.opponent_sets)
+		entries.append("[b]Week %d · %s[/b]\n[color=%s]%s[/color] %s vs %s" % [
+			int(fixture.week), fixture.competition_name,
+			"#7fd18a" if won else "#e0785c", "WIN" if won else "LOSS",
+			fixture.result_text(), fixture.opponent_name])
+	news_panel.text = "\n\n".join(entries) if not entries.is_empty() \
+		else "[color=#8294ad]No news yet. Match results and world events will appear here as the season plays out.[/color]"
 
 
 ## Live lineup completeness, shown where the edit happens rather than only
@@ -216,20 +330,27 @@ func _refresh_roster_status() -> void:
 
 func _refresh_roster() -> void:
 	_refresh_roster_status()
-	roster_list.clear()
+	_populate_roster_list(roster_list)
+	if roster_list.item_count > 0:
+		roster_list.select(0)
+		_roster_selected(0)
+
+
+## Shared by the Roster tab and the individual-training tab, which show the
+## same squad with the same summary line. One writer means the two lists can't
+## drift apart as the line changes.
+func _populate_roster_list(list: ItemList) -> void:
+	list.clear()
 	for player_id in GameManager.team.player_ids:
 		var player := GameManager.player_by_id(player_id)
 		if player == null:
 			continue
 		var marker := " · C" if player.id == GameManager.team.captain_id else ""
-		roster_list.add_item("%s  %s%s\nAbility %s · Potential %s" % [
+		list.add_item("%s  %s%s\nAbility %s · Potential %s" % [
 			player.position_code, player.display_name, marker,
 			AttributeProfiles.grade(float(player.current_ability_score())),
 			AttributeProfiles.grade(float(player.potential))])
-		roster_list.set_item_metadata(roster_list.item_count - 1, player.id)
-	if roster_list.item_count > 0:
-		roster_list.select(0)
-		_roster_selected(0)
+		list.set_item_metadata(list.item_count - 1, player.id)
 
 
 func _roster_selected(index: int) -> void:
@@ -252,9 +373,37 @@ func _roster_selected(index: int) -> void:
 		AttributeProfiles.grade(float(player.active_serve_style_score())),
 	]
 	_refresh_player_wheel(player)
-	_refresh_position_training(player)
+	_refresh_bio(player)
 	lineup_status_option.select(0 if player.id in GameManager.team.starting_player_ids else 1)
 	raw_attributes.text = _raw_attribute_text(player)
+
+
+## `home_region` and `club_region` have been on the player model since the
+## world population landed but were never shown anywhere, so a player raised in
+## Ispayk and bought by A'ace read as an A'ace player with no trace of where
+## they came from. `traits` was likewise stored and never surfaced.
+func _refresh_bio(player: VolleyballPlayer) -> void:
+	var raised := str(player.home_region)
+	var plays := str(player.club_region)
+	var lines: Array[String] = []
+	lines.append("[b]Raised[/b]  %s" % (raised if not raised.is_empty() else "Unrecorded"))
+	if not plays.is_empty() and plays != raised:
+		lines.append("[b]Plays in[/b]  %s" % plays)
+	lines.append("[b]Age[/b]  %d · %d pro seasons" % [player.age, player.professional_experience])
+	lines.append("[b]Hand[/b]  %s-handed" % player.dominant_hand)
+	lines.append("")
+	lines.append("[b]Traits[/b]\n%s" % ("\n".join(player.traits) if not player.traits.is_empty()
+		else "[color=#8294ad]None recorded[/color]"))
+	bio_panel.text = "\n".join(lines)
+
+
+func _individual_training_selected(index: int) -> void:
+	var player := GameManager.player_by_id(
+		int(individual_training_roster_list.get_item_metadata(index)))
+	if player == null:
+		return
+	selected_individual_training_id = player.id
+	_refresh_position_training(player)
 
 
 func _refresh_position_training(player: VolleyballPlayer) -> void:
@@ -265,7 +414,7 @@ func _refresh_position_training(player: VolleyballPlayer) -> void:
 
 
 func _position_training_preview(_index: int) -> void:
-	var player := GameManager.player_by_id(selected_roster_id)
+	var player := GameManager.player_by_id(selected_individual_training_id)
 	if player == null: return
 	var target := position_training_option.get_item_text(position_training_option.selected)
 	if target == "None":
@@ -279,12 +428,12 @@ func _position_training_preview(_index: int) -> void:
 
 func _assign_position_training() -> void:
 	var target := position_training_option.get_item_text(position_training_option.selected)
-	var error: String = GameManager.set_position_training(selected_roster_id, target)
+	var error: String = GameManager.set_position_training(selected_individual_training_id, target)
 	_set_status(error if not error.is_empty() else "Position training assignment saved.", not error.is_empty())
 
 func _use_trained_position() -> void:
 	var target := position_training_option.get_item_text(position_training_option.selected)
-	var error: String = GameManager.assign_player_position(selected_roster_id, target)
+	var error: String = GameManager.assign_player_position(selected_individual_training_id, target)
 	_set_status(error if not error.is_empty() else "Roster position updated; rotation sheets remain separate.", not error.is_empty())
 	refresh()
 
@@ -361,10 +510,58 @@ func _refresh_team() -> void:
 		_player_name(GameManager.team.captain_id),
 		_player_name(GameManager.team.libero_ids[0]) if not GameManager.team.libero_ids.is_empty() else "None",
 		_depth_chart_text()]
+	identity_finance_panel.text = "[b]Identity[/b]\n%s\n\n[b]Reputation[/b]\n%d/100\n\n[b]Funds[/b]\n$%d\n\n[b]Region[/b]\n%s" % [
+		CareerManager.career.identity, CareerManager.career.reputation,
+		CareerManager.career.finances, CareerManager.career.region]
+	_refresh_team_wheel()
+	_populate_roster_list(individual_training_roster_list)
+	if individual_training_roster_list.item_count > 0:
+		var target_index := 0
+		for index in range(individual_training_roster_list.item_count):
+			if int(individual_training_roster_list.get_item_metadata(index)) \
+					== selected_individual_training_id:
+				target_index = index
+		individual_training_roster_list.select(target_index)
+		_individual_training_selected(target_index)
 	for index in range(training_option.item_count):
 		if training_option.get_item_text(index) == CareerManager.career.training_focus:
 			training_option.select(index)
 	_training_selected(training_option.selected)
+
+
+## The starting six as one profile. Each axis is the lineup's mean category
+## score, then pushed away from the lineup's own overall mean by
+## `TEAM_WHEEL_AMPLIFICATION` so a real identity is visible at a glance.
+##
+## "Overall" is rebuilt from the six amplified categories via the same
+## `category_score()` weighting `summary_profile()` uses one level down, rather
+## than averaging each player's already-derived Overall -- averaging an
+## aggregate of an aggregate double-counts the standout/weak-spot adjustment
+## baked into every player's own figure.
+func _refresh_team_wheel() -> void:
+	var starters: Array[VolleyballPlayer] = []
+	for player_id in GameManager.team.starting_player_ids:
+		var player := GameManager.player_by_id(int(player_id))
+		if player != null:
+			starters.append(player)
+	if starters.is_empty():
+		team_attribute_wheel.visible = false
+		team_wheel_caption.text = "No starting lineup set. Assign starters on the Roster tab to see the squad's aggregate profile."
+		return
+	team_attribute_wheel.visible = true
+	team_wheel_caption.text = "Starting lineup average across %d players. Differences between axes are amplified so real strengths and weaknesses read clearly; a balanced squad still shows as balanced." % starters.size()
+
+	var totals := {}
+	for player in starters:
+		var profile := AttributeProfiles.summary_profile(player)
+		for axis_name in profile:
+			if str(axis_name) == "Overall":
+				continue
+			totals[axis_name] = float(totals.get(axis_name, 0.0)) + float(profile[axis_name])
+	for axis_name in totals:
+		totals[axis_name] = float(totals[axis_name]) / float(starters.size())
+	team_attribute_wheel.set_profile(
+		AttributeProfiles.amplify_team_profile(totals), AttributeProfiles.PROFILE_TOOLTIPS, true)
 
 
 func _training_selected(index: int) -> void:
@@ -523,6 +720,9 @@ func _sixnet_top_region() -> String:
 
 
 func _advance_week() -> void:
+	## Advance Week sits inside the dropdown but doesn't route through
+	## `_navigate()`, so it dismisses the menu itself.
+	_close_nav_dropdown()
 	var error := CareerManager.advance_week()
 	_set_status(error if not error.is_empty() else "Week advanced and training applied.", not error.is_empty())
 
