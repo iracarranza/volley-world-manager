@@ -186,6 +186,8 @@ func _initialize() -> void:
 	_test_sixnet_league()
 	_test_fixture_simulation_and_seeding()
 	_test_team_wheel_amplification()
+	_test_fatigue_recovers_between_fixtures()
+	_test_errant_attacks_land_outside_the_court()
 	_test_world_population()
 	_test_world_aging()
 	if failures == 0:
@@ -1042,6 +1044,134 @@ func _test_sixnet_league() -> void:
 ## guarantee that matters is the negative one: a squad that genuinely is an
 ## all-rounder must still draw as an all-rounder. A min/max rescale to the full
 ## ring would fail that -- it manufactures a maximum and a minimum out of noise.
+## Fatigue used to have no working way down. A match costs an on-court player
+## roughly 0.60, weekly recovery returned 0.04, and the default Team Practice
+## focus charged 0.05 on top -- so a week of "rest" left a squad *more* tired
+## than it started, and by the second fixture starters were near exhaustion.
+## Since `_rating()` applies a fatigue penalty at every stage of a swing, the
+## compounded loss dragged the average attack under the error threshold and
+## roughly half of all attacks became errors. The invariant that prevents this
+## returning is simple: no training focus may out-pace recovery.
+func _test_fatigue_recovers_between_fixtures() -> void:
+	var recovery: float = CAREER_MANAGER_SCRIPT.WEEKLY_FATIGUE_RECOVERY
+	var worst_focus := ""
+	var worst_cost := -1.0
+	for activity_name in TRAINING_SYSTEM_SCRIPT.activity_names():
+		var cost := float(TRAINING_SYSTEM_SCRIPT.description(activity_name).fatigue)
+		if cost > worst_cost:
+			worst_cost = cost
+			worst_focus = str(activity_name)
+	_check(
+		worst_cost < recovery,
+		"every training focus costs less fatigue than a week of recovery returns (worst: %s at %.3f vs %.3f)"
+			% [worst_focus, worst_cost, recovery],
+	)
+
+	## A full match's cost has to be recoverable inside the two-week gap the
+	## preset fixtures sit on, or fatigue ratchets up across a season no matter
+	## what the manager does.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var match_cost := 0.0
+	var starter: VolleyballPlayer = manager.player_by_id(
+		manager.current_lineup().player_at_slot(1))
+	if starter != null:
+		match_cost = 80.0 * GAME_MANAGER_SCRIPT.RALLY_FATIGUE_BASE \
+			* GAME_MANAGER_SCRIPT.stamina_fatigue_scale(starter)
+	var default_focus_cost := float(
+		TRAINING_SYSTEM_SCRIPT.description("Team Practice").fatigue)
+	_check(
+		2.0 * (recovery - default_focus_cost) >= match_cost,
+		"two weeks on the default focus return at least what an 80-rally match costs",
+	)
+	manager.free()
+
+	## Stamina has to actually move the cost, and a 50-stamina player -- the
+	## default every hand-authored fixture player sits at -- has to pay exactly
+	## the old flat rate, so this reweights who tires without shifting the
+	## baseline the rest of the engine was calibrated against.
+	var fit := VolleyballPlayer.new()
+	fit.stamina = 90
+	var unfit := VolleyballPlayer.new()
+	unfit.stamina = 20
+	var average := VolleyballPlayer.new()
+	average.stamina = 50
+	_check(
+		GAME_MANAGER_SCRIPT.stamina_fatigue_scale(fit)
+			< GAME_MANAGER_SCRIPT.stamina_fatigue_scale(unfit),
+		"a high-stamina player tires more slowly than a low-stamina one",
+	)
+	_check(
+		is_equal_approx(GAME_MANAGER_SCRIPT.stamina_fatigue_scale(average), 1.0),
+		"a 50-stamina player pays exactly the pre-existing flat rally cost",
+	)
+
+
+## An attack ruled an error kept the trajectory aimed at the target the hitter
+## intended, because the verdict was read off `attack_quality` after the event
+## had already been emitted. Playback drew the ball landing cleanly inside the
+## court and then ended the rally with "the attack misses the court" -- the ball
+## appeared to vanish mid-court. The drawn ball has to agree with the verdict.
+func _test_errant_attacks_land_outside_the_court() -> void:
+	var minimum: Vector2 = RallySimulator.ATTACK_COURT_MIN
+	var maximum: Vector2 = RallySimulator.ATTACK_COURT_MAX
+	var simulator: RefCounted = RallySimulator.new()
+	var threshold: float = RallySimulator.ATTACK_ERROR_THRESHOLD
+
+	## Sampled across the whole legal court so the result isn't an accident of
+	## one target: every intended point, missed, must leave the court.
+	var all_out := true
+	var net_errors_stay_inbounds_laterally := true
+	for column in range(9):
+		for row in range(7):
+			var intended := Vector2(
+				lerpf(minimum.x, maximum.x, float(column) / 8.0),
+				lerpf(minimum.y, maximum.y, float(row) / 6.0))
+			for quality in [0.0, 0.05, 0.12, 0.20, threshold - 0.001]:
+				var landing: Vector2 = simulator._errant_attack_target(intended, quality)
+				var out_of_court := landing.x < minimum.x or landing.x > maximum.x \
+					or landing.y < minimum.y or landing.y > maximum.y
+				if not out_of_court:
+					all_out = false
+				## A ball put into the net still has to be over the court
+				## laterally -- it drops at the tape, it doesn't leave sideways.
+				if landing.y > maximum.y \
+						and (landing.x < minimum.x or landing.x > maximum.x):
+					net_errors_stay_inbounds_laterally = false
+	_check(all_out, "a missed attack always lands outside the legal court, wherever it was aimed")
+	_check(
+		net_errors_stay_inbounds_laterally,
+		"an attack put into the net drops at the tape rather than leaving sideways",
+	)
+
+	## The lowest-quality swings go into the net; the rest sail out past a line.
+	var into_net: Vector2 = simulator._errant_attack_target(Vector2(0.5, 0.25), 0.0)
+	var sails_out: Vector2 = simulator._errant_attack_target(
+		Vector2(0.5, 0.25), threshold - 0.001)
+	_check(
+		into_net.y > maximum.y and into_net.y < CourtConstants.NET_Y,
+		"a swing with nothing behind it goes into the net, short of the tape",
+	)
+	_check(
+		sails_out.y < minimum.y or sails_out.x < minimum.x or sails_out.x > maximum.x,
+		"a swing that merely misses sails past a line rather than into the net",
+	)
+
+	## The miss leaves by the line it was already nearest, so a wide swing goes
+	## wide and a deep swing goes long instead of teleporting somewhere unseen.
+	var near_left: Vector2 = simulator._errant_attack_target(
+		Vector2(minimum.x + 0.01, 0.30), 0.20)
+	var near_right: Vector2 = simulator._errant_attack_target(
+		Vector2(maximum.x - 0.01, 0.30), 0.20)
+	var near_endline: Vector2 = simulator._errant_attack_target(
+		Vector2(0.5, minimum.y + 0.01), 0.20)
+	_check(
+		near_left.x < minimum.x and near_right.x > maximum.x
+			and near_endline.y < minimum.y,
+		"a missed attack leaves by whichever line it was aimed nearest",
+	)
+
+
 func _test_team_wheel_amplification() -> void:
 	var flat := {"Attacking": 60.0, "Defensive": 60.0, "Setting / Control": 60.0,
 		"Physical": 60.0, "Serving": 60.0, "Mental / Tactical": 60.0}

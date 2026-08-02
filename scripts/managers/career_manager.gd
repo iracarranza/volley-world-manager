@@ -139,6 +139,29 @@ func set_training_focus(activity_name: String) -> String:
 	return ""
 
 
+## Fatigue a week away from the court gives back, before that week's training
+## charges its own cost on top.
+##
+## This has to exceed every training focus's fatigue cost or resting does not
+## rest. At the previous 0.04 it exceeded none of them: the default Team
+## Practice charges 0.05, so an untouched career gained 0.01 fatigue in a week
+## it spent recovering, and only the explicit Recovery focus (-0.20) ever moved
+## the number down. A match costs an on-court player roughly 0.60, so squads
+## walked into their second fixture near exhaustion, and since `_rating()`
+## applies a fatigue penalty at every stage of a swing, the compounded loss
+## dragged the average attack below the error threshold -- almost every attack
+## became an error, which is the bug this fixes.
+##
+## 0.40 is set against the fixture cadence rather than picked for feel: two
+## weeks between fixtures at the default focus returns 0.70, comfortably above
+## the ~0.64 an 80-rally match takes out of a starter of average stamina. A
+## squad that plays and trains normally holds steady, one that rests properly
+## gains ground, and a congested run still wears players down. A regression
+## check re-derives this against the training table and the rally cost, so
+## re-tuning either without revisiting this fails loudly.
+const WEEKLY_FATIGUE_RECOVERY: float = 0.40
+
+
 func advance_week() -> String:
 	if career == null:
 		return "No active career."
@@ -161,7 +184,7 @@ func advance_week() -> String:
 		## population a history rather than a snapshot.
 		_advance_world_year(post_year)
 	for player in _game_manager().players:
-		player.fatigue = maxf(player.fatigue - 0.04, 0.0)
+		player.fatigue = maxf(player.fatigue - WEEKLY_FATIGUE_RECOVERY, 0.0)
 	save_career()
 	week_advanced.emit(last_training_report)
 	career_changed.emit()

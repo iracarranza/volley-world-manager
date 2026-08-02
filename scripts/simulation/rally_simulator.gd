@@ -989,6 +989,10 @@ func resolve(
 			)),
 		}
 	var attack_target: Vector2 = attack_choice.target
+	## Decided here rather than after the event is emitted, so the ball the
+	## viewer watches actually goes where the verdict says it went.
+	if float(result.attack_quality) < ATTACK_ERROR_THRESHOLD:
+		attack_target = _errant_attack_target(attack_target, float(result.attack_quality))
 	var approach_start := Vector2(approach_preparation.get(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
@@ -2149,6 +2153,10 @@ func _resolve_home_continuation(
 		0.0, 1.0,
 	)
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
+	## Same contract as the primary swing: a continuation attack ruled an error
+	## has to be drawn missing the court, not landing in it and disappearing.
+	if attack_quality < ATTACK_ERROR_THRESHOLD:
+		attack_target = _errant_attack_target(attack_target, attack_quality)
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
@@ -2497,6 +2505,43 @@ const ATTACK_SCAN_COLUMNS: int = 13
 const ATTACK_SCAN_ROWS: int = 9
 const ATTACK_COURT_MIN := Vector2(0.055, 0.055)
 const ATTACK_COURT_MAX := Vector2(0.945, 0.445)
+
+## How far past the line a missed attack lands, and how far below the error
+## threshold a swing has to be before it goes into the net instead of out.
+const ATTACK_ERROR_OVERSHOOT: float = 0.045
+const ATTACK_NET_ERROR_FRACTION: float = 0.5
+
+
+## Where a swing that misses actually lands.
+##
+## The error verdict is read off `attack_quality` *after* the ATTACK event has
+## been emitted, and used to leave the trajectory pointed at the target the
+## hitter intended. Playback therefore drew the ball landing cleanly inside the
+## court and then ended the rally with "the attack misses the court": the ball
+## appeared to vanish at the end of a legal-looking arc. An error has to move
+## the ball, not just the scoreline.
+##
+## The miss is pushed past whichever line the intended target was already
+## nearest, so a cross-court swing sails wide and a deep swing sails long
+## rather than every error teleporting to one arbitrary spot. A swing with
+## almost nothing behind it goes into the net instead, which is what a badly
+## mistimed attack actually does. Deterministic on purpose -- it reads only the
+## intended target and the quality that already decided the outcome, so a
+## replayed seed still draws the identical miss.
+func _errant_attack_target(intended: Vector2, attack_quality: float) -> Vector2:
+	var lane_x := clampf(intended.x, ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x)
+	if attack_quality < ATTACK_ERROR_THRESHOLD * ATTACK_NET_ERROR_FRACTION:
+		## Into the net: short of it, on the attacker's own side of the tape.
+		return Vector2(lane_x, lerpf(ATTACK_COURT_MAX.y, CourtConstants.NET_Y, 0.65))
+	var to_left := intended.x - ATTACK_COURT_MIN.x
+	var to_right := ATTACK_COURT_MAX.x - intended.x
+	## Y decreases toward the opponent baseline, so the endline is the floor.
+	var to_endline := intended.y - ATTACK_COURT_MIN.y
+	if to_endline <= to_left and to_endline <= to_right:
+		return Vector2(lane_x, ATTACK_COURT_MIN.y - ATTACK_ERROR_OVERSHOOT)
+	if to_left <= to_right:
+		return Vector2(ATTACK_COURT_MIN.x - ATTACK_ERROR_OVERSHOOT, intended.y)
+	return Vector2(ATTACK_COURT_MAX.x + ATTACK_ERROR_OVERSHOOT, intended.y)
 
 ## Depth a shot family naturally wants, as a fraction from the net (0) to the
 ## endline (1). Power swings drive deep; rolls and tips die short.

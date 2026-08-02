@@ -686,16 +686,42 @@ func unregister_player(player_id: int) -> String:
 	return ""
 
 
+## What one rally costs an on-court player of average stamina, and the extra
+## the decisive actor pays for having been the one who had to swing, dig or
+## chase the ball down.
+const RALLY_FATIGUE_BASE: float = 0.008
+const RALLY_FATIGUE_DECISIVE: float = 0.012
+
+## How far stamina moves that cost. `stamina` is trained by the Strength & Jump
+## focus and was read by nothing: every player tired at exactly the same rate
+## no matter how conditioned they were, which made the attribute decorative and
+## left squad fitness with no way to express itself over a season. A player at
+## 50 -- the default every hand-authored fixture player sits at -- pays exactly
+## the old flat rate, so this changes *who* tires rather than shifting the
+## baseline every other calibration was measured against.
+const STAMINA_FATIGUE_SCALE_MIN: float = 0.6
+const STAMINA_FATIGUE_SCALE_MAX: float = 1.4
+
+
+static func stamina_fatigue_scale(player: VolleyballPlayer) -> float:
+	if player == null:
+		return 1.0
+	return lerpf(STAMINA_FATIGUE_SCALE_MAX, STAMINA_FATIGUE_SCALE_MIN,
+		clampf(float(player.stamina) / 100.0, 0.0, 1.0))
+
+
 func _apply_rally_fatigue_and_form(result: Resource) -> void:
 	var lineup := current_lineup()
 	for slot_number in range(1, 7):
 		var player := player_by_id(lineup.player_at_slot(slot_number))
 		if player != null:
-			player.fatigue = minf(player.fatigue + 0.008, 1.0)
+			player.fatigue = minf(
+				player.fatigue + RALLY_FATIGUE_BASE * stamina_fatigue_scale(player), 1.0)
 			player.current_form *= 0.97
 	var decisive := player_by_id(int(result.decisive_actor_id))
 	if decisive != null:
-		decisive.fatigue = minf(decisive.fatigue + 0.012, 1.0)
+		decisive.fatigue = minf(
+			decisive.fatigue + RALLY_FATIGUE_DECISIVE * stamina_fatigue_scale(decisive), 1.0)
 		decisive.current_form = clampf(
 			decisive.current_form + (0.05 if result.home_team_won else -0.04),
 			-1.0, 1.0,
