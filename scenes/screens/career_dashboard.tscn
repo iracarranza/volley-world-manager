@@ -84,11 +84,11 @@ theme_override_constants/separation = 8
 
 [node name="CurrentSectionButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
+custom_minimum_size = Vector2(140, 42)
 size_flags_horizontal = 3
 tooltip_text = "Open the navigation menu. Tab also opens and closes it."
-text = "Home   ▾   [Tab]"
+text = "Home   +"
 alignment = 0
 
 [node name="ContentPanel" type="PanelContainer" parent="Margin/Root/Body"]
@@ -260,7 +260,7 @@ horizontal_alignment = 1
 
 [node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(440, 220)
+custom_minimum_size = Vector2(440, 210)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -312,7 +312,7 @@ text = "›"
 
 [node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 224)
+custom_minimum_size = Vector2(0, 190)
 layout_mode = 2
 bbcode_enabled = true
 scroll_active = false
@@ -648,6 +648,7 @@ theme_override_constants/separation = 8
 
 [node name="HomeNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
@@ -656,6 +657,7 @@ metadata/section = "Home"
 
 [node name="RosterNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
@@ -664,6 +666,7 @@ metadata/section = "Roster"
 
 [node name="TeamNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
@@ -672,6 +675,7 @@ metadata/section = "Team"
 
 [node name="TransfersNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
@@ -680,6 +684,7 @@ metadata/section = "Transfers"
 
 [node name="CompetitionNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
@@ -688,6 +693,7 @@ metadata/section = "Competition"
 
 [node name="SixnetNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
@@ -695,11 +701,14 @@ text = "SIXNET"
 metadata/section = "Sixnet"
 
 [node name="Spacer" type="Control" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
+unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="AdvanceWeekButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 size_flags_horizontal = 3

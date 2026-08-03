@@ -143,6 +143,7 @@ var selected_individual_training_id: int = -1
 var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
 var _nav_tween: Tween
+var _nav_ribbon_expanded: bool = false
 var _roster_list_expanded: bool = false
 var _attribute_page: int = 0
 
@@ -202,6 +203,7 @@ func _ready() -> void:
 		card.section_requested.connect(_navigate)
 	refresh()
 	_navigate("Home")
+	_set_nav_ribbon_expanded(false)
 	_set_roster_list_expanded(false)
 
 
@@ -259,9 +261,22 @@ func refresh() -> void:
 ## Control inside a Container has its position rewritten on every layout pass,
 ## which would fight the tween below and snap the panel back mid-slide.
 func _toggle_nav_dropdown() -> void:
-	## Navigation is permanently visible in the top ribbon. Keep this method
-	## as a no-op so Tab remains a harmless compatibility shortcut.
-	return
+	_set_nav_ribbon_expanded(not _nav_ribbon_expanded)
+
+
+func _set_nav_ribbon_expanded(expanded: bool) -> void:
+	_nav_ribbon_expanded = expanded
+	for button in _nav_buttons:
+		button.visible = expanded
+	%Spacer.visible = expanded
+	%AdvanceWeekButton.visible = expanded
+	current_section_button.text = "%s   %s" % [
+		section_title.text, "-" if expanded else "+",
+	]
+	current_section_button.tooltip_text = (
+		"Minimize the section ribbon" if expanded
+		else "Expand the section ribbon"
+	)
 
 
 func _open_nav_dropdown() -> void:
@@ -305,13 +320,15 @@ func _click_catcher_input(event: InputEvent) -> void:
 func _navigate(section_name: String) -> void:
 	var names := ["Home", "Roster", "Team", "Transfers", "Competition", "Sixnet"]
 	sections.current_tab = maxi(names.find(section_name), 0)
-	current_section_button.text = "%s   ▾   [Tab]" % section_name
+	section_title.text = section_name
+	current_section_button.text = "%s   %s" % [
+		section_name, "-" if _nav_ribbon_expanded else "+",
+	]
 	## Every nav button and every keyboard shortcut routes through here, so
 	## highlighting and dismissal both only need saying once.
 	for button in _nav_buttons:
 		button.button_pressed = str(button.get_meta("section")) == section_name
 	_close_nav_dropdown()
-	section_title.text = section_name
 
 
 func _refresh_home() -> void:
@@ -336,7 +353,7 @@ func _refresh_home() -> void:
 		roundi(average_satisfaction * 100.0)])
 	%RosterCard.set_summary("%d registered players · %d unavailable" % [GameManager.team.player_ids.size(), unavailable])
 	%TeamCard.set_summary("%s identity · %s training" % [CareerManager.career.identity, CareerManager.career.training_focus])
-	%TransfersCard.set_summary("%d regional candidates · $%d available" % [CareerManager.career.transfer_pool.size(), CareerManager.career.finances])
+	%TransfersCard.set_summary("%d regional candidates available" % CareerManager.career.transfer_pool.size())
 	%CompetitionCard.set_summary("%s" % ("Week %d vs %s" % [fixture.week, fixture.opponent_name] if fixture != null else "Schedule complete"))
 	%SixnetCard.set_summary(
 		"Champion: %s" % CareerManager.career.sixnet_champion_region
