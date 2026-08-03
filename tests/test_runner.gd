@@ -179,6 +179,7 @@ func _initialize() -> void:
 	_test_match_scoring_and_rotation()
 	_test_player_state_flow_and_recovery()
 	_test_rally_spectacle_and_flow_separation()
+	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -4009,11 +4010,14 @@ func _test_gate_thirty_seven_to_forty_one_attack_boundary() -> void:
 
 
 func _test_gate_forty_two_development_live_attack() -> void:
-	## Reselected after Gate 44's session: shielding the setter from serve
-	## receive (defensive_plan._default_zone) changes who receives serve and
-	## therefore which seeds produce an audited continuous attack. 300469 no
-	## longer promotes under the corrected passer assignment; 300062 does.
-	const LIVE_ATTACK_SEED := 300062
+	## Reselected twice now, for the same structural reason each time: this
+	## fixture pins a seed that happens to produce an audited continuous attack,
+	## so any change to what the ball does upstream of the swing moves which
+	## seeds qualify. 300469 fell to Gate 44's passer-assignment fix; 300062 fell
+	## to the own-side delivery promotion, which stopped sets landing on their
+	## lane's table entry and so moved every hitter's contact point slightly.
+	## 300082 promotes under the resolved set position.
+	const LIVE_ATTACK_SEED := 300082
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -4449,7 +4453,8 @@ func _test_gate_forty_four_shadow_block_hypotheses() -> void:
 	var official_manager := GAME_MANAGER_SCRIPT.new()
 	official_manager.seed_vertical_slice_data()
 	official_manager.match_state.serving_home = false
-	var official_result: Resource = official_manager.resolve_active_rally(300062)
+	## Shares Gate 42's fixture seed; see the note there for why it moved.
+	var official_result: Resource = official_manager.resolve_active_rally(300082)
 	var official_block_seen := false
 	var official_block_contaminated := false
 	for raw_event in official_result.events:
@@ -4852,7 +4857,7 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 func _test_gate_forty_nine_development_live_block() -> void:
 	## The same seed Gate 42 uses. A promoted block requires a promoted attack
 	## ahead of it, so the two fixtures necessarily share a chain and a seed.
-	const LIVE_BLOCK_SEED := 300062
+	const LIVE_BLOCK_SEED := 300082
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -7526,6 +7531,80 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## A set used to land on `CourtConstants.lane_target(lane)` -- a fixed table
+## entry -- so a 0.95 set and a 0.35 set delivered the ball to the identical
+## point and set quality had no geometric consequence at all. Own-side contacts
+## do not need a simulated flight, but they do have to emit a position, because
+## the next contact's geometry reads it.
+func _test_own_side_deliveries_land_where_the_player_put_them() -> void:
+	var simulator: RefCounted = RallySimulator.new()
+	var aim := CourtConstants.lane_target("Left Pin")
+	var worst: float = RallySimulator.SET_DELIVERY_STDEV_WORST_M
+	var best: float = RallySimulator.SET_DELIVERY_STDEV_BEST_M
+	var min_y: float = RallySimulator.HOME_SET_DELIVERY_MIN_Y
+	var max_y: float = RallySimulator.HOME_SET_DELIVERY_MAX_Y
+
+	var poor_total := 0.0
+	var good_total := 0.0
+	var samples := 2000
+	var distinct_points := {}
+	var beyond_two_deviations := 0
+	var stayed_in_bounds := true
+	for _sample in range(samples):
+		var poor: Vector2 = simulator._delivered_point(
+			aim, 0.20, worst, best, min_y, max_y
+		)
+		var good: Vector2 = simulator._delivered_point(
+			aim, 0.90, worst, best, min_y, max_y
+		)
+		poor_total += RallyKinematics.court_distance_meters(aim, poor)
+		good_total += RallyKinematics.court_distance_meters(aim, good)
+		distinct_points[Vector2(snappedf(poor.x, 0.0001), snappedf(poor.y, 0.0001))] = true
+		if absf(poor.x - aim.x) * CourtConstants.COURT_WIDTH_METERS \
+				> lerpf(worst, best, 0.20) * 2.0:
+			beyond_two_deviations += 1
+		if poor.y < min_y - 0.0001 or poor.y > max_y + 0.0001 \
+				or good.y < min_y - 0.0001 or good.y > max_y + 0.0001:
+			stayed_in_bounds = false
+
+	_check(
+		distinct_points.size() > samples / 2,
+		"a set lands on a resolved point rather than repeating its lane's table entry",
+	)
+	_check(
+		poor_total / float(samples) > good_total / float(samples) * 1.5,
+		"a poorly executed set strays measurably further from its lane than a good one",
+	)
+	## A uniform draw carrying this standard deviation cannot exceed root-three
+	## deviations, so anything past two proves the tail is normal -- which is
+	## what stops "can this setter miss the pin" being a hard threshold on
+	## quality rather than a tail.
+	_check(
+		beyond_two_deviations > 0,
+		"delivery scatter is normal, so a badly missed set is rare rather than forbidden",
+	)
+	_check(
+		stayed_in_bounds,
+		"a delivery is held on its own side until an overpass branch exists to play one out",
+	)
+
+	## The opponent passer delivered to their setter's release position exactly,
+	## every time, however badly the ball was passed.
+	var pass_aim := Vector2(0.62, 0.34)
+	var shanked: Vector2 = simulator._delivered_point(
+		pass_aim, 0.10,
+		RallySimulator.PASS_DELIVERY_STDEV_WORST_M,
+		RallySimulator.PASS_DELIVERY_STDEV_BEST_M,
+		RallySimulator.OPPONENT_PASS_DELIVERY_MIN_Y,
+		RallySimulator.OPPONENT_PASS_DELIVERY_MAX_Y,
+	)
+	_check(
+		shanked.y >= RallySimulator.OPPONENT_PASS_DELIVERY_MIN_Y
+			and shanked.y <= RallySimulator.OPPONENT_PASS_DELIVERY_MAX_Y,
+		"an opponent pass resolves on the opponent's own side of the net",
+	)
+
+
 func _test_rally_spectacle_and_flow_separation() -> void:
 	var long_rally := RallyResult.new()
 	long_rally.home_team_won = true

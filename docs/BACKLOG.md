@@ -99,3 +99,117 @@ trigger, no copy.
 `StaffPlaceholder` is a reserved panel on the Team overview. There is no
 staff system: no hiring, no coaching effects, no staff model. Confirmed as
 placeholder-only scope at the time; still open.
+
+---
+
+## 7. Ball geometry — outcome, position and drawing must become one computation
+
+Design source: `docs/textbook/EVENT_CALCULATION_TAXONOMY.md`, which specified
+the per-phase decomposition and the pass/set trajectory observables before any
+of this was built. This section records the gap against it, not a new design.
+
+### The rule the work follows
+
+**Contacts that cross the net need geometry. Contacts that stay on your own
+side need attributes.**
+
+Serve, attack and block have terminal geometric verdicts decided against
+boundaries and obstacles. Reception, set and dig hand off to a teammate — there
+is no line to be on the wrong side of. Own-side contacts still have to emit a
+*position*, because the next contact's geometry reads it, but they need no
+flight simulation and no boundary test.
+
+### Landed
+
+Own-side deliveries now resolve to a position instead of a table entry:
+
+- `_delivered_point()` — normal scatter in metres, converted per axis, spread
+  from execution quality. Values from the taxonomy: sets `lerp(0.40, 0.08)`,
+  passes `lerp(0.50, 0.10)`.
+- Applied to the first-ball set, the transition set, and the opponent's
+  reception. The home reception already did this in `_reception_pass_result`.
+- `intended_target` on SET events, so aim and result are separately readable.
+- Home reception's scatter converted from uniform to normal.
+
+Measured over 854 rallies: mean set displacement 0.397 m, p90 0.672 m, max
+1.525 m. Terminal shares moved, most visibly `attack_error` 15.5% → 11.1% and
+`opponent_kill` 13.5% → 16.4%, because moving the set moves the hitter's
+contact point and therefore approach timing. `tools/run_delivery_audit.gd`
+reproduces both figures.
+
+**Finding that came out of it: set quality is compressed at the bottom.** 524 of
+559 sets scored below 0.50 and exactly one above 0.65. The quality-dependent
+spread is therefore almost always running at its worst-case end, so the
+mechanism discriminates between setters far less than it looks like it does.
+That is a set-quality calibration problem, not a delivery one, and it points
+the opposite way from the "both teams highly capable" baseline the design wants.
+
+### Not landed — the distance still to go
+
+**Serve in/out is a coin flip disconnected from the drawn ball.** Both serve
+paths compute `serve_error := rng.randf() < error_chance` and then draw the ball
+to `_serve_landing_point()`, which clamps into the court and is structurally
+incapable of returning an out-of-bounds point. The opponent path writes "The
+serve does not enter the court" while handing the renderer an in-court landing.
+This is the visible bug in save `as`, seed 3801887943.
+
+Two fixes, and they are not the same size:
+
+- Mirror `_errant_attack_target()` — keep the roll, relocate the ball. ~30
+  lines, no calibration impact, kills the visible defect.
+- Derive in/out from the landing point. `_serve_landing_point` is already 90%
+  of the way there — `deviation := lerpf(0.105, 0.018, accuracy)` is the right
+  shape, and the final `clampf` back into the court is the single line that
+  makes an errant serve impossible. Removing it converts the error *rate* from
+  a calibrated constant into an emergent one, which re-rates every server in
+  the world. The uniform must become normal first, or "can this serve go out"
+  becomes a step function of placement rating rather than a tail.
+
+**Attack: the causal direction is inverted.** Today `target → distance → angle`;
+the proposal is `angle + velocity → trajectory → landing`. Specifically:
+
+- The target scan (`_choose_attack_target`, 13×9 grid) scores candidates on
+  distance to the nearest *floor defender* and **never reads the block**. The
+  hitter picks where defenders aren't while ignoring the wall in front of them.
+- `decision_making` is a coin flip between the correct answer and the hitter's
+  own line, so a poor reader gets perfect information or a fixed fallback,
+  never a plausibly wrong read.
+- Accuracy perturbs the landing point in court space, not the launch angle.
+  Launch angle comes from a per-`attack_type` table.
+- `_contest_block()` is a scalar margin comparison run *after* the arc exists.
+  No geometric intersection anywhere.
+- In/out is `_attack_missed()`, a logistic roll, with the ball relocated
+  afterwards to agree with it.
+- The block is priced twice: `block_pressure` inside `_attack_execution`, and
+  again as a margin in `_contest_block`. Only one should survive.
+- Block deflection is a re-slice of the arc to the net, so a deflection carries
+  no directional information.
+- **The transition path aims by coin flip**: `Vector2(1.0 - set_target.x,
+  rng.randf_range(0.12, 0.38))`, with no defender scan, no repertoire gate and
+  no accuracy spread. It never calls `_choose_attack_target`.
+
+**Three attack implementations** (home, opponent, transition) plus two serve
+paths all need the same inversion, or they diverge. That is the cost driver,
+not the geometry itself.
+
+**Overpass is now detectable but not playable.** Emitting a real delivery
+position means a set or pass crossing `NET_Y` is a comparison away. There is no
+rally branch that plays one out, so deliveries are currently clamped to their
+own side (`HOME_SET_DELIVERY_MIN_Y`, `OPPONENT_PASS_DELIVERY_MIN_Y`).
+
+### Sequencing
+
+1. **Fix the serve visually first** — the cheap patch. The visible defect
+   should not stay live for however long the re-architecture takes.
+2. **Settle the target rates** — stuff rate, block involvement, rally-length
+   distribution. These are design decisions that survive any implementation;
+   the constants that currently hit them do not. Do not spend effort tuning
+   today's margins toward them.
+3. **Build the geometry as a shadow system**, the way Gates 44–49 did for the
+   block, and calibrate its spreads until the emergent rates land on step 2.
+   Editing three paths in place leaves the sim unmeasurable meanwhile.
+
+Open question before any of it: **should velocity be a real variable, or does
+angle carry everything?** Real velocity means inverting `solve_launch_arc` to
+take speed and angle and return range, which is a change to the kinematics
+layer rather than the attack layer.

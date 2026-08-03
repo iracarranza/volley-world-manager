@@ -235,6 +235,40 @@ const CONSISTENCY_FLOOR_SHARE: float = 0.30
 const UNIFORM_TO_NORMAL_DEVIATION: float = 0.5773502691896258
 const EXECUTION_ERROR_DEVIATION_LIMIT: float = 3.5
 
+## Where an own-side delivery actually arrives, in metres of standard deviation
+## from where it was aimed.
+##
+## Own-side contacts do not need trajectory simulation -- there is no line to be
+## on the wrong side of and no block to intersect -- but they do have to emit a
+## *position*, because the next contact's geometry reads it. Until now a set
+## landed on `CourtConstants.lane_target(lane)`, a fixed table entry, so a 0.95
+## set and a 0.35 set delivered the ball to the identical point and set quality
+## had no geometric consequence whatsoever.
+##
+## Values are the ones specified in
+## docs/textbook/EVENT_CALCULATION_TAXONOMY.md, which designed this before it
+## was built. Stated in metres and converted per axis at the point of use,
+## because the court is 9 m across and 18 m deep -- one normalized number would
+## scatter a ball twice as far sideways as long.
+const SET_DELIVERY_STDEV_WORST_M: float = 0.40
+const SET_DELIVERY_STDEV_BEST_M: float = 0.08
+const PASS_DELIVERY_STDEV_WORST_M: float = 0.50
+const PASS_DELIVERY_STDEV_BEST_M: float = 0.10
+
+## How far a delivery is allowed to stray before it stops being a delivery.
+##
+## A set nominally lands at y = 0.53, which is 0.54 m from the net, and the
+## worst-case spread is 0.40 m -- so an unclamped tail can put the ball through
+## the net onto the opponent's side. That is a real volleyball event (the
+## overpass), and emitting a position rather than a table entry is exactly what
+## makes it *detectable*, but there is no rally branch that plays one out yet.
+## Until there is, the delivery is held on its own side rather than silently
+## teleporting the rally.
+const HOME_SET_DELIVERY_MIN_Y: float = 0.51
+const HOME_SET_DELIVERY_MAX_Y: float = 0.80
+const OPPONENT_PASS_DELIVERY_MIN_Y: float = 0.20
+const OPPONENT_PASS_DELIVERY_MAX_Y: float = 0.49
+
 ## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
 ## so the result can be compared with an attack quality that is also a fraction
 ## of an ideal, which is the whole point of a contest between them.
@@ -816,9 +850,12 @@ func resolve(
 		result.key_factors.append(ExplanationText.factor("play_abandoned"))
 	var tempo_demand := float(3 - resolved_tempo) * 0.055 \
 		* lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
-	var set_target := CourtConstants.lane_target(assignment.lane)
+	## The lane the setter is *aiming* at. `_set_geometry` reads this rather than
+	## where the ball ends up, because difficulty is a property of the attempt.
+	var intended_set_target := CourtConstants.lane_target(assignment.lane)
+	var set_target := intended_set_target
 	var set_geometry := _set_geometry(
-		setter, setter_start, set_contact, set_target, preferred_release
+		setter, setter_start, set_contact, intended_set_target, preferred_release
 	)
 	## One number carrying both the overreach and the reach cost, so the severity
 	## of attempting something beyond a setter lives with the model that decides
@@ -832,6 +869,15 @@ func resolve(
 			(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
 		) + _execution_error(setter, "set_accuracy", 0.12),
 		0.0, 1.0,
+	)
+	## Resolved here rather than at the aim, because it needs the quality that
+	## was only just computed -- and resolved *before* the arc, so the flight,
+	## the SET event's end position, the hitter's contact point and the coverage
+	## shape all describe the same ball.
+	set_target = _delivered_point(
+		intended_set_target, float(result.set_quality),
+		SET_DELIVERY_STDEV_WORST_M, SET_DELIVERY_STDEV_BEST_M,
+		HOME_SET_DELIVERY_MIN_Y, HOME_SET_DELIVERY_MAX_Y,
 	)
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
@@ -882,6 +928,11 @@ func resolve(
 			"deadline": set_contact_time,
 			"event_time": set_contact_time,
 			"release_interval": release_interval,
+			## Where the setter aimed, alongside `end_position` which is where
+			## the ball went. Separating the two is what makes set accuracy
+			## measurable at all -- and readable in playback as intent versus
+			## result rather than a single number.
+			"intended_target": intended_set_target,
 			## Why this setter could run this ball and not another one. Carried
 			## on the event so the limit is readable in the rally record rather
 			## than only visible as a lower quality number.
@@ -1577,8 +1628,18 @@ func _resolve_home_serve(
 		receiver, receiver_start, opponent_landing, serve_time, "lateral"
 	)
 	opponent_live_positions[receiver.id] = opponent_receiver_reach
+	## The home passer already delivered to a computed point (see
+	## `_reception_pass_result`); the opponent's went to their setter's release
+	## position exactly, every time, however badly the ball was passed. Same
+	## promotion, lighter model -- the opponent side is deliberately cheaper, but
+	## "cheaper" should not mean "perfect".
+	var opponent_pass_target := _delivered_point(
+		_opponent_setter_release_target(opponent_team), reception_quality,
+		PASS_DELIVERY_STDEV_WORST_M, PASS_DELIVERY_STDEV_BEST_M,
+		OPPONENT_PASS_DELIVERY_MIN_Y, OPPONENT_PASS_DELIVERY_MAX_Y,
+	)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		opponent_landing, _opponent_setter_release_target(opponent_team),
+		opponent_landing, opponent_pass_target,
 		reception_success,
 		reception_quality, "%s receives" % receiver.display_name,
 		"Opponent reception quality: %d%%. %s%s" % [
@@ -2230,7 +2291,14 @@ func _resolve_home_continuation(
 		) + _execution_error(setter, "set_accuracy", 0.14),
 		0.10, 0.92,
 	)
-	var set_target := CourtConstants.lane_target(assignment.lane)
+	## Same promotion as the first-ball set: the transition set stops landing on
+	## its lane's table entry and starts landing where this setter put it.
+	var intended_set_target := CourtConstants.lane_target(assignment.lane)
+	var set_target := _delivered_point(
+		intended_set_target, set_quality,
+		SET_DELIVERY_STDEV_WORST_M, SET_DELIVERY_STDEV_BEST_M,
+		HOME_SET_DELIVERY_MIN_Y, HOME_SET_DELIVERY_MAX_Y,
+	)
 	var continuation_set_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(set_contact, set_target),
 		_set_launch_angle_degrees(setter, assignment.tempo, set_quality),
@@ -2255,6 +2323,7 @@ func _resolve_home_continuation(
 			"arrival_margin": setter_arrival_margin,
 			"flight_time": continuation_flight_time,
 			"release_interval": cont_release_interval,
+			"intended_target": intended_set_target,
 			"deadline": cont_set_contact_time,
 			"event_time": cont_set_contact_time,
 			"outgoing_trajectory": _ball_trajectory(
@@ -3588,8 +3657,13 @@ func _reception_pass_result(
 	)
 	var error_scale := pow(1.0 - execution, 1.35)
 	var perpendicular := Vector2(-desired_direction.y, desired_direction.x)
-	var directional_error := rng.randf_range(-0.30, 0.30) * error_scale
-	var depth_error := rng.randf_range(-0.24, 0.24) * error_scale
+	## Normal rather than uniform, matched on deviation so an ordinary pass
+	## scatters exactly as far as it used to. Under a uniform, a passer whose
+	## `error_scale` was small enough simply could not put the ball outside a
+	## fixed box around the setter -- not unlikely, impossible -- which is the
+	## same shape of defect that made block outcomes unreachable.
+	var directional_error := _normal_from_uniform_halfwidth(0.30) * error_scale
+	var depth_error := _normal_from_uniform_halfwidth(0.24) * error_scale
 	var destination := desired_target \
 		+ perpendicular * directional_error + desired_direction * depth_error
 	if execution < 0.18:
@@ -4646,9 +4720,52 @@ func _execution_error(
 	## the tails change. Clamped well outside the old bound purely to stop a
 	## freak draw putting a set in the stands; at 3.5 deviations the residual
 	## probability is about 2e-4, which is rare rather than forbidden.
-	var deviation := spread * UNIFORM_TO_NORMAL_DEVIATION
+	return _normal_from_uniform_halfwidth(spread)
+
+
+## A normal draw carrying the same standard deviation a uniform on
+## [-half_width, half_width] would have, clamped where a freak draw stops being
+## rare and starts being absurd. Shared so that every site converted away from
+## `randf_range` scatters identically to how it used to on ordinary contacts.
+func _normal_from_uniform_halfwidth(half_width: float) -> float:
+	var deviation := half_width * UNIFORM_TO_NORMAL_DEVIATION
 	var limit := deviation * EXECUTION_ERROR_DEVIATION_LIMIT
 	return clampf(rng.randfn(0.0, deviation), -limit, limit)
+
+
+## Where an own-side delivery lands, given where it was aimed and how well it
+## was executed.
+##
+## This is the whole of the "positional promotion": no flight is simulated and
+## no boundary is tested, but the contact stops arriving at a table entry and
+## starts arriving at a point that depends on the player. That is what the next
+## contact's geometry needs -- a hitter's available angles depend on where the
+## set actually is, not on where the lane says it should be.
+##
+## Normal rather than uniform, matching `_execution_error`. A uniform spread
+## would make "can this setter miss the pin" a hard threshold on quality instead
+## of a tail, which is the same defect that made block outcomes impossible
+## rather than unlikely.
+func _delivered_point(
+	intended: Vector2,
+	quality: float,
+	worst_stdev_meters: float,
+	best_stdev_meters: float,
+	min_y: float,
+	max_y: float,
+) -> Vector2:
+	var stdev_meters := lerpf(
+		worst_stdev_meters, best_stdev_meters, clampf(quality, 0.0, 1.0)
+	)
+	var limit := stdev_meters * EXECUTION_ERROR_DEVIATION_LIMIT
+	var offset_x := clampf(rng.randfn(0.0, stdev_meters), -limit, limit) \
+		/ CourtConstants.COURT_WIDTH_METERS
+	var offset_y := clampf(rng.randfn(0.0, stdev_meters), -limit, limit) \
+		/ CourtConstants.COURT_LENGTH_METERS
+	return Vector2(
+		clampf(intended.x + offset_x, 0.04, 0.96),
+		clampf(intended.y + offset_y, min_y, max_y),
+	)
 
 
 ## One dig, wherever in the rally it happens.
