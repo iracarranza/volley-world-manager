@@ -298,3 +298,62 @@ counter-adjustments can remain match-engine follow-up. The separate 3D replay
 is available from Match Center through View 3D. It reuses the completed rally
 event stream and player snapshots; it does not replace the tactical board or
 participate in simulation.
+
+## Running the tests on a fresh checkout
+
+The headless test runner needs Godot's global class cache to know about every
+`class_name` in the project. That cache lives in `.godot/` and is **not** in
+version control, so a fresh clone -- or a `git checkout` that crosses a commit
+which added a new `class_name` -- fails with parse errors that look like broken
+code:
+
+```
+SCRIPT ERROR: Parse Error: Identifier "TeamPrinciples" not declared in the current scope.
+```
+
+The class is declared correctly; the cache simply has not seen it. Run an import
+pass once, then the suite:
+
+```
+godot --headless --path . --import
+godot --headless --path . --script res://tests/test_runner.gd
+```
+
+Only the import is needed, and only after the set of `class_name` declarations
+changes. It is quick and safe to run whenever the runner reports a parse error
+naming a class you can see on disk.
+
+## Working with two agents on this repo
+
+Two agents work on this project: one with direct access to the developer's
+machine, one in a remote container. Neither can see the other's working tree.
+Every coordination failure so far has come from the same root cause -- acting on
+a *report* of work rather than on the work itself -- so the protocol is short
+and all of it is about shared ground truth.
+
+**Push before handing off.** Staged, stashed or merely-committed-locally work is
+invisible to the other agent, and to the developer's ability to compare. Three
+separate hand-offs stalled on this. If it is worth reporting, push it first;
+a branch costs nothing and is reversible.
+
+**Findings go in `docs/calibration/`, not only in chat.** A number in a chat
+message cannot be verified, reproduced, or found again next week. A dated report
+in this directory travels with the code. Follow the existing convention: state
+the **tool**, the **commit measured at**, the **sample size**, and the method.
+`TEAM_IDENTITY_BASELINE_2026_08_02.md` and
+`ATTACK_ERROR_DIAGNOSTIC_2026_08_03.md` are the pattern.
+
+**Diagnostics belong in `tools/`, not in throwaway scripts.** If the other agent
+cannot re-run the measurement, they have to take the number on trust -- and
+several taken on trust this week were wrong. A committed tool turns "I measured
+0.34" into something either agent can check in one command.
+
+**Verify claims about code against the code.** Both agents have confidently
+reported things about the other's work that were untrue: that a feature had been
+dropped when it had only been renamed; that two branches contained duplicate
+patches when `git cherry` showed neither did. Reading the file is cheap. The
+retraction is not.
+
+**State what you have not verified.** A design written against a tree you cannot
+see is still useful, but it must say so at the top, or its constants get treated
+as current and copied forward.

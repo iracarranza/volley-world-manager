@@ -19,6 +19,22 @@ func reset_flight() -> void:
 		ghost.visible = false
 
 
+## Leaves the ball resting where the point ended instead of hiding it.
+##
+## Playback used to call `reset_flight()` the moment the last flight finished,
+## so the landing was drawn for a single frame and then vanished -- the ball
+## appeared to disappear in mid-air. Where the point ended is the thing a
+## viewer most wants to look at, and it matters more now that a swing ruled
+## out actually lands past the painted line: hiding it immediately threw away
+## the only frame that showed the ball was out. The trail is cleared because a
+## resting ball has no flight behind it, but the ball itself stays put until
+## the next rally, a replay, or closing the screen resets it.
+func hold_at_rest() -> void:
+	sample_history.clear()
+	for ghost in trail_ghosts:
+		ghost.visible = false
+
+
 func set_flight_sample(world_position: Vector3, velocity: Vector3) -> void:
 	visible = true
 	global_position = world_position
