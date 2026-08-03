@@ -175,6 +175,7 @@ func _initialize() -> void:
 	_test_seeded_floor_defense_geometry()
 	_test_playback_movement_is_humanly_possible()
 	_test_body_type_distribution_is_flat()
+	_test_every_script_has_a_uid()
 	_test_match_scoring_and_rotation()
 	_test_player_state_flow_and_recovery()
 	_test_defense_opponent_and_match_day_controls()
@@ -7162,6 +7163,50 @@ func _test_playback_movement_is_humanly_possible() -> void:
 			% [short_deflection, long_deflection],
 	)
 	manager.free()
+
+
+## Every script ships with its .uid, so pulls do not collide on generated files.
+##
+## Godot 4.4+ writes a .uid next to each script and relies on it being in
+## version control to keep references intact across renames. A script committed
+## without one is a delayed trap: every checkout generates the file locally, and
+## the day somebody finally commits it, everyone else's pull aborts with
+## "untracked working tree files would be overwritten". That happened twice on
+## this repo before anyone noticed the cause was two missing files rather than a
+## bad ignore rule.
+##
+## Checking presence on disk is enough to catch it. A script added without
+## running the importer fails here, which is the moment to fix it.
+func _test_every_script_has_a_uid() -> void:
+	var missing: Array[String] = []
+	var scripts := 0
+	var pending: Array[String] = ["res://"]
+	while not pending.is_empty():
+		var directory_path: String = pending.pop_back()
+		var directory := DirAccess.open(directory_path)
+		if directory == null:
+			continue
+		directory.list_dir_begin()
+		var entry := directory.get_next()
+		while entry != "":
+			if entry.begins_with("."):
+				entry = directory.get_next()
+				continue
+			var full_path := directory_path.path_join(entry)
+			if directory.current_is_dir():
+				pending.append(full_path)
+			elif entry.ends_with(".gd"):
+				scripts += 1
+				if not FileAccess.file_exists("%s.uid" % full_path):
+					missing.append(full_path)
+			entry = directory.get_next()
+		directory.list_dir_end()
+	_check(scripts > 100, "uid check walked the project (%d scripts)" % scripts)
+	_check(
+		missing.is_empty(),
+		"every script has a .uid beside it -- run `godot --headless --path . --import` (missing: %s)"
+			% ", ".join(missing),
+	)
 
 
 ## Body type is flat everywhere, and stays flat.

@@ -1,2 +1,14 @@
 .godot/
 .DS_Store
+
+## Deliberately NOT ignored: *.uid
+##
+## Godot 4.4+ writes a .uid file next to every script and imported resource,
+## and its identity system depends on them being version-controlled -- they are
+## what keeps references intact across a rename or a move. Ignoring them looks
+## tempting the first time a pull collides on one, but the collision means the
+## opposite: somebody added a script without a .uid, the editor generated one
+## locally, and the two met when it was finally committed.
+##
+## The fix is `godot --headless --path . --import` and committing the result,
+## which `_test_every_script_has_a_uid` in tests/test_runner.gd now enforces.
