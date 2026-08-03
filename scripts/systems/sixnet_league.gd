@@ -54,6 +54,9 @@ const POWER_SEASON_PULL: float = 0.25
 ## worlds. Four points is a visible regional gap on that scale; 74 marks a
 ## genuinely weak production year without classifying half the world as poor.
 const DOMINANCE_THRESHOLD: float = 4.0
+
+## The one region that ignores geography. See `_adopt_zeitgeist()`.
+const ZEITGEIST_REGION: String = "Zaitgaist"
 const ISOLATION_THRESHOLD: float = 74.0
 const MAX_BLENDED_ATTRIBUTES: int = 2
 const MAX_SPECIALTY_BONUS_DELTA: float = 6.0  ## base +8 specialty bonus can reach +14
@@ -418,8 +421,18 @@ static func apply_promotion_relegation(career: Resource) -> void:
 ## intensifies its own existing specialty (narrows and deepens it, capped).
 ## One shared entry check, one overlay dict -- two legible, narratively
 ## distinct outcomes rather than two competing systems.
+## Scoped to `DEVELOPMENT_REGIONS` -- core plus minor -- rather than
+## `CORE_REGIONS`. Ispayk and A'ace stay out: their identities come from
+## history and money, not from a local tradition that could spread.
 static func apply_influence_drift(career: Resource) -> void:
-	for region_name in Regions.CORE_REGIONS:
+	for region_name in Regions.DEVELOPMENT_REGIONS:
+		## Zaitgaist has no tradition to defend and no neighbor it listens to.
+		## Each season it simply becomes whatever just won the Sixnet, so it
+		## skips the dominance and isolation branches entirely. Everything else
+		## in this system is geographic; this is the one rule that is not.
+		if region_name == ZEITGEIST_REGION:
+			_adopt_zeitgeist(career)
+			continue
 		var neighbors: Array = Array(Regions.REGION_ADJACENCY.get(region_name, []))
 		var own_power := float(career.region_strength.get(region_name, 50.0))
 		var strongest_neighbor := ""
@@ -429,10 +442,37 @@ static func apply_influence_drift(career: Resource) -> void:
 			if gap > strongest_gap:
 				strongest_gap = gap
 				strongest_neighbor = str(neighbor)
-		if strongest_gap > DOMINANCE_THRESHOLD and not strongest_neighbor.is_empty():
+		## A minor region is by design far weaker than any major neighbor, so
+		## without resistance the gap would clear the threshold every season:
+		## minor traditions would blend every year, never intensify, and lose
+		## the specialization that is the entire reason the tier exists.
+		var threshold := DOMINANCE_THRESHOLD \
+			* (1.0 + Regions.tradition_resistance(region_name))
+		if strongest_gap > threshold and not strongest_neighbor.is_empty():
 			_blend_specialty_toward(career, region_name, strongest_neighbor)
 		elif own_power < ISOLATION_THRESHOLD:
 			_intensify_own_specialty(career, region_name)
+
+
+## Zaitgaist adopts the reigning champion's specialty wholesale -- the champion
+## rather than the strongest region, so it copies what *won* rather than what
+## was objectively best. That builds in a one-season lag: it is permanently
+## playing last year's winning style, which is the joke, the mechanic, and the
+## reason it can never lead.
+static func _adopt_zeitgeist(career: Resource) -> void:
+	var champion := str(career.sixnet_champion_region)
+	if champion.is_empty() or champion == ZEITGEIST_REGION:
+		return
+	var overlay: Dictionary = _region_overlay_entry(career, ZEITGEIST_REGION)
+	var champion_specialty: Array = Array(
+		PlayerGeneratorModel.REGION_SPECIALTY.get(champion, [])
+	)
+	overlay["specialty_add"] = champion_specialty.duplicate()
+	overlay["zeitgeist_source"] = champion
+	## Never accumulates. Zaitgaist replaces its borrowed identity outright
+	## each time rather than layering one champion's tradition on the last --
+	## it has no tradition of its own for them to layer onto.
+	overlay.erase("specialty_bonus_delta")
 
 
 static func _region_overlay_entry(career: Resource, region_name: String) -> Dictionary:

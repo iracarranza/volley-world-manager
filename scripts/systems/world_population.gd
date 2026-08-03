@@ -144,6 +144,15 @@ const GUARANTEED_YOUNG_TIER: String = "standout"
 const REGION_BIRTH_WEIGHTS := {
 	"A'ace": 0.35,
 	"Ispayk": 1.20,
+	## Minor regions are small programs, not small talent pools with the same
+	## headcount -- they genuinely raise far fewer players. Zaitgaist is a
+	## city-state you could walk across in a morning.
+	"Tu'ul ys Feynt": 0.25,
+	"Lo-onğ Ralī": 0.20,
+	"Bompaşao": 0.30,
+	"Rhen Tempaol": 0.28,
+	"Kutre den Lyn": 0.26,
+	"Zaitgaist": 0.12,
 }
 
 ## Where talent *ends up*.
@@ -160,6 +169,23 @@ const REGION_PULL := {
 	"Spëddigh": 0.80,
 	"Taktikã": 0.80,
 	"Ispayk": 0.45,
+	## Every minor region loses its best players to bigger programs. This is
+	## what produces the tier's signature story: a specialist raised in one of
+	## these and scouted playing somewhere else entirely, which the roster
+	## dossier already shows because `home_region` and `club_region` are
+	## separate fields.
+	## Well below every major, including Ispayk. Pull is relative and shared
+	## across all inhabited regions, so values merely *lower* than the majors
+	## still made the minor tier a net importer once six of them existed: they
+	## raise about 15% of the world between them, and at 0.45-0.70 they were
+	## attracting 26% of all migration. A minor region has to end a career
+	## having exported its best players, not collected somebody else's.
+	"Kutre den Lyn": 0.30,
+	"Rhen Tempaol": 0.26,
+	"Bompaşao": 0.24,
+	"Tu'ul ys Feynt": 0.20,
+	"Zaitgaist": 0.18,
+	"Lo-onğ Ralī": 0.14,
 }
 
 ## How likely a player is to have moved at all, by how good they are. Talent
@@ -320,19 +346,133 @@ static func _scarce_allotment(
 	return counts
 
 
-## Where a player is born. Weighted only by how prolific each region is --
-## never by how good the player is or how old they are.
-static func birth_region(rng: RandomNumberGenerator) -> String:
+## How a region's talent is shaped, as multipliers on its birth share per
+## talent tier. `REGION_BIRTH_WEIGHTS` decides how *many* players a region
+## raises; this decides what they look like.
+##
+## The world totals stay invariant. There are still exactly eight generational
+## players alive, twenty-four elite, sixty-two standout. Tier is chosen before
+## region, so weighting the region draw redistributes *which* regions those
+## scarce players come from and never creates more -- which is the whole point
+## of the scarcity model, and the invariant a regression check pins.
+##
+## Without this every region drew talent from the same distribution, so no
+## region could be star-heavy or depth-heavy and the taglines describing
+## exactly that were fiction the generator never implemented. Pāwa Hitō's
+## showcase academies now genuinely concentrate top-tier talent at the cost of
+## depth; Bloc du Larg's methodical halls produce the inverse. Minor regions
+## lean hard toward the middle tiers -- low ceiling, respectable floor -- so
+## they stay places worth scouting without ever producing a generational
+## player.
+const REGION_TIER_AFFINITY := {
+	"Pāwa Hitō": {"generational": 1.9, "elite": 1.6, "standout": 1.3,
+		"solid": 0.9, "squad": 0.8, "fringe": 1.1},
+	"Bloc du Larg": {"generational": 0.5, "elite": 0.8, "standout": 1.1,
+		"solid": 1.4, "squad": 1.3, "fringe": 0.7},
+	"Taktikã": {"generational": 0.8, "elite": 1.0, "standout": 1.2,
+		"solid": 1.2, "squad": 1.0, "fringe": 0.8},
+	"Xérvu": {"generational": 1.2, "elite": 1.2, "standout": 1.1,
+		"solid": 1.0, "squad": 0.9, "fringe": 0.9},
+	"Spëddigh": {"generational": 0.7, "elite": 0.9, "standout": 1.2,
+		"solid": 1.3, "squad": 1.1, "fringe": 0.8},
+	"Ispayk": {"generational": 1.1, "elite": 1.0, "standout": 1.1,
+		"solid": 1.1, "squad": 1.0, "fringe": 1.0},
+	## Buys rather than raises: almost no homegrown pipeline at any tier.
+	"A'ace": {"generational": 0.4, "elite": 0.6, "standout": 0.8,
+		"solid": 1.1, "squad": 1.2, "fringe": 1.2},
+	"Tu'ul ys Feynt": {"generational": 0.3, "elite": 0.6, "standout": 1.0,
+		"solid": 1.2, "squad": 1.2, "fringe": 1.1},
+	"Lo-onğ Ralī": {"generational": 0.2, "elite": 0.5, "standout": 0.9,
+		"solid": 1.3, "squad": 1.3, "fringe": 1.1},
+	"Bompaşao": {"generational": 0.4, "elite": 0.9, "standout": 1.2,
+		"solid": 1.1, "squad": 1.0, "fringe": 0.9},
+	"Rhen Tempaol": {"generational": 0.3, "elite": 0.7, "standout": 1.1,
+		"solid": 1.2, "squad": 1.1, "fringe": 1.0},
+	"Kutre den Lyn": {"generational": 0.4, "elite": 1.0, "standout": 1.3,
+		"solid": 1.1, "squad": 0.9, "fringe": 0.8},
+	"Zaitgaist": {"generational": 0.15, "elite": 0.4, "standout": 0.9,
+		"solid": 1.4, "squad": 1.4, "fringe": 1.0},
+}
+
+## What a region's players *play*, as multipliers on POSITION_MIX. Renormalised
+## per region, so a region always produces a full spread -- these tilt the mix,
+## they never remove a position.
+##
+## This is the dial that makes the minor tier land, because it interacts with
+## the positional best-seven in `SixnetLeague.region_strength()`: a region that
+## produces world-class liberos and almost no middles has high peak individual
+## talent and a poor best seven, since the seven still needs two middles and
+## will fill them with whoever is left. "Brilliant at one thing, cannot field a
+## team" falls out of the arithmetic instead of being asserted.
+const REGION_POSITION_AFFINITY := {
+	"Pāwa Hitō": {"Setter": 0.8, "Outside Hitter": 1.2, "Middle Blocker": 1.3,
+		"Opposite": 1.3, "Libero": 0.6},
+	"Bloc du Larg": {"Setter": 1.2, "Outside Hitter": 1.0, "Middle Blocker": 1.3,
+		"Opposite": 0.8, "Libero": 1.0},
+	"Spëddigh": {"Setter": 1.3, "Outside Hitter": 1.1, "Middle Blocker": 0.8,
+		"Opposite": 0.7, "Libero": 1.4},
+	"Taktikã": {"Setter": 1.4, "Outside Hitter": 1.0, "Middle Blocker": 0.8,
+		"Opposite": 0.8, "Libero": 1.1},
+	"Xérvu": {"Setter": 0.9, "Outside Hitter": 1.2, "Middle Blocker": 0.9,
+		"Opposite": 1.2, "Libero": 0.8},
+	## Deception is a pin-hitter's craft; nobody here is tall.
+	"Tu'ul ys Feynt": {"Setter": 1.1, "Outside Hitter": 1.4, "Middle Blocker": 0.4,
+		"Opposite": 1.2, "Libero": 1.0},
+	## The sharpest case in the set: elite liberos, nothing tall at all.
+	"Lo-onğ Ralī": {"Setter": 0.9, "Outside Hitter": 1.2, "Middle Blocker": 0.3,
+		"Opposite": 0.5, "Libero": 2.4},
+	"Bompaşao": {"Setter": 0.9, "Outside Hitter": 1.5, "Middle Blocker": 0.4,
+		"Opposite": 0.6, "Libero": 2.2},
+	## The only middle-heavy region here -- setters and quick middles.
+	"Rhen Tempaol": {"Setter": 2.0, "Outside Hitter": 0.9, "Middle Blocker": 1.6,
+		"Opposite": 0.5, "Libero": 0.8},
+	"Kutre den Lyn": {"Setter": 1.2, "Outside Hitter": 1.5, "Middle Blocker": 0.5,
+		"Opposite": 1.3, "Libero": 0.7},
+	## Flat on purpose: no tradition telling it what to produce.
+	"Zaitgaist": {"Setter": 1.0, "Outside Hitter": 1.0, "Middle Blocker": 1.0,
+		"Opposite": 1.0, "Libero": 1.0},
+}
+
+
+## How many roster spots a region has, as a share. Defaults to how much it
+## raises, which is a decent proxy for how many programs a place runs -- but
+## only a proxy, and A'ace is the case that proves it: it raises almost nobody
+## and runs a full complement of well-funded clubs. Using birth rate alone
+## there would strip the region of the capacity to sign the players its entire
+## identity is built on.
+const REGION_ROSTER_CAPACITY := {
+	"A'ace": 1.50,
+	"Ispayk": 0.95,
+}
+
+
+static func region_capacity(region_name: String) -> float:
+	return float(REGION_ROSTER_CAPACITY.get(
+		region_name, REGION_BIRTH_WEIGHTS.get(region_name, 1.0)
+	))
+
+
+static func tier_affinity(region_name: String, tier_key: String) -> float:
+	var region_table: Dictionary = REGION_TIER_AFFINITY.get(region_name, {})
+	return float(region_table.get(tier_key, 1.0))
+
+
+## Where a player is born. Weighted by how prolific each region is and, when a
+## tier is supplied, by how much that region concentrates talent at that tier.
+## Never by the player's age.
+static func birth_region(rng: RandomNumberGenerator, tier_key: String = "") -> String:
 	var total := 0.0
-	for region_name in Regions.SIXNET_PARTICIPANTS:
-		total += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0))
+	for region_name in Regions.INHABITED_REGIONS:
+		total += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0)) \
+			* tier_affinity(str(region_name), tier_key)
 	var roll := rng.randf() * total
 	var cumulative := 0.0
-	for region_name in Regions.SIXNET_PARTICIPANTS:
-		cumulative += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0))
+	for region_name in Regions.INHABITED_REGIONS:
+		cumulative += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0)) \
+			* tier_affinity(str(region_name), tier_key)
 		if roll <= cumulative:
 			return str(region_name)
-	return str(Regions.SIXNET_PARTICIPANTS[Regions.SIXNET_PARTICIPANTS.size() - 1])
+	return str(Regions.INHABITED_REGIONS[Regions.INHABITED_REGIONS.size() - 1])
 
 
 ## Decides where a player actually plays. Better players move more often,
@@ -352,10 +492,16 @@ static func assign_club_region(player: VolleyballPlayer, rng: RandomNumberGenera
 	var exponent := float(PULL_EXPONENT_BY_BAND.get(band, 1.0))
 	var total := 0.0
 	var weights := {}
-	for region_name in Regions.SIXNET_PARTICIPANTS:
+	for region_name in Regions.INHABITED_REGIONS:
 		if str(region_name) == home:
 			continue
-		var weight := pow(float(REGION_PULL.get(region_name, 1.0)), exponent)
+		## Pull answers "how attractive is this place", never "how many roster
+		## spots does it have". Without the second term a city-state with a
+		## twelfth of Landavol's birth rate absorbed a full share of world
+		## migration and ended every career a net importer -- backwards for a
+		## tier defined by losing its best players.
+		var weight := pow(float(REGION_PULL.get(region_name, 1.0)), exponent) \
+			* region_capacity(str(region_name))
 		weights[region_name] = weight
 		total += weight
 	var roll := rng.randf() * total
@@ -367,11 +513,17 @@ static func assign_club_region(player: VolleyballPlayer, rng: RandomNumberGenera
 			return
 
 
-static func weighted_position(rng: RandomNumberGenerator) -> Dictionary:
-	var roll := rng.randf()
+static func weighted_position(
+	rng: RandomNumberGenerator, region_name: String = "",
+) -> Dictionary:
+	var affinity: Dictionary = REGION_POSITION_AFFINITY.get(region_name, {})
+	var total := 0.0
+	for entry in POSITION_MIX:
+		total += float(entry.weight) * float(affinity.get(str(entry.role), 1.0))
+	var roll := rng.randf() * total
 	var cumulative := 0.0
 	for entry in POSITION_MIX:
-		cumulative += float(entry.weight)
+		cumulative += float(entry.weight) * float(affinity.get(str(entry.role), 1.0))
 		if roll <= cumulative:
 			return entry
 	return POSITION_MIX[POSITION_MIX.size() - 1]
@@ -429,7 +581,7 @@ static func generate(
 	## contains, and simply could not be met. Eight, spread over eight
 	## cohorts, leaves the golden mechanic intact.
 	var guaranteed_pending: Array[String] = []
-	for region_name in Regions.SIXNET_PARTICIPANTS:
+	for region_name in Regions.INHABITED_REGIONS:
 		guaranteed_pending.append(str(region_name))
 
 	var result: Array[VolleyballPlayer] = []
@@ -470,8 +622,8 @@ static func generate(
 						and not guaranteed_pending.is_empty():
 					region = guaranteed_pending.pop_front()
 				else:
-					region = birth_region(rng)
-				var position := weighted_position(rng)
+					region = birth_region(rng, tier_key)
+				var position := weighted_position(rng, region)
 				var player := PlayerGeneratorModel.generate_prospect(
 					region,
 					str(position.role),
