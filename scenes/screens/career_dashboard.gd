@@ -902,8 +902,8 @@ func _player_dossier_text(player: VolleyballPlayer) -> String:
 	## on the wheel it would inflate the category, and Overall with it. It
 	## belongs with the other things that are true of a player rather than good
 	## about them.
-	biography += "[b]Adaptability[/b]  %d\n[b]Ego[/b]  %d\n[b]Hand[/b]  %s-handed" % [
-		player.adaptability, player.ego, player.dominant_hand,
+	biography += "[b]Adaptability[/b]  %d\n[b]Ego[/b]  %d\n[b]Leadership[/b]  %d\n[b]Hand[/b]  %s-handed" % [
+		player.adaptability, player.ego, player.leadership, player.dominant_hand,
 	]
 	return "[table=3][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][/table]" % [
 		status, volleyball, biography,

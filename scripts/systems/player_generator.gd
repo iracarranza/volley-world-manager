@@ -126,14 +126,13 @@ const ROLE_SECONDARY := {
 			"serve_technique", "serve_consistency", "serve_placement", "ball_control"],
 	"Outside Hitter": ["feinting", "court_vision", "composure", "serve_technique",
 			"serve_consistency", "explosiveness", "jump_reach", "block_timing",
-			"lateral_speed", "reception_stability", "leadership"],
+			"lateral_speed", "reception_stability"],
 	"Middle Blocker": ["attack_accuracy", "tooling", "feinting", "shot_variety",
-			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed",
-			"leadership"],
+			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed"],
 	"Opposite": ["feinting", "finesse", "serve_technique", "serve_aggression",
-			"serve_variation", "explosiveness", "arm_speed", "work_rate", "leadership"],
+			"serve_variation", "explosiveness", "arm_speed", "work_rate"],
 	"Libero": ["court_vision", "adaptability", "composure", "transition_speed",
-			"stamina", "tactical_discipline", "acceleration", "leadership"],
+			"stamina", "tactical_discipline", "acceleration"],
 }
 
 ## Height variation band per role, in centimetres.
@@ -183,6 +182,7 @@ static func generate_roster(
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
 		assign_body_type(player, rng)
 		assign_ego(player, rng, canonical_region)
+		assign_leadership(player, rng, canonical_region)
 		_apply_body_variation(player, rng, canonical_region, overlay)
 		player.stride_length_m = player.default_stride_length_m()
 		## Sets every attribute and derives `potential` from the ceilings it built.
@@ -273,6 +273,7 @@ static func _build_prospect(
 	player.professional_experience = maxi(age - 20, 0)
 	assign_body_type(player, rng)
 	assign_ego(player, rng, canonical_region)
+	assign_leadership(player, rng, canonical_region)
 	_apply_body_variation(player, rng, canonical_region, overlay)
 	player.stride_length_m = player.default_stride_length_m()
 	_apply_attributes(player, canonical_region, rng, age <= 20, overlay, talent)
@@ -331,7 +332,7 @@ const PHYSICAL_ATTRIBUTES: Array[String] = [
 const MENTAL_ATTRIBUTES: Array[String] = [
 	"court_vision", "anticipation", "decision_making", "composure",
 	"tactical_discipline", "improvisation", "adaptability", "unpredictability",
-	"work_rate", "leadership",
+	"work_rate",
 ]
 
 ## Age at which physical qualities stop improving and begin to fade.
@@ -530,6 +531,42 @@ const POSITION_EGO_BIAS := {
 	"Opposite": 9.0, "Outside Hitter": 5.0, "Middle Blocker": 0.0,
 	"Setter": -4.0, "Libero": -8.0,
 }
+
+
+## How much the rest of the side plays up around this player.
+##
+## Generated here rather than through `_apply_attributes` because leadership
+## left `ABILITY_ATTRIBUTES` -- it acts on teammates rather than on this
+## player's own contacts, so it must not feed a capability rating. Without an
+## explicit assignment every player would silently sit at the default 50.
+##
+## Roles that organise the court from within it carry more of it; the roles
+## judged on terminal contacts carry less. Deliberately a milder spread than
+## ego, because a squad of twelve wildly varying leaders reads as noise rather
+## than as a captaincy question.
+const POSITION_LEADERSHIP_BIAS := {
+	"Setter": 8.0, "Libero": 5.0, "Middle Blocker": 0.0,
+	"Outside Hitter": -1.0, "Opposite": -3.0,
+}
+
+
+static func assign_leadership(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+	region_name: String,
+) -> void:
+	## Its own stream, for the same reason ego has one: drawing from the shared
+	## generation rng advances it for every attribute after, so adding this
+	## silently rerolls the world.
+	var leadership_rng := RandomNumberGenerator.new()
+	leadership_rng.seed = hash("%d|leadership|%d|%s" % [
+		rng.seed, player.id, region_name,
+	])
+	player.leadership = clampi(roundi(
+		leadership_rng.randfn(50.0, 12.0)
+		+ float(POSITION_LEADERSHIP_BIAS.get(player.position_role, 0.0))
+		+ float(player.age - 24) * 0.6
+	), 1, 100)
 
 
 static func assign_ego(

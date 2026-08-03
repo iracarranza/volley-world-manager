@@ -14,7 +14,7 @@ const PROFILE_TOOLTIPS := {
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise, hand control and unpredictability.",
 	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity, sustained engine and reach.",
 	"Serving": "Power, technique, placement, consistency, aggression, variation and repertoire.",
-	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline, creativity and leadership.",
+	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline and creativity.",
 }
 
 const AXIS_CONTRIBUTORS := {
@@ -23,7 +23,7 @@ const AXIS_CONTRIBUTORS := {
 	"Setting / Control": "set_accuracy; set_balance; set_stability; tempo_control; set_disguise; hand_control; unpredictability",
 	"Physical": "acceleration; lateral_speed; transition_speed; explosiveness; jump_reach; stamina; work_rate; height_cm; wingspan_cm",
 	"Serving": "serve_power; serve_technique; serve_placement; serve_consistency; serve_aggression; serve_variation; serve-style proficiencies",
-	"Mental / Tactical": "court_vision; anticipation; decision_making; composure; tactical_discipline; improvisation; adaptability; leadership",
+	"Mental / Tactical": "court_vision; anticipation; decision_making; composure; tactical_discipline; improvisation; adaptability",
 	"Overall": "Attacking; Defensive; Setting / Control; Physical; Serving; Mental / Tactical",
 	"Power": "attack_power; mass_kg; explosiveness; transition_speed; arm_speed; approach_timing",
 	"Accuracy": "attack_accuracy",
@@ -66,7 +66,6 @@ const AXIS_CONTRIBUTORS := {
 	"Composure": "composure",
 	"Tactical Discipline": "tactical_discipline",
 	"Creativity": "improvisation; adaptability",
-	"Leadership": "leadership",
 }
 
 ## The one place every raw ability attribute is assigned to a category. Every
@@ -109,7 +108,7 @@ const CATEGORY_ATTRIBUTES := {
 	],
 	"Mental & Tactical": [
 		"court_vision", "anticipation", "decision_making", "composure",
-		"tactical_discipline", "improvisation", "adaptability", "leadership",
+		"tactical_discipline", "improvisation", "adaptability",
 	],
 }
 
@@ -312,8 +311,7 @@ static func detailed_profile(
 				"Tactical Discipline": raw.call("tactical_discipline"),
 				"Creativity": _weighted(
 					[raw.call("improvisation"), raw.call("adaptability")], [0.50, 0.50]
-				),
-				"Leadership": raw.call("leadership")}
+				)}
 		_:
 			## "Power" replaces attack_power/arm_speed with the composite that
 			## actually reflects usable hitting power -- several physical

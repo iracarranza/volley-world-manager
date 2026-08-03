@@ -86,6 +86,19 @@ extends Resource
 @export_range(1, 100) var composure: int = 50
 @export_range(1, 100) var tactical_discipline: int = 50
 @export_range(1, 100) var improvisation: int = 50
+## How much the rest of the side plays up around this player.
+##
+## Out of `ABILITY_ATTRIBUTES` for the same reason as `ego` and `body_type`:
+## every ability attribute belongs to a category that
+## `AttributeProfiles.category_score()` averages into a rating, and leadership
+## does not make *this* player better at volleyball -- it acts on everybody
+## else. Scoring a captain higher for it inflated Mental & Tactical, and Overall
+## with it, for a quality the player never applies to their own contacts.
+##
+## Read by `GameManager` for how a squad's confidence moves after a point and
+## how far a collapse is allowed to run, and by
+## `SignatureMoveModel.crush_capability()` -- a hitter the room follows goes for
+## the big one more readily.
 @export_range(1, 100) var leadership: int = 50
 ## How hard this setter's distribution pattern is to scout across a whole
 ## match -- varying tempo and target selection rather than falling into
@@ -161,11 +174,11 @@ const ABILITY_ATTRIBUTES: Array[String] = [
 	"set_disguise", "hand_control", "unpredictability", "attack_power", "attack_accuracy", "approach_timing",
 	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
 	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
-	"leadership", "adaptability",
+	"adaptability",
 ]
 
 const POSITION_WEIGHTS := {
-	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making", "leadership"],
+	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making"],
 	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance", "work_rate"],
 	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation", "work_rate"],
 	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "tooling", "shot_variety", "block_timing", "serve_power"],

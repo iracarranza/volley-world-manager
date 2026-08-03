@@ -961,7 +961,9 @@ func _test_minor_region_behaviour() -> void:
 			and int(generated_grade_counts.B) > int(generated_grade_counts.D),
 		"B is the plurality grade across deterministic professional rosters",
 	)
-	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 7
+	## Six axes since leadership left the wheel: it acts on teammates rather than
+	## on this player's own contacts, so it must not feed a capability rating.
+	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 6
 			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical")
 				.has("Court Vision")
 			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical")
@@ -1017,7 +1019,7 @@ func _test_minor_region_behaviour() -> void:
 	## merges or splits an axis is caught either direction.
 	var expected_axis_counts := {
 		"Attacking": 7, "Defensive": 7, "Setting & Ball Control": 7,
-		"Physical": 7, "Serving": 7, "Mental & Tactical": 7,
+		"Physical": 7, "Serving": 7, "Mental & Tactical": 6,
 	}
 	var axis_counts_match_expected := true
 	for profile_name in expected_axis_counts:
@@ -1052,14 +1054,24 @@ func _test_minor_region_behaviour() -> void:
 		contributor_tooltips_are_names_only,
 		"wheel tooltips name contributing attributes without exposing formulas",
 	)
+	## Leadership deliberately has no axis. The wheel's axes feed
+	## `category_score()`, and leadership acts on teammates rather than on this
+	## player's own contacts -- scoring a captain higher for it inflated Mental &
+	## Tactical, and Overall with it, for a quality they never apply to their own
+	## ball. It is surfaced in the biography instead, beside ego and handedness.
 	_check(
 		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Physical")
 			.has("Engine")
 			and "work_rate" in str(ATTRIBUTE_PROFILE_SCRIPT.AXIS_CONTRIBUTORS.Engine)
-			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(
+			and not ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(
 				club_roster[0], "Mental & Tactical"
 			).has("Leadership"),
-		"work rate is combined into the physical Engine axis and leadership remains visible",
+		"work rate combines into the physical Engine axis, and leadership is not a wheel axis",
+	)
+	_check(
+		not ("leadership" in VolleyballPlayer.ABILITY_ATTRIBUTES)
+			and club_roster[0].leadership >= 1,
+		"leadership is generated and stored without being an ability attribute",
 	)
 	_check(
 		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Defensive").has("Touch Control")
@@ -6080,24 +6092,38 @@ func _test_readiness_and_calibration_reports() -> void:
 	## even is an engine defect rather than a difference between the teams.
 	##
 	## This was a ratchet at 0.90 while the opponent had no first-ball set path
-	## and the share sat at 0.871. With that path built it measures near-even,
-	## so this is now a real symmetry check: both squads are drawn from the same
-	## generator, and neither side's attack should win appreciably more than the
-	## other's. The bound leaves room for sampling noise at this sample size,
-	## not for a structural advantage.
+	## and the share sat at 0.871. With that path built it measured near-even on
+	## the one seed it looked at, and the bound came down to 0.12.
 	##
-	## This is one roster pair, not an average over many: two independently
-	## generated squads can differ substantially in overall talent by chance
-	## (talent itself spans a ~2x range), so the base seed is chosen for a
-	## pairing that happens to read as even, not because any seed would. Changing
-	## the generated rating distribution shifts the roster pairing even when the
-	## rally engine is untouched, so this seed is re-swept whenever generation
-	## changes rather than weakening the symmetry bound.
+	## Measuring one roster pair could not support that bound. Swept across forty
+	## independently generated pairings the single-pair share runs from 0.054 to
+	## 1.000 -- the pairing, not the engine, decides the number, and only about a
+	## quarter of seeds land inside 0.12. The instruction this comment used to
+	## carry was to re-sweep the seed whenever generation changed, which means
+	## the gate was re-fitted to noise after every change: a procedure that
+	## guarantees it can never fail, and therefore never detect the asymmetry it
+	## was written for. Removing `leadership` from the ability set reshuffled the
+	## stream and the lottery came up short, which is how this was found.
+	##
+	## `_pooled_home_attack_share` measures the quantity the claim is actually
+	## about. Every roster set plays an equal number of rallies on each side of
+	## the net and under each serving assignment, so roster strength cancels by
+	## construction rather than being averaged down, and what is left is the side
+	## itself. Ten pairings of 160 rallies costs about eight seconds and resolves
+	## roughly 800 attack-decided points.
+	##
+	## The bound stays at 0.12; it did not need loosening, the measurement needed
+	## fixing. It measures 0.558 -- see
+	## `docs/calibration/ATTACK_SIDE_SYMMETRY_2026_08_03.md`. That is a real home
+	## tilt of about six points and it is not sampling noise (3.3 sigma at this
+	## sample size), but it sits inside the bound, so this gate now runs as a
+	## tight ratchet: any change that worsens the tilt by another four points
+	## fires it. The tilt itself is an open finding, not something this gate
+	## accepts as correct.
+	var attack_share := _pooled_home_attack_share(10, 40)
 	_check(
-		int(calibration.get("home_attack_wins", 0))
-			+ int(calibration.get("opponent_attack_wins", 0)) > 0
-			and absf(float(calibration.get("home_attack_share", 1.0)) - 0.5) <= 0.12,
-		"neither side's attack wins appreciably more than the other's",
+		absf(attack_share - 0.5) <= 0.12,
+		"neither side's attack wins appreciably more than the other's (%.3f)" % attack_share,
 	)
 	## Closing used to resolve at exactly 1.0 for every blocker in every rally,
 	## and 477 mechanism checks could not see it: each one asked whether the
@@ -7348,6 +7374,52 @@ func _test_body_type_distribution_is_flat() -> void:
 				expected_share * 100.0,
 			],
 	)
+
+
+## Share of attack-decided points won by the home side, pooled across several
+## independently generated roster pairings.
+##
+## Averaging pairings is not enough on its own here. The quantity under test is
+## whether *the side of the net* confers an advantage, and a roster pair
+## contributes its own talent difference to every rally it plays; across forty
+## pairings the single-pair share still spans 0.054 to 1.000. So each pairing is
+## played twice with the two squads exchanged, and each of those twice with the
+## serve on either side. Every generated squad therefore spends exactly equal
+## time as home and as away, and equal time serving and receiving: roster
+## strength and serve advantage cancel in the pooled total instead of being
+## averaged down, and the residual is attributable to the side.
+##
+## Pooling the raw win counts rather than averaging per-pairing ratios keeps a
+## pairing that resolves few attack-decided points from carrying the same weight
+## as one that resolves many.
+func _pooled_home_attack_share(pairings: int, rallies_per_condition: int) -> float:
+	var home_wins := 0
+	var away_wins := 0
+	for pairing_index in range(pairings):
+		var seed_a := 900006 + pairing_index * 1000
+		var seed_b := 905006 + pairing_index * 1000
+		for swap in [false, true]:
+			for serving_home in [true, false]:
+				var manager := GAME_MANAGER_SCRIPT.new()
+				manager.seed_vertical_slice_data()
+				EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+					manager.players, seed_b if swap else seed_a
+				)
+				EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+					manager.opponent_team.players, seed_a if swap else seed_b
+				)
+				manager.match_state.serving_home = serving_home
+				for seed_value in range(5000, 5000 + rallies_per_condition):
+					var result: Resource = manager.resolve_active_rally(seed_value)
+					if result == null:
+						continue
+					match str(result.terminal_outcome):
+						"kill":
+							home_wins += 1
+						"opponent_kill":
+							away_wins += 1
+				manager.free()
+	return float(home_wins) / maxf(float(home_wins + away_wins), 1.0)
 
 
 ## Mean home stuff-block rate across several independently generated roster
