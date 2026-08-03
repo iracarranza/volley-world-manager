@@ -1,6 +1,8 @@
 class_name VolleyballAttributeProfileSystem
 extends RefCounted
 
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
+
 const PROFILE_NAMES: Array[String] = [
 	"Player Profile", "Attacking", "Defensive", "Setting & Ball Control",
 	"Physical", "Serving", "Mental & Tactical",
@@ -130,13 +132,9 @@ const GRADE_B_MINUS_MIN: float = 66.0
 const GRADE_C_PLUS_MIN: float = 61.0
 const GRADE_C_MIN: float = 55.0
 const GRADE_C_MINUS_MIN: float = 50.0
-const GRADE_COLORS := {
-	"S": "ffd84d",
-	"A": "58d68d",
-	"B": "5dade2",
-	"C": "f2f4f7",
-	"D": "ff6b6b",
-}
+## Compatibility alias for callers that inspect the palette. Grade thresholds
+## remain simulation-owned; their presentation colors live in UIPalette.
+const GRADE_COLORS := UIPalette.GRADE_COLORS
 
 
 ## Shapes a team-level profile -- axis name to lineup-average score -- for the
@@ -195,7 +193,7 @@ static func grade_tier(score: float) -> String:
 
 
 static func grade_color_hex(score: float) -> String:
-	return str(GRADE_COLORS[grade_tier(score)])
+	return UIPalette.grade_color_hex(grade_tier(score))
 
 
 static func axis_tooltip(axis_name: String, description: String = "") -> String:

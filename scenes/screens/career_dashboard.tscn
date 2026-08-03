@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/screens/career_dashboard.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/dashboard_card.tscn" id="2"]
 [ext_resource type="Script" path="res://scenes/components/player_attribute_wheel.gd" id="3_wheel"]
+[ext_resource type="Script" path="res://scenes/components/ui_backdrop.gd" id="4_backdrop"]
 
 [node name="CareerDashboard" type="Control"]
 layout_mode = 3
@@ -19,6 +20,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.035, 0.055, 0.1, 1)
+script = ExtResource("4_backdrop")
 
 [node name="Margin" type="MarginContainer" parent="."]
 layout_mode = 1

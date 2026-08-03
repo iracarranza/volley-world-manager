@@ -18,6 +18,10 @@ const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population
 const WORLD_AGING_SCRIPT := preload("res://scripts/systems/world_aging.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
 const ATTRIBUTE_WHEEL_SCRIPT := preload("res://scenes/components/player_attribute_wheel.gd")
+const UI_PALETTE_SCRIPT := preload("res://scripts/data/ui_palette.gd")
+const UI_STYLE_SCRIPT := preload("res://scripts/systems/ui_style_system.gd")
+const DARK_UI_THEME := preload("res://scenes/themes/dark_theme.tres")
+const LIGHT_UI_THEME := preload("res://scenes/themes/light_theme.tres")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
 const RALLY_MOMENT_SCRIPT := preload("res://scripts/models/rally_moment.gd")
@@ -190,6 +194,7 @@ func _initialize() -> void:
 	_test_team_identity_changes_match_outcomes()
 	_test_team_identity_directional_outcomes()
 	_test_team_wheel_amplification()
+	_test_ui_visual_system()
 	_test_fatigue_recovers_between_fixtures()
 	_test_errant_attacks_land_outside_the_court()
 	_test_world_population()
@@ -207,6 +212,43 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+func _test_ui_visual_system() -> void:
+	_check(
+		DARK_UI_THEME.get_color("font_color", "Label").is_equal_approx(
+			UI_PALETTE_SCRIPT.color(&"ink", false)
+		),
+		"dark Control theme stays synchronized with the shared ink token",
+	)
+	_check(
+		LIGHT_UI_THEME.get_color("font_color", "Label").is_equal_approx(
+			UI_PALETTE_SCRIPT.color(&"ink", true)
+		),
+		"light Control theme stays synchronized with the shared ink token",
+	)
+	var dark_primary := DARK_UI_THEME.get_stylebox("normal", "PrimaryAction") as StyleBoxFlat
+	var light_primary := LIGHT_UI_THEME.get_stylebox("normal", "PrimaryAction") as StyleBoxFlat
+	_check(
+		dark_primary != null and dark_primary.bg_color.is_equal_approx(
+			UI_PALETTE_SCRIPT.color(&"accent", false)
+		),
+		"dark primary actions use the shared accent token",
+	)
+	_check(
+		light_primary != null and light_primary.bg_color.is_equal_approx(
+			UI_PALETTE_SCRIPT.color(&"accent", true)
+		),
+		"light primary actions use the shared accent token",
+	)
+	var action := Button.new()
+	action.name = "AdvanceWeekButton"
+	UI_STYLE_SCRIPT.apply(action, false)
+	_check(
+		action.theme_type_variation == &"PrimaryAction",
+		"semantic styling keeps decisive dashboard actions visually prominent",
+	)
+	action.free()
 
 
 func _test_contact_envelopes_and_vertical_setting() -> void:

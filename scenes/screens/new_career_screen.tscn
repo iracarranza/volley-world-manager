@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/screens/new_career_screen.gd" id="1"]
+[ext_resource type="Script" path="res://scenes/components/ui_backdrop.gd" id="2_backdrop"]
 
 [sub_resource type="StyleBoxFlat" id="RailPanel"]
 bg_color = Color(0.025, 0.06, 0.11, 0.96)
@@ -40,6 +41,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.027, 0.067, 0.122, 1)
+script = ExtResource("2_backdrop")
 
 [node name="AccentBand" type="ColorRect" parent="."]
 unique_name_in_owner = true

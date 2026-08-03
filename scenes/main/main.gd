@@ -4,6 +4,7 @@ signal career_exit_requested
 
 const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
+const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -578,7 +579,13 @@ func _apply_light_mode(light_mode: bool) -> void:
 	court_instructions.add_theme_color_override("font_color", secondary_text)
 	demand_label.add_theme_color_override("font_color", secondary_text)
 	physical_debug_label.add_theme_color_override("font_color", secondary_text)
+	UIStyleSystem.apply(self, light_mode)
 	_update_status_color()
+
+
+func set_light_mode(light_mode: bool) -> void:
+	theme_toggle.set_pressed_no_signal(light_mode)
+	_apply_light_mode(light_mode)
 
 
 func _select_rotation(index: int) -> void:

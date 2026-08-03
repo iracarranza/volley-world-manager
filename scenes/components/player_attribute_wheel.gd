@@ -4,6 +4,7 @@ extends Control
 signal expand_requested
 
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const LEGEND_LINE_HEIGHT: float = 22.0
 const EXPANDED_LEGEND_LINE_HEIGHT: float = 34.0
 
@@ -28,6 +29,11 @@ func _ready() -> void:
 	focus_mode = Control.FOCUS_ALL if expansion_enabled else Control.FOCUS_NONE
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND \
 		if expansion_enabled else Control.CURSOR_ARROW
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED:
+		queue_redraw()
 
 
 func set_expanded_presentation(expanded: bool) -> void:
@@ -104,13 +110,19 @@ func _draw() -> void:
 	var center: Vector2 = geometry.center
 	var radius: float = geometry.radius
 	var font := ThemeDB.fallback_font
+	var light_mode := UIPalette.control_is_light(self)
+	var stroke := UIPalette.color(&"stroke", light_mode)
+	var muted := UIPalette.color(&"ink_muted", light_mode)
+	var ink := UIPalette.color(&"ink", light_mode)
+	var accent := UIPalette.color(&"accent", light_mode)
+	var current := UIPalette.color(&"accent_alt", light_mode)
 	for ring_index in range(1, 5):
 		var ring := PackedVector2Array()
 		for index in range(axes.size()):
 			ring.append(center + _axis_vector(index) * radius * float(ring_index) / 4.0)
 		ring.append(ring[0])
 		draw_polyline(
-			ring, Color(0.35, 0.48, 0.65, 0.48),
+			ring, Color(stroke, 0.48),
 			1.5 if expanded_presentation else 1.0, true,
 		)
 		if expanded_presentation:
@@ -118,12 +130,12 @@ func _draw() -> void:
 				font,
 				center + Vector2(7.0, -radius * float(ring_index) / 4.0 + 4.0),
 				str(ring_index * 25), HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
-				Color(0.46, 0.58, 0.72, 0.8),
+				Color(muted, 0.8),
 			)
 	for index in range(axes.size()):
 		draw_line(
 			center, center + _axis_vector(index) * radius,
-			Color(0.42, 0.55, 0.72, 0.56),
+			Color(stroke, 0.56),
 			1.5 if expanded_presentation else 1.0, true,
 		)
 	## Potential draws first, faint and behind, so the current shape stays the
@@ -138,12 +150,12 @@ func _draw() -> void:
 		if potential_values.size() >= 3:
 			draw_colored_polygon(
 				potential_values,
-				Color(0.95, 0.75, 0.25, 0.15 if expanded_presentation else 0.10),
+				Color(accent, 0.15 if expanded_presentation else 0.10),
 			)
 			var potential_outline: PackedVector2Array = potential_values.duplicate()
 			potential_outline.append(potential_values[0])
 			draw_polyline(
-				potential_outline, Color(0.95, 0.75, 0.25, 0.9),
+				potential_outline, Color(accent, 0.9),
 				3.5 if expanded_presentation else 2.0, true,
 			)
 	var values := PackedVector2Array()
@@ -153,24 +165,24 @@ func _draw() -> void:
 		))
 	if values.size() >= 3:
 		draw_colored_polygon(
-			values, Color(0.1, 0.55, 0.92, 0.38 if expanded_presentation else 0.28)
+			values, Color(current, 0.38 if expanded_presentation else 0.28)
 		)
 		var outline: PackedVector2Array = values.duplicate()
 		outline.append(values[0])
 		draw_polyline(
-			outline, Color(0.3, 0.8, 1.0, 1.0),
+			outline, current,
 			4.0 if expanded_presentation else 2.0, true,
 		)
 		if expanded_presentation:
 			for point in values:
-				draw_circle(point, 5.0, Color(0.66, 0.9, 1.0, 1.0))
-				draw_circle(point, 2.2, Color(0.04, 0.18, 0.34, 1.0))
+				draw_circle(point, 5.0, ink)
+				draw_circle(point, 2.2, UIPalette.color(&"surface_inset", light_mode))
 	if inline_axis_labels:
 		_draw_inline_axis_labels(font, geometry)
 		if expansion_enabled and not expanded_presentation:
 			draw_string(
 				font, Vector2(5.0, 13.0), "EXPAND", HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-				Color(0.48, 0.74, 0.96, 0.72),
+				Color(current, 0.72),
 			)
 		return
 	var marker_font_size := 13 if expanded_presentation else 10
@@ -183,11 +195,11 @@ func _draw() -> void:
 			* (radius + (22.0 if expanded_presentation else 10.0))
 		marker_position += Vector2(-marker_size.x * 0.5, marker_size.y * 0.35)
 		draw_string(font, marker_position, marker, HORIZONTAL_ALIGNMENT_LEFT, -1,
-			marker_font_size, Color(0.62, 0.82, 1.0))
+			marker_font_size, muted)
 	draw_line(
 		Vector2(float(geometry.legend_x) - 7.0, 6.0),
 		Vector2(float(geometry.legend_x) - 7.0, size.y - 6.0),
-		Color(0.34, 0.46, 0.62, 0.45), 1.0,
+		Color(stroke, 0.45), 1.0,
 	)
 	var legend_font_size := 15 if expanded_presentation else (10 if size.x < 380.0 else 11)
 	var legend_line_height := _legend_line_height()
@@ -211,18 +223,17 @@ func _draw() -> void:
 		draw_string(
 			font, Vector2(float(geometry.legend_x), baseline),
 			"%d  %s" % [index + 1, axes[index]], HORIZONTAL_ALIGNMENT_LEFT,
-			name_width, legend_font_size, Color(0.86, 0.92, 1.0),
+			name_width, legend_font_size, ink,
 		)
 		draw_string(
 			font, Vector2(float(geometry.legend_x) + name_width, baseline),
 			value_text, HORIZONTAL_ALIGNMENT_RIGHT, value_width, legend_font_size,
-			Color(0.95, 0.76, 0.28) if not potential_profile.is_empty() \
-			else Color(0.48, 0.78, 1.0),
+			accent if not potential_profile.is_empty() else current,
 		)
 	if expansion_enabled and not expanded_presentation:
 		draw_string(
 			font, Vector2(5.0, 13.0), "EXPAND", HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-			Color(0.48, 0.74, 0.96, 0.72),
+			Color(current, 0.72),
 		)
 
 
@@ -271,6 +282,7 @@ func _legend_line_height() -> float:
 
 func _draw_inline_axis_labels(font: Font, geometry: Dictionary) -> void:
 	var font_size := 16 if expanded_presentation else 11
+	var label_color := UIPalette.color(&"ink", UIPalette.control_is_light(self))
 	for index in range(axes.size()):
 		var rect := _axis_label_rect(index, geometry)
 		var axis_name := axes[index]
@@ -286,7 +298,7 @@ func _draw_inline_axis_labels(font: Font, geometry: Dictionary) -> void:
 		draw_string(
 			font, Vector2(rect.position.x, rect.position.y + rect.size.y * 0.68),
 			label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size,
-			Color(0.88, 0.94, 1.0),
+			label_color,
 		)
 
 

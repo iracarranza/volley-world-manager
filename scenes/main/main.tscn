@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/tactical_court.tscn" id="2_court"]
 [ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="3_theme"]
 [ext_resource type="PackedScene" uid="uid://c5dfblsc38oqe" path="res://scenes/screens/match_screen.tscn" id="4_matchscreen"]
+[ext_resource type="Script" path="res://scenes/components/ui_backdrop.gd" id="5_backdrop"]
 
 [node name="Main" type="Control" unique_id=564539663]
 layout_mode = 3
@@ -23,6 +24,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("5_backdrop")
 mouse_filter = 2
 color = Color(0.027, 0.043, 0.075, 1)
 

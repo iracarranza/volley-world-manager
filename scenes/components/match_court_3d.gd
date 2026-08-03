@@ -2,6 +2,7 @@ class_name MatchCourt3D
 extends Node3D
 
 const FALLBACK_PLAYER_SCENE := preload("res://scenes/components/player_actor_3d.tscn")
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 @export var court_width: float = 9.0
 @export var court_length: float = 18.0
@@ -15,6 +16,7 @@ var player_actors: Dictionary = {}
 var live_positions: Dictionary = {}
 var home_player_ids: Dictionary = {}
 var camera_preset: int = 0
+var light_mode_enabled: bool = false
 
 const CAMERA_PRESETS: Array[Dictionary] = [
 	{"name": "Broadcast", "position": Vector3(12.5, 8.2, 10.8), "fov": 48.0},
@@ -24,6 +26,8 @@ const CAMERA_PRESETS: Array[Dictionary] = [
 
 
 func _ready() -> void:
+	add_to_group("ui_palette_3d")
+	apply_ui_palette(false)
 	_apply_camera_preset()
 	ball_actor.reset_flight()
 
@@ -93,12 +97,48 @@ func _spawn_player(
 	actor.configure(
 		player_id, home_team, display_name, dominant_hand, physical_profile
 	)
+	actor.apply_ui_palette(light_mode_enabled)
 	player_actors[player_id] = actor
 	live_positions[player_id] = position
 	if home_team:
 		home_player_ids[player_id] = true
 	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
 	return actor
+
+
+func apply_ui_palette(light_mode: bool) -> void:
+	light_mode_enabled = light_mode
+	_apply_mesh_color($ArenaFloor, UIPalette.color(&"court_floor", light_mode))
+	_apply_mesh_color($CourtSurface, UIPalette.color(&"court_surface", light_mode))
+	for line in [
+		$EndLineHome, $EndLineAway, $AttackLineHome, $AttackLineAway,
+		$SidelineLeft, $SidelineRight,
+	]:
+		_apply_mesh_color(line, UIPalette.color(&"court_line", light_mode))
+	_apply_mesh_color($Net, UIPalette.color(&"court_net", light_mode), true)
+	_apply_mesh_color($LeftPost, UIPalette.color(&"court_post", light_mode), false, 0.18)
+	_apply_mesh_color($RightPost, UIPalette.color(&"court_post", light_mode), false, 0.18)
+	var environment := $WorldEnvironment.environment.duplicate() as Environment
+	environment.background_color = UIPalette.color(&"canvas", light_mode).darkened(0.18)
+	environment.ambient_light_color = UIPalette.color(&"ink_muted", light_mode)
+	$WorldEnvironment.environment = environment
+	for actor in player_actors.values():
+		(actor as PlayerActor3D).apply_ui_palette(light_mode)
+
+
+func _apply_mesh_color(
+	mesh_instance: MeshInstance3D,
+	color: Color,
+	transparent: bool = false,
+	metallic: float = 0.0,
+) -> void:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.72
+	material.metallic = metallic
+	if transparent or color.a < 1.0:
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mesh_instance.material_override = material
 
 
 func set_player_position(player_id: int, position: Vector2) -> void:
