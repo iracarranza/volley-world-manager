@@ -266,7 +266,12 @@ func _geometry() -> Dictionary:
 	var legend_width := clampf(size.x * 0.48, 142.0, maxf(size.x - 130.0, 142.0))
 	var wheel_width := size.x - legend_width
 	var center := Vector2(wheel_width * 0.48, size.y * 0.5)
-	var radius := maxf(minf(wheel_width * 0.34, size.y * 0.34), 28.0)
+	## 0.30 rather than 0.34: the axis labels sit in the ring outside the wheel,
+	## and the body font is wide enough that "Mental / Tactical" and
+	## "Setting / Control" were overlapping the spokes at the old radius. Giving
+	## the ring more room costs a little wheel and keeps the labels legible,
+	## which is the whole point of drawing them.
+	var radius := maxf(minf(wheel_width * 0.30, size.y * 0.30), 28.0)
 	return {
 		"center": center,
 		"radius": radius,
@@ -304,15 +309,35 @@ func _draw_inline_axis_labels(font: Font, geometry: Dictionary) -> void:
 
 func _axis_label_rect(index: int, geometry: Dictionary) -> Rect2:
 	var vector := _axis_vector(index)
-	var width := 250.0 if expanded_presentation else 126.0
+	var width := 250.0 if expanded_presentation else 138.0
 	var height := 30.0 if expanded_presentation else 22.0
-	var distance := float(geometry.radius) + (34.0 if expanded_presentation else 23.0)
+	var distance := float(geometry.radius) + (34.0 if expanded_presentation else 28.0)
 	var anchor := Vector2(geometry.center) + vector * distance
 	## Pull top and bottom labels slightly inward; side labels have more room and
 	## remain attached to their spoke without colliding with the popup boundary.
 	if absf(vector.y) > 0.75:
 		anchor.y += 8.0 if vector.y < 0.0 else -5.0
-	return Rect2(anchor - Vector2(width * 0.5, height * 0.5), Vector2(width, height))
+	## Push a side label out by half its own text, so its inner edge clears the
+	## spoke instead of its centre sitting on the spoke end. Centred, the long
+	## names -- "Mental / Tactical", "Setting / Control" -- reached back across
+	## the rim and sat on top of the wheel. Measured rather than assumed, because
+	## how far half a label reaches is a property of the font, and this stopped
+	## being true the moment the body font changed.
+	if absf(vector.x) > 0.55 and index < axes.size():
+		var font := get_theme_font(&"font", &"Label")
+		if font != null:
+			var font_size := 16 if expanded_presentation else 11
+			var text_width := font.get_string_size(
+				str(axes[index]), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size
+			).x
+			anchor.x += signf(vector.x) * (text_width * 0.5 + 6.0)
+	var rect := Rect2(
+		anchor - Vector2(width * 0.5, height * 0.5), Vector2(width, height)
+	)
+	## Never let the push carry a label off the widget; a clipped label is worse
+	## than a tight one.
+	rect.position.x = clampf(rect.position.x, 0.0, maxf(size.x - width, 0.0))
+	return rect
 
 
 func _axis_tooltip(index: int) -> String:

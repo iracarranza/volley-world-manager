@@ -187,6 +187,7 @@ func _ready() -> void:
 	%TitleButton.pressed.connect(func() -> void: title_requested.emit())
 	advance_week_button.pressed.connect(_confirm_advance)
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
+	_name_team_sub_tabs()
 	training_option.item_selected.connect(_training_selected)
 	roster_list_toggle.pressed.connect(_toggle_roster_list)
 	roster_list.item_selected.connect(_roster_selected)
@@ -528,6 +529,31 @@ func _populate_roster_list(list: ItemList) -> void:
 			AttributeProfiles.grade(float(player.current_ability_score())),
 			AttributeProfiles.grade(float(player.potential))])
 		list.set_item_metadata(list.item_count - 1, player.id)
+
+
+## A `TabContainer` titles its tabs from the child node names, and node names
+## cannot contain spaces -- so the Team section read "IndividualTraining" and
+## "TeamTraining" on screen. The names are load-bearing (unique-name lookups and
+## `%IndividualTrainingRosterList`), so the titles are set here rather than by
+## renaming the nodes and chasing every reference.
+const TEAM_SUB_TAB_TITLES := {
+	"Overview": "Overview",
+	"IndividualTraining": "Individual Training",
+	"TeamTraining": "Team Training",
+}
+
+
+func _name_team_sub_tabs() -> void:
+	var tabs: TabContainer = get_node_or_null("%TeamSubTabs")
+	if tabs == null:
+		return
+	for index in range(tabs.get_tab_count()):
+		var control := tabs.get_tab_control(index)
+		if control == null:
+			continue
+		var title: String = str(TEAM_SUB_TAB_TITLES.get(str(control.name), ""))
+		if not title.is_empty():
+			tabs.set_tab_title(index, title)
 
 
 func _roster_selected(index: int) -> void:

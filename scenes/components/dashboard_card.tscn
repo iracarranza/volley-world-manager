@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scenes/components/dashboard_card.gd" id="1"]
 
 [node name="DashboardCard" type="Button"]
-custom_minimum_size = Vector2(200, 92)
+custom_minimum_size = Vector2(224, 122)
 size_flags_horizontal = 3
 script = ExtResource("1")
 
@@ -41,7 +41,7 @@ mouse_filter = 2
 [node name="TitleLabel" type="Label" parent="Margin/Row/Text"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 15
 text = "Section"
 mouse_filter = 2
 autowrap_mode = 2
@@ -49,10 +49,10 @@ max_lines_visible = 2
 
 [node name="SummaryLabel" type="Label" parent="Margin/Row/Text"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
+custom_minimum_size = Vector2(166, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.7, 0.8, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 11
 text = "Summary"
 autowrap_mode = 2
 max_lines_visible = 3

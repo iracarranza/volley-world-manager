@@ -8,8 +8,22 @@ var _steps: Array = []
 var _step_index: int = 0
 
 
+## Mirrors `application.gd::_apply_theme()`. Without this the preview renders the
+## dashboard with Godot's built-in font and default control styling, because the
+## theme is assigned to the Application root and this harness never creates one
+## -- so every screenshot looked plausible and showed a UI nobody ships. Layout
+## judged from those is layout judged against the wrong font metrics.
+const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
+const LightTheme := preload("res://scenes/themes/light_theme.tres")
+const UIStyle := preload("res://scripts/systems/ui_style_system.gd")
+
+## Set to true to capture the light theme instead.
+const PREVIEW_LIGHT_MODE: bool = false
+
+
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(SHOTS_DIR)
+	theme = LightTheme if PREVIEW_LIGHT_MODE else DarkTheme
 	var manager := get_node("/root/CareerManager")
 	var error: String = manager.create_career(
 		"Preview Career", "Harbor City VC", "Landavol", "Club", "Balanced"
@@ -19,6 +33,9 @@ func _ready() -> void:
 	var packed := load("res://scenes/screens/career_dashboard.tscn") as PackedScene
 	_dashboard = packed.instantiate()
 	add_child(_dashboard)
+	if _dashboard.has_method("set_light_mode"):
+		_dashboard.set_light_mode(PREVIEW_LIGHT_MODE)
+	UIStyle.apply(self, PREVIEW_LIGHT_MODE)
 	_steps = [
 		["01_home", func() -> void: _dashboard._navigate("Home")],
 		["02_nav_open", func() -> void: _dashboard._toggle_nav_dropdown()],
