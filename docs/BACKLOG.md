@@ -439,7 +439,72 @@ block contest is a step function on contact height**, with almost no gradient
 in between — which is why no threshold tuning inside Gate C can reach the
 target.
 
-### The root cause, and it is upstream of all of this
+### Resolved: leap, not standing reach
+
+Contact height was raised by widening the **leap** band (`JUMP_LEAP_MIN_CM` /
+`JUMP_LEAP_MAX_CM`, 12-78 cm -> 20-110 cm) rather than by correcting
+`standing_reach_cm()`. That is the better fix for three reasons.
+
+**The contest is proportional to leap.** A blocker jumps at a fraction of a
+hitter's effort, so the gap that decides everything is
+`leap * (1 - blocker_effort)`. Widening the leap widens the attacking advantage
+directly, without touching a single reach formula.
+
+**It moves the contest off the body and onto training.** Standing reach is
+height, which a player is born with. Leap is `jump_reach` and `explosiveness`,
+which they develop. The gap now runs +4.9 cm for a poor jumper, +17.3 cm for an
+average one and +29.5 cm for an elite one -- a threshold a player can be
+coached across.
+
+**It puts contact where the sport puts it.** 22-87 cm above the tape across the
+range, against 10-57 cm before; real contact is 60-90 cm above a 2.43 m net.
+
+Measured effect on the geometry sweep:
+
+| | before | after |
+| --- | ---: | ---: |
+| mean contact height | 2.80 m | 3.01 m |
+| lands in | 32.1% | **45.5%** |
+| netted | 7.0% | **0.4%** |
+| stuffed | 23.8% | 22.0% |
+| touched | 27.5% | 23.3% |
+| tooled | 9.6% | 8.8% |
+
+Effect on the **live** simulator was far smaller -- blocked 36.0% -> 33.9%,
+kills 24.6% -> 26.8% -- and that gap is itself the finding. The geometry sweep
+moved thirteen points on "in" while the live path moved two, because the legacy
+block is a scalar margin comparison that barely reads reach at all. A change to
+how high people jump should move a block contest a lot; that it does not is
+another argument for promoting the geometric one.
+
+`standing_reach_cm()` is still ~15 cm low across the range (see below) and is
+still worth correcting, but it is no longer blocking Gate D.
+
+### Still short of target, and the levers that remain
+
+Geometry sweep now sits at 22.0% stuffed against a 12% target, with block
+involvement (stuff + touch + tool) at 54.1% against a 35-45% target.
+
+The design intent is **antagonistic, then decisively overcome**: being blocked
+or touched should be common, there should be a hard ceiling, and clearing it
+should let hitting dominate. The current shape is already antagonistic; what is
+wrong is that too much of the involvement *terminates*. The direct lever is
+`AttackResolutionModel.STUFF_DEPTH_METERS`, which decides how far below a
+blocker's reach a ball has to arrive to be pressed down rather than deflected
+up -- raising it converts stuffs into touches without reducing how often the
+block is involved at all.
+
+Secondary levers: `BLOCKER_REACH_EFFORT`, blocker `half_width_m`, and how
+accurately the block positions itself laterally.
+
+Worth noting the counter-pressure already exists.
+`_opponent_block_adaptation_bonus()` rewards the block when the opponent has
+anticipated **both** the lane and the tempo, routed through
+`OpponentTeam.block_bonus()` and `block_adaptation_strength`. So a hitter who
+overcomes the block by jumping over it is answered by a block that learns their
+pattern -- which is the loop that keeps the ceiling from being a solved problem.
+
+### The remaining reach question
 
 `VolleyballPlayer.standing_reach_cm()` is
 `height_cm * 1.215 + (wingspan_cm - height_cm) * 0.32`, and it is about **15 cm

@@ -515,8 +515,35 @@ func standing_reach_cm() -> float:
 ## heights setting off their back foot and swinging off a four-step run-up.
 ## This is the single place the three inputs are combined; callers that need a
 ## reach must ask here rather than re-adding height and leap themselves.
+## Vertical leap band, in centimetres, from no jumping ability to elite. Named
+## because the attack-versus-block contest is proportional to this number -- see
+## `jumping_reach_cm()` -- so anyone retuning it is retuning blocking.
+const JUMP_LEAP_MIN_CM: float = 20.0
+const JUMP_LEAP_MAX_CM: float = 110.0
+
+
 func jumping_reach_cm(effort: float = 1.0) -> float:
-	var leap := lerpf(12.0, 78.0, float(jump_reach) / 100.0) \
+	## Leap carries the attack-versus-block contest, which is why this band is
+	## wide and generous rather than sober.
+	##
+	## That contest is decided by one number: how far a hitter's contact sits
+	## above a blocker's reach. Because a blocker jumps at a fraction of a
+	## hitter's effort, that difference works out at roughly
+	## `leap * (1 - blocker_effort)` -- it is *proportional to the leap itself*.
+	## At the old 12-78 cm band an average hitter contacted 9 cm above the
+	## blocker and a poor one 0 cm, so almost every swing met hands and the
+	## contest had no room to resolve. Widening the leap widens the attacking
+	## advantage without touching `standing_reach_cm()`, and it moves the contest
+	## off body height -- which a player is born with -- and onto jump and
+	## explosiveness, which they can train.
+	##
+	## It also puts contact where the sport puts it. A hitter now meets the ball
+	## 22 cm above the tape at the bottom of the range and 87 cm at the top,
+	## against 10-57 cm before; real contact is 60-90 cm above a 2.43 m net.
+	##
+	## And it suits the setting: small players making enormous leaps is exactly
+	## the register this world plays in.
+	var leap := lerpf(JUMP_LEAP_MIN_CM, JUMP_LEAP_MAX_CM, float(jump_reach) / 100.0) \
 		* lerpf(0.72, 1.0, float(explosiveness) / 100.0) \
 		* (1.0 - fatigue * 0.35)
 	return standing_reach_cm() + leap * clampf(effort, 0.0, 1.0)

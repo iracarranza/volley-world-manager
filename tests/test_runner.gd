@@ -6524,6 +6524,14 @@ func _test_setter_capability_gates() -> void:
 
 	## 4. Height is a hard wall. Two setters identical but for build, one ball:
 	##    the taller one gets a hand to it and the shorter one cannot.
+	##
+	##    Ball raised 2.60 -> 2.90 m when the leap band widened to 20-110 cm (see
+	##    `VolleyballPlayer.JUMP_LEAP_MIN_CM`). At set effort the short setter's
+	##    ceiling went 2.59 -> 2.76 m and the tall setter's 2.85 -> 3.03 m, so
+	##    2.60 stopped separating them. The old value cleared the short setter by
+	##    one centimetre; 2.90 leaves 14 cm of margin on one side and 13 on the
+	##    other, so the next reach change moves the numbers without silently
+	##    flipping this assertion.
 	var tall: VolleyballPlayer = VolleyballPlayer.new()
 	tall.height_cm = 200.0
 	tall.wingspan_cm = 204.0
@@ -6535,10 +6543,10 @@ func _test_setter_capability_gates() -> void:
 	short_setter.jump_reach = 75
 	short_setter.explosiveness = 75
 	var tall_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
-		tall, 2, 0.5, 2.60, 1.0
+		tall, 2, 0.5, 2.90, 1.0
 	)
 	var short_read: Dictionary = SETTER_CAPABILITY_SCRIPT.evaluate(
-		short_setter, 2, 0.5, 2.60, 1.0
+		short_setter, 2, 0.5, 2.90, 1.0
 	)
 	_check(
 		str(tall_read.reach_state) == "jump"
