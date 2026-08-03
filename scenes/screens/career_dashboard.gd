@@ -10,9 +10,21 @@ const AttributeProfiles := preload("res://scripts/systems/attribute_profile_syst
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const Regions := preload("res://scripts/data/regions.gd")
+const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const ROSTER_RAIL_COLLAPSED_WIDTH: float = 42.0
 const ROSTER_RAIL_EXPANDED_WIDTH: float = 440.0
+## The complete attribute profile is six category groups. Three at a time is
+## what fits at a readable font size across the tab's width without the band
+## growing tall enough to push the Roster tab past the viewport, which is what
+## the single six-column table did.
+const ATTRIBUTE_PAGE_SIZE: int = 3
+## The longest category in `AttributeProfiles.CATEGORY_ATTRIBUTES` -- Attacking
+## and Mental & Tactical both carry eight. Rows beyond a category's own length
+## are hidden rather than destroyed, so paging costs no allocation.
+const ATTRIBUTE_ROWS_PER_COLUMN: int = 8
+const IDENTITY_PANEL_WIDTH: float = 248.0
+const IDENTITY_PANEL_NARROW_WIDTH: float = 188.0
 const RAW_ATTRIBUTE_LABELS := {
 	"attack_power": "Power Transfer",
 	"attack_accuracy": "Attack Accuracy",
@@ -74,9 +86,18 @@ const WHEEL_TOOLTIPS := {
 @onready var section_title: Label = %SectionTitle
 @onready var sections: TabContainer = %Sections
 @onready var current_section_button: Button = %CurrentSectionButton
+@onready var nav_strip: PanelContainer = %NavStrip
+@onready var nav_hint: Label = %NavHint
 @onready var nav_dropdown: Control = %NavDropdown
+@onready var nav_clip: Control = %NavClip
 @onready var dropdown_panel: PanelContainer = %DropdownPanel
 @onready var click_catcher: Control = %ClickCatcher
+@onready var advance_reveal: Control = %AdvanceReveal
+@onready var advance_catcher: Control = %AdvanceCatcher
+@onready var advance_panel: PanelContainer = %AdvancePanel
+@onready var advance_title: Label = %AdvanceTitle
+@onready var advance_week_button: Button = %AdvanceWeekButton
+@onready var advance_hint: Label = %AdvanceHint
 @onready var home_summary: RichTextLabel = %HomeSummary
 @onready var news_panel: RichTextLabel = %NewsPanel
 @onready var roster_split: HSplitContainer = %Roster
@@ -86,7 +107,12 @@ const WHEEL_TOOLTIPS := {
 @onready var roster_identity_panel: VBoxContainer = %IdentityPanel
 @onready var roster_detail: RichTextLabel = %RosterDetail
 @onready var player_dossier_button: Button = %PlayerDossierButton
-@onready var raw_attributes: RichTextLabel = %RawAttributes
+@onready var visualizer_panel: PanelContainer = %VisualizerPanel
+@onready var visualizer_body: Label = %VisualizerBody
+@onready var attribute_columns: HBoxContainer = %AttributeColumns
+@onready var attribute_prev_button: Button = %AttributePrevButton
+@onready var attribute_next_button: Button = %AttributeNextButton
+@onready var raw_page_label: Label = %RawPageLabel
 @onready var raw_title: Label = %RawTitle
 @onready var player_attribute_wheel: VolleyballPlayerAttributeWheel = %PlayerAttributeWheel
 @onready var transfer_player_attribute_wheel: VolleyballPlayerAttributeWheel = %TransferPlayerAttributeWheel
@@ -137,6 +163,11 @@ var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
 var _nav_tween: Tween
 var _roster_list_expanded: bool = false
+var _attribute_page: int = 0
+var _attribute_column_boxes: Array[VBoxContainer] = []
+var _attribute_column_rows: Array = []
+var _advance_revealed: bool = false
+var _advance_tween: Tween
 
 
 func _ready() -> void:
@@ -146,10 +177,15 @@ func _ready() -> void:
 	current_section_button.pressed.connect(_toggle_nav_dropdown)
 	click_catcher.gui_input.connect(_click_catcher_input)
 	nav_dropdown.visible = false
-	dropdown_panel.modulate.a = 0.0
+	advance_catcher.gui_input.connect(_advance_catcher_input)
+	advance_reveal.visible = false
+	_apply_floating_panel_styles()
+	_build_attribute_columns()
+	attribute_prev_button.pressed.connect(_step_attribute_page.bind(-1))
+	attribute_next_button.pressed.connect(_step_attribute_page.bind(1))
 	%SaveButton.pressed.connect(_save)
 	%TitleButton.pressed.connect(func() -> void: title_requested.emit())
-	%AdvanceWeekButton.pressed.connect(_advance_week)
+	advance_week_button.pressed.connect(_confirm_advance)
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
 	training_option.item_selected.connect(_training_selected)
 	roster_list_toggle.pressed.connect(_toggle_roster_list)
@@ -195,12 +231,47 @@ func _ready() -> void:
 	_set_roster_list_expanded(false)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_THEME_CHANGED and is_node_ready():
+		_apply_floating_panel_styles()
+
+
+## Both floating panels sit over live content, so they need a background the
+## content cannot show through. The theme's default `panel` box is translucent
+## by design -- fine for panels docked in the layout, wrong for these two, which
+## had the roster's attribute band legible straight through them. Built from
+## `UIPalette` rather than hardcoded so light mode gets a light panel.
+func _apply_floating_panel_styles() -> void:
+	var light_mode: bool = UIPaletteScript.control_is_light(self)
+	for panel in [dropdown_panel, advance_panel]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = UIPaletteScript.color(&"surface_raised", light_mode)
+		box.border_color = UIPaletteScript.color(&"stroke", light_mode)
+		box.set_border_width_all(1)
+		box.set_corner_radius_all(4)
+		box.shadow_color = Color(0.0, 0.0, 0.0, 0.35 if not light_mode else 0.18)
+		box.shadow_size = 6
+		panel.add_theme_stylebox_override("panel", box)
+
+
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	if attribute_wheel_popup.visible or player_dossier_popup.visible:
 		return
 	var key_event := event as InputEventKey
+	## Space arms the advance prompt on the first press and commits on the
+	## second, but only when the two are consecutive: any other shortcut in
+	## between disarms it, so a stray Space long after some other key can't
+	## silently burn a week. Every branch below that isn't Space therefore
+	## dismisses the prompt before doing its own work.
+	if key_event.keycode == KEY_SPACE:
+		if _advance_revealed:
+			_confirm_advance()
+		else:
+			_reveal_advance()
+		get_viewport().set_input_as_handled()
+		return
 	match key_event.keycode:
 		KEY_TAB:
 			## Shift+Tab keeps Godot's native reverse focus traversal -- keycode
@@ -208,7 +279,15 @@ func _input(event: InputEvent) -> void:
 			## rather than claiming every Tab-shaped event.
 			if key_event.shift_pressed:
 				return
+			_hide_advance_reveal()
 			_toggle_nav_dropdown()
+		KEY_ESCAPE:
+			if not _advance_revealed and not _nav_dropdown_open:
+				return
+			_hide_advance_reveal()
+			_close_nav_dropdown()
+		KEY_H:
+			_navigate("Home")
 		KEY_R:
 			_navigate("Roster")
 		KEY_T:
@@ -219,12 +298,10 @@ func _input(event: InputEvent) -> void:
 			_navigate("Competition")
 		KEY_X:
 			_navigate("Sixnet")
-		KEY_SPACE:
-			if sections.current_tab == 0:
-				_advance_week()
-			else:
-				_navigate("Home")
 		_:
+			## An unclaimed key still breaks the Space-then-Space run, otherwise
+			## "in a row" would mean "at any point later".
+			_hide_advance_reveal()
 			return
 	get_viewport().set_input_as_handled()
 
@@ -235,6 +312,7 @@ func refresh() -> void:
 	organization_label.text = "%s · %s" % [CareerManager.career.organization_name,
 		CareerManager.career.organization_type]
 	date_label.text = CareerManager.date_text()
+	_refresh_advance_action()
 	_refresh_home()
 	_refresh_roster()
 	_refresh_team()
@@ -255,25 +333,45 @@ func _toggle_nav_dropdown() -> void:
 		_open_nav_dropdown()
 
 
+## The menu expands sideways into the empty half of the nav strip rather than
+## unrolling downward over the content. That keeps its height pinned to the
+## strip's -- the drawer never gets taller than the row it lives in -- and makes
+## the motion read as an expansion rather than a panel that simply appeared.
+##
+## Width is animated on `NavClip`, a plain Control with `clip_contents`, not on
+## the panel itself: `Control.size` is clamped to `get_combined_minimum_size()`,
+## so a PanelContainer holding six buttons refuses to be narrower than those
+## buttons and would snap open instead of sliding. The clipper has no minimum,
+## so it can genuinely travel from zero, revealing a panel that stays full width
+## underneath it.
 func _open_nav_dropdown() -> void:
 	if _nav_dropdown_open:
 		return
 	_nav_dropdown_open = true
-	var origin := current_section_button.global_position \
-		+ Vector2(0.0, current_section_button.size.y + 4.0)
+	var strip_rect := nav_strip.get_global_rect()
+	var origin_x := current_section_button.global_position.x \
+		+ current_section_button.size.x + 8.0
+	var target_width := maxf(strip_rect.end.x - 10.0 - origin_x, 180.0)
+	var strip_height := maxf(current_section_button.size.y, 30.0)
 	nav_dropdown.visible = true
 	## The catcher only swallows clicks while the menu is actually open,
 	## otherwise it would sit invisibly over the whole dashboard eating every
 	## button press underneath it.
 	click_catcher.mouse_filter = Control.MOUSE_FILTER_STOP
-	dropdown_panel.position = origin - Vector2(0.0, 12.0)
-	dropdown_panel.modulate.a = 0.0
+	nav_clip.position = Vector2(origin_x, current_section_button.global_position.y)
+	nav_clip.size = Vector2(0.0, strip_height)
+	dropdown_panel.position = Vector2.ZERO
+	dropdown_panel.size = Vector2(target_width, strip_height)
+	dropdown_panel.modulate.a = 1.0
 	if _nav_tween != null:
 		_nav_tween.kill()
 	_nav_tween = create_tween().set_parallel(true) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_nav_tween.tween_property(dropdown_panel, "position", origin, 0.18)
-	_nav_tween.tween_property(dropdown_panel, "modulate:a", 1.0, 0.18)
+	_nav_tween.tween_property(nav_clip, "size:x", target_width, 0.20)
+	## The hint occupies the strip the drawer expands across, and it exists to
+	## say "press Tab" -- which has just happened. It fades rather than snapping
+	## off so the drawer looks like it is taking the space over.
+	_nav_tween.tween_property(nav_hint, "modulate:a", 0.0, 0.12)
 
 
 func _close_nav_dropdown() -> void:
@@ -283,9 +381,11 @@ func _close_nav_dropdown() -> void:
 	click_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _nav_tween != null:
 		_nav_tween.kill()
-	_nav_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	_nav_tween.tween_property(dropdown_panel, "modulate:a", 0.0, 0.12)
-	_nav_tween.tween_callback(func() -> void: nav_dropdown.visible = false)
+	_nav_tween = create_tween().set_parallel(true) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_nav_tween.tween_property(nav_clip, "size:x", 0.0, 0.14)
+	_nav_tween.tween_property(nav_hint, "modulate:a", 1.0, 0.14)
+	_nav_tween.chain().tween_callback(func() -> void: nav_dropdown.visible = false)
 
 
 func _click_catcher_input(event: InputEvent) -> void:
@@ -296,7 +396,7 @@ func _click_catcher_input(event: InputEvent) -> void:
 func _navigate(section_name: String) -> void:
 	var names := ["Home", "Roster", "Team", "Transfers", "Competition", "Sixnet"]
 	sections.current_tab = maxi(names.find(section_name), 0)
-	current_section_button.text = "%s   ▾   [Tab]" % section_name
+	current_section_button.text = "%s   ▸   [Tab]" % section_name
 	## Every nav button and every keyboard shortcut routes through here, so
 	## highlighting and dismissal both only need saying once.
 	for button in _nav_buttons:
@@ -399,7 +499,11 @@ func _set_roster_list_expanded(expanded: bool) -> void:
 	## The main profile uses all recovered width when the rail is minimized. In
 	## expanded-list mode, only its basic identity block contracts; secondary
 	## information remains in the separate dossier rather than a competing column.
-	roster_identity_panel.custom_minimum_size.x = 188.0 if expanded else 310.0
+	roster_identity_panel.custom_minimum_size.x = \
+		IDENTITY_PANEL_NARROW_WIDTH if expanded else IDENTITY_PANEL_WIDTH
+	## The reserved 3D column is the first thing to yield when the roster list
+	## takes half the tab: it holds nothing yet, and the wheel does.
+	visualizer_panel.visible = not expanded
 	roster_list_toggle.text = "<  Collapse roster" if expanded else ">"
 	roster_list_toggle.tooltip_text = (
 		"Collapse the roster list" if expanded else "Expand the roster list"
@@ -417,7 +521,9 @@ func _populate_roster_list(list: ItemList) -> void:
 		if player == null:
 			continue
 		var marker := " · C" if player.id == GameManager.team.captain_id else ""
-		list.add_item("%s  %s%s\nAbility %s · Potential %s" % [
+		## ItemList draws each item on one line and swallows the newline, so the
+		## captain marker used to run straight into the word "Ability".
+		list.add_item("%s  %s%s · Ability %s · Potential %s" % [
 			player.position_code, player.display_name, marker,
 			AttributeProfiles.grade(float(player.current_ability_score())),
 			AttributeProfiles.grade(float(player.potential))])
@@ -437,6 +543,80 @@ func _roster_selected(index: int) -> void:
 	]
 	_refresh_player_wheel(player)
 	lineup_status_option.select(0 if player.id in GameManager.team.starting_player_ids else 1)
+	visualizer_body.text = "%s\n%.0f cm\n\nPlayer model\ncoming soon" % [
+		player.position_code, player.height_cm,
+	]
+	_refresh_roster_profile_layout()
+
+
+## Each visible category is a real column of real rows -- a name Label that
+## expands and a value Label pinned right -- rather than BBCode markup inside one
+## RichTextLabel.
+##
+## The band went through both BBCode forms first and neither worked. A single
+## `[table=6]` sized its columns to their contents, so it sat in a narrow clump
+## on the left however much width the tab handed it, and its height was whatever
+## the longest category happened to need. Splitting into three RichTextLabels
+## with `[cell=ratio]` inside each fixed the clumping in principle but not in
+## practice: the table still measured to content, and an eight-attribute category
+## clipped its last row. Real Controls fill the width by construction and let the
+## row height be a number this file controls, which is what both halves of the
+## complaint -- "fill all available horizontal space" and "vertically oversized"
+## -- actually needed.
+func _build_attribute_columns() -> void:
+	for index in range(ATTRIBUTE_PAGE_SIZE):
+		var column := VBoxContainer.new()
+		column.name = "AttributeColumn%d" % index
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		column.add_theme_constant_override("separation", 1)
+		var title := Label.new()
+		title.name = "GroupTitle"
+		title.add_theme_font_size_override("font_size", 15)
+		column.add_child(title)
+		var rows: Array[HBoxContainer] = []
+		for row_index in range(ATTRIBUTE_ROWS_PER_COLUMN):
+			var row := HBoxContainer.new()
+			row.name = "Row%d" % row_index
+			var name_label := Label.new()
+			name_label.name = "Name"
+			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			name_label.clip_text = true
+			name_label.add_theme_font_size_override("font_size", 13)
+			row.add_child(name_label)
+			var value_label := Label.new()
+			value_label.name = "Value"
+			value_label.custom_minimum_size = Vector2(34.0, 0.0)
+			value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			value_label.add_theme_font_size_override("font_size", 13)
+			row.add_child(value_label)
+			## A trailing spacer keeps the value from being flung to the far
+			## right of a 450px column, where the gap back to its own name is
+			## wider than the gap on to the next column's names and the numbers
+			## read as belonging to the wrong list. The pair still stretches with
+			## the tab -- it just stops short of the column edge.
+			var tail := Control.new()
+			tail.name = "Tail"
+			tail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			tail.size_flags_stretch_ratio = 0.42
+			tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_child(tail)
+			column.add_child(row)
+			rows.append(row)
+		attribute_columns.add_child(column)
+		_attribute_column_boxes.append(column)
+		_attribute_column_rows.append(rows)
+
+
+func _attribute_page_count() -> int:
+	var groups: Array = AttributeProfiles.CATEGORY_ATTRIBUTES.keys()
+	return maxi(ceili(float(groups.size()) / float(ATTRIBUTE_PAGE_SIZE)), 1)
+
+
+func _step_attribute_page(direction: int) -> void:
+	## Wrapping rather than clamping: with two pages, a disabled arrow at each
+	## end is more chrome than the carousel is worth.
+	_attribute_page = wrapi(_attribute_page + direction, 0, _attribute_page_count())
 	_refresh_roster_profile_layout()
 
 
@@ -449,7 +629,18 @@ func _refresh_roster_profile_layout() -> void:
 		AttributeProfiles.grade(float(player.current_ability_score())),
 		AttributeProfiles.grade(float(player.potential)),
 	] if _roster_list_expanded else "Complete Attribute Profile"
-	raw_attributes.text = _raw_attribute_text(player, _roster_list_expanded)
+	var groups: Array = AttributeProfiles.CATEGORY_ATTRIBUTES.keys()
+	var page_count := _attribute_page_count()
+	_attribute_page = wrapi(_attribute_page, 0, page_count)
+	raw_page_label.text = "%d / %d" % [_attribute_page + 1, page_count]
+	for column_index in range(_attribute_column_boxes.size()):
+		var group_index := _attribute_page * ATTRIBUTE_PAGE_SIZE + column_index
+		var column := _attribute_column_boxes[column_index]
+		## A final page that isn't full leaves its spare columns hidden rather
+		## than blank, so the remaining ones keep the whole width between them.
+		column.visible = group_index < groups.size()
+		if column.visible:
+			_fill_attribute_column(player, column_index, str(groups[group_index]))
 
 
 func _individual_training_selected(index: int) -> void:
@@ -699,44 +890,49 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 	)
 
 
-func _raw_attribute_text(player: VolleyballPlayer, compressed: bool = false) -> String:
-	## Reads `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than a second,
-	## hand-typed grouping. This table and the wheel used to keep independent
-	## category lists with different names and different membership -- this
-	## one had a "Reception" bucket the wheel didn't, and neither had
-	## attack_accuracy at all. One definition means an attribute added to the
-	## player model only needs placing once to appear correctly everywhere.
-	## One category per column keeps every attribute visible in a single compact
-	## band. The old three-column table wrapped to a second row and forced the
-	## entire Roster tab below the 720px baseline viewport.
-	var result := "[table=6]"
-	var group_font_size := 12 if compressed else 15
-	var attribute_font_size := 11 if compressed else 14
+## One category group's worth of rows, written into a pre-built column.
+##
+## Reads `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than a second,
+## hand-typed grouping. This band and the wheel used to keep independent
+## category lists with different names and different membership -- this one had
+## a "Reception" bucket the wheel didn't, and neither had attack_accuracy at
+## all. One definition means an attribute added to the player model only needs
+## placing once to appear correctly everywhere.
+func _fill_attribute_column(
+	player: VolleyballPlayer, column_index: int, group_name: String
+) -> void:
+	var column := _attribute_column_boxes[column_index]
+	var rows: Array = _attribute_column_rows[column_index]
 	var position_keys: Array = Array(VolleyballPlayer.POSITION_WEIGHTS.get(
 		player.position_role, []
 	))
-	for group_name in AttributeProfiles.CATEGORY_ATTRIBUTES:
-		var display_group := "Setting / Control" \
-			if group_name == "Setting & Ball Control" else str(group_name)
-		var lines: Array[String] = ["[font_size=%d][b]%s[/b][/font_size]" % [
-			group_font_size, display_group,
-		]]
-		for attribute_name in AttributeProfiles.CATEGORY_ATTRIBUTES[group_name]:
-			var attribute_key := str(attribute_name)
-			var display_name := str(RAW_ATTRIBUTE_LABELS.get(
-				attribute_key, attribute_key.replace("_", " ").capitalize()
-			))
-			var label_markup := "[color=#aab9cc]%s[/color]" % display_name
-			if attribute_key in position_keys:
-				label_markup = "[color=#f4c95d][u][b]%s[/b][/u][/color]" % display_name
-			var score := int(player.get(attribute_key))
-			lines.append("%s  [color=#%s][b]%d[/b][/color]" % [
-				label_markup, AttributeProfiles.grade_color_hex(float(score)), score,
-			])
-		result += "[cell][font_size=%d]%s[/font_size][/cell]" % [
-			attribute_font_size, "\n".join(lines),
-		]
-	return result + "[/table]"
+	var title := column.get_node("GroupTitle") as Label
+	title.text = "Setting / Control" \
+		if group_name == "Setting & Ball Control" else group_name
+	var attributes: Array = Array(
+		AttributeProfiles.CATEGORY_ATTRIBUTES.get(group_name, [])
+	)
+	for row_index in range(rows.size()):
+		var row: HBoxContainer = rows[row_index]
+		row.visible = row_index < attributes.size()
+		if not row.visible:
+			continue
+		var attribute_key := str(attributes[row_index])
+		var name_label := row.get_node("Name") as Label
+		var value_label := row.get_node("Value") as Label
+		name_label.text = str(RAW_ATTRIBUTE_LABELS.get(
+			attribute_key, attribute_key.replace("_", " ").capitalize()
+		))
+		## The attributes this player's own position is scored on are called
+		## out, so a middle blocker's block timing reads differently from a
+		## middle blocker's set disguise at a glance.
+		var is_position_key := attribute_key in position_keys
+		name_label.add_theme_color_override("font_color",
+			Color("f4c95d") if is_position_key else Color("aab9cc"))
+		var score := int(player.get(attribute_key))
+		value_label.text = str(score)
+		value_label.add_theme_color_override("font_color",
+			Color(AttributeProfiles.grade_color_hex(float(score))))
 
 
 func _key_attributes(player: VolleyballPlayer) -> String:
@@ -973,12 +1169,113 @@ func _sixnet_top_region() -> String:
 	return top_region
 
 
-func _advance_week() -> void:
-	## Advance Week sits inside the dropdown but doesn't route through
-	## `_navigate()`, so it dismisses the menu itself.
+## The one thing that stops a week advancing today: a fixture that has come due
+## and hasn't been played. `CareerManager.advance_week()` refuses in exactly that
+## case, so rather than let the player press a button that can only fail, the
+## prompt reads what it will actually do before they press it. Any future blocker
+## belongs here too, so the button keeps naming its own outcome.
+func _blocking_fixture() -> Resource:
+	if not CareerManager.has_career():
+		return null
+	var fixture := CareerManager.next_fixture()
+	if fixture == null or bool(fixture.completed):
+		return null
+	if int(fixture.week) > int(CareerManager.career.absolute_week):
+		return null
+	return fixture
+
+
+func _refresh_advance_action() -> void:
+	if not CareerManager.has_career():
+		return
+	var fixture := _blocking_fixture()
+	advance_title.text = CareerManager.date_text().to_upper()
+	if fixture == null:
+		advance_week_button.text = "Advance Week"
+		advance_week_button.tooltip_text = \
+			"Apply this week's training and move the calendar on."
+		advance_hint.text = "Press Space again to confirm  ·  Esc to dismiss"
+		return
+	advance_week_button.text = "Jump to Competition  ▸"
+	advance_week_button.tooltip_text = \
+		"Week %d vs %s is due and must be played before the week advances." % [
+			int(fixture.week), fixture.opponent_name,
+		]
+	advance_hint.text = "Week %d vs %s is due. Press Space again to open it." % [
+		int(fixture.week), fixture.opponent_name,
+	]
+
+
+func _reveal_advance() -> void:
+	if not CareerManager.has_career():
+		return
 	_close_nav_dropdown()
+	_refresh_advance_action()
+	if _advance_revealed:
+		return
+	_advance_revealed = true
+	advance_reveal.visible = true
+	advance_catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	## Sized from the scene's own `custom_minimum_size` rather than a measured
+	## `get_combined_minimum_size()`. The panel is hidden until this runs, and
+	## Godot does not lay out hidden Controls, so the measured value came back
+	## from a stale pass and placed a 340x335 box halfway up the screen.
+	var panel_size := advance_panel.custom_minimum_size
+	advance_panel.size = panel_size
+	var resting := Vector2(
+		(size.x - panel_size.x) * 0.5,
+		size.y - panel_size.y - 44.0,
+	)
+	advance_panel.position = resting + Vector2(0.0, 14.0)
+	advance_panel.modulate.a = 0.0
+	if _advance_tween != null:
+		_advance_tween.kill()
+	_advance_tween = create_tween().set_parallel(true) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_advance_tween.tween_property(advance_panel, "position", resting, 0.16)
+	_advance_tween.tween_property(advance_panel, "modulate:a", 1.0, 0.16)
+
+
+func _hide_advance_reveal() -> void:
+	if not _advance_revealed:
+		return
+	_advance_revealed = false
+	advance_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _advance_tween != null:
+		_advance_tween.kill()
+	_advance_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_advance_tween.tween_property(advance_panel, "modulate:a", 0.0, 0.12)
+	_advance_tween.tween_callback(func() -> void: advance_reveal.visible = false)
+
+
+func _advance_catcher_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_hide_advance_reveal()
+
+
+func _confirm_advance() -> void:
+	_hide_advance_reveal()
+	var fixture := _blocking_fixture()
+	if fixture != null:
+		_jump_to_fixture(fixture)
+		return
 	var error := CareerManager.advance_week()
-	_set_status(error if not error.is_empty() else "Week advanced and training applied.", not error.is_empty())
+	_set_status(
+		error if not error.is_empty() else "Week advanced and training applied.",
+		not error.is_empty(),
+	)
+
+
+func _jump_to_fixture(fixture: Resource) -> void:
+	_navigate("Competition")
+	for index in range(fixture_list.item_count):
+		if int(fixture_list.get_item_metadata(index)) == int(fixture.id):
+			fixture_list.select(index)
+			_fixture_selected(index)
+			break
+	_set_status("Week %d vs %s is due -- play or simulate it to advance." % [
+		int(fixture.week), fixture.opponent_name,
+	], false)
 
 
 func _save() -> void:

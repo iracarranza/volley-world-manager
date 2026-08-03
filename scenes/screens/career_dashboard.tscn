@@ -69,6 +69,7 @@ size_flags_vertical = 3
 theme_override_constants/separation = 8
 
 [node name="NavStrip" type="PanelContainer" parent="Margin/Root/Body"]
+unique_name_in_owner = true
 layout_mode = 2
 
 [node name="NavStripMargin" type="MarginContainer" parent="Margin/Root/Body/NavStrip"]
@@ -84,11 +85,20 @@ theme_override_constants/separation = 8
 
 [node name="CurrentSectionButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(232, 34)
+layout_mode = 2
+tooltip_text = "Open the navigation menu. Tab also opens and closes it."
+text = "Home   ▸   [Tab]"
+alignment = 0
+
+[node name="NavHint" type="Label" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-tooltip_text = "Open the navigation menu. Tab also opens and closes it."
-text = "Home   ▾   [Tab]"
-alignment = 0
+theme_override_colors/font_color = Color(0.44, 0.53, 0.65, 1)
+theme_override_font_sizes/font_size = 12
+text = "Tab opens the section menu   ·   Space reveals Advance Week"
+vertical_alignment = 1
 
 [node name="ContentPanel" type="PanelContainer" parent="Margin/Root/Body"]
 layout_mode = 2
@@ -222,13 +232,14 @@ theme_override_constants/separation = 8
 [node name="Profile" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 layout_mode = 2
 size_flags_vertical = 3
+size_flags_stretch_ratio = 1.15
 theme_override_constants/separation = 10
 
 [node name="IdentityPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(310, 0)
+custom_minimum_size = Vector2(248, 0)
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 8
 
 [node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
 unique_name_in_owner = true
@@ -239,12 +250,81 @@ theme_override_font_sizes/normal_font_size = 14
 bbcode_enabled = true
 scroll_active = false
 
-[node name="PlayerDossierButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 42)
+[node name="TestingRosterControls" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
 layout_mode = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 2
+
+[node name="PlayerDossierButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_horizontal = 3
 tooltip_text = "Open status, dynamics, key attributes, serve repertoire, traits, and biography."
-text = "Open Player Dossier"
+text = "Dossier"
+
+[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Return this player to the testing pool."
+text = "Release"
+
+[node name="LineupStatusOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_horizontal = 3
+item_count = 2
+selected = 1
+popup/item_0/text = "Starter"
+popup/item_0/id = 0
+popup/item_1/text = "Bench"
+popup/item_1/id = 1
+
+[node name="ApplyLineupStatusButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Apply"
+
+[node name="VisualizerPanel" type="PanelContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(212, 0)
+layout_mode = 2
+
+[node name="VisualizerMargin" type="MarginContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="VisualizerBox" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="VisualizerCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "3D VIEW"
+horizontal_alignment = 1
+
+[node name="VisualizerBody" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.51, 0.58, 0.68, 1)
+theme_override_font_sizes/font_size = 12
+text = "Player model
+coming soon"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
 
 [node name="WheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
 layout_mode = 2
@@ -259,7 +339,7 @@ horizontal_alignment = 1
 
 [node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(440, 220)
+custom_minimum_size = Vector2(360, 186)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -269,57 +349,53 @@ inline_axis_labels = true
 
 [node name="RawBand" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 layout_mode = 2
-theme_override_constants/separation = 12
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="AttributePrevButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+size_flags_vertical = 3
+tooltip_text = "Previous attribute groups"
+text = "◀"
 
 [node name="RawProfile" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 4
+theme_override_constants/separation = 2
 
-[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
+[node name="RawHeader" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
+layout_mode = 2
+
+[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
 unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 17
-text = "Complete Attribute Profile"
-
-[node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 184)
-layout_mode = 2
-bbcode_enabled = true
-scroll_active = false
-
-[node name="TestingRosterControls" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="LineupActionRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="LineupStatusOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls/LineupActionRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
 size_flags_horizontal = 3
-item_count = 2
-selected = 1
-popup/item_0/text = "Starter"
-popup/item_0/id = 0
-popup/item_1/text = "Bench"
-popup/item_1/id = 1
+theme_override_font_sizes/font_size = 16
+text = "Complete Attribute Profile"
 
-[node name="ApplyLineupStatusButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls/LineupActionRow"]
+[node name="RawPageLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(66, 34)
 layout_mode = 2
-text = "Apply"
+theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "1 / 2"
+vertical_alignment = 1
 
-[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
+[node name="AttributeColumns" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
-text = "Return to Pool"
+size_flags_vertical = 3
+theme_override_constants/separation = 14
+
+[node name="AttributeNextButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 0)
+layout_mode = 2
+size_flags_vertical = 3
+tooltip_text = "Next attribute groups"
+text = "▶"
 
 [node name="RosterStatusLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 unique_name_in_owner = true
@@ -600,75 +676,146 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="DropdownPanel" type="PanelContainer" parent="NavDropdown"]
+[node name="NavClip" type="Control" parent="NavDropdown"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 380)
+clip_contents = true
 layout_mode = 0
-offset_right = 240.0
-offset_bottom = 380.0
+mouse_filter = 2
 
-[node name="NavMargin" type="MarginContainer" parent="NavDropdown/DropdownPanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 10
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
-
-[node name="Nav" type="VBoxContainer" parent="NavDropdown/DropdownPanel/NavMargin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="HomeNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="DropdownPanel" type="PanelContainer" parent="NavDropdown/NavClip"]
 unique_name_in_owner = true
+layout_mode = 0
+offset_right = 640.0
+offset_bottom = 34.0
+
+[node name="NavMargin" type="MarginContainer" parent="NavDropdown/NavClip/DropdownPanel"]
 layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 2
+
+[node name="Nav" type="HBoxContainer" parent="NavDropdown/NavClip/DropdownPanel/NavMargin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="HomeNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
+layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Home  [Space]"
+clip_text = true
+text = "Home [H]"
 metadata/section = "Home"
 
-[node name="RosterNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="RosterNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Roster  [R]"
+clip_text = true
+text = "Roster [R]"
 metadata/section = "Roster"
 
-[node name="TeamNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="TeamNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Team / Training  [T]"
+clip_text = true
+text = "Team [T]"
 metadata/section = "Team"
 
-[node name="TransfersNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="TransfersNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Recruitment  [E]"
+clip_text = true
+text = "Recruit [E]"
 metadata/section = "Transfers"
 
-[node name="CompetitionNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="CompetitionNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Competition  [V]"
+clip_text = true
+text = "Fixtures [V]"
 metadata/section = "Competition"
 
-[node name="SixnetNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="SixnetNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Sixnet  [X]"
+clip_text = true
+text = "Sixnet [X]"
 metadata/section = "Sixnet"
 
-[node name="Spacer" type="Control" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
-layout_mode = 2
-size_flags_vertical = 3
+[node name="AdvanceReveal" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
-[node name="AdvanceWeekButton" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="AdvanceCatcher" type="Control" parent="AdvanceReveal"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AdvancePanel" type="PanelContainer" parent="AdvanceReveal"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 132)
+layout_mode = 0
+offset_right = 360.0
+offset_bottom = 132.0
+
+[node name="AdvanceMargin" type="MarginContainer" parent="AdvanceReveal/AdvancePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="AdvanceBox" type="VBoxContainer" parent="AdvanceReveal/AdvancePanel/AdvanceMargin"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="AdvanceTitle" type="Label" parent="AdvanceReveal/AdvancePanel/AdvanceMargin/AdvanceBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "WEEK 1"
+
+[node name="AdvanceWeekButton" type="Button" parent="AdvanceReveal/AdvancePanel/AdvanceMargin/AdvanceBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-text = "Advance Week  [Space]"
+text = "Advance Week"
+
+[node name="AdvanceHint" type="Label" parent="AdvanceReveal/AdvancePanel/AdvanceMargin/AdvanceBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.44, 0.53, 0.65, 1)
+theme_override_font_sizes/font_size = 12
+text = "Press Space again to confirm  ·  Esc to dismiss"
 
 [node name="AttributeWheelUnderlay" type="ColorRect" parent="."]
 unique_name_in_owner = true

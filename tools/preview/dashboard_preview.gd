@@ -1,0 +1,56 @@
+extends Control
+
+const SHOTS_DIR := "user://dashboard_preview"
+
+var _dashboard: Control
+var _frame: int = 0
+var _steps: Array = []
+var _step_index: int = 0
+
+
+func _ready() -> void:
+	DirAccess.make_dir_recursive_absolute(SHOTS_DIR)
+	var manager := get_node("/root/CareerManager")
+	var error: String = manager.create_career(
+		"Preview Career", "Harbor City VC", "Landavol", "Club", "Balanced"
+	)
+	if not error.is_empty():
+		print("career error: %s" % error)
+	var packed := load("res://scenes/screens/career_dashboard.tscn") as PackedScene
+	_dashboard = packed.instantiate()
+	add_child(_dashboard)
+	_steps = [
+		["01_home", func() -> void: _dashboard._navigate("Home")],
+		["02_nav_open", func() -> void: _dashboard._toggle_nav_dropdown()],
+		["03_roster", func() -> void: _dashboard._navigate("Roster")],
+		["04_roster_page2", func() -> void: _dashboard._step_attribute_page(1)],
+		["05_roster_list", func() -> void: _dashboard._toggle_roster_list()],
+		["06_advance", func() -> void:
+			_dashboard._toggle_roster_list()
+			_dashboard._reveal_advance()],
+		["07_team", func() -> void:
+			_dashboard._hide_advance_reveal()
+			_dashboard._navigate("Team")],
+		["08_advance_blocked", func() -> void:
+			get_node("/root/CareerManager").advance_week()
+			_dashboard._reveal_advance()],
+		["09_jumped_to_fixture", func() -> void: _dashboard._confirm_advance()],
+	]
+
+
+func _process(_delta: float) -> void:
+	_frame += 1
+	## Every step gets its own settle window so tweens finish before the grab.
+	if _frame % 24 != 0:
+		return
+	if _step_index >= _steps.size():
+		get_tree().quit()
+		return
+	var step: Array = _steps[_step_index]
+	if _frame % 48 == 24:
+		(step[1] as Callable).call()
+		return
+	var image := get_viewport().get_texture().get_image()
+	image.save_png("%s/%s.png" % [SHOTS_DIR, step[0]])
+	print("saved %s" % step[0])
+	_step_index += 1
