@@ -84,6 +84,7 @@ theme_override_constants/separation = 8
 
 [node name="CurrentSectionButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Open the navigation menu. Tab also opens and closes it."
@@ -97,9 +98,9 @@ size_flags_vertical = 3
 
 [node name="ContentMargin" type="MarginContainer" parent="Margin/Root/Body/ContentPanel"]
 layout_mode = 2
-theme_override_constants/margin_left = 16
+theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 16
+theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 12
 
 [node name="Content" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin"]
@@ -143,8 +144,8 @@ icon_text = "T"
 [node name="TransfersCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 section_id = "Transfers"
-title_text = "Transfers / Recruitment"
-summary_text = "Regional candidates and roster additions."
+title_text = "Recruitment"
+summary_text = "Regional candidates · roster additions."
 icon_text = "E"
 
 [node name="CompetitionCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
@@ -232,8 +233,8 @@ theme_override_constants/separation = 10
 
 [node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 148)
 layout_mode = 2
-size_flags_vertical = 3
 theme_override_colors/default_color = Color(0.84, 0.89, 0.95, 1)
 theme_override_font_sizes/normal_font_size = 14
 bbcode_enabled = true
@@ -244,7 +245,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
 tooltip_text = "Open status, dynamics, key attributes, serve repertoire, traits, and biography."
-text = "Open Player Dossier"
+text = "Dossier"
 
 [node name="WheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
 layout_mode = 2
@@ -274,17 +275,44 @@ theme_override_constants/separation = 12
 [node name="RawProfile" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 4
+theme_override_constants/separation = 6
 
-[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
+[node name="RawHeader" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 17
 text = "Complete Attribute Profile"
 
+[node name="PreviousAttributePageButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+tooltip_text = "View the previous three attribute sections."
+text = "‹"
+
+[node name="AttributePageLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(44, 32)
+layout_mode = 2
+text = "1 / 2"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NextAttributePageButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+tooltip_text = "View the next three attribute sections."
+text = "›"
+
 [node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 184)
+custom_minimum_size = Vector2(0, 224)
 layout_mode = 2
 bbcode_enabled = true
 scroll_active = false
@@ -319,7 +347,7 @@ text = "Apply"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
-text = "Return to Pool"
+text = "Release Player"
 
 [node name="RosterStatusLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 unique_name_in_owner = true
@@ -618,57 +646,64 @@ theme_override_constants/margin_bottom = 10
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="HomeNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="HomeNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Home  [Space]"
+text = "HOME"
 metadata/section = "Home"
 
-[node name="RosterNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="RosterNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Roster  [R]"
+text = "ROSTER"
 metadata/section = "Roster"
 
-[node name="TeamNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="TeamNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Team / Training  [T]"
+text = "TEAM"
 metadata/section = "Team"
 
-[node name="TransfersNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="TransfersNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Recruitment  [E]"
+text = "RECRUIT"
 metadata/section = "Transfers"
 
-[node name="CompetitionNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="CompetitionNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Competition  [V]"
+text = "FIXTURES"
 metadata/section = "Competition"
 
-[node name="SixnetNav" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="SixnetNav" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 toggle_mode = true
-text = "Sixnet  [X]"
+text = "SIXNET"
 metadata/section = "Sixnet"
 
-[node name="Spacer" type="Control" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="Spacer" type="Control" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 layout_mode = 2
-size_flags_vertical = 3
+size_flags_horizontal = 3
 
-[node name="AdvanceWeekButton" type="Button" parent="NavDropdown/DropdownPanel/NavMargin/Nav"]
+[node name="AdvanceWeekButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-text = "Advance Week  [Space]"
+size_flags_horizontal = 3
+text = "ADVANCE WEEK"
 
 [node name="AttributeWheelUnderlay" type="ColorRect" parent="."]
 unique_name_in_owner = true

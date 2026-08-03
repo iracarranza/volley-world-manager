@@ -13,6 +13,10 @@ const Regions := preload("res://scripts/data/regions.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const ROSTER_RAIL_COLLAPSED_WIDTH: float = 42.0
 const ROSTER_RAIL_EXPANDED_WIDTH: float = 440.0
+const ATTRIBUTE_GROUP_PAGES := [
+	["Attacking", "Defensive", "Setting & Ball Control"],
+	["Physical", "Serving", "Mental & Tactical"],
+]
 const RAW_ATTRIBUTE_LABELS := {
 	"attack_power": "Power Transfer",
 	"attack_accuracy": "Attack Accuracy",
@@ -88,6 +92,9 @@ const WHEEL_TOOLTIPS := {
 @onready var player_dossier_button: Button = %PlayerDossierButton
 @onready var raw_attributes: RichTextLabel = %RawAttributes
 @onready var raw_title: Label = %RawTitle
+@onready var attribute_page_label: Label = %AttributePageLabel
+@onready var previous_attribute_page_button: Button = %PreviousAttributePageButton
+@onready var next_attribute_page_button: Button = %NextAttributePageButton
 @onready var player_attribute_wheel: VolleyballPlayerAttributeWheel = %PlayerAttributeWheel
 @onready var transfer_player_attribute_wheel: VolleyballPlayerAttributeWheel = %TransferPlayerAttributeWheel
 @onready var team_attribute_wheel: VolleyballPlayerAttributeWheel = %TeamAttributeWheel
@@ -137,6 +144,7 @@ var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
 var _nav_tween: Tween
 var _roster_list_expanded: bool = false
+var _attribute_page: int = 0
 
 
 func _ready() -> void:
@@ -154,6 +162,8 @@ func _ready() -> void:
 	training_option.item_selected.connect(_training_selected)
 	roster_list_toggle.pressed.connect(_toggle_roster_list)
 	roster_list.item_selected.connect(_roster_selected)
+	previous_attribute_page_button.pressed.connect(func() -> void: _cycle_attribute_page(-1))
+	next_attribute_page_button.pressed.connect(func() -> void: _cycle_attribute_page(1))
 	player_dossier_button.pressed.connect(_open_player_dossier)
 	individual_training_roster_list.item_selected.connect(_individual_training_selected)
 	player_attribute_wheel.expand_requested.connect(_open_player_attribute_lab)
@@ -249,10 +259,9 @@ func refresh() -> void:
 ## Control inside a Container has its position rewritten on every layout pass,
 ## which would fight the tween below and snap the panel back mid-slide.
 func _toggle_nav_dropdown() -> void:
-	if _nav_dropdown_open:
-		_close_nav_dropdown()
-	else:
-		_open_nav_dropdown()
+	## Navigation is permanently visible in the top ribbon. Keep this method
+	## as a no-op so Tab remains a harmless compatibility shortcut.
+	return
 
 
 func _open_nav_dropdown() -> void:
@@ -315,7 +324,7 @@ func _refresh_home() -> void:
 		satisfaction_total += player.satisfaction
 	var average_satisfaction := satisfaction_total \
 		/ maxf(float(GameManager.players.size()), 1.0)
-	home_summary.text = "[font_size=24][b]%s[/b][/font_size]\n%s · %s\nReputation %d/100 · Funds $%d\n\n[b]Next fixture[/b]\n%s\n\n[b]Weekly plan[/b]\n%s · Familiarity %d%% · Cohesion %d%%\n\n[b]Squad[/b]\n%d registered · %d unavailable · Average satisfaction %d%%" % [
+	home_summary.text = _inset_rich_text("[font_size=24][b]%s[/b][/font_size]\n%s · %s\nReputation %d/100 · Funds $%d\n\n[b]Next fixture[/b]\n%s\n\n[b]Weekly plan[/b]\n%s · Familiarity %d%% · Cohesion %d%%\n\n[b]Squad[/b]\n%d registered · %d unavailable · Average satisfaction %d%%" % [
 		CareerManager.career.organization_name, CareerManager.career.region,
 		CareerManager.career.identity, CareerManager.career.reputation,
 		CareerManager.career.finances,
@@ -324,7 +333,7 @@ func _refresh_home() -> void:
 		roundi(GameManager.team.tactical_familiarity * 100.0),
 		roundi(GameManager.team.cohesion * 100.0),
 		GameManager.team.player_ids.size(), unavailable,
-		roundi(average_satisfaction * 100.0)]
+		roundi(average_satisfaction * 100.0)])
 	%RosterCard.set_summary("%d registered players · %d unavailable" % [GameManager.team.player_ids.size(), unavailable])
 	%TeamCard.set_summary("%s identity · %s training" % [CareerManager.career.identity, CareerManager.career.training_focus])
 	%TransfersCard.set_summary("%d regional candidates · $%d available" % [CareerManager.career.transfer_pool.size(), CareerManager.career.finances])
@@ -358,8 +367,8 @@ func _refresh_news() -> void:
 			int(fixture.week), fixture.competition_name,
 			"#7fd18a" if won else "#e0785c", "WIN" if won else "LOSS",
 			fixture.result_text(), fixture.opponent_name])
-	news_panel.text = "\n\n".join(entries) if not entries.is_empty() \
-		else "[color=#8294ad]No news yet. Match results and world events will appear here as the season plays out.[/color]"
+	news_panel.text = _inset_rich_text("\n\n".join(entries) if not entries.is_empty() \
+		else "[color=#8294ad]No news yet. Match results and world events will appear here as the season plays out.[/color]")
 
 
 ## Live lineup completeness, shown where the edit happens rather than only
@@ -417,7 +426,7 @@ func _populate_roster_list(list: ItemList) -> void:
 		if player == null:
 			continue
 		var marker := " · C" if player.id == GameManager.team.captain_id else ""
-		list.add_item("%s  %s%s\nAbility %s · Potential %s" % [
+		list.add_item("  %s  %s%s\n  Ability %s · Potential %s" % [
 			player.position_code, player.display_name, marker,
 			AttributeProfiles.grade(float(player.current_ability_score())),
 			AttributeProfiles.grade(float(player.potential))])
@@ -449,7 +458,17 @@ func _refresh_roster_profile_layout() -> void:
 		AttributeProfiles.grade(float(player.current_ability_score())),
 		AttributeProfiles.grade(float(player.potential)),
 	] if _roster_list_expanded else "Complete Attribute Profile"
-	raw_attributes.text = _raw_attribute_text(player, _roster_list_expanded)
+	attribute_page_label.text = "%d / %d" % [_attribute_page + 1, ATTRIBUTE_GROUP_PAGES.size()]
+	previous_attribute_page_button.disabled = ATTRIBUTE_GROUP_PAGES.size() <= 1
+	next_attribute_page_button.disabled = ATTRIBUTE_GROUP_PAGES.size() <= 1
+	raw_attributes.text = _raw_attribute_text(player, _roster_list_expanded, _attribute_page)
+
+
+func _cycle_attribute_page(direction: int) -> void:
+	if ATTRIBUTE_GROUP_PAGES.size() <= 1:
+		return
+	_attribute_page = posmod(_attribute_page + direction, ATTRIBUTE_GROUP_PAGES.size())
+	_refresh_roster_profile_layout()
 
 
 func _individual_training_selected(index: int) -> void:
@@ -699,28 +718,32 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 	)
 
 
-func _raw_attribute_text(player: VolleyballPlayer, compressed: bool = false) -> String:
+func _raw_attribute_text(
+	player: VolleyballPlayer, compressed: bool = false, page: int = 0,
+) -> String:
 	## Reads `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than a second,
 	## hand-typed grouping. This table and the wheel used to keep independent
 	## category lists with different names and different membership -- this
 	## one had a "Reception" bucket the wheel didn't, and neither had
 	## attack_accuracy at all. One definition means an attribute added to the
 	## player model only needs placing once to appear correctly everywhere.
-	## One category per column keeps every attribute visible in a single compact
-	## band. The old three-column table wrapped to a second row and forced the
-	## entire Roster tab below the 720px baseline viewport.
-	var result := "[table=6]"
-	var group_font_size := 12 if compressed else 15
-	var attribute_font_size := 11 if compressed else 14
+	## The profile rotates between two pages of three categories. Each category
+	## nests a two-column label/value table so the numbers stay vertically lined
+	## up instead of drifting with proportional label widths.
+	var result := "[table=3]"
+	var group_font_size := 13 if compressed else 15
+	var attribute_font_size := 13 if compressed else 15
 	var position_keys: Array = Array(VolleyballPlayer.POSITION_WEIGHTS.get(
 		player.position_role, []
 	))
-	for group_name in AttributeProfiles.CATEGORY_ATTRIBUTES:
+	var page_groups: Array = ATTRIBUTE_GROUP_PAGES[clampi(page, 0, ATTRIBUTE_GROUP_PAGES.size() - 1)]
+	for group_name in page_groups:
 		var display_group := "Setting / Control" \
 			if group_name == "Setting & Ball Control" else str(group_name)
-		var lines: Array[String] = ["[font_size=%d][b]%s[/b][/font_size]" % [
+		var group_text := "[font_size=%d][b]%s[/b][/font_size]" % [
 			group_font_size, display_group,
-		]]
+		]
+		group_text += "\n[table=2]"
 		for attribute_name in AttributeProfiles.CATEGORY_ATTRIBUTES[group_name]:
 			var attribute_key := str(attribute_name)
 			var display_name := str(RAW_ATTRIBUTE_LABELS.get(
@@ -730,13 +753,22 @@ func _raw_attribute_text(player: VolleyballPlayer, compressed: bool = false) -> 
 			if attribute_key in position_keys:
 				label_markup = "[color=#f4c95d][u][b]%s[/b][/u][/color]" % display_name
 			var score := int(player.get(attribute_key))
-			lines.append("%s  [color=#%s][b]%d[/b][/color]" % [
-				label_markup, AttributeProfiles.grade_color_hex(float(score)), score,
-			])
-		result += "[cell][font_size=%d]%s[/font_size][/cell]" % [
-			attribute_font_size, "\n".join(lines),
-		]
+			group_text += "[cell][font_size=%d]%s[/font_size][/cell]" % [
+				attribute_font_size, label_markup,
+			]
+			group_text += "[cell][right][font_size=%d][color=#%s][b]%d[/b][/color][/font_size][/right][/cell]" % [
+				attribute_font_size, AttributeProfiles.grade_color_hex(float(score)), score,
+			]
+		group_text += "[/table]"
+		result += "[cell]%s[/cell]" % group_text
 	return result + "[/table]"
+
+
+func _inset_rich_text(content: String) -> String:
+	var lines := content.split("\n")
+	for index in range(lines.size()):
+		lines[index] = "  " + lines[index]
+	return "\n".join(lines)
 
 
 func _key_attributes(player: VolleyballPlayer) -> String:
@@ -748,7 +780,7 @@ func _key_attributes(player: VolleyballPlayer) -> String:
 
 
 func _refresh_team() -> void:
-	team_summary.text = "[font_size=22][b]%s Identity[/b][/font_size]\n%s\nRegional alignment %d%% · Opponent adaptation %d%%\nTactical familiarity %d%% · Cohesion %d%%\nCaptain: %s · Libero: %s\n\n[b]Depth chart[/b]\n%s" % [
+	team_summary.text = _inset_rich_text("[font_size=22][b]%s Identity[/b][/font_size]\n%s\nRegional alignment %d%% · Opponent adaptation %d%%\nTactical familiarity %d%% · Cohesion %d%%\nCaptain: %s · Libero: %s\n\n[b]Depth chart[/b]\n%s" % [
 		GameManager.team.team_name, GameManager.team.identity,
 		roundi(GameManager.team.regional_alignment * 100.0),
 		roundi(lerpf(0.09, 0.18, GameManager.team.regional_alignment) * 100.0),
@@ -756,10 +788,10 @@ func _refresh_team() -> void:
 		roundi(GameManager.team.cohesion * 100.0),
 		_player_name(GameManager.team.captain_id),
 		_player_name(GameManager.team.libero_ids[0]) if not GameManager.team.libero_ids.is_empty() else "None",
-		_depth_chart_text()]
-	identity_finance_panel.text = "[b]Identity[/b]\n%s\n\n[b]Reputation[/b]\n%d/100\n\n[b]Funds[/b]\n$%d\n\n[b]Region[/b]\n%s" % [
+		_depth_chart_text()])
+	identity_finance_panel.text = _inset_rich_text("[b]Identity[/b]\n%s\n\n[b]Reputation[/b]\n%d/100\n\n[b]Funds[/b]\n$%d\n\n[b]Region[/b]\n%s" % [
 		CareerManager.career.identity, CareerManager.career.reputation,
-		CareerManager.career.finances, CareerManager.career.region]
+		CareerManager.career.finances, CareerManager.career.region])
 	_refresh_team_wheel()
 	_populate_roster_list(individual_training_roster_list)
 	if individual_training_roster_list.item_count > 0:
@@ -832,13 +864,13 @@ func _refresh_transfers() -> void:
 	transfer_list.clear()
 	for player_resource in CareerManager.career.transfer_pool:
 		var player := player_resource as VolleyballPlayer
-		transfer_list.add_item("%s  %s · Age %d" % [player.position_code, player.display_name, player.age])
+		transfer_list.add_item("  %s  %s · Age %d" % [player.position_code, player.display_name, player.age])
 		transfer_list.set_item_metadata(transfer_list.item_count - 1, player.id)
 	if transfer_list.item_count > 0:
 		transfer_list.select(0)
 		_transfer_selected(0)
 	else:
-		transfer_detail.text = "No regional candidates currently available."
+		transfer_detail.text = _inset_rich_text("No regional candidates currently available.")
 		sign_button.disabled = true
 
 
@@ -847,10 +879,10 @@ func _transfer_selected(index: int) -> void:
 	var player := _market_player(selected_transfer_id)
 	if player == null:
 		return
-	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Ability %s · Potential %s\n%s\n\nPrototype testing: freely add this player to the roster." % [
+	transfer_detail.text = _inset_rich_text("[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Ability %s · Potential %s\n%s\n\nPrototype testing: freely add this player to the roster." % [
 		player.display_name, player.position_role, player.age,
 		AttributeProfiles.grade(float(player.current_ability_score())),
-		AttributeProfiles.grade(float(player.potential)), _key_attributes(player)]
+		AttributeProfiles.grade(float(player.potential)), _key_attributes(player)])
 	## Same full-summary view as the roster's "Player Profile" wheel, with the
 	## same accurate potential outline -- see the note in
 	## `_refresh_player_wheel()` for what changes here once scouting exists.
@@ -871,7 +903,7 @@ func _sign_transfer() -> void:
 func _refresh_competition() -> void:
 	fixture_list.clear()
 	for fixture in CareerManager.career.fixtures:
-		fixture_list.add_item("Week %d · %s · %s" % [fixture.week, fixture.opponent_name, fixture.result_text()])
+		fixture_list.add_item("  Week %d · %s · %s" % [fixture.week, fixture.opponent_name, fixture.result_text()])
 		fixture_list.set_item_metadata(fixture_list.item_count - 1, fixture.id)
 	if fixture_list.item_count > 0:
 		fixture_list.select(0)
@@ -884,12 +916,12 @@ func _fixture_selected(index: int) -> void:
 	if fixture == null:
 		return
 	var due := int(fixture.week) <= int(CareerManager.career.absolute_week)
-	fixture_detail.text = "[font_size=22][b]%s[/b][/font_size]\n%s · Week %d\nStatus: %s\n\nFormat: Best of %d · Sets to %d · Win by %d\n\nRoster check: %s" % [
+	fixture_detail.text = _inset_rich_text("[font_size=22][b]%s[/b][/font_size]\n%s · Week %d\nStatus: %s\n\nFormat: Best of %d · Sets to %d · Win by %d\n\nRoster check: %s" % [
 		fixture.opponent_name, fixture.competition_name, fixture.week, fixture.result_text(),
 		CareerManager.career.match_format.best_of_sets,
 		CareerManager.career.match_format.regular_set_target,
 		CareerManager.career.match_format.win_by,
-		"Ready" if GameManager.match_roster_errors().is_empty() else GameManager.match_roster_errors()[0]]
+		"Ready" if GameManager.match_roster_errors().is_empty() else GameManager.match_roster_errors()[0]])
 	var fixture_ready: bool = not bool(fixture.completed) and due \
 		and GameManager.match_roster_errors().is_empty()
 	play_match_button.disabled = not fixture_ready
@@ -944,7 +976,7 @@ func _refresh_sixnet() -> void:
 			roundi(float(career.region_strength.get(region_name, 50.0))),
 			roundi(float(career.sixnet_form.get(region_name, 50.0))),
 		])
-	sixnet_summary.text = "\n".join(lines)
+	sixnet_summary.text = _inset_rich_text("\n".join(lines))
 
 
 func _sixnet_slot_line(
