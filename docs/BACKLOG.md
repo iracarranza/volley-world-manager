@@ -197,17 +197,44 @@ position means a set or pass crossing `NET_Y` is a comparison away. There is no
 rally branch that plays one out, so deliveries are currently clamped to their
 own side (`HOME_SET_DELIVERY_MIN_Y`, `OPPONENT_PASS_DELIVERY_MIN_Y`).
 
-### Sequencing
+### Gates
 
-1. **Fix the serve visually first** — the cheap patch. The visible defect
-   should not stay live for however long the re-architecture takes.
-2. **Settle the target rates** — stuff rate, block involvement, rally-length
-   distribution. These are design decisions that survive any implementation;
-   the constants that currently hit them do not. Do not spend effort tuning
-   today's margins toward them.
-3. **Build the geometry as a shadow system**, the way Gates 44–49 did for the
-   block, and calibrate its spreads until the emergent rates land on step 2.
-   Editing three paths in place leaves the sim unmeasurable meanwhile.
+The cheap serve patch was dropped deliberately: the re-architecture fixes the
+same defect, and patching then replacing is wasted work.
+
+- **Gate A — ballistics. Landed.** `scripts/simulation/ball_flight_model.gd`.
+  Launch from a contact height with signed angles, the inverse solve, a
+  height-at-distance probe for block intersection, and a minimum-speed query.
+  Pure functions, no rally state, nothing wired — behaviour is unchanged.
+- **Gate B — shadow attack geometry.** Course repertoire, perceived
+  availability *including the block*, power as an independent choice, and the
+  three execution channels. Emits alongside the live path.
+- **Gate C — resolution.** Block intersection along the flight, landing, in/out
+  from geometry. Still shadow.
+- **Gate D — calibration.** Tune spreads and the power range until the emergent
+  rates hit the targets. Needs those targets settled first: stuff rate, block
+  involvement, rally-length distribution. They are design decisions that
+  survive any implementation; the constants that currently hit them are not, so
+  do not spend effort tuning today's margins toward them.
+- **Gate E — promotion** behind a rollout flag, across all three attack paths
+  and both serve paths, the way Gates 44–49 did for the block.
+
+### Gate A notes
+
+Two things worth carrying forward.
+
+**A near-vertical root must be declined, not clamped.** The lofted solution for
+a fast ball at short range is a near-vertical lob — 22 m/s over 4 m solves to
+87.7° — and pinning that to an 85° bound returns an angle carrying 8.8 m
+instead of the 4 m requested. `solve_angle_for_range` therefore flags each root
+usable or not rather than clamping, because a solver that quietly answers a
+different question than the one asked is the same defect as a serve that is
+ruled out and drawn in. A round-trip test over the speed × range grid pins it.
+
+**`RallyKinematics.solve_launch_arc` is not being deleted yet.** Every live call
+site still uses it, and it remains the right model for own-side deliveries,
+which launch and land at roughly the same height and are never struck downward.
+Gate E decides which sites move.
 
 ### Resolved: velocity is real, and it is `attack_power`
 

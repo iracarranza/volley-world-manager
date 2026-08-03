@@ -180,6 +180,7 @@ func _initialize() -> void:
 	_test_player_state_flow_and_recovery()
 	_test_rally_spectacle_and_flow_separation()
 	_test_own_side_deliveries_land_where_the_player_put_them()
+	_test_ball_flight_from_contact_height()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7531,6 +7532,144 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## Gate A of the ball-geometry work. `RallyKinematics.solve_launch_arc()` is the
+## level-ground solution and clamps launch angles positive, so it cannot express
+## a spike -- a ball struck downward from about 3.2 m. Every expected value here
+## is computed from the closed form independently rather than read back off the
+## implementation.
+func _test_ball_flight_from_contact_height() -> void:
+	const CONTACT_HEIGHT := 3.2
+	const GRAVITY := 9.8
+
+	## A flat 25 m/s ball from 3.2 m carries 20.2 m -- eleven metres past a 9 m
+	## court. This is the number that shows why downward angles are the ordinary
+	## case for an attack rather than a special case.
+	var flat: Dictionary = BallFlightModel.solve_flight(25.0, 0.0, CONTACT_HEIGHT)
+	_check(
+		absf(float(flat.range_meters) - 20.20) < 0.05
+			and absf(float(flat.duration_seconds) - 0.808) < 0.005,
+		"a flat 25 m/s ball from 3.2 m carries twenty metres, far past the endline",
+	)
+	## Struck down twenty degrees, the same speed lands 7.4 m away: a spike.
+	var spike: Dictionary = BallFlightModel.solve_flight(25.0, -20.0, CONTACT_HEIGHT)
+	_check(
+		absf(float(spike.range_meters) - 7.44) < 0.05
+			and float(spike.duration_seconds) < float(flat.duration_seconds),
+		"the same speed struck downward lands inside the court and arrives sooner",
+	)
+	## A descending ball never rises, so its apex is the contact itself.
+	_check(
+		absf(float(spike.apex_height_meters) - CONTACT_HEIGHT) < 0.0001
+			and float(BallFlightModel.solve_flight(
+				12.0, 30.0, CONTACT_HEIGHT
+			).apex_height_meters) > CONTACT_HEIGHT,
+		"a struck-down ball apexes at the hand while a lifted one rises above it",
+	)
+
+	## Round trip: solve for the angle that reaches a range, fly it, land there.
+	var round_trips := true
+	for speed in [14.0, 18.0, 22.0, 28.0]:
+		for target_range in [4.0, 6.5, 9.0]:
+			var solved: Dictionary = BallFlightModel.solve_angle_for_range(
+				speed, target_range, CONTACT_HEIGHT
+			)
+			if not bool(solved.found):
+				continue
+			for key in ["driven", "lofted"]:
+				if not bool(solved["%s_found" % key]):
+					continue
+				var flown: Dictionary = BallFlightModel.solve_flight(
+					speed, float(solved["%s_angle_degrees" % key]), CONTACT_HEIGHT
+				)
+				if absf(float(flown.range_meters) - target_range) > 0.02:
+					round_trips = false
+	_check(
+		round_trips,
+		"solving for a launch angle and flying it lands on the range that was asked for",
+	)
+
+	## The root that motivated flagging rather than clamping. 22 m/s over 4 m
+	## lofts to 87.7 degrees; pinned to the 85-degree bound it would carry 8.8 m,
+	## answering a question nobody asked.
+	var steep: Dictionary = BallFlightModel.solve_angle_for_range(
+		22.0, 4.0, CONTACT_HEIGHT
+	)
+	_check(
+		bool(steep.found) and bool(steep.driven_found)
+			and not bool(steep.lofted_found),
+		"a lofted root past the representable band is reported unusable, not clamped into a lie",
+	)
+
+	## Both roots reach the same spot; the driven one is the flatter of the two,
+	## which is what makes "spike or roll shot" a choice rather than a formula.
+	var pair: Dictionary = BallFlightModel.solve_angle_for_range(
+		25.0, 7.44, CONTACT_HEIGHT
+	)
+	_check(
+		bool(pair.found) and bool(pair.driven_found)
+			and absf(float(pair.driven_angle_degrees) + 20.0) < 0.2
+			and float(pair.lofted_angle_degrees) > float(pair.driven_angle_degrees),
+		"the two solutions for one range are the driven ball and the lofted one",
+	)
+
+	## Too slow to reach: reported, not fudged.
+	_check(
+		not bool(BallFlightModel.solve_angle_for_range(
+			3.0, 16.0, CONTACT_HEIGHT
+		).found),
+		"a speed that cannot carry the distance reports no solution rather than inventing one",
+	)
+
+	## The probe a block intersection reads. At the landing point the ball is on
+	## the floor; short of it, it is still up.
+	var height_at_landing: float = BallFlightModel.height_at_distance(
+		spike, float(spike.range_meters)
+	)
+	var height_at_net: float = BallFlightModel.height_at_distance(spike, 0.9)
+	_check(
+		absf(height_at_landing) < 0.02
+			and height_at_net > 2.0 and height_at_net < CONTACT_HEIGHT,
+		"ball height read at a horizontal distance is zero at the landing point and net height near the net",
+	)
+
+	## Height at distance must agree with the flight it came from, across the
+	## whole path, or a block test and a drawn arc would describe different balls.
+	var agrees := true
+	for step in range(1, 20):
+		var fraction := float(step) / 20.0
+		var elapsed := float(spike.duration_seconds) * fraction
+		var expected := CONTACT_HEIGHT \
+			+ float(spike.vertical_speed_mps) * elapsed \
+			- 0.5 * GRAVITY * elapsed * elapsed
+		var probed: float = BallFlightModel.height_at_distance(
+			spike, float(spike.horizontal_speed_mps) * elapsed
+		)
+		if absf(probed - expected) > 0.0001:
+			agrees = false
+	_check(
+		agrees,
+		"the height probe and the flight it was solved from describe the same ball",
+	)
+
+	## Nothing in the reachable input space may produce NaN or a negative
+	## duration -- this feeds playback, where either would be visible.
+	var finite := true
+	for speed in [0.0, 0.05, 1.0, 12.0, 35.0, 60.0]:
+		for angle in [-85.0, -60.0, -20.0, 0.0, 20.0, 60.0, 85.0, 120.0]:
+			for height in [0.0, 1.0, 3.4]:
+				var flight: Dictionary = BallFlightModel.solve_flight(
+					speed, angle, height
+				)
+				var carried := float(flight.range_meters)
+				var lasted := float(flight.duration_seconds)
+				if is_nan(carried) or is_nan(lasted) or lasted <= 0.0 or carried < 0.0:
+					finite = false
+	_check(
+		finite,
+		"every speed, angle and contact height resolves to a finite forward flight",
+	)
+
+
 ## A set used to land on `CourtConstants.lane_target(lane)` -- a fixed table
 ## entry -- so a 0.95 set and a 0.35 set delivered the ball to the identical
 ## point and set quality had no geometric consequence at all. Own-side contacts
