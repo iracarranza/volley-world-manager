@@ -44,6 +44,7 @@ const SetterCapabilityModel := preload(
 const AttemptJudgmentModel := preload(
 	"res://scripts/simulation/attempt_judgment.gd"
 )
+const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 const RallyKinematicsModel := preload(
 	"res://scripts/simulation/rally_kinematics.gd"
 )
@@ -234,6 +235,9 @@ var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
 var shadow_reception_trace: RallyTrace
+var home_principles: Resource
+var identity_effects: Dictionary = {}
+var rally_seed: int = 0
 
 
 func resolve(
@@ -245,8 +249,19 @@ func resolve(
 	home_serving: bool,
 	seed_value: int,
 	development_continuous_reception: bool = false,
+	team_principles: Resource = null,
 ) -> Resource:
 	rng.seed = seed_value
+	rally_seed = seed_value
+	home_principles = team_principles if team_principles != null \
+		else TeamPrinciplesModel.for_identity("Balanced")
+	identity_effects = {
+		"serve_risk": {},
+		"attack_selection": {},
+		"confidence_volatility": 1.0 + (
+			float(home_principles.emotional_expression) - 0.5
+		) * 0.6,
+	}
 	rally_clock = 0.0
 	shadow_reception_trace = null
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
@@ -681,6 +696,16 @@ func resolve(
 	if hitter == null or hitter.id == setter.id:
 		hitter = _fallback_hitter(players, lineup, setter.id)
 		assignment = _fallback_assignment(hitter, lineup)
+	var base_tempo := int(assignment.tempo)
+	assignment = _apply_identity_tempo(assignment, float(result.reception_quality))
+	identity_effects["attack_selection"] = {
+		"lane": assignment.lane,
+		"base_tempo": base_tempo,
+		"selected_tempo": assignment.tempo,
+		"pin_focus": float(home_principles.pin_focus),
+		"decisiveness": float(home_principles.decisiveness),
+		"tempo_variation": float(home_principles.tempo_variation),
+	}
 	if active_play == null:
 		result.key_factors.append(ExplanationText.factor("default_offense"))
 	else:
@@ -933,6 +958,10 @@ func resolve(
 	var available_attacks := ApproachMechanicsModel.available_attack_families(
 		hitter, resolved_approach, hitter_arrival_margin
 	)
+	hit_type = _identity_hit_type(
+		hit_type, available_attacks, float(result.set_quality), hitter_arrival_margin
+	)
+	identity_effects["attack_selection"]["hit_type"] = hit_type
 	## Capability is not permission at the third contact either.
 	##
 	## This used to silently rewrite a power swing into a roll shot whenever the
@@ -988,11 +1017,21 @@ func resolve(
 				"target_reason", "largest perceived gap"
 			)),
 		}
+	var attack_effectiveness := _attack_effectiveness(
+		float(result.attack_quality), float(home_principles.decisiveness),
+	)
+	identity_effects["attack_selection"]["effectiveness"] = attack_effectiveness
 	var attack_target: Vector2 = attack_choice.target
-	## Decided here rather than after the event is emitted, so the ball the
-	## viewer watches actually goes where the verdict says it went.
-	if float(result.attack_quality) < ATTACK_ERROR_THRESHOLD:
-		attack_target = _errant_attack_target(attack_target, float(result.attack_quality))
+	var intended_attack_target := attack_target
+	var attack_missed := float(result.attack_quality) < ATTACK_ERROR_THRESHOLD
+	if attack_missed:
+		attack_target = _errant_attack_target(
+			intended_attack_target, float(result.attack_quality)
+		)
+		## A promoted continuous attack describes the intended successful
+		## contact. Once the official quality rules it an error, its persistent
+		## endpoint cannot override the visible miss.
+		using_live_attack = false
 	var approach_start := Vector2(approach_preparation.get(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
@@ -1036,7 +1075,11 @@ func resolve(
 			" Arrived %.2fs late and lost the approach window." % absf(hitter_arrival_margin)),
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
-			"target_reason": attack_choice.reason, "movement_start": hitter_start,
+			"target_reason": attack_choice.reason,
+			"intended_target": intended_attack_target,
+			"attack_missed": attack_missed,
+			"attack_effectiveness": attack_effectiveness,
+			"movement_start": hitter_start,
 			"approach_start_position": approach_start,
 			"approach_target_position": Vector2(approach_preparation.get(
 				"approach_target_position", approach_start
@@ -1107,7 +1150,7 @@ func resolve(
 	# Resolve the block from the opponent's actual front-row geometry. A
 	# roster-wide best blocker must not cover every pin regardless of distance.
 	var block_resolution := _contest_block(
-		opponent_block_formation, float(result.attack_quality)
+		opponent_block_formation, attack_effectiveness
 	)
 
 	var live_block_integration: Dictionary = {}
@@ -1301,7 +1344,7 @@ func resolve(
 		read_modifier + floor_defense_bonus, 0.0, 0,
 	)
 	Familiarity.record_exposure(opponent_defender, read_tags)
-	var dug: bool = _dig_contest(opponent_defender, defense_strength, float(result.attack_quality))
+	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
@@ -1345,6 +1388,16 @@ func _resolve_home_serve(
 	var serve_risk := 0.5
 	if defensive_plan != null:
 		serve_risk = float(defensive_plan.serve_risk)
+	var called_serve_risk := serve_risk
+	serve_risk = clampf(
+		serve_risk + (float(home_principles.serve_aggression) - 0.5) * 0.70,
+		0.0, 1.0,
+	)
+	identity_effects["serve_risk"] = {
+		"called": called_serve_risk,
+		"effective": serve_risk,
+		"serve_aggression": float(home_principles.serve_aggression),
+	}
 	var serve_quality := clampf(
 		_power_rating(server, "serve_power") * 0.25
 		+ _rating(server, "serve_technique") * 0.20
@@ -1405,10 +1458,15 @@ func _resolve_home_serve(
 	var serve_receive_bonus := _opponent_serve_receive_adaptation_bonus(
 		opponent_team, target_name
 	)
+	## Quality describes execution; selected risk describes how much pace and
+	## movement the serve attempts. Centre this at the legacy 0.50 call so the
+	## Balanced calibration does not move merely because identities exist.
+	var serve_risk_pressure := (serve_risk - 0.5) * 0.16
 	var reception_quality := clampf(
 		_rating(receiver, "reception") * 0.58
 		+ _rating(receiver, "ball_control") * 0.24
 		- serve_quality * 0.44
+		- serve_risk_pressure
 		- CoverageModel.reception_body_penalty(receiver, opponent_arrival, serve_quality)
 		+ clampf(float(opponent_arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12)
 		+ minf(float(support_count) * 0.025, 0.075)
@@ -1431,6 +1489,7 @@ func _resolve_home_serve(
 		], {"side": "opponent", "landing": opponent_landing,
 			"flight_time": serve_time, "arrival": opponent_arrival,
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
+			"serve_risk_pressure": serve_risk_pressure,
 			"movement_start": receiver_start,
 			"movement_target": opponent_landing if receiver_arrived else receiver_start,
 			"movement_duration": receiver_move_time})
@@ -2153,10 +2212,6 @@ func _resolve_home_continuation(
 		0.0, 1.0,
 	)
 	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
-	## Same contract as the primary swing: a continuation attack ruled an error
-	## has to be drawn missing the court, not landing in it and disappearing.
-	if attack_quality < ATTACK_ERROR_THRESHOLD:
-		attack_target = _errant_attack_target(attack_target, attack_quality)
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
@@ -2180,6 +2235,10 @@ func _resolve_home_continuation(
 			attack_quality - continuation_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
+	var intended_attack_target := attack_target
+	var attack_missed := attack_quality < ATTACK_ERROR_THRESHOLD
+	if attack_missed:
+		attack_target = _errant_attack_target(intended_attack_target, attack_quality)
 	## One shot shape, used both for the full flight and -- if a block touches
 	## it -- for the re-sliced leg to the net, so the two describe the same ball.
 	var continuation_attack_angle := _attack_launch_angle_degrees(
@@ -2196,6 +2255,8 @@ func _resolve_home_continuation(
 		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0),
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
 			"attack_type": continuation_hit_type,
+			"intended_target": intended_attack_target,
+			"attack_missed": attack_missed,
 			"movement_start": hitter_start,
 			"approach_start_position": continuation_approach_start,
 			"approach_target_position": Vector2(transition_preparation.get(
@@ -3446,6 +3507,9 @@ func _finish(
 		"Home" if home_won else "Opponent", end_position, end_position,
 		home_won, 1.0, ExplanationText.headline(outcome), result.explanation)
 	result.analysis = _build_rally_analysis(result)
+	result.analysis["team_identity"] = str(home_principles.preset_name)
+	result.analysis["team_principles"] = home_principles.to_dict()
+	result.analysis["identity_effects"] = identity_effects.duplicate(true)
 	if shadow_reception_trace != null:
 		var existing_rollout: Dictionary = shadow_reception_trace.summary.get(
 			"reception_rollout", {}
@@ -3709,7 +3773,81 @@ func _choose_assignment(
 			candidates.append(assignment)
 	if candidates.is_empty():
 		return null
+	if not is_equal_approx(float(home_principles.pin_focus), 0.5):
+		var total_weight := 0.0
+		var weights: Array[float] = []
+		for assignment in candidates:
+			var pin_lane := assignment.lane in ["Left Pin", "Right Pin"]
+			var middle_lane := assignment.lane in ["Front Quick", "Right Quick"]
+			var weight := 1.0
+			if pin_lane:
+				weight = lerpf(0.35, 1.65, float(home_principles.pin_focus))
+			elif middle_lane:
+				weight = lerpf(1.65, 0.35, float(home_principles.pin_focus))
+			weights.append(weight)
+			total_weight += weight
+		var roll := rng.randf() * total_weight
+		for index in range(candidates.size()):
+			roll -= weights[index]
+			if roll <= 0.0:
+				return candidates[index]
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
+
+
+func _apply_identity_tempo(
+	assignment: HitterAssignment,
+	reception_quality: float,
+) -> HitterAssignment:
+	if assignment == null:
+		return assignment
+	var adjusted := assignment.duplicate(true) as HitterAssignment
+	if reception_quality < 0.36:
+		return adjusted
+	var tempo_shift := 0
+	var commitment := lerpf(
+		float(home_principles.decisiveness),
+		float(home_principles.transition_commitment),
+		0.45,
+	)
+	if commitment >= 0.66:
+		tempo_shift -= 1
+	elif commitment <= 0.34:
+		tempo_shift += 1
+	if float(home_principles.tempo_variation) >= 0.66 and reception_quality >= 0.48:
+		tempo_shift += [-1, 0, 1][posmod(rally_seed, 3)]
+	adjusted.tempo = clampi(adjusted.tempo + tempo_shift, 0, 3)
+	return adjusted
+
+
+func _identity_hit_type(
+	default_type: String,
+	available_attacks: Array,
+	set_quality: float,
+	arrival_margin: float,
+) -> String:
+	var decisiveness := float(home_principles.decisiveness)
+	if decisiveness <= 0.30 and (set_quality < 0.48 or arrival_margin < 0.05):
+		return "Controlled roll" if "controlled_roll" in available_attacks \
+			else "Emergency tip"
+	if decisiveness >= 0.75 and default_type == "Tempo swing" \
+			and "power_swing" in available_attacks:
+		return "Power swing"
+	return default_type
+
+
+func _attack_effectiveness(
+	execution_quality: float,
+	decisiveness: float = 0.5,
+) -> float:
+	## Execution still decides whether the ball lands in. Decisiveness instead
+	## prices what the attack does when it clears that gate: a controlled side
+	## keeps more balls alive, while a committed side accepts more overreach for
+	## greater pressure on the block and floor defence. Neutral identity returns
+	## execution unchanged, preserving the engine's existing calibration baseline.
+	var intention_multiplier := lerpf(0.85, 1.15, clampf(decisiveness, 0.0, 1.0))
+	return clampf(
+		execution_quality * intention_multiplier, 0.0, 1.0
+	)
 
 
 ## A copy of the called assignment at a tempo the setter can actually run. The
@@ -3853,6 +3991,14 @@ func _form_home_block(
 		+ maxf(preset_window_seconds, 0.0) * preset_share \
 		+ (1.0 - set_quality) * 0.10
 	close_time += lerpf(-0.09, 0.09, read_quality)
+	var identity_commitment_seconds := (
+		float(home_principles.block_commitment) - 0.5
+	) * 0.18
+	close_time += identity_commitment_seconds
+	identity_effects["block_commitment"] = {
+		"principle": float(home_principles.block_commitment),
+		"closing_time_adjustment": identity_commitment_seconds,
+	}
 	var strategy := str(defensive_plan.block_strategy) if defensive_plan != null \
 		else "Read Block"
 	var pin_attack := attack_x <= 0.34 or attack_x >= 0.66
@@ -4640,7 +4786,8 @@ func _rating(player: VolleyballPlayer, property_name: String) -> float:
 		return 0.5
 	var raw_rating := float(player.get(property_name)) / 100.0
 	return clampf(
-		raw_rating * (1.0 - player.fatigue * 0.18) + player.current_form * 0.06,
+		raw_rating * (1.0 - player.fatigue * 0.18) \
+			* player.confidence_execution_scale() + player.current_form * 0.06,
 		0.05, 1.0,
 	)
 
@@ -4648,7 +4795,8 @@ func _rating(player: VolleyballPlayer, property_name: String) -> float:
 func _power_rating(player: VolleyballPlayer, property_name: String) -> float:
 	if property_name == "attack_power":
 		return clampf(float(player.usable_attack_power()) / 100.0 \
-			* (1.0 - player.fatigue * 0.18) + player.current_form * 0.06, 0.05, 1.0)
+			* (1.0 - player.fatigue * 0.18) * player.confidence_execution_scale() \
+			+ player.current_form * 0.06, 0.05, 1.0)
 	var base := _rating(player, property_name)
 	var mass_bonus := clampf((player.mass_kg - 82.0) / 48.0, -0.50, 1.0) * 0.07
 	return clampf(base + mass_bonus, 0.05, 1.0)

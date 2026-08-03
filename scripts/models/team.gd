@@ -1,11 +1,20 @@
 class_name VolleyballTeam
 extends Resource
 
+const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
+
 @export var id: int = 1
 @export var team_name: String = "Harbor City VC"
 @export var short_name: String = "HCV"
 @export var identity: String = "Balanced"
+@export var principles: Resource = TeamPrinciplesModel.for_identity("Balanced")
 @export_range(0.0, 1.0) var tactical_familiarity: float = 0.35
+## Trust and emotional connection. Familiarity governs knowing the system;
+## cohesion governs how strongly confidence and recovery spread through it.
+@export_range(0.0, 1.0) var cohesion: float = 0.50
+## How closely this team follows the volleyball tradition of its home region.
+## Alignment helps a new roster gel, while departure is harder to pre-scout.
+@export_range(0.0, 1.0) var regional_alignment: float = 0.50
 @export var player_ids: Array[int] = []
 @export var captain_id: int = -1
 @export var libero_ids: Array[int] = []
@@ -79,9 +88,23 @@ func validate() -> Array[String]:
 	return errors
 
 
+func apply_identity(identity_name: String) -> void:
+	identity = identity_name if identity_name in TeamPrinciplesModel.PRESET_NAMES else "Balanced"
+	principles = TeamPrinciplesModel.for_identity(identity)
+
+
+func apply_custom_identity(identity_name: String, values: Dictionary) -> void:
+	principles = TeamPrinciplesModel.custom(identity_name, values)
+	identity = str(principles.preset_name)
+
+
 func to_dict() -> Dictionary:
 	return {"id": id, "team_name": team_name, "short_name": short_name,
-		"identity": identity, "tactical_familiarity": tactical_familiarity,
+		"identity": identity,
+		"principles": principles.to_dict() if principles != null else {},
+		"tactical_familiarity": tactical_familiarity,
+		"cohesion": cohesion,
+		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
 		"libero_ids": libero_ids.duplicate(), "depth_chart": depth_chart.duplicate(true),
 		"starting_player_ids": starting_player_ids.duplicate(),
@@ -94,7 +117,15 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.team_name = str(data.get("team_name", "Harbor City VC"))
 	team.short_name = str(data.get("short_name", "HCV"))
 	team.identity = str(data.get("identity", "Balanced"))
+	team.principles = TeamPrinciplesModel.from_dict(
+		data.get("principles", {}), team.identity
+	)
+	team.identity = str(team.principles.preset_name)
 	team.tactical_familiarity = clampf(float(data.get("tactical_familiarity", 0.35)), 0.0, 1.0)
+	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
+	team.regional_alignment = clampf(
+		float(data.get("regional_alignment", 0.50)), 0.0, 1.0
+	)
 	for raw_id in data.get("player_ids", []):
 		team.player_ids.append(int(raw_id))
 	team.captain_id = int(data.get("captain_id", -1))

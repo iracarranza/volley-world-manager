@@ -73,17 +73,17 @@ const AGE_BANDS: Array[Dictionary] = [
 ## scale -- they are "very good", and a world with twice the players
 ## plausibly has twice as many very good ones.
 const TALENT_TIERS: Array[Dictionary] = [
-	{"key": "generational", "pa_min": 92, "pa_max": 99, "world_total": 8,
+	{"key": "generational", "pa_min": 96, "pa_max": 99, "world_total": 8,
 		"scales_with_population": false, "remainder_weight": 0.0},
-	{"key": "elite", "pa_min": 84, "pa_max": 91, "world_total": 24,
+	{"key": "elite", "pa_min": 89, "pa_max": 95, "world_total": 24,
 		"scales_with_population": true, "remainder_weight": 0.0},
-	{"key": "standout", "pa_min": 76, "pa_max": 83, "world_total": 62,
+	{"key": "standout", "pa_min": 82, "pa_max": 88, "world_total": 62,
 		"scales_with_population": true, "remainder_weight": 0.0},
-	{"key": "solid", "pa_min": 66, "pa_max": 75, "world_total": 0,
+	{"key": "solid", "pa_min": 74, "pa_max": 81, "world_total": 0,
 		"scales_with_population": true, "remainder_weight": 0.30},
-	{"key": "squad", "pa_min": 54, "pa_max": 65, "world_total": 0,
+	{"key": "squad", "pa_min": 66, "pa_max": 73, "world_total": 0,
 		"scales_with_population": true, "remainder_weight": 0.44},
-	{"key": "fringe", "pa_min": 38, "pa_max": 53, "world_total": 0,
+	{"key": "fringe", "pa_min": 50, "pa_max": 65, "world_total": 0,
 		"scales_with_population": true, "remainder_weight": 0.26},
 ]
 
@@ -407,8 +407,15 @@ static func generate(
 	for tier in TALENT_TIERS:
 		if int(tier.world_total) <= 0:
 			continue
+		var eligible_ages := ages
+		## S-potential players define a golden generation rather than merely
+		## being somewhat more common in one. Ordinary cohorts can still produce
+		## elite A players, but the fixed generational budget belongs exclusively
+		## to the periodic cohorts selected by `golden_cohorts()`.
+		if str(tier.key) == "generational" and not golden.is_empty():
+			eligible_ages = ages.filter(func(age: int) -> bool: return golden.has(age))
 		scarce_by_age[str(tier.key)] = _scarce_allotment(
-			tier_world_total(tier, population_size), ages, sizes, golden
+			tier_world_total(tier, population_size), eligible_ages, sizes, golden
 		)
 
 	## Every region is guaranteed a scoutable prospect in each of the two

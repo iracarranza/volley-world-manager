@@ -19,8 +19,11 @@
   rotations, saved
   plays, active plays, match state, rally-resolution entry point and serialization.
 - `scripts/models/team.gd`: owns roster registration, captain/libero roles,
-  roster limits, identity, tactical familiarity and position depth charts. It
-  does not own tactical positions.
+  roster limits, identity, tactical familiarity, cohesion, regional alignment
+  and position depth charts. Its
+  serialized `TeamPrinciples` resource turns identity presets into tactical
+  inputs while reconstructing principles from the identity string in old saves.
+  It does not own tactical positions.
 - `scripts/models/career_state.gd`: career identity, organization type, region,
   time, resources, fixtures, transfer pool, training focus and match format.
 - `scripts/models/match_format.gd`: best-of-set rules, regular/deciding targets
@@ -43,6 +46,12 @@
   targets and player responsibility map.
 - `scripts/models/defensive_assignment.gd`: one player's base, read, seam,
   short-ball, emergency, attack-coverage and second-contact responsibilities.
+- `scripts/models/team_principles.gd`: seven normalized choices behind a team
+  identity, including named custom identities. `GameManager` passes them into
+  seeded rally resolution and applies their emotional response after each point;
+  they never rewrite raw attributes. `VolleyballRegions` measures distance from
+  regional tradition to seed familiarity/cohesion, while `GameManager` converts
+  that same alignment into the opponent's scouting confidence and adaptation rate.
 - `scripts/models/defensive_zone.gd`: a player's normalized zone center,
   metre-based responsibility radius, priority, activity and zone type.
 - `scripts/models/ball_trajectory.gd`: one authoritative contact-to-contact
@@ -71,6 +80,11 @@ Title save selection / New Career form
 → completed result / statistics / reputation
 → Career Dashboard + versioned save slot
 ```
+
+Identity balance is not certified by a changed scoreline. Use
+`tools/run_identity_calibration.gd` to measure every preset across independent
+career-name seeds. Global reference-band calibration remains a separate report:
+identity direction can be correct while the assembled sport is still miscentered.
 
 The career layer is deliberately above the match layer. `CareerManager` may
 configure or serialize `GameManager`, but rally simulation never reads calendar,

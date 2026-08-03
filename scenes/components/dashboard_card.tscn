@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scenes/components/dashboard_card.gd" id="1"]
 
 [node name="DashboardCard" type="Button"]
-custom_minimum_size = Vector2(240, 92)
+custom_minimum_size = Vector2(200, 92)
 size_flags_horizontal = 3
 script = ExtResource("1")
 

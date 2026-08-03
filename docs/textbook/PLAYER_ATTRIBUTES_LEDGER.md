@@ -1,7 +1,7 @@
 # Player Attributes Ledger
 
 **Status:** Comprehensive inventory of all tracked player data.
-**Last updated:** 2026-07-30
+**Last updated:** 2026-08-02
 
 ---
 
@@ -26,7 +26,8 @@ These are **persistent, long-term properties** tied to a `VolleyballPlayer` reso
 | `age` | int | 15–45 | Years old |
 | `professional_experience` | int | 0–25 | Years in professional play |
 | `potential` | int | 1–100 | Career ceiling rating (for scouting) |
-| `morale` | float | 0.0–1.0 | Psychological state (affects form) |
+| `satisfaction` | float | 0.0–1.0 | Long-term relationship with the current club |
+| `reputation` | int | 1–100 | External standing; not part of ability scoring |
 
 ### Physical Base Traits
 
@@ -49,6 +50,7 @@ These are **persistent, long-term properties** tied to a `VolleyballPlayer` reso
 | `jump_reach` | int | 1–100 | Maximum reach while jumping |
 | `explosiveness` | int | 1–100 | Power generation in jumps and movements |
 | `stamina` | int | 1–100 | Fatigue resistance over a match |
+| `work_rate` | int | 1–100 | Willingness to repeatedly pursue, cover and transition |
 | `arm_speed` | int | 1–100 | Hand/arm velocity independent of body |
 
 ### Technical: Serving
@@ -115,13 +117,15 @@ These are **persistent, long-term properties** tied to a `VolleyballPlayer` reso
 | `tactical_discipline` | int | 1–100 | Adherence to game plan |
 | `improvisation` | int | 1–100 | Ability to adapt outside the plan |
 | `adaptability` | int | 1–100 | Speed of adjustment to opponent or role change |
+| `leadership` | int | 1–100 | Stable ability to steady and lift teammates |
 
 ### Development & Progress
 
 | Attribute | Type | Range | Purpose |
 |---|---|---|---|
 | `fatigue` | float | 0.0–1.0 | Current match fatigue (degrades capabilities) |
-| `current_form` | float | -1.0–1.0 | Temporary performance modifier (hot/cold streak) |
+| `current_form` | float | -1.0–1.0 | Persistent recent-match performance; updated after fixtures and decayed weekly |
+| `match_confidence` | float | -1.0–1.0 | Point-to-point belief during the current match |
 | `traits` | array[string] | any | Special ability tags (e.g., "clutch_performer", "left_hand_hitter") |
 | `primary_position` | string | any | Career primary role (may differ from `position_role` in rotation) |
 | `natural_positions` | array[string] | any | Positions player can play competently |
@@ -135,7 +139,7 @@ These are **persistent, long-term properties** tied to a `VolleyballPlayer` reso
 
 **`usable_attack_power()`** — Derived from `attack_power` (25%), normalized mass (10%), explosiveness (18%), transition_speed (12%), arm_speed (20%), approach_timing (15%).
 
-**`baseline_defensive_range()`** — Derived from acceleration (22%), lateral_speed (24%), anticipation (22%), standing reach (14%), ball_control (8%), stamina (10%).
+**`baseline_defensive_range()`** — Derived from acceleration (28%), lateral_speed (32%), standing reach (18%), stamina (12%), and work_rate (10%).
 
 ---
 

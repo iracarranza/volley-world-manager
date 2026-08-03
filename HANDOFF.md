@@ -2,22 +2,31 @@
 
 ## Playable now
 
-- Start at a dedicated title screen, continue the most recently saved career,
-  inspect save-slot metadata, load a selected career or begin a new one.
-- Create a career through a two-column setup flow adapted from Music Manager:
-  choose Landavol, Spëddigh, Pāwa Hitō or Bloc du Larg, create a Club or Academy, name the career and
-  organization, and select a team identity.
+- Start at a dedicated two-column title screen with New Career, Load Career,
+  Options and Exit. Load opens the save browser; Options persists the Midnight
+  Court or Daylight Gym color theme.
+- Create a career through a four-stage questionnaire: choose one of the eight
+  fictional regions, establish a Club or Academy, select a preset or build a
+  named custom identity from seven principle tags, then name the career and
+  organization. The compact flat-color presentation follows the friendly,
+  toy-like visual direction in `docs/world/STYLE_AND_SETTING.md`.
 - Generate starting rosters deterministically from career name, region and
   organization type. Regions modify names and physical/technical/mental
   tendencies; clubs begin with ten senior players and stronger finances, while
   academies begin with twelve younger, higher-potential players.
 - Navigate a career dashboard with reusable summary cards and dedicated Home,
   Roster, Team, Transfers/Recruitment and Competition screens.
-- Inspect individual player identity, availability, age, experience, morale,
-  fatigue, position-weighted ability stars, potential stars, measurements and
-  every raw attribute from the Roster screen. View a six-axis Player Profile
-  derived from Attacking, Defensive, Setting & Ball Control, Physical, Serving
-  and Mental & Tactical wheels. Every wheel vertex uses D-S presentation grades;
+- Inspect individual player identity, availability, age, experience, satisfaction,
+  reputation, match confidence, fatigue, position-weighted ability, potential,
+  measurements and every raw attribute from the Roster screen. View a seven-axis
+  Player Profile derived from six symmetric seven-axis detailed wheels: Attacking,
+  Defensive, Setting & Ball Control, Physical, Serving and Mental & Tactical.
+  The compact roster wheel is always the labeled Player Profile; selecting it
+  opens the full-screen Attribute Lab, where the six detailed wheels are chosen.
+  Status/dynamics, key attributes, serving repertoire, traits and biography live
+  in a separate full-screen Player Dossier so the main roster preserves readable
+  identity and complete-attribute views in both roster-rail states. Every wheel
+  vertex uses D-S presentation grades and contributor-name tooltips;
   usable power and baseline defensive range remain derived rather than duplicate stats.
 - Generate a five-style serving repertoire for every player: Standing, Jump
   Topspin, Jump Float, Hybrid and Sky Ball. The primary style and its proficiency
@@ -32,9 +41,18 @@
 - Calculate position suitability from actual attributes and derived reach rather
   than height restrictions. Exceptional wingspan, jump capacity and explosiveness
   can therefore make an unconventional libero-to-middle/opposite conversion viable.
-- Review team identity, tactical familiarity, captain/libero hierarchy and the
-  position depth chart. Select one of seven weekly training focuses with visible
-  attribute, fatigue, morale and familiarity effects.
+- Review team identity, tactical familiarity, cohesion, captain/libero hierarchy and the
+  position depth chart. Team identities now persist seven configurable principles:
+  decisiveness, pin focus, tempo variation, emotional expression, serve aggression,
+  transition commitment and block commitment. Presets alter serve risk, attack
+  distribution, selected tempo, swing choice and confidence volatility without
+  modifying player ratings; identical seeded first matches produce different
+  scorelines when only the identity changes. Regional alignment grants stronger
+  starting familiarity and cohesion; departure from tradition is harder to
+  integrate but lowers opponent scouting confidence and in-match adaptation.
+  Directional identity checks run across six independent career-name seeds,
+  rather than treating one deterministic save as a population. Select one of seven weekly training focuses with visible
+  attribute, fatigue, satisfaction, cohesion and familiarity effects.
 - Advance a 48-week calendar using four-week months and four seasons. Training
   applies before fixtures; a due unplayed fixture blocks further advancement.
 - Browse a deterministic regional transfer pool, inspect candidates and costs,
@@ -90,7 +108,9 @@
   attack type, contact quality, block lane and block close quality.
 - Continue through repeated three-contact possessions, emergency T3 outside
   balls and transition attacks until a point or four-exchange safety limit.
-- Track points, sets, service possession, side-out rotation and rally history.
+- Track points, sets, service possession, side-out rotation, signed match flow,
+  player confidence and rally history. Composure, leadership and cohesion shape
+  confidence response without turning flow into a direct hidden ability bonus.
 - Rotate both teams through six rotation-specific lineups. Port Azure carries a
   seven-player roster so its libero can replace a back-row middle without
   removing the second middle from front-row rotations.
@@ -98,7 +118,7 @@
   with kills, blocks, aces and digs summarized in Match Center.
 - Open Team & Roster from the header to inspect registered players, current
   court/bench status, captain and libero roles, availability, age, experience,
-  potential, morale, fatigue and the initial positional depth chart.
+  potential, satisfaction, reputation, confidence, fatigue and the initial positional depth chart.
 - Change captain and libero designations through roster-safe manager actions.
   Registration APIs reject duplicate or over-limit additions and prevent a
   player still used by a rotation sheet from being removed.

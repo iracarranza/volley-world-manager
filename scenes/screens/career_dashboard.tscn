@@ -121,6 +121,7 @@ theme_override_constants/separation = 10
 
 [node name="HomeCards" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
 layout_mode = 2
+size_flags_horizontal = 3
 columns = 5
 
 [node name="RosterCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
@@ -188,13 +189,28 @@ bbcode_enabled = true
 scroll_active = true
 
 [node name="Roster" type="HSplitContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
-layout_mode = 2
-split_offset = 330
-
-[node name="RosterList" type="ItemList" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
+split_offset = 42
+
+[node name="RosterRail" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(42, 0)
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="RosterListToggle" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterRail"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(42, 38)
+layout_mode = 2
+tooltip_text = "Expand the roster list"
+text = ">"
+
+[node name="RosterList" type="ItemList" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterRail"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="RosterPlayer" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster"]
 layout_mode = 2
@@ -206,76 +222,82 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 
-[node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+[node name="IdentityPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(310, 0)
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="RosterDetail" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_colors/default_color = Color(0.84, 0.89, 0.95, 1)
+theme_override_font_sizes/normal_font_size = 14
 bbcode_enabled = true
+scroll_active = false
+
+[node name="PlayerDossierButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+tooltip_text = "Open status, dynamics, key attributes, serve repertoire, traits, and biography."
+text = "Open Player Dossier"
 
 [node name="WheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
-custom_minimum_size = Vector2(400, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 
-[node name="WheelProfileOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
-unique_name_in_owner = true
+[node name="WheelCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 layout_mode = 2
-tooltip_text = "Choose which phase of the selected player's profile to visualize."
+theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "PLAYER PROFILE  /  SELECT TO EXPAND"
+horizontal_alignment = 1
 
 [node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(400, 285)
+custom_minimum_size = Vector2(440, 220)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 1
 script = ExtResource("3_wheel")
+inline_axis_labels = true
 
-[node name="RosterExtra" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
-custom_minimum_size = Vector2(260, 0)
+[node name="RawBand" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 12
 
-[node name="Placeholder3D" type="PanelContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra"]
-custom_minimum_size = Vector2(260, 220)
+[node name="RawProfile" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
 layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
 
-[node name="Placeholder3DLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra/Placeholder3D"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.45, 0.52, 0.62, 1)
-theme_override_font_sizes/font_size = 13
-text = "3D player visualizer
-(reserved)"
-horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 2
-
-[node name="BioTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 17
-text = "Biography"
-
-[node name="BioPanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RosterExtra"]
+[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 3
-bbcode_enabled = true
-
-[node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "Complete Attribute Profile"
 
-[node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
+[node name="RawAttributes" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 260)
+custom_minimum_size = Vector2(0, 184)
 layout_mode = 2
 bbcode_enabled = true
-scroll_active = true
+scroll_active = false
 
-[node name="TestingRosterControls" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
+[node name="TestingRosterControls" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel"]
 layout_mode = 2
+theme_override_constants/separation = 4
 
-[node name="LineupStatusOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/TestingRosterControls"]
+[node name="LineupActionRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="LineupStatusOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls/LineupActionRow"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
 size_flags_horizontal = 3
 item_count = 2
@@ -285,15 +307,17 @@ popup/item_0/id = 0
 popup/item_1/text = "Bench"
 popup/item_1/id = 1
 
-[node name="ApplyLineupStatusButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/TestingRosterControls"]
+[node name="ApplyLineupStatusButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls/LineupActionRow"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(66, 34)
 layout_mode = 2
-text = "Apply Lineup Status"
+text = "Apply"
 
-[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/TestingRosterControls"]
+[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
-text = "Return to Player Pool"
+text = "Return to Pool"
 
 [node name="RosterStatusLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 unique_name_in_owner = true
@@ -643,3 +667,212 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "Advance Week  [Space]"
+
+[node name="AttributeWheelUnderlay" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.008, 0.015, 0.03, 0.86)
+
+[node name="AttributeWheelPopup" type="PopupPanel" parent="."]
+unique_name_in_owner = true
+initial_position = 1
+size = Vector2i(1180, 680)
+exclusive = true
+
+[node name="PopupMargin" type="MarginContainer" parent="AttributeWheelPopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 16
+
+[node name="Content" type="VBoxContainer" parent="AttributeWheelPopup/PopupMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Header" type="HBoxContainer" parent="AttributeWheelPopup/PopupMargin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleStack" type="VBoxContainer" parent="AttributeWheelPopup/PopupMargin/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="Eyebrow" type="Label" parent="AttributeWheelPopup/PopupMargin/Content/Header/TitleStack"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.77, 0.29, 1)
+theme_override_font_sizes/font_size = 11
+text = "ATTRIBUTE LAB  /  FULL PROFILE"
+
+[node name="ExpandedWheelTitle" type="Label" parent="AttributeWheelPopup/PopupMargin/Content/Header/TitleStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.89, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 27
+text = "PLAYER / PROFILE"
+
+[node name="ExpandedWheelContext" type="Label" parent="AttributeWheelPopup/PopupMargin/Content/Header/TitleStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.54, 0.65, 0.78, 1)
+theme_override_font_sizes/font_size = 13
+text = "ROSTER | Position | Age | Current | Potential"
+
+[node name="CloseAttributeWheelButton" type="Button" parent="AttributeWheelPopup/PopupMargin/Content/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(168, 42)
+layout_mode = 2
+text = "Return to Dashboard"
+
+[node name="HeaderRule" type="ColorRect" parent="AttributeWheelPopup/PopupMargin/Content"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.2, 0.61, 0.9, 0.72)
+
+[node name="Toolbar" type="HBoxContainer" parent="AttributeWheelPopup/PopupMargin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ExpandedWheelProfileLabel" type="Label" parent="AttributeWheelPopup/PopupMargin/Content/Toolbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "PROFILE"
+vertical_alignment = 1
+
+[node name="ExpandedWheelProfileOption" type="OptionButton" parent="AttributeWheelPopup/PopupMargin/Content/Toolbar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 38)
+layout_mode = 2
+tooltip_text = "Switch the selected player's wheel without leaving the Attribute Lab."
+
+[node name="ToolbarSpacer" type="Control" parent="AttributeWheelPopup/PopupMargin/Content/Toolbar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CurrentLegend" type="Label" parent="AttributeWheelPopup/PopupMargin/Content/Toolbar"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.82, 1, 1)
+text = "CURRENT  /  CYAN"
+vertical_alignment = 1
+
+[node name="PotentialLegend" type="Label" parent="AttributeWheelPopup/PopupMargin/Content/Toolbar"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.77, 0.29, 1)
+text = "POTENTIAL  /  GOLD"
+vertical_alignment = 1
+
+[node name="ExpandedAttributeWheel" type="Control" parent="AttributeWheelPopup/PopupMargin/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(720, 400)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 1
+script = ExtResource("3_wheel")
+expansion_enabled = false
+inline_axis_labels = true
+
+[node name="FooterRule" type="ColorRect" parent="AttributeWheelPopup/PopupMargin/Content"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.22, 0.35, 0.5, 0.55)
+
+[node name="ExpandedWheelHint" type="Label" parent="AttributeWheelPopup/PopupMargin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.62, 0.75, 1)
+theme_override_font_sizes/font_size = 12
+text = "Hover an axis label for its definition, current and potential values, and exact contributing attributes."
+horizontal_alignment = 1
+
+[node name="PlayerDossierPopup" type="PopupPanel" parent="."]
+unique_name_in_owner = true
+visible = false
+initial_position = 1
+size = Vector2i(1120, 640)
+exclusive = true
+
+[node name="DossierMargin" type="MarginContainer" parent="PlayerDossierPopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="Dossier" type="VBoxContainer" parent="PlayerDossierPopup/DossierMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DossierHeader" type="HBoxContainer" parent="PlayerDossierPopup/DossierMargin/Dossier"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="DossierTitleStack" type="VBoxContainer" parent="PlayerDossierPopup/DossierMargin/Dossier/DossierHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 3
+
+[node name="DossierEyebrow" type="Label" parent="PlayerDossierPopup/DossierMargin/Dossier/DossierHeader/DossierTitleStack"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.77, 0.29, 1)
+theme_override_font_sizes/font_size = 11
+text = "PLAYER DOSSIER  /  OFF-COURT & CONTEXT"
+
+[node name="PlayerDossierTitle" type="Label" parent="PlayerDossierPopup/DossierMargin/Dossier/DossierHeader/DossierTitleStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.89, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 27
+text = "PLAYER NAME"
+
+[node name="PlayerDossierContext" type="Label" parent="PlayerDossierPopup/DossierMargin/Dossier/DossierHeader/DossierTitleStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.54, 0.65, 0.78, 1)
+theme_override_font_sizes/font_size = 13
+text = "POSITION / AGE / CURRENT -> POTENTIAL"
+
+[node name="ClosePlayerDossierButton" type="Button" parent="PlayerDossierPopup/DossierMargin/Dossier/DossierHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(168, 42)
+layout_mode = 2
+text = "Return to Roster"
+
+[node name="DossierRule" type="ColorRect" parent="PlayerDossierPopup/DossierMargin/Dossier"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.96, 0.77, 0.29, 0.72)
+
+[node name="PlayerDossierContent" type="RichTextLabel" parent="PlayerDossierPopup/DossierMargin/Dossier"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/default_color = Color(0.82, 0.88, 0.94, 1)
+theme_override_font_sizes/normal_font_size = 15
+bbcode_enabled = true
+scroll_active = true

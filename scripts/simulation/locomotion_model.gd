@@ -138,7 +138,7 @@ static func cadence_hz(
 	var rating := _speed_rating(player, mode)
 	var fatigue_factor := 1.0 - player.fatigue * 0.30
 	return lerpf(float(band[0]), float(band[1]), rating) \
-		* fatigue_factor * limb_turnover_factor(player, mode)
+		* fatigue_factor * player.effort_scale() * limb_turnover_factor(player, mode)
 
 
 static func cadence_band(mode: RallyPlayerState.MovementMode) -> Array:
@@ -199,7 +199,7 @@ static func legacy_maximum_speed(
 	ceiling_mps: float,
 ) -> float:
 	return lerpf(LEGACY_SPEED_FLOOR_MPS, ceiling_mps, speed_rating) \
-		* mass_factor(player) * fatigue_factor(player)
+		* mass_factor(player) * fatigue_factor(player) * player.effort_scale()
 
 
 ## Inverts the relationship: given a speed the existing model produces, what

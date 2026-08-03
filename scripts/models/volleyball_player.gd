@@ -18,7 +18,13 @@ extends Resource
 ## an estimate derived from this data rather than this data itself, not
 ## changing what is stored here.
 @export var attribute_ceilings: Dictionary = {}
-@export_range(0.0, 1.0) var morale: float = 0.70
+## Long-term relationship with the player's current club. Unlike the old
+## `morale` field this does not directly modify rally execution; playing time,
+## results and management decisions move it over weeks and matches.
+@export_range(0.0, 1.0) var satisfaction: float = 0.70
+## External standing, not ability. Reputation affects how the world values and
+## talks about a player; it is deliberately absent from ability scoring.
+@export_range(1, 100) var reputation: int = 20
 @export_enum("Available", "Resting", "Injured", "Suspended") var availability: String = "Available"
 
 @export_category("Physical")
@@ -37,6 +43,9 @@ extends Resource
 @export_range(1, 100) var jump_reach: int = 50
 @export_range(1, 100) var explosiveness: int = 50
 @export_range(1, 100) var stamina: int = 50
+## Willingness to repeatedly pursue, cover and transition. Stamina is the
+## physical capacity; work rate is how aggressively the player spends it.
+@export_range(1, 100) var work_rate: int = 50
 @export_range(1, 100) var arm_speed: int = 50
 ## Length of one full approach stride. Correlates with height but is scouted
 ## independently: two players of equal height can carry very different footwork.
@@ -77,6 +86,7 @@ extends Resource
 @export_range(1, 100) var composure: int = 50
 @export_range(1, 100) var tactical_discipline: int = 50
 @export_range(1, 100) var improvisation: int = 50
+@export_range(1, 100) var leadership: int = 50
 ## How hard this setter's distribution pattern is to scout across a whole
 ## match -- varying tempo and target selection rather than falling into
 ## readable habits. A single-contact skill would live in the "Technical"
@@ -87,6 +97,9 @@ extends Resource
 @export_category("State")
 @export_range(0.0, 1.0) var fatigue: float = 0.0
 @export_range(-1.0, 1.0) var current_form: float = 0.0
+## Point-to-point belief during the current match. This name intentionally
+## differs from perception `confidence`, which means certainty in a ball read.
+@export_range(-1.0, 1.0) var match_confidence: float = 0.0
 @export var traits: Array[String] = []
 @export_enum("Standing", "Jump Topspin", "Jump Float", "Hybrid", "Sky Ball") var primary_serve_style: String = "Standing"
 @export var serve_style_proficiencies: Dictionary = {}
@@ -110,20 +123,21 @@ extends Resource
 
 const ABILITY_ATTRIBUTES: Array[String] = [
 	"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-	"stamina", "arm_speed", "serve_power", "serve_technique", "serve_placement",
+	"stamina", "work_rate", "arm_speed", "serve_power", "serve_technique", "serve_placement",
 	"serve_consistency", "serve_aggression", "serve_variation", "reception", "reception_balance",
 	"reception_stability", "set_accuracy", "set_balance", "set_stability", "tempo_control",
 	"set_disguise", "hand_control", "unpredictability", "attack_power", "attack_accuracy", "approach_timing",
 	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
-	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation", "adaptability",
+	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
+	"leadership", "adaptability",
 ]
 
 const POSITION_WEIGHTS := {
-	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making"],
-	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance"],
-	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation"],
+	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making", "leadership"],
+	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance", "work_rate"],
+	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation", "work_rate"],
 	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "tooling", "shot_variety", "block_timing", "serve_power"],
-	"Libero": ["reception", "reception_balance", "reception_stability", "dig_control", "ball_control", "anticipation", "lateral_speed", "decision_making"],
+	"Libero": ["reception", "reception_balance", "reception_stability", "dig_control", "ball_control", "anticipation", "lateral_speed", "decision_making", "work_rate"],
 }
 
 ## Tactical step-count scaling for the attack run-up. This is a system demand,
@@ -201,10 +215,26 @@ func usable_attack_power(overrides: Dictionary = {}) -> int:
 ## physical inputs into one hitting-power reading, so it stays merged.
 func baseline_defensive_range(overrides: Dictionary = {}) -> int:
 	return clampi(roundi(
-		float(overrides.get("acceleration", acceleration)) * 0.31 \
-		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.35 \
-		+ float(reach_rating()) * 0.20 \
-		+ float(overrides.get("stamina", stamina)) * 0.14), 1, 100)
+		float(overrides.get("acceleration", acceleration)) * 0.28 \
+		+ float(overrides.get("lateral_speed", lateral_speed)) * 0.32 \
+		+ float(reach_rating()) * 0.18 \
+		+ float(overrides.get("stamina", stamina)) * 0.12 \
+		+ float(overrides.get("work_rate", work_rate)) * 0.10), 1, 100)
+
+
+## Effort changes how often a player reaches their movement ceiling, not the
+## ceiling itself. The narrow band keeps work rate meaningful without turning
+## willingness into raw speed.
+func effort_scale() -> float:
+	return lerpf(0.96, 1.04, float(work_rate) / 100.0)
+
+
+## Confidence is intentionally a small execution modifier. Composed players
+## remain closer to their baseline in either direction; emotional players gain
+## more from a surge and lose more after a collapse.
+func confidence_execution_scale() -> float:
+	var sensitivity := lerpf(0.06, 0.02, float(composure) / 100.0)
+	return 1.0 + match_confidence * sensitivity
 
 
 ## Default stride for a player of this height. Roughly 0.43x standing height,
@@ -305,7 +335,10 @@ func to_dict() -> Dictionary:
 		"age": age,
 		"professional_experience": professional_experience,
 		"potential": potential,
-		"morale": morale,
+		"satisfaction": satisfaction,
+		## Keep the legacy key while older builds may still load these saves.
+		"morale": satisfaction,
+		"reputation": reputation,
 		"availability": availability,
 		"height_cm": height_cm,
 		"mass_kg": mass_kg,
@@ -316,6 +349,7 @@ func to_dict() -> Dictionary:
 		"jump_reach": jump_reach,
 		"explosiveness": explosiveness,
 		"stamina": stamina,
+		"work_rate": work_rate,
 		"arm_speed": arm_speed,
 		"stride_length_m": stride_length_m,
 		"serve_power": serve_power,
@@ -351,8 +385,10 @@ func to_dict() -> Dictionary:
 		"composure": composure,
 		"tactical_discipline": tactical_discipline,
 		"improvisation": improvisation,
+		"leadership": leadership,
 		"fatigue": fatigue,
 		"current_form": current_form,
+		"match_confidence": match_confidence,
 		"traits": traits.duplicate(),
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
@@ -375,7 +411,10 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.age = clampi(int(data.get("age", 24)), 15, 45)
 	player.professional_experience = clampi(int(data.get("professional_experience", 3)), 0, 25)
 	player.potential = clampi(int(data.get("potential", 70)), 1, 100)
-	player.morale = clampf(float(data.get("morale", 0.70)), 0.0, 1.0)
+	player.satisfaction = clampf(float(
+		data.get("satisfaction", data.get("morale", 0.70))
+	), 0.0, 1.0)
+	player.reputation = clampi(int(data.get("reputation", 20)), 1, 100)
 	player.availability = str(data.get("availability", "Available"))
 	player.apply_role_physical_defaults()
 	player.height_cm = clampf(float(data.get("height_cm", player.height_cm)), 150.0, 220.0)
@@ -383,13 +422,13 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.wingspan_cm = clampf(float(data.get("wingspan_cm", player.wingspan_cm)), 150.0, 235.0)
 	for property_name in [
 		"acceleration", "lateral_speed", "transition_speed", "jump_reach", "explosiveness",
-		"stamina", "arm_speed", "serve_power", "serve_accuracy", "reception",
+		"stamina", "work_rate", "arm_speed", "serve_power", "serve_accuracy", "reception",
 		"reception_balance", "reception_stability",
 		"set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control",
 		"unpredictability",
 		"attack_power", "attack_accuracy", "approach_timing", "tooling", "feinting", "finesse", "shot_variety",
 		"block_timing", "ball_control", "dig_control", "court_vision", "anticipation",
-		"decision_making", "composure", "tactical_discipline", "improvisation",
+		"decision_making", "composure", "tactical_discipline", "improvisation", "leadership",
 	]:
 		player.set(property_name, clampi(int(data.get(property_name, 50)), 1, 100))
 	var legacy_serve_accuracy := int(data.get("serve_accuracy", 50))
@@ -411,6 +450,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.position_training_target = str(data.get("position_training_target", ""))
 	player.fatigue = clampf(float(data.get("fatigue", 0.0)), 0.0, 1.0)
 	player.current_form = clampf(float(data.get("current_form", 0.0)), -1.0, 1.0)
+	player.match_confidence = clampf(float(data.get("match_confidence", 0.0)), -1.0, 1.0)
 	player.traits = Array(data.get("traits", []), TYPE_STRING, "", null)
 	## Legacy saves have no stride length; derive it from height so existing
 	## players keep a sane approach instead of collapsing to the export default.

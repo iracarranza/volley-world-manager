@@ -47,6 +47,7 @@ func create_career(
 	region: String,
 	organization_type: String,
 	identity: String,
+	custom_principles: Dictionary = {},
 ) -> String:
 	if career_name.strip_edges().is_empty() or organization_name.strip_edges().is_empty():
 		return "Career and organization names are required."
@@ -71,7 +72,17 @@ func create_career(
 	var team: Resource = TeamModel.new()
 	team.team_name = state.organization_name
 	team.short_name = _short_name(state.organization_name)
-	team.identity = identity
+	if custom_principles.is_empty():
+		team.apply_identity(identity)
+	else:
+		team.apply_custom_identity(identity, custom_principles)
+	state.identity = team.identity
+	var starting_identity := VolleyballRegions.starting_identity_state(
+		region, team.principles
+	)
+	team.tactical_familiarity = float(starting_identity.familiarity)
+	team.cohesion = float(starting_identity.cohesion)
+	team.regional_alignment = float(starting_identity.alignment)
 	var error: String = _game_manager().configure_managed_team(team, generated)
 	if not error.is_empty():
 		return error
@@ -184,11 +195,20 @@ func advance_week() -> String:
 		## population a history rather than a snapshot.
 		_advance_world_year(post_year)
 	for player in _game_manager().players:
-		player.fatigue = maxf(player.fatigue - WEEKLY_FATIGUE_RECOVERY, 0.0)
+		## Weekly recovery must exceed every training load. The old 0.04 was
+		## smaller than default Team Practice's 0.05, so an idle week made a
+		## rested squad more tired and fixture-to-fixture fatigue only climbed.
+		recover_weekly_fatigue(player)
+		player.current_form *= 0.92
 	save_career()
 	week_advanced.emit(last_training_report)
 	career_changed.emit()
 	return ""
+
+
+static func recover_weekly_fatigue(player: VolleyballPlayer) -> void:
+	if player != null:
+		player.fatigue = maxf(player.fatigue - WEEKLY_FATIGUE_RECOVERY, 0.0)
 
 
 func prepare_fixture(fixture_id: int) -> String:
@@ -251,9 +271,44 @@ func complete_active_match() -> void:
 		career.reputation = clampi(int(career.reputation) + (
 			2 if fixture.home_sets > fixture.opponent_sets else -1
 		), 0, 100)
+		_apply_player_match_outcomes(fixture.home_sets > fixture.opponent_sets)
 	career.active_fixture_id = -1
 	save_career()
 	career_changed.emit()
+
+
+func _apply_player_match_outcomes(won: bool) -> void:
+	var manager := _game_manager()
+	var player_statistics: Dictionary = manager.match_state.statistics.players
+	for player in manager.players:
+		var stats: Dictionary = player_statistics.get(str(player.id), {})
+		var contacts := int(stats.get("contacts", 0))
+		var appeared := contacts > 0
+		var satisfaction_change := 0.01 if won else -0.008
+		satisfaction_change += 0.005 if appeared else -0.004
+		player.satisfaction = clampf(
+			player.satisfaction + satisfaction_change, 0.0, 1.0
+		)
+		if appeared:
+			var average_quality := float(stats.get("quality_total", 0.0)) \
+				/ float(maxi(contacts, 1))
+			var performance_signal := clampf(
+				(average_quality - 0.52) / 0.28, -1.0, 1.0
+			)
+			player.current_form = clampf(
+				lerpf(player.current_form, performance_signal, 0.35), -1.0, 1.0
+			)
+			var reputation_change := 2 if average_quality >= 0.75 \
+				else (1 if average_quality >= 0.62 else 0)
+			player.reputation = clampi(
+				player.reputation + reputation_change, 1, 100
+			)
+		else:
+			player.current_form *= 0.85
+		player.match_confidence *= 0.35
+	manager.team.cohesion = clampf(
+		float(manager.team.cohesion) + (0.006 if won else -0.003), 0.0, 1.0
+	)
 
 
 func sign_transfer(player_id: int) -> String:
@@ -440,6 +495,7 @@ func _metadata() -> Dictionary:
 	return {"career_name": career.career_name,
 		"organization_name": career.organization_name,
 		"organization_type": career.organization_type, "region": career.region,
+		"identity": career.identity,
 		"absolute_week": career.absolute_week, "date": date_text(),
 		"reputation": career.reputation,
 		"next_fixture": fixture.opponent_name if fixture != null else "None",

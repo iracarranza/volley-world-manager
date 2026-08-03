@@ -138,10 +138,12 @@ does not touch physique at all.
 
 | Region | Intended character | Needs |
 |---|---|---|
-| Pāwa Hitō | players are generally **larger** | physique bias -- not currently possible |
-| Spëddigh | faster lateral movement, balance, floor defense | a defensive-movement cluster |
+| Pāwa Hitō | sustained transition attacks and conditioning | stamina/transition cluster; average frame |
+| Spëddigh | relentless work, tempo pressure, rapid movement | work-rate/tempo cluster |
 | Bloc du Larg | strong at-net attributes | a net cluster (block, jump, attack at the net) |
 | Landavol | all-round, strong mental and technical | broad small positive, mental/technical stronger |
+| Taktikã | composed, adaptable systems | composure/decision cluster |
+| Ispayk | large-framed terminal attackers | physique and bomba cluster |
 
 So the region schema grows from three scalars to:
 
@@ -149,7 +151,7 @@ So the region schema grows from three scalars to:
 - **named attribute-cluster weights** rather than three category buckets.
 
 The same discipline as role applies: a regional bias is a **lean, not a
-determinant**. A Pāwa Hitō libero and a small Bloc du Larg middle must both
+determinant**. An Ispayk libero and a small Bloc du Larg middle must both
 remain possible, or region becomes the new role -- an essence that writes a
 body, which is the exact problem this whole change exists to remove.
 
