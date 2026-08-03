@@ -206,10 +206,11 @@ same defect, and patching then replacing is wasted work.
   Launch from a contact height with signed angles, the inverse solve, a
   height-at-distance probe for block intersection, and a minimum-speed query.
   Pure functions, no rally state, nothing wired — behaviour is unchanged.
-- **Gate B — courses and power as choices. Landed (both halves).**
-  `attack_course_model.gd` and `attack_power_model.gd`. Still to come in
-  Gate B: perceived availability *including the block*, and the three execution
-  channels.
+- **Gate B — the hitter's decision. Landed, closed.**
+  `attack_course_model.gd`, `attack_power_model.gd`, `attack_read_model.gd`,
+  `attack_swing_model.gd`. Courses as bearings, power as a temperament-driven
+  choice, a blurred read of the block and floor, and three independent
+  execution channels.
 - **Gate C — resolution.** Block intersection along the flight, landing, in/out
   from geometry. Still shadow.
 - **Gate D — calibration.** Tune spreads and the power range until the emergent
@@ -272,6 +273,57 @@ and it is the first thing Gate C's power selection has to respect.
 **Bearings are metric, not normalized.** The court is 9 m by 18 m, so equal
 normalized offsets in x and y are a 26.6° shot, not 45°. Computing bearings in
 normalized space would tilt every course in the game.
+
+### Perception is blurred, not coin-flipped
+
+`attack_read_model.gd`. `_choose_attack_target()` hands the hitter the scan's
+best answer or a fixed fallback down their own line, chosen by
+`randf() < decision_making`. That is two behaviours with no middle: perfect play
+or a stock mistake, never a plausible misread. Perception now degrades the
+*inputs* — blockers and defenders are seen up to 0.55 m and 1.30 m from where
+they are, scaled by how well the hitter reads — so a hitter commits confidently
+to a picture that is slightly wrong.
+
+How much lane a pair of hands seals is deliberately **not** blurred. That is a
+fact about the block's shape rather than something read off it in the air, and
+blurring it would double-count the position error.
+
+The block also enters the decision at all, which it previously did not: openness
+is the *lesser* of the gap past the block at the net and the gap from the
+defence at the floor, because threading the block into a waiting libero is not
+half a good shot.
+
+**Finding, and Gate C depends on it: shot selection barely moves where the ball
+passes the net.** From a contact 0.36 m off the net, the entire legal bearing
+range crosses within about 0.7 m of the hitter's own x — a line shot crosses
+0.04 m across, a sharp cross 0.37 m, an extreme cross 0.68 m. So a blocker is
+beaten by *height*, by their own positioning, and by the edge of their hands —
+not by aiming at a different point on the floor. A test pins the span, because
+the result is unintuitive enough to be "fixed" by mistake later.
+
+### Three execution channels
+
+`attack_swing_model.gd`. Intent goes in as a course, a launch angle and a speed,
+and comes out moved on three independent channels, each failing in a separately
+nameable way:
+
+| channel | asymmetry | reads as |
+| --- | --- | --- |
+| power | shortfall ≈ 3× overshoot | dropped short |
+| vertical angle | symmetric | sailed long, or into the net |
+| bearing | symmetric, widest | pulled wide, or into a blocker |
+
+Bearing runs wider than vertical because the swing plane constrains how far a
+hitter can miss upward but not how far they can miss sideways. Power is
+asymmetric because mishitting a ball and having it dribble is common, and
+catching one better than intended is not. All three widen with
+`swing_cost()`'s spread multiplier, so a ball struck across the body is less
+accurate in every respect rather than only slower.
+
+`dominant_channel` reports which one moved the ball furthest from intent,
+normalised by each channel's own spread. That is what turns today's single
+`attack_error` into a hitter who pulled it wide, one who sailed it long, and one
+who never got hold of it.
 
 ### The natural swing line is the run-up — fixed, and it was worse than shallow
 

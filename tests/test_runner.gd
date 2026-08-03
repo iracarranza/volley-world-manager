@@ -82,6 +82,12 @@ const ATTACK_PROGRESSION_CALIBRATION_SCRIPT := preload(
 const ATTACK_POWER_SCRIPT := preload(
 	"res://scripts/simulation/attack_power_model.gd"
 )
+const ATTACK_READ_SCRIPT := preload(
+	"res://scripts/simulation/attack_read_model.gd"
+)
+const ATTACK_SWING_SCRIPT := preload(
+	"res://scripts/simulation/attack_swing_model.gd"
+)
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -186,6 +192,8 @@ func _initialize() -> void:
 	_test_ball_flight_from_contact_height()
 	_test_attack_courses_are_relative_to_the_hitter()
 	_test_attack_power_is_a_choice()
+	_test_hitters_read_a_blurred_picture()
+	_test_swing_channels_fail_separately()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7572,6 +7580,211 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## Gate B. A hitter commits to the picture they believe, not to the truth with a
+## coin flip over it. `_choose_attack_target()` today hands over the scan's best
+## answer or a fixed fallback down the hitter's own line -- two behaviours and no
+## middle. Blurring the inputs instead produces confident, plausible misreads.
+func _test_hitters_read_a_blurred_picture() -> void:
+	var contact := Vector2(CourtConstants.LANE_X["Left Pin"], 0.52)
+	var blockers: Array = [
+		{"net_x": 0.20, "reach_height_m": 3.05, "half_width_m": 0.45},
+		{"net_x": 0.50, "reach_height_m": 3.15, "half_width_m": 0.45},
+	]
+	var defenders: Array = [Vector2(0.22, 0.20), Vector2(0.72, 0.24)]
+	var draws: Array = [1.0, -1.0, -1.0, 1.0]
+
+	var sharp := ATTACK_READ_SCRIPT.perceived_blockers(blockers, 0.98, draws)
+	var poor := ATTACK_READ_SCRIPT.perceived_blockers(blockers, 0.05, draws)
+	_check(
+		absf(float(sharp[0].net_x) - 0.20) < 0.005
+			and absf(float(poor[0].net_x) - 0.20) > 0.03,
+		"a sharp reader sees the block where it is and a poor one does not",
+	)
+	_check(
+		is_equal_approx(
+			float(poor[0].half_width_m), float(blockers[0]["half_width_m"])
+		),
+		"how much lane a pair of hands seals is not something the hitter misreads",
+	)
+	var poor_defenders := ATTACK_READ_SCRIPT.perceived_defenders(
+		defenders, 0.05, draws
+	)
+	_check(
+		poor_defenders[0].distance_to(defenders[0]) > 0.01,
+		"a poor reader misplaces the floor defence too",
+	)
+
+	## The block enters the decision at all, which today it does not. A course
+	## aimed through a blocker's hands must score worse than one past them, even
+	## when the floor behind both is equally empty.
+	var through_x := ATTACK_READ_SCRIPT.net_crossing_x(contact, 12.0, true)
+	_check(
+		through_x > contact.x and through_x < 1.0,
+		"a course crossing the net resolves to a point along the net",
+	)
+	## Shot selection barely moves where the ball passes the net. Contacting
+	## 0.36 m off it, the whole legal bearing range crosses within about 0.7 m of
+	## the hitter's own x -- so a blocker is beaten by height, by their own
+	## positioning, and by the edge of their hands, not by aiming somewhere else
+	## on the floor. Asserted because it is unintuitive and Gate C depends on it.
+	var narrowest := 1.0
+	var widest := 0.0
+	for bearing in [-40.0, -20.0, 0.0, 20.0, 45.0, 62.0]:
+		var crossing: float = ATTACK_READ_SCRIPT.net_crossing_x(
+			contact, bearing, true
+		)
+		narrowest = minf(narrowest, crossing)
+		widest = maxf(widest, crossing)
+	_check(
+		(widest - narrowest) * CourtConstants.COURT_WIDTH_METERS < 1.6,
+		"every course from a net contact crosses within a metre or so of the hitter",
+	)
+
+	## A blocker standing on the crossing seals it; one standing away does not.
+	## Stated against the crossing rather than against a floor target, since the
+	## line above is exactly why the two are not the same question.
+	var probe_bearing := 20.0
+	var crossing_x: float = ATTACK_READ_SCRIPT.net_crossing_x(
+		contact, probe_bearing, true
+	)
+	var in_the_way: Array = [
+		{"net_x": crossing_x, "reach_height_m": 3.15, "half_width_m": 0.45},
+	]
+	var stood_off: Array = [
+		{"net_x": crossing_x + 0.30, "reach_height_m": 3.15, "half_width_m": 0.45},
+	]
+	_check(
+		ATTACK_READ_SCRIPT.block_clearance_meters(
+			contact, probe_bearing, in_the_way, true
+		) < 0.0
+			and ATTACK_READ_SCRIPT.block_clearance_meters(
+				contact, probe_bearing, stood_off, true
+			) > 0.0,
+		"a blocker on the crossing seals the course and one stood off it does not",
+	)
+
+	## Struck over the top: a ball high enough at the net is not this blocker's
+	## business, which is what lets a tall contact beat a short block.
+	var over: Dictionary = BallFlightModel.solve_flight(22.0, -6.0, 3.35)
+	var under: Dictionary = BallFlightModel.solve_flight(22.0, -30.0, 2.10)
+	var lane_bearing := AttackCourseModel.bearing_to_point(
+		contact, Vector2(0.20, 0.16), true
+	)
+	_check(
+		ATTACK_READ_SCRIPT.block_clearance_meters(
+			contact, lane_bearing, blockers, true, over
+		) > ATTACK_READ_SCRIPT.block_clearance_meters(
+			contact, lane_bearing, blockers, true, under
+		),
+		"a ball struck over the top of the block is not stopped by it",
+	)
+
+	## Openness takes the worse of the two obstacles, because threading the
+	## block into a waiting defender is not half a good shot.
+	var threaded := ATTACK_READ_SCRIPT.course_openness(
+		contact, lane_bearing, Vector2(0.22, 0.20), [], defenders, true
+	)
+	var clean := ATTACK_READ_SCRIPT.course_openness(
+		contact, lane_bearing, Vector2(0.50, 0.42), [], defenders, true
+	)
+	_check(
+		float(threaded.openness) < float(clean.openness),
+		"a course landing on a defender scores worse than one landing in space",
+	)
+	_check(
+		bool(ATTACK_READ_SCRIPT.course_openness(
+			contact, probe_bearing, Vector2(0.50, 0.42), in_the_way, [], true
+		).into_the_block)
+			and not bool(ATTACK_READ_SCRIPT.course_openness(
+				contact, probe_bearing, Vector2(0.50, 0.42), stood_off, [], true
+			).into_the_block),
+		"a course through sealed net is reported as into the block, and a clear one is not",
+	)
+
+
+## Gate B. Three channels, three different misses. One quality roll produces all
+## of them indistinguishably; separating them is what lets the miss be named.
+func _test_swing_channels_fail_separately() -> void:
+	var clean: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.80, 1.0, 0.0, 0.0, 0.0
+	)
+	_check(
+		is_equal_approx(float(clean.bearing_degrees), 20.0)
+			and is_equal_approx(float(clean.vertical_angle_degrees), -14.0)
+			and is_equal_approx(float(clean.speed_mps), 24.0),
+		"a swing with no error delivers exactly what was intended",
+	)
+
+	## Each channel moves only its own number.
+	var pulled: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.50, 1.0, 1.0, 0.0, 0.0
+	)
+	var sailed: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.50, 1.0, 0.0, 1.0, 0.0
+	)
+	var mishit: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.50, 1.0, 0.0, 0.0, -1.0
+	)
+	_check(
+		float(pulled.bearing_degrees) > 20.0
+			and is_equal_approx(float(pulled.vertical_angle_degrees), -14.0)
+			and is_equal_approx(float(pulled.speed_mps), 24.0)
+			and str(pulled.dominant_channel) == "bearing",
+		"a bearing miss moves the course and nothing else",
+	)
+	_check(
+		float(sailed.vertical_angle_degrees) > -14.0
+			and is_equal_approx(float(sailed.bearing_degrees), 20.0)
+			and str(sailed.dominant_channel) == "vertical",
+		"a vertical miss moves the launch angle and nothing else",
+	)
+	_check(
+		float(mishit.speed_mps) < 24.0
+			and is_equal_approx(float(mishit.bearing_degrees), 20.0)
+			and str(mishit.dominant_channel) == "power",
+		"a power miss takes speed off the ball and nothing else",
+	)
+
+	## Power is asymmetric: coming off soft is common, catching it better than
+	## intended is rare. Equal-magnitude draws must not move it equally.
+	var soft: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.50, 1.0, 0.0, 0.0, -1.0
+	)
+	var caught: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.50, 1.0, 0.0, 0.0, 1.0
+	)
+	_check(
+		absf(float(soft.power_error_fraction))
+			> absf(float(caught.power_error_fraction)) * 2.0,
+		"a mishit loses far more speed than a well-caught ball gains",
+	)
+
+	## Accuracy narrows every channel, and swinging across the body widens them.
+	var precise: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.95, 1.0, 1.0, 1.0, -1.0
+	)
+	var wild: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.05, 1.0, 1.0, 1.0, -1.0
+	)
+	var strained: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		20.0, -14.0, 24.0, 0.95, 2.1, 1.0, 1.0, -1.0
+	)
+	_check(
+		absf(float(precise.bearing_error_degrees))
+			< absf(float(wild.bearing_error_degrees))
+			and absf(float(precise.vertical_error_degrees))
+				< absf(float(wild.vertical_error_degrees))
+			and absf(float(precise.power_error_fraction))
+				< absf(float(wild.power_error_fraction)),
+		"accuracy narrows all three channels together",
+	)
+	_check(
+		absf(float(strained.bearing_error_degrees))
+			> absf(float(precise.bearing_error_degrees)),
+		"a swing across the body is less accurate as well as slower",
+	)
+
+
 ## Gate B. Power is chosen the way a course is -- how hard can I reasonably hit
 ## here -- and three different temperaments answer it three different ways. The
 ## point is that over-hitting and under-hitting are separate mistakes made by
