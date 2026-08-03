@@ -1,7 +1,8 @@
 # UI Visual System — technical constraints
 
 Date: 2026-08-03
-Measured at: `b33b5b9`
+Measured at: `b33b5b9`, revised against `f2fbc80` ("Recalibrate attacks and
+split regional strength") after review.
 
 This is the **structural half** of the visual system: what the system has to
 cover, where it has to live, and what already exists. It deliberately contains
@@ -53,11 +54,26 @@ outside the system permanently and get hand-patched later — which is the
 "another collection of hardcoded per-screen styles" outcome the work exists to
 prevent, merely relocated.
 
-**Godot note:** `.tres` files cannot reference GDScript constants, so the theme
-values are duplicated from `UIPalette` by hand or by a small generator tool. A
-regression check asserting that a sample of theme colours equals the
-corresponding `UIPalette` constant is what stops the two drifting; without it,
-the duplication silently rots.
+### Neither `.tres` themes nor scene-defined 3D materials can read a constant
+
+Both downstream targets are static resource data. Godot cannot reference a
+GDScript constant from a `.tres` theme *or* from a `[sub_resource
+type="StandardMaterial3D"]` inside a `.tscn`. So "read it directly" is only true
+for code paths, and two mechanisms are required, both mandatory:
+
+1. **A synchronisation test, not an optional one.** Theme values are duplicated
+   from `UIPalette` by hand or by a generator. Either way the duplication rots
+   silently unless a regression check asserts the `.tres` colours equal their
+   `UIPalette` counterparts. Without it `UIPalette` is documentation, not a
+   source of truth. Treat the check as part of the definition of done for the
+   theme, not as a follow-up.
+2. **A runtime material applicator for the 3D path.** `MatchCourt3D`'s court,
+   lines, net and posts carry materials authored in the scene file, which will
+   never see `UIPalette`. They need code that walks the mesh instances on
+   `_ready()` and assigns colours from the palette — the pattern
+   `PlayerActor3D._apply_material_color()` already uses for the player rig.
+   Until that exists, the 3D court is outside the system regardless of what the
+   palette module contains.
 
 ---
 
@@ -167,9 +183,11 @@ miss:
   are thin, not that the mechanism is missing.
 - **Both theme resources exist** and already define `StyleBoxFlat`s for button
   normal/hover and panel.
-- **A grade colour map exists** — `AttributeProfiles.GRADE_COLORS` (S/A/B/C/D)
-  plus the `GRADE_*_MIN` band constants. Fold these into `UIPalette` rather than
-  defining a second grade palette; they are already consumed by the dashboard.
+- **A grade colour map exists** — `AttributeProfiles.GRADE_COLORS` (S/A/B/C/D).
+  Move **only the colours** into `UIPalette`; they are presentation. The
+  `GRADE_*_MIN` threshold constants beside them stay in `AttributeProfiles`,
+  because what counts as an A is a domain decision the simulation owns, not a
+  styling one. Moving the thresholds would put game balance in the UI layer.
 
 ---
 
@@ -184,8 +202,32 @@ cheaper than authoring a parallel 2D bust pipeline, and it guarantees the roster
 card and the match court show *the same player* rather than two representations
 that drift apart as the model changes.
 
-Note this has been scoped once already: a `Placeholder3D` slot existed on the
-Roster tab and was removed during the roster rebuild.
+Two constraints on that, both of which make this step larger than it looks:
+
+**Portraits must be cached, not live.** Fourteen concurrently rendering
+`SubViewport`s is a real cost, and the existing `MatchScreen` viewport is
+already set to `render_target_update_mode = 4` (`UPDATE_ALWAYS`), so the project
+has form here. Render each portrait **once** to a texture, cache it, and
+regenerate only when the inputs change. The cache key is the physical profile —
+height, mass, wingspan, position, handedness — which changes rarely and slowly
+(aging), so the cache is cheap and long-lived.
+
+**The rig cannot yet tell two players apart.** It varies body proportions and
+handedness, but every player is drawn with the same skin colour: `Color("d6a06c")`
+is hardcoded three times in `PlayerActor3D._configure_appearance()`, for head,
+arms and legs. There is no hair, no facial variation, and no per-player cosmetic
+data on `VolleyballPlayer` at all. Two players of similar build are currently
+indistinguishable except by team colour.
+
+So reusing the rig is still the right call — it is far cheaper than a parallel
+pipeline and keeps one representation — but **portraits are not worth shipping
+until per-player cosmetic variation exists**. That means new generated,
+serialized fields on the player model (skin tone, hair style/colour, and
+whatever else the art direction wants), which is a player-model change, not a
+UI change. Sequence it accordingly: cosmetic identity first, portraits second.
+
+Note the surface has been scoped once already: a `Placeholder3D` slot existed on
+the Roster tab and was removed during the roster rebuild.
 
 ---
 
@@ -209,9 +251,11 @@ Beyond "every control and state":
 
 ## 9. Verification
 
-- `godot --headless --path . --script res://tests/test_runner.gd` — 617 checks
-  at `b33b5b9`. Theme work should not move this number; if it does, a scene
-  binding broke.
+- `godot --headless --path . --script res://tests/test_runner.gd` — **620 checks
+  at `f2fbc80`** (617 at `b33b5b9`, before the attack recalibration and regional
+  strength split added three). Theme work should not move this number; if it
+  does, a scene binding broke. Re-read the current count before trusting any
+  figure quoted in a doc — that is what the "measured at" line is for.
 - `tools/validate_ui_bindings.sh` exists and should be run after any `.tscn`
   restructuring — a `%UniqueName` left dangling by a node move is the most
   likely failure mode of this work, and it fails silently on tabs nobody opens.
