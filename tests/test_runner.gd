@@ -7656,6 +7656,69 @@ func _test_attack_courses_are_relative_to_the_hitter() -> void:
 		"a bearing is measured on the floor rather than in normalized coordinates",
 	)
 
+	## The natural swing line is read off the run-up, not assumed to be the net
+	## normal. `_approach_start_position()` offsets a pin's start toward their own
+	## sideline, so pins lean across the court and middles do not -- and the two
+	## pins must mirror.
+	var left_natural := AttackCourseModel.natural_bearing_from_approach(
+		Vector2(0.065, 0.665), left_pin, true
+	)
+	var right_natural := AttackCourseModel.natural_bearing_from_approach(
+		Vector2(0.935, 0.665), right_pin, true
+	)
+	var middle_natural := AttackCourseModel.natural_bearing_from_approach(
+		Vector2(0.50, 0.665), Vector2(0.50, 0.52), true
+	)
+	_check(
+		left_natural > 1.0 and right_natural < -1.0
+			and absf(left_natural + right_natural) < 0.01
+			and absf(middle_natural) < 0.01,
+		"pins run in leaning across the court, mirrored, while a middle runs straight",
+	)
+
+	## Cost is a function of the turn off the approach, not of absolute bearing:
+	## the same shot is cheap for a hitter who ran at it and dear for one turning
+	## back across themselves.
+	var square: Dictionary = AttackCourseModel.swing_cost(0.0, 40.0)
+	var half_turned: Dictionary = AttackCourseModel.swing_cost(20.0, 40.0)
+	var full_turned: Dictionary = AttackCourseModel.swing_cost(40.0, 40.0)
+	_check(
+		float(square.power_fraction) > float(half_turned.power_fraction)
+			and float(half_turned.power_fraction) > float(full_turned.power_fraction)
+			and float(square.spread_multiplier) < float(half_turned.spread_multiplier)
+			and float(half_turned.spread_multiplier) < float(full_turned.spread_multiplier),
+		"turning further off the approach costs power and widens aim together",
+	)
+	_check(
+		is_equal_approx(
+			float(AttackCourseModel.swing_cost(-25.0, 40.0).power_fraction),
+			float(AttackCourseModel.swing_cost(25.0, 40.0).power_fraction)
+		),
+		"the cost of turning is the same either way off the approach line",
+	)
+	_check(
+		bool(full_turned.within_repertoire)
+			and not bool(AttackCourseModel.swing_cost(48.0, 40.0).within_repertoire),
+		"a turn past the hitter's range falls outside their repertoire",
+	)
+
+	## The cone follows the approach. A left-pin hitter's free swing is centred
+	## on the line they ran in on, not on the net normal.
+	var approach_courses := AttackCourseModel.courses_from_approach(
+		left_pin, Vector2(0.065, 0.665), 45.0, true, 91
+	)
+	var freest_bearing := 0.0
+	var freest_strain := 999.0
+	for course in approach_courses:
+		if float(course.strain) < freest_strain:
+			freest_strain = float(course.strain)
+			freest_bearing = float(course.bearing_degrees)
+	_check(
+		not approach_courses.is_empty()
+			and absf(freest_bearing - left_natural) < 1.0,
+		"the cheapest course is the one straight down the hitter's approach line",
+	)
+
 	## The opponent attacks the other way; the same call with the flag flipped
 	## must behave identically in their frame.
 	var opponent_contact := Vector2(CourtConstants.LANE_X["Left Pin"], 0.48)

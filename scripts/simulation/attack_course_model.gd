@@ -114,6 +114,50 @@ static func _slab(
 	}
 
 
+## What a hitter loses by turning the ball off the line they ran in on.
+##
+## `power_fraction` is what remains of their intended speed and
+## `spread_multiplier` scales their aiming error, both worsening with the angle
+## turned. A ball struck across the body is neither as hard nor as accurate as
+## one struck through the approach.
+##
+## Provisional magnitudes -- Gate D calibrates them. What matters structurally
+## is that the cost is a function of the *offset from the approach*, not of the
+## absolute bearing, so the same shot is cheap for a hitter who ran at it and
+## expensive for one who has to turn back across themselves.
+const ACROSS_BODY_POWER_FLOOR: float = 0.72
+const ACROSS_BODY_SPREAD_CEILING: float = 2.10
+
+
+static func swing_cost(
+	offset_degrees: float,
+	swing_range_degrees: float,
+) -> Dictionary:
+	var reach := maxf(swing_range_degrees, 0.0001)
+	var strain := clampf(absf(offset_degrees) / reach, 0.0, 1.0)
+	return {
+		"within_repertoire": absf(offset_degrees) <= swing_range_degrees,
+		"strain": strain,
+		"power_fraction": lerpf(1.0, ACROSS_BODY_POWER_FLOOR, strain),
+		"spread_multiplier": lerpf(1.0, ACROSS_BODY_SPREAD_CEILING, strain),
+	}
+
+
+## The line the hitter is already travelling, continued forward.
+##
+## Read off the run-up rather than assumed to be the net normal, so a hitter who
+## approached from outside naturally swings across and has to turn back to hit
+## down the line. `_approach_start_position()` already offsets a pin's run-up
+## toward their own sideline, so the lean and its sign come out of geometry the
+## engine had all along.
+static func natural_bearing_from_approach(
+	approach_start: Vector2,
+	contact: Vector2,
+	attacking_negative_y: bool,
+) -> float:
+	return bearing_to_point(approach_start, contact, attacking_negative_y)
+
+
 ## Every course this hitter could credibly swing, sampled across their
 ## repertoire cone and filtered to the ones that reach the floor in bounds.
 ##
@@ -137,14 +181,39 @@ static func available_courses(
 		var span := court_span_for_bearing(contact, bearing, attacking_negative_y)
 		if not bool(span.reaches_court):
 			continue
+		var offset := bearing - natural_bearing_degrees
+		var cost := swing_cost(offset, reach)
 		courses.append({
 			"bearing_degrees": bearing,
 			"near_meters": float(span.near_meters),
 			"far_meters": float(span.far_meters),
 			"span_meters": float(span.span_meters),
-			"offset_degrees": bearing - natural_bearing_degrees,
+			"offset_degrees": offset,
+			"power_fraction": float(cost.power_fraction),
+			"spread_multiplier": float(cost.spread_multiplier),
+			"strain": float(cost.strain),
 		})
 	return courses
+
+
+## `available_courses` with the natural line read off the run-up instead of
+## passed in. This is the entry point a hitter's decision layer uses.
+static func courses_from_approach(
+	contact: Vector2,
+	approach_start: Vector2,
+	swing_range_degrees: float,
+	attacking_negative_y: bool,
+	sample_count: int = 25,
+) -> Array[Dictionary]:
+	return available_courses(
+		contact,
+		natural_bearing_from_approach(
+			approach_start, contact, attacking_negative_y
+		),
+		swing_range_degrees,
+		attacking_negative_y,
+		sample_count,
+	)
 
 
 ## Where a ball on this bearing lands, at this ground distance, in court

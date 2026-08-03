@@ -273,6 +273,40 @@ and it is the first thing Gate C's power selection has to respect.
 normalized offsets in x and y are a 26.6° shot, not 45°. Computing bearings in
 normalized space would tilt every course in the game.
 
+### The natural swing line is the run-up — and the run-up is too shallow
+
+Courses are centred on the line the hitter ran in on rather than on the net
+normal, read straight off `_approach_start_position()`, which already offsets a
+pin's start toward their own sideline. `swing_cost()` then charges power and
+aim for turning off that line, so the same shot is cheap for a hitter who ran
+at it and dear for one turning back across themselves.
+
+The mechanism works and the signs are right — pins lean across the court,
+mirrored, and middles run straight. **The magnitudes are wrong, and the result
+currently inverts the sport.** Measured with `tools/run_course_probe.gd`:
+
+| lane | natural | line | off | cross | off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Left Pin | +10.31° | −2.20° | 12.5° | +41.08° | 30.8° |
+| Front Quick | 0.00° | −21.67° | 21.7° | +27.15° | 27.1° |
+| Right Pin | −10.31° | +2.20° | 12.5° | −41.08° | 30.8° |
+
+An outside hitter running in diagonally should find **cross** natural and
+**line** the hard turn back across the body. Here line is 12.5° off the approach
+and cross is 30.8°, so the cheap shot and the dear one are swapped.
+
+The cause is not in this module. `_approach_start_position()` offsets a pin by
+0.055 in x against 0.135 in y — 0.5 m of lateral run over 2.4 m of forward run,
+about 10°. A real outside approach covers something closer to 1.5–2 m laterally
+over 3 m forward, nearer 30°. The run-up is roughly a third as angled as the
+sport's.
+
+Fixing it means changing approach *mechanics*, which moves run-up distance,
+travel time and `approach_execution_fit` — a calibration-bearing change that
+belongs in its own step rather than smuggled into this gate. Until then the
+approach lean is present but too weak to express the asymmetry it exists for.
+Deliberately not papered over with a fudge factor on the bearing.
+
 ### Resolved: velocity is real, and it is `attack_power`
 
 Decided 2026-08-03. Power is carried in both calculation and playback. It is a
