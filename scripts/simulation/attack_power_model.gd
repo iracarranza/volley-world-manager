@@ -55,6 +55,13 @@ const JUDGMENT_ERROR_SPREAD: float = 0.28
 ## Nobody swings at nothing, and nobody exceeds what their approach left them.
 const MIN_POWER_FRACTION: float = 0.25
 
+## What each kind of shot is meant to be, as a share of the hitter's ceiling.
+## These are the intent anchors -- a drive is a drive whether it is aimed four
+## metres in or nine, which is what keeps power independent of the course.
+const DRIVE_INTENT: float = 0.90
+const CONTROL_INTENT: float = 0.66
+const OFF_SPEED_INTENT: float = 0.36
+
 
 ## What this hitter can produce on this swing.
 ##
@@ -103,6 +110,7 @@ static func required_speed_mps(
 ## only visible as a worse number.
 static func choose_power(
 	ceiling_mps: float,
+	intent_fraction: float,
 	target_distance_meters: float,
 	contact_height_meters: float,
 	aggression: float,
@@ -112,14 +120,20 @@ static func choose_power(
 	judgment_error: float,
 ) -> Dictionary:
 	var ceiling := maxf(ceiling_mps, BallFlightModel.MIN_SPEED_MPS)
+	## Anchored on what the shot is *meant to be*, not on the least force that
+	## reaches the target.
+	##
+	## The first version anchored on the distance -- and a hitter aiming four
+	## metres in therefore swung at a third of their power, which is not a shot
+	## anybody plays. An attacker drives the ball and uses the *angle* to control
+	## where it lands; power is chosen for its own sake, because a hard ball is
+	## harder to dig. Anchoring on distance quietly re-coupled the two axes this
+	## whole model exists to separate, so a cut shot could not be hit hard and
+	## soft -- the very example the design is built around.
+	var base_fraction := clampf(intent_fraction, 0.0, 1.0)
 	var required := required_speed_mps(
 		target_distance_meters, contact_height_meters
 	)
-	var required_fraction := required / ceiling
-	## A hitter who cannot drive it that deep is not stopped from swinging --
-	## they simply cannot reach, and the ball lands short. That is a real
-	## limitation and it should be visible rather than clamped away silently.
-	var reachable := required_fraction <= 1.0
 
 	## Backing yourself: swing bigger than the situation asks.
 	##
@@ -140,14 +154,20 @@ static func choose_power(
 		* (1.0 - clampf(decision_making, 0.0, 1.0)) * judgment_error
 
 	var chosen_fraction := clampf(
-		required_fraction + eagerness - intimidation + misjudgement,
+		base_fraction + eagerness - intimidation + misjudgement,
 		MIN_POWER_FRACTION, 1.0,
 	)
+	var speed := chosen_fraction * ceiling
+	## Reachability is now a *consequence* of the swing rather than its anchor.
+	## A hitter who chose too little for the distance they aimed at lands short,
+	## which is a real thing that happens and is worth naming.
+	var reachable := speed >= required
 	return {
-		"speed_mps": chosen_fraction * ceiling,
+		"speed_mps": speed,
 		"ceiling_mps": ceiling,
 		"required_speed_mps": required,
-		"required_fraction": required_fraction,
+		"required_fraction": required / ceiling,
+		"intent_fraction": base_fraction,
 		"chosen_fraction": chosen_fraction,
 		"reachable": reachable,
 		"eagerness": eagerness,
@@ -156,7 +176,7 @@ static func choose_power(
 		## Why this swing came out the way it did, for the rally record and for
 		## the action vocabulary, which wants over- and under-hitting named
 		## separately rather than both reported as "attack error".
-		"bias": _bias_label(eagerness - intimidation + misjudgement, reachable),
+		"bias": _bias_label(eagerness - intimidation + misjudgement),
 	}
 
 
@@ -183,9 +203,11 @@ static func aggression_from(
 	)
 
 
-static func _bias_label(net_bias: float, reachable: bool) -> String:
-	if not reachable:
-		return "short of the range"
+## Temperament only. Whether the swing then reaches is a *consequence*, reported
+## separately by `reachable` -- folding it in here overwrote the reason a hitter
+## held back with the fact that holding back left them short, and a rally record
+## wants to say both.
+static func _bias_label(net_bias: float) -> String:
 	if net_bias > 0.06:
 		return "over-swung"
 	if net_bias < -0.06:

@@ -306,11 +306,10 @@ same defect, and patching then replacing is wasted work.
 - **Gate C — resolution. Landed.** `attack_resolution_model.gd`. Tape, antennae,
   block and floor, read off one flight in the order the ball meets them. No
   branch consults a random number.
-- **Gate D — calibration.** Tune spreads and the power range until the emergent
-  rates hit the targets. Needs those targets settled first: stuff rate, block
-  involvement, rally-length distribution. They are design decisions that
-  survive any implementation; the constants that currently hit them are not, so
-  do not spend effort tuning today's margins toward them.
+- **Gate D — calibration. First pass done, blocked.**
+  `attack_geometry_calibration.gd` sweeps the Gate B→C chain over a generated
+  population. Targets set (below). Convergence is blocked on the reach model,
+  not on the geometry.
 - **Gate E — promotion** behind a rollout flag, across all three attack paths
   and both serve paths, the way Gates 44–49 did for the block.
 
@@ -366,6 +365,106 @@ and it is the first thing Gate C's power selection has to respect.
 **Bearings are metric, not normalized.** The court is 9 m by 18 m, so equal
 normalized offsets in x and y are a 26.6° shot, not 45°. Computing bearings in
 normalized space would tilt every course in the game.
+
+### Gate D targets
+
+Chosen from the gameplay fantasy rather than from realism alone: high baseline
+competence, points decided by named exceptional actions, rally length as a
+*distribution* with a fat short mode and a real tail, and capability sitting on
+the **continuation** side rather than the terminating side.
+
+**Terminal outcome mix, share of all rallies:**
+
+| outcome | target | now (870 rallies) |
+| --- | ---: | ---: |
+| kill (both sides) | **55%** | 24.6% |
+| attack error (both sides) | **16%** | 12.3% |
+| terminal block (stuff + counter) | **12%** | 41.5% |
+| service error | **11%** | 17.6% |
+| ace | **6%** | 4.0% |
+
+**The headline gap is not the stuff rate — it is that blocks and kills are the
+wrong way round.** The engine ends 41.5% of rallies on a block and 24.6% on a
+kill; real volleyball is roughly the reverse, and so is the fantasy. Everything
+else is a rounding error next to that.
+
+12% terminal block is "deliberately blocky" — above the 8–10% an elite real
+team manages — while staying rare enough that a roof remains a nameable moment
+rather than the texture.
+
+**Block involvement 35–45%** of attacks touched, against 12% terminated. That
+is the split that gives a blocky *feel* without making the block the routine
+way rallies end.
+
+**Rally length**, as a distribution rather than a mean: ~55% decided within one
+attack per side, ~33% two to three, ~12% extended. Named actions cluster in the
+tail, which is what makes the long rallies the memorable ones.
+
+**Named actions:** 40–60% of rallies contain at least one; ~1 per rally mean;
+and a high share of *points* whose decisive event carries a name. Rare per
+contact, dominant per point.
+
+### Gate D first pass: the geometry is not the problem
+
+`AttackGeometryCalibration.run()` sweeps courses → read → power → swing →
+resolve over a generated population. Three defects surfaced, in order.
+
+**1. Near-parallel courses were selectable.** The legal cone reaches past 85°,
+and a course scorer picks those *because* no blocker stands 80° away — then the
+ball needs twenty metres of travel to cross the net. Fixed with
+`MAX_COURSE_BEARING_DEGREES = 70`: nobody hits a volleyball sideways down the
+tape.
+
+**2. Power was anchored on distance, which re-coupled the two axes the whole
+model exists to separate.** `choose_power` derived its speed from the least
+force that reached the target, so a hitter aiming four metres in swung at a
+third of their power — and a cut shot could not be hit hard *and* soft, the
+exact example the design is built around. Power is now anchored on **intent**
+(`DRIVE_INTENT` 0.90, `CONTROL_INTENT` 0.66, `OFF_SPEED_INTENT` 0.36) and the
+launch angle is solved to put that ball where it was aimed. Reachability became
+a consequence rather than the anchor.
+
+**3. The blocker out-reaches the hitter, and that decides everything.** The
+block test is `ball_height_at_net vs blocker_reach`, so what matters is the
+difference between where a hitter contacts and how high a blocker gets. Swept
+at two contact heights:
+
+| contact | in | net | stuff | touch | tool |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2.68 m (model reach) | 11.1% | 25.2% | 36.5% | 16.8% | 10.4% |
+| 3.15 m (realistic) | 90.3% | 0.0% | 0.2% | 8.0% | 1.5% |
+
+A 47 cm change in contact height moves the stuff rate from 36.5% to 0.2%. **The
+block contest is a step function on contact height**, with almost no gradient
+in between — which is why no threshold tuning inside Gate C can reach the
+target.
+
+### The root cause, and it is upstream of all of this
+
+`VolleyballPlayer.standing_reach_cm()` is
+`height_cm * 1.215 + (wingspan_cm - height_cm) * 0.32`, and it is about **15 cm
+low across the whole height range**:
+
+| height / span | model | realistic (~1.30 × height) | short by |
+| --- | ---: | ---: | ---: |
+| 185 / 190 | 226 cm | 240 cm | 14 cm |
+| 193 / 198 | 236 cm | 251 cm | 15 cm |
+| 203 / 211 | 249 cm | 264 cm | 15 cm |
+
+The net is 243 cm. So the model puts a 193 cm player's standing reach **below
+the tape**, where a real one stands comfortably above it. Every reach in the
+game is compressed against a net that is proportionally too high, and the
+attack-versus-block contest — which is entirely a reach difference — is the
+system that suffers most.
+
+Changing it touches blocking, contact envelopes, reachability and every
+existing calibration, so it is **not** being changed as part of Gate D. It is
+the next decision to make, and Gate D cannot converge before it.
+
+Interim harness constants, chosen to restore a gradient rather than to hide the
+problem: `CONTACT_BELOW_REACH_METERS` 0.22 → 0.10 and `BLOCKER_REACH_EFFORT`
+0.72 → 0.62, which moves the hitter from 6 cm *below* the blocker's reach to
+12 cm above and takes the stuff rate 36.5% → 23.8%.
 
 ### Gate C notes
 

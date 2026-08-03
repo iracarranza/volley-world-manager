@@ -7719,7 +7719,7 @@ func _test_attack_resolves_from_geometry() -> void:
 	)
 	var ceiling: float = ATTACK_POWER_SCRIPT.available_ceiling_mps(0.75, 0.9, 1.0)
 	var chosen: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, 7.0, HEIGHT, 0.5, 0.6, 0.9, 0.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, 7.0, HEIGHT, 0.5, 0.6, 0.9, 0.0, 0.0
 	)
 	var delivered: Dictionary = ATTACK_SWING_SCRIPT.deliver(
 		course, -18.0, float(chosen.speed_mps), 0.8, 1.0, 0.0, 0.0, 0.0
@@ -7955,22 +7955,44 @@ func _test_attack_power_is_a_choice() -> void:
 
 	## A good reader hits with just enough to push the ball where they intended.
 	var measured: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.95, 0.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.5, 0.95, 0.0, 0.0
 	)
 	_check(
-		absf(float(measured.chosen_fraction) - float(measured.required_fraction)) < 0.02
+		absf(float(measured.chosen_fraction) - float(measured.intent_fraction)) < 0.02
 			and str(measured.bias) == "measured",
-		"a good reader chooses the power the shot actually needs",
+		"a composed, well-read hitter delivers the shot they intended",
+	)
+
+	## Power is independent of the course, which is the whole point of splitting
+	## them. Anchoring on the target distance re-coupled them: a hitter aiming
+	## four metres in swung at a third of their power, so a cut shot could not be
+	## hit hard and soft -- the example the design is built around.
+	var near_drive: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, 4.0, HEIGHT, 0.5, 0.5, 0.95, 0.0, 0.0
+	)
+	var far_drive: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, 8.5, HEIGHT, 0.5, 0.5, 0.95, 0.0, 0.0
+	)
+	var near_soft: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, ATTACK_POWER_SCRIPT.OFF_SPEED_INTENT, 4.0, HEIGHT, 0.5, 0.5, 0.95, 0.0, 0.0
+	)
+	_check(
+		is_equal_approx(float(near_drive.speed_mps), float(far_drive.speed_mps)),
+		"a drive is struck at the same speed whether it is aimed short or deep",
+	)
+	_check(
+		float(near_soft.speed_mps) < float(near_drive.speed_mps) * 0.6,
+		"the same course can be hit hard or soft, because intent sets the power",
 	)
 
 	## Backing yourself: more power than the situation asks for, more often --
 	## and the trait has to cut both ways, or a timid hitter is just an ordinary
 	## one and the aggressive hitter is everybody.
 	var eager: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.95, 0.5, 0.95, 0.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.95, 0.5, 0.95, 0.0, 0.0
 	)
 	var reluctant: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.05, 0.5, 0.95, 0.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.05, 0.5, 0.95, 0.0, 0.0
 	)
 	_check(
 		float(eager.speed_mps) > float(measured.speed_mps)
@@ -7986,13 +8008,13 @@ func _test_attack_power_is_a_choice() -> void:
 	## Decelerating into the wall -- but only if the wall is there, and only if
 	## composure is short. A composed hitter is unmoved by the same block.
 	var timid: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.10, 0.95, 1.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.10, 0.95, 1.0, 0.0
 	)
 	var composed: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.95, 0.95, 1.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.95, 0.95, 1.0, 0.0
 	)
 	var unblocked: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.10, 0.95, 0.0, 0.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.10, 0.95, 0.0, 0.0
 	)
 	_check(
 		float(timid.speed_mps) < float(measured.speed_mps)
@@ -8007,13 +8029,13 @@ func _test_attack_power_is_a_choice() -> void:
 
 	## Misjudgement scales with how poorly the hitter reads, and cuts both ways.
 	var poor_over: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.10, 0.0, 1.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.5, 0.10, 0.0, 1.0
 	)
 	var poor_under: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.10, 0.0, -1.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.5, 0.10, 0.0, -1.0
 	)
 	var good_over: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
-		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.95, 0.0, 1.0
+		ceiling, ATTACK_POWER_SCRIPT.DRIVE_INTENT, DEEP, HEIGHT, 0.5, 0.5, 0.95, 0.0, 1.0
 	)
 	_check(
 		float(poor_over.speed_mps) > float(measured.speed_mps)
@@ -8033,11 +8055,8 @@ func _test_attack_power_is_a_choice() -> void:
 	var weak: float = ATTACK_POWER_SCRIPT.available_ceiling_mps(0.02, 0.35, 0.75)
 	_check(
 		not bool(ATTACK_POWER_SCRIPT.choose_power(
-			weak, 9.2, HEIGHT, 0.5, 0.5, 0.9, 0.0, 0.0
-		).reachable)
-			and str(ATTACK_POWER_SCRIPT.choose_power(
-				weak, 9.2, HEIGHT, 0.5, 0.5, 0.9, 0.0, 0.0
-			).bias) == "short of the range",
+			weak, ATTACK_POWER_SCRIPT.DRIVE_INTENT, 9.2, HEIGHT, 0.5, 0.5, 0.9, 0.0, 0.0
+		).reachable),
 		"a hitter who cannot drive it that deep is told so rather than quietly reaching",
 	)
 
@@ -8105,15 +8124,21 @@ func _test_attack_power_is_a_choice() -> void:
 		"a disciplined hitter swings to instruction and an undisciplined one to their own ego",
 	)
 
-	## The chosen speed has to actually fly the distance it was chosen for.
+	## Power and distance compose through the *angle*, which is the causal order
+	## the split exists to create: the hitter swings at their intent speed and
+	## the launch angle is solved to put that ball where they aimed.
+	var aimed: Dictionary = BallFlightModel.solve_angle_for_range(
+		float(measured.speed_mps), DEEP, HEIGHT
+	)
 	var flight: Dictionary = BallFlightModel.solve_flight(
 		float(measured.speed_mps),
-		ATTACK_POWER_SCRIPT.DRIVEN_REFERENCE_ANGLE_DEGREES,
+		float(aimed.driven_angle_degrees),
 		HEIGHT,
 	)
 	_check(
-		absf(float(flight.range_meters) - DEEP) < 0.05,
-		"the power a measured hitter chose carries the ball exactly as far as intended",
+		bool(aimed.driven_found)
+			and absf(float(flight.range_meters) - DEEP) < 0.05,
+		"an intended speed and an aimed distance compose into a flight that lands there",
 	)
 
 

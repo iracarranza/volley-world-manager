@@ -39,6 +39,16 @@ const COURT_MAX_X: float = 1.0
 ## of the court for twenty centimetres.
 const MIN_USABLE_SPAN_METERS: float = 0.35
 
+## How far off the net normal a ball can credibly be struck.
+##
+## The legal cone reaches past 85 degrees -- a ball travelling almost parallel
+## to the net still clips court eventually -- but those are not shots. Left in,
+## a course scorer picks them precisely *because* no blocker stands 80 degrees
+## away, and the ball then needs twenty metres of travel just to cross the net.
+## Nobody hits a volleyball sideways down the tape; this is the line between a
+## sharp cross and a geometric artefact.
+const MAX_COURSE_BEARING_DEGREES: float = 70.0
+
 
 ## Unit direction of a bearing, in metres, for a hitter attacking toward the
 ## given half.
@@ -178,6 +188,8 @@ static func available_courses(
 	for index in range(samples):
 		var fraction := float(index) / float(samples - 1)
 		var bearing := natural_bearing_degrees + lerpf(-reach, reach, fraction)
+		if absf(bearing) > MAX_COURSE_BEARING_DEGREES:
+			continue
 		var span := court_span_for_bearing(contact, bearing, attacking_negative_y)
 		if not bool(span.reaches_court):
 			continue
