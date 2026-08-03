@@ -94,6 +94,9 @@ const ATTACK_RESOLUTION_SCRIPT := preload(
 const SIGNATURE_MOVE_SCRIPT := preload(
 	"res://scripts/simulation/signature_move_model.gd"
 )
+const GEOMETRIC_ATTACK_SCRIPT := preload(
+	"res://scripts/simulation/geometric_attack_resolver.gd"
+)
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -202,6 +205,7 @@ func _initialize() -> void:
 	_test_swing_channels_fail_separately()
 	_test_attack_resolves_from_geometry()
 	_test_signature_moves_beat_a_block()
+	_test_geometric_resolver_composes_one_swing()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7596,6 +7600,102 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## Gate E. The five models composed into the single call the resolver will make.
+## The point of the seam is that promoting the geometry is one substitution
+## rather than five -- wiring three attack paths to five models each is how three
+## copies of `_attack_execution` happened.
+func _test_geometric_resolver_composes_one_swing() -> void:
+	var hitter := VolleyballPlayer.new()
+	hitter.height_cm = 195.0
+	hitter.wingspan_cm = 200.0
+	hitter.jump_reach = 78
+	hitter.explosiveness = 74
+	hitter.attack_power = 76
+	hitter.attack_accuracy = 70
+	hitter.shot_variety = 66
+	hitter.court_vision = 64
+	hitter.decision_making = 68
+	hitter.composure = 62
+	hitter.tactical_discipline = 55
+	hitter.leadership = 58
+	hitter.ego = 60
+	var contact := Vector2(0.12, 0.52)
+	var height: float = hitter.jumping_reach_cm() / 100.0 - 0.10
+	var blockers: Array = [
+		{"net_x": 0.18, "reach_height_m": 2.95, "half_width_m": 0.34},
+	]
+	var defenders: Array = [Vector2(0.30, 0.22), Vector2(0.70, 0.26)]
+	var still := {
+		"read": [0.0, 0.0], "read_floor": [0.0, 0.0, 0.0, 0.0],
+		"judgment": 0.0, "bearing": 0.0, "vertical": 0.0, "power": 0.0,
+		"aim_fraction": 0.46,
+	}
+
+	var swing: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+		hitter, contact, height, "Left Pin", blockers, defenders, true,
+		0.85, 0.5, 0.2, 0.1, still,
+	)
+	_check(
+		bool(swing.available)
+			and str(swing.outcome) in ["in", "out", "net", "stuff", "touch",
+				"tool", "block_crush", "high_hands"],
+		"one call turns a hitter and a picture into a resolved swing",
+	)
+	_check(
+		float(Dictionary(swing.flight).duration_seconds) > 0.0
+			and not is_nan((swing.landing as Vector2).x),
+		"the resolved swing carries a real flight and a real landing",
+	)
+
+	## Deterministic: the same draws replay the same ball.
+	var repeat: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+		hitter, contact, height, "Left Pin", blockers, defenders, true,
+		0.85, 0.5, 0.2, 0.1, still,
+	)
+	_check(
+		str(repeat.outcome) == str(swing.outcome)
+			and (repeat.landing as Vector2).is_equal_approx(swing.landing),
+		"the same swing with the same draws resolves identically",
+	)
+
+	## The draws are what move it, so a caller owns determinism entirely.
+	var pulled := still.duplicate(true)
+	pulled["bearing"] = 2.5
+	var pulled_swing: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+		hitter, contact, height, "Left Pin", blockers, defenders, true,
+		0.85, 0.5, 0.2, 0.1, pulled,
+	)
+	_check(
+		not (pulled_swing.landing as Vector2).is_equal_approx(swing.landing),
+		"a different swing draw puts the ball somewhere else",
+	)
+
+	## The narrative is populated whether or not anything special happened, so a
+	## rally record always has something to say about why the ball did that.
+	var narrative: Dictionary = swing.narrative
+	_check(
+		narrative.has("power_bias") and narrative.has("miss_channel")
+			and not str(narrative.power_bias).is_empty(),
+		"every resolved swing reports why it came out the way it did",
+	)
+
+	## A hitter with no legal course is refused rather than fudged.
+	_check(
+		not bool(GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+			null, contact, height, "Left Pin", blockers, defenders, true,
+			0.85, 0.5, 0.0, 0.0, still,
+		).available),
+		"no hitter means no swing rather than an invented one",
+	)
+
+	## The flag that will eventually promote this is off, and stays off until
+	## every attack and serve path is migrated.
+	_check(
+		not RallyFeatureFlags.ENABLE_GEOMETRIC_ATTACK,
+		"the geometric attack rollout is disabled in production",
+	)
+
+
 ## The two ways a spike beats a block it has already met. Keyed to different
 ## attributes on purpose, so a power build and a placement build each have an
 ## answer -- and gated on a charge that is an *availability* signal rather than a

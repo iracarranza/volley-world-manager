@@ -310,8 +310,20 @@ same defect, and patching then replacing is wasted work.
   `attack_geometry_calibration.gd` sweeps the Gate B→C chain over a generated
   population. Targets set (below). Convergence is blocked on the reach model,
   not on the geometry.
-- **Gate E — promotion** behind a rollout flag, across all three attack paths
-  and both serve paths, the way Gates 44–49 did for the block.
+- **Gate E — promotion. Seam built, wiring open.**
+  `geometric_attack_resolver.gd` composes all five models into the single call
+  the resolver will make, and `ENABLE_GEOMETRIC_ATTACK` /
+  `ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK` exist and are off. What remains is
+  substituting it into the three attack paths and both serve paths.
+
+  The seam exists specifically so that substitution is *one* call per site
+  rather than five. Wiring three attack paths to five models individually is
+  how three copies of `_attack_execution` happened in the first place.
+
+  Note this rollout is unlike the others. Gates 48/49 promote one *contact*;
+  this replaces how an attack is decided and resolved end to end. The flag
+  therefore stays off until every path is migrated -- a rally running the
+  geometric attack into the legacy block contest would be measuring neither.
 
 ### Gate A notes
 
