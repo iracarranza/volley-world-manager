@@ -167,6 +167,8 @@ static func _generate_intake(
 			continue
 		var deficit := maxi(target - int(alive_by_tier.get(str(tier.key), 0)), 0)
 		var share := GOLDEN_DEFICIT_SHARE if is_golden else ORDINARY_DEFICIT_SHARE
+		if str(tier.key) == "generational" and not is_golden:
+			share = 0.0
 		var wanted := mini(roundi(float(deficit) * share), deficit)
 		wanted = mini(wanted, maxi(intake_size - scarce_used, 0))
 		counts[str(tier.key)] = wanted

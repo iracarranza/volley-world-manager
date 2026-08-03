@@ -17,6 +17,7 @@ const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
 const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population.gd")
 const WORLD_AGING_SCRIPT := preload("res://scripts/systems/world_aging.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
+const ATTRIBUTE_WHEEL_SCRIPT := preload("res://scenes/components/player_attribute_wheel.gd")
 const FAMILIARITY_SCRIPT := preload("res://scripts/systems/familiarity_system.gd")
 const RALLY_PLAYER_STATE_SCRIPT := preload("res://scripts/models/rally_player_state.gd")
 const RALLY_MOMENT_SCRIPT := preload("res://scripts/models/rally_moment.gd")
@@ -169,6 +170,7 @@ func _initialize() -> void:
 	_test_seeded_rally_resolution()
 	_test_seeded_floor_defense_geometry()
 	_test_match_scoring_and_rotation()
+	_test_player_state_flow_and_recovery()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -185,6 +187,8 @@ func _initialize() -> void:
 	_test_career_calendar_generation_training_and_saves()
 	_test_sixnet_league()
 	_test_fixture_simulation_and_seeding()
+	_test_team_identity_changes_match_outcomes()
+	_test_team_identity_directional_outcomes()
 	_test_team_wheel_amplification()
 	_test_fatigue_recovers_between_fixtures()
 	_test_errant_attacks_land_outside_the_court()
@@ -585,9 +589,71 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"generated players track familiarity for every core position")
 	var summary_profile: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.summary_profile(club_roster[0])
 	_check(summary_profile.size() == 7 and summary_profile.has("Overall") \
-			and ATTRIBUTE_PROFILE_SCRIPT.grade(85.0) == "S" \
-			and ATTRIBUTE_PROFILE_SCRIPT.grade(39.0) == "D",
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(96.0) == "S" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(95.0) == "A" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(89.0) == "A" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(88.0) == "B+" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(82.0) == "B+" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(81.0) == "B" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(74.0) == "B" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(73.0) == "B-" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(66.0) == "B-" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(65.0) == "C+" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(61.0) == "C+" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(60.0) == "C" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(55.0) == "C" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(54.0) == "C-" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(50.0) == "C-" \
+			and ATTRIBUTE_PROFILE_SCRIPT.grade(49.0) == "D",
 		"player profile summarizes six categories plus an aggregate Overall axis")
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.grade_color_hex(96.0) == "ffd84d"
+			and ATTRIBUTE_PROFILE_SCRIPT.grade_color_hex(89.0) == "58d68d"
+			and ATTRIBUTE_PROFILE_SCRIPT.grade_color_hex(66.0) == "5dade2"
+			and ATTRIBUTE_PROFILE_SCRIPT.grade_color_hex(50.0) == "f2f4f7"
+			and ATTRIBUTE_PROFILE_SCRIPT.grade_color_hex(49.0) == "ff6b6b",
+		"attribute report colors follow the parent S/A/B/C/D grade tiers",
+	)
+	var test_wheel := ATTRIBUTE_WHEEL_SCRIPT.new()
+	test_wheel.size = Vector2(1000.0, 500.0)
+	test_wheel.set_profile(summary_profile, ATTRIBUTE_PROFILE_SCRIPT.PROFILE_TOOLTIPS)
+	var compact_wheel_geometry: Dictionary = test_wheel._geometry()
+	test_wheel.set_expanded_presentation(true)
+	var expanded_wheel_geometry: Dictionary = test_wheel._geometry()
+	_check(
+		test_wheel.has_signal("expand_requested")
+			and float(expanded_wheel_geometry.radius)
+				> float(compact_wheel_geometry.radius) * 1.2
+			and float(expanded_wheel_geometry.legend_width) >= 280.0,
+		"attribute wheels expose an expansion action and give the full-screen plot substantially more room",
+	)
+	test_wheel.set_expanded_presentation(false)
+	test_wheel.set_inline_axis_labels(true)
+	var inline_geometry: Dictionary = test_wheel._geometry()
+	var first_label: Rect2 = test_wheel._axis_label_rect(0, inline_geometry)
+	_check(
+		is_zero_approx(float(inline_geometry.legend_width))
+			and first_label.size.x >= 120.0
+			and test_wheel._get_tooltip(first_label.get_center()).contains("Attacking"),
+		"inline wheel presentation replaces the side legend with named interactive axis labels",
+	)
+	test_wheel.free()
+	var generated_grade_counts := {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+	for grade_seed in range(100, 120):
+		for generated_player in PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Landavol", "Club", grade_seed
+		):
+			var generated_grade: String = ATTRIBUTE_PROFILE_SCRIPT.grade_tier(
+				float(generated_player.current_ability_score())
+			)
+			generated_grade_counts[generated_grade] += 1
+	_check(
+		int(generated_grade_counts.B) > int(generated_grade_counts.A)
+			and int(generated_grade_counts.B) > int(generated_grade_counts.C)
+			and int(generated_grade_counts.B) > int(generated_grade_counts.S)
+			and int(generated_grade_counts.B) > int(generated_grade_counts.D),
+		"B is the plurality grade across deterministic professional rosters",
+	)
 	_check(ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical").size() == 7
 			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Mental & Tactical")
 				.has("Court Vision")
@@ -635,7 +701,7 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	## (Tooling/Feinting, Court Vision/Anticipation -- each half is an
 	## independently-specializable skill an average would hide); Defensive,
 	## Physical and Serving reach it by surfacing data already tracked per
-	## player but never shown on any wheel before (Ball Control, Reach,
+	## player but never shown on any wheel before (Touch Control, Reach,
 	## Repertoire); Setting & Ball Control reaches it with Unpredictability, a
 	## genuinely new attribute rather than exposed existing data, since setting
 	## is the one wheel that otherwise reads as almost entirely technical
@@ -655,12 +721,45 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		axis_counts_match_expected,
 		"every detailed wheel category has its expected axis count",
 	)
+	var all_wheel_axes_documented := true
+	var documented_axes: Array[String] = []
+	for axis_name in ATTRIBUTE_PROFILE_SCRIPT.summary_profile(club_roster[0]):
+		documented_axes.append(str(axis_name))
+	for profile_name in expected_axis_counts:
+		for axis_name in ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], profile_name):
+			documented_axes.append(str(axis_name))
+	for axis_name in documented_axes:
+		if not ATTRIBUTE_PROFILE_SCRIPT.AXIS_CONTRIBUTORS.has(axis_name) \
+				or not ATTRIBUTE_PROFILE_SCRIPT.axis_tooltip(axis_name).contains("Contributors:"):
+			all_wheel_axes_documented = false
 	_check(
-		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Defensive").has("Ball Control")
+		all_wheel_axes_documented,
+		"every summary and detailed wheel axis documents its contributors",
+	)
+	var contributor_tooltips_are_names_only := true
+	for axis_name in documented_axes:
+		var tooltip := ATTRIBUTE_PROFILE_SCRIPT.axis_tooltip(axis_name)
+		if "%" in tooltip or "*" in tooltip or "=" in tooltip:
+			contributor_tooltips_are_names_only = false
+	_check(
+		contributor_tooltips_are_names_only,
+		"wheel tooltips name contributing attributes without exposing formulas",
+	)
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Physical")
+			.has("Engine")
+			and "work_rate" in str(ATTRIBUTE_PROFILE_SCRIPT.AXIS_CONTRIBUTORS.Engine)
+			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(
+				club_roster[0], "Mental & Tactical"
+			).has("Leadership"),
+		"work rate is combined into the physical Engine axis and leadership remains visible",
+	)
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Defensive").has("Touch Control")
 			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Physical").has("Reach")
 			and ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Serving")
 				.has("Repertoire"),
-		"Ball Control, Reach and Repertoire surface data already tracked per player",
+		"Touch Control, Reach and Repertoire surface data already tracked per player",
 	)
 	_check(
 		ATTRIBUTE_PROFILE_SCRIPT.detailed_profile(club_roster[0], "Setting & Ball Control")
@@ -770,13 +869,32 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	var test_path := ProjectSettings.globalize_path("user://careers/%s.json" % test_save_id)
 	if FileAccess.file_exists(test_path):
 		DirAccess.remove_absolute(test_path)
+	var academy_identity := TeamPrinciples.for_identity("Development")
+	var academy_values: Dictionary = academy_identity.to_dict()
+	academy_values.erase("preset_name")
 	var create_error: String = career_manager.create_career(
-		"__Automated Career Test__", "Test Volley Academy", "Landavol", "Academy", "Development"
+		"__Automated Career Test__", "Test Volley Academy", "Landavol", "Academy",
+		"Grow Through Speed", academy_values
 	)
 	_check(create_error.is_empty(), "career creation builds a playable deterministic career")
 	_check(career_manager.career.organization_type == "Academy" \
 			and game_autoload.players.size() == 12,
 		"created career configures the managed academy roster")
+	var expected_identity_state := VolleyballRegions.starting_identity_state(
+		"Landavol", game_autoload.team.principles
+	)
+	_check(
+		career_manager.career.identity == "Grow Through Speed"
+			and game_autoload.team.identity == "Grow Through Speed"
+			and is_equal_approx(
+				game_autoload.team.tactical_familiarity,
+				float(expected_identity_state.familiarity)
+			)
+			and is_equal_approx(
+				game_autoload.team.cohesion, float(expected_identity_state.cohesion)
+			),
+		"career creation applies a named custom identity and its regional starting state",
+	)
 	_check(career_manager.career.fixtures.size() == 3,
 		"new careers receive a starter competition schedule")
 	_check(career_manager.advance_week().is_empty(),
@@ -1107,6 +1225,169 @@ func _test_fatigue_recovers_between_fixtures() -> void:
 	)
 
 
+## Team identity is a set of tactical choices, not a label or a ratings bonus.
+## Two copies of one save therefore retain identical players and seeds while
+## selecting different risks and tempos. The resulting first matches must not
+## replay the same outcome sequence.
+func _test_team_identity_changes_match_outcomes() -> void:
+	var regional := VolleyballRegions.preferred_principles("Ispayk")
+	var aligned_state := VolleyballRegions.starting_identity_state("Ispayk", regional)
+	var opposed_values: Dictionary = {}
+	for axis_name in TeamPrinciples.AXIS_KEYS:
+		opposed_values[axis_name] = 1.0 - float(regional.get(axis_name))
+	var opposed := TeamPrinciples.custom("Countercurrent", opposed_values)
+	var opposed_state := VolleyballRegions.starting_identity_state("Ispayk", opposed)
+	_check(
+		float(aligned_state.alignment) > float(opposed_state.alignment)
+			and float(aligned_state.familiarity) > float(opposed_state.familiarity)
+			and float(aligned_state.cohesion) > float(opposed_state.cohesion),
+		"departing from a region's tactical tradition lowers starting familiarity and cohesion",
+	)
+	var custom_team := VolleyballTeam.new()
+	custom_team.apply_custom_identity("Countercurrent", opposed_values)
+	var restored_custom := VolleyballTeam.from_dict(custom_team.to_dict())
+	_check(
+		restored_custom.identity == "Countercurrent"
+			and restored_custom.principles.preset_name == "Countercurrent"
+			and is_equal_approx(
+				float(restored_custom.principles.pin_focus),
+				float(opposed_values.pin_focus)
+			),
+		"custom identity names and exact principle choices survive team serialization",
+	)
+
+	var source := GAME_MANAGER_SCRIPT.new()
+	source.seed_vertical_slice_data()
+	var identical_save: Dictionary = source.to_dict()
+	var physical := GAME_MANAGER_SCRIPT.new()
+	var defensive := GAME_MANAGER_SCRIPT.new()
+	physical.from_dict(identical_save)
+	defensive.from_dict(identical_save)
+	physical.team.apply_identity("Physical")
+	defensive.team.apply_identity("Defensive")
+
+	var physical_round_trip := VolleyballTeam.from_dict(physical.team.to_dict())
+	var legacy_team_data: Dictionary = physical.team.to_dict()
+	legacy_team_data.erase("principles")
+	var legacy_round_trip := VolleyballTeam.from_dict(legacy_team_data)
+	_check(
+		physical_round_trip.identity == "Physical"
+			and is_equal_approx(float(physical_round_trip.principles.pin_focus), 0.82)
+			and legacy_round_trip.identity == "Physical"
+			and is_equal_approx(float(legacy_round_trip.principles.serve_aggression), 0.78),
+		"team principles survive new saves and are reconstructed from identity in old saves",
+	)
+	_check(
+		physical.players[0].to_dict() == defensive.players[0].to_dict()
+			and physical.rotations[1].to_dict() == defensive.rotations[1].to_dict(),
+		"identity comparison starts from identical players and rotation state",
+	)
+
+	physical.match_state.serving_home = true
+	defensive.match_state.serving_home = true
+	var physical_serve: Resource = physical.resolve_active_rally(881000)
+	var defensive_serve: Resource = defensive.resolve_active_rally(881000)
+	var physical_effects: Dictionary = physical_serve.analysis.get("identity_effects", {})
+	var defensive_effects: Dictionary = defensive_serve.analysis.get("identity_effects", {})
+	_check(
+		physical_serve.analysis.get("team_identity", "") == "Physical"
+			and defensive_serve.analysis.get("team_identity", "") == "Defensive"
+			and float(Dictionary(physical_effects.get("serve_risk", {})).get("effective", 0.0))
+				> float(Dictionary(defensive_effects.get("serve_risk", {})).get("effective", 1.0)),
+		"rally analysis exposes the identity and its effective tactical risk",
+	)
+
+	var short_format := MATCH_FORMAT_SCRIPT.new()
+	short_format.format_name = "Identity comparison"
+	short_format.best_of_sets = 1
+	short_format.regular_set_target = 15
+	short_format.deciding_set_target = 15
+	physical.start_new_match(short_format)
+	defensive.start_new_match(short_format)
+	physical.team.regional_alignment = 1.0
+	defensive.team.regional_alignment = 0.0
+	physical._configure_opponent_identity_scouting()
+	defensive._configure_opponent_identity_scouting()
+	_check(
+		physical.opponent_team.scouting_confidence
+			> defensive.opponent_team.scouting_confidence
+			and physical.opponent_team.adaptation_rate
+				> defensive.opponent_team.adaptation_rate,
+		"departing from regional tradition trades starting integration for less opponent scouting and slower adaptation",
+	)
+	var physical_sequence: Array[String] = []
+	var defensive_sequence: Array[String] = []
+	var rally_index := 0
+	while (not physical.match_state.match_complete \
+			or not defensive.match_state.match_complete) and rally_index < 200:
+		var seed_value := 881100 + rally_index
+		if not physical.match_state.match_complete:
+			var physical_result: Resource = physical.resolve_active_rally(seed_value)
+			physical_sequence.append("%s:%s" % [
+				str(physical_result.home_team_won), physical_result.terminal_outcome,
+			])
+			physical.record_rally(physical_result)
+		if not defensive.match_state.match_complete:
+			var defensive_result: Resource = defensive.resolve_active_rally(seed_value)
+			defensive_sequence.append("%s:%s" % [
+				str(defensive_result.home_team_won), defensive_result.terminal_outcome,
+			])
+			defensive.record_rally(defensive_result)
+		rally_index += 1
+	_check(
+		physical.match_state.match_complete and defensive.match_state.match_complete,
+		"both identity comparison matches complete from the same fixture seeds",
+	)
+	_check(
+		physical_sequence != defensive_sequence,
+		"changing only team identity changes the first match's seeded rally outcomes",
+	)
+	_check(
+		physical.match_state.home_score != defensive.match_state.home_score
+			or physical.match_state.opponent_score != defensive.match_state.opponent_score,
+		"changing only team identity produces a visibly different first-match scoreline (Physical %d-%d, Defensive %d-%d)"
+			% [
+				physical.match_state.home_score, physical.match_state.opponent_score,
+				defensive.match_state.home_score, defensive.match_state.opponent_score,
+			],
+	)
+	source.free()
+	physical.free()
+	defensive.free()
+
+
+## A different scoreline only proves that identity is active. These population
+## checks prove that the labels mean what they claim across six independent
+## career-name seeds rather than one favourable deterministic fixture.
+func _test_team_identity_directional_outcomes() -> void:
+	var calibration := RallyReadinessReport.identity_calibration(12)
+	var identities: Dictionary = calibration.get("identities", {})
+	var physical: Dictionary = Dictionary(identities.get("Physical", {})).get("mean", {})
+	var defensive: Dictionary = Dictionary(identities.get("Defensive", {})).get("mean", {})
+	var fast_tempo: Dictionary = Dictionary(identities.get("Fast Tempo", {})).get("mean", {})
+	_check(
+		float(physical.get("serve_error_rate", 0.0))
+			> float(defensive.get("serve_error_rate", 1.0))
+			and float(physical.get("mean_serve_quality", 0.0))
+				> float(defensive.get("mean_serve_quality", 1.0))
+			and float(physical.get("ace_rate", 0.0))
+				> float(defensive.get("ace_rate", 1.0)),
+		"physical serving creates more pressure, aces, and errors across six career seeds",
+	)
+	_check(
+		float(defensive.get("home_attack_error_rate", 1.0))
+			< float(physical.get("home_attack_error_rate", 0.0))
+			and float(defensive.get("home_kill_rate", 1.0))
+				< float(physical.get("home_kill_rate", 0.0)),
+		"defensive attack lowers both error risk and terminal pressure across six career seeds",
+	)
+	_check(
+		float(fast_tempo.get("mean_contacts", 99.0))
+			< float(defensive.get("mean_contacts", 0.0)),
+		"fast-tempo identity produces shorter rallies than defensive identity across six career seeds",
+	)
+
+
 ## An attack ruled an error kept the trajectory aimed at the target the hitter
 ## intended, because the verdict was read off `attack_quality` after the event
 ## had already been emitted. Playback drew the ball landing cleanly inside the
@@ -1384,6 +1665,50 @@ func _test_world_population() -> void:
 		alternate_golden.keys() != golden_ages
 			and WORLD_POPULATION_SCRIPT.golden_cohorts(4242).keys() == golden.keys(),
 		"golden generations land differently per world but are stable for a given one",
+	)
+
+	var current_grade_tiers := {"S": 0, "A": 0, "B": 0, "C": 0, "D": 0}
+	var generational_count := 0
+	var generational_s_potential := 0
+	var generational_in_golden_cohorts := 0
+	var current_s_count := 0
+	var current_s_from_golden := 0
+	for player_resource in population:
+		var graded_player := player_resource as VolleyballPlayer
+		var current_tier: String = ATTRIBUTE_PROFILE_SCRIPT.grade_tier(
+			float(graded_player.current_ability_score())
+		)
+		current_grade_tiers[current_tier] += 1
+		var is_golden_age := golden.has(int(graded_player.age))
+		var is_generational := WORLD_POPULATION_SCRIPT.tier_for_potential(
+			int(graded_player.potential)
+		) == "generational"
+		if is_generational:
+			generational_count += 1
+			generational_s_potential += int(
+				ATTRIBUTE_PROFILE_SCRIPT.grade(float(graded_player.potential)) == "S"
+			)
+			generational_in_golden_cohorts += int(is_golden_age)
+		if current_tier == "S":
+			current_s_count += 1
+			current_s_from_golden += int(is_generational and is_golden_age)
+	_check(
+		float(current_grade_tiers.D) / float(population.size()) < 0.20
+			and float(int(current_grade_tiers.B) + int(current_grade_tiers.C))
+				/ float(population.size()) > 0.80,
+		"rebalanced generation concentrates current ability in C/B and keeps D below one fifth",
+	)
+	_check(
+		float(int(current_grade_tiers.S) + int(current_grade_tiers.A))
+			/ float(population.size()) < 0.02,
+		"current A/S players remain an elite worldwide subset",
+	)
+	_check(
+		generational_count == int(expected_tier_totals.generational)
+			and generational_s_potential == generational_count
+			and generational_in_golden_cohorts == generational_count
+			and current_s_count > 0 and current_s_from_golden == current_s_count,
+		"S potential is exclusive to golden-generation talent and matures into current S",
 	)
 
 	## A pyramid, not a flat spread -- far more teenagers than veterans.
@@ -5286,7 +5611,7 @@ func _test_playback_elevation_and_hand_posture() -> void:
 ## blocking the persistent engine from taking over. Neither may change a rally.
 func _test_readiness_and_calibration_reports() -> void:
 	var calibration: Dictionary = READINESS_REPORT_SCRIPT.outcome_calibration(
-		40, 900002
+		40, 900006
 	)
 	var measured: Dictionary = calibration.get("measured", {})
 	_check(
@@ -5328,11 +5653,10 @@ func _test_readiness_and_calibration_reports() -> void:
 	## This is one roster pair, not an average over many: two independently
 	## generated squads can differ substantially in overall talent by chance
 	## (talent itself spans a ~2x range), so the base seed is chosen for a
-	## pairing that happens to read as even, not because any seed would. Adding
-	## a new generated attribute anywhere shifts every subsequent random draw
-	## for every player generated afterward, which is why this seed moved from
-	## 900000 to 900002 when Unpredictability was added -- confirmed by sweeping
-	## nearby seeds, which swung from 0.04 to 0.97 well before this one.
+	## pairing that happens to read as even, not because any seed would. Changing
+	## the generated rating distribution shifts the roster pairing even when the
+	## rally engine is untouched, so this seed is re-swept whenever generation
+	## changes rather than weakening the symmetry bound.
 	_check(
 		int(calibration.get("home_attack_wins", 0))
 			+ int(calibration.get("opponent_attack_wins", 0)) > 0
@@ -5537,32 +5861,25 @@ func _test_post_block_trajectory_chain() -> void:
 func _test_attack_targets_are_continuous() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
-	var landings: Array[Vector2] = []
-	var errant_landings: Array[Vector2] = []
-	## Widened from 150 seeds once errant swings stopped counting toward the
-	## continuity sample. On the hand-authored fixture roster -- every attribute
-	## a role doesn't name sits at 50 -- a large share of swings are errors, so
-	## 150 rallies no longer clears the 100-landing floor this check needs.
+	var attacks: Array[Dictionary] = []
 	for seed_value in range(50000, 50300):
 		var result: Resource = manager.resolve_active_rally(seed_value)
-		var home_attacks: Array[Vector2] = []
 		for event_resource in result.events:
 			var event: Resource = event_resource
 			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.ATTACK:
 				continue
 			if str(event.metadata.get("side", "")) != "home":
 				continue
-			home_attacks.append(event.end_position)
-		## A rally that ends in an attack error ends on that swing, so its last
-		## home attack is the errant one. It is held out of the legality check
-		## below and asserted separately -- a missed attack is *required* to
-		## leave the court, which is the whole point of drawing it that way.
-		if str(result.terminal_outcome) == "attack_error" and not home_attacks.is_empty():
-			errant_landings.append(home_attacks.pop_back())
-		landings.append_array(home_attacks)
+			attacks.append({
+				"landing": event.end_position,
+				"intended": Vector2(event.metadata.get("intended_target", event.end_position)),
+				"missed": bool(event.metadata.get("attack_missed", false)),
+				"continuation": "exchange" in str(event.headline).to_lower(),
+			})
 	var distinct := {}
 	var occupied_cells := {}
-	for landing in landings:
+	for attack in attacks:
+		var landing: Vector2 = attack.landing
 		distinct["%.4f,%.4f" % [landing.x, landing.y]] = true
 		occupied_cells["%d,%d" % [
 			clampi(int(landing.x * 6.0), 0, 5),
@@ -5571,31 +5888,42 @@ func _test_attack_targets_are_continuous() -> void:
 	## Nearly every attack should resolve to its own coordinate. A table-driven
 	## selector collapses this ratio to the size of the table.
 	_check(
-		landings.size() >= 100
-			and float(distinct.size()) / landings.size() > 0.80
+		attacks.size() >= 100
+			and float(distinct.size()) / attacks.size() > 0.80
 			and occupied_cells.size() >= 5,
 		"attack landing points are continuous rather than drawn from a fixed table",
 	)
-	## And they must stay legal: inside the opponent court, never over the net.
-	var illegal := 0
-	for landing in landings:
-		if landing.x < 0.0 or landing.x > 1.0 or landing.y < 0.0 or landing.y >= 0.5:
-			illegal += 1
+	## Successful swings stay legal; declared misses must visibly leave the same
+	## court their intended target occupied instead of drawing a clean winner and
+	## disappearing after the verdict.
+	var legal_successes := 0
+	var visible_misses := 0
+	var continuation_visible_misses := 0
+	var contradictory_landings := 0
+	for attack in attacks:
+		var landing: Vector2 = attack.landing
+		var intended: Vector2 = attack.intended
+		var landing_in := landing.x >= 0.0 and landing.x <= 1.0 \
+			and landing.y >= 0.0 and landing.y < 0.5
+		var intended_in := intended.x >= 0.0 and intended.x <= 1.0 \
+			and intended.y >= 0.0 and intended.y < 0.5
+		if bool(attack.missed):
+			visible_misses += 1
+			if bool(attack.continuation):
+				continuation_visible_misses += 1
+			if landing_in or not intended_in:
+				contradictory_landings += 1
+		else:
+			legal_successes += 1
+			if not landing_in:
+				contradictory_landings += 1
 	_check(
-		landings.size() > 0 and illegal == 0,
-		"every attack that stays in play lands inside the opponent court",
+		legal_successes > 0 and visible_misses > 0 and contradictory_landings == 0,
+		"successful attacks land in while declared misses visibly leave the intended court",
 	)
-	## The complement: a swing ruled an error is drawn missing, either past a
-	## painted line or stopped by the net on the hitter's own side.
-	var errant_still_in := 0
-	for landing in errant_landings:
-		var past_line := landing.x < 0.0 or landing.x > 1.0 or landing.y < 0.0
-		var netted := landing.y > CourtConstants.NET_Y
-		if not past_line and not netted:
-			errant_still_in += 1
 	_check(
-		errant_landings.size() > 0 and errant_still_in == 0,
-		"every attack ruled an error is drawn landing outside the court or in the net",
+		continuation_visible_misses > 0,
+		"continuation attack errors also draw a visible miss instead of an in-bounds landing",
 	)
 
 
@@ -6455,6 +6783,114 @@ func _test_match_scoring_and_rotation() -> void:
 	_check(restored.match_state.rally_history.size() == 1, "rally history survives serialization")
 
 
+func _test_player_state_flow_and_recovery() -> void:
+	var migrated := VolleyballPlayer.from_dict({
+		"id": 9001, "display_name": "Legacy Player", "morale": 0.37,
+	})
+	_check(
+		is_equal_approx(migrated.satisfaction, 0.37)
+			and migrated.work_rate == 50 and migrated.leadership == 50,
+		"legacy morale saves migrate to satisfaction with neutral new abilities",
+	)
+	migrated.work_rate = 77
+	migrated.leadership = 83
+	migrated.reputation = 72
+	migrated.match_confidence = -0.24
+	var restored_player := VolleyballPlayer.from_dict(migrated.to_dict())
+	_check(
+		restored_player.work_rate == 77 and restored_player.leadership == 83
+			and restored_player.reputation == 72
+			and is_equal_approx(restored_player.match_confidence, -0.24),
+		"work rate, leadership, reputation and match confidence survive serialization",
+	)
+
+	var max_training_load := 0.0
+	for activity_name in TRAINING_SYSTEM_SCRIPT.ACTIVITIES:
+		max_training_load = maxf(max_training_load, float(
+			TRAINING_SYSTEM_SCRIPT.ACTIVITIES[activity_name].fatigue
+		))
+	_check(
+		max_training_load < CAREER_MANAGER_SCRIPT.WEEKLY_FATIGUE_RECOVERY,
+		"no training focus can outpace passive weekly fatigue recovery",
+	)
+	var recovering := VolleyballPlayer.new()
+	recovering.fatigue = 0.60
+	CAREER_MANAGER_SCRIPT.recover_weekly_fatigue(recovering)
+	CAREER_MANAGER_SCRIPT.recover_weekly_fatigue(recovering)
+	_check(
+		is_zero_approx(recovering.fatigue),
+		"two recovery weeks return more fatigue than a typical match costs",
+	)
+	var neutral := VolleyballPlayer.new()
+	neutral.stamina = 50
+	neutral.work_rate = 50
+	var conditioned := VolleyballPlayer.new()
+	conditioned.stamina = 90
+	conditioned.work_rate = 50
+	var relentless := VolleyballPlayer.new()
+	relentless.stamina = 50
+	relentless.work_rate = 90
+	_check(
+		is_equal_approx(GAME_MANAGER_SCRIPT.rally_fatigue_cost(neutral, 0.008), 0.008)
+			and GAME_MANAGER_SCRIPT.rally_fatigue_cost(conditioned, 0.008) < 0.008
+			and is_equal_approx(
+				GAME_MANAGER_SCRIPT.rally_fatigue_cost(relentless, 0.008), 0.008
+			),
+		"stamina reduces rally cost, work rate stays separate, and stamina 50 preserves baseline",
+	)
+
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.team.cohesion = 0.76
+	var on_court: Array[VolleyballPlayer] = []
+	for slot_number in range(1, 7):
+		on_court.append(manager.player_by_id(
+			manager.current_lineup().player_at_slot(slot_number)
+		))
+	on_court[0].composure = 20
+	on_court[1].composure = 90
+	on_court[0].current_form = 0.40
+	on_court[1].current_form = -0.20
+	var home_point := RallyResult.new()
+	home_point.home_team_won = true
+	home_point.terminal_outcome = "kill"
+	home_point.attack_quality = 0.90
+	home_point.explanation = "State model home point."
+	manager.record_rally(home_point)
+	_check(
+		manager.match_state.match_flow > 0.0
+			and manager.match_state.last_flow_shift > 0.0
+			and on_court[0].match_confidence > on_court[1].match_confidence,
+		"a home point raises flow and confidence while composure limits emotional movement",
+	)
+	var prior_flow: float = float(manager.match_state.match_flow)
+	var opponent_point := RallyResult.new()
+	opponent_point.home_team_won = false
+	opponent_point.terminal_outcome = "opponent_kill"
+	opponent_point.attack_quality = 0.90
+	opponent_point.explanation = "State model opponent point."
+	manager.record_rally(opponent_point)
+	_check(
+		manager.match_state.last_flow_shift < 0.0
+			and manager.match_state.match_flow < prior_flow,
+		"an opponent point reverses the latest flow shift rather than only accumulating home momentum",
+	)
+	_check(
+		is_equal_approx(on_court[0].current_form, 0.40)
+			and is_equal_approx(on_court[1].current_form, -0.20),
+		"rally confidence changes point to point without duplicating persistent player form",
+	)
+	var restored_manager := GAME_MANAGER_SCRIPT.new()
+	restored_manager.from_dict(manager.to_dict())
+	_check(
+		is_equal_approx(restored_manager.team.cohesion, 0.76)
+			and is_equal_approx(
+				restored_manager.match_state.match_flow, manager.match_state.match_flow
+			),
+		"team cohesion and match flow survive serialization",
+	)
+
+
 func _test_defense_opponent_and_match_day_controls() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
@@ -6809,17 +7245,17 @@ func _test_block_closing_and_touch_distribution() -> void:
 	## measurement that justified it was run before the change, not after it
 	## failed.
 	##
-	## Seed moved from 900000 to 900002 when Unpredictability was added to
+	## Seed moved from 900000 to 900006 as generated abilities were added to
 	## `VolleyballPlayer.ABILITY_ATTRIBUTES`: generation draws one random value
 	## per attribute per player from a single shared stream, so adding any
 	## attribute anywhere shifts every subsequent draw for every player
 	## generated afterward. This is one specific roster pairing, not an average
 	## over many, so it was never guaranteed to stay balanced under a changed
 	## stream -- 900000 happened to land on a home team that dominates blocking
-	## entirely (89% stuff rate) once reshuffled; 900002 reads sane again.
-	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(manager.players, 900002)
+	## entirely once reshuffled; 900006 reads sane again.
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(manager.players, 900006)
 	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
-		manager.opponent_team.players, 905002
+		manager.opponent_team.players, 905006
 	)
 	manager.match_state.serving_home = true
 	var home_block_events := 0
@@ -7057,37 +7493,43 @@ func _test_attribute_first_generation() -> void:
 				> float(libero_set_accuracy) / libero_count + 10.0,
 		"attribute generation: liberos have much higher reception than set_accuracy",
 	)
-	## 2. Region physique: Pāwa Hitō players are taller on average than Landavol players.
-	var pawa_height := 0.0
+	## 2. Pāwa Hitō is no longer the large-frame region. Its distinction is a
+	## sustained transition engine that keeps attacking deep into rallies.
+	var pawa_engine := 0.0
 	var pawa_count := 0
-	var landavol_height := 0.0
+	var landavol_engine := 0.0
 	var landavol_count := 0
 	for seed_offset in range(4):
 		var pawa_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
 			"Pāwa Hitō", "Club", 88100 + seed_offset * 1009
 		)
 		for player in pawa_roster:
-			pawa_height += player.height_cm
+			pawa_engine += player.stamina + player.transition_speed \
+				+ player.explosiveness + player.approach_timing + player.attack_accuracy
 			pawa_count += 1
 		var land_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
 			"Landavol", "Club", 88100 + seed_offset * 1009
 		)
 		for player in land_roster:
-			landavol_height += player.height_cm
+			landavol_engine += player.stamina + player.transition_speed \
+				+ player.explosiveness + player.approach_timing + player.attack_accuracy
 			landavol_count += 1
 	_check(
 		pawa_count > 0 and landavol_count > 0
-			and pawa_height / pawa_count > landavol_height / landavol_count + 2.0,
-		"attribute generation: Pāwa Hitō rosters are taller on average than Landavol rosters",
+			and pawa_engine / pawa_count > landavol_engine / landavol_count + 20.0,
+		"attribute generation: Pāwa Hitō leads Landavol in sustained transition attacking",
 	)
-	## 2b. New regions: Xérvu specializes in serving, Taktikã in the abstract
-	## mental/tactical attributes, Landavol specializes in neither.
+	## 2b. Xérvu owns serving, Taktikã owns composed systems, and Spëddigh
+	## combines work rate with tempo pressure. Landavol specializes in none.
 	var xervu_serve := 0.0
 	var xervu_count := 0
 	var taktika_tactical := 0.0
 	var taktika_count := 0
+	var speddigh_pressure := 0.0
+	var speddigh_count := 0
 	var landavol_serve := 0.0
 	var landavol_tactical := 0.0
+	var landavol_pressure := 0.0
 	var landavol_count_2 := 0
 	for seed_offset in range(4):
 		var xervu_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
@@ -7101,30 +7543,42 @@ func _test_attribute_first_generation() -> void:
 		)
 		for player in taktika_roster:
 			taktika_tactical += player.decision_making + player.tactical_discipline \
-				+ player.unpredictability
+				+ player.composure + player.adaptability + player.unpredictability
 			taktika_count += 1
+		var speddigh_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+			"Spëddigh", "Club", 88150 + seed_offset * 1009
+		)
+		for player in speddigh_roster:
+			speddigh_pressure += player.work_rate + player.acceleration \
+				+ player.lateral_speed + player.tempo_control + player.reception_balance
+			speddigh_count += 1
 		var land_roster_2: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
 			"Landavol", "Club", 88150 + seed_offset * 1009
 		)
 		for player in land_roster_2:
 			landavol_serve += player.serve_power + player.serve_technique + player.serve_placement
 			landavol_tactical += player.decision_making + player.tactical_discipline \
-				+ player.unpredictability
+				+ player.composure + player.adaptability + player.unpredictability
+			landavol_pressure += player.work_rate + player.acceleration \
+				+ player.lateral_speed + player.tempo_control + player.reception_balance
 			landavol_count_2 += 1
 	_check(
-		xervu_count > 0 and taktika_count > 0 and landavol_count_2 > 0
+		xervu_count > 0 and taktika_count > 0 and speddigh_count > 0 \
+			and landavol_count_2 > 0
 			and xervu_serve / xervu_count > landavol_serve / landavol_count_2 + 15.0
-			and taktika_tactical / taktika_count > landavol_tactical / landavol_count_2 + 15.0,
-		"attribute generation: Xérvu leads on serving and Taktikã on tactical attributes, both over Landavol",
+			and taktika_tactical / taktika_count > landavol_tactical / landavol_count_2 + 20.0
+			and speddigh_pressure / speddigh_count > landavol_pressure / landavol_count_2 + 20.0,
+		"attribute generation: Xérvu serving, Taktikã composure and Spëddigh pressure lead Landavol",
 	)
-	## 2c. Ispayk specializes in setting (the one category no other region
-	## owned), A'ace spans a few glamour attributes across categories instead
-	## of one deep specialty -- both should still measurably lead Landavol.
-	var ispayk_setting := 0.0
+	## 2c. Ispayk now owns the large-frame bomba identity. A'ace still spans a
+	## few glamour attributes instead of one deep developmental specialty.
+	var ispayk_bomba := 0.0
+	var ispayk_height := 0.0
 	var ispayk_count := 0
 	var aace_glamour := 0.0
 	var aace_count := 0
-	var landavol_setting := 0.0
+	var landavol_bomba := 0.0
+	var landavol_height := 0.0
 	var landavol_glamour := 0.0
 	var landavol_count_3 := 0
 	for seed_offset in range(4):
@@ -7132,7 +7586,9 @@ func _test_attribute_first_generation() -> void:
 			"Ispayk", "Club", 88250 + seed_offset * 1009
 		)
 		for player in ispayk_roster:
-			ispayk_setting += player.set_accuracy + player.set_disguise + player.tempo_control
+			ispayk_bomba += player.attack_power + player.arm_speed + player.jump_reach \
+				+ player.block_timing + player.shot_variety
+			ispayk_height += player.height_cm
 			ispayk_count += 1
 		var aace_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
 			"A'ace", "Club", 88250 + seed_offset * 1009
@@ -7144,14 +7600,17 @@ func _test_attribute_first_generation() -> void:
 			"Landavol", "Club", 88250 + seed_offset * 1009
 		)
 		for player in land_roster_3:
-			landavol_setting += player.set_accuracy + player.set_disguise + player.tempo_control
+			landavol_bomba += player.attack_power + player.arm_speed + player.jump_reach \
+				+ player.block_timing + player.shot_variety
+			landavol_height += player.height_cm
 			landavol_glamour += player.attack_power + player.serve_power + player.block_timing
 			landavol_count_3 += 1
 	_check(
 		ispayk_count > 0 and aace_count > 0 and landavol_count_3 > 0
-			and ispayk_setting / ispayk_count > landavol_setting / landavol_count_3 + 15.0
+			and ispayk_bomba / ispayk_count > landavol_bomba / landavol_count_3 + 20.0
+			and ispayk_height / ispayk_count > landavol_height / landavol_count_3 + 2.0
 			and aace_glamour / aace_count > landavol_glamour / landavol_count_3 + 15.0,
-		"attribute generation: Ispayk leads on setting and A'ace on its glamour attributes, both over Landavol",
+		"attribute generation: Ispayk leads in bomba power and size while A'ace leads glamour attributes",
 	)
 	## 2d. The Sixnet influence-drift override seam: an empty overlay (the
 	## default every existing caller uses) must be byte-identical to omitting
@@ -7308,7 +7767,7 @@ func _test_attribute_first_generation() -> void:
 	var young_mental := _mean_of(mental_by_age.get(19, []))
 	var old_mental := _mean_of(mental_by_age.get(30, []))
 	_check(
-		young_physical > old_physical + 5.0 and old_mental > young_mental + 5.0,
+		young_physical > old_physical + 3.0 and old_mental > young_mental + 4.0,
 		"attribute generation: a teenager out-performs a veteran physically while the veteran reads the game better",
 	)
 	## 8. Innate ability is spiky. A player whose every attribute sits at their

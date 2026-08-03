@@ -27,22 +27,23 @@ const POSITIONS: Array[Dictionary] = [
 ## a slightly smaller-than-average profile reinforces that this specialty
 ## isn't won by size. Landavol stays at zero across the board: the one region
 ## with no physical lean at all, matching it now having no attribute
-## specialty either (see REGION_SPECIALTY below). Ispayk is lean rather than
-## bulky -- craft over size, matching a program built on setting touch and a
-## quick arm rather than raw mass. A'ace leans slightly positive across all
+## specialty either (see REGION_SPECIALTY below). Ispayk now carries the
+## largest frame bias: its bomba tradition is built around terminal power.
+## Pāwa Hitō is closer to average size because its physical distinction is
+## repeated effort and transition quality rather than mass. A'ace leans slightly positive across all
 ## three: assembled, well-resourced athletes rather than a developed body
 ## type of its own.
 const REGION_HEIGHT_BIAS := {
-	"Pāwa Hitō": 4.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
-	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 0.0, "A'ace": 1.0,
+	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
+	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 4.0, "A'ace": 1.0,
 }
 const REGION_MASS_BIAS := {
-	"Pāwa Hitō": 5.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
-	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": -1.0, "A'ace": 1.0,
+	"Pāwa Hitō": -1.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
+	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": 5.0, "A'ace": 1.0,
 }
 const REGION_WINGSPAN_BIAS := {
-	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
-	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 1.0, "A'ace": 1.0,
+	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
+	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 3.0, "A'ace": 1.0,
 }
 
 ## Attributes that receive a +8 specialty bonus for players from each region.
@@ -58,25 +59,25 @@ const REGION_WINGSPAN_BIAS := {
 ## Landavol has no specialty at all: it is deliberately the generic, no-lean
 ## region, so every attribute develops purely on role and talent there.
 ##
-## Ispayk owns Setting & Ball Control -- the one wheel category that no
-## region specialized in before -- plus attack_power and shot_variety for the
-## "and spike" half of its set-and-spike identity. A'ace deliberately gets
+## Pāwa Hitō sustains repeated transition attacks; Spëddigh spends effort and
+## tempo to keep every phase moving; Taktikã develops players whose execution
+## changes little with emotional match flow; Ispayk develops the large, fast
+## arm and terminal contact behind its bomba tradition. A'ace deliberately gets
 ## only three attributes spanning three different categories (attack_power,
 ## serve_power, block_timing) rather than one deep specialty: it represents
 ## assembled star talent across a few glamour positions bought in with money,
 ## not a systemic developmental identity the way every other region's
 ## specialty represents an actual local training tradition.
 const REGION_SPECIALTY := {
-	"Pāwa Hitō": ["attack_power", "block_timing", "jump_reach", "explosiveness"],
-	"Spëddigh": ["acceleration", "lateral_speed", "reception_balance", "reception_stability", "dig_control"],
+	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness", "approach_timing", "attack_accuracy"],
+	"Spëddigh": ["work_rate", "acceleration", "lateral_speed", "tempo_control", "reception_balance"],
 	"Bloc du Larg": ["block_timing", "ball_control", "court_vision", "anticipation"],
 	"Landavol": [],
 	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
 		"serve_aggression", "serve_variation"],
-	"Taktikã": ["decision_making", "composure", "tactical_discipline", "improvisation",
+	"Taktikã": ["decision_making", "composure", "tactical_discipline",
 		"adaptability", "unpredictability"],
-	"Ispayk": ["set_accuracy", "set_disguise", "tempo_control", "hand_control",
-		"attack_power", "shot_variety"],
+	"Ispayk": ["attack_power", "arm_speed", "jump_reach", "block_timing", "shot_variety"],
 	"A'ace": ["attack_power", "serve_power", "block_timing"],
 }
 
@@ -91,13 +92,14 @@ const ROLE_SECONDARY := {
 			"serve_technique", "serve_consistency", "serve_placement", "ball_control"],
 	"Outside Hitter": ["feinting", "court_vision", "composure", "serve_technique",
 			"serve_consistency", "explosiveness", "jump_reach", "block_timing",
-			"lateral_speed", "reception_stability"],
+			"lateral_speed", "reception_stability", "leadership"],
 	"Middle Blocker": ["attack_accuracy", "tooling", "feinting", "shot_variety",
-			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed"],
+			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed",
+			"leadership"],
 	"Opposite": ["feinting", "finesse", "serve_technique", "serve_aggression",
-			"serve_variation", "explosiveness", "arm_speed"],
+			"serve_variation", "explosiveness", "arm_speed", "work_rate", "leadership"],
 	"Libero": ["court_vision", "adaptability", "composure", "transition_speed",
-			"stamina", "tactical_discipline", "acceleration"],
+			"stamina", "tactical_discipline", "acceleration", "leadership"],
 }
 
 ## Height variation band per role, in centimetres.
@@ -161,7 +163,7 @@ static func generate_roster(
 ## correction is normally exact and this loop exits after two passes; the
 ## extra attempts only matter at the very top of the scale, where individual
 ## attribute ceilings saturate at 99 and the correction undershoots.
-const PROSPECT_CALIBRATION_ATTEMPTS: int = 4
+const PROSPECT_CALIBRATION_ATTEMPTS: int = 8
 
 
 ## Builds one player to order: a specific region, role, age and *potential*,
@@ -271,7 +273,8 @@ static func redevelop_to_age(
 		var ceiling := float(player.attribute_ceilings.get(
 			property_name, player.get(property_name)
 		))
-		var reserve := _attribute_reserve(property_name, player.age, rng)
+		var reserve := _attribute_reserve(property_name, player.age, rng) \
+			* _generational_reserve_scale(player.potential, player.age)
 		player.set(property_name, clampi(
 			roundi(ceiling - reserve), 1, maxi(roundi(ceiling), 1)
 		))
@@ -290,6 +293,7 @@ const PHYSICAL_ATTRIBUTES: Array[String] = [
 const MENTAL_ATTRIBUTES: Array[String] = [
 	"court_vision", "anticipation", "decision_making", "composure",
 	"tactical_discipline", "improvisation", "adaptability", "unpredictability",
+	"work_rate", "leadership",
 ]
 
 ## Age at which physical qualities stop improving and begin to fade.
@@ -354,21 +358,35 @@ static func _attribute_reserve(
 	if property_name in PHYSICAL_ATTRIBUTES:
 		if age <= PHYSICAL_PEAK_AGE:
 			return maxf(lerpf(
-				12.0, 1.5,
+				9.0, 1.5,
 				clampf(float(age - 15) / float(PHYSICAL_PEAK_AGE - 15), 0.0, 1.0)
 			) + jitter, 0.0)
 		## Past peak the gap reopens, and this time it is loss rather than youth.
 		return maxf(1.5 + float(age - PHYSICAL_PEAK_AGE) * 1.9 + jitter, 0.0)
 	if property_name in MENTAL_ATTRIBUTES:
 		return maxf(lerpf(
-			38.0, 1.0, clampf(float(age - 15) / 19.0, 0.0, 1.0)
+			26.0, 1.0, clampf(float(age - 15) / 19.0, 0.0, 1.0)
 		) + jitter, 0.0)
 	var technical_reserve := lerpf(
-		28.0, 1.0, clampf(float(age - 15) / 15.0, 0.0, 1.0)
+		17.0, 1.0, clampf(float(age - 15) / 15.0, 0.0, 1.0)
 	)
 	if age > TECHNICAL_PEAK_AGE:
 		technical_reserve += float(age - TECHNICAL_PEAK_AGE) * TECHNICAL_DECLINE_PER_YEAR
 	return maxf(technical_reserve + jitter, 0.0)
+
+
+## Generational prospects still develop normally as teenagers, so an S ceiling
+## is not a scouting spoiler. Once they enter their prime they realize almost
+## all of that ceiling and become the only reliable source of current S players;
+## the scale opens again with age so even historic talent eventually declines.
+static func _generational_reserve_scale(potential: int, age: int) -> float:
+	if potential < int(AttributeProfiles.GRADE_S_MIN) or age < 23:
+		return 1.0
+	if age <= 30:
+		return 0.08
+	if age <= 34:
+		return lerpf(0.08, 0.45, float(age - 30) / 4.0)
+	return lerpf(0.45, 1.0, clampf(float(age - 34) / 4.0, 0.0, 1.0))
 
 
 ## The general level this player was born with, before role, region, and innate
@@ -492,10 +510,20 @@ static func _apply_attributes(
 
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
 		var ceiling := float(ceilings[property_name])
-		var reserve := _attribute_reserve(property_name, player.age, rng)
+		var reserve := _attribute_reserve(property_name, player.age, rng) \
+			* _generational_reserve_scale(player.potential, player.age)
 		player.set(property_name, clampi(
 			roundi(ceiling - reserve), 1, roundi(ceiling)
 		))
+	## Status is generated after ability so reputation reflects what the player
+	## has actually established, not hidden potential. Satisfaction is club
+	## context rather than talent and begins in a narrow neutral band.
+	player.reputation = clampi(roundi(
+		float(player.current_ability_score()) * 0.80
+		+ float(player.professional_experience) * 1.50 - 20.0
+	), 1, 100)
+	player.satisfaction = rng.randf_range(0.62, 0.82)
+	player.match_confidence = 0.0
 
 
 ## The role-weighted ability score of an attribute set. Mirrors

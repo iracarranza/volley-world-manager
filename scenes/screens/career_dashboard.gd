@@ -11,6 +11,17 @@ const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const Regions := preload("res://scripts/data/regions.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
+const ROSTER_RAIL_COLLAPSED_WIDTH: float = 42.0
+const ROSTER_RAIL_EXPANDED_WIDTH: float = 440.0
+const RAW_ATTRIBUTE_LABELS := {
+	"attack_power": "Power Transfer",
+	"attack_accuracy": "Attack Accuracy",
+	"reception": "Reception Tech",
+	"reception_stability": "Pace Resistance",
+	"ball_control": "Touch Control",
+	"dig_control": "Dig Placement",
+	"decision_making": "Decisions",
+}
 const WHEEL_TOOLTIPS := {
 	"Power": "Usable hitting power derived from power transfer, mass, explosiveness, transition speed, arm speed, and approach timing.",
 	"Tooling": "Deliberately using a blocker's hands to score or create an advantageous deflection.",
@@ -20,11 +31,11 @@ const WHEEL_TOOLTIPS := {
 	"Shot Variety": "The number of credible attack solutions available to the player.",
 	"Reception Technique": "Platform angle and directional control on ordinary contacts.",
 	"Reception Balance": "Maintaining platform quality while moving, reaching, or contacting near the edge of range.",
-	"Reception Stability": "Withstanding high ball speed without the platform breaking down.",
-	"Defensive Range": "Baseline range derived purely from movement, reach, and stamina; actual rally range also depends on ball-flight time, position, hands (see Ball Control) and reading the play (see Anticipation).",
-	"Ball Control": "Turning a hard-driven touch into a controlled, playable ball.",
+	"Pace Resistance": "Withstanding high ball speed without the platform breaking down.",
+	"Defensive Range": "Baseline range derived purely from movement, reach, and stamina; actual rally range also depends on ball-flight time, position, hands (see Touch Control) and reading the play (see Anticipation).",
+	"Touch Control": "Cushioning a hard-driven touch so the ball remains playable.",
 	"Block Timing": "Matching jump and hand penetration to the attacker's contact.",
-	"Dig Control": "Turning a defensive touch into a playable ball rather than merely making contact.",
+	"Dig Placement": "Directing a successful floor-defense contact toward a useful target.",
 	"Set Accuracy": "Delivering the ball to the intended contact window.",
 	"Set Balance": "Maintaining setting quality while moving or reaching.",
 	"Set Stability": "Maintaining clean contact against difficult incoming pace and spin.",
@@ -37,7 +48,7 @@ const WHEEL_TOOLTIPS := {
 	"Transition Speed": "Speed moving between phases and into an approach.",
 	"Explosiveness": "How quickly the player accesses maximum jump capacity.",
 	"Jump Capacity": "The player's maximum available jumping reach rating.",
-	"Stamina": "Capacity to preserve physical execution through workload and fatigue.",
+	"Engine": "The combination of physical stamina and willingness to repeat high-effort actions.",
 	"Reach": "Standing reach rating derived from height and wingspan; a fixed physical trait, not a trainable skill.",
 	"Serve Power": "Maximum velocity and force available on a serve.",
 	"Serve Technique": "Contact quality and ability to create the intended spin or float.",
@@ -52,8 +63,8 @@ const WHEEL_TOOLTIPS := {
 	"Decision Making": "Choosing the right option under time pressure.",
 	"Composure": "Maintaining execution quality under pressure or after a mistake.",
 	"Tactical Discipline": "Sticking to assignment and system rather than improvising off-plan.",
-	"Improvisation": "Generating an effective solution outside of trained patterns.",
-	"Adaptability": "Adjusting to an opponent's tendencies and in-match changes.",
+	"Creativity": "Generating effective improvised solutions and adapting them to changing conditions.",
+	"Leadership": "Stabilizing teammates and setting the emotional standard under pressure.",
 	"Overall": "Aggregate across all six category scores, weighted toward the average with a bonus for a standout strength and a small penalty for a weak spot.",
 }
 
@@ -68,15 +79,32 @@ const WHEEL_TOOLTIPS := {
 @onready var click_catcher: Control = %ClickCatcher
 @onready var home_summary: RichTextLabel = %HomeSummary
 @onready var news_panel: RichTextLabel = %NewsPanel
+@onready var roster_split: HSplitContainer = %Roster
+@onready var roster_rail: VBoxContainer = %RosterRail
+@onready var roster_list_toggle: Button = %RosterListToggle
 @onready var roster_list: ItemList = %RosterList
+@onready var roster_identity_panel: VBoxContainer = %IdentityPanel
 @onready var roster_detail: RichTextLabel = %RosterDetail
-@onready var bio_panel: RichTextLabel = %BioPanel
+@onready var player_dossier_button: Button = %PlayerDossierButton
 @onready var raw_attributes: RichTextLabel = %RawAttributes
-@onready var player_attribute_wheel: Control = %PlayerAttributeWheel
-@onready var transfer_player_attribute_wheel: Control = %TransferPlayerAttributeWheel
-@onready var team_attribute_wheel: Control = %TeamAttributeWheel
+@onready var raw_title: Label = %RawTitle
+@onready var player_attribute_wheel: VolleyballPlayerAttributeWheel = %PlayerAttributeWheel
+@onready var transfer_player_attribute_wheel: VolleyballPlayerAttributeWheel = %TransferPlayerAttributeWheel
+@onready var team_attribute_wheel: VolleyballPlayerAttributeWheel = %TeamAttributeWheel
 @onready var team_wheel_caption: Label = %TeamWheelCaption
-@onready var wheel_profile_option: OptionButton = %WheelProfileOption
+@onready var attribute_wheel_underlay: ColorRect = %AttributeWheelUnderlay
+@onready var attribute_wheel_popup: PopupPanel = %AttributeWheelPopup
+@onready var expanded_attribute_wheel: VolleyballPlayerAttributeWheel = %ExpandedAttributeWheel
+@onready var expanded_wheel_title: Label = %ExpandedWheelTitle
+@onready var expanded_wheel_context: Label = %ExpandedWheelContext
+@onready var expanded_wheel_profile_label: Label = %ExpandedWheelProfileLabel
+@onready var expanded_wheel_profile_option: OptionButton = %ExpandedWheelProfileOption
+@onready var close_attribute_wheel_button: Button = %CloseAttributeWheelButton
+@onready var player_dossier_popup: PopupPanel = %PlayerDossierPopup
+@onready var player_dossier_title: Label = %PlayerDossierTitle
+@onready var player_dossier_context: Label = %PlayerDossierContext
+@onready var player_dossier_content: RichTextLabel = %PlayerDossierContent
+@onready var close_player_dossier_button: Button = %ClosePlayerDossierButton
 @onready var individual_training_roster_list: ItemList = %IndividualTrainingRosterList
 @onready var position_training_option: OptionButton = %PositionTrainingOption
 @onready var position_training_summary: Label = %PositionTrainingSummary
@@ -108,6 +136,7 @@ var selected_individual_training_id: int = -1
 var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
 var _nav_tween: Tween
+var _roster_list_expanded: bool = false
 
 
 func _ready() -> void:
@@ -123,9 +152,23 @@ func _ready() -> void:
 	%AdvanceWeekButton.pressed.connect(_advance_week)
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
 	training_option.item_selected.connect(_training_selected)
+	roster_list_toggle.pressed.connect(_toggle_roster_list)
 	roster_list.item_selected.connect(_roster_selected)
+	player_dossier_button.pressed.connect(_open_player_dossier)
 	individual_training_roster_list.item_selected.connect(_individual_training_selected)
-	wheel_profile_option.item_selected.connect(_wheel_profile_selected)
+	player_attribute_wheel.expand_requested.connect(_open_player_attribute_lab)
+	team_attribute_wheel.expand_requested.connect(_open_team_attribute_lab)
+	transfer_player_attribute_wheel.expand_requested.connect(_open_transfer_attribute_lab)
+	expanded_wheel_profile_option.item_selected.connect(_expanded_wheel_profile_selected)
+	close_attribute_wheel_button.pressed.connect(_close_attribute_lab)
+	attribute_wheel_popup.close_requested.connect(_close_attribute_lab)
+	attribute_wheel_popup.popup_hide.connect(_attribute_lab_hidden)
+	close_player_dossier_button.pressed.connect(_close_player_dossier)
+	player_dossier_popup.close_requested.connect(_close_player_dossier)
+	player_dossier_popup.popup_hide.connect(_modal_hidden)
+	expanded_attribute_wheel.set_expanded_presentation(true)
+	expanded_attribute_wheel.set_inline_axis_labels(true)
+	player_attribute_wheel.set_inline_axis_labels(true)
 	%AssignPositionTrainingButton.pressed.connect(_assign_position_training)
 	%UsePositionButton.pressed.connect(_use_trained_position)
 	%ApplyLineupStatusButton.pressed.connect(_apply_lineup_status)
@@ -142,17 +185,20 @@ func _ready() -> void:
 	for activity_name in Training.activity_names():
 		training_option.add_item(activity_name)
 	for profile_name in WHEEL_PROFILES:
-		wheel_profile_option.add_item(profile_name)
+		expanded_wheel_profile_option.add_item(profile_name)
 	position_training_option.add_item("None")
 	for position_name in Familiarity.POSITIONS: position_training_option.add_item(position_name)
 	for card in [%RosterCard, %TeamCard, %TransfersCard, %CompetitionCard, %SixnetCard]:
 		card.section_requested.connect(_navigate)
 	refresh()
 	_navigate("Home")
+	_set_roster_list_expanded(false)
 
 
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if attribute_wheel_popup.visible or player_dossier_popup.visible:
 		return
 	var key_event := event as InputEventKey
 	match key_event.keycode:
@@ -262,20 +308,23 @@ func _navigate(section_name: String) -> void:
 func _refresh_home() -> void:
 	var fixture := CareerManager.next_fixture()
 	var unavailable := 0
-	var morale_total := 0.0
+	var satisfaction_total := 0.0
 	for player in GameManager.players:
 		if player.availability != "Available":
 			unavailable += 1
-		morale_total += player.morale
-	var average_morale := morale_total / maxf(float(GameManager.players.size()), 1.0)
-	home_summary.text = "[font_size=24][b]%s[/b][/font_size]\n%s · %s\nReputation %d/100 · Funds $%d\n\n[b]Next fixture[/b]\n%s\n\n[b]Weekly plan[/b]\n%s · Team familiarity %d%%\n\n[b]Squad[/b]\n%d registered · %d unavailable · Average morale %d%%" % [
+		satisfaction_total += player.satisfaction
+	var average_satisfaction := satisfaction_total \
+		/ maxf(float(GameManager.players.size()), 1.0)
+	home_summary.text = "[font_size=24][b]%s[/b][/font_size]\n%s · %s\nReputation %d/100 · Funds $%d\n\n[b]Next fixture[/b]\n%s\n\n[b]Weekly plan[/b]\n%s · Familiarity %d%% · Cohesion %d%%\n\n[b]Squad[/b]\n%d registered · %d unavailable · Average satisfaction %d%%" % [
 		CareerManager.career.organization_name, CareerManager.career.region,
 		CareerManager.career.identity, CareerManager.career.reputation,
 		CareerManager.career.finances,
 		"Week %d vs %s" % [fixture.week, fixture.opponent_name] if fixture != null else "No scheduled fixture",
 		CareerManager.career.training_focus,
 		roundi(GameManager.team.tactical_familiarity * 100.0),
-		GameManager.team.player_ids.size(), unavailable, roundi(average_morale * 100.0)]
+		roundi(GameManager.team.cohesion * 100.0),
+		GameManager.team.player_ids.size(), unavailable,
+		roundi(average_satisfaction * 100.0)]
 	%RosterCard.set_summary("%d registered players · %d unavailable" % [GameManager.team.player_ids.size(), unavailable])
 	%TeamCard.set_summary("%s identity · %s training" % [CareerManager.career.identity, CareerManager.career.training_focus])
 	%TransfersCard.set_summary("%d regional candidates · $%d available" % [CareerManager.career.transfer_pool.size(), CareerManager.career.finances])
@@ -336,6 +385,28 @@ func _refresh_roster() -> void:
 		_roster_selected(0)
 
 
+func _toggle_roster_list() -> void:
+	_set_roster_list_expanded(not _roster_list_expanded)
+
+
+func _set_roster_list_expanded(expanded: bool) -> void:
+	_roster_list_expanded = expanded
+	var rail_width := ROSTER_RAIL_EXPANDED_WIDTH \
+		if expanded else ROSTER_RAIL_COLLAPSED_WIDTH
+	roster_rail.custom_minimum_size = Vector2(rail_width, 0.0)
+	roster_split.split_offset = roundi(rail_width)
+	roster_list.visible = expanded
+	## The main profile uses all recovered width when the rail is minimized. In
+	## expanded-list mode, only its basic identity block contracts; secondary
+	## information remains in the separate dossier rather than a competing column.
+	roster_identity_panel.custom_minimum_size.x = 188.0 if expanded else 310.0
+	roster_list_toggle.text = "<  Collapse roster" if expanded else ">"
+	roster_list_toggle.tooltip_text = (
+		"Collapse the roster list" if expanded else "Expand the roster list"
+	)
+	_refresh_roster_profile_layout()
+
+
 ## Shared by the Roster tab and the individual-training tab, which show the
 ## same squad with the same summary line. One writer means the two lists can't
 ## drift apart as the line changes.
@@ -358,43 +429,27 @@ func _roster_selected(index: int) -> void:
 	if player == null:
 		return
 	selected_roster_id = player.id
-	var key_attributes := _key_attributes(player)
-	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]  %s\n%s · Age %d · %d pro seasons\nAvailability: %s · Morale %d%% · Fatigue %d%%\n\n[b]Ability[/b]\nCurrent: %s\nPotential: %s\n[color=#8294ad]Current grade is weighted for this player's position. The wheel's outer line shows potential on every axis.[/color]\n\n[b]Key attributes[/b]\n%s\n\n[b]Measurements[/b]\n%.0f cm · %.0f kg · %.0f cm wingspan\n\nCurrent rotation: %s" % [
+	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]\n[color=#91a5bd]%s / %s  |  Age %d[/color]\n[b]CA[/b] %s -> [b]PA[/b] %s  |  %s-handed\n%.0f cm  |  %.0f kg  |  %.0f cm span" % [
 		player.display_name, player.position_code, player.position_role, player.age,
-		player.professional_experience, player.availability,
-		roundi(player.morale * 100.0), roundi(player.fatigue * 100.0),
 		AttributeProfiles.grade(float(player.current_ability_score())),
-		AttributeProfiles.grade(float(player.potential)),
-		key_attributes, player.height_cm, player.mass_kg, player.wingspan_cm,
-		"Slot %d" % GameManager.current_lineup().slot_for_player(player.id) if GameManager.current_lineup().slot_for_player(player.id) >= 1 else "Bench"]
-	roster_detail.text += "\n\n[b]Profile[/b]\n%s-handed · Adaptability %d\nNatural: %s\n\n[b]Serve repertoire[/b]\n%s · %s proficiency" % [
-		player.dominant_hand, player.adaptability, ", ".join(player.natural_positions),
-		player.primary_serve_style,
-		AttributeProfiles.grade(float(player.active_serve_style_score())),
+		AttributeProfiles.grade(float(player.potential)), player.dominant_hand,
+		player.height_cm, player.mass_kg, player.wingspan_cm,
 	]
 	_refresh_player_wheel(player)
-	_refresh_bio(player)
 	lineup_status_option.select(0 if player.id in GameManager.team.starting_player_ids else 1)
-	raw_attributes.text = _raw_attribute_text(player)
+	_refresh_roster_profile_layout()
 
 
-## `home_region` and `club_region` have been on the player model since the
-## world population landed but were never shown anywhere, so a player raised in
-## Ispayk and bought by A'ace read as an A'ace player with no trace of where
-## they came from. `traits` was likewise stored and never surfaced.
-func _refresh_bio(player: VolleyballPlayer) -> void:
-	var raised := str(player.home_region)
-	var plays := str(player.club_region)
-	var lines: Array[String] = []
-	lines.append("[b]Raised[/b]  %s" % (raised if not raised.is_empty() else "Unrecorded"))
-	if not plays.is_empty() and plays != raised:
-		lines.append("[b]Plays in[/b]  %s" % plays)
-	lines.append("[b]Age[/b]  %d · %d pro seasons" % [player.age, player.professional_experience])
-	lines.append("[b]Hand[/b]  %s-handed" % player.dominant_hand)
-	lines.append("")
-	lines.append("[b]Traits[/b]\n%s" % ("\n".join(player.traits) if not player.traits.is_empty()
-		else "[color=#8294ad]None recorded[/color]"))
-	bio_panel.text = "\n".join(lines)
+func _refresh_roster_profile_layout() -> void:
+	var player := GameManager.player_by_id(selected_roster_id)
+	if player == null:
+		return
+	raw_title.text = "Complete Attribute Profile  |  %s  |  %s  |  %d  |  %s -> %s" % [
+		player.display_name, player.position_code, player.age,
+		AttributeProfiles.grade(float(player.current_ability_score())),
+		AttributeProfiles.grade(float(player.potential)),
+	] if _roster_list_expanded else "Complete Attribute Profile"
+	raw_attributes.text = _raw_attribute_text(player, _roster_list_expanded)
 
 
 func _individual_training_selected(index: int) -> void:
@@ -448,50 +503,239 @@ func _return_to_pool() -> void:
 	refresh()
 
 
-func _wheel_profile_selected(_index: int) -> void:
+func _open_player_attribute_lab() -> void:
 	var player := GameManager.player_by_id(selected_roster_id)
-	if player != null:
-		_refresh_player_wheel(player)
+	if player == null:
+		return
+	expanded_wheel_profile_option.select(0)
+	_open_attribute_lab(
+		player_attribute_wheel,
+		"%s / PLAYER PROFILE" % player.display_name.to_upper(),
+		"ROSTER | %s | Age %d | Current %s | Potential %s" % [
+			player.position_role, player.age,
+			AttributeProfiles.grade(float(player.current_ability_score())),
+			AttributeProfiles.grade(float(player.potential)),
+		],
+		true,
+	)
+
+
+func _open_team_attribute_lab() -> void:
+	_open_attribute_lab(
+		team_attribute_wheel,
+		"%s / STARTING LINEUP" % GameManager.team.team_name.to_upper(),
+		"TEAM OVERVIEW | Aggregate of the selected starting six",
+		false,
+	)
+
+
+func _open_transfer_attribute_lab() -> void:
+	var player := _market_player(selected_transfer_id)
+	if player == null:
+		return
+	_open_attribute_lab(
+		transfer_player_attribute_wheel,
+		"%s / RECRUITMENT PROFILE" % player.display_name.to_upper(),
+		"TRANSFER TARGET | %s | Age %d | Current %s | Potential %s" % [
+			player.position_role, player.age,
+			AttributeProfiles.grade(float(player.current_ability_score())),
+			AttributeProfiles.grade(float(player.potential)),
+		],
+		false,
+	)
+
+
+func _open_attribute_lab(
+	source: VolleyballPlayerAttributeWheel,
+	title: String,
+	context: String,
+	profile_selectable: bool,
+) -> void:
+	if source.axes.size() < 3:
+		return
+	expanded_wheel_title.text = title
+	expanded_wheel_context.text = context
+	expanded_wheel_profile_label.visible = profile_selectable
+	expanded_wheel_profile_option.visible = profile_selectable
+	_copy_wheel_profile(source, expanded_attribute_wheel)
+	var viewport_size := get_viewport_rect().size
+	var popup_rect := Rect2i(
+		20, 16,
+		maxi(roundi(viewport_size.x) - 40, 760),
+		maxi(roundi(viewport_size.y) - 32, 520),
+	)
+	attribute_wheel_underlay.visible = true
+	attribute_wheel_popup.popup(popup_rect)
+
+
+func _copy_wheel_profile(
+	source: VolleyballPlayerAttributeWheel,
+	target: VolleyballPlayerAttributeWheel,
+) -> void:
+	target.set_profile(
+		source.profile, source.axis_tooltips, source.show_grades, source.potential_profile
+	)
+
+
+func _expanded_wheel_profile_selected(index: int) -> void:
+	if not attribute_wheel_popup.visible or not expanded_wheel_profile_option.visible:
+		return
+	var player := GameManager.player_by_id(selected_roster_id)
+	if player == null:
+		return
+	var profile_name := expanded_wheel_profile_option.get_item_text(index)
+	var profile := AttributeProfiles.summary_profile(player) \
+		if profile_name == "Player Profile" \
+		else AttributeProfiles.detailed_profile(player, profile_name)
+	var potential_profile := AttributeProfiles.summary_profile(player, true) \
+		if profile_name == "Player Profile" \
+		else AttributeProfiles.detailed_profile(player, profile_name, true)
+	var tooltips := AttributeProfiles.PROFILE_TOOLTIPS \
+		if profile_name == "Player Profile" else WHEEL_TOOLTIPS
+	expanded_wheel_title.text = "%s / %s" % [
+		player.display_name.to_upper(), profile_name.to_upper(),
+	]
+	expanded_attribute_wheel.set_profile(profile, tooltips, true, potential_profile)
+
+
+func _close_attribute_lab() -> void:
+	attribute_wheel_popup.hide()
+
+
+func _attribute_lab_hidden() -> void:
+	_modal_hidden()
+
+
+func _open_player_dossier() -> void:
+	var player := GameManager.player_by_id(selected_roster_id)
+	if player == null:
+		return
+	player_dossier_title.text = player.display_name.to_upper()
+	player_dossier_context.text = "%s  /  %s  /  AGE %d  /  %s -> %s" % [
+		player.position_code, player.position_role.to_upper(), player.age,
+		AttributeProfiles.grade(float(player.current_ability_score())),
+		AttributeProfiles.grade(float(player.potential)),
+	]
+	player_dossier_content.text = _player_dossier_text(player)
+	var viewport_size := get_viewport_rect().size
+	attribute_wheel_underlay.visible = true
+	player_dossier_popup.popup(Rect2i(
+		28, 22, maxi(roundi(viewport_size.x) - 56, 760),
+		maxi(roundi(viewport_size.y) - 44, 520),
+	))
+
+
+func _close_player_dossier() -> void:
+	player_dossier_popup.hide()
+
+
+func _modal_hidden() -> void:
+	attribute_wheel_underlay.visible = \
+		attribute_wheel_popup.visible or player_dossier_popup.visible
+
+
+func _player_dossier_text(player: VolleyballPlayer) -> String:
+	var lineup_slot := GameManager.current_lineup().slot_for_player(player.id)
+	var rotation_text := "Slot %d" % lineup_slot if lineup_slot >= 1 else "Bench"
+	var status := "[font_size=18][b]STATUS & DYNAMICS[/b][/font_size]\n\n"
+	status += "[b]Availability[/b]  %s\n[b]Rotation[/b]  %s\n" % [
+		player.availability, rotation_text,
+	]
+	status += "[b]Reputation[/b]  %d\n[b]Recent form[/b]  %+d%%\n" % [
+		player.reputation, roundi(player.current_form * 100.0),
+	]
+	status += "[b]Satisfaction[/b]  %d%%\n[b]Match confidence[/b]  %+d%%\n" % [
+		roundi(player.satisfaction * 100.0),
+		roundi(player.match_confidence * 100.0),
+	]
+	status += "[b]Fatigue[/b]  %d%%\n\n[b]Natural positions[/b]\n%s" % [
+		roundi(player.fatigue * 100.0), ", ".join(player.natural_positions),
+	]
+
+	var serve_lines: Array[String] = []
+	var style_names: Array = player.serve_style_proficiencies.keys()
+	style_names.sort()
+	for style_name in style_names:
+		var score := float(player.serve_style_proficiencies[style_name])
+		var marker := "  [color=#f4c95d][b]PRIMARY[/b][/color]" \
+			if str(style_name) == player.primary_serve_style else ""
+		serve_lines.append("%s  %s%s" % [
+			style_name, AttributeProfiles.grade(score), marker,
+		])
+	var volleyball := "[font_size=18][b]   VOLLEYBALL PROFILE[/b][/font_size]\n\n"
+	volleyball += "[b]Key attributes[/b]\n%s\n\n[b]Serve repertoire[/b]\n%s" % [
+		_key_attributes(player), "\n".join(serve_lines),
+	]
+
+	var raised := str(player.home_region)
+	var plays := str(player.club_region)
+	var trait_text := "\n".join(player.traits) if not player.traits.is_empty() \
+		else "[color=#8294ad]None recorded[/color]"
+	var biography := "[font_size=18][b]   TRAITS & BIOGRAPHY[/b][/font_size]\n\n"
+	biography += "[b]Traits[/b]\n%s\n\n[b]Raised[/b]  %s\n" % [
+		trait_text, raised if not raised.is_empty() else "Unrecorded",
+	]
+	if not plays.is_empty() and plays != raised:
+		biography += "[b]Plays in[/b]  %s\n" % plays
+	biography += "[b]Professional experience[/b]  %d seasons\n" % player.professional_experience
+	biography += "[b]Adaptability[/b]  %d\n[b]Hand[/b]  %s-handed" % [
+		player.adaptability, player.dominant_hand,
+	]
+	return "[table=3][cell]%s[/cell][cell]%s[/cell][cell]%s[/cell][/table]" % [
+		status, volleyball, biography,
+	]
 
 
 func _refresh_player_wheel(player: VolleyballPlayer) -> void:
-	var profile_name := wheel_profile_option.get_item_text(wheel_profile_option.selected) \
-		if wheel_profile_option.selected >= 0 else "Player Profile"
-	var profile := AttributeProfiles.summary_profile(player) if profile_name == "Player Profile" \
-		else AttributeProfiles.detailed_profile(player, profile_name)
 	## Fully accurate today: this reads the player's real generated ceilings,
 	## the same data `potential` is scored from. When scouting exists, an
 	## unscouted prospect's outer line should come from an estimate derived
 	## from this data (a range, a fogged band) rather than this data itself --
 	## the ceilings stay real; what changes is whether the viewer is shown them
 	## directly.
-	var potential_profile := AttributeProfiles.summary_profile(player, true) \
-		if profile_name == "Player Profile" \
-		else AttributeProfiles.detailed_profile(player, profile_name, true)
-	var tooltips := AttributeProfiles.PROFILE_TOOLTIPS if profile_name == "Player Profile" \
-		else WHEEL_TOOLTIPS
-	player_attribute_wheel.set_profile(profile, tooltips, true, potential_profile)
+	player_attribute_wheel.set_profile(
+		AttributeProfiles.summary_profile(player), AttributeProfiles.PROFILE_TOOLTIPS,
+		true, AttributeProfiles.summary_profile(player, true),
+	)
 
 
-func _raw_attribute_text(player: VolleyballPlayer) -> String:
+func _raw_attribute_text(player: VolleyballPlayer, compressed: bool = false) -> String:
 	## Reads `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than a second,
 	## hand-typed grouping. This table and the wheel used to keep independent
 	## category lists with different names and different membership -- this
 	## one had a "Reception" bucket the wheel didn't, and neither had
 	## attack_accuracy at all. One definition means an attribute added to the
 	## player model only needs placing once to appear correctly everywhere.
-	var result := "[table=3]"
+	## One category per column keeps every attribute visible in a single compact
+	## band. The old three-column table wrapped to a second row and forced the
+	## entire Roster tab below the 720px baseline viewport.
+	var result := "[table=6]"
+	var group_font_size := 12 if compressed else 15
+	var attribute_font_size := 11 if compressed else 14
+	var position_keys: Array = Array(VolleyballPlayer.POSITION_WEIGHTS.get(
+		player.position_role, []
+	))
 	for group_name in AttributeProfiles.CATEGORY_ATTRIBUTES:
-		var lines: Array[String] = ["[b]%s[/b]" % group_name]
+		var display_group := "Setting / Control" \
+			if group_name == "Setting & Ball Control" else str(group_name)
+		var lines: Array[String] = ["[font_size=%d][b]%s[/b][/font_size]" % [
+			group_font_size, display_group,
+		]]
 		for attribute_name in AttributeProfiles.CATEGORY_ATTRIBUTES[group_name]:
-			var display_name := str(attribute_name).replace("_", " ").capitalize()
-			if str(attribute_name) == "reception":
-				display_name = "Reception Technique"
-			elif str(attribute_name) == "attack_power":
-				display_name = "Power Transfer"
-			lines.append("%s: %d" % [display_name,
-				int(player.get(str(attribute_name)))])
-		result += "[cell]%s[/cell]" % "\n".join(lines)
+			var attribute_key := str(attribute_name)
+			var display_name := str(RAW_ATTRIBUTE_LABELS.get(
+				attribute_key, attribute_key.replace("_", " ").capitalize()
+			))
+			var label_markup := "[color=#aab9cc]%s[/color]" % display_name
+			if attribute_key in position_keys:
+				label_markup = "[color=#f4c95d][u][b]%s[/b][/u][/color]" % display_name
+			var score := int(player.get(attribute_key))
+			lines.append("%s  [color=#%s][b]%d[/b][/color]" % [
+				label_markup, AttributeProfiles.grade_color_hex(float(score)), score,
+			])
+		result += "[cell][font_size=%d]%s[/font_size][/cell]" % [
+			attribute_font_size, "\n".join(lines),
+		]
 	return result + "[/table]"
 
 
@@ -504,9 +748,12 @@ func _key_attributes(player: VolleyballPlayer) -> String:
 
 
 func _refresh_team() -> void:
-	team_summary.text = "[font_size=22][b]%s Identity[/b][/font_size]\n%s\nTactical familiarity %d%%\nCaptain: %s · Libero: %s\n\n[b]Depth chart[/b]\n%s" % [
+	team_summary.text = "[font_size=22][b]%s Identity[/b][/font_size]\n%s\nRegional alignment %d%% · Opponent adaptation %d%%\nTactical familiarity %d%% · Cohesion %d%%\nCaptain: %s · Libero: %s\n\n[b]Depth chart[/b]\n%s" % [
 		GameManager.team.team_name, GameManager.team.identity,
+		roundi(GameManager.team.regional_alignment * 100.0),
+		roundi(lerpf(0.09, 0.18, GameManager.team.regional_alignment) * 100.0),
 		roundi(GameManager.team.tactical_familiarity * 100.0),
+		roundi(GameManager.team.cohesion * 100.0),
 		_player_name(GameManager.team.captain_id),
 		_player_name(GameManager.team.libero_ids[0]) if not GameManager.team.libero_ids.is_empty() else "None",
 		_depth_chart_text()]
@@ -569,9 +816,11 @@ func _training_selected(index: int) -> void:
 		return
 	var activity_name := training_option.get_item_text(index)
 	var activity := Training.description(activity_name)
-	training_description.text = "%s\nAttributes: %s · Fatigue %+d%% · Morale %+d%%" % [
+	training_description.text = "%s\nAttributes: %s · Fatigue %+d%% · Satisfaction %+d%% · Cohesion %+d%%" % [
 		activity.description, ", ".join(activity.attributes),
-		roundi(float(activity.fatigue) * 100.0), roundi(float(activity.morale) * 100.0)]
+		roundi(float(activity.fatigue) * 100.0),
+		roundi(float(activity.satisfaction) * 100.0),
+		roundi(float(activity.cohesion) * 100.0)]
 
 
 func _apply_training_focus() -> void:

@@ -1,6 +1,28 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/screens/new_career_screen.gd" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="RailPanel"]
+bg_color = Color(0.025, 0.06, 0.11, 0.96)
+border_width_right = 1
+border_color = Color(0.82, 0.66, 0.16, 0.45)
+
+[sub_resource type="StyleBoxFlat" id="QuestionPanel"]
+bg_color = Color(0.035, 0.075, 0.13, 0.97)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.82, 0.66, 0.16, 0.35)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="PreviewPanel"]
+bg_color = Color(0.015, 0.035, 0.065, 0.72)
+border_width_left = 2
+border_color = Color(0.95, 0.75, 0.2, 0.8)
 
 [node name="NewCareerScreen" type="Control"]
 layout_mode = 3
@@ -12,126 +34,275 @@ grow_vertical = 2
 script = ExtResource("1")
 
 [node name="Background" type="ColorRect" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.035, 0.055, 0.1, 1)
+color = Color(0.027, 0.067, 0.122, 1)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="AccentBand" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -8.0
+color = Color(0.83, 0.66, 0.16, 1)
+
+[node name="Layout" type="HBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(820, 600)
+[node name="Rail" type="PanelContainer" parent="Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("RailPanel")
+
+[node name="RailMargin" type="MarginContainer" parent="Layout/Rail"]
+layout_mode = 2
+theme_override_constants/margin_left = 34
+theme_override_constants/margin_top = 42
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 34
+
+[node name="RailContent" type="VBoxContainer" parent="Layout/Rail/RailMargin"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="Mark" type="Label" parent="Layout/Rail/RailMargin/RailContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
+theme_override_font_sizes/font_size = 13
+text = "VWM / CAREER BUILDER"
+
+[node name="RailTitle" type="Label" parent="Layout/Rail/RailMargin/RailContent"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 27
+text = "Write the\nfirst chapter."
+
+[node name="Rule" type="HSeparator" parent="Layout/Rail/RailMargin/RailContent"]
 layout_mode = 2
 
-[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+[node name="StepRail" type="VBoxContainer" parent="Layout/Rail/RailMargin/RailContent"]
+unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 24
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 24
+size_flags_vertical = 3
+theme_override_constants/separation = 4
 
-[node name="Content" type="VBoxContainer" parent="Center/Panel/Margin"]
+[node name="RailHint" type="Label" parent="Layout/Rail/RailMargin/RailContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.52, 0.61, 0.72, 1)
+text = "Nothing here changes raw talent.\nYour choices change what the\nteam trusts and attempts."
+
+[node name="MainMargin" type="MarginContainer" parent="Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 42
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 42
+theme_override_constants/margin_bottom = 26
+
+[node name="Main" type="VBoxContainer" parent="Layout/MainMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Topbar" type="HBoxContainer" parent="Layout/MainMargin/Main"]
+layout_mode = 2
+
+[node name="StepKicker" type="Label" parent="Layout/MainMargin/Main/Topbar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
+text = "QUESTION 1 OF 4"
+
+[node name="CancelButton" type="Button" parent="Layout/MainMargin/Main/Topbar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[node name="QuestionTitle" type="Label" parent="Layout/MainMargin/Main"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 31
+text = "Where does your volleyball begin?"
+
+[node name="QuestionHint" type="Label" parent="Layout/MainMargin/Main"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.74, 0.84, 1)
+autowrap_mode = 2
+
+[node name="QuestionPanel" type="PanelContainer" parent="Layout/MainMargin/Main"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("QuestionPanel")
+
+[node name="QuestionMargin" type="MarginContainer" parent="Layout/MainMargin/Main/QuestionPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="RegionStep" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="Header" type="HBoxContainer" parent="Center/Panel/Margin/Content"]
+[node name="Prompt" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/RegionStep"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
+text = "SELECT A VOLLEYBALL CULTURE"
+
+[node name="RegionGrid" type="GridContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/RegionStep"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+columns = 4
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+
+[node name="TypeStep" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Prompt" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/TypeStep"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
+text = "CHOOSE THE TERMS OF THE PROJECT"
+
+[node name="TypeRow" type="HBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/TypeStep"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+alignment = 1
+theme_override_constants/separation = 18
+
+[node name="IdentityStep" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="IdentityHeader" type="HBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PresetLabel" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep/IdentityHeader"]
+layout_mode = 2
+text = "Shortcut"
+
+[node name="PresetOption" type="OptionButton" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep/IdentityHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 38)
 layout_mode = 2
 
-[node name="Title" type="Label" parent="Center/Panel/Margin/Content/Header"]
+[node name="NameLabel" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep/IdentityHeader"]
+layout_mode = 2
+text = "Identity name"
+
+[node name="IdentityNameEdit" type="LineEdit" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep/IdentityHeader"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 28
-text = "Create a Volleyball Career"
+placeholder_text = "Name your philosophy"
 
-[node name="BackButton" type="Button" parent="Center/Panel/Margin/Content/Header"]
+[node name="IdentityTagGrid" type="GridContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Back"
+size_flags_vertical = 3
+columns = 4
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 4
 
-[node name="Names" type="GridContainer" parent="Center/Panel/Margin/Content"]
-layout_mode = 2
-columns = 2
-
-[node name="CareerLabel" type="Label" parent="Center/Panel/Margin/Content/Names"]
-layout_mode = 2
-text = "Career name"
-
-[node name="OrganizationLabel" type="Label" parent="Center/Panel/Margin/Content/Names"]
-layout_mode = 2
-text = "Organization name"
-
-[node name="CareerNameEdit" type="LineEdit" parent="Center/Panel/Margin/Content/Names"]
+[node name="AlignmentPreview" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 38)
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NamesStep" type="HBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Fields" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep"]
+custom_minimum_size = Vector2(330, 0)
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SaveLabel" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/Fields"]
+layout_mode = 2
+text = "SAVE NAME"
+
+[node name="CareerNameEdit" type="LineEdit" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/Fields"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
 placeholder_text = "My Volleyball Career"
 
-[node name="OrganizationNameEdit" type="LineEdit" parent="Center/Panel/Margin/Content/Names"]
+[node name="OrgLabel" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/Fields"]
+layout_mode = 2
+text = "ORGANIZATION NAME"
+
+[node name="OrganizationNameEdit" type="LineEdit" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/Fields"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 38)
+custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
 placeholder_text = "Harbor City VC"
 
-[node name="Choices" type="GridContainer" parent="Center/Panel/Margin/Content"]
+[node name="ReviewPanel" type="PanelContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep"]
 layout_mode = 2
-columns = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("PreviewPanel")
 
-[node name="RegionField" type="VBoxContainer" parent="Center/Panel/Margin/Content/Choices"]
+[node name="ReviewMargin" type="MarginContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/ReviewPanel"]
 layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
 
-[node name="Label" type="Label" parent="Center/Panel/Margin/Content/Choices/RegionField"]
-layout_mode = 2
-text = "Region"
-
-[node name="RegionOption" type="OptionButton" parent="Center/Panel/Margin/Content/Choices/RegionField"]
+[node name="ReviewText" type="RichTextLabel" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/NamesStep/ReviewPanel/ReviewMargin"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 38)
 layout_mode = 2
+bbcode_enabled = true
+fit_content = true
 
-[node name="TypeField" type="VBoxContainer" parent="Center/Panel/Margin/Content/Choices"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Center/Panel/Margin/Content/Choices/TypeField"]
-layout_mode = 2
-text = "Organization type"
-
-[node name="OrganizationTypeOption" type="OptionButton" parent="Center/Panel/Margin/Content/Choices/TypeField"]
+[node name="ErrorLabel" type="Label" parent="Layout/MainMargin/Main"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 38)
-layout_mode = 2
-
-[node name="IdentityField" type="VBoxContainer" parent="Center/Panel/Margin/Content/Choices"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="Center/Panel/Margin/Content/Choices/IdentityField"]
-layout_mode = 2
-text = "Team identity"
-
-[node name="IdentityOption" type="OptionButton" parent="Center/Panel/Margin/Content/Choices/IdentityField"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 38)
-layout_mode = 2
-
-[node name="SetupDescription" type="Label" parent="Center/Panel/Margin/Content"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 150)
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_colors/font_color = Color(0.66, 0.75, 0.86, 1)
-autowrap_mode = 2
-
-[node name="ErrorLabel" type="Label" parent="Center/Panel/Margin/Content"]
-unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.38, 0.38, 1)
 
-[node name="CreateCareerButton" type="Button" parent="Center/Panel/Margin/Content"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 46)
+[node name="Navigation" type="HBoxContainer" parent="Layout/MainMargin/Main"]
 layout_mode = 2
-text = "Create Career"
+
+[node name="PreviousButton" type="Button" parent="Layout/MainMargin/Main/Navigation"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 44)
+layout_mode = 2
+text = "Previous"
+
+[node name="Spacer" type="Control" parent="Layout/MainMargin/Main/Navigation"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NextButton" type="Button" parent="Layout/MainMargin/Main/Navigation"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 44)
+layout_mode = 2
+text = "Continue"

@@ -8,11 +8,63 @@ const PROFILE_NAMES: Array[String] = [
 
 const PROFILE_TOOLTIPS := {
 	"Attacking": "Power, accuracy, tooling, feinting, finesse, approach timing and shot variety.",
-	"Defensive": "Reception technique, balance, stability, range, ball control, block timing and dig control.",
+	"Defensive": "Reception technique, balance, pace resistance, physical range, touch control, block timing and dig placement.",
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise, hand control and unpredictability.",
-	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity, stamina and reach.",
+	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity, sustained engine and reach.",
 	"Serving": "Power, technique, placement, consistency, aggression, variation and repertoire.",
-	"Mental / Tactical": "Court vision, anticipation, decision making, composure, discipline, improvisation and adaptability.",
+	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline, creativity and leadership.",
+}
+
+const AXIS_CONTRIBUTORS := {
+	"Attacking": "attack_power; mass_kg; explosiveness; transition_speed; arm_speed; approach_timing; attack_accuracy; tooling; feinting; finesse; shot_variety",
+	"Defensive": "reception; reception_balance; reception_stability; acceleration; lateral_speed; height_cm; wingspan_cm; stamina; work_rate; ball_control; block_timing; dig_control",
+	"Setting / Control": "set_accuracy; set_balance; set_stability; tempo_control; set_disguise; hand_control; unpredictability",
+	"Physical": "acceleration; lateral_speed; transition_speed; explosiveness; jump_reach; stamina; work_rate; height_cm; wingspan_cm",
+	"Serving": "serve_power; serve_technique; serve_placement; serve_consistency; serve_aggression; serve_variation; serve-style proficiencies",
+	"Mental / Tactical": "court_vision; anticipation; decision_making; composure; tactical_discipline; improvisation; adaptability; leadership",
+	"Overall": "Attacking; Defensive; Setting / Control; Physical; Serving; Mental / Tactical",
+	"Power": "attack_power; mass_kg; explosiveness; transition_speed; arm_speed; approach_timing",
+	"Accuracy": "attack_accuracy",
+	"Tooling": "tooling",
+	"Feinting": "feinting",
+	"Finesse": "finesse",
+	"Approach Timing": "approach_timing",
+	"Shot Variety": "shot_variety",
+	"Reception Technique": "reception",
+	"Reception Balance": "reception_balance",
+	"Pace Resistance": "reception_stability",
+	"Defensive Range": "acceleration; lateral_speed; height_cm; wingspan_cm; stamina; work_rate",
+	"Touch Control": "ball_control",
+	"Block Timing": "block_timing",
+	"Dig Placement": "dig_control",
+	"Set Accuracy": "set_accuracy",
+	"Set Balance": "set_balance",
+	"Set Stability": "set_stability",
+	"Tempo Control": "tempo_control",
+	"Set Disguise": "set_disguise",
+	"Hand Control": "hand_control",
+	"Unpredictability": "unpredictability",
+	"Acceleration": "acceleration",
+	"Lateral Speed": "lateral_speed",
+	"Transition Speed": "transition_speed",
+	"Explosiveness": "explosiveness",
+	"Jump Capacity": "jump_reach",
+	"Engine": "stamina; work_rate",
+	"Reach": "height_cm; wingspan_cm",
+	"Serve Power": "serve_power",
+	"Serve Technique": "serve_technique",
+	"Serve Placement": "serve_placement",
+	"Serve Consistency": "serve_consistency",
+	"Serve Aggression": "serve_aggression",
+	"Serve Variation": "serve_variation",
+	"Repertoire": "serve_power; serve_technique; serve_placement; serve_consistency; serve_aggression; serve_variation; hand_control; composure; decision_making; explosiveness; arm_speed; stamina; improvisation",
+	"Court Vision": "court_vision",
+	"Anticipation": "anticipation",
+	"Decision Making": "decision_making",
+	"Composure": "composure",
+	"Tactical Discipline": "tactical_discipline",
+	"Creativity": "improvisation; adaptability",
+	"Leadership": "leadership",
 }
 
 ## The one place every raw ability attribute is assigned to a category. Every
@@ -47,7 +99,7 @@ const CATEGORY_ATTRIBUTES := {
 	],
 	"Physical": [
 		"acceleration", "lateral_speed", "transition_speed", "explosiveness",
-		"jump_reach", "stamina",
+		"jump_reach", "stamina", "work_rate",
 	],
 	"Serving": [
 		"serve_power", "serve_technique", "serve_placement",
@@ -55,7 +107,7 @@ const CATEGORY_ATTRIBUTES := {
 	],
 	"Mental & Tactical": [
 		"court_vision", "anticipation", "decision_making", "composure",
-		"tactical_discipline", "improvisation", "adaptability",
+		"tactical_discipline", "improvisation", "adaptability", "leadership",
 	],
 }
 
@@ -70,6 +122,21 @@ const CATEGORY_ATTRIBUTES := {
 ## still small. This exaggerates spread that exists; it never invents spread
 ## that doesn't -- which a min/max rescale to the full ring would.
 const TEAM_WHEEL_AMPLIFICATION: float = 1.6
+const GRADE_S_MIN: float = 96.0
+const GRADE_A_MIN: float = 89.0
+const GRADE_B_PLUS_MIN: float = 82.0
+const GRADE_B_MIN: float = 74.0
+const GRADE_B_MINUS_MIN: float = 66.0
+const GRADE_C_PLUS_MIN: float = 61.0
+const GRADE_C_MIN: float = 55.0
+const GRADE_C_MINUS_MIN: float = 50.0
+const GRADE_COLORS := {
+	"S": "ffd84d",
+	"A": "58d68d",
+	"B": "5dade2",
+	"C": "f2f4f7",
+	"D": "ff6b6b",
+}
 
 
 ## Shapes a team-level profile -- axis name to lineup-average score -- for the
@@ -94,15 +161,49 @@ static func amplify_team_profile(averages: Dictionary) -> Dictionary:
 
 
 static func grade(score: float) -> String:
-	if score >= 85.0:
+	## These are deliberately nonlinear roster bands. B and C carry subdivisions
+	## because most database players live there; S remains a true top-end outlier.
+	if score >= GRADE_S_MIN:
 		return "S"
-	if score >= 70.0:
+	if score >= GRADE_A_MIN:
 		return "A"
-	if score >= 55.0:
+	if score >= GRADE_B_PLUS_MIN:
+		return "B+"
+	if score >= GRADE_B_MIN:
 		return "B"
-	if score >= 40.0:
+	if score >= GRADE_B_MINUS_MIN:
+		return "B-"
+	if score >= GRADE_C_PLUS_MIN:
+		return "C+"
+	if score >= GRADE_C_MIN:
+		return "C"
+	if score >= GRADE_C_MINUS_MIN:
+		return "C-"
+	return "D"
+
+
+static func grade_tier(score: float) -> String:
+	if score >= GRADE_S_MIN:
+		return "S"
+	if score >= GRADE_A_MIN:
+		return "A"
+	if score >= GRADE_B_MINUS_MIN:
+		return "B"
+	if score >= GRADE_C_MINUS_MIN:
 		return "C"
 	return "D"
+
+
+static func grade_color_hex(score: float) -> String:
+	return str(GRADE_COLORS[grade_tier(score)])
+
+
+static func axis_tooltip(axis_name: String, description: String = "") -> String:
+	var contributors := str(AXIS_CONTRIBUTORS.get(axis_name, "Not documented"))
+	var result := description.strip_edges()
+	if not result.is_empty():
+		result += "\n\n"
+	return result + "Contributors: %s" % contributors
 
 
 ## One raw attribute or one derived composite, per category. Every category
@@ -154,11 +255,11 @@ static func detailed_profile(
 			## blending the two hid that. It gets its own axis instead.
 			return {"Reception Technique": raw.call("reception"),
 				"Reception Balance": raw.call("reception_balance"),
-				"Reception Stability": raw.call("reception_stability"),
+				"Pace Resistance": raw.call("reception_stability"),
 				"Defensive Range": player.baseline_defensive_range(source),
-				"Ball Control": raw.call("ball_control"),
+				"Touch Control": raw.call("ball_control"),
 				"Block Timing": raw.call("block_timing"),
-				"Dig Control": raw.call("dig_control")}
+				"Dig Placement": raw.call("dig_control")}
 		"Setting & Ball Control":
 			return {"Set Accuracy": raw.call("set_accuracy"),
 				"Set Balance": raw.call("set_balance"),
@@ -176,7 +277,10 @@ static func detailed_profile(
 				"Lateral Speed": raw.call("lateral_speed"),
 				"Transition Speed": raw.call("transition_speed"),
 				"Explosiveness": raw.call("explosiveness"),
-				"Jump Capacity": raw.call("jump_reach"), "Stamina": raw.call("stamina"),
+				"Jump Capacity": raw.call("jump_reach"),
+				"Engine": _weighted(
+					[raw.call("stamina"), raw.call("work_rate")], [0.65, 0.35]
+				),
 				"Reach": player.reach_rating()}
 		"Serving":
 			## Repertoire was already computed for every player at generation
@@ -208,8 +312,10 @@ static func detailed_profile(
 				"Decision Making": raw.call("decision_making"),
 				"Composure": raw.call("composure"),
 				"Tactical Discipline": raw.call("tactical_discipline"),
-				"Improvisation": raw.call("improvisation"),
-				"Adaptability": raw.call("adaptability")}
+				"Creativity": _weighted(
+					[raw.call("improvisation"), raw.call("adaptability")], [0.50, 0.50]
+				),
+				"Leadership": raw.call("leadership")}
 		_:
 			## "Power" replaces attack_power/arm_speed with the composite that
 			## actually reflects usable hitting power -- several physical

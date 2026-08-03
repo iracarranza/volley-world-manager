@@ -86,11 +86,13 @@ static func _sweep(
 	sample_count: int,
 	base_seed: int,
 	population: StringName = DEFAULT_POPULATION,
+	identity_name: String = "Balanced",
 ) -> Array[Dictionary]:
 	var records: Array[Dictionary] = []
 	for serving_home in [true, false]:
 		var manager := GameManagerModel.new()
 		manager.seed_vertical_slice_data()
+		manager.team.apply_identity(identity_name)
 		if population == &"generated":
 			## Both sides, or the measurement compares a real squad against a
 			## squad of clones and reads the difference as a balance finding.
@@ -107,6 +109,10 @@ static func _sweep(
 				continue
 			var contacts := 0
 			var attack_attempts := 0
+			var home_attack_attempts := 0
+			var serve_quality := 0.0
+			var attack_effectiveness: Array[float] = []
+			var home_attack_effectiveness: Array[float] = []
 			var block_outcomes := {}
 			var block_closes: Array[float] = []
 			var set_qualities: Array[float] = []
@@ -123,6 +129,8 @@ static func _sweep(
 					RallyEventModel.EventType.DEFENSE,
 				]:
 					contacts += 1
+				if int(event.event_type) == RallyEventModel.EventType.SERVE:
+					serve_quality = float(event.quality)
 				## Every swing records an ATTACK event before its outcome is
 				## known, so this counts attempts -- including the swings that
 				## get dug and keep the rally alive. Without them the attack
@@ -130,6 +138,13 @@ static func _sweep(
 				## makes the kill rate rise whenever errors and stuffs fall.
 				if int(event.event_type) == RallyEventModel.EventType.ATTACK:
 					attack_attempts += 1
+					var effectiveness := float(event.metadata.get(
+						"attack_effectiveness", event.quality
+					))
+					attack_effectiveness.append(effectiveness)
+					if str(event.metadata.get("side", "")) == "home":
+						home_attack_attempts += 1
+						home_attack_effectiveness.append(effectiveness)
 				## A block that formed but never reached the ball still emits an
 				## event, so the outcome tally is the only way to tell how often
 				## the wall is actually in the way.
@@ -167,6 +182,10 @@ static func _sweep(
 				"home_won": bool(result.home_team_won),
 				"contacts": contacts,
 				"attack_attempts": attack_attempts,
+				"home_attack_attempts": home_attack_attempts,
+				"serve_quality": serve_quality,
+				"attack_effectiveness": attack_effectiveness,
+				"home_attack_effectiveness": home_attack_effectiveness,
 				"block_outcomes": block_outcomes,
 				"block_closes": block_closes,
 				"set_qualities": set_qualities,
@@ -182,17 +201,22 @@ static func outcome_calibration(
 	sample_count: int = 120,
 	base_seed: int = 900000,
 	population: StringName = DEFAULT_POPULATION,
+	identity_name: String = "Balanced",
 ) -> Dictionary:
-	var records := _sweep(sample_count, base_seed, population)
+	var records := _sweep(sample_count, base_seed, population, identity_name)
 	if records.is_empty():
 		return {"fixture_valid": false}
 
 	var outcomes := {}
 	var contact_total := 0
 	var serves := 0
+	var serve_quality_total := 0.0
+	var attack_effectiveness_total := 0.0
+	var attack_effectiveness_samples := 0
 	var aces := 0
 	var serve_errors := 0
 	var attacks := 0
+	var home_attacks := 0
 	var terminal_attacks := 0
 	var kills := 0
 	var attack_errors := 0
@@ -200,6 +224,9 @@ static func outcome_calibration(
 	var receiving_team_won := 0
 	var home_attack_wins := 0
 	var opponent_attack_wins := 0
+	var home_attack_errors := 0
+	var home_attack_effectiveness_total := 0.0
+	var home_attack_effectiveness_samples := 0
 	var block_outcomes := {}
 	var blocks_formed := 0
 	var blocks_touching := 0
@@ -229,6 +256,14 @@ static func outcome_calibration(
 		outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
 		contact_total += int(record["contacts"])
 		attacks += int(record["attack_attempts"])
+		home_attacks += int(record["home_attack_attempts"])
+		serve_quality_total += float(record["serve_quality"])
+		for effectiveness in Array(record["attack_effectiveness"]):
+			attack_effectiveness_total += float(effectiveness)
+			attack_effectiveness_samples += 1
+		for effectiveness in Array(record["home_attack_effectiveness"]):
+			home_attack_effectiveness_total += float(effectiveness)
+			home_attack_effectiveness_samples += 1
 		serves += 1
 		match outcome:
 			"ace":
@@ -247,6 +282,7 @@ static func outcome_calibration(
 					kills += 1
 				"attack_error":
 					attack_errors += 1
+					home_attack_errors += 1
 				"blocked", "counter_block":
 					stuffs += 1
 		## Which side's attack won the point. Every asymmetry found in this
@@ -273,6 +309,14 @@ static func outcome_calibration(
 		"stuff_rate": float(stuffs) / maxf(float(attacks), 1.0),
 		"block_touch_rate": float(blocks_touching) / maxf(float(attacks), 1.0),
 		"mean_contacts": float(contact_total) / float(serves),
+		"mean_serve_quality": serve_quality_total / float(serves),
+		"mean_attack_effectiveness": attack_effectiveness_total \
+			/ maxf(float(attack_effectiveness_samples), 1.0),
+		"home_kill_rate": float(home_attack_wins) / maxf(float(home_attacks), 1.0),
+		"home_attack_error_rate": float(home_attack_errors) \
+			/ maxf(float(home_attacks), 1.0),
+		"mean_home_attack_effectiveness": home_attack_effectiveness_total \
+			/ maxf(float(home_attack_effectiveness_samples), 1.0),
 	}
 	var within := {}
 	var outside: Array[String] = []
@@ -288,9 +332,11 @@ static func outcome_calibration(
 	return {
 		"fixture_valid": true,
 		"population": str(population),
+		"identity": identity_name,
 		"rally_count": serves,
 		"terminal_outcomes": outcomes,
 		"attack_attempts": attacks,
+		"home_attack_attempts": home_attacks,
 		"terminal_attacks": terminal_attacks,
 		"home_attack_wins": home_attack_wins,
 		"opponent_attack_wins": opponent_attack_wins,
@@ -322,6 +368,47 @@ static func outcome_calibration(
 		"within_reference": within,
 		"outside_reference": outside,
 		"all_within_reference": outside.is_empty(),
+	}
+
+
+## The balance baseline must remain stratified once team identity changes real
+## tactical inputs. Each career name supplies an independent seed; each identity
+## is then measured against all of them rather than treating one deterministic
+## career as a population.
+static func identity_calibration(
+	sample_count: int = 40,
+	career_names: Array[String] = [
+		"North Window", "Glass Harbor", "Second Tempo",
+		"Quiet Hands", "Golden Rotation", "Long Road Home",
+	],
+) -> Dictionary:
+	var by_identity := {}
+	for identity_name in TeamPrinciples.PRESET_NAMES:
+		var runs: Array[Dictionary] = []
+		var metric_totals := {}
+		for career_name in career_names:
+			var seed_value := absi(hash("%s|identity-calibration" % career_name))
+			var report := outcome_calibration(
+				sample_count, seed_value, DEFAULT_POPULATION, identity_name
+			)
+			runs.append({
+				"career_name": career_name,
+				"seed": seed_value,
+				"measured": report.get("measured", {}).duplicate(true),
+				"outside_reference": report.get("outside_reference", []).duplicate(),
+			})
+			for metric_name in Dictionary(report.get("measured", {})):
+				metric_totals[metric_name] = float(metric_totals.get(metric_name, 0.0)) \
+					+ float(report.measured[metric_name])
+		var means := {}
+		for metric_name in metric_totals:
+			means[metric_name] = float(metric_totals[metric_name]) \
+				/ maxf(float(runs.size()), 1.0)
+		by_identity[identity_name] = {"mean": means, "careers": runs}
+	return {
+		"sample_count_per_serving_side": sample_count,
+		"career_count": career_names.size(),
+		"identities": by_identity,
 	}
 
 

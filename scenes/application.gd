@@ -1,6 +1,9 @@
 extends Control
 
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
+const LightTheme := preload("res://scenes/themes/light_theme.tres")
+const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var title_screen: VolleyballTitleScreen = %TitleScreen
@@ -12,11 +15,14 @@ const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 func _ready() -> void:
 	title_screen.new_career_requested.connect(_show_new_career)
 	title_screen.career_load_requested.connect(_load_career)
+	title_screen.theme_requested.connect(_apply_theme)
+	title_screen.exit_requested.connect(func() -> void: get_tree().quit())
 	new_career_screen.back_requested.connect(_show_title)
 	new_career_screen.career_created.connect(_show_dashboard)
 	career_dashboard.title_requested.connect(_show_title)
 	career_dashboard.play_match_requested.connect(_show_match)
 	call_deferred("_connect_match_center_signal")
+	_load_theme()
 	_show_title()
 
 
@@ -56,3 +62,22 @@ func _show_dashboard() -> void:
 func _show_match() -> void:
 	match_center.enter_career_match()
 	_show_only(match_center)
+
+
+func _load_theme() -> void:
+	var config := ConfigFile.new()
+	var theme_name := "dark"
+	if config.load(SETTINGS_PATH) == OK:
+		theme_name = str(config.get_value("presentation", "theme", "dark"))
+	_apply_theme(theme_name, false)
+
+
+func _apply_theme(theme_name: String, persist: bool = true) -> void:
+	var resolved := "light" if theme_name == "light" else "dark"
+	theme = LightTheme if resolved == "light" else DarkTheme
+	title_screen.set_theme_name(resolved)
+	new_career_screen.set_light_mode(resolved == "light")
+	if persist:
+		var config := ConfigFile.new()
+		config.set_value("presentation", "theme", resolved)
+		config.save(SETTINGS_PATH)

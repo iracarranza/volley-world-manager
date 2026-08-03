@@ -233,6 +233,11 @@ func start_new_match(format: Resource) -> void:
 	if opponent_team == null:
 		_seed_opponent()
 	opponent_team.select_rotation(1)
+	_configure_opponent_identity_scouting()
+	for player in players:
+		player.match_confidence = 0.0
+	for opponent_player in opponent_team.players:
+		opponent_player.match_confidence = 0.0
 	rotation_changed.emit(1)
 
 
@@ -470,6 +475,7 @@ func resolve_active_rally(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,
 		development_continuous_reception,
+		team.principles if team != null else null,
 	)
 
 
@@ -479,7 +485,7 @@ func record_rally(result: Resource) -> Dictionary:
 	var update: Dictionary = match_state.record_rally(result)
 	if opponent_team != null:
 		opponent_team.observe_rally(result)
-	_apply_rally_fatigue_and_form(result)
+	_apply_rally_dynamics(result, update)
 	if bool(update.get("rotated", false)):
 		select_rotation(int(match_state.home_rotation))
 	if bool(update.get("opponent_rotated", false)) and opponent_team != null:
@@ -493,8 +499,17 @@ func call_timeout() -> String:
 	if match_state.home_timeouts_remaining <= 0:
 		return "No timeouts remain in this set."
 	match_state.home_timeouts_remaining -= 1
+	var captain := player_by_id(int(team.captain_id)) if team != null else null
+	var leadership := float(captain.leadership) / 100.0 if captain != null else 0.5
+	var confidence_recovery := clampf(
+		0.25 + float(team.cohesion) * 0.20 + leadership * 0.15, 0.25, 0.60
+	)
 	for player in players:
 		player.fatigue = maxf(player.fatigue - 0.08, 0.0)
+		player.match_confidence = lerpf(
+			player.match_confidence, 0.0,
+			confidence_recovery if player.match_confidence < 0.0 else 0.12,
+		)
 	return ""
 
 
@@ -710,22 +725,124 @@ static func stamina_fatigue_scale(player: VolleyballPlayer) -> float:
 		clampf(float(player.stamina) / 100.0, 0.0, 1.0))
 
 
-func _apply_rally_fatigue_and_form(result: Resource) -> void:
+func _apply_rally_dynamics(result: Resource, update: Dictionary) -> void:
+	var home_on_court: Array[VolleyballPlayer] = []
 	var lineup := current_lineup()
 	for slot_number in range(1, 7):
 		var player := player_by_id(lineup.player_at_slot(slot_number))
 		if player != null:
-			player.fatigue = minf(
-				player.fatigue + RALLY_FATIGUE_BASE * stamina_fatigue_scale(player), 1.0)
-			player.current_form *= 0.97
+			home_on_court.append(player)
+	var opponent_on_court: Array[VolleyballPlayer] = []
+	if opponent_team != null:
+		for opponent_resource in opponent_team.on_court_players():
+			var opponent_player := opponent_resource as VolleyballPlayer
+			if opponent_player != null:
+				opponent_on_court.append(opponent_player)
+
+	for player in home_on_court + opponent_on_court:
+		player.fatigue = minf(
+			player.fatigue + rally_fatigue_cost(player, RALLY_FATIGUE_BASE), 1.0
+		)
+
 	var decisive := player_by_id(int(result.decisive_actor_id))
+	if decisive == null and opponent_team != null:
+		decisive = opponent_team.player_by_id(int(result.decisive_actor_id)) \
+			as VolleyballPlayer
 	if decisive != null:
 		decisive.fatigue = minf(
-			decisive.fatigue + RALLY_FATIGUE_DECISIVE * stamina_fatigue_scale(decisive), 1.0)
-		decisive.current_form = clampf(
-			decisive.current_form + (0.05 if result.home_team_won else -0.04),
+			decisive.fatigue + rally_fatigue_cost(
+				decisive, RALLY_FATIGUE_DECISIVE
+			), 1.0
+		)
+	var captain := player_by_id(int(team.captain_id)) if team != null else null
+	var home_leadership := float(captain.leadership) / 100.0 \
+		if captain != null and captain in home_on_court else 0.5
+	var opponent_leadership := 0.5
+	for opponent_player in opponent_on_court:
+		opponent_leadership = maxf(
+			opponent_leadership, float(opponent_player.leadership) / 100.0
+		)
+	_apply_confidence_shift(
+		home_on_court, bool(result.home_team_won),
+		float(team.cohesion) if team != null else 0.5,
+		home_leadership, int(result.decisive_actor_id),
+		identity_confidence_volatility(),
+	)
+	_apply_confidence_shift(
+		opponent_on_court, not bool(result.home_team_won), 0.5,
+		opponent_leadership, int(result.decisive_actor_id),
+	)
+	if bool(update.get("set_complete", false)):
+		for player in home_on_court + opponent_on_court:
+			player.match_confidence *= 0.55
+	result.analysis["home_match_confidence"] = _average_confidence(home_on_court)
+	result.analysis["opponent_match_confidence"] = _average_confidence(
+		opponent_on_court
+	)
+	var effects: Dictionary = result.analysis.get("identity_effects", {})
+	effects["confidence_volatility"] = identity_confidence_volatility()
+	result.analysis["identity_effects"] = effects
+	if opponent_team != null:
+		result.analysis["identity_scouting"] = {
+			"regional_alignment": float(team.regional_alignment) if team != null else 0.5,
+			"opponent_scouting_confidence": float(opponent_team.scouting_confidence),
+			"opponent_adaptation_rate": float(opponent_team.adaptation_rate),
+		}
+
+
+static func rally_fatigue_cost(player: VolleyballPlayer, base_cost: float) -> float:
+	return maxf(base_cost * stamina_fatigue_scale(player), 0.0)
+
+
+func _apply_confidence_shift(
+	side_players: Array[VolleyballPlayer],
+	won: bool,
+	cohesion: float,
+	leadership: float,
+	decisive_actor_id: int,
+	volatility: float = 1.0,
+) -> void:
+	var magnitude := (0.035 + absf(float(match_state.last_flow_shift)) * 0.14) \
+		* volatility
+	for player in side_players:
+		var sensitivity := lerpf(1.25, 0.60, float(player.composure) / 100.0)
+		var team_response := lerpf(0.90, 1.05, cohesion) if won \
+			else lerpf(1.10, 0.75, cohesion)
+		var leader_response := lerpf(1.0, 1.10, leadership) if won \
+			else lerpf(1.0, 0.75, leadership)
+		var shift := magnitude * sensitivity * team_response * leader_response
+		if player.id == decisive_actor_id:
+			shift += 0.035 * sensitivity
+		player.match_confidence = clampf(
+			player.match_confidence * 0.98 + (shift if won else -shift),
 			-1.0, 1.0,
 		)
+
+
+func identity_confidence_volatility() -> float:
+	if team == null or team.principles == null:
+		return 1.0
+	return 1.0 + (float(team.principles.emotional_expression) - 0.5) * 0.6
+
+
+func _configure_opponent_identity_scouting() -> void:
+	if opponent_team == null:
+		return
+	var alignment := float(team.regional_alignment) if team != null else 0.5
+	## Familiar regional systems are easier to prepare for. A countercultural
+	## identity pays for integration up front, then gives opponents less useful
+	## film and slows how quickly their block and floor defense adapt in-match.
+	opponent_team.scouting_confidence = lerpf(0.26, 0.52, alignment)
+	opponent_team.adaptation_rate = lerpf(0.09, 0.18, alignment)
+
+
+func _average_confidence(side_players: Array[VolleyballPlayer]) -> float:
+	if side_players.is_empty():
+		return 0.0
+	var total := 0.0
+	for player in side_players:
+		total += player.match_confidence
+	return total / float(side_players.size())
 
 
 func to_dict() -> Dictionary:

@@ -2099,15 +2099,22 @@ func _refresh_match_controls() -> void:
 		or GameManager.match_state.match_complete
 	undo_substitution_button.disabled = GameManager.match_state.substitution_history.is_empty()
 	var fatigue_values: Array[float] = []
+	var confidence_values: Array[float] = []
 	for slot_number in range(1, 7):
 		var player := GameManager.player_by_id(lineup.player_at_slot(slot_number))
 		if player != null:
 			fatigue_values.append(player.fatigue)
+			confidence_values.append(player.match_confidence)
 	var average_fatigue := 0.0
+	var average_confidence := 0.0
 	for fatigue_value in fatigue_values:
 		average_fatigue += fatigue_value
 	if not fatigue_values.is_empty():
 		average_fatigue /= fatigue_values.size()
+	for confidence_value in confidence_values:
+		average_confidence += confidence_value
+	if not confidence_values.is_empty():
+		average_confidence /= confidence_values.size()
 	var next_rotation_number := posmod(GameManager.selected_rotation, 6) + 1
 	var next_lineup := GameManager.rotations[next_rotation_number] as RotationLineup
 	var next_codes: Array[String] = []
@@ -2115,14 +2122,16 @@ func _refresh_match_controls() -> void:
 		var next_player := GameManager.player_by_id(next_lineup.player_at_slot(slot_number))
 		if next_player != null:
 			next_codes.append(next_player.position_code)
-	match_overview_label.text = "Serving: %s · Rotation %d · Subs %d · Fatigue %d%%\nNext rotation: %s" % [
+	match_overview_label.text = "Serving: %s · Rotation %d · Subs %d · Fatigue %d%% · Confidence %+d%%\nNext rotation: %s" % [
 		"Home" if GameManager.match_state.serving_home else "Opponent",
 		GameManager.selected_rotation,
 		GameManager.match_state.home_substitutions_used,
 		roundi(average_fatigue * 100.0),
+		roundi(average_confidence * 100.0),
 		" · ".join(next_codes),
 	]
-	match_overview_label.text += "\nOpponent rotation %d · %s" % [
+	match_overview_label.text += "\nFlow: %s · Opponent rotation %d · %s" % [
+		GameManager.match_state.flow_label(),
 		int(GameManager.match_state.opponent_rotation),
 		GameManager.match_state.statistics.summary(),
 	]
@@ -2202,10 +2211,12 @@ func _refresh_roster_player_detail() -> void:
 	var slot_number := lineup.slot_for_player(player.id)
 	var assignment := "Rotation %d · Slot %d" % [GameManager.selected_rotation, slot_number] \
 		if slot_number >= 1 else "Bench for current rotation"
-	roster_player_detail_label.text = "%s · %s\nAge %d · %d pro seasons · Potential %d/100\n%s · %s · Morale %d%% · Fatigue %d%%" % [
+	roster_player_detail_label.text = "%s · %s\nAge %d · %d pro seasons · Potential %d/100\n%s · %s\nReputation %d · Form %+d%% · Satisfaction %d%% · Confidence %+d%% · Fatigue %d%%" % [
 		player.display_name, player.position_role, player.age,
 		player.professional_experience, player.potential, assignment,
-		player.availability, roundi(player.morale * 100.0), roundi(player.fatigue * 100.0),
+		player.availability, player.reputation, roundi(player.current_form * 100.0),
+		roundi(player.satisfaction * 100.0), roundi(player.match_confidence * 100.0),
+		roundi(player.fatigue * 100.0),
 	]
 	set_captain_button.disabled = player.id == int(GameManager.team.captain_id)
 	set_libero_button.disabled = player.position_role != "Libero"

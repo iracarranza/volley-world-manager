@@ -1,6 +1,6 @@
 # Current Implementation Status
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 Fresh developers and coding models should begin with
 [FRESH_AGENT_HANDOFF.md](FRESH_AGENT_HANDOFF.md). It is the authoritative
@@ -14,6 +14,28 @@ This page is the quickest defense against confusing source-code existence with a
 - `GameManager` and `CareerManager` are Autoloads configured in `project.godot`.
 - Career creation, save/load, weekly advancement, training, transfers, fixtures, and match entry have implementations in `CareerManager`.
 - `GameManager.resolve_active_rally()` calls `RallySimulator.resolve()`.
+- Team identity is active match state rather than presentation text.
+  `TeamPrinciples` persists seven normalized principles with compatibility for
+  legacy saves and supports named custom combinations; the simulator consumes serve aggression, pin focus,
+  decisiveness, tempo variation, transition commitment and block commitment,
+  while GameManager applies emotional-expression confidence volatility. Regional
+  distance reduces starting tactical familiarity/cohesion but also reduces the
+  opponent's scouting confidence and adaptation rate. Rally analysis records
+  the effective choices. A cloned-save regression requires Physical and
+  Defensive identities to produce different first-match rally sequences and
+  scorelines from identical players and seeds. Directional checks across six
+  career-name seeds require Physical serving to create more pressure, aces and
+  errors than Defensive, Defensive attacking to create fewer errors and kills
+  than Physical, and Fast Tempo to shorten rallies relative to Defensive.
+- Match confidence is point-level state reset at match start. `current_form` is
+  a persistent recent-match performance signal updated after fixtures and
+  decayed weekly; rallies no longer mutate both systems in parallel.
+- The Roster keeps a labeled seven-axis Player Profile in its main pane and
+  reserves detailed wheel selection for the expanded Attribute Lab. Its compact
+  identity block contains only name, position, age, CA/PA, measurements and hand;
+  secondary status, volleyball context, traits and biography open in a separate
+  full-screen Player Dossier. Expanding the roster list compresses the complete
+  profile context into its single heading rather than adding a competing column.
 - `RallySimulator` currently computes the rally and returns a `RallyResult` containing ordered `RallyEvent` resources.
 - The main match screen has 2D tactical playback code in `scenes/main/main.gd`.
 - The match dashboard keeps the full current event visible and contains prior
@@ -217,12 +239,12 @@ This page is the quickest defense against confusing source-code existence with a
   `VolleyballPlayer.POSITION_WEIGHTS` rather than restated in the generator, so
   generation and `current_ability_score()` cannot disagree about what a role is
   for; only the secondary tier is generator-specific.
-- Region specialty lists give each of the four regions a +8 bonus on five
-  thematically consistent attributes (Pāwa Hitō: attack/block; Spëddigh: floor
-  defence and lateral speed; Bloc du Larg: blocking, ball control, and mental
-  discipline; Landavol: mental and setting). Region physique biases shift
-  height, mass, and wingspan before individual variation so Pāwa Hitō rosters
-  are measurably taller than Landavol rosters.
+- Region specialty lists give each region focused +8 attribute leans. Pāwa Hitō
+  sustains repeated transition attacks, Spëddigh applies work rate and tempo
+  pressure, Taktikã develops composed system players, and Ispayk owns the
+  large-framed bomba identity. Region physique biases shift height, mass, and
+  wingspan before individual variation, with Ispayk now measurably larger than
+  Landavol while Pāwa remains near average size.
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
   recorded (`stale_stride_rate` is now 0.0).
