@@ -183,6 +183,39 @@ but it becomes a slow risk rather than a certainty.
 against the power scale. Moving the check onto strength will otherwise make the
 intensify branch fire for everyone or for no one.
 
+### The zeitgeist rule — one region bypasses adjacency
+
+`Geistadt` (Appendix A) is the exception to everything above. It has no
+specialty of its own and **does not drift by adjacency at all**. Instead, at
+each season boundary its `region_overlay` is rewritten to mirror the specialty
+of the reigning Sixnet champion:
+
+```gdscript
+## Geistadt has no tradition to defend and no neighbour it listens to. Each
+## season it simply becomes whatever just won. Everything else in this system
+## is geographic; this is the one rule that is not.
+if region_name == ZEITGEIST_REGION:
+    var champion := str(career.sixnet_champion_region)
+    if not champion.is_empty():
+        _adopt_specialty_of(career, region_name, champion)
+    continue   ## skip the dominance/isolation branches entirely
+```
+
+**The champion, not the strongest.** `career.sixnet_champion_region` already
+exists, and using it rather than the highest `region_strength` means Geistadt
+adopts *what won* rather than what was objectively best. That builds in a
+one-season lag — they are permanently playing last year's winning style, which
+is simultaneously the joke, the mechanic, and the reason they can never lead.
+
+**Hysteresis: a two-season commitment.** Recommended over switching cleanly
+every year. A pure mirror is tidy but inert; a region that commits for two
+seasons will occasionally be caught all-in on a style that has just died, which
+is a far better story and costs one constant. Set `ZEITGEIST_COMMIT_SEASONS = 2`.
+
+Because Geistadt donates nothing — it has no tradition of its own to spread —
+Landavol still gains no identity from housing it. See the closing note of
+Appendix A.
+
 ### Anti-inflation: specialty budget
 
 Influence drift is currently a one-way ratchet. Blending adds an attribute to
@@ -485,6 +518,13 @@ floor near 14 or make an incomplete lineup a penalty rather than a hard block.
 - **World positional viability:** after generation the world-wide mix must stay
   within tolerance of `POSITION_MIX`, however regions skew. The failure mode is
   a world that cannot field setters.
+- **Geistadt tracks the champion:** run several synthetic seasons with a forced
+  champion and assert Geistadt's overlay matches that region's specialty after
+  the commit window, and that it never enters the dominance or isolation
+  branches regardless of Landavol's strength.
+- **Geistadt stays signable:** it must reliably produce `solid`/`squad` tier
+  players and almost never `elite`. A low floor rather than a low ceiling would
+  mean nobody ever surfaces there and the region never reaches the player.
 
 ## 11. Open questions
 
@@ -516,6 +556,30 @@ is claimed by **no major region** (Spëddigh owns `reception_balance` and
 `reception_stability` but never `reception` itself). And `attack_accuracy` is
 claimed by **nobody at all**, despite being a primary attribute for three of the
 five roles.
+
+## Status
+
+**None of these are implemented.** As of `e875f20` the code still defines only
+the original eight regions. The prerequisite from §2 *has* landed — `career_state.gd`
+now carries `region_strength` and `sixnet_form` separately, with legacy
+`region_power` deserializing into both — so the foundation this tier needs is in
+place, but `MINOR_REGIONS`, `REGION_TRADITION_RESISTANCE`, `REGION_TIER_AFFINITY`
+and `REGION_POSITION_AFFINITY` do not exist yet.
+
+## The six at a glance
+
+| region | specialty | connected major | resistance | distinguishing trait |
+| --- | --- | --- | ---: | --- |
+| **Tu'ul ys Feynt** | deception | Taktikã | 1.0 | competent everywhere, elite nowhere |
+| **Anhal Ridge** | endurance defence | Pāwa Hitō | 1.4 | world-class liberos, nothing tall |
+| **Braç Sindao** | the platform | Bloc du Larg | 0.8 | likeliest to mount a Sixnet challenge |
+| **Rhen Tempaal** | first tempo | Spëddigh | 0.9 | the only middle-heavy region here |
+| **Corvel Anse** | placement | Xérvu | 0.7 | strongest prime, weakest depth |
+| **Geistadt** | *none — borrowed* | Landavol (enclave) | 0.0 | ignores adjacency; mirrors the champion |
+
+Resistance spans 0.0 to 1.4 deliberately. Tu'ul and Geistadt are the two poles:
+one resists absorption hardest, the other has nothing to resist with. The tier
+reads as a spectrum rather than a list because of those endpoints.
 
 ---
 
@@ -714,6 +778,69 @@ split in §5.
 
 ---
 
+## Geistadt — *the zeitgeist*
+
+> A city-state you could walk across in a morning, landlocked inside Landavol,
+> which has never developed a style and has played every style there is.
+
+| | |
+| --- | --- |
+| Ratings | physical 1 · technical 1 · mental 2 |
+| Specialty | **none of its own** — see the zeitgeist rule, §3 |
+| Body bias | height 0.0 · mass 0.0 · wingspan 0.0 |
+| Birth weight / pull | 0.12 / 0.50 |
+| Tradition resistance | **0.0** |
+| Connected major | **Landavol** (enclave) — but see below |
+
+**Inspiration.** Vatican City and San Marino: a sovereign enclave small enough
+to be a rounding error, entirely surrounded by one neighbour.
+
+**Naming.** From *Zeitgeist* — German *Zeit* (time) + *Geist* (spirit, ghost),
+the latter from Proto-Germanic *\*gaistaz*, which also carried "fury". Player
+names are Germanic compounds. `Geistadt` is the recommendation over `Zaltgeist`
+or `Vorgeist` because the `-stadt` does the city-state work immediately;
+still changeable.
+
+**Why it ignores its own neighbour.** Every other region drifts by adjacency —
+you absorb from whoever is next door. Geistadt **bypasses `REGION_ADJACENCY`
+entirely** and tracks the global zeitgeist instead. Being the most geographically
+enclosed place on the map and the only one that doesn't care who its neighbours
+are is the whole joke, and one clean rule beats two competing ones.
+
+Its ratings sum to 4 — the lowest in the world — because the identity is that
+they have almost no innate ability. What they have is total permeability.
+
+| tier | gen | elite | standout | solid | squad | fringe |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| | 0.15 | 0.4 | 0.9 | 1.4 | 1.4 | 1.0 |
+
+| position | S | OH | MB | OP | L |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+
+Positional affinity is flat on purpose: they have no tradition telling them what
+to produce. Tier affinity is **low ceiling, not low floor** — they reliably make
+`solid` and `squad` players and almost never an `elite` one. That distinction is
+load-bearing (see below); a region that produces nobody signable never reaches
+the player at all.
+
+**Best-seven consequence:** permanently mediocre and permanently topical. Their
+seven is always a competent, cut-price rendition of whatever won last season.
+
+**Why a manager would ever look.** Two reasons, and without them this is just a
+worse Landavol nobody visits:
+
+1. **It is a meta-barometer.** What Geistadt is producing tells you what the
+   world currently thinks is good — a diegetic scouting shortcut, not just
+   flavour.
+2. **It is budget access to the current meta.** A Geistadt player is a cheap
+   approximation of the winning style. That is a real market proposition, and
+   the reason their tier floor must stay respectable.
+
+**Names:** Anselm, Reike, Vasholt, Merrin, Ottlin, Sabet, Frauke, Delvin
+
+---
+
 ## Adjacency and one deliberate omission
 
 ```gdscript
@@ -722,14 +849,25 @@ split in §5.
 "Bloc du Larg": [..., "Braç Sindao"],
 "Spëddigh":     [..., "Rhen Tempaal"],
 "Xérvu":        [..., "Corvel Anse"],
+"Landavol":     [..., "Geistadt"],        ## geographic only -- see below
 ```
 
 `REGION_ADJACENCY` is symmetric by construction, so each minor region lists its
 major back.
 
-**Landavol deliberately has no minor neighbour.** It is the only major with an
-empty `REGION_SPECIALTY` and a tagline saying it develops broadly rather than
-toward anything. Leaving it without a tradition feeding it keeps it the control
-group — the region that stays generic on purpose, and the baseline every drifted
-region can be measured against. Trivially reversible if it should eventually
-acquire an identity; the recommendation is to keep it.
+**Geistadt's entry is geography, not influence.** It is listed for map and
+presentation purposes — it is genuinely an enclave inside Landavol — but the
+drift code skips it before the adjacency branches ever run (§3, the zeitgeist
+rule). Whether to keep the entry at all is an implementation taste question: it
+is honest about the map and costs nothing, but anyone reading `REGION_ADJACENCY`
+alone would wrongly conclude Landavol influences it. Whichever way it goes, the
+comment above needs to survive.
+
+**Landavol still has no minor tradition feeding it.** It is the only major with
+an empty `REGION_SPECIALTY` and a tagline saying it develops broadly rather than
+toward anything, and it stays the control group — the baseline every drifted
+region is measured against. Housing Geistadt does not change that, because
+Geistadt has no tradition of its own to donate: it only ever reflects whoever
+just won the Sixnet. The two share a border and a blankness, arrived at
+oppositely — Landavol has no identity because it refuses to specialise, Geistadt
+because it specialises in whatever is currently fashionable.
