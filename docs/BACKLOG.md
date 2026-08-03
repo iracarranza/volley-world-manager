@@ -209,7 +209,82 @@ own side (`HOME_SET_DELIVERY_MIN_Y`, `OPPONENT_PASS_DELIVERY_MIN_Y`).
    block, and calibrate its spreads until the emergent rates land on step 2.
    Editing three paths in place leaves the sim unmeasurable meanwhile.
 
-Open question before any of it: **should velocity be a real variable, or does
-angle carry everything?** Real velocity means inverting `solve_launch_arc` to
-take speed and angle and return range, which is a change to the kinematics
-layer rather than the attack layer.
+### Resolved: velocity is real, and it is `attack_power`
+
+Decided 2026-08-03. Power is carried in both calculation and playback. It is a
+*choice made independently of the course* — an attacker may hit a cut shot hard
+or soft, and those are the same course at two velocities. Execution then decides
+how faithfully the intent is realised, for the power and the angle alike; a poor
+swing drops power, but choosing a shot does not.
+
+**This conflicts with how attack shape is currently expressed.**
+`_attack_launch_angle_degrees` maps `attack_type` to an angle band — "Power
+swing" 6–10°, "Roll shot" 20–30°, "Tip" 22–32°. Those names bundle power and
+angle into one axis. Under the decision above they are points in a 2D
+(course × power) space, and "a cut shot with high power" is a thing the current
+table cannot express, because power is not a variable anywhere.
+
+**`solve_launch_arc` must be replaced, not inverted.** It is the level-ground
+projectile solution — `duration = sqrt(2d·tan θ / g)`, `speed = sqrt(d·g /
+sin 2θ)` — which assumes launch and landing at the same height, and
+`MIN_LAUNCH_ANGLE_DEGREES = 2.0` clamps every launch upward. A spike contacts
+near 3.2 m and launches *downward*; a negative angle puts a negative under that
+square root. The engine currently models every spike as a ball lobbed upward
+from the floor to the floor, and gets away with it only because the target is
+chosen first and the arc back-solved to reach it.
+
+The launch-from-height form handles it, negative angles included:
+
+```
+t_land = (v·sin θ + sqrt(v²·sin²θ + 2·g·h)) / g
+range  = v·cos θ · t_land
+```
+
+There is always a solution for h > 0 — the ball always comes down — so
+insufficient power lands short rather than failing to solve. Worked at
+h = 3.2 m, against a 9 m far court:
+
+| v (m/s) | θ | range | flight | reads as |
+| ---: | ---: | ---: | ---: | --- |
+| 25 | 0° | 20.20 m | 0.81 s | eleven metres past the endline |
+| 25 | −12° | 10.67 m | 0.44 s | long, just out |
+| 25 | −20° | 7.44 m | 0.32 s | a spike |
+| 30 | −25° | 6.30 m | 0.23 s | a heavy spike, deep-ish |
+| 18 | −8° | 10.55 m | 0.59 s | slower, still sails |
+| 12 | +25° | 16.06 m | 1.48 s | a lob well past the court |
+| 8 | +35° | 9.19 m | 1.40 s | a roll shot to the endline |
+
+Two things to take from it. **Downward launch angles are the normal case for
+attacks, not an edge case** — and they do most of the work an aerodynamic drag
+term would otherwise have to, which is what makes a drag-free model viable at
+all. Float and topspin serves stay a known simplification.
+
+And the usable region is narrower than intuition suggests: a 12 m/s roll shot at
+25° already carries sixteen metres. Off-speed shots have to be genuinely soft or
+genuinely steep, so the power axis needs real range at the bottom, not just at
+the top.
+
+**Contact height becomes a required input.** It is already computed —
+`contact_envelope_system.gd` and the `contact_height_meters` metadata — so this
+is plumbing rather than new modelling.
+
+**Three error channels replace one roll.** "Execution determines the resulting
+action" separates cleanly into:
+
+- delivered power, multiplicative and biased downward (you rarely hit it harder
+  than intended) — mishit, drops short
+- vertical angle — sails long, or into the net
+- horizontal angle — pulled wide, or off the intended course
+
+Each is a *different, nameable* failure, where `_attack_missed()` today is one
+logistic roll that produces all of them indistinguishably. This is where the
+action vocabulary gets its attacking entries for free.
+
+**Attributes get distinct physical jobs:** `attack_power` sets the peak velocity
+ceiling in m/s, `attack_accuracy` sets angular spread, and a consistency
+attribute sets power-delivery variance. Today `attack_power` is a weight in a
+quality composite.
+
+**Playback payoff:** ball speed becomes visibly different between a driven ball
+and a roll shot. Duration is currently back-solved from distance, so speed is
+implied and barely varies.
