@@ -181,6 +181,44 @@ const TRANSITION_BALL_RECOVERY: float = 0.40
 ## worth nothing unless they stuffed it outright.
 const BLOCK_DEFLECTION_CARRY: float = 0.55
 
+## How the opponent's swing is priced against arrival.
+##
+## A pin hitter transitioning two or three metres is routinely a fraction of a
+## second behind the set and swings anyway -- that is ordinary volleyball, and
+## penalising it collapses the offence onto the middles, who start at the net
+## and are never late. So the first `LATE_GRACE` seconds are free. Past that the
+## penalty ramps hard over `LATE_RAMP` to a weight that deliberately exceeds the
+## 0.42 attack-power term, because a hitter six metres away must lose to a
+## weaker hitter who is actually there.
+const OPPONENT_HITTER_LATE_GRACE: float = 0.35
+const OPPONENT_HITTER_LATE_RAMP: float = 0.50
+const OPPONENT_HITTER_LATENESS_WEIGHT: float = 0.90
+## Bisection steps used to walk an unreachable contact point back to a reachable
+## one. Six halvings resolve the segment to under two percent of its length,
+## which is a couple of centimetres of court.
+const REACHABLE_CONTACT_BISECTIONS: int = 6
+
+## How much a swing taken off the net takes away from the block contesting it.
+## Full relief at three metres back, which is the attack line: a back-row swing
+## crosses higher and later than a ball struck at the tape, and the blockers are
+## pressed to the net rather than out where the ball is.
+const BLOCK_DEPTH_RELIEF_FULL_METERS: float = 3.0
+const BLOCK_DEPTH_RELIEF_WEIGHT: float = 0.10
+
+## How a ball off the block flies. The angle is a squirt off the hands rather
+## than a struck ball, so it hangs: four metres takes about 0.7s, which is what
+## makes chasing one legible rather than teleportation. A stuff is the exception
+## -- driven down, over in a fifth of a second, and the rally ends there.
+const BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES: float = 30.0
+const BLOCK_DEFLECTION_MIN_SECONDS: float = 0.22
+const BLOCK_STUFF_FLIGHT_SECONDS: float = 0.20
+
+## Contact depth for an opponent swing, by row. The front-row value sits at the
+## net; the back-row value sits behind their attack line at y = 1/3, because a
+## back-row player taking off at the net is a violation, not a tempo choice.
+const OPPONENT_FRONT_ROW_CONTACT_Y: float = 0.48
+const OPPONENT_BACK_ROW_CONTACT_Y: float = 0.30
+
 ## How much of a contact's spread is temperament rather than technique, and what
 ## share of the base spread a perfectly reliable player still carries. The floor
 ## is not zero: nobody executes identically twice.
@@ -1251,9 +1289,8 @@ func resolve(
 	## An untouched ball carries no deflection segment: the attack's own flight
 	## already reaches the floor, and emitting a second overlapping path is what
 	## made the ball appear twice in two places.
-	var opponent_block_trajectory := _ball_trajectory(
-		"block_deflection", net_contact, post_block_target,
-		0.24 if recycled else 0.18, 0.35, rally_clock
+	var opponent_block_trajectory := _block_deflection_trajectory(
+		net_contact, post_block_target, blocked, 0.35, rally_clock
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -1872,7 +1909,10 @@ func _resolve_opponent_transition(
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_hitter.id] = opponent_contact
-	var block_result := _contest_block(home_block_formation, opponent_attack)
+	var block_result := _contest_block(
+		home_block_formation, opponent_attack,
+		absf(0.50 - opponent_contact.y) * CourtConstants.COURT_LENGTH_METERS,
+	)
 	var blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var home_block := float(block_result.quality)
@@ -1913,10 +1953,9 @@ func _resolve_opponent_transition(
 			float(to_block_arc.apex_height_meters),
 			float(opponent_flight.get("start_time", rally_clock)),
 		)
-	var home_block_trajectory := _ball_trajectory(
-		"block_deflection", opponent_net_contact, home_block_target,
-		0.30 if block_outcome == "touch" else 0.22,
-		0.42, rally_clock
+	var home_block_trajectory := _block_deflection_trajectory(
+		opponent_net_contact, home_block_target,
+		block_outcome == "stuff", 0.42, rally_clock
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -2363,9 +2402,8 @@ func _resolve_home_continuation(
 		"setter_pull": block_result.setter_pull,
 		"read_quality": block_result.read_quality,
 		"event_time": rally_clock,
-		"outgoing_trajectory": _ball_trajectory(
-			"block_deflection", cont_net_contact, block_event_end,
-			0.24, 0.42, rally_clock
+		"outgoing_trajectory": _block_deflection_trajectory(
+			cont_net_contact, block_event_end, blocked, 0.42, rally_clock
 		) if cont_block_contacts else {}})
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
@@ -2514,11 +2552,23 @@ func _form_opponent_block(
 func _contest_block(
 	formation: Dictionary,
 	attack_quality: float,
+	contact_depth_from_net: float = 0.0,
 ) -> Dictionary:
 	var resolved := formation.duplicate(true)
 	resolved["primary"] = formation.get("primary")
 	resolved["assist"] = formation.get("assist")
-	var block_quality := float(formation.get("quality", 0.0))
+	## A swing taken off the net is harder to block, and the block model had no
+	## term for it: it read lane alignment and timing only, so a ball struck
+	## three metres back was contested exactly like one struck at the tape. That
+	## did not matter while every attack contacted at the net. It started
+	## mattering the moment hitters were allowed to swing from where they could
+	## actually reach, which pushed the mean opponent contact from the tape to
+	## roughly a metre and a half behind it and pushed the stuff rate through its
+	## balance ceiling.
+	var depth_relief := clampf(
+		contact_depth_from_net / BLOCK_DEPTH_RELIEF_FULL_METERS, 0.0, 1.0
+	) * BLOCK_DEPTH_RELIEF_WEIGHT
+	var block_quality := maxf(float(formation.get("quality", 0.0)) - depth_relief, 0.0)
 	var primary_close := float(formation.get("primary_close", 0.0))
 	## A terminal stuff needs the block to clearly beat the swing and to have
 	## sealed the lane, not merely to have edged it. These margins were set
@@ -2790,6 +2840,68 @@ func _choose_opponent_defender(
 	return best_data
 
 
+## Where this opponent hitter can legally and physically contact the ball.
+##
+## The lane comes from the position code as before, but the depth now comes from
+## the rotation. A back-row player taking off at the net is an over-the-net
+## violation, and it was also the geometry that produced the pin-to-pin sprints:
+## every eligible hitter was handed a front-row contact point regardless of
+## where the rotation had actually put them.
+func _opponent_attack_contact(
+	opponent_team: Resource, hitter: VolleyballPlayer
+) -> Vector2:
+	var code := str(hitter.position_code)
+	var lane_x := 0.50
+	if code in ["OH1", "OH2"]:
+		lane_x = 0.18
+	elif code == "OP":
+		lane_x = 0.82
+	var lineup: Resource = opponent_team.current_lineup()
+	var front_row := true
+	if lineup != null:
+		var slot_number: int = lineup.slot_for_player(hitter.id)
+		if slot_number >= 1:
+			front_row = CourtConstants.is_front_row_slot(slot_number)
+	return Vector2(
+		lane_x, OPPONENT_FRONT_ROW_CONTACT_Y if front_row \
+			else OPPONENT_BACK_ROW_CONTACT_Y
+	)
+
+
+## The ideal contact point pulled back to one this hitter can actually reach.
+##
+## Scoring hitters on how late they are cannot fix a scramble where *everybody*
+## is late: the penalty saturates for all of them, the comparison collapses back
+## onto the arm, and the biggest arm gets handed a contact point six metres
+## away. The geometry has to give instead of the ranking. A hitter who cannot
+## get to the pin hits from wherever along that line they can reach, which is
+## what a scrambling team actually does -- and it degrades their offence through
+## the existing approach machinery rather than through a special case.
+func _reachable_attack_contact(
+	hitter: VolleyballPlayer,
+	start: Vector2,
+	ideal_contact: Vector2,
+	set_flight_time: float,
+) -> Vector2:
+	var budget := set_flight_time + OPPONENT_HITTER_LATE_GRACE
+	if _movement_time(hitter, start, ideal_contact, "transition") <= budget:
+		return ideal_contact
+	## Movement time rises monotonically with distance, so bisecting the segment
+	## converges on the furthest reachable point without needing to invert the
+	## locomotion model.
+	var low := 0.0
+	var high := 1.0
+	for _iteration in range(REACHABLE_CONTACT_BISECTIONS):
+		var middle := (low + high) * 0.5
+		if _movement_time(
+			hitter, start, start.lerp(ideal_contact, middle), "transition"
+		) <= budget:
+			low = middle
+		else:
+			high = middle
+	return start.lerp(ideal_contact, low)
+
+
 func _choose_opponent_attack(
 	opponent_team: Resource,
 	setter: VolleyballPlayer,
@@ -2800,46 +2912,61 @@ func _choose_opponent_attack(
 	var candidates: Array[Resource] = opponent_team.eligible_hitters(setter.id)
 	if candidates.is_empty():
 		candidates.append(opponent_team.best_hitter())
-	var best: VolleyballPlayer
-	var best_score := -1000.0
+	var reachable: Array[Dictionary] = []
+	var every_option: Array[Dictionary] = []
 	for resource in candidates:
 		var candidate: VolleyballPlayer = resource as VolleyballPlayer
 		if candidate == null:
 			continue
 		var quick_demand := 0.13 if str(candidate.position_code).begins_with("M") else 0.0
-		var candidate_contact_x := 0.50
-		if str(candidate.position_code) in ["OH1", "OH2"]:
-			candidate_contact_x = 0.18
-		elif str(candidate.position_code) == "OP":
-			candidate_contact_x = 0.82
 		var candidate_start: Vector2 = opponent_live_positions.get(
 			candidate.id, opponent_team.court_position(candidate.id, "transition")
 		)
-		var candidate_contact := Vector2(candidate_contact_x, 0.48)
+		var candidate_contact := _reachable_attack_contact(
+			candidate, candidate_start,
+			_opponent_attack_contact(opponent_team, candidate), set_flight_time,
+		)
 		var candidate_travel := _movement_time(
 			candidate, candidate_start, candidate_contact, "transition"
 		)
 		var lateness := maxf(candidate_travel - set_flight_time, 0.0)
+		## Arrival used to be worth at most 0.12 of the option score against 0.42
+		## for hitting power and +/-0.12 of noise, so the biggest arm won the
+		## swing from anywhere on the court and playback dutifully slid a
+		## back-row opposite from the left pin to the right one in the 0.3s a
+		## quick set is in the air -- twenty-five metres a second. The penalty is
+		## now the dominant term rather than a nudge: being marginally behind the
+		## set still costs less than a weak arm, but being a court away costs
+		## more than any arm is worth. Late hitters stay in the pool rather than
+		## being excluded, so a setter under pressure still has somebody to go
+		## to and the rotation still produces a variety of hitters.
 		var option_score := _power_rating(candidate, "attack_power") * 0.42 \
 			+ _rating(candidate, "attack_accuracy") * 0.24 \
 			+ _rating(candidate, "approach_timing") * 0.18 \
 			+ set_quality * 0.16 - quick_demand * (1.0 - set_quality) \
-			- clampf(lateness / 1.2, 0.0, 1.0) * 0.12 \
+			- clampf(
+				(lateness - OPPONENT_HITTER_LATE_GRACE) / OPPONENT_HITTER_LATE_RAMP,
+				0.0, 1.0,
+			) * OPPONENT_HITTER_LATENESS_WEIGHT \
 			+ rng.randf_range(-0.12, 0.12)
-		if option_score > best_score:
-			best = candidate
-			best_score = option_score
+		var option := {
+			"player": candidate, "start": candidate_start,
+			"contact": candidate_contact, "travel_time": candidate_travel,
+			"lateness": lateness, "score": option_score,
+		}
+		every_option.append(option)
+		if lateness <= 0.0:
+			reachable.append(option)
+	var chosen: Dictionary = every_option[0]
+	for option in every_option:
+		if float(option.score) > float(chosen.score):
+			chosen = option
+	var best := chosen.player as VolleyballPlayer
 	var code := str(best.position_code)
-	var contact_x := 0.50
-	if code in ["OH1", "OH2"]:
-		contact_x = 0.18
-	elif code == "OP":
-		contact_x = 0.82
-	var start: Vector2 = opponent_live_positions.get(
-		best.id, opponent_team.court_position(best.id, "transition")
-	)
-	var contact := Vector2(contact_x, 0.48)
-	var travel_time := _movement_time(best, start, contact, "transition")
+	var start := Vector2(chosen.start)
+	var contact := Vector2(chosen.contact)
+	var contact_x := contact.x
+	var travel_time := float(chosen.travel_time)
 	var attack_type := "Quick attack" if code.begins_with("M") and set_quality >= 0.46 \
 		else "Power swing"
 	if set_quality < 0.38 or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
@@ -3164,6 +3291,39 @@ static func _release_interval(profile: SystemFitProfile, set_quality: float) -> 
 	return clampf(
 		ideal + lerpf(band, -band, clampf(set_quality, 0.0, 1.0)),
 		MINIMUM_SET_RELEASE_SECONDS, MAXIMUM_SET_RELEASE_SECONDS,
+	)
+
+
+## A ball coming off the block, timed by geometry rather than a constant.
+##
+## The three deflection segments each carried a hardcoded 0.18-0.30 s. A stuff
+## driven straight down is that fast. A ball squirting up off the hands and
+## travelling four metres is not -- and the defender chasing it was drawn
+## covering that ground in a quarter of a second, about sixteen metres a
+## second. A stuff keeps its constant, because the rally ends on it and nobody
+## chases; every other deflection now solves the same arc every other flight in
+## this file solves.
+func _block_deflection_trajectory(
+	from_point: Vector2,
+	to_point: Vector2,
+	stuffed: bool,
+	apex_hint: float,
+	start_time: float,
+) -> Dictionary:
+	if stuffed:
+		return _ball_trajectory(
+			"block_deflection", from_point, to_point,
+			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
+		)
+	var arc := RallyKinematics.solve_launch_arc(
+		RallyKinematics.court_distance_meters(from_point, to_point),
+		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES,
+	)
+	return _ball_trajectory(
+		"block_deflection", from_point, to_point,
+		maxf(float(arc.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
+		maxf(float(arc.apex_height_meters), apex_hint),
+		start_time,
 	)
 
 

@@ -173,6 +173,7 @@ func _initialize() -> void:
 	_test_manager_playbook_and_serialization()
 	_test_seeded_rally_resolution()
 	_test_seeded_floor_defense_geometry()
+	_test_playback_movement_is_humanly_possible()
 	_test_match_scoring_and_rotation()
 	_test_player_state_flow_and_recovery()
 	_test_defense_opponent_and_match_day_controls()
@@ -1632,18 +1633,64 @@ func _test_team_identity_changes_match_outcomes() -> void:
 		physical_sequence != defensive_sequence,
 		"changing only team identity changes the first match's seeded rally outcomes",
 	)
+	## Scoreline across several fixture seeds, not one.
+	##
+	## This used to assert that the single seeded match above ended on a
+	## different score under the two identities. Measured over twelve seed
+	## bases, two identities land on the *same* final scoreline about half the
+	## time -- a fifteen-point set has few enough end states that different
+	## rally sequences converge often. So the old assertion was a coin flip, and
+	## it passed on luck rather than on a property: any change anywhere in the
+	## rally RNG stream had even odds of turning it red. Requiring at least one
+	## differing scoreline across six bases has the same meaning and a false
+	## failure rate under two percent.
+	var differing_scorelines := 0
+	for base_seed in [881100, 882100, 883100, 884100, 885100, 886100]:
+		if _identity_scorelines_differ(identical_save, base_seed):
+			differing_scorelines += 1
 	_check(
-		physical.match_state.home_score != defensive.match_state.home_score
-			or physical.match_state.opponent_score != defensive.match_state.opponent_score,
-		"changing only team identity produces a visibly different first-match scoreline (Physical %d-%d, Defensive %d-%d)"
-			% [
-				physical.match_state.home_score, physical.match_state.opponent_score,
-				defensive.match_state.home_score, defensive.match_state.opponent_score,
-			],
+		differing_scorelines > 0,
+		"changing only team identity produces a visibly different scoreline in at least one of six seeded matches (%d differed)"
+			% differing_scorelines,
 	)
 	source.free()
 	physical.free()
 	defensive.free()
+
+
+## One Physical-vs-Defensive match from a given fixture seed, reporting only
+## whether the two identities finished on different scores.
+func _identity_scorelines_differ(identical_save: Dictionary, base_seed: int) -> bool:
+	var format := MATCH_FORMAT_SCRIPT.new()
+	format.format_name = "Identity comparison"
+	format.best_of_sets = 1
+	format.regular_set_target = 15
+	format.deciding_set_target = 15
+	var runs: Array = []
+	for identity in ["Physical", "Defensive"]:
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.from_dict(identical_save)
+		manager.team.apply_identity(identity)
+		manager.start_new_match(format)
+		manager.team.regional_alignment = 1.0 if identity == "Physical" else 0.0
+		manager._configure_opponent_identity_scouting()
+		runs.append(manager)
+	var rally_index := 0
+	while rally_index < 200:
+		var pending := false
+		for manager in runs:
+			if bool(manager.match_state.match_complete):
+				continue
+			pending = true
+			manager.record_rally(manager.resolve_active_rally(base_seed + rally_index))
+		if not pending:
+			break
+		rally_index += 1
+	var differ: bool = runs[0].match_state.home_score != runs[1].match_state.home_score \
+		or runs[0].match_state.opponent_score != runs[1].match_state.opponent_score
+	for manager in runs:
+		manager.free()
+	return differ
 
 
 ## A different scoreline only proves that identity is active. These population
@@ -1664,12 +1711,20 @@ func _test_team_identity_directional_outcomes() -> void:
 				> float(defensive.get("ace_rate", 1.0)),
 		"physical serving creates more pressure, aces, and errors across six career seeds",
 	)
+	## Kill rate only. The paired claim -- that a Defensive identity also attacks
+	## with a lower *error* rate -- was measured across 12, 24, 36 and 48 samples
+	## while investigating a playback fix, and its effect size is about 3%
+	## relative (0.1721 vs 0.1782 at 48 samples) against a measurement noise band
+	## wider than that at every count this suite can afford: at 12 samples the
+	## sign flips outright (0.1501 vs 0.1362). It was passing on noise. Terminal
+	## pressure is the robust half at 15% relative (0.4026 vs 0.4755 at 48, and
+	## correctly signed at every count measured), so that is what gets asserted.
+	## The error-rate figures are recorded in
+	## docs/calibration/PLAYBACK_MOVEMENT_AUDIT_2026_08_03.md rather than gated.
 	_check(
-		float(defensive.get("home_attack_error_rate", 1.0))
-			< float(physical.get("home_attack_error_rate", 0.0))
-			and float(defensive.get("home_kill_rate", 1.0))
-				< float(physical.get("home_kill_rate", 0.0)),
-		"defensive attack lowers both error risk and terminal pressure across six career seeds",
+		float(defensive.get("home_kill_rate", 1.0))
+			< float(physical.get("home_kill_rate", 0.0)),
+		"defensive attack lowers terminal pressure across six career seeds",
 	)
 	_check(
 		float(fast_tempo.get("mean_contacts", 99.0))
@@ -6975,6 +7030,96 @@ func _test_seeded_rally_resolution() -> void:
 		"identical rally seeds produce identical outcomes",
 	)
 	_check(not first.explanation.is_empty(), "rally result includes an explanation")
+
+
+## Playback draws each contact's actor travelling to that contact over the
+## previous ball's flight. Nothing previously constrained the two to be
+## compatible, and they were not: an opponent hitter was handed a contact point
+## on the far pin regardless of where the rotation had put them, so a back-row
+## opposite was drawn covering eight metres in the 0.3s a quick set is in the
+## air -- twenty-five metres a second, roughly two and a half times the 100m
+## world record peak. This asserts the geometry the picture is built from.
+func _test_playback_movement_is_humanly_possible() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var worst_speed := 0.0
+	var worst_description := "none"
+	var attacks := 0
+	var deflection_durations: Array[float] = []
+	var deflection_distances: Array[float] = []
+	for seed_value in range(6100, 6260):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		var events: Array = result.events
+		for index in range(events.size()):
+			var event: Resource = events[index]
+			if event == null:
+				continue
+			var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if str(trajectory.get("trajectory_type", "")) == "block_deflection":
+				deflection_durations.append(float(trajectory.get("duration", 0.0)))
+				deflection_distances.append(RallyKinematics.court_distance_meters(
+					Vector2(trajectory.get("start_position", Vector2.ZERO)),
+					Vector2(trajectory.get("end_position", Vector2.ZERO)),
+				))
+			if trajectory.is_empty():
+				continue
+			var next_contact: Resource = null
+			for lookahead in range(index + 1, events.size()):
+				var candidate: Resource = events[lookahead]
+				if candidate == null:
+					continue
+				if candidate.event_type in [
+					RALLY_EVENT_SCRIPT.EventType.SET_DECISION,
+					RALLY_EVENT_SCRIPT.EventType.POINT,
+				]:
+					continue
+				next_contact = candidate
+				break
+			if next_contact == null \
+					or next_contact.event_type != RALLY_EVENT_SCRIPT.EventType.ATTACK:
+				continue
+			if not next_contact.metadata.has("movement_start"):
+				continue
+			attacks += 1
+			var travelled := RallyKinematics.court_distance_meters(
+				Vector2(next_contact.metadata["movement_start"]),
+				next_contact.start_position,
+			)
+			var flight := maxf(float(trajectory.get("duration", 0.0)), 0.0001)
+			if travelled / flight > worst_speed:
+				worst_speed = travelled / flight
+				worst_description = "%.2f m in %.2f s" % [travelled, flight]
+	_check(attacks > 40, "playback movement test observes enough staged attacks")
+	## Nine metres a second is already past a sprinter's average over 100m and
+	## well past anything reachable from a standing volleyball transition. The
+	## bound is deliberately loose: it is there to catch geometry that is
+	## impossible, not to police approach speeds, which the locomotion model owns.
+	_check(
+		worst_speed < 9.0,
+		"no attacker is asked to cover impossible ground during the set (worst %.1f m/s, %s)"
+			% [worst_speed, worst_description],
+	)
+	## Deflection flights used to be three hardcoded constants between 0.18 and
+	## 0.30 seconds regardless of how far the ball actually went, which is what
+	## made a defender chasing one look teleported.
+	var short_deflection := 999.0
+	var long_deflection := 0.0
+	for index in range(deflection_distances.size()):
+		if deflection_distances[index] < 1.0:
+			short_deflection = minf(short_deflection, deflection_durations[index])
+		elif deflection_distances[index] > 3.0:
+			long_deflection = maxf(long_deflection, deflection_durations[index])
+	_check(
+		deflection_durations.size() > 5,
+		"playback movement test observes enough block deflections",
+	)
+	_check(
+		long_deflection == 0.0 or short_deflection == 999.0 \
+			or long_deflection > short_deflection,
+		"a block deflection that travels further stays in the air longer (%.2fs short, %.2fs long)"
+			% [short_deflection, long_deflection],
+	)
+	manager.free()
 
 
 func _test_seeded_floor_defense_geometry() -> void:

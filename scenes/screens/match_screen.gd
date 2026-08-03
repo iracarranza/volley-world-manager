@@ -182,16 +182,28 @@ func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress:
 	var event_actor := int(event.actor_id)
 	var event_peak := _event_elevation(event, event_actor)
 	var event_direction := event.end_position - event.start_position
-	match_court_3d.set_player_pose(
-		event_actor, int(event.event_type),
-		event_peak * (1.0 - smoothstep(0.18, 0.75, progress)),
-		progress, event_direction, true,
-	)
+	var outgoing_weight := 1.0 - smoothstep(0.18, 0.75, progress)
+	var incoming_weight := smoothstep(0.48, 1.0, progress)
+	## One player can legally contact twice in a row -- a blocker digging their
+	## own deflection is the common case, since a block touch is not one of the
+	## team's three contacts. Posing both events for them wrote the incoming
+	## pose over the outgoing one at every progress value, so the block collapsed
+	## to a standing dig the instant the deflection started travelling. That is
+	## the "one play reading as several actions" the viewer sees. Whichever pose
+	## currently carries more weight is the one drawn, so the block holds until
+	## the dig genuinely takes over.
+	var same_actor := next_contact != null and int(next_contact.actor_id) == event_actor
+	var draw_outgoing := not same_actor or outgoing_weight >= incoming_weight
+	if draw_outgoing:
+		match_court_3d.set_player_pose(
+			event_actor, int(event.event_type),
+			event_peak * outgoing_weight, progress, event_direction, true,
+		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
 	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
 		match_court_3d.set_player_pose(
 			event_assist, int(event.event_type),
-			_event_elevation(event, event_assist) * (1.0 - smoothstep(0.18, 0.75, progress)),
+			_event_elevation(event, event_assist) * outgoing_weight,
 			progress, event_direction, true,
 		)
 	if next_contact == null:
@@ -199,11 +211,11 @@ func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress:
 	var next_actor := int(next_contact.actor_id)
 	var next_peak := _event_elevation(next_contact, next_actor)
 	var next_direction := next_contact.end_position - next_contact.start_position
-	match_court_3d.set_player_pose(
-		next_actor, int(next_contact.event_type),
-		next_peak * smoothstep(0.48, 1.0, progress),
-		progress, next_direction, true,
-	)
+	if not same_actor or not draw_outgoing:
+		match_court_3d.set_player_pose(
+			next_actor, int(next_contact.event_type),
+			next_peak * incoming_weight, progress, next_direction, true,
+		)
 	var next_assist := int(next_contact.metadata.get("assist_id", -1))
 	if next_assist >= 0 and next_contact.event_type == RallyEventModel.EventType.BLOCK:
 		match_court_3d.set_player_pose(
@@ -250,6 +262,15 @@ func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictio
 			Dictionary(player_physical_profiles.get(next_actor_id, {})),
 		)
 		_set_plan_target(plan, next_actor_id, action_target)
+		## Start the drawn journey where the simulator timed it from, not
+		## wherever the previous leg happened to leave this actor standing. The
+		## two disagreed most sharply for a blocker who then dug their own
+		## deflection: the block phase parked them at the net, the dig was timed
+		## from their floor-defence position, and playback drew the whole gap in
+		## the 0.24s the deflection was in the air -- about 20 m/s.
+		if next_contact.metadata.has("movement_start") and plan.has(next_actor_id):
+			plan[next_actor_id]["start"] = actor_start
+			match_court_3d.set_player_position(next_actor_id, actor_start)
 		if next_contact.metadata.has("approach_start_position"):
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["approach_start_position"]
