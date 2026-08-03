@@ -12,15 +12,15 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 12.0
+offset_left = 18.0
 offset_top = 8.0
-offset_right = -12.0
+offset_right = -18.0
 offset_bottom = -8.0
 mouse_filter = 2
 
 [node name="Row" type="HBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 12
 mouse_filter = 2
 
 [node name="IconLabel" type="Label" parent="Margin/Row"]
@@ -44,6 +44,8 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 17
 text = "Section"
 mouse_filter = 2
+autowrap_mode = 2
+max_lines_visible = 2
 
 [node name="SummaryLabel" type="Label" parent="Margin/Row/Text"]
 unique_name_in_owner = true
