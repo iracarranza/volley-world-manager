@@ -336,13 +336,38 @@ fraction, so the same player hits softer off a bad run-up or across their body.
 `short of the range`. That is the action vocabulary's attacking entries arriving
 for free: over-hitting and under-hitting become separately nameable.
 
-**Gap: there is no ego / attack-aggression attribute.** `ABILITY_ATTRIBUTES` has
-`serve_aggression` but no attacking equivalent, and `composure`,
-`decision_making` and `tactical_discipline` do not cover "backs themselves". The
-model takes aggression as an explicit 0–1 input; until an attribute exists, a
-caller has to synthesise it from team `decisiveness` (already wired to
-power-swing choices) and player `tactical_discipline`. A dedicated attribute
-would express it directly and is worth considering before Gate E wires this up.
+**`ego` added, and deliberately kept off the ability wheel.**
+`VolleyballPlayer.ego`, 1–100, outside `ABILITY_ATTRIBUTES`.
+
+The wheel was the obvious home and is the wrong one. Its axes feed
+`AttributeProfiles.category_score()`, which is `0.70·mean + 0.20·max +
+0.10·min` over them — so any axis added to Mental & Tactical raises that
+category, and Overall with it. Ego is not a capability: a hitter with ego 90 is
+not mentally stronger than one with 50, they attempt different shots and fail
+differently. On the wheel it would read as a strength and inflate a rating.
+
+`body_type` is the existing precedent, held out of `ABILITY_ATTRIBUTES` with a
+comment saying exactly this. Ego follows it, and is displayed in the biography
+alongside `Adaptability` and `Hand` — the things that are *true* of a player
+rather than *good* about them.
+
+Consequences of being outside `ABILITY_ATTRIBUTES`: no ceiling, no training, no
+category, and no contribution to current ability or potential. That is intended.
+
+Generated with regional and positional leans — Ispayk 64.9 down to Taktikã
+36.8, Opposite 59.6 down to Libero 42.8, on a deliberately wide σ = 16 because
+the extremes are the interesting players rather than the broken ones.
+
+**Drawn from its own RNG stream**, which matters more than it looks. Taking a
+number from the shared generation rng advances it for every attribute drawn
+afterwards, so the first version silently rerolled the entire world and failed
+two balance fixtures on a change that touches no simulation code. A test now
+asserts `assign_ego` consumes nothing from the shared stream.
+
+`AttackPowerModel.aggression_from(ego, team_decisiveness, tactical_discipline)`
+folds the instruction in: a disciplined hitter converges on what the bench
+asked for, an undisciplined one plays their own game — which is what makes a
+low-discipline star both a weapon and a liability rather than simply worse.
 
 ### Superseded: the original finding
 

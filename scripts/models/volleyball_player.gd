@@ -120,6 +120,23 @@ extends Resource
 @export_enum("Homi", "Avi", "Cani", "Feli", "Ursi", "Simi")
 var body_type: String = "Homi"
 @export_range(1, 100) var adaptability: int = 50
+
+## How much a player backs themselves -- whether they take the shot on or take
+## the safe one.
+##
+## Deliberately **not** in `ABILITY_ATTRIBUTES`, for the same reason `body_type`
+## is not. It is a temperament rather than a skill, and every ability attribute
+## belongs to a category that `AttributeProfiles.category_score()` averages into
+## a rating. Ego does not make a player better, so folding it into a capability
+## score would inflate Mental & Tactical -- and therefore Overall -- for a trait
+## whose high end is not an improvement. A hitter with ego 90 is not stronger
+## than one with 50; they attempt different shots and fail differently.
+##
+## It cuts both ways in the simulation. High ego swings bigger than the
+## situation asks and sails long; low ego leaves something on the ball and gets
+## dug. See `AttackPowerModel.choose_power()`, which centres it on 50 so that an
+## ordinary player takes the shot the situation calls for.
+@export_range(1, 100) var ego: int = 50
 ## Where this player was raised, and where they actually play now. These are
 ## deliberately separate: talent is *born* roughly evenly across the world but
 ## *accumulates* wherever the money is, and collapsing the two would erase the
@@ -408,7 +425,7 @@ func to_dict() -> Dictionary:
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
 		"dominant_hand": dominant_hand, "body_type": body_type,
-		"adaptability": adaptability,
+		"adaptability": adaptability, "ego": ego,
 		"home_region": home_region, "club_region": club_region,
 		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
 		"position_familiarity": position_familiarity.duplicate(true),
@@ -459,6 +476,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	## Saves written before body types load as Homi, the no-modifier baseline,
 	## so an old career is unchanged rather than silently re-rolled.
 	player.body_type = str(data.get("body_type", "Homi"))
+	player.ego = clampi(int(data.get("ego", 50)), 1, 100)
 	player.home_region = str(data.get("home_region", ""))
 	player.club_region = str(data.get("club_region", player.home_region))
 	player.adaptability = clampi(int(data.get("adaptability", 50)), 1, 100)

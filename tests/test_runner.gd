@@ -7644,6 +7644,60 @@ func _test_attack_power_is_a_choice() -> void:
 		"a poor approach and a swing across the body each cost available power",
 	)
 
+	## `ego` is a temperament, deliberately outside `ABILITY_ATTRIBUTES`. Every
+	## ability attribute belongs to a category that `category_score()` averages
+	## into a rating, and ego does not make a player better -- folding it in
+	## would inflate Mental & Tactical, and Overall, for a trait whose high end
+	## is not an improvement.
+	_check(
+		not ("ego" in VolleyballPlayer.ABILITY_ATTRIBUTES),
+		"ego stays out of the ability attributes so it cannot inflate a capability score",
+	)
+	var ego_categorised := false
+	for category in ATTRIBUTE_PROFILE_SCRIPT.CATEGORY_ATTRIBUTES.values():
+		if "ego" in category:
+			ego_categorised = true
+	_check(
+		not ego_categorised,
+		"ego belongs to no attribute category, matching how body type is handled",
+	)
+	var ego_player := VolleyballPlayer.new()
+	ego_player.ego = 83
+	_check(
+		VolleyballPlayer.from_dict(ego_player.to_dict()).ego == 83,
+		"ego survives a save and load",
+	)
+
+	## Generation draws ego from its own stream. Taking a number from the shared
+	## generation rng here advances it for every attribute drawn afterwards, so
+	## adding this one field silently rerolled the whole world -- two balance
+	## fixtures failed on a change touching no simulation code. Keeping it
+	## independent means ego can be retuned or removed without perturbing a
+	## single other attribute.
+	var stream := RandomNumberGenerator.new()
+	stream.seed = 4242
+	var untouched := stream.state
+	var generated := VolleyballPlayer.new()
+	generated.id = 7
+	generated.position_role = "Opposite"
+	PLAYER_GENERATOR_SCRIPT.assign_ego(generated, stream, "Ispayk")
+	_check(
+		stream.state == untouched and generated.ego >= 1 and generated.ego <= 100,
+		"assigning ego consumes nothing from the shared generation stream",
+	)
+
+	## Discipline decides whose plan gets played: an obedient hitter converges on
+	## the bench's instruction, an undisciplined one plays their own game.
+	_check(
+		is_equal_approx(
+			ATTACK_POWER_SCRIPT.aggression_from(0.90, 0.20, 1.0), 0.20
+		)
+			and is_equal_approx(
+				ATTACK_POWER_SCRIPT.aggression_from(0.90, 0.20, 0.0), 0.90
+			),
+		"a disciplined hitter swings to instruction and an undisciplined one to their own ego",
+	)
+
 	## The chosen speed has to actually fly the distance it was chosen for.
 	var flight: Dictionary = BallFlightModel.solve_flight(
 		float(measured.speed_mps),

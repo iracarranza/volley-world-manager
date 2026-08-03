@@ -182,6 +182,7 @@ static func generate_roster(
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
 		assign_body_type(player, rng)
+		assign_ego(player, rng, canonical_region)
 		_apply_body_variation(player, rng, canonical_region, overlay)
 		player.stride_length_m = player.default_stride_length_m()
 		## Sets every attribute and derives `potential` from the ceilings it built.
@@ -271,6 +272,7 @@ static func _build_prospect(
 	player.age = age
 	player.professional_experience = maxi(age - 20, 0)
 	assign_body_type(player, rng)
+	assign_ego(player, rng, canonical_region)
 	_apply_body_variation(player, rng, canonical_region, overlay)
 	player.stride_length_m = player.default_stride_length_m()
 	_apply_attributes(player, canonical_region, rng, age <= 20, overlay, talent)
@@ -496,6 +498,65 @@ const BODY_TYPE_ATTRIBUTES := {
 
 static func assign_body_type(player: VolleyballPlayer, rng: RandomNumberGenerator) -> void:
 	player.body_type = BODY_TYPES[rng.randi_range(0, BODY_TYPES.size() - 1)]
+
+
+## How much a region's players back themselves, and how much a role attracts
+## players who do.
+##
+## Generated here rather than through `_apply_attributes` because `ego` is not
+## in `ABILITY_ATTRIBUTES` -- it is a temperament, so it has no ceiling, does not
+## train, and must not feed a category rating. See the note on the field.
+##
+## The regional leans follow the identities the world already has: Ispayk swings
+## first and asks later, Taktikã is the region built on not being moved, and
+## Xérvu's whole game is a high-risk serve that either wins the set or loses it.
+const REGION_EGO_BIAS := {
+	"Ispayk": 14.0, "Xérvu": 9.0, "Pāwa Hitō": 5.0, "A'ace": 6.0,
+	"Spëddigh": 2.0, "Landavol": 0.0, "Bloc du Larg": -6.0, "Taktikã": -15.0,
+	## Minor regions, listed rather than defaulted so a reader can see that the
+	## silence is deliberate. The deception traditions back themselves; the
+	## endurance and passing traditions are built on not needing to.
+	"Tu'ul ys Feynt": 7.0,
+	"Lo-onğ Ralī": -9.0,
+	"Bompaşao": -7.0,
+	"Rhen Tempaol": 3.0,
+	"Kutre den Lyn": 1.0,
+	"Zaitgaist": 0.0,
+}
+
+## Terminal roles attract players who want the ball; the roles that keep a rally
+## alive attract players who would rather it went somewhere else.
+const POSITION_EGO_BIAS := {
+	"Opposite": 9.0, "Outside Hitter": 5.0, "Middle Blocker": 0.0,
+	"Setter": -4.0, "Libero": -8.0,
+}
+
+
+static func assign_ego(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+	region_name: String,
+) -> void:
+	## Drawn from its own stream rather than the shared generation one.
+	##
+	## Taking a number from `rng` here advances it for everything generated
+	## afterwards, so adding this attribute silently rerolled every player in the
+	## world -- two balance fixtures failed on a change that touches no
+	## simulation code at all. Deriving a private seed keeps ego independent, so
+	## it can be added, removed or retuned without perturbing a single other
+	## attribute. `rng.seed` is the seed it was configured with, not its running
+	## state, so this stays stable no matter when it is called.
+	var ego_rng := RandomNumberGenerator.new()
+	ego_rng.seed = hash("%d|ego|%d|%s" % [rng.seed, player.id, region_name])
+	## Wide on purpose. Ego is the one axis where the extremes are the
+	## interesting players rather than the broken ones, so it should not cluster
+	## the way a skill does.
+	var base := ego_rng.randfn(50.0, 16.0)
+	player.ego = clampi(roundi(
+		base
+		+ float(REGION_EGO_BIAS.get(region_name, 0.0))
+		+ float(POSITION_EGO_BIAS.get(player.position_role, 0.0))
+	), 1, 100)
 
 
 static func body_type_attribute_delta(body_type: String, property_name: String) -> float:

@@ -26,6 +26,11 @@ extends RefCounted
 ##
 ## Pure and deterministic. Judgment error arrives as a caller-supplied value
 ## rather than drawn here, so seeded replay stays the simulator's business.
+##
+## `aggression` is `VolleyballPlayer.ego` on a 0-1 scale -- see
+## `aggression_from()`, which folds in the team's instruction, because how much
+## a hitter backs themselves and how much the bench has told them to are
+## different things that both move the same dial.
 
 const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd")
 
@@ -153,6 +158,29 @@ static func choose_power(
 		## separately rather than both reported as "attack error".
 		"bias": _bias_label(eagerness - intimidation + misjudgement, reachable),
 	}
+
+
+## The dial `choose_power` reads, from the player's own temperament and the
+## instruction they were given.
+##
+## `ego` is who the player is; `team_decisiveness` is what the bench asked for;
+## `tactical_discipline` is how much they do as asked. A disciplined player
+## converges on the instruction, an undisciplined one plays their own game --
+## which is what makes a low-discipline star both a weapon and a liability
+## rather than simply worse.
+static func aggression_from(
+	ego_rating: float,
+	team_decisiveness: float,
+	tactical_discipline: float,
+) -> float:
+	return clampf(
+		lerpf(
+			clampf(ego_rating, 0.0, 1.0),
+			clampf(team_decisiveness, 0.0, 1.0),
+			clampf(tactical_discipline, 0.0, 1.0),
+		),
+		0.0, 1.0,
+	)
 
 
 static func _bias_label(net_bias: float, reachable: bool) -> String:
