@@ -266,6 +266,37 @@ This validates against fiction that is **already written**:
 
 The taglines describe these archetypes; generation just doesn't implement them.
 
+### Positional production skew
+
+Tier affinity says how *good* a region's players are. A second dial says *what
+they play*, and it is the one that makes minor regions land.
+
+`world_population.gd:210` already holds a `POSITION_MIX` with weights (Setter
+0.16, Outside Hitter 0.30, Middle Blocker 0.24, Opposite 0.16, Libero 0.14) and
+`weighted_position(rng)` at `:370`, called from `:467`. The seam is clean — that
+function needs a region argument.
+
+```gdscript
+## Per-position multipliers on POSITION_MIX, applied then renormalised so each
+## region's own mix still sums to 1.0. A region absent here is unchanged.
+const REGION_POSITION_AFFINITY := { ... }   # see Appendix A
+```
+
+**Why this matters more than it looks.** It interacts directly with the
+positional best-seven in §5. A region that produces world-class liberos and
+almost no middle blockers has a high *peak individual* talent and a *terrible*
+best seven — because the seven still needs two middles, and it will be filling
+those slots with whoever is left. That is exactly the "brilliant at one thing,
+cannot field a team" story the minor tier exists to tell, and it falls out of
+the arithmetic rather than needing to be asserted.
+
+**Global viability.** The world must still produce enough setters and liberos
+overall or no team anywhere can be fielded. This is naturally safe because the
+world mix is the birth-weight-weighted average of regional mixes, and minor
+regions carry birth weights of 0.2–0.3 — their skew barely moves the global
+figure. Worth a test anyway (§10): after generation, the world-wide positional
+mix must stay within a tolerance of `POSITION_MIX`.
+
 ---
 
 ## 5. Strength aggregation
@@ -451,6 +482,9 @@ floor near 14 or make an incomplete lineup a penalty rather than a hard block.
   8 slots.
 - **Back-compat:** a save written before the split loads with both fields
   populated and no crash.
+- **World positional viability:** after generation the world-wide mix must stay
+  within tolerance of `POSITION_MIX`, however regions skew. The failure mode is
+  a world that cannot field setters.
 
 ## 11. Open questions
 
@@ -464,3 +498,238 @@ floor near 14 or make an incomplete lineup a penalty rather than a hard block.
   constants are all first guesses and need a multi-career sweep, not a single
   seed — `fixture_base_seed()` hashes the career name, so one career is one
   sample, not a result.
+
+---
+
+# Appendix A — Minor region roster
+
+Five drafted regions. All follow the tier's conventions: a narrow specialty of
+two or three attributes, ratings summing to 4–5 against the majors' 6–8, and a
+name that half-hides the trait rather than announcing it.
+
+Every attribute named below is a real key in
+`AttributeProfiles.CATEGORY_ATTRIBUTES`. Tier and position affinities default to
+1.0 where unlisted.
+
+**Two gaps these deliberately fill.** `reception` — the core passing technique —
+is claimed by **no major region** (Spëddigh owns `reception_balance` and
+`reception_stability` but never `reception` itself). And `attack_accuracy` is
+claimed by **nobody at all**, despite being a primary attribute for three of the
+five roles.
+
+---
+
+## Tu'ul ys Feynt — *deception*
+
+> Village halls where the ball is won by the shot the blocker didn't believe —
+> wrists over power, patience over height.
+
+| | |
+|---|---|
+| Ratings | physical 1 · technical 3 · mental 1 |
+| Specialty | `feinting`, `tooling`, `finesse` |
+| Body bias | height −3.0 · mass −4.0 · wingspan −2.0 |
+| Birth weight / pull | 0.25 / 0.55 |
+| Tradition resistance | 1.0 |
+| Connected major | **Taktikã** |
+
+**Inspiration.** Welsh chapel-hall leagues crossed with the Italian *pallonetto*
+tradition — the tip as a first option rather than a bail-out.
+
+**Why Taktikã.** Deception and tactical unpredictability are the same instinct at
+different scales: one hides a single contact, the other hides a whole
+distribution. If Taktikã ever absorbs it, its `unpredictability` gains a physical
+expression.
+
+| tier | gen | elite | standout | solid | squad | fringe |
+|---|---|---|---|---|---|---|
+| | 0.3 | 0.6 | 1.0 | 1.2 | 1.2 | 1.1 |
+
+| position | S | OH | MB | OP | L |
+|---|---|---|---|---|---|
+| | 1.1 | 1.4 | 0.4 | 1.2 | 1.0 |
+
+**Best-seven consequence:** competent almost everywhere, elite nowhere, and
+short of middles. Ranks respectably on depth and poorly on prime.
+
+**Names:** Bryn, Eilir, Tewdr, Anwen, Maelo, Ffion, Gwern, Rhosyn
+
+---
+
+## Anhal Ridge — *endurance defence*
+
+> Thin-air gyms three days' travel from anywhere. Rallies here end when someone's
+> legs go, and nobody's legs go.
+
+| | |
+|---|---|
+| Ratings | physical 2 · technical 1 · mental 2 |
+| Specialty | `stamina`, `dig_control`, `reception_stability` |
+| Body bias | height −5.0 · mass −5.0 · wingspan −3.0 |
+| Birth weight / pull | 0.20 / 0.45 |
+| Tradition resistance | 1.4 |
+| Connected major | **Pāwa Hitō** |
+
+**Inspiration.** Himalayan hill leagues and the Bolivian altiplano — altitude-bred
+aerobic bases, and a defensive culture where the point is simply to still be
+standing.
+
+**Why Pāwa Hitō.** Deliberate contrast. Pāwa Hitō is 4/1/1 explosive with **no
+stamina anywhere in its specialty**, and star-heavy production gives it thin
+depth. An endurance neighbour is the one tradition that would genuinely change
+it, and the drift would show up in results rather than only in data. The high
+resistance is doing real work here — an isolated mountain tradition should be
+among the hardest to absorb.
+
+| tier | gen | elite | standout | solid | squad | fringe |
+|---|---|---|---|---|---|---|
+| | 0.2 | 0.5 | 0.9 | 1.3 | 1.3 | 1.1 |
+
+| position | S | OH | MB | OP | L |
+|---|---|---|---|---|---|
+| | 0.9 | 1.2 | 0.3 | 0.5 | 2.4 |
+
+**Best-seven consequence:** the sharpest case in the set. World-class liberos and
+almost nothing tall, so the seven is filled at middle and opposite by whoever is
+left. High peak individual talent, poor prime, and it will never contend without
+importing height.
+
+**Names:** Dorje, Pema, Anhal, Tsering, Norbu, Lhamo, Kunzang, Yangchen
+
+---
+
+## Braç Sindao — *the platform*
+
+> Concrete courts, no net posts worth the name, and a religion built around the
+> first contact. If it's passable, it gets passed.
+
+| | |
+|---|---|
+| Ratings | physical 1 · technical 3 · mental 1 |
+| Specialty | `reception`, `reception_balance`, `ball_control` |
+| Body bias | height −2.0 · mass −1.0 · wingspan 0.0 |
+| Birth weight / pull | 0.30 / 0.60 |
+| Tradition resistance | 0.8 |
+| Connected major | **Bloc du Larg** |
+
+**Inspiration.** Cuban and Puerto Rican barrio courts crossed with Japanese
+high-school receive drilling — thousands of reps at the one skill.
+
+**Why Bloc du Larg.** A passing tradition beside the methodical structure region
+is the natural pairing, and it fills the `reception` gap noted above. Lower
+resistance than the others: this is a coastal, well-travelled tradition rather
+than an isolated one, so it should be genuinely absorbable.
+
+| tier | gen | elite | standout | solid | squad | fringe |
+|---|---|---|---|---|---|---|
+| | 0.4 | 0.9 | 1.2 | 1.1 | 1.0 | 0.9 |
+
+| position | S | OH | MB | OP | L |
+|---|---|---|---|---|---|
+| | 0.9 | 1.5 | 0.4 | 0.6 | 2.2 |
+
+**Best-seven consequence:** strong in the back row and at outside, thin at the
+net. The most likely of these five to mount a Sixnet challenge, because its prime
+is genuinely competitive everywhere the ball is passed.
+
+**Names:** Nilo, Yaritza, Braç, Elpidio, Marisol, Ozéias, Caridad, Tavo
+
+---
+
+## Rhen Tempaal — *first tempo*
+
+> Small halls where the set is already gone before the block has finished
+> landing. Nobody here hits hard. Everybody here hits early.
+
+| | |
+|---|---|
+| Ratings | physical 2 · technical 2 · mental 1 |
+| Specialty | `approach_timing`, `arm_speed`, `transition_speed` |
+| Body bias | height −1.0 · mass −3.0 · wingspan −1.0 |
+| Birth weight / pull | 0.28 / 0.65 |
+| Tradition resistance | 0.9 |
+| Connected major | **Spëddigh** |
+
+**Inspiration.** The Japanese quick-attack lineage and Korean speed volleyball —
+offence solved by arriving first rather than by hitting through.
+
+**Why Spëddigh.** Its tagline already reads "tempo… and rapid transition
+decisions." This is that idea pushed past what a major region can sustain: all
+tempo, with no power to fall back on when the tempo is taken away.
+
+| tier | gen | elite | standout | solid | squad | fringe |
+|---|---|---|---|---|---|---|
+| | 0.3 | 0.7 | 1.1 | 1.2 | 1.1 | 1.0 |
+
+| position | S | OH | MB | OP | L |
+|---|---|---|---|---|---|
+| | 2.0 | 0.9 | 1.6 | 0.5 | 0.8 |
+
+**Best-seven consequence:** the inverse of Anhal Ridge, and the only region here
+that is *middle-heavy*. Setters and quick middles in abundance, almost no
+opposite. Its seven is unusually well covered where the majors are thin, which
+makes it a good source of transfer targets even when it cannot compete.
+
+**Names:** Rhen, Soah, Minjae, Tempa, Haerin, Wonsik, Yerin, Doha
+
+---
+
+## Corvel Anse — *placement*
+
+> Technical schools that treat a hard swing as an admission of failure. The
+> corner is always open if you can see it.
+
+| | |
+|---|---|
+| Ratings | physical 1 · technical 3 · mental 1 |
+| Specialty | `attack_accuracy`, `shot_variety`, `court_vision` |
+| Body bias | height 0.0 · mass −2.0 · wingspan 0.0 |
+| Birth weight / pull | 0.26 / 0.70 |
+| Tradition resistance | 0.7 |
+| Connected major | **Xérvu** |
+
+**Inspiration.** Serbian and Italian technical academies — the hitter who never
+overpowers anyone and never gets dug either.
+
+**Why Xérvu.** Xérvu is the technical region (2/4/1) built on first-strike
+precision; Corvel Anse is that same precision applied to the swing instead of the
+serve. It also fills the `attack_accuracy` gap. The lowest resistance in the set —
+a well-connected inland tradition that Xérvu could plausibly absorb outright,
+which is the intended risk.
+
+| tier | gen | elite | standout | solid | squad | fringe |
+|---|---|---|---|---|---|---|
+| | 0.4 | 1.0 | 1.3 | 1.1 | 0.9 | 0.8 |
+
+| position | S | OH | MB | OP | L |
+|---|---|---|---|---|---|
+| | 1.2 | 1.5 | 0.5 | 1.3 | 0.7 |
+
+**Best-seven consequence:** the strongest prime of the five and the weakest
+depth — a top-heavy technical region whose best seven is respectable and whose
+eighth-to-fourteenth players are not. The clearest test case for the prime/depth
+split in §5.
+
+**Names:** Corvel, Zorana, Miloš, Anse, Vesna, Ilija, Radmila, Novak
+
+---
+
+## Adjacency and one deliberate omission
+
+```gdscript
+"Taktikã":      [..., "Tu'ul ys Feynt"],
+"Pāwa Hitō":    [..., "Anhal Ridge"],
+"Bloc du Larg": [..., "Braç Sindao"],
+"Spëddigh":     [..., "Rhen Tempaal"],
+"Xérvu":        [..., "Corvel Anse"],
+```
+
+`REGION_ADJACENCY` is symmetric by construction, so each minor region lists its
+major back.
+
+**Landavol deliberately has no minor neighbour.** It is the only major with an
+empty `REGION_SPECIALTY` and a tagline saying it develops broadly rather than
+toward anything. Leaving it without a tradition feeding it keeps it the control
+group — the region that stays generic on purpose, and the baseline every drifted
+region can be measured against. Trivially reversible if it should eventually
+acquire an identity; the recommendation is to keep it.
