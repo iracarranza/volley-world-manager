@@ -36,12 +36,19 @@ const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd"
 ## a playable touch. A ball clipping the last few centimetres of the outside
 ## hand goes out of play and is the hitter's point, not the blocker's.
 ##
-## 0.15 m rather than 0.25: a hand and forearm above the tape present roughly
-## half a metre of surface, and meeting it 0.23 m down is mid-palm rather than
-## the fingertip graze 0.25 m was implicitly calling it. Provisional either way
-## -- Gate D calibrates these against the stuff-rate target.
-const TOOL_EDGE_MARGIN_METERS: float = 0.12
-const STUFF_DEPTH_METERS: float = 0.15
+## Calibrated in Gate D. A hand and forearm above the tape present roughly half
+## a metre of surface, so this is the line between pressing down on a ball and
+## getting a piece of one on the way past. It went 0.25 -> 0.15 when a test
+## found 0.25 was calling mid-palm contact a fingertip graze, then settled at
+## 0.21 in the Gate D sweep. It is the constant that separates the block being
+## *involved* from the block *ending* the rally, and the design wants a lot of
+## the first and little of the second.
+##
+## `TOOL_EDGE_MARGIN` narrowed 0.12 -> 0.08 in the same pass. It is a share of
+## the sealed lane, so when the lane narrowed a fixed 0.12 turned a third of
+## every block into an edge contact and tools stopped being rare.
+const TOOL_EDGE_MARGIN_METERS: float = 0.08
+const STUFF_DEPTH_METERS: float = 0.21
 
 ## How far onto the hitter's own side a netted ball drops. Normalized, ~0.2 m.
 const NETTED_DROP_OFFSET: float = 0.012

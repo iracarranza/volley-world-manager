@@ -29,6 +29,9 @@ const CourtConstants := preload("res://scripts/data/court_constants.gd")
 const BallFlightModelRef := preload(
 	"res://scripts/simulation/ball_flight_model.gd"
 )
+const SignatureMoveModel := preload(
+	"res://scripts/simulation/signature_move_model.gd"
+)
 
 ## Contact happens just below the top of a hitter's reach -- struck in front of
 ## and slightly under full extension, not at the fingertip limit.
@@ -50,7 +53,10 @@ const CONTACT_BELOW_REACH_METERS: float = 0.10
 ## A blocker jumps from a standstill or a shuffle rather than a full approach,
 ## and gets appreciably less of their leap than a hitter does.
 const BLOCKER_REACH_EFFORT: float = 0.62
-const BLOCKER_HALF_WIDTH_METERS: float = 0.45
+## How much net a pair of hands actually seals. Narrowed from 0.45 in Gate D:
+## at 0.45 the block was involved in 55% of swings against a 35-45% target, and
+## the lateral window is the term that decides involvement.
+const BLOCKER_HALF_WIDTH_METERS: float = 0.34
 
 ## Lanes a hitter can be set to, and how often each is used. Pins carry the
 ## offence, which is what makes their lopsided course cones matter.
@@ -76,6 +82,7 @@ static func run(
 	var tally := {
 		"in": 0, "out_long": 0, "out_wide": 0, "out_antenna": 0,
 		"net": 0, "stuff": 0, "touch": 0, "tool": 0,
+		"block_crush": 0, "high_hands": 0,
 	}
 	var bias_tally := {}
 	var channel_tally := {}
@@ -83,6 +90,8 @@ static func run(
 	var heights: Array[float] = []
 	var clearances: Array[float] = []
 	var unreachable := 0
+	var attempts := 0
+	var conversions := 0
 
 	for index in range(sample_count):
 		var hitter: VolleyballPlayer = hitters[rng.randi_range(0, hitters.size() - 1)]
@@ -214,8 +223,37 @@ static func run(
 			"net":
 				tally["net"] += 1
 			"blocked":
-				var kind := str(Dictionary(resolved.block).get("kind", "touch"))
-				tally[kind] = int(tally.get(kind, 0)) + 1
+				var contact_info: Dictionary = resolved.block
+				var kind := str(contact_info.get("kind", "touch"))
+				## Signature moves resolve on top of the physical contact.
+				var moved: Dictionary = SignatureMoveModel.resolve_contact(
+					kind, float(delivered.speed_mps),
+					float(delivered.bearing_error_degrees),
+					float(contact_info.get("depth_below_reach_meters", 0.0)),
+					blockers.size(),
+					SignatureMoveModel.charge(
+						SignatureMoveModel.crush_capability(
+							_rating(hitter, "attack_power"),
+							float(hitter.ego) / 100.0,
+							_rating(hitter, "leadership"),
+						),
+						rng.randf_range(-0.5, 0.7), rng.randf_range(-0.6, 0.6),
+					),
+					SignatureMoveModel.charge(
+						SignatureMoveModel.high_hands_capability(
+							_rating(hitter, "attack_accuracy"),
+							_rating(hitter, "composure"),
+							_rating(hitter, "decision_making"),
+						),
+						rng.randf_range(-0.5, 0.7), rng.randf_range(-0.6, 0.6),
+					),
+				)
+				var final_kind := str(moved.outcome)
+				tally[final_kind] = int(tally.get(final_kind, 0)) + 1
+				if not str(moved.attempted_move).is_empty():
+					attempts += 1
+					if bool(moved.move_succeeded):
+						conversions += 1
 			_:
 				var reason := str(resolved.out_reason)
 				if reason == "long":
@@ -231,6 +269,8 @@ static func run(
 	return {
 		"samples": total,
 		"tally": tally,
+		"move_attempts_pct": float(attempts) / float(maxi(total, 1)) * 100.0,
+		"move_conversion_pct": float(conversions) / float(maxi(attempts, 1)) * 100.0,
 		"shares": _shares(tally, total),
 		"power_bias": _shares(bias_tally, total),
 		"miss_channel": _shares(channel_tally, total),

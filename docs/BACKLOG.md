@@ -480,7 +480,73 @@ another argument for promoting the geometric one.
 `standing_reach_cm()` is still ~15 cm low across the range (see below) and is
 still worth correcting, but it is no longer blocking Gate D.
 
-### Still short of target, and the levers that remain
+### Signature moves, and Gate D converged
+
+`signature_move_model.gd`. Two ways a spike beats a block it has physically
+met, keyed to different attributes so a power build and a placement build each
+have an answer:
+
+- **Block Crush** -- struck harder than the hands can absorb; rips through and
+  keeps going down. Power, ego, leadership.
+- **High Hands** -- placed deliberately on the outside edge; leaves high and
+  away from court. Accuracy, composure, decision making.
+
+Tips, rolls and cut shots have no move here, and lose nothing by it: they beat
+a block by not touching it.
+
+**Charge is not a consumable.** `charge()` asks whether a player currently has
+the game in them, from ability, belief and which way the match is running.
+Attempting costs nothing, succeeding costs nothing, **only failing is
+expensive** -- and it is expensive because it damages the belief the charge was
+reading. That asymmetry is what makes it self-regulating: a hitter who goes for
+it and misses drops below the line and has to earn back, one who keeps landing
+them stays hot, and streaks fall out without anyone scripting streaks.
+
+Belief is the existing `VolleyballPlayer.match_confidence`, already moved by
+`flow_shift` and already decayed between sets. New consumer and new writer, no
+new state. **Watch the loop gain**: quality → flow → confidence → execution →
+quality was already closed with small gain (0.02-0.06); moves now read *and*
+write confidence, so that gain has risen and wants measuring rather than
+assuming.
+
+Note the two move families have different owners. Attacker moves gate on the
+attacker's own confidence and ego; receiver moves will gate on the team's
+`floor_defense_adaptation_strength`. Failure should cost whichever thing gated
+that move, not a shared pool.
+
+**Distinguishing a placed ball from a lucky one** uses the swing's own
+`bearing_error_degrees`: edge contact from a swing that went where it was aimed
+is High Hands, the same contact off a wild swing is an ordinary tool. The
+hitter did not put it there.
+
+#### Gate D result
+
+| | target | measured |
+| --- | ---: | ---: |
+| terminal stuff | 12% | **12.5%** |
+| block involvement | 35-45% | 49.5% |
+| lands in | -- | 50.2% |
+| netted | -- | 0.3% |
+| move attempts | 10-15% of swings | 3.8% |
+| move conversion | ~50% | 37% |
+
+Converged on the stuff rate, which was the headline gap. Involvement sits about
+five points high, and moves fire somewhat rarer than the 10-15% suggested --
+both acceptable for a first pass and both cheap to move later
+(`BLOCKER_HALF_WIDTH_METERS` for the first, `AVAILABILITY_THRESHOLD` for the
+second).
+
+Constants that moved, and why:
+
+- `STUFF_DEPTH_METERS` 0.15 -> 0.21. The line between the block being
+  *involved* and the block *ending* the rally.
+- `TOOL_EDGE_MARGIN_METERS` 0.12 -> 0.08. It is a share of the sealed lane, so
+  when the lane narrowed a fixed 0.12 turned a third of every block into an
+  edge contact and tools stopped being rare.
+- `BLOCKER_HALF_WIDTH_METERS` 0.45 -> 0.34. The lateral window is the term that
+  decides involvement.
+
+### Remaining levers
 
 Geometry sweep now sits at 22.0% stuffed against a 12% target, with block
 involvement (stuff + touch + tool) at 54.1% against a 35-45% target.

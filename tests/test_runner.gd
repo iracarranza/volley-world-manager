@@ -91,6 +91,9 @@ const ATTACK_SWING_SCRIPT := preload(
 const ATTACK_RESOLUTION_SCRIPT := preload(
 	"res://scripts/simulation/attack_resolution_model.gd"
 )
+const SIGNATURE_MOVE_SCRIPT := preload(
+	"res://scripts/simulation/signature_move_model.gd"
+)
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -198,6 +201,7 @@ func _initialize() -> void:
 	_test_hitters_read_a_blurred_picture()
 	_test_swing_channels_fail_separately()
 	_test_attack_resolves_from_geometry()
+	_test_signature_moves_beat_a_block()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7592,6 +7596,95 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## The two ways a spike beats a block it has already met. Keyed to different
+## attributes on purpose, so a power build and a placement build each have an
+## answer -- and gated on a charge that is an *availability* signal rather than a
+## promise, so the indicator can show and the move still not come off.
+func _test_signature_moves_beat_a_block() -> void:
+	var cold: float = SIGNATURE_MOVE_SCRIPT.charge(0.90, -0.9, -0.9)
+	var hot: float = SIGNATURE_MOVE_SCRIPT.charge(0.90, 0.9, 0.9)
+	var weak_hot: float = SIGNATURE_MOVE_SCRIPT.charge(0.20, 0.9, 0.9)
+	_check(
+		hot > cold and not SIGNATURE_MOVE_SCRIPT.is_available(weak_hot),
+		"belief and flow decide when a capable player has it, not whether a weak one does",
+	)
+	_check(
+		SIGNATURE_MOVE_SCRIPT.is_available(hot)
+			and not SIGNATURE_MOVE_SCRIPT.is_available(cold),
+		"the same player has the surge on a good day and not on a bad one",
+	)
+
+	## The two routes read different attributes, so one player is not
+	## automatically good at both.
+	var bruiser: float = SIGNATURE_MOVE_SCRIPT.crush_capability(0.92, 0.85, 0.80)
+	var bruiser_hands: float = SIGNATURE_MOVE_SCRIPT.high_hands_capability(
+		0.35, 0.30, 0.35
+	)
+	var placer: float = SIGNATURE_MOVE_SCRIPT.high_hands_capability(0.92, 0.85, 0.85)
+	var placer_crush: float = SIGNATURE_MOVE_SCRIPT.crush_capability(0.35, 0.30, 0.35)
+	_check(
+		bruiser > bruiser_hands and placer > placer_crush,
+		"the power route and the placement route are not the same capability",
+	)
+	_check(
+		SIGNATURE_MOVE_SCRIPT.block_absorb_mps(0.30, 2)
+			> SIGNATURE_MOVE_SCRIPT.block_absorb_mps(0.05, 1),
+		"solid contact on a double block holds more than fingertips on a single",
+	)
+
+	## Block Crush: hit harder than the hands can hold, with the charge up.
+	var crushed: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_contact(
+		"stuff", 30.0, 0.4, 0.20, 1, 0.90, 0.10
+	)
+	var held: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_contact(
+		"stuff", 17.0, 0.4, 0.20, 1, 0.90, 0.10
+	)
+	_check(
+		str(crushed.outcome) == "block_crush" and bool(crushed.move_succeeded)
+			and is_equal_approx(float(crushed.confidence_cost), 0.0),
+		"a ball struck harder than the block can absorb goes through it",
+	)
+	_check(
+		str(held.outcome) == "stuff" and not bool(held.move_succeeded)
+			and float(held.confidence_cost) > 0.0,
+		"the same attempt against a block that holds is stuffed, and it costs belief",
+	)
+
+	## No charge, no move -- and no cost, because nothing was attempted.
+	var ordinary: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_contact(
+		"stuff", 30.0, 0.4, 0.20, 1, 0.10, 0.10
+	)
+	_check(
+		str(ordinary.outcome) == "stuff"
+			and str(ordinary.attempted_move).is_empty()
+			and is_equal_approx(float(ordinary.confidence_cost), 0.0),
+		"a contact without the surge was never a move and is not punished as one",
+	)
+
+	## High Hands: edge contact the hitter *aimed* at. The same contact off a
+	## wild swing is an ordinary tool -- the ball found the edge, the hitter did
+	## not put it there.
+	var placed: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_contact(
+		"tool", 22.0, 0.9, 0.04, 1, 0.10, 0.90
+	)
+	var lucky: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_contact(
+		"tool", 22.0, 6.5, 0.04, 1, 0.10, 0.90
+	)
+	_check(
+		str(placed.outcome) == "high_hands" and bool(placed.move_succeeded),
+		"edge contact from a swing that went where it was aimed is placed, not lucky",
+	)
+	_check(
+		str(lucky.outcome) == "tool" and not bool(lucky.move_succeeded)
+			and float(lucky.confidence_cost) > 0.0,
+		"the same edge contact off a wild swing is an ordinary tool and a failed attempt",
+	)
+	_check(
+		SIGNATURE_MOVE_SCRIPT.FAILURE_CONFIDENCE_COST > 0.10,
+		"going for the big one and missing is felt more than losing a rally",
+	)
+
+
 ## Gate C. In, out, netted and blocked are read off one flight instead of rolled
 ## and then drawn to match. Nothing here consults a random number, so every case
 ## below is a fact about the geometry rather than a sample.
