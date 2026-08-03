@@ -41,7 +41,7 @@ const SIXNET_LOGISTIC_K: float = 0.08
 
 const POWER_MIN: float = 10.0
 const POWER_MAX: float = 95.0
-## How much a single season's result pulls region_power toward that season's
+## How much a single season's result pulls Sixnet form toward that season's
 ## win-rate-implied target. Deliberately partial: one dominant season nudges
 ## power, it cannot swing it 30 points in a year.
 const POWER_SEASON_PULL: float = 0.25
@@ -50,28 +50,104 @@ const POWER_SEASON_PULL: float = 0.25
 ## numbers, since this mechanic (per the user's own uncertainty about it) is
 ## the piece most likely to need retuning after being observed over real
 ## synthetic seasons.
-const DOMINANCE_THRESHOLD: float = 15.0
-const ISOLATION_THRESHOLD: float = 40.0
+## Real-population prime/depth strength measures about 70-82 across six test
+## worlds. Four points is a visible regional gap on that scale; 74 marks a
+## genuinely weak production year without classifying half the world as poor.
+const DOMINANCE_THRESHOLD: float = 4.0
+const ISOLATION_THRESHOLD: float = 74.0
 const MAX_BLENDED_ATTRIBUTES: int = 2
 const MAX_SPECIALTY_BONUS_DELTA: float = 6.0  ## base +8 specialty bonus can reach +14
 const INTENSIFY_STEP: float = 2.0
 const BLEND_BIAS_FRACTION: float = 0.15
+const PRIME_WEIGHT: float = 0.65
+const PRIME_MEAN_WEIGHT: float = 0.70
+const PRIME_BEST_WEIGHT: float = 0.15
+const PRIME_WEAK_WEIGHT: float = 0.15
+const REGIONAL_BEST_SEVEN := {
+	"Setter": 1,
+	"Outside Hitter": 2,
+	"Middle Blocker": 2,
+	"Opposite": 1,
+	"Libero": 1,
+}
 
 
 ## Idempotent: a no-op once `career.sixnet_slots` is populated. Called at the
 ## top of every `advance_week()` so a save from before this feature existed
 ## lazily backfills on first use instead of never getting a league at all.
-static func ensure_bootstrapped(career: Resource) -> void:
+static func ensure_bootstrapped(career: Resource, population: Array = []) -> void:
+	if not population.is_empty():
+		career.region_strength = calculate_region_strengths(population)
 	if not career.sixnet_slots.is_empty():
 		return
-	var initial_power := {}
+	var initial_strength: Dictionary = career.region_strength.duplicate(true)
+	var initial_form: Dictionary = {}
 	for region_name in Regions.SIXNET_PARTICIPANTS:
-		initial_power[region_name] = bootstrap_rating(
-			region_name, int(hash(str(career.career_name) + str(region_name)))
-		)
-	career.region_power = initial_power.duplicate(true)
-	career.sixnet_slots = allocate_slots(initial_power)
+		if not initial_strength.has(region_name):
+			initial_strength[region_name] = bootstrap_rating(
+				region_name, int(hash(str(career.career_name) + str(region_name)))
+			)
+		initial_form[region_name] = float(initial_strength[region_name])
+	career.region_strength = initial_strength
+	career.sixnet_form = initial_form
+	career.sixnet_slots = allocate_slots(initial_strength)
 	career.sixnet_season_start_week = career.absolute_week
+
+
+static func calculate_region_strengths(population: Array) -> Dictionary:
+	var result := {}
+	for region_name in Regions.DEFINITIONS:
+		var regional_players: Array[VolleyballPlayer] = []
+		for player_resource in population:
+			var player := player_resource as VolleyballPlayer
+			if player != null and str(player.home_region) == str(region_name):
+				regional_players.append(player)
+		if not regional_players.is_empty():
+			result[str(region_name)] = region_strength(regional_players)
+	return result
+
+
+static func region_strength(players: Array[VolleyballPlayer]) -> float:
+	var selected: Array[VolleyballPlayer] = []
+	var selected_ids := {}
+	for role_name in REGIONAL_BEST_SEVEN:
+		var candidates: Array[VolleyballPlayer] = []
+		for player in players:
+			if player.position_role == str(role_name):
+				candidates.append(player)
+		candidates.sort_custom(func(a, b):
+			return a.current_ability_score() > b.current_ability_score()
+		)
+		for index in range(mini(int(REGIONAL_BEST_SEVEN[role_name]), candidates.size())):
+			selected.append(candidates[index])
+			selected_ids[candidates[index].id] = true
+	if selected.is_empty():
+		return 50.0
+	var prime_values: Array[float] = []
+	for player in selected:
+		prime_values.append(float(player.current_ability_score()))
+	var prime: float = _mean(prime_values) * PRIME_MEAN_WEIGHT \
+		+ prime_values.max() * PRIME_BEST_WEIGHT \
+		+ prime_values.min() * PRIME_WEAK_WEIGHT
+	var reserves: Array[VolleyballPlayer] = []
+	for player in players:
+		if not selected_ids.has(player.id):
+			reserves.append(player)
+	reserves.sort_custom(func(a, b):
+		return a.current_ability_score() > b.current_ability_score()
+	)
+	var depth_values: Array[float] = []
+	for index in range(mini(7, reserves.size())):
+		depth_values.append(float(reserves[index].current_ability_score()))
+	var depth: float = _mean(depth_values) if not depth_values.is_empty() else prime
+	return prime * PRIME_WEIGHT + depth * (1.0 - PRIME_WEIGHT)
+
+
+static func _mean(values: Array[float]) -> float:
+	var total := 0.0
+	for value in values:
+		total += value
+	return total / maxf(float(values.size()), 1.0)
 
 
 ## A region's rating is generated, not invented: one sample Academy-tier
@@ -231,8 +307,8 @@ static func _resolve_slot_pairing(
 	var region_a := str(career.sixnet_slots.get(slot_a, ""))
 	var region_b := str(career.sixnet_slots.get(slot_b, ""))
 	return resolve_match(
-		float(career.region_power.get(region_a, 50.0)),
-		float(career.region_power.get(region_b, 50.0)),
+		float(career.sixnet_form.get(region_a, 50.0)),
+		float(career.sixnet_form.get(region_b, 50.0)),
 		seed_value,
 	)
 
@@ -292,7 +368,7 @@ static func _combined_record(career: Resource, region_name: String) -> Dictionar
 ## `POWER_SEASON_PULL`), and clamped to `[POWER_MIN, POWER_MAX]` so no region
 ## is ever permanently unbeatable or permanently dead across a long career.
 ## Covers all eight bracket participants, not just the six core regions:
-## Ispayk and A'ace play in the Sixnet and so their power moves with their
+## Ispayk and A'ace play in the Sixnet and so their form moves with their
 ## results too. (Influence *drift* below stays core-only -- that mechanic is
 ## about geography, which those two deliberately sit outside of.)
 static func apply_power_update(career: Resource) -> void:
@@ -303,8 +379,8 @@ static func apply_power_update(career: Resource) -> void:
 			continue
 		var win_rate := float(record.get("wins", 0)) / float(games)
 		var target := lerpf(30.0, 90.0, win_rate)
-		var current := float(career.region_power.get(region_name, 50.0))
-		career.region_power[region_name] = clampf(
+		var current := float(career.sixnet_form.get(region_name, 50.0))
+		career.sixnet_form[region_name] = clampf(
 			lerpf(current, target, POWER_SEASON_PULL), POWER_MIN, POWER_MAX
 		)
 
@@ -345,11 +421,11 @@ static func apply_promotion_relegation(career: Resource) -> void:
 static func apply_influence_drift(career: Resource) -> void:
 	for region_name in Regions.CORE_REGIONS:
 		var neighbors: Array = Array(Regions.REGION_ADJACENCY.get(region_name, []))
-		var own_power := float(career.region_power.get(region_name, 50.0))
+		var own_power := float(career.region_strength.get(region_name, 50.0))
 		var strongest_neighbor := ""
 		var strongest_gap := 0.0
 		for neighbor in neighbors:
-			var gap := float(career.region_power.get(neighbor, 50.0)) - own_power
+			var gap := float(career.region_strength.get(neighbor, 50.0)) - own_power
 			if gap > strongest_gap:
 				strongest_gap = gap
 				strongest_neighbor = str(neighbor)

@@ -704,8 +704,12 @@ func unregister_player(player_id: int) -> String:
 ## What one rally costs an on-court player of average stamina, and the extra
 ## the decisive actor pays for having been the one who had to swing, dig or
 ## chase the ball down.
-const RALLY_FATIGUE_BASE: float = 0.008
-const RALLY_FATIGUE_DECISIVE: float = 0.012
+## A typical 70-rally match should tax the lineup without pinning everyone at
+## exhaustion. The former 0.008 base alone charged 0.56 before decisive work,
+## pushing low-stamina lineups toward 1.0 and recreating the attack-error cliff
+## inside a single fixture even after between-match recovery was repaired.
+const RALLY_FATIGUE_BASE: float = 0.0035
+const RALLY_FATIGUE_DECISIVE: float = 0.006
 
 ## How far stamina moves that cost. `stamina` is trained by the Strength & Jump
 ## focus and was read by nothing: every player tired at exactly the same rate

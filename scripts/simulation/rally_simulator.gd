@@ -120,6 +120,14 @@ const ATTACK_ACCURACY_WEIGHT: float = 0.50
 const ATTACK_POWER_WEIGHT: float = 0.32
 const ATTACK_DECISION_WEIGHT: float = 0.18
 
+## Generated competitive hitters sit below an ideal 0.78 capability. Passing their
+## raw rating through at full slope made a five-point ability gap produce a
+## 2.6x swing in mean attack quality and moved match error rates from 0.00 to
+## 0.60. Compressing around the population centre preserves ordering and elite
+## separation without turning ordinary roster variance into a hard error cliff.
+const ATTACK_CAPABILITY_PIVOT: float = 0.78
+const ATTACK_CAPABILITY_GAIN: float = 0.50
+
 ## How much of the swing each dimension of the opportunity can take away. They
 ## multiply rather than add, because a swing is only as good as the worst thing
 ## about it.
@@ -133,12 +141,14 @@ const LATE_ARRIVAL_SECONDS: float = 0.60
 ## Execution spread that is not attributable to anything modelled.
 const ATTACK_EXECUTION_NOISE: float = 0.10
 
-## A swing that kept less than this fraction of an ideal one does not land in.
-## It is a boundary on the execution scale rather than a rate to hit, and it is
-## reachable for the first time: the additive form floored attack quality at
-## 0.321 against a threshold of 0.29, so no swing in the engine could ever be an
-## error.
+## Midpoint of the attack-error response. A hard comparison here turned normal
+## roster variance into a cliff: strong lineups were error-free while lineups
+## five ability points lower missed almost half their swings. Quality now moves
+## a bounded probability around this midpoint instead.
 const ATTACK_ERROR_THRESHOLD: float = 0.24
+const ATTACK_ERROR_FLOOR: float = 0.10
+const ATTACK_ERROR_CEILING: float = 0.30
+const ATTACK_ERROR_RESPONSE_WIDTH: float = 0.12
 
 ## How decisively the block has to beat the swing for each outcome.
 ##
@@ -1023,7 +1033,7 @@ func resolve(
 	identity_effects["attack_selection"]["effectiveness"] = attack_effectiveness
 	var attack_target: Vector2 = attack_choice.target
 	var intended_attack_target := attack_target
-	var attack_missed := float(result.attack_quality) < ATTACK_ERROR_THRESHOLD
+	var attack_missed := _attack_missed(float(result.attack_quality))
 	if attack_missed:
 		attack_target = _errant_attack_target(
 			intended_attack_target, float(result.attack_quality)
@@ -1115,7 +1125,7 @@ func resolve(
 		"hitter_center_position", set_target
 	)) if using_live_attack else set_target
 	rally_clock += float(set_flight_time)
-	if result.attack_quality < ATTACK_ERROR_THRESHOLD:
+	if attack_missed:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
@@ -2236,7 +2246,7 @@ func _resolve_home_continuation(
 			0.0, 1.0,
 		)
 	var intended_attack_target := attack_target
-	var attack_missed := attack_quality < ATTACK_ERROR_THRESHOLD
+	var attack_missed := _attack_missed(attack_quality)
 	if attack_missed:
 		attack_target = _errant_attack_target(intended_attack_target, attack_quality)
 	## One shot shape, used both for the full flight and -- if a block touches
@@ -2293,7 +2303,7 @@ func _resolve_home_continuation(
 	## contact with the dig's clock: set contact, then the set flight, then the
 	## attack. Later contacts read `rally_clock` and inherit it.
 	rally_clock = cont_set_contact_time + continuation_flight_time
-	if attack_quality < ATTACK_ERROR_THRESHOLD:
+	if attack_missed:
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
@@ -4157,11 +4167,16 @@ func _attack_execution(
 ) -> float:
 	if hitter == null:
 		return 0.0
-	var capability := clampf(
+	var raw_capability := clampf(
 		_rating(hitter, "attack_accuracy") * ATTACK_ACCURACY_WEIGHT
 		+ _power_rating(hitter, "attack_power") * ATTACK_POWER_WEIGHT
 		+ _rating(hitter, "decision_making") * ATTACK_DECISION_WEIGHT
 		+ familiarity_bonus,
+		0.0, 1.0,
+	)
+	var capability := clampf(
+		ATTACK_CAPABILITY_PIVOT
+			+ (raw_capability - ATTACK_CAPABILITY_PIVOT) * ATTACK_CAPABILITY_GAIN,
 		0.0, 1.0,
 	)
 	## Arriving early is worth nothing extra -- the ball still has to come down
@@ -4179,6 +4194,15 @@ func _attack_execution(
 		1.0 - clampf(tempo_demand, 0.0, 0.60)
 	)
 	return clampf(capability * opportunity - block_pressure, 0.0, 1.0)
+
+
+func _attack_missed(attack_quality: float) -> bool:
+	var response := 1.0 / (1.0 + exp(
+		(clampf(attack_quality, 0.0, 1.0) - ATTACK_ERROR_THRESHOLD)
+			/ ATTACK_ERROR_RESPONSE_WIDTH
+	))
+	var miss_chance := lerpf(ATTACK_ERROR_FLOOR, ATTACK_ERROR_CEILING, response)
+	return rng.randf() < miss_chance
 
 
 ## How often this serve misses, given how much the server is asking of it.

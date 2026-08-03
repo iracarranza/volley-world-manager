@@ -1,5 +1,10 @@
 # Attack Error Diagnostic
 
+> Superseded by `ATTACK_AND_REGION_STRENGTH_RECALIBRATION_2026_08_03.md`.
+> This first version inferred hitters from the terminal decisive actor and did
+> not count actual attack events, so its correlations remain historical context
+> rather than a valid post-fix baseline.
+
 Date: 2026-08-03
 Measured at: `a71590f` (merge of `codex/recover-player-state-ui` into
 `claude/system-fit-serve-receive-von64k`)

@@ -80,18 +80,19 @@ func _play(career_manager: Node, game_manager: Node, fixture_id: int) -> Diction
 		var result: Resource = game_manager.resolve_active_rally(base_seed + rallies)
 		game_manager.record_rally(result)
 		rallies += 1
-		var outcome := str(result.terminal_outcome)
-		if outcome in ["kill", "attack_error", "blocked", "counter_block", "dug"]:
+		for event_resource in result.events:
+			var event := event_resource as RallyEvent
+			if event == null or event.event_type != RallyEvent.EventType.ATTACK \
+					or str(event.metadata.get("side", "")) != "home":
+				continue
 			attacks += 1
-			if outcome == "attack_error":
+			if bool(event.metadata.get("attack_missed", false)):
 				errors += 1
-			## The player who actually swung, not the squad average.
-			var hitter: VolleyballPlayer = game_manager.player_by_id(int(result.decisive_actor_id))
+			var hitter: VolleyballPlayer = game_manager.player_by_id(event.actor_id)
 			if hitter != null:
 				hitter_ca_total += float(hitter.current_ability_score())
 				hitter_ca_count += 1
-		if float(result.attack_quality) > 0.0:
-			quality_total += float(result.attack_quality)
+			quality_total += float(event.quality)
 			quality_count += 1
 		fatigue_total += _lineup_fatigue(game_manager)
 	return {
