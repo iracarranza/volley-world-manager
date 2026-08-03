@@ -1,11 +1,22 @@
 # Body types
 
-Design doc. Nothing here is implemented yet.
+Design doc. **The secondary layer is implemented; the primary one is not.**
 
-Measured against `87de57c`. Codex has since pushed `f2fbc80` ("Recalibrate
-attacks and split regional strength"); the mechanisms this relies on
-(`SystemFitProfile`, `attribute_ceilings`, `stamina_fatigue_scale`) predate it,
-but re-read the constants before implementing.
+Landed: `body_type` on `VolleyballPlayer` (serialized both ways), uniform
+assignment across every region, `BODY_TYPE_METRICS` for height/mass/wingspan,
+`BODY_TYPE_ATTRIBUTES` applied to `attribute_ceilings` before storage, and
+both generation paths wired. The flat-distribution rule in §1 is enforced by
+`_test_body_type_distribution_is_flat`, which fails naming the region and the
+type if anyone weights it.
+
+Not landed: **the `SystemFitProfile` shifts of §2**, which is the layer that
+makes a type a tactical answer rather than a power level. Until those exist,
+body types are stat blocks — precisely what §2 says the feature must not be.
+A Cani setter and a Feli setter currently differ in numbers, not in which
+system suits them.
+
+Also outstanding: surfacing body type in the UI (it appears nowhere in
+`scenes/`), and a ceiling-persistence test across save/load.
 
 ---
 

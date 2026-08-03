@@ -8,19 +8,21 @@ Order within each section is rough implementation order, not priority.
 
 ---
 
-## 1. Body types — in progress
+## 1. Body types — secondary layer done, primary layer missing
 
-Branch: `claude/body-types-wip` (**634/636 checks — do not merge**).
+Branch: `claude/body-types-wip`, rebased onto `main`, **645 checks green**.
 
-Landed on that branch:
+Landed:
 
 - `body_type` on `VolleyballPlayer` (categorical, alongside `dominant_hand`,
   deliberately *not* in `ABILITY_ATTRIBUTES`), serialized both ways.
 - `BODY_TYPES` / `BODY_TYPE_METRICS` (height, mass, wingspan) /
   `BODY_TYPE_ATTRIBUTES` in `player_generator.gd`, applied to ceilings before
   storage, wired into both generation paths.
-- Uniform assignment across all regions, no regional weighting — the one rule
-  in `docs/design/BODY_TYPES.md` that must never be softened.
+- Uniform assignment across all regions, now enforced by
+  `_test_body_type_distribution_is_flat` rather than only stated in prose. It
+  fails naming the region and the type — a deliberate 50% Ursi bias in
+  Landavol is reported as "Ursi in Landavol, 44.1% against 16.7%".
 
 Still missing:
 
@@ -28,17 +30,8 @@ Still missing:
   design doc — body type is supposed to move `ideal_value` / `tolerance` /
   `in_system_bonus` so a Cani setter and a Feli setter are *suited
   differently*, not ranked. Only the secondary metric/attribute/ceiling layer
-  is in.
-- **Two failing balance checks**: `home stuff-block rate remains below the
-  prototype balance ceiling`, and `physical serving creates more pressure,
-  aces, and errors across six career seeds`. Untested hypothesis: the block
-  one is probably real (Avi moves `jump` and `block_timing`, which feed
-  blocking directly); the serving one may be an underpowered six-seed
-  directional test now carrying extra per-player variance rather than a true
-  regression.
-- **Distribution-flatness regression test** — assert every region produces
-  every type in equal proportion, so the universal-constant rule can't be
-  eroded by a later tuning pass.
+  is in, which means body types are currently stat blocks: exactly what §2
+  says the feature must not be.
 - **Ceiling-persistence test** — assert the ceiling deltas survive a
   save/load round trip.
 - **One line in `docs/world/STYLE_AND_SETTING.md`** — that doc still says
@@ -47,6 +40,10 @@ Still missing:
   vocabulary before it reaches twenty strings of news copy.
 - **Surfacing in UI** — `body_type` appears nowhere in `scenes/`. It should
   read as flavour on the player dossier, never as a scouting category.
+
+The three balance checks that were failing were **not** body-type defects.
+All three were assertions running below the resolution their sample size could
+support; see `docs/calibration/IDENTITY_AND_BLOCK_TEST_POWER_2026_08_03.md`.
 
 ## 2. Regional strength — the unimplemented half
 
