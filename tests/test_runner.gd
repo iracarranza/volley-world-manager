@@ -672,6 +672,55 @@ func _test_minor_region_behaviour() -> void:
 		minor_playing < minor_raised,
 		"the minor tier exports talent on balance rather than collecting it",
 	)
+
+	## Tier affinity redistributes *which* regions scarce talent comes from and
+	## must never create more of it. This is the invariant the whole scarcity
+	## model rests on -- finding a generational player has to stay an event --
+	## and it is the one a later well-meaning affinity tweak would break
+	## silently.
+	var full_world: Array = WORLD_POPULATION_SCRIPT.generate(4242, 4000)
+	var tier_totals := {}
+	for tier in WORLD_POPULATION_SCRIPT.TALENT_TIERS:
+		var band_key := str(tier.key)
+		for player_resource in full_world:
+			var player := player_resource as VolleyballPlayer
+			if player != null and player.potential >= int(tier.pa_min) \
+					and player.potential <= int(tier.pa_max):
+				tier_totals[band_key] = int(tier_totals.get(band_key, 0)) + 1
+	_check(
+		int(tier_totals.get("generational", 0)) == 8
+			and int(tier_totals.get("elite", 0)) == 24
+			and int(tier_totals.get("standout", 0)) == 62,
+		"tier affinity redistributes scarce talent between regions without creating more",
+	)
+
+	## Positional affinity has to actually reshape production, or the minor
+	## tier's "brilliant at one thing, cannot field a team" story never
+	## materialises -- it is what makes the positional best-seven in
+	## `region_strength()` punish a region with no middles.
+	var libero_share := {}
+	var middle_share := {}
+	for region_name in ["Lo-onğ Ralī", "Landavol", "Rhen Tempaol"]:
+		var total := 0
+		var liberos := 0
+		var middles := 0
+		for player_resource in full_world:
+			var player := player_resource as VolleyballPlayer
+			if player == null or str(player.home_region) != region_name:
+				continue
+			total += 1
+			if player.position_role == "Libero":
+				liberos += 1
+			elif player.position_role == "Middle Blocker":
+				middles += 1
+		libero_share[region_name] = float(liberos) / maxf(float(total), 1.0)
+		middle_share[region_name] = float(middles) / maxf(float(total), 1.0)
+	_check(
+		float(libero_share["Lo-onğ Ralī"]) > float(libero_share["Landavol"]) * 1.5
+			and float(middle_share["Lo-onğ Ralī"]) < float(middle_share["Landavol"]) * 0.6
+			and float(middle_share["Rhen Tempaol"]) > float(middle_share["Landavol"]),
+		"positional affinity reshapes what each region produces, not just how much",
+	)
 	_check(REGIONS_SCRIPT.canonical_name("Europe") == "Landavol",
 		"legacy real-world region saves migrate to a fictional setting")
 	_check(

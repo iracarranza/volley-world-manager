@@ -195,8 +195,8 @@ static func _generate_intake(
 	for tier in WorldPopulationModel.TALENT_TIERS:
 		var tier_key := str(tier.key)
 		for _index in range(int(counts.get(tier_key, 0))):
-			var region := WorldPopulationModel.birth_region(rng)
-			var position := WorldPopulationModel.weighted_position(rng)
+			var region := WorldPopulationModel.birth_region(rng, tier_key)
+			var position := WorldPopulationModel.weighted_position(rng, region)
 			var player := PlayerGeneratorModel.generate_prospect(
 				region,
 				str(position.role),
