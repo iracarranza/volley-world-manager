@@ -163,6 +163,14 @@ func _audit_movement(
 		if next_contact == null:
 			continue
 		var targets := {}
+		## Same order `_build_movement_plan` applies them in: the phase targets
+		## that walk a side's blockers or floor defenders into shape first, then
+		## the staged next actor, then the next contact's own actor, each
+		## overwriting the last.
+		for key in ["home_phase_targets", "opponent_phase_targets"]:
+			var phase_targets: Dictionary = next_contact.metadata.get(key, {})
+			for raw_id in phase_targets:
+				targets[int(raw_id)] = Vector2(phase_targets[raw_id])
 		var staged_id := int(event.metadata.get("staged_next_actor_id", -1))
 		if staged_id >= 0:
 			targets[staged_id] = Vector2(

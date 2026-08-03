@@ -7047,6 +7047,8 @@ func _test_playback_movement_is_humanly_possible() -> void:
 	var attacks := 0
 	var deflection_durations: Array[float] = []
 	var deflection_distances: Array[float] = []
+	var beaten_defenders := 0
+	var beaten_defenders_short := 0
 	for seed_value in range(6100, 6260):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		var events: Array = result.events
@@ -7054,6 +7056,20 @@ func _test_playback_movement_is_humanly_possible() -> void:
 			var event: Resource = events[index]
 			if event == null:
 				continue
+			if event.event_type in [
+				RALLY_EVENT_SCRIPT.EventType.DEFENSE,
+				RALLY_EVENT_SCRIPT.EventType.RECEPTION,
+			] and event.metadata.has("movement_target"):
+				var margin := float(event.metadata.get(
+					"arrival_margin",
+					Dictionary(event.metadata.get("arrival", {})).get("arrival_margin", 0.0),
+				))
+				if margin < 0.0:
+					beaten_defenders += 1
+					if Vector2(event.metadata["movement_target"]).distance_to(
+						event.start_position
+					) > 0.001:
+						beaten_defenders_short += 1
 			var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
 			if str(trajectory.get("trajectory_type", "")) == "block_deflection":
 				deflection_durations.append(float(trajectory.get("duration", 0.0)))
@@ -7112,6 +7128,20 @@ func _test_playback_movement_is_humanly_possible() -> void:
 	_check(
 		deflection_durations.size() > 5,
 		"playback movement test observes enough block deflections",
+	)
+	_check(
+		beaten_defenders > 0,
+		"playback movement test observes defenders who were beaten to the ball",
+	)
+	## A defender the ball beat is drawn where they got to, not at the contact.
+	## Playback used to walk every actor onto the ball regardless -- so a dig
+	## that the simulator had already scored as unreachable was shown as a
+	## player arriving and then inexplicably failing, at whatever speed the gap
+	## demanded.
+	_check(
+		beaten_defenders_short == beaten_defenders,
+		"every defender beaten to the ball stops short of it (%d of %d)"
+			% [beaten_defenders_short, beaten_defenders],
 	)
 	_check(
 		long_deflection == 0.0 or short_deflection == 999.0 \

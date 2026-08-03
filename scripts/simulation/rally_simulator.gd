@@ -517,8 +517,14 @@ func resolve(
 		rally_clock = float(live_reception_integration.get(
 			"simulation_time", rally_clock
 		))
-	else:
-		live_positions[receiver.id] = serve_landing
+	var receiver_reach := _reached_point(
+		receiver, receiver_start, serve_landing, serve_time, "lateral"
+	)
+	if not using_live_reception:
+		## Short of the ball is where a beaten passer actually is, and it is what
+		## the rest of the rally should reason from as well as what playback
+		## should draw.
+		live_positions[receiver.id] = receiver_reach
 	var preferred_release: Vector2 = defensive_plan.setter_release_target(lineup.active_setter_id()) \
 		if defensive_plan != null else Vector2(0.50, 0.60)
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
@@ -567,7 +573,7 @@ func resolve(
 			"support_count": support_count, "seam_conflict": seam_conflict,
 			"claim_margin": float(reception_claim.get("claim_margin", 1.0)),
 			"movement_start": receiver_start,
-			"movement_target": serve_landing if receiver_arrived else receiver_start,
+			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
 			"event_time": rally_clock,
 			"incoming_trajectory": serve_trajectory,
@@ -1283,6 +1289,26 @@ func resolve(
 			float(attack_to_block_arc.apex_height_meters),
 			float(attack_event.metadata.get("event_time", rally_clock))
 		)
+	## Walk the opponent's blockers to their wall during the *set's* flight,
+	## which is when a block actually forms. Without this they were drawn
+	## sprinting to the antenna during the attack's flight instead -- and an
+	## attack-to-block segment can be 0.14s, so a blocker caught deep in
+	## transition covered seven metres inside it. The home side already stages
+	## its blockers this way through `home_phase_targets` on the opponent's
+	## attack event; this is the same mechanism pointed the other way, which is
+	## why only opponent blockers showed up in the movement audit.
+	var opponent_wall := _block_wall_positions(set_target.x, true)
+	var opponent_block_stage := {}
+	if opponent_blocker != null:
+		opponent_block_stage[opponent_blocker.id] = Vector2(opponent_wall.primary_position)
+	if assisting_blocker != null:
+		opponent_block_stage[assisting_blocker.id] = Vector2(opponent_wall.assist_position)
+	for raw_player_id in opponent_block_stage:
+		opponent_live_positions[int(raw_player_id)] = Vector2(
+			opponent_block_stage[raw_player_id]
+		)
+	if not opponent_block_stage.is_empty():
+		attack_event.metadata["opponent_phase_targets"] = opponent_block_stage
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
@@ -1340,8 +1366,12 @@ func resolve(
 		var coverer_move_time := _movement_time(
 			coverer, coverer_start, recycle_target, "lateral"
 		) if coverer != null else 4.0
+		var coverer_reach := _reached_point(
+			coverer, coverer_start, recycle_target,
+			float(opponent_block_trajectory.get("duration", 0.24)), "lateral",
+		) if coverer != null else recycle_target
 		if coverer != null:
-			live_positions[coverer.id] = recycle_target
+			live_positions[coverer.id] = coverer_reach
 		var coverage_pass_target := recycle_target + Vector2(0.04, -0.05)
 		_add_event(result, RallyEventModel.EventType.DEFENSE,
 			coverer.id if coverer != null else -1,
@@ -1356,6 +1386,7 @@ func resolve(
 			), {"side": "home", "coverage": "attack",
 				"blocked_hitter_id": hitter.id,
 				"movement_start": coverer_start,
+				"movement_target": coverer_reach,
 				"movement_duration": coverer_move_time})
 		if not coverage_success:
 			return _finish(result, "blocked", false, hitter.id, {
@@ -1393,6 +1424,10 @@ func resolve(
 	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
+	var opponent_defender_reach := _reached_point(
+		opponent_defender, Vector2(opponent_defense.start), attack_target,
+		attack_flight, "lateral",
+	)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
@@ -1404,9 +1439,13 @@ func resolve(
 		], {"side": "opponent", "movement_start": opponent_defense.start,
 			"movement_duration": opponent_defense.travel_time,
 			"arrival_margin": opponent_defense.arrival_margin,
+			"movement_target": opponent_defender_reach,
 			"attack_direction": attack_choice.direction,
 			"adaptation_bonus": floor_defense_bonus})
-	opponent_live_positions[opponent_defender.id] = attack_target
+	## Where they actually ended up, not where the ball was. A defender who was
+	## beaten to it starts the next phase short of it, which is the position the
+	## rest of the rally should reason from.
+	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
 	if dug:
 		result.key_factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
@@ -1524,7 +1563,10 @@ func _resolve_home_serve(
 		reception_quality = minf(reception_quality, 0.12)
 	result.reception_quality = reception_quality
 	var reception_success := receiver_arrived and reception_quality >= 0.18
-	opponent_live_positions[receiver.id] = opponent_landing
+	var opponent_receiver_reach := _reached_point(
+		receiver, receiver_start, opponent_landing, serve_time, "lateral"
+	)
+	opponent_live_positions[receiver.id] = opponent_receiver_reach
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		opponent_landing, _opponent_setter_release_target(opponent_team),
 		reception_success,
@@ -1538,7 +1580,7 @@ func _resolve_home_serve(
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
 			"serve_risk_pressure": serve_risk_pressure,
 			"movement_start": receiver_start,
-			"movement_target": opponent_landing if receiver_arrived else receiver_start,
+			"movement_target": opponent_receiver_reach,
 			"movement_duration": receiver_move_time})
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
@@ -2080,7 +2122,10 @@ func _resolve_opponent_transition(
 	var defender_move_time := _movement_time(
 		defender, defender_start, home_target, "lateral"
 	)
-	live_positions[defender.id] = home_target
+	var defender_reach := _reached_point(
+		defender, defender_start, home_target, attack_time, "lateral"
+	)
+	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
@@ -2098,6 +2143,7 @@ func _resolve_opponent_transition(
 			"flight_time": attack_time, "arrival": defense_arrival,
 			"support_count": support_count,
 			"movement_start": defender_start,
+			"movement_target": defender_reach,
 			"movement_duration": defender_move_time})
 	result.key_factors.append(ExplanationText.factor(
 		"defense_assignment_fit" if responsibility_fit >= 0.02 \
@@ -2365,6 +2411,22 @@ func _resolve_home_continuation(
 	## two places at once.
 	var cont_block_contacts := blocked \
 		or block_outcome in ["recycle", "touch", "funnel"]
+	## Same blocker staging as the first-ball path: form the wall during the
+	## set's flight rather than during the attack-to-block segment, which can be
+	## a seventh of a second.
+	var cont_wall := _block_wall_positions(set_target.x, true)
+	var cont_block_stage := {}
+	if opponent_blocker != null:
+		cont_block_stage[opponent_blocker.id] = Vector2(cont_wall.primary_position)
+	if assisting_blocker != null:
+		cont_block_stage[assisting_blocker.id] = Vector2(cont_wall.assist_position)
+	for raw_player_id in cont_block_stage:
+		opponent_live_positions[int(raw_player_id)] = Vector2(
+			cont_block_stage[raw_player_id]
+		)
+	if not cont_block_stage.is_empty():
+		(result.events[-1] as RallyEvent).metadata["opponent_phase_targets"] = \
+			cont_block_stage
 	var cont_net_contact := Vector2(set_target.x, 0.50)
 	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
 		else Vector2(set_target.x, 0.47)
@@ -2412,11 +2474,28 @@ func _resolve_home_continuation(
 	## already in the rally rather than reading a first-ball swing.
 	var defense_quality := _defense_execution(opponent_defender, 0.0, 0.0, 0.0, 0)
 	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
+	## This branch carried no spatial metadata at all, so playback fell back to
+	## the contact point and walked the digger there from wherever they stood,
+	## however far that was. The dig outcome above is unchanged -- only the
+	## journey drawn to it is now the one they could make.
+	var transition_defender_start: Vector2 = opponent_live_positions.get(
+		opponent_defender.id,
+		opponent_team.court_position(opponent_defender.id, "defense"),
+	) if opponent_defender != null else attack_target
+	var transition_defender_reach := _reached_point(
+		opponent_defender, transition_defender_start, attack_target,
+		continuation_attack_flight, "lateral",
+	)
+	if opponent_defender != null:
+		opponent_live_positions[opponent_defender.id] = transition_defender_reach
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
 		attack_target + Vector2(0.04, -0.03), dug, defense_quality,
 		"Opponent dig · exchange %d" % exchange_number,
-		"Contact 1 of 3 · %d%% control." % roundi(defense_quality * 100.0))
+		"Contact 1 of 3 · %d%% control." % roundi(defense_quality * 100.0),
+		{"side": "opponent",
+			"movement_start": transition_defender_start,
+			"movement_target": transition_defender_reach})
 	if not dug:
 		return _finish(result, "kill", true, hitter.id, {
 			"setter": setter.display_name,
@@ -2900,6 +2979,44 @@ func _reachable_attack_contact(
 		else:
 			high = middle
 	return start.lerp(ideal_contact, low)
+
+
+## How far along their run a player actually got, when the ball beat them there.
+##
+## Playback draws each contact's actor travelling to the contact point over the
+## previous ball's flight. For a defender who never reached the ball that is a
+## lie in the player's favour and it reads as a teleport: they were shown
+## arriving, at whatever speed the geometry demanded, and then failing for
+## reasons the picture did not show. Emitting the point they actually reached
+## lets the ball land next to somebody who is visibly short of it, which is what
+## the simulator already decided happened.
+##
+## Bisected against `_movement_time` rather than scaled by the time fraction,
+## because locomotion has an acceleration phase: a player who has used 60% of
+## the time has covered less than 60% of the ground, and the difference is
+## exactly the early part of the run where the error would be most visible.
+func _reached_point(
+	mover: VolleyballPlayer,
+	start: Vector2,
+	target: Vector2,
+	available_time: float,
+	mode: String,
+) -> Vector2:
+	if mover == null or available_time <= 0.0:
+		return start
+	if _movement_time(mover, start, target, mode) <= available_time:
+		return target
+	var low := 0.0
+	var high := 1.0
+	for _iteration in range(REACHABLE_CONTACT_BISECTIONS):
+		var middle := (low + high) * 0.5
+		if _movement_time(
+			mover, start, start.lerp(target, middle), mode
+		) <= available_time:
+			low = middle
+		else:
+			high = middle
+	return start.lerp(target, low)
 
 
 func _choose_opponent_attack(

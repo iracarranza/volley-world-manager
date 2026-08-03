@@ -163,14 +163,71 @@ This is the same failure mode flagged earlier on `claude/body-types-wip`
 seeds"), and the same diagnosis applies: that test family runs below the
 resolution its sample count can support.
 
+## Follow-up: beaten defenders are now drawn short of the ball
+
+The next step named at the bottom of this document has since been implemented.
+`_reached_point()` bisects the run from a player's start to the contact against
+`_movement_time`, and returns the furthest point they could actually reach in
+the flight they had. It is bisected rather than scaled by the time fraction
+because locomotion has an acceleration phase: a player who has spent 60% of the
+time has covered less than 60% of the ground, and the gap is largest at the
+start of the run, which is the part most visible.
+
+It is emitted as `movement_target` from six sites — both receptions, both floor
+defences, the block-touch coverer, and the transition dig, which previously
+carried no spatial metadata at all. Both playback views already read
+`movement_target` (`match_screen.gd` via `_build_movement_plan`,
+`tactical_court.gd` via `_movement_action_target`), so neither needed changing.
+The live-position bookkeeping was updated with it too: a defender who was beaten
+to the ball starts the *next* phase short of it, which is what the rest of the
+rally should reason from.
+
+Reception already did a binary version of this — target the ball if the passer
+arrived, otherwise don't move them at all. That is now partial as well, so a
+passer who nearly got there is drawn nearly getting there.
+
+Making live positions honest exposed a second problem it had been masking.
+Opponent blockers were only walked to the wall during the *attack-to-block*
+segment, which can be 0.14 s, so a blocker caught deep in transition covered
+seven metres inside it — 51.8 m/s, worse than anything in the original report.
+It had been hidden because live positions were previously overwritten onto the
+ball, which happened to leave players nearer the net. The home side already
+forms its wall during the preceding flight via `home_phase_targets`; both
+opponent block paths now do the same through `opponent_phase_targets`, which is
+why only opponent blockers ever appeared in this table.
+
+| transition | over 6.5 m/s | worst |
+| --- | ---: | ---: |
+| Serve → Reception | 0 of 65 | 1.6 m/s |
+| Reception → Set | 0 of 65 | 4.3 m/s |
+| Set → Attack | 4 of 356 | 12.9 m/s |
+| Attack → Block | 0 of 44 | 1.0 m/s |
+| Block → Defense | 0 of 59 | 6.1 m/s |
+| Defense → Set | 3 of 25 | 12.2 m/s |
+
+Overall: **1.1% of movements above 6.5 m/s, worst 12.9 m/s** — from 21.4% and
+25.5 m/s in the original report, and 5.7% / 17.9 m/s after the first pass.
+`Block → Defense`, which was 15 of 16 over-speed at the start, is now zero.
+
 ## 3. Per-player timelines — not done, and worth doing
 
 The suggestion was to resolve each player against their own timeline and the
 ball, so a defender can still be mid-dive while the ball travels and the setter
-is already moving. That is right, and it is what the remaining residue in the
-table above is made of — `Defense → Set` at 17.0 m/s is a setter chasing a dug
-ball across a 0.48 s flight, and the current model can only draw that as one
-lerp across the whole flight.
+is already moving. That is right, and it is what the remaining residue is made
+of. Two cases survive everything above, and they share a shape: **the contact
+happens, so the player cannot be drawn short of it.**
+
+- `Defense → Set` at 12.2 m/s — a setter chasing a dug ball 7 m across a 0.58 s
+  flight. The setter does touch it; `setter_capability.reach_state` records
+  `beyond_reach` and the set is degraded accordingly. Drawing them short would
+  mean the ball sets itself.
+- `Set → Attack` at 12.9 m/s — a home hitter's final 2 m of run-up inside a
+  0.16 s quick set. Same thing: the swing happens, late and degraded.
+
+Both are cases where the run genuinely overlaps the previous action rather than
+starting when the ball is struck — the setter is already moving as the dig goes
+up, the hitter is already approaching before the set is released. A per-player
+timeline models that directly; a plan-per-flight cannot express it at all.
 
 The engine already has most of the parts: `RallyPlayerState` carries position
 and velocity, `ApproachMechanicsModel` reasons about arrival margins,
@@ -180,7 +237,6 @@ is a real piece of work — a new contract between the simulator and
 `match_screen.gd` — and it should be its own change rather than a rider on this
 one.
 
-The concrete next step is smaller than the full rewrite: when the simulator
-already says a player did not arrive (`arrival_margin` is negative), playback
-should draw them as far as they got rather than at the ball. That is honest with
-the data that exists today and would remove most of the remaining residue.
+The smaller step that came first — drawing a beaten defender where they got to
+— is done, and it took the residue from 5.7% of movements to 1.1%. What is left
+needs the timeline.
