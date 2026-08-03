@@ -806,7 +806,11 @@ func _apply_confidence_shift(
 	decisive_actor_id: int,
 	volatility: float = 1.0,
 ) -> void:
-	var magnitude := (0.035 + absf(float(match_state.last_flow_shift)) * 0.14) \
+	## 0.28 rather than 0.14 because halving the flow impact band also halved the
+	## shifts this reads. Doubling the coefficient keeps confidence moving exactly
+	## as far as it did before, so lengthening flow's memory changes flow and
+	## nothing else.
+	var magnitude := (0.035 + absf(float(match_state.last_flow_shift)) * 0.28) \
 		* volatility
 	for player in side_players:
 		var sensitivity := lerpf(1.25, 0.60, float(player.composure) / 100.0)

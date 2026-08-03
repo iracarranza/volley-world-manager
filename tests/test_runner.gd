@@ -178,6 +178,7 @@ func _initialize() -> void:
 	_test_every_script_has_a_uid()
 	_test_match_scoring_and_rotation()
 	_test_player_state_flow_and_recovery()
+	_test_rally_spectacle_and_flow_separation()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7519,6 +7520,97 @@ func _test_player_state_flow_and_recovery() -> void:
 				restored_manager.match_state.match_flow, manager.match_state.match_flow
 			),
 		"team cohesion and match flow survive serialization",
+	)
+
+
+## Spectacle answers "was this worth watching", flow answers "who is on a run".
+## They were one number until the split, which is the whole reason playback
+## selection could never be built on flow.
+func _test_rally_spectacle_and_flow_separation() -> void:
+	var long_rally := RallyResult.new()
+	long_rally.home_team_won = true
+	long_rally.terminal_outcome = "counter_block"
+	long_rally.attack_quality = 0.88
+	long_rally.analysis = {"contacts": 14}
+	var short_error := RallyResult.new()
+	short_error.home_team_won = true
+	short_error.terminal_outcome = "attack_error"
+	short_error.attack_quality = 0.30
+	short_error.analysis = {"contacts": 2}
+
+	var even := VolleyballMatchState.new()
+	var surging := VolleyballMatchState.new()
+	surging.match_flow = 0.90
+	_check(
+		is_equal_approx(
+			even.rally_spectacle(long_rally), surging.rally_spectacle(long_rally)
+		),
+		"rally spectacle scores the rally alone and ignores the flow it happened in",
+	)
+	_check(
+		even.rally_spectacle(long_rally) > even.rally_spectacle(short_error) + 0.40,
+		"a long high-quality rally far outscores a short error for spectacle",
+	)
+
+	## The saturation that makes flow unusable as a highlight trigger, asserted
+	## rather than described: the same rally, scored twice.
+	even.record_rally(long_rally)
+	surging.record_rally(long_rally)
+	_check(
+		even.last_flow_shift > surging.last_flow_shift * 2.0,
+		"an identical rally moves flow far less during a run, so flow cannot rank highlights",
+	)
+
+	## Leverage is lateness AND closeness. The old term returned its maximum at
+	## 24-10, where the set is already over.
+	var tight := VolleyballMatchState.new()
+	var target := int(tight.match_format.target_for_set(1))
+	tight.home_score = target - 2
+	tight.opponent_score = target - 3
+	var blowout := VolleyballMatchState.new()
+	blowout.home_score = target - 2
+	blowout.opponent_score = maxi(target - 16, 0)
+	var clutch_point := RallyResult.new()
+	clutch_point.home_team_won = true
+	clutch_point.terminal_outcome = "kill"
+	clutch_point.attack_quality = 0.70
+	clutch_point.analysis = {"contacts": 6}
+	var dead_point := RallyResult.new()
+	dead_point.home_team_won = true
+	dead_point.terminal_outcome = "kill"
+	dead_point.attack_quality = 0.70
+	dead_point.analysis = {"contacts": 6}
+	tight.record_rally(clutch_point)
+	blowout.record_rally(dead_point)
+	_check(
+		float(clutch_point.analysis.get("flow_impact", 0.0))
+			> float(dead_point.analysis.get("flow_impact", 0.0)),
+		"a late point in a tight set carries more flow impact than the same point in a decided one",
+	)
+	_check(
+		is_equal_approx(
+			float(clutch_point.analysis.get("rally_spectacle", -1.0)),
+			float(dead_point.analysis.get("rally_spectacle", -2.0)),
+		),
+		"identical rallies score identical spectacle regardless of the scoreline",
+	)
+
+	## Decay and impact are a matched pair. Changing one alone rescales the whole
+	## meter, so the steady-state band is pinned to what 0.72/[0.12, 0.50] gave.
+	_check(
+		absf(
+			VolleyballMatchState.FLOW_IMPACT_MIN
+				/ (1.0 - VolleyballMatchState.FLOW_DECAY) - 0.12 / 0.28
+		) < 0.01
+			and absf(
+				VolleyballMatchState.FLOW_IMPACT_MAX
+					/ (1.0 - VolleyballMatchState.FLOW_DECAY) - 0.50 / 0.28
+			) < 0.01,
+		"flow decay and impact stay matched: the steady-state band is unchanged",
+	)
+	_check(
+		log(0.5) / log(VolleyballMatchState.FLOW_DECAY) > 4.0,
+		"flow remembers a run for more than four points rather than the old two",
 	)
 
 

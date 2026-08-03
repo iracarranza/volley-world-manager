@@ -1,7 +1,9 @@
-# The action vocabulary (draft)
+# The action vocabulary and rally spectacle (draft)
 
 Date: 2026-08-03
-Status: **draft for review.** Nothing here is implemented.
+Status: the vocabulary below is **a draft, not implemented**. The spectacle
+score and the flow rebalance described in the second half **are implemented**
+(`scripts/models/match_state.gd`).
 
 ## The problem this solves
 
@@ -139,6 +141,148 @@ Targets to gate in the test suite:
 
 The last two are different denominators on purpose. Named actions should be
 **rare per contact and dominant per point**.
+
+---
+
+# Part two: spectacle, flow, and why they had to be split
+
+The momentum system was originally proposed to solve playback selection --
+deciding which rallies deserve 3D. It cannot do that job in the form it was
+built, and this is structural rather than a tuning problem.
+
+## `flow_shift` measures the wrong thing
+
+Two properties of `new_flow = clamp(old_flow * decay ± impact, -1, 1)`, using
+the pre-change 0.72 decay and [0.12, 0.50] impact band:
+
+**It saturates.** At flow +0.90 a maximum-impact rally gives
+`0.90×0.72 + 0.50 = 1.148` → clamps to 1.0, a shift of **+0.10**. The identical
+rally from even flow shifts **+0.50**. A team's best volleyball scores lowest
+exactly while it is dominating.
+
+**It is reversal-dominated.** At flow +0.90 a *minimum*-impact rally lost by the
+leader gives `0.648 − 0.12 = 0.528`, a shift of **−0.372** -- nearly four times
+the spectacular rally above. A routine sideout outranks a twenty-contact
+exchange whenever it breaks a streak.
+
+Both are correct for a momentum meter. Both are wrong for choosing what to show.
+
+## The split
+
+`_flow_impact` now takes a spectacle score rather than computing one inline:
+
+- `rally_spectacle(result) -> float` is **context-free**. Endurance (contacts),
+  peak execution, and a terminal flourish. It reads only the rally. Playback
+  selection consumes this.
+- `_leverage(set_target) -> float` is **context-dependent** -- lateness ×
+  closeness.
+- `_flow_impact(spectacle, set_target)` combines them for the flow update.
+  Confidence continues to read `flow_shift` and is unaffected.
+
+### Two defects found by measuring rather than reasoning
+
+Both were in the first implementation and are fixed:
+
+1. **Aces scored below routine stuff blocks** (0.34 vs 0.58). The three summary
+   quality fields on `RallyResult` are reception, set and attack -- a serve is
+   structurally invisible to them, and an ace is by definition a near-zero
+   reception rally, so it scored its own brilliance as nothing. Peak is now read
+   across the rally's events.
+2. **Reading events pinned every rally at maximum.** Every rally emits a POINT
+   event at a hardcoded quality of 1.0, so a service error into the net scored
+   the same execution as an ace. POINT is now skipped.
+
+### Measured distribution, 825 rallies over 8 matches
+
+| outcome | mean spectacle | share |
+| --- | ---: | ---: |
+| serve_error | 0.193 | 16.6% |
+| attack_error | 0.379 | 15.5% |
+| opponent_kill | 0.524 | 13.5% |
+| ace | 0.560 | 4.4% |
+| counter_block | 0.600 | 5.6% |
+| kill | 0.609 | 10.9% |
+| blocked | 0.654 | 33.6% |
+
+Overall p50 0.573, p99 0.722, max 0.758.
+
+**Two things are wrong with this and neither is the formula's fault.**
+
+The ordering is sensible but `blocked` is simultaneously the highest-scoring
+outcome *and* a third of all rallies, so a highlight reel built on this today
+would be one-third block stuffs. That is the uncalibrated 39.4% stuff rate
+showing through, not a spectacle defect.
+
+The distribution is also bunched: 43.9% of rallies clear 0.60 but only 1.8%
+clear 0.70, so there is a cliff rather than a usable knob between them. The
+cause is that `flourish` currently has three discrete levels. Once the
+vocabulary lands and flourish becomes a **sum over the rally's named moments**,
+the top of the range spreads out and thresholds become selectable.
+
+**Conclusion: playback thresholds cannot be finalised until the block rate is
+calibrated and the vocabulary is in.** The score is correct and in place; the
+inputs it reads are not yet ready to be thresholded.
+
+## Flow rebalance
+
+**Decay and impact are a matched pair.** A team winning every rally at constant
+impact `i` settles at `i / (1 - decay)`, so changing one alone silently
+rescales the meter. The old 0.72 gave momentum a half-life of about **two
+points** -- 0.72² = 0.52, so a 5-0 run was indistinguishable from a single point
+by the third point after. That is recency, not momentum.
+
+Now 0.86 with a halved impact band. Half-life rises to ~4.6 points while the
+steady-state range is unchanged: 0.06/0.14 = 0.43 exactly as 0.12/0.28 was, and
+0.25/0.14 = 1.79 exactly as 0.50/0.28 was. The confidence coefficient moved
+0.14 → 0.28 to absorb the halved shifts, so confidence moves exactly as far as
+before and only flow's memory changed. A test pins the pairing.
+
+## Leverage was mis-specified
+
+`max(score) / target` returns 1.0 at both 24-23 and 24-10, treating a decided
+set as maximally clutch. Leverage is now `lateness × closeness`, with closeness
+falling to zero at an eight-point margin.
+
+## Identity: Spëddigh contained Pāwa Hitō
+
+Spëddigh was 0.85 tempo variation / 0.90 transition commitment against Pāwa's
+0.50 / 0.88 -- strictly better on both defining axes, leaving Pāwa with no
+dimension of its own. Two regions cannot be distinct when one contains the
+other.
+
+Spëddigh now takes the highest tempo variation in the world (0.90) and settles
+for merely high transition (0.78); Pāwa takes the highest transition commitment
+(0.94) and the lowest tempo variation of any attacking region (0.32). One is
+unpredictable, the other relentless.
+
+A related observation worth recording: the regions carry identity in **two
+different systems**, and this is fine as long as it is deliberate. Xérvu
+(serve_aggression 0.92) and Taktikã (emotional_expression 0.12) are principles
+regions and are cleanly implemented. Ispayk is an *attribute* region -- its
+power lives in the generator. Pāwa's stated identity, sustained high-stamina
+attacking, is also an attribute story; stamina and work rate are not identity
+axes at all. The fix above gives it a principles axis to own, but its real
+distinction should continue to live in generation.
+
+## Still open
+
+- Momentum-to-highlight thresholds (blocked on block calibration).
+- Grouping connected rallies into highlight sequences.
+- Named actions feeding `flourish` as a sum.
+- Different spectacle weights for solo/double/triple blocks.
+- Forced playback for set points, match points and reversals.
+- Momentum timeline or graph.
+
+The fictional-rule proposals (golden ball, coach tokens, altered court,
+short-handed play) are deliberately **not** treated here as a playback solution.
+Forcing 3D on a special event solves selection by fiat rather than by
+identifying quality, and each such rule invalidates the calibration baseline.
+They should be judged as gameplay ideas on their own merit, separately.
+
+One unmeasured risk: quality → `flow_impact` → `flow_shift` → confidence →
+`execution_scale` → quality is a closed loop. Its gain is deliberately small
+(0.02-0.06 against fatigue at 0.18) so it is probably harmless, but "probably"
+on a feedback loop deserves one sweep.
 
 ## What this implies for the block calibration
 

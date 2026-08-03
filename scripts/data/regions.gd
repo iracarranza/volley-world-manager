@@ -88,15 +88,28 @@ const REGIONAL_PRINCIPLES := {
 		"emotional_expression": 0.50, "serve_aggression": 0.50,
 		"transition_commitment": 0.50, "block_commitment": 0.50,
 	},
+	## Spëddigh and Pāwa Hitō each own one axis outright, which they previously
+	## did not. Spëddigh was 0.85 tempo variation and 0.90 transition commitment
+	## against Pāwa's 0.50 and 0.88 -- so Spëddigh was Pāwa plus unpredictability,
+	## strictly better on both defining axes, and Pāwa had no dimension of its
+	## own to be extreme on. Two regions cannot be distinct when one contains the
+	## other.
+	##
+	## Spëddigh now takes the highest tempo variation in the world and settles
+	## for merely high transition; Pāwa takes the highest transition commitment
+	## and the lowest tempo variation of any attacking region. One is
+	## unpredictable, the other is relentless, and the sim already renders that
+	## difference: tempo_variation rotates tempos when reception allows, while
+	## transition_commitment drives how hard a side releases into its next swing.
 	"Spëddigh": {
-		"decisiveness": 0.68, "pin_focus": 0.42, "tempo_variation": 0.85,
-		"emotional_expression": 0.65, "serve_aggression": 0.58,
-		"transition_commitment": 0.90, "block_commitment": 0.55,
+		"decisiveness": 0.68, "pin_focus": 0.42, "tempo_variation": 0.90,
+		"emotional_expression": 0.68, "serve_aggression": 0.58,
+		"transition_commitment": 0.78, "block_commitment": 0.52,
 	},
 	"Pāwa Hitō": {
-		"decisiveness": 0.72, "pin_focus": 0.62, "tempo_variation": 0.50,
-		"emotional_expression": 0.65, "serve_aggression": 0.55,
-		"transition_commitment": 0.88, "block_commitment": 0.55,
+		"decisiveness": 0.76, "pin_focus": 0.70, "tempo_variation": 0.32,
+		"emotional_expression": 0.62, "serve_aggression": 0.55,
+		"transition_commitment": 0.94, "block_commitment": 0.58,
 	},
 	"Bloc du Larg": {
 		"decisiveness": 0.26, "pin_focus": 0.32, "tempo_variation": 0.30,
