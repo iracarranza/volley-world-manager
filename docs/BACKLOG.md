@@ -206,9 +206,10 @@ same defect, and patching then replacing is wasted work.
   Launch from a contact height with signed angles, the inverse solve, a
   height-at-distance probe for block intersection, and a minimum-speed query.
   Pure functions, no rally state, nothing wired — behaviour is unchanged.
-- **Gate B — shadow attack geometry.** Course repertoire, perceived
-  availability *including the block*, power as an independent choice, and the
-  three execution channels. Emits alongside the live path.
+- **Gate B — courses as bearings. Landed (geometry half).**
+  `scripts/simulation/attack_course_model.gd`. Still to come in Gate B:
+  perceived availability *including the block*, power as an independent choice,
+  and the three execution channels.
 - **Gate C — resolution.** Block intersection along the flight, landing, in/out
   from geometry. Still shadow.
 - **Gate D — calibration.** Tune spreads and the power range until the emergent
@@ -235,6 +236,42 @@ ruled out and drawn in. A round-trip test over the speed × range grid pins it.
 site still uses it, and it remains the right model for own-side deliveries,
 which launch and land at roughly the same height and are never struck downward.
 Gate E decides which sites move.
+
+### Gate B notes
+
+A course is a **bearing**, measured on the floor from the net normal, positive
+toward increasing x. Zones are not portable between hitters — a left-pin
+hitter's cross-court and a right-pin hitter's cross-court are opposite
+directions — so the bearing is the choice and the *label* is derived from where
+the ball lands relative to the hitter, which `_attack_direction()` already does
+correctly.
+
+Measured legal cones, contact at y = 0.52 (`tools/run_course_probe.gd`):
+
+| lane | legal cone | width | deepest shot |
+| --- | --- | ---: | --- |
+| Left Pin | −64.75° … +87.25° | 152.0° | 11.79 m at +40.25° |
+| Front Quick | −83.65° … +85.90° | 169.6° | 10.39 m at +29.95° |
+| Pipe | −85.00° … +85.00° | 170.0° | 9.98 m at −25.65° |
+| Right Quick | −85.90° … +83.65° | 169.6° | 10.39 m at −29.95° |
+| Right Pin | −87.25° … +64.75° | 152.0° | 11.79 m at −40.25° |
+
+Two consequences for the gates after this one.
+
+**The pins' cones are lopsided and mirrored.** A left-pin hitter can turn 87°
+across the court and only 65° back toward their own sideline. `swing_range`
+today is a symmetric window in *x* and offers that hitter the same reach toward
+a sideline 0.065 away as toward one 0.825 away.
+
+**The deepest legal shot from a pin is 11.79 m, not 9 m** — the sharp cross
+diagonal is longer than the court is deep. So required power is a function of
+the chosen course, and the sharp cross costs more of it than the line does.
+That is a genuine tactical consequence falling straight out of the geometry,
+and it is the first thing Gate C's power selection has to respect.
+
+**Bearings are metric, not normalized.** The court is 9 m by 18 m, so equal
+normalized offsets in x and y are a 26.6° shot, not 45°. Computing bearings in
+normalized space would tilt every course in the game.
 
 ### Resolved: velocity is real, and it is `attack_power`
 

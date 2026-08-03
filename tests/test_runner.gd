@@ -181,6 +181,7 @@ func _initialize() -> void:
 	_test_rally_spectacle_and_flow_separation()
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
+	_test_attack_courses_are_relative_to_the_hitter()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7532,6 +7533,142 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## Gate B. A course is a bearing rather than a named zone because a zone name is
+## not portable between hitters: a left-pin hitter's cross-court and a right-pin
+## hitter's cross-court are opposite directions. Everything below is stated as a
+## property that must hold for *both* pins, so a model that quietly assumes one
+## side fails it.
+func _test_attack_courses_are_relative_to_the_hitter() -> void:
+	## Contacts just inside the net on the home side, on each pin.
+	var left_pin := Vector2(CourtConstants.LANE_X["Left Pin"], 0.52)
+	var right_pin := Vector2(CourtConstants.LANE_X["Right Pin"], 0.52)
+
+	## Cross-court means "toward the far side of the court", which is opposite
+	## signed for the two pins. This is the property zones cannot express.
+	var left_cross := AttackCourseModel.bearing_to_point(
+		left_pin, Vector2(0.80, 0.14), true
+	)
+	var right_cross := AttackCourseModel.bearing_to_point(
+		right_pin, Vector2(0.20, 0.14), true
+	)
+	_check(
+		left_cross > 5.0 and right_cross < -5.0,
+		"cross-court is an opposite-signed bearing for a left-pin and a right-pin hitter",
+	)
+
+	## Line shots hug the sideline each hitter is already near, so they sit close
+	## to the net normal and lean opposite ways.
+	var left_line := AttackCourseModel.bearing_to_point(
+		left_pin, Vector2(0.09, 0.14), true
+	)
+	var right_line := AttackCourseModel.bearing_to_point(
+		right_pin, Vector2(0.91, 0.14), true
+	)
+	_check(
+		absf(left_line) < absf(left_cross) and absf(right_line) < absf(right_cross)
+			and left_line < 0.0 and right_line > 0.0,
+		"line shots stay near the net normal and lean toward each hitter's own sideline",
+	)
+
+	## Round trip: a bearing flown a distance lands where the bearing said.
+	var round_trips := true
+	for bearing in [-40.0, -18.0, 0.0, 12.0, 33.0, 55.0]:
+		for distance in [3.0, 6.0, 8.5]:
+			var landing: Vector2 = AttackCourseModel.landing_point(
+				left_pin, bearing, distance, true
+			)
+			var read_back: float = AttackCourseModel.bearing_to_point(
+				left_pin, landing, true
+			)
+			if absf(read_back - bearing) > 0.01:
+				round_trips = false
+	_check(
+		round_trips,
+		"a bearing flown to a landing point reads back as the same bearing",
+	)
+
+	## The asymmetry, stated directly. A left-pin hitter has 0.065 of court to
+	## their left and 0.825 to their right, so their legal cone is lopsided --
+	## and the right pin's is its mirror. A symmetric window in x, which is what
+	## `swing_range` is today, cannot represent either.
+	var left_courses := AttackCourseModel.available_courses(
+		left_pin, 0.0, 70.0, true, 71
+	)
+	var right_courses := AttackCourseModel.available_courses(
+		right_pin, 0.0, 70.0, true, 71
+	)
+	var left_positive := 0
+	var left_negative := 0
+	for course in left_courses:
+		if float(course.bearing_degrees) > 0.0:
+			left_positive += 1
+		elif float(course.bearing_degrees) < 0.0:
+			left_negative += 1
+	var right_positive := 0
+	var right_negative := 0
+	for course in right_courses:
+		if float(course.bearing_degrees) > 0.0:
+			right_positive += 1
+		elif float(course.bearing_degrees) < 0.0:
+			right_negative += 1
+	_check(
+		left_positive > left_negative and right_negative > right_positive,
+		"each pin's legal cone leans across the court, in opposite directions",
+	)
+	_check(
+		left_positive == right_negative and left_negative == right_positive,
+		"the two pins' cones are mirror images, because the court is symmetric",
+	)
+
+	## A bearing pointed along the net, or backwards, is not a shot.
+	_check(
+		not bool(AttackCourseModel.court_span_for_bearing(
+			left_pin, 90.0, true
+		).reaches_court)
+			and not bool(AttackCourseModel.court_span_for_bearing(
+				left_pin, 170.0, true
+			).reaches_court),
+		"bearings along the net or away from it reach no court",
+	)
+
+	## Straight ahead from the middle: the span runs from the net to the endline,
+	## which is 9 m of court, entered a little late because the contact sits on
+	## the hitter's own side of the net.
+	var middle := Vector2(0.50, 0.52)
+	var straight: Dictionary = AttackCourseModel.court_span_for_bearing(
+		middle, 0.0, true
+	)
+	_check(
+		bool(straight.reaches_court)
+			and absf(float(straight.near_meters) - 0.36) < 0.01
+			and absf(float(straight.far_meters) - 9.36) < 0.01,
+		"straight ahead from mid-net spans the nine metres of opponent court",
+	)
+
+	## Bearings are metric, not normalized. A ball aimed at equal normalized
+	## offsets in x and y is NOT a 45-degree shot, because the court is twice as
+	## long as it is wide -- getting this wrong would tilt every course.
+	var diagonal := AttackCourseModel.bearing_to_point(
+		Vector2(0.50, 0.50), Vector2(0.75, 0.25), true
+	)
+	_check(
+		absf(diagonal - 26.565) < 0.01,
+		"a bearing is measured on the floor rather than in normalized coordinates",
+	)
+
+	## The opponent attacks the other way; the same call with the flag flipped
+	## must behave identically in their frame.
+	var opponent_contact := Vector2(CourtConstants.LANE_X["Left Pin"], 0.48)
+	var opponent_span: Dictionary = AttackCourseModel.court_span_for_bearing(
+		opponent_contact, 0.0, false
+	)
+	_check(
+		bool(opponent_span.reaches_court)
+			and absf(float(opponent_span.span_meters) - 9.0) < 0.01,
+		"a hitter attacking the other half sees the same nine metres of court",
+	)
+
+
 ## Gate A of the ball-geometry work. `RallyKinematics.solve_launch_arc()` is the
 ## level-ground solution and clamps launch angles positive, so it cannot express
 ## a spike -- a ball struck downward from about 3.2 m. Every expected value here
