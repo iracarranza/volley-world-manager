@@ -6,6 +6,7 @@ signal back_requested
 
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 const STEPS := ["01  ORIGIN", "02  FOUNDATION", "03  PHILOSOPHY", "04  SIGNATURE"]
 const AXIS_QUESTIONS := [
@@ -40,6 +41,7 @@ var selected_region := "Landavol"
 var selected_type := "Club"
 var selected_values: Dictionary = {}
 var identity_tracks_region := true
+var light_mode_enabled := false
 var step_panels: Array[Control] = []
 var step_labels: Array[Label] = []
 var tag_buttons: Dictionary = {}
@@ -159,8 +161,9 @@ func _build_identity_choices() -> void:
 func _show_step() -> void:
 	for index in range(step_panels.size()):
 		step_panels[index].visible = index == current_step
-		step_labels[index].modulate = Color("f4c95d") if index == current_step \
-			else Color("71839b")
+		step_labels[index].modulate = UIPalette.color(
+			&"accent" if index == current_step else &"ink_faint", light_mode_enabled
+		)
 	step_kicker.text = "QUESTION %d OF %d" % [current_step + 1, STEPS.size()]
 	match current_step:
 		0:
@@ -316,47 +319,12 @@ func _region_signature(region_name: String) -> String:
 
 
 func set_light_mode(enabled: bool) -> void:
-	%Background.color = Color("e9f0e8") if enabled else Color("07111f")
-	%AccentBand.color = Color("bd3f38") if enabled else Color("d4a928")
-	%Rail.add_theme_stylebox_override("panel", _panel_style(
-		Color("dbe5dc") if enabled else Color("071827"),
-		Color("bd3f38") if enabled else Color("d4a928"), true
-	))
-	%QuestionPanel.add_theme_stylebox_override("panel", _panel_style(
-		Color("f4f8f3") if enabled else Color("091e32"),
-		Color("bd3f38") if enabled else Color("d4a928"), false
-	))
-	var text_color := Color("123d2a") if enabled else Color("f5f1de")
-	var quiet_color := Color("496557") if enabled else Color("a6bdcf")
-	_set_descendant_colors(self, text_color)
-	question_hint.add_theme_color_override("font_color", quiet_color)
-	step_kicker.add_theme_color_override(
-		"font_color", Color("a9322d") if enabled else Color("f0c24f")
-	)
-	error_label.add_theme_color_override("font_color", Color("d33232") if enabled else Color("ff6161"))
-	%AlignmentPreview.add_theme_color_override(
-		"font_color", Color("a9322d") if enabled else Color("f0c24f")
-	)
-
-
-func _set_descendant_colors(node: Node, color: Color) -> void:
-	for child in node.get_children():
-		if child is Label:
-			(child as Label).add_theme_color_override("font_color", color)
-		elif child is Button:
-			(child as Button).add_theme_color_override("font_color", color)
-		elif child is RichTextLabel:
-			(child as RichTextLabel).add_theme_color_override("default_color", color)
-		_set_descendant_colors(child, color)
-
-
-func _panel_style(background: Color, border: Color, right_edge_only: bool) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	if right_edge_only:
-		style.border_width_right = 1
-	else:
-		style.set_border_width_all(1)
-		style.set_corner_radius_all(12)
-	return style
+	light_mode_enabled = enabled
+	%Background.color = UIPalette.color(&"canvas", enabled)
+	%AccentBand.color = UIPalette.color(&"accent", enabled)
+	question_hint.modulate = UIPalette.color(&"ink_muted", enabled)
+	step_kicker.modulate = UIPalette.color(&"accent", enabled)
+	error_label.modulate = UIPalette.color(&"danger", enabled)
+	%AlignmentPreview.modulate = UIPalette.color(&"accent_alt", enabled)
+	if not step_labels.is_empty():
+		_show_step()

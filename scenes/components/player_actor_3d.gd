@@ -1,6 +1,8 @@
 class_name PlayerActor3D
 extends Node3D
 
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
+
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 
 @onready var body_pivot: Node3D = $BodyPivot
@@ -54,8 +56,18 @@ func configure(
 	]
 	identity_label.modulate = Color("f8f2d8")
 	identity_label.visible = false
-	var team_color := Color("1677ff") if home_team else Color("ed4b42")
-	var accent_color := Color("f1d44b") if home_team else Color("f7f2e8")
+	apply_ui_palette(false)
+	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+
+
+func apply_ui_palette(light_mode: bool) -> void:
+	_ensure_node_bindings()
+	var team_color := UIPalette.color(
+		&"accent_alt" if is_home_team else &"danger", light_mode
+	)
+	var accent_color := UIPalette.color(
+		&"accent" if is_home_team else &"ink", light_mode
+	)
 	_apply_material_color(torso, team_color)
 	_apply_material_color(shorts, team_color.darkened(0.38))
 	_apply_material_color(head, Color("d6a06c"))
@@ -65,7 +77,6 @@ func configure(
 		_apply_material_color(leg.get_node("Mesh"), Color("d6a06c"))
 		_apply_material_color(leg.get_node("Shoe"), team_color.darkened(0.55))
 	_apply_material_color(focus_ring, accent_color)
-	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 
 func set_tactical_position(position: Vector2, world_position: Vector3) -> void:

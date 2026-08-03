@@ -1,6 +1,7 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3 uid="uid://d2f0vqe5oq171"]
 
-[ext_resource type="Script" path="res://scenes/screens/title_screen.gd" id="1"]
+[ext_resource type="Script" uid="uid://m3nkbwbjxc0h" path="res://scenes/screens/title_screen.gd" id="1"]
+[ext_resource type="Script" uid="uid://bk18pfym1p674" path="res://scenes/components/ui_backdrop.gd" id="2_backdrop"]
 
 [sub_resource type="StyleBoxFlat" id="MenuPanel"]
 bg_color = Color(0.025, 0.065, 0.11, 0.96)
@@ -48,9 +49,7 @@ corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 10
 
-[sub_resource type="StyleBoxEmpty" id="DialogBackground"]
-
-[node name="TitleScreen" type="Control"]
+[node name="TitleScreen" type="Control" unique_id=1345326369]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -59,240 +58,254 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=1351328532]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 color = Color(0.024, 0.063, 0.114, 1)
+script = ExtResource("2_backdrop")
 
-[node name="CourtBand" type="ColorRect" parent="."]
+[node name="CourtBand" type="ColorRect" parent="." unique_id=1924689405]
 unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 15
+anchors_preset = -1
 anchor_left = 0.56
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 color = Color(0.035, 0.137, 0.192, 1)
 
-[node name="CourtLineA" type="ColorRect" parent="."]
+[node name="CourtLineA" type="ColorRect" parent="." unique_id=395404625]
 layout_mode = 1
-anchors_preset = 15
-anchor_left = 0.70
+anchors_preset = -1
+anchor_left = 0.7
 anchor_right = 0.705
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 color = Color(0.9, 0.78, 0.37, 0.18)
 
-[node name="CourtLineB" type="ColorRect" parent="."]
+[node name="CourtLineB" type="ColorRect" parent="." unique_id=678274186]
 layout_mode = 1
-anchors_preset = 15
+anchors_preset = -1
 anchor_left = 0.86
 anchor_right = 0.865
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 color = Color(0.9, 0.78, 0.37, 0.18)
 
-[node name="AccentBar" type="ColorRect" parent="."]
+[node name="AccentBar" type="ColorRect" parent="." unique_id=1389907265]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
 offset_bottom = 8.0
+grow_horizontal = 2
 color = Color(0.84, 0.67, 0.16, 1)
 
-[node name="Content" type="MarginContainer" parent="."]
+[node name="Content" type="MarginContainer" parent="." unique_id=185262592]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/margin_left = 68
 theme_override_constants/margin_top = 58
 theme_override_constants/margin_right = 68
 theme_override_constants/margin_bottom = 52
 
-[node name="Columns" type="HBoxContainer" parent="Content"]
+[node name="Columns" type="HBoxContainer" parent="Content" unique_id=344751336]
 layout_mode = 2
 theme_override_constants/separation = 72
 
-[node name="Brand" type="VBoxContainer" parent="Content/Columns"]
+[node name="Brand" type="VBoxContainer" parent="Content/Columns" unique_id=979713392]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 12
 
-[node name="Edition" type="Label" parent="Content/Columns/Brand"]
+[node name="Edition" type="Label" parent="Content/Columns/Brand" unique_id=516549044]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.78, 0.26, 1)
 theme_override_font_sizes/font_size = 14
-text = "SIXNET EDITION  /  2026"
+text = "UI Build 3  /  2026"
 
-[node name="Title" type="Label" parent="Content/Columns/Brand"]
+[node name="Title" type="Label" parent="Content/Columns/Brand" unique_id=389871345]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 54
-text = "VOLLEY\nWORLD\nMANAGER"
+text = "VOLLEY
+WORLD
+MANAGER"
 
-[node name="Subtitle" type="Label" parent="Content/Columns/Brand"]
+[node name="Subtitle" type="Label" parent="Content/Columns/Brand" unique_id=920369090]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.66, 0.75, 0.84, 1)
 theme_override_font_sizes/font_size = 17
-text = "Build a culture. Test it under pressure.\nLive with every consequence."
+text = "it's time to volley
+manager style...."
 
-[node name="BrandSpacer" type="Control" parent="Content/Columns/Brand"]
+[node name="BrandSpacer" type="Control" parent="Content/Columns/Brand" unique_id=741330892]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="SaveCount" type="Label" parent="Content/Columns/Brand"]
+[node name="SaveCount" type="Label" parent="Content/Columns/Brand" unique_id=2075630121]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.52, 0.62, 0.71, 1)
 text = "00 ACTIVE FILES"
 
-[node name="MenuPanel" type="PanelContainer" parent="Content/Columns"]
+[node name="MenuPanel" type="PanelContainer" parent="Content/Columns" unique_id=526429459]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(390, 0)
 layout_mode = 2
 theme_override_styles/panel = SubResource("MenuPanel")
 
-[node name="MenuMargin" type="MarginContainer" parent="Content/Columns/MenuPanel"]
+[node name="MenuMargin" type="MarginContainer" parent="Content/Columns/MenuPanel" unique_id=1434067587]
 layout_mode = 2
 theme_override_constants/margin_left = 28
 theme_override_constants/margin_top = 34
 theme_override_constants/margin_right = 28
 theme_override_constants/margin_bottom = 34
 
-[node name="Menu" type="VBoxContainer" parent="Content/Columns/MenuPanel/MenuMargin"]
+[node name="Menu" type="VBoxContainer" parent="Content/Columns/MenuPanel/MenuMargin" unique_id=2041436598]
 layout_mode = 2
-alignment = 1
 theme_override_constants/separation = 14
+alignment = 1
 
-[node name="MenuKicker" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="MenuKicker" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1688684666]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.78, 0.26, 1)
 text = "FRONT OFFICE"
 
-[node name="MenuTitle" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="MenuTitle" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=682887669]
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
 text = "Choose your next move."
 
-[node name="MenuRule" type="HSeparator" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="MenuRule" type="HSeparator" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1299074118]
 layout_mode = 2
 
-[node name="NewCareerButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="NewCareerButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=946641406]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("MenuButton")
-theme_override_styles/hover = SubResource("MenuButtonHover")
 theme_override_styles/pressed = SubResource("MenuButtonHover")
+theme_override_styles/hover = SubResource("MenuButtonHover")
 text = "01   NEW CAREER"
 alignment = 0
 
-[node name="LoadMenuButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="LoadMenuButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1990464271]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("MenuButton")
-theme_override_styles/hover = SubResource("MenuButtonHover")
 theme_override_styles/pressed = SubResource("MenuButtonHover")
+theme_override_styles/hover = SubResource("MenuButtonHover")
 text = "02   LOAD CAREER"
 alignment = 0
 
-[node name="OptionsButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="OptionsButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1483439356]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("MenuButton")
-theme_override_styles/hover = SubResource("MenuButtonHover")
 theme_override_styles/pressed = SubResource("MenuButtonHover")
+theme_override_styles/hover = SubResource("MenuButtonHover")
 text = "03   OPTIONS"
 alignment = 0
 
-[node name="ExitButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu"]
+[node name="ExitButton" type="Button" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=152827268]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 58)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_styles/normal = SubResource("MenuButton")
-theme_override_styles/hover = SubResource("MenuButtonHover")
 theme_override_styles/pressed = SubResource("MenuButtonHover")
+theme_override_styles/hover = SubResource("MenuButtonHover")
 text = "04   EXIT"
 alignment = 0
 
-[node name="LoadDialog" type="Window" parent="."]
+[node name="LoadDialog" type="Window" parent="." unique_id=463405210]
 unique_name_in_owner = true
-visible = false
+transparent_bg = true
 title = "Load Career"
 initial_position = 1
 size = Vector2i(760, 500)
+visible = false
 unresizable = true
-transparent_bg = true
 
-[node name="Panel" type="PanelContainer" parent="LoadDialog"]
+[node name="Panel" type="PanelContainer" parent="LoadDialog" unique_id=2054687485]
 unique_name_in_owner = true
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 theme_override_styles/panel = SubResource("DialogPanel")
 
-[node name="Margin" type="MarginContainer" parent="LoadDialog/Panel"]
+[node name="Margin" type="MarginContainer" parent="LoadDialog/Panel" unique_id=176918665]
 layout_mode = 2
 theme_override_constants/margin_left = 26
 theme_override_constants/margin_top = 22
 theme_override_constants/margin_right = 26
 theme_override_constants/margin_bottom = 22
 
-[node name="Content" type="VBoxContainer" parent="LoadDialog/Panel/Margin"]
+[node name="Content" type="VBoxContainer" parent="LoadDialog/Panel/Margin" unique_id=537499133]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Title" type="Label" parent="LoadDialog/Panel/Margin/Content"]
+[node name="Title" type="Label" parent="LoadDialog/Panel/Margin/Content" unique_id=1643131153]
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 text = "Return to the touchline."
 
-[node name="SaveList" type="ItemList" parent="LoadDialog/Panel/Margin/Content"]
+[node name="SaveList" type="ItemList" parent="LoadDialog/Panel/Margin/Content" unique_id=1744823514]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="SaveDetail" type="Label" parent="LoadDialog/Panel/Margin/Content"]
+[node name="SaveDetail" type="Label" parent="LoadDialog/Panel/Margin/Content" unique_id=602262997]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 70)
 layout_mode = 2
 autowrap_mode = 2
 
-[node name="Actions" type="HBoxContainer" parent="LoadDialog/Panel/Margin/Content"]
+[node name="Actions" type="HBoxContainer" parent="LoadDialog/Panel/Margin/Content" unique_id=956166453]
 layout_mode = 2
 
-[node name="DeleteButton" type="Button" parent="LoadDialog/Panel/Margin/Content/Actions"]
+[node name="DeleteButton" type="Button" parent="LoadDialog/Panel/Margin/Content/Actions" unique_id=820725570]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Delete"
 
-[node name="Spacer" type="Control" parent="LoadDialog/Panel/Margin/Content/Actions"]
+[node name="Spacer" type="Control" parent="LoadDialog/Panel/Margin/Content/Actions" unique_id=2047308210]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="LoadSelectedButton" type="Button" parent="LoadDialog/Panel/Margin/Content/Actions"]
+[node name="LoadSelectedButton" type="Button" parent="LoadDialog/Panel/Margin/Content/Actions" unique_id=1241309076]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(180, 42)
 layout_mode = 2
 text = "Load selected"
 
-[node name="OptionsDialog" type="AcceptDialog" parent="."]
+[node name="OptionsDialog" type="AcceptDialog" parent="." unique_id=417169172]
 unique_name_in_owner = true
-visible = false
 title = "Options"
-dialog_text = "Presentation palette"
 initial_position = 1
 size = Vector2i(440, 210)
+dialog_text = "Presentation palette"
 
-[node name="ThemeOption" type="OptionButton" parent="OptionsDialog"]
+[node name="ThemeOption" type="OptionButton" parent="OptionsDialog" unique_id=1680183597]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(360, 42)
 offset_left = 36.0
@@ -300,7 +313,7 @@ offset_top = 72.0
 offset_right = 396.0
 offset_bottom = 114.0
 
-[node name="DeleteConfirmation" type="ConfirmationDialog" parent="."]
+[node name="DeleteConfirmation" type="ConfirmationDialog" parent="." unique_id=2128247499]
 unique_name_in_owner = true
 title = "Delete Career"
 dialog_text = "Permanently delete this career save?"

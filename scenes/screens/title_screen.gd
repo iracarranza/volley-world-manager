@@ -7,6 +7,7 @@ signal theme_requested(theme_name: String)
 signal exit_requested
 
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var save_list: ItemList = %SaveList
@@ -57,36 +58,11 @@ func refresh_saves() -> void:
 func set_theme_name(theme_name: String) -> void:
 	var light_mode := theme_name == "light"
 	theme_option.select(1 if light_mode else 0)
-	%Background.color = Color("e7eee7") if light_mode else Color("06101d")
-	%CourtBand.color = Color("cfdccf") if light_mode else Color("0b2331")
-	%AccentBar.color = Color("b43732") if light_mode else Color("d7aa28")
-	%Title.modulate = Color("123d2a") if light_mode else Color("f5f1de")
-	%Edition.modulate = Color("9a302c") if light_mode else Color("f0c24f")
-	%MenuPanel.add_theme_stylebox_override("panel", _panel_style(
-		Color("f4f8f3") if light_mode else Color("071a2c"),
-		Color("9a302c") if light_mode else Color("d4a928")
-	))
-	%Panel.add_theme_stylebox_override("panel", _panel_style(
-		Color("f4f8f3") if light_mode else Color("071827"),
-		Color("9a302c") if light_mode else Color("d4a928")
-	))
-	var font_color := Color("123d2a") if light_mode else Color("f5f1de")
-	for button in [%NewCareerButton, load_menu_button, %OptionsButton, %ExitButton]:
-		button.add_theme_color_override("font_color", font_color)
-		button.add_theme_color_override(
-			"font_hover_color", Color("9a302c") if light_mode else Color("ffe788")
-		)
-	for label in %MenuPanel.find_children("*", "Label", true, false):
-		(label as Label).add_theme_color_override("font_color", font_color)
-
-
-func _panel_style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(10)
-	return style
+	%Background.color = UIPalette.color(&"canvas", light_mode)
+	%CourtBand.color = UIPalette.color(&"canvas_alt", light_mode)
+	%AccentBar.color = UIPalette.color(&"accent", light_mode)
+	%Title.modulate = UIPalette.color(&"ink", light_mode)
+	%Edition.modulate = UIPalette.color(&"accent", light_mode)
 
 
 func _open_load_menu() -> void:

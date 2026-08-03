@@ -3,6 +3,7 @@ extends Control
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
 const LightTheme := preload("res://scenes/themes/light_theme.tres")
+const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -34,6 +35,7 @@ func _connect_match_center_signal() -> void:
 func _show_only(screen: Control) -> void:
 	for candidate in [title_screen, new_career_screen, career_dashboard, match_center]:
 		candidate.visible = candidate == screen
+	UIStyleSystem.reveal(screen)
 
 
 func _show_title() -> void:
@@ -77,6 +79,12 @@ func _apply_theme(theme_name: String, persist: bool = true) -> void:
 	theme = LightTheme if resolved == "light" else DarkTheme
 	title_screen.set_theme_name(resolved)
 	new_career_screen.set_light_mode(resolved == "light")
+	if match_center.has_method("set_light_mode"):
+		match_center.set_light_mode(resolved == "light")
+	UIStyleSystem.apply(self, resolved == "light")
+	for palette_node in get_tree().get_nodes_in_group("ui_palette_3d"):
+		if palette_node.has_method("apply_ui_palette"):
+			palette_node.apply_ui_palette(resolved == "light")
 	if persist:
 		var config := ConfigFile.new()
 		config.set_value("presentation", "theme", resolved)
