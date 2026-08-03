@@ -230,6 +230,41 @@ func _test_ui_visual_system() -> void:
 		),
 		"light Control theme stays synchronized with the shared ink token",
 	)
+	_check(
+		DARK_UI_THEME.default_font.get("base_font").resource_path.ends_with(
+			"ShortStack-Regular.ttf"
+		),
+		"dense informational UI uses Short Stack as its shared readable face",
+	)
+	_check(
+		DARK_UI_THEME.get_font("font", "DisplayHeading").resource_path.ends_with(
+			"CherryBombOne-Regular.ttf"
+		),
+		"display headings use Cherry Bomb One as the shared character face",
+	)
+	var body_font: Font = DARK_UI_THEME.default_font.get("base_font")
+	var body_fallbacks: Array = DARK_UI_THEME.default_font.get("fallbacks")
+	var heading_font := DARK_UI_THEME.get_font("font", "DisplayHeading")
+	var regional_glyphs := ["ë", "ā", "ō", "é", "ã", "ç"]
+	var body_has_regional_glyphs := true
+	var heading_has_regional_glyphs := true
+	for glyph in regional_glyphs:
+		var body_supports_glyph := body_font.has_char(glyph.unicode_at(0))
+		for fallback_font in body_fallbacks:
+			if (fallback_font as Font).has_char(glyph.unicode_at(0)):
+				body_supports_glyph = true
+				break
+		body_has_regional_glyphs = body_has_regional_glyphs and body_supports_glyph
+		heading_has_regional_glyphs = heading_has_regional_glyphs \
+			and heading_font.has_char(glyph.unicode_at(0))
+	_check(
+		body_has_regional_glyphs,
+		"Short Stack covers every accented glyph used by regional names",
+	)
+	_check(
+		heading_has_regional_glyphs,
+		"Cherry Bomb One covers every accented glyph used by regional names",
+	)
 	var dark_primary := DARK_UI_THEME.get_stylebox("normal", "PrimaryAction") as StyleBoxFlat
 	var light_primary := LIGHT_UI_THEME.get_stylebox("normal", "PrimaryAction") as StyleBoxFlat
 	_check(

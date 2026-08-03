@@ -1,0 +1,8 @@
+[gd_resource type="FontVariation" load_steps=3 format=3]
+
+[ext_resource type="FontFile" path="res://Short_Stack/ShortStack-Regular.ttf" id="1_body"]
+[ext_resource type="FontFile" path="res://Cherry_Bomb_One/CherryBombOne-Regular.ttf" id="2_fallback"]
+
+[resource]
+base_font = ExtResource("1_body")
+fallbacks = Array[Font]([ExtResource("2_fallback")])

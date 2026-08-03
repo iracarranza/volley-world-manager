@@ -109,7 +109,7 @@ func _draw() -> void:
 	var geometry := _geometry()
 	var center: Vector2 = geometry.center
 	var radius: float = geometry.radius
-	var font := ThemeDB.fallback_font
+	var font := get_theme_font(&"font", &"Label")
 	var light_mode := UIPalette.control_is_light(self)
 	var stroke := UIPalette.color(&"stroke", light_mode)
 	var muted := UIPalette.color(&"ink_muted", light_mode)

@@ -89,11 +89,13 @@ static func _style_label(label: Label) -> void:
 	if node_name in ["Title", "RailTitle", "QuestionTitle", "OrganizationLabel"] \
 			or node_name.ends_with("ScreenTitle"):
 		label.theme_type_variation = &"DisplayHeading"
+		label.rotation_degrees = -1.0 if node_name.length() % 2 == 0 else 0.8
 	elif node_name.ends_with("Title") or node_name in ["SectionTitle", "CaptionLabel"]:
 		label.theme_type_variation = &"SectionHeading"
 	elif node_name.contains("Kicker") or node_name.contains("Eyebrow") \
 			or node_name in ["Edition", "Mark", "Prompt", "ModeLabel"]:
 		label.theme_type_variation = &"EyebrowLabel"
+		label.rotation_degrees = -0.7 if node_name.length() % 2 == 0 else 0.7
 	elif node_name.contains("Status") or node_name.contains("Score") \
 			or node_name.contains("Date") or node_name.contains("Value"):
 		label.theme_type_variation = &"StatLabel"
