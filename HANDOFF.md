@@ -298,3 +298,27 @@ counter-adjustments can remain match-engine follow-up. The separate 3D replay
 is available from Match Center through View 3D. It reuses the completed rally
 event stream and player snapshots; it does not replace the tactical board or
 participate in simulation.
+
+## Running the tests on a fresh checkout
+
+The headless test runner needs Godot's global class cache to know about every
+`class_name` in the project. That cache lives in `.godot/` and is **not** in
+version control, so a fresh clone -- or a `git checkout` that crosses a commit
+which added a new `class_name` -- fails with parse errors that look like broken
+code:
+
+```
+SCRIPT ERROR: Parse Error: Identifier "TeamPrinciples" not declared in the current scope.
+```
+
+The class is declared correctly; the cache simply has not seen it. Run an import
+pass once, then the suite:
+
+```
+godot --headless --path . --import
+godot --headless --path . --script res://tests/test_runner.gd
+```
+
+Only the import is needed, and only after the set of `class_name` declarations
+changes. It is quick and safe to run whenever the runner reports a parse error
+naming a class you can see on disk.

@@ -116,7 +116,17 @@ func set_pose(
 	shadow.scale = Vector3.ONE * lerpf(1.0, 1.35, elevation)
 	shadow.transparency = lerpf(0.0, 0.58, elevation)
 	if contact_direction.length_squared() > 0.0001:
-		rotation.y = atan2(contact_direction.x, contact_direction.y)
+		## Godot's forward is -Z, and this rig genuinely faces that way -- both
+		## shoes sit at z = -0.06. Rotating by theta about Y puts local -Z at
+		## world (-sin theta, -cos theta), so facing (dx, dz) needs
+		## atan2(-dx, -dz). Passing (dx, dz) instead yields theta + PI, which
+		## drew every server, setter and attacker with their back to the ball.
+		##
+		## The direction is still in normalized court space, where x spans 9 m
+		## and y spans 18 m, so the angle remains slightly aspect-compressed.
+		## That is a much smaller error than the sign and is left for a caller
+		## that knows the court dimensions.
+		rotation.y = atan2(-contact_direction.x, -contact_direction.y)
 	if not is_contact_actor:
 		return
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm

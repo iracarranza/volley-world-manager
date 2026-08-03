@@ -94,7 +94,7 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	skip_button.disabled = true
 	pause_button.disabled = false
 	pause_button.text = "Pause"
-	match_court_3d.ball_actor.reset_flight()
+	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.reset_player_poses()
 	event_label.text = "POINT COMPLETE"
 	caption_label.text = rally_result.terminal_outcome.replace("_", " ").to_upper()
@@ -122,7 +122,7 @@ func _run_rally(generation: int) -> void:
 			await _play_flight(event, next_contact, trajectory, event_index, events.size(), generation)
 		else:
 			await _play_contact_pulse(event, 0.38, generation)
-	match_court_3d.ball_actor.reset_flight()
+	match_court_3d.ball_actor.hold_at_rest()
 
 
 func _play_flight(
