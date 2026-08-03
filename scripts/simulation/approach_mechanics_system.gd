@@ -4,6 +4,7 @@ extends RefCounted
 const RallyKinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
 const RallyMovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const CourtConstants := preload("res://scripts/data/court_constants.gd")
 
 ## What a run-up has to deliver before a hitter can swing at full power, and
 ## before the whole shot menu is open to them. Named because the requirement
@@ -258,25 +259,68 @@ static func evaluate_takeoff(
 ## from behind it, and "behind" is +y for the home side and -y for the opponent.
 ## Taking the home offset for an opponent would place their approach mark across
 ## the net, inside home territory.
+## Where a hitter starts their run-up, and therefore how diagonally they arrive.
+##
+## Single source of truth. `rally_simulator.gd` carried a second derivation of
+## this and the two disagreed in *sign*: this one sent `Left Pin` to
+## `target.x + 0.07`, which is *inward* of the contact, so pins ran inside-out.
+## The simulator's copy sent them outward. This one is what
+## `prepare_for_attack()` calls, so inside-out is what the engine actually did --
+## backwards from the sport, where an outside hitter starts wide and runs in.
+##
+## The lateral offset is now derived from an explicit **angle** rather than
+## stated as a fixed distance, so that changing the run-up's depth cannot
+## silently change its direction. The old ±0.07 against a 0.11 depth was about
+## seventeen degrees, pointed the wrong way; a real outside approach is around
+## thirty, pointed outward.
+##
+## This direction is load-bearing beyond appearance. `evaluate_takeoff()` reads
+## it: `lateral_share` blends transition speed toward lateral speed, alignment
+## drives the turn delay, and carried momentum only counts along it. A hitter's
+## available swing is centred on it too.
+const APPROACH_ANGLE_MIDDLE_DEGREES: float = 8.0
+const APPROACH_ANGLE_PIN_DEGREES: float = 30.0
+const APPROACH_DEPTH: float = 0.11
+## Wide enough to begin outside the sideline, because that is where an outside
+## hitter's approach actually begins. Holding them on court capped the angle at
+## exactly the pins that need it most.
+const APPROACH_START_MIN_X: float = -0.10
+const APPROACH_START_MAX_X: float = 1.10
+## How much of the hitter's current position survives, so a player out of
+## position is not teleported across the court to draw a textbook run-up.
+## Applied to the base rather than to the finished offset -- folding it over the
+## sum shrank every textbook approach by 22% even for a hitter already standing
+## in the right place, which was never the point.
+const APPROACH_ROUTE_BLEND: float = 0.78
+
+
 static func approach_start_position(
 	target: Vector2,
-	lane: String,
+	_lane: String = "",
 	side: StringName = &"home",
+	current_position: Variant = null,
+	depth: float = APPROACH_DEPTH,
 ) -> Vector2:
-	var lateral_offset := 0.0
-	if lane == "Left Pin":
-		lateral_offset = 0.07
-	elif lane == "Right Pin":
-		lateral_offset = -0.07
-	if side == &"opponent":
-		return Vector2(
-			clampf(target.x + lateral_offset, 0.06, 0.94),
-			clampf(target.y - 0.11, 0.04, 0.46),
-		)
-	return Vector2(
-		clampf(target.x + lateral_offset, 0.06, 0.94),
-		clampf(target.y + 0.11, 0.54, 0.96),
+	var pin_distance := absf(target.x - 0.50)
+	var wideness := clampf(pin_distance / 0.38, 0.0, 1.0)
+	var angle := lerpf(
+		APPROACH_ANGLE_MIDDLE_DEGREES, APPROACH_ANGLE_PIN_DEGREES, wideness
 	)
+	var forward_meters := absf(depth) * CourtConstants.COURT_LENGTH_METERS
+	var lateral_meters := forward_meters * tan(deg_to_rad(angle))
+	var outward := signf(target.x - 0.50) * lateral_meters \
+		/ CourtConstants.COURT_WIDTH_METERS
+	var base_x := target.x
+	if current_position is Vector2:
+		base_x = lerpf(
+			(current_position as Vector2).x, target.x, APPROACH_ROUTE_BLEND
+		)
+	var start_x := clampf(
+		base_x + outward, APPROACH_START_MIN_X, APPROACH_START_MAX_X
+	)
+	if side == &"opponent":
+		return Vector2(start_x, clampf(target.y - depth, 0.04, 0.46))
+	return Vector2(start_x, clampf(target.y + depth, 0.54, 0.96))
 
 
 ## The families this hitter can execute cleanly off this approach. A family is

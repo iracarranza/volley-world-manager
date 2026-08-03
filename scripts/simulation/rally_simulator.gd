@@ -3379,22 +3379,18 @@ func _approach_start_position(
 	var local_current := Vector2(
 		current_position.x, 1.0 - current_position.y
 	) if opponent_side else current_position
+	## Delegated rather than derived here. This function used to carry its own
+	## copy of the run-up geometry, and the two disagreed in *sign* -- this one
+	## started a pin outside the contact, `ApproachMechanicsSystem`'s started them
+	## inside it. Since that one is what `prepare_for_attack()` calls, the engine
+	## ran its pins inside-out while this fallback drew them the other way.
 	var pin_distance := absf(local_contact.x - 0.50)
 	var approach_depth := 0.135 * lerpf(
 		0.88, 1.12, clampf(pin_distance / 0.34, 0.0, 1.0)
 	)
-	var outward_offset := 0.0
-	if local_contact.x < 0.35:
-		outward_offset = -0.055
-	elif local_contact.x > 0.65:
-		outward_offset = 0.055
-	var approach := Vector2(
-		clampf(local_contact.x + outward_offset, 0.06, 0.94),
-		clampf(local_contact.y + approach_depth, 0.56, 0.94),
+	var approach := ApproachMechanicsModel.approach_start_position(
+		local_contact, "", &"home", local_current, approach_depth
 	)
-	## Do not send a hitter backward across the whole court merely to draw a
-	## textbook approach. Preserve the resolved side of their current route.
-	approach.x = lerpf(local_current.x, approach.x, 0.78)
 	return Vector2(approach.x, 1.0 - approach.y) if opponent_side else approach
 
 

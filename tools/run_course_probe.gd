@@ -10,6 +10,7 @@ extends SceneTree
 
 const AttackCourseModel := preload("res://scripts/simulation/attack_course_model.gd")
 const CourtConstants := preload("res://scripts/data/court_constants.gd")
+const ApproachMechanicsModel := preload("res://scripts/simulation/approach_mechanics_system.gd")
 
 var _done: bool = false
 
@@ -22,16 +23,9 @@ func _process(_delta: float) -> bool:
 	for lane in ["Left Pin", "Front Quick", "Pipe", "Right Quick", "Right Pin"]:
 		var cx: float = CourtConstants.LANE_X[lane]
 		var contact := Vector2(cx, 0.53)
-		## Mirrors _approach_start_position(): pins start offset toward their own
-		## sideline and behind, middles start straight behind.
-		var pin_distance: float = absf(cx - 0.50)
-		var depth: float = 0.135 * lerpf(0.88, 1.12, clampf(pin_distance / 0.34, 0.0, 1.0))
-		var outward := 0.0
-		if cx < 0.35:
-			outward = -0.055
-		elif cx > 0.65:
-			outward = 0.055
-		var start := Vector2(clampf(cx + outward, 0.06, 0.94), clampf(contact.y + depth, 0.56, 0.94))
+		var start: Vector2 = ApproachMechanicsModel.approach_start_position(
+			contact, lane, &"home", contact
+		)
 		var natural: float = AttackCourseModel.natural_bearing_from_approach(start, contact, true)
 		## Line hugs whichever sideline the hitter is already nearest.
 		var own_sideline: float = 0.09 if cx < 0.5 else 0.91

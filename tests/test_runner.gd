@@ -7676,6 +7676,44 @@ func _test_attack_courses_are_relative_to_the_hitter() -> void:
 		"pins run in leaning across the court, mirrored, while a middle runs straight",
 	)
 
+	## The live derivation, not a copy of it. `ApproachMechanicsSystem` and
+	## `rally_simulator` each carried their own run-up geometry and the two
+	## disagreed in sign -- the live one sent `Left Pin` to `target.x + 0.07`,
+	## which is *inward*, so the engine ran its pins inside-out. They are one
+	## function now, and this asserts the direction the surviving one produces.
+	var live_left := APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		left_pin, "Left Pin", &"home", left_pin
+	)
+	var live_right := APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		right_pin, "Right Pin", &"home", right_pin
+	)
+	_check(
+		live_left.x < left_pin.x and live_right.x > right_pin.x
+			and absf((left_pin.x - live_left.x) - (live_right.x - right_pin.x)) < 0.001,
+		"a pin's run-up starts outside their contact, mirrored, not inside it",
+	)
+	var live_left_bearing := AttackCourseModel.natural_bearing_from_approach(
+		live_left, left_pin, true
+	)
+	_check(
+		absf(live_left_bearing - 30.0) < 0.5,
+		"a pin runs in at about thirty degrees rather than the sport-inverting ten",
+	)
+
+	## The consequence that made the sign bug matter. An outside hitter running
+	## in diagonally should find cross-court the natural swing and line the hard
+	## turn back across the body. Under the old inward run-up this was reversed.
+	var to_cross := AttackCourseModel.bearing_to_point(
+		left_pin, Vector2(0.80, 0.14), true
+	)
+	var to_line := AttackCourseModel.bearing_to_point(
+		left_pin, Vector2(0.09, 0.14), true
+	)
+	_check(
+		absf(to_cross - live_left_bearing) < absf(to_line - live_left_bearing),
+		"cross-court is the cheaper swing for an outside hitter and line the harder one",
+	)
+
 	## Cost is a function of the turn off the approach, not of absolute bearing:
 	## the same shot is cheap for a hitter who ran at it and dear for one turning
 	## back across themselves.

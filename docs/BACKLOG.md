@@ -273,7 +273,46 @@ and it is the first thing Gate C's power selection has to respect.
 normalized offsets in x and y are a 26.6° shot, not 45°. Computing bearings in
 normalized space would tilt every course in the game.
 
-### The natural swing line is the run-up — and the run-up is too shallow
+### The natural swing line is the run-up — fixed, and it was worse than shallow
+
+**Resolved.** The run-up was not merely too square; there were **two derivations
+of it that disagreed in sign**, and the live one had pins running inside-out.
+
+`ApproachMechanicsSystem.approach_start_position()` sent `Left Pin` to
+`target.x + 0.07` — *inward* of the contact — while `rally_simulator`'s private
+copy sent them outward. `prepare_for_attack()` calls the former, so inside-out
+is what the engine actually did: a natural bearing near −17.6°, pointing at the
+hitter's own sideline. The first fix attempt edited the simulator's copy and
+changed nothing at all, which is how the duplication surfaced — 854 rallies came
+back byte-identical.
+
+They are one function now, in `ApproachMechanicsSystem`, and the lateral offset
+is derived from an explicit **angle** rather than a fixed distance, so changing
+the run-up's depth can no longer silently change its direction. Pins run in at
+30°, middles at 8–14°, scaled by how wide the contact is. Approach starts may
+now sit outside the sideline, which is where an outside hitter's actually
+begins; holding them on court capped the angle at exactly the pins that need it.
+
+Measured after (`tools/run_course_probe.gd`, now calling the live derivation
+rather than a copy):
+
+| lane | natural | line | off | cross | off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Left Pin | +30.00° | −2.20° | 32.2° | +41.08° | **11.1°** |
+| Front Quick | +13.79° | −21.67° | 35.5° | +27.15° | **13.4°** |
+| Right Pin | −30.00° | +2.20° | 32.2° | −41.08° | **11.1°** |
+
+Cross is now the cheap swing and line the hard turn back across the body, which
+is the sport. Before, the offsets were 12.5° and 30.8° — exactly inverted.
+
+Outcome cost of the change, 870 rallies: kills 11.8% → 10.3%, attack errors
+11.1% → 12.3%, blocked 34.4% → 36.0%. Attacking got harder, which is correct —
+`evaluate_takeoff()` reads this direction, so a diagonal run-up blends transition
+speed toward lateral speed and charges lateral control, and pins had been
+getting a free square approach. It also pushes the block rate further from its
+target, which was already the largest open calibration item.
+
+### Superseded: the original finding
 
 Courses are centred on the line the hitter ran in on rather than on the net
 normal, read straight off `_approach_start_position()`, which already offsets a
