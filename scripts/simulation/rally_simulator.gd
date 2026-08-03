@@ -225,6 +225,16 @@ const OPPONENT_BACK_ROW_CONTACT_Y: float = 0.30
 const CONSISTENCY_COMPOSURE_WEIGHT: float = 0.40
 const CONSISTENCY_FLOOR_SHARE: float = 0.30
 
+## Converting the old uniform execution error to a normal one without changing
+## how much ordinary contacts scatter: a uniform on [-s, s] has standard
+## deviation s/sqrt(3), so a normal with that deviation matches it in the body
+## of the distribution and differs only in the tails. The limit is far enough
+## out that a contest is never flatly impossible -- 3.5 deviations is about a
+## 2e-4 residual -- while still ruling out a freak draw putting a set in the
+## stands.
+const UNIFORM_TO_NORMAL_DEVIATION: float = 0.5773502691896258
+const EXECUTION_ERROR_DEVIATION_LIMIT: float = 3.5
+
 ## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
 ## so the result can be compared with an attack quality that is also a fraction
 ## of an ideal, which is the whole point of a contest between them.
@@ -4618,7 +4628,27 @@ func _execution_error(
 	base_spread: float,
 ) -> float:
 	var spread := _execution_spread(player, control_attribute, base_spread)
-	return rng.randf_range(-spread, spread)
+	## Normal, not uniform on [-spread, spread].
+	##
+	## A uniform draw has hard support boundaries, and every consumer of this
+	## value is eventually compared against a threshold. So whenever a
+	## contest's systematic margin sat further than `spread` from its
+	## threshold, the outcome stopped being uncertain at all -- not unlikely,
+	## impossible. The block contest showed it plainly: swept across generated
+	## roster pairings, one pairing recorded zero stuff blocks in 127 contests
+	## and another 84 in 144, because their mean margins sat 0.085 below and
+	## 0.102 above the same cutoff while blocker spread ran 0.04-0.13. There
+	## was no gradient between them for a squad to move along, which is the
+	## wrong shape for a game about incremental improvement.
+	##
+	## Matched on standard deviation (a uniform's is its half-width over root
+	## three), so ordinary contacts scatter exactly as much as before and only
+	## the tails change. Clamped well outside the old bound purely to stop a
+	## freak draw putting a set in the stands; at 3.5 deviations the residual
+	## probability is about 2e-4, which is rare rather than forbidden.
+	var deviation := spread * UNIFORM_TO_NORMAL_DEVIATION
+	var limit := deviation * EXECUTION_ERROR_DEVIATION_LIMIT
+	return clampf(rng.randfn(0.0, deviation), -limit, limit)
 
 
 ## One dig, wherever in the rally it happens.
