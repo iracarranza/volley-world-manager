@@ -23,7 +23,11 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## inside `CareerManager.advance_week()`. Saves from before this feature
 ## existed load these as empty/zero, which `ensure_bootstrapped()` treats as
 ## "not yet set up" and lazily backfills -- no migration step needed.
-@export var region_power: Dictionary = {}  ## region_name -> float (10-95)
+## Academy production and current Sixnet results are deliberately separate.
+## Saves written before the split carried both meanings in `region_power`;
+## `from_dict()` seeds both new fields from that legacy value.
+@export var region_strength: Dictionary = {}  ## region_name -> current population quality
+@export var sixnet_form: Dictionary = {}  ## region_name -> competitive form (10-95)
 @export var sixnet_slots: Dictionary = {}  ## "upper_1".."lower_4" -> region_name
 ## Per-region additive generation deltas from influence drift, layered on top
 ## of `PlayerGenerator`'s static `REGION_SPECIALTY`/`REGION_*_BIAS` consts,
@@ -76,7 +80,8 @@ func to_dict() -> Dictionary:
 		"training_focus": training_focus, "fixtures": fixture_data,
 		"transfer_pool_ids": market_ids, "active_fixture_id": active_fixture_id,
 		"match_format": match_format.to_dict() if match_format != null else {},
-		"region_power": region_power.duplicate(true),
+		"region_strength": region_strength.duplicate(true),
+		"sixnet_form": sixnet_form.duplicate(true),
 		"sixnet_slots": sixnet_slots.duplicate(true),
 		"region_overlay": region_overlay.duplicate(true),
 		"sixnet_standings": sixnet_standings.duplicate(true),
@@ -113,7 +118,11 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 		state.transfer_pool.append(VolleyballPlayer.from_dict(player_data))
 	state.active_fixture_id = int(data.get("active_fixture_id", -1))
 	state.match_format = VolleyballMatchFormat.from_dict(data.get("match_format", {}))
-	state.region_power = Dictionary(data.get("region_power", {})).duplicate(true)
+	var legacy_power := Dictionary(data.get("region_power", {})).duplicate(true)
+	state.region_strength = Dictionary(
+		data.get("region_strength", legacy_power)
+	).duplicate(true)
+	state.sixnet_form = Dictionary(data.get("sixnet_form", legacy_power)).duplicate(true)
 	state.sixnet_slots = Dictionary(data.get("sixnet_slots", {})).duplicate(true)
 	state.region_overlay = Dictionary(data.get("region_overlay", {})).duplicate(true)
 	state.sixnet_standings = Dictionary(data.get("sixnet_standings", {})).duplicate(true)

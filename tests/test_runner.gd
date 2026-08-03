@@ -977,9 +977,9 @@ func _test_sixnet_league() -> void:
 		"bootstrapping fills exactly 8 Sixnet slots, covering all 6 core regions",
 	)
 	_check(
-		career.region_power.size() == 8
-			and career.region_power.has("Ispayk") and career.region_power.has("A'ace"),
-		"all eight Sixnet participants receive a power level, including Ispayk and A'ace",
+		career.region_strength.size() == 8 and career.sixnet_form.size() == 8
+			and career.region_strength.has("Ispayk") and career.sixnet_form.has("A'ace"),
+		"all eight Sixnet participants receive separate strength and form ratings",
 	)
 	_check(
 		str(career.sixnet_slots.get(SIXNET_LEAGUE_SCRIPT.AACE_FIXED_SLOT, "")) == "A'ace"
@@ -1007,6 +1007,45 @@ func _test_sixnet_league() -> void:
 		SIXNET_LEAGUE_SCRIPT.bootstrap_rating("Landavol", 5150) \
 			== SIXNET_LEAGUE_SCRIPT.bootstrap_rating("Landavol", 5150),
 		"team-rating bootstrap is deterministic for a fixed seed",
+	)
+	var legacy_state := CAREER_STATE_SCRIPT.from_dict({
+		"region_power": {"Landavol": 71.0, "Xérvu": 68.0},
+	})
+	_check(
+		legacy_state.region_strength == legacy_state.sixnet_form
+			and float(legacy_state.region_strength.get("Landavol", 0.0)) == 71.0,
+		"legacy region_power saves seed both regional strength and Sixnet form",
+	)
+	var make_regional_player := func(player_id: int, role: String, rating: int) -> VolleyballPlayer:
+		var player := VolleyballPlayer.new()
+		player.id = player_id
+		player.position_role = role
+		for attribute_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+			player.set(attribute_name, rating)
+		return player
+	var concentrated: Array[VolleyballPlayer] = []
+	var distributed: Array[VolleyballPlayer] = []
+	var roles := [
+		"Setter", "Outside Hitter", "Outside Hitter", "Middle Blocker",
+		"Middle Blocker", "Opposite", "Libero",
+		"Setter", "Outside Hitter", "Outside Hitter", "Middle Blocker",
+		"Middle Blocker", "Opposite", "Libero",
+	]
+	for index in range(roles.size()):
+		var concentrated_rating := 60
+		if index in [1, 2, 8]:
+			concentrated_rating = 94
+		var distributed_rating := 94 if index in [0, 1, 3] else 60
+		concentrated.append(make_regional_player.call(
+			1000 + index, str(roles[index]), concentrated_rating
+		))
+		distributed.append(make_regional_player.call(
+			2000 + index, str(roles[index]), distributed_rating
+		))
+	_check(
+		SIXNET_LEAGUE_SCRIPT.region_strength(distributed)
+			> SIXNET_LEAGUE_SCRIPT.region_strength(concentrated),
+		"regional strength rewards stars spread across positions over one-position stacking",
 	)
 
 	SIXNET_LEAGUE_SCRIPT.resolve_full_season(career)
@@ -1053,7 +1092,7 @@ func _test_sixnet_league() -> void:
 		for region_name in REGIONS_SCRIPT.CORE_REGIONS:
 			var record := SIXNET_LEAGUE_SCRIPT._combined_record(career, region_name)
 			var games := int(record.get("wins", 0)) + int(record.get("losses", 0))
-			var current := float(career.region_power.get(region_name, 50.0))
+			var current := float(career.sixnet_form.get(region_name, 50.0))
 			if games == 0:
 				expected[region_name] = current
 				continue
@@ -1062,7 +1101,7 @@ func _test_sixnet_league() -> void:
 			expected[region_name] = clampf(lerpf(current, target, 0.25), 10.0, 95.0)
 		SIXNET_LEAGUE_SCRIPT.apply_power_update(career)
 		for region_name in REGIONS_SCRIPT.CORE_REGIONS:
-			var power_after := float(career.region_power.get(region_name, 50.0))
+			var power_after := float(career.sixnet_form.get(region_name, 50.0))
 			if power_after < 10.0 - 0.001 or power_after > 95.0 + 0.001:
 				out_of_range_found = true
 			if not is_equal_approx(power_after, float(expected[region_name])):
@@ -1092,15 +1131,16 @@ func _test_sixnet_league() -> void:
 	## Landavol (neighbors Bloc du Larg=90, Spëddigh=25): Bloc du Larg is 40
 	## above Landavol's own 50 -- past DOMINANCE_THRESHOLD -- so Landavol
 	## should blend toward it.
-	## Taktikã (neighbors Spëddigh=25, Xérvu=25): both neighbors sit only 5
+	## Taktikã (neighbors Spëddigh=23, Xérvu=23): both neighbors sit only 3
 	## above Taktikã's own 20 -- no dominant neighbor -- while Taktikã's own
 	## power is below ISOLATION_THRESHOLD, so it should intensify instead.
 	var drift_career := CAREER_STATE_SCRIPT.new()
 	drift_career.career_name = "Drift Test Academy"
-	drift_career.region_power = {
-		"Landavol": 50.0, "Spëddigh": 25.0, "Pāwa Hitō": 25.0,
-		"Bloc du Larg": 90.0, "Xérvu": 25.0, "Taktikã": 20.0,
+	drift_career.region_strength = {
+		"Landavol": 50.0, "Spëddigh": 23.0, "Pāwa Hitō": 25.0,
+		"Bloc du Larg": 90.0, "Xérvu": 23.0, "Taktikã": 20.0,
 	}
+	drift_career.sixnet_form = drift_career.region_strength.duplicate(true)
 	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(drift_career)
 	var landavol_overlay: Dictionary = drift_career.region_overlay.get("Landavol", {})
 	_check(
@@ -1119,7 +1159,8 @@ func _test_sixnet_league() -> void:
 	SIXNET_LEAGUE_SCRIPT.ensure_bootstrapped(drift_career)
 	var restored := CAREER_STATE_SCRIPT.from_dict(drift_career.to_dict())
 	_check(
-		restored.region_power == drift_career.region_power
+		restored.region_strength == drift_career.region_strength
+			and restored.sixnet_form == drift_career.sixnet_form
 			and restored.sixnet_slots == drift_career.sixnet_slots
 			and restored.region_overlay == drift_career.region_overlay
 			and restored.sixnet_standings == drift_career.sixnet_standings
@@ -1398,6 +1439,17 @@ func _test_errant_attacks_land_outside_the_court() -> void:
 	var maximum: Vector2 = RallySimulator.ATTACK_COURT_MAX
 	var simulator: RefCounted = RallySimulator.new()
 	var threshold: float = RallySimulator.ATTACK_ERROR_THRESHOLD
+	var low_quality_misses := 0
+	var high_quality_misses := 0
+	for _sample in range(4000):
+		low_quality_misses += int(simulator._attack_missed(0.18))
+		high_quality_misses += int(simulator._attack_missed(0.50))
+	var low_rate := float(low_quality_misses) / 4000.0
+	var high_rate := float(high_quality_misses) / 4000.0
+	_check(
+		low_rate > high_rate and low_rate < 0.31 and high_rate > 0.09,
+		"attack errors follow a bounded quality response instead of a hard ability cliff",
+	)
 
 	## Sampled across the whole legal court so the result isn't an accident of
 	## one target: every intended point, missed, must leave the court.

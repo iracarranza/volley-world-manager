@@ -350,9 +350,10 @@ several taken on trust this week were wrong. A committed tool turns "I measured
 
 **Verify claims about code against the code.** Both agents have confidently
 reported things about the other's work that were untrue: that a feature had been
-dropped when it had only been renamed; that two branches contained duplicate
-patches when `git cherry` showed neither did. Reading the file is cheap. The
-retraction is not.
+dropped when it had only been renamed; and later that `git cherry` showed two
+patch-equivalent regional commits as unique, when its `-` marker meant the
+opposite. Reading the file is cheap. The retraction is not. Different hashes do
+not make cherry-picked patches unique.
 
 **State what you have not verified.** A design written against a tree you cannot
 see is still useful, but it must say so at the top, or its constants get treated

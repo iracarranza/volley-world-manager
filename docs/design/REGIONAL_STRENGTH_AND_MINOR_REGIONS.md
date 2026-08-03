@@ -1,16 +1,12 @@
 # Regional strength, minor regions, and the Sixnet standing model
 
-Design handoff. Nothing here is implemented yet.
-
-**Status of the tree this was written against.** The container this was drafted
-in sits at `0bd0809` and does *not* contain the merged Codex work
-(`team_principles.gd`, `work_rate`, satisfaction/confidence/cohesion, the
-regional identity revisions, the world-generation redistribution, or the attack
-calibration fixes). Every line number and constant below was read from
-`0bd0809`. The **architecture** should survive that merge; the **specific
-constants and identity data almost certainly moved**, since Codex revised
-`regions.gd`, `player_generator.gd` and `world_population.gd` — the same three
-files this design touches. Re-read those before implementing.
+Partially implemented. The field split, legacy-save migration, real-population
+`home_region` measurement, positional prime/depth aggregation, annual refresh,
+and strength-based drift thresholds are live. Prestige, prime history, tier
+affinity, specialty-budget conservation, and challenge relegation remain design
+work. Current measured strength spans roughly 70-82 across six 1,200-player
+worlds; constants below that concern normalization or later systems remain
+proposals until those systems land.
 
 ---
 

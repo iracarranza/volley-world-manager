@@ -932,13 +932,18 @@ func _refresh_sixnet() -> void:
 			slot_id in career.sixnet_qualified_slots,
 		))
 	lines.append("")
-	lines.append("[b]Regional Power[/b]")
+	lines.append("[b]Regional Strength / Sixnet Form[/b]")
 	var ranked_regions: Array = Regions.SIXNET_PARTICIPANTS.duplicate()
 	ranked_regions.sort_custom(func(a, b) -> bool:
-		return float(career.region_power.get(a, 50.0)) > float(career.region_power.get(b, 50.0))
+		return float(career.region_strength.get(a, 50.0)) \
+			> float(career.region_strength.get(b, 50.0))
 	)
 	for region_name in ranked_regions:
-		lines.append("%s: %d" % [region_name, roundi(float(career.region_power.get(region_name, 50.0)))])
+		lines.append("%s: %d strength / %d form" % [
+			region_name,
+			roundi(float(career.region_strength.get(region_name, 50.0))),
+			roundi(float(career.sixnet_form.get(region_name, 50.0))),
+		])
 	sixnet_summary.text = "\n".join(lines)
 
 
@@ -961,7 +966,7 @@ func _sixnet_top_region() -> String:
 	var top_region := ""
 	var top_power := -1.0
 	for region_name in Regions.SIXNET_PARTICIPANTS:
-		var power := float(CareerManager.career.region_power.get(region_name, 50.0))
+		var power := float(CareerManager.career.sixnet_form.get(region_name, 50.0))
 		if power > top_power:
 			top_power = power
 			top_region = region_name

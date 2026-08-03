@@ -87,7 +87,6 @@ func create_career(
 	if not error.is_empty():
 		return error
 	state.fixtures = _starting_fixtures(region)
-	SixnetLeague.ensure_bootstrapped(state)
 	## The world is built once, here, and then kept. The transfer market is a
 	## slice taken out of it rather than a separate roll, so every player the
 	## manager can sign is a real person from somewhere with a real place in
@@ -96,6 +95,10 @@ func create_career(
 	world_population = WorldPopulation.generate(
 		world_seed, WorldPopulation.DEFAULT_POPULATION_SIZE, state.region_overlay
 	)
+	## Regional production strength reads the people this world actually made,
+	## so Sixnet bootstrapping must happen after population generation rather
+	## than sampling and discarding a synthetic academy roster.
+	SixnetLeague.ensure_bootstrapped(state, world_population)
 	## Golden years are recorded in the world's own calendar so the cadence
 	## can carry forward as the career runs, rather than being re-derived
 	## from ages that shift every season.
@@ -164,8 +167,8 @@ func set_training_focus(activity_name: String) -> String:
 ## became an error, which is the bug this fixes.
 ##
 ## 0.40 is set against the fixture cadence rather than picked for feel: two
-## weeks between fixtures at the default focus returns 0.70, comfortably above
-## the ~0.64 an 80-rally match takes out of a starter of average stamina. A
+## weeks between fixtures at the default focus return enough even for the
+## pathological case where one player pays the decisive cost on every rally. A
 ## squad that plays and trains normally holds steady, one that rests properly
 ## gains ground, and a congested run still wears players down. A regression
 ## check re-derives this against the training table and the rally cost, so
@@ -194,6 +197,10 @@ func advance_week() -> String:
 		## new intake arrives. This is the only thing that makes the
 		## population a history rather than a snapshot.
 		_advance_world_year(post_year)
+		var strength_population: Array = world_population.duplicate()
+		strength_population.append_array(career.transfer_pool)
+		strength_population.append_array(_game_manager().players)
+		SixnetLeague.ensure_bootstrapped(career, strength_population)
 	for player in _game_manager().players:
 		## Weekly recovery must exceed every training load. The old 0.04 was
 		## smaller than default Team Practice's 0.05, so an idle week made a
