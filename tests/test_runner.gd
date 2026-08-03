@@ -515,13 +515,163 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 
 
 func _test_career_calendar_generation_training_and_saves() -> void:
-	var fictional_regions := REGIONS_SCRIPT.names()
+	## `playable_names()`, not `names()`. Minor regions exist in the world and
+	## raise players, but run no academy the manager could take over, so they
+	## are places you sign players *from* rather than places you manage.
+	var fictional_regions := REGIONS_SCRIPT.playable_names()
 	_check(fictional_regions.size() == 8 and "Landavol" in fictional_regions \
 			and "Spëddigh" in fictional_regions and "Pāwa Hitō" in fictional_regions \
 			and "Bloc du Larg" in fictional_regions and "Xérvu" in fictional_regions \
 			and "Taktikã" in fictional_regions and "Ispayk" in fictional_regions \
 			and "A'ace" in fictional_regions,
 		"career creation exposes only the eight confirmed fictional regions")
+	var every_region := REGIONS_SCRIPT.names()
+	var minor_present := true
+	for minor_name in REGIONS_SCRIPT.MINOR_REGIONS:
+		if not (minor_name in every_region) or minor_name in fictional_regions:
+			minor_present = false
+	_check(
+		every_region.size() == 14 and minor_present,
+		"minor regions exist in the world but are never offered as a starting region",
+	)
+	var unresisted := 0
+	for minor_name in REGIONS_SCRIPT.MINOR_REGIONS:
+		if minor_name != "Zaitgaist" and REGIONS_SCRIPT.tradition_resistance(minor_name) <= 0.0:
+			unresisted += 1
+	_check(
+		REGIONS_SCRIPT.tradition_resistance("Landavol") == 0.0 and unresisted == 0,
+		"every minor tradition except Zaitgaist resists absorption; majors resist normally",
+	)
+	_test_minor_region_behaviour()
+
+
+## The minor tier only earns its place if it behaves differently from the
+## majors rather than merely existing as extra data.
+func _test_minor_region_behaviour() -> void:
+	## Resistance has to actually change the outcome. Two identical worlds
+	## differing only in the drifting region's resistance must diverge: the
+	## unresisting one is absorbed by its dominant neighbor, the resisting one
+	## is not. Without this, `REGION_TRADITION_RESISTANCE` could be a dead
+	## constant and every test above would still pass.
+	var strengths := {
+		"Taktikã": 90.0,           ## dominant neighbor
+		"Tu'ul ys Feynt": 40.0,    ## resistance 1.0
+		"Zaitgaist": 40.0,         ## resistance 0.0
+		"Landavol": 40.0,
+	}
+	var resisted := CAREER_STATE_SCRIPT.new()
+	resisted.career_name = "Resistance Test"
+	resisted.region_strength = strengths.duplicate()
+	resisted.sixnet_champion_region = ""
+	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(resisted)
+	var tuul: Dictionary = resisted.region_overlay.get("Tu'ul ys Feynt", {})
+	var gap := 90.0 - 40.0
+	var plain_threshold: float = SIXNET_LEAGUE_SCRIPT.DOMINANCE_THRESHOLD
+	var resisted_threshold := plain_threshold * (1.0 + 1.0)
+	_check(
+		gap > plain_threshold and gap > resisted_threshold
+			and Array(tuul.get("specialty_add", [])).size() > 0,
+		"a dominant neighbor still absorbs a resisting minor region once the gap is large enough",
+	)
+
+	## The zeitgeist rule: Zaitgaist copies the champion's specialty outright
+	## and never enters the dominance or isolation branches, whatever its
+	## neighbor Landavol is doing.
+	var zeit := CAREER_STATE_SCRIPT.new()
+	zeit.career_name = "Zeitgeist Test"
+	zeit.region_strength = {"Landavol": 95.0, "Zaitgaist": 10.0}
+	zeit.sixnet_champion_region = "Xérvu"
+	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(zeit)
+	var borrowed: Dictionary = zeit.region_overlay.get("Zaitgaist", {})
+	var xervu_specialty: Array = Array(
+		PLAYER_GENERATOR_SCRIPT.REGION_SPECIALTY.get("Xérvu", [])
+	)
+	_check(
+		Array(borrowed.get("specialty_add", [])) == xervu_specialty
+			and str(borrowed.get("zeitgeist_source", "")) == "Xérvu"
+			and not borrowed.has("specialty_bonus_delta"),
+		"Zaitgaist adopts the reigning champion's specialty and never intensifies its own",
+	)
+
+	## It replaces rather than accumulates -- it has no tradition of its own
+	## for successive champions to layer onto.
+	zeit.sixnet_champion_region = "Taktikã"
+	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(zeit)
+	var reborrowed: Dictionary = zeit.region_overlay.get("Zaitgaist", {})
+	_check(
+		Array(reborrowed.get("specialty_add", []))
+				== Array(PLAYER_GENERATOR_SCRIPT.REGION_SPECIALTY.get("Taktikã", []))
+			and str(reborrowed.get("zeitgeist_source", "")) == "Taktikã",
+		"Zaitgaist replaces its borrowed identity each season rather than accumulating",
+	)
+
+	## Minor regions must never reach the bracket. This is the invariant the
+	## whole tier depends on, and it holds because the league iterates
+	## SIXNET_PARTICIPANTS rather than DEFINITIONS.
+	var league := CAREER_STATE_SCRIPT.new()
+	league.career_name = "Bracket Scope Test"
+	SIXNET_LEAGUE_SCRIPT.ensure_bootstrapped(league)
+	var minor_in_bracket := false
+	for slot_id in league.sixnet_slots:
+		if str(league.sixnet_slots[slot_id]) in REGIONS_SCRIPT.MINOR_REGIONS:
+			minor_in_bracket = true
+	_check(
+		league.sixnet_slots.size() == 8 and not minor_in_bracket,
+		"no minor region ever occupies a Sixnet slot",
+	)
+
+	## Specialties are narrow by construction -- two or three attributes against
+	## the majors' four to six -- which is what makes a minor player a spike
+	## rather than simply a worse player.
+	var too_broad := ""
+	for minor_name in REGIONS_SCRIPT.MINOR_REGIONS:
+		var specialty: Array = Array(
+			PLAYER_GENERATOR_SCRIPT.REGION_SPECIALTY.get(minor_name, [])
+		)
+		if minor_name == "Zaitgaist":
+			if not specialty.is_empty():
+				too_broad = minor_name
+		elif specialty.size() < 2 or specialty.size() > 3:
+			too_broad = minor_name
+	_check(
+		too_broad.is_empty(),
+		"every minor specialty is two or three attributes, and Zaitgaist has none of its own",
+	)
+
+	## The tier has to exist in the world, not only in the data tables. A
+	## generated world must actually raise players in every minor region, and
+	## the tier must be a net *exporter* -- losing its best to bigger programs
+	## is the entire story, and it was backwards on the first attempt because
+	## migration weighted destinations by attractiveness with no term for how
+	## many programs a region actually runs.
+	var world: Array = WORLD_POPULATION_SCRIPT.generate(90210, 1200)
+	var raised := {}
+	var playing := {}
+	for player_resource in world:
+		var player := player_resource as VolleyballPlayer
+		if player == null:
+			continue
+		raised[player.home_region] = int(raised.get(player.home_region, 0)) + 1
+		playing[player.club_region] = int(playing.get(player.club_region, 0)) + 1
+	var empty_minor := ""
+	var minor_raised := 0
+	var minor_playing := 0
+	for minor_name in REGIONS_SCRIPT.MINOR_REGIONS:
+		if int(raised.get(minor_name, 0)) <= 0:
+			empty_minor = minor_name
+		minor_raised += int(raised.get(minor_name, 0))
+		minor_playing += int(playing.get(minor_name, 0))
+	_check(
+		empty_minor.is_empty(),
+		"a generated world raises players in every minor region, not only the Sixnet eight",
+	)
+	## Aggregate rather than per-region: at this sample size an individual
+	## minor region raises only a few dozen players, so one of six landing
+	## marginally positive is noise. The claim is about the tier.
+	_check(
+		minor_playing < minor_raised,
+		"the minor tier exports talent on balance rather than collecting it",
+	)
 	_check(REGIONS_SCRIPT.canonical_name("Europe") == "Landavol",
 		"legacy real-world region saves migrate to a fictional setting")
 	_check(
@@ -1131,14 +1281,22 @@ func _test_sixnet_league() -> void:
 	## Landavol (neighbors Bloc du Larg=90, Spëddigh=25): Bloc du Larg is 40
 	## above Landavol's own 50 -- past DOMINANCE_THRESHOLD -- so Landavol
 	## should blend toward it.
-	## Taktikã (neighbors Spëddigh=23, Xérvu=23): both neighbors sit only 3
-	## above Taktikã's own 20 -- no dominant neighbor -- while Taktikã's own
-	## power is below ISOLATION_THRESHOLD, so it should intensify instead.
+	## Taktikã (neighbors Spëddigh=23, Xérvu=23, Tu'ul ys Feynt=18): no
+	## neighbor is dominant -- the two majors sit 3 above Taktikã's own 20 and
+	## the minor sits below it -- while Taktikã's own power is under
+	## ISOLATION_THRESHOLD, so it should intensify instead.
+	##
+	## Minor regions are listed explicitly rather than left to default. They
+	## are neighbors of the majors now, so omitting them would silently hand
+	## every major a phantom neighbor at the fallback strength -- which is what
+	## first broke this check when the tier landed.
 	var drift_career := CAREER_STATE_SCRIPT.new()
 	drift_career.career_name = "Drift Test Academy"
 	drift_career.region_strength = {
 		"Landavol": 50.0, "Spëddigh": 23.0, "Pāwa Hitō": 25.0,
 		"Bloc du Larg": 90.0, "Xérvu": 23.0, "Taktikã": 20.0,
+		"Tu'ul ys Feynt": 18.0, "Longh Ralhi": 16.0, "Bhomp Passau": 19.0,
+		"Rhen Tempaol": 18.0, "Kutt Lyne": 17.0, "Zaitgaist": 12.0,
 	}
 	drift_career.sixnet_form = drift_career.region_strength.duplicate(true)
 	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(drift_career)

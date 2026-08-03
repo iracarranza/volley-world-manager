@@ -144,6 +144,15 @@ const GUARANTEED_YOUNG_TIER: String = "standout"
 const REGION_BIRTH_WEIGHTS := {
 	"A'ace": 0.35,
 	"Ispayk": 1.20,
+	## Minor regions are small programs, not small talent pools with the same
+	## headcount -- they genuinely raise far fewer players. Zaitgaist is a
+	## city-state you could walk across in a morning.
+	"Tu'ul ys Feynt": 0.25,
+	"Longh Ralhi": 0.20,
+	"Bhomp Passau": 0.30,
+	"Rhen Tempaol": 0.28,
+	"Kutt Lyne": 0.26,
+	"Zaitgaist": 0.12,
 }
 
 ## Where talent *ends up*.
@@ -160,6 +169,23 @@ const REGION_PULL := {
 	"Spëddigh": 0.80,
 	"Taktikã": 0.80,
 	"Ispayk": 0.45,
+	## Every minor region loses its best players to bigger programs. This is
+	## what produces the tier's signature story: a specialist raised in one of
+	## these and scouted playing somewhere else entirely, which the roster
+	## dossier already shows because `home_region` and `club_region` are
+	## separate fields.
+	## Well below every major, including Ispayk. Pull is relative and shared
+	## across all inhabited regions, so values merely *lower* than the majors
+	## still made the minor tier a net importer once six of them existed: they
+	## raise about 15% of the world between them, and at 0.45-0.70 they were
+	## attracting 26% of all migration. A minor region has to end a career
+	## having exported its best players, not collected somebody else's.
+	"Kutt Lyne": 0.30,
+	"Rhen Tempaol": 0.26,
+	"Bhomp Passau": 0.24,
+	"Tu'ul ys Feynt": 0.20,
+	"Zaitgaist": 0.18,
+	"Longh Ralhi": 0.14,
 }
 
 ## How likely a player is to have moved at all, by how good they are. Talent
@@ -324,15 +350,15 @@ static func _scarce_allotment(
 ## never by how good the player is or how old they are.
 static func birth_region(rng: RandomNumberGenerator) -> String:
 	var total := 0.0
-	for region_name in Regions.SIXNET_PARTICIPANTS:
+	for region_name in Regions.INHABITED_REGIONS:
 		total += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0))
 	var roll := rng.randf() * total
 	var cumulative := 0.0
-	for region_name in Regions.SIXNET_PARTICIPANTS:
+	for region_name in Regions.INHABITED_REGIONS:
 		cumulative += float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0))
 		if roll <= cumulative:
 			return str(region_name)
-	return str(Regions.SIXNET_PARTICIPANTS[Regions.SIXNET_PARTICIPANTS.size() - 1])
+	return str(Regions.INHABITED_REGIONS[Regions.INHABITED_REGIONS.size() - 1])
 
 
 ## Decides where a player actually plays. Better players move more often,
@@ -352,10 +378,18 @@ static func assign_club_region(player: VolleyballPlayer, rng: RandomNumberGenera
 	var exponent := float(PULL_EXPONENT_BY_BAND.get(band, 1.0))
 	var total := 0.0
 	var weights := {}
-	for region_name in Regions.SIXNET_PARTICIPANTS:
+	for region_name in Regions.INHABITED_REGIONS:
 		if str(region_name) == home:
 			continue
-		var weight := pow(float(REGION_PULL.get(region_name, 1.0)), exponent)
+		## Scaled by how much the region actually raises, which stands in for
+		## how many programs it runs. Pull alone answers "how attractive is
+		## this place", never "how many roster spots does it have" -- so a
+		## city-state with a twelfth of Landavol's birth rate was absorbing a
+		## full share of world migration and ending every career as a net
+		## importer, which is backwards for a tier defined by losing its best
+		## players. Capacity is the missing term, not attractiveness.
+		var weight := pow(float(REGION_PULL.get(region_name, 1.0)), exponent) \
+			* float(REGION_BIRTH_WEIGHTS.get(region_name, 1.0))
 		weights[region_name] = weight
 		total += weight
 	var roll := rng.randf() * total
@@ -429,7 +463,7 @@ static func generate(
 	## contains, and simply could not be met. Eight, spread over eight
 	## cohorts, leaves the golden mechanic intact.
 	var guaranteed_pending: Array[String] = []
-	for region_name in Regions.SIXNET_PARTICIPANTS:
+	for region_name in Regions.INHABITED_REGIONS:
 		guaranteed_pending.append(str(region_name))
 
 	var result: Array[VolleyballPlayer] = []

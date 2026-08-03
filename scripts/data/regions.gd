@@ -20,6 +20,33 @@ const DEFINITIONS := {
 		"physical": 4, "technical": 2, "mental": 1, "names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"]},
 	"A'ace": {"tagline": "The circuit's newest flagship-in-waiting, buying in overnight the star talent a young program hasn't had time to grow -- all the resources, none of the history.",
 		"physical": 3, "technical": 2, "mental": 1, "names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"]},
+
+	## Minor regions. Small programs that never contest the Sixnet, with
+	## ratings summing to 4-5 against the majors' 6-8 and a specialty of two or
+	## three attributes rather than four to six. Weak overall, sharply
+	## specialized -- a player from one grades poorly by
+	## `current_ability_score()` while sitting near the top of the world on the
+	## two or three things their tradition actually teaches.
+	##
+	## Names follow the same device as the majors (see
+	## `docs/world/STYLE_AND_SETTING.md`): a volleyball phrase reworded oddly
+	## and dressed in unfamiliar spelling -- Tu'ul ys Feynt is "tools and
+	## feints", Rhen Tempaol is "one tempo", Longh Ralhi is "long rally".
+	"Tu'ul ys Feynt": {"tagline": "Village halls where the ball is won by the shot the blocker didn't believe -- wrists over power, patience over height.",
+		"physical": 1, "technical": 3, "mental": 1, "names": ["Bryn", "Eilir", "Tewdr", "Anwen", "Maelo", "Ffion", "Gwern", "Rhosyn"]},
+	"Longh Ralhi": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
+		"physical": 2, "technical": 1, "mental": 2, "names": ["Dorje", "Pema", "Tenzin", "Tsering", "Norbu", "Lhamo", "Kunzang", "Yangchen"]},
+	"Bhomp Passau": {"tagline": "Concrete courts, no net posts worth the name, and a religion built around the first contact. If it's passable, it gets passed.",
+		"physical": 1, "technical": 3, "mental": 1, "names": ["Nilo", "Yaritza", "Elpidio", "Marisol", "Ozéias", "Caridad", "Tavo", "Idalia"]},
+	"Rhen Tempaol": {"tagline": "Small halls where the set is already gone before the block has finished landing. Nobody here hits hard. Everybody here hits early.",
+		"physical": 2, "technical": 2, "mental": 1, "names": ["Soah", "Minjae", "Haerin", "Wonsik", "Yerin", "Doha", "Jiwoo", "Seong"]},
+	"Kutt Lyne": {"tagline": "Technical schools that treat a hard swing as an admission of failure. The corner is always open if you can see it.",
+		"physical": 1, "technical": 3, "mental": 1, "names": ["Zorana", "Miloš", "Vesna", "Ilija", "Radmila", "Novak", "Danica", "Stevan"]},
+	## The one region whose name is not a volleyball phrase, because it is the
+	## one region with no technique of its own to name itself after. It borrows
+	## whatever just won instead -- see `SixnetLeague`'s zeitgeist rule.
+	"Zaitgaist": {"tagline": "A city-state you could walk across in a morning, landlocked inside Landavol, which has never developed a style and has played every style there is.",
+		"physical": 1, "technical": 1, "mental": 2, "names": ["Anselm", "Reike", "Vasholt", "Merrin", "Ottlin", "Sabet", "Frauke", "Delvin"]},
 }
 
 const LEGACY_REGIONS := {
@@ -102,13 +129,94 @@ const REGIONAL_PRINCIPLES := {
 ## culture (see `docs/world/STYLE_AND_SETTING.md`); this is a made-up world
 ## map, symmetric by construction (every entry appears on both sides).
 const REGION_ADJACENCY := {
-	"Landavol": ["Bloc du Larg", "Spëddigh"],
-	"Spëddigh": ["Landavol", "Taktikã"],
-	"Pāwa Hitō": ["Xérvu"],
-	"Bloc du Larg": ["Landavol", "Xérvu"],
-	"Xérvu": ["Bloc du Larg", "Pāwa Hitō", "Taktikã"],
-	"Taktikã": ["Spëddigh", "Xérvu"],
+	"Landavol": ["Bloc du Larg", "Spëddigh", "Zaitgaist"],
+	"Spëddigh": ["Landavol", "Taktikã", "Rhen Tempaol"],
+	"Pāwa Hitō": ["Xérvu", "Longh Ralhi"],
+	"Bloc du Larg": ["Landavol", "Xérvu", "Bhomp Passau"],
+	"Xérvu": ["Bloc du Larg", "Pāwa Hitō", "Taktikã", "Kutt Lyne"],
+	"Taktikã": ["Spëddigh", "Xérvu", "Tu'ul ys Feynt"],
+	"Tu'ul ys Feynt": ["Taktikã"],
+	"Longh Ralhi": ["Pāwa Hitō"],
+	"Bhomp Passau": ["Bloc du Larg"],
+	"Rhen Tempaol": ["Spëddigh"],
+	"Kutt Lyne": ["Xérvu"],
+	## Geography only. Zaitgaist is genuinely an enclave inside Landavol, but
+	## drift skips it before the adjacency branches ever run -- it tracks the
+	## Sixnet champion instead of its neighbor. Reading this table alone would
+	## wrongly suggest Landavol influences it.
+	"Zaitgaist": ["Landavol"],
 }
+
+## Minor regions: present in the world, absent from the Sixnet. Every loop that
+## means "regions with a development tradition" iterates DEVELOPMENT_REGIONS;
+## every loop that means "regions in the bracket" keeps using
+## SIXNET_PARTICIPANTS, which is why adding these needs no league changes.
+const MINOR_REGIONS: Array[String] = [
+	"Tu'ul ys Feynt", "Longh Ralhi", "Bhomp Passau", "Rhen Tempaol",
+	"Kutt Lyne", "Zaitgaist",
+]
+
+## Influence drift covers core plus minor. Ispayk and A'ace stay out: their
+## identities come from history and money rather than a local training
+## tradition that could spread or be absorbed.
+const DEVELOPMENT_REGIONS: Array[String] = [
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
+	"Tu'ul ys Feynt", "Longh Ralhi", "Bhomp Passau", "Rhen Tempaol",
+	"Kutt Lyne", "Zaitgaist",
+]
+
+## Every region that raises and hosts players -- the eight Sixnet
+## participants plus the minor tier. This is the population scope, and it is
+## deliberately *not* SIXNET_PARTICIPANTS: minor regions are inhabited places
+## that produce, keep and lose players, they simply never contest the bracket.
+## Conflating the two is how the tier ends up existing in data and nowhere in
+## the actual world.
+const INHABITED_REGIONS: Array[String] = [
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
+	"Ispayk", "A'ace",
+	"Tu'ul ys Feynt", "Longh Ralhi", "Bhomp Passau", "Rhen Tempaol",
+	"Kutt Lyne", "Zaitgaist",
+]
+
+## How much harder than usual it is to absorb a region's tradition, as a
+## multiplier on `DOMINANCE_THRESHOLD`.
+##
+## Minor regions are by design far weaker than any major neighbor, so without
+## this the strength gap would always clear the threshold: they would blend
+## every single season, never intensify, and lose the specialization that is
+## the entire reason the tier exists. Resistance makes absorption a slow risk
+## rather than a certainty -- a small tradition can still die, which is a
+## better story than one that cannot.
+##
+## The spread is deliberate. Longh Ralhi is an isolated mountain tradition and
+## the hardest to reach; Kutt Lyne is well-connected inland and could plausibly
+## be swallowed outright; Zaitgaist has nothing to resist with, which is the
+## point of it. Regions absent here resist normally.
+const REGION_TRADITION_RESISTANCE := {
+	"Longh Ralhi": 1.4,
+	"Tu'ul ys Feynt": 1.0,
+	"Rhen Tempaol": 0.9,
+	"Bhomp Passau": 0.8,
+	"Kutt Lyne": 0.7,
+	"Zaitgaist": 0.0,
+}
+
+
+static func tradition_resistance(region_name: String) -> float:
+	return float(REGION_TRADITION_RESISTANCE.get(canonical_name(region_name), 0.0))
+
+
+## Regions a new career can be founded in.
+##
+## Deliberately not every region in `DEFINITIONS`. Minor regions exist in the
+## world, raise players and appear in scouting, but they run no academy at the
+## level this game is about -- founding a Zaitgaist academy and competing
+## toward the Sixnet is not a story the tier supports. They are places you sign
+## players *from*, not places you manage.
+static func playable_names() -> Array[String]:
+	var result: Array[String] = SIXNET_PARTICIPANTS.duplicate()
+	result.sort()
+	return result
 
 
 static func names() -> Array[String]:

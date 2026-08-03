@@ -36,14 +36,32 @@ const POSITIONS: Array[Dictionary] = [
 const REGION_HEIGHT_BIAS := {
 	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
 	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 4.0, "A'ace": 1.0,
+	"Tu'ul ys Feynt": -3.0,
+	"Longh Ralhi": -5.0,
+	"Bhomp Passau": -2.0,
+	"Rhen Tempaol": -1.0,
+	"Kutt Lyne": 0.0,
+	"Zaitgaist": 0.0,
 }
 const REGION_MASS_BIAS := {
 	"Pāwa Hitō": -1.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
 	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": 5.0, "A'ace": 1.0,
+	"Tu'ul ys Feynt": -4.0,
+	"Longh Ralhi": -5.0,
+	"Bhomp Passau": -1.0,
+	"Rhen Tempaol": -3.0,
+	"Kutt Lyne": -2.0,
+	"Zaitgaist": 0.0,
 }
 const REGION_WINGSPAN_BIAS := {
 	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
 	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 3.0, "A'ace": 1.0,
+	"Tu'ul ys Feynt": -2.0,
+	"Longh Ralhi": -3.0,
+	"Bhomp Passau": 0.0,
+	"Rhen Tempaol": -1.0,
+	"Kutt Lyne": 0.0,
+	"Zaitgaist": 0.0,
 }
 
 ## Attributes that receive a +8 specialty bonus for players from each region.
@@ -79,6 +97,22 @@ const REGION_SPECIALTY := {
 		"adaptability", "unpredictability"],
 	"Ispayk": ["attack_power", "arm_speed", "jump_reach", "block_timing", "shot_variety"],
 	"A'ace": ["attack_power", "serve_power", "block_timing"],
+
+	## Minor regions: two or three attributes, not four to six. The tier's
+	## whole proposition is a narrow, deep tradition rather than a broad one,
+	## and two of these fill gaps no major region claims -- `reception`, the
+	## core passing technique (Spëddigh owns balance and pace resistance but
+	## never reception itself), and `attack_accuracy`, claimed by nobody at all
+	## despite being primary for three of the five roles.
+	"Tu'ul ys Feynt": ["feinting", "tooling", "finesse"],
+	"Longh Ralhi": ["stamina", "dig_control", "reception_stability"],
+	"Bhomp Passau": ["reception", "reception_balance", "ball_control"],
+	"Rhen Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
+	"Kutt Lyne": ["attack_accuracy", "shot_variety", "court_vision"],
+	## Zaitgaist has no tradition of its own. Its specialty comes entirely from
+	## `region_overlay`, rewritten each season to mirror whoever last won the
+	## Sixnet -- see `SixnetLeague.apply_influence_drift()`.
+	"Zaitgaist": [],
 }
 
 ## Secondary role attributes receive a +5 bonus: the supporting skills a role
