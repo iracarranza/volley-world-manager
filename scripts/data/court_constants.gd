@@ -9,6 +9,11 @@ const HOME_BASELINE_Y: float = 0.96
 ## Full-court dimensions, used to convert normalised offsets into real distances.
 const COURT_WIDTH_METERS: float = 9.0
 const COURT_LENGTH_METERS: float = 18.0
+## Height of the tape. Nothing consulted this before ball flight was solved from
+## a contact height -- with the landing point chosen first and the arc
+## back-solved to reach it, no ball could fail to clear the net, so there was
+## nothing to consult it with.
+const NET_HEIGHT_METERS: float = 2.43
 ## Each half court is 9 m deep. The attack line is 3 m from the net, leaving a
 ## 3 m front zone and 6 m back zone (a 1:2 depth ratio).
 const HOME_ATTACK_LINE_Y: float = 0.653333

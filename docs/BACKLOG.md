@@ -211,8 +211,9 @@ same defect, and patching then replacing is wasted work.
   `attack_swing_model.gd`. Courses as bearings, power as a temperament-driven
   choice, a blurred read of the block and floor, and three independent
   execution channels.
-- **Gate C — resolution.** Block intersection along the flight, landing, in/out
-  from geometry. Still shadow.
+- **Gate C — resolution. Landed.** `attack_resolution_model.gd`. Tape, antennae,
+  block and floor, read off one flight in the order the ball meets them. No
+  branch consults a random number.
 - **Gate D — calibration.** Tune spreads and the power range until the emergent
   rates hit the targets. Needs those targets settled first: stuff rate, block
   involvement, rally-length distribution. They are design decisions that
@@ -273,6 +274,39 @@ and it is the first thing Gate C's power selection has to respect.
 **Bearings are metric, not normalized.** The court is 9 m by 18 m, so equal
 normalized offsets in x and y are a 26.6° shot, not 45°. Computing bearings in
 normalized space would tilt every course in the game.
+
+### Gate C notes
+
+`attack_resolution_model.gd` reads one flight in the order the ball meets
+things: **tape → antennae → block → floor.** No branch consults a random
+number, which is what allows an attack error to be *shown* — the ball is long
+because it was struck too flat and too hard, and playback draws exactly that.
+
+**`CourtConstants.NET_HEIGHT_METERS` did not exist.** Nothing had ever tested
+whether a ball clears the tape, and nothing could have: with the landing point
+chosen first and the arc back-solved to reach it, no ball could fail. The net
+test only becomes possible once the ball flies. A netted ball now also drops on
+the side it was struck from rather than wherever the unimpeded arc pointed.
+
+**The block is resolved by where the ball met the hands**, not by a margin
+comparison:
+
+| condition | outcome |
+| --- | --- |
+| ball above `reach_height_m` | not touched — beaten over the top |
+| lateral offset beyond `half_width_m` | not touched — passed wide of the hands |
+| within `TOOL_EDGE_MARGIN` of the edge | **tool** — the hitter's point |
+| more than `STUFF_DEPTH` below the reach | **stuff** — pressed down on |
+| otherwise | **touch** — fingertips, deflected up and playable |
+
+`STUFF_DEPTH_METERS` moved 0.25 → 0.15 when a test caught it: a ball meeting
+the hands 0.23 m below a blocker's reach is mid-palm, and 0.25 m was implicitly
+calling that a fingertip graze. Both thresholds are provisional and are what
+Gate D tunes against the stuff-rate target.
+
+This is also where "tool off the block" and "got tooled" stop being
+undetectable — the vocabulary entries that need to know the ball actually
+touched a hand.
 
 ### Perception is blurred, not coin-flipped
 

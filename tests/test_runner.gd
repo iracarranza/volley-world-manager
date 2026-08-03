@@ -88,6 +88,9 @@ const ATTACK_READ_SCRIPT := preload(
 const ATTACK_SWING_SCRIPT := preload(
 	"res://scripts/simulation/attack_swing_model.gd"
 )
+const ATTACK_RESOLUTION_SCRIPT := preload(
+	"res://scripts/simulation/attack_resolution_model.gd"
+)
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -194,6 +197,7 @@ func _initialize() -> void:
 	_test_attack_power_is_a_choice()
 	_test_hitters_read_a_blurred_picture()
 	_test_swing_channels_fail_separately()
+	_test_attack_resolves_from_geometry()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7580,6 +7584,161 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## Gate C. In, out, netted and blocked are read off one flight instead of rolled
+## and then drawn to match. Nothing here consults a random number, so every case
+## below is a fact about the geometry rather than a sample.
+func _test_attack_resolves_from_geometry() -> void:
+	var contact := Vector2(0.30, 0.52)
+	const HEIGHT := 3.20
+
+	## Struck down at a sane angle and speed: lands in.
+	var clean: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT, 0.0, -20.0, 22.0, [], true
+	)
+	_check(
+		str(clean.outcome) == "in"
+			and (clean.landing as Vector2).y < CourtConstants.NET_Y
+			and (clean.landing as Vector2).y > 0.0,
+		"a driven ball at a sane angle lands in the opponent court",
+	)
+
+	## Too flat and too hard: the same swing, sailed long. The ball is out
+	## because of how it was struck, not because a roll said so.
+	var sailed: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT, 0.0, -2.0, 27.0, [], true
+	)
+	_check(
+		str(sailed.outcome) == "out" and str(sailed.out_reason) == "long"
+			and (sailed.landing as Vector2).y < 0.0,
+		"a flat, hard swing carries past the endline and is drawn there",
+	)
+
+	## Not enough on it to clear the tape.
+	var netted: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, 2.35, 0.0, -30.0, 8.0, [], true
+	)
+	_check(
+		str(netted.outcome) == "net"
+			and float(netted.net_clearance_meters) < 0.0
+			and (netted.landing as Vector2).y > CourtConstants.NET_Y,
+		"a ball below the tape is netted and drops on the hitter's own side",
+	)
+	## The net test exists at all only because the ball now flies rather than
+	## being placed: with a chosen landing and a back-solved arc, no ball could
+	## fail to clear it.
+	_check(
+		float(clean.net_clearance_meters) > 0.0,
+		"a ball that gets across reports positive clearance over the tape",
+	)
+
+	## Swung so wide it crosses outside the antenna: out in the air, before the
+	## floor is ever consulted.
+	var antenna: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		Vector2(0.06, 0.52), HEIGHT, -80.0, -14.0, 24.0, [], true
+	)
+	_check(
+		str(antenna.outcome) == "out" and str(antenna.out_reason) == "antenna",
+		"a ball crossing outside the sideline is out at the net, not at the floor",
+	)
+
+	## The block, resolved by where the ball met the hands rather than by a
+	## margin comparison. All three read the same swing against three blockers
+	## who differ only in how high they get and where they stand.
+	var crossing: float = float(clean.net_crossing_x)
+	var wall: Array = [
+		{"net_x": crossing, "reach_height_m": 3.30, "half_width_m": 0.45},
+	]
+	var short_block: Array = [
+		{"net_x": crossing, "reach_height_m": 2.50, "half_width_m": 0.45},
+	]
+	var stuffed: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT, 0.0, -20.0, 22.0, wall, true
+	)
+	var over_the_top: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT, 0.0, -20.0, 22.0, short_block, true
+	)
+	_check(
+		str(stuffed.outcome) == "blocked"
+			and str((stuffed.block as Dictionary).kind) == "stuff",
+		"a ball meeting solid hands below their reach is stuffed",
+	)
+	_check(
+		str(over_the_top.outcome) == "in",
+		"the same swing over a shorter block is not blocked at all",
+	)
+
+	## Off the outside hand: the hitter's point, not the blocker's.
+	var edge_x := crossing + (0.45 - 0.04) / CourtConstants.COURT_WIDTH_METERS
+	var edge_block: Array = [
+		{"net_x": edge_x, "reach_height_m": 3.30, "half_width_m": 0.45},
+	]
+	var tooled: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT, 0.0, -20.0, 22.0, edge_block, true
+	)
+	_check(
+		str(tooled.outcome) == "blocked"
+			and str((tooled.block as Dictionary).kind) == "tool",
+		"a ball clipping the last few centimetres of the hands is a tool",
+	)
+
+	## Passing outside the hands entirely is not a block.
+	var beside_block: Array = [
+		{"net_x": crossing + 1.2 / CourtConstants.COURT_WIDTH_METERS,
+			"reach_height_m": 3.30, "half_width_m": 0.45},
+	]
+	_check(
+		str(ATTACK_RESOLUTION_SCRIPT.resolve(
+			contact, HEIGHT, 0.0, -20.0, 22.0, beside_block, true
+		).outcome) == "in",
+		"a ball passing wide of the hands is not touched by them",
+	)
+
+	## The opponent attacks the other way and must behave identically in their
+	## own frame -- including which side of the net a netted ball drops on.
+	var mirrored: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		Vector2(0.30, 0.48), HEIGHT, 0.0, -20.0, 22.0, [], false
+	)
+	var mirrored_net: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		Vector2(0.30, 0.48), 2.35, 0.0, -30.0, 8.0, [], false
+	)
+	_check(
+		str(mirrored.outcome) == "in"
+			and (mirrored.landing as Vector2).y > CourtConstants.NET_Y,
+		"a hitter attacking the other half lands in their opponent's court",
+	)
+	_check(
+		str(mirrored_net.outcome) == "net"
+			and (mirrored_net.landing as Vector2).y < CourtConstants.NET_Y,
+		"a netted ball drops on whichever side it was struck from",
+	)
+
+	## The end-to-end claim: a swing built by the Gate B models resolves without
+	## any of them disagreeing about what the ball did.
+	var course := AttackCourseModel.bearing_to_point(
+		contact, Vector2(0.62, 0.20), true
+	)
+	var ceiling: float = ATTACK_POWER_SCRIPT.available_ceiling_mps(0.75, 0.9, 1.0)
+	var chosen: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, 7.0, HEIGHT, 0.5, 0.6, 0.9, 0.0, 0.0
+	)
+	var delivered: Dictionary = ATTACK_SWING_SCRIPT.deliver(
+		course, -18.0, float(chosen.speed_mps), 0.8, 1.0, 0.0, 0.0, 0.0
+	)
+	var end_to_end: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT,
+		float(delivered.bearing_degrees),
+		float(delivered.vertical_angle_degrees),
+		float(delivered.speed_mps),
+		[], true,
+	)
+	_check(
+		str(end_to_end.outcome) in ["in", "out"]
+			and not is_nan((end_to_end.landing as Vector2).x)
+			and float(Dictionary(end_to_end.flight).duration_seconds) > 0.0,
+		"a course, a power choice and a swing compose into one resolved flight",
+	)
+
+
 ## Gate B. A hitter commits to the picture they believe, not to the truth with a
 ## coin flip over it. `_choose_attack_target()` today hands over the scan's best
 ## answer or a fixed fallback down the hitter's own line -- two behaviours and no
