@@ -181,6 +181,7 @@ static func generate_roster(
 		player.apply_role_physical_defaults()
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
+		assign_body_type(player, rng)
 		_apply_body_variation(player, rng, canonical_region, overlay)
 		player.stride_length_m = player.default_stride_length_m()
 		## Sets every attribute and derives `potential` from the ceilings it built.
@@ -269,6 +270,7 @@ static func _build_prospect(
 	player.apply_role_physical_defaults()
 	player.age = age
 	player.professional_experience = maxi(age - 20, 0)
+	assign_body_type(player, rng)
 	_apply_body_variation(player, rng, canonical_region, overlay)
 	player.stride_length_m = player.default_stride_length_m()
 	_apply_attributes(player, canonical_region, rng, age <= 20, overlay, talent)
@@ -434,6 +436,72 @@ static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
 
 ## Produces correlated individual bodies around role templates, shifted by
 ## region physique bias. Stride is updated by the caller after this returns.
+## Morphology, drawn uniformly. Every region produces every body type in equal
+## proportion, everywhere, always -- this is a fixed property of the world and
+## the one rule here that must never be softened into a tuning value.
+##
+## The reason is design intent rather than caution. Regional difference is
+## already carried by REGION_SPECIALTY, the body biases, and the tier and
+## positional affinities in world_population.gd; regions are *supposed* to feel
+## distinct. Weighting body type regionally on top of that would immediately
+## read as "people from here are built like that", which is the one reading
+## this must never support. A flat draw keeps morphology orthogonal to origin,
+## so a Tu'ul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
+## traditions and the *tradition* is what differs.
+const BODY_TYPES: Array[String] = ["Homi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
+
+## Body-metric deltas, applied after the regional bias so the two compose.
+const BODY_TYPE_METRICS := {
+	## Stride is deliberately absent. It is derived from post-variation height
+	## and pinned by a regression check, so morphology reaches locomotion
+	## through height and mass rather than by offsetting stride directly.
+	"Homi": {"height": 0.0, "mass": 0.0, "wingspan": 0.0},
+	"Avi": {"height": -4.0, "mass": -7.0, "wingspan": 6.0},
+	"Cani": {"height": 0.0, "mass": 2.0, "wingspan": 0.0},
+	"Feli": {"height": -3.0, "mass": -4.0, "wingspan": 0.0},
+	"Ursi": {"height": 1.0, "mass": 11.0, "wingspan": 1.0},
+	"Simi": {"height": -6.0, "mass": -5.0, "wingspan": 2.0},
+}
+
+## Attribute deltas, applied to the *ceiling* rather than only to the generated
+## value. If a body type shifted starting values alone, training would converge
+## everyone and morphology would quietly evaporate over a few seasons, leaving
+## character-creation flavour instead of a permanent identity.
+##
+## Each type sums to zero. That is not decoration: the first pass had every
+## type net positive, which inflated the generated population against the
+## hand-authored fixture roster (whose players default to Homi and take no
+## deltas) and tripped three balance checks that had been calibrated on a
+## uniform population. A body type has to trade, not upgrade.
+##
+## Avi carries no attack_power penalty despite being the lightest: mass already
+## feeds `usable_attack_power()`, so applying one here would count it twice.
+## Feli's stamina penalty is likewise load-bearing rather than cosmetic --
+## `GameManager.stamina_fatigue_scale()` reads stamina directly, so a Feli
+## measurably tires faster inside a single match. First-set terror, fifth-set
+## liability, with no new mechanism.
+const BODY_TYPE_ATTRIBUTES := {
+	"Homi": {},
+	"Avi": {"jump_reach": 4.0, "block_timing": 2.0, "reception_stability": -6.0},
+	"Cani": {"stamina": 3.5, "transition_speed": 3.0, "attack_power": 2.0,
+		"jump_reach": -4.5, "hand_control": -4.0},
+	"Feli": {"explosiveness": 4.0, "lateral_speed": 3.0, "dig_control": 2.5,
+		"set_disguise": 2.0, "stamina": -6.0, "tactical_discipline": -5.5},
+	"Ursi": {"reception_stability": 4.0, "attack_power": 3.0, "composure": 2.0,
+		"acceleration": -3.5, "lateral_speed": -3.0, "jump_reach": -2.5},
+	"Simi": {"hand_control": 4.0, "ball_control": 3.5, "finesse": 3.0,
+		"tooling": 2.0, "attack_power": -7.0, "jump_reach": -5.5},
+}
+
+
+static func assign_body_type(player: VolleyballPlayer, rng: RandomNumberGenerator) -> void:
+	player.body_type = BODY_TYPES[rng.randi_range(0, BODY_TYPES.size() - 1)]
+
+
+static func body_type_attribute_delta(body_type: String, property_name: String) -> float:
+	return float(Dictionary(BODY_TYPE_ATTRIBUTES.get(body_type, {})).get(property_name, 0.0))
+
+
 static func _apply_body_variation(
 	player: VolleyballPlayer,
 	rng: RandomNumberGenerator,
@@ -453,9 +521,19 @@ static func _apply_body_variation(
 		+ float(overlay.get("mass_bias_delta", 0.0))
 	var wingspan_bias := float(REGION_WINGSPAN_BIAS.get(region_name, 0.0)) \
 		+ float(overlay.get("wingspan_bias_delta", 0.0))
-	player.height_cm = clampf(player.height_cm + height_delta + height_bias, 150.0, 220.0)
-	player.mass_kg = clampf(player.mass_kg + mass_delta + mass_bias, 50.0, 130.0)
-	player.wingspan_cm = clampf(player.wingspan_cm + span_delta + wingspan_bias, 150.0, 235.0)
+	## Region first, then morphology, both additive -- so two Ursi from
+	## different regions differ by their region's bias and by nothing else.
+	var morphology: Dictionary = BODY_TYPE_METRICS.get(player.body_type, {})
+	player.height_cm = clampf(
+		player.height_cm + height_delta + height_bias
+			+ float(morphology.get("height", 0.0)), 150.0, 220.0)
+	player.mass_kg = clampf(
+		player.mass_kg + mass_delta + mass_bias
+			+ float(morphology.get("mass", 0.0)), 50.0, 130.0)
+	player.wingspan_cm = clampf(
+		player.wingspan_cm + span_delta + wingspan_bias
+			+ float(morphology.get("wingspan", 0.0)), 150.0, 235.0)
+
 
 
 const PRIMARY_TIER_BONUS: int = 15
@@ -538,6 +616,15 @@ static func _apply_attributes(
 	## Kept individually, not only as the aggregate above -- a potential
 	## attribute wheel reads this rather than approximating a shape from one
 	## number. Rounded to match every other attribute's integer scale.
+	## Morphology moves the ceiling, not merely the starting value -- see
+	## BODY_TYPE_ATTRIBUTES. Applied here so `potential` above is still scored
+	## on the untouched roll and only the per-attribute headroom shifts.
+	for property_name in ceilings:
+		var morph_delta := body_type_attribute_delta(player.body_type, property_name)
+		if not is_zero_approx(morph_delta):
+			ceilings[property_name] = clampf(
+				float(ceilings[property_name]) + morph_delta, 1.0, 99.0)
+
 	player.attribute_ceilings.clear()
 	for property_name in ceilings:
 		player.attribute_ceilings[property_name] = roundi(float(ceilings[property_name]))

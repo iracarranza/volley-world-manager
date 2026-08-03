@@ -104,6 +104,21 @@ extends Resource
 @export_enum("Standing", "Jump Topspin", "Jump Float", "Hybrid", "Sky Ball") var primary_serve_style: String = "Standing"
 @export var serve_style_proficiencies: Dictionary = {}
 @export_enum("Right", "Left") var dominant_hand: String = "Right"
+
+## Morphology. Always been true of everyone, remarked on by nobody -- handled
+## the way academy managers being "arguably alien" is handled in
+## `docs/world/STYLE_AND_SETTING.md`: never pinned down, never explained.
+##
+## Categorical like `dominant_hand`, deliberately **not** an entry in
+## `ABILITY_ATTRIBUTES`. It is a fact about a player, not a skill they have,
+## and the two-way regression check that sums `ABILITY_ATTRIBUTES` against
+## `AttributeProfiles.CATEGORY_ATTRIBUTES` would demand a category for it.
+##
+## Distribution is uniform in every region without exception -- see
+## `PlayerGenerator.BODY_TYPES`. That is a fixed property of the world, not a
+## tuning value.
+@export_enum("Homi", "Avi", "Cani", "Feli", "Ursi", "Simi")
+var body_type: String = "Homi"
 @export_range(1, 100) var adaptability: int = 50
 ## Where this player was raised, and where they actually play now. These are
 ## deliberately separate: talent is *born* roughly evenly across the world but
@@ -392,7 +407,8 @@ func to_dict() -> Dictionary:
 		"traits": traits.duplicate(),
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
-		"dominant_hand": dominant_hand, "adaptability": adaptability,
+		"dominant_hand": dominant_hand, "body_type": body_type,
+		"adaptability": adaptability,
 		"home_region": home_region, "club_region": club_region,
 		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
 		"position_familiarity": position_familiarity.duplicate(true),
@@ -440,6 +456,9 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 		data.get("serve_style_proficiencies", {})
 	).duplicate(true)
 	player.dominant_hand = str(data.get("dominant_hand", "Right"))
+	## Saves written before body types load as Homi, the no-modifier baseline,
+	## so an old career is unchanged rather than silently re-rolled.
+	player.body_type = str(data.get("body_type", "Homi"))
 	player.home_region = str(data.get("home_region", ""))
 	player.club_region = str(data.get("club_region", player.home_region))
 	player.adaptability = clampi(int(data.get("adaptability", 50)), 1, 100)
