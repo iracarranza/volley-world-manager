@@ -148,10 +148,10 @@ const REGION_BIRTH_WEIGHTS := {
 	## headcount -- they genuinely raise far fewer players. Zaitgaist is a
 	## city-state you could walk across in a morning.
 	"Tu'ul ys Feynt": 0.25,
-	"Longh Ralhi": 0.20,
-	"Bhomp Passau": 0.30,
+	"Lo-onğ Ralī": 0.20,
+	"Bompaşao": 0.30,
 	"Rhen Tempaol": 0.28,
-	"Kutt Lyne": 0.26,
+	"Kutre den Lyn": 0.26,
 	"Zaitgaist": 0.12,
 }
 
@@ -180,12 +180,12 @@ const REGION_PULL := {
 	## raise about 15% of the world between them, and at 0.45-0.70 they were
 	## attracting 26% of all migration. A minor region has to end a career
 	## having exported its best players, not collected somebody else's.
-	"Kutt Lyne": 0.30,
+	"Kutre den Lyn": 0.30,
 	"Rhen Tempaol": 0.26,
-	"Bhomp Passau": 0.24,
+	"Bompaşao": 0.24,
 	"Tu'ul ys Feynt": 0.20,
 	"Zaitgaist": 0.18,
-	"Longh Ralhi": 0.14,
+	"Lo-onğ Ralī": 0.14,
 }
 
 ## How likely a player is to have moved at all, by how good they are. Talent

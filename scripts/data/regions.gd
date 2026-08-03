@@ -31,16 +31,18 @@ const DEFINITIONS := {
 	## Names follow the same device as the majors (see
 	## `docs/world/STYLE_AND_SETTING.md`): a volleyball phrase reworded oddly
 	## and dressed in unfamiliar spelling -- Tu'ul ys Feynt is "tools and
-	## feints", Rhen Tempaol is "one tempo", Longh Ralhi is "long rally".
+	## feints", Rhen Tempaol is "one tempo", Lo-onğ Ralī is "long rally",
+	## Bompaşao is "bump pass", and Kutre den Lyn is "cut and line" carrying
+	## the same connector shape as Bloc du Larg.
 	"Tu'ul ys Feynt": {"tagline": "Village halls where the ball is won by the shot the blocker didn't believe -- wrists over power, patience over height.",
 		"physical": 1, "technical": 3, "mental": 1, "names": ["Bryn", "Eilir", "Tewdr", "Anwen", "Maelo", "Ffion", "Gwern", "Rhosyn"]},
-	"Longh Ralhi": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
+	"Lo-onğ Ralī": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
 		"physical": 2, "technical": 1, "mental": 2, "names": ["Dorje", "Pema", "Tenzin", "Tsering", "Norbu", "Lhamo", "Kunzang", "Yangchen"]},
-	"Bhomp Passau": {"tagline": "Concrete courts, no net posts worth the name, and a religion built around the first contact. If it's passable, it gets passed.",
+	"Bompaşao": {"tagline": "Concrete courts, no net posts worth the name, and a religion built around the first contact. If it's passable, it gets passed.",
 		"physical": 1, "technical": 3, "mental": 1, "names": ["Nilo", "Yaritza", "Elpidio", "Marisol", "Ozéias", "Caridad", "Tavo", "Idalia"]},
 	"Rhen Tempaol": {"tagline": "Small halls where the set is already gone before the block has finished landing. Nobody here hits hard. Everybody here hits early.",
 		"physical": 2, "technical": 2, "mental": 1, "names": ["Soah", "Minjae", "Haerin", "Wonsik", "Yerin", "Doha", "Jiwoo", "Seong"]},
-	"Kutt Lyne": {"tagline": "Technical schools that treat a hard swing as an admission of failure. The corner is always open if you can see it.",
+	"Kutre den Lyn": {"tagline": "Technical schools that treat a hard swing as an admission of failure. The corner is always open if you can see it.",
 		"physical": 1, "technical": 3, "mental": 1, "names": ["Zorana", "Miloš", "Vesna", "Ilija", "Radmila", "Novak", "Danica", "Stevan"]},
 	## The one region whose name is not a volleyball phrase, because it is the
 	## one region with no technique of its own to name itself after. It borrows
@@ -131,15 +133,15 @@ const REGIONAL_PRINCIPLES := {
 const REGION_ADJACENCY := {
 	"Landavol": ["Bloc du Larg", "Spëddigh", "Zaitgaist"],
 	"Spëddigh": ["Landavol", "Taktikã", "Rhen Tempaol"],
-	"Pāwa Hitō": ["Xérvu", "Longh Ralhi"],
-	"Bloc du Larg": ["Landavol", "Xérvu", "Bhomp Passau"],
-	"Xérvu": ["Bloc du Larg", "Pāwa Hitō", "Taktikã", "Kutt Lyne"],
+	"Pāwa Hitō": ["Xérvu", "Lo-onğ Ralī"],
+	"Bloc du Larg": ["Landavol", "Xérvu", "Bompaşao"],
+	"Xérvu": ["Bloc du Larg", "Pāwa Hitō", "Taktikã", "Kutre den Lyn"],
 	"Taktikã": ["Spëddigh", "Xérvu", "Tu'ul ys Feynt"],
 	"Tu'ul ys Feynt": ["Taktikã"],
-	"Longh Ralhi": ["Pāwa Hitō"],
-	"Bhomp Passau": ["Bloc du Larg"],
+	"Lo-onğ Ralī": ["Pāwa Hitō"],
+	"Bompaşao": ["Bloc du Larg"],
 	"Rhen Tempaol": ["Spëddigh"],
-	"Kutt Lyne": ["Xérvu"],
+	"Kutre den Lyn": ["Xérvu"],
 	## Geography only. Zaitgaist is genuinely an enclave inside Landavol, but
 	## drift skips it before the adjacency branches ever run -- it tracks the
 	## Sixnet champion instead of its neighbor. Reading this table alone would
@@ -152,8 +154,8 @@ const REGION_ADJACENCY := {
 ## every loop that means "regions in the bracket" keeps using
 ## SIXNET_PARTICIPANTS, which is why adding these needs no league changes.
 const MINOR_REGIONS: Array[String] = [
-	"Tu'ul ys Feynt", "Longh Ralhi", "Bhomp Passau", "Rhen Tempaol",
-	"Kutt Lyne", "Zaitgaist",
+	"Tu'ul ys Feynt", "Lo-onğ Ralī", "Bompaşao", "Rhen Tempaol",
+	"Kutre den Lyn", "Zaitgaist",
 ]
 
 ## Influence drift covers core plus minor. Ispayk and A'ace stay out: their
@@ -161,8 +163,8 @@ const MINOR_REGIONS: Array[String] = [
 ## tradition that could spread or be absorbed.
 const DEVELOPMENT_REGIONS: Array[String] = [
 	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
-	"Tu'ul ys Feynt", "Longh Ralhi", "Bhomp Passau", "Rhen Tempaol",
-	"Kutt Lyne", "Zaitgaist",
+	"Tu'ul ys Feynt", "Lo-onğ Ralī", "Bompaşao", "Rhen Tempaol",
+	"Kutre den Lyn", "Zaitgaist",
 ]
 
 ## Every region that raises and hosts players -- the eight Sixnet
@@ -174,8 +176,8 @@ const DEVELOPMENT_REGIONS: Array[String] = [
 const INHABITED_REGIONS: Array[String] = [
 	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
 	"Ispayk", "A'ace",
-	"Tu'ul ys Feynt", "Longh Ralhi", "Bhomp Passau", "Rhen Tempaol",
-	"Kutt Lyne", "Zaitgaist",
+	"Tu'ul ys Feynt", "Lo-onğ Ralī", "Bompaşao", "Rhen Tempaol",
+	"Kutre den Lyn", "Zaitgaist",
 ]
 
 ## How much harder than usual it is to absorb a region's tradition, as a
@@ -188,16 +190,16 @@ const INHABITED_REGIONS: Array[String] = [
 ## rather than a certainty -- a small tradition can still die, which is a
 ## better story than one that cannot.
 ##
-## The spread is deliberate. Longh Ralhi is an isolated mountain tradition and
-## the hardest to reach; Kutt Lyne is well-connected inland and could plausibly
+## The spread is deliberate. Lo-onğ Ralī is an isolated mountain tradition and
+## the hardest to reach; Kutre den Lyn is well-connected inland and could plausibly
 ## be swallowed outright; Zaitgaist has nothing to resist with, which is the
 ## point of it. Regions absent here resist normally.
 const REGION_TRADITION_RESISTANCE := {
-	"Longh Ralhi": 1.4,
+	"Lo-onğ Ralī": 1.4,
 	"Tu'ul ys Feynt": 1.0,
 	"Rhen Tempaol": 0.9,
-	"Bhomp Passau": 0.8,
-	"Kutt Lyne": 0.7,
+	"Bompaşao": 0.8,
+	"Kutre den Lyn": 0.7,
 	"Zaitgaist": 0.0,
 }
 

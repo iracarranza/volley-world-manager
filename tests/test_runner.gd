@@ -1295,8 +1295,8 @@ func _test_sixnet_league() -> void:
 	drift_career.region_strength = {
 		"Landavol": 50.0, "Spëddigh": 23.0, "Pāwa Hitō": 25.0,
 		"Bloc du Larg": 90.0, "Xérvu": 23.0, "Taktikã": 20.0,
-		"Tu'ul ys Feynt": 18.0, "Longh Ralhi": 16.0, "Bhomp Passau": 19.0,
-		"Rhen Tempaol": 18.0, "Kutt Lyne": 17.0, "Zaitgaist": 12.0,
+		"Tu'ul ys Feynt": 18.0, "Lo-onğ Ralī": 16.0, "Bompaşao": 19.0,
+		"Rhen Tempaol": 18.0, "Kutre den Lyn": 17.0, "Zaitgaist": 12.0,
 	}
 	drift_career.sixnet_form = drift_career.region_strength.duplicate(true)
 	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(drift_career)
