@@ -79,6 +79,9 @@ const ATTACK_ROLLOUT_AUDIT_SCRIPT := preload(
 const ATTACK_PROGRESSION_CALIBRATION_SCRIPT := preload(
 	"res://scripts/simulation/attack_progression_calibration.gd"
 )
+const ATTACK_POWER_SCRIPT := preload(
+	"res://scripts/simulation/attack_power_model.gd"
+)
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -182,6 +185,7 @@ func _initialize() -> void:
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
 	_test_attack_courses_are_relative_to_the_hitter()
+	_test_attack_power_is_a_choice()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7533,6 +7537,125 @@ func _test_player_state_flow_and_recovery() -> void:
 ## Spectacle answers "was this worth watching", flow answers "who is on a run".
 ## They were one number until the split, which is the whole reason playback
 ## selection could never be built on flow.
+## Gate B. Power is chosen the way a course is -- how hard can I reasonably hit
+## here -- and three different temperaments answer it three different ways. The
+## point is that over-hitting and under-hitting are separate mistakes made by
+## separate players, where one quality roll produces both indistinguishably.
+func _test_attack_power_is_a_choice() -> void:
+	const HEIGHT := 3.2
+	const DEEP := 8.5
+	var ceiling: float = ATTACK_POWER_SCRIPT.available_ceiling_mps(0.70, 0.85, 1.0)
+
+	## A good reader hits with just enough to push the ball where they intended.
+	var measured: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.95, 0.0, 0.0
+	)
+	_check(
+		absf(float(measured.chosen_fraction) - float(measured.required_fraction)) < 0.02
+			and str(measured.bias) == "measured",
+		"a good reader chooses the power the shot actually needs",
+	)
+
+	## Backing yourself: more power than the situation asks for, more often --
+	## and the trait has to cut both ways, or a timid hitter is just an ordinary
+	## one and the aggressive hitter is everybody.
+	var eager: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.95, 0.5, 0.95, 0.0, 0.0
+	)
+	var reluctant: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.05, 0.5, 0.95, 0.0, 0.0
+	)
+	_check(
+		float(eager.speed_mps) > float(measured.speed_mps)
+			and str(eager.bias) == "over-swung",
+		"an aggressive hitter swings bigger than the shot needs",
+	)
+	_check(
+		float(reluctant.speed_mps) < float(measured.speed_mps)
+			and str(reluctant.bias) == "held back",
+		"an unaggressive hitter leaves something on the ball rather than merely not over-swinging",
+	)
+
+	## Decelerating into the wall -- but only if the wall is there, and only if
+	## composure is short. A composed hitter is unmoved by the same block.
+	var timid: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.10, 0.95, 1.0, 0.0
+	)
+	var composed: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.95, 0.95, 1.0, 0.0
+	)
+	var unblocked: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.10, 0.95, 0.0, 0.0
+	)
+	_check(
+		float(timid.speed_mps) < float(measured.speed_mps)
+			and str(timid.bias) == "held back",
+		"a hitter short of composure holds back in front of a formed block",
+	)
+	_check(
+		float(composed.speed_mps) > float(timid.speed_mps)
+			and absf(float(unblocked.speed_mps) - float(measured.speed_mps)) < 0.001,
+		"composure resists the block, and an open net intimidates nobody",
+	)
+
+	## Misjudgement scales with how poorly the hitter reads, and cuts both ways.
+	var poor_over: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.10, 0.0, 1.0
+	)
+	var poor_under: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.10, 0.0, -1.0
+	)
+	var good_over: Dictionary = ATTACK_POWER_SCRIPT.choose_power(
+		ceiling, DEEP, HEIGHT, 0.5, 0.5, 0.95, 0.0, 1.0
+	)
+	_check(
+		float(poor_over.speed_mps) > float(measured.speed_mps)
+			and float(poor_under.speed_mps) < float(measured.speed_mps)
+			and float(poor_over.speed_mps) - float(poor_under.speed_mps)
+				> float(good_over.speed_mps) - float(measured.speed_mps),
+		"a poor reader misjudges the power in both directions, and by more",
+	)
+
+	## Reaching further costs more power, and past a hitter's ceiling the shot
+	## is simply not on -- reported, not clamped into a lie.
+	_check(
+		ATTACK_POWER_SCRIPT.required_speed_mps(9.0, HEIGHT)
+			> ATTACK_POWER_SCRIPT.required_speed_mps(5.0, HEIGHT),
+		"driving the ball deeper costs more power",
+	)
+	var weak: float = ATTACK_POWER_SCRIPT.available_ceiling_mps(0.02, 0.35, 0.75)
+	_check(
+		not bool(ATTACK_POWER_SCRIPT.choose_power(
+			weak, 9.2, HEIGHT, 0.5, 0.5, 0.9, 0.0, 0.0
+		).reachable)
+			and str(ATTACK_POWER_SCRIPT.choose_power(
+				weak, 9.2, HEIGHT, 0.5, 0.5, 0.9, 0.0, 0.0
+			).bias) == "short of the range",
+		"a hitter who cannot drive it that deep is told so rather than quietly reaching",
+	)
+
+	## The ceiling is spent by the approach and by turning across the body, so
+	## the same player hits softer off a bad run-up than a good one.
+	_check(
+		ATTACK_POWER_SCRIPT.available_ceiling_mps(0.70, 0.95, 1.0)
+			> ATTACK_POWER_SCRIPT.available_ceiling_mps(0.70, 0.35, 1.0)
+			and ATTACK_POWER_SCRIPT.available_ceiling_mps(0.70, 0.95, 1.0)
+				> ATTACK_POWER_SCRIPT.available_ceiling_mps(0.70, 0.95, 0.72),
+		"a poor approach and a swing across the body each cost available power",
+	)
+
+	## The chosen speed has to actually fly the distance it was chosen for.
+	var flight: Dictionary = BallFlightModel.solve_flight(
+		float(measured.speed_mps),
+		ATTACK_POWER_SCRIPT.DRIVEN_REFERENCE_ANGLE_DEGREES,
+		HEIGHT,
+	)
+	_check(
+		absf(float(flight.range_meters) - DEEP) < 0.05,
+		"the power a measured hitter chose carries the ball exactly as far as intended",
+	)
+
+
 ## Gate B. A course is a bearing rather than a named zone because a zone name is
 ## not portable between hitters: a left-pin hitter's cross-court and a right-pin
 ## hitter's cross-court are opposite directions. Everything below is stated as a

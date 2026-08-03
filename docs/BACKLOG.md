@@ -206,10 +206,10 @@ same defect, and patching then replacing is wasted work.
   Launch from a contact height with signed angles, the inverse solve, a
   height-at-distance probe for block intersection, and a minimum-speed query.
   Pure functions, no rally state, nothing wired — behaviour is unchanged.
-- **Gate B — courses as bearings. Landed (geometry half).**
-  `scripts/simulation/attack_course_model.gd`. Still to come in Gate B:
-  perceived availability *including the block*, power as an independent choice,
-  and the three execution channels.
+- **Gate B — courses and power as choices. Landed (both halves).**
+  `attack_course_model.gd` and `attack_power_model.gd`. Still to come in
+  Gate B: perceived availability *including the block*, and the three execution
+  channels.
 - **Gate C — resolution.** Block intersection along the flight, landing, in/out
   from geometry. Still shadow.
 - **Gate D — calibration.** Tune spreads and the power range until the emergent
@@ -311,6 +311,38 @@ Outcome cost of the change, 870 rallies: kills 11.8% → 10.3%, attack errors
 speed toward lateral speed and charges lateral control, and pins had been
 getting a free square approach. It also pushes the block rate further from its
 target, which was already the largest open calibration item.
+
+### Power is a choice, and there is no attribute for the trait that drives it
+
+`attack_power_model.gd`. The hitter asks how hard they can reasonably hit here
+and answers with their temperament. Three drivers, each producing a *different*
+mistake, where one quality roll produced all of them indistinguishably:
+
+- **decision making** judges how much power the intent needs — a good reader
+  hits with just enough to push the ball to the endline;
+- **aggression** biases the choice upward, centred on 0.5 so the trait cuts
+  both ways — a timid hitter genuinely leaves something on the ball rather than
+  merely failing to over-swing;
+- **composure**, against the block in front of them, biases it downward — and
+  only a formed block intimidates, and only a hitter short of composure.
+
+Power required is priced at a driven reference angle (−15°), so reaching the
+endline costs more than dropping it short, and a hitter whose ceiling cannot
+carry that far is told `reachable = false` rather than quietly reaching. The
+ceiling itself is spent by approach quality and by `swing_cost()`'s power
+fraction, so the same player hits softer off a bad run-up or across their body.
+
+**`bias` is reported on every swing** — `over-swung`, `held back`, `measured`,
+`short of the range`. That is the action vocabulary's attacking entries arriving
+for free: over-hitting and under-hitting become separately nameable.
+
+**Gap: there is no ego / attack-aggression attribute.** `ABILITY_ATTRIBUTES` has
+`serve_aggression` but no attacking equivalent, and `composure`,
+`decision_making` and `tactical_discipline` do not cover "backs themselves". The
+model takes aggression as an explicit 0–1 input; until an attribute exists, a
+caller has to synthesise it from team `decisiveness` (already wired to
+power-swing choices) and player `tactical_discipline`. A dedicated attribute
+would express it directly and is worth considering before Gate E wires this up.
 
 ### Superseded: the original finding
 
