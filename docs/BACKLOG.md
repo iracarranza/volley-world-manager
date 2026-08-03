@@ -102,7 +102,99 @@ placeholder-only scope at the time; still open.
 
 ---
 
-## 7. Ball geometry — outcome, position and drawing must become one computation
+## 7. Continuous movement for all twelve players
+
+Intended model: all twelve players move continuously during every ball flight,
+each on their own timeline. "Relative to the ball" does **not** mean everyone
+chases it — each reacts to the ball's *perceived* trajectory through role,
+tactical assignment, teammate ownership and current phase. Passers move to
+reception responsibility; the setter releases or chases the projected second
+contact; hitters stage approaches and adjust to set quality; blockers read and
+close; floor defenders shift behind the block; non-contacting attackers move
+into coverage or transition.
+
+Position, velocity, intent and recovery persist across contacts. Nobody resets
+to a rotation slot, snaps to event coordinates, or stands still waiting for
+their own event. A defender may still be recovering while the setter moves and
+the ball travels on.
+
+The simulator stays authoritative. Playback samples simulator-produced ball and
+player timelines and never invents movement. If a player cannot physically
+reach a contact given acceleration, speed, reaction delay, fatigue, body
+measurements and available time, **the simulator resolves a late, degraded or
+missed action** — the renderer must not teleport them to make an
+already-decided contact look right.
+
+### The core finding: two representations, and the resolver uses the poor one
+
+`RallyPlayerState` already carries everything the architecture below asks for —
+`position`, `velocity`, `facing`, `movement_mode`, `body_state`, `balance`,
+`readiness`, `intent`, `intent_target`, `committed_until`, `last_contact_time`,
+`recovery_until`. It is consumed by `RallyState`, `RallyStateBuilder`,
+`ApproachMechanicsSystem`, the three live integrators and the movement
+calibrations.
+
+`RallySimulator` does not use it. It carries `live_positions` and
+`opponent_live_positions`, both **position-only `Vector2` dictionaries**, across
+19 write sites. Every step discards velocity, facing, intent and recovery and
+keeps only where the player ended up.
+
+That is *why* movement is event-allotted rather than integrated: there is
+nothing to integrate from. Motion cannot continue across a contact when the only
+thing carried across is a point. Collapsing the resolver onto `RallyPlayerState`
+is therefore step one, and it is already half-built.
+
+### Architecture
+
+1. Authoritative per-player movement state: position, velocity, facing, intent
+   target, movement mode, last update time.
+2. Update every player over the same monotonic rally clock the ball uses.
+3. Re-evaluate intent at perception/read moments; movement continues between
+   them. **This is Gate 50's model and needs no continuous re-perception** — a
+   player runs toward the destination they last judged, which is what keeps the
+   Gate 31/32 information boundary intact.
+4. Emit time-bounded movement segments or sampled tracks for every player.
+5. Both 2D and 3D playback sample the ball and all player tracks at the same
+   timestamp.
+6. Carry each segment's ending state into the next phase without resetting.
+7. Deterministic seeded outcomes; identical playback for identical rally data.
+
+### Acceptance
+
+- No player snaps between event positions.
+- No player exceeds physically plausible movement limits.
+- All players remain active off the ball.
+- Tactical shape changes continuously as the ball develops.
+- Failed arrivals finish where the player actually reached.
+- Contact events and rendered positions agree.
+- Playback never computes a second version of rally truth.
+
+### Current state, verified
+
+| claim | status |
+| --- | --- |
+| Ball trajectories continuous contact to contact | yes, `outgoing_trajectory` |
+| Next actor and some phase groups move during a flight | partial, 10 staging sites |
+| Live positions persist between phases | yes, but position only |
+| Partial arrival for some failed defensive actions | yes, 7 `_reached_point()` sites |
+| Blockers staged during the preceding flight | partial |
+| Movement continuously integrated | no — allotted |
+| Per-player timelines for all twelve | no |
+
+Design trail: `docs/design/MOVEMENT_FLUIDITY_DRAFT.md`,
+`docs/calibration/PLAYBACK_MOVEMENT_AUDIT_2026_08_03.md`, and the "Spatial rally
+clock" section of `ARCHITECTURE.md`.
+
+Note the two docs use "step 4" for different things: the draft's "Step 4, done"
+is the unification of `_movement_time()` onto
+`RallyMovementSystem.traversal_seconds()` (done, and it cut the traversal
+discrepancy range from 0.557–1.246 to 0.969–1.043). The draft's "Remaining"
+section uses step 4 for resolver-*integrated* movement, which is open and is
+what this section describes.
+
+---
+
+## 8. Ball geometry — outcome, position and drawing must become one computation
 
 Design source: `docs/textbook/EVENT_CALCULATION_TAXONOMY.md`, which specified
 the per-phase decomposition and the pass/set trajectory observables before any

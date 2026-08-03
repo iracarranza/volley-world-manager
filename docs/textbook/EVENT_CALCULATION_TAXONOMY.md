@@ -162,7 +162,7 @@ Not all event properties should be treated the same way:
 > `solve_launch_arc` shape rather than a simulated one, which is deliberate —
 > own-side contacts have no boundary to test against. `intended_target` is now
 > carried on SET events so aim and result read separately. Scatter is normal
-> rather than uniform. See `docs/BACKLOG.md` §7.
+> rather than uniform. See `docs/BACKLOG.md` §8.
 - Calculated from delivery_execution_quality and chosen height
 - Base arc shape (parabola) determined by `set_height_meters` and distance
 - Variance around nominal landing:
@@ -335,7 +335,7 @@ Not all event properties should be treated the same way:
 > normal rather than uniform. The opponent's passer delivered to the setter's
 > release position exactly, every time, however badly the ball was passed — it
 > now uses `_delivered_point()` at the spread stated here. See
-> `docs/BACKLOG.md` §7.
+> `docs/BACKLOG.md` §8.
 - Calculated from contact_execution_quality, similar to reception
 - Formula:
   ```
