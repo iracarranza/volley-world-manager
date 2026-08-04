@@ -1662,8 +1662,22 @@ func resolve(
 			),
 		)
 
+	## A deflected ball reaches the floor slower, and the defence gets that time.
+	##
+	## The home dig has always added it -- `+0.24 s` for a touch, `+0.06` for a
+	## funnel -- and this side got the raw flight. That is the side it matters
+	## most to: the opponent's block touches 22.9% of home swings against the
+	## home block's 6.5%, so the bonus was withheld from the defence that earns
+	## it four times as often. Decomposed, this is most of a `reach_margin` of
+	## +0.333 m for the home defender against -0.094 m here, on identical
+	## rosters, which in turn carries the dig rate gap of 0.320 to 0.142.
+	var opponent_defense_time := attack_flight
+	if block_outcome == "touch":
+		opponent_defense_time += 0.24
+	elif block_outcome == "funnel":
+		opponent_defense_time += 0.06
 	var opponent_defense := _choose_opponent_defender(
-		opponent_team, attack_target, attack_flight
+		opponent_team, attack_target, opponent_defense_time
 	)
 	var opponent_defender := opponent_defense.player as VolleyballPlayer
 	var read_tags: Array[String] = ["hand:%s" % hitter.dominant_hand.to_lower(),
