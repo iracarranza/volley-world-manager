@@ -54,6 +54,17 @@ silent on them. The gate needs to assert that a rally's timeline actually
 *spans* -- that consecutive events are distinct where the sport says they must
 be -- and not merely that it never reverses. Open; see below.
 
+**A rate without its denominator is not a measurement.** `run_serving_side_split`
+reported the home side's attack quality falling 0.330 to 0.191 on home-served
+rallies -- a 42% collapse, reported as evidence of a second defect. It was eight
+attacks. Home serves, so the opponent receives and swings first, and most of
+those rallies end before the home side gets a swing at all; the cell can never
+hold a usable sample. The neighbouring cell that *does* (the opponent's, n=280)
+moved 0.462 to 0.440, which is a modest real effect and the opposite conclusion.
+Both the tool and this file now carry counts beside rates. Note the shape: the
+error was not in the number, it was in reading a four-cell table where two cells
+are three orders of magnitude better sampled than the other two.
+
 **An instrument's own labels are part of the measurement.** A dump script
 hardcoded the `RallyEvent.EventType` order from memory. `SET_DECISION` is index
 2, not 7, so every label from index 2 upward was shifted, and the output looked
@@ -65,6 +76,21 @@ with no `SET`. There was no defect. Read the enum, do not recall it.
 Recorded because each is a thing that is *known to be imprecise* rather than a
 thing believed to be right. A later reader who rediscovers one of these should
 know it was seen and bounded, not missed.
+
+**The attack-symmetry ratchet is red, and the baseline it ratchets against was
+measured under a stopped clock.** `attack symmetry does not drift further while
+tuning` fails at 0.646 against a 0.135 ceiling after `rally_clock` started
+running on home-served rallies. Chased for a second defect and none was found:
+the live attack integrator only runs on the home-*receive* path, so it is not
+involved; the movement system uses `simulation_time` as an absolute clock with a
+relative window, not as a budget. What is left is a genuine, modest effect --
+the opponent's attack quality on home-served rallies falls 0.462 to 0.440
+(n=280), consistent with losing an advantage they had while their
+`simulation_time` was pinned at zero for half of every match. The previous
+passing value was therefore not a measurement of the engine; it was a
+measurement of the engine plus a clock that had not started. Deciding whether to
+re-baseline is a human call, because widening it is the move the gate exists to
+prevent.
 
 **Home-serving rallies have a partly synthesised timeline.** Measured by
 `tools/run_playback_schedule_probe.gd`: 25.5% of all inter-event gaps are under

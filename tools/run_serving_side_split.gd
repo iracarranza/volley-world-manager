@@ -62,9 +62,32 @@ func _initialize() -> void:
 			_rate(buckets[true], "opponent", rate),
 			_rate(buckets[false], "opponent", rate),
 		])
+	## Denominators, on the same page as the rates.
+	##
+	## Without these this tool reported a 42% swing in the home side's attack
+	## quality on home-served rallies and it was computed over eight attacks --
+	## home serves, so the opponent receives and swings first, and most of those
+	## rallies end before the home side ever gets one. A rate printed without its
+	## sample size invites exactly that reading, so it is no longer printed
+	## without one.
+	print("")
+	print("%-18s %10d %10d %10d %10d" % [
+		"attacks (n)",
+		int(buckets[true]["home"].attacks), int(buckets[false]["home"].attacks),
+		int(buckets[true]["opponent"].attacks),
+		int(buckets[false]["opponent"].attacks),
+	])
+	print("%-18s %10d %10d %10d %10d" % [
+		"dig attempts (n)",
+		int(buckets[true]["home"].dig_attempts),
+		int(buckets[false]["home"].dig_attempts),
+		int(buckets[true]["opponent"].dig_attempts),
+		int(buckets[false]["opponent"].dig_attempts),
+	])
 	print("")
 	print("Columns 3 and 4 are the opponent. If the home-serve clock was")
-	print("propping them up, column 3 is the one that moved.")
+	print("propping them up, column 3 is the one that moved -- but read the")
+	print("counts first; some of these cells are far too small to carry a rate.")
 
 
 func _empty_side() -> Dictionary:
