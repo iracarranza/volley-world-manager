@@ -89,17 +89,129 @@ static func is_modelled(body_type: String) -> bool:
 	return body_type in MODELLED
 
 
+## One shared body, described as fractions of a player's own height.
+##
+## The three type functions below were each authored as a complete skeleton, so
+## every one of them restated the whole figure in order to say the one or two
+## things that make it distinctive. Restating the whole figure is how they drifted
+## away from each other and away from a person: Feli's shoulders sat at 0.745 of
+## its height and Avi's at 0.750, against roughly 0.82 on a human, while both
+## hung arms long enough to put the hands at 0.30-0.32 where a person's fingertips
+## reach about 0.38. Low shoulders and long arms is not a neutral pair of errors
+## -- together they read as simian, which is a thing the silhouette says about a
+## player that nobody chose to say.
+##
+## So the shared figure lives here once, and a body type is a *pull away from it*
+## rather than a replacement for it. Long arms remain available to a body type
+## that should have them, and remain available to an individual player whose
+## attributes earn them; what is no longer available is a whole species reading
+## as ape because its skeleton was drawn freehand.
+const UNIVERSAL_RATIOS := {
+	"shoulder_y": 0.815,
+	"shoulder_x": 0.170,
+	## Where the fingertips land. Arm length is derived from this and the
+	## shoulder rather than set directly, because the reach is the thing the eye
+	## actually reads and the length is only how you get there.
+	"hand_y": 0.395,
+	"hip_y": 0.520,
+	"hip_x": 0.075,
+	"torso_height": 0.420,
+	"torso_radius": 0.145,
+	"head_radius": 0.088,
+	"head_y": 0.930,
+	"leg_height": 0.330,
+}
+
+## How far a body type is allowed to pull the shared figure.
+##
+## At 1.0 each type is exactly the skeleton it was authored as; at 0.0 the three
+## are identical and only their cosmetics differ. The drafts read too strongly --
+## the type was the whole body rather than a note on top of one -- so the pull is
+## a minority share. Identity is meant to arrive through the parts that are
+## *added* (a tail, a beak and crest, a produce torso), which stay at full
+## strength below, not through rebuilding the frame.
+const TYPE_EXPRESSION: float = 0.45
+
+
 ## The full description of one player's body: meshes, attachment points,
 ## colours and cosmetic parts.
 static func silhouette(body_type: String, player_id: int) -> Dictionary:
 	var resolved := body_type if is_modelled(body_type) else FALLBACK_TYPE
+	var authored: Dictionary
 	match resolved:
 		"Feli":
-			return _feli()
+			authored = _feli()
 		"Avi":
-			return _avi()
+			authored = _avi()
 		_:
-			return _vegi(produce_for(player_id))
+			authored = _vegi(produce_for(player_id))
+	return _toward_universal(authored)
+
+
+## Blends an authored skeleton toward the shared figure.
+##
+## Only proportions are touched. Colours, materials, shapes and the whole
+## `extras` list pass through untouched, because those are what the type is
+## supposed to be saying.
+static func _toward_universal(spec: Dictionary) -> Dictionary:
+	var rig := float(spec.get("rig_height", 2.0))
+	if rig <= 0.0:
+		return spec
+	var blended := spec.duplicate(true)
+	var shoulder := Vector2(spec.get("shoulder", Vector2(0.34, 1.5)))
+	var hip := Vector2(spec.get("hip", Vector2(0.15, 0.46)))
+	var arm: Dictionary = Dictionary(spec.get("arm", {}))
+	var authored_hand := shoulder.y - float(arm.get("height", 0.8))
+	var shoulder_y := _pull(shoulder.y, UNIVERSAL_RATIOS.shoulder_y * rig)
+	var hand_y := _pull(authored_hand, UNIVERSAL_RATIOS.hand_y * rig)
+	blended["shoulder"] = Vector2(
+		_pull(shoulder.x, UNIVERSAL_RATIOS.shoulder_x * rig), shoulder_y
+	)
+	blended["hip"] = Vector2(
+		_pull(hip.x, UNIVERSAL_RATIOS.hip_x * rig),
+		_pull(hip.y, UNIVERSAL_RATIOS.hip_y * rig),
+	)
+	## Derived, so the reach is what was blended and the bone follows. Floored
+	## well clear of zero: a degenerate arm is a worse failure than a long one.
+	arm["height"] = maxf(shoulder_y - hand_y, 0.25)
+	blended["arm"] = arm
+	var leg: Dictionary = Dictionary(spec.get("leg", {}))
+	if leg.has("height"):
+		leg["height"] = _pull(
+			float(leg.height), UNIVERSAL_RATIOS.leg_height * rig
+		)
+		blended["leg"] = leg
+	var head: Dictionary = Dictionary(spec.get("head", {}))
+	if head.has("radius"):
+		var head_radius := _pull(
+			float(head.radius), UNIVERSAL_RATIOS.head_radius * rig
+		)
+		head["radius"] = head_radius
+		if head.has("height"):
+			head["height"] = head_radius * 1.9
+		blended["head"] = head
+	blended["head_y"] = _pull(
+		float(spec.get("head_y", rig * 0.9)), UNIVERSAL_RATIOS.head_y * rig
+	)
+	## The produce torso is the Vegi's whole identity and its proportions are the
+	## cosmetic, so it is left alone. The other two carry the kit on the torso and
+	## are pulled like any other bone.
+	if str(spec.get("torso_material", "kit")) != "skin":
+		var torso: Dictionary = Dictionary(spec.get("torso", {}))
+		if torso.has("height"):
+			torso["height"] = _pull(
+				float(torso.height), UNIVERSAL_RATIOS.torso_height * rig
+			)
+		if torso.has("radius"):
+			torso["radius"] = _pull(
+				float(torso.radius), UNIVERSAL_RATIOS.torso_radius * rig
+			)
+		blended["torso"] = torso
+	return blended
+
+
+static func _pull(authored: float, universal: float) -> float:
+	return universal + (authored - universal) * TYPE_EXPRESSION
 
 
 ## A vegetable that plays volleyball.
