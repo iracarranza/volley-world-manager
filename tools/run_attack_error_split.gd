@@ -86,6 +86,14 @@ func _initialize() -> void:
 		float(sides.home.net_distance) / maxf(float(sides.home.count), 1.0),
 		float(sides.opponent.net_distance) / maxf(float(sides.opponent.count), 1.0),
 	])
+	print("%-28s %10d %10d" % [
+		"contacts near front ideal", int(sides.home.front_like),
+		int(sides.opponent.front_like),
+	])
+	print("%-28s %10d %10d" % [
+		"contacts near back ideal", int(sides.home.back_like),
+		int(sides.opponent.back_like),
+	])
 	for side in ["home", "opponent"]:
 		var reasons: Dictionary = sides[side].reasons
 		if reasons.is_empty():
@@ -105,7 +113,8 @@ func _initialize() -> void:
 func _empty() -> Dictionary:
 	return {
 		"count": 0, "missed": 0, "geometric": 0, "geometric_missed": 0,
-		"quality": 0.0, "net_distance": 0.0, "reasons": {},
+		"quality": 0.0, "net_distance": 0.0, "front_like": 0, "back_like": 0,
+		"reasons": {},
 	}
 
 
@@ -128,9 +137,15 @@ func _collect(result: Resource, sides: Dictionary) -> void:
 		var bucket: Dictionary = sides[side]
 		bucket.count += 1
 		bucket.quality = float(bucket.quality) + float(event.quality)
-		bucket.net_distance = float(bucket.net_distance) + absf(
-			event.start_position.y - 0.5
-		) * 18.0
+		var to_net := absf(event.start_position.y - 0.5) * 18.0
+		bucket.net_distance = float(bucket.net_distance) + to_net
+		## Which nominal contact this swing sits nearest. The two ideals are 0.36
+		## and 3.60 m for the opponent, 0.54 and 2.88 m for home, so a 2 m split
+		## separates them cleanly on either side.
+		if to_net < 2.0:
+			bucket.front_like += 1
+		else:
+			bucket.back_like += 1
 		if bool(event.metadata.get("attack_missed", false)):
 			bucket.missed += 1
 		var outcome := str(event.metadata.get("geometric_outcome", ""))
