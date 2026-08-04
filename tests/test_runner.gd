@@ -97,6 +97,9 @@ const SIGNATURE_MOVE_SCRIPT := preload(
 const GEOMETRIC_ATTACK_SCRIPT := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
+const GEOMETRIC_PROMOTION_SCRIPT := preload(
+	"res://scripts/simulation/geometric_attack_promotion.gd"
+)
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -206,6 +209,7 @@ func _initialize() -> void:
 	_test_attack_resolves_from_geometry()
 	_test_signature_moves_beat_a_block()
 	_test_geometric_resolver_composes_one_swing()
+	_test_geometric_attack_promotion_translates_a_rally()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7766,6 +7770,147 @@ func _test_geometric_resolver_composes_one_swing() -> void:
 		not RallyFeatureFlags.ENABLE_GEOMETRIC_ATTACK,
 		"the geometric attack rollout is disabled in production",
 	)
+
+
+## Gate E: the translation layer between a rally and the geometric attack, and
+## the shadow pass that now runs on every home first-ball swing.
+##
+## The promotion itself is still closed. What is asserted here is that the
+## translation is faithful and that the shadow is genuinely invisible -- the
+## second of which is the one that can silently break the whole game.
+func _test_geometric_attack_promotion_translates_a_rally() -> void:
+	var promotion := GEOMETRIC_PROMOTION_SCRIPT
+
+	## A close fraction has to become geometry, because the resolver intersects a
+	## trajectory with a pair of hands and has nowhere to put a scalar. A blocker
+	## who did not close is not in the wall; one who half closed seals half the
+	## net. This is the only place in the engine where that conversion happens.
+	var tall := VolleyballPlayer.new()
+	tall.id = 1
+	tall.height_cm = 200.0
+	tall.wingspan_cm = 205.0
+	tall.jump_reach = 74
+	tall.explosiveness = 70
+	var short := VolleyballPlayer.new()
+	short.id = 2
+	short.height_cm = 180.0
+	short.wingspan_cm = 182.0
+	short.jump_reach = 42
+	short.explosiveness = 40
+	var full_wall: Array = promotion.block_wall(
+		{"primary": tall, "assist": short, "primary_close": 1.0, "assist_close": 0.9},
+		null, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)},
+	)
+	_check(
+		full_wall.size() == 2
+			and is_equal_approx(
+				float(full_wall[0].half_width_m),
+				promotion.BLOCKER_HALF_WIDTH_METERS
+			)
+			and float(full_wall[0].reach_height_m) > float(full_wall[1].reach_height_m),
+		"a closed block becomes two pairs of hands at their own reach",
+	)
+	var half_wall: Array = promotion.block_wall(
+		{"primary": tall, "assist": short, "primary_close": 0.5, "assist_close": 0.2},
+		null, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)},
+	)
+	_check(
+		half_wall.size() == 1
+			and float(half_wall[0].half_width_m)
+				< promotion.BLOCKER_HALF_WIDTH_METERS * 0.75,
+		"a blocker who never closed is not in the wall, and a partial close seals less net",
+	)
+
+	## The run-up is what a jump multiplier is for. It scales the leap alone, so
+	## a bad approach costs a hitter their jump and not their body.
+	var full_contact: float = promotion.contact_height_meters(tall, 1.0)
+	var poor_contact: float = promotion.contact_height_meters(tall, 0.5)
+	_check(
+		full_contact > poor_contact
+			and poor_contact > tall.standing_reach_cm() / 100.0
+				- promotion.CONTACT_BELOW_REACH_METERS - 0.001,
+		"a broken approach costs the leap and never the standing reach",
+	)
+
+	## The outcome vocabulary the rally continues with. `in` and `touch` are the
+	## two that keep a rally alive; everything else ends it, and three of them end
+	## it in the hitter's favour.
+	var mapping := {
+		"in": ["", false], "touch": ["", false],
+		"net": ["attack_error", false], "out": ["attack_error", false],
+		"stuff": ["blocked", false],
+		"tool": ["kill", true], "block_crush": ["kill", true],
+		"high_hands": ["kill", true],
+	}
+	var mapped_correctly := true
+	for outcome in mapping:
+		var continuation: Dictionary = promotion.continuation({
+			"available": true, "outcome": outcome, "resolution": {},
+			"delivered": {"speed_mps": 20.0, "bearing_error_degrees": 1.0},
+			"power": {"speed_mps": 20.0}, "landing": Vector2(0.5, 0.25),
+			"narrative": {},
+		})
+		var expected: Array = mapping[outcome]
+		if str(continuation.terminal_outcome) != str(expected[0]) \
+				or bool(continuation.hitter_point) != bool(expected[1]):
+			mapped_correctly = false
+	_check(
+		mapped_correctly,
+		"every geometric outcome maps to exactly one rally continuation",
+	)
+
+	## An unresolved swing must say so rather than resolving to a default, which
+	## on this path would be a silent kill.
+	_check(
+		not bool(promotion.continuation({
+			"available": false, "reason": "no legal course"
+		}).get("resolved", true)),
+		"a swing the geometry refused does not fall through to an outcome",
+	)
+
+	## The shadow pass draws from a stream of its own.
+	##
+	## This is the assertion that matters most on this gate. The geometric attack
+	## is evaluated on *every* swing whether or not it is promoted, so if it drew
+	## from the rally's own generator it would advance the stream and change every
+	## rally in the game -- the same defect that rerolled the world when `ego`
+	## drew from the shared generation stream. Nothing about the promoted path
+	## would look wrong; the unpromoted one would already have broken it.
+	var stream := RandomNumberGenerator.new()
+	stream.seed = 4242
+	var before := stream.state
+	var drawn: Dictionary = promotion.draws(stream, 2, 6)
+	_check(
+		stream.state != before
+			and Array(drawn.read).size() == 4
+			and Array(drawn.read_floor).size() == 12
+			and drawn.has("judgment") and drawn.has("intent"),
+		"one draw call takes every random input the resolver needs, in one order",
+	)
+
+	## And end to end: a real rally carries a geometric record, and carrying it
+	## does not move the rally.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = false
+	var first: Resource = manager.resolve_active_rally(770012)
+	var trace: Dictionary = first.analysis.get("shadow_reception", {})
+	var record: Dictionary = Dictionary(trace.get("summary", {})).get(
+		"geometric_attack", {}
+	)
+	_check(
+		bool(record.get("available", false))
+			and not str(record.get("outcome", "")).is_empty()
+			and float(record.get("speed_mps", 0.0)) > 0.0,
+		"a live rally resolves its attack geometrically alongside the legacy swing",
+	)
+	var repeat: Resource = manager.resolve_active_rally(770012)
+	_check(
+		str(repeat.terminal_outcome) == str(first.terminal_outcome)
+			and repeat.events.size() == first.events.size(),
+		"the shadow geometric swing leaves the rally it measures untouched",
+	)
+	manager.free()
 
 
 ## The two ways a spike beats a block it has already met. Keyed to different

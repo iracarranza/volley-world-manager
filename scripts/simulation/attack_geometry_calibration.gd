@@ -49,14 +49,23 @@ const SignatureMoveModel := preload(
 ## the hitter contacting comfortably above the block -- that is why attacking
 ## works at all. At 0.10 and 0.62 the hitter is 12 cm above, which restores a
 ## gradient instead of a step.
-const CONTACT_BELOW_REACH_METERS: float = 0.10
 ## A blocker jumps from a standstill or a shuffle rather than a full approach,
 ## and gets appreciably less of their leap than a hitter does.
-const BLOCKER_REACH_EFFORT: float = 0.62
-## How much net a pair of hands actually seals. Narrowed from 0.45 in Gate D:
-## at 0.45 the block was involved in 55% of swings against a 35-45% target, and
-## the lateral window is the term that decides involvement.
-const BLOCKER_HALF_WIDTH_METERS: float = 0.34
+##
+## How much net a pair of hands actually seals was narrowed from 0.45 in this
+## gate: at 0.45 the block was involved in 55% of swings against a 35-45% target,
+## and the lateral window is the term that decides involvement.
+##
+## Gate E moved all three into `GeometricAttackPromotion`, the production path,
+## and this harness now reads them from there. A calibration that sweeps
+## constants the game does not use is worse than no calibration, and these are
+## exactly the numbers a later tuning pass would be tempted to edit in one place
+## and not the other.
+const CONTACT_BELOW_REACH_METERS: float = \
+	GeometricAttackPromotion.CONTACT_BELOW_REACH_METERS
+const BLOCKER_REACH_EFFORT: float = GeometricAttackPromotion.BLOCKER_REACH_EFFORT
+const BLOCKER_HALF_WIDTH_METERS: float = \
+	GeometricAttackPromotion.BLOCKER_HALF_WIDTH_METERS
 
 ## Lanes a hitter can be set to, and how often each is used. Pins carry the
 ## offence, which is what makes their lopsided course cones matter.

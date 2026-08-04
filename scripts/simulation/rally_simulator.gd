@@ -13,6 +13,12 @@ const ShadowReceptionSystemModel := preload("res://scripts/simulation/shadow_rec
 const RallyShadowComparisonModel := preload("res://scripts/simulation/rally_shadow_comparison.gd")
 const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout_policy.gd")
 const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
+const GeometricAttackResolverModel := preload(
+	"res://scripts/simulation/geometric_attack_resolver.gd"
+)
+const GeometricAttackPromotionModel := preload(
+	"res://scripts/simulation/geometric_attack_promotion.gd"
+)
 const RallyStateBuilderModel := preload("res://scripts/simulation/rally_state_builder.gd")
 const LiveReceptionIntegratorModel := preload(
 	"res://scripts/simulation/live_reception_integrator.gd"
@@ -323,6 +329,11 @@ const MINIMUM_SET_RELEASE_SECONDS: float = 0.15
 const MAXIMUM_SET_RELEASE_SECONDS: float = 0.75
 
 var rng := RandomNumberGenerator.new()
+## Gate E's own stream. See `_geometric_swing` -- the geometric attack is
+## evaluated on every swing whether or not it is promoted, so it must not draw
+## from `rng` or an unpromoted shadow would change every rally in the game.
+var geometric_rng := RandomNumberGenerator.new()
+var geometric_swing_index: int = 0
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
@@ -345,6 +356,7 @@ func resolve(
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
+	geometric_swing_index = 0
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
 	identity_effects = {
@@ -1110,6 +1122,17 @@ func resolve(
 			opponent_defenders.append(opponent_live_positions.get(
 				defender.id, opponent_team.court_position(defender.id, "defense")
 			))
+	shadow_summary["geometric_attack"] = _geometric_swing_record(
+		_geometric_swing(
+			hitter, set_target, assignment.lane, opponent_block_formation,
+			opponent_team, opponent_live_positions, opponent_defenders, true,
+			float(resolved_approach.get("jump_multiplier", 1.0)),
+			float(resolved_approach.get("runup_quality", 0.0)),
+			float(home_principles.decisiveness), 0.0,
+		),
+		"home",
+	)
+	shadow_reception_trace.summary = shadow_summary
 	var attack_choice := _choose_attack_target(
 		hitter, CourtConstants.lane_target(assignment.lane), hit_type,
 		opponent_defenders,
@@ -4551,6 +4574,88 @@ func _attack_execution(
 		1.0 - clampf(tempo_demand, 0.0, 0.60)
 	)
 	return clampf(capability * opportunity - block_pressure, 0.0, 1.0)
+
+
+## Gate E. The geometric swing for this attack, alongside the legacy one.
+##
+## Every attack site calls this. Today nothing downstream reads the answer
+## unless the rollout is open -- it is recorded into the shadow summary so the
+## geometric outcome mix can be measured against the legacy one on live rallies
+## rather than on a synthetic sweep. That is the same order Gates 44 through 49
+## ran in, and for the same reason: an outcome model that has only ever been
+## swept in isolation has never met the inputs a rally actually produces.
+##
+## The draws come from `geometric_rng`, a stream of its own seeded from the rally
+## seed and the contact index. This is not tidiness. The shadow pass runs on
+## every attack whether or not it is promoted, so drawing from `rng` would
+## advance the rally's own stream and silently change every rally in the game --
+## the same defect that rerolled the world when `ego` drew from the shared
+## generation stream. A private stream means an unpromoted geometric attack is
+## exactly as invisible as it claims to be.
+func _geometric_swing(
+	hitter: VolleyballPlayer,
+	contact: Vector2,
+	lane: String,
+	formation: Dictionary,
+	blocking_team: Resource,
+	blocking_live: Dictionary,
+	defenders: Array,
+	attacking_negative_y: bool,
+	jump_multiplier: float,
+	approach_quality: float,
+	decisiveness: float,
+	flow_for_team: float,
+) -> Dictionary:
+	if hitter == null:
+		return {}
+	geometric_rng.seed = hash("%d|geometric|%d|%d" % [
+		rally_seed, hitter.id, geometric_swing_index
+	])
+	geometric_swing_index += 1
+	var wall := GeometricAttackPromotionModel.block_wall(
+		formation, blocking_team, blocking_live
+	)
+	return GeometricAttackResolverModel.resolve_swing(
+		hitter, contact,
+		GeometricAttackPromotionModel.contact_height_meters(hitter, jump_multiplier),
+		lane, wall, defenders, attacking_negative_y, approach_quality, decisiveness,
+		float(hitter.match_confidence), flow_for_team,
+		GeometricAttackPromotionModel.draws(
+			geometric_rng, wall.size(), defenders.size()
+		),
+	)
+
+
+## The shadow record for one geometric swing: what it decided and what it would
+## have produced, small enough to keep on every attack of every rally.
+func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
+	if swing.is_empty():
+		return {"side": side, "available": false, "reason": "no hitter"}
+	var continuation := GeometricAttackPromotionModel.continuation(swing)
+	if not bool(continuation.get("resolved", false)):
+		return {
+			"side": side, "available": false,
+			"reason": str(continuation.get("reason", "unresolved")),
+		}
+	var course: Dictionary = swing.get("course", {})
+	var delivered: Dictionary = swing.get("delivered", {})
+	return {
+		"side": side,
+		"available": true,
+		"outcome": str(continuation.outcome),
+		"terminal_outcome": str(continuation.terminal_outcome),
+		"quality": float(continuation.quality),
+		"landing": Vector2(continuation.landing),
+		"out_reason": str(continuation.out_reason),
+		"bearing_degrees": float(course.get("bearing_degrees", 0.0)),
+		"offset_degrees": float(course.get("offset_degrees", 0.0)),
+		"speed_mps": float(delivered.get("speed_mps", 0.0)),
+		"bearing_error_degrees": float(delivered.get("bearing_error_degrees", 0.0)),
+		"block_kind": str(
+			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
+		),
+		"narrative": Dictionary(continuation.narrative),
+	}
 
 
 func _attack_missed(attack_quality: float) -> bool:
