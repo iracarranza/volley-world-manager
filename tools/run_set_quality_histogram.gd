@@ -8,20 +8,12 @@ extends SceneTree
 ## the opponent transition set's own clamp -- so the shape of the pool is the
 ## question, not the answer. This splits it.
 ##
-## Three set paths exist and they are separately implemented:
-##
-##   home first ball      `_set_execution` off a reception, with a setter
-##                        capability gate, real set geometry and a scattered
-##                        delivery point. Clamp floor 0.00.
-##   home transition      `_resolve_home_continuation`, off a dig. Passes
-##                        geometry difficulty 0.0 and capability penalty 0.0.
-##                        Clamp floor 0.10.
-##   opponent transition  the opponent's only set path, off its dig. Real
-##                        geometry, real capability penalty. Clamp floor 0.08.
-##
+## Four set paths exist: a first ball and a transition on each side of the net.
+## Splitting them this way is what makes the comparison that matters possible --
+## home transition against opponent transition, the two that are the same phase.
 ## Rosters are identical on both sides for the same reason the symmetry gate
-## uses them: anything that differs between the two transition columns is then
-## the implementation, not the draw.
+## uses them, so anything that differs between those two columns is the
+## implementation and not the draw.
 ##
 ## Run:
 ##   godot --headless --path . --script res://tools/run_set_quality_histogram.gd
@@ -44,8 +36,16 @@ const TERMS: Array[String] = [
 	"geometry_difficulty", "arrival", "familiarity",
 ]
 
+## The engine now labels each set event with the path that produced it. The
+## first cut of this instrument inferred the path from the presence of
+## `setter_capability` metadata, which was wrong in two ways: it pooled the
+## opponent's first ball and its transition into one column -- so the one
+## phase-matched comparison this tool exists for was never actually being made
+## -- and it broke the moment the transition set started emitting capability
+## like every other path. A path is a fact about the code, so the code says it.
 const PATHS: Array[String] = [
-	"home first ball", "home transition", "opponent transition",
+	"home_first_ball", "home_transition",
+	"opponent_first_ball", "opponent_transition",
 ]
 
 
@@ -106,6 +106,8 @@ func _collect(
 			continue
 		if event.event_type == RallyEventScript.EventType.SET:
 			var path := _path_for(event, side)
+			if not samples.has(path):
+				continue
 			last_set_path[side] = path
 			var array: PackedFloat32Array = samples[path]
 			array.append(float(event.quality))
@@ -148,32 +150,25 @@ func _collect(
 	attacks[terminal_path] = terminal_tally
 
 
-## `setter_capability` is written only by the first-ball set -- it is the gate
-## that path runs and the transition paths do not -- so its presence is the
-## discriminator rather than a headline string match.
 func _path_for(event: Resource, side: String) -> String:
-	if side == "opponent":
-		return "opponent transition"
-	if event.metadata.has("setter_capability"):
-		return "home first ball"
-	return "home transition"
+	return str(event.metadata.get("set_path", ""))
 
 
 func _print_distributions(samples: Dictionary) -> void:
-	print("%-20s %5s %6s %6s %6s %6s %6s %6s" % [
+	print("%-21s %5s %6s %6s %6s %6s %6s %6s" % [
 		"path", "n", "min", "p25", "med", "p75", "max", "mean",
 	])
 	for path in PATHS:
 		var values: PackedFloat32Array = samples[path]
 		if values.is_empty():
-			print("%-20s %5d  (no samples)" % [path, 0])
+			print("%-21s %5d  (no samples)" % [path, 0])
 			continue
 		var sorted := Array(values)
 		sorted.sort()
 		var total := 0.0
 		for value in sorted:
 			total += float(value)
-		print("%-20s %5d %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f" % [
+		print("%-21s %5d %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f" % [
 			path, sorted.size(), float(sorted[0]),
 			_quantile(sorted, 0.25), _quantile(sorted, 0.50),
 			_quantile(sorted, 0.75), float(sorted[-1]),
@@ -183,7 +178,7 @@ func _print_distributions(samples: Dictionary) -> void:
 
 func _print_histogram(samples: Dictionary) -> void:
 	print("Share of sets per decile (the pooled figure's bimodality, split)")
-	var header := "%-20s" % "path"
+	var header := "%-21s" % "path"
 	for bucket in range(BUCKETS):
 		header += " %5s" % ("%.1f" % (float(bucket) / float(BUCKETS)))
 	print(header)
@@ -195,7 +190,7 @@ func _print_histogram(samples: Dictionary) -> void:
 		counts.resize(BUCKETS)
 		for value in values:
 			counts[clampi(int(float(value) * float(BUCKETS)), 0, BUCKETS - 1)] += 1
-		var row := "%-20s" % path
+		var row := "%-21s" % path
 		for bucket in range(BUCKETS):
 			row += " %5.2f" % (float(counts[bucket]) / float(values.size()))
 		print(row)
@@ -203,7 +198,7 @@ func _print_histogram(samples: Dictionary) -> void:
 
 func _print_terms(terms: Dictionary) -> void:
 	print("Mean of each term (blank where the path does not emit a decomposition)")
-	var header := "%-20s" % "path"
+	var header := "%-21s" % "path"
 	for term in TERMS:
 		header += " %9s" % term.substr(0, 9)
 	print(header)
@@ -211,9 +206,9 @@ func _print_terms(terms: Dictionary) -> void:
 		var accumulated: Dictionary = terms[path]
 		var count := float(accumulated.get("count", 0.0))
 		if count <= 0.0:
-			print("%-20s  (no set_terms on this path)" % path)
+			print("%-21s  (no set_terms on this path)" % path)
 			continue
-		var row := "%-20s" % path
+		var row := "%-21s" % path
 		for term in TERMS:
 			row += " %9.3f" % (float(accumulated.get(term, 0.0)) / count)
 		print(row)
@@ -221,16 +216,16 @@ func _print_terms(terms: Dictionary) -> void:
 
 func _print_attacks(attacks: Dictionary) -> void:
 	print("What each path's sets produce when they are swung at")
-	print("%-20s %8s %8s %8s %8s" % [
+	print("%-21s %8s %8s %8s %8s" % [
 		"path", "attempts", "kill", "error", "stuffed",
 	])
 	for path in PATHS:
 		var tally: Dictionary = attacks[path]
 		var attempts := float(tally.attempts)
 		if attempts <= 0.0:
-			print("%-20s %8d" % [path, 0])
+			print("%-21s %8d" % [path, 0])
 			continue
-		print("%-20s %8d %8.3f %8.3f %8.3f" % [
+		print("%-21s %8d %8.3f %8.3f %8.3f" % [
 			path, tally.attempts, float(tally.kills) / attempts,
 			float(tally.errors) / attempts, float(tally.stuffed) / attempts,
 		])

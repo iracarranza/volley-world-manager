@@ -972,7 +972,8 @@ func resolve(
 		+ (" Arrived %.2fs before contact." % setter_arrival_margin
 			if setter_arrival_margin >= 0.0 else
 			" Arrived %.2fs late; set control was reduced." % absf(setter_arrival_margin)),
-		{"side": "home", "set_terms": home_set_terms, "emergency_setter": emergency_setter,
+		{"side": "home", "set_path": "home_first_ball",
+			"set_terms": home_set_terms, "emergency_setter": emergency_setter,
 			"first_contact_id": receiver.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
@@ -1946,38 +1947,43 @@ func _resolve_opponent_transition(
 		opponent_setter, int(opponent_team.tendencies.get("tempo", 2)),
 		incoming_quality,
 	)
-	var opponent_capability := {}
-	var opponent_pass_quality := incoming_quality
-	var opponent_capability_penalty := 0.0
-	if first_ball:
-		opponent_capability = SetterCapabilityModel.evaluate(
-			opponent_setter, opponent_tempo_call, incoming_quality,
-			SetterCapabilityModel.pass_contact_height_meters(
-				incoming_quality, rng.randf()
-			),
-			clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
+	## Capability, on every ball rather than only the first one.
+	##
+	## This was gated on `first_ball`, which meant an opponent set out of
+	## defence paid no capability penalty at all -- the mirror of the defect
+	## just fixed on the home transition set. Fixing one and leaving the other
+	## would have made the two transition sets differ by side, which is the
+	## exact shape this engine has produced eleven times now. A setter taking a
+	## dug ball is doing the same thing they do off a pass: reaching for a
+	## contact at some height, off some approach, for some tempo.
+	var opponent_capability := SetterCapabilityModel.evaluate(
+		opponent_setter, opponent_tempo_call, incoming_quality,
+		SetterCapabilityModel.pass_contact_height_meters(
+			incoming_quality, rng.randf()
+		),
+		clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
+	)
+	var opponent_pass_quality := float(
+		opponent_capability.get("effective_pass_quality", incoming_quality)
+	)
+	var opponent_capability_penalty := float(
+		opponent_capability.get("quality_penalty", 0.0)
+	)
+	## And the verdict is acted on, not just billed for.
+	##
+	## `SetterCapabilityModel.evaluate` answers two things: what this set
+	## costs the setter, and what tempo they can actually run. The home side
+	## reads both -- it pays the penalty *and* abandons the play through
+	## `_downgraded_assignment`. This side read the bill and threw away the
+	## verdict: `resolved_tempo` and `tempo_downgraded` appear nowhere on the
+	## opponent path, so an opponent setter was told they could not run the
+	## tempo they called, charged for attempting it, and then ran it anyway.
+	## The whole point of the model is that capability is not permission, and
+	## it was only enforced against one team.
+	if bool(opponent_capability.get("tempo_downgraded", false)):
+		opponent_tempo_call = int(
+			opponent_capability.get("resolved_tempo", opponent_tempo_call)
 		)
-		opponent_pass_quality = float(
-			opponent_capability.get("effective_pass_quality", incoming_quality)
-		)
-		opponent_capability_penalty = float(
-			opponent_capability.get("quality_penalty", 0.0)
-		)
-		## And the verdict is acted on, not just billed for.
-		##
-		## `SetterCapabilityModel.evaluate` answers two things: what this set
-		## costs the setter, and what tempo they can actually run. The home side
-		## reads both -- it pays the penalty *and* abandons the play through
-		## `_downgraded_assignment`. This side read the bill and threw away the
-		## verdict: `resolved_tempo` and `tempo_downgraded` appear nowhere on the
-		## opponent path, so an opponent setter was told they could not run the
-		## tempo they called, charged for attempting it, and then ran it anyway.
-		## The whole point of the model is that capability is not permission, and
-		## it was only enforced against one team.
-		if bool(opponent_capability.get("tempo_downgraded", false)):
-			opponent_tempo_call = int(
-				opponent_capability.get("resolved_tempo", opponent_tempo_call)
-			)
 	var opponent_set_quality := clampf(
 		_set_execution(
 			opponent_setter, opponent_pass_quality, transition_penalty,
@@ -2086,7 +2092,9 @@ func _resolve_opponent_transition(
 		dig_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
-		{"side": "opponent", "set_terms": opponent_set_terms,
+		{"side": "opponent",
+			"set_path": "opponent_first_ball" if first_ball else "opponent_transition",
+			"set_terms": opponent_set_terms,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
 			"set_distance_meters": resolved_set_geometry.distance_meters,
@@ -2702,20 +2710,67 @@ func _resolve_home_continuation(
 	var hitter := _fallback_hitter(players, lineup, setter.id)
 	var assignment := _fallback_assignment(hitter, lineup)
 	var exchange_penalty := float(exchange_number) * 0.04
-	## Same shape as the swing and the dig: what the setter brings, times what
-	## the arriving ball allowed. Command buys back part of a bad ball, so the
-	## gap between setters is widest when the ball is worst -- which is also
-	## what makes a setter's attributes visible in the result at all.
+	## What this setter can actually deliver off this ball.
+	##
+	## The transition set was the only set in the engine paying neither a
+	## capability penalty nor a geometry difficulty -- both passed as literal
+	## 0.0 -- and carrying no familiarity term at all. It was also the only one
+	## that emitted no `set_terms`, so the gap was invisible to every
+	## measurement: the per-path histogram could rank this path and not
+	## decompose it. Three of the six things a set is made of reached every set
+	## in the game except this one.
+	##
+	## The reach term is the substantial one here. A setter taking a low, ugly
+	## dig is contacting the ball below their standing reach or above what the
+	## approach lets them jump to, and that is priced identically for a first
+	## ball. It was simply never asked on this path.
+	var setter_capability := SetterCapabilityModel.evaluate(
+		setter, assignment.tempo, incoming_quality,
+		SetterCapabilityModel.pass_contact_height_meters(
+			incoming_quality, rng.randf()
+		),
+		clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
+	)
+	## Capability is not permission here either. The first ball abandons a tempo
+	## its setter cannot run; a transition ball that cannot be run fast is no
+	## different. This is inert today because `_fallback_assignment` always calls
+	## tempo 3 and there is nothing slower to fall back to -- the transition
+	## tempo is a constant, which is its own recorded defect. Wiring it now means
+	## the day that constant becomes a decision, this path already obeys it.
+	if bool(setter_capability.tempo_downgraded):
+		assignment = _downgraded_assignment(
+			assignment, int(setter_capability.resolved_tempo)
+		)
+	## The lane the setter is aiming at, hoisted above the quality it feeds:
+	## difficulty is a property of the attempt, so geometry is read off the
+	## intent rather than off where the ball ended up. Same rule as the first
+	## ball, which reads `intended_set_target` for exactly this reason.
+	var intended_set_target := CourtConstants.lane_target(assignment.lane)
+	var cont_release_target: Vector2 = defensive_plan.setter_release_target(
+		lineup.active_setter_id()
+	) if defensive_plan != null else Vector2(0.50, 0.60)
+	var cont_set_geometry := _set_geometry(
+		setter, setter_start, set_contact, intended_set_target, cont_release_target
+	)
+	## A transition set is harder than one off a served ball and the tempo it
+	## runs costs something: `exchange_penalty` carries the first, the tempo
+	## demand every other set pays carries the second.
+	var cont_tempo_demand := float(3 - int(setter_capability.resolved_tempo)) \
+		* 0.055 * lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
+	var cont_set_terms := _set_terms(
+		setter, float(setter_capability.effective_pass_quality),
+		exchange_penalty + cont_tempo_demand,
+		float(setter_capability.quality_penalty), setter_arrival_margin,
+		float(cont_set_geometry.difficulty),
+		(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
+	)
 	var set_quality := clampf(
-		_set_execution(
-			setter, incoming_quality, exchange_penalty, 0.0,
-			setter_arrival_margin, 0.0,
-		) + _execution_error(setter, "set_accuracy", 0.14),
+		float(cont_set_terms.quality)
+			+ _execution_error(setter, "set_accuracy", 0.14),
 		0.10, 0.92,
 	)
 	## Same promotion as the first-ball set: the transition set stops landing on
 	## its lane's table entry and starts landing where this setter put it.
-	var intended_set_target := CourtConstants.lane_target(assignment.lane)
 	var set_target := _delivered_point(
 		intended_set_target, set_quality,
 		SET_DELIVERY_STDEV_WORST_M, SET_DELIVERY_STDEV_BEST_M,
@@ -2739,7 +2794,13 @@ func _resolve_home_continuation(
 		+ " · exchange %d" % exchange_number,
 		"Contact 2 of 3 after %s's dig · %d%% set quality." % [
 			defender.display_name, roundi(set_quality * 100.0),
-		], {"side": "home", "emergency_setter": emergency_setter,
+		], {"side": "home", "set_path": "home_transition",
+			"set_terms": cont_set_terms,
+			"setter_capability": setter_capability.duplicate(true),
+			"set_distance_meters": cont_set_geometry.distance_meters,
+			"set_angle_degrees": cont_set_geometry.angle_degrees,
+			"body_orientation_fit": cont_set_geometry.body_orientation_fit,
+			"emergency_setter": emergency_setter,
 			"first_contact_id": defender.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
@@ -2830,10 +2891,15 @@ func _resolve_home_continuation(
 			hitter, set_quality,
 			_approach_execution_fit(hitter, continuation_approach),
 			hitter_arrival_margin, exchange_penalty, cont_block_pressure,
+			## The familiarity the other two swings already get. This was the
+			## only attack in the game with no exposure term, so a transition
+			## hitter could be fed the same lane all match and never be read for
+			## it -- half of the scouting system was write-only against them.
+			Familiarity.attack_geometry(hitter, assignment.lane)
+			+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14,
 		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
-	var attack_target := Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
@@ -2879,6 +2945,25 @@ func _resolve_home_continuation(
 				court_defender.id,
 				opponent_team.court_position(court_defender.id, "defense"),
 			))
+	## Where this swing is aimed.
+	##
+	## It used to be `Vector2(1.0 - set_target.x, rng.randf_range(0.12, 0.38))`:
+	## straight back over the setter's line, at a uniformly random depth. The
+	## other two swings call `_choose_attack_target`, which reads
+	## `attack_accuracy`, `shot_variety` and `decision_making`, scans the court
+	## for the gap, and errs by an amount the hitter's accuracy decides. On this
+	## path none of those attributes touched the ball and the defenders standing
+	## in the court were invisible to it -- a transition hitter aimed the same
+	## way whether they were the best finisher on the roster or the worst.
+	##
+	## The contact passed is `set_target`, the point the ball is actually struck
+	## from after the reachability clamp, rather than the lane table entry the
+	## first ball still hands it. That difference is deliberate and is the first
+	## ball's to fix, not this one's.
+	var attack_choice := _choose_attack_target(
+		hitter, set_target, continuation_hit_type, continuation_defenders
+	)
+	var attack_target: Vector2 = attack_choice.target
 	## The third swing, against the wall this path actually forms.
 	var cont_wall_plan := _opponent_defensive_plan(opponent_team)
 	var transition_record := _geometric_swing_record(
@@ -3063,11 +3148,45 @@ func _resolve_home_continuation(
 		opponent_team, attack_target, continuation_attack_flight
 	)
 	var opponent_defender := cont_defense.player as VolleyballPlayer
+	## What this defender knows, and what their body costs them.
+	##
+	## Both were passed as literal 0.0, which made this the one dig in the engine
+	## with no read at all: no scouting, no adaptation, no plan, and no posture
+	## penalty either. The other two dig sites build both from models that
+	## already exist, and this path simply never called them. Every term below is
+	## the same call the opponent's first-ball dig makes.
+	var cont_read_tags: Array[String] = [
+		"hand:%s" % hitter.dominant_hand.to_lower(),
+		"attack:%s" % str(attack_choice.direction).to_lower().replace("-", "_"),
+	]
+	var cont_read_modifier := Familiarity.read_modifier(
+		opponent_defender, cont_read_tags, float(opponent_team.scouting_confidence)
+	)
+	var cont_floor_bonus := _opponent_floor_defense_adaptation_bonus(
+		opponent_team, assignment.lane
+	)
+	## `_opponent_attack_type` classifies a landing point in home-court
+	## coordinates, so the ball is mirrored into that frame rather than handed a
+	## shot name none of its branches would match.
+	var cont_posture_read := _defensive_responsibility_fit(
+		cont_opponent_plan, opponent_defender.id, attack_target,
+		_opponent_attack_type(Vector2(attack_target.x, 1.0 - attack_target.y)),
+	)
 	var cont_dig_terms := _defense_terms(
-		opponent_defender, float(cont_defense.reach_margin_meters), 0.0, 0.0,
+		opponent_defender, float(cont_defense.reach_margin_meters),
+		cont_read_modifier + cont_floor_bonus + cont_posture_read,
+		CoverageModel.reception_body_penalty(
+			opponent_defender, Dictionary(cont_defense.get("arrival", {})),
+			attack_quality,
+		),
 		int(cont_defense.get("support_count", 0)),
 	)
 	cont_dig_terms["contested_against"] = attack_quality
+	## A read is only worth having if something was recorded to read. The
+	## first-ball dig logs its exposure here; this one never did, so the
+	## familiarity term above would have stayed at its neutral value for the
+	## whole match no matter how often the same hitter took the same lane.
+	Familiarity.record_exposure(opponent_defender, cont_read_tags)
 	var defense_quality := float(cont_dig_terms.quality)
 	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
 	## This branch carried no spatial metadata at all, so playback fell back to
