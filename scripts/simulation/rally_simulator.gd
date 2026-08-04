@@ -905,13 +905,15 @@ func resolve(
 	## of attempting something beyond a setter lives with the model that decides
 	## what "beyond" means rather than being restated here.
 	var capability_penalty := float(setter_capability.quality_penalty)
+	var home_set_terms := _set_terms(
+		setter, float(setter_capability.effective_pass_quality),
+		tempo_demand, capability_penalty, setter_arrival_margin,
+		float(set_geometry.difficulty),
+		(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
+	)
 	result.set_quality = clampf(
-		_set_execution(
-			setter, float(setter_capability.effective_pass_quality),
-			tempo_demand, capability_penalty, setter_arrival_margin,
-			float(set_geometry.difficulty),
-			(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
-		) + _execution_error(setter, "set_accuracy", 0.12),
+		float(home_set_terms.quality)
+			+ _execution_error(setter, "set_accuracy", 0.12),
 		0.0, 1.0,
 	)
 	## Resolved here rather than at the aim, because it needs the quality that
@@ -965,7 +967,7 @@ func resolve(
 		+ (" Arrived %.2fs before contact." % setter_arrival_margin
 			if setter_arrival_margin >= 0.0 else
 			" Arrived %.2fs late; set control was reduced." % absf(setter_arrival_margin)),
-		{"side": "home", "emergency_setter": emergency_setter,
+		{"side": "home", "set_terms": home_set_terms, "emergency_setter": emergency_setter,
 			"first_contact_id": receiver.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
 			"arrival_margin": setter_arrival_margin,
@@ -1943,13 +1945,15 @@ func _resolve_opponent_transition(
 	## after the provisional computation above was moved onto the shared model --
 	## so the propagation link and the aligned attribute list reached the
 	## estimate and never reached the ball.
+	var opponent_set_terms := _set_terms(
+		opponent_setter, opponent_pass_quality, transition_penalty,
+		opponent_capability_penalty, setter_arrival_margin,
+		float(set_geometry.difficulty),
+		(Familiarity.execution_modifier(opponent_setter) - 1.0) * 0.16,
+	)
 	opponent_set_quality = clampf(
-		_set_execution(
-			opponent_setter, opponent_pass_quality, transition_penalty,
-			opponent_capability_penalty, setter_arrival_margin,
-			float(set_geometry.difficulty),
-			(Familiarity.execution_modifier(opponent_setter) - 1.0) * 0.16,
-		) + _execution_error(opponent_setter, "set_accuracy", 0.12),
+		float(opponent_set_terms.quality)
+			+ _execution_error(opponent_setter, "set_accuracy", 0.12),
 		0.08, 0.94,
 	)
 	var set_arc := RallyKinematics.solve_launch_arc(
@@ -1962,7 +1966,8 @@ func _resolve_opponent_transition(
 		dig_position, opponent_contact, true, opponent_set_quality,
 		"Opponent transition set · exchange %d" % exchange_number,
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
-		{"side": "opponent", "setter_position": opponent_setter_position,
+		{"side": "opponent", "set_terms": opponent_set_terms,
+			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
 			"set_distance_meters": set_geometry.distance_meters,
 			"set_angle_degrees": set_geometry.angle_degrees,
@@ -5315,17 +5320,51 @@ func _set_execution(
 	geometry_difficulty: float,
 	familiarity_bonus: float = 0.0,
 ) -> float:
+	return float(_set_terms(
+		setter, usable_pass_quality, tempo_demand, capability_penalty,
+		arrival_margin, geometry_difficulty, familiarity_bonus,
+	).quality)
+
+
+## The same set, with its working shown.
+##
+## The dig composite was asked which factor moved and answered that the question
+## belonged one contact earlier: measured across all contacts, the home side
+## sets at 0.484 and the opponent at 0.254, the largest single asymmetry in the
+## engine. The same instrument is pointed at the set rather than guessing which
+## of its six subtracted terms is responsible.
+func _set_terms(
+	setter: VolleyballPlayer,
+	usable_pass_quality: float,
+	tempo_demand: float,
+	capability_penalty: float,
+	arrival_margin: float,
+	geometry_difficulty: float,
+	familiarity_bonus: float = 0.0,
+) -> Dictionary:
 	if setter == null:
-		return 0.0
+		return {"quality": 0.0, "capability": 0.0, "usable": 0.0, "pass": 0.0,
+			"tempo_demand": 0.0, "capability_penalty": 0.0,
+			"geometry_difficulty": 0.0, "arrival": 0.0, "familiarity": 0.0}
 	var capability := _transition_set_capability(setter)
 	var usable := _usable_transition_ball(usable_pass_quality, capability)
-	return clampf(
-		capability * (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - usable))
-		- tempo_demand - capability_penalty - geometry_difficulty
-		+ clampf(arrival_margin * 0.18, -0.42, 0.08)
-		+ familiarity_bonus,
-		0.0, 1.0,
-	)
+	var arrival := clampf(arrival_margin * 0.18, -0.42, 0.08)
+	return {
+		"quality": clampf(
+			capability * (1.0 - TRANSITION_BALL_WEIGHT * (1.0 - usable))
+			- tempo_demand - capability_penalty - geometry_difficulty
+			+ arrival + familiarity_bonus,
+			0.0, 1.0,
+		),
+		"capability": capability,
+		"usable": usable,
+		"pass": usable_pass_quality,
+		"tempo_demand": tempo_demand,
+		"capability_penalty": capability_penalty,
+		"geometry_difficulty": geometry_difficulty,
+		"arrival": arrival,
+		"familiarity": familiarity_bonus,
+	}
 
 
 ## What a setter brings to a ball played out of defence, as a fraction of an
