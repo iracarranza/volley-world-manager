@@ -1,8 +1,17 @@
 # Accommodations: food, flavour, and lodging
 
-Draft. Nothing here is built. This is the design being written down while the
-simulation work it sits on top of is still in flight, so that when it is built
-the shape is already argued rather than improvised.
+Draft. Nothing here is built. `CLUB_LIFE.md` holds the frame around this --
+the audience thesis, staff, sponsorships and what a voli has to say -- and
+should be read first; this is the food and lodging detail. Both are written down
+while the simulation work they sit on top of is still in flight, so that when
+they are built the shape is already argued rather than improvised.
+
+**Terminology note.** `CLUB_LIFE.md` adopts *voli* for the people on court,
+because "player" currently means both them and the person holding the
+controller. This document was written before that and still says "player" in
+most places. The migration is deliberate but unfinished; where the two
+disagree, *voli* is the intended term and `VolleyballPlayer` remains the class
+name.
 
 ## Why this exists at all
 
@@ -60,6 +69,15 @@ Three rules make the paste layer more than a second tier list:
 disproportionately. So a squad-wide indulgence is a real budget decision, and
 targeting one player's preference is affordable.
 
+**A block holds two to four pastes, and the chef decides how many.** A weak chef
+combines two flavours effectively; the best cannot hold five. This is the answer
+to the objection that eight pastes is a large combinatorial surface for a system
+whose output is a morale figure: what governs comprehension is not how many
+pastes exist but how many are in play at once, and that is bounded at four
+regardless. It converts the problem from one of scale into one of discovery,
+which is a better problem to have. It also gives the chef a legible progression
+axis with a hard ceiling, so chef quality cannot run away.
+
 **Preference is per-player, and it comes from two sources.** The design
 question raised was body type *or* region of origin. It should be **both, and
 they should be allowed to disagree** — that disagreement is where characters
@@ -75,12 +93,51 @@ player whose region loves a paste their body type tolerates poorly is a player
 with a favourite food that does not love them back, and that is a more
 interesting person than either input alone.
 
+**Allergies are real, and sometimes mistaken.** Some volis genuinely cannot eat
+a thing. The setback should be low impact and low urgency -- tangible, easy to
+address, never an irritant. What makes it more than an admin task is that it is
+the ground truth underneath the complaint system: a voli who says "I think I'm
+allergic to Xervyan food" may be right, may have high palate fatigue on a paste
+from that region, or may be blaming their dinner for something else entirely.
+Some real allergies go unreported. See unreliable self-report in
+`CLUB_LIFE.md`; the physio and scout earn their slots translating one into the
+other.
+
 **Palate fatigue.** Holding a ratio constant decays its morale return toward
 zero and then past it. This is the mechanic that stops the system from being
 solved once. It should decay on the *specific ratio*, not the paste — so
 varying the mix is a real answer, and rotating pastes entirely is a stronger
 one. Recovery while a ratio is unused should be slower than the decay, so a
 beloved paste over-used is a resource genuinely spent.
+
+## 2b. Who cooks, and where the food comes from
+
+Staff carry a region of origin and a current location exactly as volis do.
+Ingredients near the club are cheap and distance adds an import cost; chefs are
+familiar with particular regional cuisines and cook those better.
+
+The convergence risk and what prevents it are recorded in `CLUB_LIFE.md`: cheap
+local ingredients plus a locally-familiar chef would be a dominant strategy were
+it not that a squad drawn from six regions cannot all eat local. Cheap food is
+homesick food for most of them.
+
+## 2c. Team-wide by default, differentiated at a compounding cost
+
+A meal plan applies to the whole squad by default. Feeding volis separately is
+possible and costs more each time it is done, the way bespoke costs more than
+mass production.
+
+This is what makes a sponsor's dietary requirement a real decision rather than
+an unwinnable constraint -- without it, satisfying one voli means harming five,
+and the correct answer is always to ignore the sponsor.
+
+**Unresolved, and it matters:** if differentiation costs only money the decision
+collapses into arithmetic -- sponsor pays X, differentiation costs Y, act when X
+exceeds Y. That is a solvable optimum. The proposed fix is to spend the chef's
+*attention* instead: a limited number of separate plans per week, scaling with
+chef quality. Money is fungible and therefore dull; attention is a real
+allocation, and it makes a better chef's reward flexibility rather than a larger
+number.
 
 ## 3. Lodging
 
@@ -117,9 +174,11 @@ sketched alongside it:
 
 ## 5. Deliberately unresolved
 
-- Whether meal choice is squad-wide, per-group, or per-player. Per-player is
-  the most expressive and the most tedious; the likely answer is squad-wide
-  with per-player exceptions, but that should be decided against a real UI.
+- Whether differentiation is paid in the chef's attention, in money, or both.
+  (The squad-wide-with-exceptions question this replaced is now settled: team
+  default, differentiated at a compounding cost. See 2c.)
+- How many pastes exist. Eight was the first instinct; the slot limit bounds the
+  decision but not the authoring burden, and the number is still unchosen.
 - Whether nutrition feeds the fatigue model directly or sits beside it. The
   staged fatigue design (tiredness → forced errors → unforced errors) is not
   built yet, and this should hook into it rather than duplicate it.
