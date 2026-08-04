@@ -296,7 +296,7 @@ const DIG_POSTURE_WEIGHT: float = 0.55
 const DIG_REACH_MARGIN_METERS: float = 0.45
 
 ## Where a pass stops supporting a quicker call and starts forcing a slower one.
-## Asserted rather than swept -- see `_opponent_tempo_call`.
+## Asserted rather than swept -- see `_tempo_call`.
 const OPPONENT_QUICK_CALL_PASS: float = 0.68
 const OPPONENT_SLOW_CALL_PASS: float = 0.38
 
@@ -327,6 +327,12 @@ const OPPONENT_SERVE_WEIGHT_TOTAL: float = 0.72
 
 ## Nominal pass-to-setter flight, for the opponent side where the real value is
 ## not separately modelled. The home paths pass their measured window instead.
+## The tempo a ball dug out of defence is set at, before the setter's own read
+## adjusts it. High, because a scramble ball is high -- and the same figure on
+## both sides of the net, which is the point: this used to be a literal 3 in
+## `_fallback_assignment` on one side and a serve-receive tendency on the other.
+const TRANSITION_TEMPO_BASE: int = 3
+
 const DEFAULT_SECOND_CONTACT_SECONDS: float = 0.68
 
 const DEFAULT_SET_RELEASE_SECONDS: float = 0.42
@@ -1989,8 +1995,15 @@ func _resolve_opponent_transition(
 	## The opponent's own capability read, run on a serve reception exactly as
 	## the home setter's is. On a dug ball there is no called play to overreach
 	## against, so the penalty is zero and the pass stands as it arrived.
-	var opponent_tempo_call := _opponent_tempo_call(
-		opponent_setter, int(opponent_team.tendencies.get("tempo", 2)),
+	## A dug ball is set high by anybody. The opponent asked its serve-receive
+	## tendency what to run on a scramble ball too, so it played the same middle
+	## tempo out of defence as it does off a clean pass -- while the home side
+	## has always set its own transition high. The tendency is what the bench
+	## prefers *when there is a choice*, and out of defence there is not one.
+	var opponent_tempo_call := _tempo_call(
+		opponent_setter,
+		int(opponent_team.tendencies.get("tempo", 2)) if first_ball \
+			else TRANSITION_TEMPO_BASE,
 		incoming_quality,
 	)
 	## Capability, on every ball rather than only the first one.
@@ -2767,6 +2780,12 @@ func _resolve_home_continuation(
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
 	var hitter := _fallback_hitter(players, lineup, setter.id)
 	var assignment := _fallback_assignment(hitter, lineup)
+	## The same read the opponent's setter makes, off the same base. This path
+	## took `_fallback_assignment`'s literal 3 and never varied it, so a home
+	## setter given a clean dig and the judgment to use it ran the same high
+	## ball as one scrambling -- and the histogram's `tempo_demand` term of
+	## 0.000 on this path was that constant showing up as a cost nobody paid.
+	assignment.tempo = _tempo_call(setter, TRANSITION_TEMPO_BASE, incoming_quality)
 	var exchange_penalty := float(exchange_number) * 0.04
 	## What this setter can actually deliver off this ball.
 	##
@@ -4276,13 +4295,29 @@ func _floor_phase_positions(
 ## home block closing for the wrong ball, since set flight time is what
 ## `_contest_block` gets its close window from; that is plausible and unverified,
 ## and worth confirming before these numbers are trusted further.
-func _opponent_tempo_call(
+## What tempo this setter calls off this ball. One function, both sides.
+##
+## It was `_opponent_tempo_call` and only the opponent used it; the home side
+## took `assignment.tempo` from the called play on a first ball and a hardcoded
+## 3 out of `_fallback_assignment` on every transition. That is two constants
+## rather than one decision, and `_set_launch_angle_degrees` makes the
+## difference enormous: tempo 3 leaves at 45-55 degrees, tempo 2 at 25-35.
+##
+## Measured, identical rosters, the set flight the hitter gets to run under:
+##
+##   home_first_ball        0.902s      opponent_first_ball    0.488s
+##   home_transition        1.063s      opponent_transition    0.489s
+##
+## Half the airtime is half the approach, which is why the opponent hitter
+## arrived 0.33s late against the home side's 0.06s, ran up 36% slower, jumped
+## lower and erred at twice the rate on every out-channel at once.
+func _tempo_call(
 	setter: VolleyballPlayer,
-	tendency_tempo: int,
+	requested_tempo: int,
 	pass_quality: float,
 ) -> int:
 	var called := clampi(
-		tendency_tempo,
+		requested_tempo,
 		SetterCapabilityModel.QUICK_TEMPO, SetterCapabilityModel.SLOWEST_TEMPO,
 	)
 	## Lower is quicker: tempo 0 is the first-tempo ball, 3 the high one.
