@@ -44,11 +44,45 @@ longer exists. Never commit on a suite that started before the last edit.
 **Asserting a rate is not measuring it.** "The home claim rarely fails" was
 stated without measurement; it is 32.6% against the opponent's 50.0%.
 
+**A degenerate result satisfies a monotonicity check trivially.** The timestamp
+gate asserts coverage, ordering and zero causality-floor corrections, and
+reported 100% / 0 / 0. It was reading data that is partly degenerate: on
+home-serving rallies the first three events all carry a synthesised
+`start_time` of 0.000, the reception's trajectory being byte-identical to the
+serve's. All-equal stamps are never backwards, so a check for "backwards" is
+silent on them. The gate needs to assert that a rally's timeline actually
+*spans* -- that consecutive events are distinct where the sport says they must
+be -- and not merely that it never reverses. Open; see below.
+
+**An instrument's own labels are part of the measurement.** A dump script
+hardcoded the `RallyEvent.EventType` order from memory. `SET_DECISION` is index
+2, not 7, so every label from index 2 upward was shifted, and the output looked
+exactly like an event-ordering defect: `POINT` before `SET_DECISION`, a rally
+with no `SET`. There was no defect. Read the enum, do not recall it.
+
 ## Open residuals
 
 Recorded because each is a thing that is *known to be imprecise* rather than a
 thing believed to be right. A later reader who rediscovers one of these should
 know it was seen and bounded, not missed.
+
+**Home-serving rallies have a partly synthesised timeline.** Measured by
+`tools/run_playback_schedule_probe.gd`: 25.5% of all inter-event gaps are under
+5 ms, against a genuinely bimodal distribution -- a near-empty band between 5 ms
+and 200 ms, then the real population from 0.2 s up. Some of those zero gaps are
+legitimate simultaneity (`ATTACK -> BLOCK`, 85 of 3502). Most are not.
+`_ensure_event_trajectories` fills missing trajectories at a fallback timestamp,
+and on the home-serve path it fires for the first three events, stamping them
+all at t=0. Playback must not be driven from `physical_time` until this is
+fixed: half the rallies would render the serve and the reception as one instant.
+The bimodality is worth keeping -- once the synthesised stamps are gone, the
+empty band between 5 ms and 200 ms is what justifies a concurrency epsilon
+rather than taste.
+
+**Serve origin x is not mirrored.** Home serves from x = 0.82, the opponent from
+x = 0.80. Both were literals; the y coordinate of each was wrong in the same way
+and is now `CourtConstants.serve_origin`, but unifying x would move both sides'
+serve angles and is a calibration change.
 
 **Bare `rally_clock` event stamps.** `_stamp_physical_times` now produces zero
 causality-floor corrections, which proves the derived moments agree with each

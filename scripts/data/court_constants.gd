@@ -5,6 +5,10 @@ extends RefCounted
 ## opponent baseline (0.0) to the home baseline (1.0). The net is at Y = 0.5.
 
 const NET_Y: float = 0.5
+## Not the end line, despite the name: the end lines are Y = 0.0 and Y = 1.0
+## (see the frame described above, and `_court_to_local`, which maps that range
+## onto the drawn court). This is the deepest position a player is placed at,
+## inset from the line, and it is read as such everywhere it is used.
 const HOME_BASELINE_Y: float = 0.96
 ## Full-court dimensions, used to convert normalised offsets into real distances.
 const COURT_WIDTH_METERS: float = 9.0
@@ -18,6 +22,33 @@ const NET_HEIGHT_METERS: float = 2.43
 ## 3 m front zone and 6 m back zone (a 1:2 depth ratio).
 const HOME_ATTACK_LINE_Y: float = 0.653333
 const OPPONENT_ATTACK_LINE_Y: float = 0.346667
+
+## The serve is struck from the service zone, which is behind the end line.
+##
+## Both origins used to be `Vector2` literals repeated at six call sites, and
+## both sat 1.44 m *inside* their own baseline -- the server standing in their
+## own back zone, on the court, which is a fault before it is anything else. It
+## also shortened every serve by the depth of the service zone, so serve flight
+## time, the receiver's reading angle and the reception's difficulty were all
+## measured from a contact point that cannot occur.
+##
+## A metre back from the line is an ordinary standing-serve contact point. It is
+## deliberately modest: the tactical board reserves a 34 px margin outside the
+## court rect, which at typical board sizes is about one metre, so the server
+## stays visible rather than being drawn into the panel edge. Run-up depth for
+## jump serves is a separate thing to model, not a bigger number here.
+const SERVE_DEPTH_BEHIND_BASELINE_METERS: float = 1.0
+
+
+## Where a serve is struck from, given the server's lateral position.
+##
+## `x` stays a caller's choice because the two sides do not currently agree on
+## it -- home serves from 0.82 and the opponent from 0.80, a drift that survived
+## precisely because each side had its own literal. Unifying it would move both
+## sides' serve angles, which is a calibration change and not this one.
+static func serve_origin(x: float, home_side: bool) -> Vector2:
+	var depth := SERVE_DEPTH_BEHIND_BASELINE_METERS / COURT_LENGTH_METERS
+	return Vector2(x, 1.0 + depth if home_side else -depth)
 
 const LANES: Array[String] = [
 	"Left Pin", "Front Quick", "Right Quick", "Right Pin", "Pipe",

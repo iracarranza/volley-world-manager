@@ -466,7 +466,7 @@ func resolve(
 	## Gate E: the same serve through the shared ballistics, in shadow.
 	_geometric_serve_record(
 		"geometric_serve_opponent", opponent_server,
-		Vector2(0.80, 0.08), serve_landing, false, opponent_risk,
+		CourtConstants.serve_origin(0.80, false), serve_landing, false, opponent_risk,
 	)
 	## Recorded against the intent above, moved below: the shadow resolver aims
 	## where the server aimed and reaches its own verdict, while the official
@@ -474,16 +474,16 @@ func resolve(
 	if serve_error:
 		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
 	var serve_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(Vector2(0.80, 0.08), serve_landing),
+		RallyKinematics.court_distance_meters(CourtConstants.serve_origin(0.80, false), serve_landing),
 		_serve_launch_angle_degrees(opponent_server, serve_quality),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	var serve_trajectory := _ball_trajectory(
-		"serve", Vector2(0.80, 0.08), serve_landing, serve_time,
+		"serve", CourtConstants.serve_origin(0.80, false), serve_landing, serve_time,
 		float(serve_arc.apex_height_meters),
 	)
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
-		Vector2(0.80, 0.08), serve_landing, not serve_error, serve_quality,
+		CourtConstants.serve_origin(0.80, false), serve_landing, not serve_error, serve_quality,
 		"%s serve" % opponent_server.primary_serve_style if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
@@ -653,7 +653,7 @@ func resolve(
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
 	var reception_pass := _reception_pass_result(
 		receiver, receiver_start, serve_landing, desired_pass_target,
-		Vector2(0.80, 0.08), serve_quality, arrival,
+		CourtConstants.serve_origin(0.80, false), serve_quality, arrival,
 		float(result.reception_quality)
 	)
 	if using_live_reception:
@@ -1823,19 +1823,19 @@ func _resolve_home_serve(
 	)
 	_geometric_serve_record(
 		"geometric_serve_home", server,
-		Vector2(0.82, 0.92), opponent_landing, true, serve_risk,
+		CourtConstants.serve_origin(0.82, true), opponent_landing, true, serve_risk,
 	)
 	if serve_error:
 		opponent_landing = _errant_serve_landing(
 			opponent_landing, serve_quality, false
 		)
 	var serve_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(Vector2(0.82, 0.92), opponent_landing),
+		RallyKinematics.court_distance_meters(CourtConstants.serve_origin(0.82, true), opponent_landing),
 		_serve_launch_angle_degrees(server, serve_quality),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
-		Vector2(0.82, 0.92), opponent_landing, not serve_error,
+		CourtConstants.serve_origin(0.82, true), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
 		"%s · %d%% pressure at %d%% selected risk." % [server.primary_serve_style,
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
@@ -1843,7 +1843,7 @@ func _resolve_home_serve(
 			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style,
 			"outgoing_trajectory": _ball_trajectory(
-				"serve", Vector2(0.82, 0.92), opponent_landing, serve_time,
+				"serve", CourtConstants.serve_origin(0.82, true), opponent_landing, serve_time,
 				float(serve_arc.apex_height_meters),
 			)})
 	if serve_error:
@@ -1987,7 +1987,7 @@ func _resolve_home_serve(
 	## opponent's pass is thrown by the same arm.
 	var opponent_pass := _reception_pass_result(
 		receiver, receiver_start, opponent_landing, opponent_setter_release,
-		Vector2(0.82, 0.92), serve_quality, opponent_arrival,
+		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
 		reception_quality, 0.02, 0.49,
 	)
 	return _resolve_opponent_transition(
