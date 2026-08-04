@@ -1020,6 +1020,7 @@ func resolve(
 	var hitter_arrival_margin := float(set_flight_time) - hitter_move_time
 	var approach_preparation: Dictionary = {}
 	var resolved_approach: Dictionary = {}
+	var prepared_actor: RallyPlayerState = null
 	if using_live_attack:
 		hitter_start = Vector2(selected_live_attack.get(
 			"source_position", hitter_start
@@ -1052,7 +1053,7 @@ func resolve(
 			approach_preparation = ApproachMechanicsModel.prepare_for_attack(
 				attack_state, hitter_actor, assignment_data, receiver.id, rally_clock
 			)
-			var prepared_actor := approach_preparation.get("actor") as RallyPlayerState
+			prepared_actor = approach_preparation.get("actor") as RallyPlayerState
 			approach_preparation.erase("actor")
 			if prepared_actor != null:
 				## Preparation relocates where this phase's run-up begins: the
@@ -1071,9 +1072,24 @@ func resolve(
 					)),
 				)
 				hitter_arrival_margin = float(set_flight_time) - hitter_move_time
-				resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
-					prepared_actor, set_target, set_flight_time
-				)
+	set_target = _reachable_contact(
+		hitter_start, set_target, hitter_move_time, float(set_flight_time)
+	)
+	_retarget_set_event(
+		set_event, set_target, "set", float(set_flight_time),
+		float(set_trajectory.get(
+			"apex_rise_meters", float(set_arc.apex_height_meters)
+		)),
+		set_contact_time,
+	)
+	## Read the run-up against the contact that will actually be struck. The
+	## takeoff evaluation used to run inside the preparation branch above,
+	## against the target the set aimed at; a clamped contact would then have
+	## been scored on a runway nobody ran.
+	if prepared_actor != null:
+		resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
+			prepared_actor, set_target, float(set_flight_time)
+		)
 	## Same staging leg as the setter's: the hitter should already be at
 	## hitter_start (their staged approach mark) by the time this set's flight
 	## finishes, not shown getting there and running the approach in one motion.
@@ -2081,6 +2097,7 @@ func _resolve_opponent_transition(
 				set_flight_time, float(set_arc.apex_height_meters),
 				rally_clock
 			)})
+	var opponent_set_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
 	## Provisional: recomputed below once preparation has staged the hitter.
 	var hitter_arrival_margin: float = set_flight_time - float(attack_choice.travel_time)
@@ -2247,6 +2264,14 @@ func _resolve_opponent_transition(
 		opponent_hitter, opponent_approach_start, opponent_contact, "transition"
 	)
 	hitter_arrival_margin = set_flight_time - opponent_move_time
+	opponent_contact = _reachable_contact(
+		opponent_approach_start, opponent_contact, opponent_move_time,
+		set_flight_time,
+	)
+	_retarget_set_event(
+		opponent_set_event, opponent_contact, "opponent_set", set_flight_time,
+		float(set_arc.apex_height_meters), rally_clock,
+	)
 	var opponent_approach := ApproachMechanicsModel.evaluate_takeoff(
 		opponent_prepared, opponent_contact, set_flight_time
 	) if opponent_prepared != null else {}
@@ -2330,7 +2355,6 @@ func _resolve_opponent_transition(
 
 	## Let playback walk the hitter to their approach mark during the set,
 	## instead of teleporting them into a swing when the attack event begins.
-	var opponent_set_event := result.events[-1] as RallyEvent
 	if opponent_set_event != null:
 		opponent_set_event.metadata["staged_next_actor_id"] = opponent_hitter.id
 		opponent_set_event.metadata["staged_next_position"] = opponent_approach_start
@@ -2761,29 +2785,14 @@ func _resolve_home_continuation(
 		hitter, hitter_start, set_target, "transition"
 	)
 	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
-	## The ball is contacted where the hitter can be, not where the set wanted
-	## them.
-	##
-	## `evaluate_takeoff` already knows this: on seed 6144 it reports a hitter
-	## covering 0.19 m of a 2.07 m runway inside a 0.228 s set flight -- 4.5% --
-	## and the rally emitted the ATTACK event at the far end of that runway
-	## anyway. Nothing was wrong with the movement model; the resolver asked it a
-	## question, was told the hitter could not get there, and placed the contact
-	## there regardless. Playback then had to cover two metres in a quarter
-	## second, which is the 9.1 m/s teleport, and capping the animation would
-	## only have left the hitter short while the ball met empty air.
-	##
-	## So the contact slides back down the hitter's own path to the point they
-	## actually reach. A ball met at the wrong point is a worse ball -- that is
-	## already priced, through the negative `hitter_arrival_margin` this same
-	## shortfall produces -- and the swing still happens, from where the swing
-	## really is.
-	if hitter_move_time > continuation_flight_time and hitter_move_time > 0.001:
-		var reached_fraction := clampf(
-			continuation_flight_time / hitter_move_time, 0.0, 1.0
-		)
-		set_target = hitter_start.lerp(set_target, reached_fraction)
+	set_target = _reachable_contact(
+		hitter_start, set_target, hitter_move_time, continuation_flight_time
+	)
 	var set_event_for_staging := result.events[-1] as RallyEvent
+	_retarget_set_event(
+		set_event_for_staging, set_target, "set", continuation_flight_time,
+		float(continuation_set_arc.apex_height_meters), cont_set_contact_time,
+	)
 	if set_event_for_staging != null:
 		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
 		set_event_for_staging.metadata["staged_next_position"] = hitter_start
@@ -4307,6 +4316,65 @@ func _block_deflection_trajectory(
 		maxf(float(arc.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
 		maxf(float(arc.apex_height_meters), apex_hint),
 		start_time,
+	)
+
+
+## The ball is contacted where the hitter can be, not where the set wanted them.
+##
+## `evaluate_takeoff` already knows this: on seed 6144 it reports a hitter
+## covering 0.19 m of a 2.07 m runway inside a 0.228 s set flight -- 4.5% -- and
+## the rally emitted the ATTACK event at the far end of that runway anyway.
+## Nothing was wrong with the movement model; the resolver asked it a question,
+## was told the hitter could not get there, and placed the contact there
+## regardless. Playback then had to cover two metres in a quarter second, which
+## is the 9.1 m/s teleport, and capping the animation would only have left the
+## hitter short while the ball met empty air.
+##
+## So the contact slides back down the hitter's own path to the point they
+## actually reach. A ball met at the wrong point is a worse ball -- already
+## priced, through the negative arrival margin this same shortfall produces --
+## and the swing still happens, from where the swing really is.
+##
+## All three attack paths call this, deliberately. It was first added to the
+## home continuation alone, which left the opponent swinging at contacts it
+## never reached: the same one-side-modelled-fully defect this engine has now
+## produced ten times, and the tenth was introduced by the fix for the ninth.
+static func _reachable_contact(
+	hitter_start: Vector2,
+	intended_contact: Vector2,
+	hitter_move_time: float,
+	flight_time: float,
+) -> Vector2:
+	if hitter_move_time <= flight_time or hitter_move_time <= 0.001:
+		return intended_contact
+	return hitter_start.lerp(
+		intended_contact, clampf(flight_time / hitter_move_time, 0.0, 1.0)
+	)
+
+
+## Land the set where the swing now happens.
+##
+## The set event is emitted before the hitter's route is known, so a clamped
+## contact would otherwise leave the ball drawn to one point and struck at
+## another. The flight time is deliberately *not* re-solved: a setter delivering
+## short of the lane lofts the ball rather than releasing it earlier, so the
+## hang time every later contact is timed from stays exactly as it was and only
+## the landing point moves. Re-solving would also be circular -- a shorter ball
+## flies for less time, which shortens the runway that produced the clamp.
+func _retarget_set_event(
+	set_event: RallyEvent,
+	contact: Vector2,
+	kind: String,
+	flight_time: float,
+	apex_height: float,
+	release_time: float,
+) -> void:
+	if set_event == null or set_event.end_position.is_equal_approx(contact):
+		return
+	set_event.end_position = contact
+	set_event.metadata["outgoing_trajectory"] = _ball_trajectory(
+		kind, set_event.start_position, contact, flight_time, apex_height,
+		release_time,
 	)
 
 
