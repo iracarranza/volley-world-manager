@@ -637,7 +637,7 @@ static func _apply_body_variation(
 const PRIMARY_TIER_BONUS: int = 15
 const SECONDARY_TIER_BONUS: int = 5
 const TERTIARY_TIER_PENALTY: int = -8
-const SPECIALTY_BONUS: int = 8
+const SPECIALTY_BONUS: int = 16
 
 
 static func _tier_bonus(
