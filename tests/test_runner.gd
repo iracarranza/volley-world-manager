@@ -6330,7 +6330,18 @@ func _test_post_block_trajectory_chain() -> void:
 			## An untouched attack keeps its full arc. Truncating it to the net
 			## drew the spike barely moving and made the block's deflection look
 			## like the ball teleporting onto whoever dug it.
-			if not touched and flight_start.distance_to(flight_end) < 0.08:
+			##
+			## Detected by where the ball stops rather than by how far it went.
+			## Truncation ends it on the net plane exactly -- the re-slice targets
+			## `Vector2(set_target.x, NET_Y)` -- while a tip or a roll shot ends
+			## it short in the opponent's court. The original check read "less
+			## than 0.08 from the contact", which caught both, and once the
+			## geometric attack started producing genuinely short shots it began
+			## reporting them as truncations. The defect it was written for is
+			## unchanged; the proxy for it stopped being specific.
+			if not touched \
+					and absf(flight_end.y - CourtConstants.NET_Y) < 0.01 \
+					and flight_start.distance_to(flight_end) < 0.08:
 				truncated_misses += 1
 			var block_flight: Dictionary = block.metadata.get("outgoing_trajectory", {})
 			if touched:
