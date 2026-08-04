@@ -263,11 +263,21 @@ static func estimate_movement(
 ## Advances a temporary actor snapshot toward a target without mutating the
 ## supplied rally state. Velocity is carried into the returned snapshot so a
 ## later perception update can redirect movement already underway.
+## `carry_through` decides what arriving means.
+##
+## The default is a player who has got where they were going and set up there,
+## which is right for a defensive mark. It is wrong for a waypoint: a hitter
+## running to their approach mark does not stop on it, they run through it into
+## the swing. That distinction did not exist, so arrival always wrote
+## `Vector2.ZERO` and every player in the engine reached every destination at a
+## dead stop -- contradicting this function's own contract two lines above, and
+## leaving `_leg_seconds`'s carried-speed branch permanently unreachable.
 static func project_toward(
 	actor: RallyPlayerState,
 	target: Vector2,
 	duration: float,
 	mode: RallyPlayerState.MovementMode,
+	carry_through: bool = false,
 ) -> Dictionary:
 	if actor == null or actor.player == null:
 		return {"actor": null, "distance_meters": 0.0, "elapsed": 0.0}
@@ -311,9 +321,12 @@ static func project_toward(
 		direction.y * traveled / RallyKinematicsModel.COURT_LENGTH_METERS,
 	)
 	var reached_target := traveled >= distance - 0.001
+	var arrival_velocity := direction * ending_speed
+	if reached_target and not carry_through:
+		arrival_velocity = Vector2.ZERO
 	projected.apply_position(
 		target if reached_target else actor.position + court_delta,
-		Vector2.ZERO if reached_target else direction * ending_speed,
+		arrival_velocity,
 	)
 	projected.movement_mode = mode
 	projected.intent = &"receive"
@@ -386,10 +399,27 @@ static func traversal_seconds(
 	mode: RallyPlayerState.MovementMode,
 	waypoint: Variant = null,
 ) -> float:
+	return float(traversal_result(actor, target, mode, waypoint)["seconds"])
+
+
+## The same traversal, keeping the speed the player carries out of it.
+##
+## `_leg_seconds` has always computed an exit speed and `traversal_seconds` has
+## always thrown it away, so every caller got a duration and no state -- which
+## is why every leg in the engine began from rest and why the guard below that
+## skips the standing-start charge for a moving player had never once fired.
+## The value existed; nothing could reach it.
+static func traversal_result(
+	actor: RallyPlayerState,
+	target: Vector2,
+	mode: RallyPlayerState.MovementMode,
+	waypoint: Variant = null,
+) -> Dictionary:
 	if actor == null or actor.player == null:
-		return 0.0
+		return {"seconds": 0.0, "exit_speed": 0.0, "exit_velocity": Vector2.ZERO}
 	if waypoint == null:
-		return _leg_seconds(actor, actor.position, target, mode, 0.0)["seconds"]
+		var single := _leg_seconds(actor, actor.position, target, mode, 0.0)
+		return _with_exit_velocity(single, actor.position, target)
 	var corner := Vector2(waypoint)
 	var first := _leg_seconds(actor, actor.position, corner, mode, 0.0)
 	## Only the component of the carried speed aligned with the new heading
@@ -403,7 +433,28 @@ static func traversal_seconds(
 				incoming.normalized().dot(outgoing.normalized()), 0.0
 			) * float(first["exit_speed"])
 	var second := _leg_seconds(actor, corner, target, mode, carried)
-	return float(first["seconds"]) + float(second["seconds"])
+	return _with_exit_velocity(
+		{
+			"seconds": float(first["seconds"]) + float(second["seconds"]),
+			"exit_speed": float(second["exit_speed"]),
+		},
+		corner, target,
+	)
+
+
+## Turns a scalar exit speed into a velocity along the heading the leg ended on,
+## which is the form a player's state carries and the next leg reads.
+static func _with_exit_velocity(
+	leg: Dictionary, from: Vector2, to: Vector2
+) -> Dictionary:
+	var heading := RallyKinematicsModel.court_delta_meters(from, to)
+	var speed := float(leg.get("exit_speed", 0.0))
+	return {
+		"seconds": float(leg.get("seconds", 0.0)),
+		"exit_speed": speed,
+		"exit_velocity": heading.normalized() * speed \
+			if heading.length() > 0.0001 else Vector2.ZERO,
+	}
 
 
 static func _leg_seconds(

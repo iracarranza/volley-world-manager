@@ -68,6 +68,14 @@ static func run(seed_count: int = 40, base_seed: int = 300000) -> Dictionary:
 				## A traversal of a few centimetres says nothing about pace.
 				continue
 			actor.facing = opening.normalized()
+			## The same speed the resolver credited this player with entering the
+			## leg. Rebuilding the actor at rest and comparing that against a
+			## duration the resolver computed *with* carried velocity measures the
+			## difference between the two assumptions, not the difference between
+			## the two models -- which is the only thing this gate exists to see.
+			actor.velocity = Vector2(event.metadata.get(
+				"movement_entry_velocity", Vector2.ZERO
+			))
 			var natural: float = ShadowMovementModel.natural_traversal_time(
 				actor, destination, mode
 			)

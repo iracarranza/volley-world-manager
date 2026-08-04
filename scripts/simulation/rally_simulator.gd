@@ -360,6 +360,16 @@ var opponent_plan: Resource = null
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
+## What each player is carrying, alongside where they are.
+##
+## `live_positions` has always been the resolver's authoritative state and it
+## holds positions only, so a player who had just sprinted across the court
+## existed at rest on the next contact. The continuous movement work unified the
+## *formula* -- `_movement_time` asks the same model reachability does -- but not
+## the state: `project_toward` is called by every shadow and calibration system
+## and by the resolver never. These two dictionaries are the missing half.
+var live_velocities: Dictionary = {}
+var opponent_live_velocities: Dictionary = {}
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
 var identity_effects: Dictionary = {}
@@ -395,6 +405,10 @@ func resolve(
 	rally_clock = 0.0
 	shadow_reception_trace = null
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
+	## Everyone starts the rally genuinely at rest -- this is the one moment the
+	## old assumption was true.
+	live_velocities = {}
+	opponent_live_velocities = {}
 	opponent_live_positions = _initial_opponent_positions(opponent_team, home_serving)
 	var result: Resource = RallyResultModel.new()
 	result.initial_home_positions = live_positions.duplicate(true)
@@ -1031,6 +1045,7 @@ func resolve(
 	var approach_preparation: Dictionary = {}
 	var resolved_approach: Dictionary = {}
 	var prepared_actor: RallyPlayerState = null
+	var hitter_entry_velocity := Vector2.ZERO
 	if using_live_attack:
 		hitter_start = Vector2(selected_live_attack.get(
 			"source_position", hitter_start
@@ -1052,7 +1067,13 @@ func resolve(
 			if attack_state != null else null
 		if hitter_actor != null:
 			hitter_actor = hitter_actor.snapshot()
-			hitter_actor.apply_position(hitter_start, hitter_actor.velocity)
+			## Seeded from what this hitter is actually carrying. The state
+			## builder makes every actor at rest, so passing `hitter_actor.velocity`
+			## back in was passing zero back in, and `prepare_for_attack` then
+			## reported `prepared_velocity_mps` of zero for 91% of hitters.
+			hitter_actor.apply_position(
+				hitter_start, live_velocities.get(hitter.id, Vector2.ZERO)
+			)
 			var assignment_data := {
 				"player_id": assignment.player_id,
 				"lane": assignment.lane,
@@ -1074,13 +1095,17 @@ func resolve(
 				## stale pairs a staged start with the unstaged duration, and
 				## playback draws the short leg at the long leg's pace.
 				hitter_start = prepared_actor.position
-				hitter_move_time = _movement_time(
+				hitter_entry_velocity = prepared_actor.velocity
+				var hitter_leg := _travel(
 					hitter, hitter_start, set_target, "transition",
 					Vector2(approach_preparation.get(
 						"approach_start_position",
 						_approach_start_position(set_target, hitter_start, false)
 					)),
+					prepared_actor.velocity,
 				)
+				hitter_move_time = float(hitter_leg.seconds)
+				live_velocities[hitter.id] = hitter_leg.exit_velocity
 				hitter_arrival_margin = float(set_flight_time) - hitter_move_time
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, float(set_flight_time)
@@ -1324,6 +1349,7 @@ func resolve(
 			"jump_multiplier": float(resolved_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(resolved_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
+			"movement_entry_velocity": hitter_entry_velocity,
 			"arrival_margin": hitter_arrival_margin,
 			"deadline": rally_clock + float(set_flight_time),
 			"event_time": rally_clock + float(set_flight_time),
@@ -2301,7 +2327,8 @@ func _resolve_opponent_transition(
 	)
 	if opponent_hitter_actor != null:
 		opponent_hitter_actor.apply_position(
-			Vector2(attack_choice.start), opponent_hitter_actor.velocity
+			Vector2(attack_choice.start),
+			opponent_live_velocities.get(opponent_hitter.id, Vector2.ZERO),
 		)
 	var opponent_preparation := ApproachMechanicsModel.prepare_for_attack(
 		opponent_state, opponent_hitter_actor,
@@ -2327,9 +2354,13 @@ func _resolve_opponent_transition(
 	## the same defect the movement-fluidity work fixed on the home side, and it
 	## only surfaced here once block pressure made continuations common enough to
 	## shift the ATTACK phase's timing ratio to 1.083.
-	var opponent_move_time := _movement_time(
-		opponent_hitter, opponent_approach_start, opponent_contact, "transition"
+	var opponent_leg := _travel(
+		opponent_hitter, opponent_approach_start, opponent_contact, "transition",
+		null,
+		opponent_prepared.velocity if opponent_prepared != null else Vector2.ZERO,
 	)
+	var opponent_move_time := float(opponent_leg.seconds)
+	opponent_live_velocities[opponent_hitter.id] = opponent_leg.exit_velocity
 	hitter_arrival_margin = set_flight_time - opponent_move_time
 	opponent_contact = _reachable_contact(
 		opponent_approach_start, opponent_contact, opponent_move_time,
@@ -2491,6 +2522,8 @@ func _resolve_opponent_transition(
 			"event_time": rally_clock + set_flight_time,
 			"launch_angle_degrees": opponent_attack_angle,
 			"movement_duration": opponent_move_time,
+			"movement_entry_velocity": opponent_prepared.velocity \
+				if opponent_prepared != null else Vector2.ZERO,
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_hitter.id] = opponent_contact
@@ -2902,9 +2935,12 @@ func _resolve_home_continuation(
 	for raw_player_id in transition_state.home_players:
 		var phase_actor := transition_state.player_state(&"home", int(raw_player_id))
 		if phase_actor != null:
-			phase_actor.apply_position(Vector2(live_positions.get(
-				int(raw_player_id), phase_actor.position
-			)), phase_actor.velocity)
+			phase_actor.apply_position(
+				Vector2(live_positions.get(
+					int(raw_player_id), phase_actor.position
+				)),
+				live_velocities.get(int(raw_player_id), Vector2.ZERO),
+			)
 	var hitter_actor := transition_state.player_state(&"home", hitter.id)
 	var continuation_assignment := {
 		"player_id": hitter.id, "lane": assignment.lane,
@@ -2919,9 +2955,12 @@ func _resolve_home_continuation(
 	transition_preparation.erase("actor")
 	if prepared_hitter != null:
 		hitter_start = prepared_hitter.position
-	var hitter_move_time := _movement_time(
-		hitter, hitter_start, set_target, "transition"
+	var continuation_leg := _travel(
+		hitter, hitter_start, set_target, "transition", null,
+		prepared_hitter.velocity if prepared_hitter != null else Vector2.ZERO,
 	)
+	var hitter_move_time := float(continuation_leg.seconds)
+	live_velocities[hitter.id] = continuation_leg.exit_velocity
 	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, continuation_flight_time
@@ -3108,6 +3147,8 @@ func _resolve_home_continuation(
 			"jump_multiplier": float(continuation_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(continuation_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
+			"movement_entry_velocity": prepared_hitter.velocity \
+				if prepared_hitter != null else Vector2.ZERO,
 			"arrival_margin": hitter_arrival_margin,
 			"set_flight_time": continuation_flight_time,
 			"flight_time": continuation_attack_flight,
@@ -4421,22 +4462,54 @@ func _movement_time(
 	target: Vector2,
 	movement_kind: String,
 	waypoint: Variant = null,
+	## What this player is already carrying into the leg. Every traversal in the
+	## engine was timed from a dead stop -- 14,991 legs of 14,991 -- so the guard
+	## in `_leg_seconds` that exists to stop a moving player being charged a
+	## standing start and a turn had never once fired. Measured, that cost 1.020s
+	## for a mean 2.35 m leg where an entry at half top speed costs 0.674s, and
+	## it is why 83% of attack contacts were placed beyond the hitter's reach.
+	##
+	## Zero stays right where a player genuinely is stationary. It simply is not
+	## the common case, and `prepare_for_attack` has been returning the real
+	## figure as `prepared_velocity_mps` all along with nothing reading it.
+	entry_velocity: Vector2 = Vector2.ZERO,
 ) -> float:
+	return float(_travel(
+		player, start, target, movement_kind, waypoint, entry_velocity
+	)["seconds"])
+
+
+## A traversal, keeping what the player carries out of it.
+##
+## Callers that merely ask "how long would this take" -- candidate scoring in
+## `_spatial_setter_choice`, defender searches -- want the duration and must not
+## record anything, because most of those players never move. Callers that
+## *commit* a movement take the exit velocity and store it, so the next leg
+## begins where the last one ended instead of from a dead stop.
+func _travel(
+	player: VolleyballPlayer,
+	start: Vector2,
+	target: Vector2,
+	movement_kind: String,
+	waypoint: Variant = null,
+	entry_velocity: Vector2 = Vector2.ZERO,
+) -> Dictionary:
 	if player == null:
-		return 4.0
+		return {"seconds": 4.0, "exit_velocity": Vector2.ZERO}
 	## One movement model. This used to carry its own constant-velocity formula
 	## with a flat startup penalty, which disagreed with the kinematics every
 	## reachability decision is built on -- and disagreed in opposite directions
 	## by phase, because a flat penalty undercharges short traversals and
 	## amortises away on long ones. It now asks the same model.
 	var actor := RallyPlayerState.create(player, &"home", -1, start)
+	actor.velocity = entry_velocity
 	var opening := RallyKinematicsModel.court_delta_meters(start, target)
 	if opening.length() > 0.0001:
 		## The resolver does not track facing at this point, and charging a full
 		## reorientation the player may not need would reintroduce a second
 		## disagreement. Face the route; the turn floor still applies.
 		actor.facing = opening.normalized()
-	return RallyMovementSystemModel.traversal_seconds(
+	return RallyMovementSystemModel.traversal_result(
 		actor, target, _movement_mode_for_kind(movement_kind), waypoint
 	)
 

@@ -117,8 +117,13 @@ static func prepare_for_attack(
 		target, str(assignment.get("lane", "Left Pin")), side
 	)
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
+	## Run *through* the approach mark, not to it. This is the leg that ends
+	## where the run-up begins, so stopping dead on arrival makes every hitter
+	## re-accelerate from rest into their own swing -- which is exactly what was
+	## happening, and why 83% of attack contacts were placed beyond reach.
 	var projection := RallyMovementModel.project_toward(
-		actor, start, preparation_time, RallyPlayerState.MovementMode.TRANSITION
+		actor, start, preparation_time, RallyPlayerState.MovementMode.TRANSITION,
+		true,
 	)
 	var prepared := projection.get("actor") as RallyPlayerState
 	if prepared != null:
