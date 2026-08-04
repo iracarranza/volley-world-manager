@@ -467,7 +467,19 @@ static func _leg_seconds(
 	var meter_delta := RallyKinematicsModel.court_delta_meters(from, to)
 	var distance := meter_delta.length()
 	if distance <= 0.001:
-		return {"seconds": 0.0, "exit_speed": entry_speed}
+		## A zero-length leg costs no time and sheds no speed. Returning
+		## `entry_speed` looks harmless and is not: the two-leg form passes 0.0
+		## as the first leg's entry and lets it fall back to the actor's own
+		## velocity, so a corner that coincides with the start reported an exit
+		## of zero and handed the *real* leg a standing start -- the one case
+		## where a waypoint silently discards the speed a player is carrying.
+		## The home first ball takes exactly that shape: its approach mark and
+		## its start are the same point.
+		return {
+			"seconds": 0.0,
+			"exit_speed": entry_speed if entry_speed > 0.0 \
+				else actor.velocity.length(),
+		}
 	var direction := meter_delta.normalized()
 	var profile := _movement_profile(actor, direction, mode)
 	var maximum_speed := maxf(float(profile.maximum_speed), 0.05)

@@ -72,10 +72,22 @@ static func integrate(
 
 	var first_target: Vector2 = Vector2(waypoint) if waypoint != null else target
 	var opening_direction := _direction(stepper.position, first_target)
-	## Paid once, from the facing the player actually started with.
-	var turn_delay := float(MovementModel.movement_profile(
-		stepper, opening_direction, mode
-	).get("direction_change_delay", 0.0))
+	## Paid once, from the facing the player actually started with -- and only
+	## when the traversal genuinely starts from rest.
+	##
+	## `RallyMovementSystem._leg_seconds` charges it under exactly that
+	## condition ("a player already carrying speed into this leg has already
+	## turned"), and this integrator charged it unconditionally. While every
+	## player in the engine started every leg at a dead stop the two rules were
+	## indistinguishable. Once hitters began carrying speed into their approach,
+	## ATTACK became the one phase where the stepper billed a turn the closed
+	## form skipped, and the two models parted by 13% on that phase alone while
+	## agreeing to better than 0.6% on the three that still start from rest.
+	var opening_speed := maxf(stepper.velocity.dot(opening_direction), 0.0)
+	var turn_delay := 0.0 if opening_speed > 0.0 else float(
+		MovementModel.movement_profile(stepper, opening_direction, mode)
+		.get("direction_change_delay", 0.0)
+	)
 	var moving_time := maxf(duration - turn_delay, 0.0)
 	## What an aligned step costs *this* player. Every step below sets facing to
 	## the direction of travel, so this is the charge `project_toward()` will
@@ -163,9 +175,33 @@ static func natural_traversal_time(
 		return -1.0
 	var points: Array = integration.get("trail", [])
 	var times: Array = integration.get("sample_times", [])
+	var speeds: Array = integration.get("speeds_mps", [])
 	for index in range(points.size()):
-		if Vector2(points[index]).distance_to(target) <= 0.002:
+		if Vector2(points[index]).distance_to(target) > 0.002:
+			continue
+		if index == 0:
 			return float(times[index])
+		## Arrival happens *inside* the step that reaches it, and the stepper
+		## clamps the player onto the target, so taking the sample time whole
+		## rounds every traversal up to the next 1/30 s boundary. That bias is
+		## invisible on a one-second leg and systematic on a half-second one --
+		## which is what an ATTACK became once hitters carried speed into it, and
+		## most of why this integrator and the closed form parted company on that
+		## phase alone.
+		##
+		## Estimated from the step's own entry speed and the metres left to run,
+		## using nothing but the integration's own outputs, and never longer than
+		## the step it happened in.
+		var previous: Vector2 = Vector2(points[index - 1])
+		var remaining := KinematicsModel.court_delta_meters(
+			previous, target
+		).length()
+		var entry_speed := float(speeds[index - 1]) if index - 1 < speeds.size() \
+			else 0.0
+		var span := float(times[index]) - float(times[index - 1])
+		if entry_speed <= 0.05 or span <= 0.0:
+			return float(times[index])
+		return float(times[index - 1]) + minf(remaining / entry_speed, span)
 	return -1.0
 
 
