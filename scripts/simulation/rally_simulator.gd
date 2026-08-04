@@ -1896,6 +1896,17 @@ func _resolve_opponent_transition(
 	## The opponent's own capability read, run on a serve reception exactly as
 	## the home setter's is. On a dug ball there is no called play to overreach
 	## against, so the penalty is zero and the pass stands as it arrived.
+	## Still a constant, and still wrong for it: this side calls tempo 2 on every
+	## ball of every match, which is why `SetterCapabilityModel`'s downgrade
+	## branch never fires here -- a tempo of 2 sits inside any ordinary setter's
+	## range, so the model is asked a question it cannot answer interestingly.
+	##
+	## A hand-tuned stand-in for a playbook was tried and reverted: varying the
+	## call on pass quality cost 0.007 of set quality and moved symmetry by
+	## nothing (0.488 either way), which is two invented constants buying a
+	## measurably worse number. The real fix is an opponent playbook that varies
+	## the call the way the home side's does, not a curve fitted to make one
+	## look varied.
 	var opponent_tempo_call := int(opponent_team.tendencies.get("tempo", 2))
 	var opponent_capability := {}
 	var opponent_pass_quality := incoming_quality
@@ -1914,6 +1925,21 @@ func _resolve_opponent_transition(
 		opponent_capability_penalty = float(
 			opponent_capability.get("quality_penalty", 0.0)
 		)
+		## And the verdict is acted on, not just billed for.
+		##
+		## `SetterCapabilityModel.evaluate` answers two things: what this set
+		## costs the setter, and what tempo they can actually run. The home side
+		## reads both -- it pays the penalty *and* abandons the play through
+		## `_downgraded_assignment`. This side read the bill and threw away the
+		## verdict: `resolved_tempo` and `tempo_downgraded` appear nowhere on the
+		## opponent path, so an opponent setter was told they could not run the
+		## tempo they called, charged for attempting it, and then ran it anyway.
+		## The whole point of the model is that capability is not permission, and
+		## it was only enforced against one team.
+		if bool(opponent_capability.get("tempo_downgraded", false)):
+			opponent_tempo_call = int(
+				opponent_capability.get("resolved_tempo", opponent_tempo_call)
+			)
 	var opponent_set_quality := clampf(
 		_set_execution(
 			opponent_setter, opponent_pass_quality, transition_penalty,
@@ -1923,7 +1949,10 @@ func _resolve_opponent_transition(
 		) + _execution_error(opponent_setter, "set_accuracy", 0.12),
 		0.08, 0.94,
 	)
-	var opponent_tempo := int(opponent_team.tendencies.get("tempo", 2))
+	## The tempo the setter can deliver, which on a downgraded first ball is not
+	## the one the bench called. Re-reading the tendency here is what let the
+	## downgrade above be computed and then ignored a dozen lines later.
+	var opponent_tempo := opponent_tempo_call
 	## _choose_opponent_attack needs a flight-time estimate before the real set
 	## target is known. Estimate it against the same placeholder target
 	## set_geometry's first pass already uses above; the real distance-based
