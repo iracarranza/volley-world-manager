@@ -338,6 +338,11 @@ var geometric_swing_index: int = 0
 ## because `_build_rally_analysis` replaces `result.analysis` wholesale and a
 ## serve is resolved long before that runs.
 var geometric_serves: Dictionary = {}
+## Whether this rally was asked to open development-only promotions. It is a
+## parameter of `resolve()` and the geometric attack is decided in three
+## different functions, so it is held for the rally rather than threaded
+## through every continuation signature.
+var geometric_development_open: bool = false
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
@@ -362,6 +367,7 @@ func resolve(
 	rally_seed = seed_value
 	geometric_swing_index = 0
 	geometric_serves = {}
+	geometric_development_open = development_continuous_reception
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
 	identity_effects = {
@@ -1143,6 +1149,9 @@ func resolve(
 		"home",
 	)
 	shadow_reception_trace.summary = shadow_summary
+	var geometric := _geometric_promotion(
+		Dictionary(shadow_summary["geometric_attack"])
+	)
 	var attack_choice := _choose_attack_target(
 		hitter, CourtConstants.lane_target(assignment.lane), hit_type,
 		opponent_defenders,
@@ -1172,7 +1181,16 @@ func resolve(
 	var attack_target: Vector2 = attack_choice.target
 	var intended_attack_target := attack_target
 	var attack_missed := _attack_missed(float(result.attack_quality))
-	if attack_missed:
+	if not geometric.is_empty():
+		## A geometric swing is not aimed at a point and then scattered off it.
+		## It is struck along a course at a speed and it lands where the ball
+		## lands, so the error and the endpoint are the same fact and there is
+		## nothing left for `_errant_attack_target` to invent. The lane's target
+		## stays as `intended_attack_target`, which is what the record and the
+		## opponent's read are actually about.
+		attack_missed = bool(geometric.attack_missed)
+		attack_target = Vector2(geometric.target)
+	elif attack_missed:
 		attack_target = _errant_attack_target(
 			intended_attack_target, float(result.attack_quality)
 		)
@@ -1351,6 +1369,14 @@ func resolve(
 	## its ceiling on almost every swing -- two thirds of all attacks recycled
 	## into a continuation and rallies never ended.
 	var block_outcome := str(block_resolution.outcome)
+	if not geometric.is_empty():
+		## The contest above still ran, and everything it decided other than the
+		## outcome -- who blocked, how far they closed, the coverage shape, the
+		## scouting bonus -- is still the rally's. What the geometry replaces is
+		## the one thing it can answer better: whether the ball actually met the
+		## hands, which is a question about where the ball was and where the
+		## hands were rather than about two quality scalars.
+		block_outcome = str(geometric.block_outcome)
 	var blocked := block_outcome == "stuff"
 	# A positional partial block is the same continuation class as the older
 	# "recycle" result: the home attack-coverage unit must play the deflection.
@@ -1406,6 +1432,11 @@ func resolve(
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
+	## A ball that went out off the hands is not a recycled ball, and its
+	## endpoint is the one the geometry already produced -- outside the court,
+	## which is exactly why it is the hitter's point.
+	if not geometric.is_empty() and bool(geometric.hitter_point):
+		post_block_target = Vector2(geometric.target)
 	## An untouched ball carries no deflection segment: the attack's own flight
 	## already reaches the floor, and emitting a second overlapping path is what
 	## made the ball appear twice in two places.
@@ -1442,6 +1473,19 @@ func resolve(
 			"event_time": rally_clock,
 			"incoming_trajectory": attack_event.metadata.outgoing_trajectory,
 			"outgoing_trajectory": opponent_block_trajectory})
+	## Three of the geometric outcomes end the rally at the net in the hitter's
+	## favour -- through the hands, off the hands and out, or placed off them on
+	## purpose. The legacy path has no vocabulary for any of them: a swing that
+	## touched the block could only be stuffed or recycled, so a hitter using the
+	## block was scored as a hitter who had been stopped by it. This claims the
+	## point before the recycle branch can take the ball back into home coverage.
+	if not geometric.is_empty() and bool(geometric.hitter_point):
+		result.key_factors.append(ExplanationText.factor("attack_control"))
+		return _finish(result, "kill", true, hitter.id, {
+			"setter": setter.display_name,
+			"hitter": hitter.display_name,
+			"play": result.active_play_name,
+		})
 	if blocked:
 		result.key_factors.append(ExplanationText.factor("strong_block"))
 		return _finish(result, "blocked", false, hitter.id, {
@@ -1797,6 +1841,16 @@ func _resolve_opponent_transition(
 	)
 	var opponent_hitter := attack_choice.player as VolleyballPlayer
 	var opponent_contact: Vector2 = attack_choice.contact
+	## `_choose_opponent_attack` returns who swings, from where, and what shot --
+	## it has never returned a lane. Every reader of one therefore took the
+	## `"Left Pin"` default, so the opponent's approach was prepared for the left
+	## pin, their familiarity accrued to the left pin, and their swing was
+	## resolved along the left pin's natural course, wherever the hitter actually
+	## contacted the ball. While a lane was only a label on an event that cost
+	## nothing; once it began deciding the ball's course it sent right-side
+	## swings across the wrong diagonal and out, and the opponent missed at over
+	## twice the home side's rate.
+	var opponent_lane := CourtConstants.lane_at_x(opponent_contact.x)
 	## The opponent searches the floor for a gap through the same function the
 	## home side does. `_choose_opponent_attack()` still picks who swings and
 	## what shot; where the ball goes was a random depth band until now.
@@ -1916,7 +1970,7 @@ func _resolve_opponent_transition(
 		opponent_state, opponent_hitter_actor,
 		{
 			"player_id": opponent_hitter.id,
-			"lane": str(attack_choice.get("lane", "Left Pin")),
+			"lane": opponent_lane,
 			"tempo": opponent_tempo,
 			"target": opponent_contact,
 		},
@@ -1958,9 +2012,7 @@ func _resolve_opponent_transition(
 				hitter_arrival_margin, opponent_tempo_demand, home_block_pressure,
 				## The same familiarity the home swing gets. Omitting it here was
 				## worth nine kills to one once the attack started winning.
-				Familiarity.attack_geometry(
-					opponent_hitter, str(attack_choice.get("lane", "Left Pin"))
-				)
+				Familiarity.attack_geometry(opponent_hitter, opponent_lane)
 				+ (Familiarity.execution_modifier(opponent_hitter) - 1.0) * 0.14
 				+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
 			) + opponent_attack_noise,
@@ -2001,7 +2053,7 @@ func _resolve_opponent_transition(
 	var opponent_record := _geometric_swing_record(
 		_geometric_swing(
 			opponent_hitter, opponent_contact,
-			str(attack_choice.get("lane", "Left Pin")), home_block_formation,
+			opponent_lane, home_block_formation,
 			null, live_positions, home_defenders, false,
 			float(opponent_approach.get("jump_multiplier", 1.0)),
 			_approach_execution_fit(opponent_hitter, opponent_approach)
@@ -2012,6 +2064,9 @@ func _resolve_opponent_transition(
 	)
 	if shadow_reception_trace != null:
 		shadow_reception_trace.summary["geometric_attack_opponent"] = opponent_record
+	var geometric := _geometric_promotion(opponent_record)
+	if not geometric.is_empty():
+		home_target = Vector2(geometric.target)
 
 	## Let playback walk the hitter to their approach mark during the set,
 	## instead of teleporting them into a swing when the attack event begins.
@@ -2079,6 +2134,16 @@ func _resolve_opponent_transition(
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_hitter.id] = opponent_contact
+	## The opponent could not miss a swing. Not "rarely" -- there was no branch
+	## for it anywhere on this path, so every transition ball the opponent hit
+	## either beat the block or was dug, and a home hitter who errs at the
+	## sport's rate was being compared against an opponent who never errs at
+	## all. That is the asymmetry the symmetry gate was written to find, and it
+	## closes here because both sides now miss through the same ballistics.
+	if not geometric.is_empty() and bool(geometric.attack_missed):
+		return _finish(result, "opponent_attack_error", true, opponent_hitter.id, {
+			"hitter": opponent_hitter.display_name,
+		})
 	var block_result := _contest_block(
 		home_block_formation, opponent_attack,
 		absf(0.50 - opponent_contact.y) * CourtConstants.COURT_LENGTH_METERS,
@@ -2087,6 +2152,8 @@ func _resolve_opponent_transition(
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var home_block := float(block_result.quality)
 	var block_outcome := str(block_result.outcome)
+	if not geometric.is_empty():
+		block_outcome = str(geometric.block_outcome)
 	if blocker != null:
 		live_positions[blocker.id] = Vector2(opponent_contact.x, 0.54)
 	if assisting_blocker != null:
@@ -2174,6 +2241,14 @@ func _resolve_opponent_transition(
 			"event_time": rally_clock,
 			"incoming_trajectory": opponent_attack_trajectory,
 			"outgoing_trajectory": home_block_trajectory})
+	## The mirror of the home side's net-decided point: through the hands, off
+	## them and out, or placed off them on purpose. Claimed before the touch and
+	## funnel branches, which would otherwise hand the ball back to a home
+	## defender who is not going to get it.
+	if not geometric.is_empty() and bool(geometric.hitter_point):
+		return _finish(result, "opponent_kill", false, -1, {
+			"hitter": original_hitter.display_name,
+		})
 	if block_outcome == "stuff":
 		return _finish(result, "counter_block", true, blocker_id, {
 			"hitter": original_hitter.display_name,
@@ -2485,9 +2560,43 @@ func _resolve_home_continuation(
 			attack_quality - continuation_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
+	## The same wall that pressured the swing, now contested against it. Forming
+	## it twice would let the block that hurried the hitter and the block that
+	## touched the ball be two different blocks.
+	##
+	## It is resolved here, above the swing's result, because the geometric
+	## swing needs the wall in front of it and the swing's result is the thing
+	## the geometric path replaces. `_contest_block` draws no randomness, so
+	## hoisting it does not move the rally's stream by a single value.
+	var block_result := _contest_block(cont_formation, attack_quality)
+	var continuation_defenders: Array[Vector2] = []
+	for defender_resource in opponent_team.on_court_players():
+		var court_defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if court_defender != null:
+			continuation_defenders.append(opponent_live_positions.get(
+				court_defender.id,
+				opponent_team.court_position(court_defender.id, "defense"),
+			))
+	## The third swing, against the wall this path actually forms.
+	var transition_record := _geometric_swing_record(
+		_geometric_swing(
+			hitter, set_target, str(assignment.lane), block_result, opponent_team,
+			opponent_live_positions, continuation_defenders, true,
+			float(continuation_approach.get("jump_multiplier", 1.0)),
+			_approach_execution_fit(hitter, continuation_approach),
+			float(home_principles.decisiveness), 0.0,
+		),
+		"transition",
+	)
+	if shadow_reception_trace != null:
+		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
+	var geometric := _geometric_promotion(transition_record)
 	var intended_attack_target := attack_target
 	var attack_missed := _attack_missed(attack_quality)
-	if attack_missed:
+	if not geometric.is_empty():
+		attack_missed = bool(geometric.attack_missed)
+		attack_target = Vector2(geometric.target)
+	elif attack_missed:
 		attack_target = _errant_attack_target(intended_attack_target, attack_quality)
 	## One shot shape, used both for the full flight and -- if a block touches
 	## it -- for the re-sliced leg to the net, so the two describe the same ball.
@@ -2547,47 +2656,15 @@ func _resolve_home_continuation(
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
-	## The same wall that pressured the swing, now contested against it. Forming
-	## it twice would let the block that hurried the hitter and the block that
-	## touched the ball be two different blocks.
-	var block_result := _contest_block(cont_formation, attack_quality)
 	var opponent_blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var primary_close := float(block_result.primary_close)
 	var assist_close := float(block_result.assist_close)
 	var block_quality := float(block_result.quality)
 	var block_outcome := str(block_result.outcome)
+	if not geometric.is_empty():
+		block_outcome = str(geometric.block_outcome)
 	var blocked := block_outcome == "stuff"
-	## The third swing, in shadow, against the wall this path actually forms.
-	##
-	## It is recorded here rather than beside the other two because the block on
-	## this path is resolved *after* the swing quality is, so wiring it earlier
-	## handed the resolver an empty formation and produced a swing into an open
-	## net -- which then read as an engine gap rather than as a misplaced call.
-	## The legacy transition swing is contested; what it does not do is feed the
-	## block back into `_attack_execution` as pressure, which the other two paths
-	## do. That asymmetry is real and stays recorded, but it is a term, not an
-	## absent block.
-	var continuation_defenders: Array[Vector2] = []
-	for defender_resource in opponent_team.on_court_players():
-		var court_defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-		if court_defender != null:
-			continuation_defenders.append(opponent_live_positions.get(
-				court_defender.id,
-				opponent_team.court_position(court_defender.id, "defense"),
-			))
-	var transition_record := _geometric_swing_record(
-		_geometric_swing(
-			hitter, set_target, str(assignment.lane), block_result, opponent_team,
-			opponent_live_positions, continuation_defenders, true,
-			float(continuation_approach.get("jump_multiplier", 1.0)),
-			_approach_execution_fit(hitter, continuation_approach),
-			float(home_principles.decisiveness), 0.0,
-		),
-		"transition",
-	)
-	if shadow_reception_trace != null:
-		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
 	## Same contract as the main attack path: a block only shortens the shot if
 	## it actually touches it, and an untouched ball carries no deflection leg.
 	## Without this the continuation attack flew its full arc *and* the block
@@ -2651,6 +2728,13 @@ func _resolve_home_continuation(
 		"outgoing_trajectory": _block_deflection_trajectory(
 			cont_net_contact, block_event_end, blocked, 0.42, rally_clock
 		) if cont_block_contacts else {}})
+	if not geometric.is_empty() and bool(geometric.hitter_point):
+		result.key_factors.append(ExplanationText.factor("attack_control"))
+		return _finish(result, "kill", true, hitter.id, {
+			"setter": setter.display_name,
+			"hitter": hitter.display_name,
+			"play": "Default T3 Outside",
+		})
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
 	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
@@ -4789,6 +4873,68 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
 		),
 		"narrative": Dictionary(continuation.narrative),
+	}
+
+
+## Gate E promotion. What the geometric resolver decided, or `{}` when attacks
+## are still resolved by `_attack_execution` and `_contest_block`.
+##
+## The shadow record is already the translation; this only decides whether the
+## rally is allowed to *act* on it, and re-expresses the outcome in the legacy
+## block vocabulary so the block event, the deflection leg and the coverage
+## branch keep reading the one string they have always read.
+##
+## What promotion takes over is the swing's result: where the ball lands,
+## whether it landed in, and whether the wall got to it. What it deliberately
+## does not take over is the drawn arc -- `solve_launch_arc` is a ground-to-
+## ground solver and the resolver launches from three metres up, which is the
+## whole reason `_feasible_launch` exists. Handing it the resolver's elevation
+## would draw a spike that leaves the hitter's hand going upward at a negative
+## angle. The trajectory stays on the existing kinematics until it is promoted
+## on its own terms.
+##
+##   in                        the ball is down and the defence has to play it
+##   net, out                  the swing missed; no block was involved
+##   stuff                     the wall put it down
+##   touch                     hands slowed it and the rally continues
+##   tool, block_crush,
+##   high_hands                the hitter's point, decided at the net
+## The one thing promotion deliberately leaves alone is `attack_quality`.
+##
+## The resolver derives a quality *from* its outcome, which is the right shape
+## for a model that owns the whole swing -- but the legacy execution chain is
+## still running here, and it is what the resolver's own bearing and power
+## channels are driven by. Overwriting it would mean a hitter dragged out of
+## position and swinging late reported whatever quality their result happened to
+## imply, so a displaced hitter who still found the floor scored higher than a
+## well-set one the block grazed. Execution is how the swing was struck; outcome
+## is what it produced. They are allowed to disagree, and in this sport they do.
+func _geometric_promotion(record: Dictionary) -> Dictionary:
+	if not GeometricAttackPromotionModel.enabled(geometric_development_open):
+		return {}
+	if not bool(record.get("available", false)):
+		return {}
+	var outcome := str(record.get("outcome", "in"))
+	var terminal := str(record.get("terminal_outcome", ""))
+	## Only three of the eight outcomes involve the wall touching the ball, and
+	## `tool` and `high_hands` are two of them -- the hands are what sent the
+	## ball out. They read as a touch so the block still deflects on screen; the
+	## hitter's point is claimed before the recycle branch can see them.
+	var block_outcome := "miss"
+	if outcome in ["stuff"]:
+		block_outcome = "stuff"
+	elif outcome in ["touch", "tool", "high_hands"]:
+		block_outcome = "touch"
+	return {
+		"outcome": outcome,
+		"block_outcome": block_outcome,
+		"attack_missed": terminal == "attack_error",
+		"hitter_point": terminal == "kill",
+		"target": Vector2(record.get("landing", Vector2(0.5, 0.25))),
+		"quality": clampf(float(record.get("quality", 0.0)), 0.0, 1.0),
+		"speed_mps": float(record.get("speed_mps", 0.0)),
+		"launch_angle_degrees": float(record.get("vertical_angle_degrees", 0.0)),
+		"out_reason": str(record.get("out_reason", "")),
 	}
 
 

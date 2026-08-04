@@ -326,3 +326,57 @@ samples large enough to support them. The next step is to open
 `ENABLE_GEOMETRIC_ATTACK` behind the development override and compare terminal
 outcome distributions against the legacy path -- with the symmetry gate as the
 instrument, and its six-point home tilt as the prediction.
+
+## Promotion, and the gate refusing it
+
+The flag was inert. `ENABLE_GEOMETRIC_ATTACK` was read in exactly one function,
+`GeometricAttackPromotion.enabled()`, and that function had no callers.
+`continuation()` -- the translation from a resolved swing into the rally's
+outcome vocabulary -- was called only from `_geometric_swing_record`, the shadow
+recorder. Setting the constant to `true` would have changed nothing while
+reading, everywhere else, as a shipped feature.
+
+The promotion branch is now wired on all three attack paths. What it takes over
+is the swing's result: the landing point, the in/out, and whether the wall got
+to the ball. What it deliberately leaves alone is `attack_quality` -- execution
+is how the swing was struck, outcome is what it produced, and the two are
+allowed to disagree -- and the drawn arc, because `solve_launch_arc` is a
+ground-to-ground solver and the resolver launches from three metres up.
+
+Three things came out of wiring it that the shadow pass could not have shown.
+
+**The opponent could not miss.** There was no attack-error branch anywhere on
+the opponent's swing path. Every transition ball the opponent hit either beat
+the block or was dug, against a home hitter erring at the sport's rate. It
+needed a new terminal outcome, `opponent_attack_error`, and it is counted in the
+hitting-error rate but deliberately not in the home tally.
+
+**Every opponent swing was a left-pin swing.** `_choose_opponent_attack` returns
+a hitter, a contact point and a shot; it has never returned a lane, so all three
+readers of one took the `"Left Pin"` default. Currently inert -- the lane
+reaches `approach_start_position`, whose `_lane` parameter is unused, and
+measurably nothing moved when it was fixed -- but it was labelling events and
+accruing familiarity against a lane 47% of opponent hitters were not in.
+`CourtConstants.lane_at_x` now derives it from the contact point.
+
+**The symmetry gate rejects the promotion.** Opened across all three paths, the
+pooled roster-cancelling estimator moves from 0.558 to 0.671, against a 0.12
+bound. Counting attack errors as the other side's point it is 0.749: 247 kills
+and 90 opponent errors against 74 opponent kills and 39 home errors, over 600
+rallies played in both squad and both serving assignments.
+
+The promotion did not create that tilt. It removed what was hiding it. The
+legacy path ends a large share of attacks at the block, and a ball that never
+reaches the floor never asks which side's floor defence is modelled better. Once
+the geometric swing puts those balls down, every rally runs through the home
+side's claimant search, arrival margins, posture reads and support counts on one
+side of the net, and through `_choose_opponent_defender` and a flat dig contest
+on the other. That is the same defect shape as every asymmetry found in this
+engine: one side modelled fully, the other as a simplified parallel
+implementation.
+
+So production stays closed and development is open, which is where Gates 42, 48
+and 49 each sat before their own flip. The next gate is the opponent's floor
+defence, and the symmetry estimator is already the instrument for it: it should
+fall from 0.671 toward 0.5 as the two dig paths converge, and the production
+flip belongs at the end of that gate rather than this one.

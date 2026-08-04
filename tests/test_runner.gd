@@ -7766,11 +7766,47 @@ func _test_geometric_resolver_composes_one_swing() -> void:
 		"no hitter means no swing rather than an invented one",
 	)
 
-	## The flag that will eventually promote this is off, and stays off until
-	## every attack and serve path is migrated.
+	## Production is closed and development is open -- the same place Gates 42,
+	## 48 and 49 each sat before their own flip.
 	_check(
-		not RallyFeatureFlags.ENABLE_GEOMETRIC_ATTACK,
-		"the geometric attack rollout is disabled in production",
+		not GEOMETRIC_PROMOTION_SCRIPT.enabled(false)
+			and GEOMETRIC_PROMOTION_SCRIPT.enabled(true),
+		"the geometric attack promotes in development and not in production",
+	)
+
+	## The promotion is wired, not merely permitted.
+	##
+	## A constant that nothing reads is the failure mode this replaces: for the
+	## whole shadow phase the flag was checked in exactly one function that
+	## nothing called, so flipping it would have changed nothing while reading
+	## as a shipped feature. The evidence that it is wired has to be an outcome
+	## the legacy path cannot produce, and there is one -- the opponent could
+	## not miss a swing. There was no branch for it anywhere on that path, so
+	## every transition ball the opponent hit was either blocked or dug, against
+	## a home hitter erring at the sport's rate. If `opponent_attack_error` never
+	## appears, the geometric swing is not deciding opponent attacks.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var opponent_errors := 0
+	var home_errors := 0
+	## Both serving assignments, because the opponent only swings at a first
+	## ball when the home team served it. A sweep that never serves reaches the
+	## opponent attack path zero times and would pass or fail on nothing.
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(880000, 880120):
+			var rally: Resource = manager.resolve_active_rally(seed_value, true)
+			if rally == null:
+				continue
+			match str(rally.terminal_outcome):
+				"opponent_attack_error": opponent_errors += 1
+				"attack_error": home_errors += 1
+	manager.free()
+	_check(
+		opponent_errors > 0 and home_errors > 0,
+		"both sides can miss a swing (%d home, %d opponent in 240 rallies)" % [
+			home_errors, opponent_errors,
+		],
 	)
 
 

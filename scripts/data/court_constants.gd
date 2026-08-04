@@ -160,6 +160,31 @@ static func lane_target(lane_name: String) -> Vector2:
 	return Vector2(lane_x, target_y)
 
 
+## Which lane a contact at this x belongs to.
+##
+## The inverse of `lane_target`, and it exists because one side of the net was
+## reading a lane it never had. `_choose_opponent_attack` returns a hitter, a
+## contact point and a shot -- it has never returned a lane -- so every caller
+## asking it for one got the `"Left Pin"` default, and every opponent swing in
+## the game was resolved as a left-pin swing no matter where the hitter was
+## standing. Nothing noticed while the lane only labelled an event; it started
+## to matter the moment the lane began deciding the ball's natural course.
+static func lane_at_x(contact_x: float) -> String:
+	var nearest := "Front Quick"
+	var best := INF
+	for lane_name in LANES:
+		## The pipe is a back-row lane, not a place on the net. Choosing it from
+		## an x alone would put a front-row hitter on a pipe every time they
+		## contacted near the middle.
+		if lane_name == "Pipe":
+			continue
+		var distance := absf(float(LANE_X[lane_name]) - contact_x)
+		if distance < best:
+			best = distance
+			nearest = lane_name
+	return nearest
+
+
 static func is_normalized(point: Vector2) -> bool:
 	return point.x >= 0.0 and point.x <= 1.0 \
 		and point.y >= 0.0 and point.y <= 1.0

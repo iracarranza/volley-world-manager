@@ -275,7 +275,8 @@ static func outcome_calibration(
 		## scored against every attempt above, not against each other: the
 		## sport's kill and hitting-error rates are per attempt, and a
 		## terminal-only denominator makes each rate a function of the others.
-		if outcome in ["kill", "opponent_kill", "attack_error", "blocked", "counter_block"]:
+		if outcome in ["kill", "opponent_kill", "attack_error",
+			"opponent_attack_error", "blocked", "counter_block"]:
 			terminal_attacks += 1
 			match outcome:
 				"kill", "opponent_kill":
@@ -283,6 +284,13 @@ static func outcome_calibration(
 				"attack_error":
 					attack_errors += 1
 					home_attack_errors += 1
+				## Counted in the sport's hitting-error rate like any other, but
+				## deliberately not in the home tally: the whole reason that
+				## tally is split is that an engine which models one side fully
+				## and the other in parallel will silently attribute one side's
+				## misses to the other.
+				"opponent_attack_error":
+					attack_errors += 1
 				"blocked", "counter_block":
 					stuffs += 1
 		## Which side's attack won the point. Every asymmetry found in this
