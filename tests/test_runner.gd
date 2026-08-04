@@ -511,9 +511,10 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 					)
 			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
 					and str(event.metadata.get("side", "")) == "opponent":
+				## A defender's margin is a reach, in metres, and says so.
 				spatial_defense_observed = spatial_defense_observed or (
 					event.metadata.has("movement_start")
-					and event.metadata.has("arrival_margin")
+					and event.metadata.has("reach_margin_meters")
 				)
 			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK \
 					and str(event.metadata.get("side", "")) == "home":
