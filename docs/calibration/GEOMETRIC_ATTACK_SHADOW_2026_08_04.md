@@ -454,3 +454,45 @@ is identity -- `_attack_effectiveness` prices a decisive attack up by as much as
 15% against the dig it faces, and only the home team has principles to be
 decisive with. Neither is a parallel implementation any more, which is what this
 gate was for.
+
+### The gate did not close
+
+| | kill share | with errors counted |
+|---|---|---|
+| legacy attack | 0.574 | 0.437 |
+| geometric attack promoted | **0.716** | 0.716 |
+
+Against a 0.12 bound, over 960 rallies per condition on the roster-cancelling
+design. It moved *away* from 0.5, not toward it.
+
+That is not the defence work regressing. Most of the opponent's old dig rate came
+from transition digs that could not be late -- a flat zero arrival margin on a
+defender chosen without reference to where the ball went -- so removing the
+freebie made the number honest and made the real gap visible. Home digs 0.39,
+opponent 0.13, and with the parallel implementation gone that difference is now
+a calibration question about one model rather than an argument between two.
+
+Two changes were tried and backed out, both because measuring beat assuming.
+
+**A floor preset for the opponent.** They were positioned from
+`ROTATION_SLOT_POSITIONS`, whose own comment forbids it for live play, so giving
+them `apply_floor_preset("Perimeter")` looked obviously right. Then:
+`apply_floor_preset` is only ever called from the tactics screen, so a default
+career plan is on that same grid. The experiment measured 0.723 -- slightly
+*worse* -- and would have handed the opponent a floor system the player has to
+go and choose. Reverted. The grid defect is real and belongs to both sides.
+
+**The opponent's decisiveness.** Their swing read `home_principles.decisiveness`,
+so a decisive home identity made the opponent swing harder at gaps they had not
+chosen. Fixed to neutral. Numerically inert on this fixture -- the vertical
+slice is Balanced, multiplier 1.0 -- and correct regardless.
+
+The opponent also now reads its own plan on a dig, through
+`_defensive_responsibility_fit`, with the landing point mirrored into the frame
+`_opponent_attack_type` classifies in. Positioning a side by a plan while never
+letting them read it would have been the same defect one layer down.
+
+`ENABLE_GEOMETRIC_ATTACK` stays closed. The next gate is the dig contest itself
+-- one model, both sides, needing calibration rather than reconciliation -- and
+the metres-for-seconds unit defect in `_defense_execution` is the first thing it
+has to settle, because every dig rate in this table is read through it.

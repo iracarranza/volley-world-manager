@@ -1577,9 +1577,23 @@ func resolve(
 	var floor_defense_bonus := _opponent_floor_defense_adaptation_bonus(
 		opponent_team, assignment.lane
 	)
+	## The same plan read the home defender gets. Scouting and familiarity were
+	## the only things this side could bring to a dig, because responsibility
+	## fit and posture are read off a defensive plan and this side had none. It
+	## has one now, so it reads from it -- otherwise giving the opponent a plan
+	## would have positioned them by it without ever letting them know it.
+	## `_opponent_attack_type` classifies a landing point in home-court
+	## coordinates, so the home side's ball is mirrored into that frame rather
+	## than handed the hitter's shot name, which none of the classifier's
+	## branches would ever match.
+	var opponent_posture_read := _defensive_responsibility_fit(
+		_opponent_defensive_plan(opponent_team), opponent_defender.id,
+		attack_target,
+		_opponent_attack_type(Vector2(attack_target.x, 1.0 - attack_target.y)),
+	)
 	var defense_strength := _defense_execution(
 		opponent_defender, float(opponent_defense.arrival_margin),
-		read_modifier + floor_defense_bonus,
+		read_modifier + floor_defense_bonus + opponent_posture_read,
 		CoverageModel.reception_body_penalty(
 			opponent_defender, Dictionary(opponent_defense.get("arrival", {})),
 			attack_effectiveness,
@@ -2085,7 +2099,12 @@ func _resolve_opponent_transition(
 			float(opponent_approach.get("jump_multiplier", 1.0)),
 			_approach_execution_fit(opponent_hitter, opponent_approach)
 				if not opponent_approach.is_empty() else 0.5,
-			float(home_principles.decisiveness), 0.0,
+			## Their swing, not the home team's temperament. This read
+			## `home_principles.decisiveness`, so a decisive home identity made
+			## the *opponent* swing harder at gaps they had not chosen to take,
+			## and a controlled one made them cautious on the home coach's
+			## behalf. Neutral until the opponent has principles of their own.
+			0.5, 0.0,
 		),
 		"opponent",
 	)
@@ -3725,6 +3744,19 @@ func _opponent_defensive_plan(opponent_team: Resource) -> Resource:
 		return null
 	opponent_plan = DefensivePlanModel.new()
 	opponent_plan.ensure_defaults(lineup)
+	## Deliberately no floor preset on top.
+	##
+	## `ensure_defaults` seeds `defender_positions` from
+	## `CourtConstants.ROTATION_SLOT_POSITIONS`, whose own comment says it "is
+	## NOT a tactical formation and must not be used to position players during
+	## live play" -- it exists to check overlap legality at the moment of serve.
+	## That is a real defect, and it is the *home* side's defect too:
+	## `apply_floor_preset` is only ever called from the tactics screen, so a
+	## default career plan defends from the rotation grid exactly like this one
+	## does. Applying Perimeter here alone would hand the opponent a floor
+	## system the player has to go and choose, which is the same asymmetry as
+	## the one this gate exists to remove, pointed the other way. Both sides
+	## move together or neither does.
 	## Mirrored at the source, not at every reader. `ensure_defaults` lays the
 	## plan out in home coordinates because that is the only court it has ever
 	## described, and a zone centred on the home back row is not a place an
