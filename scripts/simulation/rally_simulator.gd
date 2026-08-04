@@ -2761,6 +2761,28 @@ func _resolve_home_continuation(
 		hitter, hitter_start, set_target, "transition"
 	)
 	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
+	## The ball is contacted where the hitter can be, not where the set wanted
+	## them.
+	##
+	## `evaluate_takeoff` already knows this: on seed 6144 it reports a hitter
+	## covering 0.19 m of a 2.07 m runway inside a 0.228 s set flight -- 4.5% --
+	## and the rally emitted the ATTACK event at the far end of that runway
+	## anyway. Nothing was wrong with the movement model; the resolver asked it a
+	## question, was told the hitter could not get there, and placed the contact
+	## there regardless. Playback then had to cover two metres in a quarter
+	## second, which is the 9.1 m/s teleport, and capping the animation would
+	## only have left the hitter short while the ball met empty air.
+	##
+	## So the contact slides back down the hitter's own path to the point they
+	## actually reach. A ball met at the wrong point is a worse ball -- that is
+	## already priced, through the negative `hitter_arrival_margin` this same
+	## shortfall produces -- and the swing still happens, from where the swing
+	## really is.
+	if hitter_move_time > continuation_flight_time and hitter_move_time > 0.001:
+		var reached_fraction := clampf(
+			continuation_flight_time / hitter_move_time, 0.0, 1.0
+		)
+		set_target = hitter_start.lerp(set_target, reached_fraction)
 	var set_event_for_staging := result.events[-1] as RallyEvent
 	if set_event_for_staging != null:
 		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
