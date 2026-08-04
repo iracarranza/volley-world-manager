@@ -2,6 +2,7 @@ class_name OpponentTeam
 extends Resource
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 
 @export var team_name: String = "Port Azure VC"
 @export var players: Array[Resource] = []
@@ -9,6 +10,22 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 @export_range(1, 6) var current_rotation: int = 1
 @export var rotations: Dictionary = {}
 @export_range(0.0, 1.0) var scouting_confidence: float = 0.42
+## What this side believes about volleyball, from the same table the home team
+## picks from.
+##
+## The home side has had a `TeamPrinciples` -- seven axes -- since identities
+## existed, and this side had a three-key `tendencies` dictionary and a literal
+## 0.5 wherever the engine wanted a principle. That is not a quieter opponent,
+## it is a differently-shaped one, and it is why every symmetry instrument in
+## this project has had to pin individual scalars by hand to stop reading a
+## coaching choice as an engine fault. A gate can only control the confounds
+## somebody thought of; giving both sides the same type removes the whole class.
+##
+## Deliberately the existing presets and nothing new. Regional identities are
+## worth having and belong on top of a base that is already known to be even.
+@export_enum(
+	"Balanced", "Technical", "Physical", "Defensive", "Fast Tempo", "Development"
+) var identity: String = "Balanced"
 @export var tendencies: Dictionary = {
 	"preferred_lane": "Left Pin",
 	"tempo": 2,
@@ -74,6 +91,11 @@ func rotate() -> void:
 
 func setter() -> Resource:
 	return player_by_id(setter_id)
+
+
+## This side's principles, resolved the same way the home team's are.
+func principles() -> Resource:
+	return TeamPrinciplesModel.for_identity(identity)
 
 
 func best_server() -> Resource:

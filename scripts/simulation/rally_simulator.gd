@@ -372,6 +372,7 @@ var live_velocities: Dictionary = {}
 var opponent_live_velocities: Dictionary = {}
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
+var opponent_principles: Resource
 var identity_effects: Dictionary = {}
 var rally_seed: int = 0
 
@@ -394,6 +395,15 @@ func resolve(
 	geometric_development_open = development_continuous_reception
 	opponent_plan = null
 	home_principles = team_principles if team_principles != null \
+		else TeamPrinciplesModel.for_identity("Balanced")
+	## The other bench has opinions too. Every read of a principle on this side
+	## returned a hardcoded 0.5, so a home coach choosing Physical (decisiveness
+	## 0.86) or Defensive (0.18) was choosing an identity the opponent
+	## structurally could not have -- invisible while both sat at Balanced's
+	## 0.50, and a permanent one-sided advantage the moment anybody picked
+	## anything else.
+	opponent_principles = opponent_team.principles() \
+		if opponent_team != null and opponent_team.has_method("principles") \
 		else TeamPrinciplesModel.for_identity("Balanced")
 	identity_effects = {
 		"serve_risk": {},
@@ -2435,12 +2445,14 @@ func _resolve_opponent_transition(
 			float(opponent_approach.get("jump_multiplier", 1.0)),
 			_approach_execution_fit(opponent_hitter, opponent_approach)
 				if not opponent_approach.is_empty() else 0.5,
-			## Their swing, not the home team's temperament. This read
-			## `home_principles.decisiveness`, so a decisive home identity made
-			## the *opponent* swing harder at gaps they had not chosen to take,
-			## and a controlled one made them cautious on the home coach's
-			## behalf. Neutral until the opponent has principles of their own.
-			0.5, 0.0,
+			## Their swing, their temperament. This read
+			## `home_principles.decisiveness` once, so a decisive home identity
+			## made the *opponent* swing harder at gaps they had not chosen to
+			## take; the fix for that was a literal 0.5, which is the same defect
+			## wearing a neutral face -- a side that cannot be aggressive or
+			## controlled no matter what its bench believes. It has principles
+			## now, so it reads its own.
+			float(opponent_principles.decisiveness), 0.0,
 			str(defensive_plan.block_intent) if defensive_plan != null \
 				else "Balanced",
 		),
@@ -3429,6 +3441,12 @@ func _form_opponent_block(
 		+ maxf(preset_window_seconds, 0.0) * preset_share \
 		+ (1.0 - set_quality) * 0.10
 	close_time += lerpf(-0.09, 0.09, read_quality)
+	## The same commitment the home block pays for. `_form_home_block` shifts
+	## its closing window by `(block_commitment - 0.5) * 0.18`, so a Physical
+	## home side (0.82) reaches its wall while a Defensive one (0.26) holds back
+	## and plays the floor. This side had no such term at all, which made the
+	## block philosophy a home-only lever on an axis both benches should own.
+	close_time += (float(opponent_principles.block_commitment) - 0.5) * 0.18
 	var primary_close := _blocker_close_fraction(
 		primary, lineup, attack_x, close_time
 	)
