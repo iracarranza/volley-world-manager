@@ -1842,6 +1842,22 @@ func _resolve_home_serve(
 		var opponent_setter_id := opponent_lineup.active_setter_id()
 		if opponent_setter_id >= 0:
 			opponent_live_positions[opponent_setter_id] = opponent_setter_release
+			## And playback has to be told to *walk* them there.
+			##
+			## Writing `opponent_live_positions` alone moves the setter for the
+			## model and teleports them for the viewer: the next frame simply
+			## draws them somewhere else. The comment above this block already
+			## said the home setter is walked across through
+			## `staged_next_position` on the reception event, and then this did
+			## only half of that -- the half nobody can see.
+			var opponent_reception_event := result.events[-1] as RallyEvent
+			if opponent_reception_event != null \
+					and opponent_reception_event.event_type \
+						== RallyEventModel.EventType.RECEPTION:
+				opponent_reception_event.metadata["staged_next_actor_id"] = \
+					opponent_setter_id
+				opponent_reception_event.metadata["staged_next_position"] = \
+					opponent_setter_release
 	## And the pass has to find them, rather than arrive on them.
 	##
 	## Staging the setter fixed where they start; it left the ball landing on
@@ -2134,14 +2150,34 @@ func _resolve_opponent_transition(
 	var home_wall_positions := _block_wall_positions(opponent_contact.x, false)
 	var staged_home_primary := home_block_formation.get("primary") as VolleyballPlayer
 	var staged_home_assist := home_block_formation.get("assist") as VolleyballPlayer
+	## Staged on the opponent's set as well as in `live_positions`, so the wall
+	## forms during the set's flight instead of appearing at the net. Same
+	## omission as the setter above, made in the same session: the model was
+	## given the position and the viewer was given a jump.
+	var home_block_stage := {}
 	if staged_home_primary != null:
 		live_positions[staged_home_primary.id] = Vector2(
+			home_wall_positions.primary_position
+		)
+		home_block_stage[staged_home_primary.id] = Vector2(
 			home_wall_positions.primary_position
 		)
 	if staged_home_assist != null:
 		live_positions[staged_home_assist.id] = Vector2(
 			home_wall_positions.assist_position
 		)
+		home_block_stage[staged_home_assist.id] = Vector2(
+			home_wall_positions.assist_position
+		)
+	if not home_block_stage.is_empty():
+		var set_event_for_wall := result.events[-1] as RallyEvent
+		if set_event_for_wall != null:
+			var existing: Dictionary = set_event_for_wall.metadata.get(
+				"home_phase_targets", {}
+			)
+			for raw_id in home_block_stage:
+				existing[raw_id] = home_block_stage[raw_id]
+			set_event_for_wall.metadata["home_phase_targets"] = existing
 	var home_block_pressure := float(
 		home_block_formation.get("primary_close", 0.0)
 	) * BLOCK_PRIMARY_PRESSURE + float(
