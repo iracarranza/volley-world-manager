@@ -7414,17 +7414,36 @@ func _pooled_home_attack_share(pairings: int, rallies_per_condition: int) -> flo
 	var home_wins := 0
 	var away_wins := 0
 	for pairing_index in range(pairings):
-		var seed_a := 900006 + pairing_index * 1000
-		var seed_b := 905006 + pairing_index * 1000
-		for swap in [false, true]:
+		## One roster, both sides of the net.
+		##
+		## This used to draw two rosters and play each of them on each side, so
+		## that whichever was stronger won once as home and once as away and its
+		## advantage netted out. That cancels roster strength *in expectation*,
+		## which leaves the residual variance of however the two draws happened
+		## to differ sitting on top of the quantity being measured -- and that
+		## quantity is a few points wide while a single pairing's block rate
+		## spans 0.000 to 0.907.
+		##
+		## Giving both sides the same roster removes it by construction instead.
+		## Every deviation from 0.500 is the engine, because there is nothing
+		## else left for it to be. It also makes the swap redundant -- swapping
+		## identical rosters is the same experiment -- which halves the run count
+		## for a tighter answer.
+		##
+		## What it deliberately does not equalise is the structure around the
+		## players: the home side carries a RotationLineup and a DefensivePlan
+		## and the opponent an OpponentTeam. That difference is exactly the
+		## engine asymmetry this gate exists to find, so it stays in.
+		var roster_seed := 900006 + pairing_index * 1000
+		for swap in [false]:
 			for serving_home in [true, false]:
 				var manager := GAME_MANAGER_SCRIPT.new()
 				manager.seed_vertical_slice_data()
 				EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
-					manager.players, seed_b if swap else seed_a
+					manager.players, roster_seed
 				)
 				EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
-					manager.opponent_team.players, seed_a if swap else seed_b
+					manager.opponent_team.players, roster_seed
 				)
 				manager.match_state.serving_home = serving_home
 				for seed_value in range(5000, 5000 + rallies_per_condition):

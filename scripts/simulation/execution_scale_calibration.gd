@@ -78,13 +78,23 @@ const CLOSE_FRACTIONS: Array[float] = [1.0, 0.6, 0.2]
 ## rotations, plays, defensive assignments -- are left exactly as they were.
 ## Only the ability attributes are replaced, drawn from `PlayerGenerator` and
 ## matched by position role so a middle still gets a middle's profile.
+## The region is a parameter now.
+##
+## It was pinned to "Pāwa Hitō", so every calibration sweep in the engine drew
+## its rosters from one tradition -- and a tradition is not cosmetic here:
+## `REGION_SPECIALTY` grants a flat +8 on each region's named attributes, so a
+## Bloc du Larg roster genuinely blocks better and a Landavol roster carries no
+## bonus at all by design. Sweeping one region measures how much a *seed* moves
+## an outcome; sweeping regions measures how much a known attribute delta moves
+## it, which is the question worth asking.
 static func apply_generated_attributes(
 	players: Array,
 	base_seed: int,
+	region_name: String = "Pāwa Hitō",
 ) -> void:
 	var donors_by_role := {}
 	var donors: Array[VolleyballPlayer] = PlayerGeneratorModel.generate_roster(
-		"Pāwa Hitō", "Club", base_seed
+		region_name, "Club", base_seed
 	)
 	for donor in donors:
 		var role := str(donor.position_role)
