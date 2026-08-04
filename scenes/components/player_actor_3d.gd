@@ -274,10 +274,6 @@ func set_pose(
 			## well their body could face it. Playback reads it; it does not
 			## invent it.
 			_apply_dig_posture()
-			left_leg.rotation_degrees.x = -22.0
-			right_leg.rotation_degrees.x = -22.0
-			left_arm.rotation_degrees = Vector3(-70.0, 0.0, -18.0)
-			right_arm.rotation_degrees = Vector3(-70.0, 0.0, 18.0)
 		RallyEventModel.EventType.SET:
 			left_arm.rotation_degrees = Vector3(-160.0, 0.0, -25.0)
 			right_arm.rotation_degrees = Vector3(-160.0, 0.0, 25.0)
