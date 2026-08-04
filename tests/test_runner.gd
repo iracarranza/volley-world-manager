@@ -217,6 +217,7 @@ func _initialize() -> void:
 	_test_a_margin_carries_its_unit_in_its_name()
 	_test_a_serve_that_misses_is_drawn_missing()
 	_test_a_block_can_be_told_what_it_is_for()
+	_test_scouting_crosses_the_net_in_both_directions()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -10842,4 +10843,73 @@ func _test_a_block_can_be_told_what_it_is_for() -> void:
 		not (int(seal.stuff) >= int(funnel.stuff)
 			and int(seal.partial) >= int(funnel.partial)),
 		"neither block intent is strictly better than the other",
+	)
+
+
+## Scouting runs both ways.
+##
+## `observe_rally` is called once per rally, for the opponent only, and
+## `_opponent_block_adaptation_bonus` turns what it accumulates into a better
+## wall when the opponent anticipated the lane and tempo it is facing. The home
+## block had nothing: no observation of what the opponent keeps doing, and no
+## read of it. `Familiarity.read_modifier` and `record_exposure` were likewise
+## called for `opponent_defender` alone. So the AI scouted the player at both
+## team and player level and the player scouted the AI at neither -- the ninth
+## instance of one side modelled and the other implemented in parallel, and the
+## first one found that favours the opponent.
+##
+## The home block now reads per blocker through the same familiarity model the
+## opponent's floor defence uses. This checks that the read exists, that it
+## grows with exposure rather than being a constant, and that it stays a read
+## rather than becoming a bonus every wall collects.
+func _test_scouting_crosses_the_net_in_both_directions() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	manager.match_state.serving_home = true
+	var early_total := 0.0
+	var early_count := 0
+	var late_total := 0.0
+	var late_count := 0
+	var any_positive := false
+	var rally_index := 0
+	for seed_value in range(5000, 5240):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		rally_index += 1
+		for raw_event in result.events:
+			var event := raw_event as RallyEvent
+			if event == null \
+					or event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+					or str(event.metadata.get("side", "")) != "home":
+				continue
+			if not event.metadata.has("adaptation_bonus"):
+				continue
+			var bonus := float(event.metadata["adaptation_bonus"])
+			any_positive = any_positive or bonus > 0.0
+			if rally_index <= 60:
+				early_total += bonus
+				early_count += 1
+			elif rally_index > 180:
+				late_total += bonus
+				late_count += 1
+	manager.free()
+	_check(
+		early_count > 5 and late_count > 5,
+		"the scouting test observes home blocks early and late (%d, %d)" % [
+			early_count, late_count,
+		],
+	)
+	_check(
+		any_positive,
+		"the home block can read a pattern it has seen before",
+	)
+	## A read that does not grow with exposure is a constant wearing a read's
+	## name -- the same defect as the opponent's tempo call.
+	var early_mean := early_total / maxf(float(early_count), 1.0)
+	var late_mean := late_total / maxf(float(late_count), 1.0)
+	_check(
+		late_mean > early_mean,
+		"the home block reads the opponent better after facing them (%.4f -> %.4f)"
+			% [early_mean, late_mean],
 	)

@@ -2078,6 +2078,40 @@ func _resolve_opponent_transition(
 		## gives the opponent block; the home block was reading this pass too.
 		DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS,
 	)
+	## The home block reads the opponent, the way the opponent block reads them.
+	##
+	## `_opponent_block_adaptation_bonus` gives the opponent's wall a quality
+	## bonus when it anticipated the lane and tempo it is facing, drawn from
+	## `observe_rally` accumulating what the home team keeps doing. The home wall
+	## had no equivalent -- `observe_rally` is called once per rally for the
+	## opponent alone and nothing records what the *opponent* keeps doing -- so
+	## scouting in this engine ran one way across the net.
+	##
+	## It is read per blocker rather than per team, through the familiarity model
+	## the opponent's floor defence already uses. That is a deliberate difference
+	## from the opponent's team-level `block_bonus()`: a blocker who has faced
+	## this hitter in this lane has learned something a team average cannot
+	## express, and it needs no new store because familiarity already persists on
+	## the player. The team-level half -- a home equivalent of `observe_rally`
+	## and `scouting_confidence` -- does need one, and is not built here.
+	var home_block_read_tags: Array[String] = [
+		"attack:%s" % str(attack_choice.get("attack_type", "Attack"))
+			.to_lower().replace(" ", "_"),
+		"lane:%s" % opponent_lane.to_lower().replace(" ", "_"),
+	]
+	var home_block_adaptation := 0.0
+	var reading_blocker := home_block_formation.get("primary") as VolleyballPlayer
+	if reading_blocker != null:
+		home_block_adaptation = maxf(
+			Familiarity.read_modifier(reading_blocker, home_block_read_tags), 0.0
+		)
+		Familiarity.record_exposure(reading_blocker, home_block_read_tags)
+	if home_block_adaptation > 0.0:
+		home_block_formation["quality"] = clampf(
+			float(home_block_formation.get("quality", 0.0)) + home_block_adaptation,
+			0.05, 0.98,
+		)
+	home_block_formation["adaptation_bonus"] = home_block_adaptation
 	var home_block_pressure := float(
 		home_block_formation.get("primary_close", 0.0)
 	) * BLOCK_PRIMARY_PRESSURE + float(
@@ -2382,6 +2416,7 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
 		], {"side": "home", "outcome": block_outcome,
+			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"primary_close": block_result.primary_close,
 			"assist_close": block_result.assist_close,
