@@ -765,14 +765,17 @@ func resolve(
 		shadow_summary["attack_rollout"] = attack_rollout_evidence
 		shadow_reception_trace.summary = shadow_summary
 	var live_attack_integration: Dictionary = {}
+	var home_second_contact := _home_second_contact_candidates(players, lineup)
 	setter = _second_contact_setter(
-		players, lineup, defensive_plan, receiver.id
+		home_second_contact.candidates, defensive_plan,
+		lineup.active_setter_id(), receiver.id,
 	)
 	var set_contact: Vector2 = reception_pass.destination
 	var second_contact_window := float(pass_trajectory.get("duration", 0.68))
 	var setter_choice := _spatial_setter_choice(
-		players, lineup, defensive_plan, receiver.id, setter,
-		set_contact, second_contact_window
+		home_second_contact.candidates, home_second_contact.starts,
+		defensive_plan, lineup.active_setter_id(), receiver.id, setter,
+		set_contact, second_contact_window,
 	)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
@@ -1677,7 +1680,8 @@ func resolve(
 		result.key_factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
 			result, players, lineup, hitter, opponent_pass_target,
-			opponent_team, defensive_plan, 1, defense_strength,
+			opponent_team, defensive_plan, 1, defense_strength, false,
+			opponent_defender.id,
 		)
 	result.key_factors.append(ExplanationText.factor("attack_control"))
 	var kill_key := "kill_default" if active_play == null else (
@@ -1857,6 +1861,13 @@ func _resolve_home_serve(
 	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
 	if opponent_lineup != null:
 		var opponent_setter_id := opponent_lineup.active_setter_id()
+		## Not when the setter is the one receiving. This walked them to their
+		## release seat during the flight of a serve they were about to pass,
+		## which was harmless only while they also set every ball regardless.
+		## Now that an emergency setter can take over, staging the receiver as
+		## setter would move a player who is neither.
+		if opponent_setter_id == receiver.id:
+			opponent_setter_id = -1
 		if opponent_setter_id >= 0:
 			opponent_live_positions[opponent_setter_id] = opponent_setter_release
 			## And playback has to be told to *walk* them there.
@@ -1891,7 +1902,7 @@ func _resolve_home_serve(
 	)
 	return _resolve_opponent_transition(
 		result, players, lineup, server, Vector2(opponent_pass.destination),
-		opponent_team, defensive_plan, 1, reception_quality, true,
+		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
 	)
 
 
@@ -1915,13 +1926,41 @@ func _resolve_opponent_transition(
 	## in the game was built off a scramble set, including the one off their own
 	## serve receive, while the home side ran the full capability model.
 	first_ball: bool = false,
+	## Who played the ball into this setter. The opponent had no use for it
+	## because it always set with `opponent_team.setter()` -- so on the rallies
+	## where that setter made the dig themselves, they rose from the floor and
+	## set their own ball. The home side has covered for its setter since the
+	## beginning through `_second_contact_setter`; this side had no concept of
+	## an emergency setter at all.
+	first_contact_player_id: int = -1,
 ) -> Resource:
-	var opponent_setter := opponent_team.setter() as VolleyballPlayer
 	var transition_penalty := float(exchange_number - 1) * 0.035
 	## The pass destination is the setter's physical contact point. Keeping a
 	## separate display-only setter coordinate made the ball originate away from
 	## the marker and introduced a visible snap at every opponent set.
 	var opponent_setter_position := dig_position
+	## The same two-step choice the home side makes: the plan's nominated cover
+	## when the designated setter is unavailable, then whoever can actually get
+	## to the ball. Both selectors are now one implementation taking a candidate
+	## list, so neither side can drift from the other again.
+	var opponent_second_contact := _opponent_second_contact_candidates(opponent_team)
+	var opponent_plan_for_setter := _opponent_defensive_plan(opponent_team)
+	var opponent_setter := _second_contact_setter(
+		opponent_second_contact.candidates, opponent_plan_for_setter,
+		int(opponent_team.setter_id), first_contact_player_id,
+	)
+	if opponent_setter == null:
+		opponent_setter = opponent_team.setter() as VolleyballPlayer
+	var opponent_setter_choice := _spatial_setter_choice(
+		opponent_second_contact.candidates, opponent_second_contact.starts,
+		opponent_plan_for_setter, int(opponent_team.setter_id),
+		first_contact_player_id, opponent_setter,
+		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
+	)
+	if opponent_setter_choice.player != null:
+		opponent_setter = opponent_setter_choice.player as VolleyballPlayer
+	if opponent_setter == null:
+		opponent_setter = opponent_team.setter() as VolleyballPlayer
 	var setter_start: Vector2 = opponent_live_positions.get(
 		opponent_setter.id, opponent_team.court_position(opponent_setter.id, "transition")
 	)
@@ -2687,16 +2726,19 @@ func _resolve_home_continuation(
 	## measurable effect on who won it.
 	incoming_quality: float = 1.0,
 ) -> Resource:
+	var cont_second_contact := _home_second_contact_candidates(players, lineup)
 	var setter := _second_contact_setter(
-		players, lineup, defensive_plan, defender.id
+		cont_second_contact.candidates, defensive_plan,
+		lineup.active_setter_id(), defender.id,
 	)
 	# Preserve contact continuity: the transition set begins where the dig
 	# actually finishes instead of teleporting the ball to center court.
 	var set_contact := dig_position
 	var second_contact_window := 0.68
 	var setter_choice := _spatial_setter_choice(
-		players, lineup, defensive_plan, defender.id, setter,
-		set_contact, second_contact_window
+		cont_second_contact.candidates, cont_second_contact.starts,
+		defensive_plan, lineup.active_setter_id(), defender.id, setter,
+		set_contact, second_contact_window,
 	)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
@@ -3220,6 +3262,7 @@ func _resolve_home_continuation(
 	return _resolve_opponent_transition(
 		result, players, lineup, hitter, attack_target,
 		opponent_team, defensive_plan, exchange_number + 1, defense_quality,
+		false, opponent_defender.id,
 	)
 
 
@@ -4679,10 +4722,25 @@ func _reception_pass_result(
 	}
 
 
+## Who is physically taking this second contact, and from where.
+##
+## The candidate list, their starting positions and the designated setter's id
+## all arrive as arguments rather than being read off `lineup` and
+## `live_positions` directly, because both sides of the net need this and they
+## keep their players in different places. That was the whole defect: the home
+## side ran this and `_second_contact_setter` below, and the opponent ran
+## `opponent_team.setter()` -- one line, always the same player, including on
+## the ball that player had just dug themselves.
+##
+## On identical rosters that showed up as a `capability` term of 0.625 for the
+## home transition set against 0.878 for the opponent's, which is only possible
+## if the two sides are choosing different people to set. One of them was not
+## choosing at all.
 func _spatial_setter_choice(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
+	candidates: Array[VolleyballPlayer],
+	starts: Dictionary,
 	defensive_plan: Resource,
+	designated_setter_id: int,
 	first_contact_player_id: int,
 	preferred_setter: VolleyballPlayer,
 	target: Vector2,
@@ -4690,13 +4748,10 @@ func _spatial_setter_choice(
 ) -> Dictionary:
 	var best := {"player": preferred_setter, "start": target, "travel_time": 4.0}
 	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+	for candidate in candidates:
 		if candidate == null or candidate.id == first_contact_player_id:
 			continue
-		var start: Vector2 = live_positions.get(
-			candidate.id, CourtConstants.slot_position(slot_number)
-		)
+		var start: Vector2 = starts.get(candidate.id, target)
 		var travel_time := _movement_time(candidate, start, target, "transition")
 		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
 			if defensive_plan != null else null
@@ -4708,7 +4763,7 @@ func _spatial_setter_choice(
 			"Secondary emergency setter": duty_bonus = 0.18
 			"Stay available to attack": duty_bonus = -0.16
 			"No second-contact duty": duty_bonus = -0.24
-		if candidate.id == lineup.active_setter_id():
+		if candidate.id == designated_setter_id:
 			duty_bonus += 0.46
 		elif candidate == preferred_setter:
 			duty_bonus += 0.20
@@ -4722,19 +4777,20 @@ func _spatial_setter_choice(
 	return best
 
 
+## The designated setter, unless they took the first contact -- then whoever the
+## plan nominated to cover for them.
 func _second_contact_setter(
-	players: Array[VolleyballPlayer],
-	lineup: RotationLineup,
+	candidates: Array[VolleyballPlayer],
 	defensive_plan: Resource,
+	designated_setter_id: int,
 	first_contact_player_id: int,
 ) -> VolleyballPlayer:
-	var regular_setter := _player_by_id(players, lineup.active_setter_id())
+	var regular_setter := _player_by_id(candidates, designated_setter_id)
 	if regular_setter != null and regular_setter.id != first_contact_player_id:
 		return regular_setter
 	var best: VolleyballPlayer
 	var best_score := -1000.0
-	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+	for candidate in candidates:
 		if candidate == null or candidate.id == first_contact_player_id:
 			continue
 		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
@@ -4759,6 +4815,43 @@ func _second_contact_setter(
 			best = candidate
 			best_score = score
 	return best
+
+
+## The six players on court and where each of them currently is, in the shape
+## the two selectors above take. One per side, because that is the only thing
+## about second-contact selection that differs between them.
+func _home_second_contact_candidates(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+) -> Dictionary:
+	var candidates: Array[VolleyballPlayer] = []
+	var starts := {}
+	for slot_number in range(1, 7):
+		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if candidate == null:
+			continue
+		candidates.append(candidate)
+		starts[candidate.id] = live_positions.get(
+			candidate.id, CourtConstants.slot_position(slot_number)
+		)
+	return {"candidates": candidates, "starts": starts}
+
+
+func _opponent_second_contact_candidates(opponent_team: Resource) -> Dictionary:
+	var candidates: Array[VolleyballPlayer] = []
+	var starts := {}
+	if opponent_team == null:
+		return {"candidates": candidates, "starts": starts}
+	for raw_candidate in opponent_team.on_court_players():
+		var candidate: VolleyballPlayer = raw_candidate as VolleyballPlayer
+		if candidate == null:
+			continue
+		candidates.append(candidate)
+		starts[candidate.id] = opponent_live_positions.get(
+			candidate.id,
+			opponent_team.court_position(candidate.id, "transition"),
+		)
+	return {"candidates": candidates, "starts": starts}
 
 
 func _home_block_deflection_target(
