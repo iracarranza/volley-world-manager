@@ -295,6 +295,11 @@ const DIG_POSTURE_WEIGHT: float = 0.55
 ## speed when a defender has to move to it.
 const DIG_REACH_MARGIN_METERS: float = 0.45
 
+## Where a pass stops supporting a quicker call and starts forcing a slower one.
+## Asserted rather than swept -- see `_opponent_tempo_call`.
+const OPPONENT_QUICK_CALL_PASS: float = 0.68
+const OPPONENT_SLOW_CALL_PASS: float = 0.38
+
 ## How much the attacker is favoured when swing and dig are equally good. A
 ## clean swing beats a set defence more often than not, so an even contest is
 ## not a coin flip.
@@ -1896,18 +1901,10 @@ func _resolve_opponent_transition(
 	## The opponent's own capability read, run on a serve reception exactly as
 	## the home setter's is. On a dug ball there is no called play to overreach
 	## against, so the penalty is zero and the pass stands as it arrived.
-	## Still a constant, and still wrong for it: this side calls tempo 2 on every
-	## ball of every match, which is why `SetterCapabilityModel`'s downgrade
-	## branch never fires here -- a tempo of 2 sits inside any ordinary setter's
-	## range, so the model is asked a question it cannot answer interestingly.
-	##
-	## A hand-tuned stand-in for a playbook was tried and reverted: varying the
-	## call on pass quality cost 0.007 of set quality and moved symmetry by
-	## nothing (0.488 either way), which is two invented constants buying a
-	## measurably worse number. The real fix is an opponent playbook that varies
-	## the call the way the home side's does, not a curve fitted to make one
-	## look varied.
-	var opponent_tempo_call := int(opponent_team.tendencies.get("tempo", 2))
+	var opponent_tempo_call := _opponent_tempo_call(
+		opponent_setter, int(opponent_team.tendencies.get("tempo", 2)),
+		incoming_quality,
+	)
 	var opponent_capability := {}
 	var opponent_pass_quality := incoming_quality
 	var opponent_capability_penalty := 0.0
@@ -3897,6 +3894,51 @@ func _floor_phase_positions(
 				else clampf(target.y, 0.56, 0.96),
 		)
 	return positions
+
+
+## What tempo the opponent calls on this ball.
+##
+## It was `tendencies.get("tempo", 2)` -- the same number on every ball of every
+## rally of every match. Structurally that already mirrored the home side, which
+## also calls before the pass and lets `SetterCapabilityModel` resolve down; what
+## it did not mirror is that the home call comes from a playbook and ranges 0 to
+## 3 while this one never varied. A side that always runs the same play cannot be
+## caught running the wrong one, which is why the capability model's downgrade
+## branch never once fired here.
+##
+## The thresholds below are asserted, not derived. There is no home-side
+## equivalent to mirror, because the home tempo comes from a playbook the
+## opponent does not have, so this is calibration by assertion until the roster
+## influence sweep prices it properly. It was measured before being kept: the
+## promoted symmetry estimator moves from 0.617 to 0.594 -- from three
+## thousandths inside the bound to twenty-six -- against 0.007 of opponent set
+## quality. The likely mechanism is that a varying tempo sometimes catches the
+## home block closing for the wrong ball, since set flight time is what
+## `_contest_block` gets its close window from; that is plausible and unverified,
+## and worth confirming before these numbers are trusted further.
+func _opponent_tempo_call(
+	setter: VolleyballPlayer,
+	tendency_tempo: int,
+	pass_quality: float,
+) -> int:
+	var called := clampi(
+		tendency_tempo,
+		SetterCapabilityModel.QUICK_TEMPO, SetterCapabilityModel.SLOWEST_TEMPO,
+	)
+	## Lower is quicker: tempo 0 is the first-tempo ball, 3 the high one.
+	if pass_quality >= OPPONENT_QUICK_CALL_PASS:
+		called -= 1
+	elif pass_quality < OPPONENT_SLOW_CALL_PASS:
+		called += 1
+	## A setter who reads the game runs closer to the edge of what the pass
+	## allows; one who does not plays it safe.
+	if _rating(setter, "decision_making") >= 0.72 \
+			and pass_quality >= OPPONENT_SLOW_CALL_PASS:
+		called -= 1
+	return clampi(
+		called,
+		SetterCapabilityModel.QUICK_TEMPO, SetterCapabilityModel.SLOWEST_TEMPO,
+	)
 
 
 ## The opponent's defensive plan, built once per rally from their own lineup.
