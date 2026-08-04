@@ -1834,6 +1834,12 @@ func _resolve_home_serve(
 		_serve_launch_angle_degrees(server, serve_quality),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
+	## Named so the reception can carry it as its incoming ball, exactly as the
+	## opponent-serve path already does.
+	var serve_trajectory := _ball_trajectory(
+		"serve", CourtConstants.serve_origin(0.82, true), opponent_landing,
+		serve_time, float(serve_arc.apex_height_meters),
+	)
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
 		CourtConstants.serve_origin(0.82, true), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
@@ -1842,14 +1848,21 @@ func _resolve_home_serve(
 		], {"side": "home", "target": target_name, "flight_time": serve_time,
 			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style,
-			"outgoing_trajectory": _ball_trajectory(
-				"serve", CourtConstants.serve_origin(0.82, true), opponent_landing, serve_time,
-				float(serve_arc.apex_height_meters),
-			)})
+			"event_time": 0.0, "contact_time": serve_time,
+			"outgoing_trajectory": serve_trajectory})
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
 			"server": server.display_name,
 		})
+	## The ball is now in the air, and the clock has to say so.
+	##
+	## The opponent-serve path has always done this. This one never did, so
+	## `rally_clock` stayed at zero through the serve, the reception and into
+	## the transition -- every contact on a home-served rally derived its moment
+	## from a clock that had not started. It is the reason the timestamp gate saw
+	## a quarter of all inter-event gaps at zero and still reported the timeline
+	## sound: stamps that are all equal are never out of order.
+	rally_clock = serve_time
 	var opponent_coverage := _opponent_reception_coverage(opponent_team)
 	var opponent_claim: Dictionary = CoverageModel.choose_claimant(
 		opponent_coverage.players, opponent_coverage.zones,
@@ -1899,18 +1912,24 @@ func _resolve_home_serve(
 		receiver, receiver_start, opponent_landing, serve_time, "lateral"
 	)
 	opponent_live_positions[receiver.id] = opponent_receiver_reach
-	## The home passer already delivered to a computed point (see
-	## `_reception_pass_result`); the opponent's went to their setter's release
-	## position exactly, every time, however badly the ball was passed. Same
-	## promotion, lighter model -- the opponent side is deliberately cheaper, but
-	## "cheaper" should not mean "perfect".
-	var opponent_pass_target := _delivered_point(
-		_opponent_setter_release_target(opponent_team), reception_quality,
-		PASS_DELIVERY_STDEV_WORST_M, PASS_DELIVERY_STDEV_BEST_M,
-		OPPONENT_PASS_DELIVERY_MIN_Y, OPPONENT_PASS_DELIVERY_MAX_Y,
+	## Where the setter will stand, resolved before the pass rather than after it
+	## so the pass can be thrown at them.
+	var opponent_setter_release := _opponent_setter_release_target(opponent_team)
+	## One pass, computed once.
+	##
+	## This event used to end at a `_delivered_point` scatter while the rally
+	## continued from a *separate* `_reception_pass_result` scatter computed
+	## further down -- two independent draws, so the pass that was drawn and the
+	## pass that was played landed in different places. The home side has always
+	## used one result for both.
+	var opponent_pass := _reception_pass_result(
+		receiver, receiver_start, opponent_landing, opponent_setter_release,
+		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
+		reception_quality, 0.02, 0.49,
 	)
+	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
-		opponent_landing, opponent_pass_target,
+		opponent_landing, opponent_pass_destination,
 		reception_success,
 		reception_quality, "%s receives" % receiver.display_name,
 		"Opponent reception quality: %d%%. %s%s" % [
@@ -1923,15 +1942,27 @@ func _resolve_home_serve(
 			"serve_risk_pressure": serve_risk_pressure,
 			"movement_start": receiver_start,
 			"movement_target": opponent_receiver_reach,
-			"movement_duration": receiver_move_time})
+			"movement_duration": receiver_move_time,
+			## The three keys that made this side's timeline synthetic. Without an
+			## outgoing trajectory `_ensure_event_trajectories` invented one from
+			## `flight_time` -- which on a reception is the *incoming* serve's
+			## duration -- and stamped it at the `event_time` default of zero.
+			"event_time": rally_clock,
+			"incoming_trajectory": serve_trajectory,
+			"outgoing_trajectory": opponent_pass.trajectory,
+			"body_alignment": opponent_pass.body_alignment,
+			"platform_feasibility": opponent_pass.platform_feasibility,
+			"contact_posture": opponent_pass.contact_posture,
+			"setter_release_target": opponent_setter_release,
+			"actual_pass_target": opponent_pass_destination})
 	if not reception_success:
 		return _finish(result, "ace", true, server.id, {"server": server.display_name})
-	## The opponent setter releases to the same place a home setter would,
-	## mirrored. This used to be the hardcoded court centre (0.50, 0.34), which
-	## put the setter directly on top of whoever was covering the middle -- the
-	## setter marker visibly vanished inside another opponent's during serve
-	## receive -- and had them setting from a position no setter takes.
-	var opponent_setter_release := _opponent_setter_release_target(opponent_team)
+	## `opponent_setter_release` is resolved above, before the pass, because the
+	## pass is thrown at it. It used to be the hardcoded court centre (0.50,
+	## 0.34), which put the setter directly on top of whoever was covering the
+	## middle -- the setter marker visibly vanished inside another opponent's
+	## during serve receive -- and had them setting from a position no setter
+	## takes.
 	## Stage the setter where a setter stands.
 	##
 	## The receiver gets a live position on the line above and the setter never
@@ -1976,7 +2007,7 @@ func _resolve_home_serve(
 					opponent_setter_id
 				opponent_reception_event.metadata["staged_next_position"] = \
 					opponent_setter_release
-	## And the pass has to find them, rather than arrive on them.
+	## The pass has to find them, rather than arrive on them.
 	##
 	## Staging the setter fixed where they start; it left the ball landing on
 	## that exact spot every time, however badly it was passed, so the setter had
@@ -1984,14 +2015,11 @@ func _resolve_home_serve(
 	## (+0.060 against -0.022) -- a fix that overshot rather than landed. The
 	## home pass has always scattered through `_reception_pass_result`, whose
 	## only home-specific line was a y clamp; with that clamp a parameter, the
-	## opponent's pass is thrown by the same arm.
-	var opponent_pass := _reception_pass_result(
-		receiver, receiver_start, opponent_landing, opponent_setter_release,
-		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
-		reception_quality, 0.02, 0.49,
-	)
+	## opponent's pass is thrown by the same arm. That call now happens above,
+	## before the reception event, so the ball the viewer is shown and the ball
+	## the rally continues from are the same one.
 	return _resolve_opponent_transition(
-		result, players, lineup, server, Vector2(opponent_pass.destination),
+		result, players, lineup, server, opponent_pass_destination,
 		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
 	)
 

@@ -5179,6 +5179,12 @@ func _test_event_physical_time_is_derived() -> void:
 	var breaks := 0
 	var floored := 0
 	var rallies := 0
+	var flat_serves := 0
+	var short_spans := 0
+	var home_served := 0
+	var opponent_served := 0
+	var home_span_total := 0.0
+	var opponent_span_total := 0.0
 	for serving_home in [true, false]:
 		manager.match_state.serving_home = serving_home
 		for seed_value in range(5000, 5060):
@@ -5187,6 +5193,9 @@ func _test_event_physical_time_is_derived() -> void:
 				continue
 			rallies += 1
 			var previous := -1.0
+			var first := -1.0
+			var last := 0.0
+			var serve_moment := -1.0
 			for raw_event in result.events:
 				var event: Resource = raw_event
 				events += 1
@@ -5198,7 +5207,24 @@ func _test_event_physical_time_is_derived() -> void:
 					breaks += 1
 				if event.metadata.has("physical_time_floored"):
 					floored += 1
+				if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.SERVE:
+					serve_moment = moment
+				elif int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.RECEPTION \
+						and serve_moment >= 0.0 and moment - serve_moment < 0.05:
+					flat_serves += 1
+				if first < 0.0:
+					first = moment
+				last = maxf(last, moment)
 				previous = moment
+			var span := last - maxf(first, 0.0)
+			if result.events.size() >= 4 and span < 0.5:
+				short_spans += 1
+			if serving_home:
+				home_served += 1
+				home_span_total += span
+			else:
+				opponent_served += 1
+				opponent_span_total += span
 	manager.free()
 	_check(rallies >= 100 and events > 500,
 		"physical time gate saw a real sample (%d rallies, %d events)"
@@ -5213,6 +5239,27 @@ func _test_event_physical_time_is_derived() -> void:
 	_check(floored == 0,
 		"the causality floor never has to correct a derived moment (%d fired)"
 			% floored)
+	## The three checks above passed on a timeline that was half synthetic.
+	##
+	## `_resolve_home_serve` never advanced `rally_clock`, so on home-served
+	## rallies the serve, the reception and the set were all stamped at zero --
+	## and stamps that are all equal are covered, ordered, and never floored.
+	## Everything above is satisfied by a clock that does not run. These check
+	## that it does.
+	_check(flat_serves == 0,
+		"the ball takes time to cross the court after a serve (%d receptions "
+			% flat_serves + "stamped within 50ms of their own serve)")
+	_check(short_spans == 0,
+		"a multi-contact rally spans real time (%d rallies of 4+ events inside "
+			% short_spans + "0.5 s)")
+	## Neither side's clock may be the degenerate one. A per-side mean is what
+	## would have caught this immediately: the pooled figure looked plausible
+	## because the opponent-served half was carrying it.
+	var home_mean := home_span_total / maxf(float(home_served), 1.0)
+	var opponent_mean := opponent_span_total / maxf(float(opponent_served), 1.0)
+	_check(home_mean > 1.5 and opponent_mean > 1.5,
+		"both serving sides produce a real timeline (home %.2f s, opponent %.2f s)"
+			% [home_mean, opponent_mean])
 
 
 ## Playback now samples a traversal built by the engine's movement model rather
