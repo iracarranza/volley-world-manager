@@ -19,12 +19,22 @@ const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const SUBJECTS: Array = [
 	["Feli", ""], ["Avi", ""],
 	["Vegi", "Tomato"], ["Vegi", "Aubergine"], ["Vegi", "Pumpkin"],
-	["Vegi", "Pear"], ["Vegi", "Turnip"],
+	["Vegi", "Pear"], ["Vegi", "Turnip"], ["Vegi", "Stalk"],
 ]
 
+## The dig row exists because the four postures are the point of the knee.
+## `_reception_pass_result` decides which one a contact was, so seeing them side
+## by side is how you check the deep one actually reads as forced low rather
+## than as a slightly shorter player.
 const POSES: Array = [
 	["stand", -1, 0.0],
 	["block", 5, 0.55],
+	["dig", 1, 0.0],
+]
+
+## Cycled across the row on the dig pose so every stance is on screen at once.
+const DIG_POSTURES: Array[String] = [
+	"planted", "moving", "reaching", "off-axis",
 ]
 
 var _subjects: Array = []
@@ -74,17 +84,23 @@ func _shoot(pose: Array) -> void:
 	stage.add_child(environment)
 
 	var camera := Camera3D.new()
-	camera.position = Vector3(0.0, 1.15, 6.6)
-	camera.fov = 44.0
+	## Pulled back and widened when the sixth Vegi shape arrived -- the framing
+	## was fitted to seven subjects and silently cropped the eighth rather than
+	## failing, which is the kind of thing a preview tool must not do.
+	camera.position = Vector3(0.0, 1.15, 8.4)
+	camera.fov = 50.0
 	stage.add_child(camera)
 
 	var spacing := 1.25
 	var start := -spacing * float(_subjects.size() - 1) * 0.5
 	for index in range(_subjects.size()):
 		var subject: Dictionary = _subjects[index]
-		var label := str(subject.produce)
-		if label.is_empty():
-			label = str(subject.type)
+		## The body type, never the produce. A Vegi is a Vegi -- the produce is
+		## how the variety is generated, not a name the player is known by, and
+		## printing it here was the one place in the game that turned a body into
+		## a species. Six rows all reading "Vegi" is the point: they are one type
+		## that grows in different shapes.
+		var label := str(subject.type)
 		var actor: Node3D = ACTOR.instantiate()
 		stage.add_child(actor)
 		actor.configure(
@@ -97,6 +113,11 @@ func _shoot(pose: Array) -> void:
 		actor.set_tactical_position(
 			Vector2.ZERO, Vector3(start + spacing * float(index), 0.0, 0.0)
 		)
+		if str(pose[0]) == "dig":
+			actor.contact_posture = DIG_POSTURES[index % DIG_POSTURES.size()]
+			actor.identity_label.text = "%s · %s" % [
+				str(subject.type), actor.contact_posture,
+			]
 		actor.set_pose(
 			int(pose[1]), float(pose[2]), 0.5, Vector2.ZERO, int(pose[1]) >= 0
 		)

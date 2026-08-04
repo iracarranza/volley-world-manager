@@ -111,8 +111,15 @@ position = Vector3(-0.16, 0.48, 0)
 position = Vector3(0, -0.08, 0)
 mesh = SubResource("LegMesh")
 
-[node name="Shoe" type="MeshInstance3D" parent="BodyPivot/LeftLeg"]
-position = Vector3(0, -0.42, -0.06)
+[node name="Knee" type="Node3D" parent="BodyPivot/LeftLeg"]
+position = Vector3(0, -0.22, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="BodyPivot/LeftLeg/Knee"]
+position = Vector3(0, -0.10, 0)
+mesh = SubResource("LegMesh")
+
+[node name="Shoe" type="MeshInstance3D" parent="BodyPivot/LeftLeg/Knee"]
+position = Vector3(0, -0.20, -0.06)
 rotation_degrees = Vector3(90, 0, 0)
 mesh = SubResource("ShoeMesh")
 
@@ -123,8 +130,15 @@ position = Vector3(0.16, 0.48, 0)
 position = Vector3(0, -0.08, 0)
 mesh = SubResource("LegMesh")
 
-[node name="Shoe" type="MeshInstance3D" parent="BodyPivot/RightLeg"]
-position = Vector3(0, -0.42, -0.06)
+[node name="Knee" type="Node3D" parent="BodyPivot/RightLeg"]
+position = Vector3(0, -0.22, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="BodyPivot/RightLeg/Knee"]
+position = Vector3(0, -0.10, 0)
+mesh = SubResource("LegMesh")
+
+[node name="Shoe" type="MeshInstance3D" parent="BodyPivot/RightLeg/Knee"]
+position = Vector3(0, -0.20, -0.06)
 rotation_degrees = Vector3(90, 0, 0)
 mesh = SubResource("ShoeMesh")
 

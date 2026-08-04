@@ -32,10 +32,21 @@ var shoulder_offset: Vector2 = Vector2(0.40, 1.52)
 var hip_offset: Vector2 = Vector2(0.16, 0.48)
 var body_height_scale: float = 1.0
 var arm_length_scale: float = 1.0
+var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
+## How strained the contact the simulator resolved was. Not a visual choice:
+## `_reception_pass_result` classifies every reception and dig as planted,
+## moving, reaching or off-axis from the defender's reach margin, how far into
+## the edge of their range the ball was, and how well their body could face it.
+## Playback reads that verdict rather than inventing a pose.
+var contact_posture: String = "planted"
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
 var locomotion_bob: float = 0.0
 var has_world_position: bool = false
+
+## Thigh share of total leg length. Slightly over half, which is roughly true
+## and is the ratio that keeps a folded knee reading as a knee.
+const THIGH_SHARE: float = 0.54
 
 const REFERENCE_HEIGHT_CM: float = 188.0
 const REFERENCE_WINGSPAN_CM: float = 191.0
@@ -91,8 +102,10 @@ func apply_ui_palette(light_mode: bool) -> void:
 	for arm in [left_arm, right_arm]:
 		_apply_material_color(arm.get_node("Mesh"), skin_color)
 	for leg in [left_leg, right_leg]:
+		## Two bones and a shoe. The shoe hangs off the knee now, not the hip.
 		_apply_material_color(leg.get_node("Mesh"), skin_color)
-		_apply_material_color(leg.get_node("Shoe"), team_color.darkened(0.55))
+		_apply_material_color(leg.get_node("Knee/Mesh"), skin_color)
+		_apply_material_color(leg.get_node("Knee/Shoe"), team_color.darkened(0.55))
 	for cosmetic in _cosmetics():
 		match str(cosmetic.get_meta("color_key", "skin")):
 			"kit":
@@ -132,6 +145,73 @@ func set_highlighted(highlighted: bool) -> void:
 	identity_label.outline_size = 5 if highlighted else 3
 
 
+## The four postures the resolver distinguishes, drawn as four stances.
+##
+## `planted` is a defender who got there: a normal athletic dig, knees bent,
+## platform square in front. `moving` is one still travelling through the
+## contact. `reaching` is one at the limit of their range, which in this sport
+## means going down -- deep knee, hips low, the shape a player makes when the
+## ball is barely gettable. `off-axis` is one who got there but could not turn
+## their body to face it, so the platform goes out to the side and the shoulders
+## tilt with it.
+##
+## The depths are ordered so the two that matter tactically -- planted against
+## reaching -- are unmistakably different at a glance from a court camera.
+func _apply_dig_posture() -> void:
+	var knee_bend := 34.0
+	var hip_pitch := -18.0
+	var drop := 0.10
+	var platform_yaw := 0.0
+	var platform_roll := 0.0
+	match contact_posture:
+		"reaching":
+			## Forced down. The knee folds nearly double and the hips go with it,
+			## which is the whole point of having the joint.
+			knee_bend = 96.0
+			hip_pitch = -42.0
+			drop = 0.30
+			platform_roll = 10.0
+		"off-axis":
+			## Got there, could not square up. Platform to the side.
+			knee_bend = 52.0
+			hip_pitch = -24.0
+			drop = 0.16
+			platform_yaw = 34.0
+			platform_roll = 22.0
+		"moving":
+			knee_bend = 44.0
+			hip_pitch = -22.0
+			drop = 0.14
+		_:
+			pass
+	body_pivot.position.y -= drop * body_height_scale
+	body_pivot.rotation.x = deg_to_rad(hip_pitch * 0.24)
+	for leg in [left_leg, right_leg]:
+		## Thigh forward, shank back under it. Splitting the fold across both
+		## bones is what keeps the foot near the floor instead of swinging the
+		## whole leg out in front.
+		leg.rotation_degrees.x = -knee_bend * 0.45
+		var knee := leg.get_node("Knee") as Node3D
+		knee.rotation_degrees.x = knee_bend
+	## The platform: two arms held *together* in front, not spread.
+	##
+	## The old dig swung them to -70 degrees with an 18-degree outward tilt each,
+	## which under Godot's YXZ order reads as both arms straight out to the sides.
+	## A platform is the opposite shape -- forearms joined, angled down and
+	## forward -- so the pitch is shallower and the arms are brought inward
+	## rather than splayed. `platform_yaw` then swings the whole platform off to
+	## one side for a defender who could not square up, which is the thing worth
+	## seeing.
+	var lead := -46.0 + hip_pitch * 0.30
+	var spread := 7.0
+	left_arm.rotation_degrees = Vector3(
+		lead, platform_yaw, -spread - platform_roll
+	)
+	right_arm.rotation_degrees = Vector3(
+		lead, platform_yaw, spread - platform_roll
+	)
+
+
 func set_pose(
 	event_type: int,
 	elevation: float,
@@ -151,6 +231,10 @@ func set_pose(
 	var gait_angle := sin(stride_cycle * TAU) * 32.0 * gait_blend
 	left_leg.rotation_degrees = Vector3(gait_angle, 0.0, 0.0)
 	right_leg.rotation_degrees = Vector3(-gait_angle, 0.0, 0.0)
+	## Knees straighten every frame before a pose folds them, so a dig does not
+	## leave the defender walking around bent for the rest of the rally.
+	for leg in [left_leg, right_leg]:
+		(leg.get_node("Knee") as Node3D).rotation_degrees = Vector3.ZERO
 	shadow.scale = Vector3.ONE * lerpf(1.0, 1.35, elevation)
 	shadow.transparency = lerpf(0.0, 0.58, elevation)
 	if contact_direction.length_squared() > 0.0001:
@@ -175,8 +259,21 @@ func set_pose(
 			striking_arm.rotation_degrees.x = -145.0 * clampf(phase * 1.8, 0.0, 1.0)
 			guide_arm.rotation_degrees.x = -72.0
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-			body_pivot.position.y -= 0.30 * body_height_scale
-			body_pivot.scale.y *= 0.82
+			## A dig is drawn by bending, not by squashing.
+			##
+			## This used to scale the whole actor on one axis -- head, produce
+			## torso, beak and all -- because the leg was a single capsule with
+			## nothing to bend. It now has a knee, and how far that knee folds is
+			## the simulator's own verdict on the contact rather than a constant.
+			##
+			## Being forced low is tactically real: a defender who had to drop to
+			## reach a ball played it differently from one who stayed on their
+			## feet, and `_reception_pass_result` already decided which happened.
+			## `contact_posture` is that decision, built from the defender's reach
+			## margin, how deep into the edge of their range the ball was, and how
+			## well their body could face it. Playback reads it; it does not
+			## invent it.
+			_apply_dig_posture()
 			left_leg.rotation_degrees.x = -22.0
 			right_leg.rotation_degrees.x = -22.0
 			left_arm.rotation_degrees = Vector3(-70.0, 0.0, -18.0)
@@ -283,18 +380,43 @@ func _build_silhouette() -> void:
 	leg_spec["shape"] = "cylinder"
 	var leg_height := float(leg_spec.get("height", 0.74))
 	var shoe_spec: Dictionary = silhouette.get("shoe", {})
+	## The leg is two bones now, not one.
+	##
+	## A single capsule from hip to shoe cannot be bent, which is why a dig used
+	## to be drawn by squashing the whole actor on one axis. Being forced low is
+	## a tactical fact -- a defender who had to go to their knees to reach a ball
+	## did something different from one who stayed on their feet -- so it needs a
+	## joint that can say so rather than a scale factor that flattens the head
+	## along with everything else.
+	##
+	## Thigh slightly longer than shank, which is both roughly true and the ratio
+	## that keeps the knee reading as a knee when it folds.
+	var thigh_length := leg_height * THIGH_SHARE
+	var shank_length := leg_height - thigh_length
+	leg_bone_lengths = Vector2(thigh_length, shank_length)
+	var thigh_spec := leg_spec.duplicate()
+	thigh_spec["height"] = thigh_length
+	## The shank tapers on from where the thigh left off, so the two bones read
+	## as one limb rather than two stacked cylinders of unrelated width.
+	var shank_spec := leg_spec.duplicate()
+	shank_spec["height"] = shank_length
+	shank_spec["top_radius"] = leg_spec.get("bottom_radius", 0.07)
 	for index in [0, 1]:
 		var leg: Node3D = left_leg if index == 0 else right_leg
 		var side := -1.0 if index == 0 else 1.0
 		leg.position = Vector3(side * hip_offset.x, hip_offset.y, 0.0)
 		var leg_mesh := leg.get_node("Mesh") as MeshInstance3D
-		leg_mesh.mesh = BodyTypeModelsScript.build_mesh(leg_spec)
-		leg_mesh.position = Vector3(
-			0.0, -(hip_offset.y - leg_height * 0.5 - 0.03), 0.0
-		)
-		var shoe := leg.get_node("Shoe") as MeshInstance3D
+		leg_mesh.mesh = BodyTypeModelsScript.build_mesh(thigh_spec)
+		leg_mesh.position = Vector3(0.0, -thigh_length * 0.5, 0.0)
+		var knee := leg.get_node("Knee") as Node3D
+		knee.position = Vector3(0.0, -thigh_length, 0.0)
+		knee.rotation_degrees = Vector3.ZERO
+		var shank_mesh := knee.get_node("Mesh") as MeshInstance3D
+		shank_mesh.mesh = BodyTypeModelsScript.build_mesh(shank_spec)
+		shank_mesh.position = Vector3(0.0, -shank_length * 0.5, 0.0)
+		var shoe := knee.get_node("Shoe") as MeshInstance3D
 		shoe.mesh = BodyTypeModelsScript.build_mesh(shoe_spec)
-		shoe.position = Vector3(0.0, -(hip_offset.y - 0.06), -0.06)
+		shoe.position = Vector3(0.0, -shank_length, -0.06)
 		## A box foot is authored lying flat already; only the capsule shoe
 		## needs standing on its side to become a foot rather than a leg.
 		shoe.rotation_degrees = Vector3(

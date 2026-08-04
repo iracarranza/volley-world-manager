@@ -184,11 +184,16 @@ func set_player_pose(
 	phase: float,
 	direction: Vector2,
 	highlighted: bool,
+	contact_posture: String = "planted",
 ) -> void:
 	if not player_actors.has(player_id):
 		return
 	var actor := player_actors[player_id] as PlayerActor3D
 	actor.set_highlighted(highlighted)
+	## Carried rather than derived here. The resolver already decided how
+	## strained this contact was; the court's job is to hand that verdict to the
+	## actor, not to form a second opinion from the positions.
+	actor.contact_posture = contact_posture
 	actor.set_pose(event_type, elevation, phase, direction, highlighted)
 
 

@@ -27,51 +27,77 @@ const MODELLED: Array[String] = ["Vegi", "Feli", "Avi"]
 
 const FALLBACK_TYPE: String = "Vegi"
 
-## Produce a Vegi grows as. A Vegi is not a generic plant person: each one is a
-## particular fruit or vegetable, fixed for that player's whole career, because
-## a body you recognise across seasons is the point of drawing bodies at all.
+## The shapes a Vegi grows in.
 ##
-## Five, with deliberately unlike silhouettes -- squat, tall, wide, waisted and
-## rooted -- so the type reads at a glance from across the court rather than
-## needing the colour to carry it.
+## These names are internal and stay internal. A Vegi is not "a Tomato" and is
+## never labelled as one anywhere a player can read -- they are all just Vegi,
+## and the produce is how the variety is generated rather than what the variety
+## *is*. Surfacing the name turns a body into a species and invites a taxonomy
+## nobody asked for; keeping it internal leaves a roster of Vegi who happen to
+## look unlike each other, which is the intent.
+##
+## Fixed per player for their whole career, because a body you recognise across
+## seasons is the point of drawing bodies at all.
+##
+## Six, with deliberately unlike silhouettes -- squat, tall, wide, waisted,
+## rooted and stalky -- so one Vegi reads as a different Vegi at a glance from
+## across the court rather than needing the colour to carry it.
 const PRODUCE: Array[String] = [
-	"Tomato", "Aubergine", "Pumpkin", "Pear", "Turnip",
+	"Tomato", "Aubergine", "Pumpkin", "Pear", "Turnip", "Stalk",
 ]
 
 const PRODUCE_BODIES := {
 	"Tomato": {
 		"skin": Color("d63b2a"), "crown": Color("3f7a35"),
-		"torso": {"shape": "sphere", "radius": 0.40, "height": 0.72},
+		"torso": {"shape": "sphere", "radius": 0.33, "height": 0.66},
 		"torso_y": 1.02, "head_y": 1.46, "head_radius": 0.13,
-		"shoulder": Vector2(0.38, 1.28), "rig_height": 1.80,
+		"shoulder": Vector2(0.31, 1.28), "rig_height": 1.80,
 	},
 	"Aubergine": {
 		"skin": Color("54307a"), "crown": Color("4e8a3a"),
-		"torso": {"shape": "capsule", "radius": 0.30, "height": 1.14},
+		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
 		"torso_y": 1.16, "head_y": 1.78, "head_radius": 0.12,
-		"shoulder": Vector2(0.32, 1.52), "rig_height": 2.06,
+		"shoulder": Vector2(0.27, 1.52), "rig_height": 2.06,
 	},
 	"Pumpkin": {
 		"skin": Color("d97a1e"), "crown": Color("6b7a2e"),
-		"torso": {"shape": "sphere", "radius": 0.50, "height": 0.76},
+		"torso": {"shape": "sphere", "radius": 0.41, "height": 0.70},
 		"torso_y": 0.96, "head_y": 1.42, "head_radius": 0.15,
-		"shoulder": Vector2(0.46, 1.20), "rig_height": 1.76,
+		"shoulder": Vector2(0.37, 1.20), "rig_height": 1.76,
 	},
 	"Pear": {
 		"skin": Color("b8c452"), "crown": Color("5c8a3c"),
 		## A pear is two masses, so it is the one produce with a second torso
 		## lobe rather than a single scaled primitive -- the waist is the shape.
-		"torso": {"shape": "sphere", "radius": 0.38, "height": 0.66},
+		"torso": {"shape": "sphere", "radius": 0.32, "height": 0.60},
 		"torso_y": 0.94, "head_y": 1.62, "head_radius": 0.12,
-		"shoulder": Vector2(0.30, 1.40), "rig_height": 1.92,
-		"extra_lobe": {"radius": 0.26, "height": 0.52, "y": 1.36},
+		"shoulder": Vector2(0.26, 1.40), "rig_height": 1.92,
+		"extra_lobe": {"radius": 0.22, "height": 0.48, "y": 1.36},
 	},
 	"Turnip": {
 		"skin": Color("e8e2ea"), "crown": Color("7fa03e"),
-		"torso": {"shape": "sphere", "radius": 0.42, "height": 0.80},
+		"torso": {"shape": "sphere", "radius": 0.35, "height": 0.74},
 		"torso_y": 1.00, "head_y": 1.48, "head_radius": 0.13,
-		"shoulder": Vector2(0.38, 1.26), "rig_height": 1.82,
+		"shoulder": Vector2(0.31, 1.26), "rig_height": 1.82,
 		"blush": Color("9c5fa8"),
+	},
+	## The stalky one -- green onion, celery, sugarcane. Every other produce is
+	## a mass with limbs on it; this is the one that is essentially vertical, so
+	## it covers a silhouette none of the other five reach. The narrow torso is
+	## the whole read, which is why it is the tallest and the thinnest at once.
+	"Stalk": {
+		"skin": Color("9dbf5c"), "crown": Color("cfe08a"),
+		"torso": {"shape": "capsule", "radius": 0.165, "height": 1.34},
+		"torso_y": 1.24, "head_y": 1.92, "head_radius": 0.105,
+		"shoulder": Vector2(0.22, 1.60), "rig_height": 2.12,
+		## Ribs, so a thin cylinder does not read as a pipe. Offset in pairs
+		## down the length rather than spaced evenly, which is closer to how a
+		## stalk actually bundles.
+		"ribs": [
+			{"x": -0.10, "y": 1.44, "height": 0.86},
+			{"x": 0.10, "y": 1.40, "height": 0.78},
+			{"x": 0.0, "y": 1.34, "height": 0.94},
+		],
 	},
 }
 
@@ -113,13 +139,17 @@ const UNIVERSAL_RATIOS := {
 	## shoulder rather than set directly, because the reach is the thing the eye
 	## actually reads and the length is only how you get there.
 	"hand_y": 0.395,
-	"hip_y": 0.520,
+	## Raised, and `leg_height` grown to match, so the extra room becomes leg
+	## rather than a longer gap. The hip block above it was also deep enough to
+	## eat the top of the thigh, which is what made the joint read as a bubble
+	## with legs under it instead of a waist.
+	"hip_y": 0.545,
 	"hip_x": 0.075,
 	"torso_height": 0.420,
 	"torso_radius": 0.145,
 	"head_radius": 0.088,
 	"head_y": 0.930,
-	"leg_height": 0.330,
+	"leg_height": 0.370,
 }
 
 ## How far a body type is allowed to pull the shared figure.
@@ -268,6 +298,20 @@ static func _vegi(produce: String) -> Dictionary:
 			"radius": float(lobe.radius), "height": float(lobe.height),
 			"position": Vector3(0.0, float(lobe.y), 0.0), "color": "skin",
 		})
+	if body.has("ribs"):
+		## A stalk is a bundle, not a tube. Without these the narrowest torso in
+		## the set reads as a length of pipe with a face on it.
+		var rib_index := 0
+		for raw_rib in body.ribs:
+			var rib: Dictionary = raw_rib
+			rib_index += 1
+			extras.append({
+				"name": "Rib%d" % rib_index, "parent": "BodyPivot",
+				"shape": "capsule", "radius": 0.045,
+				"height": float(rib.height),
+				"position": Vector3(float(rib.x), float(rib.y), 0.04),
+				"color": "crown",
+			})
 	if body.has("blush"):
 		## A turnip is white below and purple on the shoulder. Same rule as the
 		## kit band: the cap is a fraction *larger* than the body so it encloses
@@ -284,7 +328,7 @@ static func _vegi(produce: String) -> Dictionary:
 		"torso": torso,
 		"torso_y": float(body.torso_y),
 		"torso_material": "skin",
-		"shorts": {"shape": "capsule", "radius": 0.24, "height": 0.30},
+		"shorts": {"shape": "box", "size": Vector3(0.42, 0.20, 0.30)},
 		"shorts_y": float(body.torso_y) - float(torso.get("height", 0.7)) * 0.55,
 		"head": {"shape": "sphere", "radius": float(body.head_radius),
 			"height": float(body.head_radius) * 1.9},
@@ -310,7 +354,7 @@ static func _feli() -> Dictionary:
 		"torso": {"shape": "capsule", "radius": 0.27, "height": 0.94},
 		"torso_y": 1.10,
 		"torso_material": "kit",
-		"shorts": {"shape": "capsule", "radius": 0.29, "height": 0.42},
+		"shorts": {"shape": "box", "size": Vector3(0.50, 0.22, 0.34)},
 		"shorts_y": 0.62,
 		"head": {"shape": "sphere", "radius": 0.185, "height": 0.34},
 		"head_y": 1.74,
@@ -369,7 +413,7 @@ static func _avi() -> Dictionary:
 		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
 		"torso_y": 1.20,
 		"torso_material": "kit",
-		"shorts": {"shape": "capsule", "radius": 0.27, "height": 0.38},
+		"shorts": {"shape": "box", "size": Vector3(0.44, 0.20, 0.32)},
 		"shorts_y": 0.64,
 		"head": {"shape": "sphere", "radius": 0.155, "height": 0.30},
 		"head_y": 1.94,

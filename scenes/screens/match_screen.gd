@@ -173,8 +173,26 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 			int(event.actor_id), int(event.event_type),
 			peak * sin(progress * PI), progress,
 			event.end_position - event.start_position, true,
+			_contact_posture(event),
 		)
 		await get_tree().process_frame
+
+
+## How strained this contact was, as the resolver recorded it.
+##
+## `_reception_pass_result` classifies every reception and dig from the
+## defender's reach margin, how deep into the edge of their range the ball was,
+## and how well their body could face it, and writes the verdict onto the event.
+## Reading it here is what makes a defender dropping to their knees mean
+## something rather than being a flourish: the pose says what the simulation
+## already decided, and a player forced low really was forced low.
+##
+## Defaults to `planted` for every other contact type, which is what the pose
+## code treats as an ordinary athletic stance.
+func _contact_posture(event: RallyEvent) -> String:
+	if event == null:
+		return "planted"
+	return str(event.metadata.get("contact_posture", "planted"))
 
 
 func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress: float) -> void:
@@ -198,6 +216,7 @@ func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress:
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
 			event_peak * outgoing_weight, progress, event_direction, true,
+			_contact_posture(event),
 		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
 	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
