@@ -38,6 +38,12 @@ const SPIKES: Array[int] = [0, 6, 12]
 ## pass mark for *symmetry*: with the same players on both sides these rates
 ## should differ by roughly nothing, and anything above the second figure is a
 ## defect rather than noise.
+## The tempo a default home play asks for. The opponent's tendency is pinned to
+## it for the duration of this sweep so both sides request the same ball; a team
+## that genuinely wants a quicker offence is a tactical difference worth having,
+## and worth measuring separately from whether the engine is even-handed.
+const HOME_PLAYBOOK_TEMPO: int = 3
+
 const GAP_GOOD: float = 0.03
 const GAP_SUSPECT: float = 0.08
 
@@ -136,6 +142,14 @@ func _sweep(spike: int) -> Dictionary:
 			)
 			if spike > 0:
 				_spike_roster(manager.players, spike)
+			## Identical rosters are not identical teams. The vertical-slice
+			## fixture gives its opponent a tempo tendency of 1 -- a first-tempo
+			## offence -- while the home playbook requests 3, and tempo drives
+			## the set's arc so steeply that the two sides were being handed
+			## different amounts of approach time by tactics alone. A gate that
+			## does not control for that reads a coaching choice as an engine
+			## defect, which is exactly the confound it exists to prevent.
+			manager.opponent_team.tendencies["tempo"] = HOME_PLAYBOOK_TEMPO
 			manager.match_state.serving_home = serving_home
 			for seed_value in range(5000, 5000 + RALLIES):
 				var result: Resource = manager.resolve_active_rally(seed_value)
