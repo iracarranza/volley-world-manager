@@ -6,6 +6,7 @@ const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const DefensivePlanModel := preload("res://scripts/models/defensive_plan.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
@@ -343,6 +344,8 @@ var geometric_serves: Dictionary = {}
 ## different functions, so it is held for the rally rather than threaded
 ## through every continuation signature.
 var geometric_development_open: bool = false
+## The opponent's defensive plan for this rally, built on first use.
+var opponent_plan: Resource = null
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
@@ -368,6 +371,7 @@ func resolve(
 	geometric_swing_index = 0
 	geometric_serves = {}
 	geometric_development_open = development_continuous_reception
+	opponent_plan = null
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
 	identity_effects = {
@@ -1423,6 +1427,24 @@ func resolve(
 		opponent_block_stage[opponent_blocker.id] = Vector2(opponent_wall.primary_position)
 	if assisting_blocker != null:
 		opponent_block_stage[assisting_blocker.id] = Vector2(opponent_wall.assist_position)
+	## And the other four, who until now were staged nowhere at all. The two
+	## blockers were walked to the wall and everybody else was left standing
+	## wherever the previous phase had put them, so the opponent's floor defence
+	## met a spike from a position nothing had chosen. This is the same
+	## preparation the home six get on the opponent's attack, pointed the other
+	## way.
+	var opponent_floor_stage := _floor_phase_positions(
+		opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
+		set_target.x,
+		opponent_blocker.id if opponent_blocker != null else -1,
+		assisting_blocker.id if assisting_blocker != null else -1,
+		true,
+	)
+	for raw_floor_id in opponent_floor_stage:
+		var floor_id := int(raw_floor_id)
+		if opponent_block_stage.has(floor_id):
+			continue
+		opponent_block_stage[floor_id] = Vector2(opponent_floor_stage[raw_floor_id])
 	for raw_player_id in opponent_block_stage:
 		opponent_live_positions[int(raw_player_id)] = Vector2(
 			opponent_block_stage[raw_player_id]
@@ -1557,7 +1579,12 @@ func resolve(
 	)
 	var defense_strength := _defense_execution(
 		opponent_defender, float(opponent_defense.arrival_margin),
-		read_modifier + floor_defense_bonus, 0.0, 0,
+		read_modifier + floor_defense_bonus,
+		CoverageModel.reception_body_penalty(
+			opponent_defender, Dictionary(opponent_defense.get("arrival", {})),
+			attack_effectiveness,
+		),
+		int(opponent_defense.get("support_count", 0)),
 	)
 	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
@@ -2681,6 +2708,17 @@ func _resolve_home_continuation(
 		cont_block_stage[opponent_blocker.id] = Vector2(cont_wall.primary_position)
 	if assisting_blocker != null:
 		cont_block_stage[assisting_blocker.id] = Vector2(cont_wall.assist_position)
+	var cont_floor_stage := _floor_phase_positions(
+		opponent_team.current_lineup(), _opponent_defensive_plan(opponent_team),
+		set_target.x,
+		opponent_blocker.id if opponent_blocker != null else -1,
+		assisting_blocker.id if assisting_blocker != null else -1,
+		true,
+	)
+	for raw_floor_id in cont_floor_stage:
+		var floor_id := int(raw_floor_id)
+		if not cont_block_stage.has(floor_id):
+			cont_block_stage[floor_id] = Vector2(cont_floor_stage[raw_floor_id])
 	for raw_player_id in cont_block_stage:
 		opponent_live_positions[int(raw_player_id)] = Vector2(
 			cont_block_stage[raw_player_id]
@@ -2737,10 +2775,20 @@ func _resolve_home_continuation(
 		})
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
-	var opponent_defender := opponent_team.best_defender() as VolleyballPlayer
 	## A transition dig is the same act as any other; the defender is simply
-	## already in the rally rather than reading a first-ball swing.
-	var defense_quality := _defense_execution(opponent_defender, 0.0, 0.0, 0.0, 0)
+	## already in the rally rather than reading a first-ball swing. It was not
+	## treated as one: this path took the roster's best digger regardless of
+	## where the ball went, and handed `_defense_execution` a flat zero arrival
+	## margin -- a defender who is always exactly on time for a ball they never
+	## had to move to, chosen by a search that could not lose.
+	var cont_defense := _choose_opponent_defender(
+		opponent_team, attack_target, continuation_attack_flight
+	)
+	var opponent_defender := cont_defense.player as VolleyballPlayer
+	var defense_quality := _defense_execution(
+		opponent_defender, float(cont_defense.arrival_margin), 0.0, 0.0,
+		int(cont_defense.get("support_count", 0)),
+	)
 	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
 	## This branch carried no spatial metadata at all, so playback fell back to
 	## the contact point and walked the digger there from wherever they stood,
@@ -3156,35 +3204,102 @@ func _choose_attack_target(
 	}
 
 
+## Who on the opponent plays this ball, through the same search the home side
+## uses.
+##
+## This was a hand-rolled scan and it lost the rally in three separate ways. It
+## struck the setter and both middles off the list, so a six-player defence
+## defended with three. It reported no support count, so the covered-defender
+## term was permanently zero on one side of the net and averaged 0.30 on the
+## other. And it made a defender run to the exact landing coordinate, while
+## `choose_claimant` credits the home defender with a metre and a half of reach
+## before asking them to move at all -- which is most of why the home defender
+## arrived with 0.97s to spare and the opponent 0.56s late, and why the home
+## side dug 42% of balls to the opponent's 23% with identical dig attributes on
+## both sides by construction.
+##
+## None of those were decisions. They were the shape of a second implementation
+## written for the same job, and the fix is not to correct them one by one but
+## to stop having two.
 func _choose_opponent_defender(
 	opponent_team: Resource,
 	target: Vector2,
 	flight_time: float,
 ) -> Dictionary:
-	var best: VolleyballPlayer
-	var best_score := -1000.0
-	var best_data := {"start": target, "distance_meters": 99.0,
-		"travel_time": 9.0, "arrival_margin": -9.0}
+	var defenders: Array[VolleyballPlayer] = []
 	for defender_resource in opponent_team.on_court_players():
 		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-		if defender == null or str(defender.position_code) in ["S", "M1", "M2"]:
+		if defender != null:
+			defenders.append(defender)
+	if defenders.is_empty():
+		return {"player": null, "start": target, "distance_meters": 99.0,
+			"travel_time": 9.0, "arrival_margin": -9.0, "support_count": 0,
+			"edge_ratio": 1.5}
+	var plan := _opponent_defensive_plan(opponent_team)
+	var zones := _zones_at_phase_positions(
+		plan.zones_for(DefensiveZoneModel.ZoneType.FLOOR_DEFENSE),
+		opponent_live_positions,
+	) if plan != null else {}
+	var claim := CoverageModel.choose_claimant(
+		defenders, zones, target, flight_time, "reception"
+	)
+	var claimant := claim.get("player") as VolleyballPlayer
+	var arrival: Dictionary = claim.get("arrival", {})
+	if claimant == null:
+		## Nobody could reach it. The search says so by returning no player, and
+		## the ball still has to be described as landing on somebody, so the
+		## nearest body takes it and eats the deficit -- evaluated through the
+		## same function, so the margin it reports is on the same scale as a
+		## claimed ball's rather than a second opinion about the same event.
+		claimant = _nearest_opponent_body(opponent_team, target)
+		arrival = CoverageModel.evaluate_arrival(
+			claimant, zones.get(claimant.id) as Resource,
+			target, flight_time, "reception",
+		) if claimant != null else {}
+	var start: Vector2 = opponent_live_positions.get(
+		claimant.id, opponent_team.court_position(claimant.id, "defense")
+	) if claimant != null else target
+	var travel_time := _movement_time(claimant, start, target, "lateral") \
+		if claimant != null else 9.0
+	## `evaluate_arrival` reports its margin in *metres* -- it is
+	## `physical_reach - distance`, how much further the defender could have
+	## reached -- and `_defense_execution` reads it against
+	## `DIG_LATE_ARRIVAL_SECONDS`. That mismatch is older than this function and
+	## is not corrected here, because correcting it would silently rescale every
+	## dig in the engine including the home side's. What matters for the two
+	## sides being comparable is that they are on the *same* scale, so the
+	## fallback reports metres too rather than the seconds it used to.
+	var fallback_margin := CoverageModel.court_distance_meters(start, target)
+	return {
+		"player": claimant,
+		"start": start,
+		"distance_meters": fallback_margin,
+		"travel_time": travel_time,
+		"arrival_margin": float(arrival.get("arrival_margin", -fallback_margin)),
+		"edge_ratio": float(arrival.get("edge_ratio", 1.2)),
+		"support_count": int(claim.get("support_count", 0)),
+		"arrival": arrival,
+	}
+
+
+## The nearest opponent to a ball nobody claimed.
+func _nearest_opponent_body(
+	opponent_team: Resource, target: Vector2
+) -> VolleyballPlayer:
+	var nearest: VolleyballPlayer = null
+	var best := INF
+	for defender_resource in opponent_team.on_court_players():
+		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if defender == null:
 			continue
 		var start: Vector2 = opponent_live_positions.get(
 			defender.id, opponent_team.court_position(defender.id, "defense")
 		)
-		var mirrored_target := Vector2(target.x, target.y)
-		var distance_meters := CoverageModel.court_distance_meters(start, mirrored_target)
-		var travel_time := _movement_time(defender, start, mirrored_target, "lateral")
-		var arrival_margin := flight_time - travel_time
-		var score := arrival_margin * 0.58 + _rating(defender, "anticipation") * 0.25 \
-			+ _rating(defender, "reception") * 0.17
-		if score > best_score:
-			best = defender
-			best_score = score
-			best_data = {"start": start, "distance_meters": distance_meters,
-				"travel_time": travel_time, "arrival_margin": arrival_margin}
-	best_data["player"] = best if best != null else opponent_team.best_defender()
-	return best_data
+		var distance := CoverageModel.court_distance_meters(start, target)
+		if distance < best:
+			best = distance
+			nearest = defender
+	return nearest if nearest != null else opponent_team.best_defender()
 
 
 ## Where this opponent hitter can legally and physically contact the ball.
@@ -3510,9 +3625,42 @@ func _home_floor_phase_positions(
 	primary_blocker_id: int,
 	assisting_blocker_id: int,
 ) -> Dictionary:
+	return _floor_phase_positions(
+		lineup, defensive_plan, attack_x,
+		primary_blocker_id, assisting_blocker_id, false,
+	)
+
+
+## Where a defending six stands while the ball is being attacked at them.
+##
+## This used to exist for the home side only, and that single fact was most of
+## the engine's home advantage. The home six were walked to their floor-defence
+## shape during the attack's flight, so they met the ball having already
+## arrived; the opponent six were left wherever the previous phase had put them
+## -- at the block wall, at a hitter's contact point -- and had to cover that
+## ground inside the attack. Measured over 407 digs the home defender arrived
+## with 0.97s to spare and the opponent 0.56s late, a gap of a second and a half
+## in a model whose timing term saturates at 1.2s. Home dug 42% of balls and the
+## opponent 23%, with identical dig attributes on both sides by construction.
+##
+## Nothing about standing in your defensive shape is home-specific, so the side
+## is now a parameter rather than a copy: the y axis mirrors, the depth and
+## posture adjustments flip with it, and both sixes get the same preparation.
+func _floor_phase_positions(
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	attack_x: float,
+	primary_blocker_id: int,
+	assisting_blocker_id: int,
+	opponent_side: bool,
+) -> Dictionary:
 	var positions := {}
 	if lineup == null:
 		return positions
+	## Mirroring is the whole difference. `+1` walks a home defender back from
+	## the net and an opponent defender toward it, so every depth term carries
+	## the side's sign rather than the home side's.
+	var forward := -1.0 if opponent_side else 1.0
 	var relationship := str(defensive_plan.block_defense_relationship) \
 		if defensive_plan != null else "Balanced"
 	var depth := str(defensive_plan.defensive_depth) \
@@ -3522,11 +3670,12 @@ func _home_floor_phase_positions(
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id in [primary_blocker_id, assisting_blocker_id]:
-			positions[player_id] = Vector2(attack_x, 0.54)
+			positions[player_id] = Vector2(attack_x, 0.46 if opponent_side else 0.54)
 			continue
 		var fallback := CourtConstants.slot_position(slot_number)
 		var target: Vector2 = defensive_plan.defender_position(player_id, fallback) \
 			if defensive_plan != null else fallback
+
 		var zone: Resource = defensive_plan.zone_for(
 			player_id, DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
 		) if defensive_plan != null else null
@@ -3540,11 +3689,11 @@ func _home_floor_phase_positions(
 		var front_row := CourtConstants.is_front_row_slot(slot_number)
 		target.x = lerpf(target.x, coverage_focus, 0.09 if front_row else 0.18)
 		if depth == "Deep":
-			target.y += 0.035
+			target.y += 0.035 * forward
 		elif depth == "Shallow":
-			target.y -= 0.035
+			target.y -= 0.035 * forward
 		if short_posture == "Compress Short":
-			target.y = lerpf(target.y, 0.68, 0.18)
+			target.y = lerpf(target.y, 0.32 if opponent_side else 0.68, 0.18)
 		var assignment: Resource = defensive_plan.assignment_for(player_id) \
 			if defensive_plan != null else null
 		if assignment != null \
@@ -3552,9 +3701,50 @@ func _home_floor_phase_positions(
 			target.x = lerpf(target.x, 0.50, 0.08)
 		positions[player_id] = Vector2(
 			clampf(target.x, 0.06, 0.94),
-			clampf(target.y, 0.56, 0.96),
+			clampf(target.y, 0.04, 0.44) if opponent_side \
+				else clampf(target.y, 0.56, 0.96),
 		)
 	return positions
+
+
+## The opponent's defensive plan, built once per rally from their own lineup.
+##
+## They have never had one. Every read of a posture, a seam responsibility or a
+## floor-defence zone on that side of the net returned a default, so the
+## opponent defended from the rotation grid while the home side defended from a
+## plan. `ensure_defaults` produces exactly the plan a home coach starts from,
+## which is the right baseline: the opponent is not being given a better system
+## than the player, it is being given the same one.
+func _opponent_defensive_plan(opponent_team: Resource) -> Resource:
+	if opponent_plan != null:
+		return opponent_plan
+	if opponent_team == null:
+		return null
+	var lineup: RotationLineup = opponent_team.current_lineup()
+	if lineup == null:
+		return null
+	opponent_plan = DefensivePlanModel.new()
+	opponent_plan.ensure_defaults(lineup)
+	## Mirrored at the source, not at every reader. `ensure_defaults` lays the
+	## plan out in home coordinates because that is the only court it has ever
+	## described, and a zone centred on the home back row is not a place an
+	## opponent defender can stand. Flipping it once here means any reader that
+	## does not have a staged position for somebody still gets a centre on the
+	## right half of the net, instead of a defender who appears to be defending
+	## from inside the other team.
+	for zone_type in [
+		DefensiveZoneModel.ZoneType.FLOOR_DEFENSE,
+		DefensiveZoneModel.ZoneType.SERVE_RECEIVE,
+	]:
+		for raw_player_id in opponent_plan.zones_for(zone_type):
+			var zone: Resource = opponent_plan.zone_for(int(raw_player_id), zone_type)
+			if zone == null:
+				continue
+			zone.center = Vector2(zone.center.x, 1.0 - zone.center.y)
+	for raw_player_id in opponent_plan.defender_positions:
+		var seat: Vector2 = opponent_plan.defender_positions[raw_player_id]
+		opponent_plan.defender_positions[raw_player_id] = Vector2(seat.x, 1.0 - seat.y)
+	return opponent_plan
 
 
 func _approach_start_position(

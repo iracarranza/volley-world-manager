@@ -380,3 +380,77 @@ and 49 each sat before their own flip. The next gate is the opponent's floor
 defence, and the symmetry estimator is already the instrument for it: it should
 fall from 0.671 toward 0.5 as the two dig paths converge, and the production
 flip belongs at the end of that gate rather than this one.
+
+## The defence gate
+
+The previous section closed with the prediction that the home tilt was not the
+geometric attack's doing but its floor defence's. That was measurable, and the
+measurement is unambiguous. Over 407 digs played on the roster-cancelling
+design -- each pairing in both squad assignments and both serving assignments,
+with the geometric attack promoted so balls actually reach the floor:
+
+| | home | opponent |
+|---|---|---|
+| digs attempted | 185 | 222 |
+| dig success | **0.422** | **0.225** |
+| mean contact quality | 0.361 | 0.325 |
+| mean arrival margin | **+0.967** | **-0.559** |
+| supporters per dig | 0.30 | 0.00 |
+| roles ever digging | all six | three |
+
+The dig attributes are identical on both sides by construction. Everything in
+that table is the engine, not the rosters.
+
+Four separate mechanisms, all the same defect -- a second implementation
+written for a job that already had one.
+
+**Nobody staged the opponent's floor.** `_home_floor_phase_positions` walked the
+home six into their defensive shape during the attack's flight. The opponent had
+no equivalent: two blockers were sent to the wall and the other four were left
+wherever the previous phase had put them. It is now `_floor_phase_positions`
+with the side as a parameter, mirroring the y axis and the sign of every depth
+and posture term.
+
+**The opponent had no defensive plan.** Every read of a posture, a seam
+responsibility or a floor-defence zone on that side returned a default, so the
+opponent defended from the rotation grid while the home side defended from a
+plan. They now get `ensure_defaults`, mirrored once at the source -- the same
+plan a home coach starts from, not a better one.
+
+**Three of six were struck off the candidate list.** `_choose_opponent_defender`
+skipped the setter and both middles outright, which is not a rule of the sport
+and is not what the home side's claimant search does. A six-player defence
+defended with three.
+
+**And the search itself was a different search.** The home side runs
+`CoverageModel.choose_claimant`, which credits a defender with a metre and a
+half of reach before asking them to move. The opponent's hand-rolled scan made
+its defender run to the exact landing coordinate, reported no support count, and
+on the transition path did not even choose by position -- it took the roster's
+best digger for any ball anywhere and handed `_defense_execution` a flat zero
+arrival margin, a defender always exactly on time for a ball they never had to
+move to. Both sides now go through one search.
+
+Fixing those moves the opponent's mean arrival margin from **-0.559 to -0.048**,
+puts all six roles on the floor, and makes the support term and the body penalty
+real on that side for the first time. Dig success is 0.126, and the drop from
+the nominal 0.225 is honesty rather than regression: most of the old number came
+from transition digs that could not be late.
+
+**A unit defect surfaced on the way.** `evaluate_arrival` reports
+`arrival_margin` as `physical_reach - distance`, which is **metres**, and
+`_defense_execution` reads it against `DIG_LATE_ARRIVAL_SECONDS`, which is
+**seconds**. This is older than any of the above and is deliberately not
+corrected here, because correcting it rescales every dig in the engine including
+the home side's, and that belongs in its own gate with its own re-calibration.
+What matters for two sides being comparable is that they are on one scale, so
+the fallback path now reports metres too rather than the seconds it used to.
+
+**What remains.** The home defender still arrives with about a metre in hand and
+the opponent with none, and both sides are now measured by the same function, so
+the residual is placement rather than mechanism: the home side defends from a
+career-tuned plan and the opponent from `ensure_defaults`. The other named term
+is identity -- `_attack_effectiveness` prices a decisive attack up by as much as
+15% against the dig it faces, and only the home team has principles to be
+decisive with. Neither is a parallel implementation any more, which is what this
+gate was for.
