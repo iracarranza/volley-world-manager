@@ -1828,8 +1828,22 @@ func _resolve_home_serve(
 		var opponent_setter_id := opponent_lineup.active_setter_id()
 		if opponent_setter_id >= 0:
 			opponent_live_positions[opponent_setter_id] = opponent_setter_release
+	## And the pass has to find them, rather than arrive on them.
+	##
+	## Staging the setter fixed where they start; it left the ball landing on
+	## that exact spot every time, however badly it was passed, so the setter had
+	## no ground to cover at all and arrived *earlier* than the home setter
+	## (+0.060 against -0.022) -- a fix that overshot rather than landed. The
+	## home pass has always scattered through `_reception_pass_result`, whose
+	## only home-specific line was a y clamp; with that clamp a parameter, the
+	## opponent's pass is thrown by the same arm.
+	var opponent_pass := _reception_pass_result(
+		receiver, receiver_start, opponent_landing, opponent_setter_release,
+		Vector2(0.82, 0.92), serve_quality, opponent_arrival,
+		reception_quality, 0.02, 0.49,
+	)
 	return _resolve_opponent_transition(
-		result, players, lineup, server, opponent_setter_release,
+		result, players, lineup, server, Vector2(opponent_pass.destination),
 		opponent_team, defensive_plan, 1, reception_quality, true,
 	)
 
@@ -1966,10 +1980,28 @@ func _resolve_opponent_transition(
 	## after the provisional computation above was moved onto the shared model --
 	## so the propagation link and the aligned attribute list reached the
 	## estimate and never reached the ball.
+	## The geometry of the set that is actually being played.
+	##
+	## `set_geometry` above is computed before the hitter is chosen, against
+	## `Vector2(0.50, 0.48)` standing in for a target nobody knows yet -- and
+	## then reused here, where the target *is* known, so every opponent set in
+	## the game was scored for difficulty as though it were being delivered to
+	## the middle of the court. The home side has never done this: it reads
+	## `intended_set_target` and the setter's release seat, which is why its
+	## difficulty term sits at 0.077 against this side's 0.131.
+	##
+	## It went unnoticed while the setter stood exactly where the pass landed,
+	## because a placeholder distance and a real one were both short. Scattering
+	## the pass gave the setter ground to cover and the fiction started costing
+	## the opponent a set.
+	var resolved_set_geometry := _set_geometry(
+		opponent_setter, setter_start, opponent_setter_position,
+		opponent_contact, _opponent_setter_release_target(opponent_team),
+	)
 	var opponent_set_terms := _set_terms(
 		opponent_setter, opponent_pass_quality, transition_penalty,
 		opponent_capability_penalty, setter_arrival_margin,
-		float(set_geometry.difficulty),
+		float(resolved_set_geometry.difficulty),
 		(Familiarity.execution_modifier(opponent_setter) - 1.0) * 0.16,
 	)
 	opponent_set_quality = clampf(
@@ -1990,9 +2022,9 @@ func _resolve_opponent_transition(
 		{"side": "opponent", "set_terms": opponent_set_terms,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
-			"set_distance_meters": set_geometry.distance_meters,
-			"set_angle_degrees": set_geometry.angle_degrees,
-			"body_orientation_fit": set_geometry.body_orientation_fit,
+			"set_distance_meters": resolved_set_geometry.distance_meters,
+			"set_angle_degrees": resolved_set_geometry.angle_degrees,
+			"body_orientation_fit": resolved_set_geometry.body_orientation_fit,
 			"outgoing_trajectory": _ball_trajectory(
 				"opponent_set", opponent_setter_position, opponent_contact,
 				set_flight_time, float(set_arc.apex_height_meters),
@@ -4138,6 +4170,8 @@ func _reception_pass_result(
 	serve_force: float,
 	arrival: Dictionary,
 	reception_quality: float,
+	landing_min_y: float = 0.51,
+	landing_max_y: float = 0.98,
 ) -> Dictionary:
 	var movement_vector := contact_position - start_position
 	var desired_vector := desired_target - contact_position
@@ -4189,8 +4223,13 @@ func _reception_pass_result(
 		destination += Vector2(
 			rng.randf_range(-0.25, 0.25), rng.randf_range(-0.04, 0.18)
 		)
+	## The half the ball has to stay on. Hardcoded to the home court until the
+	## opponent needed the same function, which is the whole reason they did not
+	## have it: a pass that could only land between y 0.51 and 0.98 was a pass
+	## only one team could throw.
 	destination = Vector2(
-		clampf(destination.x, 0.02, 0.98), clampf(destination.y, 0.51, 0.98)
+		clampf(destination.x, 0.02, 0.98),
+		clampf(destination.y, landing_min_y, landing_max_y),
 	)
 	var pass_distance := CoverageModel.court_distance_meters(
 		contact_position, destination
