@@ -352,17 +352,47 @@ func _open_nav_dropdown() -> void:
 	var strip_rect := nav_strip.get_global_rect()
 	var origin_x := current_section_button.global_position.x \
 		+ current_section_button.size.x + 8.0
-	var target_width := maxf(strip_rect.end.x - 10.0 - origin_x, 180.0)
-	var strip_height := maxf(current_section_button.size.y, 30.0)
+	## Both spans are taken from the panel's own combined minimum rather than
+	## from the strip's button or a literal. `Control.size` is silently clamped
+	## up to that minimum and the clipper is not, so any figure below it slices
+	## the drawer instead of sizing it -- and the slice is invisible in code and
+	## obvious on screen.
+	##
+	## The height came from the button (34px) against a panel that cannot be
+	## shorter than 37, so the bottom border of every drawer button was cut off
+	## and the row read as sitting under the strip rather than in it.
+	##
+	## The width guard is defensive rather than a reproduced bug: the old
+	## fallback of 180 sat below the panel's 558 minimum and would have hidden
+	## four of the six buttons the same way, but the project stretches from a
+	## fixed 1280x720 base so a resized window only ever hands the strip more
+	## room. A wider theme font is what would actually reach it.
+	var panel_minimum := dropdown_panel.get_combined_minimum_size()
+	var drawer_height := maxf(panel_minimum.y, current_section_button.size.y)
+	var available_width := strip_rect.end.x - 10.0 - origin_x
+	var target_width := maxf(available_width, panel_minimum.x)
+	if target_width > available_width:
+		## Not enough strip to the right of the button: pull the drawer back so
+		## its right edge meets the strip's, covering the button rather than
+		## running off the end of the row.
+		origin_x = maxf(
+			strip_rect.position.x + 10.0, strip_rect.end.x - 10.0 - target_width
+		)
 	nav_dropdown.visible = true
 	## The catcher only swallows clicks while the menu is actually open,
 	## otherwise it would sit invisibly over the whole dashboard eating every
 	## button press underneath it.
 	click_catcher.mouse_filter = Control.MOUSE_FILTER_STOP
-	nav_clip.position = Vector2(origin_x, current_section_button.global_position.y)
-	nav_clip.size = Vector2(0.0, strip_height)
+	## Centred on the strip's button so the drawer reads as that row continuing,
+	## not as a second row starting slightly lower.
+	nav_clip.position = Vector2(
+		origin_x,
+		current_section_button.global_position.y
+			+ (current_section_button.size.y - drawer_height) * 0.5,
+	)
+	nav_clip.size = Vector2(0.0, drawer_height)
 	dropdown_panel.position = Vector2.ZERO
-	dropdown_panel.size = Vector2(target_width, strip_height)
+	dropdown_panel.size = Vector2(target_width, drawer_height)
 	dropdown_panel.modulate.a = 1.0
 	if _nav_tween != null:
 		_nav_tween.kill()
