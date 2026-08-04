@@ -121,8 +121,45 @@ func _run_rally(generation: int) -> void:
 		if not trajectory.is_empty():
 			await _play_flight(event, next_contact, trajectory, event_index, events.size(), generation)
 		else:
-			await _play_contact_pulse(event, 0.38, generation)
+			## An event the ball spends no time on costs no time.
+			##
+			## This was a flat 0.38 s for every contact without a trajectory, so
+			## a block that never touched the ball, a defender's read step and a
+			## dive all bought a beat of their own -- and the rally visibly
+			## stopped while nothing happened. The simulator already knows when
+			## each contact occurred, so the gap to the next one is the honest
+			## answer, and where that gap is zero the two events are genuinely
+			## simultaneous and share a beat instead of queueing.
+			await _play_contact_pulse(
+				event, _gap_to_next(events, event_index), generation
+			)
 	match_court_3d.ball_actor.hold_at_rest()
+
+
+## How long the ball actually spends between this event and the next.
+##
+## Read from `physical_time`, which every event now carries and which the
+## timestamp gate holds to 100% coverage with zero causality corrections. A
+## quarter of all inter-event gaps are under 5 ms -- `RECEPTION` into the
+## setter's decision, `ATTACK` into the `BLOCK` that meets it -- and those are
+## not events to draw in sequence, they are one moment.
+##
+## Falls back to the old flat beat only when a stamp is missing, which the gate
+## says should never happen; it is there so a regression degrades to the
+## previous behaviour rather than to a zero-length rally.
+func _gap_to_next(events: Array, event_index: int) -> float:
+	var current := events[event_index] as RallyEvent
+	if current == null or not current.metadata.has("physical_time"):
+		return 0.38
+	var moment := float(current.metadata["physical_time"])
+	for later_index in range(event_index + 1, events.size()):
+		var later := events[later_index] as RallyEvent
+		if later == null or not later.metadata.has("physical_time"):
+			continue
+		return maxf(float(later.metadata["physical_time"]) - moment, 0.0)
+	## The last contact of the rally has nothing after it, so it gets a short
+	## outro rather than a gap.
+	return 0.38
 
 
 func _play_flight(

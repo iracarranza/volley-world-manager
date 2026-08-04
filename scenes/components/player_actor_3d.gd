@@ -39,6 +39,10 @@ var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
 ## the edge of their range the ball was, and how well their body could face it.
 ## Playback reads that verdict rather than inventing a pose.
 var contact_posture: String = "planted"
+## Where the actor is currently facing, kept between frames so a change of
+## heading can be turned into rather than snapped to.
+var facing_yaw: float = 0.0
+var has_facing: bool = false
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
 var locomotion_bob: float = 0.0
@@ -47,6 +51,18 @@ var has_world_position: bool = false
 ## Thigh share of total leg length. Slightly over half, which is roughly true
 ## and is the ratio that keeps a folded knee reading as a knee.
 const THIGH_SHARE: float = 0.54
+
+## How fast a player can turn, in radians per second.
+##
+## Facing used to be assigned outright every frame, so a player pivoted through
+## any angle in one frame the instant their heading changed. That reads as a
+## teleport even when the position between two points is interpolating perfectly
+## -- the body arrives smoothly and the *orientation* jumps -- and it is the
+## cheaper half of what "teleporting" looks like on the court.
+##
+## About two turns a second at full rate. Fast enough that a defender squaring
+## up to a ball never looks sluggish, slow enough that the turn is visible.
+const FACING_TURN_RATE: float = 12.0
 
 const REFERENCE_HEIGHT_CM: float = 188.0
 const REFERENCE_WINGSPAN_CM: float = 191.0
@@ -248,7 +264,19 @@ func set_pose(
 		## and y spans 18 m, so the angle remains slightly aspect-compressed.
 		## That is a much smaller error than the sign and is left for a caller
 		## that knows the court dimensions.
-		rotation.y = atan2(-contact_direction.x, -contact_direction.y)
+		var target_yaw := atan2(-contact_direction.x, -contact_direction.y)
+		if not has_facing:
+			## First heading of the rally is adopted outright: there is no
+			## previous facing to turn from, and easing out of an arbitrary
+			## default would be a spin nobody asked for.
+			facing_yaw = target_yaw
+			has_facing = true
+		else:
+			var step := FACING_TURN_RATE * get_process_delta_time()
+			var difference := angle_difference(facing_yaw, target_yaw)
+			facing_yaw = target_yaw if absf(difference) <= step \
+				else facing_yaw + signf(difference) * step
+		rotation.y = facing_yaw
 	if not is_contact_actor:
 		return
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
