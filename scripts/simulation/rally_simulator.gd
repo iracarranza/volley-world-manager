@@ -334,6 +334,10 @@ var rng := RandomNumberGenerator.new()
 ## from `rng` or an unpromoted shadow would change every rally in the game.
 var geometric_rng := RandomNumberGenerator.new()
 var geometric_swing_index: int = 0
+## Serve records are held here rather than written straight onto the result,
+## because `_build_rally_analysis` replaces `result.analysis` wholesale and a
+## serve is resolved long before that runs.
+var geometric_serves: Dictionary = {}
 var rally_clock: float = 0.0
 var live_positions: Dictionary = {}
 var opponent_live_positions: Dictionary = {}
@@ -357,6 +361,7 @@ func resolve(
 	rng.seed = seed_value
 	rally_seed = seed_value
 	geometric_swing_index = 0
+	geometric_serves = {}
 	home_principles = team_principles if team_principles != null \
 		else TeamPrinciplesModel.for_identity("Balanced")
 	identity_effects = {
@@ -412,6 +417,11 @@ func resolve(
 	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_landing := _serve_landing_point(
 		intended_target, opponent_server, players, lineup, true
+	)
+	## Gate E: the same serve through the shared ballistics, in shadow.
+	_geometric_serve_record(
+		"geometric_serve_opponent", opponent_server,
+		Vector2(0.80, 0.08), serve_landing, false, opponent_risk,
 	)
 	var serve_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(Vector2(0.80, 0.08), serve_landing),
@@ -1584,6 +1594,10 @@ func _resolve_home_serve(
 	var opponent_landing := _serve_landing_point(
 		target_name, server, [], null, false
 	)
+	_geometric_serve_record(
+		"geometric_serve_home", server,
+		Vector2(0.82, 0.92), opponent_landing, true, serve_risk,
+	)
 	var serve_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(Vector2(0.82, 0.92), opponent_landing),
 		_serve_launch_angle_degrees(server, serve_quality),
@@ -2452,32 +2466,6 @@ func _resolve_home_continuation(
 			attack_quality - continuation_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
-	## The third swing, in shadow. Note the empty formation: this path passes a
-	## block pressure of zero to `_attack_execution` because it never forms a
-	## block at all, so the geometric record for a transition swing is a swing
-	## into an open net. That is not a modelling choice, it is a gap -- a
-	## transition attack in the sport meets a block that had to recover from its
-	## own swing -- and recording it here is how it stops being invisible.
-	var continuation_defenders: Array[Vector2] = []
-	for defender_resource in opponent_team.on_court_players():
-		var court_defender: VolleyballPlayer = defender_resource as VolleyballPlayer
-		if court_defender != null:
-			continuation_defenders.append(opponent_live_positions.get(
-				court_defender.id,
-				opponent_team.court_position(court_defender.id, "defense"),
-			))
-	var transition_record := _geometric_swing_record(
-		_geometric_swing(
-			hitter, set_target, str(assignment.lane), {}, opponent_team,
-			opponent_live_positions, continuation_defenders, true,
-			float(continuation_approach.get("jump_multiplier", 1.0)),
-			_approach_execution_fit(hitter, continuation_approach),
-			float(home_principles.decisiveness), 0.0,
-		),
-		"transition",
-	)
-	if shadow_reception_trace != null:
-		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
 	var intended_attack_target := attack_target
 	var attack_missed := _attack_missed(attack_quality)
 	if attack_missed:
@@ -2552,6 +2540,36 @@ func _resolve_home_continuation(
 	var block_quality := float(block_result.quality)
 	var block_outcome := str(block_result.outcome)
 	var blocked := block_outcome == "stuff"
+	## The third swing, in shadow, against the wall this path actually forms.
+	##
+	## It is recorded here rather than beside the other two because the block on
+	## this path is resolved *after* the swing quality is, so wiring it earlier
+	## handed the resolver an empty formation and produced a swing into an open
+	## net -- which then read as an engine gap rather than as a misplaced call.
+	## The legacy transition swing is contested; what it does not do is feed the
+	## block back into `_attack_execution` as pressure, which the other two paths
+	## do. That asymmetry is real and stays recorded, but it is a term, not an
+	## absent block.
+	var continuation_defenders: Array[Vector2] = []
+	for defender_resource in opponent_team.on_court_players():
+		var court_defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if court_defender != null:
+			continuation_defenders.append(opponent_live_positions.get(
+				court_defender.id,
+				opponent_team.court_position(court_defender.id, "defense"),
+			))
+	var transition_record := _geometric_swing_record(
+		_geometric_swing(
+			hitter, set_target, str(assignment.lane), block_result, opponent_team,
+			opponent_live_positions, continuation_defenders, true,
+			float(continuation_approach.get("jump_multiplier", 1.0)),
+			_approach_execution_fit(hitter, continuation_approach),
+			float(home_principles.decisiveness), 0.0,
+		),
+		"transition",
+	)
+	if shadow_reception_trace != null:
+		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
 	## Same contract as the main attack path: a block only shortens the shot if
 	## it actually touches it, and an untouched ball carries no deflection leg.
 	## Without this the continuation attack flew its full arc *and* the block
@@ -3943,6 +3961,8 @@ func _finish(
 		"Home" if home_won else "Opponent", end_position, end_position,
 		home_won, 1.0, ExplanationText.headline(outcome), result.explanation)
 	result.analysis = _build_rally_analysis(result)
+	for serve_key in geometric_serves:
+		result.analysis[serve_key] = geometric_serves[serve_key]
 	result.analysis["team_identity"] = str(home_principles.preset_name)
 	result.analysis["team_principles"] = home_principles.to_dict()
 	result.analysis["identity_effects"] = identity_effects.duplicate(true)
@@ -4680,6 +4700,42 @@ func _geometric_swing(
 	swing["jump_multiplier"] = jump_multiplier
 	swing["wall_size"] = wall.size()
 	return swing
+
+
+## Gate E. The geometric serve, alongside the legacy one.
+##
+## Same private stream as the swing, for the same reason, and the record goes
+## straight onto `result.analysis` because a serve happens before the shadow
+## trace this rally will carry exists.
+func _geometric_serve_record(
+	key: String,
+	server: VolleyballPlayer,
+	contact: Vector2,
+	target: Vector2,
+	attacking_negative_y: bool,
+	tactical_risk: float,
+) -> void:
+	if server == null:
+		return
+	geometric_rng.seed = hash("%d|serve|%s|%d" % [rally_seed, key, server.id])
+	var serve: Dictionary = GeometricAttackResolverModel.resolve_serve(
+		server, contact,
+		GeometricAttackPromotionModel.serve_contact_height_meters(server),
+		target, attacking_negative_y, tactical_risk,
+		GeometricAttackPromotionModel.serve_draws(geometric_rng),
+	)
+	if not bool(serve.get("available", false)):
+		return
+	var resolution: Dictionary = serve.get("resolution", {})
+	geometric_serves[key] = {
+		"outcome": str(serve.outcome),
+		"out_reason": str(resolution.get("out_reason", "")),
+		"speed_mps": float(serve.speed_mps),
+		"bearing_degrees": float(serve.bearing_degrees),
+		"launch_mode": str(serve.launch_mode),
+		"landing": Vector2(serve.landing),
+		"net_clearance_meters": float(resolution.get("net_clearance_meters", 0.0)),
+	}
 
 
 ## The shadow record for one geometric swing: what it decided and what it would

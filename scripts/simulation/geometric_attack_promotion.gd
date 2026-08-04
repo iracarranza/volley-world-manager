@@ -105,6 +105,38 @@ static func contact_height_meters(
 	return maxf(standing + leap - CONTACT_BELOW_REACH_METERS, 0.0)
 
 
+## How high a server meets the ball.
+##
+## A jump server contacts near the top of their reach like a hitter; a standing
+## float server contacts around head height and gets none of their leap. Rather
+## than branch on a style string, this scales the leap by an effort figure the
+## caller supplies, which is the same shape as the blocker's reach effort and
+## keeps one expression for "how much of your jump did you actually use".
+const SERVE_JUMP_EFFORT: float = 0.55
+
+
+static func serve_contact_height_meters(
+	server: VolleyballPlayer,
+	effort: float = SERVE_JUMP_EFFORT,
+) -> float:
+	if server == null:
+		return 0.0
+	var standing := server.standing_reach_cm() / 100.0
+	var leap := maxf(server.jumping_reach_cm() / 100.0 - standing, 0.0)
+	return maxf(standing + leap * clampf(effort, 0.0, 1.0)
+		- CONTACT_BELOW_REACH_METERS, 0.0)
+
+
+## A serve has no block to read and no defence to pick a gap in -- it has three
+## execution channels and nothing else -- so it draws three values, not eleven.
+static func serve_draws(rng: RandomNumberGenerator) -> Dictionary:
+	return {
+		"bearing": rng.randfn(0.0, 1.0),
+		"vertical": rng.randfn(0.0, 1.0),
+		"power": rng.randfn(0.0, 1.0),
+	}
+
+
 ## Every random input the resolver needs, drawn in one fixed order.
 ##
 ## The resolver takes its randomness as data so a swing can be replayed or

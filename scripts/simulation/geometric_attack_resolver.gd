@@ -67,6 +67,29 @@ const NET_CLEARANCE_MARGIN_METERS: float = 0.12
 ## How many target distances get probed looking for one that clears. The search
 ## is monotone in distance, so this is a resolution and not a menu.
 const NET_FEASIBILITY_STEPS: int = 9
+## How much of a spike's execution spread a serve carries.
+##
+## A serve is struck from a standstill, off a self-toss, with no set to read and
+## no block to beat -- the one contact in the sport a player rehearses in
+## isolation. It should not scatter like a swing taken off a bad set with hands
+## in the way.
+##
+## It matters more here than anywhere else because a serve has to be launched
+## *upward*: from a 2.6 m contact a flat ball is 1.5 m high at the net, so the
+## driven root cannot clear the tape and every serve takes the lofted one. On
+## the lofted branch range is steeply sensitive to launch angle, so vertical
+## error turns directly into balls long. Swept on live rallies, 360 serves each,
+## measured on both sides of the net:
+##
+##   value | serve error, home | opponent | combined
+##    1.00 |             32.8% |    32.2% |    32.5%
+##    0.70 |             15.6% |    10.6% |    13.1%
+##    0.45 |              3.9% |     0.0% |     1.9%
+##
+## The response is steeply nonlinear because the lofted branch amplifies angle
+## error into range error. 0.70 lands inside the sport's 8-15%; 0.45 produces a
+## serve that essentially cannot miss.
+const SERVE_SPREAD_MULTIPLIER: float = 0.70
 
 
 ## One swing, start to finish.
@@ -250,6 +273,91 @@ static func resolve_swing(
 			"move_succeeded": bool(move.get("move_succeeded", false)),
 			"confidence_cost": float(move.get("confidence_cost", 0.0)),
 		},
+	}
+
+
+## One serve, start to finish.
+##
+## A serve is the same ball as a spike and a different decision. There is no
+## approach, so no natural line and no repertoire cone -- a server picks a spot
+## and hits it. There is no block, so the only things between contact and the
+## floor are the tape and the lines. What is shared is everything that matters:
+## the same flight solver, the same net-clearance constraint, the same execution
+## channels, and the same resolution that reads the outcome off where the ball
+## landed rather than off a quality scalar.
+##
+## Sharing them is the point. Serves were hardcoded in or out -- a serve that
+## visibly stayed inside the court could be scored an error -- because the serve
+## path derived its own trajectory and then decided the outcome separately. Two
+## descriptions of one ball will always drift apart; there is now one.
+static func resolve_serve(
+	server: VolleyballPlayer,
+	contact: Vector2,
+	contact_height_meters: float,
+	target: Vector2,
+	attacking_negative_y: bool,
+	tactical_risk: float,
+	draws: Dictionary,
+) -> Dictionary:
+	if server == null:
+		return {"available": false, "reason": "no server"}
+	var bearing := AttackCourseModel.bearing_to_point(
+		contact, target, attacking_negative_y
+	)
+	var across := (target.x - contact.x) * CourtConstants.COURT_WIDTH_METERS
+	var along := (target.y - contact.y) * CourtConstants.COURT_LENGTH_METERS
+	var distance := maxf(sqrt(across * across + along * along), 0.5)
+
+	## How hard, from the serve's own attributes rather than the attack's. Risk
+	## is the tactical instruction: a team told to serve aggressively asks more
+	## of the ball, and asking more of it is exactly what puts it out.
+	var ceiling := AttackPowerModel.available_ceiling_mps(
+		_rating(server, "serve_power"), 1.0, 1.0
+	)
+	var intent := lerpf(
+		AttackPowerModel.CONTROL_INTENT, AttackPowerModel.DRIVE_INTENT,
+		clampf(tactical_risk, 0.0, 1.0),
+	)
+	var speed := maxf(
+		ceiling * intent * lerpf(
+			0.82, 1.0, _rating(server, "serve_technique")
+		),
+		BallFlightModel.MIN_SPEED_MPS,
+	)
+	var launch := _feasible_launch(
+		contact, bearing, speed, contact_height_meters, distance, distance,
+		attacking_negative_y,
+	)
+
+	## A serve's control is its own attribute, and consistency is what keeps the
+	## ball on the court -- so it, not attack accuracy, sets the spread.
+	var control := _rating(server, "serve_consistency") * 0.6 \
+		+ _rating(server, "serve_technique") * 0.4
+	var delivered := AttackSwingModel.deliver(
+		bearing, float(launch.angle_degrees), speed, control,
+		SERVE_SPREAD_MULTIPLIER,
+		float(draws.get("bearing", 0.0)),
+		float(draws.get("vertical", 0.0)),
+		float(draws.get("power", 0.0)),
+	)
+	var resolved := AttackResolutionModel.resolve(
+		contact, contact_height_meters,
+		float(delivered.bearing_degrees),
+		float(delivered.vertical_angle_degrees),
+		float(delivered.speed_mps),
+		[], attacking_negative_y,
+	)
+	return {
+		"available": true,
+		"outcome": str(resolved.outcome),
+		"bearing_degrees": bearing,
+		"target_distance_meters": distance,
+		"speed_mps": float(delivered.speed_mps),
+		"launch_mode": str(launch.mode),
+		"delivered": delivered,
+		"resolution": resolved,
+		"landing": resolved.landing,
+		"flight": resolved.flight,
 	}
 
 

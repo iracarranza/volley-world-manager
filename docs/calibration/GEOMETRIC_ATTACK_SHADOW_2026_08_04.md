@@ -185,24 +185,70 @@ dropping errors below the sport and pulling selection back toward the natural
 line -- buying one target by spending two. Stuff at 9.0% against a 12% target is
 the residual, and it is the honest cost of the trade.
 
-## All three attack paths measured
+## All five ball paths measured
+
+### The transition swing was not uncontested -- the call was misplaced
+
+The previous revision of this document recorded a transition swing facing no
+block at all, 0.0% block involvement and 96.2% in. That was wrong, and the error
+was mine rather than the engine's: `_resolve_home_continuation` resolves its
+block *after* it scores the swing, so the shadow call placed beside the swing
+handed the resolver an empty formation. A misplaced call read as an absent
+mechanism.
+
+Moved to after `_resolve_opponent_block`, the transition swing is contested.
+What that path genuinely does not do -- and the other two do -- is feed the
+block back into `_attack_execution` as pressure. That asymmetry is real and
+stays open; it is a missing term, not a missing block.
 
 | path | n | attack error | block involvement | stuff | in |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| home first ball | 398 | 10.6% | 36.2% | 9.0% | 53.3% |
-| opponent first ball | 11 | 9.1% | 27.3% | 9.1% | 63.6% |
-| transition | 53 | 3.8% | **0.0%** | **0.0%** | **96.2%** |
+| home first ball | 724 | 8.7% | 43.1% | 16.3% | 48.2% |
+| transition | 75 | 9.3% | 16.0% | 4.0% | 74.7% |
+| opponent first ball | 13 | 23.1% | 23.1% | 7.7% | 53.8% |
 
-The transition row is a finding, not a result. That path passes a block pressure
-of zero to `_attack_execution` because it never forms a block at all, so a
-transition swing in this engine is a swing into an open net and converts 96% of
-the time. In the sport a transition attack meets a block that had to recover
-from its own swing -- late and small, but there. Recording it through the same
-resolver as the other two is what makes it impossible to keep missing.
+A transition block being weaker than a first-ball block is right -- it forms off
+a dig with no setter to read. The opponent first-ball path is rare in these
+fixtures and n=13 says nothing yet.
 
-The opponent sample is small because the opponent first-ball path is rare in
-these fixtures; it is directionally consistent with the home path and not yet
-powered enough to compare against it.
+**A caution on all of these numbers.** Measured over four roster pairings the
+home path reads 8.7% error and 16.3% stuff; over three it read 10.6% and 9.0%.
+The pairing-to-pairing spread is large enough that the `STRAIN_AVERSION` table
+above is a guide to the *shape* of the trade, not a precise measurement of any
+row. This is the same lesson as `ATTACK_SIDE_SYMMETRY_2026_08_03.md`, and the
+same remedy applies: any figure worth acting on needs pairings averaged, not one
+lucky fixture.
+
+### The serve
+
+`resolve_serve` composes the same pieces with two of them removed: no approach,
+so no natural line and no repertoire cone -- a server picks a spot and hits it --
+and no block, so the only things between contact and the floor are the tape and
+the lines.
+
+The property that decides everything: **a serve must be launched upward.** From
+a 2.6 m contact a flat ball is about 1.5 m high when it reaches the net, so the
+driven root cannot clear the tape and every serve takes the lofted one. On the
+lofted branch range is steeply sensitive to launch angle, so vertical execution
+error converts directly into balls long -- which is why a serve cannot carry a
+spike's execution spread:
+
+| SERVE_SPREAD_MULTIPLIER | home | opponent | combined |
+| ---: | ---: | ---: | ---: |
+| 1.00 | 32.8% | 32.2% | 32.5% |
+| **0.70** | **15.6%** | **10.6%** | **13.1%** |
+| 0.45 | 3.9% | 0.0% | 1.9% |
+
+0.70 lands inside the sport's 8-15%. 0.45 produces a serve that essentially
+cannot miss. A serve is struck from a standstill off a self-toss with no set to
+read and no block to beat -- the one contact in the sport rehearsed in isolation
+-- so carrying less scatter than a swing is right, and the multiplier is where
+that belief gets a number.
+
+Worth noting on its own: at full spread the two sides measured 32.8% and 32.2%,
+and at 0.70 they measure 15.6% and 10.6%. One resolver, two sides, no divergence
+that is not sampling -- which is the first direct evidence for the prediction
+this gate is being held to.
 
 ## What this means for promotion
 
@@ -213,16 +259,16 @@ the rally, and a hitter with no course selection would have made every rally rea
 the same. Both are resolved: attack error sits at 10.6% inside the sport's band,
 and 30.7% of swings now leave the natural line.
 
-What remains is coverage rather than correctness. One of the three attack paths
-faces no block at all, and neither serve path goes through the resolver yet.
-Promoting now would put the geometric attack in charge of a rally where a
-transition swing is an uncontested 96% point, which would tell us nothing about
-the model and quite a lot about the gap.
+Coverage is now complete: three attack paths and two serve paths all resolve
+through the shared geometry in shadow, and every rate they produce is inside or
+adjacent to its design band. What is left before the flip is not more wiring.
 
 The order from here:
 
-1. Give the transition path a block, so all three swings are contested.
-2. Wire both serve paths through the same resolver.
+1. Feed the transition block back into `_attack_execution` as pressure, the one
+   term that path is still missing.
+2. Re-derive `STRAIN_AVERSION` over averaged pairings rather than the three the
+   table above used, now that the spread between samples is known to be wide.
 3. Then open `ENABLE_GEOMETRIC_ATTACK` behind the development override and
    compare terminal outcome distributions against the legacy path.
 

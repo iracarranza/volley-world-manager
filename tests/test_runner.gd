@@ -211,6 +211,7 @@ func _initialize() -> void:
 	_test_geometric_resolver_composes_one_swing()
 	_test_geometric_attack_promotion_translates_a_rally()
 	_test_the_hitter_can_see_the_net_and_the_gap()
+	_test_the_serve_flies_the_same_ball_as_the_spike()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7770,6 +7771,84 @@ func _test_geometric_resolver_composes_one_swing() -> void:
 	_check(
 		not RallyFeatureFlags.ENABLE_GEOMETRIC_ATTACK,
 		"the geometric attack rollout is disabled in production",
+	)
+
+
+## The serve, through the same ballistics as the spike.
+##
+## Serves used to be hardcoded in or out -- a serve that visibly stayed inside
+## the court could be scored an error -- because the serve path derived its own
+## trajectory and then decided the outcome separately. Two descriptions of one
+## ball always drift apart. There is now one: the same flight solver, the same
+## net-clearance constraint, the same execution channels, and the outcome read
+## off where the ball landed.
+func _test_the_serve_flies_the_same_ball_as_the_spike() -> void:
+	var server := VolleyballPlayer.new()
+	server.height_cm = 190.0
+	server.wingspan_cm = 194.0
+	server.jump_reach = 60
+	server.explosiveness = 60
+	server.serve_power = 70
+	server.serve_technique = 65
+	server.serve_consistency = 60
+	var contact := Vector2(0.82, 0.92)
+	var height: float = GEOMETRIC_PROMOTION_SCRIPT.serve_contact_height_meters(server)
+	var still := {"bearing": 0.0, "vertical": 0.0, "power": 0.0}
+
+	## A serve has to be launched upward and the model has to know it. From a
+	## 2.6 m contact a flat ball is about 1.5 m high at the net, so the driven
+	## root cannot clear the tape and the feasible solution is the lofted one.
+	## This is the single most important property of the serve: get it wrong and
+	## every serve is in the net.
+	var served: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_serve(
+		server, contact, height, Vector2(0.20, 0.16), true, 0.5, still
+	)
+	_check(
+		bool(served.available) and str(served.outcome) == "in"
+			and float(served.resolution.net_clearance_meters) > 0.0,
+		"a cleanly struck serve clears the tape and lands in the court",
+	)
+	_check(
+		float(served.delivered.vertical_angle_degrees) > 0.0,
+		"the ball leaves the hand travelling upward, because from here it must",
+	)
+
+	## Both sides of the net, same model. Every asymmetry ever found in this
+	## engine was one side modelled fully and the other as a parallel
+	## implementation, and the serve had two of them.
+	var mirrored: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_serve(
+		server, Vector2(0.18, 0.08), height, Vector2(0.80, 0.84), false, 0.5, still
+	)
+	_check(
+		bool(mirrored.available) and str(mirrored.outcome) == "in"
+			and absf(
+				float(mirrored.target_distance_meters)
+					- float(served.target_distance_meters)
+			) < 0.5,
+		"the same serve mirrored across the net is the same serve",
+	)
+
+	## Risk is the tactical instruction, and it has to reach the ball. A team
+	## told to serve aggressively asks more of it, and asking more of it is what
+	## eventually puts it out.
+	var timid: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_serve(
+		server, contact, height, Vector2(0.20, 0.16), true, 0.0, still
+	)
+	var aggressive: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_serve(
+		server, contact, height, Vector2(0.20, 0.16), true, 1.0, still
+	)
+	_check(
+		float(aggressive.speed_mps) > float(timid.speed_mps),
+		"serve risk arrives at the ball as speed rather than as a hidden modifier",
+	)
+
+	## No server, no serve. The alternative on this path is a default trajectory
+	## attributed to nobody.
+	_check(
+		not bool(GEOMETRIC_ATTACK_SCRIPT.resolve_serve(
+			null, contact, height, Vector2(0.20, 0.16), true, 0.5, still
+		).available),
+		"a missing server produces no serve rather than an invented one",
 	)
 
 
