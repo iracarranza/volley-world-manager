@@ -293,7 +293,7 @@ const DIG_POSTURE_WEIGHT: float = 0.55
 ## Arriving this far behind the ball costs the whole timing dimension. Shorter
 ## than the hitter's window because the ball is already travelling at attack
 ## speed when a defender has to move to it.
-const DIG_LATE_ARRIVAL_SECONDS: float = 0.45
+const DIG_REACH_MARGIN_METERS: float = 0.45
 
 ## How much the attacker is favoured when swing and dig are equally good. A
 ## clean swing beats a set defence more often than not, so an even contest is
@@ -541,9 +541,16 @@ func resolve(
 			receiver_arrived = true
 	var arrival: Dictionary = reception_claim.get("arrival", {})
 	if using_live_reception:
-		arrival = live_reception_integration.get("arrival", {})
+		## The promoted contact measures its margin in seconds, so it is
+		## converted here rather than silently reinterpreted. This is the only
+		## place the two systems' margins meet, and it is now the only place a
+		## conversion happens.
+		arrival = live_reception_integration.get("arrival", {}).duplicate()
+		arrival["reach_margin_meters"] = CoverageModel.reach_margin_from_seconds(
+			receiver, float(arrival.get("arrival_margin_seconds", 0.0))
+		)
 	var arrival_bonus := clampf(
-		float(arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12
+		float(arrival.get("reach_margin_meters", -1.0)) * 0.07, -0.16, 0.12
 	)
 	var support_count := int(reception_claim.get("support_count", 0))
 	var support_bonus := minf(float(support_count) * 0.025, 0.075)
@@ -1592,7 +1599,7 @@ func resolve(
 		_opponent_attack_type(Vector2(attack_target.x, 1.0 - attack_target.y)),
 	)
 	var defense_strength := _defense_execution(
-		opponent_defender, float(opponent_defense.arrival_margin),
+		opponent_defender, float(opponent_defense.reach_margin_meters),
 		read_modifier + floor_defense_bonus + opponent_posture_read,
 		CoverageModel.reception_body_penalty(
 			opponent_defender, Dictionary(opponent_defense.get("arrival", {})),
@@ -1617,7 +1624,7 @@ func resolve(
 			" Scouting anticipated this lane." if floor_defense_bonus >= 0.035 else "",
 		], {"side": "opponent", "movement_start": opponent_defense.start,
 			"movement_duration": opponent_defense.travel_time,
-			"arrival_margin": opponent_defense.arrival_margin,
+			"reach_margin_meters": opponent_defense.reach_margin_meters,
 			"movement_target": opponent_defender_reach,
 			"attack_direction": attack_choice.direction,
 			"adaptation_bonus": floor_defense_bonus})
@@ -1737,7 +1744,10 @@ func _resolve_home_serve(
 		- serve_quality * 0.44
 		- serve_risk_pressure
 		- CoverageModel.reception_body_penalty(receiver, opponent_arrival, serve_quality)
-		+ clampf(float(opponent_arrival.get("arrival_margin", -1.0)) * 0.07, -0.16, 0.12)
+		+ clampf(
+			float(opponent_arrival.get("reach_margin_meters", -1.0)) * 0.07,
+			-0.16, 0.12,
+		)
 		+ minf(float(support_count) * 0.025, 0.075)
 		+ serve_receive_bonus + rng.randf_range(-0.12, 0.12),
 		0.0, 1.0,
@@ -2352,7 +2362,7 @@ func _resolve_opponent_transition(
 			posture_read += 0.045 if short_ball else -0.035
 	var defense_quality := _defense_execution(
 		defender,
-		float(defense_arrival.get("arrival_margin", -1.0)),
+		float(defense_arrival.get("reach_margin_meters", -1.0)),
 		posture_read,
 		CoverageModel.reception_body_penalty(
 			defender, defense_arrival, opponent_attack
@@ -2805,7 +2815,7 @@ func _resolve_home_continuation(
 	)
 	var opponent_defender := cont_defense.player as VolleyballPlayer
 	var defense_quality := _defense_execution(
-		opponent_defender, float(cont_defense.arrival_margin), 0.0, 0.0,
+		opponent_defender, float(cont_defense.reach_margin_meters), 0.0, 0.0,
 		int(cont_defense.get("support_count", 0)),
 	)
 	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
@@ -3252,7 +3262,7 @@ func _choose_opponent_defender(
 			defenders.append(defender)
 	if defenders.is_empty():
 		return {"player": null, "start": target, "distance_meters": 99.0,
-			"travel_time": 9.0, "arrival_margin": -9.0, "support_count": 0,
+			"travel_time": 9.0, "reach_margin_meters": -9.0, "support_count": 0,
 			"edge_ratio": 1.5}
 	var plan := _opponent_defensive_plan(opponent_team)
 	var zones := _zones_at_phase_positions(
@@ -3294,7 +3304,9 @@ func _choose_opponent_defender(
 		"start": start,
 		"distance_meters": fallback_margin,
 		"travel_time": travel_time,
-		"arrival_margin": float(arrival.get("arrival_margin", -fallback_margin)),
+		"reach_margin_meters": float(
+			arrival.get("reach_margin_meters", -fallback_margin)
+		),
 		"edge_ratio": float(arrival.get("edge_ratio", 1.2)),
 		"support_count": int(claim.get("support_count", 0)),
 		"arrival": arrival,
@@ -4040,8 +4052,8 @@ func _reception_pass_result(
 	var redirect_demand := clampf(
 		absf(incoming_direction.angle_to(desired_direction)) / PI, 0.0, 1.0
 	)
-	var arrival_margin := float(arrival.get("arrival_margin", -0.5))
-	var settle_factor := clampf((arrival_margin + 0.25) / 1.25, 0.0, 1.0)
+	var reach_margin := float(arrival.get("reach_margin_meters", -0.5))
+	var settle_factor := clampf((reach_margin + 0.25) / 1.25, 0.0, 1.0)
 	var edge_ratio := float(arrival.get("edge_ratio", 1.0))
 	var body_alignment := clampf(
 		movement_alignment * 0.42 + settle_factor * 0.38
@@ -4087,7 +4099,7 @@ func _reception_pass_result(
 		0.38 + pass_distance / lerpf(5.2, 8.4, execution), 0.42, 1.25
 	)
 	var posture := "planted"
-	if arrival_margin < 0.0:
+	if reach_margin < 0.0:
 		posture = "reaching"
 	elif edge_ratio > 0.82:
 		posture = "moving"
@@ -4330,6 +4342,11 @@ func _build_rally_analysis(result: Resource) -> Dictionary:
 			if not direction.is_empty() and direction not in directions:
 				directions.append(direction)
 		longest_movement = maxf(longest_movement, float(event.metadata.get("movement_duration", 0.0)))
+		## Seconds, and only seconds. `arrival_margin` on an event is a hitter's
+		## or a setter's time to spare; a defender's margin lives under
+		## `reach_margin_meters` because it is a distance. This loop used to take
+		## a `min` across both, so the answer was whichever unit happened to
+		## produce the smaller number.
 		if event.metadata.has("arrival_margin"):
 			lowest_arrival_margin = minf(lowest_arrival_margin, float(event.metadata.arrival_margin))
 		if event.metadata.has("read_quality"):
@@ -5386,9 +5403,18 @@ func _delivered_point(
 ## did not get there has no technique to apply. `read_bonus` carries scouting,
 ## responsibility fit and defensive-plan posture -- the things that tell a
 ## defender where the ball is going before it goes there.
+## The dig, given how much reach the defender had left over.
+##
+## The second parameter is *metres*, not seconds. It used to be called
+## `arrival_margin` and weighed against a constant called
+## `DIG_LATE_ARRIVAL_SECONDS`, and every production caller was already feeding it
+## `physical_reach - distance` from the coverage model -- so the model was not
+## wrong, its name was, which is worse in one specific way: it told anyone
+## reading it that a seconds value belonged here, and eventually something put
+## one in.
 func _defense_execution(
 	defender: VolleyballPlayer,
-	arrival_margin: float,
+	reach_margin_meters: float,
 	read_bonus: float,
 	posture_penalty: float,
 	support_count: int,
@@ -5404,7 +5430,7 @@ func _defense_execution(
 		0.0, 1.0,
 	)
 	var timing := clampf(
-		(arrival_margin + DIG_LATE_ARRIVAL_SECONDS) / DIG_LATE_ARRIVAL_SECONDS,
+		(reach_margin_meters + DIG_REACH_MARGIN_METERS) / DIG_REACH_MARGIN_METERS,
 		0.0, 1.0,
 	)
 	## A covered defender is playing a ball someone else could also reach, which
@@ -5805,7 +5831,7 @@ func _arrival_phrase(arrival: Dictionary, arrived: bool, support_count: int) -> 
 	if not arrived:
 		return "No assigned player could arrive before the ball landed."
 	return "Arrived with %.2f m to spare; %d nearby teammate%s supported the zone." % [
-		float(arrival.get("arrival_margin", 0.0)), support_count,
+		float(arrival.get("reach_margin_meters", 0.0)), support_count,
 		"" if support_count == 1 else "s",
 	]
 

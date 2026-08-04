@@ -97,6 +97,8 @@ const SIGNATURE_MOVE_SCRIPT := preload(
 const GEOMETRIC_ATTACK_SCRIPT := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
+const COVERAGE_SCRIPT := preload("res://scripts/simulation/coverage_calculator.gd")
+const DEFENSIVE_ZONE_SCRIPT := preload("res://scripts/models/defensive_zone.gd")
 const GEOMETRIC_PROMOTION_SCRIPT := preload(
 	"res://scripts/simulation/geometric_attack_promotion.gd"
 )
@@ -212,6 +214,7 @@ func _initialize() -> void:
 	_test_geometric_attack_promotion_translates_a_rally()
 	_test_the_hitter_can_see_the_net_and_the_gap()
 	_test_the_serve_flies_the_same_ball_as_the_spike()
+	_test_a_margin_carries_its_unit_in_its_name()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7180,9 +7183,16 @@ func _test_playback_movement_is_humanly_possible() -> void:
 				RALLY_EVENT_SCRIPT.EventType.DEFENSE,
 				RALLY_EVENT_SCRIPT.EventType.RECEPTION,
 			] and event.metadata.has("movement_target"):
+				## Beaten means they could not reach it, which is a distance:
+				## `reach_margin_meters` goes negative when the ball lands
+				## further away than the player could stretch. This used to read
+				## `arrival_margin`, a key that carried metres here and seconds
+				## on the attack events beside it.
 				var margin := float(event.metadata.get(
-					"arrival_margin",
-					Dictionary(event.metadata.get("arrival", {})).get("arrival_margin", 0.0),
+					"reach_margin_meters",
+					Dictionary(event.metadata.get("arrival", {})).get(
+						"reach_margin_meters", 0.0
+					),
 				))
 				if margin < 0.0:
 					beaten_defenders += 1
@@ -10526,3 +10536,83 @@ func _test_defensive_presets_release_and_setting_systems() -> void:
 		if geometry_seen:
 			break
 	_check(geometry_seen, "home sets expose distance, angle and body-orientation geometry")
+
+
+## Two quantities, two names.
+##
+## The coverage model reports how much further a player could have reached --
+## metres. The continuous system reports how many seconds they had to spare.
+## Both were called `arrival_margin`, both were handed to terms fitted against
+## metres, and nothing anywhere said which was which. `_defense_execution`
+## weighed one against a constant named `DIG_LATE_ARRIVAL_SECONDS` while every
+## production caller fed it the other, and the promoted reception path fed the
+## seconds one into a slot the unpromoted path fills with metres -- so the same
+## receiver in the same position scored differently depending on whether a
+## rollout flag was open, on a boundary whose entire purpose is to be neutral.
+##
+## The model was never wrong. Its names were, which is worse in one specific
+## way: they told a reader that a seconds value belonged there, and eventually
+## something put one in. This pins the names rather than the numbers, because
+## the numbers were fine and the names are what failed.
+func _test_a_margin_carries_its_unit_in_its_name() -> void:
+	var receiver := VolleyballPlayer.new()
+	receiver.lateral_speed = 70
+	receiver.acceleration = 70
+	receiver.ball_control = 65
+	receiver.wingspan_cm = 190.0
+	receiver.anticipation = 60
+	receiver.reception = 65
+	var zone := DEFENSIVE_ZONE_SCRIPT.new()
+	zone.player_id = 1
+	zone.center = Vector2(0.30, 0.80)
+	zone.radius_meters = 3.0
+	zone.priority = 2
+	zone.enabled = true
+	var arrival: Dictionary = COVERAGE_SCRIPT.evaluate_arrival(
+		receiver, zone, Vector2(0.34, 0.78), 1.1, "reception"
+	)
+	_check(
+		arrival.has("reach_margin_meters") and not arrival.has("arrival_margin"),
+		"the coverage model reports reach in metres under a name that says so",
+	)
+
+	## The conversion is the only bridge between the two, and it has to behave
+	## like a distance: more time is more ground, and a faster player covers
+	## more of it in the same time.
+	var slow := VolleyballPlayer.new()
+	slow.lateral_speed = 30
+	slow.acceleration = 30
+	var quick := VolleyballPlayer.new()
+	quick.lateral_speed = 95
+	quick.acceleration = 95
+	var half := COVERAGE_SCRIPT.reach_margin_from_seconds(receiver, 0.5)
+	var full := COVERAGE_SCRIPT.reach_margin_from_seconds(receiver, 1.0)
+	_check(
+		full > half and half > 0.0
+			and COVERAGE_SCRIPT.reach_margin_from_seconds(quick, 0.5)
+				> COVERAGE_SCRIPT.reach_margin_from_seconds(slow, 0.5)
+			and is_zero_approx(COVERAGE_SCRIPT.reach_margin_from_seconds(receiver, 0.0)),
+		"seconds convert to metres monotonically and with the player's speed",
+	)
+
+	## A half-second to spare is metres of ground, not half a unit of whatever
+	## the consumer happened to assume. Read as metres it clears the arrival
+	## bonus clamp; read raw it barely registers, and that gap is exactly what
+	## the promoted reception path was silently paying.
+	_check(
+		half > 0.85,
+		"half a second of margin is worth its ground (%.2f m)" % half,
+	)
+
+	## And the promoted path can no longer be mistaken for the unpromoted one:
+	## its dictionary does not carry the ambiguous key at all.
+	var live_keys := ["arrival_margin_seconds"]
+	var integrator_source := FileAccess.get_file_as_string(
+		"res://scripts/simulation/live_reception_integrator.gd"
+	)
+	_check(
+		'"arrival_margin_seconds"' in integrator_source
+			and '"arrival_margin":' not in integrator_source
+			and live_keys.size() == 1,
+		"the promoted reception reports seconds under a name that says so",
+	)

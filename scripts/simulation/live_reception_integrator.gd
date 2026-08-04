@@ -80,7 +80,16 @@ static func apply(
 		"ball_start_time": trajectory.start_time,
 		"ball_end_time": trajectory.end_time,
 		"arrival": {
-			"arrival_margin": float(repeated.get("true_arrival_margin", 0.0)),
+			## Seconds, and named so. The continuous system measures time to
+			## spare; the quality terms this feeds are fitted against metres of
+			## reach. Emitting it under `arrival_margin` put a seconds value in
+			## the slot `evaluate_arrival` fills with metres, and the consumer
+			## scaled it identically -- so a promoted receiver comfortably in
+			## position scored a fraction of what the same receiver scored
+			## unpromoted, on a boundary a rollout is supposed to keep neutral.
+			"arrival_margin_seconds": float(
+				repeated.get("true_arrival_margin", 0.0)
+			),
 			"travel_time": float(repeated.get("travel_time", 0.0)),
 			"physical_feasibility": float(repeated.get(
 				"true_physical_feasibility", 0.0

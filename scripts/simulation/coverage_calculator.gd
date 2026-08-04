@@ -38,12 +38,19 @@ static func evaluate_arrival(
 	var physical_reach := base_reach + travel_distance
 	var assigned_reach := float(zone.radius_meters)
 	var reachable := distance <= minf(physical_reach, assigned_reach)
-	var arrival_margin := physical_reach - distance
+	## Named for what it is. This is a *distance* -- how much further this
+	## player could have reached than the ball actually needed them to -- and it
+	## was called `arrival_margin`, which is the name the rest of the engine uses
+	## for a time. Two quantities in different units under one name is an
+	## invitation, and it was taken: a promoted reception fed its seconds into
+	## the slot this metres value occupies, and every consumer scaled it as if
+	## nothing had changed.
+	var reach_margin := physical_reach - distance
 	var zone_margin := assigned_reach - distance
 	var edge_ratio := distance / maxf(assigned_reach, 0.1)
 	var skill_rating := float(player.get(contact_skill)) / 100.0
 	var claim_score := float(zone.priority) * 0.24 \
-		+ clampf(arrival_margin / 3.0, -0.5, 0.5) * 0.34 \
+		+ clampf(reach_margin / 3.0, -0.5, 0.5) * 0.34 \
 		+ clampf(zone_margin / 3.0, -0.5, 0.5) * 0.16 \
 		+ anticipation * 0.14 + skill_rating * 0.12
 	return {
@@ -53,7 +60,7 @@ static func evaluate_arrival(
 		"available_time": available_time,
 		"physical_reach_meters": physical_reach,
 		"assigned_reach_meters": assigned_reach,
-		"arrival_margin": arrival_margin,
+		"reach_margin_meters": reach_margin,
 		"edge_ratio": edge_ratio,
 		"claim_score": claim_score,
 	}
@@ -113,6 +120,27 @@ static func choose_claimant(
 	best.seam_conflict = support_count > 0 and best_priority == second_priority \
 		and claim_margin < 0.10
 	return best
+
+
+## The same distance, from a time.
+##
+## A continuous system measures how many seconds a receiver had to spare, and
+## the quality terms downstream are all fitted against metres of reach. This is
+## the one conversion between them, using the movement speed `evaluate_arrival`
+## itself uses to turn available time into covered ground, so a promoted contact
+## and an unpromoted one are scored on one scale instead of two.
+static func reach_margin_from_seconds(
+	player: VolleyballPlayer,
+	seconds: float,
+) -> float:
+	if player == null:
+		return 0.0
+	var speed_rating := float(player.lateral_speed) / 100.0
+	var movement_speed := LocomotionModel.legacy_maximum_speed(
+		player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
+	)
+	var acceleration_factor := lerpf(0.62, 1.0, float(player.acceleration) / 100.0)
+	return seconds * movement_speed * acceleration_factor
 
 
 static func reception_body_penalty(
