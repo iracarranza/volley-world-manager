@@ -173,6 +173,7 @@ func _initialize() -> void:
 	_test_gate_forty_eight_block_rollout_boundary()
 	_test_gate_forty_nine_development_live_block()
 	_test_shadow_movement_integration()
+	_test_event_physical_time_is_derived()
 	_test_playback_samples_resolved_movement()
 	_test_3d_playback_contract()
 	_test_block_visualization_geometry()
@@ -5151,6 +5152,67 @@ func _test_shadow_movement_integration() -> void:
 			and str(refused.get("reason", "")) == "non-positive duration",
 		"Movement integration refuses a non-positive duration",
 	)
+
+
+## Every event knows the physical moment it happened, and nothing had to be
+## corrected to make the sequence legal.
+##
+## Playback still advances on an accumulator of animation slots rather than on
+## the simulation's own clock. Replacing that accumulator is only safe if the
+## clock exists and is trustworthy, which is three separate claims -- coverage,
+## ordering, and, the one that actually matters, that the causality floor in
+## `_stamp_physical_times` almost never has to fire.
+##
+## That floor clamps each stamp up to the running maximum, so a timeline that
+## runs backwards can never reach playback. It is a guard, not a schedule:
+## every time it fires, some event's own derived moment disagreed with the
+## contact before it. A test that asserted only "the stamps are ordered" would
+## be reading the guard's output and calling the derivations sound -- which is
+## precisely how a dig stamped at the swing's landing sat behind a set built
+## from the pre-attack clock, and how attack coverage was stamped as happening
+## before the block it covers, both of them silently corrected.
+func _test_event_physical_time_is_derived() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var events := 0
+	var stamped := 0
+	var breaks := 0
+	var floored := 0
+	var rallies := 0
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(5000, 5060):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			rallies += 1
+			var previous := -1.0
+			for raw_event in result.events:
+				var event: Resource = raw_event
+				events += 1
+				if not event.metadata.has("physical_time"):
+					continue
+				stamped += 1
+				var moment := float(event.metadata["physical_time"])
+				if moment < previous - 0.0001:
+					breaks += 1
+				if event.metadata.has("physical_time_floored"):
+					floored += 1
+				previous = moment
+	manager.free()
+	_check(rallies >= 100 and events > 500,
+		"physical time gate saw a real sample (%d rallies, %d events)"
+			% [rallies, events])
+	_check(stamped == events,
+		"every rally event carries a physical time (%d of %d)" % [stamped, events])
+	_check(breaks == 0,
+		"physical times never run backwards in event order (%d breaks)" % breaks)
+	## Zero, not a tolerance. Every path that produces one of these is a
+	## derivation this suite can name, so a single correction is a path that
+	## has stopped deriving its own moment rather than acceptable noise.
+	_check(floored == 0,
+		"the causality floor never has to correct a derived moment (%d fired)"
+			% floored)
 
 
 ## Playback now samples a traversal built by the engine's movement model rather

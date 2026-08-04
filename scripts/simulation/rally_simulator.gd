@@ -1559,8 +1559,12 @@ func resolve(
 	## An untouched ball carries no deflection segment: the attack's own flight
 	## already reaches the floor, and emitting a second overlapping path is what
 	## made the ball appear twice in two places.
+	## The deflection leaves the hands when the ball reaches them, which is
+	## after the swing. `rally_clock` here is still the moment the set left the
+	## setter, so this stamped every touched block a full set-flight early.
 	var opponent_block_trajectory := _block_deflection_trajectory(
-		net_contact, post_block_target, blocked, 0.35, rally_clock
+		net_contact, post_block_target, blocked, 0.35,
+		rally_clock + float(set_flight_time),
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -1644,7 +1648,18 @@ func resolve(
 				"blocked_hitter_id": hitter.id,
 				"movement_start": coverer_start,
 				"movement_target": coverer_reach,
-				"movement_duration": coverer_move_time})
+				"movement_duration": coverer_move_time,
+				## Coverage happens when the blocked ball comes back down, which
+				## is the end of the deflection's own arc. `rally_clock` here is
+				## still the set's contact time -- earlier than the block itself,
+				## so this stamped the cover as happening before the touch it
+				## covers.
+				"event_time": float(opponent_block_trajectory.get(
+					"end_time", rally_clock + float(set_flight_time)
+				))})
+		rally_clock = maxf(rally_clock, float(opponent_block_trajectory.get(
+			"end_time", rally_clock + float(set_flight_time)
+		)))
 		if not coverage_success:
 			return _finish(result, "blocked", false, hitter.id, {
 				"hitter": hitter.display_name,
@@ -1716,6 +1731,13 @@ func resolve(
 	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
+	## When the ball actually reaches the defender, which is the end of the
+	## swing's own arc. The transition that follows builds its second-contact
+	## window from `rally_clock`, so the clock has to arrive here too -- left at
+	## the set's contact time it would place the next set *before* this dig.
+	var opponent_dig_time := float(attack_trajectory.get(
+		"end_time", rally_clock + attack_flight
+	))
 	var opponent_defender_reach := _reached_point(
 		opponent_defender, Vector2(opponent_defense.start), attack_target,
 		attack_flight, "lateral",
@@ -1733,12 +1755,17 @@ func resolve(
 			"movement_duration": opponent_defense.travel_time,
 			"reach_margin_meters": opponent_defense.reach_margin_meters,
 			"movement_target": opponent_defender_reach,
+			## The dig happens when the swing reaches the floor, which the
+			## swing's own trajectory already states. Deriving it from
+			## `rally_clock` instead misses the set flight that separates them.
+			"event_time": opponent_dig_time,
 			"attack_direction": attack_choice.direction,
 			"adaptation_bonus": floor_defense_bonus})
 	## Where they actually ended up, not where the ball was. A defender who was
 	## beaten to it starts the next phase short of it, which is the position the
 	## rest of the rally should reason from.
 	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
+	rally_clock = maxf(rally_clock, opponent_dig_time)
 	if dug:
 		result.key_factors.append(ExplanationText.factor("strong_defense"))
 		return _resolve_opponent_transition(
@@ -2610,9 +2637,11 @@ func _resolve_opponent_transition(
 			float(to_block_arc.apex_height_meters),
 			float(opponent_flight.get("start_time", rally_clock)),
 		)
+	## Same correction as the home block's: the ball has to arrive before the
+	## hands can touch it.
 	var home_block_trajectory := _block_deflection_trajectory(
 		opponent_net_contact, home_block_target,
-		block_outcome == "stuff", 0.42, rally_clock
+		block_outcome == "stuff", 0.42, rally_clock + set_flight_time,
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -2754,6 +2783,12 @@ func _resolve_opponent_transition(
 	)
 	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
+	## See the mirrored site on the home swing: the continuation's second-contact
+	## window is measured from `rally_clock`, so the clock has to reach the dig.
+	var home_dig_time := float(opponent_attack_trajectory.get(
+		"end_time", rally_clock + attack_time
+	))
+	rally_clock = maxf(rally_clock, home_dig_time)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
 		defense_quality, "%s defends" % defender.display_name,
@@ -2772,7 +2807,10 @@ func _resolve_opponent_transition(
 			"support_count": support_count,
 			"movement_start": defender_start,
 			"movement_target": defender_reach,
-			"movement_duration": defender_move_time})
+			"movement_duration": defender_move_time,
+			## The dig happens when the swing reaches the floor, which the
+			## swing's own trajectory already states.
+			"event_time": home_dig_time})
 	result.key_factors.append(ExplanationText.factor(
 		"defense_assignment_fit" if responsibility_fit >= 0.02 \
 		else "defense_assignment_stretch"
@@ -3141,6 +3179,13 @@ func _resolve_home_continuation(
 		continuation_attack_angle,
 	)
 	var continuation_attack_flight: float = float(continuation_attack_arc.duration_seconds)
+	## Named rather than inlined into the event: the dig below reads this same
+	## trajectory's `end_time` so the two contacts agree on when the ball landed.
+	var continuation_attack_trajectory := _ball_trajectory(
+		"attack", set_target, attack_target, continuation_attack_flight,
+		float(continuation_attack_arc.apex_height_meters),
+		cont_set_contact_time + continuation_flight_time,
+	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, attack_quality >= 0.25, attack_quality,
 		"T3 outside swing · exchange %d" % exchange_number,
@@ -3179,11 +3224,7 @@ func _resolve_home_continuation(
 			"set_flight_time": continuation_flight_time,
 			"flight_time": continuation_attack_flight,
 			"event_time": cont_set_contact_time + continuation_flight_time,
-			"outgoing_trajectory": _ball_trajectory(
-				"attack", set_target, attack_target, continuation_attack_flight,
-				float(continuation_attack_arc.apex_height_meters),
-				cont_set_contact_time + continuation_flight_time
-			)})
+			"outgoing_trajectory": continuation_attack_trajectory})
 	live_positions[hitter.id] = set_target
 	## The continuation now owns a real timeline instead of stamping every
 	## contact with the dig's clock: set contact, then the set flight, then the
@@ -3350,6 +3391,10 @@ func _resolve_home_continuation(
 	)
 	if opponent_defender != null:
 		opponent_live_positions[opponent_defender.id] = transition_defender_reach
+	var cont_dig_time := float(continuation_attack_trajectory.get(
+		"end_time", rally_clock + continuation_attack_flight
+	))
+	rally_clock = maxf(rally_clock, cont_dig_time)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
 		attack_target + Vector2(0.04, -0.03), dug, defense_quality,
@@ -3357,7 +3402,10 @@ func _resolve_home_continuation(
 		"Contact 1 of 3 · %d%% control." % roundi(defense_quality * 100.0),
 		{"side": "opponent",
 			"movement_start": transition_defender_start,
-			"movement_target": transition_defender_reach})
+			"movement_target": transition_defender_reach,
+			## The dig happens when the swing reaches the floor, which the
+			## swing's own trajectory already states.
+			"event_time": cont_dig_time})
 	if not dug:
 		return _finish(result, "kill", true, hitter.id, {
 			"setter": setter.display_name,
@@ -5183,8 +5231,90 @@ func _build_rally_analysis(result: Resource) -> Dictionary:
 		"average_block_read": average_read}
 
 
+## When each event physically happened, on the clock the rally was simulated on.
+##
+## An event's moment is when its actor touches the ball and sends it, which is
+## exactly its outgoing trajectory's `start_time`. Measured across 300 rallies,
+## every event that carries both that and a resolver-supplied `event_time`
+## agrees to within a microsecond, so the trajectory is authoritative and the
+## hand-placed stamps are corroboration rather than a second opinion.
+##
+## Two kinds carry neither and are derived rather than invented:
+##
+##   A block that never touched the ball has an empty `outgoing_trajectory` --
+##   the resolver deliberately emits no deflection segment for an untouched
+##   ball -- and was stamped with bare `rally_clock`, which at that point is
+##   still the moment the *set* left the setter's hands. That produced 90
+##   blocks per 300 rallies recorded 0.782 s *before* the swing they blocked.
+##   The real moment is when the ball crosses the net, which is a known
+##   fraction along the attack's own flight.
+##
+##   POINT has no trajectory and no stamp at all. It happens when the ball
+##   finishes, which is the last trajectory's end.
+##
+## The running maximum at the end is a causality floor, not a schedule: events
+## are emitted in the order they occur, so a physical time may not precede the
+## event before it. It is counted, because a floor that fires often would mean
+## the derivations above are wrong.
+func _stamp_physical_times(result: Resource) -> int:
+	var corrections := 0
+	var previous := 0.0
+	var ball_free_at := 0.0
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		var metadata: Dictionary = event.metadata
+		var trajectory: Dictionary = metadata.get("outgoing_trajectory", {})
+		var moment := -1.0
+		if trajectory.has("start_time"):
+			moment = float(trajectory["start_time"])
+		elif int(event.event_type) == RallyEventModel.EventType.BLOCK:
+			## An untouched block: the ball passed the hands rather than meeting
+			## them, so its moment is the net crossing of the swing it failed to
+			## intercept. `incoming_trajectory` is that swing.
+			## Ahead of the generic `event_time` fallback on purpose: the stamp
+			## these blocks carry is the known-bad one, still holding the moment
+			## the set left the setter's hands. Deriving beats trusting it.
+			moment = _net_crossing_time(metadata.get("incoming_trajectory", {}))
+			if moment < 0.0 and metadata.has("event_time"):
+				moment = float(metadata["event_time"])
+		elif metadata.has("event_time"):
+			moment = float(metadata["event_time"])
+		elif int(event.event_type) == RallyEventModel.EventType.POINT:
+			moment = ball_free_at
+		if moment < 0.0:
+			moment = previous
+		if moment < previous:
+			corrections += 1
+			metadata["physical_time_floored"] = previous - moment
+			moment = previous
+		metadata["physical_time"] = moment
+		event.metadata = metadata
+		previous = moment
+		if trajectory.has("end_time"):
+			ball_free_at = maxf(ball_free_at, float(trajectory["end_time"]))
+		else:
+			ball_free_at = maxf(ball_free_at, moment)
+	return corrections
+
+
+## Where the ball crosses the net on its way from a swing to the floor, as a
+## fraction of that flight. A block that never touched it still happened, and
+## it happened here.
+func _net_crossing_time(attack_trajectory: Dictionary) -> float:
+	if not attack_trajectory.has("start_time"):
+		return -1.0
+	var start := Vector2(attack_trajectory.get("start_position", Vector2(0.5, 0.6)))
+	var end := Vector2(attack_trajectory.get("end_position", Vector2(0.5, 0.2)))
+	var span := end.y - start.y
+	if absf(span) < 0.0001:
+		return float(attack_trajectory["start_time"])
+	var fraction := clampf((CourtConstants.NET_Y - start.y) / span, 0.0, 1.0)
+	return float(attack_trajectory["start_time"]) 		+ float(attack_trajectory.get("duration", 0.0)) * fraction
+
+
 func _finalize_rally_timeline(result: Resource) -> void:
 	_ensure_event_trajectories(result)
+	result.analysis["physical_time_corrections"] = _stamp_physical_times(result)
 	var timeline := 0.0
 	for event_resource in result.events:
 		var event: Resource = event_resource
