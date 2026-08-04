@@ -21,6 +21,11 @@ const NET_HEIGHT_METERS: float = 2.43
 var playback_speed: float = 1.0
 var active_result: RallyResult
 var playback_generation: int = 0
+## Where playback had a player standing when the resolver said their journey
+## started somewhere else. Kept rather than absorbed: each entry is a leg the
+## simulator timed from a position playback never walked them to, and the list
+## going up is how that gets noticed.
+var playback_start_mismatches: Array[Dictionary] = []
 var playback_paused: bool = false
 var skip_requested: bool = false
 var playback_active: bool = false
@@ -85,6 +90,7 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 		player_physical_profiles,
 	)
 	match_court_3d.ball_actor.reset_flight()
+	playback_start_mismatches.clear()
 	progress_bar.value = 0.0
 	await _run_rally(generation)
 	if generation != playback_generation:
@@ -324,9 +330,37 @@ func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictio
 		## deflection: the block phase parked them at the net, the dig was timed
 		## from their floor-defence position, and playback drew the whole gap in
 		## the 0.24s the deflection was in the air -- about 20 m/s.
+		## ...but re-anchoring the journey must not re-anchor the *player*.
+		##
+		## This used to assign the simulator's start into the plan and then call
+		## `set_player_position` with it, which moves the actor there outright
+		## before the leg is drawn. Wherever the two disagreed -- which is the
+		## entire reason this block exists -- the viewer saw a jump, and the
+		## approach is where they disagree most, because a hitter is staged to
+		## their approach mark by machinery playback never watched happen.
+		##
+		## The journey is now drawn from where the player visibly is. The leg
+		## still takes the time the simulator gave it, so a disagreement shows up
+		## as a slightly different pace rather than as a body arriving somewhere
+		## it never travelled to. Pace is a thing the eye forgives; teleporting
+		## is not.
+		##
+		## The gap is recorded rather than absorbed silently: it is a real
+		## mismatch between what the resolver timed and what playback can show,
+		## and it should stay measurable.
 		if next_contact.metadata.has("movement_start") and plan.has(next_actor_id):
-			plan[next_actor_id]["start"] = actor_start
-			match_court_3d.set_player_position(next_actor_id, actor_start)
+			var visible_start := Vector2(match_court_3d.live_positions.get(
+				next_actor_id, actor_start
+			))
+			if visible_start.distance_to(actor_start) > 0.02:
+				playback_start_mismatches.append({
+					"player_id": next_actor_id,
+					"event_type": int(next_contact.event_type),
+					"visible_start": visible_start,
+					"reported_start": actor_start,
+					"distance": visible_start.distance_to(actor_start),
+				})
+			plan[next_actor_id]["start"] = visible_start
 		if next_contact.metadata.has("approach_start_position"):
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["approach_start_position"]
