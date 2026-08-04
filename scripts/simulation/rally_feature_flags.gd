@@ -47,5 +47,20 @@ const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 ## So the promotion waits on the floor defence, not on itself. Development
 ## builds run it today through `ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK`, which is
 ## where Gates 42, 48 and 49 each sat before their own production flip.
-const ENABLE_GEOMETRIC_ATTACK: bool = false
+## OPEN FOR MANUAL TUNING, NOT BECAUSE IT PASSED.
+##
+## The symmetry gate rejects this at 0.636 against a 0.12 bound, measured on
+## identical rosters over 709 kills. It is on because the outcomes it produces --
+## balls landing where the geometry puts them, tools and block-crushes, an
+## opponent that can miss -- have to be watched to be tuned, and the play path in
+## `main.gd` passes no development flag, so nothing else reveals them.
+##
+## Turning it on here rather than passing `true` at the play site is deliberate:
+## that argument also opens the Gate 42 live attack, the Gate 48/49 live block
+## and continuous reception, and tuning against four systems moving at once is
+## not tuning.
+##
+## Before this ships, `_pooled_home_attack_share` must come inside 0.12 on its
+## own terms. Do not widen the bound to close this.
+const ENABLE_GEOMETRIC_ATTACK: bool = true
 const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
