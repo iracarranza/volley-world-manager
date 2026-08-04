@@ -4136,6 +4136,11 @@ func _physical_playback_profile(player: VolleyballPlayer) -> Dictionary:
 		"height_cm": player.height_cm,
 		"wingspan_cm": player.wingspan_cm,
 		"stride_length_m": player.stride_length_m,
+		## What this player is. Generation has assigned a body type since it
+		## existed, and it reached height, mass, wingspan and six attribute
+		## ceilings -- everything except the one place a player is actually
+		## looked at.
+		"body_type": player.body_type,
 		"standing_reach_meters": player.standing_reach_cm() / 100.0,
 		"jumping_reach_meters": player.jumping_reach_cm() / 100.0,
 	}
