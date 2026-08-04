@@ -9870,7 +9870,25 @@ func _test_block_closing_and_touch_distribution() -> void:
 				attack_coverage_observed = true
 	_check(home_block_events > 20, "block distribution test observes enough home contests")
 	_check(non_middle_primary, "nearest pin players can lead blocks instead of the middle")
-	var pooled_blocks := _pooled_home_block_outcomes(4, 60)
+	## 2400 rallies, not 480. At 480 this yields 22 contested blocks total and
+	## has been flipped by three unrelated changes this session -- 24 vs 25,
+	## 10 vs 11, and an exact 11 vs 11 draw -- which is a coin toss reporting
+	## itself as a regression. The figures below are read from this sweep.
+	var pooled_blocks := _pooled_home_block_outcomes(8, 150)
+	## This is a real defect, and the test is correctly red.
+	##
+	## Raising the sample did not rescue the claim, it settled it: over 2400
+	## rallies the home block returns 60 partials against 63 stuffs, a partial
+	## share of 0.488 of contested blocks. The sport is nowhere near 1:1 --
+	## `outcome_calibration`'s own reference bands put block touches at
+	## [0.15, 0.45] against stuffs at [0.03, 0.14], roughly three touches per
+	## stuff -- and this engine's other instrument agrees, reporting a touch
+	## rate 3.6x its stuff rate across both sides. The home block alone converts
+	## far too many contests into terminal stuffs.
+	##
+	## The assertion is left as it stands because it states the right thing. It
+	## now fails stably and for a reason, instead of flipping on whichever
+	## rallies happened to run.
 	_check(
 		int(pooled_blocks.partials) > int(pooled_blocks.stuffs),
 		"partial block outcomes outnumber terminal stuffs (%d partial, %d stuff)" % [
