@@ -97,9 +97,17 @@ const FUNNEL_REACH_PENALTY: float = 0.14
 const FUNNEL_WIDTH_SCALE: float = 1.16
 
 
+## The wall a swing is hit into.
+##
+## `fallback_positions` is where each blocker stands when nothing has staged
+## them yet, as a plain id -> position map rather than a team resource. It used
+## to be the latter, which only one side of the net has: the opponent's swing
+## passed `null` here, so every unstaged home blocker was placed at x = 0.5 --
+## the middle of the net, regardless of who they were or where the ball was.
+## A dictionary is the one shape both sides can supply.
 static func block_wall(
 	formation: Dictionary,
-	team: Resource,
+	fallback_positions: Dictionary,
 	live_positions: Dictionary = {},
 	block_intent: String = "Balanced",
 ) -> Array:
@@ -121,7 +129,7 @@ static func block_wall(
 				reach_effort -= FUNNEL_REACH_PENALTY
 				width_scale = FUNNEL_WIDTH_SCALE
 		wall.append({
-			"net_x": _blocker_net_x(blocker, team, live_positions),
+			"net_x": _blocker_net_x(blocker, fallback_positions, live_positions),
 			"reach_height_m": blocker.jumping_reach_cm(
 				clampf(reach_effort, 0.0, 1.0)
 			) / 100.0,
@@ -332,11 +340,11 @@ static func quality_for(outcome: String, swing: Dictionary) -> float:
 ## Where a blocker's hands are on the net, in normalised court x.
 static func _blocker_net_x(
 	blocker: VolleyballPlayer,
-	team: Resource,
+	fallback_positions: Dictionary,
 	live_positions: Dictionary,
 ) -> float:
 	if live_positions.has(blocker.id):
 		return clampf(Vector2(live_positions[blocker.id]).x, 0.0, 1.0)
-	if team != null and team.has_method("court_position"):
-		return clampf(Vector2(team.court_position(blocker.id, "block")).x, 0.0, 1.0)
+	if fallback_positions.has(blocker.id):
+		return clampf(Vector2(fallback_positions[blocker.id]).x, 0.0, 1.0)
 	return 0.5

@@ -8135,7 +8135,7 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 	short.explosiveness = 40
 	var full_wall: Array = promotion.block_wall(
 		{"primary": tall, "assist": short, "primary_close": 1.0, "assist_close": 0.9},
-		null, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)},
+		{}, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)},
 	)
 	_check(
 		full_wall.size() == 2
@@ -8148,7 +8148,7 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 	)
 	var half_wall: Array = promotion.block_wall(
 		{"primary": tall, "assist": short, "primary_close": 0.5, "assist_close": 0.2},
-		null, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)},
+		{}, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)},
 	)
 	_check(
 		half_wall.size() == 1

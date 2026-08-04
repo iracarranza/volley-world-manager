@@ -1185,9 +1185,14 @@ func resolve(
 	shadow_summary["geometric_attack"] = _geometric_swing_record(
 		_geometric_swing(
 			hitter, set_target, assignment.lane, opponent_block_formation,
-			opponent_team, opponent_live_positions, opponent_defenders, true,
+			_opponent_block_fallbacks(opponent_team), opponent_live_positions,
+			opponent_defenders, true,
 			float(resolved_approach.get("jump_multiplier", 1.0)),
-			float(resolved_approach.get("runup_quality", 0.0)),
+			## `_approach_execution_fit`, not `runup_quality`. The other two
+			## swings pass the fit and this one passed the raw run-up, so the
+			## same physical approach entered the resolver on two different
+			## scales depending on which contact it was.
+			_approach_execution_fit(hitter, resolved_approach),
 			float(home_principles.decisiveness), 0.0,
 			str(opponent_plan_for_wall.block_intent) \
 				if opponent_plan_for_wall != null else "Balanced",
@@ -1289,6 +1294,8 @@ func resolve(
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
 			"target_reason": attack_choice.reason,
 			"intended_target": intended_attack_target,
+			"geometric_outcome": str(geometric.get("outcome", "")),
+			"geometric_out_reason": str(geometric.get("out_reason", "")),
 			"attack_missed": attack_missed,
 			"attack_effectiveness": attack_effectiveness,
 			"movement_start": hitter_start,
@@ -2379,7 +2386,8 @@ func _resolve_opponent_transition(
 		_geometric_swing(
 			opponent_hitter, opponent_contact,
 			opponent_lane, home_block_formation,
-			null, live_positions, home_defenders, false,
+			_home_block_fallbacks(players, lineup), live_positions,
+			home_defenders, false,
 			float(opponent_approach.get("jump_multiplier", 1.0)),
 			_approach_execution_fit(opponent_hitter, opponent_approach)
 				if not opponent_approach.is_empty() else 0.5,
@@ -2448,6 +2456,14 @@ func _resolve_opponent_transition(
 			"reached_approach_start": bool(opponent_preparation.get(
 				"reached_approach_start", true
 			)),
+			## Why this swing ended the way it did, on the event, so the three
+			## attack paths can be compared without re-deriving it. Only the
+			## home continuation recorded any of this, which is why an opponent
+			## error rate of 0.411 against the home side's 0.184 could be seen
+			## and not explained.
+			"geometric_outcome": str(geometric.get("outcome", "")),
+			"geometric_out_reason": str(geometric.get("out_reason", "")),
+			"attack_missed": bool(geometric.get("attack_missed", false)),
 			"transition_preparation": opponent_preparation.duplicate(true),
 			"resolved_approach": opponent_approach.duplicate(true),
 			"available_attack_actions": opponent_attack_actions.duplicate(),
@@ -3010,8 +3026,9 @@ func _resolve_home_continuation(
 	var cont_wall_plan := _opponent_defensive_plan(opponent_team)
 	var transition_record := _geometric_swing_record(
 		_geometric_swing(
-			hitter, set_target, str(assignment.lane), block_result, opponent_team,
-			opponent_live_positions, continuation_defenders, true,
+			hitter, set_target, str(assignment.lane), block_result,
+			_opponent_block_fallbacks(opponent_team), opponent_live_positions,
+			continuation_defenders, true,
 			float(continuation_approach.get("jump_multiplier", 1.0)),
 			_approach_execution_fit(hitter, continuation_approach),
 			float(home_principles.decisiveness), 0.0,
@@ -3047,6 +3064,8 @@ func _resolve_home_continuation(
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
 			"attack_type": continuation_hit_type,
 			"intended_target": intended_attack_target,
+			"geometric_outcome": str(geometric.get("outcome", "")),
+			"geometric_out_reason": str(geometric.get("out_reason", "")),
 			"attack_missed": attack_missed,
 			"movement_start": hitter_start,
 			"approach_start_position": continuation_approach_start,
@@ -5659,7 +5678,7 @@ func _geometric_swing(
 	contact: Vector2,
 	lane: String,
 	formation: Dictionary,
-	blocking_team: Resource,
+	blocking_fallbacks: Dictionary,
 	blocking_live: Dictionary,
 	defenders: Array,
 	attacking_negative_y: bool,
@@ -5676,7 +5695,7 @@ func _geometric_swing(
 	])
 	geometric_swing_index += 1
 	var wall := GeometricAttackPromotionModel.block_wall(
-		formation, blocking_team, blocking_live, block_intent
+		formation, blocking_fallbacks, blocking_live, block_intent
 	)
 	var height := GeometricAttackPromotionModel.contact_height_meters(
 		hitter, jump_multiplier
@@ -5737,6 +5756,35 @@ func _geometric_serve_record(
 
 ## The shadow record for one geometric swing: what it decided and what it would
 ## have produced, small enough to keep on every attack of every rally.
+## Where each blocker stands when nothing has staged them, one map per side.
+##
+## `GeometricAttackPromotion.block_wall` used to take a team resource for this,
+## which only the opponent has -- so the opponent's own swing passed `null` and
+## every unstaged home blocker was placed at the middle of the net. A hitter
+## aiming around a wall was aiming around a wall that was not where it stood.
+func _home_block_fallbacks(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+) -> Dictionary:
+	var fallbacks := {}
+	for slot_number in range(1, 7):
+		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if player != null:
+			fallbacks[player.id] = CourtConstants.slot_position(slot_number)
+	return fallbacks
+
+
+func _opponent_block_fallbacks(opponent_team: Resource) -> Dictionary:
+	var fallbacks := {}
+	if opponent_team == null:
+		return fallbacks
+	for raw_player in opponent_team.on_court_players():
+		var player: VolleyballPlayer = raw_player as VolleyballPlayer
+		if player != null:
+			fallbacks[player.id] = opponent_team.court_position(player.id, "block")
+	return fallbacks
+
+
 func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 	if swing.is_empty():
 		return {"side": side, "available": false, "reason": "no hitter"}
