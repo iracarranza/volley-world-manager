@@ -2251,6 +2251,34 @@ func _resolve_opponent_transition(
 		_set_launch_angle_degrees(opponent_setter, opponent_tempo, opponent_set_quality),
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
+	## When the setter actually touches the ball.
+	##
+	## This set was stamped at bare `rally_clock` -- the moment of the pass that
+	## fed it -- so the opponent set left the setter's hands at the same instant
+	## the ball arrived at them, with no flight from the passer and no release.
+	## 210 of the sub-20ms event gaps in `run_playback_schedule_probe` were this
+	## one thing.
+	##
+	## The home side has always used the incoming pass's own flight plus a
+	## release interval drawn from the setter's system fit, and this function
+	## already knew the figure: it hands `DEFAULT_SET_RELEASE_SECONDS +
+	## DEFAULT_SECOND_CONTACT_SECONDS` to `_form_home_block` below, described
+	## there as "the opponent's own pass-to-release time". The block was reading a
+	## delay the set itself did not take.
+	var opponent_incoming_pass: Dictionary = {}
+	if not result.events.is_empty():
+		opponent_incoming_pass = Dictionary(
+			(result.events[-1] as RallyEvent).metadata.get("outgoing_trajectory", {})
+		)
+	var opponent_second_contact_window := float(
+		opponent_incoming_pass.get("duration", DEFAULT_SECOND_CONTACT_SECONDS)
+	)
+	var opponent_release_interval := _release_interval(
+		opponent_setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE),
+		opponent_set_quality,
+	)
+	var opponent_set_contact_time := rally_clock \
+		+ opponent_second_contact_window + opponent_release_interval
 	_add_event(result, RallyEventModel.EventType.SET, opponent_setter.id,
 		opponent_setter.display_name,
 		dig_position, opponent_contact, true, opponent_set_quality,
@@ -2264,10 +2292,12 @@ func _resolve_opponent_transition(
 			"set_distance_meters": resolved_set_geometry.distance_meters,
 			"set_angle_degrees": resolved_set_geometry.angle_degrees,
 			"body_orientation_fit": resolved_set_geometry.body_orientation_fit,
+			"set_flight_time": set_flight_time,
+			"event_time": opponent_set_contact_time,
 			"outgoing_trajectory": _ball_trajectory(
 				"opponent_set", opponent_setter_position, opponent_contact,
 				set_flight_time, float(set_arc.apex_height_meters),
-				rally_clock
+				opponent_set_contact_time
 			)})
 	var opponent_set_event := result.events[-1] as RallyEvent
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
@@ -2417,7 +2447,7 @@ func _resolve_opponent_transition(
 			"tempo": opponent_tempo,
 			"target": opponent_contact,
 		},
-		opponent_setter.id, rally_clock + set_flight_time, &"opponent",
+		opponent_setter.id, opponent_set_contact_time + set_flight_time, &"opponent",
 	)
 	var opponent_prepared := opponent_preparation.get("actor") as RallyPlayerState
 	opponent_preparation.erase("actor")
@@ -2445,9 +2475,14 @@ func _resolve_opponent_transition(
 		opponent_approach_start, opponent_contact, opponent_move_time,
 		set_flight_time,
 	)
+	## Rebuilding the arc must not rebuild the clock with it. This passed
+	## `rally_clock`, so whenever the reachable-contact clamp moved the target --
+	## often -- the retarget silently restamped the set back to the moment of the
+	## pass, undoing the release above. The home set and the home continuation
+	## both pass their own contact time here; this was the only one that did not.
 	_retarget_set_event(
 		opponent_set_event, opponent_contact, "opponent_set", set_flight_time,
-		float(set_arc.apex_height_meters), rally_clock,
+		float(set_arc.apex_height_meters), opponent_set_contact_time,
 	)
 	var opponent_approach := ApproachMechanicsModel.evaluate_takeoff(
 		opponent_prepared, opponent_contact, set_flight_time
@@ -2557,7 +2592,7 @@ func _resolve_opponent_transition(
 		"attack", opponent_contact, home_target,
 		float(opponent_attack_arc.duration_seconds),
 		float(opponent_attack_arc.apex_height_meters),
-		rally_clock + set_flight_time
+		opponent_set_contact_time + set_flight_time
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
@@ -2600,7 +2635,7 @@ func _resolve_opponent_transition(
 			"approach_in_system": bool(opponent_approach.get("approach_in_system", false)),
 			"jump_multiplier": float(opponent_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(opponent_approach.get("lateral_control", 0.0)),
-			"event_time": rally_clock + set_flight_time,
+			"event_time": opponent_set_contact_time + set_flight_time,
 			"launch_angle_degrees": opponent_attack_angle,
 			"movement_duration": opponent_move_time,
 			"movement_entry_velocity": opponent_prepared.velocity \
@@ -2669,7 +2704,7 @@ func _resolve_opponent_transition(
 	## hands can touch it.
 	var home_block_trajectory := _block_deflection_trajectory(
 		opponent_net_contact, home_block_target,
-		block_outcome == "stuff", 0.42, rally_clock + set_flight_time,
+		block_outcome == "stuff", 0.42, opponent_set_contact_time + set_flight_time,
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
