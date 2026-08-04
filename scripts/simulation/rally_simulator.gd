@@ -1807,6 +1807,27 @@ func _resolve_home_serve(
 	## setter marker visibly vanished inside another opponent's during serve
 	## receive -- and had them setting from a position no setter takes.
 	var opponent_setter_release := _opponent_setter_release_target(opponent_team)
+	## Stage the setter where a setter stands.
+	##
+	## The receiver gets a live position on the line above and the setter never
+	## did, so `_resolve_opponent_transition` fell through to
+	## `court_position(id, "transition")` -- the rotation's transition base --
+	## and had the setter run to the release point from there on every single
+	## serve. Measured over 488 sets that put their arrival term at -0.153
+	## against the home setter's -0.022, about 0.85s late against 0.12s, and it
+	## dragged two more terms with it: a setter reaching from the wrong place is
+	## the same setter whose delivery lands outside their capability and whose
+	## set travels a worse angle. Those three terms carried the entire 0.287 set
+	## gap, which in turn was the largest asymmetry left in the engine.
+	##
+	## The home setter is walked to their release target during the serve's
+	## flight through `staged_next_position` on the reception event. This is that,
+	## for the one player on the other side of the net who needed it.
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	if opponent_lineup != null:
+		var opponent_setter_id := opponent_lineup.active_setter_id()
+		if opponent_setter_id >= 0:
+			opponent_live_positions[opponent_setter_id] = opponent_setter_release
 	return _resolve_opponent_transition(
 		result, players, lineup, server, opponent_setter_release,
 		opponent_team, defensive_plan, 1, reception_quality, true,
