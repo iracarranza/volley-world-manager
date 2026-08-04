@@ -216,6 +216,7 @@ func _initialize() -> void:
 	_test_the_serve_flies_the_same_ball_as_the_spike()
 	_test_a_margin_carries_its_unit_in_its_name()
 	_test_a_serve_that_misses_is_drawn_missing()
+	_test_a_block_can_be_told_what_it_is_for()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -10765,4 +10766,80 @@ func _test_a_serve_that_misses_is_drawn_missing() -> void:
 		"missed serves find the tape and the lines both (%d net, %d long or wide)" % [
 			net_misses, long_or_wide,
 		],
+	)
+
+
+## A block that is told what it is for.
+##
+## `block_defense_relationship` chooses which lane the wall protects and nothing
+## chooses what it tries to do once it is there, so the two philosophies the
+## sport actually runs -- seal the lane and end the rally, or take a piece and
+## let the floor play it -- were the same wall. The outcome bands for both have
+## been in `_contest_block` the whole time with no dial reaching them.
+##
+## The tradeoff is the point, and it is what this pins. Sealing narrows the band
+## where the block touches the ball without ending the rally, from both sides: a
+## committed wall either beats the swing or the swing goes past it. Funnelling
+## widens that band at the cost of terminal points. If one intent produced more
+## stuffs *and* more touches than another it would not be a choice, it would be
+## a free upgrade, which is the failure mode this checks for.
+func _test_a_block_can_be_told_what_it_is_for() -> void:
+	var counts := {}
+	for intent in ["Seal", "Balanced", "Funnel"]:
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		for rotation_number in manager.defensive_plans:
+			var plan: Resource = manager.defensive_plans[rotation_number]
+			if plan != null:
+				plan.block_intent = intent
+		var stuffs := 0
+		var partials := 0
+		var blocks := 0
+		for serving_home in [true, false]:
+			manager.match_state.serving_home = serving_home
+			for seed_value in range(5000, 5150):
+				var result: Resource = manager.resolve_active_rally(seed_value)
+				if result == null:
+					continue
+				for raw_event in result.events:
+					var event := raw_event as RallyEvent
+					if event == null \
+							or event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+							or str(event.metadata.get("side", "")) != "home":
+						continue
+					blocks += 1
+					match str(event.metadata.get("outcome", "miss")):
+						"stuff": stuffs += 1
+						"touch", "funnel": partials += 1
+		counts[intent] = {"stuff": stuffs, "partial": partials, "blocks": blocks}
+		manager.free()
+	var seal: Dictionary = counts["Seal"]
+	var funnel: Dictionary = counts["Funnel"]
+	_check(
+		int(seal.blocks) > 40 and int(funnel.blocks) > 40,
+		"the block intent test observes enough home blocks (%d seal, %d funnel)" % [
+			int(seal.blocks), int(funnel.blocks),
+		],
+	)
+	## Sealing ends more rallies at the net than funnelling does.
+	_check(
+		int(seal.stuff) > int(funnel.stuff),
+		"a sealing block stuffs more than a funnelling one (%d vs %d)" % [
+			int(seal.stuff), int(funnel.stuff),
+		],
+	)
+	## And funnelling gets a piece of more balls without ending them.
+	_check(
+		int(funnel.partial) > int(seal.partial),
+		"a funnelling block deflects more than a sealing one (%d vs %d)" % [
+			int(funnel.partial), int(seal.partial),
+		],
+	)
+	## Neither is free. If one intent beat the other on both counts it would be
+	## a strictly better setting rather than a decision, which is the whole
+	## failure mode a tactical dial has.
+	_check(
+		not (int(seal.stuff) >= int(funnel.stuff)
+			and int(seal.partial) >= int(funnel.partial)),
+		"neither block intent is strictly better than the other",
 	)

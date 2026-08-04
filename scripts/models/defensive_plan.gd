@@ -12,6 +12,13 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @export_enum("Balanced", "Defend Line", "Defend Cross") var block_defense_relationship := "Balanced"
 @export_enum("Shallow", "Balanced", "Deep") var defensive_depth := "Balanced"
 @export_enum("Standard", "Compress Short") var short_ball_posture := "Standard"
+## What the block is *for*, as opposed to where it goes.
+##
+## `block_defense_relationship` already chooses which lane the wall protects.
+## This chooses what it tries to do once it is there, which is a separate
+## decision a coach actually makes: seal the lane and end the rally at the net,
+## or take a piece of the ball and let the floor play the rest.
+@export_enum("Seal", "Balanced", "Funnel") var block_intent := "Balanced"
 @export var serve_target: String = "Zone 5"
 @export_range(0.0, 1.0) var serve_risk: float = 0.5
 @export var defender_positions: Dictionary = {}
@@ -153,6 +160,7 @@ func to_dict() -> Dictionary:
 		"block_defense_relationship": block_defense_relationship,
 		"defensive_depth": defensive_depth,
 		"short_ball_posture": short_ball_posture,
+		"block_intent": block_intent,
 		"serve_target": serve_target,
 		"serve_risk": serve_risk,
 		"defender_positions": positions,
@@ -172,6 +180,7 @@ func load_dict(data: Dictionary) -> void:
 	block_defense_relationship = str(data.get("block_defense_relationship", "Balanced"))
 	defensive_depth = str(data.get("defensive_depth", "Balanced"))
 	short_ball_posture = str(data.get("short_ball_posture", "Standard"))
+	block_intent = str(data.get("block_intent", "Balanced"))
 	serve_target = str(data.get("serve_target", "Zone 5"))
 	serve_risk = clampf(float(data.get("serve_risk", 0.5)), 0.0, 1.0)
 	defender_positions.clear()

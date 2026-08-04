@@ -1338,8 +1338,14 @@ func resolve(
 
 	# Resolve the block from the opponent's actual front-row geometry. A
 	# roster-wide best blocker must not cover every pin regardless of distance.
+	## The opponent's wall, with the opponent's intent. Their plan is built from
+	## the same defaults a home coach starts on, so a Balanced intent here is the
+	## same Balanced intent the player would have.
+	var opponent_plan_for_block := _opponent_defensive_plan(opponent_team)
 	var block_resolution := _contest_block(
-		opponent_block_formation, attack_effectiveness
+		opponent_block_formation, attack_effectiveness, 0.0,
+		str(opponent_plan_for_block.block_intent) \
+			if opponent_plan_for_block != null else "Balanced",
 	)
 
 	var live_block_integration: Dictionary = {}
@@ -2299,6 +2305,7 @@ func _resolve_opponent_transition(
 	var block_result := _contest_block(
 		home_block_formation, opponent_attack,
 		absf(0.50 - opponent_contact.y) * CourtConstants.COURT_LENGTH_METERS,
+		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
 	)
 	var blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
@@ -2724,7 +2731,12 @@ func _resolve_home_continuation(
 	## swing needs the wall in front of it and the swing's result is the thing
 	## the geometric path replaces. `_contest_block` draws no randomness, so
 	## hoisting it does not move the rally's stream by a single value.
-	var block_result := _contest_block(cont_formation, attack_quality)
+	var cont_opponent_plan := _opponent_defensive_plan(opponent_team)
+	var block_result := _contest_block(
+		cont_formation, attack_quality, 0.0,
+		str(cont_opponent_plan.block_intent) if cont_opponent_plan != null \
+			else "Balanced",
+	)
 	var continuation_defenders: Array[Vector2] = []
 	for defender_resource in opponent_team.on_court_players():
 		var court_defender: VolleyballPlayer = defender_resource as VolleyballPlayer
@@ -3075,10 +3087,32 @@ func _form_opponent_block(
 
 ## Settles a formed block against the swing that was actually hit at it. One
 ## copy, both sides of the net, every exchange.
+## What a block intends, as three shifts to the outcome bands.
+##
+## The bands must stay ordered -- funnel below touch below stuff -- so an intent
+## moves all three rather than one, and what it really changes is the *width* of
+## the band where the block gets a piece of the ball without ending the rally.
+##
+## Sealing narrows it from both directions: the wall is committed, so it either
+## beats the swing outright or the swing goes past it. Funnelling widens it: the
+## block is not trying to end the rally, it is trying to slow the ball down and
+## put it somewhere the floor is already standing. That is the whole tactical
+## choice, and it is a real one -- a terminal block wins points a funnel does
+## not, and a funnel keeps rallies alive that a beaten seal loses.
+static func _block_intent_margins(intent: String) -> Dictionary:
+	match intent:
+		"Seal":
+			return {"stuff": -0.05, "touch": -0.025, "funnel": 0.04}
+		"Funnel":
+			return {"stuff": 0.05, "touch": -0.04, "funnel": -0.04}
+	return {"stuff": 0.0, "touch": 0.0, "funnel": 0.0}
+
+
 func _contest_block(
 	formation: Dictionary,
 	attack_quality: float,
 	contact_depth_from_net: float = 0.0,
+	block_intent: String = "Balanced",
 ) -> Dictionary:
 	var resolved := formation.duplicate(true)
 	resolved["primary"] = formation.get("primary")
@@ -3104,14 +3138,17 @@ func _contest_block(
 	var contest := block_quality + _execution_error(
 		formation.get("primary") as VolleyballPlayer, "block_timing", 0.13
 	)
+	var intent_shift := _block_intent_margins(block_intent)
 	var outcome := "miss"
-	if contest > attack_quality + BLOCK_STUFF_MARGIN and primary_close >= 0.78:
+	if contest > attack_quality + BLOCK_STUFF_MARGIN + float(intent_shift.stuff) \
+			and primary_close >= 0.78:
 		outcome = "stuff"
-	elif contest > attack_quality + BLOCK_TOUCH_MARGIN:
+	elif contest > attack_quality + BLOCK_TOUCH_MARGIN + float(intent_shift.touch):
 		outcome = "touch"
-	elif contest > attack_quality + BLOCK_FUNNEL_MARGIN:
+	elif contest > attack_quality + BLOCK_FUNNEL_MARGIN + float(intent_shift.funnel):
 		outcome = "funnel"
 	resolved["outcome"] = outcome
+	resolved["block_intent"] = block_intent
 	return resolved
 
 
