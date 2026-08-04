@@ -433,6 +433,11 @@ func resolve(
 		"geometric_serve_opponent", opponent_server,
 		Vector2(0.80, 0.08), serve_landing, false, opponent_risk,
 	)
+	## Recorded against the intent above, moved below: the shadow resolver aims
+	## where the server aimed and reaches its own verdict, while the official
+	## ball has to go where the official verdict already says it went.
+	if serve_error:
+		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
 	var serve_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(Vector2(0.80, 0.08), serve_landing),
 		_serve_launch_angle_degrees(opponent_server, serve_quality),
@@ -1690,6 +1695,10 @@ func _resolve_home_serve(
 		"geometric_serve_home", server,
 		Vector2(0.82, 0.92), opponent_landing, true, serve_risk,
 	)
+	if serve_error:
+		opponent_landing = _errant_serve_landing(
+			opponent_landing, serve_quality, false
+		)
 	var serve_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(Vector2(0.82, 0.92), opponent_landing),
 		_serve_launch_angle_degrees(server, serve_quality),
@@ -3107,6 +3116,62 @@ func _errant_attack_target(intended: Vector2, attack_quality: float) -> Vector2:
 	if to_left <= to_right:
 		return Vector2(-wide_overshoot, intended.y)
 	return Vector2(1.0 + wide_overshoot, intended.y)
+
+## The same three numbers for a serve, and the same reasoning behind them.
+##
+## A serve misses in one of three ways and the tape is the commonest, so the
+## net channel is entered on a wider band of quality than the attack's.
+const SERVE_ERROR_OVERSHOOT_METERS: float = 0.60
+const SERVE_NET_ERROR_DROP_METERS: float = 0.50
+const SERVE_NET_ERROR_QUALITY: float = 0.42
+
+
+## Where a serve that misses actually lands.
+##
+## `_serve_landing_point` clamps its result to the receiving half -- x into
+## [0.06, 0.94] and y into the legal depth band -- so it is structurally
+## incapable of producing a ball that is out. The error verdict is a separate
+## coin flip against `_serve_error_chance`, taken before the landing point is
+## computed and never fed into it, so a serve ruled out was drawn landing
+## cleanly inside the court and the rally then ended with "the serve does not
+## enter the court". That is the same defect `_errant_attack_target` was written
+## for, on the one contact that starts every rally, and it went unfixed because
+## the attack fix was made where the attack was wrong rather than where the
+## engine was.
+##
+## Deterministic, like the attack version: it reads the intended target and the
+## quality that already decided the outcome, so a replayed seed draws the
+## identical miss.
+func _errant_serve_landing(
+	intended: Vector2,
+	serve_quality: float,
+	landing_on_home_side: bool,
+) -> Vector2:
+	var wide_overshoot := SERVE_ERROR_OVERSHOOT_METERS \
+		/ CourtConstants.COURT_WIDTH_METERS
+	var deep_overshoot := SERVE_ERROR_OVERSHOOT_METERS \
+		/ CourtConstants.COURT_LENGTH_METERS
+	var net_drop := SERVE_NET_ERROR_DROP_METERS / CourtConstants.COURT_LENGTH_METERS
+	var lane_x := clampf(intended.x, 0.06, 0.94)
+	if serve_quality < SERVE_NET_ERROR_QUALITY:
+		## Into the tape, dropping on the server's own side of it -- which is
+		## the half the ball came from, the opposite one to where it was aimed.
+		return Vector2(lane_x, CourtConstants.NET_Y
+			+ (-net_drop if landing_on_home_side else net_drop))
+	## Otherwise it carried. Past whichever line the intended target already sat
+	## nearest, so a deep serve sails long and one aimed near a sideline sails
+	## wide, rather than every miss landing on one arbitrary spot.
+	var endline := 1.0 if landing_on_home_side else 0.0
+	var to_endline := absf(intended.y - endline)
+	var to_left := intended.x
+	var to_right := 1.0 - intended.x
+	if to_endline <= to_left and to_endline <= to_right:
+		return Vector2(lane_x, endline
+			+ (deep_overshoot if landing_on_home_side else -deep_overshoot))
+	if to_left <= to_right:
+		return Vector2(-wide_overshoot, intended.y)
+	return Vector2(1.0 + wide_overshoot, intended.y)
+
 
 ## Depth a shot family naturally wants, as a fraction from the net (0) to the
 ## endline (1). Power swings drive deep; rolls and tips die short.

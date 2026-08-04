@@ -215,6 +215,7 @@ func _initialize() -> void:
 	_test_the_hitter_can_see_the_net_and_the_gap()
 	_test_the_serve_flies_the_same_ball_as_the_spike()
 	_test_a_margin_carries_its_unit_in_its_name()
+	_test_a_serve_that_misses_is_drawn_missing()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -10616,4 +10617,78 @@ func _test_a_margin_carries_its_unit_in_its_name() -> void:
 			and '"arrival_margin":' not in integrator_source
 			and live_keys.size() == 1,
 		"the promoted reception reports seconds under a name that says so",
+	)
+
+
+## A serve ruled out is drawn out.
+##
+## `_serve_landing_point` clamps to the receiving half, so it cannot produce a
+## ball that is out; the error verdict is a separate draw against
+## `_serve_error_chance`, taken before the landing point exists and never fed
+## into it. So every service error in the game was drawn landing cleanly inside
+## the court, and the rally then ended with "the serve does not enter the
+## court" -- the ball simply vanished at the end of a legal-looking arc.
+##
+## `_errant_attack_target` fixed exactly this for attacks, and its own comment
+## says so: "The ball was correctly ruled out and still drawn in, which is the
+## exact complaint this was meant to fix." The serve kept the bug because that
+## fix was made where the attack was wrong rather than where the engine was.
+## This checks the contact that starts every rally, on both sides of the net.
+func _test_a_serve_that_misses_is_drawn_missing() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var errors_seen := 0
+	var drawn_in := 0
+	var net_misses := 0
+	var long_or_wide := 0
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(9200, 9320):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null or str(result.terminal_outcome) != "serve_error":
+				continue
+			var serve: RallyEvent = null
+			for raw_event in result.events:
+				var event := raw_event as RallyEvent
+				if event != null \
+						and event.event_type == RALLY_EVENT_SCRIPT.EventType.SERVE:
+					serve = event
+					break
+			if serve == null:
+				continue
+			errors_seen += 1
+			var landing: Vector2 = serve.end_position
+			## The receiving half, as the renderer paints it: the full width
+			## between the sidelines, and the depth between the net and that
+			## side's endline.
+			var inside_width := landing.x >= 0.0 and landing.x <= 1.0
+			## `serving_home` means the home team served, so the ball is aimed at
+			## the opponent half -- the one with the smaller y.
+			var receiving_half := landing.y < CourtConstants.NET_Y if serving_home \
+				else landing.y > CourtConstants.NET_Y
+			var inside_depth := landing.y >= 0.0 and landing.y <= 1.0
+			if inside_width and receiving_half and inside_depth:
+				drawn_in += 1
+			elif (landing.y > CourtConstants.NET_Y) == serving_home:
+				net_misses += 1
+			else:
+				long_or_wide += 1
+	manager.free()
+	_check(
+		errors_seen > 10,
+		"the serve error test observes enough missed serves (%d)" % errors_seen,
+	)
+	_check(
+		drawn_in == 0,
+		"no serve ruled out is drawn landing in the court (%d of %d were)" % [
+			drawn_in, errors_seen,
+		],
+	)
+	## And not all one way. A miss that always went into the net would satisfy
+	## the check above while being just as wrong as one that never did.
+	_check(
+		net_misses > 0 and long_or_wide > 0,
+		"missed serves find the tape and the lines both (%d net, %d long or wide)" % [
+			net_misses, long_or_wide,
+		],
 	)
