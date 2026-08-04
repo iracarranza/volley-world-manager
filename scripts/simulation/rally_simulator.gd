@@ -1603,7 +1603,7 @@ func resolve(
 		attack_target,
 		_opponent_attack_type(Vector2(attack_target.x, 1.0 - attack_target.y)),
 	)
-	var defense_strength := _defense_execution(
+	var opponent_dig_terms := _defense_terms(
 		opponent_defender, float(opponent_defense.reach_margin_meters),
 		read_modifier + floor_defense_bonus + opponent_posture_read,
 		CoverageModel.reception_body_penalty(
@@ -1612,6 +1612,8 @@ func resolve(
 		),
 		int(opponent_defense.get("support_count", 0)),
 	)
+	opponent_dig_terms["contested_against"] = attack_effectiveness
+	var defense_strength := float(opponent_dig_terms.quality)
 	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
@@ -1627,7 +1629,8 @@ func resolve(
 			opponent_defender.display_name, "controls" if dug else "cannot reach",
 			str(attack_choice.direction), float(opponent_defense.distance_meters),
 			" Scouting anticipated this lane." if floor_defense_bonus >= 0.035 else "",
-		], {"side": "opponent", "movement_start": opponent_defense.start,
+		], {"side": "opponent", "dig_terms": opponent_dig_terms,
+			"movement_start": opponent_defense.start,
 			"movement_duration": opponent_defense.travel_time,
 			"reach_margin_meters": opponent_defense.reach_margin_meters,
 			"movement_target": opponent_defender_reach,
@@ -2369,7 +2372,7 @@ func _resolve_opponent_transition(
 			posture_read += -0.055 if short_ball else 0.035
 		elif defensive_plan.defensive_depth == "Shallow":
 			posture_read += 0.045 if short_ball else -0.035
-	var defense_quality := _defense_execution(
+	var home_dig_terms := _defense_terms(
 		defender,
 		float(defense_arrival.get("reach_margin_meters", -1.0)),
 		posture_read,
@@ -2378,10 +2381,13 @@ func _resolve_opponent_transition(
 		),
 		support_count,
 	)
+	home_dig_terms["contested_against"] = opponent_attack
+	var defense_quality := float(home_dig_terms.quality)
 	## Never reaching the ball is already most of what the timing term says; this
 	## keeps the hard floor the arrival model asserts separately.
 	if not defender_arrived:
 		defense_quality = minf(defense_quality, 0.10)
+		home_dig_terms["unarrived_floor"] = true
 	var defense_success: bool = defender_arrived \
 		and _dig_contest(defender, defense_quality, opponent_attack)
 	var defender_start: Vector2 = live_positions.get(
@@ -2402,7 +2408,8 @@ func _resolve_opponent_transition(
 			roundi(defense_quality * 100.0), roundi(opponent_attack * 100.0),
 			_responsibility_phrase(defensive_plan, defender.id, attack_type),
 			_arrival_phrase(defense_arrival, defender_arrived, support_count),
-		], {"side": "home", "attack_type": attack_type,
+		], {"side": "home", "dig_terms": home_dig_terms,
+			"attack_type": attack_type,
 			"planner_floor_center": Vector2(floor_phase_positions.get(
 				defender.id, defender_start
 			)),
@@ -2823,10 +2830,12 @@ func _resolve_home_continuation(
 		opponent_team, attack_target, continuation_attack_flight
 	)
 	var opponent_defender := cont_defense.player as VolleyballPlayer
-	var defense_quality := _defense_execution(
+	var cont_dig_terms := _defense_terms(
 		opponent_defender, float(cont_defense.reach_margin_meters), 0.0, 0.0,
 		int(cont_defense.get("support_count", 0)),
 	)
+	cont_dig_terms["contested_against"] = attack_quality
+	var defense_quality := float(cont_dig_terms.quality)
 	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
 	## This branch carried no spatial metadata at all, so playback fell back to
 	## the contact point and walked the digger there from wherever they stood,
@@ -5484,8 +5493,30 @@ func _defense_execution(
 	posture_penalty: float,
 	support_count: int,
 ) -> float:
+	return float(_defense_terms(
+		defender, reach_margin_meters, read_bonus, posture_penalty, support_count
+	).quality)
+
+
+## The same dig, with its working shown.
+##
+## Every attempt to explain why one side of the net digs better than the other
+## has so far been a guess at which term was responsible, and two of those
+## guesses were wrong -- the parallel implementation, then the timing term. A
+## composite that only ever reports its product cannot be asked which factor
+## moved, so it now reports the factors too and the question can be measured
+## instead of argued.
+func _defense_terms(
+	defender: VolleyballPlayer,
+	reach_margin_meters: float,
+	read_bonus: float,
+	posture_penalty: float,
+	support_count: int,
+) -> Dictionary:
 	if defender == null:
-		return 0.0
+		return {"quality": 0.0, "capability": 0.0, "timing": 0.0,
+			"posture": 0.0, "support": 0.0, "opportunity": 0.0,
+			"read_bonus": 0.0, "reach_margin_meters": 0.0}
 	var capability := clampf(
 		_rating(defender, "reception") * DIG_RECEPTION_WEIGHT
 		+ _rating(defender, "anticipation") * DIG_ANTICIPATION_WEIGHT
@@ -5504,7 +5535,16 @@ func _defense_execution(
 	var opportunity := (1.0 - DIG_TIMING_WEIGHT * (1.0 - timing)) \
 		* (1.0 - DIG_POSTURE_WEIGHT * clampf(posture_penalty, 0.0, 1.0)) \
 		* (1.0 + support)
-	return clampf(capability * opportunity * DIG_SOLO_SHARE, 0.0, 1.0)
+	return {
+		"quality": clampf(capability * opportunity * DIG_SOLO_SHARE, 0.0, 1.0),
+		"capability": capability,
+		"timing": timing,
+		"posture": clampf(posture_penalty, 0.0, 1.0),
+		"support": support,
+		"opportunity": opportunity,
+		"read_bonus": read_bonus,
+		"reach_margin_meters": reach_margin_meters,
+	}
 
 
 ## Whether this dig comes up, against the swing that was actually hit.
