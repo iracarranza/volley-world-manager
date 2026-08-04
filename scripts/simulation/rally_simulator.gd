@@ -1979,6 +1979,26 @@ func _resolve_opponent_transition(
 			opponent_attack - opponent_swing_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
+	## The same geometric swing the home first ball resolves in shadow, on the
+	## other side of the net. Recording both sides is the point: the symmetry
+	## gate measures a six-point home tilt today, and one shared resolver is the
+	## most plausible way that goes away -- which can only be checked if both
+	## sides are measured through it.
+	var opponent_record := _geometric_swing_record(
+		_geometric_swing(
+			opponent_hitter, opponent_contact,
+			str(attack_choice.get("lane", "Left Pin")), home_block_formation,
+			null, live_positions, home_defenders, false,
+			float(opponent_approach.get("jump_multiplier", 1.0)),
+			_approach_execution_fit(opponent_hitter, opponent_approach)
+				if not opponent_approach.is_empty() else 0.5,
+			float(home_principles.decisiveness), 0.0,
+		),
+		"opponent",
+	)
+	if shadow_reception_trace != null:
+		shadow_reception_trace.summary["geometric_attack_opponent"] = opponent_record
+
 	## Let playback walk the hitter to their approach mark during the set,
 	## instead of teleporting them into a swing when the attack event begins.
 	var opponent_set_event := result.events[-1] as RallyEvent
@@ -2432,6 +2452,32 @@ func _resolve_home_continuation(
 			attack_quality - continuation_deficit * ATTACK_OVERREACH_SEVERITY,
 			0.0, 1.0,
 		)
+	## The third swing, in shadow. Note the empty formation: this path passes a
+	## block pressure of zero to `_attack_execution` because it never forms a
+	## block at all, so the geometric record for a transition swing is a swing
+	## into an open net. That is not a modelling choice, it is a gap -- a
+	## transition attack in the sport meets a block that had to recover from its
+	## own swing -- and recording it here is how it stops being invisible.
+	var continuation_defenders: Array[Vector2] = []
+	for defender_resource in opponent_team.on_court_players():
+		var court_defender: VolleyballPlayer = defender_resource as VolleyballPlayer
+		if court_defender != null:
+			continuation_defenders.append(opponent_live_positions.get(
+				court_defender.id,
+				opponent_team.court_position(court_defender.id, "defense"),
+			))
+	var transition_record := _geometric_swing_record(
+		_geometric_swing(
+			hitter, set_target, str(assignment.lane), {}, opponent_team,
+			opponent_live_positions, continuation_defenders, true,
+			float(continuation_approach.get("jump_multiplier", 1.0)),
+			_approach_execution_fit(hitter, continuation_approach),
+			float(home_principles.decisiveness), 0.0,
+		),
+		"transition",
+	)
+	if shadow_reception_trace != null:
+		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
 	var intended_attack_target := attack_target
 	var attack_missed := _attack_missed(attack_quality)
 	if attack_missed:
@@ -4615,15 +4661,25 @@ func _geometric_swing(
 	var wall := GeometricAttackPromotionModel.block_wall(
 		formation, blocking_team, blocking_live
 	)
-	return GeometricAttackResolverModel.resolve_swing(
-		hitter, contact,
-		GeometricAttackPromotionModel.contact_height_meters(hitter, jump_multiplier),
+	var height := GeometricAttackPromotionModel.contact_height_meters(
+		hitter, jump_multiplier
+	)
+	var swing := GeometricAttackResolverModel.resolve_swing(
+		hitter, contact, height,
 		lane, wall, defenders, attacking_negative_y, approach_quality, decisiveness,
 		float(hitter.match_confidence), flow_for_team,
 		GeometricAttackPromotionModel.draws(
 			geometric_rng, wall.size(), defenders.size()
 		),
 	)
+	## The two inputs a sweep cannot supply for itself. Gate D contacted at full
+	## jumping reach because it had no approach to ask; a rally does, and whether
+	## that difference explains the net rate is the first question the shadow was
+	## wired to answer.
+	swing["contact_height_meters"] = height
+	swing["jump_multiplier"] = jump_multiplier
+	swing["wall_size"] = wall.size()
+	return swing
 
 
 ## The shadow record for one geometric swing: what it decided and what it would
@@ -4651,6 +4707,10 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"offset_degrees": float(course.get("offset_degrees", 0.0)),
 		"speed_mps": float(delivered.get("speed_mps", 0.0)),
 		"bearing_error_degrees": float(delivered.get("bearing_error_degrees", 0.0)),
+		"contact_height_meters": float(swing.get("contact_height_meters", 0.0)),
+		"jump_multiplier": float(swing.get("jump_multiplier", 1.0)),
+		"wall_size": int(swing.get("wall_size", 0)),
+		"vertical_angle_degrees": float(delivered.get("vertical_angle_degrees", 0.0)),
 		"block_kind": str(
 			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
 		),

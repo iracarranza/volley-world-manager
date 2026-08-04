@@ -210,6 +210,7 @@ func _initialize() -> void:
 	_test_signature_moves_beat_a_block()
 	_test_geometric_resolver_composes_one_swing()
 	_test_geometric_attack_promotion_translates_a_rally()
+	_test_the_hitter_can_see_the_net_and_the_gap()
 	_test_defense_opponent_and_match_day_controls()
 	_test_coverage_arrival_and_reception_ownership()
 	_test_second_contact_ownership()
@@ -7769,6 +7770,109 @@ func _test_geometric_resolver_composes_one_swing() -> void:
 	_check(
 		not RallyFeatureFlags.ENABLE_GEOMETRIC_ATTACK,
 		"the geometric attack rollout is disabled in production",
+	)
+
+
+## The two decisions a hitter makes that the geometry was not telling them
+## about: where the tape is, and which lane is actually open.
+##
+## Both were found by measuring the shadow on live rallies, and both had the same
+## shape -- a mechanism that worked perfectly on an input that could not
+## discriminate.
+func _test_the_hitter_can_see_the_net_and_the_gap() -> void:
+	## 1. The tape is a constraint on shot selection, not only on the outcome.
+	##
+	## Nothing upstream of the launch solve knew the net existed: the course scan
+	## reads the block and the floor, the power model reads the distance. So a
+	## hitter could pick a short cut shot whose driven solution is a dive into the
+	## net and swing at it, and 24% of shadow swings did exactly that.
+	##
+	## A ball aimed 3 m in from a contact barely above the tape is the case: the
+	## driven solution for that range is very steep, and the feasible one is not.
+	## Struck from behind the ten-foot line, so the ball has 2.2 m of court to
+	## descend through before it reaches the tape. A ball contacted right at the
+	## net has barely started falling when it crosses and clears almost anything,
+	## which is why this only bites on a deeper contact.
+	var contact := Vector2(0.20, 0.62)
+	var low_contact_height := 2.80
+	var netted := BallFlightModel.solve_angle_for_range(18.0, 3.0, low_contact_height)
+	var to_net := (0.5 - contact.y) * CourtConstants.COURT_LENGTH_METERS
+	_check(
+		bool(netted.get("driven_found", false))
+			and BallFlightModel.height_at_distance(
+				BallFlightModel.solve_flight(
+					18.0, float(netted.driven_angle_degrees), low_contact_height
+				),
+				absf(to_net),
+			) < CourtConstants.NET_HEIGHT_METERS,
+		"the driven solution for a short target really is a ball into the tape",
+	)
+
+	var hitter := VolleyballPlayer.new()
+	hitter.height_cm = 188.0
+	hitter.wingspan_cm = 190.0
+	hitter.jump_reach = 40
+	hitter.explosiveness = 40
+	hitter.attack_power = 70
+	hitter.attack_accuracy = 99
+	hitter.shot_variety = 60
+	hitter.court_vision = 60
+	hitter.decision_making = 60
+	hitter.composure = 60
+	hitter.tactical_discipline = 55
+	hitter.ego = 55
+	## Zero execution error, so what is measured is the choice and not the swing.
+	var exact := {
+		"read": [0.0, 0.0], "read_floor": [0.0, 0.0, 0.0, 0.0],
+		"judgment": 0.0, "bearing": 0.0, "vertical": 0.0, "power": 0.0,
+		"aim_fraction": 0.0, "intent": 0.90,
+	}
+	var short_swing: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+		hitter, contact, low_contact_height, "Left Pin",
+		[{"net_x": 0.24, "reach_height_m": 2.90, "half_width_m": 0.34}],
+		[Vector2(0.30, 0.22), Vector2(0.70, 0.26)],
+		true, 0.85, 0.5, 0.0, 0.0, exact,
+	)
+	_check(
+		bool(short_swing.available)
+			and float(short_swing.resolution.net_clearance_meters) >= 0.0,
+		"a hitter aiming short chooses a ball that clears the tape, not one that cannot",
+	)
+
+	## 2. The gap has to be visible before it can be chosen.
+	##
+	## Block clearance is a lane gap measured in tens of centimetres; floor
+	## clearance genuinely spans metres. Normalising both against 4 m crushed
+	## every block score to 0.05 or less, so `openness` came out flat across the
+	## cone and `STRAIN_AVERSION` -- zero at the natural line by construction --
+	## decided every shot. And clamping openness at zero made a ball hit *into*
+	## sealed net score the same as one grazing past it.
+	var wall: Array = [{
+		"net_x": 0.30, "reach_height_m": 3.10, "half_width_m": 0.34,
+	}]
+	var floor_defenders: Array = [Vector2(0.80, 0.20)]
+	var into_block: Dictionary = ATTACK_READ_SCRIPT.course_openness(
+		Vector2(0.30, 0.52), 0.0, Vector2(0.30, 0.20), wall, floor_defenders, true
+	)
+	var past_block: Dictionary = ATTACK_READ_SCRIPT.course_openness(
+		Vector2(0.30, 0.52), -40.0, Vector2(0.08, 0.20), wall, floor_defenders, true
+	)
+	_check(
+		float(into_block.block_clearance_meters) < 0.0
+			and float(into_block.openness) < 0.0,
+		"a ball into sealed net scores below zero rather than flooring at it",
+	)
+	_check(
+		float(past_block.openness) - float(into_block.openness) > 0.30,
+		"an open lane and a sealed one are separated by more than rounding",
+	)
+	## And the separation has to survive the strain of turning to reach it, or
+	## the scan cannot act on what it sees. The sharpest course in the cone
+	## carries strain 1.0.
+	_check(
+		float(past_block.openness) - float(into_block.openness)
+			> 1.0 * GEOMETRIC_ATTACK_SCRIPT.STRAIN_AVERSION * 0.25,
+		"the gap a hitter sees is worth enough to be worth turning for",
 	)
 
 

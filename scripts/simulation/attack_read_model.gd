@@ -38,6 +38,12 @@ const DEFENDER_POSITION_ERROR_M: float = 1.30
 ## Openness past this is a free swing; nothing is gained by being further from
 ## a defender than a defender can travel in the time available anyway.
 const OPENNESS_SATURATION_M: float = 4.0
+## How much lane past the hands counts as a fully open shot. A ball that clears
+## the outside hand by 70 cm is not made any better by clearing it by a metre --
+## but one that clears by 10 cm is a very different shot, and that difference is
+## the whole of a hitter's read at the net. Sharing the floor's 4 m scale made
+## every one of those look identical.
+const BLOCK_OPENNESS_SATURATION_M: float = 0.70
 
 
 ## The block as this hitter sees it.
@@ -197,11 +203,29 @@ static func course_openness(
 		contact, bearing_degrees, blockers, attacking_negative_y, flight
 	)
 	var past_floor := floor_clearance_meters(landing, defenders)
-	var block_score := clampf(past_block / OPENNESS_SATURATION_M, -1.0, 1.0)
+	## The two clearances are not the same quantity and cannot share a scale.
+	##
+	## Floor clearance is the distance from the landing point to the nearest
+	## defender and genuinely spans metres -- 1.3 to 3.1 across a typical cone.
+	## Block clearance is the gap between the ball's path and the nearest hand at
+	## the net, and it spans *centimetres*: measured across a 17-bearing cone
+	## against a formed two-man block it ran from -0.31 to +0.19 m. Dividing both
+	## by 4 m crushed every block score to 0.05 or less, so `openness` came out
+	## flat across the whole cone and the course scan had nothing to choose on.
+	## `STRAIN_AVERSION` then decided every shot, and strain is zero at the
+	## natural approach line by construction: 91.7% of swings in shadow went
+	## exactly where the hitter was already running.
+	var block_score := clampf(
+		past_block / BLOCK_OPENNESS_SATURATION_M, -1.0, 1.0
+	)
 	var floor_score := clampf(past_floor / OPENNESS_SATURATION_M, 0.0, 1.0)
+	## And openness is allowed to go negative, because a ball hit *into* sealed
+	## net is not merely unattractive, it is worse than one that grazes past. The
+	## old floor at zero made those two the same number, so no amount of open
+	## lane elsewhere could outweigh the strain of turning to reach it.
 	return {
 		"block_clearance_meters": past_block,
 		"floor_clearance_meters": past_floor,
 		"into_the_block": past_block < 0.0,
-		"openness": clampf(minf(block_score, floor_score), 0.0, 1.0),
+		"openness": clampf(minf(block_score, floor_score), -1.0, 1.0),
 	}

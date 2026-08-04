@@ -35,7 +35,11 @@ contest rather than replacing it.
 
 ## Three findings
 
-### 1. A uniform draw where three named tiers belong (fixed)
+All three are fixed below. They are recorded as they were found, hypothesis and
+all, because the wrong hypothesis in finding 2 is what led to the measurement
+that found the real cause.
+
+### 1. A uniform draw where three named tiers belong
 
 `choose_power` reads `intent_fraction` as how much of the available ceiling the
 swing asks for, and its meaningful values are the three named constants:
@@ -108,26 +112,122 @@ which is the thing this whole rework exists to give them. Promoting the
 geometric attack before this is resolved would replace a legacy attack that
 picks targets with a geometric one that does not.
 
+## Both open findings, resolved
+
+### The tape was not a constraint on shot selection
+
+The jump-multiplier hypothesis above was **wrong**, and measuring it is what
+found the real cause. Live `jump_multiplier` is 0.999 / 1.010 / 1.038 at p10 /
+median / p90 -- the approach is not costing anyone their contact height.
+
+What the same measurement did show is a vertical launch angle running to
+**-53.5 degrees at p10**. The tape is checked in `AttackResolutionModel`, in
+*resolution*, and nowhere in *decision*: the course scan reads the block and the
+floor, the power model reads the target distance, and nothing between them knows
+there is a net. So a hitter could pick a short cut shot whose driven solution is
+a dive into the tape, swing at it, and have the resolver dutifully report "net".
+The decision layer was offering shots that are not physically available.
+
+`_feasible_launch` makes the net a constraint on the choice. For a fixed speed a
+longer target range means a flatter driven solution and more height at the net,
+so the search is monotone: start where the hitter aimed, push the target deeper
+until it clears by `NET_CLEARANCE_MARGIN_METERS`. If nothing driven clears, lift
+it -- the roll shot off a tight set. If nothing clears at all, the swing happens
+anyway and will probably be in the net, which is correct: a hitter under a bad
+set does hit the tape, and that is now the only path that produces one.
+
+Net contact fell from **23.6% to 4.5%**.
+
+### The gap was not visible to the scan
+
+Only 33 of 398 swings left the natural approach line. The cause was not tie
+saturation, as guessed -- it was the opposite. Probing openness across a
+17-bearing cone against a formed two-man block:
+
+| bearing offset | block clearance | floor clearance | openness | score |
+| ---: | ---: | ---: | ---: | ---: |
+| -45.0 | +0.19 m | 3.12 m | 0.048 | -0.302 |
+| -22.5 | +0.04 m | 1.57 m | 0.009 | -0.166 |
+| 0.0 (natural) | **-0.11 m** | 1.54 m | **0.000** | **0.000** |
+| +22.5 | -0.31 m | 2.20 m | 0.000 | -0.175 |
+| +45.0 | +0.06 m | 1.31 m | 0.015 | -0.335 |
+
+Two defects, visible in the same table. Block clearance spans **-0.31 to +0.19
+metres** and was normalised against `OPENNESS_SATURATION_M = 4.0` -- a scale an
+order of magnitude too large for the quantity, so every block score came out at
+0.05 or less. And openness was clamped at zero, so the natural line, which sends
+the ball *into* sealed net at -0.11 m, scored exactly the same 0.000 as a lane
+that grazes past. With openness flat at zero the score reduced to
+`-strain x STRAIN_AVERSION`, which is maximised at strain zero -- the natural
+line, by construction. The scan was not choosing badly; it had nothing to choose
+on.
+
+Fixed by giving block clearance its own scale (`BLOCK_OPENNESS_SATURATION_M`,
+0.70 m -- clearing the outside hand by 70 cm is a fully open shot) and letting
+openness go negative, so a ball into the hands scores below one past them.
+
+That inverted the balance: openness now spans -1 to 1 where it spanned 0.05, and
+`STRAIN_AVERSION = 0.35` stopped being a tie-break and became irrelevant. 89% of
+swings went to the sharpest available cut. Re-derived against the design targets
+on live rallies:
+
+| STRAIN_AVERSION | off natural line | attack error | block involvement | stuff |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.35 | 89.2% | 26.6% | 20.1% | 5.3% |
+| 0.60 | 73.1% | 21.6% | 24.6% | 6.3% |
+| 0.85 | 51.0% | 14.6% | 32.4% | 8.0% |
+| **1.10** | **30.7%** | **10.6%** | **36.2%** | **9.0%** |
+| 1.40 | 15.3% | 6.8% | 41.5% | 11.6% |
+
+1.10 is where attack error and block involvement are both inside their bands
+with shot selection still alive. 1.40 reaches the 12% stuff target, but only by
+dropping errors below the sport and pulling selection back toward the natural
+line -- buying one target by spending two. Stuff at 9.0% against a 12% target is
+the residual, and it is the honest cost of the trade.
+
+## All three attack paths measured
+
+| path | n | attack error | block involvement | stuff | in |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| home first ball | 398 | 10.6% | 36.2% | 9.0% | 53.3% |
+| opponent first ball | 11 | 9.1% | 27.3% | 9.1% | 63.6% |
+| transition | 53 | 3.8% | **0.0%** | **0.0%** | **96.2%** |
+
+The transition row is a finding, not a result. That path passes a block pressure
+of zero to `_attack_execution` because it never forms a block at all, so a
+transition swing in this engine is a swing into an open net and converts 96% of
+the time. In the sport a transition attack meets a block that had to recover
+from its own swing -- late and small, but there. Recording it through the same
+resolver as the other two is what makes it impossible to keep missing.
+
+The opponent sample is small because the opponent first-ball path is rare in
+these fixtures; it is directionally consistent with the home path and not yet
+powered enough to compare against it.
+
 ## What this means for promotion
 
-Promotion is deliberately not taken in this gate. Findings 2 and 3 are both
-reasons a promoted geometric attack would play *worse* than the legacy one
-despite being the better model: a 28% error rate would swamp the rally, and a
-hitter with no course selection would make every rally read the same.
+Promotion is still not taken, but the reasons have changed. Findings 2 and 3
+were both reasons a promoted geometric attack would have played *worse* than the
+legacy one despite being the better model -- a 28% error rate would have swamped
+the rally, and a hitter with no course selection would have made every rally read
+the same. Both are resolved: attack error sits at 10.6% inside the sport's band,
+and 30.7% of swings now leave the natural line.
+
+What remains is coverage rather than correctness. One of the three attack paths
+faces no block at all, and neither serve path goes through the resolver yet.
+Promoting now would put the geometric attack in charge of a rally where a
+transition swing is an uncontested 96% point, which would tell us nothing about
+the model and quite a lot about the gap.
 
 The order from here:
 
-1. Re-run the Gate D sweep with the live `jump_multiplier` distribution and
-   settle whether contact height explains the net rate.
-2. Make openness discriminate across the cone, so the scan chooses.
-3. Wire the shadow into the remaining attack paths (opponent first-ball,
-   transition, and both serve paths) and confirm the mix holds on all of them.
-4. Then open `ENABLE_GEOMETRIC_ATTACK` behind the development override and
+1. Give the transition path a block, so all three swings are contested.
+2. Wire both serve paths through the same resolver.
+3. Then open `ENABLE_GEOMETRIC_ATTACK` behind the development override and
    compare terminal outcome distributions against the legacy path.
 
-The symmetry gate repaired in
-`ATTACK_SIDE_SYMMETRY_2026_08_03.md` is the instrument for step 4. It measures
-a real six-point home tilt today, and the geometric attack replacing three
-separately-written attack paths with one shared resolver is the most plausible
-way that tilt goes away — which makes it a genuine prediction this gate can be
-held to rather than a hope.
+The symmetry gate repaired in `ATTACK_SIDE_SYMMETRY_2026_08_03.md` is the
+instrument for step 3. It measures a real six-point home tilt today, and the
+geometric attack replacing three separately-written attack paths with one shared
+resolver is the most plausible way that tilt goes away -- which makes it a
+genuine prediction this gate can be held to rather than a hope.

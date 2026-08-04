@@ -37,8 +37,36 @@ const ApproachMechanicsModel := preload(
 ## perturbed afterwards anyway, so this is a search resolution and not a menu.
 const COURSE_SAMPLES: int = 17
 ## How much a hitter weighs an open lane against the strain of turning to reach
-## it. Higher and everyone swings across their body at the biggest gap.
-const STRAIN_AVERSION: float = 0.35
+## it. Higher and everyone hits where their approach already points; lower and
+## everyone swings across their body at the biggest gap.
+##
+## Re-derived in Gate E, because it had to be. While `openness` came out flat
+## across the whole cone -- block clearance normalised against a 4 m scale for a
+## quantity that spans 30 cm -- this constant was the *only* term with any range,
+## so it decided every shot and 91.7% of swings went down the natural line. With
+## openness spanning -1 to 1 the balance inverted and 89% went to the sharpest
+## available cut instead. Swept against the design targets on live rallies:
+##
+##   value | off natural line | attack error | block involvement | stuff
+##    0.35 |            89.2% |        26.6% |             20.1% |  5.3%
+##    0.60 |            73.1% |        21.6% |             24.6% |  6.3%
+##    0.85 |            51.0% |        14.6% |             32.4% |  8.0%
+##    1.10 |            30.7% |        10.6% |             36.2% |  9.0%
+##    1.40 |            15.3% |         6.8% |             41.5% | 11.6%
+##
+## 1.10 is where attack error and block involvement are both inside their bands
+## with shot selection still alive. 1.40 reaches the 12% stuff target, but only
+## by dropping errors below the sport and pulling shot selection back toward the
+## natural line -- buying one target by spending two.
+const STRAIN_AVERSION: float = 1.10
+## How much air a hitter wants between the ball and the tape when choosing a
+## shot. Not a safety factor on the outcome -- execution error is applied after
+## this and can still put the ball in the net. This is the margin a hitter aims
+## for, and aiming to clear by nothing is not a thing anyone does.
+const NET_CLEARANCE_MARGIN_METERS: float = 0.12
+## How many target distances get probed looking for one that clears. The search
+## is monotone in distance, so this is a resolution and not a menu.
+const NET_FEASIBILITY_STEPS: int = 9
 
 
 ## One swing, start to finish.
@@ -136,12 +164,21 @@ static func resolve_swing(
 	)
 
 	## --- the angle that puts that speed where it was aimed -------------------
-	var solved := BallFlightModel.solve_angle_for_range(
-		float(chosen.speed_mps), aim_distance, contact_height_meters
+	##
+	## Constrained by the tape. Nothing above this point knows the net exists:
+	## the course scan reads the block and the floor, and the power model reads
+	## the distance, so a hitter could pick a short cut shot whose driven
+	## solution is a 53-degree dive into the net and swing at it. Measured in
+	## shadow on live rallies that was 24% of swings -- the resolution layer
+	## dutifully reported "net" for a choice the decision layer should never have
+	## offered. A hitter knows where the tape is.
+	var launch := _feasible_launch(
+		contact, float(best.bearing_degrees), float(chosen.speed_mps),
+		contact_height_meters, aim_distance, float(best.far_meters),
+		attacking_negative_y,
 	)
-	var intended_angle := AttackPowerModel.DRIVEN_REFERENCE_ANGLE_DEGREES
-	if bool(solved.get("driven_found", false)):
-		intended_angle = float(solved.driven_angle_degrees)
+	var intended_angle := float(launch.angle_degrees)
+	aim_distance = float(launch.aim_distance)
 
 	## --- what they actually did ----------------------------------------------
 	var delivered := AttackSwingModel.deliver(
@@ -214,6 +251,108 @@ static func resolve_swing(
 			"confidence_cost": float(move.get("confidence_cost", 0.0)),
 		},
 	}
+
+
+## The steepest ball this hitter can actually hit, at the speed they chose.
+##
+## For a fixed speed, a longer target range means a flatter driven solution and
+## therefore more height at the net. So the search is monotone: start at the
+## distance the hitter aimed for, and if that ball is in the tape, push the
+## target deeper until it clears. That is what a hitter does -- a ball they
+## cannot cut sharp gets hit deeper, not into the net.
+##
+## Three outcomes, in the order a hitter would take them:
+##
+##   driven   the intended ball clears, or clears once pushed deeper
+##   lofted   nothing driven clears, so the ball goes *over* rather than through
+##            -- the roll shot a hitter takes off a set that is too tight
+##   forced   neither clears at this speed. The swing happens anyway and will
+##            very likely be in the net, which is correct: a hitter under a bad
+##            set does hit the tape. This is the only path that should produce a
+##            net error, and it should be rare.
+static func _feasible_launch(
+	contact: Vector2,
+	bearing_degrees: float,
+	speed_mps: float,
+	contact_height_meters: float,
+	aim_distance: float,
+	far_meters: float,
+	attacking_negative_y: bool,
+) -> Dictionary:
+	var ground_to_net := _ground_distance_to_net(
+		contact, bearing_degrees, attacking_negative_y
+	)
+	var needed := CourtConstants.NET_HEIGHT_METERS + NET_CLEARANCE_MARGIN_METERS
+	var best_driven := 0.0
+	var best_distance := aim_distance
+	var reach := maxf(far_meters, aim_distance)
+	for step in range(NET_FEASIBILITY_STEPS):
+		var probe := lerpf(
+			aim_distance, reach, float(step) / float(NET_FEASIBILITY_STEPS - 1)
+		)
+		var solved := BallFlightModel.solve_angle_for_range(
+			speed_mps, probe, contact_height_meters
+		)
+		if not bool(solved.get("driven_found", false)):
+			continue
+		var angle := float(solved.driven_angle_degrees)
+		if _height_at_net(speed_mps, angle, contact_height_meters, ground_to_net) \
+				>= needed:
+			return {
+				"angle_degrees": angle, "aim_distance": probe,
+				"mode": "driven", "cleared": true,
+			}
+		best_driven = angle
+		best_distance = probe
+	## Nothing driven gets over. Try lifting it instead.
+	var lofted_solve := BallFlightModel.solve_angle_for_range(
+		speed_mps, aim_distance, contact_height_meters
+	)
+	if bool(lofted_solve.get("lofted_found", false)):
+		var lofted := float(lofted_solve.lofted_angle_degrees)
+		if _height_at_net(speed_mps, lofted, contact_height_meters, ground_to_net) \
+				>= needed:
+			return {
+				"angle_degrees": lofted, "aim_distance": aim_distance,
+				"mode": "lofted", "cleared": true,
+			}
+	return {
+		"angle_degrees": best_driven if best_driven != 0.0
+			else AttackPowerModel.DRIVEN_REFERENCE_ANGLE_DEGREES,
+		"aim_distance": best_distance, "mode": "forced", "cleared": false,
+	}
+
+
+static func _height_at_net(
+	speed_mps: float,
+	angle_degrees: float,
+	contact_height_meters: float,
+	ground_to_net: float,
+) -> float:
+	return BallFlightModel.height_at_distance(
+		BallFlightModel.solve_flight(
+			speed_mps, angle_degrees, contact_height_meters
+		),
+		ground_to_net,
+	)
+
+
+## How far the ball travels over the ground before it reaches the net, along the
+## bearing it was struck on. A shot angled across the court crosses more ground
+## getting there than one hit straight down the line.
+static func _ground_distance_to_net(
+	contact: Vector2,
+	bearing_degrees: float,
+	attacking_negative_y: bool,
+) -> float:
+	var direction := AttackCourseModel.direction_meters(
+		bearing_degrees, attacking_negative_y
+	)
+	var to_net := (CourtConstants.NET_Y - contact.y) \
+		* CourtConstants.COURT_LENGTH_METERS
+	if absf(direction.y) < 0.000001:
+		return 0.0
+	return maxf(to_net / direction.y, 0.0)
 
 
 ## How formed the wall in front of the hitter is, 0-1. Two blockers is a full
