@@ -75,3 +75,47 @@ the engine and reopens calibration that several gates have just settled. Either
 wants its own sweep: under the current weights, Bompaşao's `reception`,
 `reception_balance`, `ball_control` package would likely become the strongest
 defensive region in the game, and nobody designed it to be.
+
+
+## The attributes moved to the fiction
+
+`anticipation` is the most cross-cutting attribute in the engine -- 0.30 of dig
+capability, 0.34 of a blocker's read, 0.10 of their contact -- and the blocking
+tradition held it while the digging tradition did not. One swap each way:
+
+- **Bloc du Larg** `block_timing, ball_control, court_vision, anticipation`
+  -> `block_timing, jump_reach, court_vision, tactical_discipline`
+- **Lo-onğ Ralī** `stamina, dig_control, reception_stability`
+  -> `stamina, dig_control, anticipation`
+
+| region | stuff before | after | dig before | after |
+|---|---|---|---|---|
+| Bloc du Larg | 0.140 | 0.144 | 0.376 | 0.307 |
+| Lo-onğ Ralī | 0.090 | 0.119 | 0.314 | 0.383 |
+
+Bloc du Larg's advantage over baseline is now +5.4 stuff and +3.1 dig, where it
+was +5.0 and +10.0. Lo-onğ Ralī's is +10.7 dig, where it was +3.8. The blocking
+region blocks, the digging region digs, and neither does the other's job better
+than they do.
+
+Dropping `anticipation` did not cost Bloc du Larg any blocking: `jump_reach` at
+0.29 of contact skill and `tactical_discipline` at 0.20 of the read more than
+covered it. Two constraints were kept rather than broken -- `reception` is the
+heaviest dig attribute and the obvious thing to hand Lo-onğ Ralī, but it is
+Bompaşao's claim and the minor tier exists to fill gaps no major region takes;
+and minor regions get three attributes, so this is a swap and not an addition.
+
+## Two things this leaves open
+
+**`anticipation` still leaks, in the other direction now.** Lo-onğ Ralī gains
+2.9 points of stuff rate it has no business gaining, because the attribute sits
+in the blocker's read as well as the dig. That is a third of Bloc du Larg's
+advantage rather than three times it, so the ordering is right and the leak is
+tolerable -- but the clean fix is splitting the attribute, not moving it again.
+
+**Defensive identity now out-earns attacking identity.** Lo-onğ Ralī takes 55.0%
+of attack exchanges against Ispayk's 51.4%, so a digging tradition wins more
+rallies than an attacking one. Digging well extends rallies and extended rallies
+are won, which is not wrong in itself, but it means a career would reward
+defensive rosters over offensive ones. Nothing here measured whether that
+ordering is intended.

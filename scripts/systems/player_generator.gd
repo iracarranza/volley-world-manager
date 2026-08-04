@@ -89,7 +89,14 @@ const REGION_WINGSPAN_BIAS := {
 const REGION_SPECIALTY := {
 	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness", "approach_timing", "attack_accuracy"],
 	"Spëddigh": ["work_rate", "acceleration", "lateral_speed", "tempo_control", "reception_balance"],
-	"Bloc du Larg": ["block_timing", "ball_control", "court_vision", "anticipation"],
+	## Blocking, and only blocking. This carried `anticipation`, which is the
+	## most cross-cutting attribute in the engine -- 0.30 of dig capability, 0.34
+	## of a blocker's read and 0.10 of their contact -- so the blocking tradition
+	## quietly became the best digging tradition too, gaining 10.0 points of dig
+	## rate where the region actually named for digging gained 3.8. It trades
+	## that for reach and discipline, which reach the block and nothing else.
+	"Bloc du Larg": ["block_timing", "jump_reach", "court_vision",
+		"tactical_discipline"],
 	"Landavol": [],
 	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
 		"serve_aggression", "serve_variation"],
@@ -105,7 +112,14 @@ const REGION_SPECIALTY := {
 	## never reception itself), and `attack_accuracy`, claimed by nobody at all
 	## despite being primary for three of the five roles.
 	"Tu'ul ys Feynt": ["feinting", "tooling", "finesse"],
-	"Lo-onğ Ralī": ["stamina", "dig_control", "reception_stability"],
+	## The long-rally tradition, which was worse at digging than the blocking
+	## tradition. `dig_control` is only 0.22 of dig capability and
+	## `reception_stability` enters a dig solely through the body penalty, so two
+	## of its three attributes barely reached the floor. `anticipation` is 0.30
+	## and is the one Bloc du Larg gives up, which takes this region from 0.22 of
+	## the dig model to 0.52 without poaching `reception` -- Bompaşao's claim,
+	## and the only attribute that outweighs it.
+	"Lo-onğ Ralī": ["stamina", "dig_control", "anticipation"],
 	"Bompaşao": ["reception", "reception_balance", "ball_control"],
 	"Rhen Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
 	"Kutre den Lyn": ["attack_accuracy", "shot_variety", "court_vision"],
