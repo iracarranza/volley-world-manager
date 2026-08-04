@@ -146,12 +146,44 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			stride_cycle += travelled / maxf(stride_length_m, 0.30)
 			gait_blend = 1.0
 			locomotion_bob = absf(sin(stride_cycle * TAU)) * 0.035
+			## Face where you are going.
+			##
+			## Facing was only ever set from a contact direction, and only the
+			## contact actor is posed -- so every other player on the court
+			## translated without ever turning. A setter walking back to their
+			## release seat during serve receive slid there backwards, still
+			## facing the net, which is the "sliding" half of what reads as
+			## teleporting.
+			##
+			## Rate-limited by the same turn speed a contact facing uses, so a
+			## player rounding a corner leans into it rather than snapping. The
+			## contact actor's own facing is applied afterwards in `set_pose` and
+			## still wins, which is correct: someone playing the ball faces the
+			## ball, not their footwork.
+			_turn_toward(atan2(
+				-(world_position.x - self.position.x),
+				-(world_position.z - self.position.z),
+			))
 		else:
 			gait_blend = 0.0
 			locomotion_bob = 0.0
 	has_world_position = true
 	tactical_position = position
 	self.position = world_position
+
+
+## Turns the actor toward a heading at `FACING_TURN_RATE`, or adopts it outright
+## if this is the first heading it has ever had.
+func _turn_toward(target_yaw: float) -> void:
+	if not has_facing:
+		facing_yaw = target_yaw
+		has_facing = true
+	else:
+		var step := FACING_TURN_RATE * get_process_delta_time()
+		var difference := angle_difference(facing_yaw, target_yaw)
+		facing_yaw = target_yaw if absf(difference) <= step \
+			else facing_yaw + signf(difference) * step
+	rotation.y = facing_yaw
 
 
 func set_highlighted(highlighted: bool) -> void:
@@ -264,19 +296,9 @@ func set_pose(
 		## and y spans 18 m, so the angle remains slightly aspect-compressed.
 		## That is a much smaller error than the sign and is left for a caller
 		## that knows the court dimensions.
-		var target_yaw := atan2(-contact_direction.x, -contact_direction.y)
-		if not has_facing:
-			## First heading of the rally is adopted outright: there is no
-			## previous facing to turn from, and easing out of an arbitrary
-			## default would be a spin nobody asked for.
-			facing_yaw = target_yaw
-			has_facing = true
-		else:
-			var step := FACING_TURN_RATE * get_process_delta_time()
-			var difference := angle_difference(facing_yaw, target_yaw)
-			facing_yaw = target_yaw if absf(difference) <= step \
-				else facing_yaw + signf(difference) * step
-		rotation.y = facing_yaw
+		## The contact actor faces the ball, which overrides whatever their
+		## footwork was pointing them at.
+		_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
 		return
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
