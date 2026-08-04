@@ -64,10 +64,44 @@ static func enabled(development_requested: bool = false) -> bool:
 ## and it is deliberately the only place a close fraction becomes a width, so
 ## the legacy contest and the geometric one cannot disagree about what closing
 ## means.
+## What a block intends, as geometry rather than as a threshold.
+##
+## The first version of this dial shifted `_contest_block`'s outcome bands, and
+## the geometric promotion overwrote the outcome immediately afterwards -- so
+## Seal and Funnel produced 0 stuffs and 1 deflection apiece with the flag on.
+## A tactical option that silently does nothing is worse than one never added.
+##
+## The resolver decides contact by intersecting a trajectory with a pair of
+## hands, so intent has to live in the hands. A committed block penetrates: more
+## reach over the tape, a tighter seal, and beaten clean when it is wrong. A soft
+## block stays down and wide: less penetration, more court taken away, more balls
+## slowed rather than ended. That is the same tradeoff the bands described, in
+## the only terms this model can read -- and unlike the bands it works on both
+## paths, because the legacy contest reads the same wall.
+## Reach is what separates the two, not width.
+##
+## The first attempt had sealing *narrow* each blocker -- and measured, it
+## produced 16 stuffs against a funnelling block's 20, which is the dial
+## backwards. Narrowing a blocker models smaller hands, not a tighter seal: a
+## real seal closes the seam *between* two blockers, which this wall does not
+## represent, so shrinking them only removed intersections of every kind and the
+## reach bonus could not pay for it.
+##
+## What actually distinguishes the two is how high the hands get. Penetrating
+## over the tape puts the ball down; staying low and wide gets a piece of it and
+## leaves it alive. So sealing buys reach at no cost in width, and funnelling
+## sells reach for it.
+const SEAL_REACH_BONUS: float = 0.16
+const SEAL_WIDTH_SCALE: float = 1.0
+const FUNNEL_REACH_PENALTY: float = 0.14
+const FUNNEL_WIDTH_SCALE: float = 1.16
+
+
 static func block_wall(
 	formation: Dictionary,
 	team: Resource,
 	live_positions: Dictionary = {},
+	block_intent: String = "Balanced",
 ) -> Array:
 	var wall: Array = []
 	for role in ["primary", "assist"]:
@@ -77,10 +111,22 @@ static func block_wall(
 		var close := float(formation.get("%s_close" % role, 0.0))
 		if close < WALL_JOIN_CLOSE:
 			continue
+		var reach_effort := BLOCKER_REACH_EFFORT
+		var width_scale := 1.0
+		match block_intent:
+			"Seal":
+				reach_effort += SEAL_REACH_BONUS
+				width_scale = SEAL_WIDTH_SCALE
+			"Funnel":
+				reach_effort -= FUNNEL_REACH_PENALTY
+				width_scale = FUNNEL_WIDTH_SCALE
 		wall.append({
 			"net_x": _blocker_net_x(blocker, team, live_positions),
-			"reach_height_m": blocker.jumping_reach_cm(BLOCKER_REACH_EFFORT) / 100.0,
-			"half_width_m": BLOCKER_HALF_WIDTH_METERS * clampf(close, 0.0, 1.0),
+			"reach_height_m": blocker.jumping_reach_cm(
+				clampf(reach_effort, 0.0, 1.0)
+			) / 100.0,
+			"half_width_m": BLOCKER_HALF_WIDTH_METERS * width_scale
+				* clampf(close, 0.0, 1.0),
 			"player_id": blocker.id,
 			"close": close,
 		})

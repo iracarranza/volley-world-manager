@@ -1161,6 +1161,7 @@ func resolve(
 			opponent_defenders.append(opponent_live_positions.get(
 				defender.id, opponent_team.court_position(defender.id, "defense")
 			))
+	var opponent_plan_for_wall := _opponent_defensive_plan(opponent_team)
 	shadow_summary["geometric_attack"] = _geometric_swing_record(
 		_geometric_swing(
 			hitter, set_target, assignment.lane, opponent_block_formation,
@@ -1168,6 +1169,8 @@ func resolve(
 			float(resolved_approach.get("jump_multiplier", 1.0)),
 			float(resolved_approach.get("runup_quality", 0.0)),
 			float(home_principles.decisiveness), 0.0,
+			str(opponent_plan_for_wall.block_intent) \
+				if opponent_plan_for_wall != null else "Balanced",
 		),
 		"home",
 	)
@@ -2112,6 +2115,33 @@ func _resolve_opponent_transition(
 			0.05, 0.98,
 		)
 	home_block_formation["adaptation_bonus"] = home_block_adaptation
+	## Put the home wall where the home wall is.
+	##
+	## `_blocker_net_x` reads `live_positions` first and falls back to the
+	## blocking team's `court_position` -- but the home side is not an
+	## `OpponentTeam`, so this call site passes `null` and the fallback is the
+	## literal 0.5 at the end of that function. Home blockers who had not
+	## happened to be written into `live_positions` earlier in the rally were
+	## therefore all standing at mid-net, so a swing to either pin met nobody:
+	## 0 stuffs and 1 deflection across 300 rallies with the geometric attack
+	## open. It is also why two home blockers render on top of each other --
+	## they were literally at the same coordinate.
+	##
+	## The positions already existed; they were computed after the swing, for
+	## the block event's metadata, and never fed back to the model that needed
+	## them. `_block_wall_positions` gives the pair a shoulder offset, so staging
+	## both fixes the geometry and the picture at once.
+	var home_wall_positions := _block_wall_positions(opponent_contact.x, false)
+	var staged_home_primary := home_block_formation.get("primary") as VolleyballPlayer
+	var staged_home_assist := home_block_formation.get("assist") as VolleyballPlayer
+	if staged_home_primary != null:
+		live_positions[staged_home_primary.id] = Vector2(
+			home_wall_positions.primary_position
+		)
+	if staged_home_assist != null:
+		live_positions[staged_home_assist.id] = Vector2(
+			home_wall_positions.assist_position
+		)
 	var home_block_pressure := float(
 		home_block_formation.get("primary_close", 0.0)
 	) * BLOCK_PRIMARY_PRESSURE + float(
@@ -2251,6 +2281,8 @@ func _resolve_opponent_transition(
 			## and a controlled one made them cautious on the home coach's
 			## behalf. Neutral until the opponent has principles of their own.
 			0.5, 0.0,
+			str(defensive_plan.block_intent) if defensive_plan != null \
+				else "Balanced",
 		),
 		"opponent",
 	)
@@ -2781,6 +2813,7 @@ func _resolve_home_continuation(
 				opponent_team.court_position(court_defender.id, "defense"),
 			))
 	## The third swing, against the wall this path actually forms.
+	var cont_wall_plan := _opponent_defensive_plan(opponent_team)
 	var transition_record := _geometric_swing_record(
 		_geometric_swing(
 			hitter, set_target, str(assignment.lane), block_result, opponent_team,
@@ -2788,6 +2821,8 @@ func _resolve_home_continuation(
 			float(continuation_approach.get("jump_multiplier", 1.0)),
 			_approach_execution_fit(hitter, continuation_approach),
 			float(home_principles.decisiveness), 0.0,
+			str(cont_wall_plan.block_intent) if cont_wall_plan != null \
+				else "Balanced",
 		),
 		"transition",
 	)
@@ -5294,6 +5329,7 @@ func _geometric_swing(
 	approach_quality: float,
 	decisiveness: float,
 	flow_for_team: float,
+	block_intent: String = "Balanced",
 ) -> Dictionary:
 	if hitter == null:
 		return {}
@@ -5302,7 +5338,7 @@ func _geometric_swing(
 	])
 	geometric_swing_index += 1
 	var wall := GeometricAttackPromotionModel.block_wall(
-		formation, blocking_team, blocking_live
+		formation, blocking_team, blocking_live, block_intent
 	)
 	var height := GeometricAttackPromotionModel.contact_height_meters(
 		hitter, jump_multiplier
