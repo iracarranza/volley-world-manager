@@ -277,3 +277,52 @@ instrument for step 3. It measures a real six-point home tilt today, and the
 geometric attack replacing three separately-written attack paths with one shared
 resolver is the most plausible way that tilt goes away -- which makes it a
 genuine prediction this gate can be held to rather than a hope.
+
+
+## Postscript: the two things that were left before the flip
+
+### The transition block now pressures the swing
+
+`_resolve_home_continuation` formed its wall *after* it scored the swing, so the
+block on that path could take a ball away but never make one harder to hit -- it
+passed a block pressure of zero, alone among the three swings. The formation is
+now built before the swing is scored, its closes become pressure, and
+`_contest_block` contests that same formation afterwards rather than forming a
+second one. One wall does both jobs; a wall that hurried the hitter and a wall
+that touched the ball can no longer be different walls.
+
+### `STRAIN_AVERSION` re-derived, and the first answer was wrong
+
+The table this document carried was measured on three roster pairings. Re-run
+over eight, with both serving assignments and all three attack paths pooled:
+
+| STRAIN_AVERSION | off natural line | attack error | block involvement | stuff |
+| ---: | ---: | ---: | ---: | ---: |
+| **0.85** | **60.4%** | **11.7%** | 24.7% | **11.7%** |
+| 1.10 | 37.1% | 9.2% | 27.4% | 13.3% |
+| 1.40 | 16.8% | 7.6% | 32.8% | 16.3% |
+
+0.85 is the only row with attack error inside the sport's 10-15%, and its 11.7%
+stuff is the closest any row gets to the 12% target. **1.10 -- the value three
+pairings chose -- sits below the error band and overshoots stuff.** The constant
+is now 0.85.
+
+That the answer moved is the finding. At a fixed value of this constant, attack
+error and stuff each shift by several points between a three-pairing sample and
+an eight-pairing one. This is the lesson of `ATTACK_SIDE_SYMMETRY_2026_08_03.md`
+arriving in a second place, and it would have been shipped as a tuning decision
+if the sweep had not been repeated: a figure read off one handful of pairings is
+a draw from a wide distribution, not a measurement.
+
+Involvement reads lower in this table than in the per-path one because this
+sweep pools the transition swing, whose block forms off a dig and is genuinely
+weaker. It is a comparison between rows, not a reading against the 35-45% band.
+
+### What the flip is now waiting on
+
+Nothing structural. Five ball paths resolve through shared geometry, every rate
+is in or adjacent to its band, and both tuning constants have been derived on
+samples large enough to support them. The next step is to open
+`ENABLE_GEOMETRIC_ATTACK` behind the development override and compare terminal
+outcome distributions against the legacy path -- with the symmetry gate as the
+instrument, and its six-point home tilt as the prediction.

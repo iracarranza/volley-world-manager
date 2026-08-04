@@ -2430,6 +2430,25 @@ func _resolve_home_continuation(
 	var continuation_actions := ApproachMechanicsModel.available_attack_families(
 		hitter, continuation_approach, hitter_arrival_margin
 	)
+	## The wall, formed before the swing is scored rather than after.
+	##
+	## This path used to pass a block pressure of zero, which made it the only
+	## one of the three swings that could not be hurried by hands in front of it:
+	## the block was still resolved, but *after* the swing quality already
+	## existed, so it could take the ball away and never make the ball harder to
+	## hit. Forming here and contesting the same formation below is what the
+	## first-ball path already does, and it means one wall does both jobs instead
+	## of a wall that only ever arrives too late to matter.
+	var cont_formation := _form_opponent_block(
+		opponent_team, set_target.x, assignment.tempo, set_quality,
+		set_contact.x, continuation_flight_time,
+		second_contact_window + cont_release_interval,
+	)
+	var cont_block_pressure := float(
+		cont_formation.get("primary_close", 0.0)
+	) * BLOCK_PRIMARY_PRESSURE + float(
+		cont_formation.get("assist_close", 0.0)
+	) * BLOCK_ASSIST_PRESSURE
 	## The third copy of the execution scale, now the same model as the other
 	## two. A transition swing is harder than one off a served ball, and
 	## `exchange_penalty` is what carries that -- as a demand on the swing, the
@@ -2438,7 +2457,7 @@ func _resolve_home_continuation(
 		_attack_execution(
 			hitter, set_quality,
 			_approach_execution_fit(hitter, continuation_approach),
-			hitter_arrival_margin, exchange_penalty, 0.0,
+			hitter_arrival_margin, exchange_penalty, cont_block_pressure,
 		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
@@ -2528,11 +2547,10 @@ func _resolve_home_continuation(
 		return _finish(result, "attack_error", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
-	var block_result := _resolve_opponent_block(
-		opponent_team, set_target.x, assignment.tempo, set_quality,
-		attack_quality, set_contact.x, continuation_flight_time,
-		second_contact_window + cont_release_interval,
-	)
+	## The same wall that pressured the swing, now contested against it. Forming
+	## it twice would let the block that hurried the hitter and the block that
+	## touched the ball be two different blocks.
+	var block_result := _contest_block(cont_formation, attack_quality)
 	var opponent_blocker := block_result.primary as VolleyballPlayer
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var primary_close := float(block_result.primary_close)

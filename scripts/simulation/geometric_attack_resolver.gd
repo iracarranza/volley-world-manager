@@ -45,20 +45,30 @@ const COURSE_SAMPLES: int = 17
 ## quantity that spans 30 cm -- this constant was the *only* term with any range,
 ## so it decided every shot and 91.7% of swings went down the natural line. With
 ## openness spanning -1 to 1 the balance inverted and 89% went to the sharpest
-## available cut instead. Swept against the design targets on live rallies:
+## available cut instead.
+##
+## Derived twice, and the second derivation overturned the first. Three roster
+## pairings said 1.10; eight say 0.85. Attack error and stuff both move by
+## several points between those two samples at a *fixed* value of this constant,
+## which is the whole lesson of `ATTACK_SIDE_SYMMETRY_2026_08_03.md` arriving in
+## a second place: a figure read off one handful of pairings is a draw from a
+## wide distribution, not a measurement.
+##
+## Eight pairings, both serving assignments, all three attack paths pooled:
 ##
 ##   value | off natural line | attack error | block involvement | stuff
-##    0.35 |            89.2% |        26.6% |             20.1% |  5.3%
-##    0.60 |            73.1% |        21.6% |             24.6% |  6.3%
-##    0.85 |            51.0% |        14.6% |             32.4% |  8.0%
-##    1.10 |            30.7% |        10.6% |             36.2% |  9.0%
-##    1.40 |            15.3% |         6.8% |             41.5% | 11.6%
+##    0.85 |            60.4% |        11.7% |             24.7% | 11.7%
+##    1.10 |            37.1% |         9.2% |             27.4% | 13.3%
+##    1.40 |            16.8% |         7.6% |             32.8% | 16.3%
 ##
-## 1.10 is where attack error and block involvement are both inside their bands
-## with shot selection still alive. 1.40 reaches the 12% stuff target, but only
-## by dropping errors below the sport and pulling shot selection back toward the
-## natural line -- buying one target by spending two.
-const STRAIN_AVERSION: float = 1.10
+## 0.85 is the only row with attack error inside the sport's 10-15%, and its
+## 11.7% stuff is the closest any row gets to the 12% target. 1.10 -- the value
+## three pairings chose -- sits below the error band and overshoots stuff.
+##
+## Involvement reads lower here than in the per-path tables because this sweep
+## pools the transition swing, whose block forms off a dig and is genuinely
+## weaker. Read it as a comparison between rows, not against the 35-45% band.
+const STRAIN_AVERSION: float = 0.85
 ## How much air a hitter wants between the ball and the tape when choosing a
 ## shot. Not a safety factor on the outcome -- execution error is applied after
 ## this and can still put the ball in the net. This is the margin a hitter aims
