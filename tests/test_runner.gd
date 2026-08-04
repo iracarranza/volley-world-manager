@@ -7443,6 +7443,55 @@ func _pooled_home_attack_share(pairings: int, rallies_per_condition: int) -> flo
 ## Mean home stuff-block rate across several independently generated roster
 ## pairings. One pairing is a draw from a distribution that spans nearly the
 ## whole range, so only the mean is a quantity worth asserting on.
+## Every home block outcome across several roster pairings, pooled.
+##
+## The stuff *rate* was given a multi-pairing sample because one pairing's rate
+## swings from 0.000 to 0.907; the two claims beside it -- that partial contacts
+## outnumber terminal stuffs, and that a partial carries a deflection target --
+## kept riding on the single 900006/905006 draw the same comment warns about.
+## They are distributional claims and they need a distribution: measured over
+## 400 rallies the home block returns 58 stuffs against 121 partials, and a
+## window that finds none of the latter is measuring its own seed.
+func _pooled_home_block_outcomes(
+	pairings: int, rallies_per_pairing: int
+) -> Dictionary:
+	var stuffs := 0
+	var partials := 0
+	var deflection_seen := false
+	for pairing_index in range(pairings):
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+			manager.players, 900006 + pairing_index * 1000
+		)
+		EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+			manager.opponent_team.players, 905006 + pairing_index * 1000
+		)
+		for serving_home in [true, false]:
+			manager.match_state.serving_home = serving_home
+			for seed_value in range(5000, 5000 + rallies_per_pairing):
+				var result: Resource = manager.resolve_active_rally(seed_value)
+				if result == null:
+					continue
+				for event_resource in result.events:
+					var event: Resource = event_resource
+					if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
+							or str(event.metadata.get("side", "")) != "home":
+						continue
+					match str(event.metadata.get("outcome", "miss")):
+						"stuff":
+							stuffs += 1
+						"touch", "funnel":
+							partials += 1
+							deflection_seen = deflection_seen \
+								or event.metadata.has("deflection_target")
+		manager.free()
+	return {
+		"stuffs": stuffs, "partials": partials,
+		"deflection_seen": deflection_seen,
+	}
+
+
 func _mean_stuff_block_rate(pairings: int, rallies_per_pairing: int) -> float:
 	var total := 0.0
 	for pairing_index in range(pairings):
@@ -9740,9 +9789,12 @@ func _test_block_closing_and_touch_distribution() -> void:
 				attack_coverage_observed = true
 	_check(home_block_events > 20, "block distribution test observes enough home contests")
 	_check(non_middle_primary, "nearest pin players can lead blocks instead of the middle")
+	var pooled_blocks := _pooled_home_block_outcomes(4, 60)
 	_check(
-		touches_and_funnels > stuff_blocks,
-		"partial block outcomes occur more often than terminal stuff blocks",
+		int(pooled_blocks.partials) > int(pooled_blocks.stuffs),
+		"partial block outcomes outnumber terminal stuffs (%d partial, %d stuff)" % [
+			int(pooled_blocks.partials), int(pooled_blocks.stuffs),
+		],
 	)
 	## Averaged over six roster pairings, not measured on one.
 	##
@@ -9766,7 +9818,10 @@ func _test_block_closing_and_touch_distribution() -> void:
 		"home stuff-block rate stays below the balance ceiling across six roster pairings (mean %.3f)"
 			% mean_stuff_rate,
 	)
-	_check(block_deflection_observed, "partial home blocks expose a changed deflection target")
+	_check(
+		bool(pooled_blocks.deflection_seen),
+		"partial home blocks expose a changed deflection target",
+	)
 	_check(attack_coverage_observed, "opponent block touches can trigger explicit attack coverage")
 	_check(block_segments_observed, "block events expose spatial net-coverage segments")
 	_check(
