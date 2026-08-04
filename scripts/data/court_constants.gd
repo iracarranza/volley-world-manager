@@ -65,7 +65,16 @@ const SERVE_RECEIVE_STAGING_POSITIONS := {
 
 ## A shielded setter stands close to the net so the serve travels past them to
 ## the passers. They are never a primary receiver, in either row.
-const SETTER_SHIELD_Y: float = 0.63
+##
+## 0.63 was not close to the net. The net is at 0.50, the front-row slots sit at
+## 0.56-0.57, and `HOME_ATTACK_LINE_Y` is 0.6533 -- so the old value put a
+## front-row setter *behind* their own front row, essentially on the attack
+## line. A back-row setter, placed at their partner's depth plus 0.09, landed at
+## roughly 0.655. The two rows were 0.025 apart, about 45 cm on an 18 m court:
+## the front/back branch below was structurally right and produced two
+## positions nobody could tell apart, which is why a front-row setter read as
+## starting in the back row.
+const SETTER_SHIELD_Y: float = 0.545
 
 const BACK_ROW_SLOTS: Array[int] = [1, 5, 6]
 
@@ -249,8 +258,17 @@ static func setter_serve_receive_position(setter_slot: int) -> Vector2:
 	var partner_slot := int(BACK_FRONT_SLOT_PAIRS.get(setter_slot, 2))
 	var partner := slot_position(partner_slot)
 	## Stay behind the partner (larger Y is deeper on the home side) so the
-	## overlap rule holds at serve contact while the partner screens the setter.
-	return Vector2(clampf(partner.x, 0.10, 0.90), clampf(partner.y + 0.09, 0.53, 0.94))
+	## overlap rule holds at serve contact while the partner screens the setter,
+	## and behind the attack line as well -- a back-row setter who starts level
+	## with it has no release to run, and is indistinguishable from a front-row
+	## one. The journey to the net after the serve is struck is the difference
+	## between the two rows, so the starting depth has to leave room for it.
+	return Vector2(
+		clampf(partner.x, 0.10, 0.90),
+		clampf(
+			maxf(partner.y + 0.09, HOME_ATTACK_LINE_Y + 0.03), 0.53, 0.94
+		),
+	)
 
 
 ## Exhaustive minimum-travel matching of passer slots to seams. Returns the slot

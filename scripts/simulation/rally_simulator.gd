@@ -5189,7 +5189,21 @@ func _finalize_rally_timeline(result: Resource) -> void:
 	for event_resource in result.events:
 		var event: Resource = event_resource
 		var metadata: Dictionary = event.metadata
+		## What the resolver itself said, kept before this function replaces it.
+		##
+		## `event_time` is read here as a request and then written back over with
+		## the finalised value, so the resolver's own physical timestamp -- the
+		## one the rally was actually simulated on -- is destroyed on the way
+		## out. Nothing downstream could tell a time the physics produced from a
+		## time this loop invented, and the coverage question ("does every event
+		## carry a real one?") could not be asked at all from outside.
+		##
+		## Recorded, not yet used. Driving playback from it means deleting the
+		## accumulator that currently guarantees monotonic ordering, and that is
+		## only safe once the coverage is known rather than assumed.
 		var requested_time := float(metadata.get("event_time", timeline))
+		if metadata.has("event_time"):
+			metadata["resolver_event_time"] = requested_time
 		timeline = maxf(timeline, requested_time)
 		var movement_duration := float(metadata.get("movement_duration", 0.0))
 		var flight_duration := float(metadata.get("flight_time", 0.0)) \
