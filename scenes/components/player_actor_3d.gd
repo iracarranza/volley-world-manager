@@ -162,15 +162,18 @@ func apply_ui_palette(light_mode: bool) -> void:
 	for feature in _face_features():
 		_apply_material_color(feature, face_color)
 	for cosmetic in _cosmetics():
+		var part_alpha := float(cosmetic.get_meta("alpha", 1.0))
 		match str(cosmetic.get_meta("color_key", "skin")):
 			"kit":
-				_apply_material_color(cosmetic, team_color)
+				_apply_material_color(cosmetic, team_color, part_alpha)
 			"crown":
-				_apply_material_color(cosmetic, crown_color)
+				_apply_material_color(cosmetic, crown_color, part_alpha)
 			"literal":
-				_apply_material_color(cosmetic, cosmetic.get_meta("color_value"))
+				_apply_material_color(
+					cosmetic, cosmetic.get_meta("color_value"), part_alpha
+				)
 			_:
-				_apply_material_color(cosmetic, skin_color)
+				_apply_material_color(cosmetic, skin_color, part_alpha)
 	_apply_material_color(focus_ring, accent_color)
 
 
@@ -547,10 +550,19 @@ func set_pose(
 			_set_elbow(right_arm, 4.0)
 
 
-func _apply_material_color(mesh: MeshInstance3D, color: Color) -> void:
+func _apply_material_color(
+	mesh: MeshInstance3D, color: Color, alpha: float = 1.0
+) -> void:
 	var material := StandardMaterial3D.new()
-	material.albedo_color = color
+	material.albedo_color = Color(color, alpha)
 	material.roughness = 0.72
+	if alpha < 0.999:
+		## Alpha scissor rather than blend would give a stipple; blend is right
+		## for a membrane. Depth draw stays on so two overlapping wings still
+		## read as two, and culling goes off so a wing seen from behind is not a
+		## hole.
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh.material_override = material
 
 
@@ -748,6 +760,8 @@ func _build_cosmetics() -> void:
 			instance.set_meta("color_value", part.color_value)
 		else:
 			instance.set_meta("color_key", str(part.get("color", "skin")))
+		if part.has("alpha"):
+			instance.set_meta("alpha", float(part.alpha))
 		parent.add_child(instance)
 
 

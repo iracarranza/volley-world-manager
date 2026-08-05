@@ -27,7 +27,7 @@ const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 ## long enough to hold both answers neither at a size worth looking at.
 const ANIMAL_BODIES: Array[String] = ["Feli", "Avi", "Cani", "Ursi", "Simi"]
 const VEGI_BODIES: Array[String] = [
-	"Tomato", "Aubergine", "Pumpkin", "Pear", "Turnip", "Stalk",
+	"Tomato", "Aubergine", "Pear", "Stalk", "Pepper",
 ]
 
 ## Plates. Each one is a scenario, and each states everything about itself.
@@ -56,14 +56,14 @@ const PLATES: Array[Dictionary] = [
 		"subjects": VEGI_BODIES,
 		"pose": [-1, 0.0],
 		"faces": ["neutral"],
-		"yaws": [-24.0, 30.0, -14.0, 38.0, -34.0, 20.0],
+		"yaws": [-24.0, 30.0, -14.0, 38.0, -34.0],
 		"camera": [Vector3(0.0, 1.66, -9.8), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.80,
 	},
 	{
 		"name": "02_expressions_open",
 		"caption": "face",
-		"subjects": ["Turnip", "Pumpkin", "Tomato"],
+		"subjects": ["Pepper", "Pear", "Tomato"],
 		"pose": [-1, 0.0],
 		"faces": ["happy", "neutral", "worried"],
 		"yaws": [-16.0, 0.0, 18.0],
@@ -73,7 +73,7 @@ const PLATES: Array[Dictionary] = [
 	{
 		"name": "03_expressions_narrowed",
 		"caption": "face",
-		"subjects": ["Pear", "Turnip", "Aubergine"],
+		"subjects": ["Pear", "Pepper", "Aubergine"],
 		"pose": [-1, 0.0],
 		"faces": ["devious", "suspicious", "cross"],
 		"yaws": [14.0, 0.0, -20.0],
@@ -83,7 +83,7 @@ const PLATES: Array[Dictionary] = [
 	{
 		"name": "04_expressions_flat",
 		"caption": "face",
-		"subjects": ["Stalk", "Turnip", "Feli"],
+		"subjects": ["Stalk", "Pepper", "Feli"],
 		"pose": [-1, 0.0],
 		"faces": ["relaxed", "deadpan", "tired"],
 		"yaws": [-14.0, 0.0, 20.0],
@@ -93,7 +93,7 @@ const PLATES: Array[Dictionary] = [
 	{
 		"name": "05_serve",
 		"caption": "serve",
-		"subjects": ["Avi", "Feli", "Pumpkin"],
+		"subjects": ["Avi", "Feli", "Pepper"],
 		"pose": [0, 0.45],
 		"faces": ["neutral", "cross", "deadpan"],
 		"yaws": [-34.0, 0.0, 30.0],
@@ -103,7 +103,7 @@ const PLATES: Array[Dictionary] = [
 	{
 		"name": "06_set",
 		"caption": "set",
-		"subjects": ["Pear", "Turnip", "Stalk"],
+		"subjects": ["Pear", "Pepper", "Stalk"],
 		"pose": [3, 0.5],
 		"faces": ["neutral", "happy", "suspicious"],
 		"yaws": [26.0, -8.0, -38.0],
@@ -123,7 +123,7 @@ const PLATES: Array[Dictionary] = [
 	{
 		"name": "08_block",
 		"caption": "block",
-		"subjects": ["Avi", "Stalk", "Pumpkin"],
+		"subjects": ["Avi", "Stalk", "Pepper"],
 		"pose": [5, 0.55],
 		"faces": ["cross", "deadpan", "suspicious"],
 		"yaws": [-12.0, 4.0, 16.0],
@@ -135,7 +135,7 @@ const PLATES: Array[Dictionary] = [
 		"caption": "posture",
 		## No Avi here on purpose: its wing fans are the largest cosmetic in the
 		## game and they hide exactly the twist this plate exists to show.
-		"subjects": ["Turnip", "Feli", "Pear", "Pumpkin"],
+		"subjects": ["Pepper", "Feli", "Pear", "Aubergine"],
 		"pose": [1, 0.0],
 		"postures": ["planted", "moving", "reaching", "off-axis"],
 		"faces": ["deadpan", "worried", "cross", "suspicious"],

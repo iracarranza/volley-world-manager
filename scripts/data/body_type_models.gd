@@ -48,44 +48,43 @@ const FALLBACK_TYPE: String = "Vegi"
 ## Six, with deliberately unlike silhouettes -- squat, tall, wide, waisted,
 ## rooted and stalky -- so one Vegi reads as a different Vegi at a glance from
 ## across the court rather than needing the colour to carry it.
+## Five, and the count went *down* on purpose.
+##
+## Pumpkin and Turnip were both "a heavy round mass", which is the silhouette
+## Ursi already owns outright and owns better -- a Vegi competing with a body
+## type for the same read is a Vegi doing nothing. Pear is already the massive
+## one among the produce and needs no help. Pepper takes their slot as the
+## lobed, square-shouldered shape none of the others reach, and it is the reason
+## palettes exist: a bell pepper is the one produce whose *colour* is the first
+## thing anybody names about it.
 const PRODUCE: Array[String] = [
-	"Tomato", "Aubergine", "Pumpkin", "Pear", "Turnip", "Stalk",
+	"Tomato", "Aubergine", "Pear", "Stalk", "Pepper",
 ]
 
 const PRODUCE_BODIES := {
 	"Tomato": {
 		"skin": Color("d63b2a"), "crown": Color("3f7a35"),
+		"crown_shape": "calyx",
 		"torso": {"shape": "sphere", "radius": 0.33, "height": 0.66},
 		"torso_y": 1.02, "head_y": 1.46, "head_radius": 0.13,
 		"shoulder": Vector2(0.31, 1.28), "rig_height": 1.80,
 	},
 	"Aubergine": {
 		"skin": Color("54307a"), "crown": Color("4e8a3a"),
+		"crown_shape": "hood",
 		"torso": {"shape": "capsule", "radius": 0.25, "height": 1.10},
 		"torso_y": 1.16, "head_y": 1.78, "head_radius": 0.12,
 		"shoulder": Vector2(0.27, 1.52), "rig_height": 2.06,
 	},
-	"Pumpkin": {
-		"skin": Color("d97a1e"), "crown": Color("6b7a2e"),
-		"torso": {"shape": "sphere", "radius": 0.41, "height": 0.70},
-		"torso_y": 0.96, "head_y": 1.42, "head_radius": 0.15,
-		"shoulder": Vector2(0.37, 1.20), "rig_height": 1.76,
-	},
 	"Pear": {
 		"skin": Color("b8c452"), "crown": Color("5c8a3c"),
+		"crown_shape": "twig",
 		## A pear is two masses, so it is the one produce with a second torso
 		## lobe rather than a single scaled primitive -- the waist is the shape.
 		"torso": {"shape": "sphere", "radius": 0.32, "height": 0.60},
 		"torso_y": 0.94, "head_y": 1.62, "head_radius": 0.12,
 		"shoulder": Vector2(0.26, 1.40), "rig_height": 1.92,
 		"extra_lobe": {"radius": 0.22, "height": 0.48, "y": 1.36},
-	},
-	"Turnip": {
-		"skin": Color("e8e2ea"), "crown": Color("7fa03e"),
-		"torso": {"shape": "sphere", "radius": 0.35, "height": 0.74},
-		"torso_y": 1.00, "head_y": 1.48, "head_radius": 0.13,
-		"shoulder": Vector2(0.31, 1.26), "rig_height": 1.82,
-		"blush": Color("9c5fa8"),
 	},
 	## The stalky one -- green onion, celery, sugarcane. Every other produce is
 	## a mass with limbs on it; this is the one that is essentially vertical, so
@@ -104,8 +103,231 @@ const PRODUCE_BODIES := {
 			{"x": 0.10, "y": 1.40, "height": 0.78},
 			{"x": 0.0, "y": 1.34, "height": 0.94},
 		],
+		"crown_shape": "blades",
+	},
+	## Square-shouldered and lobed, which is a shape none of the other four
+	## reach: broad across the top and tapering to the bottom, rather than a
+	## mass with a waist or a tube. The lobes reuse the Stalk's rib mechanism
+	## turned through ninety degrees of purpose -- vertical capsules laid on the
+	## surface, which is exactly what a pepper's ridges are.
+	"Pepper": {
+		"skin": Color("c8332c"), "crown": Color("4f7c3a"),
+		"torso": {"shape": "sphere", "radius": 0.335, "height": 0.78},
+		"torso_y": 1.04, "head_y": 1.56, "head_radius": 0.128,
+		"shoulder": Vector2(0.34, 1.34), "rig_height": 1.88,
+		## Laid on the sphere's surface rather than near its axis. At the Stalk's
+		## depth these sat inside a torso twice the radius and drew nothing --
+		## a rib is a ridge, and a ridge that does not break the surface is not
+		## visible at any distance.
+		"ribs": [
+			{"x": -0.215, "y": 1.05, "z": 0.215, "height": 0.60, "thickness": 0.058},
+			{"x": 0.0, "y": 1.05, "z": 0.305, "height": 0.66, "thickness": 0.062},
+			{"x": 0.215, "y": 1.05, "z": 0.215, "height": 0.60, "thickness": 0.058},
+			{"x": -0.215, "y": 1.05, "z": -0.215, "height": 0.60, "thickness": 0.058},
+			{"x": 0.215, "y": 1.05, "z": -0.215, "height": 0.60, "thickness": 0.058},
+		],
+		"crown_shape": "cap",
 	},
 }
+
+
+## Colourways, per body.
+##
+## Two volis of the same body type used to be the same colour, which meant the
+## only thing separating them on a roster was a name -- and a roster is where you
+## are supposed to *recognise* people. A palette is the cheapest identity there
+## is: it costs no geometry, survives any distance the game is watched from, and
+## it is the first thing anybody describes a teammate by.
+##
+## Bell peppers are why this exists. A pepper's colour is the first thing anybody
+## names about it, so the produce that most needed variants is the one that made
+## it obvious every body needed them.
+##
+## Deterministic per voli and fixed for their career, like the produce. `crown`
+## is the secondary -- leaves, beak, ears, muzzle -- and it is chosen with the
+## skin rather than separately, because the pairing is the palette.
+const PALETTES := {
+	"Feli": [
+		{"skin": Color("c98f4e"), "crown": Color("f0dcc0")},
+		{"skin": Color("6d6a66"), "crown": Color("d9d5cd")},
+		{"skin": Color("2f2b2c"), "crown": Color("b9a98f")},
+		{"skin": Color("d8b98a"), "crown": Color("8a5f3c")},
+	],
+	"Avi": [
+		{"skin": Color("8fb7d6"), "crown": Color("e8a63c")},
+		{"skin": Color("d9dfe4"), "crown": Color("d96a3c")},
+		{"skin": Color("4a7f5e"), "crown": Color("e8c93c")},
+		{"skin": Color("c46b8a"), "crown": Color("f2e0c0")},
+	],
+	"Cani": [
+		{"skin": Color("8a6a45"), "crown": Color("e8ddc8")},
+		{"skin": Color("3c3a3f"), "crown": Color("c9c2b4")},
+		{"skin": Color("c9a06a"), "crown": Color("f4ecdc")},
+		{"skin": Color("6f4a34"), "crown": Color("d8c3a0")},
+	],
+	"Ursi": [
+		{"skin": Color("4a3b34"), "crown": Color("d9c9b4")},
+		{"skin": Color("1f1c1e"), "crown": Color("cdd6db")},
+		{"skin": Color("8a6f52"), "crown": Color("efe3cd")},
+		{"skin": Color("d6c6ad"), "crown": Color("6b5847")},
+	],
+	"Simi": [
+		{"skin": Color("6f5a4e"), "crown": Color("f0d9bd")},
+		{"skin": Color("2e2a2b"), "crown": Color("c4a888")},
+		{"skin": Color("a08466"), "crown": Color("f4e6cf")},
+		{"skin": Color("55402f"), "crown": Color("e0b98c")},
+	],
+	"Tomato": [
+		{"skin": Color("d63b2a"), "crown": Color("3f7a35")},
+		{"skin": Color("e8b13a"), "crown": Color("4d7d38")},
+		{"skin": Color("7d2a3a"), "crown": Color("4a7040")},
+	],
+	"Aubergine": [
+		{"skin": Color("54307a"), "crown": Color("4e8a3a")},
+		{"skin": Color("2b2140"), "crown": Color("6a9b46")},
+		{"skin": Color("d8d2e0"), "crown": Color("5b8c3f")},
+	],
+	"Pear": [
+		{"skin": Color("b8c452"), "crown": Color("5c8a3c")},
+		{"skin": Color("caa23c"), "crown": Color("6b7a3a")},
+		{"skin": Color("8f5a3a"), "crown": Color("5f7a42")},
+	],
+	"Stalk": [
+		{"skin": Color("9dbf5c"), "crown": Color("cfe08a")},
+		{"skin": Color("e4ebd2"), "crown": Color("8fbf5c")},
+		{"skin": Color("6f9a4a"), "crown": Color("d6e6a0")},
+	],
+	## Five, because a bell pepper's colours are a known set and this is the
+	## produce the whole palette idea came from.
+	"Pepper": [
+		{"skin": Color("c8332c"), "crown": Color("4f7c3a")},
+		{"skin": Color("e8b43a"), "crown": Color("4f7c3a")},
+		{"skin": Color("d97a1e"), "crown": Color("5a8440")},
+		{"skin": Color("5d8f3f"), "crown": Color("3f6b32")},
+		{"skin": Color("6b3f7a"), "crown": Color("4a7040")},
+	],
+}
+
+
+## Which colourway a voli wears. Seeded from the id like `produce_for`, and
+## deliberately a *different* hash string so body shape and colour do not
+## correlate -- one hash driving both would make every Tomato red and every
+## Stalk pale, which is the thing this is meant to prevent.
+static func palette_for(body_key: String, player_id: int) -> Dictionary:
+	var options: Array = PALETTES.get(body_key, [])
+	if options.is_empty():
+		return {}
+	var index := absi(hash("palette:%s:%d" % [body_key, player_id])) % options.size()
+	return Dictionary(options[index])
+
+
+## The torso's radius a fraction of the way up from its centre, so a part worn
+## on it can be sized to where it actually sits. `up` is in units of the torso's
+## own vertical semi-axis.
+##
+## A sphere torso narrows toward the top and a capsule does not, and a single
+## constant cannot serve both -- which is how the kit band ended up either
+## buried or floating depending on which produce wore it.
+static func _torso_radius_at(torso: Dictionary, up: float) -> float:
+	var radius := float(torso.get("radius", 0.32))
+	if str(torso.get("shape", "sphere")) != "sphere":
+		return radius
+	var t := clampf(up, 0.0, 0.98)
+	return radius * sqrt(maxf(1.0 - t * t, 0.04))
+
+
+## What grows out of the top. One shape per produce rather than one stem and two
+## leaves for all of them.
+##
+## Every Vegi wearing the same crown meant the head was the one place they were
+## identical, which is the worst place to be identical -- it is where the eye
+## goes first and where the face already lives. These are also chosen to *not*
+## sit at eye level: the old leaves stuck straight out sideways across the face,
+## which was the collision complaint.
+static func _produce_crown(body: Dictionary) -> Array:
+	var top := float(body.head_y) + float(body.head_radius) * 0.92
+	match str(body.get("crown_shape", "calyx")):
+		"hood":
+			## Aubergine. A broad calyx that caps the head rather than sprouting
+			## from it, angled back so it never crosses the face.
+			return [
+				{
+					"name": "Hood", "parent": "BodyPivot", "shape": "cone",
+					"radius": float(body.head_radius) * 1.48, "height": 0.19,
+					"position": Vector3(0.0, top + 0.05, 0.03),
+					"rotation": Vector3(-16.0, 0.0, 0.0), "color": "crown",
+				},
+				{
+					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
+					"top_radius": 0.03, "bottom_radius": 0.042, "height": 0.13,
+					"position": Vector3(0.0, top + 0.15, 0.02), "color": "crown",
+				},
+			]
+		"twig":
+			## Pear. A pear has a bare stalk and nothing else, and it is the one
+			## produce whose silhouette is already doing enough work.
+			return [
+				{
+					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
+					"top_radius": 0.022, "bottom_radius": 0.038, "height": 0.26,
+					"position": Vector3(0.0, top + 0.11, 0.01),
+					"rotation": Vector3(-9.0, 0.0, 6.0), "color": "crown",
+				},
+			]
+		"blades":
+			## Stalk. A fan of upright leaves, which is what a stalk's top is.
+			var blades: Array = []
+			for index in range(3):
+				var lean := -16.0 + 16.0 * float(index)
+				blades.append({
+					"name": "Blade%d" % index, "parent": "BodyPivot",
+					"shape": "box", "size": Vector3(0.055, 0.30, 0.022),
+					"position": Vector3(
+						-0.05 + 0.05 * float(index), top + 0.14, 0.0
+					),
+					"rotation": Vector3(0.0, 0.0, lean), "color": "crown",
+				})
+			return blades
+		"cap":
+			## Pepper. A flat cap disc with a short thick stem through it.
+			return [
+				{
+					"name": "Cap", "parent": "BodyPivot", "shape": "cylinder",
+					"top_radius": float(body.head_radius) * 1.02,
+					"bottom_radius": float(body.head_radius) * 1.26,
+					"height": 0.055,
+					"position": Vector3(0.0, top + 0.02, 0.0), "color": "crown",
+				},
+				{
+					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
+					"top_radius": 0.032, "bottom_radius": 0.046, "height": 0.14,
+					"position": Vector3(0.0, top + 0.10, 0.0), "color": "crown",
+				},
+			]
+		_:
+			## Tomato. A star calyx, laid flat on the crown of the head where it
+			## reads as a tomato's five points rather than as ears.
+			var points: Array = [
+				{
+					"name": "Stem", "parent": "BodyPivot", "shape": "cylinder",
+					"top_radius": 0.028, "bottom_radius": 0.042, "height": 0.14,
+					"position": Vector3(0.0, top + 0.07, 0.0), "color": "crown",
+				},
+			]
+			for index in range(5):
+				var angle := TAU * float(index) / 5.0
+				points.append({
+					"name": "Calyx%d" % index, "parent": "BodyPivot",
+					"shape": "box", "size": Vector3(0.055, 0.022, 0.18),
+					"position": Vector3(
+						sin(angle) * float(body.head_radius) * 0.62,
+						top + 0.01,
+						cos(angle) * float(body.head_radius) * 0.62,
+					),
+					"rotation": Vector3(-14.0, rad_to_deg(angle), 0.0),
+					"color": "crown",
+				})
+			return points
 
 
 ## Deterministic per player, so a Vegi is the same aubergine every match, in
@@ -174,6 +396,10 @@ const TYPE_EXPRESSION: float = 0.45
 static func silhouette(body_type: String, player_id: int) -> Dictionary:
 	var resolved := body_type if is_modelled(body_type) else FALLBACK_TYPE
 	var authored: Dictionary
+	## Which colourway this voli wears. Keyed by produce for a Vegi and by type
+	## for everyone else, so a palette is a property of the *shape* rather than
+	## of the species -- a Tomato's colours have nothing to say about a Stalk's.
+	var palette_key := produce_for(player_id) if resolved == "Vegi" else resolved
 	match resolved:
 		"Feli":
 			authored = _feli()
@@ -187,7 +413,46 @@ static func silhouette(body_type: String, player_id: int) -> Dictionary:
 			authored = _simi()
 		_:
 			authored = _vegi(produce_for(player_id))
-	return _toward_universal(authored)
+	var palette := palette_for(palette_key, player_id)
+	if not palette.is_empty():
+		authored["skin"] = palette.skin
+		authored["crown"] = palette.crown
+	return _add_neck(_toward_universal(authored))
+
+
+## Close the gap between the torso and the head, whatever the blend left there.
+##
+## `_toward_universal` pulls `head_y` toward the shared figure but leaves the
+## torso where the type authored it, so the two move apart by however far that
+## type disagreed with the reference. On the round produce that is most of a
+## head's height, and a head hanging clear of the shoulders reads as broken
+## rather than as long-necked.
+##
+## Fixing it by re-authoring every `head_y` would be a set of constants tuned
+## against the blend -- correct until the blend moves, and silently wrong after.
+## A neck sized from the two things it spans is correct by construction, and it
+## is also just a real part of a body.
+static func _add_neck(spec: Dictionary) -> Dictionary:
+	var torso: Dictionary = spec.get("torso", {})
+	var head: Dictionary = spec.get("head", {})
+	var torso_top := float(spec.get("torso_y", 1.1)) \
+		+ float(torso.get("height", 0.8)) * 0.5
+	var head_bottom := float(spec.get("head_y", 1.8)) \
+		- float(head.get("height", 0.3)) * 0.5
+	## Always drawn, even when the two already meet: a short collar of neck at
+	## the join is what stops a sphere head reading as balanced on a sphere body.
+	var span := maxf(head_bottom - torso_top, 0.0) + 0.06
+	var extras: Array = spec.get("extras", [])
+	extras.append({
+		"name": "Neck", "parent": "BodyPivot", "shape": "cylinder",
+		"top_radius": float(head.get("radius", 0.13)) * 0.52,
+		"bottom_radius": float(head.get("radius", 0.13)) * 0.72,
+		"height": span,
+		"position": Vector3(0.0, torso_top + span * 0.5 - 0.03, 0.0),
+		"color": "skin",
+	})
+	spec["extras"] = extras
+	return spec
 
 
 ## Blends an authored skeleton toward the shared figure.
@@ -267,42 +532,30 @@ static func _vegi(produce: String) -> Dictionary:
 	var body: Dictionary = PRODUCE_BODIES.get(produce, PRODUCE_BODIES["Tomato"])
 	var torso: Dictionary = body.torso
 	var shoulder: Vector2 = body.shoulder
-	var extras: Array = [
-		## Stem and leaves, the part that says "picked" rather than "grown".
-		{
-			"name": "Stem", "parent": "BodyPivot",
-			"shape": "cylinder", "top_radius": 0.035, "bottom_radius": 0.05,
-			"height": 0.20, "position": Vector3(0.0, body.head_y + 0.16, 0.0),
-			"color": "crown",
-		},
-		{
-			"name": "LeafLeft", "parent": "BodyPivot",
-			"shape": "box", "size": Vector3(0.30, 0.02, 0.16),
-			"position": Vector3(-0.15, body.head_y + 0.10, 0.02),
-			"rotation": Vector3(0.0, -18.0, 22.0), "color": "crown",
-		},
-		{
-			"name": "LeafRight", "parent": "BodyPivot",
-			"shape": "box", "size": Vector3(0.30, 0.02, 0.16),
-			"position": Vector3(0.15, body.head_y + 0.10, -0.02),
-			"rotation": Vector3(0.0, 18.0, -22.0), "color": "crown",
-		},
-		## The singlet, as a band.
-		##
-		## It has to sit *clear* of the produce rather than near it. At 0.94 and
-		## 1.02 of the body radius the band crossed the surface it was worn over
-		## and the two fought for the same pixels, which drew a jagged
-		## two-colour rash around every Vegi instead of a shirt. A band wider
-		## than the widest point of the body cannot intersect it at all.
-		{
-			"name": "Kit", "parent": "BodyPivot",
-			"shape": "cylinder",
-			"top_radius": float(torso.get("radius", 0.40)) * 1.06,
-			"bottom_radius": float(torso.get("radius", 0.40)) * 1.06,
-			"height": 0.30, "position": Vector3(0.0, body.torso_y, 0.0),
-			"color": "kit",
-		},
-	]
+	var extras: Array = _produce_crown(body)
+	## The singlet, as a **collar** rather than a belt.
+	##
+	## It used to be a cylinder 6% wider than the widest point of the torso, sat
+	## at the torso's centre. That was the fix for an earlier bug -- a band the
+	## same size as the body fought it for pixels -- but the cure was worse: a
+	## ring wider than the body is a ring *sticking out of* the body, and on a
+	## round produce it read as a hoop somebody had been posted through. It also
+	## sat exactly where the arms swing, so every pose collided with it.
+	##
+	## A collar avoids both. It sits high, where every produce narrows toward the
+	## head, so it is small; it is sized from the torso's own profile at that
+	## height rather than from its widest point, so it hugs rather than floats;
+	## and it is nowhere near the arms. A neckline is also simply what a singlet
+	## looks like from across a court -- the band was never reading as clothing.
+	var collar_y := float(body.torso_y) + float(torso.get("height", 0.7)) * 0.42
+	extras.append({
+		"name": "Kit", "parent": "BodyPivot",
+		"shape": "cylinder",
+		"top_radius": _torso_radius_at(torso, 0.34) * 1.08,
+		"bottom_radius": _torso_radius_at(torso, 0.30) * 1.12,
+		"height": 0.075, "position": Vector3(0.0, collar_y, 0.0),
+		"color": "kit",
+	})
 	if body.has("extra_lobe"):
 		var lobe: Dictionary = body.extra_lobe
 		extras.append({
@@ -319,9 +572,12 @@ static func _vegi(produce: String) -> Dictionary:
 			rib_index += 1
 			extras.append({
 				"name": "Rib%d" % rib_index, "parent": "BodyPivot",
-				"shape": "capsule", "radius": 0.045,
+				"shape": "capsule",
 				"height": float(rib.height),
-				"position": Vector3(float(rib.x), float(rib.y), 0.04),
+				"radius": float(rib.get("thickness", 0.045)),
+				"position": Vector3(
+					float(rib.x), float(rib.y), float(rib.get("z", 0.04))
+				),
 				"color": "crown",
 			})
 	if body.has("blush"):
@@ -455,12 +711,19 @@ static func _avi() -> Dictionary:
 				"shape": "box", "size": Vector3(0.06, 0.86, 0.40),
 				"position": Vector3(-0.07, -0.40, 0.12),
 				"rotation": Vector3(0.0, 0.0, 6.0), "color": "skin",
+				## Feathers, not panels. The wing fans are the largest cosmetic in
+				## the game and the only one big enough to hide the body wearing
+				## them -- an Avi's own torso, and on a block the teammate behind.
+				## Translucency keeps the reach they exist to show while giving
+				## back the silhouette they were eating.
+				"alpha": 0.55,
 			},
 			{
 				"name": "WingRight", "parent": "BodyPivot/RightArm",
 				"shape": "box", "size": Vector3(0.06, 0.86, 0.40),
 				"position": Vector3(0.07, -0.40, 0.12),
 				"rotation": Vector3(0.0, 0.0, -6.0), "color": "skin",
+				"alpha": 0.55,
 			},
 			{
 				"name": "TailFeathers", "parent": "BodyPivot", "shape": "box",
@@ -617,56 +880,64 @@ static func _ursi() -> Dictionary:
 	}
 
 
-## All reach and no weight. Simi carries the hand-control, ball-control and
-## finesse bonuses and pays for them in attack power and jump reach, so the body
-## is built around leverage: the longest arms on the shortest legs, a narrow
-## chest and hips, and a low centre.
+## All reach and no weight, and deliberately *not* a person.
 ##
-## Long arms are a deliberate exception rather than the house style. The shared
-## figure was pulled *away* from long-armed proportions on purpose -- bodies
-## should not be simian-coded by default -- which is exactly what makes it worth
-## something when one type actually is.
+## The first Simi was a human with long arms, which is the one failure mode this
+## body cannot have -- the roster is animals and produce, and the moment one type
+## reads as an ordinary human being it becomes the default everyone else is a
+## costume of. That is exactly why Homi was retired; drawing it back in under
+## another name would undo the same decision twice.
+##
+## The fix is proportion rather than decoration. The arms are the longest in the
+## game and the legs the shortest, so the hands hang near the knees; the shoulders
+## are wide and set *low*; and the head is small and sits close to them with
+## almost no neck. Nothing about the standing silhouette is upright-human, and
+## none of it needs a costume to say so. The flat side-discs went with it -- ears
+## in a human's place on a human's head was half the problem.
 static func _simi() -> Dictionary:
 	return {
-		"torso": {"shape": "capsule", "radius": 0.255, "height": 0.92},
-		"torso_y": 1.10,
+		"torso": {"shape": "capsule", "radius": 0.285, "height": 0.76},
+		"torso_y": 0.98,
 		"torso_material": "kit",
 		"shorts": {"shape": "box", "size": Vector3(0.46, 0.20, 0.32)},
-		"shorts_y": 0.60,
-		"head": {"shape": "sphere", "radius": 0.165, "height": 0.30},
-		"head_y": 1.70,
-		"arm": {"top_radius": 0.06, "bottom_radius": 0.078, "height": 1.04},
-		"leg": {"top_radius": 0.095, "bottom_radius": 0.07, "height": 0.62},
-		"shoe": {"shape": "box", "size": Vector3(0.20, 0.06, 0.30)},
-		"shoulder": Vector2(0.34, 1.44),
-		"hip": Vector2(0.14, 0.46),
-		"rig_height": 1.86,
+		"shorts_y": 0.56,
+		"head": {"shape": "sphere", "radius": 0.145, "height": 0.25},
+		"head_y": 1.44,
+		"arm": {"top_radius": 0.062, "bottom_radius": 0.08, "height": 1.20},
+		"leg": {"top_radius": 0.10, "bottom_radius": 0.072, "height": 0.54},
+		"shoe": {"shape": "box", "size": Vector3(0.21, 0.06, 0.32)},
+		## Wide and low. A shoulder line below the head's own radius is what
+		## makes a body read as hunched without posing it that way.
+		"shoulder": Vector2(0.38, 1.26),
+		"hip": Vector2(0.13, 0.42),
+		"rig_height": 1.66,
 		"skin": Color("6f5a4e"),
 		"crown": Color("f0d9bd"),
 		"extras": [
-			## Flat discs on the sides of the head rather than cones on top. The
-			## three animal types now differ at the ear alone: pricked, dropped,
-			## round-and-high, and flat-and-wide.
+			## Small, low and set well back, nothing like a human ear's place.
 			{
-				"name": "EarLeft", "parent": "BodyPivot", "shape": "cylinder",
-				"top_radius": 0.062, "bottom_radius": 0.062, "height": 0.028,
-				"position": Vector3(-0.175, 1.71, 0.0),
-				"rotation": Vector3(0.0, 0.0, 90.0), "color": "skin",
+				"name": "EarLeft", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.052, "height": 0.085,
+				"position": Vector3(-0.135, 1.42, 0.045), "color": "skin",
 			},
 			{
-				"name": "EarRight", "parent": "BodyPivot", "shape": "cylinder",
-				"top_radius": 0.062, "bottom_radius": 0.062, "height": 0.028,
-				"position": Vector3(0.175, 1.71, 0.0),
-				"rotation": Vector3(0.0, 0.0, 90.0), "color": "skin",
+				"name": "EarRight", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.052, "height": 0.085,
+				"position": Vector3(0.135, 1.42, 0.045), "color": "skin",
 			},
-			## A brow, sitting above where the face draws its eyes. Cheapest
-			## possible way to give a head a *front* without a muzzle, and it
-			## leaves the mouth on the skull where the shared face code puts it.
+			## A heavy brow over a short muzzle. The muzzle is what takes the
+			## mouth off the skull -- `_mouth_override` reads it by name -- and a
+			## face with its mouth on a snout is not a human face.
 			{
 				"name": "Brow", "parent": "BodyPivot", "shape": "box",
-				"size": Vector3(0.20, 0.045, 0.05),
-				"position": Vector3(0.0, 1.775, -0.145),
-				"rotation": Vector3(-14.0, 0.0, 0.0), "color": "crown",
+				"size": Vector3(0.20, 0.05, 0.06),
+				"position": Vector3(0.0, 1.505, -0.115),
+				"rotation": Vector3(-12.0, 0.0, 0.0), "color": "crown",
+			},
+			{
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.082, "height": 0.10,
+				"position": Vector3(0.0, 1.395, -0.125), "color": "crown",
 			},
 		],
 	}
