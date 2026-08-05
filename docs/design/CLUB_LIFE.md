@@ -232,7 +232,11 @@ The world needs somewhere to be learned, and it should earn its place
 mechanically rather than being a lore page nobody opens. Per region:
 
 - what it **grows** -- pastes and ingredients, with their import multiplier from
-  your club
+  your club. Mostly this is the **minor** regions' entry: each core region sells
+  a paste its minor neighbour grows, which is the atlas's reason to have a page
+  for a place that runs no academy
+- what it is **called by** -- its demonym (`VolleyballRegions.DEMONYMS`), which
+  is the word that appears in every complaint and sponsor line about food
 - what it **makes** -- food blocks, which is a different map over the same
   panels: growing follows land, manufacturing follows capital, and the two do not
   coincide (see `ACCOMMODATIONS_AND_CARE.md`)
@@ -271,6 +275,13 @@ look at a map is the lore page this is trying not to be.
 - Which regions manufacture Supergruel, Mixigence and Vollyslommy. The
   orthographic device says plainly-spelled products come from somewhere with no
   spelling signature; it does not say which.
+- What Vollyslommy's pun actually is. Chutum Üch is *chew too much* and
+  Mixigence is *exigence, mixed*, and in both cases the pun states the mechanic
+  (see `ACCOMMODATIONS_AND_CARE.md`). Vollyslommy's does not resolve yet, which
+  means its effect is currently asserted rather than read off the name.
+- How large the block catalogue is, given that availability rather than
+  existence is what bounds the menu. "More than your kitchen can reach" answers
+  the design question but not the authoring one.
 - Whether the atlas is its own nav section or lives inside Club. The jump-to-globe
   control makes it reachable either way, which lowers the stakes of the answer.
 - How many pastes exist. Eight was the first instinct and is a lot of

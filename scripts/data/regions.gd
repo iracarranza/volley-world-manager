@@ -51,6 +51,42 @@ const DEFINITIONS := {
 		"physical": 1, "technical": 1, "mental": 2, "names": ["Anselm", "Reike", "Vasholt", "Merrin", "Ottlin", "Sabet", "Frauke", "Delvin"]},
 }
 
+## What you call a person or a thing *from* a region.
+##
+## The rule is civic, not ethnic: a demonym is built from the place name and
+## says nothing about ancestry or naming tradition. This is the Filipino/Tagalog
+## distinction -- Filipino is everyone from the Philippines, Tagalog is one
+## people and one language, and conflating them makes a nation into an
+## ethnicity. Here it matters mechanically rather than only politely, because
+## `home_region` is where a voli was *raised* and `club_region` is where they
+## play now: a Xervyan is anyone from Xérvu, including one whose family came
+## from somewhere else, and a voli who moves does not stop being one.
+##
+## Formation follows the place name and drops diacritics that would not survive
+## being said out loud -- Xérvu/Xervyan, Taktikã/Taktikan -- except where the
+## mark is the whole character of the word (Spëddish, Ralīn). Two-word regions
+## contract to whichever half is actually spoken: "Bloc du Larg" is *Larg* in a
+## sentence, so Largen.
+##
+## Nothing derives from the people's naming tradition. That tradition tells you
+## what a voli is called; the demonym tells you where they are from.
+const DEMONYMS := {
+	"Landavol": "Landavolan",
+	"Spëddigh": "Spëddish",
+	"Pāwa Hitō": "Pāwan",
+	"Bloc du Larg": "Largen",
+	"Xérvu": "Xervyan",
+	"Taktikã": "Taktikan",
+	"Ispayk": "Ispaykano",
+	"A'ace": "A'aceni",
+	"Tu'ul ys Feynt": "Feyntish",
+	"Lo-onğ Ralī": "Ralīn",
+	"Bompaşao": "Bompaşan",
+	"Rhen Tempaol": "Tempaoli",
+	"Kutre den Lyn": "Kutren",
+	"Zaitgaist": "Zaitgaister",
+}
+
 const LEGACY_REGIONS := {
 	"East Asia": "Pāwa Hitō", "Southeast Asia": "Ispayk",
 	"Europe": "Landavol", "North America": "Pāwa Hitō",
@@ -245,6 +281,21 @@ static func names() -> Array[String]:
 static func canonical_name(region_name: String) -> String:
 	return str(LEGACY_REGIONS.get(region_name, region_name)) \
 		if region_name in DEFINITIONS or region_name in LEGACY_REGIONS else "Landavol"
+
+
+## "Xervyan", for a voli, a paste or a plate of food. Unknown regions fall back
+## to the region name itself rather than to Landavol's demonym, because calling
+## an unrecognised place's food Landavolan is a wrong answer stated confidently.
+## Deliberately not routed through `canonical_name`, which resolves anything it
+## does not recognise to Landavol. That is right for picking a region to play in
+## and wrong for naming one: it would report an unknown place's food as
+## Landavolan, which is a wrong answer stated confidently. Legacy names still
+## resolve; everything else echoes back visibly unresolved.
+static func demonym(region_name: String) -> String:
+	if region_name in DEMONYMS:
+		return str(DEMONYMS[region_name])
+	var legacy_name := str(LEGACY_REGIONS.get(region_name, ""))
+	return str(DEMONYMS.get(legacy_name, region_name))
 
 
 static func definition(region_name: String) -> Dictionary:

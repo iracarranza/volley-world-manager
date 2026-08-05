@@ -477,8 +477,11 @@ const SAMPLE_STAFF: Array = [
 		"Runs the week's sessions. Better coaches convert the same hours into more."],
 	["Scout", "Edda Vinter", "Spëddigh", "Information confidence",
 		"A weak scout does not give you worse volis. It gives you a blurrier roster."],
+	## Region column names the *place*; the familiarity line uses the *demonym*
+	## (`VolleyballRegions.DEMONYMS`). That is the distinction doing visible work:
+	## you are from Xérvu, the flavour is Xervyan.
 	["Chef / Nutritionist", "Amara Oyelaran", "Xérvu", "Morale and nourishment",
-		"Works Xérvu and Bloc du Larg flavours well. Can hold three plans a week."],
+		"Works Xervyan and Largen flavours well. Can hold three plans a week."],
 	["Physio", "Remy Aucoin", "Bloc du Larg", "Condition and recovery",
 		"Owns fatigue. Occasionally owns the complaints that follow it."],
 ]
@@ -573,20 +576,25 @@ func _refresh_accommodations() -> void:
 		"[i]The allergy may not be real. Volis report what they feel, not what",
 		"is happening to them, and telling those apart is the physio's job.[/i]",
 	])
-	## Origins follow `VolleyballRegions.REGION_ADJACENCY` from Landavol, so the
-	## multipliers read as a gradient rather than as arbitrary numbers: neighbours
-	## are cheap, the far side of the ball is not.
+	## Two columns because there are two places: grower ▸ seller. Every core
+	## region sells a paste its minor neighbour grows, and the pairing is already
+	## in `VolleyballRegions.REGION_ADJACENCY` -- six majors, six minors, one
+	## each. Import cost follows the seller's distance from Landavol, so the
+	## multipliers read as a gradient rather than as arbitrary numbers.
+	##
+	## This is also the only place a player has a reason to learn the minor tier
+	## exists. It is in the adjacency table and the scouting population and
+	## nowhere anyone would look.
 	_add_foldout("Paste stores", false, "\n".join([
-		"    Sharp ferment      [color=#7fbf6a]plentiful[/color]     Landavol · local",
-		"    Smoky char         [color=#7fbf6a]plentiful[/color]     Landavol · local",
-		"    Bitter herb        [color=#c9a227]low[/color]           Bloc du Larg · 1.1x",
-		"    Clean umami        [color=#c9a227]low[/color]           Pāwa Hitō · 1.4x",
-		"    Heavy sweet        [color=#b5563f]none[/color]          Taktikã · 1.9x",
+		"    Sharp ferment    [color=#7fbf6a]plentiful[/color]   Zaitgaist ▸ Landavol · local",
+		"    Smoky char       [color=#7fbf6a]plentiful[/color]   Zaitgaist ▸ Landavol · local",
+		"    Bitter herb      [color=#c9a227]low[/color]         Bompaşao ▸ Bloc du Larg · 1.1x",
+		"    Clean umami      [color=#c9a227]low[/color]         Lo-onğ Ralī ▸ Pāwa Hitō · 1.4x",
+		"    Heavy sweet      [color=#b5563f]none[/color]        Tu'ul ys Feynt ▸ Taktikã · 1.9x",
 		"",
-		"[i]Pastes are grown; blocks are made. Both pay for distance, but they are",
-		"not the same map -- land grows flavour, capital builds factories. A squad",
-		"drawn from six regions cannot all eat local, so the cheapest table is also",
-		"the most homesick one.[/i]",
+		"[i]Grown on the left, sold on the right. Pastes are grown and blocks are",
+		"made, and those are not the same map -- land grows flavour, capital builds",
+		"factories. The label says Xérvu; the field is somewhere poorer.[/i]",
 	]), "Jump to globe  ⟶")
 	_add_foldout("Lodging", false, "\n".join([
 		"    Home              Harbor City quarters · standing cost",

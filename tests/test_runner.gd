@@ -664,6 +664,32 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		REGIONS_SCRIPT.tradition_resistance("Landavol") == 0.0 and unresisted == 0,
 		"every minor tradition except Zaitgaist resists absorption; majors resist normally",
 	)
+	## Demonyms live in their own dict rather than inside DEFINITIONS, so nothing
+	## structural forces a new region to bring one. This check is that force: a
+	## region without a word for its people gets referred to by its place name in
+	## running text, which reads as an oversight rather than as a style.
+	var missing_demonyms: Array[String] = []
+	var duplicate_demonyms := false
+	var seen_demonyms: Dictionary = {}
+	for region_name in REGIONS_SCRIPT.INHABITED_REGIONS:
+		var word := REGIONS_SCRIPT.demonym(region_name)
+		if word.is_empty() or word == region_name:
+			missing_demonyms.append(str(region_name))
+		if word in seen_demonyms:
+			duplicate_demonyms = true
+		seen_demonyms[word] = true
+	_check(
+		missing_demonyms.is_empty() and not duplicate_demonyms,
+		"every inhabited region has its own demonym (missing: %s)" % [missing_demonyms],
+	)
+	## The fallback must not quietly hand back Landavol's word. Naming an
+	## unrecognised place's food Landavolan is a wrong answer stated confidently;
+	## echoing the input is at least visibly unresolved.
+	_check(
+		REGIONS_SCRIPT.demonym("Xérvu") == "Xervyan" \
+			and REGIONS_SCRIPT.demonym("Nowhere At All") != "Landavolan",
+		"demonym lookup resolves known regions and does not fall back to Landavol",
+	)
 	_test_minor_region_behaviour()
 
 

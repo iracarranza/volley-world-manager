@@ -271,6 +271,40 @@ Ispayk, A'ace):
   zero physique bias. It exists so "generic/well-rounded" has a home instead
   of every region needing an identity.
 
+### Demonyms
+
+`VolleyballRegions.DEMONYMS` holds the word for a person or a thing *from* a
+region -- Xervyan, Spëddish, Zaitgaister. Three rules:
+
+- **It is built from the place, never from the people's naming tradition.**
+  This is the Filipino/Tagalog distinction: Filipino is everyone from the
+  Philippines, Tagalog is one people and one language, and treating the second
+  as the first turns a country into an ethnicity. Xérvu's people are named from
+  West/Southern/East African traditions, but the demonym is *Xervyan* and comes
+  from the map.
+- **It sheds diacritics that would not survive being said aloud** (Xérvu →
+  Xervyan, Taktikã → Taktikan), and keeps the ones carrying the word's whole
+  character (Spëddish, Ralīn).
+- **Two-word regions contract to the half that gets spoken.** Nobody says "Bloc
+  du Larg" in a sentence about a person; they say Larg. Hence Largen, Feyntish,
+  Tempaoli.
+
+This is not only politeness. `home_region` is where a voli was raised and
+`club_region` is where they play now, and the manager moves them between the
+two constantly -- so the game needs a word meaning *from there* that says
+nothing about ancestry, or every transfer quietly implies one.
+
+| region | demonym | | region | demonym |
+| --- | --- | --- | --- | --- |
+| Landavol | Landavolan | | Tu'ul ys Feynt | Feyntish |
+| Spëddigh | Spëddish | | Lo-onğ Ralī | Ralīn |
+| Pāwa Hitō | Pāwan | | Bompaşao | Bompaşan |
+| Bloc du Larg | Largen | | Rhen Tempaol | Tempaoli |
+| Xérvu | Xervyan | | Kutre den Lyn | Kutren |
+| Taktikã | Taktikan | | Zaitgaist | Zaitgaister |
+| Ispayk | Ispaykano | | | |
+| A'ace | A'aceni | | | |
+
 The diacritic-pun trick itself is specifically a **region**-naming device --
 it doesn't need to be forced onto everything else. Other flavor (the Sixnet
 Championship is the first example) can use its own invented-but-plainly-named

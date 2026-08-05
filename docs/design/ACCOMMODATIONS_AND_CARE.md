@@ -73,6 +73,53 @@ rule they read as made somewhere with no orthographic signature -- Landavol, or
 A'ace, which bought a food industry the way it bought a roster. **Unassigned on
 purpose.** The device is settled; which factory sits where is not.
 
+### The pun names the effect
+
+The second naming rule, and the more useful one: **a product's pun already
+states what it does**, so the mechanic should be read off the name rather than
+attached to it afterward.
+
+- **Chutum Üch** is *chew too much*. So it takes the longest to eat -- a real
+  time cost against the week -- and it carries flavour best for exactly the same
+  reason. You are in contact with it longer. One pun, both columns.
+- **Mixigence** is *exigence, mixed*: a blend that meets the requirement and
+  does nothing further. So it never fails and never surprises, and it caps at
+  two pastes, because it arrives already a mixture.
+- **Supergruel** is complete and joyless, and gruel is the thing you can always
+  make. So it needs no preparation -- the one block that still works on a travel
+  day when the kitchen is not running. That is what makes it correct during
+  fixture congestion, rather than the nutrition figure alone.
+- **Vollyslommy** is indulgence, so its morale spike is the largest *and* decays
+  fastest. Event food, not a diet. This is why it is right after a cup exit and
+  wrong as a standing table, mechanically rather than by assertion.
+
+Vollyslommy's exact pun is the one still unfixed; the others are legible.
+
+### How many blocks, and the answer that is not a number
+
+The tension is between *choice* and *ladder*. Four to six rows differing only on
+nutrition, morale and cost is a ladder, and on a ladder you pick by budget and
+never think about it again -- so more rows make it worse, not richer. But once
+each block has a **week when it is the right answer**, they stop being rungs and
+become a toolkit, and then more is fine.
+
+So the count is not chosen directly. **A block exists if you can name the week it
+wins.** Congestion → Supergruel. A squad whose pastes are doing the work →
+Chutum Üch. No strong reason → Mixigence. The room needs rescuing →
+Vollyslommy. A fifth needs a fifth week, not a fifth price point.
+
+**The case for many more is real, though, and it is a different argument.** If
+blocks are manufactured by regions, the block list is a *map* -- six regions,
+six products, and the catalogue becomes an anchor for the geography. That is
+worth having.
+
+Both survive if **the world holds more blocks than your kitchen can reach**. The
+catalogue is large; availability is set by import cost and trade, so your menu is
+three or four at a time out of a dozen. Variety without a scroll list, and the
+products you cannot currently afford are one more reason to open the globe. It
+also means a club in a different region has a visibly different menu, which is
+worldbuilding you get for free from a mechanic already needed for pastes.
+
 ## 1. Food blocks
 
 A base block is chosen per-week (or per-trip; see lodging). They vary along axes
@@ -213,6 +260,38 @@ So a wealthy manufacturing region imports cheap ingredients and exports expensiv
 product, and a poor agricultural one is surrounded by flavour it sells onward.
 That is a trade shape rather than a distance table, and it gives the atlas
 something to say beyond "1.4x".
+
+### A major's signature paste grows in its minor neighbour
+
+The strongest version of that trade shape, and it needs no new data:
+**`REGION_ADJACENCY` already pairs each core region with exactly one minor one.**
+
+| grows it | sells it |
+| --- | --- |
+| Rhen Tempaol | Spëddigh |
+| Lo-onğ Ralī | Pāwa Hitō |
+| Bompaşao | Bloc du Larg |
+| Kutre den Lyn | Xérvu |
+| Tu'ul ys Feynt | Taktikã |
+| Zaitgaist | Landavol |
+
+Six and six, one each, already in `scripts/data/regions.gd`. The paste a player
+buys as Xervyan is grown in Kutre den Lyn; the major holds the trade and the
+margin, the minor holds the land.
+
+**This is what finally gives the minor tier a reason to be known.** Minor regions
+currently exist in adjacency tables and the scouting population and nowhere a
+player would ever look. Under this rule you learn Kutre den Lyn exists *because
+you bought paste*, which is the same principle as everything else here -- you
+arrive because you needed something, and the world is what you find.
+
+It also carries a politics without stating one. The label says Xérvu. The field
+is somewhere else, and somewhere else is poorer.
+
+**Zaitgaist is the exception, and it should be.** The region with no tradition of
+its own, which borrows whatever just won: its crop follows the Sixnet champion.
+`career.sixnet_champion_region` already exists, so the joke is mechanically live
+-- Zaitgaist grows this year's flavour, every year, and is never early.
 
 ### The stores open onto the world
 
