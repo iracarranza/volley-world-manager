@@ -291,6 +291,33 @@ re-sequences every seeded outcome after it. Drawing the improvisation roll
 conditionally flipped both block gates on the re-sequencing alone. Draw
 unconditionally, gate afterwards.
 
+### The missing row filter is not reachable — and the home side has no pipe
+
+`OpponentTeam.eligible_hitters()` filters by position code and never reads the
+row, which is why "a back-row player can be picked as a front-row attacker" was on
+the list. Audited with `tools/run_front_row_legality.gd`, 720 rallies:
+
+| side | attacks | back row | illegal |
+| --- | ---: | ---: | ---: |
+| home | 416 | 0 | 0 |
+| opponent | 312 | 201 | 0 |
+
+**No violation occurs.** The filter is only half the rule and the other half
+already carries it: `_opponent_attack_contact_point` reads the lineup and pulls
+back-row hitters behind the attack line, so 0 of 201 back-row attacks were struck
+illegally. Gated by `_test_no_attack_is_struck_illegally()` so it stays that way —
+and the gate has to install generated attributes, because on the raw vertical
+slice the opponent's hitters sit in front-row slots almost always and the sample
+collapses to four attacks, which is a legality check that passes because nothing
+was tested.
+
+**The finding points the opposite way from the defect it was looking for.** The
+opponent takes 64% of its attacks from the back row; the home side takes *none*.
+The home playbook has no pipe at all, so the block can compress on it with nothing
+to lose, and nothing was measuring that. This is a bigger offensive asymmetry than
+the filter would have been a fix for, and it sits on the *home* side — the
+opposite of every other asymmetry in this section.
+
 ### Set quality collapses on two of the four paths
 
 From `tools/run_set_quality_histogram.gd`, and relevant because everything above

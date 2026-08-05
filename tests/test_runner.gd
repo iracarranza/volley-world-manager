@@ -708,7 +708,83 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	)
 	_test_reception_recovery_bands()
 	_test_tempo_buys_flight_time()
+	_test_no_attack_is_struck_illegally()
 	_test_minor_region_behaviour()
+
+
+## Nobody attacks from a place their rotation does not allow.
+##
+## A back-row player may not contact the ball above the net in front of the attack
+## line. `OpponentTeam.eligible_hitters()` filters by position code and never reads
+## the row, which is why this was on the list as a missing filter -- but the filter
+## is only half the question, and the audit says the other half already carries the
+## rule: `_opponent_attack_contact_point` reads the lineup and pulls back-row
+## hitters behind the line, so 0 of 201 back-row attacks were struck illegally.
+##
+## So this gate exists to keep it that way rather than to catch a live defect. It
+## also pins the fact that the sample is real -- a legality check that passes
+## because nobody ever attacks from the back row is checking nothing, and the home
+## side is exactly that case today.
+func _test_no_attack_is_struck_illegally() -> void:
+	## Three metres of an eighteen-metre court, each side of the net.
+	var line_offset := 3.0 / 18.0
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	## Generated attributes, matching `tools/run_front_row_legality.gd`. On the raw
+	## vertical slice the opponent's hitters sit in front-row slots almost always
+	## and the sample collapses to four attacks -- a legality check that passes
+	## because nothing was tested.
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(manager.players, 900006)
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+		manager.opponent_team.players, 900006
+	)
+	var back_row := 0
+	var illegal := 0
+	var home_back_row := 0
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(5000, 5090):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for raw_event in result.events:
+				var event := raw_event as RallyEvent
+				if event == null 						or event.event_type != RALLY_EVENT_SCRIPT.EventType.ATTACK:
+					continue
+				var side := str(event.metadata.get("side", ""))
+				var lineup: RotationLineup = manager.current_lineup() 					if side == "home" else manager.opponent_team.current_lineup()
+				if lineup == null:
+					continue
+				var slot := int(lineup.slot_for_player(event.actor_id))
+				if slot < 1 or CourtConstants.is_front_row_slot(slot):
+					continue
+				back_row += 1
+				if side == "home":
+					home_back_row += 1
+				var contact_y: float = event.start_position.y
+				var in_front := contact_y < CourtConstants.NET_Y + line_offset 					if side == "home" else contact_y > CourtConstants.NET_Y - line_offset
+				if in_front:
+					illegal += 1
+	manager.free()
+	_check(
+		back_row > 30,
+		"the legality test observes enough back-row attacks (%d)" % back_row,
+	)
+	_check(
+		illegal == 0,
+		"no back-row attack is struck in front of the line (%d of %d were)" % [
+			illegal, back_row,
+		],
+	)
+	## And the finding this audit turned up, which points the opposite way from the
+	## defect it was looking for: the opponent takes about two thirds of its attacks
+	## from the back row and the home side takes none at all. A team with no pipe is
+	## a team the block can compress on, and nothing was measuring it.
+	_check(
+		home_back_row == 0,
+		"the home side still has no back-row attack (%d found) -- see BACKLOG §8"
+			% home_back_row,
+	)
 
 
 ## Tempo has to cost time, or it is a label.
