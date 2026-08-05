@@ -709,7 +709,66 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_test_reception_recovery_bands()
 	_test_tempo_buys_flight_time()
 	_test_no_attack_is_struck_illegally()
+	_test_the_approach_mark_tracks_the_set()
 	_test_minor_region_behaviour()
+
+
+## The approach mark moves with the ball.
+##
+## This gate exists because of a mistake I made reading the data rather than a defect
+## in the code. The traversal to the hitter's ideal mark measures a mean of 0.847 s at
+## *every* tempo, and I read that constant as "the mark is placed from the lane and
+## never looks at the set". It is not: tempo changes the arc, not the aim point, so a
+## mean that does not move when only tempo moves is correct behaviour, and the question
+## was always the ball-to-ball spread. Measured within one tempo, the mark's x runs
+## -0.032 to 0.361 across 312 attacks -- about three and a half metres -- tracking the
+## delivered set over the same range, and the walk varies 0.707 to 0.981 s.
+##
+## So what is worth keeping is not a fix but a guard: if the mark ever *does* become a
+## constant, that is a real regression and nothing else would notice. The `_lane`
+## argument is unused and deliberately named so; this pins the fact that the target is
+## what matters.
+func _test_the_approach_mark_tracks_the_set() -> void:
+	## Two balls delivered two metres apart along the net, same lane, same side.
+	var left := APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		Vector2(0.20, 0.60), "Left Pin", &"home"
+	)
+	var middle := APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		Vector2(0.50, 0.60), "Left Pin", &"home"
+	)
+	var deep := APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		Vector2(0.20, 0.72), "Left Pin", &"home"
+	)
+	_check(
+		absf(left.x - middle.x) > 0.20,
+		"the approach mark follows the set across the net (%.3f vs %.3f)" % [
+			left.x, middle.x
+		],
+	)
+	_check(
+		absf(left.y - deep.y) > 0.10,
+		"the approach mark follows the set's depth (%.3f vs %.3f)" % [
+			left.y, deep.y
+		],
+	)
+	## And the lane name genuinely does not enter into it, so nobody re-derives the
+	## mark from a label later on.
+	_check(
+		APPROACH_MECHANICS_SCRIPT.approach_start_position(
+			Vector2(0.20, 0.60), "Right Pin", &"home"
+		).is_equal_approx(left),
+		"the lane name does not move the approach mark -- the set does",
+	)
+	## Mirrored, not duplicated: the opponent's mark sits on their own side.
+	var opponent := APPROACH_MECHANICS_SCRIPT.approach_start_position(
+		Vector2(0.20, 0.40), "Left Pin", &"opponent"
+	)
+	_check(
+		opponent.y < CourtConstants.NET_Y and left.y > CourtConstants.NET_Y,
+		"each side's approach mark sits behind its own net (%.3f / %.3f)" % [
+			opponent.y, left.y
+		],
+	)
 
 
 ## Nobody attacks from a place their rotation does not allow.

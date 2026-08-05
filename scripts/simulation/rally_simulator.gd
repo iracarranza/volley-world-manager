@@ -3952,6 +3952,11 @@ func _approach_budget(
 		"to_mark_seconds": to_mark,
 		"preparation_deficit_seconds": to_mark - preparation_window,
 		"run_up_seconds": run_up,
+		## Where the mark ended up, so its ball-to-ball spread can be measured. A
+		## mark that does not move with the delivered set would show a spread of
+		## zero, and the walk to it would be the same length every rally.
+		"ideal_mark": ideal_mark,
+		"contact_point": contact_point,
 		## Whether the hitter got to the mark they were aiming at, which the approach
 		## model decides. This should now agree with `preparation_deficit_seconds`
 		## rather than contradict it -- if it does not, one of the two is still wrong.

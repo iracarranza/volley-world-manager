@@ -1,8 +1,9 @@
 # Tempo, set height, and the hitter's approach
 
-Status: **Links 1-2 hold and are gated. Link 3 is measured, and the deficit is real,
-small and tempo-ordered — which is what step 4 needs to be worth building.** One
-structural fix comes first: see "The approach mark does not move with the ball".
+Status: **Links 1-2 hold and are gated. Link 3 is measured: the deficit is real, small
+and tempo-ordered, which is what step 4 needs to be worth building.** No structural fix
+is outstanding — the one I thought I had found is withdrawn below, with the measurement
+that disproves it.
 
 ## The chain
 
@@ -87,8 +88,9 @@ can feel and a tactic that can be wrong.
 2. ~~**Publish the budget**~~ **Done**, as `approach_budget` on the ATTACK event
    (the set event is stamped before the hitter has been staged, so the attack is
    where the approach is described). Two windows, never added — measured below.
-2b. **Place the approach mark from the set**, not from the lane. The one structural
-   fix the measurement turned up, and the run-up's length depends on it.
+2b. ~~**Place the approach mark from the set**, not from the lane.~~ **Withdrawn** —
+   it already is. See below; the mark moves about three and a half metres across a
+   sample and the walk to it varies by a quarter-second.
 3. **Spend it in playback only.** Attacker arrival draws from the budget. If
    sliding disappears at this step, the residue was the ask and not the drawing.
 4. **Spend it in the resolver.** A compromised approach costs attack quality; an
@@ -146,18 +148,38 @@ genuinely does fit, in 2.0 s of window for 0.847 s of walking. The engine was ri
 instrument was wrong. The two now agree — 0% short on the walk, 0% missed mark — and
 agreement between two independent measures is the only reason to trust either.
 
-### The approach mark does not move with the ball
+### Withdrawn: "the approach mark does not move with the ball"
 
-`to mark` is a constant **0.847 s at every tempo**, and that is the one structural defect
-left in this chain. The traversal to the ideal approach mark does not vary with the ball at
-all, which is only possible if `approach_start_position()` places the mark at a fixed
-offset from the *lane* rather than from where the set is actually going. A proper approach
-start is a function of the set's landing point: a ball delivered a metre off the pin should
-move the mark a metre, and it currently does not.
+I wrote that here last pass, and it is wrong. The evidence offered was that `to mark`
+measures a mean of **0.847 s at every tempo**, from which I concluded that
+`approach_start_position()` places the mark from the lane and never reads the set.
 
-This is worth fixing before step 4 because the run-up's length is measured *from* that
-mark. A mark in the wrong place makes the run-up the wrong length, which makes the deficit
-above the wrong size — right in shape, uncertain in magnitude.
+It reads the set. The `_lane` argument is unused and named so. The mark is
+`target + (outward, depth)` where the outward offset comes from how far off centre the
+delivered set is, and `target` is the *delivered* point, scattered ball to ball. Measured
+within a single tempo across 312 attacks:
+
+| within one tempo | p10 | p90 | spread |
+| --- | ---: | ---: | ---: |
+| approach mark x | −0.032 | 0.361 | ~3.5 m |
+| delivered set x | 0.038 | 0.374 | tracked over the same range |
+| walk to the mark | 0.707 s | 0.981 s | 0.27 s |
+
+The mean is stable across tempos because **tempo changes the arc, not the aim point** —
+so a walk time that does not move when only tempo moves is correct behaviour, not a
+constant. The question was always the ball-to-ball spread, and I never looked at it.
+
+`_test_the_approach_mark_tracks_the_set()` now pins it: the mark follows the set across
+the net and in depth, the lane name does not move it, and each side's mark sits behind
+its own net. Kept as a guard, since if the mark ever *did* become a constant nothing else
+would notice.
+
+**The lesson, twice in two passes.** Both corrections on this page come from the same
+mistake: reading a stable mean as a stable quantity. The double-charged walk looked like a
+100% deficit; the tracking mark looked like a fixed offset. It is the same failure as the
+thresholds set outside their own distributions that bit four times in the recovery work —
+one number where the distribution was the question. When a summary statistic supports a
+structural claim, the spread is the thing to check first.
 
 ### And no harness had ever measured first or second tempo
 

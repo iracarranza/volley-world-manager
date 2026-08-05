@@ -331,17 +331,22 @@ to lose, and nothing was measuring that. This is a bigger offensive asymmetry th
 the filter would have been a fix for, and it sits on the *home* side — the
 opposite of every other asymmetry in this section.
 
-### The approach mark is placed from the lane, not from the set
+### Withdrawn: the approach mark is placed from the set already
 
-`ApproachMechanicsSystem.approach_start_position()` takes the lane name and the side and
-returns a mark. It does not read where the set is actually going, and the consequence is
-measurable: the traversal from the hitter to their ideal mark is a **constant 0.847 s at
-every tempo** across 936 attacks. A ball delivered a metre off the pin should move the
-mark a metre.
+Recorded here last pass as a defect on the strength of `to mark` measuring a constant
+0.847 s at every tempo. It is not one. `approach_start_position()` reads the delivered set
+point — its `_lane` argument is unused — and within a single tempo the mark's x spans
+−0.032 to 0.361 across 312 attacks, about three and a half metres, tracking the set over
+the same range while the walk varies 0.707–0.981 s. The mean is stable across tempos
+because tempo changes the arc and not the aim point.
 
-This matters beyond tidiness because the hitter's run-up is measured *from* that mark, so
-the approach deficit in `docs/design/TEMPO_AND_APPROACH.md` is right in shape and uncertain
-in magnitude until the mark moves. It is the next thing to fix in that chain.
+Gated by `_test_the_approach_mark_tracks_the_set()` so that if it ever *does* become a
+constant, something notices.
+
+Worth carrying: this and the double-charged approach budget were the same mistake —
+reading a stable mean as a stable quantity — and it is the same shape as the thresholds
+set outside their own distributions in the recovery work. When a summary statistic is
+being used to support a structural claim, check the spread first.
 
 ### Set quality collapses on two of the four paths
 

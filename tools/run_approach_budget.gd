@@ -115,6 +115,31 @@ func _initialize() -> void:
 			window / n, to_mark / n, _percentile(walk_deficits, 0.50),
 			float(walk_short) / n * 100.0, float(missed_mark) / n * 100.0,
 		])
+		## Does the approach mark track the ball, or sit at a fixed offset from the
+		## lane? A mean walk time that does not change with tempo proves nothing --
+		## tempo changes the arc, not the aim point -- so the question is the
+		## *ball-to-ball* spread within one tempo.
+		var marks_x: Array = []
+		var marks_y: Array = []
+		var contacts_x: Array = []
+		var walks: Array = []
+		for row in rows:
+			var mark := Vector2(row.get("ideal_mark", Vector2.ZERO))
+			var contact := Vector2(row.get("contact_point", Vector2.ZERO))
+			marks_x.append(mark.x)
+			marks_y.append(mark.y)
+			contacts_x.append(contact.x)
+			walks.append(float(row.get("to_mark_seconds", 0.0)))
+		marks_x.sort()
+		marks_y.sort()
+		contacts_x.sort()
+		walks.sort()
+		print("       mark x p10-p90 %.4f..%.4f  y %.4f..%.4f  |  set x %.4f..%.4f  |  walk %.3f..%.3f s" % [
+			_percentile(marks_x, 0.10), _percentile(marks_x, 0.90),
+			_percentile(marks_y, 0.10), _percentile(marks_y, 0.90),
+			_percentile(contacts_x, 0.10), _percentile(contacts_x, 0.90),
+			_percentile(walks, 0.10), _percentile(walks, 0.90),
+		])
 	print("")
 	print("Link 2 holds if `flight` widens across tempos. Step 4 is worth building")
 	print("only if `short%` is neither 0 nor 100 -- a branch nobody enters is dead")
