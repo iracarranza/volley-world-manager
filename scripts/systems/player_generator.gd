@@ -40,7 +40,7 @@ const REGION_HEIGHT_BIAS := {
 	"Lo-onğ Ralī": -5.0,
 	"Bompaşao": -2.0,
 	"Rhen Tempaol": -1.0,
-	"Kutre den Lyn": 0.0,
+	"Kutré Lyn": 0.0,
 	"Zaitgaist": 0.0,
 }
 const REGION_MASS_BIAS := {
@@ -50,7 +50,7 @@ const REGION_MASS_BIAS := {
 	"Lo-onğ Ralī": -5.0,
 	"Bompaşao": -1.0,
 	"Rhen Tempaol": -3.0,
-	"Kutre den Lyn": -2.0,
+	"Kutré Lyn": -2.0,
 	"Zaitgaist": 0.0,
 }
 const REGION_WINGSPAN_BIAS := {
@@ -60,7 +60,7 @@ const REGION_WINGSPAN_BIAS := {
 	"Lo-onğ Ralī": -3.0,
 	"Bompaşao": 0.0,
 	"Rhen Tempaol": -1.0,
-	"Kutre den Lyn": 0.0,
+	"Kutré Lyn": 0.0,
 	"Zaitgaist": 0.0,
 }
 
@@ -122,7 +122,7 @@ const REGION_SPECIALTY := {
 	"Lo-onğ Ralī": ["stamina", "dig_control", "anticipation"],
 	"Bompaşao": ["reception", "reception_balance", "ball_control"],
 	"Rhen Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
-	"Kutre den Lyn": ["attack_accuracy", "shot_variety", "court_vision"],
+	"Kutré Lyn": ["attack_accuracy", "shot_variety", "court_vision"],
 	## Zaitgaist has no tradition of its own. Its specialty comes entirely from
 	## `region_overlay`, rewritten each season to mirror whoever last won the
 	## Sixnet -- see `SixnetLeague.apply_influence_drift()`.
@@ -535,7 +535,7 @@ const REGION_EGO_BIAS := {
 	"Lo-onğ Ralī": -9.0,
 	"Bompaşao": -7.0,
 	"Rhen Tempaol": 3.0,
-	"Kutre den Lyn": 1.0,
+	"Kutré Lyn": 1.0,
 	"Zaitgaist": 0.0,
 }
 

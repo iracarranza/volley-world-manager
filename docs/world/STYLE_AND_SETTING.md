@@ -304,7 +304,7 @@ nothing about ancestry, or every transfer quietly implies one.
 | Spëddigh | Spëddish | | Lo-onğ Ralī | Ralīn |
 | Pāwa Hitō | Pāwan | | Bompaşao | Bompaşan |
 | Bloc du Larg | Largen | | Rhen Tempaol | Tempaoli |
-| Xérvu | Xérvyan | | Kutre den Lyn | Kutren |
+| Xérvu | Xérvyan | | Kutré Lyn | Kutrén |
 | Taktikã | Taktikãn | | Zaitgaist | Zaitgaister |
 | Ispayk | Ispaykano | | | |
 | A'ace | A'aceni | | | |
@@ -323,23 +323,18 @@ not currently applied, and auditing the six pairs:
 | Bompaşao | Bloc du Larg | none, French connector | near -- ş is Turkish where ç would be French |
 | Rhen Tempaol | Spëddigh | umlaut (ë) | no |
 | Tu'ul ys Feynt | Taktikã | tilde (ã) | no |
-| Kutre den Lyn | Xérvu | acute (é) | no |
+| Kutré Lyn | Xérvu | acute (é) | **yes**, since the rename below |
 
-**Kutre den Lyn is the one flagged as failing outright.** It borrows Bloc du
-Larg's connector shape ("den" for "du") while sitting next to Xérvu, so it reads
-as related to the wrong region, and the *r* that was meant to carry phonetic
-character does not do it. Replacements under consideration, all still "cut and
-line":
+**Kutre den Lyn failed it outright and has been renamed to Kutré Lyn.** It
+borrowed Bloc du Larg's connector shape ("den" for "du") while sitting next to
+Xérvu, so it announced kinship with the wrong region, and the *r* that was meant
+to carry phonetic character did not do it. The new name keeps "cut and line",
+drops the misdirecting connector and takes Xérvu's acute. Demonym: **Kutrén**.
+`LEGACY_REGIONS` maps the old string so existing saves resolve.
 
-- **Kutré Lyn** -- takes Xérvu's acute, drops the connector that was pointing at
-  the wrong neighbour. Shortest and cleanest.
-- **Xutré Lyn** -- takes both the acute *and* the initial X. Unmistakably
-  Xérvu's kin; possibly too close to read as its own place.
-- **Kutré den Lyné** -- keeps the connector and adds two acutes. Most
-  language-like, longest, and the connector is still the thing that misfires.
-
-Whichever is chosen needs a `LEGACY_REGIONS` entry so existing saves resolve,
-and the demonym moves with it (Kutrén).
+Rhen Tempaol's gap has an explanation rather than a fix pending: it is a colony
+of Spëddigh sitting in Pāwa Hitō's seas, so the spelling it *should* take is the
+administrator's. See `GEOGRAPHY.md`.
 
 The diacritic-pun trick itself is specifically a **region**-naming device --
 it doesn't need to be forced onto everything else. Other flavor (the Sixnet

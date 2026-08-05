@@ -109,21 +109,45 @@ wins.** Applying that:
   expensive flavour, and the saturation makes that trade actually pay.
 - **Vollyslommy** -- the room needs rescuing. Biggest morale spike and the
   fastest decay, so it is event food and never a diet.
-- **Mixigence** -- *no answer*.
+- **Mixigence** -- the reset week. See below.
 
-**Mixigence fails its own test, and it should be treated as failing.** "The safe
-middle that nobody loves and nobody refuses" is a description of a design slot,
-not of a week anyone would choose it. A block whose identity is being
-unremarkable is a rung, and rungs are the thing this section exists to prevent.
+### Mixigence is the reset block (settled)
 
-There is one perk that would save it: **Mixigence is the block palate fatigue
-does not accumulate on.** It is engineered to be forgettable, so it is what you
-feed the squad while a beloved ratio recovers -- the reset week, deliberately
-chosen, with a real cost in that nothing good happens during it. That is a week.
+It had no answer, which is the same as being a rung: "the safe middle nobody
+loves and nobody refuses" describes a design slot, not a week anyone would
+choose. It now has one.
 
-If that perk is not taken, cut it. Three blocks with three distinct weeks is
-stronger than four with a spare, and the catalogue can grow later from products
-that arrive with a reason.
+**Palate fatigue does not accumulate on Mixigence.** It is engineered to be
+forgettable, and forgettable is the mechanic -- it is what you feed the squad
+while a beloved ratio recovers. A deliberate week, with a real price: nothing
+good happens during it. You spend a week of morale to buy back a paste you had
+worn out.
+
+That makes it the only block whose value is about **time** rather than about the
+meal. The other three are answers to *this week*; Mixigence is an investment in
+the next one, which is a different kind of decision and the reason it can sit in
+the middle without being a rung.
+
+It also protects palate fatigue from becoming an unmanageable ratchet. Without a
+reset, a long career only ever accumulates worn-out ratios, and the flavour layer
+narrows toward nothing. This is the pressure valve, and it costs something to
+pull.
+
+**The name is unresolved.** *Mixigence* was reverse-engineered from "exigence,
+mixed", which no longer describes what the block does, and by the separate-axes
+rule above it does not have to -- but it should at least sound like a product
+somebody would buy. Candidates:
+
+- **Middlings** -- a real milling term for the coarse middle fraction of the
+  grain. Interesting sound, immediately decodable origin, and it means "the
+  middle" without editorialising. Closest to the Saint Kitts and Nevis register.
+- **Blanderal** -- bland + mineral. Reads as an engineered nutrition product and
+  quietly admits what it is.
+- **Plaen** -- plain, respelled. Shortest, and plainly spelled in a world where
+  spelling is a passport, so it declares "made nowhere in particular".
+
+All three are plainly spelled, which under the orthographic rule means the
+factory is somewhere with no signature. That still needs choosing.
 
 **The case for many more is real, though, and it is a different argument.** If
 blocks are manufactured by regions, the block list is a *map* -- six regions,
@@ -146,7 +170,7 @@ that deliberately do **not** move together, so there is no dominant choice:
 | --- | --- | --- | --- | --- | --- |
 | Supergruel | engineered nutrition | high | very low | very low | low |
 | Chutum Üch | thick, cheap, hard work to eat | moderate | low | low | **high** |
-| Mixigence | manufactured, consistent | moderate | moderate | moderate | normal |
+| Mixigence | engineered to be forgettable | moderate | moderate | moderate | normal |
 | Vollyslommy | indulgence, pre-flavoured | low | very high | very high | very low |
 
 **Saturation is not the paste slot count.** The chef sets how *many* pastes a
@@ -312,7 +336,7 @@ The strongest version of that trade shape, and it needs no new data:
 | Rhen Tempaol | Spëddigh |
 | Lo-onğ Ralī | Pāwa Hitō |
 | Bompaşao | Bloc du Larg |
-| Kutre den Lyn | Xérvu |
+| Kutré Lyn | Xérvu |
 | Tu'ul ys Feynt | Taktikã |
 | Zaitgaist | Landavol |
 

@@ -22,7 +22,7 @@ the current 4,000.**
 | Lo-onğ Ralī | 111 | 59 | 9/20/4/4/22 | yes | yes |
 | Bompaşao | 126 | 75 | 11/29/11/4/20 | yes | yes |
 | Rhen Tempaol | 137 | 74 | 14/23/27/6/4 | yes | yes |
-| Kutre den Lyn | 103 | 60 | 12/30/9/6/3 | yes | yes |
+| Kutré Lyn | 103 | 60 | 12/30/9/6/3 | yes | yes |
 | Zaitgaist | 66 | 37 | 5/12/12/3/5 | yes | yes |
 
 The cohort-spread reasoning was wrong because it divided by all 31 ages. Only

@@ -690,6 +690,22 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 			and REGIONS_SCRIPT.demonym("Nowhere At All") != "Landavolan",
 		"demonym lookup resolves known regions and does not fall back to Landavol",
 	)
+	## A rename that loses its LEGACY_REGIONS entry does not error -- every voli
+	## carrying the old string just quietly becomes Landavolan, because
+	## `canonical_name` falls back rather than failing. That is invisible in a
+	## save and unrecoverable once it is written, so it gets a gate.
+	var legacy_resolves := true
+	for legacy_name in REGIONS_SCRIPT.LEGACY_REGIONS:
+		var target := str(REGIONS_SCRIPT.LEGACY_REGIONS[legacy_name])
+		if REGIONS_SCRIPT.canonical_name(legacy_name) != target \
+				or not (target in REGIONS_SCRIPT.DEFINITIONS):
+			legacy_resolves = false
+	_check(
+		legacy_resolves \
+			and REGIONS_SCRIPT.canonical_name("Kutre den Lyn") == "Kutré Lyn" \
+			and REGIONS_SCRIPT.demonym("Kutre den Lyn") == "Kutrén",
+		"every legacy region name resolves to a live region, renames included",
+	)
 	_test_minor_region_behaviour()
 
 
@@ -1505,7 +1521,7 @@ func _test_sixnet_league() -> void:
 		"Landavol": 50.0, "Spëddigh": 23.0, "Pāwa Hitō": 25.0,
 		"Bloc du Larg": 90.0, "Xérvu": 23.0, "Taktikã": 20.0,
 		"Tu'ul ys Feynt": 18.0, "Lo-onğ Ralī": 16.0, "Bompaşao": 19.0,
-		"Rhen Tempaol": 18.0, "Kutre den Lyn": 17.0, "Zaitgaist": 12.0,
+		"Rhen Tempaol": 18.0, "Kutré Lyn": 17.0, "Zaitgaist": 12.0,
 	}
 	drift_career.sixnet_form = drift_career.region_strength.duplicate(true)
 	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(drift_career)

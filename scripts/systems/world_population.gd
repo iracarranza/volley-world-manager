@@ -151,7 +151,7 @@ const REGION_BIRTH_WEIGHTS := {
 	"Lo-onğ Ralī": 0.20,
 	"Bompaşao": 0.30,
 	"Rhen Tempaol": 0.28,
-	"Kutre den Lyn": 0.26,
+	"Kutré Lyn": 0.26,
 	"Zaitgaist": 0.12,
 }
 
@@ -180,7 +180,7 @@ const REGION_PULL := {
 	## raise about 15% of the world between them, and at 0.45-0.70 they were
 	## attracting 26% of all migration. A minor region has to end a career
 	## having exported its best players, not collected somebody else's.
-	"Kutre den Lyn": 0.30,
+	"Kutré Lyn": 0.30,
 	"Rhen Tempaol": 0.26,
 	"Bompaşao": 0.24,
 	"Tu'ul ys Feynt": 0.20,
@@ -388,7 +388,7 @@ const REGION_TIER_AFFINITY := {
 		"solid": 1.1, "squad": 1.0, "fringe": 0.9},
 	"Rhen Tempaol": {"generational": 0.3, "elite": 0.7, "standout": 1.1,
 		"solid": 1.2, "squad": 1.1, "fringe": 1.0},
-	"Kutre den Lyn": {"generational": 0.4, "elite": 1.0, "standout": 1.3,
+	"Kutré Lyn": {"generational": 0.4, "elite": 1.0, "standout": 1.3,
 		"solid": 1.1, "squad": 0.9, "fringe": 0.8},
 	"Zaitgaist": {"generational": 0.15, "elite": 0.4, "standout": 0.9,
 		"solid": 1.4, "squad": 1.4, "fringe": 1.0},
@@ -426,7 +426,7 @@ const REGION_POSITION_AFFINITY := {
 	## The only middle-heavy region here -- setters and quick middles.
 	"Rhen Tempaol": {"Setter": 2.0, "Outside Hitter": 0.9, "Middle Blocker": 1.6,
 		"Opposite": 0.5, "Libero": 0.8},
-	"Kutre den Lyn": {"Setter": 1.2, "Outside Hitter": 1.5, "Middle Blocker": 0.5,
+	"Kutré Lyn": {"Setter": 1.2, "Outside Hitter": 1.5, "Middle Blocker": 0.5,
 		"Opposite": 1.3, "Libero": 0.7},
 	## Flat on purpose: no tradition telling it what to produce.
 	"Zaitgaist": {"Setter": 1.0, "Outside Hitter": 1.0, "Middle Blocker": 1.0,
