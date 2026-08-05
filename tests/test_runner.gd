@@ -707,7 +707,57 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"every legacy region name resolves to a live region, renames included",
 	)
 	_test_reception_recovery_bands()
+	_test_tempo_buys_flight_time()
 	_test_minor_region_behaviour()
+
+
+## Tempo has to cost time, or it is a label.
+##
+## Link 1 and 2 of `docs/design/TEMPO_AND_APPROACH.md`: tempo sets the set's launch
+## angle, and the angle sets the flight. Both already existed -- what did not exist
+## was anything holding them together, so a future tuning pass could flatten the
+## angle table and nothing would notice that third tempo had stopped being slow.
+##
+## Measured over 936 attacks, the flight runs 0.376 s at first tempo, 0.554 s at
+## second and 0.806 s at third. This pins the ordering, not those figures.
+func _test_tempo_buys_flight_time() -> void:
+	var simulator := RallySimulator.new()
+	simulator.rng = RandomNumberGenerator.new()
+	simulator.rng.seed = 4242
+	var setter := VolleyballPlayer.new()
+	setter.tempo_control = 70
+	setter.hand_control = 70
+	## One distance, three tempos, so only the angle differs.
+	var distance := 4.0
+	var durations: Array[float] = []
+	for tempo in [1, 2, 3]:
+		var total := 0.0
+		## Averaged, because the angle carries deliberate jitter and a single draw
+		## from each band can overlap its neighbour.
+		for _sample in range(40):
+			total += float(RallyKinematics.solve_launch_arc(
+				distance,
+				simulator._set_launch_angle_degrees(setter, tempo, 0.60),
+			).duration_seconds)
+		durations.append(total / 40.0)
+	_check(
+		durations[1] > durations[0] + 0.05 and durations[2] > durations[1] + 0.05,
+		"a slower tempo buys the hitter more flight time (%.3f / %.3f / %.3f s)" % [
+			durations[0], durations[1], durations[2],
+		],
+	)
+	## And the fallback assignment is the reason no harness has ever measured the
+	## fast end of that range: with no called play its tempo is a constant, so every
+	## calibration tool that seeds the vertical slice runs one tempo three times.
+	var hitter := VolleyballPlayer.new()
+	hitter.id = 4
+	var lineup := RotationLineup.new()
+	lineup.ensure_defaults([1, 2, 3, 4, 5, 6])
+	var fallback := simulator._fallback_assignment(hitter, lineup)
+	_check(
+		fallback != null and int(fallback.tempo) == 3,
+		"the fallback assignment pins one tempo, which is why sweeps must call a play",
+	)
 
 
 ## The four recovery states have to be reachable and ordered.

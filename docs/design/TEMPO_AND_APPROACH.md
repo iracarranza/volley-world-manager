@@ -1,8 +1,9 @@
 # Tempo, set height, and the hitter's approach
 
-Status: **Specified, not built.** Nothing below is implemented. It is written
-down because it is one causal chain rather than four features, and building any
-link of it alone produces a version the others have to be bent around.
+Status: **Links 1-2 hold and are now measured and gated. Steps 3-4 are blocked,
+and the measurement is what blocks them.** See "What step 2 measured" below before
+building anything further — the compromise branch would fire on *every* attack,
+which means the ask is wrong rather than the compromise being needed.
 
 ## The chain
 
@@ -82,13 +83,12 @@ can feel and a tactic that can be wrong.
 
 ## Order to build it
 
-1. **Set peak height from tempo**, and let the existing arc solver produce the
-   flight time. Measurable immediately: the spread of set durations by tempo
-   should widen from nearly nothing.
-2. **Publish the budget** on the set event -- available seconds -- without using
-   it. Compare against `traversal_seconds()` to the ideal approach start and log
-   the deficit distribution. This is the measurement that says whether the
-   compromise branch will ever fire, before any behaviour depends on it.
+1. ~~**Set peak height from tempo**, and let the existing arc solver produce the
+   flight time.~~ **Already true**, and now gated. Measured spread below.
+2. ~~**Publish the budget**~~ **Done**, as `approach_budget` on the ATTACK event
+   (the set event is stamped before the hitter has been staged, so the attack is
+   where the approach is described). Measured below, and the answer changes what
+   steps 3 and 4 should be.
 3. **Spend it in playback only.** Attacker arrival draws from the budget. If
    sliding disappears at this step, the residue was the ask and not the drawing.
 4. **Spend it in the resolver.** A compromised approach costs attack quality; an
@@ -97,6 +97,50 @@ can feel and a tactic that can be wrong.
 
 Steps 1 and 2 change no outcomes and are worth doing on their own, because they
 turn "tempo should cost time" from an assertion into a number.
+
+## What step 2 measured
+
+`tools/run_approach_budget.gd`, 4 pairings x 90 rallies per tempo, home attacks:
+
+| tempo | n | flight | to mark | run-up | needed | median deficit | short |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 312 | 0.376 | 0.847 | 0.663 | 1.510 | 1.152 | **100%** |
+| 2 | 312 | 0.554 | 0.847 | 0.793 | 1.639 | 1.105 | **100%** |
+| 3 | 312 | 0.806 | 0.847 | 0.937 | 1.784 | 1.016 | **100%** |
+
+**Link 1 and 2 were already built.** Tempo drives the set's launch angle (12-18°
+at first tempo, 45-55° at third) and the arc solver turns that into a real flight
+time, so a third-tempo ball genuinely takes more than twice as long to arrive as a
+first-tempo one. Neither link was gated, so nothing stopped a future tuning pass
+from flattening the angle table and quietly ending tempo's only connection to
+time; `_test_tempo_buys_flight_time()` pins the ordering now.
+
+**Step 4 must not be built yet.** The deficit is positive on 100% of attacks at
+every tempo. A compromise branch everybody enters is not a compromise, it is the
+model — and the tool says so in its own output. The ask is wrong before the
+response is missing.
+
+Three things to fix first, in this order:
+
+1. **The approach model never reports failure.** `reached_ideal_mark` came back
+   true on every one of 936 attacks while the deficit was positive on every one of
+   them. Two measures of the same event disagreeing completely means one is not
+   measuring. That is the first thing to look at, because everything else is
+   judged against it.
+2. **`to mark` is a constant 0.847 s at every tempo.** The traversal to the ideal
+   approach mark does not vary with the ball at all, which is only possible if the
+   mark is placed at a fixed offset from the hitter rather than from the set. A
+   proper approach start is a function of where the ball is going.
+3. **No harness has ever measured first or second tempo.** With no called play the
+   resolver falls through to `_fallback_assignment`, whose tempo is hardcoded to 3,
+   and every calibration tool in the repository seeds the vertical slice. The whole
+   tempo system has been calibrated at one setting; the sweep above had to install
+   a play per rotation to see the other two. Gated by the second half of
+   `_test_tempo_buys_flight_time()`.
+
+Only once the required side is trustworthy does the available side mean anything,
+and only then is the three-way outcome table above a decision rather than a
+foregone conclusion.
 
 ## Open
 

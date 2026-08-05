@@ -1082,6 +1082,11 @@ func resolve(
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
 	)
+	## Before preparation relocates it. The budget asks how far the hitter had to
+	## come, and preparation's whole job is to move them -- reading `hitter_start`
+	## afterwards would measure the distance they had left, not the distance they
+	## faced.
+	var hitter_standing_at := hitter_start
 	var hitter_move_time := _movement_time(
 		hitter, hitter_start, set_target, "transition"
 	)
@@ -1379,6 +1384,13 @@ func resolve(
 			if hitter_arrival_margin >= 0.0 else
 			" Arrived %.2fs late and lost the approach window." % absf(hitter_arrival_margin)),
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
+			## Step 2 of the tempo chain: what the set's flight gave this hitter
+			## against what they needed. Published, not spent -- see
+			## `_approach_budget`.
+			"approach_budget": _approach_budget(
+				hitter, hitter_standing_at, approach_preparation, set_target,
+				float(set_flight_time), int(assignment.tempo),
+			),
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
 			"target_reason": attack_choice.reason,
 			"intended_target": intended_attack_target,
@@ -3883,6 +3895,53 @@ const ATTACK_NET_ERROR_FRACTION: float = 0.5
 ## mistimed attack actually does. Deterministic on purpose -- it reads only the
 ## intended target and the quality that already decided the outcome, so a
 ## replayed seed still draws the identical miss.
+## What the set's own flight gives the hitter, against what the hitter needs.
+##
+## Step 2 of `docs/design/TEMPO_AND_APPROACH.md`, and it deliberately changes no
+## outcome. Tempo already sets the set's launch angle -- 12-18 degrees at first
+## tempo, 45-55 at third -- so the arc solver has been producing genuinely
+## different flight times all along. What has never existed is the comparison that
+## makes those times mean something: whether the hitter could actually get there.
+##
+## **Available** is the set's flight. **Required** is the traversal from where the
+## hitter was standing to the *ideal* approach mark, plus the run-up from that mark
+## to the contact point. The first term is why where they were standing matters and
+## not only who they are.
+##
+## Published so the deficit distribution can be measured before any behaviour
+## depends on it. If the deficit is never positive, the compromise branch would be
+## dead code and step 4 is not worth building; if it is always positive, the
+## approach model is asking for arrivals nothing can meet, which is the sliding
+## complaint stated as a number.
+func _approach_budget(
+	hitter: VolleyballPlayer,
+	standing_at: Vector2,
+	preparation: Dictionary,
+	contact_point: Vector2,
+	set_flight_seconds: float,
+	tempo: int,
+) -> Dictionary:
+	if hitter == null:
+		return {}
+	var ideal_mark := Vector2(preparation.get("approach_target_position", standing_at)) \
+		if not preparation.is_empty() else standing_at
+	var to_mark := _movement_time(hitter, standing_at, ideal_mark, "transition")
+	var run_up := _movement_time(hitter, ideal_mark, contact_point, "transition")
+	var required := to_mark + run_up
+	return {
+		"tempo": tempo,
+		"available_seconds": set_flight_seconds,
+		"required_seconds": required,
+		"to_mark_seconds": to_mark,
+		"run_up_seconds": run_up,
+		"deficit_seconds": required - set_flight_seconds,
+		## Whether the hitter got to the mark they were aiming at, which the
+		## approach model already decides. A deficit and a missed mark should agree;
+		## if they do not, one of the two is wrong.
+		"reached_ideal_mark": bool(preparation.get("reached_approach_start", true)),
+	}
+
+
 func _errant_attack_target(intended: Vector2, attack_quality: float) -> Vector2:
 	var lane_x := clampf(intended.x, ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x)
 	var wide_overshoot := ATTACK_ERROR_OVERSHOOT_METERS / CourtConstants.COURT_WIDTH_METERS

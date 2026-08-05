@@ -315,17 +315,17 @@ engine and it is not in the dig.
 
 ### Not landed — the distance still to go
 
-**Serve in/out is a coin flip disconnected from the drawn ball.** Both serve
-paths compute `serve_error := rng.randf() < error_chance` and then draw the ball
-to `_serve_landing_point()`, which clamps into the court and is structurally
-incapable of returning an out-of-bounds point. The opponent path writes "The
-serve does not enter the court" while handing the renderer an in-court landing.
-This is the visible bug in save `as`, seed 3801887943.
+**Serve in/out: the visible half is landed; the emergent half is not.**
 
-Two fixes, and they are not the same size:
+The first of the two fixes below shipped. `_errant_serve_landing()` mirrors
+`_errant_attack_target()` on both serve paths — keep the roll, relocate the ball,
+into the tape on a poor contact and past whichever line the intended target sat
+nearest otherwise. `_test_a_serve_that_misses_is_drawn_missing()` gates it on both
+sides of the net and requires the misses not to be all one kind. The visible
+defect in save `as`, seed 3801887943 is gone.
 
-- Mirror `_errant_attack_target()` — keep the roll, relocate the ball. ~30
-  lines, no calibration impact, kills the visible defect.
+What remains is the second, larger fix:
+
 - Derive in/out from the landing point. `_serve_landing_point` is already 90%
   of the way there — `deviation := lerpf(0.105, 0.018, accuracy)` is the right
   shape, and the final `clampf` back into the court is the single line that
