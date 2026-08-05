@@ -35,6 +35,8 @@ const SignatureMoveModel := preload(
 const AttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
+const BlockJumpModel := preload("res://scripts/simulation/block_jump_model.gd")
+const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
 
 ## Contact happens just below the top of a hitter's reach -- struck in front of
 ## and slightly under full extension, not at the fingertip limit.
@@ -342,14 +344,46 @@ static func _block_at(
 		## The block forms in front of the hitter, imperfectly.
 		var offset := (float(index) * 0.5 - 0.25 * float(count - 1)) \
 			* 2.0 * BLOCKER_HALF_WIDTH_METERS / CourtConstants.COURT_WIDTH_METERS
+		## The same jump the rally builds, so the sweep measures the wall the game
+		## fields. The read and the close are sampled rather than assumed perfect --
+		## a harness whose blockers are all ideally timed cannot say anything about
+		## what timing is worth.
+		var leap := maxf(
+			(blocker.jumping_reach_cm() - blocker.standing_reach_cm()) / 100.0, 0.0
+		)
+		var jump: Dictionary = BlockJumpModel.resolve(
+			leap, clampf(float(blocker.block_timing) / 100.0, 0.0, 1.0),
+			rng.randf_range(0.25, 0.95), _sampled_close(rng),
+		)
 		wall.append({
 			"net_x": clampf(
 				contact_x + offset + rng.randfn(0.0, 0.022), 0.02, 0.98
 			),
-			"reach_height_m": blocker.jumping_reach_cm(BLOCKER_REACH_EFFORT) / 100.0,
+			"reach_height_m": (
+				blocker.standing_reach_cm() / 100.0 + leap * float(jump.phase)
+			) if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING \
+				else blocker.jumping_reach_cm(BLOCKER_REACH_EFFORT) / 100.0,
+			"arm_state": str(jump.arm_state) \
+				if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING else null,
+			"block_effectiveness": float(jump.effectiveness) \
+				if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING else null,
 			"half_width_m": BLOCKER_HALF_WIDTH_METERS,
 		})
 	return wall
+
+
+## Close fractions as live rallies distribute them -- p10 0.475, p25 0.785, p50
+## and above 1.00 -- rather than uniform over the same interval, which is a
+## different distribution and shifts every quantity that keys off it.
+static func _sampled_close(rng: RandomNumberGenerator) -> float:
+	var roll := rng.randf()
+	if roll < 0.10:
+		return rng.randf_range(0.34, 0.475)
+	if roll < 0.25:
+		return rng.randf_range(0.475, 0.785)
+	if roll < 0.50:
+		return rng.randf_range(0.785, 1.0)
+	return 1.0
 
 
 static func _rating(player: VolleyballPlayer, attribute: String) -> float:

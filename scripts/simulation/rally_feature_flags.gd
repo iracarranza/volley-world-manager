@@ -102,6 +102,45 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## suspicion. Do not widen a bound to close it.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 
+## Decide the block contest on when the blocker jumped, not only on how tall
+## they are.
+##
+## `BLOCKER_REACH_EFFORT` is a flat 0.62 of every blocker's leap, and it stands
+## for two different things at once: a block jump is taken from a standstill and
+## is genuinely lower than a hitter's, *and* the blocker is somewhere on the way
+## up or down when the ball arrives. Rolling the second into the first means
+## `block_timing` -- an attribute every player carries, trainable, generated,
+## shown on the profile wheel -- decides nothing whatever about whether a block
+## stuffs, and a blocker who peaked early is modelled as identical to one who
+## peaked on the ball.
+##
+## Timing is what separates a stuff from a tool. Arms at full extension and not
+## yet falling present a surface angled down into the court; arms on the way down
+## present the same surface tilted back off a shrinking height, which is what a
+## hitter tools. `BlockJumpModel` returns both the height available and whether
+## the arms are still rising, and the contact reads them separately.
+##
+## **Both aggregates are preserved, deliberately and by solving.** Adding a term
+## and rebalancing the wall at the same time would leave no sweep able to
+## separate them. `STANDING_JUMP_FRACTION` is solved so the mean phase reproduces
+## the 0.62 Gate D calibrated (0.620 measured), and `REFERENCE_EFFECTIVENESS` so
+## the stuff rate returns to its 12% target (12.2% measured) with block
+## involvement unmoved at 43.3%. What is new is only the spread either side.
+##
+## Three attempts were needed to get that right and all three are recorded in
+## `BlockJumpModel`, because each looked correct and was not: scaling off raw
+## timing gave 18.9% stuff, dividing by relative effectiveness gave 15.8%, and
+## centring on the arithmetic mean of effectiveness gave 16.2% because the
+## mapping to the stuff rate is not linear.
+##
+## **Off because it costs elsewhere.** The attack-symmetry ratchet drifts 0.652 to
+## 0.663, and the gate asserting that extreme hitter displacement reduces arrival
+## and attack quality fails outright. The second is the informative one: a
+## displaced hitter meets a wall whose timing now depends on a close fraction that
+## displacement also moves, so the two are coupled in a way the flat reach hid.
+## That coupling wants understanding before this ships, not a widened bound.
+const ENABLE_BLOCK_JUMP_TIMING: bool = false
+
 ## Let the opponent hitter walk to their mark before the set is released.
 ##
 ## `_reachable_attack_contact` charges the hitter's entire journey -- transition

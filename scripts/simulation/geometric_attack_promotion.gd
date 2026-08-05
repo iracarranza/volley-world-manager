@@ -21,6 +21,7 @@ const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
 const AttackPowerModel := preload("res://scripts/simulation/attack_power_model.gd")
 const CourtConstants := preload("res://scripts/data/court_constants.gd")
 const AttackCourseModel := preload("res://scripts/simulation/attack_course_model.gd")
+const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
 
 ## Where a hitter's contact sits relative to the top of their reach, and how
 ## much of their leap a blocker gets. These two numbers decide the entire block
@@ -217,6 +218,7 @@ static func block_wall(
 	block_intent: String = "Balanced",
 ) -> Array:
 	var wall: Array = []
+	var read_quality := clampf(float(formation.get("read_quality", 0.5)), 0.0, 1.0)
 	for role in ["primary", "assist"]:
 		var blocker := formation.get(role) as VolleyballPlayer
 		if blocker == null:
@@ -233,11 +235,41 @@ static func block_wall(
 			"Funnel":
 				reach_effort -= FUNNEL_REACH_PENALTY
 				width_scale = FUNNEL_WIDTH_SCALE
+		## What this blocker reaches *at the ball*, not at the top of a jump they
+		## may already have come down from. `reach_effort` stays the intent's
+		## contribution -- sealing asks for a taller wall, funnelling a lower one --
+		## and the jump model supplies the rest.
+		var jump := BlockJumpModelRef.resolve(
+			maxf(
+				(blocker.jumping_reach_cm() - blocker.standing_reach_cm()) / 100.0,
+				0.0,
+			),
+			clampf(float(blocker.block_timing) / 100.0, 0.0, 1.0),
+			read_quality, close,
+		)
+		var timed_reach := blocker.standing_reach_cm() / 100.0 \
+			+ maxf(
+				(blocker.jumping_reach_cm() - blocker.standing_reach_cm()) / 100.0,
+				0.0,
+			) * float(jump.phase) * (
+				clampf(reach_effort, 0.0, 1.0) / BLOCKER_REACH_EFFORT
+			)
 		wall.append({
 			"net_x": _blocker_net_x(blocker, fallback_positions, live_positions),
-			"reach_height_m": blocker.jumping_reach_cm(
-				clampf(reach_effort, 0.0, 1.0)
-			) / 100.0,
+			"reach_height_m": timed_reach if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING \
+				else blocker.jumping_reach_cm(
+					clampf(reach_effort, 0.0, 1.0)
+				) / 100.0,
+			## What separates a stuff from a tool, carried to the contact -- and
+			## only when the flag is open. `_block_contact` keys off the presence
+			## of these, so attaching them unconditionally applied the whole
+			## timing model with the flag shut, which is a switch that does not
+			## switch anything off.
+			"arm_state": str(jump.arm_state) \
+				if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING else null,
+			"block_effectiveness": float(jump.effectiveness) \
+				if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING else null,
+			"timing_quality": float(jump.timing_quality),
 			"half_width_m": BLOCKER_HALF_WIDTH_METERS * width_scale
 				* clampf(close, 0.0, 1.0),
 			"player_id": blocker.id,

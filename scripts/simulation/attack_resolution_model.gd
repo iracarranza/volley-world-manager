@@ -27,6 +27,7 @@ const CourtConstants := preload("res://scripts/data/court_constants.gd")
 const AttackCourseModel := preload("res://scripts/simulation/attack_course_model.gd")
 const AttackReadModel := preload("res://scripts/simulation/attack_read_model.gd")
 const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd")
+const BlockJumpModel := preload("res://scripts/simulation/block_jump_model.gd")
 
 ## Where on the hands the ball met them, which decides what comes off.
 ##
@@ -49,6 +50,32 @@ const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd"
 ## every block into an edge contact and tools stopped being rare.
 const TOOL_EDGE_MARGIN_METERS: float = 0.08
 const STUFF_DEPTH_METERS: float = 0.21
+## How the two geometric thresholds bend with the blocker's jump timing.
+##
+## `STUFF_DEPTH_METERS` is how far below the hands a ball has to cross before the
+## block puts it down rather than merely slowing it, and it was a single figure
+## for every blocker in every state. A blocker meeting the ball at the apex needs
+## less of it -- their hands are locked out and angled over -- so the requirement
+## scales down to `TIMING_STUFF_DEPTH_SPAN` of itself at perfect timing.
+##
+## Hands on the way down are the case the sport punishes hardest, so they are
+## charged twice: the depth needed for a stuff goes back up, and the outside edge
+## they can be tooled off widens, because a dropping hand's effective edge is
+## inside where the hand actually is.
+## How much a blocker's jump timing is worth against the depth their hands need.
+##
+## The design dial this whole model exists to expose: at zero, timing changes
+## nothing and the block is the height comparison it has always been; at one, a
+## blocker at half the reference effectiveness needs half again the depth to put
+## a ball down. It is set against the measured stuff rate rather than picked,
+## because what a calibration is entitled to decide is how much a term matters --
+## not to quietly move the aggregate while claiming to add a term.
+const TIMING_STUFF_SENSITIVITY: float = 1.0
+
+## Only the tool widening lives here now. How much height and arm direction are
+## worth is the jump's business, and `BlockJumpModel` returns them combined as one
+## centred `effectiveness` so this threshold is scaled exactly once.
+const TIMING_DESCENDING_TOOL_WIDENING: float = 1.45
 
 ## How far onto the hitter's own side a netted ball drops. Normalized, ~0.2 m.
 const NETTED_DROP_OFFSET: float = 0.012
@@ -189,11 +216,58 @@ static func _block_contact(
 			nearest_edge_miss = maxf(nearest_edge_miss, edge_gap)
 			continue
 		var depth_below := reach - height_at_net
+		## Timing, which is what actually separates a stuff from a tool.
+		##
+		## Depth below the hands and distance from the outside edge are both
+		## geometry, and geometry alone says a blocker who peaked half a second
+		## early does the same thing to the ball as one who met it at full
+		## extension. They do not. Arms still rising into a locked-out position
+		## present a surface angled down into the court; arms already falling
+		## present the same surface tilted back off a height that is shrinking as
+		## the ball reaches it, and that is what a hitter tools.
+		##
+		## So the two geometric thresholds bend around the timing rather than
+		## being replaced by it. A blocker who met the ball at the apex stuffs on
+		## less depth than one who did not, and a blocker whose hands are on the
+		## way down is tooled from further inside their own edge -- the effective
+		## edge of a dropping hand is not where the hand is.
+		var stuff_depth := STUFF_DEPTH_METERS
+		var tool_margin := TOOL_EDGE_MARGIN_METERS
+		if blocker.get("block_effectiveness", null) != null:
+			## Centred on the population, so a blocker timing the ball the way the
+			## average blocker times it meets exactly the constants Gate D
+			## calibrated and only the spread either side is new. Scaling straight
+			## off the raw timing instead took stuff from 12.0% to 18.9% while
+			## involvement did not move -- adding timing and rebalancing the wall
+			## at the same time, which no later sweep could have separated.
+			var relative := clampf(
+				float(blocker.get("block_effectiveness", 0.0)), 0.05, 2.0
+			) / BlockJumpModel.REFERENCE_EFFECTIVENESS
+			## Better timing asks less depth of the ball, because the hands are
+			## higher and angled over it rather than tilted back off it.
+			##
+			## Linear in the deviation rather than reciprocal. Dividing by the
+			## relative effectiveness is convex and unbounded below, so it does
+			## not centre where its mean says it should -- a blocker at half the
+			## reference got twice the threshold while one at double got only
+			## half off, and the stuff rate came out at 15.8% against the 12.0%
+			## the flat constant produced. This is exactly `STUFF_DEPTH_METERS` at
+			## the reference and symmetric either side of it.
+			stuff_depth = STUFF_DEPTH_METERS * maxf(
+				1.0 + TIMING_STUFF_SENSITIVITY * (1.0 - relative), 0.15
+			)
+			## And a dropping hand is tooled from further inside its own edge,
+			## because its effective edge is not where the hand is. Only the
+			## falling case: hands still on the way up are extended and angled
+			## over, merely lower than they will get, and that height is already
+			## priced into the reach.
+			if str(blocker.get("arm_state", "extended")) == "descending":
+				tool_margin *= TIMING_DESCENDING_TOOL_WIDENING
 		var kind := "touch"
-		if edge_gap < TOOL_EDGE_MARGIN_METERS:
+		if edge_gap < tool_margin:
 			## Off the outside hand and away. This one is the hitter's point.
 			kind = "tool"
-		elif depth_below > STUFF_DEPTH_METERS:
+		elif depth_below > stuff_depth:
 			kind = "stuff"
 		return {
 			"kind": kind,
