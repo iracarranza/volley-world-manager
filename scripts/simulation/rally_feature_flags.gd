@@ -102,6 +102,58 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## suspicion. Do not widen a bound to close it.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 
+## One speed model for every player, in every subsystem.
+##
+## There are two live today and which one a player gets depends on which
+## subsystem asks. `RallyMovementSystem` uses `LocomotionModel.maximum_speed()` --
+## the stride x cadence decomposition. `ApproachMechanicsSystem` and
+## `CoverageCalculator` use `legacy_maximum_speed()` against ceilings of 5.25 and
+## 4.65 m/s, which the locomotion model itself records as disagreeing with its own
+## 3.96 and 3.25.
+##
+## It is not a uniform offset, which is the part that matters. Measured across the
+## vertical-slice roster, legacy over stride runs:
+##
+##   Sena   0.97x     Boro  1.07x     Tala  1.17x
+##   Ivo    1.19x     Mira  1.32x     Nemi  1.33x
+##
+## So the two models **rank players differently**. Sena is slower under legacy and
+## Nemi a third faster, meaning the same rally can disagree with itself about who
+## is quicker depending on whether the question came from the approach or from the
+## traversal. That is not a tuning difference, it is two answers to one question.
+##
+## It sits directly under this session's work. `_movement_time` times the hitter's
+## run through the stride model while `ApproachMechanicsSystem` prepares that same
+## hitter at a 5.25 m/s ceiling, so the contact-depth fix and the approach budget
+## were reasoning about a player moving at two speeds. `CoverageCalculator` at
+## 4.65 against 3.25 inflates defensive reach by up to 43%, which is upstream of
+## the claimant search and the dig contest -- and therefore of the symmetry
+## ratchet this repository has been chasing.
+##
+## `locomotion_model.gd` states the divergence out loud and calls unifying it "a
+## deliberate rebalance, not a cleanup", which is exactly right and is why this is
+## a flag rather than an edit.
+##
+## **Turned on, it improves the thing this repository has been chasing.** The
+## attack-symmetry ratchet moves 0.652 to 0.641 -- the best it has read -- and the
+## drift assertion passes. That is a real argument for landing it.
+##
+## **One thing blocks it, and it is a gap the unification exposed rather than
+## created.** `maximum_speed()` is `stride x cadence`, and `cadence_hz` prices
+## fatigue, effort and limb turnover but *not mass*. `legacy_maximum_speed`
+## multiplied by `mass_factor()` explicitly. So unifying onto the stride model
+## drops mass out of coverage entirely, and the gate asserting that greater mass
+## slightly reduces movement-derived coverage fails outright. The identity gate on
+## defensive attack goes with it.
+##
+## That is the stride model's own design intent unfinished, not this switch
+## misbehaving: its header argues physique should enter locomotion honestly --
+## height buying stride while mass costs turnover -- and the turnover half was
+## never built. Price mass in `cadence_hz`, re-measure, then open this. Do not
+## reach for `mass_factor` as a multiplier on the outside; that is the crude
+## penalty the stride model was written to replace.
+const ENABLE_UNIFIED_SPEED_MODEL: bool = false
+
 ## Decide the block contest on when the blocker jumped, not only on how tall
 ## they are.
 ##

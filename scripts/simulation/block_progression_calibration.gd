@@ -68,6 +68,18 @@ const SCENARIOS: Array[Dictionary] = [
 ]
 
 const SET_ORIGIN := Vector2(0.50, 0.60)
+## FLAGGED, AND IT IS THE THIRD INSTANCE OF ONE DEFECT. A fixed contact height,
+## used for every sample this calibration takes.
+##
+## Gate D pinned contact *depth* at a literal 0.36 m and drifted from the game
+## because of it; `ExecutionScaleCalibration.contest_shares` projected a block mix
+## from thresholds production no longer reads. This is the same shape: a
+## calibration holding constant the very quantity whose variation decides the
+## outcome it measures. Contact height is `standing_reach + leap - 0.10` and spans
+## roughly 3.0-3.3 m across a real roster, so 2.55 m is not even a central value
+## of the distribution it stands in for -- it is below all of it.
+##
+## Sweep it, the way `AttackGeometryCalibration.depth_sweep` now sweeps depth.
 const CONTACT_HEIGHT_METERS: float = 2.55
 
 ## Time from set release to hitter contact. A block needs a realistic window:

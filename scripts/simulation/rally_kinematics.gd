@@ -6,12 +6,23 @@ extends RefCounted
 ## Court geometry belongs to `CourtConstants`, which is where every other
 ## consumer reads it. Re-declaring the numbers here meant a court that changed
 ## size would silently change it in one place and not the other.
+const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd")
 const COURT_WIDTH_METERS: float = CourtConstants.COURT_WIDTH_METERS
 const COURT_LENGTH_METERS: float = CourtConstants.COURT_LENGTH_METERS
 const MIN_BALL_SPEED_MPS: float = 0.1
 const MIN_FLIGHT_DURATION: float = 0.01
 const DEFAULT_TIMING_TOLERANCE: float = 0.25
-const DEFAULT_GRAVITY_MPS2: float = 9.8
+## Read from the physics module rather than redeclared. It was 9.8 here, 9.8 in
+## `BallFlightModel`, 9.81 in `BlockJumpModel` and a fourth private copy inside
+## the ball-flight test -- one physical constant, four declarations, two values.
+const DEFAULT_GRAVITY_MPS2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2
+## Deliberately tighter than `BallFlightModel.MAX_LAUNCH_ANGLE_DEGREES`, which
+## allows 85. That module resolves a launch from three metres up and reads the
+## outcome off where the ball lands; this one solves a drawn ground-to-ground arc,
+## where the apex is the thing that has to stay believable. Two bounds, two
+## purposes -- said out loud here because neither file previously acknowledged the
+## other, and a reader of one would have taken it for the bound.
+##
 ## Below this, a shot is flat enough that tan(theta) collapses toward zero and
 ## the required speed toward the distance/duration floor; above the max, apex
 ## height blows up implausibly at real court distances (an unclamped 80 degree

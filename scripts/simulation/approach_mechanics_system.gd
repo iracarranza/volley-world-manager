@@ -1,6 +1,8 @@
 class_name ApproachMechanicsSystem
 extends RefCounted
 
+const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
+const RallyPlayerState := preload("res://scripts/models/rally_player_state.gd")
 const RallyKinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
 const RallyMovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
@@ -174,9 +176,16 @@ static func evaluate_takeoff(
 		float(actor.player.lateral_speed), lateral_share * 0.65
 	) / 100.0
 	var fatigue_factor := LocomotionModel.fatigue_factor(actor.player)
-	var maximum_speed := LocomotionModel.legacy_maximum_speed(
-		actor.player, speed_rating, LocomotionModel.LEGACY_APPROACH_CEILING_MPS
-	)
+	## One model or the other, never a blend. See
+	## `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL` -- the legacy ceiling here
+	## disagrees with the stride model that times this same player's traversal,
+	## and not by a constant factor.
+	var maximum_speed := LocomotionModel.maximum_speed(
+		actor.player, RallyPlayerState.MovementMode.APPROACH
+	) if FeatureFlags.ENABLE_UNIFIED_SPEED_MODEL \
+		else LocomotionModel.legacy_maximum_speed(
+			actor.player, speed_rating, LocomotionModel.LEGACY_APPROACH_CEILING_MPS
+		)
 	var acceleration := lerpf(2.2, 6.8, float(actor.player.acceleration) / 100.0) \
 		* fatigue_factor
 	var alignment := 1.0

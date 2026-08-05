@@ -1,6 +1,17 @@
 class_name BallReadSystem
 extends RefCounted
 
+## FLAGGED, same camp as the set-release window. The band every player's
+## recognition delay is drawn from.
+##
+## A band is the right shape -- reading a ball is a skill and these are its
+## extremes -- so unlike a fixed contact height this is not a distribution
+## flattened to a point. What is unrecorded is where the extremes came from, and
+## 0.04 s is fast enough to be worth justifying: simple visual reaction time in
+## humans floors around 0.15-0.20 s, and anything quicker is anticipation rather
+## than reaction. If the fast end is meant to represent a player who has already
+## read the play and is moving before the contact, that belongs in the anticipation
+## term, not in a recognition delay that then reads as superhuman.
 const MIN_RECOGNITION_DELAY: float = 0.04
 const MAX_RECOGNITION_DELAY: float = 0.52
 

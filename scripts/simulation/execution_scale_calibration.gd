@@ -313,44 +313,21 @@ static func block_scale(players: Array[VolleyballPlayer]) -> Dictionary:
 	return rows
 
 
-## What the contest margins would produce, given two scales.
+## `contest_shares` lived here and has been deleted.
 ##
-## Pairs a random swing with a random block and applies the resolver's own
-## thresholds. This is the number that decides a margin, and it costs
-## microseconds instead of a five-minute sweep.
-static func contest_shares(
-	attack_values: Array,
-	block_values: Array,
-	sample_count: int = 20000,
-	base_seed: int = 20250801,
-) -> Dictionary:
-	if attack_values.is_empty() or block_values.is_empty():
-		return {}
-	var rng := RandomNumberGenerator.new()
-	rng.seed = base_seed
-	var counts := {"stuff": 0, "touch": 0, "funnel": 0, "miss": 0}
-	for index in range(maxi(sample_count, 1)):
-		var attack := float(attack_values[rng.randi() % attack_values.size()])
-		var block := float(block_values[rng.randi() % block_values.size()])
-		var contest := block + rng.randf_range(-0.14, 0.12)
-		var outcome := "miss"
-		if contest > attack + RallySimulatorModel.BLOCK_STUFF_MARGIN:
-			outcome = "stuff"
-		elif contest > attack + RallySimulatorModel.BLOCK_TOUCH_MARGIN:
-			outcome = "touch"
-		elif contest > attack + RallySimulatorModel.BLOCK_FUNNEL_MARGIN:
-			outcome = "funnel"
-		counts[outcome] = int(counts[outcome]) + 1
-	var shares := {}
-	for key in counts:
-		shares[key] = float(counts[key]) / float(maxi(sample_count, 1))
-	## The stuff share here is an upper bound: the resolver additionally
-	## requires the primary to have sealed the lane, which this does not model.
-	shares["touched"] = 1.0 - float(shares["miss"])
-	return shares
+## It paired a random swing with a random block, applied `BLOCK_STUFF_MARGIN` and
+## its two siblings, and reported the resulting mix as what the block does. That
+## stopped being true when `ENABLE_GEOMETRIC_ATTACK` opened: the geometric path
+## overwrites the outcome and those three thresholds decide nothing. So it
+## projected a branch production does not take -- and it had no callers, so it was
+## a wrong answer nobody was even asking for.
+##
+## Recorded rather than silently removed because this is the second instance of
+## the same defect in as many days. Gate D's harness had also fallen behind the
+## resolver it was meant to calibrate, and for the same reason: nothing ran it, so
+## nothing noticed.
 
 
-## Share of swings the error threshold would reject, per situation.
 static func error_shares(attack_rows: Dictionary) -> Dictionary:
 	var shares := {}
 	for situation_name in attack_rows:

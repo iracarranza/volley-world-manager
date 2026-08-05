@@ -33,6 +33,15 @@ extends RefCounted
 ## work a drag term would otherwise have to. Float and topspin serves remain
 ## outside what this can express.
 
+## Gravity, for every ball in the engine.
+##
+## The single declaration. It stood at 9.8 here and in `RallyKinematics` and at
+## 9.81 in `BlockJumpModel` -- one physical constant with two values, which is a
+## small error and exactly the kind that survives because nobody looks at it.
+## Unified downward to 9.8, which is what two of the three declarations used and
+## what the hand-derived expectations in `_test_ball_flight_from_contact_height`
+## were computed from. The other 0.1% buys no physical fidelity and would have
+## invalidated every one of those literals.
 const DEFAULT_GRAVITY_MPS2: float = 9.8
 const MIN_SPEED_MPS: float = 0.1
 const MIN_FLIGHT_DURATION: float = 0.01
@@ -41,6 +50,16 @@ const MIN_FLIGHT_DURATION: float = 0.01
 ## The bounds exist only to keep cos(theta) away from zero, where horizontal
 ## range collapses and the inverse solve stops being meaningful.
 const MIN_LAUNCH_ANGLE_DEGREES: float = -85.0
+## Deliberately *not* the same bound as `RallyKinematics.MAX_LAUNCH_ANGLE_DEGREES`,
+## which sits at 75 degrees. That one bounds the apex of a drawn ground-to-ground
+## arc, where an unclamped steep solution implies a physically silly apex over a
+## real court distance. This one bounds a launch from three metres up whose
+## outcome is read off where it lands, and a serve or a heavily lifted ball
+## genuinely leaves the hand steeper than 75.
+##
+## The divergence is the point and is stated in both files. What was wrong was
+## that neither knew the other existed, so a reader of either would have assumed
+## it was the bound.
 const MAX_LAUNCH_ANGLE_DEGREES: float = 85.0
 
 

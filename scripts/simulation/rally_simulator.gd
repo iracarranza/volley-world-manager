@@ -58,6 +58,19 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 const RallyKinematicsModel := preload(
 	"res://scripts/simulation/rally_kinematics.gd"
 )
+## FLAGGED, NOT DERIVED. How many attack exchanges a rally may contain before it
+## is cut off.
+##
+## No reason has ever been recorded for four, and it is not obvious one exists: a
+## rally ends when a ball hits the floor or goes out, and how many times it
+## crosses the net before that is an outcome, not an input. A cap is a loop guard,
+## and a loop guard set at the *median rally length of the sport it is bounding*
+## is not a guard, it is a rule -- every rally that would have run five exchanges
+## is being ended by this line rather than by play.
+##
+## What it should be is a runaway backstop set far above anything real, with the
+## rally-length distribution measured underneath it. If long rallies then turn out
+## to be too common, that is the floor defence to fix, not this number.
 const MAX_EXCHANGES: int = 4
 
 ## `OPPONENT_SERVE`, `OPPONENT_BLOCK` and `OPPONENT_DEFENSE` were flat
@@ -192,6 +205,19 @@ const ATTACK_ERROR_RESPONSE_WIDTH: float = 0.12
 ## Set to the shares Gate D asks for: a stuff at roughly the top eighth of the
 ## distribution, and touch plus funnel taking about another thirty percent, so the
 ## block is involved in 40% of attacks and terminates 12% of them.
+##
+## **These are the legacy resolver's, and nothing reads them while the geometric
+## attack is open.** `_geometric_promotion` overwrites `block_outcome` whenever
+## `ENABLE_GEOMETRIC_ATTACK` is true, so on the production path the outcome comes
+## from `AttackResolutionModel._block_contact` -- a height and edge comparison
+## against a real wall -- and these three thresholds decide nothing. Changing them
+## produced byte-identical rallies, which is how that was discovered.
+##
+## They are kept rather than deleted because `_contest_block` is a live fallback:
+## turn the geometric flag off and it resolves every block again. What must not
+## happen is what already had -- a calibration tuning them and reporting the
+## result as the game's block mix. `ExecutionScaleCalibration.contest_shares`
+## did exactly that, had zero callers, and has been deleted.
 const BLOCK_STUFF_MARGIN: float = 0.34
 const BLOCK_TOUCH_MARGIN: float = 0.237
 const BLOCK_FUNNEL_MARGIN: float = 0.12
@@ -359,6 +385,23 @@ const OPPONENT_SERVE_WEIGHT_TOTAL: float = 0.72
 ## `_fallback_assignment` on one side and a serve-receive tendency on the other.
 const TRANSITION_TEMPO_BASE: int = 3
 
+## FLAGGED. These four bound every setter's tempo and are now load-bearing:
+## `ENABLE_OPPONENT_APPROACH_WINDOW` spends `DEFAULT_SET_RELEASE_SECONDS +
+## DEFAULT_SECOND_CONTACT_SECONDS` as the pass-to-release window that lets a
+## hitter walk to their mark, so a fix rests on two numbers nothing derived.
+##
+## They are defensible *as defaults* -- a mean pass-to-release time is a real
+## quantity and `SYSTEM_FIT_SET_RELEASE` already varies it per setter. What is
+## missing is not a derivation for the mean but a consequence for the tail: a
+## setter working far outside their band is modelled as merely *inaccurate*, and
+## that is not what happens. A ball held too long is a lift, and a poor or
+## out-of-position setter -- a libero forced to set, a young middle taking the
+## second ball -- commits ball-handling faults at a rate the sport notices.
+## `MINIMUM_SET_RELEASE_SECONDS` and `MAXIMUM_SET_RELEASE_SECONDS` currently clamp
+## silently where they should sometimes produce a fault instead.
+##
+## So the work here is a lift/double-contact outcome driven by `setting_technique`
+## against the release the situation demands, not a better constant.
 const DEFAULT_SECOND_CONTACT_SECONDS: float = 0.68
 
 const DEFAULT_SET_RELEASE_SECONDS: float = 0.42

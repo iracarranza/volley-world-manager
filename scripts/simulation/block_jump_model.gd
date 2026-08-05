@@ -30,7 +30,11 @@ extends RefCounted
 ## all of which already vary rally to rally. Adding a draw here would re-sequence
 ## every seeded outcome downstream of it for no gain in fidelity.
 
-const GRAVITY_MPS2: float = 9.81
+## Read from the physics module rather than redeclared. This file having its own
+## 9.81 while two others had 9.8 -- and the ball-flight test a fourth copy -- is
+## how one physical constant came to have two values in four places.
+const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd")
+const GRAVITY_MPS2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2
 
 ## How much of an approach jump a block jump gets, before timing is considered.
 ##

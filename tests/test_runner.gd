@@ -9876,7 +9876,12 @@ func _test_attack_courses_are_relative_to_the_hitter() -> void:
 ## implementation.
 func _test_ball_flight_from_contact_height() -> void:
 	const CONTACT_HEIGHT := 3.2
-	const GRAVITY := 9.8
+	## Read from the model, not redeclared. The independence this test is built
+	## for is in the *formula* -- every expected value below is derived from the
+	## closed form rather than read back off the implementation -- and a private
+	## copy of gravity does not add to that, it just quietly tests a different
+	## ball. It was 9.8 here and the model now says 9.81, which is what caught it.
+	var gravity: float = BallFlightModel.DEFAULT_GRAVITY_MPS2
 
 	## A flat 25 m/s ball from 3.2 m carries 20.2 m -- eleven metres past a 9 m
 	## court. This is the number that shows why downward angles are the ordinary
@@ -9977,7 +9982,7 @@ func _test_ball_flight_from_contact_height() -> void:
 		var elapsed := float(spike.duration_seconds) * fraction
 		var expected := CONTACT_HEIGHT \
 			+ float(spike.vertical_speed_mps) * elapsed \
-			- 0.5 * GRAVITY * elapsed * elapsed
+			- 0.5 * gravity * elapsed * elapsed
 		var probed: float = BallFlightModel.height_at_distance(
 			spike, float(spike.horizontal_speed_mps) * elapsed
 		)

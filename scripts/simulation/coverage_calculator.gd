@@ -1,6 +1,9 @@
 class_name CoverageCalculator
 extends RefCounted
 
+const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
+const RallyPlayerState := preload("res://scripts/models/rally_player_state.gd")
+
 ## Court geometry and normalised-to-metres conversion both live elsewhere:
 ## `CourtConstants` owns the dimensions and `RallyKinematics` owns the
 ## conversion. This file used to carry its own copy of each -- a third set of
@@ -29,9 +32,15 @@ static func evaluate_arrival(
 	var available_time := maxf(ball_time_seconds - reaction_delay, 0.0)
 	var speed_rating := float(player.lateral_speed) / 100.0
 	var acceleration_rating := float(player.acceleration) / 100.0
-	var movement_speed := LocomotionModel.legacy_maximum_speed(
-		player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
-	)
+	## See `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL`. The legacy ceiling runs
+	## defenders up to 43% faster laterally than the stride model allows, which
+	## inflates every reach this function reports.
+	var movement_speed := LocomotionModel.maximum_speed(
+		player, RallyPlayerState.MovementMode.LATERAL
+	) if FeatureFlags.ENABLE_UNIFIED_SPEED_MODEL \
+		else LocomotionModel.legacy_maximum_speed(
+			player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
+		)
 	var acceleration_factor := lerpf(0.62, 1.0, acceleration_rating)
 	var travel_distance := movement_speed * available_time * acceleration_factor
 	var base_reach := _base_reach_meters(player, contact_skill)
@@ -147,9 +156,15 @@ static func reach_margin_from_seconds(
 	if player == null:
 		return 0.0
 	var speed_rating := float(player.lateral_speed) / 100.0
-	var movement_speed := LocomotionModel.legacy_maximum_speed(
-		player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
-	)
+	## See `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL`. The legacy ceiling runs
+	## defenders up to 43% faster laterally than the stride model allows, which
+	## inflates every reach this function reports.
+	var movement_speed := LocomotionModel.maximum_speed(
+		player, RallyPlayerState.MovementMode.LATERAL
+	) if FeatureFlags.ENABLE_UNIFIED_SPEED_MODEL \
+		else LocomotionModel.legacy_maximum_speed(
+			player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
+		)
 	var acceleration_factor := lerpf(0.62, 1.0, float(player.acceleration) / 100.0)
 	return seconds * movement_speed * acceleration_factor
 
