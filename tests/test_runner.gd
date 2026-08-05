@@ -29,6 +29,9 @@ const RALLY_STATE_BUILDER_SCRIPT := preload("res://scripts/simulation/rally_stat
 const RALLY_SCHEDULER_SCRIPT := preload("res://scripts/simulation/rally_scheduler.gd")
 const RALLY_MOVEMENT_SCRIPT := preload("res://scripts/simulation/rally_movement_system.gd")
 const LOCOMOTION_MODEL_SCRIPT := preload("res://scripts/simulation/locomotion_model.gd")
+const GATE_D_SCRIPT := preload(
+	"res://scripts/simulation/attack_geometry_calibration.gd"
+)
 const EXECUTION_SCALE_SCRIPT := preload(
 	"res://scripts/simulation/execution_scale_calibration.gd"
 )
@@ -711,6 +714,7 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_test_no_attack_is_struck_illegally()
 	_test_the_approach_mark_tracks_the_set()
 	_test_playback_geometry_is_drawable()
+	_test_gate_d_measures_the_swing_the_game_plays()
 	_test_minor_region_behaviour()
 
 
@@ -720,6 +724,48 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 ## a number the resolver handed over that could not be drawn any other way. They are
 ## gated together because they share that shape: the view was faithful and the state
 ## it was given was not.
+## Gate D has to measure the chain the game runs, and has to be run.
+##
+## It had no caller -- no tool, no test -- and it hand-rolled the resolver's
+## chain rather than calling it, so it fell behind without anything noticing.
+## What it had fallen behind on was `_feasible_launch`, which the resolver added
+## because a quarter of swings were choosing a driven solution into the tape; the
+## copy never gained it, so the harness reported an ordinary spike struck a metre
+## off the net as unable to clear the net at all.
+##
+## So this asserts two things, and deliberately not a calibration. That the
+## harness runs the production resolver, which is what a plausible mix at a
+## realistic depth demonstrates, and that it still produces one. The bands are
+## wide on purpose: this is a tripwire against silent drift, not a target. A
+## target belongs in the sweep, where it can be read against the whole depth
+## range instead of one point of it.
+func _test_gate_d_measures_the_swing_the_game_plays() -> void:
+	var report: Dictionary = GATE_D_SCRIPT.run(600, 20260805)
+	var shares: Dictionary = report.shares
+	var involved := float(shares.get("stuff", 0.0)) \
+		+ float(shares.get("touch", 0.0)) + float(shares.get("tool", 0.0)) \
+		+ float(shares.get("block_crush", 0.0)) \
+		+ float(shares.get("high_hands", 0.0))
+	_check(
+		involved > 25.0 and involved < 55.0,
+		"Gate D block involvement is plausible (%.1f%%)" % involved,
+	)
+	_check(
+		float(shares.get("in", 0.0)) > 35.0,
+		"Gate D lands a plausible share of swings in (%.1f%%)"
+			% float(shares.get("in", 0.0)),
+	)
+	## The regression that hid for so long, stated directly: a ball struck a metre
+	## off the net clears the tape. When the harness lost the feasibility solve
+	## this was -1.42 m at the mean and the whole depth range read as unblockable.
+	var deep: Dictionary = GATE_D_SCRIPT.run(600, 20260805, 0.0, 1.00)
+	_check(
+		float(deep.median_net_clearance_m) > 0.0,
+		"a swing struck a metre off the net clears the tape (%.2f m)"
+			% float(deep.median_net_clearance_m),
+	)
+
+
 func _test_playback_geometry_is_drawable() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
