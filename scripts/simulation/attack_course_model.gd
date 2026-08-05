@@ -61,6 +61,37 @@ static func direction_meters(
 	return Vector2(sin(radians), forward * cos(radians))
 
 
+## Where on the tape a ball struck from this contact on this bearing crosses.
+##
+## Purely the ground geometry -- the vertical question of whether it clears the
+## tape at all belongs to the flight, and is asked separately.
+##
+## Shared because two callers need the same answer and reaching it twice is how
+## the wall ended up standing somewhere the ball never went. The resolver asks
+## it *after* the swing to place the intersection; a blocker asks it *before* the
+## swing, off the approach line, to decide where to stand. A hitter contacting a
+## metre off the net with a turned shoulder crosses the net a long way from where
+## they jumped -- measured on live rallies, the median beaten wall was standing
+## 2.1 m from the point the ball actually came through, which is six times its
+## own half-width. No wall is wide enough to cover that; it was in the wrong
+## place.
+static func net_crossing_x(
+	contact: Vector2,
+	bearing_degrees: float,
+	attacking_negative_y: bool,
+) -> float:
+	var direction := direction_meters(bearing_degrees, attacking_negative_y)
+	if absf(direction.y) < 0.000001:
+		return contact.x
+	var to_net_meters := (CourtConstants.NET_Y - contact.y) \
+		* CourtConstants.COURT_LENGTH_METERS
+	var ground_to_net := to_net_meters / direction.y
+	if ground_to_net < 0.0:
+		ground_to_net = 0.0
+	return contact.x \
+		+ direction.x * ground_to_net / CourtConstants.COURT_WIDTH_METERS
+
+
 ## How much legal court lies along one bearing from one contact point.
 ##
 ## Returns the window of ground distances, in metres, over which a ball on this

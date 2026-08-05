@@ -1003,7 +1003,8 @@ func _test_tempo_buys_flight_time() -> void:
 	var hitter := VolleyballPlayer.new()
 	hitter.id = 4
 	var lineup := RotationLineup.new()
-	lineup.ensure_defaults([1, 2, 3, 4, 5, 6])
+	for slot_number in range(1, 7):
+		lineup.assign_slot(slot_number, slot_number)
 	var fallback := simulator._fallback_assignment(hitter, lineup)
 	_check(
 		fallback != null and int(fallback.tempo) == 3,

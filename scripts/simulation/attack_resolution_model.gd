@@ -89,8 +89,12 @@ static func resolve(
 	if ground_to_net < 0.0:
 		ground_to_net = 0.0
 	var height_at_net := BallFlightModel.height_at_distance(flight, ground_to_net)
-	var crossing_x := contact.x \
-		+ direction.x * ground_to_net / CourtConstants.COURT_WIDTH_METERS
+	## The same geometry a blocker uses to decide where to stand, asked from the
+	## other end. Shared so the wall and the ball cannot be placed by two
+	## different formulas.
+	var crossing_x := AttackCourseModel.net_crossing_x(
+		contact, bearing_degrees, attacking_negative_y
+	)
 	result["net_crossing_x"] = crossing_x
 	result["net_clearance_meters"] = height_at_net - CourtConstants.NET_HEIGHT_METERS
 	result["landing"] = AttackCourseModel.landing_point(
@@ -116,13 +120,23 @@ static func resolve(
 		return result
 
 	## --- 3. The block ------------------------------------------------------
+	var block_miss: Dictionary = {}
 	var contacted := _block_contact(
-		crossing_x, height_at_net, blockers
+		crossing_x, height_at_net, blockers, block_miss
 	)
 	if not contacted.is_empty():
 		result["block"] = contacted
 		result["outcome"] = "blocked"
 		return result
+	result["block_miss_reason"] = str(block_miss.get("reason", ""))
+	result["net_height_over_block_meters"] = height_at_net - _tallest_reach(blockers)
+	## How far past the nearest hand the ball crossed, in metres. A wall beaten by
+	## a hand's width is a width problem; one beaten by a metre is standing in the
+	## wrong place, and widening it would only be a bound stretched to swallow a
+	## distribution it was never cutting.
+	result["block_edge_miss_meters"] = float(
+		block_miss.get("edge_miss_meters", 0.0)
+	)
 
 	## --- 4. The floor ------------------------------------------------------
 	var landing: Vector2 = result["landing"]
@@ -136,6 +150,14 @@ static func resolve(
 	return result
 
 
+## The highest hand in the wall, or zero if there is no wall.
+static func _tallest_reach(blockers: Array) -> float:
+	var tallest := 0.0
+	for blocker in blockers:
+		tallest = maxf(tallest, float(blocker.get("reach_height_m", 0.0)))
+	return tallest
+
+
 ## Which blocker the ball met, and what that means.
 ##
 ## Returns an empty dictionary when nothing touched it -- either because every
@@ -144,16 +166,27 @@ static func _block_contact(
 	crossing_x: float,
 	height_at_net: float,
 	blockers: Array,
+	## Filled with why nothing touched the ball, when nothing did, and by how far.
+	## Whether a wall was beaten *over* or *around* is the difference between a
+	## reach problem and a positioning one, and the two want opposite fixes.
+	miss_detail: Dictionary = {},
 ) -> Dictionary:
+	var over := false
+	var around := false
+	## The closest any hand came, over all blockers, as a negative gap in metres.
+	var nearest_edge_miss := -INF
 	for blocker in blockers:
 		var reach := float(blocker.get("reach_height_m", 3.0))
 		if height_at_net > reach:
+			over = true
 			continue
 		var half_width := float(blocker.get("half_width_m", 0.45))
 		var lateral := absf(crossing_x - float(blocker.get("net_x", 0.5))) \
 			* CourtConstants.COURT_WIDTH_METERS
 		var edge_gap := half_width - lateral
 		if edge_gap < 0.0:
+			around = true
+			nearest_edge_miss = maxf(nearest_edge_miss, edge_gap)
 			continue
 		var depth_below := reach - height_at_net
 		var kind := "touch"
@@ -169,4 +202,14 @@ static func _block_contact(
 			"depth_below_reach_meters": depth_below,
 			"edge_gap_meters": edge_gap,
 		}
+	if blockers.is_empty():
+		miss_detail["reason"] = "no wall"
+	elif over and around:
+		miss_detail["reason"] = "over and around"
+	elif over:
+		miss_detail["reason"] = "over"
+	elif around:
+		miss_detail["reason"] = "around"
+	if is_finite(nearest_edge_miss):
+		miss_detail["edge_miss_meters"] = nearest_edge_miss
 	return {}

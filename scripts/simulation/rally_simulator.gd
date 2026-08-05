@@ -36,6 +36,9 @@ const LiveAttackIntegratorModel := preload(
 const ApproachMechanicsModel := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
+const AttackCourseModelRef := preload(
+	"res://scripts/simulation/attack_course_model.gd"
+)
 const ShadowBlockSystemModel := preload(
 	"res://scripts/simulation/shadow_block_system.gd"
 )
@@ -171,9 +174,27 @@ const ATTACK_ERROR_RESPONSE_WIDTH: float = 0.12
 ## back to 0.61 on the same numbers. A margin is a statement about how much the
 ## block has to win by, and it only means something against a given amount of
 ## block -- change what the wall can reach and it has to be restated.
-const BLOCK_STUFF_MARGIN: float = 0.22
-const BLOCK_TOUCH_MARGIN: float = 0.18
-const BLOCK_FUNNEL_MARGIN: float = 0.10
+## Where a block's contest margin has to land for each outcome, set from the
+## distribution of that margin rather than from taste.
+##
+## `contest - attack_quality` is one number and these are three thresholds on it,
+## so the only way to know what share each outcome gets is to know where the
+## distribution sits. Measured over 1,013 home blocks against an opponent that
+## swings: p10 -0.176, p25 -0.052, p50 0.077, p75 0.237, p90 0.363.
+##
+## The old trio -- 0.10, 0.18, 0.22 -- packed all three bands into a 0.12-wide
+## window near the middle of a spread half a unit across, and the consequence was
+## not subtle: **the `funnel` outcome fired zero times under every intent**, because
+## its band was 0.08 wide and the touch band above it took everything. A three-way
+## cascade with a dead middle rung is a two-way cascade, and the block-intent dials
+## that shift that rung were shifting nothing.
+##
+## Set to the shares Gate D asks for: a stuff at roughly the top eighth of the
+## distribution, and touch plus funnel taking about another thirty percent, so the
+## block is involved in 40% of attacks and terminates 12% of them.
+const BLOCK_STUFF_MARGIN: float = 0.34
+const BLOCK_TOUCH_MARGIN: float = 0.237
+const BLOCK_FUNNEL_MARGIN: float = 0.12
 
 ## A serve is missed when the server asks more of it than their control
 ## supports. `SERVE_ERROR_CEILING` is the miss rate of a server with no control
@@ -1617,7 +1638,13 @@ func resolve(
 	## its blockers this way through `home_phase_targets` on the opponent's
 	## attack event; this is the same mechanism pointed the other way, which is
 	## why only opponent blockers showed up in the movement audit.
-	var opponent_wall := _block_wall_positions(set_target.x, true)
+	var opponent_wall_x := _wall_stage_x(
+		hitter, set_target, str(assignment.lane), true,
+		float(opponent_block_formation.get("read_quality", 0.0)),
+		str(opponent_plan_for_wall.block_intent) \
+			if opponent_plan_for_wall != null else "Balanced",
+	)
+	var opponent_wall := _block_wall_positions(opponent_wall_x, true)
 	var opponent_block_stage := {}
 	if opponent_blocker != null:
 		opponent_block_stage[opponent_blocker.id] = Vector2(opponent_wall.primary_position)
@@ -1634,7 +1661,7 @@ func resolve(
 		set_target.x,
 		opponent_blocker.id if opponent_blocker != null else -1,
 		assisting_blocker.id if assisting_blocker != null else -1,
-		true,
+		true, opponent_wall_x,
 	)
 	for raw_floor_id in opponent_floor_stage:
 		var floor_id := int(raw_floor_id)
@@ -1684,12 +1711,11 @@ func resolve(
 			"primary_close": primary_close,
 			"assist_close": assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
-			"primary_position": _block_wall_positions(
-				set_target.x, true
-			).primary_position,
-			"assist_position": _block_wall_positions(
-				set_target.x, true
-			).assist_position,
+			## The wall that was staged, not a second one computed from the
+			## contact. Recomputing it here is how the drawn wall and the
+			## contested wall came apart the first time.
+			"primary_position": Vector2(opponent_wall.primary_position),
+			"assist_position": Vector2(opponent_wall.assist_position),
 			"setter_pull": block_resolution.setter_pull,
 			"read_quality": block_resolution.read_quality,
 			"event_time": _swing_reaches_net(
@@ -2507,7 +2533,12 @@ func _resolve_opponent_transition(
 	## the block event's metadata, and never fed back to the model that needed
 	## them. `_block_wall_positions` gives the pair a shoulder offset, so staging
 	## both fixes the geometry and the picture at once.
-	var home_wall_positions := _block_wall_positions(opponent_contact.x, false)
+	var home_wall_x := _wall_stage_x(
+		opponent_hitter, opponent_contact, opponent_lane, false,
+		float(home_block_formation.get("read_quality", 0.0)),
+		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
+	)
+	var home_wall_positions := _block_wall_positions(home_wall_x, false)
 	var staged_home_primary := home_block_formation.get("primary") as VolleyballPlayer
 	var staged_home_assist := home_block_formation.get("assist") as VolleyballPlayer
 	## Staged on the opponent's set as well as in `live_positions`, so the wall
@@ -2616,6 +2647,33 @@ func _resolve_opponent_transition(
 		opponent_approach_start, opponent_contact, opponent_move_time,
 		set_flight_time,
 	)
+	## And the wall moves with it.
+	##
+	## The wall above was staged against the contact the set was *aimed* at.
+	## `_reachable_contact` then moves that contact to wherever the hitter can
+	## actually get, and nothing re-read it -- so the resolver contested a wall
+	## built for a point the ball no longer came from, while the 2D court and the
+	## 3D view drew a third position recomputed from the final contact. Three
+	## readings of one fact, none of them reconciled.
+	##
+	## The staged position above stays what it is: it is where the blockers
+	## committed during the set's flight, and playback should show them heading
+	## there. This is the adjustment they make once the hitter commits, which is
+	## what a blocker does and what the resolver has to contest.
+	home_wall_x = _wall_stage_x(
+		opponent_hitter, opponent_contact, opponent_lane, false,
+		float(home_block_formation.get("read_quality", 0.0)),
+		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
+	)
+	home_wall_positions = _block_wall_positions(home_wall_x, false)
+	if staged_home_primary != null:
+		live_positions[staged_home_primary.id] = Vector2(
+			home_wall_positions.primary_position
+		)
+	if staged_home_assist != null:
+		live_positions[staged_home_assist.id] = Vector2(
+			home_wall_positions.assist_position
+		)
 	## Rebuilding the arc must not rebuild the clock with it. This passed
 	## `rally_clock`, so whenever the reachable-contact clamp moved the target --
 	## often -- the retarget silently restamped the set back to the moment of the
@@ -2860,7 +2918,7 @@ func _resolve_opponent_transition(
 		if assisting_blocker != null else -1
 	var floor_phase_positions := _home_floor_phase_positions(
 		lineup, defensive_plan, opponent_contact.x,
-		blocker_id, assisting_blocker_id
+		blocker_id, assisting_blocker_id, home_wall_x,
 	)
 	for raw_player_id in floor_phase_positions:
 		live_positions[int(raw_player_id)] = Vector2(
@@ -2878,17 +2936,22 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
 		], {"side": "home", "outcome": block_outcome,
+			"contest_margin": float(block_result.get("contest_margin", 0.0)),
+			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
+			"net_height_over_block_meters": float(
+				geometric.get("net_height_over_block_meters", 0.0)
+			),
+			"block_edge_miss_meters": float(
+				geometric.get("block_edge_miss_meters", 0.0)
+			),
+			"net_crossing_x": float(geometric.get("net_crossing_x", 0.5)),
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"primary_close": block_result.primary_close,
 			"assist_close": block_result.assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
-			"primary_position": _block_wall_positions(
-				opponent_contact.x, false
-			).primary_position,
-			"assist_position": _block_wall_positions(
-				opponent_contact.x, false
-			).assist_position,
+			"primary_position": Vector2(home_wall_positions.primary_position),
+			"assist_position": Vector2(home_wall_positions.assist_position),
 			"deflection_target": deflection_target,
 			"coverage_segments": block_result.coverage_segments,
 			"setter_pull": block_result.setter_pull,
@@ -3513,7 +3576,12 @@ func _resolve_home_continuation(
 	## Same blocker staging as the first-ball path: form the wall during the
 	## set's flight rather than during the attack-to-block segment, which can be
 	## a seventh of a second.
-	var cont_wall := _block_wall_positions(set_target.x, true)
+	var cont_wall_x := _wall_stage_x(
+		hitter, set_target, str(assignment.lane), true,
+		float(block_result.get("read_quality", 0.0)),
+		str(cont_wall_plan.block_intent) if cont_wall_plan != null else "Balanced",
+	)
+	var cont_wall := _block_wall_positions(cont_wall_x, true)
 	var cont_block_stage := {}
 	if opponent_blocker != null:
 		cont_block_stage[opponent_blocker.id] = Vector2(cont_wall.primary_position)
@@ -3524,7 +3592,7 @@ func _resolve_home_continuation(
 		set_target.x,
 		opponent_blocker.id if opponent_blocker != null else -1,
 		assisting_blocker.id if assisting_blocker != null else -1,
-		true,
+		true, cont_wall_x,
 	)
 	for raw_floor_id in cont_floor_stage:
 		var floor_id := int(raw_floor_id)
@@ -3568,8 +3636,8 @@ func _resolve_home_continuation(
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
 		"primary_close": primary_close, "assist_close": assist_close,
 		"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
-		"primary_position": _block_wall_positions(set_target.x, true).primary_position,
-		"assist_position": _block_wall_positions(set_target.x, true).assist_position,
+		"primary_position": Vector2(cont_wall.primary_position),
+		"assist_position": Vector2(cont_wall.assist_position),
 		"coverage_segments": block_result.coverage_segments,
 		"setter_pull": block_result.setter_pull,
 		"read_quality": block_result.read_quality,
@@ -3835,11 +3903,21 @@ func _form_opponent_block(
 ## choice, and it is a real one -- a terminal block wins points a funnel does
 ## not, and a funnel keeps rallies alive that a beaten seal loses.
 static func _block_intent_margins(intent: String) -> Dictionary:
+	## Sized against the same distribution the bands are. The previous shifts moved
+	## the touch rung by 0.015 between the two intents -- a fortieth of the spread --
+	## and asked a sample of fifty blocks to resolve it. That is not a dial, it is
+	## noise with a name, and it is why the two intents came out tied at twenty
+	## partials each once the opponent started swinging.
+	##
+	## These move real shares: a seal's stuff rung sits about six points of the
+	## distribution lower than a funnel's, and a funnel's own rung sits sixteen
+	## points below a seal's, so the tactical choice shows up in tens of events
+	## rather than in ones.
 	match intent:
 		"Seal":
-			return {"stuff": -0.05, "touch": -0.025, "funnel": 0.04}
+			return {"stuff": -0.06, "touch": -0.02, "funnel": 0.09}
 		"Funnel":
-			return {"stuff": 0.05, "touch": -0.04, "funnel": -0.04}
+			return {"stuff": 0.09, "touch": -0.03, "funnel": -0.07}
 	return {"stuff": 0.0, "touch": 0.0, "funnel": 0.0}
 
 
@@ -3884,6 +3962,10 @@ func _contest_block(
 		outcome = "funnel"
 	resolved["outcome"] = outcome
 	resolved["block_intent"] = block_intent
+	## How far the block's contest exceeded the swing, which is the single number
+	## all three bands are thresholds on. Reported so the bands can be set from the
+	## distribution they cut rather than from the outcomes they happened to produce.
+	resolved["contest_margin"] = contest - attack_quality
 	return resolved
 
 
@@ -4679,10 +4761,11 @@ func _home_floor_phase_positions(
 	attack_x: float,
 	primary_blocker_id: int,
 	assisting_blocker_id: int,
+	wall_x: float = NAN,
 ) -> Dictionary:
 	return _floor_phase_positions(
 		lineup, defensive_plan, attack_x,
-		primary_blocker_id, assisting_blocker_id, false,
+		primary_blocker_id, assisting_blocker_id, false, wall_x,
 	)
 
 
@@ -4708,6 +4791,7 @@ func _floor_phase_positions(
 	primary_blocker_id: int,
 	assisting_blocker_id: int,
 	opponent_side: bool,
+	wall_x: float = NAN,
 ) -> Dictionary:
 	var positions := {}
 	if lineup == null:
@@ -4731,7 +4815,13 @@ func _floor_phase_positions(
 	##
 	## Same source now. A wall is two players side by side and that is a fact about
 	## where they stand, not a detail of how one view draws them.
-	var wall := _block_wall_positions(attack_x, opponent_side)
+	## Staged on the crossing the blocking side read, when one was supplied. The
+	## floor behind them still shades on the attack lane: where the hitter is and
+	## where the ball goes through the tape are different facts, and only the wall
+	## stands on the second one.
+	var wall := _block_wall_positions(
+		attack_x if is_nan(wall_x) else wall_x, opponent_side
+	)
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id == primary_blocker_id:
@@ -4982,6 +5072,44 @@ static func _movement_mode_for_kind(
 		"approach":
 			return RallyPlayerState.MovementMode.APPROACH
 	return RallyPlayerState.MovementMode.TRANSITION
+
+
+## Where this wall should form, in normalised court x.
+##
+## The one place the blocking side's read is turned into a position. Every
+## staging site used to pass the hitter's contact straight through, which is
+## where the hitter jumps rather than where the ball crosses; see
+## `RallyFeatureFlags.ENABLE_BLOCK_CROSSING_READ` for what that cost and what it
+## measured.
+##
+## Falls back to the contact when the read is closed, so the flag is genuinely a
+## switch between two staged positions and not between a position and nothing.
+func _wall_stage_x(
+	hitter: VolleyballPlayer,
+	contact: Vector2,
+	lane: String,
+	attacking_negative_y: bool,
+	read_quality: float,
+	block_intent: String,
+) -> float:
+	if hitter == null or not RallyFeatureFlagsModel.ENABLE_BLOCK_CROSSING_READ:
+		return contact.x
+	var approach_start := ApproachMechanicsModel.approach_start_position(
+		contact, lane, &"home" if attacking_negative_y else &"opponent", contact
+	)
+	return GeometricAttackPromotionModel.wall_stage_x(
+		contact,
+		AttackCourseModelRef.natural_bearing_from_approach(
+			approach_start, contact, attacking_negative_y
+		),
+		attacking_negative_y, read_quality,
+		## The cone this hitter can turn the ball through, on the same terms the
+		## resolver gives them. A blocker facing a hitter with range knows it.
+		lerpf(22.0, 62.0,
+			_rating(hitter, "shot_variety") * 0.6
+				+ _rating(hitter, "attack_accuracy") * 0.4),
+		block_intent,
+	)
 
 
 ## The two positions a block wall occupies, pressed to the net on the blocking
@@ -7005,6 +7133,16 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"block_kind": str(
 			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
 		),
+		## Why the wall was beaten, when it was. This record is the only thing
+		## promotion sees -- a key the resolver states but the curator drops is a
+		## key nothing downstream can read, however faithfully the layers below
+		## carry it.
+		"block_miss_reason": str(swing.get("block_miss_reason", "")),
+		"net_height_over_block_meters": float(
+			swing.get("net_height_over_block_meters", 0.0)
+		),
+		"block_edge_miss_meters": float(swing.get("block_edge_miss_meters", 0.0)),
+		"net_crossing_x": float(swing.get("net_crossing_x", 0.5)),
 		"narrative": Dictionary(continuation.narrative),
 	}
 
@@ -7068,6 +7206,15 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		"speed_mps": float(record.get("speed_mps", 0.0)),
 		"launch_angle_degrees": float(record.get("vertical_angle_degrees", 0.0)),
 		"out_reason": str(record.get("out_reason", "")),
+		## Why the wall was beaten, when it was. Over the top is a reach problem
+		## and around the edge is a positioning one; they want opposite fixes and
+		## the outcome alone cannot tell them apart.
+		"block_miss_reason": str(record.get("block_miss_reason", "")),
+		"net_height_over_block_meters": float(
+			record.get("net_height_over_block_meters", 0.0)
+		),
+		"block_edge_miss_meters": float(record.get("block_edge_miss_meters", 0.0)),
+		"net_crossing_x": float(record.get("net_crossing_x", 0.5)),
 	}
 
 

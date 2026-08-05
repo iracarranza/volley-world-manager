@@ -273,6 +273,22 @@ static func resolve_swing(
 		"signature_move": move,
 		"landing": resolved.landing,
 		"flight": resolved.flight,
+		## Why the wall was beaten, carried up rather than left in `resolution`.
+		## Every consumer reads the flat keys; a diagnostic buried one level down is
+		## a diagnostic nobody asks for. Over the top is a reach problem and around
+		## the edge is a positioning one, and they want opposite fixes.
+		"block_miss_reason": str(resolved.get("block_miss_reason", "")),
+		"net_height_over_block_meters": float(
+			resolved.get("net_height_over_block_meters", 0.0)
+		),
+		"block_edge_miss_meters": float(
+			resolved.get("block_edge_miss_meters", 0.0)
+		),
+		## Where on the tape this ball actually crossed. The wall is staged on the
+		## hitter's contact, and a hitter contacting off the net crosses somewhere
+		## else entirely -- the gap between the two is the whole question of whether
+		## the wall is narrow or simply standing in the wrong place.
+		"net_crossing_x": float(resolved.get("net_crossing_x", 0.5)),
 		## What a rally record and the action vocabulary read: why this ball did
 		## what it did, in terms a person can say out loud.
 		"narrative": {

@@ -20,6 +20,7 @@ const AttackResolverModel := preload(
 const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
 const AttackPowerModel := preload("res://scripts/simulation/attack_power_model.gd")
 const CourtConstants := preload("res://scripts/data/court_constants.gd")
+const AttackCourseModel := preload("res://scripts/simulation/attack_course_model.gd")
 
 ## Where a hitter's contact sits relative to the top of their reach, and how
 ## much of their leap a blocker gets. These two numbers decide the entire block
@@ -39,6 +40,110 @@ const BLOCKER_HALF_WIDTH_METERS: float = 0.34
 ## still moving, still turned, still arriving -- the ball passes where they are
 ## going to be rather than where they are.
 const WALL_JOIN_CLOSE: float = 0.34
+
+## How far off the line they read a block intent moves the wall, in metres.
+##
+## Sized as one blocker's own half-width rather than picked: shifting by less
+## than that leaves the same balls in front of the same hands, and shifting by
+## more opens a lane wider than the wall itself. What the intent buys is the
+## *other* half of the hitter's cone, not a different court.
+const BLOCK_INTENT_SHIFT_METERS: float = 0.34
+## How many bearings across the hitter's cone the read averages. A resolution,
+## not a menu -- the answer is the cone's centre and this is how finely it is
+## found.
+const CONE_READ_SAMPLES: int = 9
+
+
+## Where the wall should stand to meet this swing, in normalised court x.
+##
+## A wall used to be staged on the hitter's *contact*. That is where the hitter
+## jumps, not where the ball crosses the tape: a hitter contacting a metre off
+## the net with a turned shoulder sends the ball through a point well inside
+## their own position. Measured over 1,013 home blocks, every beaten wall was
+## beaten toward court centre -- p10 +0.59 m, median +2.13 m, p90 +3.50 m -- so
+## the misses were not scatter around a well-placed wall, they were a wall
+## standing somewhere the ball systematically was not. Two metres against a
+## 0.34 m half-width is not a width that can be widened into a fix.
+##
+## What a blocker can see before the swing is the approach: which way the hitter
+## is running and where they will meet the ball. That is the line this reads, and
+## `read_quality` decides how much of the correction they get -- a blocker who
+## has not read the play still ends up near the contact, which is exactly the old
+## behaviour, so a bad read costs what it used to cost and a good one no longer
+## does.
+##
+## Intent then takes one side of the remaining cone. Sealing holds the line and
+## concedes the angle to the diggers; funnelling gives the line and channels the
+## ball into the middle. Until this existed both intents stood on the same point
+## and differed only in how tall and wide they were, which is why neither could
+## separate from the other on a swinging opponent.
+static func wall_stage_x(
+	contact: Vector2,
+	natural_bearing_degrees: float,
+	attacking_negative_y: bool,
+	read_quality: float,
+	cone_degrees: float,
+	block_intent: String = "Balanced",
+) -> float:
+	## Not the natural line -- the middle of what this hitter can actually do.
+	##
+	## Reading the approach and standing on the bearing it points at assumes the
+	## hitter swings where they are running, and `STRAIN_AVERSION` was calibrated
+	## on the measurement that they do not: 60.4% of swings leave the natural line
+	## for the biggest available gap. Staged on the natural crossing the wall was
+	## still a systematic 0.8 m short of where the ball came through, which is
+	## more than a blocker's own half-width -- so the intent dials, which express
+	## themselves in reach and width, were swamped by a placement error and both
+	## of them simply sampled whichever side of the residual sat nearer the bulk.
+	##
+	## The cone's centre is what a blocker covers when they cannot read the one
+	## shot: it is the geometry of the hitter's repertoire rather than a constant
+	## fitted to close the gap, and it does not need to know the choice the hitter
+	## has not made yet.
+	var predicted := 0.0
+	var samples := 0
+	for index in range(CONE_READ_SAMPLES):
+		var fraction := float(index) / float(CONE_READ_SAMPLES - 1)
+		var bearing := natural_bearing_degrees \
+			+ lerpf(-cone_degrees, cone_degrees, fraction)
+		if absf(bearing) > AttackCourseModel.MAX_COURSE_BEARING_DEGREES:
+			continue
+		var crossing := AttackCourseModel.net_crossing_x(
+			contact, bearing, attacking_negative_y
+		)
+		if crossing < 0.0 or crossing > 1.0:
+			continue
+		predicted += crossing
+		samples += 1
+	if samples == 0:
+		predicted = AttackCourseModel.net_crossing_x(
+			contact, natural_bearing_degrees, attacking_negative_y
+		)
+	else:
+		predicted /= float(samples)
+	var staged := lerpf(contact.x, predicted, clampf(read_quality, 0.0, 1.0))
+	## Which way is "angle" and which is "line" is a fact about this hitter, not
+	## about which half of the court the wall is standing in. It is the direction
+	## the ball is already turning away from the contact -- a right-pin hitter
+	## cutting back across their body is turning one way whether their crossing
+	## lands at x 0.7 or x 0.4, and a shift defined against court centre flips
+	## sign halfway through that range. It did, and it inverted both intents.
+	var angle_direction := signf(predicted - contact.x)
+	if angle_direction == 0.0:
+		angle_direction = 1.0 if contact.x < 0.5 else -1.0
+	var shift := 0.0
+	match block_intent:
+		## Hold the line and concede the angle to the diggers behind.
+		"Seal":
+			shift = -BLOCK_INTENT_SHIFT_METERS
+		## Give the line and stand in the angle, so the ball is channelled to the
+		## middle rather than allowed to find the sideline.
+		"Funnel":
+			shift = BLOCK_INTENT_SHIFT_METERS
+	return clampf(
+		staged + shift * angle_direction / CourtConstants.COURT_WIDTH_METERS,
+		0.05, 0.95,
+	)
 
 
 ## Whether this rally resolves its attacks geometrically.

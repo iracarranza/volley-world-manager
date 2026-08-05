@@ -102,6 +102,56 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## suspicion. Do not widen a bound to close it.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 
+## Stage the block wall where the ball crosses the tape, not where the hitter jumps.
+##
+## OFF, AND THE SHAPE IS WRONG. Kept because the measurement behind it is worth
+## having written down, and because the diagnostics it added are already earning
+## their keep. Do not turn this on -- see the two findings below, either of which
+## invalidates it on its own.
+##
+## `_block_wall_positions` has always been handed the hitter's contact x. That is
+## where they leave the ground, not where the ball crosses: the geometry collapses
+## to `displacement = tan(bearing) * off_net_metres`, so the wall is wrong by a
+## metre for every metre of turn at a metre off the tape. Measured over 1,013 home
+## blocks, every beaten wall was beaten toward court centre -- p10 +0.59 m, median
+## +2.13 m, p90 +3.50 m. Against a 0.34 m half-width that is not a width that can
+## be widened into a fix, and 90% of blocks never touched the ball at all.
+##
+## **First finding: this is a symptom.** The displacement is entirely explained by
+## how far off the net the hitter contacts, and those contacts are not credible.
+## Intended front-row contact is 0.36 m off the tape and back-row 3.60 m; the
+## measured median is 5.41 m, mean 4.52 m, p90 6.74 m -- swings from the baseline.
+## `_reachable_attack_contact` produces them, bisecting the hitter's run and
+## handing them "wherever along that line they can reach" whenever they cannot
+## make the pin inside the set flight plus a 0.35 s grace, which is almost always.
+## The consequence is unambiguous: blocks that touched the ball faced a p50
+## contact 1.77 m off the net, blocks that were beaten faced 5.51 m. The block
+## works at a real contact depth and never works otherwise. Fixing the wall
+## downstream of that would bake a compensation into the wall and then be wrong
+## again once the contact depth is fixed.
+##
+## **Second finding: the dial is the wrong one.** How a block decides where to
+## stand is a *system* -- commit (read the hitter), read (read the ball), spread
+## (read the net section) -- and which shot it concedes once there is an *intent*
+## (Seal/Balanced/Funnel, already on `DefensivePlan`). This flag pushed placement
+## into the intent, which already had a job, and the two block-intent gates duly
+## inverted rather than separated: with placement in the intent, Seal and Funnel
+## stopped meaning line-versus-angle and started meaning nearer-or-further from
+## where the ball actually goes, so whichever landed closer won every outcome
+## column. Measured, with this on: Seal 14 stuffs / 15 partials, Funnel 23 / 9 --
+## strong separation, backwards.
+##
+## Every wall in the engine today is a commit block, applied universally including
+## against high outside sets where it is the wrong system. That is the more likely
+## reading of Gate D's 41.5% terminal rate against a 12% target, and read blocking
+## as the default is the fix. The replacement is a `block_system` on
+## `DefensivePlan`, not a global modifier, with `read_quality` and
+## `_blocker_read_quality` as its accuracy term and `BLOCK_SHOULDER_OFFSET` -- a
+## frozen 0.095 today, which is why blocker separation measures exactly 0.855 m at
+## p10, p50 and p90 alike -- finally varying under bunch versus spread.
+##
+const ENABLE_BLOCK_CROSSING_READ: bool = false
+
 ## Reception quality off a serve, computed one way for both sides of the net.
 ##
 ## The home side (opponent serving) has always summed reception 0.65 + ball_control
