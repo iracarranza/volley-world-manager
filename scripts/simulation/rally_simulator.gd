@@ -727,7 +727,7 @@ func resolve(
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
-			"event_time": rally_clock,
+			"event_time": _contact_time(serve_trajectory, rally_clock),
 			"incoming_trajectory": serve_trajectory,
 			"outgoing_trajectory": pass_trajectory,
 			"body_alignment": reception_pass.body_alignment,
@@ -938,7 +938,11 @@ func resolve(
 		if active_play == null else "Moves to the safest available option."),
 		{"side": "home", "emergency_setter": emergency_setter,
 			"first_contact_id": receiver.id,
-			"event_time": rally_clock, "deadline": rally_clock + second_contact_window,
+			## The decision is taken when the ball reaches the setter, and the
+			## window runs from there.
+			"event_time": _contact_time(pass_trajectory, rally_clock),
+			"deadline": _contact_time(pass_trajectory, rally_clock)
+				+ second_contact_window,
 			"incoming_trajectory": pass_trajectory})
 
 	## What this setter can do with the ball they are about to receive, and what
@@ -1652,7 +1656,9 @@ func resolve(
 			).assist_position,
 			"setter_pull": block_resolution.setter_pull,
 			"read_quality": block_resolution.read_quality,
-			"event_time": rally_clock,
+			"event_time": _contact_time(
+				attack_event.metadata.outgoing_trajectory, rally_clock
+			),
 			"incoming_trajectory": attack_event.metadata.outgoing_trajectory,
 			"outgoing_trajectory": opponent_block_trajectory})
 	## Three of the geometric outcomes end the rally at the net in the hitter's
@@ -2028,7 +2034,7 @@ func _resolve_home_serve(
 			## outgoing trajectory `_ensure_event_trajectories` invented one from
 			## `flight_time` -- which on a reception is the *incoming* serve's
 			## duration -- and stamped it at the `event_time` default of zero.
-			"event_time": rally_clock,
+			"event_time": _contact_time(serve_trajectory, rally_clock),
 			"incoming_trajectory": serve_trajectory,
 			"outgoing_trajectory": opponent_pass.trajectory,
 			"body_alignment": opponent_pass.body_alignment,
@@ -2837,7 +2843,7 @@ func _resolve_opponent_transition(
 			"setter_pull": block_result.setter_pull,
 			"read_quality": block_result.read_quality,
 			"opponent_setter_position": opponent_setter_position,
-			"event_time": rally_clock,
+			"event_time": _contact_time(opponent_attack_trajectory, rally_clock),
 			"incoming_trajectory": opponent_attack_trajectory,
 			"outgoing_trajectory": home_block_trajectory})
 	## The mirror of the home side's net-decided point: through the hands, off
@@ -3516,9 +3522,15 @@ func _resolve_home_continuation(
 		"coverage_segments": block_result.coverage_segments,
 		"setter_pull": block_result.setter_pull,
 		"read_quality": block_result.read_quality,
-		"event_time": rally_clock,
+		"event_time": _contact_time(continuation_attack_trajectory, rally_clock),
+		## The swing this block is contesting. The continuation block was the one
+		## contact in the engine with no incoming arc at all, so playback had to
+		## infer where the ball came from and the stamp above had nothing to derive
+		## itself from.
+		"incoming_trajectory": continuation_attack_trajectory,
 		"outgoing_trajectory": _block_deflection_trajectory(
-			cont_net_contact, block_event_end, blocked, 0.42, rally_clock
+			cont_net_contact, block_event_end, blocked, 0.42,
+			_contact_time(continuation_attack_trajectory, rally_clock),
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
 		result.key_factors.append(ExplanationText.factor("attack_control"))
@@ -5014,6 +5026,18 @@ func _retarget_set_event(
 		kind, set_event.start_position, contact, flight_time, apex_height,
 		release_time,
 	)
+
+
+## When the incoming ball actually arrived, from its own arc.
+##
+## Seven event stamps read `rally_clock` bare. The timestamp gate reports full
+## coverage and no backwards steps for them, which is the point worth stating: a
+## bare clock is not *wrong*, it is *underived*. It says "whenever the resolver
+## happened to be" instead of "when this ball reached this player", and those agree
+## only until something between the two contacts moves. Every one of the seven had
+## the arc it was waiting on already in scope.
+func _contact_time(trajectory: Dictionary, fallback: float) -> float:
+	return float(trajectory.get("end_time", fallback))
 
 
 func _ball_trajectory(
