@@ -22,15 +22,53 @@ const SUBJECTS: Array = [
 	["Vegi", "Pear"], ["Vegi", "Turnip"], ["Vegi", "Stalk"],
 ]
 
+## Every pose the rig can strike, not the three that happened to get captured.
+##
+## Serve, set and attack were never photographed at all, which meant three of the
+## six things a voli does on court had no reference image and any judgement about
+## them was being made from memory. The elbow lands hardest in exactly those
+## three -- a cocked swing, a folded set -- so the gap and the feature met.
+##
 ## The dig row exists because the four postures are the point of the knee.
 ## `_reception_pass_result` decides which one a contact was, so seeing them side
 ## by side is how you check the deep one actually reads as forced low rather
 ## than as a slightly shorter player.
+##
+## Attack and serve are shot mid-swing rather than at contact: the arm is
+## straight at contact whatever the elbow does, so a contact-time frame is the
+## one frame that cannot show whether the joint works.
 const POSES: Array = [
 	["stand", -1, 0.0],
+	["serve", 0, 0.45],
+	["set", 3, 0.5],
+	["attack", 4, 0.35],
 	["block", 5, 0.55],
 	["dig", 1, 0.0],
 ]
+
+## Where to stand to see the pose.
+##
+## A platform points *forward*, so from dead in front it is end-on and a dig
+## photographs as two arms hanging at the sides -- which is what the first run of
+## this row looked like, and it is a framing failure rather than a pose failure.
+## The dig gets the elevated view a match is actually watched from, which is also
+## the only angle where the four postures are distinguishable from each other.
+## Raised and widened to clear a jumping attacker's hands. The row is framed for
+## the *tallest thing in any pose*, not for a standing figure -- an attack lifts
+## the actor 0.82 m and then puts an arm above that, and a framing fitted to a
+## stand crops exactly the part the pose exists to show.
+const DEFAULT_CAMERA := {
+	"position": Vector3(0.0, 1.42, -8.4),
+	"rotation": Vector3(0.0, 180.0, 0.0),
+	"fov": 38.0,
+}
+const CAMERAS := {
+	"dig": {
+		"position": Vector3(0.0, 3.6, -7.0),
+		"rotation": Vector3(-19.0, 180.0, 0.0),
+		"fov": 40.0,
+	},
+}
 
 ## Cycled across the row on the dig pose so every stance is on screen at once.
 const DIG_POSTURES: Array[String] = [
@@ -68,8 +106,12 @@ func _shoot(pose: Array) -> void:
 	var stage := Node3D.new()
 	root.add_child(stage)
 
+	## Lit from the side the camera is on. This tool spent its whole life
+	## photographing the backs of their heads -- the rig faces -Z and the camera
+	## sat on +Z -- which was survivable while the subject was a silhouette and is
+	## not once the subject is what the arms are doing.
 	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-42.0, -34.0, 0.0)
+	light.rotation_degrees = Vector3(-40.0, 152.0, 0.0)
 	light.light_energy = 1.3
 	stage.add_child(light)
 
@@ -87,11 +129,13 @@ func _shoot(pose: Array) -> void:
 	## Pulled back and widened when the sixth Vegi shape arrived -- the framing
 	## was fitted to seven subjects and silently cropped the eighth rather than
 	## failing, which is the kind of thing a preview tool must not do.
-	camera.position = Vector3(0.0, 1.15, 8.4)
-	camera.fov = 50.0
+	var view: Dictionary = CAMERAS.get(str(pose[0]), DEFAULT_CAMERA)
+	camera.position = view.get("position", DEFAULT_CAMERA.position)
+	camera.rotation_degrees = view.get("rotation", DEFAULT_CAMERA.rotation)
+	camera.fov = float(view.get("fov", DEFAULT_CAMERA.fov))
 	stage.add_child(camera)
 
-	var spacing := 1.25
+	var spacing := 1.12
 	var start := -spacing * float(_subjects.size() - 1) * 0.5
 	for index in range(_subjects.size()):
 		var subject: Dictionary = _subjects[index]
@@ -110,9 +154,15 @@ func _shoot(pose: Array) -> void:
 				"body_type": str(subject.type),
 			},
 		)
+		## Negated with the camera, so a turned-around view still reads left to
+		## right in the order the subjects are declared.
 		actor.set_tactical_position(
-			Vector2.ZERO, Vector3(start + spacing * float(index), 0.0, 0.0)
+			Vector2.ZERO, Vector3(-start - spacing * float(index), 0.0, 0.0)
 		)
+		## `configure` writes a height and a handedness into the label, which is
+		## the right caption on court and pure overlap in a row of eight. Say only
+		## the thing the row is varying.
+		actor.identity_label.text = label
 		if str(pose[0]) == "dig":
 			actor.contact_posture = DIG_POSTURES[index % DIG_POSTURES.size()]
 			actor.identity_label.text = "%s · %s" % [

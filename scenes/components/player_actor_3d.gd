@@ -34,6 +34,7 @@ var hip_offset: Vector2 = Vector2(0.16, 0.48)
 var body_height_scale: float = 1.0
 var arm_length_scale: float = 1.0
 var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
+var arm_bone_lengths: Vector2 = Vector2(0.40, 0.48)
 ## How strained the contact the simulator resolved was. Not a visual choice:
 ## `_reception_pass_result` classifies every reception and dig as planted,
 ## moving, reaching or off-axis from the defender's reach margin, how far into
@@ -56,6 +57,16 @@ var has_world_position: bool = false
 ## Thigh share of total leg length. Slightly over half, which is roughly true
 ## and is the ratio that keeps a folded knee reading as a knee.
 const THIGH_SHARE: float = 0.54
+
+## Upper-arm share of total arm length. Slightly under half, because the lower
+## segment carries the hand as well as the forearm.
+const UPPER_ARM_SHARE: float = 0.46
+
+## How bent a resting arm is. Deliberately not zero: nobody stands with their
+## elbows locked, and straight arms are most of why the idle rig read as a
+## mannequin. Small enough that it never competes with a pose that means
+## something.
+const READY_ELBOW_BEND: float = 17.0
 
 ## How fast a player can turn, in radians per second.
 ##
@@ -121,7 +132,9 @@ func apply_ui_palette(light_mode: bool) -> void:
 	_apply_material_color(shorts, team_color.darkened(0.38))
 	_apply_material_color(head, skin_color)
 	for arm in [left_arm, right_arm]:
+		## Two bones, as the legs have been since the knee.
 		_apply_material_color(arm.get_node("Mesh"), skin_color)
+		_apply_material_color(arm.get_node("Elbow/Mesh"), skin_color)
 	for leg in [left_leg, right_leg]:
 		## Two bones and a shoe. The shoe hangs off the knee now, not the hip.
 		_apply_material_color(leg.get_node("Mesh"), skin_color)
@@ -262,14 +275,49 @@ func _apply_dig_posture() -> void:
 	## rather than splayed. `platform_yaw` then swings the whole platform off to
 	## one side for a defender who could not square up, which is the thing worth
 	## seeing.
-	var lead := -46.0 + hip_pitch * 0.30
-	var spread := 7.0
+	## **Positive, and that is a fix.** Rotating an arm about +X by theta puts its
+	## tip at (up, z) = (-cos theta, -sin theta), and the rig faces -Z -- so a
+	## *negative* lead swings the platform out behind the player. It had been
+	## negative since the pose existed, along with every other arm angle in this
+	## file, and it was invisible because the only tool that photographed a dig
+	## stood behind the row. The instrument was wrong, so what it certified was
+	## wrong. See `docs/design/POSE_ORIENTATION.md`.
+	var lead := 46.0 - hip_pitch * 0.30
+	## Converging, not splayed -- and this sign was inverted too. Rotating an arm
+	## about +Z by theta moves its hand to x = sin theta, so the *left* arm needs a
+	## positive roll to bring its hand toward the centreline and the right arm a
+	## negative one. Reversed, as it was, the two hands travel apart and the pose
+	## becomes a shrug.
+	##
+	## Large enough that the forearms actually meet. Seven degrees was tuned by
+	## eye against a camera standing behind the player, where two arms swung out
+	## behind the back happen to overlap and read as joined.
+	var spread := 26.0
 	left_arm.rotation_degrees = Vector3(
-		lead, platform_yaw, -spread - platform_roll
+		lead, platform_yaw, spread + platform_roll
 	)
 	right_arm.rotation_degrees = Vector3(
-		lead, platform_yaw, spread - platform_roll
+		lead, platform_yaw, -spread + platform_roll
 	)
+	## **Locked.** This is the one pose in the game whose elbows are deliberately
+	## straighter than a resting arm, and it is the whole reason a platform is a
+	## platform: two forearms joined into one flat surface. Bend either one and
+	## the ball leaves at an angle nobody chose.
+	##
+	## It also does the legibility work the knee does lower down. A dig and a set
+	## are both "arms in front of the body"; locked against folded is what makes
+	## them different actions rather than two similar frames.
+	_set_elbow(left_arm, 0.0)
+	_set_elbow(right_arm, 0.0)
+
+
+## Bend one arm at the elbow. Positive folds the forearm forward, matching the
+## knee's convention of positive folding the shank back -- both are "toward the
+## way the joint actually goes".
+func _set_elbow(arm: Node3D, bend_degrees: float) -> void:
+	var elbow := arm.get_node_or_null("Elbow") as Node3D
+	if elbow != null:
+		elbow.rotation_degrees = Vector3(bend_degrees, 0.0, 0.0)
 
 
 func set_pose(
@@ -284,17 +332,26 @@ func set_pose(
 	body_pivot.position = Vector3(0.0, lift + locomotion_bob, 0.0)
 	body_pivot.rotation = Vector3.ZERO
 	body_pivot.scale = Vector3.ONE * body_height_scale
-	left_arm.rotation_degrees = Vector3(0.0, 0.0, -12.0)
-	right_arm.rotation_degrees = Vector3(0.0, 0.0, 12.0)
+	var gait_angle := sin(stride_cycle * TAU) * 32.0 * gait_blend
+	## Arms counter-swing against the legs, which is what walking looks like and
+	## what a pair of hanging sticks does not. Opposite arm to leg, and shallower,
+	## because an arm swings less than the leg driving it.
+	left_arm.rotation_degrees = Vector3(-gait_angle * 0.46, 0.0, -12.0)
+	right_arm.rotation_degrees = Vector3(gait_angle * 0.46, 0.0, 12.0)
 	left_arm.position = Vector3(-shoulder_offset.x, shoulder_offset.y, 0.0)
 	right_arm.position = Vector3(shoulder_offset.x, shoulder_offset.y, 0.0)
-	var gait_angle := sin(stride_cycle * TAU) * 32.0 * gait_blend
 	left_leg.rotation_degrees = Vector3(gait_angle, 0.0, 0.0)
 	right_leg.rotation_degrees = Vector3(-gait_angle, 0.0, 0.0)
 	## Knees straighten every frame before a pose folds them, so a dig does not
 	## leave the defender walking around bent for the rest of the rally.
 	for leg in [left_leg, right_leg]:
 		(leg.get_node("Knee") as Node3D).rotation_degrees = Vector3.ZERO
+	## Elbows go back to the ready bend for the same reason -- and the ready bend
+	## is not zero, because a nobody stands with their arms locked straight. It
+	## deepens a little as the arms swing, which is what a moving player's do.
+	var swing_bend := absf(gait_angle) * 0.30
+	_set_elbow(left_arm, READY_ELBOW_BEND + swing_bend)
+	_set_elbow(right_arm, READY_ELBOW_BEND + swing_bend)
 	shadow.scale = Vector3.ONE * lerpf(1.0, 1.35, elevation)
 	shadow.transparency = lerpf(0.0, 0.58, elevation)
 	if contact_direction.length_squared() > 0.0001:
@@ -318,8 +375,18 @@ func set_pose(
 	match event_type:
 		RallyEventModel.EventType.SERVE:
 			body_pivot.rotation.x = -0.10
-			striking_arm.rotation_degrees.x = -145.0 * clampf(phase * 1.8, 0.0, 1.0)
-			guide_arm.rotation_degrees.x = -72.0
+			var serve_swing := clampf(phase * 1.8, 0.0, 1.0)
+			## Up and a little in front at contact, and the toss arm raised in
+			## front rather than behind the shoulder.
+			striking_arm.rotation_degrees.x = -190.0 * serve_swing
+			guide_arm.rotation_degrees.x = 100.0
+			## Cocked, then thrown. The arm straightens *through* the swing rather
+			## than travelling as a rigid stick, which is where the whip comes
+			## from -- and it is the reason a serve now reads as a serve at the
+			## moment before contact rather than only at contact.
+			_set_elbow(striking_arm, lerpf(96.0, 8.0, serve_swing))
+			## The toss arm stays long. A toss with a bent elbow is a bad toss.
+			_set_elbow(guide_arm, 12.0)
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
 			## A dig is drawn by bending, not by squashing.
 			##
@@ -337,22 +404,52 @@ func set_pose(
 			## invent it.
 			_apply_dig_posture()
 		RallyEventModel.EventType.SET:
-			left_arm.rotation_degrees = Vector3(-160.0, 0.0, -25.0)
-			right_arm.rotation_degrees = Vector3(-160.0, 0.0, 25.0)
+			## Hands at the forehead, elbows out. The upper arms come up less far
+			## than they used to and the forearms finish the reach, which is what
+			## makes a set a set: the classic triangle of two folded arms over the
+			## face, rather than two straight arms held overhead like a block.
+			## Upper arms forward and nearly level, forearms vertical. The elbow
+			## adds to the shoulder's pitch, so the forearm's true angle is roughly
+			## 100 + 90 = 190 -- straight up and a shade back, which puts the hands
+			## over the forehead. Raising the shoulder further, as a first pass did
+			## at 118, folds the forearm *over and behind* the head and the pose
+			## reads as a flex rather than a set.
+			left_arm.rotation_degrees = Vector3(100.0, 0.0, -18.0)
+			right_arm.rotation_degrees = Vector3(100.0, 0.0, 18.0)
+			_set_elbow(left_arm, 90.0)
+			_set_elbow(right_arm, 90.0)
 		RallyEventModel.EventType.ATTACK:
 			body_pivot.rotation.x = -0.16
 			left_leg.rotation_degrees.x = 18.0
 			right_leg.rotation_degrees.x = -26.0
 			guide_arm.rotation_degrees.x = -95.0
-			striking_arm.rotation_degrees.x = -175.0 \
-				+ 95.0 * clampf(phase, 0.0, 1.0)
+			var swing := clampf(phase, 0.0, 1.0)
+			## Sweeps *over the top*: cocked up and back at -160, carrying on
+			## through vertical to -260, which is forward and slightly up. Going
+			## the other way -- increasing toward -80 -- swung the arm down behind
+			## the player, which is what it used to do.
+			striking_arm.rotation_degrees.x = -160.0 - 100.0 * swing
+			## Elbow high and folded behind the head, opening through contact. A
+			## straight arm rotating from behind the ear is a windmill; a hitter is
+			## a whip, and the difference is visible from any distance the attack
+			## is watched at.
+			_set_elbow(striking_arm, lerpf(112.0, 6.0, swing))
+			## The guide arm pulls down bent, which is what it actually does.
+			_set_elbow(guide_arm, 46.0)
 		RallyEventModel.EventType.BLOCK:
 			left_leg.rotation_degrees.x = 12.0
 			right_leg.rotation_degrees.x = 12.0
 			left_arm.position.y = shoulder_offset.y + 0.06
 			right_arm.position.y = shoulder_offset.y + 0.06
-			left_arm.rotation_degrees = Vector3(-175.0, 0.0, -8.0)
-			right_arm.rotation_degrees = Vector3(-175.0, 0.0, 8.0)
+			left_arm.rotation_degrees = Vector3(175.0, 0.0, -8.0)
+			right_arm.rotation_degrees = Vector3(175.0, 0.0, 8.0)
+			## Straight, and deliberately so. A block that bends at the elbow is a
+			## block that gets driven back through the net, and keeping these at
+			## nearly zero is what makes a block read as a *wall* next to a set's
+			## folded triangle -- the two poses put the arms in nearly the same
+			## place, and the elbow is the only thing telling them apart.
+			_set_elbow(left_arm, 4.0)
+			_set_elbow(right_arm, 4.0)
 
 
 func _apply_material_color(mesh: MeshInstance3D, color: Color) -> void:
@@ -423,13 +520,42 @@ func _build_silhouette() -> void:
 	head.mesh = BodyTypeModelsScript.build_mesh(silhouette.get("head", {}))
 	head.position = Vector3(0.0, float(silhouette.get("head_y", 1.82)), 0.0)
 
+	## The arm is two bones now, for the same reason the leg is.
+	##
+	## A single capsule from shoulder to hand cannot bend, so every action was
+	## drawn with a straight stick and the difference between a *locked* platform
+	## and a *folded* set had nowhere to live. Elbow bend is diagnostic of what a
+	## voli is doing: a dig has the elbows locked straight because that is what
+	## makes a platform flat, a set has them folded out at the temples, a swing
+	## has them cocked behind the head. Those are not stylings, they are how you
+	## tell the three apart from the stands.
+	##
+	## Upper arm slightly shorter than the forearm-and-hand it carries, which is
+	## roughly true and keeps the elbow reading as an elbow rather than as a
+	## midpoint.
 	var arm_spec: Dictionary = silhouette.get("arm", {})
 	arm_spec["shape"] = "cylinder"
 	var arm_height := float(arm_spec.get("height", 0.88))
+	var upper_length := arm_height * UPPER_ARM_SHARE
+	var fore_length := arm_height - upper_length
+	arm_bone_lengths = Vector2(upper_length, fore_length)
+	var upper_spec := arm_spec.duplicate()
+	upper_spec["height"] = upper_length
+	## The forearm picks up where the upper arm left off, so the two read as one
+	## limb rather than as two cylinders of unrelated width.
+	var fore_spec := arm_spec.duplicate()
+	fore_spec["height"] = fore_length
+	fore_spec["top_radius"] = arm_spec.get("bottom_radius", 0.08)
 	for arm in [left_arm, right_arm]:
 		var arm_mesh := arm.get_node("Mesh") as MeshInstance3D
-		arm_mesh.mesh = BodyTypeModelsScript.build_mesh(arm_spec)
-		arm_mesh.position = Vector3(0.0, -arm_height * 0.5, 0.0)
+		arm_mesh.mesh = BodyTypeModelsScript.build_mesh(upper_spec)
+		arm_mesh.position = Vector3(0.0, -upper_length * 0.5, 0.0)
+		var elbow := arm.get_node("Elbow") as Node3D
+		elbow.position = Vector3(0.0, -upper_length, 0.0)
+		elbow.rotation_degrees = Vector3.ZERO
+		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
+		fore_mesh.mesh = BodyTypeModelsScript.build_mesh(fore_spec)
+		fore_mesh.position = Vector3(0.0, -fore_length * 0.5, 0.0)
 
 	## Legs are placed so the foot lands just above the floor whatever the hip
 	## height and shank length are, rather than by the pair of literals that

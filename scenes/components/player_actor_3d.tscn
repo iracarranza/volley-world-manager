@@ -94,14 +94,28 @@ mesh = SubResource("HeadMesh")
 position = Vector3(-0.4, 1.52, 0)
 
 [node name="Mesh" type="MeshInstance3D" parent="BodyPivot/LeftArm"]
-position = Vector3(0, -0.38, 0)
+position = Vector3(0, -0.20, 0)
+mesh = SubResource("ArmMesh")
+
+[node name="Elbow" type="Node3D" parent="BodyPivot/LeftArm"]
+position = Vector3(0, -0.40, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="BodyPivot/LeftArm/Elbow"]
+position = Vector3(0, -0.20, 0)
 mesh = SubResource("ArmMesh")
 
 [node name="RightArm" type="Node3D" parent="BodyPivot"]
 position = Vector3(0.4, 1.52, 0)
 
 [node name="Mesh" type="MeshInstance3D" parent="BodyPivot/RightArm"]
-position = Vector3(0, -0.38, 0)
+position = Vector3(0, -0.20, 0)
+mesh = SubResource("ArmMesh")
+
+[node name="Elbow" type="Node3D" parent="BodyPivot/RightArm"]
+position = Vector3(0, -0.40, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="BodyPivot/RightArm/Elbow"]
+position = Vector3(0, -0.20, 0)
 mesh = SubResource("ArmMesh")
 
 [node name="LeftLeg" type="Node3D" parent="BodyPivot"]
