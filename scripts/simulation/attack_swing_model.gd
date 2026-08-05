@@ -41,6 +41,23 @@ const POWER_SHORTFALL: float = 0.26
 const POWER_OVERSHOOT: float = 0.09
 
 
+## How far off the intended launch angle this swing can be expected to land, in
+## degrees, one standard deviation.
+##
+## Shared so a hitter can *aim* against the same spread they will be judged by.
+## `deliver` computed this privately, so nothing upstream could ask how much air
+## a swing needed -- and the margin a hitter aimed for was a flat constant however
+## far the ball had to fly to reach the tape.
+static func vertical_spread_degrees(
+	accuracy: float,
+	spread_multiplier: float,
+) -> float:
+	return lerpf(
+		VERTICAL_SPREAD_WORST_DEGREES, VERTICAL_SPREAD_BEST_DEGREES,
+		clampf(accuracy, 0.0, 1.0),
+	) * maxf(spread_multiplier, 0.0)
+
+
 static func deliver(
 	intended_bearing_degrees: float,
 	intended_vertical_angle_degrees: float,

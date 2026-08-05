@@ -173,8 +173,18 @@ const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 ## front-row share rises. That is the correct direction for the sport and a sample
 ## floor that needs re-setting, not a defect.
 ##
-## So: re-derive Gate D against a real contact depth, then turn this on and read the
-## ratchet again. Do not widen a bound to accommodate it.
+## **Re-checked after Gate D was re-derived and the power choice was taught about
+## the tape.** Still blocked, and by the same gate: partial block outcomes still
+## fail to outnumber terminal stuffs, at an unchanged 263 against 269, and the
+## defensive-identity gate joins it. Reducing attack error at depth did not touch
+## the stuff/touch split, which is consistent with what the reconciliation found
+## -- the harness and the rally now agree on how often the block *touches* the
+## ball (29.4% against 23.0% per swing at matched depth) and disagree only on how
+## often a touch *ends* the rally (19.0% against 8.3%).
+##
+## So the remaining blocker is narrow and named: what turns a touch into a stuff.
+## Not contact depth, not attack error, not wall placement -- all three are now
+## measured and agree across both surfaces. Do not widen a bound to accommodate it.
 const ENABLE_OPPONENT_APPROACH_WINDOW: bool = false
 
 ## Stage the block wall where the ball crosses the tape, not where the hitter jumps.

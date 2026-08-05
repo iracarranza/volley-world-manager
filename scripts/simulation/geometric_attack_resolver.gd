@@ -77,6 +77,23 @@ const NET_CLEARANCE_MARGIN_METERS: float = 0.12
 ## How many target distances get probed looking for one that clears. The search
 ## is monotone in distance, so this is a resolution and not a menu.
 const NET_FEASIBILITY_STEPS: int = 9
+## How many slower swings a hitter will consider when nothing at full pace gets
+## over the tape, and how far down they will go.
+##
+## A hitter who cannot clear the net at full pace takes pace off. That is the one
+## thing the resolver could not previously do: `_feasible_launch` searched angles
+## and aim distances at a *fixed* speed, because `choose_power` had already
+## committed to one without knowing the net existed. From a tight set that never
+## mattered -- any speed clears from 0.36 m. From four metres back nothing does,
+## so the search fell through to its `forced` branch and flew the flat ball
+## anyway: Gate D measured balls into the net climbing 4.7% to 54.5% across the
+## depth sweep while long, wide and antenna barely moved.
+##
+## The floor is 0.45 rather than zero because a swing taken at under half pace is
+## a different shot -- a roll or a tip -- and that decision belongs to the power
+## model's intent, not to a feasibility search quietly turning a spike into one.
+const NET_SPEED_RELIEF_STEPS: int = 6
+const NET_SPEED_RELIEF_FLOOR: float = 0.45
 ## How much of a spike's execution spread a serve carries.
 ##
 ## A serve is struck from a standstill, off a self-toss, with no set to read and
@@ -209,13 +226,20 @@ static func resolve_swing(
 		contact, float(best.bearing_degrees), float(chosen.speed_mps),
 		contact_height_meters, aim_distance, float(best.far_meters),
 		attacking_negative_y,
+		AttackSwingModel.vertical_spread_degrees(
+			_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier)
+		),
 	)
 	var intended_angle := float(launch.angle_degrees)
 	aim_distance = float(launch.aim_distance)
+	## Whatever pace the tape left them. Equal to the chosen speed on any swing
+	## that could be hit at full pace, which is nearly all of them from a tight
+	## set.
+	var launch_speed := float(launch.speed_mps)
 
 	## --- what they actually did ----------------------------------------------
 	var delivered := AttackSwingModel.deliver(
-		float(best.bearing_degrees), intended_angle, float(chosen.speed_mps),
+		float(best.bearing_degrees), intended_angle, launch_speed,
 		_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier),
 		float(draws.get("bearing", 0.0)),
 		float(draws.get("vertical", 0.0)),
@@ -350,15 +374,19 @@ static func resolve_serve(
 		),
 		BallFlightModel.MIN_SPEED_MPS,
 	)
+	## A serve's control is its own attribute, and consistency is what keeps the
+	## ball on the court -- so it, not attack accuracy, sets the spread. Hoisted
+	## above the launch solve because the margin a server aims for is derived from
+	## it, and a serve is struck nine metres from the tape: the extreme of the same
+	## geometry that puts spikes into the net from four.
+	var control := _rating(server, "serve_consistency") * 0.6 \
+		+ _rating(server, "serve_technique") * 0.4
 	var launch := _feasible_launch(
 		contact, bearing, speed, contact_height_meters, distance, distance,
 		attacking_negative_y,
+		AttackSwingModel.vertical_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 	)
-
-	## A serve's control is its own attribute, and consistency is what keeps the
-	## ball on the court -- so it, not attack accuracy, sets the spread.
-	var control := _rating(server, "serve_consistency") * 0.6 \
-		+ _rating(server, "serve_technique") * 0.4
+	speed = float(launch.speed_mps)
 	var delivered := AttackSwingModel.deliver(
 		bearing, float(launch.angle_degrees), speed, control,
 		SERVE_SPREAD_MULTIPLIER,
@@ -412,48 +440,77 @@ static func _feasible_launch(
 	aim_distance: float,
 	far_meters: float,
 	attacking_negative_y: bool,
+	vertical_spread_degrees: float,
 ) -> Dictionary:
 	var ground_to_net := _ground_distance_to_net(
 		contact, bearing_degrees, attacking_negative_y
 	)
-	var needed := CourtConstants.NET_HEIGHT_METERS + NET_CLEARANCE_MARGIN_METERS
+	## How much air *this* swing needs, rather than how much air any swing needs.
+	##
+	## The margin was a flat `NET_CLEARANCE_MARGIN_METERS` whatever the distance to
+	## the tape, which is a constant standing where a function belongs. Vertical
+	## execution error arrives at the net as `ground_to_net * tan(error)`, so one
+	## degree costs half a centimetre from a tight set and seven centimetres from
+	## four metres back, where the spread runs to 0.35 m against a 0.12 m margin.
+	## Aiming to clear by 12 cm from there is aiming to miss.
+	##
+	## It travels with the speed relief below and not on its own. Measured alone it
+	## moved the 4.00 m net rate by a point and a half, because a higher bar with no
+	## way to hit softer only sends more solves down the `forced` branch.
+	var needed := CourtConstants.NET_HEIGHT_METERS + maxf(
+		NET_CLEARANCE_MARGIN_METERS,
+		ground_to_net * tan(deg_to_rad(maxf(vertical_spread_degrees, 0.0))),
+	)
+	var reach := maxf(far_meters, aim_distance)
 	var best_driven := 0.0
 	var best_distance := aim_distance
-	var reach := maxf(far_meters, aim_distance)
-	for step in range(NET_FEASIBILITY_STEPS):
-		var probe := lerpf(
-			aim_distance, reach, float(step) / float(NET_FEASIBILITY_STEPS - 1)
+	var full_speed := maxf(speed_mps, BallFlightModel.MIN_SPEED_MPS)
+
+	## Full pace first, then progressively less of it. A hitter who cannot get the
+	## ball over at full pace takes pace off; they do not swing through the tape.
+	for relief_step in range(NET_SPEED_RELIEF_STEPS):
+		var speed := full_speed * lerpf(
+			1.0, NET_SPEED_RELIEF_FLOOR,
+			float(relief_step) / float(NET_SPEED_RELIEF_STEPS - 1)
 		)
-		var solved := BallFlightModel.solve_angle_for_range(
-			speed_mps, probe, contact_height_meters
+		for step in range(NET_FEASIBILITY_STEPS):
+			var probe := lerpf(
+				aim_distance, reach, float(step) / float(NET_FEASIBILITY_STEPS - 1)
+			)
+			var solved := BallFlightModel.solve_angle_for_range(
+				speed, probe, contact_height_meters
+			)
+			if not bool(solved.get("driven_found", false)):
+				continue
+			var angle := float(solved.driven_angle_degrees)
+			if _height_at_net(speed, angle, contact_height_meters, ground_to_net) \
+					>= needed:
+				return {
+					"angle_degrees": angle, "aim_distance": probe,
+					"speed_mps": speed, "mode": "driven", "cleared": true,
+				}
+			if relief_step == 0:
+				best_driven = angle
+				best_distance = probe
+		## Nothing driven gets over at this pace. Try lifting it instead, before
+		## giving up any more speed -- arc is cheaper than pace.
+		var lofted_solve := BallFlightModel.solve_angle_for_range(
+			speed, aim_distance, contact_height_meters
 		)
-		if not bool(solved.get("driven_found", false)):
-			continue
-		var angle := float(solved.driven_angle_degrees)
-		if _height_at_net(speed_mps, angle, contact_height_meters, ground_to_net) \
-				>= needed:
-			return {
-				"angle_degrees": angle, "aim_distance": probe,
-				"mode": "driven", "cleared": true,
-			}
-		best_driven = angle
-		best_distance = probe
-	## Nothing driven gets over. Try lifting it instead.
-	var lofted_solve := BallFlightModel.solve_angle_for_range(
-		speed_mps, aim_distance, contact_height_meters
-	)
-	if bool(lofted_solve.get("lofted_found", false)):
-		var lofted := float(lofted_solve.lofted_angle_degrees)
-		if _height_at_net(speed_mps, lofted, contact_height_meters, ground_to_net) \
-				>= needed:
-			return {
-				"angle_degrees": lofted, "aim_distance": aim_distance,
-				"mode": "lofted", "cleared": true,
-			}
+		if bool(lofted_solve.get("lofted_found", false)):
+			var lofted := float(lofted_solve.lofted_angle_degrees)
+			if _height_at_net(
+					speed, lofted, contact_height_meters, ground_to_net
+				) >= needed:
+				return {
+					"angle_degrees": lofted, "aim_distance": aim_distance,
+					"speed_mps": speed, "mode": "lofted", "cleared": true,
+				}
 	return {
 		"angle_degrees": best_driven if best_driven != 0.0
 			else AttackPowerModel.DRIVEN_REFERENCE_ANGLE_DEGREES,
-		"aim_distance": best_distance, "mode": "forced", "cleared": false,
+		"aim_distance": best_distance, "speed_mps": full_speed,
+		"mode": "forced", "cleared": false,
 	}
 
 
