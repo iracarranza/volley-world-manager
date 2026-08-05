@@ -5,6 +5,7 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
+const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 
 @onready var body_pivot: Node3D = $BodyPivot
 @onready var torso: MeshInstance3D = $BodyPivot/Torso
@@ -39,6 +40,10 @@ var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
 ## the edge of their range the ball was, and how well their body could face it.
 ## Playback reads that verdict rather than inventing a pose.
 var contact_posture: String = "planted"
+## Which of the five faces the actor is wearing. Purely presentational today --
+## nothing in the simulator sets it yet -- so it stays a plain assignment rather
+## than being derived from state that does not exist.
+var expression: String = FaceExpressionsScript.NEUTRAL
 ## Where the actor is currently facing, kept between frames so a change of
 ## heading can be turned into rather than snapped to.
 var facing_yaw: float = 0.0
@@ -122,6 +127,13 @@ func apply_ui_palette(light_mode: bool) -> void:
 		_apply_material_color(leg.get_node("Mesh"), skin_color)
 		_apply_material_color(leg.get_node("Knee/Mesh"), skin_color)
 		_apply_material_color(leg.get_node("Knee/Shoe"), team_color.darkened(0.55))
+	## A face has to read on a pale turnip and on a near-black aubergine, so the
+	## colour is chosen against the skin's luminance rather than being one ink
+	## that happens to suit the first body type tried.
+	var face_color := Color("18131f") if skin_color.get_luminance() > 0.30 \
+		else Color("f6eddc")
+	for feature in _face_features():
+		_apply_material_color(feature, face_color)
 	for cosmetic in _cosmetics():
 		match str(cosmetic.get_meta("color_key", "skin")):
 			"kit":
@@ -470,6 +482,7 @@ func _build_silhouette() -> void:
 			0.0, 0.0
 		)
 	_build_cosmetics()
+	_build_face()
 
 
 ## Ears, beaks, wings, tails, stems and leaves.
@@ -506,3 +519,99 @@ func _cosmetics() -> Array[MeshInstance3D]:
 		if mesh_node != null and mesh_node.has_meta("cosmetic"):
 			found.append(mesh_node)
 	return found
+
+
+## Two eyes and a seven-segment mouth, parented to the head so they travel with
+## every turn and pose the rig already produces.
+##
+## Kept under a `Face` node and tagged with their own meta rather than reusing
+## the cosmetic tag: `_build_cosmetics` frees everything it finds, so sharing the
+## tag would mean a face that silently vanished the next time a stem or a wing
+## was rebuilt.
+func _build_face() -> void:
+	var face := head.get_node_or_null("Face")
+	if face != null:
+		face.free()
+	face = Node3D.new()
+	face.name = "Face"
+	head.add_child(face)
+	var head_spec: Dictionary = silhouette.get("head", {})
+	var radius := float(head_spec.get("radius", 0.13))
+	## Heads are slightly wide ellipsoids, so the vertical semi-axis is half the
+	## authored height rather than the radius. Using the radius for both puts the
+	## eyes too high on every body type at once, which is the kind of error that
+	## looks like a style until you measure it.
+	var half_height := float(head_spec.get("height", radius * 2.0)) * 0.5
+	for part in FaceExpressionsScript.parts(
+		expression, radius, half_height, _mouth_override()
+	):
+		var instance := MeshInstance3D.new()
+		instance.name = str(part.get("name", "Feature"))
+		instance.mesh = BodyTypeModelsScript.build_mesh(part)
+		instance.position = part.get("position", Vector3.ZERO)
+		instance.rotation_degrees = part.get("rotation", Vector3.ZERO)
+		instance.set_meta("face", true)
+		face.add_child(instance)
+
+
+## Some body types already have something where the mouth goes.
+##
+## Feli has a muzzle and Avi has a beak, both sitting exactly on the spot the
+## mouth is drawn -- so the first pass produced a cat and a bird with invisible
+## expressions, the mouth buried inside a solid. A muzzle wants the mouth drawn
+## on it; a beak *is* the mouth, and gets none.
+##
+## Read off the cosmetic's own spec rather than tabulated per body type. Those
+## numbers already exist in `body_type_models.gd`, and a second copy here would
+## be a constant wearing the muzzle's name -- silently wrong the first time the
+## muzzle moved.
+func _mouth_override() -> Dictionary:
+	var head_spec: Dictionary = silhouette.get("head", {})
+	var head_radius := float(head_spec.get("radius", 0.13))
+	for raw_part in silhouette.get("extras", []):
+		var part: Dictionary = raw_part
+		match str(part.get("name", "")):
+			"Muzzle":
+				var part_position: Vector3 = part.get("position", Vector3.ZERO)
+				var part_radius := float(part.get("radius", 0.1))
+				## Extras are placed in BodyPivot space; the face lives under the
+				## head, so the anchor has to come back by the head's own height.
+				## The muzzle's *centre*, in head-local space, plus its own
+				## semi-axes -- the mouth then wraps it the same way it would wrap
+				## a small head, instead of being drawn flat somewhere near it.
+				return {
+					"anchor": Vector3(
+						0.0,
+						part_position.y - head.position.y,
+						part_position.z,
+					),
+					"radius": part_radius,
+					"half_height": float(part.get("height", part_radius * 2.0)) * 0.5,
+					"scale": clampf(part_radius / maxf(head_radius, 0.001), 0.2, 1.0),
+				}
+			"Beak":
+				return {"omit": true}
+	return {}
+
+
+func _face_features() -> Array[MeshInstance3D]:
+	var found: Array[MeshInstance3D] = []
+	var face := head.get_node_or_null("Face") if head != null else null
+	if face == null:
+		return found
+	for node in face.get_children():
+		var mesh_node := node as MeshInstance3D
+		if mesh_node != null:
+			found.append(mesh_node)
+	return found
+
+
+## Swap the face. Rebuilds rather than reposing, because nine small boxes is
+## cheaper to recreate than to track, and expressions change on the scale of
+## weeks rather than frames.
+func set_expression(new_expression: String, light_mode: bool = false) -> void:
+	if not FaceExpressionsScript.has(new_expression):
+		return
+	expression = new_expression
+	_build_face()
+	apply_ui_palette(light_mode)
