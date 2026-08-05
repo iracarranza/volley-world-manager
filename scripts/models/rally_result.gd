@@ -22,5 +22,13 @@ extends Resource
 ## Height, wingspan and stride captured at resolution time. Presentation uses
 ## these values for body proportions and gait without consulting live rosters.
 @export var player_physical_profiles: Dictionary = {}
+## What each player's trips to the floor cost them in condition, keyed by id.
+##
+## Reported rather than applied. `jumping_reach_cm()` reads `fatigue`, so charging
+## it inside the resolver made a rally mutate the roster it was resolving and two
+## replays of the same seed stopped matching -- the determinism gate caught it
+## immediately. Fatigue accrual belongs to the match layer, which already has a
+## post-rally step for exactly this.
+@export var recovery_fatigue: Dictionary = {}
 @export var explanation: String = ""
 @export var ending_reason: StringName = &""

@@ -370,6 +370,23 @@ var opponent_live_positions: Dictionary = {}
 ## and by the resolver never. These two dictionaries are the missing half.
 var live_velocities: Dictionary = {}
 var opponent_live_velocities: Dictionary = {}
+## Who is still getting up, on either side of the net. Keyed by player id, and
+## holding the state, the moment they are a defender again, and how long the debt
+## was -- so a dig taken halfway through a recovery is priced on how much of it is
+## left rather than on a flag.
+var player_recovery: Dictionary = {}
+## The last dig's control figure and the force it faced, so the DEFENSE event can
+## report the same two inputs the reception does. Held rather than returned
+## because `_dig_recovery` answers one question and three call sites ask it.
+var last_dig_control: float = 0.5
+var last_dig_force: float = 0.0
+var last_dig_speed: float = 0.0
+## A dig's posture was computed and then thrown away, so every DEFENSE event
+## reported the default and the census read digs as 100% planted -- a measurement
+## of the stamp, not of the engine.
+var last_dig_posture: String = "planted"
+## What the rally's recoveries cost in condition, to be charged by the caller.
+var recovery_fatigue_cost: Dictionary = {}
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
 var opponent_principles: Resource
@@ -414,6 +431,9 @@ func resolve(
 	}
 	rally_clock = 0.0
 	shadow_reception_trace = null
+	## Nobody starts a rally on the floor.
+	player_recovery = {}
+	recovery_fatigue_cost = {}
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
 	## Everyone starts the rally genuinely at rest -- this is the one moment the
 	## old assumption was true.
@@ -654,7 +674,7 @@ func resolve(
 	var reception_pass := _reception_pass_result(
 		receiver, receiver_start, serve_landing, desired_pass_target,
 		CourtConstants.serve_origin(0.80, false), serve_quality, arrival,
-		float(result.reception_quality)
+		float(result.reception_quality), 0.51, 0.98, serve_trajectory,
 	)
 	if using_live_reception:
 		var selected_metadata: Dictionary = selected_live_reception.get(
@@ -683,6 +703,9 @@ func resolve(
 			"contact_recovery": str(reception_pass.contact_recovery),
 		}
 	var pass_trajectory: Dictionary = reception_pass.trajectory
+	## Book the cost of the contact before the rally moves on, so the transition
+	## below reads a receiver who is still getting up rather than one who is not.
+	_note_recovery(receiver, str(reception_pass.contact_recovery), rally_clock)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		serve_landing, Vector2(reception_pass.destination), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
@@ -711,6 +734,10 @@ func resolve(
 			"platform_feasibility": reception_pass.platform_feasibility,
 			"contact_posture": reception_pass.contact_posture,
 			"contact_recovery": reception_pass.contact_recovery,
+			"contact_control": reception_pass.get("contact_control", 0.5),
+			"movement_alignment": reception_pass.get("movement_alignment", 0.5),
+			"incoming_force": reception_pass.get("incoming_force", 0.0),
+			"incoming_speed_mps": reception_pass.get("incoming_speed_mps", 0.0),
 			"desired_pass_target": desired_pass_target,
 			"setter_release_target": preferred_release,
 			"actual_pass_target": reception_pass.destination,
@@ -1737,6 +1764,13 @@ func resolve(
 	var defense_strength := float(opponent_dig_terms.quality)
 	Familiarity.record_exposure(opponent_defender, read_tags)
 	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
+	## A dig has a body cost too, and until now only a serve reception did -- so a
+	## libero dug a swing off the floor and stood up unaffected, while the same
+	## libero receiving a serve paid for it.
+	var opponent_dig_recovery := _dig_recovery(
+		opponent_defender, opponent_dig_terms, attack_effectiveness,
+		attack_trajectory, float(opponent_defense.distance_meters),
+	)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
 	## When the ball actually reaches the defender, which is the end of the
 	## swing's own arc. The transition that follows builds its second-contact
@@ -1767,7 +1801,14 @@ func resolve(
 			## `rally_clock` instead misses the set flight that separates them.
 			"event_time": opponent_dig_time,
 			"attack_direction": attack_choice.direction,
+			"contact_recovery": opponent_dig_recovery,
+			"contact_control": last_dig_control,
+			"incoming_force": last_dig_force,
+			"incoming_speed_mps": last_dig_speed,
+			"contact_posture": last_dig_posture,
+			"recovering_count": _recovering_count(rally_clock),
 			"adaptation_bonus": floor_defense_bonus})
+	_note_recovery(opponent_defender, opponent_dig_recovery, opponent_dig_time)
 	## Where they actually ended up, not where the ball was. A defender who was
 	## beaten to it starts the next phase short of it, which is the position the
 	## rest of the rally should reason from.
@@ -1932,9 +1973,10 @@ func _resolve_home_serve(
 	var opponent_pass := _reception_pass_result(
 		receiver, receiver_start, opponent_landing, opponent_setter_release,
 		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
-		reception_quality, 0.02, 0.49,
+		reception_quality, 0.02, 0.49, serve_trajectory,
 	)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
+	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		opponent_landing, opponent_pass_destination,
 		reception_success,
@@ -1961,6 +2003,10 @@ func _resolve_home_serve(
 			"platform_feasibility": opponent_pass.platform_feasibility,
 			"contact_posture": opponent_pass.contact_posture,
 			"contact_recovery": opponent_pass.contact_recovery,
+			"contact_control": opponent_pass.get("contact_control", 0.5),
+			"movement_alignment": opponent_pass.get("movement_alignment", 0.5),
+			"incoming_force": opponent_pass.get("incoming_force", 0.0),
+			"incoming_speed_mps": opponent_pass.get("incoming_speed_mps", 0.0),
 			"setter_release_target": opponent_setter_release,
 			"actual_pass_target": opponent_pass_destination})
 	if not reception_success:
@@ -2799,6 +2845,9 @@ func _resolve_opponent_transition(
 			floor_phase_positions,
 		),
 		home_target, attack_time, "reception",
+		## Anyone still getting up from the last ball has that long less to reach
+		## this one.
+		_recovery_time_penalties(rally_clock),
 	)
 	var defender := defense_claim.get("player") as VolleyballPlayer
 	var defender_arrived := defender != null
@@ -2843,6 +2892,16 @@ func _resolve_opponent_transition(
 		home_dig_terms["unarrived_floor"] = true
 	var defense_success: bool = defender_arrived \
 		and _dig_contest(defender, defense_quality, opponent_attack)
+	var home_dig_recovery := _dig_recovery(
+		defender, home_dig_terms, opponent_attack, opponent_attack_trajectory,
+		CoverageModel.court_distance_meters(
+			live_positions.get(
+				defender.id,
+				defensive_plan.defender_position(defender.id, home_target),
+			),
+			home_target,
+		),
+	)
 	var defender_start: Vector2 = live_positions.get(
 		defender.id, defensive_plan.defender_position(defender.id, home_target)
 	)
@@ -2881,7 +2940,14 @@ func _resolve_opponent_transition(
 			"movement_duration": defender_move_time,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states.
+			"contact_recovery": home_dig_recovery,
+			"contact_control": last_dig_control,
+			"incoming_force": last_dig_force,
+			"incoming_speed_mps": last_dig_speed,
+			"contact_posture": last_dig_posture,
+			"recovering_count": _recovering_count(rally_clock),
 			"event_time": home_dig_time})
+	_note_recovery(defender, home_dig_recovery, home_dig_time)
 	result.key_factors.append(ExplanationText.factor(
 		"defense_assignment_fit" if responsibility_fit >= 0.02 \
 		else "defense_assignment_stretch"
@@ -3448,6 +3514,10 @@ func _resolve_home_continuation(
 	Familiarity.record_exposure(opponent_defender, cont_read_tags)
 	var defense_quality := float(cont_dig_terms.quality)
 	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
+	var cont_dig_recovery := _dig_recovery(
+		opponent_defender, cont_dig_terms, attack_quality,
+		continuation_attack_trajectory, float(cont_defense.distance_meters),
+	)
 	## This branch carried no spatial metadata at all, so playback fell back to
 	## the contact point and walked the digger there from wherever they stood,
 	## however far that was. The dig outcome above is unchanged -- only the
@@ -3476,7 +3546,14 @@ func _resolve_home_continuation(
 			"movement_target": transition_defender_reach,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states.
+			"contact_recovery": cont_dig_recovery,
+			"contact_control": last_dig_control,
+			"incoming_force": last_dig_force,
+			"incoming_speed_mps": last_dig_speed,
+			"contact_posture": last_dig_posture,
+			"recovering_count": _recovering_count(rally_clock),
 			"event_time": cont_dig_time})
+	_note_recovery(opponent_defender, cont_dig_recovery, cont_dig_time)
 	if not dug:
 		return _finish(result, "kill", true, hitter.id, {
 			"setter": setter.display_name,
@@ -3994,7 +4071,8 @@ func _choose_opponent_defender(
 		opponent_live_positions,
 	) if plan != null else {}
 	var claim := CoverageModel.choose_claimant(
-		defenders, zones, target, flight_time, "reception"
+		defenders, zones, target, flight_time, "reception",
+		_recovery_time_penalties(rally_clock),
 	)
 	var claimant := claim.get("player") as VolleyballPlayer
 	var arrival: Dictionary = claim.get("arrival", {})
@@ -4921,6 +4999,11 @@ func _reception_pass_result(
 	reception_quality: float,
 	landing_min_y: float = 0.51,
 	landing_max_y: float = 0.98,
+	## The flight the defender is receiving. Only the recovery bands read it, so a
+	## real ball speed can decide whether someone is driven off a serve without
+	## re-rating the platform feasibility that every reception in the game is
+	## calibrated against.
+	incoming_trajectory: Dictionary = {},
 ) -> Dictionary:
 	var movement_vector := contact_position - start_position
 	var desired_vector := desired_target - contact_position
@@ -4989,18 +5072,40 @@ func _reception_pass_result(
 	var posture := "planted"
 	if reach_margin < 0.0:
 		posture = "reaching"
-	elif edge_ratio > 0.82:
-		posture = "moving"
-	elif body_alignment < 0.42:
+	elif movement_alignment < POSTURE_OFF_AXIS_ALIGNMENT:
+		## Read off the *directional* term rather than the composite. Measured,
+		## `body_alignment` is partly built from the edge ratio, so testing
+		## off-axis against it meant testing the moving signal twice: whichever of
+		## the two branches came first swallowed the other, and the loser was dead
+		## whatever its threshold. `movement_alignment` is the one term that is
+		## purely about which way the body was going.
 		posture = "off-axis"
+	elif edge_ratio > POSTURE_MOVING_EDGE_RATIO:
+		posture = "moving"
 	return {
 		"destination": destination,
 		"body_alignment": body_alignment,
 		"platform_feasibility": platform_feasibility,
 		"contact_posture": posture,
-		"contact_recovery": _reception_recovery(
-			receiver, posture, execution, serve_force
+		## Control, not execution. A reception's `execution` averages around two
+		## thirds and a dig's quality around a third, so handing the shared bands
+		## each side's raw figure made the states unreachable on one path and
+		## routine on the other -- measured, receptions came back 100% platform
+		## while a third of digs went to a knee.
+		##
+		## Both are now the same question: how well did the contact hold up
+		## against what it faced. For a dig that is quality against the swing; for
+		## a reception it is execution against how hard the ball arrived.
+		"contact_recovery": _contact_recovery_state(
+			receiver, posture, execution,
+			_incoming_ball_force(incoming_trajectory, serve_force),
 		),
+		## Reported so the census can measure the two inputs the bands read,
+		## rather than inferring their distribution from the outcome.
+		"contact_control": execution,
+		"movement_alignment": movement_alignment,
+		"incoming_force": _incoming_ball_force(incoming_trajectory, serve_force),
+		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
 		"trajectory": _ball_trajectory(
 			"reception_pass", contact_position, destination,
 			flight_time, lerpf(1.1, 2.8, execution), rally_clock
@@ -5039,35 +5144,392 @@ func _reception_pass_result(
 ## Thresholds are named rather than inline so the four bands can be retuned as a
 ## set. A recovery state that fires on a third of contacts is wallpaper; one that
 ## fires on none is a pose nobody sees.
-const RECOVERY_POOR_EXECUTION: float = 0.36
-const RECOVERY_DIRE_EXECUTION: float = 0.20
-const RECOVERY_LOW_STABILITY: float = 0.34
+## How badly a contact has to go, per contact type.
+##
+## **Two thresholds per type, not one shared pair**, and that is a measurement
+## rather than a preference. `contact_control` puts both contacts on the same
+## *axis*, but not in the same *place* on it: measured over 720 rallies, a
+## reception's control sits at a median of 0.81 while a dig's sits at 0.37,
+## because receiving a serve in this engine is genuinely much easier than digging
+## a swing. One shared threshold cannot describe both -- the pair that gave digs a
+## sane 18% knee rate made receptions literally unreachable at 100% platform, and
+## the pair that reached receptions put a third of all digs on the floor.
+##
+## What a contact of each posture normally produces, measured over 1,078 of them.
+##
+## **`poor` is relative to the posture, not to the contact type.** That is the
+## finding this table exists to record. A flat threshold made the two conditions
+## the bands ask for -- a poor contact *and* a difficult posture -- into the same
+## condition: cross-tabulated, 138 of 155 reaching contacts were poor and 0 of 431
+## off-axis ones were, because a reaching contact scores badly *by definition* and
+## an off-axis one does not. So "reaching and poor" meant reaching, "off-axis and
+## poor" meant never, and two of the four bands were unreachable while a third was
+## wallpaper.
+##
+## Posture also explains most of what looked like a contact-type difference: a
+## dig's control sits far below a reception's mainly because a third of digs are
+## reaching and almost no receptions are. One table replaces two.
+const POSTURE_EXPECTED_CONTROL := {
+	"planted": 0.54,
+	"moving": 0.59,
+	"reaching": 0.08,
+	"off-axis": 0.61,
+}
+
+## How far below its posture's norm a contact has to fall to be poor, as a
+## *share* of that norm rather than a flat subtraction.
+##
+## Flat did not survive contact with the table above. A reaching contact normally
+## scores 0.08, so subtracting a fixed 0.09 gave it a negative threshold and made
+## the branch impossible -- the same "band outside its own distribution" failure as
+## the speed range and the alignment bound, arrived at from the opposite direction.
+## Proportional puts roughly the worst quarter of every posture below the line, on
+## a scale that spans an order of magnitude.
+const RECOVERY_POOR_SHARE: float = 0.18
+const RECOVERY_LOW_FOOTING: float = 0.34
 const RECOVERY_LOW_BALANCE: float = 0.34
-const RECOVERY_HEAVY_FORCE: float = 0.70
+
+## How hard the ball has to arrive to drive an average voli off it, on the force
+## scale above -- about 17 m/s, which the census puts in the top tenth of arcs.
+##
+## **One gate, not two.** The band originally asked for a *dire* contact as well
+## as a heavy ball, and measured that turned out to be self-defeating: the
+## contacts with the worst control are the ones the defender had to stretch for,
+## and a defender stretching is explicitly not being blown away. Requiring both
+## made the band structurally empty -- 0 of 1,078 contacts. What actually happens
+## is a defender standing in the right place taking something too fast for them,
+## so the force does the work and a poor contact is the qualifier.
+const RECOVERY_HEAVY_FORCE: float = 0.78
+
+## Where a contact stops being planted, per branch.
+##
+## All three were inline numbers, and two of them sat outside the distribution
+## they were testing. Measured over 1,078 contacts: `body_alignment` runs from a
+## 5th percentile of 0.442 upward, so an off-axis bound of 0.42 could never fire,
+## and `edge_ratio` reaches 0.82 in only the top tenth. The consequence was not
+## subtle -- **the off-axis and moving dig postures were never drawn in a live
+## match at all**, and two of the four bodies built for playback existed only in
+## the portfolio.
+##
+## Re-centred so each branch owns a real share: off-axis about a seventh of
+## contacts, moving about a fifth. The ordering is unchanged -- a defender who
+## could not reach it is described as reaching first, whatever else was also true.
+## Off-axis is tested *before* moving, and that ordering is load-bearing. Low
+## alignment and a high edge ratio are strongly correlated -- alignment is partly
+## built from the edge ratio -- so with moving first, every off-axis contact was
+## classified as moving instead and the branch stayed dead even after its bound
+## was corrected. "Could not square up" is the more specific claim of the two.
+## Both from the measured distribution of the term each one tests:
+## `movement_alignment` has a median of 0.254 -- a receiver ordinarily moves toward
+## the ball rather than toward the setter -- and `edge_ratio` a median of 0.239.
+const POSTURE_OFF_AXIS_ALIGNMENT: float = 0.10
+const POSTURE_MOVING_EDGE_RATIO: float = 0.42
+
+## A dig says the same four things from different evidence.
+##
+## `timing` cannot serve as the moving test here: it is derived from the reach
+## margin, so a defender who was *not* reaching always scores 1.0 and the branch is
+## unreachable by construction rather than by threshold. Distance travelled is the
+## honest signal -- a defender who ran two metres dug it on the move.
+##
+## The body-penalty bound is small because the term is: measured, it runs 0.01 to
+## 0.04, so a bound of 0.34 was testing against a number that never gets there.
+const POSTURE_DIG_OFF_AXIS_PENALTY: float = 0.045
+const POSTURE_DIG_MOVING_METERS: float = 1.6
+
+## The speed band the force is read against, in metres per second.
+##
+## Set from the engine's own arcs, not from real volleyball. The first version used
+## 9-26 m/s, which is roughly right for a real jump serve and roughly double what
+## this engine draws: measured, balls arrive at a median of 7-11 m/s with a 95th
+## percentile near 20, so a 26 m/s ceiling put every contact in the bottom third
+## of the band and made `blown_away` unreachable at any threshold. A band has to
+## span the distribution it is normalising, or it is not normalising it.
+const RECOVERY_SLOW_BALL_MPS: float = 7.0
+const RECOVERY_FAST_BALL_MPS: float = 20.0
+
+## Reference mass for the anchor term, in kilos. A voli at this weight neither
+## resists nor invites being driven off a ball; the roster spans roughly 55-115.
+const RECOVERY_REFERENCE_MASS_KG: float = 82.0
+
+## How long each state costs the player, in seconds, before they are a defender
+## again. These are the numbers that make a recovery a *rally* event rather than
+## a pose: a knee is most of a contact, a fall is a contact and the transition
+## after it, and being blown away is the rest of the exchange.
+const RECOVERY_DELAY_SECONDS := {
+	"platform": 0.0,
+	"knee": 0.55,
+	"fall": 0.95,
+	"blown_away": 1.35,
+}
+
+## How much of a dig a defender who is still getting up gives away, at the moment
+## they hit the floor. Scales to nothing as their debt runs out.
+const RECOVERY_DIG_PENALTY: float = 0.55
+
+## What one trip to the floor costs in condition. Small per event and deliberately
+## ordered like the delays -- a libero who hits the floor every rally should feel
+## it by the fifth set, not by the second point.
+const RECOVERY_FATIGUE_COST := {
+	"platform": 0.0,
+	"knee": 0.004,
+	"fall": 0.008,
+	"blown_away": 0.013,
+}
 
 
-func _reception_recovery(
+## How well this voli stays on their feet, as three separate questions.
+##
+## The first version of this read two raw attributes and nothing else, which made
+## every band a referendum on a single number -- and left `composure`,
+## `explosiveness`, `work_rate`, `ball_control` and the voli's own *mass* with no
+## say in whether they ended up on the floor, despite all five being exactly what
+## decides it.
+##
+## They are kept as three composites rather than one, because the three outcomes
+## are not degrees of the same failing:
+##
+## - **footing** is staying square and re-planting -- the knee band.
+## - **balance** is not toppling when you could not square up -- the fall band.
+## - **anchor** is not being moved by the ball at all -- the blow-away band, and
+##   the only one where being *heavy* is an advantage.
+## How hard the ball was actually travelling, from the flight that was drawn.
+##
+## The recovery bands used to be handed a *quality* -- the serve's rating, or the
+## attack's effectiveness -- as their idea of force, which meant a perfectly
+## placed floater and a jump serve at the same rating hit a defender equally hard.
+## Speed is a property of the arc, and the arc is already built and drawn, so this
+## reads it rather than standing in for it: distance over duration, normalised
+## into the band above. `fallback` covers the paths where no trajectory exists
+## yet, so the change can never make a contact forceless.
+func _incoming_ball_force(trajectory: Dictionary, fallback: float) -> float:
+	var speed := _incoming_ball_speed(trajectory)
+	if speed <= 0.0:
+		return clampf(fallback, 0.0, 1.0)
+	return clampf(
+		inverse_lerp(RECOVERY_SLOW_BALL_MPS, RECOVERY_FAST_BALL_MPS, speed),
+		0.0, 1.0,
+	)
+
+
+## Ground speed of the drawn arc, in metres per second, or zero when there is no
+## arc to read. Separate from the force so the census can report the raw figure --
+## the first version of the band was set from real volleyball speeds and left
+## `blown_away` unreachable, because this engine's balls travel at about half of
+## them and no amount of tuning a threshold fixes a wrong axis.
+func _incoming_ball_speed(trajectory: Dictionary) -> float:
+	var duration := float(trajectory.get("duration", 0.0))
+	if duration <= 0.01:
+		return 0.0
+	var metres := CoverageModel.court_distance_meters(
+		Vector2(trajectory.get("start_position", Vector2.ZERO)),
+		Vector2(trajectory.get("end_position", Vector2.ZERO)),
+	)
+	if metres <= 0.05:
+		return 0.0
+	return metres / duration
+
+
+## What a dig cost the defender, on the same four bands as a reception.
+##
+## A dig is the same act with a harder ball, so it resolves through the same
+## function -- but its inputs have to be translated, because a dig *quality* is
+## not a reception *execution*: dig quality averages around a third where
+## reception execution averages around two thirds, so feeding it in raw would put
+## nearly every dig in the world on the floor.
+##
+## The honest translation is the margin. A dig that comfortably beat the swing it
+## faced was clean; one that barely survived was desperate; one that lost was a
+## body on the floor. That is exactly the comparison `_dig_contest` already makes,
+## so the recovery is read off the same difference the outcome is.
+func _dig_recovery(
+	defender: VolleyballPlayer,
+	dig_terms: Dictionary,
+	attack_quality: float,
+	trajectory: Dictionary,
+	travel_meters: float = 0.0,
+) -> String:
+	if defender == null:
+		return "platform"
+	## The dig's own quality, unadjusted. It used to be netted against the swing
+	## it faced, which double-counted the ball: a hard swing lowered the control
+	## figure *and* then satisfied the force gate, so the two conditions the
+	## blow-away band wanted to be independent were the same condition twice.
+	## Measured, that put 44% of receptions in the blow-away band. Force is now
+	## only ever read once, as force.
+	var execution := clampf(float(dig_terms.get("quality", 0.0)), 0.0, 1.0)
+	var posture := "planted"
+	if float(dig_terms.get("reach_margin_meters", 0.0)) < 0.0:
+		posture = "reaching"
+	elif float(dig_terms.get("posture", 0.0)) > POSTURE_DIG_OFF_AXIS_PENALTY:
+		posture = "off-axis"
+	elif travel_meters > POSTURE_DIG_MOVING_METERS:
+		posture = "moving"
+	last_dig_control = execution
+	last_dig_force = _incoming_ball_force(trajectory, attack_quality)
+	last_dig_speed = _incoming_ball_speed(trajectory)
+	last_dig_posture = posture
+	return _contact_recovery_state(
+		defender, posture, execution, last_dig_force, "dig"
+	)
+
+
+func _recovery_footing(receiver: VolleyballPlayer) -> float:
+	## `work_rate` subtracts on purpose. A defender who works harder does not stay
+	## up more -- they commit to balls a lazier one lets drop, and going to a knee
+	## is what committing looks like. Modelling effort as poise would have made the
+	## most willing defenders the ones who never go down, which is backwards.
+	## The four positive weights sum to one, and `work_rate` is signed against its
+	## midpoint rather than subtracted outright. Weights that summed to less than
+	## one silently moved every voli toward the floor -- an ordinary defender rated
+	## 0.35 across the board scored 0.30 against a 0.34 threshold and went down on
+	## every single contact, which is a scale error wearing the costume of a
+	## design decision.
+	return clampf(
+		_rating(receiver, "reception_stability") * 0.52
+		+ _rating(receiver, "explosiveness") * 0.20
+		+ _rating(receiver, "composure") * 0.16
+		+ _rating(receiver, "ball_control") * 0.12
+		- (_rating(receiver, "work_rate") - 0.5) * 0.14,
+		0.0, 1.0,
+	)
+
+
+func _recovery_balance(receiver: VolleyballPlayer) -> float:
+	return clampf(
+		_rating(receiver, "reception_balance") * 0.48
+		+ _rating(receiver, "ball_control") * 0.20
+		+ _rating(receiver, "composure") * 0.17
+		+ _rating(receiver, "lateral_speed") * 0.15,
+		0.0, 1.0,
+	)
+
+
+## Resistance to simply being driven off the ball. Mass is real here and nowhere
+## else in the recovery model: a heavy voli is harder to move and no steadier for
+## it, which is the one place in the game where the heaviest bodies have a plain
+## physical advantage rather than a stylistic one.
+func _recovery_anchor(receiver: VolleyballPlayer) -> float:
+	if receiver == null:
+		return 0.5
+	var mass_edge := clampf(
+		(receiver.mass_kg - RECOVERY_REFERENCE_MASS_KG) / 60.0, -0.45, 0.45
+	)
+	return clampf(
+		_rating(receiver, "reception_stability") * 0.46
+		+ _rating(receiver, "explosiveness") * 0.28
+		+ _rating(receiver, "composure") * 0.26
+		+ mass_edge * 0.40,
+		0.0, 1.0,
+	)
+
+
+func _contact_recovery_state(
 	receiver: VolleyballPlayer,
 	posture: String,
-	execution: float,
+	control: float,
 	incoming_force: float,
+	contact_kind: String = "reception",
 ) -> String:
-	var stability := _rating(receiver, "reception_stability")
-	var balance := _rating(receiver, "reception_balance")
-	var poor := execution < RECOVERY_POOR_EXECUTION
-	var dire := execution < RECOVERY_DIRE_EXECUTION
+	var footing := _recovery_footing(receiver)
+	var balance := _recovery_balance(receiver)
+	var poor := control < float(
+		POSTURE_EXPECTED_CONTROL.get(posture, 0.54)
+	) * (1.0 - RECOVERY_POOR_SHARE)
 
 	## Checked first, because being knocked off a ball overrides every softer
 	## thing that could also have been true of the same contact.
-	if dire and incoming_force >= RECOVERY_HEAVY_FORCE \
+	##
+	## The force the ball has to bring is set by the defender rather than by a
+	## constant: an anchored voli needs a genuinely heavy ball to be moved, a
+	## light one is moved by less. At the reference anchor this is exactly the
+	## old threshold, so the band is widened in both directions rather than
+	## loosened.
+	var force_needed := RECOVERY_HEAVY_FORCE \
+		+ (_recovery_anchor(receiver) - 0.5) * 0.44
+	if poor and incoming_force >= force_needed \
 			and posture in ["planted", "off-axis", "moving"]:
 		return "blown_away"
 	if (posture == "off-axis" and poor) or balance < RECOVERY_LOW_BALANCE:
 		return "fall"
 	if (poor and posture in ["reaching", "moving"]) \
-			or stability < RECOVERY_LOW_STABILITY:
+			or footing < RECOVERY_LOW_FOOTING:
 		return "knee"
 	return "platform"
+
+
+## Record what a contact cost the player who made it, and charge it.
+##
+## Two costs, and they are different in kind. The *delay* is spent inside this
+## rally -- it is why a defender who dug off the floor is not the one covering
+## the next ball -- and the *fatigue* is spent across the match. Both are booked
+## here so no call site can take the pose without the price.
+func _note_recovery(
+	player: VolleyballPlayer, state: String, at_time: float
+) -> void:
+	if player == null or state == "platform":
+		return
+	var delay := float(RECOVERY_DELAY_SECONDS.get(state, 0.0))
+	if delay <= 0.0:
+		return
+	## A springy defender is back up sooner. Bounded so the difference between the
+	## quickest and the slowest voli is meaningful without letting anyone shrug
+	## off a blow-away.
+	var quickness := clampf(
+		_rating(player, "explosiveness") * 0.6 + _rating(player, "work_rate") * 0.4,
+		0.0, 1.0,
+	)
+	var scaled := delay * lerpf(1.28, 0.74, quickness)
+	player_recovery[player.id] = {
+		"state": state,
+		"ready_at": at_time + scaled,
+		"delay": scaled,
+	}
+	## Recorded, not charged. See `RallyResult.recovery_fatigue`.
+	var cost := float(RECOVERY_FATIGUE_COST.get(state, 0.0))
+	if cost > 0.0:
+		recovery_fatigue_cost[player.id] = float(
+			recovery_fatigue_cost.get(player.id, 0.0)
+		) + cost
+
+
+## The seconds each player still owes, in the shape `choose_claimant` takes.
+##
+## This is where a recovery stops being bookkeeping. A defender getting off the
+## floor has less of the next ball's flight available to reach it -- literally,
+## not as a penalty -- so the claim search sees a shorter clock for them and
+## somebody else takes the ball. Without it the whole cost was inert: measured,
+## zero digs in 720 rallies were ever taken out of a recovery.
+## How many players are on the floor right now. Reported on contacts so the census
+## can see the cost being paid: the *primary* effect of a recovery is that the
+## player is not chosen for the next ball at all, which makes the dig-quality
+## multiplier invisible in the outcome -- the exclusion succeeded, so the excluded
+## player never appears in the sample. A count of who was down is the thing that
+## can actually be observed.
+func _recovering_count(at_time: float) -> int:
+	return _recovery_time_penalties(at_time).size()
+
+
+func _recovery_time_penalties(at_time: float) -> Dictionary:
+	var penalties := {}
+	for player_id in player_recovery:
+		var record: Dictionary = player_recovery[player_id]
+		var owed := float(record.get("ready_at", 0.0)) - at_time
+		if owed > 0.01:
+			penalties[player_id] = owed
+	return penalties
+
+
+## How much of their recovery this player still owes at `at_time`, as a fraction
+## of the debt they took on. Zero once they are up.
+func _recovery_debt(player_id: int, at_time: float) -> float:
+	var record: Dictionary = player_recovery.get(player_id, {})
+	if record.is_empty():
+		return 0.0
+	var delay := float(record.get("delay", 0.0))
+	if delay <= 0.0:
+		return 0.0
+	return clampf((float(record.get("ready_at", 0.0)) - at_time) / delay, 0.0, 1.0)
 
 
 ## Who is physically taking this second contact, and from where.
@@ -5100,7 +5562,13 @@ func _spatial_setter_choice(
 		if candidate == null or candidate.id == first_contact_player_id:
 			continue
 		var start: Vector2 = starts.get(candidate.id, target)
-		var travel_time := _movement_time(candidate, start, target, "transition")
+		## Getting up comes out of the same budget as getting there. A voli still
+		## on the floor is not a candidate to set the next ball, and this is what
+		## says so -- without it the emergency setter search would happily pick
+		## someone lying down because they were standing in the right place.
+		var travel_time := _movement_time(candidate, start, target, "transition") \
+			+ float(player_recovery.get(candidate.id, {}).get("delay", 0.0)) \
+			* _recovery_debt(candidate.id, rally_clock)
 		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
 			if defensive_plan != null else null
 		var duty := str(assignment.second_contact_responsibility) \
@@ -5293,6 +5761,7 @@ func _finish(
 	result.home_team_won = home_won
 	result.terminal_outcome = outcome
 	result.decisive_actor_id = decisive_actor_id
+	result.recovery_fatigue = recovery_fatigue_cost.duplicate()
 	var chosen_key := explanation_key if not explanation_key.is_empty() else outcome
 	result.explanation = ExplanationText.explanation(chosen_key, values)
 	var end_position := Vector2(0.5, 0.90) if home_won else Vector2(0.5, 0.12)
@@ -6622,7 +7091,7 @@ func _defense_terms(
 	if defender == null:
 		return {"quality": 0.0, "capability": 0.0, "timing": 0.0,
 			"posture": 0.0, "support": 0.0, "opportunity": 0.0,
-			"read_bonus": 0.0, "reach_margin_meters": 0.0}
+			"read_bonus": 0.0, "reach_margin_meters": 0.0, "recovery": 1.0}
 	var capability := clampf(
 		_rating(defender, "reception") * DIG_RECEPTION_WEIGHT
 		+ _rating(defender, "anticipation") * DIG_ANTICIPATION_WEIGHT
@@ -6638,9 +7107,17 @@ func _defense_terms(
 	## A covered defender is playing a ball someone else could also reach, which
 	## is worth something but cannot exceed being in position for it.
 	var support := minf(float(maxi(support_count, 0)) * 0.03, 0.09)
+	## What the last ball cost them. A defender who went to a knee, fell, or was
+	## driven off a ball is playing this one out of a recovery, and until now a
+	## defensive *success* had no price at all -- the same player dug the next ball
+	## exactly as well from the floor as from their feet. Scaled by how much of the
+	## debt is left, so it fades rather than switching off.
+	var recovery := 1.0 - RECOVERY_DIG_PENALTY * _recovery_debt(
+		defender.id, rally_clock
+	)
 	var opportunity := (1.0 - DIG_TIMING_WEIGHT * (1.0 - timing)) \
 		* (1.0 - DIG_POSTURE_WEIGHT * clampf(posture_penalty, 0.0, 1.0)) \
-		* (1.0 + support)
+		* (1.0 + support) * recovery
 	return {
 		"quality": clampf(capability * opportunity * DIG_SOLO_SHARE, 0.0, 1.0),
 		"capability": capability,
@@ -6650,6 +7127,7 @@ func _defense_terms(
 		"opportunity": opportunity,
 		"read_bonus": read_bonus,
 		"reach_margin_meters": reach_margin_meters,
+		"recovery": recovery,
 	}
 
 

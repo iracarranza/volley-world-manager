@@ -72,6 +72,12 @@ static func choose_claimant(
 	landing_point: Vector2,
 	ball_time_seconds: float,
 	contact_skill: String,
+	## Seconds each player owes before they can move, keyed by id. A voli getting
+	## up off the floor has genuinely less of this flight left to reach the ball
+	## in, and this is the only honest place to say so -- the alternative was
+	## discounting their dig after the fact, which lets someone lying down claim a
+	## ball and then merely play it badly.
+	time_penalties: Dictionary = {},
 ) -> Dictionary:
 	var best := {
 		"player": null, "arrival": {}, "support_count": 0,
@@ -82,7 +88,12 @@ static func choose_claimant(
 	for player in players:
 		var zone: Resource = zones.get(player.id) as Resource
 		var arrival := evaluate_arrival(
-			player, zone, landing_point, ball_time_seconds, contact_skill
+			player, zone, landing_point,
+			maxf(
+				ball_time_seconds - float(time_penalties.get(player.id, 0.0)),
+				0.02,
+			),
+			contact_skill,
 		)
 		if not bool(arrival.get("reachable", false)):
 			continue

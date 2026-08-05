@@ -718,42 +718,152 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 ## genuinely requires a hard ball rather than merely a bad touch.
 func _test_reception_recovery_bands() -> void:
 	var simulator := RallySimulator.new()
-	## Built directly rather than generated: the bands are read off two
+	## Built directly rather than generated: the bands are read off a handful of
 	## attributes, and a generated roster would vary them from run to run.
 	var sturdy := VolleyballPlayer.new()
-	sturdy.reception_stability = 78
-	sturdy.reception_balance = 78
+	sturdy.reception_stability = 82
+	sturdy.reception_balance = 82
+	sturdy.composure = 74
+	sturdy.explosiveness = 70
+	sturdy.ball_control = 70
+	sturdy.work_rate = 50
 	var frail := VolleyballPlayer.new()
-	frail.reception_stability = 12
+	frail.reception_stability = 8
 	frail.reception_balance = 74
+	frail.composure = 20
+	frail.explosiveness = 14
+	frail.ball_control = 20
+	frail.work_rate = 90
 
 	_check(
-		simulator._reception_recovery(sturdy, "planted", 0.80, 0.30) == "platform",
-		"a good contact on a steady defender leaves them on their feet",
+		simulator._contact_recovery_state(
+			sturdy, "planted", 0.90, 0.30, "reception"
+		) == "platform",
+		"a controlled contact on a steady defender leaves them on their feet",
+	)
+	## 0.04 is poor *for a reach*. A reaching contact normally scores about 0.08,
+	## so judging it against a planted contact's expectations -- as a flat
+	## threshold did -- called every reach in the game poor.
+	_check(
+		simulator._contact_recovery_state(
+			sturdy, "reaching", 0.04, 0.30, "reception"
+		) == "knee"
+			and simulator._contact_recovery_state(
+				sturdy, "reaching", 0.12, 0.30, "reception"
+			) == "platform",
+		"a reach is judged against what a reach normally produces",
 	)
 	_check(
-		simulator._reception_recovery(sturdy, "reaching", 0.22, 0.30) == "knee",
-		"a poor reaching contact puts a defender on one knee",
+		simulator._contact_recovery_state(
+			frail, "planted", 0.95, 0.20, "reception"
+		) == "knee",
+		"poor footing goes down even on a comfortable ball",
 	)
 	_check(
-		simulator._reception_recovery(frail, "planted", 0.85, 0.20) == "knee",
-		"low reception stability goes down even on an ordinary ball",
-	)
-	_check(
-		simulator._reception_recovery(sturdy, "off-axis", 0.22, 0.30) == "fall",
+		simulator._contact_recovery_state(
+			sturdy, "off-axis", 0.45, 0.30, "reception"
+		) == "fall",
 		"a poor off-axis contact puts a defender on the floor",
 	)
 	## The pair that matters: same defender, same terrible contact, and the only
 	## difference is how hard the ball was travelling.
 	_check(
-		simulator._reception_recovery(sturdy, "planted", 0.10, 0.90) == "blown_away"
-			and simulator._reception_recovery(sturdy, "planted", 0.10, 0.20) != "blown_away",
+		simulator._contact_recovery_state(
+			sturdy, "planted", 0.05, 0.95, "reception"
+		) == "blown_away"
+			and simulator._contact_recovery_state(
+				sturdy, "planted", 0.05, 0.20, "reception"
+			) != "blown_away",
 		"being blown away needs a hard ball, not only a bad touch",
 	)
 	## A defender already stretched for a ball is not standing in front of it.
 	_check(
-		simulator._reception_recovery(sturdy, "reaching", 0.10, 0.95) != "blown_away",
+		simulator._contact_recovery_state(
+			sturdy, "reaching", 0.05, 0.98, "reception"
+		) != "blown_away",
 		"a reaching contact is never a blow-away, however hard the ball",
+	)
+	## The postures sit in different places on the same axis, so one control figure
+	## has to mean different things depending on what the body was doing. Measured,
+	## a flat threshold made "reaching and poor" mean reaching (138 of 155) and
+	## "off-axis and poor" mean never (0 of 431).
+	_check(
+		simulator._contact_recovery_state(
+			sturdy, "off-axis", 0.30, 0.30, "reception"
+		) == "fall"
+			and simulator._contact_recovery_state(
+				sturdy, "reaching", 0.30, 0.30, "reception"
+			) == "platform",
+		"one control figure is poor for an off-axis contact and fine for a reach",
+	)
+	## Mass earns its place only in the blow-away band. Same attributes, same
+	## terrible contact, same ball -- the heavier voli stays up.
+	var light := VolleyballPlayer.new()
+	light.reception_stability = 60
+	light.reception_balance = 80
+	light.composure = 60
+	light.explosiveness = 60
+	light.mass_kg = 62.0
+	var heavy := VolleyballPlayer.new()
+	heavy.reception_stability = 60
+	heavy.reception_balance = 80
+	heavy.composure = 60
+	heavy.explosiveness = 60
+	heavy.mass_kg = 112.0
+	_check(
+		simulator._contact_recovery_state(
+			light, "planted", 0.05, 0.80, "reception"
+		) == "blown_away"
+			and simulator._contact_recovery_state(
+				heavy, "planted", 0.05, 0.80, "reception"
+			) != "blown_away",
+		"a heavier voli resists being driven off a ball a lighter one cannot",
+	)
+	## Ball speed is read off the arc rather than standing in for a rating. A
+	## flight that covers twice the ground in the same time hits twice as hard.
+	var slow_arc := {
+		"duration": 1.0, "start_position": Vector2(0.5, 0.0),
+		"end_position": Vector2(0.5, 0.45),
+	}
+	var fast_arc := {
+		"duration": 0.5, "start_position": Vector2(0.5, 0.0),
+		"end_position": Vector2(0.5, 0.90),
+	}
+	_check(
+		simulator._incoming_ball_force(fast_arc, 0.0)
+			> simulator._incoming_ball_force(slow_arc, 0.0) + 0.2
+			and simulator._incoming_ball_force({}, 0.42) == 0.42,
+		"incoming force comes from the drawn arc, and falls back when there is none",
+	)
+	## The cost has to be payable and has to run out. A knee is cheaper than a
+	## blow-away, and neither is permanent.
+	var runner := VolleyballPlayer.new()
+	runner.explosiveness = 60
+	runner.work_rate = 60
+	simulator.rally_clock = 10.0
+	simulator._note_recovery(runner, "knee", 10.0)
+	var knee_debt := simulator._recovery_debt(runner.id, 10.0)
+	var knee_delay := float(simulator.player_recovery[runner.id]["delay"])
+	simulator.player_recovery = {}
+	simulator._note_recovery(runner, "blown_away", 10.0)
+	var blown_delay := float(simulator.player_recovery[runner.id]["delay"])
+	_check(
+		is_equal_approx(knee_debt, 1.0)
+			and blown_delay > knee_delay
+			and simulator._recovery_debt(runner.id, 10.0 + blown_delay + 0.1) == 0.0,
+		"a recovery is charged at once, costs more the worse it was, and expires",
+	)
+	## And a defender still on the floor gives away part of the next dig.
+	simulator.player_recovery = {}
+	simulator.rally_clock = 10.0
+	var upright := simulator._defense_terms(sturdy, 0.4, 0.0, 0.0, 0)
+	simulator._note_recovery(sturdy, "fall", 10.0)
+	var floored := simulator._defense_terms(sturdy, 0.4, 0.0, 0.0, 0)
+	simulator.player_recovery = {}
+	_check(
+		float(floored.quality) < float(upright.quality)
+			and is_equal_approx(float(upright.recovery), 1.0),
+		"a defender who is still getting up digs worse than the same one upright",
 	)
 
 

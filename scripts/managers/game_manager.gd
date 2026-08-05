@@ -747,6 +747,12 @@ func _apply_rally_dynamics(result: Resource, update: Dictionary) -> void:
 		player.fatigue = minf(
 			player.fatigue + rally_fatigue_cost(player, RALLY_FATIGUE_BASE), 1.0
 		)
+		## And what the floor cost them on top of the rally itself. A libero who
+		## hits the deck three times in a rally has worked harder than one who
+		## stayed on their feet, and the base cost cannot tell them apart.
+		var floor_cost := float(result.recovery_fatigue.get(player.id, 0.0))
+		if floor_cost > 0.0:
+			player.fatigue = minf(player.fatigue + floor_cost, 1.0)
 
 	var decisive := player_by_id(int(result.decisive_actor_id))
 	if decisive == null and opponent_team != null:
