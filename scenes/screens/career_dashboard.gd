@@ -141,6 +141,8 @@ const WHEEL_TOOLTIPS := {
 @onready var meal_option: OptionButton = %MealOption
 @onready var paste_row: HBoxContainer = %PasteRow
 @onready var accommodations_summary: RichTextLabel = %AccommodationsSummary
+@onready var foldout_column: VBoxContainer = %FoldoutColumn
+@onready var reaction_panel: RichTextLabel = %ReactionPanel
 @onready var sponsorship_summary: RichTextLabel = %SponsorshipSummary
 @onready var identity_finance_panel: RichTextLabel = %IdentityFinancePanel
 @onready var training_option: OptionButton = %TrainingOption
@@ -231,7 +233,8 @@ func _ready() -> void:
 		expanded_wheel_profile_option.add_item(profile_name)
 	position_training_option.add_item("None")
 	for position_name in Familiarity.POSITIONS: position_training_option.add_item(position_name)
-	for card in [%RosterCard, %TeamCard, %TransfersCard, %CompetitionCard, %SixnetCard]:
+	for card in [%RosterCard, %TeamCard, %ClubCard, %TransfersCard,
+			%CompetitionCard, %SixnetCard]:
 		card.section_requested.connect(_navigate)
 	refresh()
 	_navigate("Home")
@@ -303,6 +306,8 @@ func _input(event: InputEvent) -> void:
 			_navigate("Transfers")
 		KEY_V:
 			_navigate("Competition")
+		KEY_C:
+			_navigate("Club")
 		KEY_X:
 			_navigate("Sixnet")
 		_:
@@ -528,23 +533,84 @@ func _refresh_accommodations() -> void:
 	paste_row.add_child(add_chip)
 	accommodations_summary.text = "\n".join([
 		"[b]Accommodations[/b]  %s" % CLUB_UNBUILT,
-		"",
-		"The table is squad-wide by default. Feeding volis separately is possible",
-		"and costs more each time, the way bespoke costs more than mass production.",
-		"",
-		"A block holds two to four pastes; how many is the chef's ceiling. Holding",
-		"one ratio too long sours it, so there is no settled best meal.",
-		"",
-		"[b]Lodging[/b] — home, or a room in a region somebody was not raised in.",
-		"",
-		"Sample squad reaction:",
-		"    Feli · Rusa Kentaro — [i]happy; this is close to home cooking[/i]",
-		"    Vegi · Odile Ferrand — [i]tiring of the ferment[/i]",
-		"    Avi · Sanne Rooijakkers — [i]\"I think I'm allergic to Xervyan food.\"[/i]",
-		"",
-		"[i]That last one may not be true. Volis report what they feel, not what",
-		"is happening to them.[/i]",
+		"The table is squad-wide by default; feeding volis separately costs more",
+		"each time. A block holds two to four pastes, and how many is the chef's",
+		"ceiling.",
 	])
+	## Foldouts rather than one long column.
+	##
+	## This panel already overflowed at 1600x900 with three blocks in it, and it
+	## is going to gain more -- stores, lodging, per-voli exceptions. Stacking
+	## prose until it scrolls is how a menu becomes unreadable; a reader opens
+	## the one thing they came for and the rest stays a heading.
+	for child in foldout_column.get_children():
+		child.queue_free()
+	## The reaction is the thing a reader opens this panel to see, so it is a
+	## standing card in the right column rather than a foldout. It also fills
+	## space the controls do not need: a full-width dropdown over a narrow list
+	## is mostly whitespace, and whitespace that carries nothing is not legible,
+	## it is just empty.
+	reaction_panel.text = "\n".join([
+		"[b]Feli · Rusa Kentaro[/b]",
+		"    [i]happy; this is close to home cooking[/i]",
+		"",
+		"[b]Vegi · Odile Ferrand[/b]",
+		"    [i]tiring of the ferment[/i]",
+		"",
+		"[b]Avi · Sanne Rooijakkers[/b]",
+		"    [i]\"I think I'm allergic to Xervyan food.\"[/i]",
+		"",
+		"[b]Vegi · Petra Hallam[/b]",
+		"    [i]no comment[/i]",
+		"",
+		"[i]The allergy may not be real. Volis report what they feel, not what",
+		"is happening to them, and telling those apart is the physio's job.[/i]",
+	])
+	_add_foldout("Paste stores", false, "\n".join([
+		"    Sharp ferment      [color=#7fbf6a]plentiful[/color]     local · 1.0x",
+		"    Smoky char         [color=#7fbf6a]plentiful[/color]     local · 1.0x",
+		"    Clean umami        [color=#c9a227]low[/color]           Kesh · 1.4x import",
+		"    Heavy sweet        [color=#c9a227]low[/color]           Xervya · 1.9x import",
+		"    Bitter herb        [color=#b5563f]none[/color]          Sud Marine · 1.6x import",
+		"",
+		"[i]Ingredients near the club are cheap and distance adds import cost. A",
+		"squad drawn from six regions cannot all eat local, so the cheapest table",
+		"is also the most homesick one.[/i]",
+	]))
+	_add_foldout("Lodging", false, "\n".join([
+		"    Home              Harbor City quarters · standing cost",
+		"    Next away trip    Kesh Highlands, week 4 · [i]not yet booked[/i]",
+		"",
+		"[i]A voli billeted near where they were raised feels differently about the",
+		"trip than one taken somewhere alien.[/i]",
+	]))
+	_add_foldout("Chef's attention", false, "\n".join([
+		"    Separate plans this week    [color=#7fbf6a]1[/color] of 3 used",
+		"",
+		"[i]Differentiation is bounded by the chef rather than by funds. Money is",
+		"fungible; attention is an allocation, so a better chef buys flexibility",
+		"rather than a larger number.[/i]",
+	]))
+
+
+## One collapsible block. Header button toggles the body, which starts closed
+## unless this is the thing a reader most likely came for.
+func _add_foldout(title: String, open: bool, body_text: String) -> void:
+	var header := Button.new()
+	header.toggle_mode = true
+	header.button_pressed = open
+	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	header.text = ("▾  " if open else "▸  ") + title
+	foldout_column.add_child(header)
+	var body := RichTextLabel.new()
+	body.bbcode_enabled = true
+	body.fit_content = true
+	body.visible = open
+	body.text = body_text
+	foldout_column.add_child(body)
+	header.toggled.connect(func(pressed: bool) -> void:
+		body.visible = pressed
+		header.text = ("▾  " if pressed else "▸  ") + title)
 
 
 func _refresh_sponsorships() -> void:
@@ -595,6 +661,7 @@ func _refresh_home() -> void:
 	%TeamCard.set_summary("%s identity · %s training" % [CareerManager.career.identity, CareerManager.career.training_focus])
 	%TransfersCard.set_summary("%d regional candidates · $%d available" % [CareerManager.career.transfer_pool.size(), CareerManager.career.finances])
 	%CompetitionCard.set_summary("%s" % ("Week %d vs %s" % [fixture.week, fixture.opponent_name] if fixture != null else "Schedule complete"))
+	%ClubCard.set_summary("Staff, table and sponsors")
 	%SixnetCard.set_summary(
 		"Champion: %s" % CareerManager.career.sixnet_champion_region
 		if not CareerManager.career.sixnet_champion_region.is_empty()

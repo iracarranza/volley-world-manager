@@ -131,69 +131,86 @@ tabs_visible = false
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="HomeCards" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+[node name="HomeSubTabs" type="TabContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+tabs_visible = true
+
+[node name="Overview" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs"]
+layout_mode = 2
+
+[node name="Inbox" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs"]
+layout_mode = 2
+
+[node name="HomeCards" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview"]
 layout_mode = 2
 size_flags_horizontal = 3
-columns = 5
+columns = 3
 
-[node name="RosterCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+[node name="RosterCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 section_id = "Roster"
 title_text = "Roster"
 summary_text = "Players, availability and development."
 icon_text = "R"
 
-[node name="TeamCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+[node name="TeamCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 section_id = "Team"
 title_text = "Team"
 summary_text = "Identity, depth chart and weekly training."
 icon_text = "T"
 
-[node name="TransfersCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+[node name="ClubCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TransfersCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 section_id = "Transfers"
 title_text = "Transfers / Recruitment"
 summary_text = "Regional candidates and roster additions."
 icon_text = "E"
 
-[node name="CompetitionCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+[node name="CompetitionCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 section_id = "Competition"
 title_text = "Competition"
 summary_text = "Fixtures, results and match entry."
 icon_text = "V"
 
-[node name="SixnetCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeCards" instance=ExtResource("2")]
+[node name="SixnetCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 section_id = "Sixnet"
 title_text = "Sixnet"
 summary_text = "World league standings and regional power."
 icon_text = "X"
 
-[node name="HomeBody" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home"]
+[node name="HomeBody" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 12
 
-[node name="HomeSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody"]
+[node name="HomeSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeBody"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 bbcode_enabled = true
 
-[node name="NewsColumn" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody"]
+[node name="NewsColumn" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Inbox"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="NewsTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody/NewsColumn"]
+[node name="NewsTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Inbox/NewsColumn"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "News"
 
-[node name="NewsPanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeBody/NewsColumn"]
+[node name="NewsPanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Inbox/NewsColumn"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -736,7 +753,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 clip_text = true
-text = "Club"
+text = "Club [C]"
 metadata/section = "Club"
 
 [node name="TransfersNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
@@ -805,28 +822,71 @@ text = "Hiring is not implemented yet."
 [node name="Accommodations" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs"]
 layout_mode = 2
 
-[node name="MealRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
+[node name="AccBody" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AccLeft" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.35
+
+[node name="ReactionCard" type="PanelContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ReactionMargin" type="MarginContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/ReactionCard"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 10
+
+[node name="ReactionColumn" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/ReactionCard/ReactionMargin"]
 layout_mode = 2
 
-[node name="MealLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/MealRow"]
+[node name="ReactionTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/ReactionCard/ReactionMargin/ReactionColumn"]
 layout_mode = 2
-text = "This week's table"
+text = "Voli reaction"
 
-[node name="MealOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/MealRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(190, 0)
-layout_mode = 2
-
-[node name="PasteRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="AccommodationsSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
+[node name="ReactionPanel" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/ReactionCard/ReactionMargin/ReactionColumn"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 bbcode_enabled = true
 scroll_active = true
+
+[node name="MealRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft"]
+layout_mode = 2
+
+[node name="MealLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft/MealRow"]
+layout_mode = 2
+text = "This week's table"
+
+[node name="MealOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft/MealRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+
+[node name="PasteRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AccommodationsSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+
+[node name="FoldoutScroll" type="ScrollContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="FoldoutColumn" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/AccBody/AccLeft/FoldoutScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="Sponsorships" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs"]
 layout_mode = 2

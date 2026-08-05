@@ -38,7 +38,13 @@ func _ready() -> void:
 	UIStyle.apply(self, PREVIEW_LIGHT_MODE)
 	_steps = [
 		["01_home", func() -> void: _dashboard._navigate("Home")],
-		["02_nav_open", func() -> void: _dashboard._toggle_nav_dropdown()],
+		["01b_home_inbox", func() -> void:
+			var t := _dashboard.find_child("HomeSubTabs", true, false)
+			if t != null: t.current_tab = 1],
+		["02_nav_open", func() -> void:
+			var t := _dashboard.find_child("HomeSubTabs", true, false)
+			if t != null: t.current_tab = 0
+			_dashboard._toggle_nav_dropdown()],
 		["03_roster", func() -> void: _dashboard._navigate("Roster")],
 		["04_roster_page2", func() -> void: _dashboard._step_attribute_page(1)],
 		["05_roster_list", func() -> void: _dashboard._toggle_roster_list()],
