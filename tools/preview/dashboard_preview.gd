@@ -52,6 +52,21 @@ func _ready() -> void:
 			get_node("/root/CareerManager").advance_week()
 			_dashboard._reveal_advance()],
 		["09_jumped_to_fixture", func() -> void: _dashboard._confirm_advance()],
+		## The rest of the nav. These were never captured, so four of the seven
+		## sections had no screenshot at all and any layout judgement about them
+		## was being made from memory.
+		["10_team_training", func() -> void:
+			_dashboard._navigate("Team")
+			var tabs := _dashboard.find_child("TeamSubTabs", true, false)
+			if tabs != null:
+				tabs.current_tab = mini(1, maxi(tabs.get_tab_count() - 1, 0))],
+		["11_team_teamtraining", func() -> void:
+			var tabs := _dashboard.find_child("TeamSubTabs", true, false)
+			if tabs != null:
+				tabs.current_tab = maxi(tabs.get_tab_count() - 1, 0)],
+		["12_transfers", func() -> void: _dashboard._navigate("Transfers")],
+		["13_competition", func() -> void: _dashboard._navigate("Competition")],
+		["14_sixnet", func() -> void: _dashboard._navigate("Sixnet")],
 	]
 
 
