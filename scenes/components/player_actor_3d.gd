@@ -313,6 +313,25 @@ func _apply_dig_posture() -> void:
 	body_pivot.position.y -= drop * body_height_scale
 	body_pivot.rotation.x = deg_to_rad(hip_pitch * 0.24 + body_tilt)
 	body_pivot.rotation.y = deg_to_rad(torso_yaw)
+	## **The head keeps watching the ball.**
+	##
+	## An off-axis dig twists the whole body to get the far arm across, and the
+	## head came with it -- so the defender ended up looking where they wanted
+	## the ball to *go* rather than where it was coming *from*. That is backwards
+	## from how anybody plays: you track the hitter and the flight, and the
+	## platform is aimed by feel underneath you.
+	##
+	## Counter-rotating by the torso's own twist holds the head on the original
+	## line, and the neck clamp decides how much survives -- past its limit the
+	## head genuinely does have to travel with the shoulders, which is also true.
+	look_yaw = clampf(
+		-deg_to_rad(torso_yaw),
+		-deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
+		deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
+	)
+	## Eyes up the incoming line rather than down at the platform.
+	look_pitch = deg_to_rad(-HEAD_PITCH_LIMIT_DEGREES * 0.45)
+	_apply_head_look()
 	for index in [0, 1]:
 		var leg: Node3D = left_leg if index == 0 else right_leg
 		## Thigh forward, shank back under it. Splitting the fold across both
@@ -504,20 +523,24 @@ func set_pose(
 			## invent it.
 			_apply_dig_posture()
 		RallyEventModel.EventType.SET:
-			## Hands at the forehead, elbows out. The upper arms come up less far
-			## than they used to and the forearms finish the reach, which is what
-			## makes a set a set: the classic triangle of two folded arms over the
-			## face, rather than two straight arms held overhead like a block.
-			## Upper arms forward and nearly level, forearms vertical. The elbow
-			## adds to the shoulder's pitch, so the forearm's true angle is roughly
-			## 100 + 90 = 190 -- straight up and a shade back, which puts the hands
-			## over the forehead. Raising the shoulder further, as a first pass did
-			## at 118, folds the forearm *over and behind* the head and the pose
-			## reads as a flex rather than a set.
-			left_arm.rotation_degrees = Vector3(100.0, 0.0, -18.0)
-			right_arm.rotation_degrees = Vector3(100.0, 0.0, 18.0)
-			_set_elbow(left_arm, 90.0)
-			_set_elbow(right_arm, 90.0)
+			## A set is a *motion*, and drawing only its middle threw away the
+			## half that reads. Preparation is arms up with the elbows carried
+			## wide and the hands at the forehead; the release is that same shape
+			## extending -- elbows opening, upper arms rising, hands finishing
+			## above and in front. Phase runs one into the other rather than
+			## picking a frame.
+			##
+			## The elbow does the work: at 98 degrees the forearms are vertical
+			## beside the head, and opening toward 22 is the push. Rotating the
+			## shoulder alone would swing the whole arm through the ball.
+			var release := clampf(phase, 0.0, 1.0)
+			var set_pitch := lerpf(96.0, 132.0, release)
+			var set_flare := lerpf(30.0, 13.0, release)
+			left_arm.rotation_degrees = Vector3(set_pitch, 0.0, -set_flare)
+			right_arm.rotation_degrees = Vector3(set_pitch, 0.0, set_flare)
+			var set_elbow := lerpf(98.0, 22.0, release)
+			_set_elbow(left_arm, set_elbow)
+			_set_elbow(right_arm, set_elbow)
 		RallyEventModel.EventType.ATTACK:
 			body_pivot.rotation.x = -0.16
 			left_leg.rotation_degrees.x = 18.0
@@ -537,20 +560,29 @@ func set_pose(
 			## The guide arm pulls down bent, which is what it actually does.
 			_set_elbow(guide_arm, 46.0)
 		RallyEventModel.EventType.BLOCK:
-			left_leg.rotation_degrees.x = 12.0
-			right_leg.rotation_degrees.x = 12.0
+			## A block *presses*. Straight up is a player reaching; over the net
+			## is a player taking space, and the difference is a slight forward
+			## lean with the arms angled ahead of vertical rather than on it.
+			##
+			## The legs kick forward, not back. A blocker leaves the floor from a
+			## squat and the shins swing under and *ahead* of the body on the way
+			## up -- trailing them behind is a hurdler, not a jump.
+			body_pivot.rotation.x = -0.12
+			left_leg.rotation_degrees.x = 26.0
+			right_leg.rotation_degrees.x = 22.0
+			for leg in [left_leg, right_leg]:
+				(leg.get_node("Knee") as Node3D).rotation_degrees.x = 30.0
 			left_arm.position.y = shoulder_offset.y + 0.06
 			right_arm.position.y = shoulder_offset.y + 0.06
-			left_arm.rotation_degrees = Vector3(175.0, 0.0, -8.0)
-			right_arm.rotation_degrees = Vector3(175.0, 0.0, 8.0)
-			## Straight, and deliberately so. A block that bends at the elbow is a
-			## block that gets driven back through the net, and keeping these at
-			## nearly zero is what makes a block read as a *wall* next to a set's
+			left_arm.rotation_degrees = Vector3(158.0, 0.0, -8.0)
+			right_arm.rotation_degrees = Vector3(158.0, 0.0, 8.0)
+			## Straight, and deliberately so. A block that bends at the elbow is
+			## a block that gets driven back through the net, and keeping these
+			## near zero is what makes a block read as a *wall* next to a set's
 			## folded triangle -- the two poses put the arms in nearly the same
 			## place, and the elbow is the only thing telling them apart.
 			_set_elbow(left_arm, 4.0)
 			_set_elbow(right_arm, 4.0)
-
 
 func _apply_material_color(
 	mesh: MeshInstance3D, color: Color, alpha: float = 1.0
@@ -600,10 +632,35 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	leg_length_scale = clampf(
 		stride_length_m / maxf(expected_stride, 0.01), 0.86, 1.16
 	)
+	## Longer legs mean a **shorter torso**, not a higher waist on the same body.
+	##
+	## The first pass raised the hips and left everything above them alone, so
+	## the upper body simply overlapped further and the legs barely changed --
+	## the whole difference went into a gap nobody could see. Two volis of the
+	## same height with a 0.62 m and a 1.02 m stride should look like two
+	## genuinely different builds, and the only way that happens is if the
+	## torso gives back exactly what the legs take.
+	##
+	## So the upper body is compressed about the raised hip by the ratio of the
+	## span it has left. The crown of the head lands where it always did, which
+	## is what keeps `height_cm` honest, and every part between hip and head
+	## moves proportionally rather than being individually re-authored.
 	var leg_span := leg_bone_lengths.x + leg_bone_lengths.y
+	var leg_gain := leg_span * (leg_length_scale - 1.0)
+	var hip_y := hip_offset.y + leg_gain
 	for leg in [left_leg, right_leg]:
 		leg.scale.y = leg_length_scale
-		leg.position.y = hip_offset.y + leg_span * (leg_length_scale - 1.0)
+		leg.position.y = hip_y
+	var crown := float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M))
+	var upper_span := maxf(crown - hip_offset.y, 0.1)
+	var squeeze := clampf((upper_span - leg_gain) / upper_span, 0.55, 1.45)
+	for part in [torso, shorts, head]:
+		part.position.y = hip_y + (part.position.y - hip_offset.y) * squeeze
+	torso.scale.y = squeeze
+	for arm in [left_arm, right_arm]:
+		arm.position.y = hip_y + (arm.position.y - hip_offset.y) * squeeze
+	shoulder_offset.y = hip_y + (shoulder_offset.y - hip_offset.y) * squeeze
+	hip_offset.y = hip_y
 
 	## The hips sit on the hip joint, and this is where that is decided.
 	##
@@ -620,7 +677,7 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	var shorts_size: Vector3 = Vector3(
 		silhouette.get("shorts", {}).get("size", Vector3(0.46, 0.20, 0.32))
 	)
-	shorts.position.y = left_leg.position.y + shorts_size.y * 0.34
+	shorts.position.y = hip_y + shorts_size.y * 0.34
 
 	## Scales the *whole two-bone chain*, elbow included.
 	##

@@ -33,7 +33,11 @@ const VEGI_BODIES: Array[String] = [
 ## Plates. Each one is a scenario, and each states everything about itself.
 ##
 ##   subjects  -- body per column
-##   pose      -- [event type, phase], -1 for a standing rig
+##   pose      -- [event type, elevation, phase], -1 for a standing rig.
+##                Elevation and phase are separate arguments to `set_pose` and
+##                were being passed in the wrong order here, so every plate was
+##                photographed at a fixed mid-swing while the number meant to be
+##                the phase quietly lifted the actor off the floor.
 ##   postures  -- dig posture per column, empty for non-dig plates
 ##   faces     -- expression per column
 ##   yaws      -- facing per column, in degrees. Varied on purpose.
@@ -44,9 +48,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "01_bodies_animal",
 		"caption": "body",
 		"subjects": ANIMAL_BODIES,
-		"pose": [-1, 0.0],
+		"pose": [-1, 0.0, 0.0],
 		"faces": ["neutral", "deadpan", "happy", "suspicious", "devious"],
-		"yaws": [-30.0, 18.0, -20.0, 36.0, -42.0],
+		"yaws": [-62.0, 34.0, -38.0, 66.0, -74.0],
 		"camera": [Vector3(0.0, 1.66, -8.6), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.86,
 	},
@@ -54,9 +58,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "01b_bodies_vegi",
 		"caption": "body",
 		"subjects": VEGI_BODIES,
-		"pose": [-1, 0.0],
+		"pose": [-1, 0.0, 0.0],
 		"faces": ["neutral"],
-		"yaws": [-24.0, 30.0, -14.0, 38.0, -34.0],
+		"yaws": [-52.0, 58.0, -30.0, 70.0, -66.0],
 		"camera": [Vector3(0.0, 1.66, -9.8), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.80,
 	},
@@ -64,9 +68,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "02_expressions_open",
 		"caption": "face",
 		"subjects": ["Pepper", "Pear", "Tomato"],
-		"pose": [-1, 0.0],
+		"pose": [-1, 0.0, 0.0],
 		"faces": ["happy", "neutral", "worried"],
-		"yaws": [-16.0, 0.0, 18.0],
+		"yaws": [-34.0, 0.0, 38.0],
 		"camera": [Vector3(0.0, 1.70, -4.6), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.70,
 	},
@@ -74,9 +78,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "03_expressions_narrowed",
 		"caption": "face",
 		"subjects": ["Pear", "Pepper", "Aubergine"],
-		"pose": [-1, 0.0],
+		"pose": [-1, 0.0, 0.0],
 		"faces": ["devious", "suspicious", "cross"],
-		"yaws": [14.0, 0.0, -20.0],
+		"yaws": [30.0, 0.0, -42.0],
 		"camera": [Vector3(0.0, 1.70, -4.6), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.70,
 	},
@@ -84,9 +88,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "04_expressions_flat",
 		"caption": "face",
 		"subjects": ["Stalk", "Pepper", "Feli"],
-		"pose": [-1, 0.0],
+		"pose": [-1, 0.0, 0.0],
 		"faces": ["relaxed", "deadpan", "tired"],
-		"yaws": [-14.0, 0.0, 20.0],
+		"yaws": [-30.0, 0.0, 44.0],
 		"camera": [Vector3(0.0, 1.70, -4.6), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.70,
 	},
@@ -94,9 +98,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "05_serve",
 		"caption": "serve",
 		"subjects": ["Avi", "Feli", "Pepper"],
-		"pose": [0, 0.45],
+		"pose": [0, 0.45, 0.55],
 		"faces": ["neutral", "cross", "deadpan"],
-		"yaws": [-34.0, 0.0, 30.0],
+		"yaws": [-72.0, 12.0, 64.0],
 		"camera": [Vector3(0.0, 2.10, -7.0), Vector3(-5.0, 180.0, 0.0), 30.0],
 		"spacing": 2.05,
 	},
@@ -104,9 +108,11 @@ const PLATES: Array[Dictionary] = [
 		"name": "06_set",
 		"caption": "set",
 		"subjects": ["Pear", "Pepper", "Stalk"],
-		"pose": [3, 0.5],
+		## Preparation, mid-release and full extension of one motion.
+		"phases": [0.0, 0.5, 1.0],
+		"pose": [3, 0.0, 0.5],
 		"faces": ["neutral", "happy", "suspicious"],
-		"yaws": [26.0, -8.0, -38.0],
+		"yaws": [58.0, -14.0, -78.0],
 		"camera": [Vector3(0.0, 2.14, -7.0), Vector3(-5.0, 180.0, 0.0), 30.0],
 		"spacing": 2.05,
 	},
@@ -114,9 +120,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "07_attack",
 		"caption": "attack",
 		"subjects": ["Feli", "Aubergine", "Avi"],
-		"pose": [4, 0.35],
+		"pose": [4, 0.55, 0.35],
 		"faces": ["cross", "devious", "worried"],
-		"yaws": [-30.0, 8.0, 36.0],
+		"yaws": [-68.0, 16.0, 76.0],
 		"camera": [Vector3(0.0, 2.62, -7.6), Vector3(-6.0, 180.0, 0.0), 31.0],
 		"spacing": 2.15,
 	},
@@ -124,9 +130,9 @@ const PLATES: Array[Dictionary] = [
 		"name": "08_block",
 		"caption": "block",
 		"subjects": ["Avi", "Stalk", "Pepper"],
-		"pose": [5, 0.55],
+		"pose": [5, 0.5, 0.5],
 		"faces": ["cross", "deadpan", "suspicious"],
-		"yaws": [-12.0, 4.0, 16.0],
+		"yaws": [-46.0, 10.0, 52.0],
 		"camera": [Vector3(0.0, 2.66, -7.6), Vector3(-6.0, 180.0, 0.0), 31.0],
 		"spacing": 2.15,
 	},
@@ -138,7 +144,7 @@ const PLATES: Array[Dictionary] = [
 		"name": "08b_proportions",
 		"caption": "build",
 		"subjects": ["Pear", "Pear", "Pear", "Cani", "Cani", "Cani"],
-		"pose": [-1, 0.0],
+		"pose": [-1, 0.0, 0.0],
 		"faces": ["neutral"],
 		"yaws": [-16.0, 0.0, 16.0, -16.0, 0.0, 16.0],
 		"builds": [
@@ -158,13 +164,13 @@ const PLATES: Array[Dictionary] = [
 		## No Avi here on purpose: its wing fans are the largest cosmetic in the
 		## game and they hide exactly the twist this plate exists to show.
 		"subjects": ["Pepper", "Feli", "Pear", "Aubergine"],
-		"pose": [1, 0.0],
+		"pose": [1, 0.0, 0.0],
 		"postures": ["planted", "moving", "reaching", "off-axis"],
 		"faces": ["deadpan", "worried", "cross", "suspicious"],
 		## Each posture is asymmetric in a different way, so each is turned to the
 		## angle that shows its asymmetry -- the twist on off-axis and the stride
 		## on moving are both invisible from dead front.
-		"yaws": [-12.0, 32.0, 20.0, 44.0],
+		"yaws": [-38.0, 64.0, 48.0, 82.0],
 		"camera": [Vector3(0.0, 2.70, -7.0), Vector3(-14.0, 180.0, 0.0), 31.0],
 		"spacing": 2.20,
 	},
@@ -271,8 +277,11 @@ func _shoot(plate: Dictionary) -> void:
 		)
 		if not postures.is_empty():
 			actor.contact_posture = str(postures[index % postures.size()])
+		var phases: Array = plate.get("phases", [])
+		var phase := float(phases[index]) if index < phases.size() \
+			else float(pose[2])
 		actor.set_pose(
-			int(pose[0]), float(pose[1]), 0.5, Vector2.ZERO, int(pose[0]) >= 0
+			int(pose[0]), float(pose[1]), phase, Vector2.ZERO, int(pose[0]) >= 0
 		)
 		actor.set_expression(str(faces[index % faces.size()]))
 		## Applied *after* the pose, because `set_pose` clears the body pivot and
