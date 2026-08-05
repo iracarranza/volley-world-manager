@@ -74,6 +74,17 @@ func _ready() -> void:
 		["12b_club_food", func() -> void:
 			var t := _dashboard.find_child("ClubSubTabs", true, false)
 			if t != null: t.current_tab = 1],
+		## The foldouts start closed, so everything inside them -- including the
+		## jump-to-globe control -- was invisible to every screenshot taken so far.
+		## A collapsed panel photographs as a panel with nothing in it.
+		["12b2_club_food_stores", func() -> void:
+			var column := _dashboard.find_child("FoldoutColumn", true, false)
+			if column == null:
+				return
+			for child in column.get_children():
+				if child is Button and str(child.text).ends_with("Paste stores"):
+					(child as Button).button_pressed = true
+					break],
 		["12c_club_sponsors", func() -> void:
 			var t := _dashboard.find_child("ClubSubTabs", true, false)
 			if t != null: t.current_tab = 2],

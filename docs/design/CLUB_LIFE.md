@@ -231,15 +231,25 @@ the adjacency both survive; the readability problem does not.
 The world needs somewhere to be learned, and it should earn its place
 mechanically rather than being a lore page nobody opens. Per region:
 
-- what it **produces** -- pastes, ingredients, and their import multiplier from
+- what it **grows** -- pastes and ingredients, with their import multiplier from
   your club
+- what it **makes** -- food blocks, which is a different map over the same
+  panels: growing follows land, manufacturing follows capital, and the two do not
+  coincide (see `ACCOMMODATIONS_AND_CARE.md`)
 - who it **produces** -- volis carrying that `home_region`
+- how it **spells** -- the region's orthographic signature, which is what lets a
+  product name declare its own factory
 - its **seam distance** from where you are
 
 Then the atlas is where you go to understand why your clean umami costs 1.4x.
 That is the same principle as teaching volleyball through playback: you arrive
 because you needed something, and the geography is what you find. Nobody learns
 a map they were handed; they learn one they had a reason to read.
+
+**So it must be reachable from the moment of need, not only from a nav tab.** The
+paste stores panel gets a jump-to-globe control; anywhere else that shows an
+import multiplier should get the same. A map you can only reach by deciding to
+look at a map is the lore page this is trying not to be.
 
 ## 4. Open questions
 
@@ -254,10 +264,15 @@ a map they were handed; they learn one they had a reason to read.
 - Whether palate fatigue is a visible number or has to be read from behaviour.
   Reading it from behaviour is better for the fiction and worse for usability; a
   confidence-graded hint is probably the middle.
-- Whether Chutum Üch and Mixigence are the only middle tiers at first, and how
-  many regional dishes the middle can carry before it becomes a list to scroll
-  rather than a choice to make.
-- Whether the atlas is its own nav section or lives inside Club.
+- What the block layer differentiates on beyond nutrition/morale/cost, now that
+  regional-dish morale is off the table. The proposal is how well a block carries
+  paste; the multiplier shape is unchosen and it could read as an arbitrary
+  penalty. See `ACCOMMODATIONS_AND_CARE.md`.
+- Which regions manufacture Supergruel, Mixigence and Vollyslommy. The
+  orthographic device says plainly-spelled products come from somewhere with no
+  spelling signature; it does not say which.
+- Whether the atlas is its own nav section or lives inside Club. The jump-to-globe
+  control makes it reachable either way, which lowers the stakes of the answer.
 - How many pastes exist. Eight was the first instinct and is a lot of
   combinatorial surface for a system whose output is a morale figure. The slot
   limit below reduces the objection from a scale problem to a discovery problem,

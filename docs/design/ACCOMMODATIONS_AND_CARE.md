@@ -28,18 +28,62 @@ receiving a nutrition modifier; they are someone who has been eating the same
 grey paste for six weeks and has started to mind. If a mechanic cannot be read
 that way at the table, it does not belong here — it belongs in training.
 
-## 1. Food tiers
+## 0. Where the culture lives
 
-A base meal is chosen per-week (or per-trip; see lodging). Tiers vary along
-three axes that deliberately do **not** move together, so there is no dominant
-choice:
+**The block is not the culture. The flavour is.**
 
-| tier | what it is | nutrition | morale | cost |
-| --- | --- | --- | --- | --- |
-| Supergruel | engineered nutrition | high | very low | very low |
-| Chutum Üch | a region's own cooking | moderate | *depends* | moderate |
-| Mixigence | manufactured, consistent | moderate | moderate | moderate |
-| Vollyslommy | indulgence | low | very high | very high |
+This is a deliberate inversion of how food works for us. In our world a dish
+*is* a culture -- you learn a place by eating its cooking, and the recipe is the
+heritage. Here the meal itself is an **industrial product**: a block, manufactured
+at scale, shipped, uniform, bought by the case. What carries region and identity
+is the **paste** -- the ingredient, the flavour, the thing that was grown
+somewhere and tastes of it.
+
+So there are no regional dishes in this game. There are regional *flavours*
+applied to manufactured food. Every design decision below follows from that, and
+anything that starts to make a block read as somebody's home cooking is drifting
+back toward the version this replaced.
+
+The consequences are load-bearing rather than thematic:
+
+- **Palate fatigue belongs to the paste layer**, because that is the layer with
+  cultural memory. Nobody gets homesick for a block.
+- **Preference is about flavour, not about meals.** A voli's `home_region`
+  predicts which pastes taste like home. It says nothing about which block they
+  want.
+- **The block layer therefore has to earn its differentiation mechanically**, not
+  culturally. See below; this is the part that is still open.
+
+### Block names carry where they were made
+
+The names are the one place the block layer does touch geography, and it is
+orthographic rather than culinary. *Chutum Üch* takes its diacritic from the
+region that manufactures it -- **Spëddigh** already spells with the umlaut
+(`scripts/data/regions.gd`), so the product name is legibly Spëddigh-made
+without a tooltip saying so. This is the existing region-naming device from
+`docs/world/STYLE_AND_SETTING.md` used one layer down: reskinned English
+dressed in a region's spelling.
+
+That gives products a readable origin, which then means something because origin
+sets import cost. A player who has seen four product names learns four spelling
+systems, and the atlas is where they find out those spellings are places.
+
+*Supergruel*, *Mixigence* and *Vollyslommy* are plainly spelled, so by the same
+rule they read as made somewhere with no orthographic signature -- Landavol, or
+A'ace, which bought a food industry the way it bought a roster. **Unassigned on
+purpose.** The device is settled; which factory sits where is not.
+
+## 1. Food blocks
+
+A base block is chosen per-week (or per-trip; see lodging). They vary along axes
+that deliberately do **not** move together, so there is no dominant choice:
+
+| block | what it is | nutrition | morale | cost | takes paste |
+| --- | --- | --- | --- | --- | --- |
+| Supergruel | engineered nutrition | high | very low | very low | badly |
+| Chutum Üch | milled, finished at the table | moderate | good | moderate | well |
+| Mixigence | manufactured, consistent | moderate | moderate | moderate | neutrally |
+| Vollyslommy | indulgence, pre-flavoured | low | very high | very high | poorly, and fights it |
 
 The two ends are deliberately *both* bad choices taken alone. Supergruel is
 nutritionally complete and joyless: it holds condition together and grinds
@@ -52,28 +96,41 @@ matters more than mood, and **Vollyslommy is correct after a cup exit** when the
 room needs rescuing. The system rewards reading the season, not finding the best
 row.
 
-### The middle tiers are not a rung, they are a culture
+### The fourth axis, and why it is needed
 
-The names carry this and should keep carrying it. *Supergruel* and *Vollyslommy*
-are English-legible jokes about function. *Chutum Üch* is a **place's** food.
-*Mixigence* is a **product**. That difference is the design, not decoration:
+Recorded honestly, because it is a problem this document created for itself: an
+earlier draft gave Chutum Üch a morale value of *depends*, on the grounds that it
+was a region's own cooking and therefore worth more to volis raised there. That
+is exactly the regional-dish reading this design rejects, so it is gone -- but
+removing it left the block layer thinner than it was. Four rows differing on
+nutrition, morale and cost is a ladder with a price tag, and a ladder is solvable.
 
-- **Chutum Üch** is a real region's cooking, so its value depends on *who is
-  eating it*. For a voli raised in that region it is home cooking and worth
-  more than its rung suggests; for everyone else it is unfamiliar food they may
-  or may not take to.
-- **Mixigence** is manufactured and uniform. It is nobody's favourite and nobody
-  refuses it -- the safe middle, and the one that never becomes a story.
+The proposed recovery is the **takes paste** column: how well a block carries
+flavour. It is the right axis specifically because culture lives in the paste, so
+a block's real job is to be a better or worse *carrier* of it.
 
-This is the expansion slot. **Every region can contribute its dish to the
-middle**, and each one lands differently across a squad depending on where its
-volis were raised. A five-row ladder becomes a spread whose shape is your
-roster's geography, which is worldbuilding done inside a mechanic rather than
-beside it.
+- **Supergruel** resists flavour. Dense, engineered, and it fights whatever you
+  mix in. This is the substantive cost of gruel -- not merely that it is joyless,
+  but that **you cannot paste your way out of it**. Otherwise cheap-plus-heavy-mix
+  is a dominant strategy and the tier list collapses.
+- **Chutum Üch** takes paste well. It is milled to be finished at the table, so
+  the same paste budget goes further on it. That, not sentiment, is why it costs
+  more than Mixigence.
+- **Mixigence** takes paste exactly as advertised and never surprises anyone. The
+  safe middle, and the one that never becomes a story.
+- **Vollyslommy** arrives already flavoured, so paste on it is at best wasted and
+  at worst clashes. An indulgent squad has bought a strong opinion along with the
+  meal.
 
-It also means the middle can never be solved by table lookup. The best mid-tier
-meal for one squad is the wrong one for another, and it changes as the roster
-does.
+The consequence worth having: the two layers **interact** rather than stack. The
+value of a paste mix depends on which block is under it, so the choice cannot be
+made by reading either table alone. It is also the expansion slot -- new products
+are new carriers, not new cuisines.
+
+**Untested.** The multiplier shape (does a bad carrier scale the paste's morale
+return, or cap the ratio the chef can apply, or both?) is unchosen, and the
+interaction could easily read as an arbitrary penalty rather than a property of
+the food.
 
 ## 2. Flavouring pastes
 
@@ -141,6 +198,32 @@ The convergence risk and what prevents it are recorded in `CLUB_LIFE.md`: cheap
 local ingredients plus a locally-familiar chef would be a dominant strategy were
 it not that a squad drawn from six regions cannot all eat local. Cheap food is
 homesick food for most of them.
+
+### Two geographies over one map
+
+Pastes are **grown**; blocks are **made**. Both carry an origin and both pay
+import cost by distance, but they are not the same map laid twice:
+
+- Growing follows land and climate. A region rich in ingredients need not have a
+  factory.
+- Making follows capital and industry. A region with a factory need not grow
+  anything worth eating.
+
+So a wealthy manufacturing region imports cheap ingredients and exports expensive
+product, and a poor agricultural one is surrounded by flavour it sells onward.
+That is a trade shape rather than a distance table, and it gives the atlas
+something to say beyond "1.4x".
+
+### The stores open onto the world
+
+The paste stores panel needs a **jump-to-globe** control, because the store is
+where a player first has a reason to care where anything comes from. They came to
+find out why clean umami is short and expensive; the answer is geography, and the
+shortest path from that question to the map should be one button.
+
+This is the same principle as teaching volleyball through playback: arrive because
+you needed something, and the world is what you find. The atlas being reachable
+from a nav tab is not sufficient -- reachable from the moment of need is.
 
 ## 2c. Team-wide by default, differentiated at a compounding cost
 

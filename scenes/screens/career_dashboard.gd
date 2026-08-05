@@ -468,20 +468,26 @@ func _navigate(section_name: String) -> void:
 const CLUB_UNBUILT := "[i]Not implemented. Shown to judge layout.[/i]"
 
 ## Sample staff. Four roles, each owning one resource -- see CLUB_LIFE.md.
+## Regions come from `VolleyballRegions.DEFINITIONS`, and each staff name follows
+## that region's naming tradition -- the same rule the roster already obeys.
+## Invented place names here would undercut the one thing this panel is trying to
+## teach, which is that origin is a real coordinate with a cost attached.
 const SAMPLE_STAFF: Array = [
 	["Assistant Coach", "Rennik Vaal", "Landavol", "Training throughput",
 		"Runs the week's sessions. Better coaches convert the same hours into more."],
-	["Scout", "Ilse Bramwell", "Kesh Highlands", "Information confidence",
+	["Scout", "Edda Vinter", "Spëddigh", "Information confidence",
 		"A weak scout does not give you worse volis. It gives you a blurrier roster."],
-	["Chef / Nutritionist", "Marta Oyelaran", "Landavol", "Morale and nourishment",
-		"Cooks Landavol and Kesh cuisine well. Can hold three separate plans a week."],
-	["Physio", "Tobar Enns", "Sud Marine", "Condition and recovery",
+	["Chef / Nutritionist", "Amara Oyelaran", "Xérvu", "Morale and nourishment",
+		"Works Xérvu and Bloc du Larg flavours well. Can hold three plans a week."],
+	["Physio", "Remy Aucoin", "Bloc du Larg", "Condition and recovery",
 		"Owns fatigue. Occasionally owns the complaints that follow it."],
 ]
 
+## Blocks, not dishes. These are manufactured products, and the spelling of a
+## product name is where it was made -- Chutum Üch takes Spëddigh's umlaut. The
+## culture is in the pastes below, never in the block.
 const SAMPLE_MEALS: Array[String] = [
-	"Supergruel", "Field rations", "Canteen standard", "Prepared table",
-	"Vollyslommy",
+	"Supergruel", "Chutum Üch", "Mixigence", "Vollyslommy",
 ]
 
 ## Two to four pastes on a block, bounded by the chef. Sample mix only.
@@ -533,6 +539,7 @@ func _refresh_accommodations() -> void:
 	paste_row.add_child(add_chip)
 	accommodations_summary.text = "\n".join([
 		"[b]Accommodations[/b]  %s" % CLUB_UNBUILT,
+		"Blocks are manufactured; the pastes are where a region tastes of itself.",
 		"The table is squad-wide by default; feeding volis separately costs more",
 		"each time. A block holds two to four pastes, and how many is the chef's",
 		"ceiling.",
@@ -552,7 +559,7 @@ func _refresh_accommodations() -> void:
 	## it is just empty.
 	reaction_panel.text = "\n".join([
 		"[b]Feli · Rusa Kentaro[/b]",
-		"    [i]happy; this is close to home cooking[/i]",
+		"    [i]happy; the ferment tastes like home[/i]",
 		"",
 		"[b]Vegi · Odile Ferrand[/b]",
 		"    [i]tiring of the ferment[/i]",
@@ -566,20 +573,24 @@ func _refresh_accommodations() -> void:
 		"[i]The allergy may not be real. Volis report what they feel, not what",
 		"is happening to them, and telling those apart is the physio's job.[/i]",
 	])
+	## Origins follow `VolleyballRegions.REGION_ADJACENCY` from Landavol, so the
+	## multipliers read as a gradient rather than as arbitrary numbers: neighbours
+	## are cheap, the far side of the ball is not.
 	_add_foldout("Paste stores", false, "\n".join([
-		"    Sharp ferment      [color=#7fbf6a]plentiful[/color]     local · 1.0x",
-		"    Smoky char         [color=#7fbf6a]plentiful[/color]     local · 1.0x",
-		"    Clean umami        [color=#c9a227]low[/color]           Kesh · 1.4x import",
-		"    Heavy sweet        [color=#c9a227]low[/color]           Xervya · 1.9x import",
-		"    Bitter herb        [color=#b5563f]none[/color]          Sud Marine · 1.6x import",
+		"    Sharp ferment      [color=#7fbf6a]plentiful[/color]     Landavol · local",
+		"    Smoky char         [color=#7fbf6a]plentiful[/color]     Landavol · local",
+		"    Bitter herb        [color=#c9a227]low[/color]           Bloc du Larg · 1.1x",
+		"    Clean umami        [color=#c9a227]low[/color]           Pāwa Hitō · 1.4x",
+		"    Heavy sweet        [color=#b5563f]none[/color]          Taktikã · 1.9x",
 		"",
-		"[i]Ingredients near the club are cheap and distance adds import cost. A",
-		"squad drawn from six regions cannot all eat local, so the cheapest table",
-		"is also the most homesick one.[/i]",
-	]))
+		"[i]Pastes are grown; blocks are made. Both pay for distance, but they are",
+		"not the same map -- land grows flavour, capital builds factories. A squad",
+		"drawn from six regions cannot all eat local, so the cheapest table is also",
+		"the most homesick one.[/i]",
+	]), "Jump to globe  ⟶")
 	_add_foldout("Lodging", false, "\n".join([
 		"    Home              Harbor City quarters · standing cost",
-		"    Next away trip    Kesh Highlands, week 4 · [i]not yet booked[/i]",
+		"    Next away trip    Pāwa Hitō, week 4 · [i]not yet booked[/i]",
 		"",
 		"[i]A voli billeted near where they were raised feels differently about the",
 		"trip than one taken somewhere alien.[/i]",
@@ -595,13 +606,33 @@ func _refresh_accommodations() -> void:
 
 ## One collapsible block. Header button toggles the body, which starts closed
 ## unless this is the thing a reader most likely came for.
-func _add_foldout(title: String, open: bool, body_text: String) -> void:
+##
+## `action_label`, when given, adds a control under the body that travels
+## somewhere else. That is deliberately part of the foldout rather than a
+## separate widget: a reader who has opened "Paste stores" and is looking at an
+## import multiplier is exactly the reader who has a reason to look at the map,
+## and the shortest path from that question to the answer should be one button.
+## Reaching the world only from a nav tab makes it the lore page nobody opens.
+func _add_foldout(
+	title: String, open: bool, body_text: String, action_label: String = ""
+) -> void:
 	var header := Button.new()
 	header.toggle_mode = true
 	header.button_pressed = open
 	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	header.text = ("▾  " if open else "▸  ") + title
 	foldout_column.add_child(header)
+	## Above the body, not below it. Placed after the prose the button lands
+	## outside the scroll fold, which is the same as not existing -- the
+	## explanation is what a reader can afford to scroll for, the exit is not.
+	var action: Button = null
+	if not action_label.is_empty():
+		action = Button.new()
+		action.text = action_label
+		action.disabled = true
+		action.visible = open
+		action.size_flags_horizontal = Control.SIZE_SHRINK_END
+		foldout_column.add_child(action)
 	var body := RichTextLabel.new()
 	body.bbcode_enabled = true
 	body.fit_content = true
@@ -610,6 +641,8 @@ func _add_foldout(title: String, open: bool, body_text: String) -> void:
 	foldout_column.add_child(body)
 	header.toggled.connect(func(pressed: bool) -> void:
 		body.visible = pressed
+		if action != null:
+			action.visible = pressed
 		header.text = ("▾  " if pressed else "▸  ") + title)
 
 
@@ -624,7 +657,7 @@ func _refresh_sponsorships() -> void:
 		"[b]Active[/b]",
 		"    Rusa Kentaro — Harbour Produce Co.",
 		"        Play in 5 consecutive fixtures.        [color=#7fbf6a]4 / 5[/color]",
-		"    Odile Ferrand — Kesh Ironworks",
+		"    Odile Ferrand — Spëddigh Ironworks",
 		"        Record 20 digs across 5 matches.       [color=#c9a227]11 / 20[/color]",
 		"",
 		"[b]Offered[/b]",
