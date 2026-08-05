@@ -34,25 +34,46 @@ A base meal is chosen per-week (or per-trip; see lodging). Tiers vary along
 three axes that deliberately do **not** move together, so there is no dominant
 choice:
 
-| tier | nutrition | morale | cost |
-| --- | --- | --- | --- |
-| Supergruel | high | very low | very low |
-| Field rations | moderate | low | low |
-| Canteen standard | moderate | moderate | moderate |
-| Prepared table | moderate-high | high | high |
-| Vollyslommy | low | very high | very high |
+| tier | what it is | nutrition | morale | cost |
+| --- | --- | --- | --- | --- |
+| Supergruel | engineered nutrition | high | very low | very low |
+| Chutum Üch | a region's own cooking | moderate | *depends* | moderate |
+| Mixigence | manufactured, consistent | moderate | moderate | moderate |
+| Vollyslommy | indulgence | low | very high | very high |
 
-The two ends are the interesting ones and they are deliberately *both* bad
-choices taken alone. Supergruel is nutritionally complete and joyless: it will
-hold physical condition together and grind morale down. Vollyslommy is
-gluttonous, beloved, and does not feed an athlete — a squad living on it is
-happy and slowly getting worse.
+The two ends are deliberately *both* bad choices taken alone. Supergruel is
+nutritionally complete and joyless: it holds condition together and grinds
+morale down. Vollyslommy is gluttonous, beloved, and does not feed an athlete --
+a squad living on it is happy and slowly getting worse.
 
-The design intent is that neither extreme is a trap to be discovered once and
-avoided forever. **Supergruel is correct during a brutal fixture congestion**
-when condition matters more than mood, and **Vollyslommy is correct after a
-cup exit** when the room needs rescuing. The system should reward reading the
-season, not finding the best row.
+Neither extreme is a trap to be discovered once and avoided forever.
+**Supergruel is correct during brutal fixture congestion** when condition
+matters more than mood, and **Vollyslommy is correct after a cup exit** when the
+room needs rescuing. The system rewards reading the season, not finding the best
+row.
+
+### The middle tiers are not a rung, they are a culture
+
+The names carry this and should keep carrying it. *Supergruel* and *Vollyslommy*
+are English-legible jokes about function. *Chutum Üch* is a **place's** food.
+*Mixigence* is a **product**. That difference is the design, not decoration:
+
+- **Chutum Üch** is a real region's cooking, so its value depends on *who is
+  eating it*. For a voli raised in that region it is home cooking and worth
+  more than its rung suggests; for everyone else it is unfamiliar food they may
+  or may not take to.
+- **Mixigence** is manufactured and uniform. It is nobody's favourite and nobody
+  refuses it -- the safe middle, and the one that never becomes a story.
+
+This is the expansion slot. **Every region can contribute its dish to the
+middle**, and each one lands differently across a squad depending on where its
+volis were raised. A five-row ladder becomes a spread whose shape is your
+roster's geography, which is worldbuilding done inside a mechanic rather than
+beside it.
+
+It also means the middle can never be solved by table lookup. The best mid-tier
+meal for one squad is the wrong one for another, and it changes as the roster
+does.
 
 ## 2. Flavouring pastes
 

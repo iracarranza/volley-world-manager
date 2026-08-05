@@ -209,6 +209,38 @@ week, scaling with chef quality. Money is fungible and therefore dull; attention
 is a real allocation. It also means a better chef's reward is *flexibility*
 rather than a larger number, which is harder to power-creep.
 
+## 3b. The world is a ball, and that is usable
+
+A volleyball has **18 panels in 6 groups of 3**. Sixnet already has six regions.
+That is not a coincidence to force -- it is a structure that hands over three
+things a geography system needs:
+
+- **Adjacency for free.** Regions sharing a seam are neighbours.
+- **Distance that already has a job.** Import cost follows seam distance, which
+  is exactly what paste and ingredient availability needs.
+- **A shape nobody else has.** Every other fantasy map is a landmass.
+
+**Do not render it as a sphere.** Players cannot see the back, curvature makes
+adjacency ambiguous, and nothing can be labelled legibly. The version that works
+is the **flattened panel pattern** -- the way a shoe upper or a sail plan is
+drawn -- with the six groups laid flat and the seams visible. The identity and
+the adjacency both survive; the readability problem does not.
+
+### The atlas
+
+The world needs somewhere to be learned, and it should earn its place
+mechanically rather than being a lore page nobody opens. Per region:
+
+- what it **produces** -- pastes, ingredients, and their import multiplier from
+  your club
+- who it **produces** -- volis carrying that `home_region`
+- its **seam distance** from where you are
+
+Then the atlas is where you go to understand why your clean umami costs 1.4x.
+That is the same principle as teaching volleyball through playback: you arrive
+because you needed something, and the geography is what you find. Nobody learns
+a map they were handed; they learn one they had a reason to read.
+
 ## 4. Open questions
 
 - Whether a fourth staff member earns its slot mechanically, or whether the chef
@@ -222,6 +254,10 @@ rather than a larger number, which is harder to power-creep.
 - Whether palate fatigue is a visible number or has to be read from behaviour.
   Reading it from behaviour is better for the fiction and worse for usability; a
   confidence-graded hint is probably the middle.
+- Whether Chutum Üch and Mixigence are the only middle tiers at first, and how
+  many regional dishes the middle can carry before it becomes a list to scroll
+  rather than a choice to make.
+- Whether the atlas is its own nav section or lives inside Club.
 - How many pastes exist. Eight was the first instinct and is a lot of
   combinatorial surface for a system whose output is a morale figure. The slot
   limit below reduces the objection from a scale problem to a discovery problem,
