@@ -73,27 +73,22 @@ rule they read as made somewhere with no orthographic signature -- Landavol, or
 A'ace, which bought a food industry the way it bought a roster. **Unassigned on
 purpose.** The device is settled; which factory sits where is not.
 
-### The pun names the effect
+### Name and function are separate axes
 
-The second naming rule, and the more useful one: **a product's pun already
-states what it does**, so the mechanic should be read off the name rather than
-attached to it afterward.
+A previous draft claimed the pun *states* the mechanic, and asked every product
+name to derive its effect. That is too strong. **A name's worldbuilding value is
+allowed to be entirely independent of what the block does.** Chutum Üch is from
+Spëddigh *and* it is a cheap, thick, unpleasant block; the second fact is not an
+explanation of the first, and demanding that it be one turns naming into a puzzle
+with one solution.
 
-- **Chutum Üch** is *chew too much*. So it takes the longest to eat -- a real
-  time cost against the week -- and it carries flavour best for exactly the same
-  reason. You are in contact with it longer. One pun, both columns.
-- **Mixigence** is *exigence, mixed*: a blend that meets the requirement and
-  does nothing further. So it never fails and never surprises, and it caps at
-  two pastes, because it arrives already a mixture.
-- **Supergruel** is complete and joyless, and gruel is the thing you can always
-  make. So it needs no preparation -- the one block that still works on a travel
-  day when the kitchen is not running. That is what makes it correct during
-  fixture congestion, rather than the nutrition figure alone.
-- **Vollyslommy** is indulgence, so its morale spike is the largest *and* decays
-  fastest. Event food, not a diet. This is why it is right after a cup exit and
-  wrong as a standing table, mechanically rather than by assertion.
+So: the **name** carries origin and character. The **function** is designed on
+its own terms. Where the two happen to rhyme, take the free coherence and do not
+build a rule on it.
 
-Vollyslommy's exact pun is the one still unfixed; the others are legible.
+Chutum Üch is exactly that lucky case. It is *chew too much*, and separately it
+is thick -- and thick is why it soaks up more paste. That rhyme is a gift, not a
+law, and Mixigence should not be contorted to match it.
 
 ### How many blocks, and the answer that is not a number
 
@@ -104,9 +99,31 @@ each block has a **week when it is the right answer**, they stop being rungs and
 become a toolkit, and then more is fine.
 
 So the count is not chosen directly. **A block exists if you can name the week it
-wins.** Congestion → Supergruel. A squad whose pastes are doing the work →
-Chutum Üch. No strong reason → Mixigence. The room needs rescuing →
-Vollyslommy. A fifth needs a fifth week, not a fifth price point.
+wins.** Applying that:
+
+- **Supergruel** -- fixture congestion, where condition outranks mood and nothing
+  else holds a squad together through it. It also keeps a second job: it needs no
+  preparation, so it is the one block that still works on a travel day when the
+  kitchen is not running.
+- **Chutum Üch** -- a thin month with a well-stocked paste cupboard. Cheap brick,
+  expensive flavour, and the saturation makes that trade actually pay.
+- **Vollyslommy** -- the room needs rescuing. Biggest morale spike and the
+  fastest decay, so it is event food and never a diet.
+- **Mixigence** -- *no answer*.
+
+**Mixigence fails its own test, and it should be treated as failing.** "The safe
+middle that nobody loves and nobody refuses" is a description of a design slot,
+not of a week anyone would choose it. A block whose identity is being
+unremarkable is a rung, and rungs are the thing this section exists to prevent.
+
+There is one perk that would save it: **Mixigence is the block palate fatigue
+does not accumulate on.** It is engineered to be forgettable, so it is what you
+feed the squad while a beloved ratio recovers -- the reset week, deliberately
+chosen, with a real cost in that nothing good happens during it. That is a week.
+
+If that perk is not taken, cut it. Three blocks with three distinct weeks is
+stronger than four with a spare, and the catalogue can grow later from products
+that arrive with a reason.
 
 **The case for many more is real, though, and it is a different argument.** If
 blocks are manufactured by regions, the block list is a *map* -- six regions,
@@ -125,12 +142,36 @@ worldbuilding you get for free from a mechanic already needed for pastes.
 A base block is chosen per-week (or per-trip; see lodging). They vary along axes
 that deliberately do **not** move together, so there is no dominant choice:
 
-| block | what it is | nutrition | morale | cost | takes paste |
+| block | what it is | nutrition | morale | cost | saturation |
 | --- | --- | --- | --- | --- | --- |
-| Supergruel | engineered nutrition | high | very low | very low | badly |
-| Chutum Üch | milled, finished at the table | moderate | good | moderate | well |
-| Mixigence | manufactured, consistent | moderate | moderate | moderate | neutrally |
-| Vollyslommy | indulgence, pre-flavoured | low | very high | very high | poorly, and fights it |
+| Supergruel | engineered nutrition | high | very low | very low | low |
+| Chutum Üch | thick, cheap, hard work to eat | moderate | low | low | **high** |
+| Mixigence | manufactured, consistent | moderate | moderate | moderate | normal |
+| Vollyslommy | indulgence, pre-flavoured | low | very high | very high | very low |
+
+**Saturation is not the paste slot count.** The chef sets how *many* pastes a
+block can hold (two to four); the block sets how *much* of each it can take. Two
+limiters from two places, and they do not substitute for one another -- a great
+chef on Supergruel still gets a thin, four-way mix, and Chutum Üch under a weak
+chef gets a lot of two things.
+
+### Chutum Üch is a cheap block, not a good one
+
+It sits one rung above Supergruel and no further. It is *chew too much*: edible,
+tiring, and nobody looks forward to it -- morale **low**, not good. What it has
+is thickness, and thickness is the mechanic: **it absorbs more paste per serving
+than anything else on the list.**
+
+That makes it the block for a club that is short on money and long on flavour.
+You buy the cheap thick brick and you spend on the paste instead, and the meal
+that comes out is genuinely decent -- but it is decent because of what you put on
+it, which is exactly where this design wants the value to live.
+
+It also gives the low end a real decision rather than a price floor. Supergruel
+and Chutum Üch are both cheap, and they fail in opposite directions: Supergruel
+feeds the squad properly and cannot be improved, Chutum Üch feeds them adequately
+and can be rescued entirely. That is a choice at the bottom of the table, which
+is where budget-constrained clubs actually live.
 
 The two ends are deliberately *both* bad choices taken alone. Supergruel is
 nutritionally complete and joyless: it holds condition together and grinds
@@ -222,7 +263,7 @@ interesting person than either input alone.
 a thing. The setback should be low impact and low urgency -- tangible, easy to
 address, never an irritant. What makes it more than an admin task is that it is
 the ground truth underneath the complaint system: a voli who says "I think I'm
-allergic to Xervyan food" may be right, may have high palate fatigue on a paste
+allergic to Xérvyan food" may be right, may have high palate fatigue on a paste
 from that region, or may be blaming their dinner for something else entirely.
 Some real allergies go unreported. See unreliable self-report in
 `CLUB_LIFE.md`; the physio and scout earn their slots translating one into the
@@ -275,18 +316,23 @@ The strongest version of that trade shape, and it needs no new data:
 | Tu'ul ys Feynt | Taktikã |
 | Zaitgaist | Landavol |
 
-Six and six, one each, already in `scripts/data/regions.gd`. The paste a player
-buys as Xervyan is grown in Kutre den Lyn; the major holds the trade and the
-margin, the minor holds the land.
+Six and six, one each, already in `scripts/data/regions.gd`. The paste sold as
+Xérvyan grows in Xérvu's minor neighbour, the way a thing grows where the land
+suits it and is sold from wherever the road goes.
 
 **This is what finally gives the minor tier a reason to be known.** Minor regions
 currently exist in adjacency tables and the scouting population and nowhere a
-player would ever look. Under this rule you learn Kutre den Lyn exists *because
-you bought paste*, which is the same principle as everything else here -- you
-arrive because you needed something, and the world is what you find.
+player would ever look. Under this rule you learn one exists *because you bought
+paste*, which is the same principle as everything else here -- you arrive because
+you needed something, and the world is what you find.
 
-It also carries a politics without stating one. The label says Xérvu. The field
-is somewhere else, and somewhere else is poorer.
+**Not an extraction story.** An earlier draft framed this as the major holding
+the margin while the minor holds the land, which is our world's arrangement
+imported wholesale and is explicitly not this world's (`STYLE_AND_SETTING.md`:
+the tone is earnest and warm, and the same reason body types are simply accepted
+rather than a source of division). Growing and selling are two ordinary jobs done
+in two places. The pairing exists to make the map legible and to give distance a
+cost, not to give the player something to feel bad about buying.
 
 **Zaitgaist is the exception, and it should be.** The region with no tradition of
 its own, which borrows whatever just won: its crop follows the Sixnet champion.

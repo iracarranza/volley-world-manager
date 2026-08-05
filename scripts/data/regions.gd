@@ -59,14 +59,19 @@ const DEFINITIONS := {
 ## people and one language, and conflating them makes a nation into an
 ## ethnicity. Here it matters mechanically rather than only politely, because
 ## `home_region` is where a voli was *raised* and `club_region` is where they
-## play now: a Xervyan is anyone from Xérvu, including one whose family came
+## play now: a Xérvyan is anyone from Xérvu, including one whose family came
 ## from somewhere else, and a voli who moves does not stop being one.
 ##
-## Formation follows the place name and drops diacritics that would not survive
-## being said out loud -- Xérvu/Xervyan, Taktikã/Taktikan -- except where the
-## mark is the whole character of the word (Spëddish, Ralīn). Two-word regions
-## contract to whichever half is actually spoken: "Bloc du Larg" is *Larg* in a
-## sentence, so Largen.
+## **Diacritics are preserved.** A demonym is the same word in the same written
+## language as the place, so Xérvu gives Xérvyan and Taktikã gives Taktikãn. An
+## earlier version dropped marks that "would not survive being said out loud",
+## which is our world's habit of flattening other people's spelling into the
+## alphabet that happens to be convenient, and it is the wrong instinct here: the
+## mark is the region's signature and it is the only thing making the name look
+## like a written language at all.
+##
+## Two-word regions contract to whichever half is actually spoken: "Bloc du Larg"
+## is *Larg* in a sentence, so Largen.
 ##
 ## Nothing derives from the people's naming tradition. That tradition tells you
 ## what a voli is called; the demonym tells you where they are from.
@@ -75,8 +80,8 @@ const DEMONYMS := {
 	"Spëddigh": "Spëddish",
 	"Pāwa Hitō": "Pāwan",
 	"Bloc du Larg": "Largen",
-	"Xérvu": "Xervyan",
-	"Taktikã": "Taktikan",
+	"Xérvu": "Xérvyan",
+	"Taktikã": "Taktikãn",
 	"Ispayk": "Ispaykano",
 	"A'ace": "A'aceni",
 	"Tu'ul ys Feynt": "Feyntish",
@@ -283,7 +288,7 @@ static func canonical_name(region_name: String) -> String:
 		if region_name in DEFINITIONS or region_name in LEGACY_REGIONS else "Landavol"
 
 
-## "Xervyan", for a voli, a paste or a plate of food. Unknown regions fall back
+## "Xérvyan", for a voli, a paste or a plate of food. Unknown regions fall back
 ## to the region name itself rather than to Landavol's demonym, because calling
 ## an unrecognised place's food Landavolan is a wrong answer stated confidently.
 ## Deliberately not routed through `canonical_name`, which resolves anything it

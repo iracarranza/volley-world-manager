@@ -274,17 +274,21 @@ Ispayk, A'ace):
 ### Demonyms
 
 `VolleyballRegions.DEMONYMS` holds the word for a person or a thing *from* a
-region -- Xervyan, Spëddish, Zaitgaister. Three rules:
+region -- Xérvyan, Spëddish, Zaitgaister. Three rules:
 
 - **It is built from the place, never from the people's naming tradition.**
   This is the Filipino/Tagalog distinction: Filipino is everyone from the
   Philippines, Tagalog is one people and one language, and treating the second
   as the first turns a country into an ethnicity. Xérvu's people are named from
-  West/Southern/East African traditions, but the demonym is *Xervyan* and comes
+  West/Southern/East African traditions, but the demonym is *Xérvyan* and comes
   from the map.
-- **It sheds diacritics that would not survive being said aloud** (Xérvu →
-  Xervyan, Taktikã → Taktikan), and keeps the ones carrying the word's whole
-  character (Spëddish, Ralīn).
+- **Diacritics are preserved.** Xérvu → Xérvyan, Taktikã → Taktikãn, Spëddigh →
+  Spëddish. A demonym is the same word in the same written language as the
+  place. An earlier version of this rule dropped marks that "would not survive
+  being said aloud", which is our world's habit of flattening other people's
+  spelling into whichever alphabet is convenient, and it is wrong here: the mark
+  is the region's signature and the only thing making the name look like a
+  written language at all.
 - **Two-word regions contract to the half that gets spoken.** Nobody says "Bloc
   du Larg" in a sentence about a person; they say Larg. Hence Largen, Feyntish,
   Tempaoli.
@@ -300,10 +304,42 @@ nothing about ancestry, or every transfer quietly implies one.
 | Spëddigh | Spëddish | | Lo-onğ Ralī | Ralīn |
 | Pāwa Hitō | Pāwan | | Bompaşao | Bompaşan |
 | Bloc du Larg | Largen | | Rhen Tempaol | Tempaoli |
-| Xérvu | Xervyan | | Kutre den Lyn | Kutren |
-| Taktikã | Taktikan | | Zaitgaist | Zaitgaister |
+| Xérvu | Xérvyan | | Kutre den Lyn | Kutren |
+| Taktikã | Taktikãn | | Zaitgaist | Zaitgaister |
 | Ispayk | Ispaykano | | | |
 | A'ace | A'aceni | | | |
+
+### Open: minor regions should share their major neighbour's spelling
+
+A minor region sits next to exactly one core region in `REGION_ADJACENCY`, and
+the pair should read as **the same written language** -- that is what makes a
+neighbour a neighbour rather than a name drawn from a different hat. The rule is
+not currently applied, and auditing the six pairs:
+
+| minor | neighbour | neighbour's mark | shares it? |
+| --- | --- | --- | --- |
+| Lo-onğ Ralī | Pāwa Hitō | macron (ā, ō) | **yes** -- Ralī |
+| Zaitgaist | Landavol | none | **yes**, by absence |
+| Bompaşao | Bloc du Larg | none, French connector | near -- ş is Turkish where ç would be French |
+| Rhen Tempaol | Spëddigh | umlaut (ë) | no |
+| Tu'ul ys Feynt | Taktikã | tilde (ã) | no |
+| Kutre den Lyn | Xérvu | acute (é) | no |
+
+**Kutre den Lyn is the one flagged as failing outright.** It borrows Bloc du
+Larg's connector shape ("den" for "du") while sitting next to Xérvu, so it reads
+as related to the wrong region, and the *r* that was meant to carry phonetic
+character does not do it. Replacements under consideration, all still "cut and
+line":
+
+- **Kutré Lyn** -- takes Xérvu's acute, drops the connector that was pointing at
+  the wrong neighbour. Shortest and cleanest.
+- **Xutré Lyn** -- takes both the acute *and* the initial X. Unmistakably
+  Xérvu's kin; possibly too close to read as its own place.
+- **Kutré den Lyné** -- keeps the connector and adds two acutes. Most
+  language-like, longest, and the connector is still the thing that misfires.
+
+Whichever is chosen needs a `LEGACY_REGIONS` entry so existing saves resolve,
+and the demonym moves with it (Kutrén).
 
 The diacritic-pun trick itself is specifically a **region**-naming device --
 it doesn't need to be forced onto everything else. Other flavor (the Sixnet

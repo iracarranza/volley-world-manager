@@ -479,9 +479,9 @@ const SAMPLE_STAFF: Array = [
 		"A weak scout does not give you worse volis. It gives you a blurrier roster."],
 	## Region column names the *place*; the familiarity line uses the *demonym*
 	## (`VolleyballRegions.DEMONYMS`). That is the distinction doing visible work:
-	## you are from Xérvu, the flavour is Xervyan.
+	## you are from Xérvu, the flavour is Xérvyan.
 	["Chef / Nutritionist", "Amara Oyelaran", "Xérvu", "Morale and nourishment",
-		"Works Xervyan and Largen flavours well. Can hold three plans a week."],
+		"Works Xérvyan and Largen flavours well. Can hold three plans a week."],
 	["Physio", "Remy Aucoin", "Bloc du Larg", "Condition and recovery",
 		"Owns fatigue. Occasionally owns the complaints that follow it."],
 ]
@@ -489,6 +489,12 @@ const SAMPLE_STAFF: Array = [
 ## Blocks, not dishes. These are manufactured products, and the spelling of a
 ## product name is where it was made -- Chutum Üch takes Spëddigh's umlaut. The
 ## culture is in the pastes below, never in the block.
+##
+## Origin and function are separate axes: Chutum Üch is Spëddigh-made *and* it is
+## a cheap thick brick you would rather not chew, and neither fact explains the
+## other. Mixigence is listed here but does not currently earn its slot -- see
+## `ACCOMMODATIONS_AND_CARE.md`, which either gives it the fatigue-reset perk or
+## cuts it.
 const SAMPLE_MEALS: Array[String] = [
 	"Supergruel", "Chutum Üch", "Mixigence", "Vollyslommy",
 ]
@@ -568,7 +574,7 @@ func _refresh_accommodations() -> void:
 		"    [i]tiring of the ferment[/i]",
 		"",
 		"[b]Avi · Sanne Rooijakkers[/b]",
-		"    [i]\"I think I'm allergic to Xervyan food.\"[/i]",
+		"    [i]\"I think I'm allergic to Xérvyan food.\"[/i]",
 		"",
 		"[b]Vegi · Petra Hallam[/b]",
 		"    [i]no comment[/i]",
@@ -593,8 +599,8 @@ func _refresh_accommodations() -> void:
 		"    Heavy sweet      [color=#b5563f]none[/color]        Tu'ul ys Feynt ▸ Taktikã · 1.9x",
 		"",
 		"[i]Grown on the left, sold on the right. Pastes are grown and blocks are",
-		"made, and those are not the same map -- land grows flavour, capital builds",
-		"factories. The label says Xérvu; the field is somewhere poorer.[/i]",
+		"made, and those are not the same map -- flavour comes from where the land",
+		"suits it, product from wherever the factory went up.[/i]",
 	]), "Jump to globe  ⟶")
 	_add_foldout("Lodging", false, "\n".join([
 		"    Home              Harbor City quarters · standing cost",

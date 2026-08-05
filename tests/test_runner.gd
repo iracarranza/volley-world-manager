@@ -686,7 +686,7 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	## unrecognised place's food Landavolan is a wrong answer stated confidently;
 	## echoing the input is at least visibly unresolved.
 	_check(
-		REGIONS_SCRIPT.demonym("Xérvu") == "Xervyan" \
+		REGIONS_SCRIPT.demonym("Xérvu") == "Xérvyan" \
 			and REGIONS_SCRIPT.demonym("Nowhere At All") != "Landavolan",
 		"demonym lookup resolves known regions and does not fall back to Landavol",
 	)

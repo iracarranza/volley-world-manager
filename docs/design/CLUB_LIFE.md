@@ -71,7 +71,7 @@ by hand.
 Football Manager players voice **professional grievances** -- playing time,
 wages, transfers. Volis voice **bodily and domestic** ones:
 
-> I think I'm allergic to Xervyan food.
+> I think I'm allergic to Xérvyan food.
 
 > Our physio stretched my arms out too long.
 
@@ -89,7 +89,7 @@ that is not merely "recovered slower".
 ### Unreliable self-report
 
 Every utterance is caused by real state. **The voli may be wrong about the
-cause.** One who says they are allergic to Xervyan food may have high palate
+cause.** One who says they are allergic to Xérvyan food may have high palate
 fatigue on a paste from that region, or a morale drop that happened to land near
 a meal change, or a mentoring pairing that is not working.
 
@@ -112,6 +112,61 @@ flavour text.
 **Keep utterances rare.** The failure mode is Football Manager's: enough of them
 that they become noise to be dismissed. Once every few weeks, always about
 something real, and every one gets read.
+
+## 1b. Where social conflict comes from
+
+The open problem: social systems need conflict to be about anything, and the
+usual engine is unavailable here on purpose.
+
+**Football Manager's engine is employment.** Grievance, negotiation, opposed
+interests, someone treated unfairly. That works because it sits on a
+sociopolitical substrate -- status, money, class, who deserves what. This world
+deliberately does not have one. Body types are simply accepted rather than a line
+anyone divides along, and regions trade without any of it meaning exploitation.
+Strip that substrate out and grievance conflict has nothing underneath it.
+
+**The move is to stop equating conflict with antagonism.** Most conflict in cozy
+games is not two parties opposed; it is **one finite thing and more than one
+legitimate claim on it**. Nobody is behaving badly. You simply cannot do both.
+
+This game already generates that everywhere and has not noticed:
+
+- **The chef's attention.** A fixed number of separate meal plans per week. Two
+  volis need one. Both are right.
+- **The squad-wide table.** One block, one ratio, a roster raised in six places.
+  Somebody's favourite is somebody else's fatigue.
+- **Minutes.** A sponsorship participation quota against the lineup that wins the
+  match. The voli chasing it has a real claim; so does the season.
+- **Training hours.** The assistant coach's throughput is finite and the
+  development curve is not patient.
+- **Rooms on an away trip**, and **a mentor's time**, which is the scarcest thing
+  in the building the moment mentoring exists.
+
+So the rule: **social conflict here is two volis both being right.** No villain,
+no bad behaviour, nothing to forgive -- just care that does not divide evenly.
+
+That serves both audiences without compromise, which is rare. The cozy player
+gets conflict with nobody to be angry at and no moral failure to sit with. The
+simulation player gets allocation problems, which are the most legible kind there
+is: finite input, competing claims, measurable outcome, and your decision is
+visibly the cause. It also explains why the world does not need a political layer
+-- **the conflict is in the household, not the polity.**
+
+Two smaller sources sit alongside it and need no other party at all:
+
+- **Conflict with the body.** Allergies, fatigue, a physio who stretched
+  somebody's arms too far. Friction with nobody on the other side of it.
+- **Conflict with your own past decisions.** You promised minutes in week 3 and
+  the lineup needs someone else in week 9. Self-inflicted, legible, and gentle,
+  which is the house style.
+
+**The honest cost of this model: allocation conflict is quiet.** Nobody storms
+out of a room over a meal plan, so it will not generate drama on its own the way
+a grievance system does. It surfaces only through what volis say, which puts far
+more weight on the utterance system than it would otherwise carry -- and makes
+"rare, always about something real, every one gets read" a requirement rather
+than a preference. If the utterances are noise, this whole model is invisible and
+the systems read as spreadsheets.
 
 ## 2. Staff
 
