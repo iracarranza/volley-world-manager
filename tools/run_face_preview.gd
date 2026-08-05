@@ -46,6 +46,16 @@ const SHOTS: Array = [
 	## one is indistinguishable in a wide shot from a mouth that was never built.
 	["faces_snouts", Vector3(0.0, 1.80, -2.2), 26.0,
 		["happy", "cross"], ["Feli", "Avi"]],
+	## The pair whose whole difference is the direction the brows tilt, one per
+	## frame and dead centre. They shipped swapped once, and neither the row
+	## sheet nor a two-up close-up could settle it: a head photographed from 30
+	## degrees off axis has its eyes sheared by perspective, which is the same
+	## visual signal as a tilt. One subject, centred, is the only framing in
+	## which this claim can be checked at all.
+	["faces_brow_worried", Vector3(0.0, 1.74, -1.7), 22.0,
+		["worried"], ["Turnip"]],
+	["faces_brow_cross", Vector3(0.0, 1.74, -1.7), 22.0,
+		["cross"], ["Turnip"]],
 	## And whether any of it survives the distance a match is actually watched at.
 	["faces_match", Vector3(0.0, 2.05, -9.6), 46.0, ORDER, BODIES],
 ]

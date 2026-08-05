@@ -100,6 +100,23 @@ static func has(expression: String) -> bool:
 	return expression in EXPRESSIONS
 
 
+## A stable face per voli.
+##
+## Hashed from the id the same way `BodyTypeModels.produce_for` picks a produce,
+## so a voli wears the same face every time you open the roster. A face that
+## resampled on each refresh would read as a bug even while working exactly as
+## specified.
+##
+## This is a placeholder for a real decision, not the decision: see
+## `docs/design/CLUB_LIFE.md` on whether an expression is part of who a voli is
+## or a report on how they are doing. Random is what you use while that is
+## unresolved, because it at least makes the roster look inhabited.
+static func for_player(player_id: int) -> String:
+	var ordered := names()
+	ordered.sort()
+	return ordered[absi(hash("face:%d" % player_id)) % ordered.size()]
+
+
 ## Every feature of one face, as specs the actor can hand straight to
 ## `BodyTypeModels.build_mesh`.
 ##
@@ -135,7 +152,14 @@ static func parts(
 			"position": _surface(EYE_U * side, EYE_V, radius, half_height),
 			## Mirrored, so a positive tilt raises the *inner* end on both sides
 			## rather than rotating the whole face one way.
-			"rotation": Vector3(0.0, 0.0, tilt * side),
+			##
+			## Negated because the rig faces -Z: a positive rotation about Z reads
+			## as *clockwise* to anyone standing in front of the voli, which lifts
+			## the outer end rather than the inner one. Without this, worried and
+			## cross wear each other's brows -- the mouths stay right and only the
+			## eyes swap, which is the worst kind of wrong, because both faces
+			## still look like perfectly good faces.
+			"rotation": Vector3(0.0, 0.0, -tilt * side),
 		})
 
 	if bool(mouth_override.get("omit", false)):

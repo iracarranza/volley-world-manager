@@ -109,6 +109,23 @@ const WHEEL_TOOLTIPS := {
 @onready var player_dossier_button: Button = %PlayerDossierButton
 @onready var visualizer_panel: PanelContainer = %VisualizerPanel
 @onready var visualizer_body: Label = %VisualizerBody
+
+## The roster's live model. Built in code rather than in the scene because the
+## whole subtree is one viewport, one light and one actor, and a `.tscn` for
+## that is three files to keep in sync instead of one function to read.
+const RosterActorScene := preload("res://scenes/components/player_actor_3d.tscn")
+const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
+## Radians of turn per pixel dragged. Slow enough that a small nudge is a small
+## turn, fast enough that a full circle does not need the mouse to leave the
+## panel.
+const ROSTER_SPIN_PER_PIXEL: float = 0.011
+## Three-quarter view, not straight on. A body type reads from its profile as
+## much as its front, and a face turned slightly is a face rather than a mugshot.
+const ROSTER_REST_YAW_DEGREES: float = -24.0
+var roster_viewport: SubViewport = null
+var roster_turntable: Node3D = null
+var roster_actor: Node3D = null
+var roster_environment: Environment = null
 @onready var attribute_columns: HBoxContainer = %AttributeColumns
 @onready var attribute_prev_button: Button = %AttributePrevButton
 @onready var attribute_next_button: Button = %AttributeNextButton
@@ -187,6 +204,7 @@ func _ready() -> void:
 	nav_dropdown.visible = false
 	advance_catcher.gui_input.connect(_advance_catcher_input)
 	advance_reveal.visible = false
+	_build_roster_viewport()
 	_apply_floating_panel_styles()
 	_build_attribute_columns()
 	attribute_prev_button.pressed.connect(_step_attribute_page.bind(-1))
@@ -847,10 +865,113 @@ func _roster_selected(index: int) -> void:
 	]
 	_refresh_player_wheel(player)
 	lineup_status_option.select(0 if player.id in GameManager.team.starting_player_ids else 1)
-	visualizer_body.text = "%s\n%.0f cm\n\nPlayer model\ncoming soon" % [
-		player.position_code, player.height_cm,
+	visualizer_body.text = "%s · %.0f cm · %s" % [
+		player.position_code, player.height_cm, player.body_type,
 	]
+	_refresh_roster_actor(player)
 	_refresh_roster_profile_layout()
+
+
+## The panel that said "Player model coming soon" for as long as it existed.
+##
+## One `SubViewport` with its own world, so the roster's lighting and camera are
+## nothing to do with the match court's -- the alternative is one shared 3D world
+## with two cameras in it, which couples two screens that have no reason to agree
+## about anything.
+func _build_roster_viewport() -> void:
+	var box := visualizer_body.get_parent() as BoxContainer
+	if box == null:
+		return
+	var container := SubViewportContainer.new()
+	container.name = "VisualizerViewport"
+	container.stretch = true
+	container.custom_minimum_size = Vector2(0, 214)
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.mouse_filter = Control.MOUSE_FILTER_STOP
+	container.mouse_default_cursor_shape = Control.CURSOR_DRAG
+	box.add_child(container)
+	box.move_child(container, visualizer_body.get_index())
+
+	roster_viewport = SubViewport.new()
+	roster_viewport.own_world_3d = true
+	roster_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	roster_viewport.msaa_3d = Viewport.MSAA_4X
+	container.add_child(roster_viewport)
+
+	var world_environment := WorldEnvironment.new()
+	roster_environment = Environment.new()
+	roster_environment.background_mode = Environment.BG_COLOR
+	roster_environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	roster_environment.ambient_light_energy = 1.0
+	world_environment.environment = roster_environment
+	roster_viewport.add_child(world_environment)
+
+	## Lit and framed from -Z, because that is the way the rig faces. A camera on
+	## +Z photographs the back of the head, and the light has to follow it or the
+	## face sits in its own shadow.
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-34.0, 156.0, 0.0)
+	light.light_energy = 1.35
+	roster_viewport.add_child(light)
+
+	var camera := Camera3D.new()
+	## Framed so the tallest rig in the game still fits with a little headroom:
+	## an Avi stands 2.16 m in mesh space against a Pumpkin's 1.76 m, and a
+	## framing fitted to the average silently crops the tall one.
+	camera.position = Vector3(0.0, 1.06, -2.95)
+	camera.rotation_degrees = Vector3(-1.0, 180.0, 0.0)
+	camera.fov = 39.0
+	roster_viewport.add_child(camera)
+
+	## The actor is spun by a parent rather than by its own transform: `set_pose`
+	## and `set_tactical_position` both write the actor's rotation, so a drag
+	## applied there would be overwritten the next time either ran.
+	roster_turntable = Node3D.new()
+	roster_turntable.rotation_degrees = Vector3(0.0, ROSTER_REST_YAW_DEGREES, 0.0)
+	roster_viewport.add_child(roster_turntable)
+	roster_actor = RosterActorScene.instantiate()
+	roster_turntable.add_child(roster_actor)
+
+	container.gui_input.connect(_roster_viewport_input)
+
+
+func _roster_viewport_input(event: InputEvent) -> void:
+	if roster_turntable == null:
+		return
+	if event is InputEventMouseMotion \
+			and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		roster_turntable.rotation.y += event.relative.x * ROSTER_SPIN_PER_PIXEL
+
+
+func _refresh_roster_actor(player) -> void:
+	if roster_actor == null:
+		return
+	var light_mode: bool = UIPaletteScript.control_is_light(self)
+	if roster_environment != null:
+		roster_environment.background_color = UIPaletteScript.color(
+			&"surface_inset", light_mode
+		)
+		roster_environment.ambient_light_color = UIPaletteScript.color(
+			&"stroke", light_mode
+		)
+	roster_actor.configure(
+		player.id, true, player.display_name, player.dominant_hand,
+		{
+			"height_cm": player.height_cm,
+			"wingspan_cm": player.wingspan_cm,
+			"stride_length_m": player.stride_length_m,
+			"body_type": player.body_type,
+		},
+	)
+	## Random for now, and stable per voli so it does not resample on every
+	## selection. Whether a face is part of who someone is or a report on how they
+	## are doing is unresolved -- see `docs/design/CLUB_LIFE.md`.
+	roster_actor.set_expression(
+		FaceExpressionsScript.for_player(player.id), light_mode
+	)
+	roster_actor.identity_label.visible = false
+	roster_actor.set_highlighted(false)
+	roster_actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 
 ## Each visible category is a real column of real rows -- a name Label that
