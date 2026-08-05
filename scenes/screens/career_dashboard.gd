@@ -492,11 +492,10 @@ const SAMPLE_STAFF: Array = [
 ##
 ## Origin and function are separate axes: Chutum Üch is Spëddigh-made *and* it is
 ## a cheap thick brick you would rather not chew, and neither fact explains the
-## other. Mixigence is listed here but does not currently earn its slot -- see
-## `ACCOMMODATIONS_AND_CARE.md`, which either gives it the fatigue-reset perk or
-## cuts it.
+## other. Blan'deral takes A'ace's apostrophe and is the block palate fatigue does
+## not accumulate on -- the reset week. See `ACCOMMODATIONS_AND_CARE.md`.
 const SAMPLE_MEALS: Array[String] = [
-	"Supergruel", "Chutum Üch", "Mixigence", "Vollyslommy",
+	"Supergruel", "Chutum Üch", "Blan'deral", "Vollyslommy",
 ]
 
 ## Two to four pastes on a block, bounded by the chef. Sample mix only.

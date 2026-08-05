@@ -68,10 +68,15 @@ That gives products a readable origin, which then means something because origin
 sets import cost. A player who has seen four product names learns four spelling
 systems, and the atlas is where they find out those spellings are places.
 
-*Supergruel*, *Mixigence* and *Vollyslommy* are plainly spelled, so by the same
-rule they read as made somewhere with no orthographic signature -- Landavol, or
-A'ace, which bought a food industry the way it bought a roster. **Unassigned on
-purpose.** The device is settled; which factory sits where is not.
+*Blan'deral* takes **A'ace's apostrophe**, so it is A'aceni-made: the region that
+bought a food industry the way it bought a roster, on ground reclaimed within
+living memory, where nothing has a name older than the money. A product with no
+story, from the region with no history.
+
+*Supergruel* and *Vollyslommy* stay plainly spelled, which under this rule means
+made somewhere with no orthographic signature -- Landavol, the crossroads that
+never needed to distinguish itself from anyone. **Unassigned on purpose**, but
+that is the reading the spelling already implies.
 
 ### Name and function are separate axes
 
@@ -88,7 +93,7 @@ build a rule on it.
 
 Chutum Üch is exactly that lucky case. It is *chew too much*, and separately it
 is thick -- and thick is why it soaks up more paste. That rhyme is a gift, not a
-law, and Mixigence should not be contorted to match it.
+law, and Blan'deral should not be contorted to match it.
 
 ### How many blocks, and the answer that is not a number
 
@@ -109,22 +114,22 @@ wins.** Applying that:
   expensive flavour, and the saturation makes that trade actually pay.
 - **Vollyslommy** -- the room needs rescuing. Biggest morale spike and the
   fastest decay, so it is event food and never a diet.
-- **Mixigence** -- the reset week. See below.
+- **Blan'deral** -- the reset week. See below.
 
-### Mixigence is the reset block (settled)
+### Blan'deral is the reset block (settled)
 
 It had no answer, which is the same as being a rung: "the safe middle nobody
 loves and nobody refuses" describes a design slot, not a week anyone would
 choose. It now has one.
 
-**Palate fatigue does not accumulate on Mixigence.** It is engineered to be
+**Palate fatigue does not accumulate on Blan'deral.** It is engineered to be
 forgettable, and forgettable is the mechanic -- it is what you feed the squad
 while a beloved ratio recovers. A deliberate week, with a real price: nothing
 good happens during it. You spend a week of morale to buy back a paste you had
 worn out.
 
 That makes it the only block whose value is about **time** rather than about the
-meal. The other three are answers to *this week*; Mixigence is an investment in
+meal. The other three are answers to *this week*; Blan'deral is an investment in
 the next one, which is a different kind of decision and the reason it can sit in
 the middle without being a rung.
 
@@ -133,21 +138,17 @@ reset, a long career only ever accumulates worn-out ratios, and the flavour laye
 narrows toward nothing. This is the pressure valve, and it costs something to
 pull.
 
-**The name is unresolved.** *Mixigence* was reverse-engineered from "exigence,
-mixed", which no longer describes what the block does, and by the separate-axes
-rule above it does not have to -- but it should at least sound like a product
-somebody would buy. Candidates:
+**Renamed from Mixigence.** That name was reverse-engineered from "exigence,
+mixed", which stopped describing the block the moment it became the reset. The
+replacement is *bland + mineral*, which reads as an engineered nutrition product
+and quietly admits what it is, dressed in **A'ace's apostrophe** so the factory
+is legible from the label.
 
-- **Middlings** -- a real milling term for the coarse middle fraction of the
-  grain. Interesting sound, immediately decodable origin, and it means "the
-  middle" without editorialising. Closest to the Saint Kitts and Nevis register.
-- **Blanderal** -- bland + mineral. Reads as an engineered nutrition product and
-  quietly admits what it is.
-- **Plaen** -- plain, respelled. Shortest, and plainly spelled in a world where
-  spelling is a passport, so it declares "made nowhere in particular".
-
-All three are plainly spelled, which under the orthographic rule means the
-factory is somewhere with no signature. That still needs choosing.
+That tie is the useful part. Under the separate-axes rule the name does not owe
+the mechanic an explanation -- but it does owe the *world* a location, and a
+plainly-spelled name gives none. Every product name should be traceable to a
+region by spelling alone, because that is the whole reason product names carry
+orthography in the first place.
 
 **The case for many more is real, though, and it is a different argument.** If
 blocks are manufactured by regions, the block list is a *map* -- six regions,
@@ -170,7 +171,7 @@ that deliberately do **not** move together, so there is no dominant choice:
 | --- | --- | --- | --- | --- | --- |
 | Supergruel | engineered nutrition | high | very low | very low | low |
 | Chutum Üch | thick, cheap, hard work to eat | moderate | low | low | **high** |
-| Mixigence | engineered to be forgettable | moderate | moderate | moderate | normal |
+| Blan'deral | engineered to be forgettable | moderate | moderate | moderate | normal |
 | Vollyslommy | indulgence, pre-flavoured | low | very high | very high | very low |
 
 **Saturation is not the paste slot count.** The chef sets how *many* pastes a
@@ -227,8 +228,8 @@ a block's real job is to be a better or worse *carrier* of it.
   is a dominant strategy and the tier list collapses.
 - **Chutum Üch** takes paste well. It is milled to be finished at the table, so
   the same paste budget goes further on it. That, not sentiment, is why it costs
-  more than Mixigence.
-- **Mixigence** takes paste exactly as advertised and never surprises anyone. The
+  more than Blan'deral.
+- **Blan'deral** takes paste exactly as advertised and never surprises anyone. The
   safe middle, and the one that never becomes a story.
 - **Vollyslommy** arrives already flavoured, so paste on it is at best wasted and
   at worst clashes. An indulgent squad has bought a strong opinion along with the
@@ -343,6 +344,31 @@ The strongest version of that trade shape, and it needs no new data:
 Six and six, one each, already in `scripts/data/regions.gd`. The paste sold as
 Xérvyan grows in Xérvu's minor neighbour, the way a thing grows where the land
 suits it and is sold from wherever the road goes.
+
+**There are six minor regions, not eight.** The eight is the *majors* -- the
+Sixnet participants. Only the six **core** regions sit in `REGION_ADJACENCY`;
+Ispayk and A'ace are deliberately outside the geography system entirely, because
+their identity comes from history and money rather than from a local tradition
+that could spread. So they have no minor neighbour, and the rule above leaves
+them with no paste.
+
+**That gap is worth keeping, because the two absences are different and both are
+already the region's story:**
+
+- **A'ace grows nothing and imports everything.** Desert coast, much of it
+  reclaimed within living memory -- there is no land under it old enough to grow
+  a flavour. It buys its pantry the way it bought its roster, which means the most
+  expensive table in the world sits in the richest region, and an A'aceni club is
+  the one place where import cost is not a solvable problem.
+- **Ispayk grows its own, and sells it on.** Volcanic archipelago in the storm
+  track, which is famously the most fertile ground there is. It is the only major
+  that needs no minor neighbour -- and it exports most of what it grows, exactly
+  as it exports the players it raises and cannot keep. Cheap flavour at home,
+  Ispaykano paste on every shelf in the world, and a program that stays poor
+  anyway.
+
+Three different relationships to flavour across eight majors, from one structural
+fact that was already in the data. A uniform map would have been worse.
 
 **This is what finally gives the minor tier a reason to be known.** Minor regions
 currently exist in adjacency tables and the scouting population and nowhere a

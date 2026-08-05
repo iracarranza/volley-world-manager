@@ -159,6 +159,25 @@ the map has discovered the colony without being told, which is the same principl
 as everything else here -- you arrive because you needed something, and the world
 is what you find.
 
+## 3b. Six minors, eight majors
+
+The counts are not a matched pair and should not be forced into one. Six minor
+regions sit in `REGION_ADJACENCY`, one beside each **core** region. Ispayk and
+A'ace are Sixnet participants but stand outside the geography system entirely --
+their identity comes from history and money rather than from a local tradition
+that could spread to a neighbour.
+
+Giving them a minor each would be the tidy move and the wrong one. It would put
+fourteen regions into a symmetry the world does not have, and it would quietly
+undo the thing that makes those two distinct: they are the regions that are *not*
+of anywhere. A'ace stands on ground it made. Ispayk stands on ground that keeps
+being remade under it. Neither has a hinterland in the sense the core regions do.
+
+`ACCOMMODATIONS_AND_CARE.md` turns that asymmetry into three different
+relationships to flavour rather than a gap to be patched -- six majors sell what a
+neighbour grows, Ispayk's volcanic soil grows its own and exports most of it, and
+A'ace grows nothing at all and buys everything.
+
 ## 4. Open
 
 - Whether Rhen Tempaol's rename to Rhën Tempaol happens now or with a wider
