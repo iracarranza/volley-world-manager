@@ -710,7 +710,123 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 	_test_tempo_buys_flight_time()
 	_test_no_attack_is_struck_illegally()
 	_test_the_approach_mark_tracks_the_set()
+	_test_playback_geometry_is_drawable()
 	_test_minor_region_behaviour()
+
+
+## Three things the resolver has to state before playback can draw them.
+##
+## All three were reported from watching the 3D view, and all three turned out to be
+## a number the resolver handed over that could not be drawn any other way. They are
+## gated together because they share that shape: the view was faithful and the state
+## it was given was not.
+func _test_playback_geometry_is_drawable() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(manager.players, 900006)
+	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+		manager.opponent_team.players, 900006
+	)
+	var late_blocks := 0
+	var blocks := 0
+	var stacked := 0
+	var walls := 0
+	var narrowest := 99.0
+	var serves := 0
+	var detached_serves := 0
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(5000, 5090):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			var starts: Dictionary = result.initial_home_positions.duplicate()
+			starts.merge(result.initial_opponent_positions)
+			for raw_event in result.events:
+				var event := raw_event as RallyEvent
+				if event == null:
+					continue
+				if event.event_type == RALLY_EVENT_SCRIPT.EventType.SERVE:
+					serves += 1
+					## The ball leaves from behind the baseline, which is where a
+					## serve is legally struck -- so the server has to be standing
+					## there, not on the rotation grid inside the court.
+					if RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+						Vector2(starts.get(int(event.actor_id), event.start_position)),
+						event.start_position,
+					).length() > 0.30:
+						detached_serves += 1
+					continue
+				if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+					continue
+				var incoming: Dictionary = event.metadata.get(
+					"incoming_trajectory", {}
+				)
+				var duration := float(incoming.get("duration", 0.0))
+				if duration > 0.001:
+					blocks += 1
+					## A block happens at the tape, partway through the swing it
+					## contests. Stamped at the end of that flight -- which it was --
+					## the hands move after the ball has already landed.
+					var swing := float(incoming.get("start_time", 0.0))
+					var fraction := (
+						float(event.metadata.get("physical_time", swing)) - swing
+					) / duration
+					if fraction > 0.90:
+						late_blocks += 1
+				var assist_id := int(event.metadata.get("assist_id", -1))
+				if assist_id < 0:
+					continue
+				var phase: Dictionary = event.metadata.get("home_phase_targets", {})
+				if phase.is_empty():
+					phase = event.metadata.get("opponent_phase_targets", {})
+				if not (phase.has(assist_id) and phase.has(int(event.actor_id))):
+					continue
+				walls += 1
+				var gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+					Vector2(phase[int(event.actor_id)]), Vector2(phase[assist_id])
+				).length()
+				narrowest = minf(narrowest, gap)
+				if gap < 0.05:
+					stacked += 1
+	manager.free()
+	_check(
+		blocks > 40 and serves > 100,
+		"the playback geometry test observes enough events (%d blocks, %d serves)"
+			% [blocks, serves],
+	)
+	## The wall separation is deterministic geometry, so it is asserted at the source
+	## as well as sampled. A formed double block with an assist is rare enough on the
+	## vertical slice -- three in 180 rallies -- that the sampled arm alone would be
+	## asserting almost nothing.
+	var simulator := RallySimulator.new()
+	var wall: Dictionary = simulator._block_wall_positions(0.30, false)
+	var wall_gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+		Vector2(wall.primary_position), Vector2(wall.assist_position)
+	).length()
+	_check(
+		wall_gap >= 0.72,
+		"a formed wall stands two bodies wide at the source (%.3f m)" % wall_gap,
+	)
+	_check(
+		late_blocks <= blocks / 20,
+		"a block happens during the swing, not after it lands (%d of %d late)"
+			% [late_blocks, blocks],
+	)
+	## The widest torso in the game measures 0.715 m, so anything under that is two
+	## bodies occupying the same space. They were staged on the *same point* before
+	## this -- `_floor_phase_positions` handed both blockers one position -- so the
+	## failure being guarded against is 0.0 m, not a tight fit.
+	_check(
+		stacked == 0 and (walls == 0 or narrowest >= 0.72),
+		"the two blockers stand beside each other, not inside each other (%d walls, %d stacked, narrowest %.3f m)"
+			% [walls, stacked, narrowest],
+	)
+	_check(
+		detached_serves == 0,
+		"the server stands where the ball is struck (%d of %d off it)"
+			% [detached_serves, serves],
+	)
 
 
 ## The approach mark moves with the ball.

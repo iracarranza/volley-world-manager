@@ -72,7 +72,12 @@ const MAX_EXCHANGES: int = 4
 ## had been placing each blocker at their own defensive court position, which for
 ## a block resolves both onto the attack lane and draws them stacked. Geometry is
 ## the resolver's to own, so the pair is recorded on the event.
-const BLOCK_SHOULDER_OFFSET: float = 0.085
+## Centre-to-centre between the two blockers, as a fraction of court width --
+## 0.855 m. Measured against the bodies that have to stand there: the widest torso
+## in the game is a Tomato at 0.715 m, and the previous 0.085 left it 5 cm of
+## clearance from its neighbour. A sealed double block is shoulder to shoulder, not
+## interpenetrating, and 14 cm reads as the former.
+const BLOCK_SHOULDER_OFFSET: float = 0.095
 const BLOCK_NET_DEPTH: float = 0.032
 
 ## Lane a blocker covers with their arms without moving their feet.
@@ -477,6 +482,17 @@ func resolve(
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
 	var opponent_risk := _rating(opponent_server, "serve_aggression")
+	var opponent_serve_base: Vector2 = opponent_team.court_position(
+		opponent_server.id, "defense"
+	)
+	## Behind the baseline at the server's own lane, not at a literal 0.80.
+	## `_initial_opponent_positions` places them from `court_position`, so a
+	## hardcoded launch x left the ball a fifth of a metre off the body that struck
+	## it -- small, but exactly the kind of gap the eye reads as the ball not being
+	## hit by anybody.
+	var opponent_serve_origin := CourtConstants.serve_origin(
+		opponent_serve_base.x, false
+	)
 	var serve_error_chance := _serve_error_chance(opponent_server, opponent_risk)
 	var serve_error := rng.randf() < serve_error_chance
 	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
@@ -486,7 +502,7 @@ func resolve(
 	## Gate E: the same serve through the shared ballistics, in shadow.
 	_geometric_serve_record(
 		"geometric_serve_opponent", opponent_server,
-		CourtConstants.serve_origin(0.80, false), serve_landing, false, opponent_risk,
+		opponent_serve_origin, serve_landing, false, opponent_risk,
 	)
 	## Recorded against the intent above, moved below: the shadow resolver aims
 	## where the server aimed and reaches its own verdict, while the official
@@ -494,16 +510,18 @@ func resolve(
 	if serve_error:
 		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
 	var serve_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(CourtConstants.serve_origin(0.80, false), serve_landing),
+		RallyKinematics.court_distance_meters(opponent_serve_origin, serve_landing),
 		_serve_launch_angle_degrees(opponent_server, serve_quality),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	var serve_trajectory := _ball_trajectory(
-		"serve", CourtConstants.serve_origin(0.80, false), serve_landing, serve_time,
+		"serve", opponent_serve_origin, serve_landing, serve_time,
 		float(serve_arc.apex_height_meters),
 	)
+	## Where this server belongs once the ball is gone: their own defensive spot,
+	## the same one every other opponent gets from `court_position`.
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
-		CourtConstants.serve_origin(0.80, false), serve_landing, not serve_error, serve_quality,
+		opponent_serve_origin, serve_landing, not serve_error, serve_quality,
 		"%s serve" % opponent_server.primary_serve_style if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
@@ -512,8 +530,20 @@ func resolve(
 			"serve_style": opponent_server.primary_serve_style,
 			"flight_time": serve_time,
 			"event_time": 0.0, "contact_time": serve_time,
+			## Struck from behind the baseline, then onto the court.
+			##
+			## A server is off the court when they contact the ball and back in it
+			## before the return arrives -- that walk-in is a real part of the phase
+			## and playback had no way to draw it, because the server's position was
+			## never behind the line to begin with. Stating both ends here lets the
+			## journey be drawn over the serve's own flight.
+			"movement_start": opponent_serve_origin,
+			"movement_target": opponent_serve_base,
 			"outgoing_trajectory": serve_trajectory,
 		})
+	## And the resolver reasons from the court, not the service zone, for every
+	## contact after this one.
+	opponent_live_positions[opponent_server.id] = opponent_serve_base
 	rally_clock = serve_time
 
 	if serve_error:
@@ -685,7 +715,7 @@ func resolve(
 	var desired_pass_target: Vector2 = _desired_pass_target(preferred_release, serve_landing)
 	var reception_pass := _reception_pass_result(
 		receiver, receiver_start, serve_landing, desired_pass_target,
-		CourtConstants.serve_origin(0.80, false), serve_quality, arrival,
+		opponent_serve_origin, serve_quality, arrival,
 		float(result.reception_quality), 0.51, 0.98, serve_trajectory,
 	)
 	if using_live_reception:
@@ -1633,7 +1663,7 @@ func resolve(
 	## setter, so this stamped every touched block a full set-flight early.
 	var opponent_block_trajectory := _block_deflection_trajectory(
 		net_contact, post_block_target, blocked, 0.35,
-		rally_clock + float(set_flight_time),
+		_swing_reaches_net(attack_trajectory, rally_clock + float(set_flight_time)),
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -1662,7 +1692,7 @@ func resolve(
 			).assist_position,
 			"setter_pull": block_resolution.setter_pull,
 			"read_quality": block_resolution.read_quality,
-			"event_time": _contact_time(
+			"event_time": _swing_reaches_net(
 				attack_event.metadata.outgoing_trajectory, rally_clock
 			),
 			"incoming_trajectory": attack_event.metadata.outgoing_trajectory,
@@ -1932,6 +1962,11 @@ func _resolve_home_serve(
 		"serve", CourtConstants.serve_origin(0.82, true), opponent_landing,
 		serve_time, float(serve_arc.apex_height_meters),
 	)
+	## Their floor-defence spot, from the plan if there is one and the rotation
+	## grid if there is not -- the same fallback `_initial_home_positions` uses.
+	var home_serve_base: Vector2 = CourtConstants.slot_position(1)
+	if defensive_plan != null:
+		home_serve_base = defensive_plan.defender_position(server.id, home_serve_base)
 	_add_event(result, RallyEventModel.EventType.SERVE, server.id, server.display_name,
 		CourtConstants.serve_origin(0.82, true), opponent_landing, not serve_error,
 		serve_quality, "%s serves" % server.display_name,
@@ -1941,7 +1976,12 @@ func _resolve_home_serve(
 			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style,
 			"event_time": 0.0, "contact_time": serve_time,
+			## See the opponent serve: struck from behind the baseline, then onto
+			## the court over the serve's own flight.
+			"movement_start": CourtConstants.serve_origin(0.82, true),
+			"movement_target": home_serve_base,
 			"outgoing_trajectory": serve_trajectory})
+	live_positions[server.id] = home_serve_base
 	if serve_error:
 		return _finish(result, "serve_error", false, server.id, {
 			"server": server.display_name,
@@ -2804,8 +2844,10 @@ func _resolve_opponent_transition(
 	## Same correction as the home block's: the ball has to arrive before the
 	## hands can touch it.
 	var home_block_trajectory := _block_deflection_trajectory(
-		opponent_net_contact, home_block_target,
-		block_outcome == "stuff", 0.42, opponent_set_contact_time + set_flight_time,
+		opponent_net_contact, home_block_target, block_outcome == "stuff", 0.42,
+		_swing_reaches_net(
+			opponent_attack_trajectory, opponent_set_contact_time + set_flight_time
+		),
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -3531,7 +3573,7 @@ func _resolve_home_continuation(
 		"coverage_segments": block_result.coverage_segments,
 		"setter_pull": block_result.setter_pull,
 		"read_quality": block_result.read_quality,
-		"event_time": _contact_time(continuation_attack_trajectory, rally_clock),
+		"event_time": _swing_reaches_net(continuation_attack_trajectory, rally_clock),
 		## The swing this block is contesting. The continuation block was the one
 		## contact in the engine with no incoming arc at all, so playback had to
 		## infer where the ball came from and the stamp above had nothing to derive
@@ -3539,7 +3581,7 @@ func _resolve_home_continuation(
 		"incoming_trajectory": continuation_attack_trajectory,
 		"outgoing_trajectory": _block_deflection_trajectory(
 			cont_net_contact, block_event_end, blocked, 0.42,
-			_contact_time(continuation_attack_trajectory, rally_clock),
+			_swing_reaches_net(continuation_attack_trajectory, rally_clock),
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
 		result.key_factors.append(ExplanationText.factor("attack_control"))
@@ -4512,6 +4554,17 @@ func _initial_home_positions(
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		var position := CourtConstants.slot_position(slot_number)
+		## The server stands where the ball comes from.
+		##
+		## The serve event has always launched from `serve_origin()` -- behind the
+		## baseline, off the court, which is where a serve is legally struck -- while
+		## the server themselves was placed on the rotation grid *inside* the court.
+		## So playback drew the ball leaving from a point nobody was standing at, a
+		## metre or so behind a player who never moved. They walk in afterwards; see
+		## the SERVE event's own `movement_target`.
+		if not receiving and slot_number == 1:
+			positions[player_id] = CourtConstants.serve_origin(position.x, true)
+			continue
 		if defensive_plan != null:
 			if receiving:
 				var zone: Resource = defensive_plan.zone_for(
@@ -4535,6 +4588,9 @@ func _initial_opponent_positions(
 	var reception_zones: Dictionary = {}
 	if receiving:
 		reception_zones = _opponent_reception_coverage(opponent_team).zones
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	var serving_id := opponent_lineup.player_at_slot(1) \
+		if opponent_lineup != null and not receiving else -1
 	for player_resource in opponent_team.on_court_players():
 		var player := player_resource as VolleyballPlayer
 		if player == null:
@@ -4543,6 +4599,10 @@ func _initial_opponent_positions(
 		var zone: Resource = reception_zones.get(player.id) as Resource
 		if zone != null and bool(zone.enabled):
 			position = Vector2(zone.center)
+		## Mirrored, for the same reason as the home side: the ball leaves from
+		## behind this baseline, so the server does too.
+		if player.id == serving_id:
+			position = CourtConstants.serve_origin(position.x, false)
 		positions[player.id] = position
 	return positions
 
@@ -4662,10 +4722,23 @@ func _floor_phase_positions(
 		if defensive_plan != null else "Balanced"
 	var short_posture := str(defensive_plan.short_ball_posture) \
 		if defensive_plan != null else "Standard"
+	## The wall, at its two shoulders. Both blockers used to be handed the *same*
+	## point -- `Vector2(attack_x, wall_y)` -- so in 3D playback their bodies were
+	## stacked by construction rather than merely close: one actor standing inside
+	## another. The 2D court never showed it because it draws its squares from
+	## `_block_wall_positions()`, which has always separated them; the 3D view takes
+	## its placement from this function, and nothing reconciled the two.
+	##
+	## Same source now. A wall is two players side by side and that is a fact about
+	## where they stand, not a detail of how one view draws them.
+	var wall := _block_wall_positions(attack_x, opponent_side)
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
-		if player_id in [primary_blocker_id, assisting_blocker_id]:
-			positions[player_id] = Vector2(attack_x, 0.46 if opponent_side else 0.54)
+		if player_id == primary_blocker_id:
+			positions[player_id] = Vector2(wall.primary_position)
+			continue
+		if player_id == assisting_blocker_id:
+			positions[player_id] = Vector2(wall.assist_position)
 			continue
 		var fallback := CourtConstants.slot_position(slot_number)
 		var target: Vector2 = defensive_plan.defender_position(player_id, fallback) \
@@ -5068,6 +5141,24 @@ func _retarget_set_event(
 ## the arc it was waiting on already in scope.
 func _contact_time(trajectory: Dictionary, fallback: float) -> float:
 	return float(trajectory.get("end_time", fallback))
+
+
+## When the swing reached the tape, or `fallback` if this arc cannot say.
+##
+## A block is not timed like the contacts either side of it. Reception, set and dig
+## all happen when the ball *finishes* its flight, so `_contact_time` is right for
+## them; a block happens partway through one. `_net_crossing_time` below has always
+## known how to find that instant and only the timeline finaliser was asking it --
+## and only for blocks that never touched the ball. A block that *did* touch it took
+## its moment from the deflection arc's own start timestamp, which was whatever the
+## call site passed, so the hands moved on a clock nobody had derived.
+##
+## An on-time block and an on-time swing are the same moment in the sport, give or
+## take the fraction of a second the ball takes to cross: on a normal cross-court
+## swing from y 0.55 to 0.15 the tape sits an eighth of the way along.
+func _swing_reaches_net(trajectory: Dictionary, fallback: float) -> float:
+	var moment := _net_crossing_time(trajectory)
+	return fallback if moment < 0.0 else moment
 
 
 func _ball_trajectory(
