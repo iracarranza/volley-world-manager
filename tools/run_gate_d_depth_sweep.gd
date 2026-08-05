@@ -30,11 +30,12 @@ const SAMPLES: int = 4000
 func _initialize() -> void:
 	print("Gate D -- %d samples per depth" % SAMPLES)
 	print("")
-	print("%8s %8s %8s %8s %8s %8s %8s %9s" % [
-		"depth", "in", "error", "stuff", "touch", "tool", "involved", "clearance"
+	print("%8s %8s %8s %8s %8s %8s %8s %8s %8s %9s" % [
+		"depth", "in", "error", "long", "wide", "antenna", "net",
+		"stuff", "involved", "clearance"
 	])
-	print("%8s %8s %8s %8s %8s %8s %8s %9s" % [
-		"m", "%", "%", "%", "%", "%", "%", "m"
+	print("%8s %8s %8s %8s %8s %8s %8s %8s %8s %9s" % [
+		"m", "%", "%", "%", "%", "%", "%", "%", "%", "m"
 	])
 	for row in CalibrationScript.depth_sweep(SAMPLES):
 		var shares: Dictionary = row.shares
@@ -45,10 +46,11 @@ func _initialize() -> void:
 		var high_hands := _share(shares, "high_hands")
 		var error := _share(shares, "out_long") + _share(shares, "out_wide") \
 			+ _share(shares, "out_antenna") + _share(shares, "net")
-		print("%8.2f %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f %9.2f" % [
+		print("%8.2f %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f %9.2f" % [
 			float(row.contact_depth_meters), _share(shares, "in"), error,
-			stuff, touch, tool,
-			stuff + touch + tool + crush + high_hands,
+			_share(shares, "out_long"), _share(shares, "out_wide"),
+			_share(shares, "out_antenna"), _share(shares, "net"),
+			stuff, stuff + touch + tool + crush + high_hands,
 			float(row.median_net_clearance_m),
 		])
 	print("")

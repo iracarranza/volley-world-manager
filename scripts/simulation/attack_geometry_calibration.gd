@@ -100,7 +100,50 @@ const DEFAULT_CONTACT_DEPTH_METERS: float = 0.36
 ## The depths the sweep reads, in metres off the tape. A tight quick, a normal
 ## front-row swing, a set off the net, and a back-row pipe -- the span a real
 ## offence produces rather than the one point the harness used to sit on.
+##
+## What the sweep currently says, and the open question it leaves. Attack error
+## climbs 7.2% to 71.9% across this range, and the breakdown is almost entirely
+## balls into the net -- 4.7% to 54.5% -- while long, wide and antenna barely
+## move and the median ball still clears the tape at every depth but the last.
+##
+## The first suspect was `NET_CLEARANCE_MARGIN_METERS`, a flat 0.12 m of aim
+## margin however far the ball has to fly to reach the tape. That is a constant
+## standing where a function belongs: vertical execution error arrives at the net
+## as `ground_to_net * tan(error)`, so one degree costs half a centimetre from a
+## tight set and seven centimetres from four metres back, where the spread runs
+## to 0.35 m against that 0.12 m margin.
+##
+## It is a real defect and it is not this one. Scaling the margin by the swing's
+## own spread moves the 4.00 m net rate 56.0% to 54.5% and nothing else, because
+## `_feasible_launch` can only choose an *angle*: raising the bar it has to clear
+## just sends more solves down the `forced` branch, which flies the same flat
+## ball. Power is chosen by `choose_power` before any of this and never learns
+## the tape exists, so from depth there is no speed low enough on offer for the
+## angle search to succeed with.
+##
+## So the fix is that the power choice has to see the net, and the margin should
+## scale at the same time -- one change, not two. Reverted rather than shipped
+## half: on its own it bought nothing and drifted the symmetry ratchet 0.663 to
+## 0.666.
 const SWEPT_CONTACT_DEPTHS: Array[float] = [0.36, 1.00, 1.80, 2.80, 4.00]
+
+## The six players a swing is actually hit at.
+##
+## The harness passed an empty array here, so `resolve_swing` scanned the courses
+## against a court with a block on it and nobody behind it -- and a hitter whose
+## only obstacle is the wall aims as far from the wall as their repertoire allows.
+## That is precisely the case that minimises block involvement, which is why the
+## harness read 2.1% per swing at depth where the rally reads 11.7% per block
+## formed at a *greater* depth and with a worse-staged wall. The harness was not
+## measuring a softer block; it was measuring a hitter with no reason to swing
+## anywhere near one.
+##
+## Mirrored into the attacked half, since the swept hitter attacks toward
+## decreasing y and `slot_position` describes the home side.
+const DEFENDING_SIX: Array[Vector2] = [
+	Vector2(0.82, 0.30), Vector2(0.50, 0.30), Vector2(0.18, 0.30),
+	Vector2(0.18, 0.12), Vector2(0.50, 0.08), Vector2(0.82, 0.12),
+]
 
 
 static func run(
@@ -188,7 +231,7 @@ static func run(
 		## calibration, which is the same rule this file already states about its
 		## constants. It now applies to the chain as well.
 		var swing := AttackResolverModel.resolve_swing(
-			hitter, contact, contact_height, lane, blockers, [], true,
+			hitter, contact, contact_height, lane, blockers, DEFENDING_SIX, true,
 			rng.randf_range(0.45, 0.95), 0.5,
 			rng.randf_range(-0.5, 0.7), rng.randf_range(-0.6, 0.6),
 			GeometricAttackPromotion.draws(rng, blockers.size(), 0),
