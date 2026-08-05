@@ -118,6 +118,8 @@ const WHEEL_TOOLTIPS := {
 ## swap rather than a weight -- which is heavier than a bold body face and
 ## reads at the 13px this band runs at.
 const KEY_ATTRIBUTE_FONT := preload("res://Cherry_Bomb_One/CherryBombOne-Regular.ttf")
+const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
+const InboxEventsScript := preload("res://scripts/data/inbox_events.gd")
 const RosterActorScene := preload("res://scenes/components/player_actor_3d.tscn")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 ## Radians of turn per pixel dragged. Slow enough that a small nudge is a small
@@ -210,6 +212,7 @@ func _ready() -> void:
 	advance_catcher.gui_input.connect(_advance_catcher_input)
 	advance_reveal.visible = false
 	_build_roster_viewport()
+	_build_inbox()
 	_apply_floating_panel_styles()
 	_build_attribute_columns()
 	attribute_prev_button.pressed.connect(_step_attribute_page.bind(-1))
@@ -737,6 +740,276 @@ func _refresh_home() -> void:
 		else "%s tops regional power" % _sixnet_top_region()
 	)
 	_refresh_news()
+	_refresh_inbox()
+
+
+## The inbox, as cards that open into a reader.
+##
+## Built in code beside the news feed rather than authored in the scene, because
+## the list is data-length and the reader is one panel reused for every event.
+##
+## The reader stacks two registers on purpose: the manager's report above, the
+## voli's own words below beside their face. See `inbox_events.gd` -- those two
+## texts are deliberately different, and putting them in one panel is what makes
+## that difference visible rather than merely true.
+var inbox_reader: PanelContainer = null
+var inbox_report: RichTextLabel = null
+var inbox_subject: Label = null
+var inbox_utterance: Label = null
+var inbox_options: VBoxContainer = null
+var inbox_portrait_viewport: SubViewport = null
+var inbox_portrait_actor: Node3D = null
+var inbox_selected: int = 0
+
+
+func _build_inbox() -> void:
+	var column := news_panel.get_parent() as BoxContainer
+	if column == null:
+		return
+	var split := HBoxContainer.new()
+	split.name = "InboxSplit"
+	split.add_theme_constant_override("separation", 14)
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(split)
+	column.move_child(split, news_panel.get_index())
+
+	## Events are a queue you work through; results are a feed you scan. They sit
+	## in the same tab and are deliberately not the same object.
+	var list_column := VBoxContainer.new()
+	list_column.name = "InboxList"
+	list_column.custom_minimum_size = Vector2(300.0, 0.0)
+	list_column.add_theme_constant_override("separation", 4)
+	split.add_child(list_column)
+
+	var events: Array = InboxEventsScript.events()
+	for index in range(events.size()):
+		var event: Dictionary = events[index]
+		var card := Button.new()
+		card.name = "InboxCard%d" % index
+		card.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		card.custom_minimum_size = Vector2(0.0, 44.0)
+		card.text = "%s · %s" % [str(event.category), str(event.subject)]
+		card.clip_text = true
+		card.pressed.connect(_open_inbox_event.bind(index))
+		list_column.add_child(card)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_column.add_child(spacer)
+
+	inbox_reader = PanelContainer.new()
+	inbox_reader.name = "InboxReader"
+	inbox_reader.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.add_child(inbox_reader)
+	var pad := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_%s" % side, 16)
+	inbox_reader.add_child(pad)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 10)
+	pad.add_child(body)
+
+	inbox_subject = Label.new()
+	inbox_subject.name = "InboxSubjectTitle"
+	inbox_subject.add_theme_font_size_override("font_size", 19)
+	body.add_child(inbox_subject)
+
+	inbox_report = RichTextLabel.new()
+	inbox_report.bbcode_enabled = true
+	inbox_report.fit_content = true
+	inbox_report.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(inbox_report)
+
+	inbox_options = VBoxContainer.new()
+	inbox_options.name = "InboxOptions"
+	inbox_options.add_theme_constant_override("separation", 4)
+	body.add_child(inbox_options)
+
+	## The voli's own line sits at the bottom bound beside their face, and is the
+	## last thing read rather than the first. The report is the decision; the
+	## utterance is who is asking for it.
+	var speech := HBoxContainer.new()
+	speech.name = "InboxSpeech"
+	speech.add_theme_constant_override("separation", 12)
+	body.add_child(speech)
+
+	## A frame, then the viewport, then the ring on top. The ring cannot be a
+	## child of the SubViewportContainer -- that container blits its viewport over
+	## its own rect and the outline never appeared -- so the two are siblings
+	## inside a plain Control instead.
+	var frame := Control.new()
+	frame.name = "InboxPortraitFrame"
+	frame.custom_minimum_size = Vector2(104.0, 104.0)
+	frame.size_flags_vertical = Control.SIZE_SHRINK_END
+	speech.add_child(frame)
+	var portrait := SubViewportContainer.new()
+	portrait.name = "InboxPortrait"
+	portrait.stretch = true
+	portrait.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.add_child(portrait)
+	inbox_portrait_viewport = SubViewport.new()
+	inbox_portrait_viewport.own_world_3d = true
+	inbox_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	inbox_portrait_viewport.msaa_3d = Viewport.MSAA_4X
+	portrait.add_child(inbox_portrait_viewport)
+	## Round, without a mask. The viewport's background is painted the same
+	## colour as the card behind it and a ring is drawn over the top, so the
+	## square corners are simply the card and the eye reads a circle. A true
+	## circular mask would be a shader and a second render target for one 104px
+	## widget.
+	var ring := Panel.new()
+	ring.name = "InboxPortraitRing"
+	ring.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	## Exempt, or `UIStyle` strips the stylebox that *is* the ring. Same trap as
+	## the roster's grade colours: the pass treats every override as legacy
+	## presentation, and this one is the widget.
+	ring.set_meta("ui_style_exempt", true)
+	frame.add_child(ring)
+
+	var world := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_energy = 1.05
+	world.environment = env
+	inbox_portrait_viewport.add_child(world)
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-24.0, 162.0, 0.0)
+	light.light_energy = 1.5
+	inbox_portrait_viewport.add_child(light)
+	var camera := Camera3D.new()
+	camera.name = "PortraitCamera"
+	camera.rotation_degrees = Vector3(-3.0, 180.0, 0.0)
+	camera.fov = 24.0
+	inbox_portrait_viewport.add_child(camera)
+	inbox_portrait_actor = RosterActorScene.instantiate()
+	inbox_portrait_viewport.add_child(inbox_portrait_actor)
+
+	inbox_utterance = Label.new()
+	inbox_utterance.name = "InboxUtterance"
+	inbox_utterance.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inbox_utterance.size_flags_vertical = Control.SIZE_SHRINK_END
+	inbox_utterance.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	## A voli's own words should not arrive in the same voice as the club's
+	## paperwork, and the cheapest way to say so is to set them in the one face
+	## this game reserves for things that are not data, tilted slightly off true.
+	inbox_utterance.add_theme_font_override("font", KEY_ATTRIBUTE_FONT)
+	inbox_utterance.add_theme_font_size_override("font_size", 16)
+	inbox_utterance.set_meta("ui_style_exempt", true)
+	speech.add_child(inbox_utterance)
+
+
+func _open_inbox_event(index: int) -> void:
+	inbox_selected = index
+	_refresh_inbox()
+
+
+func _refresh_inbox() -> void:
+	if inbox_reader == null:
+		return
+	var events: Array = InboxEventsScript.events()
+	if events.is_empty():
+		return
+	var event: Dictionary = events[clampi(inbox_selected, 0, events.size() - 1)]
+	var light_mode: bool = UIPaletteScript.control_is_light(self)
+	## The roster is `player_ids`, resolved through the manager -- `players` is a
+	## property VolleyballTeam does not have, and the first draft of this reached
+	## for it because that is what it *ought* to be called.
+	var roster: Array = GameManager.team.player_ids
+	var speaker = GameManager.player_by_id(
+		int(roster[int(event.speaker_slot) % roster.size()])
+	) if not roster.is_empty() else null
+	## An event may ask for a particular body. Searched rather than asserted,
+	## because the roster is generated and an event that only works when the
+	## right voli happens to exist is an event that mostly does not appear.
+	var wanted_produce := str(event.get("prefer_produce", ""))
+	if not wanted_produce.is_empty():
+		for player_id in roster:
+			var candidate = GameManager.player_by_id(int(player_id))
+			if candidate == null or candidate.body_type != "Vegi":
+				continue
+			if BodyTypeModelsScript.produce_for(candidate.id) == wanted_produce:
+				speaker = candidate
+				break
+	var speaker_name := str(speaker.display_name) if speaker != null else "A voli"
+
+	inbox_subject.text = str(event.subject)
+	inbox_report.text = "[color=#8fa1b6]%s[/color]\n\n%s\n\n[i]%s[/i]" % [
+		str(event.category).to_upper(),
+		InboxEventsScript.report_text(event, speaker_name),
+		"Not implemented. Shown to judge the shape of the decision.",
+	]
+	inbox_utterance.text = "“%s”" % str(event.utterance)
+	inbox_utterance.add_theme_color_override(
+		"font_color", UIPaletteScript.color(&"ink", light_mode)
+	)
+	inbox_utterance.rotation_degrees = -1.4
+
+	for child in inbox_options.get_children():
+		child.queue_free()
+	for raw_option in event.get("options", []):
+		var option: Dictionary = raw_option
+		var choice := Button.new()
+		choice.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		choice.disabled = true
+		choice.clip_text = true
+		choice.text = "%s  —  %s" % [str(option.label), str(option.cost)]
+		inbox_options.add_child(choice)
+
+	if speaker != null and inbox_portrait_actor != null:
+		inbox_portrait_actor.configure(
+			speaker.id, true, speaker_name, speaker.dominant_hand,
+			{
+				"height_cm": speaker.height_cm,
+				"wingspan_cm": speaker.wingspan_cm,
+				"stride_length_m": speaker.stride_length_m,
+				"body_type": speaker.body_type,
+			},
+		)
+		## The expression is the *event's*, not the voli's resting face. This is
+		## the first place in the game an expression is driven by anything at all
+		## rather than assigned at random.
+		inbox_portrait_actor.set_expression(str(event.expression), light_mode)
+		inbox_portrait_actor.identity_label.visible = false
+		inbox_portrait_actor.set_highlighted(false)
+		inbox_portrait_actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+		inbox_portrait_actor.rotation.y = deg_to_rad(16.0)
+		var head_y: float = inbox_portrait_actor.head.position.y \
+			* inbox_portrait_actor.body_height_scale
+		var camera := inbox_portrait_viewport.get_node("PortraitCamera") as Camera3D
+		## Tight enough that the shoulders fall outside the frame entirely. The
+		## corners of the square are painted the card's colour, so anything that
+		## reaches them -- a collar, a shoulder -- is the one thing that gives the
+		## circle away.
+		camera.position = Vector3(0.0, head_y + 0.015, -0.82)
+
+	if inbox_portrait_viewport != null:
+		var portrait_env := (
+			inbox_portrait_viewport.get_child(0) as WorldEnvironment
+		).environment
+		## Painted the card's *actual* colour, read back from the panel behind it
+		## rather than guessed from a palette token. Guessing produced a square
+		## a shade darker than the card, which is precisely the artefact the
+		## ring-over-matching-background trick exists to avoid -- and the card's
+		## colour comes from a theme variation this file does not choose.
+		var card_box := inbox_reader.get_theme_stylebox("panel") as StyleBoxFlat
+		portrait_env.background_color = card_box.bg_color if card_box != null \
+			else UIPaletteScript.color(&"surface_raised", light_mode)
+		portrait_env.ambient_light_color = UIPaletteScript.color(
+			&"stroke", light_mode
+		)
+		var ring_node := inbox_portrait_viewport.get_parent().get_parent() \
+			.get_node_or_null("InboxPortraitRing") as Panel
+		if ring_node != null:
+			var ring_box := StyleBoxFlat.new()
+			ring_box.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+			ring_box.border_color = UIPaletteScript.color(
+				&"stroke_strong", light_mode
+			)
+			ring_box.set_border_width_all(2)
+			ring_box.set_corner_radius_all(64)
+			ring_node.add_theme_stylebox_override("panel", ring_box)
+
 
 
 ## The panel flavor events will eventually feed. Until they exist it carries

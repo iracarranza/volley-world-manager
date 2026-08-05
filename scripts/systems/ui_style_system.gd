@@ -40,7 +40,6 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 	if not node is Control:
 		return
 	var control := node as Control
-	_clear_legacy_presentation_overrides(control)
 	## Opted out, and the escape hatch is deliberate.
 	##
 	## This pass strips *every* colour override in the tree on the theory that a
@@ -55,8 +54,15 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 	## teal, because the labels are named "Value" and this file gives anything
 	## containing "Value" the StatLabel variation. The numbers looked styled and
 	## said nothing.
+	##
+	## The guard has to sit **above the strip**, not between the strip and the
+	## variation. Placed below it, an exempt label still had its colours wiped
+	## and merely avoided being repainted teal -- so whether the grade colours
+	## survived came down to whether the roster happened to refill after the
+	## styling pass ran, which is not a thing to leave to ordering.
 	if control.has_meta("ui_style_exempt"):
 		return
+	_clear_legacy_presentation_overrides(control)
 	if control is Button:
 		_style_button(control as Button)
 	elif control is Label:
