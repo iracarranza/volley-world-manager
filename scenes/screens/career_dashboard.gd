@@ -113,6 +113,11 @@ const WHEEL_TOOLTIPS := {
 ## The roster's live model. Built in code rather than in the scene because the
 ## whole subtree is one viewport, one light and one actor, and a `.tscn` for
 ## that is three files to keep in sync instead of one function to read.
+## The display face, borrowed for the attribute rows that matter to this
+## player's own position. Godot Labels take one font, so "bold" here is a face
+## swap rather than a weight -- which is heavier than a bold body face and
+## reads at the 13px this band runs at.
+const KEY_ATTRIBUTE_FONT := preload("res://Cherry_Bomb_One/CherryBombOne-Regular.ttf")
 const RosterActorScene := preload("res://scenes/components/player_actor_3d.tscn")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 ## Radians of turn per pixel dragged. Slow enough that a small nudge is a small
@@ -1003,17 +1008,22 @@ func _build_attribute_columns() -> void:
 		for row_index in range(ATTRIBUTE_ROWS_PER_COLUMN):
 			var row := HBoxContainer.new()
 			row.name = "Row%d" % row_index
+			## Both labels opt out of `UIStyle`. Their colours are data rather
+			## than decoration -- a grade band on the value, position relevance on
+			## the name -- and the styling pass strips every override it finds.
 			var name_label := Label.new()
 			name_label.name = "Name"
 			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_label.clip_text = true
 			name_label.add_theme_font_size_override("font_size", 13)
+			name_label.set_meta("ui_style_exempt", true)
 			row.add_child(name_label)
 			var value_label := Label.new()
 			value_label.name = "Value"
-			value_label.custom_minimum_size = Vector2(34.0, 0.0)
+			value_label.custom_minimum_size = Vector2(38.0, 0.0)
 			value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			value_label.add_theme_font_size_override("font_size", 13)
+			value_label.add_theme_font_size_override("font_size", 14)
+			value_label.set_meta("ui_style_exempt", true)
 			row.add_child(value_label)
 			## A trailing spacer keeps the value from being flung to the far
 			## right of a 450px column, where the gap back to its own name is
@@ -1358,9 +1368,23 @@ func _fill_attribute_column(
 		## The attributes this player's own position is scored on are called
 		## out, so a middle blocker's block timing reads differently from a
 		## middle blocker's set disguise at a glance.
+		##
+		## **Hue means grade; weight means relevance.** The two axes are kept on
+		## separate channels on purpose. Colouring key attributes gold, as this
+		## did, put them in direct collision with an S grade -- the one colour in
+		## the band that is supposed to mean "this number is exceptional" also
+		## meant "this row matters for this position", and a gold 48 read as a
+		## good 48. Keys are now the heading face at full-strength ink against a
+		## muted body face, so relevance is legible without spending a hue.
 		var is_position_key := attribute_key in position_keys
-		name_label.add_theme_color_override("font_color",
-			Color("f4c95d") if is_position_key else Color("aab9cc"))
+		if is_position_key:
+			name_label.add_theme_font_override("font", KEY_ATTRIBUTE_FONT)
+			name_label.add_theme_font_size_override("font_size", 13)
+			name_label.add_theme_color_override("font_color", Color("f6f1de"))
+		else:
+			name_label.remove_theme_font_override("font")
+			name_label.add_theme_font_size_override("font_size", 13)
+			name_label.add_theme_color_override("font_color", Color("8fa1b6"))
 		var score := int(player.get(attribute_key))
 		value_label.text = str(score)
 		value_label.add_theme_color_override("font_color",

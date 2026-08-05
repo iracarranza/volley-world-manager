@@ -41,6 +41,22 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 		return
 	var control := node as Control
 	_clear_legacy_presentation_overrides(control)
+	## Opted out, and the escape hatch is deliberate.
+	##
+	## This pass strips *every* colour override in the tree on the theory that a
+	## hand-set colour is legacy presentation the theme should own. That is right
+	## for a label someone tinted once and forgot, and wrong for a colour that
+	## carries meaning -- a grade band, a severity, a per-datum state. Those have
+	## to be overrides, because a theme variation is per widget *kind* and the
+	## whole point is that two identical widgets differ by their data.
+	##
+	## The roster's attribute band was the case that found this. Every value
+	## carried its grade colour and every one was wiped and repainted the same
+	## teal, because the labels are named "Value" and this file gives anything
+	## containing "Value" the StatLabel variation. The numbers looked styled and
+	## said nothing.
+	if control.has_meta("ui_style_exempt"):
+		return
 	if control is Button:
 		_style_button(control as Button)
 	elif control is Label:
