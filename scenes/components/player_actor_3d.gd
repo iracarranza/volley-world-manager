@@ -252,7 +252,11 @@ func set_highlighted(highlighted: bool) -> void:
 func _apply_dig_posture() -> void:
 	var knee_bend := 34.0
 	var hip_pitch := -18.0
-	var drop := 0.10
+	## Small, because the fold now does most of the lowering itself. A squat that
+	## bends the right way already shortens the leg's vertical span; the explicit
+	## drop is only the extra sink the hips add, and at the old values the two
+	## together pushed the feet through the floor.
+	var drop := 0.035
 	var platform_yaw := 0.0
 	var platform_roll := 0.0
 	## How far the whole body twists toward the ball, and how far the *far* leg
@@ -273,7 +277,7 @@ func _apply_dig_posture() -> void:
 			## crouch is not.
 			knee_bend = 78.0
 			hip_pitch = -38.0
-			drop = 0.24
+			drop = 0.09
 			platform_roll = 10.0
 			## Enough lean to read as committed, not so much that the figure folds
 			## into a ball. At -26 the torso came down over the knees and the legs
@@ -295,7 +299,7 @@ func _apply_dig_posture() -> void:
 			## swung sideways, which is not a posture anybody has ever been in.
 			knee_bend = 52.0
 			hip_pitch = -24.0
-			drop = 0.16
+			drop = 0.06
 			platform_yaw = 30.0
 			platform_roll = 14.0
 			torso_yaw = -22.0
@@ -306,7 +310,7 @@ func _apply_dig_posture() -> void:
 			## this read as arriving rather than as a shallower version of planted.
 			knee_bend = 44.0
 			hip_pitch = -22.0
-			drop = 0.14
+			drop = 0.05
 			stride = 30.0
 		_:
 			pass
@@ -344,10 +348,24 @@ func _apply_dig_posture() -> void:
 		## forward and one back.
 		var lead_for_leg := (far_leg_lead if index == 0 else 0.0) \
 			+ (stride if index == 0 else -stride)
-		leg.rotation_degrees.x = -knee_bend * 0.45 + lead_for_leg
+		## **A knee folds backward.**
+		##
+		## This had the thigh swinging back and the shank swinging *forward*,
+		## which puts the joint's point behind the leg -- a knee bending the wrong
+		## way. It survived because a crouch of roughly the right height is still a
+		## crouch of roughly the right height, and the tell is the one detail the
+		## knee was added to show.
+		##
+		## Correct squat: the thigh rotates forward as the hips drop, and the
+		## shank folds back by the same amount so it finishes near vertical and
+		## the foot stays under the body. Equal and opposite is what keeps the
+		## foot on the floor at any depth.
+		var thigh_lift := knee_bend * 0.45
+		leg.rotation_degrees.x = thigh_lift + lead_for_leg
 		var knee := leg.get_node("Knee") as Node3D
 		## The trailing leg stays straighter -- it is still pushing.
-		knee.rotation_degrees.x = knee_bend * (0.6 if index == 1 and stride > 0.0 else 1.0)
+		knee.rotation_degrees.x = -thigh_lift \
+			* (0.6 if index == 1 and stride > 0.0 else 1.0) * 2.0
 	## The platform: two arms held *together* in front, not spread.
 	##
 	## The old dig swung them to -70 degrees with an 18-degree outward tilt each,
@@ -535,9 +553,21 @@ func set_pose(
 			## shoulder alone would swing the whole arm through the ball.
 			var release := clampf(phase, 0.0, 1.0)
 			var set_pitch := lerpf(96.0, 132.0, release)
-			var set_flare := lerpf(30.0, 13.0, release)
-			left_arm.rotation_degrees = Vector3(set_pitch, 0.0, -set_flare)
-			right_arm.rotation_degrees = Vector3(set_pitch, 0.0, set_flare)
+			## **The hands are together, because the ball is between them.**
+			##
+			## The flare was signed the wrong way and spread the forearms apart
+			## through the whole motion, so both halves of a set were drawn as a
+			## player holding nothing. A set is two hands cupping one ball: the
+			## forearms converge for the preparation *and* the push, and only the
+			## follow-through opens outward once the ball has gone.
+			##
+			## Positive rolls the hand toward the centreline, so the left arm
+			## takes `+flare` and the right `-flare` -- the opposite of what a
+			## spread would use.
+			var follow := clampf((release - 0.78) / 0.22, 0.0, 1.0)
+			var set_flare := lerpf(lerpf(21.0, 15.0, release), -20.0, follow)
+			left_arm.rotation_degrees = Vector3(set_pitch, 0.0, set_flare)
+			right_arm.rotation_degrees = Vector3(set_pitch, 0.0, -set_flare)
 			var set_elbow := lerpf(98.0, 22.0, release)
 			_set_elbow(left_arm, set_elbow)
 			_set_elbow(right_arm, set_elbow)
@@ -571,7 +601,8 @@ func set_pose(
 			left_leg.rotation_degrees.x = 26.0
 			right_leg.rotation_degrees.x = 22.0
 			for leg in [left_leg, right_leg]:
-				(leg.get_node("Knee") as Node3D).rotation_degrees.x = 30.0
+				## Backward, like every other knee in the file.
+				(leg.get_node("Knee") as Node3D).rotation_degrees.x = -34.0
 			left_arm.position.y = shoulder_offset.y + 0.06
 			right_arm.position.y = shoulder_offset.y + 0.06
 			left_arm.rotation_degrees = Vector3(158.0, 0.0, -8.0)
