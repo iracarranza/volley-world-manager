@@ -188,7 +188,7 @@ text = "FRONT OFFICE"
 [node name="MenuTitle" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=682887669]
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
-text = "Choose your next move."
+text = "Where will you go next?"
 
 [node name="MenuRule" type="HSeparator" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1299074118]
 layout_mode = 2
