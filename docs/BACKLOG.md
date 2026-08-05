@@ -348,6 +348,41 @@ reading a stable mean as a stable quantity — and it is the same shape as the t
 set outside their own distributions in the recovery work. When a summary statistic is
 being used to support a structural claim, check the spread first.
 
+### The set-quality gap starts one contact earlier, in the reception formula
+
+The histogram below measures the opponent setting worse and erroring far more. That is
+real, and it is downstream. The serve reception that feeds it was written out twice with
+different weights:
+
+| | reception | ball_control | composure | serving side's risk charged |
+| --- | ---: | ---: | ---: | :---: |
+| home receives (opponent serves) | 0.65 | 0.20 | 0.15 | no |
+| opponent receives (home serves) | 0.58 | 0.24 | — | yes |
+
+Three attributes summing to 1.0 against two summing to 0.82, with `composure` reaching
+the home side's receivers and not the opponent's. Measured across 629 receptions on
+identical rosters: **home reception quality 0.606, opponent 0.378.** That is the largest
+single asymmetry measured in this engine, and it is upstream of everything in the table
+below — a worse pass is a worse ball for the setter, which is exactly what
+`capability_penalty` 0.297 against 0.132 is reporting.
+
+`_reception_skill()` unifies the weighting and a symmetric risk-pressure term closes the
+rest; measured, the gap narrows from 0.228 to 0.102 (0.589 against 0.487). The residue is
+the two formulas' remaining differences (serve pressure 0.48 against 0.44, seam conflict
+on one side only) and is deliberately left alone until this lands.
+
+**It is behind `ENABLE_UNIFIED_RECEPTION_SKILL`, off, and it does not land alone.** On its
+own it moves the attack-symmetry ratchet 0.656 → 0.686 and flips the defensive-identity
+gate. That is the *same direction* `ENABLE_UNIFIED_ATTACK_SHAPE` pushes it, and the
+convergence is evidence rather than coincidence: better opponent passing clears the 0.38
+set-quality threshold in `_choose_opponent_attack` more often, so more opponent balls
+become real swings instead of safe rolls — and the block those swings meet is the system
+Gate D already measures at 41.5% terminal against a 12% target. Improving reception does
+not create a defect; it exercises the block defect more often.
+
+So the two flags land together, after the block's outcome bands are re-tuned for an
+opponent that swings. Do not widen the ratchet to close either.
+
 ### Set quality collapses on two of the four paths
 
 From `tools/run_set_quality_histogram.gd`, and relevant because everything above

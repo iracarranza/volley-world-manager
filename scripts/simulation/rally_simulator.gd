@@ -620,9 +620,20 @@ func resolve(
 		support_bonus = 0.0
 		seam_conflict = false
 	var seam_penalty := 0.09 if seam_conflict else 0.0
-	var reception_base := _rating(receiver, "reception") * 0.65 \
-		+ _rating(receiver, "ball_control") * 0.20 \
-		+ _rating(receiver, "composure") * 0.15
+	## How much pace and movement the serve attempted, on top of how well it was
+	## executed. `opponent_risk` was computed above for the error-chance roll and
+	## went nowhere else -- the opponent's reception of a home serve prices this
+	## exact concept (`serve_risk_pressure` there) and the home side's reception of
+	## an opponent serve did not, so an aggressive serve that landed clean cost
+	## the server nothing extra on this side of the net while it cost the
+	## opponent's own receivers on theirs.
+	var opponent_risk_pressure := (opponent_risk - 0.5) * 0.16 \
+		if RallyFeatureFlagsModel.ENABLE_UNIFIED_RECEPTION_SKILL else 0.0
+	var reception_base := _reception_skill(receiver) \
+		if RallyFeatureFlagsModel.ENABLE_UNIFIED_RECEPTION_SKILL \
+		else _rating(receiver, "reception") * 0.65 \
+			+ _rating(receiver, "ball_control") * 0.20 \
+			+ _rating(receiver, "composure") * 0.15
 	## No flat bonus. A `+ 0.30` term used to sit at the end of this sum and it
 	## almost exactly cancelled the best serve in the game: serve pressure is
 	## `serve_quality * 0.48` and serve quality never exceeded 0.645, so the most
@@ -630,6 +641,7 @@ func resolve(
 	## 0.30 back unconditionally. Reception quality never fell below 0.387 against
 	## an ace threshold of 0.18, which is why the engine produced no aces at all.
 	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
+		- opponent_risk_pressure \
 		- CoverageModel.reception_body_penalty(receiver, arrival, serve_quality) \
 		+ arrival_bonus + support_bonus - seam_penalty \
 		+ rng.randf_range(-0.14, 0.14),
@@ -1970,9 +1982,12 @@ func _resolve_home_serve(
 	## movement the serve attempts. Centre this at the legacy 0.50 call so the
 	## Balanced calibration does not move merely because identities exist.
 	var serve_risk_pressure := (serve_risk - 0.5) * 0.16
+	var opponent_reception_base := _reception_skill(receiver) \
+		if RallyFeatureFlagsModel.ENABLE_UNIFIED_RECEPTION_SKILL \
+		else _rating(receiver, "reception") * 0.58 \
+			+ _rating(receiver, "ball_control") * 0.24
 	var reception_quality := clampf(
-		_rating(receiver, "reception") * 0.58
-		+ _rating(receiver, "ball_control") * 0.24
+		opponent_reception_base
 		- serve_quality * 0.44
 		- serve_risk_pressure
 		- CoverageModel.reception_body_penalty(receiver, opponent_arrival, serve_quality)
@@ -5576,6 +5591,25 @@ func _recovery_anchor(receiver: VolleyballPlayer) -> float:
 		+ mass_edge * 0.40,
 		0.0, 1.0,
 	)
+
+
+## What a receiver brings to a serve reception, before the serve itself is
+## weighed. One formula for both sides of the net.
+##
+## Written out twice before this: the home side (opponent serving) summed
+## reception 0.65 + ball_control 0.20 + composure 0.15 -- three attributes to
+## 1.0. The opponent side (home serving) summed reception 0.58 + ball_control
+## 0.24 -- two attributes to 0.82, composure never read at all. Measured across
+## 629 receptions on identical rosters: home reception quality averaged 0.606,
+## the opponent's 0.378 -- the largest single asymmetry in the engine, and it
+## was upstream of the whole chain the set-quality histogram measured
+## downstream of it (opponent set capability_penalty 0.297 against home's
+## 0.132, opponent attack error 47.7% against home's 15.4%). Composure alone
+## does not explain a 0.228 gap; the short weights did the rest.
+func _reception_skill(receiver: VolleyballPlayer) -> float:
+	return _rating(receiver, "reception") * 0.65 \
+		+ _rating(receiver, "ball_control") * 0.20 \
+		+ _rating(receiver, "composure") * 0.15
 
 
 func _contact_recovery_state(

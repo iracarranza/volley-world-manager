@@ -101,3 +101,36 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## swings -- that is the remaining work, and it is now a known quantity instead of a
 ## suspicion. Do not widen a bound to close it.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
+
+## Reception quality off a serve, computed one way for both sides of the net.
+##
+## The home side (opponent serving) has always summed reception 0.65 + ball_control
+## 0.20 + composure 0.15 -- three attributes to 1.0. The opponent side (home serving)
+## summed reception 0.58 + ball_control 0.24 -- two attributes to 0.82, composure
+## never read at all, and with no penalty for the serving side's chosen risk the way
+## the opponent's own formula charges the home server's. Measured across 629
+## receptions on identical rosters: home reception quality averaged 0.606 against the
+## opponent's 0.378 -- the largest single asymmetry measured in the engine, and
+## upstream of the set-quality gap the histogram tool measures downstream of it
+## (opponent set capability_penalty 0.297 against home's 0.132).
+##
+## `_reception_skill()` unifies the attribute weighting and a symmetric risk-pressure
+## term closes the rest. Narrowing that gap alone -- with `ENABLE_UNIFIED_ATTACK_SHAPE`
+## still off, so this is not the same lever -- moves the attack-symmetry ratchet from
+## 0.656 to 0.684-0.686 and flips the defensive-identity gate
+## (`home_attack_error_rate`/`home_kill_rate` for the Defensive identity, a
+## comparison already documented as resolvable only at effect sizes down to 1.4%).
+##
+## Two independent, well-justified correctness fixes -- this one and
+## `ENABLE_UNIFIED_ATTACK_SHAPE` -- push the same ratchet the same direction on their
+## own. That convergence is itself evidence: better opponent sets let more of their
+## attacks reach a real swing instead of a safe roll (`_choose_opponent_attack`
+## downgrades below 0.38, and better reception raises how often that threshold is
+## cleared), and the block those swings meet is the system Gate D already measured at
+## 41.5% terminal against a 12% target. Improving reception does not create a new
+## defect; it exercises an existing one more often.
+##
+## So this waits behind the same flag discipline: land it once the block's outcome
+## bands are re-tuned for an opponent that swings, alongside `ENABLE_UNIFIED_ATTACK_SHAPE`.
+## Do not widen the ratchet to close this.
+const ENABLE_UNIFIED_RECEPTION_SKILL: bool = false
