@@ -102,6 +102,81 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## suspicion. Do not widen a bound to close it.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 
+## Let the opponent hitter walk to their mark before the set is released.
+##
+## `_reachable_attack_contact` charges the hitter's entire journey -- transition
+## position to attack contact -- against the set's flight time plus a 0.35 s
+## grace, and hands back a contact part-way along the run when that is not
+## enough. The home side does not work this way: `_approach_budget` splits the
+## journey into a walk paid from `preparation_window_seconds` (the pass-to-release
+## window) and a run-up paid from `set_flight_seconds`, precisely because
+## charging both to one clock double-counts the walk. That correction was made on
+## the home side and never made here.
+##
+## What the double-charge produces, measured over 552 opponent swings:
+##
+##   clamped short of the asked-for contact   541 of 552  (98%)
+##   run the hitter had to make               6.12 m at p50 *and* p90 -- a constant
+##   time that run takes                      0.90 s
+##   set's hang time                          0.55 s
+##   asked-for contact, off the net           3.60 m at p50
+##   actual contact, off the net              5.48 m at p50, 6.90 m at p90
+##
+## An opponent swinging from 5.5 m off the net is swinging from their own
+## baseline, and it is not a slow hitter -- the run is a fixed 6.12 m because
+## they are never staged anywhere near the lane they are asked to attack from,
+## and the clock they are given to cover it is half the clock they have.
+##
+## It is also the entire block placement error. The crossing geometry is
+## `tan(bearing) * off_net_metres`, so a wall staged on the contact is wrong in
+## proportion to this depth: blocks that touched the ball faced a p50 contact
+## 1.77 m off the net, blocks that were beaten faced 5.51 m.
+##
+## **What it fixes, measured.** The pass-to-release window is 1.10 s, taking the
+## budget from 0.90 s to 2.00 s against a 0.90 s run:
+##
+##   contact off the net, p50    5.48 m  ->  1.32 m   (a real front-row contact)
+##   contact off the net, p90    6.90 m  ->  3.98 m   (a back-row pipe)
+##   run the hitter must make    6.12 m  ->  0.72 m
+##   run minus flight, p50       +0.36 s ->  +0.08 s
+##
+## And the block, which had been standing correctly relative to a contact that was
+## wrong, starts meeting the ball: involvement goes from 10% to 43%, inside the
+## documented 35-45% band, and the crossing bias collapses to roughly zero with no
+## change to the wall at all.
+##
+## **The block-intent gates separate on this alone**, with no band touched:
+##
+##   intent    stuff   partials
+##   Seal        121         64
+##   Balanced    107         58
+##   Funnel       72         74
+##
+## Monotone, and in the direction the gates ask for -- sealing ends more rallies at
+## the net, funnelling gets a piece of more balls without ending them. The reach and
+## width dials were never wrong. They were being swamped by a placement error that
+## was really a contact-depth error.
+##
+## **Why it is nonetheless off.** It over-corrects the block, and an existing gate
+## catches it: partial outcomes no longer outnumber terminal stuffs (263 against
+## 269), and the stuff rate runs about 24.5% of blocks formed against Gate D's 12%
+## target. That is not this change misbehaving -- it is Gate D's constants,
+## `BLOCKER_REACH_EFFORT` and `STUFF_DEPTH_METERS`, having been calibrated against
+## a contact depth of 5.5 m off the net that this change deletes. A calibration fit
+## to a distribution that no longer exists has to be re-derived, and until it is,
+## the over-blocking is also the most plausible reading of the symmetry ratchet
+## moving 0.663 to 0.677: the home wall stops the opponent's attacks far more often
+## than the sport allows.
+##
+## The back-row legality gate also drops to 13 observed attacks, because a hitter
+## who can now reach the pin is chosen over one who cannot and the opponent's
+## front-row share rises. That is the correct direction for the sport and a sample
+## floor that needs re-setting, not a defect.
+##
+## So: re-derive Gate D against a real contact depth, then turn this on and read the
+## ratchet again. Do not widen a bound to accommodate it.
+const ENABLE_OPPONENT_APPROACH_WINDOW: bool = false
+
 ## Stage the block wall where the ball crosses the tape, not where the hitter jumps.
 ##
 ## OFF, AND THE SHAPE IS WRONG. Kept because the measurement behind it is worth

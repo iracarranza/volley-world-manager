@@ -2802,6 +2802,14 @@ func _resolve_opponent_transition(
 			roundi(opponent_attack * 100.0),
 		],
 		{"side": "opponent", "lane_x": opponent_contact.x,
+			## The contact this swing was *asked* for, beside the one it got.
+			## `hitter_start` and `hitter_travel_time` were already stamped, so the
+			## only missing term was the ask -- and without it nothing downstream
+			## could see how far back the reachability clamp had pushed the swing.
+			"ideal_contact": _opponent_attack_contact(
+				opponent_team, opponent_hitter
+			),
+			"set_flight_seconds": set_flight_time,
 			"attack_type": attack_choice.attack_type,
 			"attack_direction": attack_choice.direction,
 			"hitter_start": attack_choice.start,
@@ -4454,7 +4462,23 @@ func _reachable_attack_contact(
 	ideal_contact: Vector2,
 	set_flight_time: float,
 ) -> Vector2:
+	## The whole journey used to be charged against the set's flight alone, which
+	## is the double-charge the home side's `_approach_budget` was built to stop
+	## and which was never taken off this side. A hitter does not stand still
+	## until the ball leaves the setter's hands: they transition out and walk to
+	## their mark while the pass is in the air and the setter is releasing it, and
+	## only the run-up from the mark to the contact is paid out of the set's hang
+	## time.
+	##
+	## Measured with the walk double-charged: 541 of 552 opponent swings clamped
+	## short, a 6.12 m run at both p50 and p90 against a 0.55 s set, and contacts
+	## landing a median 5.48 m off the net when the ask was 3.60 m -- an opponent
+	## swinging from their own baseline on nearly every ball. That is also the
+	## whole of the block's placement error, since the crossing displacement is
+	## `tan(bearing) * off_net_metres`.
 	var budget := set_flight_time + OPPONENT_HITTER_LATE_GRACE
+	if RallyFeatureFlagsModel.ENABLE_OPPONENT_APPROACH_WINDOW:
+		budget += DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS
 	if _movement_time(hitter, start, ideal_contact, "transition") <= budget:
 		return ideal_contact
 	## Movement time rises monotonically with distance, so bisecting the segment
