@@ -3901,24 +3901,29 @@ const ATTACK_NET_ERROR_FRACTION: float = 0.5
 ## mistimed attack actually does. Deterministic on purpose -- it reads only the
 ## intended target and the quality that already decided the outcome, so a
 ## replayed seed still draws the identical miss.
-## What the set's own flight gives the hitter, against what the hitter needs.
+## What the hitter is given, against what they need -- in **two windows**, because
+## the approach is paid for out of two different clocks.
 ##
-## Step 2 of `docs/design/TEMPO_AND_APPROACH.md`, and it deliberately changes no
-## outcome. Tempo already sets the set's launch angle -- 12-18 degrees at first
-## tempo, 45-55 at third -- so the arc solver has been producing genuinely
-## different flight times all along. What has never existed is the comparison that
-## makes those times mean something: whether the hitter could actually get there.
+## The first version of this charged both legs against the set's flight and reported
+## a deficit on 100% of attacks. That was wrong, and the way it was caught is worth
+## keeping: the same measurement also said the approach model reached its mark on
+## 100% of attacks, and two measures of one event cannot both be right when they
+## disagree completely. The approach model was the honest one.
 ##
-## **Available** is the set's flight. **Required** is the traversal from where the
-## hitter was standing to the *ideal* approach mark, plus the run-up from that mark
-## to the contact point. The first term is why where they were standing matters and
-## not only who they are.
+## `ApproachMechanicsSystem.prepare_for_attack()` runs the walk to the approach mark
+## during `set_contact_time - release_time` -- the window between the hitter being
+## released from their previous duty and the setter touching the ball. That leg is
+## already over when the set goes up. Only the **run-up** competes with the set's
+## flight.
 ##
-## Published so the deficit distribution can be measured before any behaviour
-## depends on it. If the deficit is never positive, the compromise branch would be
-## dead code and step 4 is not worth building; if it is always positive, the
-## approach model is asking for arrivals nothing can meet, which is the sliding
-## complaint stated as a number.
+## So there are two budgets and they must not be added:
+##
+## - **preparation:** the walk to the mark, against the pre-set window.
+## - **run-up:** the approach itself, against the set's flight.
+##
+## Both are reported. Adding them charges the walk twice and inflates the deficit by
+## roughly a second, which is how a real 0.13 s overrun at third tempo came out as
+## 1.02 s and made the compromise branch look like it would fire on everything.
 func _approach_budget(
 	hitter: VolleyballPlayer,
 	standing_at: Vector2,
@@ -3933,17 +3938,23 @@ func _approach_budget(
 		if not preparation.is_empty() else standing_at
 	var to_mark := _movement_time(hitter, standing_at, ideal_mark, "transition")
 	var run_up := _movement_time(hitter, ideal_mark, contact_point, "transition")
-	var required := to_mark + run_up
+	## What the model actually allowed for the walk. Zero when the hitter was
+	## released at or after the set, which is its own kind of squeeze.
+	var preparation_window := float(preparation.get("preparation_time_seconds", 0.0))
 	return {
 		"tempo": tempo,
+		## The run-up's clock, which is the one the tempo chain is about.
 		"available_seconds": set_flight_seconds,
-		"required_seconds": required,
+		"required_seconds": run_up,
+		"deficit_seconds": run_up - set_flight_seconds,
+		## The walk's clock, kept separate.
+		"preparation_window_seconds": preparation_window,
 		"to_mark_seconds": to_mark,
+		"preparation_deficit_seconds": to_mark - preparation_window,
 		"run_up_seconds": run_up,
-		"deficit_seconds": required - set_flight_seconds,
-		## Whether the hitter got to the mark they were aiming at, which the
-		## approach model already decides. A deficit and a missed mark should agree;
-		## if they do not, one of the two is wrong.
+		## Whether the hitter got to the mark they were aiming at, which the approach
+		## model decides. This should now agree with `preparation_deficit_seconds`
+		## rather than contradict it -- if it does not, one of the two is still wrong.
 		"reached_ideal_mark": bool(preparation.get("reached_approach_start", true)),
 	}
 

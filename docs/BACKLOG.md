@@ -331,6 +331,18 @@ to lose, and nothing was measuring that. This is a bigger offensive asymmetry th
 the filter would have been a fix for, and it sits on the *home* side — the
 opposite of every other asymmetry in this section.
 
+### The approach mark is placed from the lane, not from the set
+
+`ApproachMechanicsSystem.approach_start_position()` takes the lane name and the side and
+returns a mark. It does not read where the set is actually going, and the consequence is
+measurable: the traversal from the hitter to their ideal mark is a **constant 0.847 s at
+every tempo** across 936 attacks. A ball delivered a metre off the pin should move the
+mark a metre.
+
+This matters beyond tidiness because the hitter's run-up is measured *from* that mark, so
+the approach deficit in `docs/design/TEMPO_AND_APPROACH.md` is right in shape and uncertain
+in magnitude until the mark moves. It is the next thing to fix in that chain.
+
 ### Set quality collapses on two of the four paths
 
 From `tools/run_set_quality_histogram.gd`, and relevant because everything above

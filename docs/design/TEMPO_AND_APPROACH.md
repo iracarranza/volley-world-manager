@@ -1,9 +1,8 @@
 # Tempo, set height, and the hitter's approach
 
-Status: **Links 1-2 hold and are now measured and gated. Steps 3-4 are blocked,
-and the measurement is what blocks them.** See "What step 2 measured" below before
-building anything further — the compromise branch would fire on *every* attack,
-which means the ask is wrong rather than the compromise being needed.
+Status: **Links 1-2 hold and are gated. Link 3 is measured, and the deficit is real,
+small and tempo-ordered — which is what step 4 needs to be worth building.** One
+structural fix comes first: see "The approach mark does not move with the ball".
 
 ## The chain
 
@@ -87,8 +86,9 @@ can feel and a tactic that can be wrong.
    flight time.~~ **Already true**, and now gated. Measured spread below.
 2. ~~**Publish the budget**~~ **Done**, as `approach_budget` on the ATTACK event
    (the set event is stamped before the hitter has been staged, so the attack is
-   where the approach is described). Measured below, and the answer changes what
-   steps 3 and 4 should be.
+   where the approach is described). Two windows, never added — measured below.
+2b. **Place the approach mark from the set**, not from the lane. The one structural
+   fix the measurement turned up, and the run-up's length depends on it.
 3. **Spend it in playback only.** Attacker arrival draws from the budget. If
    sliding disappears at this step, the residue was the ask and not the drawing.
 4. **Spend it in the resolver.** A compromised approach costs attack quality; an
@@ -100,47 +100,73 @@ turn "tempo should cost time" from an assertion into a number.
 
 ## What step 2 measured
 
-`tools/run_approach_budget.gd`, 4 pairings x 90 rallies per tempo, home attacks:
+`tools/run_approach_budget.gd`, 4 pairings x 90 rallies per tempo, home attacks. **Two
+windows, reported separately, because the approach is paid for out of two clocks.**
 
-| tempo | n | flight | to mark | run-up | needed | median deficit | short |
+`ApproachMechanicsSystem.prepare_for_attack()` runs the walk to the approach mark during
+`set_contact_time - release_time` — the window between the hitter being released from
+their previous duty and the setter touching the ball. That leg is over before the set
+goes up. Only the **run-up** competes with the set's flight.
+
+**Run-up, against the set's flight** — the tempo chain's own question:
+
+| tempo | n | flight | run-up | deficit p10 | p50 | p90 | short |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 312 | 0.376 | 0.847 | 0.663 | 1.510 | 1.152 | **100%** |
-| 2 | 312 | 0.554 | 0.847 | 0.793 | 1.639 | 1.105 | **100%** |
-| 3 | 312 | 0.806 | 0.847 | 0.937 | 1.784 | 1.016 | **100%** |
+| 1 | 312 | 0.376 | 0.663 | +0.227 | +0.286 | +0.347 | 100% |
+| 2 | 312 | 0.554 | 0.793 | +0.172 | +0.241 | +0.295 | 100% |
+| 3 | 312 | 0.806 | 0.937 | +0.025 | +0.144 | +0.209 | **91%** |
 
-**Link 1 and 2 were already built.** Tempo drives the set's launch angle (12-18°
-at first tempo, 45-55° at third) and the arc solver turns that into a real flight
-time, so a third-tempo ball genuinely takes more than twice as long to arrive as a
-first-tempo one. Neither link was gated, so nothing stopped a future tuning pass
-from flattening the angle table and quietly ending tempo's only connection to
-time; `_test_tempo_buys_flight_time()` pins the ordering now.
+**Walk, against the pre-set window:**
 
-**Step 4 must not be built yet.** The deficit is positive on 100% of attacks at
-every tempo. A compromise branch everybody enters is not a compromise, it is the
-model — and the tool says so in its own output. The ask is wrong before the
-response is missing.
+| tempo | window | to mark | deficit p50 | short | missed mark |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 2.006 | 0.847 | −1.066 | 0% | 0% |
+| 2 | 1.995 | 0.847 | −1.057 | 0% | 0% |
+| 3 | 1.986 | 0.847 | −1.049 | 0% | 0% |
 
-Three things to fix first, in this order:
+**The shape is the design intent.** The deficit halves as tempo slows — +0.286 s at first
+tempo to +0.144 s at third — and at third tempo the best tenth of attacks (p10 +0.025 s)
+essentially afford the full approach already, which is why 91% rather than 100% are short.
+A first-tempo ball to the same hitter from the same spot routinely forces the compromise.
+That asymmetry is exactly what makes tempo a decision rather than a modifier, and it is
+now a measured quantity.
 
-1. **The approach model never reports failure.** `reached_ideal_mark` came back
-   true on every one of 936 attacks while the deficit was positive on every one of
-   them. Two measures of the same event disagreeing completely means one is not
-   measuring. That is the first thing to look at, because everything else is
-   judged against it.
-2. **`to mark` is a constant 0.847 s at every tempo.** The traversal to the ideal
-   approach mark does not vary with the ball at all, which is only possible if the
-   mark is placed at a fixed offset from the hitter rather than from the set. A
-   proper approach start is a function of where the ball is going.
-3. **No harness has ever measured first or second tempo.** With no called play the
-   resolver falls through to `_fallback_assignment`, whose tempo is hardcoded to 3,
-   and every calibration tool in the repository seeds the vertical slice. The whole
-   tempo system has been calibrated at one setting; the sweep above had to install
-   a play per rotation to see the other two. Gated by the second half of
-   `_test_tempo_buys_flight_time()`.
+### Corrected: the first version of this measurement was wrong
 
-Only once the required side is trustworthy does the available side mean anything,
-and only then is the three-way outcome table above a decision rather than a
-foregone conclusion.
+It reported a deficit on 100% of attacks at every tempo, roughly 1.0–1.15 s, and concluded
+that step 4 must not be built because a branch everybody enters is the model rather than a
+compromise. **That was my own tool double-charging the walk**, adding the pre-set leg to
+the run-up and comparing the sum against the set's flight alone.
+
+The way it was caught is worth keeping. The same measurement also reported that the
+approach model reached its mark on 100% of attacks, and two measures of one event cannot
+both be right when they disagree completely. `RallyMovementSystem.project_toward()` reports
+`reached_target` from `traveled >= distance`, honestly; it came back true because the walk
+genuinely does fit, in 2.0 s of window for 0.847 s of walking. The engine was right and the
+instrument was wrong. The two now agree — 0% short on the walk, 0% missed mark — and
+agreement between two independent measures is the only reason to trust either.
+
+### The approach mark does not move with the ball
+
+`to mark` is a constant **0.847 s at every tempo**, and that is the one structural defect
+left in this chain. The traversal to the ideal approach mark does not vary with the ball at
+all, which is only possible if `approach_start_position()` places the mark at a fixed
+offset from the *lane* rather than from where the set is actually going. A proper approach
+start is a function of the set's landing point: a ball delivered a metre off the pin should
+move the mark a metre, and it currently does not.
+
+This is worth fixing before step 4 because the run-up's length is measured *from* that
+mark. A mark in the wrong place makes the run-up the wrong length, which makes the deficit
+above the wrong size — right in shape, uncertain in magnitude.
+
+### And no harness had ever measured first or second tempo
+
+With no called play the resolver falls through to `_fallback_assignment`, whose tempo is
+hardcoded to 3, and every calibration tool in the repository seeds the vertical slice. The
+whole tempo system had been calibrated at one setting; the sweep above had to install a
+play per rotation to see the other two, and the first version of it silently did not,
+reporting tempo 3 three times. Gated by the second half of
+`_test_tempo_buys_flight_time()`.
 
 ## Open
 

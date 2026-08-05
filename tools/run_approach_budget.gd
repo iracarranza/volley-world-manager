@@ -66,8 +66,9 @@ func _initialize() -> void:
 	print("Approach budget by tempo -- %d pairings x %d rallies per tempo"
 		% [PAIRINGS, RALLIES])
 	print("")
-	print("%-6s %8s %8s %8s %8s %8s %9s %8s" % [
-		"tempo", "n", "flight", "to mark", "run-up", "needed", "deficit", "short%"
+	print("RUN-UP against the set's flight -- the tempo chain's own question")
+	print("%-6s %8s %8s %8s %9s %8s" % [
+		"tempo", "n", "flight", "run-up", "deficit", "short%"
 	])
 	for tempo in [0, 1, 2, 3]:
 		var rows: Array = by_tempo.get(tempo, [])
@@ -76,36 +77,51 @@ func _initialize() -> void:
 		var flight := 0.0
 		var to_mark := 0.0
 		var run_up := 0.0
-		var required := 0.0
+		var window := 0.0
 		var short_count := 0
+		var walk_short := 0
 		var missed_mark := 0
 		var deficits: Array = []
+		var walk_deficits: Array = []
 		for row in rows:
 			flight += float(row.get("available_seconds", 0.0))
 			to_mark += float(row.get("to_mark_seconds", 0.0))
 			run_up += float(row.get("run_up_seconds", 0.0))
-			required += float(row.get("required_seconds", 0.0))
+			window += float(row.get("preparation_window_seconds", 0.0))
 			var deficit := float(row.get("deficit_seconds", 0.0))
 			deficits.append(deficit)
 			if deficit > 0.0:
 				short_count += 1
+			var walk_deficit := float(row.get("preparation_deficit_seconds", 0.0))
+			walk_deficits.append(walk_deficit)
+			if walk_deficit > 0.0:
+				walk_short += 1
 			if not bool(row.get("reached_ideal_mark", true)):
 				missed_mark += 1
 		var n := float(rows.size())
 		deficits.sort()
-		print("%-6d %8d %8.3f %8.3f %8.3f %8.3f %9.3f %7.1f%%" % [
-			tempo, rows.size(), flight / n, to_mark / n, run_up / n,
-			required / n, _percentile(deficits, 0.50),
-			float(short_count) / n * 100.0,
+		walk_deficits.sort()
+		print("%-6d %8d %8.3f %8.3f %9.3f %7.1f%%" % [
+			tempo, rows.size(), flight / n, run_up / n,
+			_percentile(deficits, 0.50), float(short_count) / n * 100.0,
 		])
-		print("       deficit p10 %.3f  p50 %.3f  p90 %.3f   missed ideal mark %.1f%%" % [
+		print("       deficit p10 %+.3f  p50 %+.3f  p90 %+.3f" % [
 			_percentile(deficits, 0.10), _percentile(deficits, 0.50),
-			_percentile(deficits, 0.90), float(missed_mark) / n * 100.0,
+			_percentile(deficits, 0.90),
+		])
+		## The other window, on its own terms. This is the one the approach model's
+		## own arrival flag is about, so the two have to agree.
+		print("       walk: window %.3f s  to mark %.3f s  deficit p50 %+.3f  short %.1f%%  missed mark %.1f%%" % [
+			window / n, to_mark / n, _percentile(walk_deficits, 0.50),
+			float(walk_short) / n * 100.0, float(missed_mark) / n * 100.0,
 		])
 	print("")
 	print("Link 2 holds if `flight` widens across tempos. Step 4 is worth building")
 	print("only if `short%` is neither 0 nor 100 -- a branch nobody enters is dead")
 	print("code, and one everybody enters is not a compromise, it is the model.")
+	print("")
+	print("The two windows must never be added: the walk to the mark happens before")
+	print("the setter touches the ball, so only the run-up competes with the flight.")
 	quit()
 
 
