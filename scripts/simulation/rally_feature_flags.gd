@@ -155,8 +155,32 @@ const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 ## With mass priced and this open: the ratchet reads **0.643 and the drift
 ## assertion passes**, and the mass-coverage gate passes. One blocker remains
 ## instead of two -- the gate asserting that a defensive attacking identity lowers
-## both error risk and terminal pressure across six career seeds. That is the last
-## thing between this and shipping, and it is named rather than guessed at.
+## both error risk and terminal pressure across six career seeds.
+##
+## **Measured, and it is not a regression -- the gate cannot resolve its own
+## claim.** Both arms of the kill comparison sit at a 90% kill rate against a
+## sport that runs 45-50%, and with this flag open they come out bit-identical:
+##
+##             defensive err   physical err   defensive kill   physical kill
+##   flag off        0.0327         0.0383           0.8948          0.8971
+##   flag on         0.0331         0.0327           0.9019          0.9019
+##
+## Off, the gate passes on margins of 0.0056 and 0.0023. On, the error clause
+## inverts by 0.0004 and the kill clause has no margin at all. Two identities
+## agreeing to four decimals is a metric with no headroom, not a property this
+## switch removed.
+##
+## `home_kill_rate` is `home_attack_wins / home_attack_attempts`, and the
+## numerator counts rallies whose outcome was a kill -- at most one per rally --
+## against a denominator of attack attempts. For that ratio to read 0.90 the
+## denominator has to be effectively one, which is `MAX_EXCHANGES = 4` and short
+## rallies showing through in a figure that reads like a kill percentage and is
+## not one. The flagged `MAX_EXCHANGES` and this are the same finding twice.
+##
+## So the blocker is a measurement to repair, not a bound to widen. Give the kill
+## rate a denominator that can vary before asking it to separate two identities.
+## Do not raise the sample count to make this pass -- the margin is 0.0004 on a
+## saturated metric and no sample size rescues that.
 const ENABLE_UNIFIED_SPEED_MODEL: bool = false
 
 ## Decide the block contest on when the blocker jumped, not only on how tall
