@@ -33,6 +33,8 @@ var shoulder_offset: Vector2 = Vector2(0.40, 1.52)
 var hip_offset: Vector2 = Vector2(0.16, 0.48)
 var body_height_scale: float = 1.0
 var arm_length_scale: float = 1.0
+## How long this voli's legs are for their height, from `stride_length_m`.
+var leg_length_scale: float = 1.0
 var leg_bone_lengths: Vector2 = Vector2(0.40, 0.34)
 var arm_bone_lengths: Vector2 = Vector2(0.40, 0.48)
 ## How strained the contact the simulator resolved was. Not a visual choice:
@@ -580,6 +582,46 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	arm_length_scale = clampf(
 		(wingspan_cm / height_cm) / reference_ratio, 0.78, 1.24
 	)
+	## **Leg length is a tracked number, so the legs are drawn from it.**
+	##
+	## `stride_length_m` has driven cadence since the locomotion work and has
+	## never touched geometry, so two players with a 0.62 m and a 1.02 m stride
+	## stood on identical legs and only *moved* differently. Stride is the leg
+	## measurement this model actually carries -- there is no separate inseam --
+	## and it is compared against what this player's height would ordinarily
+	## produce, so the scale reads "long-legged for their size" rather than
+	## "tall".
+	##
+	## Total height is preserved. A player with the same height and longer legs
+	## has a shorter torso, not a taller body, so the hips rise by exactly what
+	## the legs gained and the feet stay on the floor. Without that the rig would
+	## quietly contradict `height_cm`, which every reach calculation trusts.
+	var expected_stride := clampf(height_cm / 100.0 * 0.43, 0.55, 1.15)
+	leg_length_scale = clampf(
+		stride_length_m / maxf(expected_stride, 0.01), 0.86, 1.16
+	)
+	var leg_span := leg_bone_lengths.x + leg_bone_lengths.y
+	for leg in [left_leg, right_leg]:
+		leg.scale.y = leg_length_scale
+		leg.position.y = hip_offset.y + leg_span * (leg_length_scale - 1.0)
+
+	## The hips sit on the hip joint, and this is where that is decided.
+	##
+	## The shorts used to be placed from the *torso's* bottom, so a body type
+	## with a tall torso pushed them down past the joint they are supposed to be
+	## capping -- Stalk, Aubergine, Pear and Ursi worst, because their torsos are
+	## the tallest. A block floating below the pelvis does not read as hips, it
+	## reads as shorts worn badly.
+	##
+	## Derived here rather than in `_build_silhouette` because the hip has just
+	## moved: two functions both placing the shorts is exactly the
+	## correct-then-clobbered shape that has bitten this file three times, so the
+	## one that knows the final hip height owns it outright.
+	var shorts_size: Vector3 = Vector3(
+		silhouette.get("shorts", {}).get("size", Vector3(0.46, 0.20, 0.32))
+	)
+	shorts.position.y = left_leg.position.y + shorts_size.y * 0.34
+
 	## Scales the *whole two-bone chain*, elbow included.
 	##
 	## This ran straight after `_build_silhouette` and rewrote the upper arm's

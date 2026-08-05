@@ -130,6 +130,28 @@ const PLATES: Array[Dictionary] = [
 		"camera": [Vector3(0.0, 2.66, -7.6), Vector3(-6.0, 180.0, 0.0), 31.0],
 		"spacing": 2.15,
 	},
+	## Proportion, which is data rather than decoration: wingspan sets arm length
+	## and stride sets leg length, and until now the second of those changed how
+	## a voli *moved* without changing how they were *built*. Same body, same
+	## height, three sets of limbs.
+	{
+		"name": "08b_proportions",
+		"caption": "build",
+		"subjects": ["Pear", "Pear", "Pear", "Cani", "Cani", "Cani"],
+		"pose": [-1, 0.0],
+		"faces": ["neutral"],
+		"yaws": [-16.0, 0.0, 16.0, -16.0, 0.0, 16.0],
+		"builds": [
+			{"label": "short legs", "stride": 0.62, "wingspan": 191.0},
+			{"label": "standard", "stride": 0.81, "wingspan": 191.0},
+			{"label": "long legs", "stride": 1.02, "wingspan": 191.0},
+			{"label": "short reach", "stride": 0.81, "wingspan": 176.0},
+			{"label": "standard", "stride": 0.81, "wingspan": 191.0},
+			{"label": "long reach", "stride": 0.81, "wingspan": 212.0},
+		],
+		"camera": [Vector3(0.0, 1.62, -10.4), Vector3(-2.0, 180.0, 0.0), 30.0],
+		"spacing": 1.72,
+	},
 	{
 		"name": "09_dig_postures",
 		"caption": "posture",
@@ -231,10 +253,16 @@ func _shoot(plate: Dictionary) -> void:
 				label = wanted if body_type == "Vegi" else body_type
 			_:
 				label = wanted if body_type == "Vegi" else body_type
+		var builds: Array = plate.get("builds", [])
+		var build: Dictionary = builds[index] if index < builds.size() else {}
+		if not build.is_empty():
+			label = str(build.get("label", label))
 		actor.configure(
 			actor_id, index % 2 == 0, label, "Right",
 			{
-				"height_cm": 188.0, "wingspan_cm": 191.0,
+				"height_cm": 188.0,
+				"wingspan_cm": float(build.get("wingspan", 191.0)),
+				"stride_length_m": float(build.get("stride", 0.81)),
 				"body_type": body_type,
 			},
 		)
