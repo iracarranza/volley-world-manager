@@ -327,14 +327,11 @@ look at a map is the lore page this is trying not to be.
   regional-dish morale is off the table. The proposal is how well a block carries
   paste; the multiplier shape is unchosen and it could read as an arbitrary
   penalty. See `ACCOMMODATIONS_AND_CARE.md`.
-- Which regions manufacture Supergruel and Vollyslommy. Both are plainly spelled,
-  which under the orthographic device means somewhere with no spelling
-  signature -- Landavol is the reading, unconfirmed. Blan'deral is settled:
-  A'ace, by its apostrophe.
-- What Vollyslommy's pun actually is. Chutum Üch is *chew too much*; Vollyslommy
-  does not resolve, and unlike the mechanic question this one matters, because a
-  product name that decodes to nothing is the only one on the shelf that a player
-  cannot place.
+- Which regions manufacture Supergruel and Vollyslommy -- now known to be
+  unanswerable from the name, since neither is a label name. Both are nicknames,
+  so the spelling is the speaker's rather than the factory's. Chutum Üch and
+  Blan'deral do carry their factory (Spëddigh, A'ace). See
+  `ACCOMMODATIONS_AND_CARE.md`.
 - How large the block catalogue is, given that availability rather than
   existence is what bounds the menu. "More than your kitchen can reach" answers
   the design question but not the authoring one.

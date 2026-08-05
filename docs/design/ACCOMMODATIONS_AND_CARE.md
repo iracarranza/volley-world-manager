@@ -73,10 +73,35 @@ bought a food industry the way it bought a roster, on ground reclaimed within
 living memory, where nothing has a name older than the money. A product with no
 story, from the region with no history.
 
-*Supergruel* and *Vollyslommy* stay plainly spelled, which under this rule means
-made somewhere with no orthographic signature -- Landavol, the crossroads that
-never needed to distinguish itself from anyone. **Unassigned on purpose**, but
-that is the reading the spelling already implies.
+### Two of them are not label names at all
+
+*Supergruel* and *Vollyslommy* are plainly spelled, and the reason is not that
+their factory sits in a region without a signature. **They are not what is
+printed on the box.** They are what people call the stuff, and a nickname is
+spelled however the person saying it spells things.
+
+- **Supergruel** is mildly derisive. Nobody's marketing department wrote it.
+- **Vollyslommy** is *slommy*: the babytalk word for food you give a small
+  creature you are spoiling. A cat can have a lil slommy.
+
+That second one is worth taking seriously rather than filing as a joke, because
+it is the **register of the entire game stated in one product name**.
+`CLUB_LIFE.md` describes the relationship as looking after creatures who have
+opinions about their food and their limbs; *slommy* is exactly the word somebody
+in that relationship would use. It decodes to a tone rather than a place, which is
+a real answer -- and it means the block everyone loves is named the way you talk
+to something you love.
+
+So product names come from two sources, and the spelling tells you which:
+
+| source | spelled | examples |
+| --- | --- | --- |
+| **the label** -- named by whoever makes it | the factory's orthography | Chutum Üch (Spëddigh), Blan'deral (A'ace) |
+| **the mouth** -- named by whoever eats it | however the speaker spells | Supergruel, Vollyslommy |
+
+The open question of which region manufactures Supergruel and Vollyslommy is
+therefore **dissolved rather than answered**. Their spelling was never going to
+say, because the name is not the factory's.
 
 ### Name and function are separate axes
 

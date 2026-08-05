@@ -5,6 +5,10 @@ survive past this session.** Nothing here is a mechanic spec -- see
 `docs/design/` for those. This is the creative bible: premise, tone, and the
 visual/narrative rules future features should be checked against.
 
+**Start at `THE_WORLD.md`** if you want to know what is true rather than why it
+was decided. It is the canonical reference, organised as the world; this document
+is the reasoning behind it, and `GEOGRAPHY.md` is the land.
+
 ## Core premise
 
 Volleyball is this world's dominant global cultural medium -- bigger than any

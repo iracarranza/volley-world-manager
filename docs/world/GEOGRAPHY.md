@@ -1,7 +1,8 @@
 # Geography and geology
 
-Status: **Creative bible, not a spec.** `STYLE_AND_SETTING.md` holds the premise
-and the naming conventions; this holds the land those conventions describe.
+Status: **Creative bible, not a spec.** `THE_WORLD.md` is the canonical reference
+and the place to start; `STYLE_AND_SETTING.md` holds the premise and the naming
+conventions; this holds the land those conventions describe.
 Nothing here is built. It exists because naming was being done case by case, and
 a world with a landscape names itself.
 
