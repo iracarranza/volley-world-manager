@@ -65,7 +65,11 @@ const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 const ENABLE_GEOMETRIC_ATTACK: bool = true
 const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 
-## One opponent swing, one flight time.
+## One attack shape for both sides of the net: one flight per ball, and one rule
+## for choosing the shot.
+##
+## **The two move together or neither does.** Separately they pull in opposite
+## directions, which is why the first attempt at each looked like a regression:
 ##
 ## The same ball is currently solved twice with two different launch angles. The
 ## drawn arc uses the hitter's own shot shape; the home defender's budget is
@@ -74,14 +78,26 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## opponent swings are lobbed at 22-32 degrees for timing purposes and hit flat at
 ## 5-14 for drawing purposes, and the outcome disagrees with the picture.
 ##
-## This is a correctness fix rather than a tuning choice, and it is off anyway,
-## because it makes the home floor defence stronger before the block has been
-## re-tuned for it: with one flight, home defenders go from 0.739 s to 0.832 s, the
-## attack-symmetry ratchet moves 0.656 to 0.672, and the funnelling-block gate
-## stops separating (13 against 13 on a sample of about fifty).
+## Unifying the flight alone makes the asymmetry *worse* -- home defenders go from
+## 0.739 s to 0.832 s, because the arc it unifies on is the lobbed one. The lob is
+## the second half of the defect: the opponent downgrades to a roll shot below a set
+## quality of 0.38 and its first-ball sets have a median of 0.344, so it fires on
+## more than half of their attacks and the opponent essentially never spikes. The
+## home side has no such rule and swings at everything.
 ##
-## Promotion waits on the same thing the shared shot rule does -- see the finding
-## above `_hit_type` in `rally_simulator.gd` and `docs/BACKLOG.md` §8. The order is:
-## widen the block-intent samples, land this, re-separate the dials. Do not widen a
-## bound to close it.
-const ENABLE_UNIFIED_DIG_FLIGHT: bool = false
+## So this flag carries both: `_compromised_shot_type` becomes the shared rule, and
+## the defender's budget becomes the flight that was drawn. Together the opponent
+## swings and the home defender is timing a swing rather than a lob.
+##
+## The block-intent gates could not judge either one until their sample was widened
+## from 300 rallies of a single six to 1,200 across four rosters -- they separated by
+## two or three counts out of fifty, and flipped on random re-sequencing alone.
+##
+## **Now they can, and the verdict is measured rather than suspected.** Against the
+## wider sample the flight fix alone passes both block gates and moves the
+## attack-symmetry ratchet 0.656 to 0.672; the pair together reverses the funnelling
+## gate by five counts out of about two hundred, which is a genuine reversal. So the
+## block's outcome bands genuinely need re-separating against an opponent that
+## swings -- that is the remaining work, and it is now a known quantity instead of a
+## suspicion. Do not widen a bound to close it.
+const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false

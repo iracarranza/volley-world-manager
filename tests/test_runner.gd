@@ -11347,40 +11347,65 @@ func _test_a_serve_that_misses_is_drawn_missing() -> void:
 ## widens that band at the cost of terminal points. If one intent produced more
 ## stuffs *and* more touches than another it would not be a choice, it would be
 ## a free upgrade, which is the failure mode this checks for.
+## Sampled across four rosters, not one.
+##
+## The original harness ran 300 rallies of a single six and separated the two
+## intents by two or three counts out of about fifty. That is not enough to tell a
+## re-tuned block from a re-shuffled random stream, and it was measured: two
+## unrelated correctness fixes -- one flight time per ball, and one shared
+## shot-selection rule -- each flipped these gates identically at every threshold
+## tried, so both had to be withheld behind flags because the suite could not say
+## whether the block had actually changed. A gate whose verdict cannot be trusted
+## blocks the work it was meant to protect.
+##
+## Roster variation rather than more rallies of the same players: the quantity being
+## measured is a property of the *dial*, and four different sixes test it four times
+## rather than testing one six harder.
+const BLOCK_INTENT_ROSTER_SEEDS: Array[int] = [900006, 901006, 902006, 903006]
+
+
 func _test_a_block_can_be_told_what_it_is_for() -> void:
 	var counts := {}
 	for intent in ["Seal", "Balanced", "Funnel"]:
-		var manager := GAME_MANAGER_SCRIPT.new()
-		manager.seed_vertical_slice_data()
-		for rotation_number in manager.defensive_plans:
-			var plan: Resource = manager.defensive_plans[rotation_number]
-			if plan != null:
-				plan.block_intent = intent
 		var stuffs := 0
 		var partials := 0
 		var blocks := 0
-		for serving_home in [true, false]:
-			manager.match_state.serving_home = serving_home
-			for seed_value in range(5000, 5150):
-				var result: Resource = manager.resolve_active_rally(seed_value)
-				if result == null:
-					continue
-				for raw_event in result.events:
-					var event := raw_event as RallyEvent
-					if event == null \
-							or event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
-							or str(event.metadata.get("side", "")) != "home":
+		for roster_seed in BLOCK_INTENT_ROSTER_SEEDS:
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+				manager.players, roster_seed
+			)
+			EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
+				manager.opponent_team.players, roster_seed
+			)
+			for rotation_number in manager.defensive_plans:
+				var plan: Resource = manager.defensive_plans[rotation_number]
+				if plan != null:
+					plan.block_intent = intent
+			for serving_home in [true, false]:
+				manager.match_state.serving_home = serving_home
+				for seed_value in range(5000, 5150):
+					var result: Resource = manager.resolve_active_rally(seed_value)
+					if result == null:
 						continue
-					blocks += 1
-					match str(event.metadata.get("outcome", "miss")):
-						"stuff": stuffs += 1
-						"touch", "funnel": partials += 1
+					for raw_event in result.events:
+						var event := raw_event as RallyEvent
+						if event == null \
+								or event.event_type \
+									!= RALLY_EVENT_SCRIPT.EventType.BLOCK \
+								or str(event.metadata.get("side", "")) != "home":
+							continue
+						blocks += 1
+						match str(event.metadata.get("outcome", "miss")):
+							"stuff": stuffs += 1
+							"touch", "funnel": partials += 1
+			manager.free()
 		counts[intent] = {"stuff": stuffs, "partial": partials, "blocks": blocks}
-		manager.free()
 	var seal: Dictionary = counts["Seal"]
 	var funnel: Dictionary = counts["Funnel"]
 	_check(
-		int(seal.blocks) > 40 and int(funnel.blocks) > 40,
+		int(seal.blocks) > 160 and int(funnel.blocks) > 160,
 		"the block intent test observes enough home blocks (%d seal, %d funnel)" % [
 			int(seal.blocks), int(funnel.blocks),
 		],

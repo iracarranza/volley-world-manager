@@ -1337,19 +1337,13 @@ func resolve(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
 	))
-	## **Not yet routed through `_compromised_shot_type`.**
-	##
-	## The home hitter should make the same compromise the opponent does -- a set
-	## too poor to swing at gets rolled over -- and the shared rule is written and
-	## ready. What blocks it is not the rule: adding a decision here consumes one
-	## more random number per home attack, which re-sequences every seeded rally
-	## after it, and the two block-intent gates separate by two or three counts on
-	## a sample of about fifty. They flip on the re-sequencing alone, identically
-	## at every threshold tried, so the suite cannot tell a re-tuned block from a
-	## re-shuffled stream.
-	##
-	## Those gates need a larger sample before this lands. Recorded in
-	## `docs/BACKLOG.md` §8 with the measurement.
+## The same compromise the opponent makes. A hitter handed an unplayable set
+	## rolls it over rather than swinging at it, and until now only one side of the
+	## net could do that.
+	if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
+		hit_type = _compromised_shot_type(
+			hitter, hit_type, float(result.set_quality)
+		)
 	var attack_angle := _attack_launch_angle_degrees(
 		hitter, hit_type, float(result.attack_quality)
 	)
@@ -2890,7 +2884,7 @@ func _resolve_opponent_transition(
 		RallyKinematics.court_distance_meters(opponent_contact, home_target),
 		_attack_launch_angle_degrees(opponent_hitter, attack_type, opponent_attack),
 	).duration_seconds)
-	if RallyFeatureFlagsModel.ENABLE_UNIFIED_DIG_FLIGHT:
+	if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
 		attack_time = float(opponent_attack_trajectory.get("duration", attack_time))
 		if block_outcome in ["touch", "funnel"]:
 			## Off the hands the ball is going somewhere else, so the remaining
@@ -4427,10 +4421,15 @@ func _choose_opponent_attack(
 	var contact := Vector2(chosen.contact)
 	var contact_x := contact.x
 	var travel_time := float(chosen.travel_time)
-	var attack_type := "Quick attack" if code.begins_with("M") and set_quality >= 0.46 \
-		else "Power swing"
-	if set_quality < 0.38 or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
-		attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
+	var intended_type := "Quick attack" \
+		if code.begins_with("M") and set_quality >= 0.46 else "Power swing"
+	var attack_type := intended_type
+	if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
+		attack_type = _compromised_shot_type(best, intended_type, set_quality)
+	else:
+		if set_quality < 0.38 \
+				or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
+			attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
 	var target := open_target
 	if attack_type in ["Roll shot", "Emergency tip"]:
 		target.y = rng.randf_range(0.58, 0.72)
@@ -7370,34 +7369,54 @@ func _best_home_server(
 	return _player_by_id(players, lineup.player_at_slot(1))
 
 
-## **Finding, not yet a change: the two sides choose their shot by different
-## rules, and that is where the dig asymmetry comes from.**
+## How poor a set has to be before the hitter gives up the swing.
 ##
-## `_choose_opponent_attack` downgrades to a roll shot or a tip when the set is
-## below 0.38. Measured, opponent first-ball sets have a median of 0.344, so it
-## fires on more than half of their attacks: the opponent essentially never spikes,
-## it rolls the ball over at 20-32 degrees instead of 5-14. The home side has no
-## such rule and swings at everything.
+## The rule lived on the opponent side only, at a threshold of 0.38 -- and measured,
+## opponent first-ball sets have a median of 0.344, so it fired on more than half of
+## their attacks. The opponent essentially never spiked: it rolled the ball over at
+## 20-32 degrees instead of 5-14, while the home side swung at everything because it
+## had no such rule at all.
 ##
-## That single difference is the whole dig asymmetry. On identical rosters, home
-## defenders dig with 0.739 s of flight and opponent defenders with 0.490 s, while
-## reaction delay comes out equal (0.325 s against 0.333 s) and raw speed is
-## identical -- so reach margin differs by 0.48 m purely because one side is
-## digging lobs. Three earlier passes read this as a claim or positioning problem;
-## `tools/run_dig_terms_split.gd` now reports the claim inputs directly, and it is
-## the flight time.
+## That one difference produced the whole dig asymmetry. Home defenders were digging
+## lobs with 0.739 s of flight and opponent defenders spikes with 0.490 s, and every
+## claim term downstream inherited exactly that gap while reaction delay and raw
+## speed came out identical on both sides. Three earlier passes read it as a
+## positioning problem.
 ##
-## Sharing the rule was implemented and then **withdrawn**, because it takes the
-## block with it. The two block-intent gates -- a sealing block stuffs more, a
-## funnelling one deflects more -- separate by two or three counts on a sample of
-## about fifty, and they were separated against an opponent that lobbed most of its
-## attacks. Against an opponent that swings they stop separating, identically at
-## every threshold tried between 0.18 and 0.30. That is a real re-tune of the
-## block, not a fixture to re-baseline, and it needs a larger sample before either
-## can be judged.
+## Now shared, and set from the pooled distribution rather than one side's: roughly
+## the worst eighth of home sets and worst third of the opponent's, which keeps the
+## compromise a real event on both sides without either team abandoning the swing as
+## its default.
+const ATTACK_COMPROMISE_SET_QUALITY: float = 0.30
+
+## And how mediocre it has to be before a hitter might *choose* the safe shot.
 ##
-## Recorded in `docs/BACKLOG.md` §8. The order is: widen the block-intent samples,
-## then share the rule, then re-separate the dials against a swinging opponent.
+## The improvisation roll was unconditional on the side that had it, which meant a
+## hitter could tip a perfect set for no reason. Nobody rolls a good set over.
+const ATTACK_IMPROVISE_SET_QUALITY: float = 0.40
+
+
+## The shot a hitter actually plays, given the ball they were given.
+##
+## `intended` is what the lane or the position called for. A set too poor to swing
+## at is downgraded rather than mishit: a roll shot if there is anything to work
+## with, a tip if there is not. Improvisation is a roll of the dice weighted by the
+## hitter's own decision-making, because choosing the safe shot is a read rather
+## than a failure.
+func _compromised_shot_type(
+	hitter: VolleyballPlayer, intended: String, set_quality: float
+) -> String:
+	## The roll is always *drawn*, and only then gated. Drawing conditionally changes
+	## how many numbers a rally consumes, which re-sequences every seeded outcome
+	## after it -- the block-intent gates promptly flipped on samples of 25 against
+	## 25, measuring a different random stream rather than a different block.
+	var roll := rng.randf()
+	var improvises := set_quality < ATTACK_IMPROVISE_SET_QUALITY \
+		and roll < 0.10 + _rating(hitter, "decision_making") * 0.08
+	if set_quality >= ATTACK_COMPROMISE_SET_QUALITY and not improvises:
+		return intended
+	return "Roll shot" if set_quality >= ATTACK_COMPROMISE_SET_QUALITY * 0.6 \
+		else "Emergency tip"
 
 
 func _hit_type(assignment: HitterAssignment, hitter: VolleyballPlayer) -> String:

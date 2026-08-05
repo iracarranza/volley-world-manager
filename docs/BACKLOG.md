@@ -282,9 +282,22 @@ of about fifty. Against an opponent that swings they stop separating, identicall
 at every threshold tried between 0.18 and 0.30. That is a real re-tune, not a
 fixture to re-baseline.
 
-Order of work: **widen the block-intent samples, then land the two fixes, then
-re-separate the dials against a swinging opponent.** Do not widen a bound to
-close either.
+**The samples are widened, and the verdict is now measured.** The block-intent
+gates ran 300 rallies of a single six and separated by two or three counts out of
+fifty; they now run 1,200 across four rosters. Against that sample:
+
+- **Flight fix alone:** passes both block gates, and moves the attack-symmetry
+  ratchet 0.656 → 0.672. It unifies on the *lobbed* arc, so it makes the
+  asymmetry worse rather than better — which is why the two fixes belong together.
+- **Both together:** reverses the funnelling gate by five counts out of about two
+  hundred. That is a genuine reversal, not re-sequencing noise.
+
+So the remaining work is exactly one thing and it is now a known quantity: **the
+block's outcome bands in `_contest_block` need re-separating against an opponent
+that swings.** `AttackResolutionModel.STUFF_DEPTH_METERS` is the named lever for
+converting stuffs into touches; the same reasoning applies to the seal/funnel
+bands. Both fixes sit behind `ENABLE_UNIFIED_ATTACK_SHAPE`, off, and flip together.
+Do not widen a bound to close either.
 
 Worth carrying: a change to how many random numbers a rally consumes
 re-sequences every seeded outcome after it. Drawing the improvisation roll
