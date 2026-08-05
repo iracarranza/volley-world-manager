@@ -16,14 +16,20 @@ class_name BodyTypeModels
 ## the silhouette alongside the meshes, and `set_pose()` reads them. Posing then
 ## works for any body plan that can name a shoulder, a hip and a head.
 ##
-## Three types are modelled here. `Vegi` replaces `Homi` -- there is no human
-## in this world, and the default body being "the normal one" was the only thing
-## making the other five read as costumes. Cani, Ursi and Simi still fall back
-## to the Vegi silhouette until they are drawn; the fallback is explicit rather
-## than a missing-key crash, and it is visible in `is_modelled()`.
+## All six types are modelled. `Vegi` replaces `Homi` -- there is no human in
+## this world, and the default body being "the normal one" was the only thing
+## making the other five read as costumes. Vegi is now the no-lean body the way
+## Landavol is the no-lean region: it exists so "unremarkable" has a home instead
+## of every type needing an identity.
+##
+## The three animal types are told apart at the **ear** before anything else,
+## because ears survive a silhouette when a torso profile does not: Feli pricks
+## up, Cani drops, Ursi is round and set high, Simi is a flat disc on the side of
+## the head. Everything below that -- limb thickness, leg length, where the mass
+## sits -- is the second read.
 
 ## Body types with a silhouette of their own. Anything else falls back.
-const MODELLED: Array[String] = ["Vegi", "Feli", "Avi"]
+const MODELLED: Array[String] = ["Vegi", "Feli", "Avi", "Cani", "Ursi", "Simi"]
 
 const FALLBACK_TYPE: String = "Vegi"
 
@@ -173,6 +179,12 @@ static func silhouette(body_type: String, player_id: int) -> Dictionary:
 			authored = _feli()
 		"Avi":
 			authored = _avi()
+		"Cani":
+			authored = _cani()
+		"Ursi":
+			authored = _ursi()
+		"Simi":
+			authored = _simi()
 		_:
 			authored = _vegi(produce_for(player_id))
 	return _toward_universal(authored)
@@ -498,3 +510,163 @@ static func build_mesh(spec: Dictionary) -> Mesh:
 			capsule.radial_segments = 12
 			capsule.rings = 6
 			return capsule
+
+
+## Broad, upright and built to keep going. Cani is the endurance body: a wider
+## chest than Feli carries the stamina and transition-speed bonus, and the legs
+## are plantigrade rather than digitigrade, which is the fastest way to tell the
+## two animals apart from a distance -- Feli reads as coiled, Cani reads as
+## *standing*. The ears drop instead of pricking up, for the same reason.
+static func _cani() -> Dictionary:
+	return {
+		"torso": {"shape": "capsule", "radius": 0.295, "height": 1.00},
+		"torso_y": 1.14,
+		"torso_material": "kit",
+		"shorts": {"shape": "box", "size": Vector3(0.54, 0.22, 0.36)},
+		"shorts_y": 0.62,
+		"head": {"shape": "sphere", "radius": 0.185, "height": 0.35},
+		"head_y": 1.80,
+		"arm": {"top_radius": 0.075, "bottom_radius": 0.09, "height": 0.86},
+		"leg": {"top_radius": 0.115, "bottom_radius": 0.085, "height": 0.74},
+		"shoe": {"shape": "capsule", "radius": 0.115, "height": 0.28},
+		"shoulder": Vector2(0.38, 1.50),
+		"hip": Vector2(0.17, 0.48),
+		"rig_height": 2.00,
+		"skin": Color("8a6a45"),
+		"crown": Color("e8ddc8"),
+		"extras": [
+			## Rotated past horizontal so they hang rather than point. A cone
+			## tipped 150 degrees reads as a drop ear at any distance the game is
+			## watched from; the same cone at 14 degrees is a cat.
+			{
+				"name": "EarLeft", "parent": "BodyPivot", "shape": "cone",
+				"radius": 0.075, "height": 0.26,
+				"position": Vector3(-0.15, 1.86, 0.02),
+				"rotation": Vector3(0.0, 0.0, 152.0), "color": "skin",
+			},
+			{
+				"name": "EarRight", "parent": "BodyPivot", "shape": "cone",
+				"radius": 0.075, "height": 0.26,
+				"position": Vector3(0.15, 1.86, 0.02),
+				"rotation": Vector3(0.0, 0.0, -152.0), "color": "skin",
+			},
+			## Longer and lower than Feli's. `PlayerActor3D._mouth_override` reads
+			## this by name, so the face draws its mouth onto the muzzle instead of
+			## burying it inside.
+			{
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.095, "height": 0.14,
+				"position": Vector3(0.0, 1.74, -0.19), "color": "crown",
+			},
+			{
+				"name": "Tail", "parent": "BodyPivot", "shape": "cylinder",
+				"top_radius": 0.035, "bottom_radius": 0.06, "height": 0.62,
+				"position": Vector3(0.0, 0.92, 0.28),
+				"rotation": Vector3(58.0, 0.0, 0.0), "color": "skin",
+			},
+		],
+	}
+
+
+## Heavy, low and immovable. Ursi trades acceleration and lateral speed for
+## reception stability, attack power and composure, and the silhouette says so
+## before the numbers do: the widest torso in the game on the shortest legs, so
+## the mass sits low and nothing about it suggests it changes direction quickly.
+##
+## The limbs are thick rather than long. That matters against Avi, which is the
+## other body built around a wall -- Avi makes a wall by being tall and wide with
+## nothing to it, Ursi makes one by being dense.
+static func _ursi() -> Dictionary:
+	return {
+		"torso": {"shape": "capsule", "radius": 0.355, "height": 1.02},
+		"torso_y": 1.10,
+		"torso_material": "kit",
+		"shorts": {"shape": "box", "size": Vector3(0.62, 0.22, 0.42)},
+		"shorts_y": 0.60,
+		"head": {"shape": "sphere", "radius": 0.20, "height": 0.36},
+		"head_y": 1.74,
+		"arm": {"top_radius": 0.095, "bottom_radius": 0.105, "height": 0.80},
+		"leg": {"top_radius": 0.135, "bottom_radius": 0.10, "height": 0.64},
+		"shoe": {"shape": "capsule", "radius": 0.13, "height": 0.30},
+		"shoulder": Vector2(0.44, 1.46),
+		"hip": Vector2(0.20, 0.46),
+		"rig_height": 1.92,
+		## Dark enough that the face palette flips to its light ink, which is the
+		## check that rule was written for.
+		"skin": Color("4a3b34"),
+		"crown": Color("d9c9b4"),
+		"extras": [
+			## Small, round, set high and wide. Ears are the whole reason a bear
+			## reads as a bear at silhouette scale.
+			{
+				"name": "EarLeft", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.075, "height": 0.13,
+				"position": Vector3(-0.17, 1.87, 0.0), "color": "skin",
+			},
+			{
+				"name": "EarRight", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.075, "height": 0.13,
+				"position": Vector3(0.17, 1.87, 0.0), "color": "skin",
+			},
+			{
+				"name": "Muzzle", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.105, "height": 0.13,
+				"position": Vector3(0.0, 1.68, -0.17), "color": "crown",
+			},
+		],
+	}
+
+
+## All reach and no weight. Simi carries the hand-control, ball-control and
+## finesse bonuses and pays for them in attack power and jump reach, so the body
+## is built around leverage: the longest arms on the shortest legs, a narrow
+## chest and hips, and a low centre.
+##
+## Long arms are a deliberate exception rather than the house style. The shared
+## figure was pulled *away* from long-armed proportions on purpose -- bodies
+## should not be simian-coded by default -- which is exactly what makes it worth
+## something when one type actually is.
+static func _simi() -> Dictionary:
+	return {
+		"torso": {"shape": "capsule", "radius": 0.255, "height": 0.92},
+		"torso_y": 1.10,
+		"torso_material": "kit",
+		"shorts": {"shape": "box", "size": Vector3(0.46, 0.20, 0.32)},
+		"shorts_y": 0.60,
+		"head": {"shape": "sphere", "radius": 0.165, "height": 0.30},
+		"head_y": 1.70,
+		"arm": {"top_radius": 0.06, "bottom_radius": 0.078, "height": 1.04},
+		"leg": {"top_radius": 0.095, "bottom_radius": 0.07, "height": 0.62},
+		"shoe": {"shape": "box", "size": Vector3(0.20, 0.06, 0.30)},
+		"shoulder": Vector2(0.34, 1.44),
+		"hip": Vector2(0.14, 0.46),
+		"rig_height": 1.86,
+		"skin": Color("6f5a4e"),
+		"crown": Color("f0d9bd"),
+		"extras": [
+			## Flat discs on the sides of the head rather than cones on top. The
+			## three animal types now differ at the ear alone: pricked, dropped,
+			## round-and-high, and flat-and-wide.
+			{
+				"name": "EarLeft", "parent": "BodyPivot", "shape": "cylinder",
+				"top_radius": 0.062, "bottom_radius": 0.062, "height": 0.028,
+				"position": Vector3(-0.175, 1.71, 0.0),
+				"rotation": Vector3(0.0, 0.0, 90.0), "color": "skin",
+			},
+			{
+				"name": "EarRight", "parent": "BodyPivot", "shape": "cylinder",
+				"top_radius": 0.062, "bottom_radius": 0.062, "height": 0.028,
+				"position": Vector3(0.175, 1.71, 0.0),
+				"rotation": Vector3(0.0, 0.0, 90.0), "color": "skin",
+			},
+			## A brow, sitting above where the face draws its eyes. Cheapest
+			## possible way to give a head a *front* without a muzzle, and it
+			## leaves the mouth on the skull where the shared face code puts it.
+			{
+				"name": "Brow", "parent": "BodyPivot", "shape": "box",
+				"size": Vector3(0.20, 0.045, 0.05),
+				"position": Vector3(0.0, 1.775, -0.145),
+				"rotation": Vector3(-14.0, 0.0, 0.0), "color": "crown",
+			},
+		],
+	}

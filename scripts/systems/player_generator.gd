@@ -465,14 +465,18 @@ static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
 ## this must never support. A flat draw keeps morphology orthogonal to origin,
 ## so a Tu'ul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
 ## traditions and the *tradition* is what differs.
-const BODY_TYPES: Array[String] = ["Homi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
+const BODY_TYPES: Array[String] = ["Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
 
 ## Body-metric deltas, applied after the regional bias so the two compose.
 const BODY_TYPE_METRICS := {
 	## Stride is deliberately absent. It is derived from post-variation height
 	## and pinned by a regression check, so morphology reaches locomotion
 	## through height and mass rather than by offsetting stride directly.
-	"Homi": {"height": 0.0, "mass": 0.0, "wingspan": 0.0},
+	## Vegi is the no-lean body, the way Landavol is the no-lean region: it
+	## exists so "unremarkable" has a home instead of every type needing an
+	## identity. It replaced Homi outright -- a plain human body in a world of
+	## animals and produce was the one type that was not *anything*.
+	"Vegi": {"height": 0.0, "mass": 0.0, "wingspan": 0.0},
 	"Avi": {"height": -4.0, "mass": -7.0, "wingspan": 6.0},
 	"Cani": {"height": 0.0, "mass": 2.0, "wingspan": 0.0},
 	"Feli": {"height": -3.0, "mass": -4.0, "wingspan": 0.0},
@@ -498,7 +502,7 @@ const BODY_TYPE_METRICS := {
 ## measurably tires faster inside a single match. First-set terror, fifth-set
 ## liability, with no new mechanism.
 const BODY_TYPE_ATTRIBUTES := {
-	"Homi": {},
+	"Vegi": {},
 	"Avi": {"jump_reach": 4.0, "block_timing": 2.0, "reception_stability": -6.0},
 	"Cani": {"stamina": 3.5, "transition_speed": 3.0, "attack_power": 2.0,
 		"jump_reach": -4.5, "hand_control": -4.0},

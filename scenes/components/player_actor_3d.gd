@@ -49,6 +49,13 @@ var expression: String = FaceExpressionsScript.NEUTRAL
 ## heading can be turned into rather than snapped to.
 var facing_yaw: float = 0.0
 var has_facing: bool = false
+## Where the head is looking, relative to where the body is facing. A voli can
+## watch the ball without turning to it -- a defender tracking a set across the
+## net keeps their platform pointed where they expect the attack, and a setter
+## reads the block over their shoulder. Separating the two is what stops every
+## actor being a mannequin that swivels as one piece.
+var look_yaw: float = 0.0
+var look_pitch: float = 0.0
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
 var locomotion_bob: float = 0.0
@@ -67,6 +74,13 @@ const UPPER_ARM_SHARE: float = 0.46
 ## mannequin. Small enough that it never competes with a pose that means
 ## something.
 const READY_ELBOW_BEND: float = 17.0
+
+## How far a head turns off the body before the body has to come with it. A neck
+## does not reach ninety degrees, and a head that does reads as broken rather
+## than as attentive -- so the look is clamped rather than the target being
+## assumed reachable.
+const HEAD_YAW_LIMIT_DEGREES: float = 62.0
+const HEAD_PITCH_LIMIT_DEGREES: float = 24.0
 
 ## How fast a player can turn, in radians per second.
 ##
@@ -236,36 +250,80 @@ func _apply_dig_posture() -> void:
 	var drop := 0.10
 	var platform_yaw := 0.0
 	var platform_roll := 0.0
+	## How far the whole body twists toward the ball, and how far the *far* leg
+	## steps across to let it. Zero for the two square postures.
+	var torso_yaw := 0.0
+	var far_leg_lead := 0.0
+	## Whole-body lean, distinct from the hip pitch that folds the player up.
+	var body_tilt := 0.0
+	## Mid-stride offsets, so a defender who arrived on the move is caught on the
+	## move rather than standing still in a lower stance.
+	var stride := 0.0
 	match contact_posture:
 		"reaching":
-			## Forced down. The knee folds nearly double and the hips go with it,
-			## which is the whole point of having the joint.
-			knee_bend = 96.0
-			hip_pitch = -42.0
-			drop = 0.30
+			## Forced down, and *leaning*. The knee folds nearly double and the
+			## hips go with it, but the read that separates this from a deep
+			## planted stance is the whole body committing forward -- a lunge is
+			## a player who has given up their balance to get there, and a
+			## crouch is not.
+			knee_bend = 78.0
+			hip_pitch = -38.0
+			drop = 0.24
 			platform_roll = 10.0
+			## Enough lean to read as committed, not so much that the figure folds
+			## into a ball. At -26 the torso came down over the knees and the legs
+			## disappeared behind it, which loses the very thing the knee is for.
+			body_tilt = -14.0
 		"off-axis":
-			## Got there, could not square up. Platform to the side.
+			## Got there, could not square up. The ball is off to one side and the
+			## platform stretches out after it -- but the interesting part is what
+			## the rest of the body does to keep the two forearms together.
+			##
+			## The **far** shoulder and the **far** leg rotate forward. That is
+			## the whole trick of an off-axis dig: the near arm can reach the ball
+			## on its own, and the only way the far arm joins it is if that side
+			## of the body comes round. So the torso twists, the far leg steps
+			## across behind the reach, and the platform ends up angled across the
+			## body instead of square to it.
+			##
+			## Without the twist this was a player standing square with both arms
+			## swung sideways, which is not a posture anybody has ever been in.
 			knee_bend = 52.0
 			hip_pitch = -24.0
 			drop = 0.16
-			platform_yaw = 34.0
-			platform_roll = 22.0
+			platform_yaw = 30.0
+			platform_roll = 14.0
+			torso_yaw = -22.0
+			far_leg_lead = 22.0
 		"moving":
+			## Caught mid-step. The two legs are deliberately *unequal*: one is
+			## still driving, the other is already planting, which is what makes
+			## this read as arriving rather than as a shallower version of planted.
 			knee_bend = 44.0
 			hip_pitch = -22.0
 			drop = 0.14
+			stride = 30.0
 		_:
 			pass
 	body_pivot.position.y -= drop * body_height_scale
-	body_pivot.rotation.x = deg_to_rad(hip_pitch * 0.24)
-	for leg in [left_leg, right_leg]:
+	body_pivot.rotation.x = deg_to_rad(hip_pitch * 0.24 + body_tilt)
+	body_pivot.rotation.y = deg_to_rad(torso_yaw)
+	for index in [0, 1]:
+		var leg: Node3D = left_leg if index == 0 else right_leg
 		## Thigh forward, shank back under it. Splitting the fold across both
 		## bones is what keeps the foot near the floor instead of swinging the
 		## whole leg out in front.
-		leg.rotation_degrees.x = -knee_bend * 0.45
+		##
+		## `far_leg_lead` is added to the left leg only, because `torso_yaw` is
+		## authored for a ball off to the player's right and the left side is the
+		## one that has to travel. `stride` splits the pair the other way, one
+		## forward and one back.
+		var lead_for_leg := (far_leg_lead if index == 0 else 0.0) \
+			+ (stride if index == 0 else -stride)
+		leg.rotation_degrees.x = -knee_bend * 0.45 + lead_for_leg
 		var knee := leg.get_node("Knee") as Node3D
-		knee.rotation_degrees.x = knee_bend
+		## The trailing leg stays straighter -- it is still pushing.
+		knee.rotation_degrees.x = knee_bend * (0.6 if index == 1 and stride > 0.0 else 1.0)
 	## The platform: two arms held *together* in front, not spread.
 	##
 	## The old dig swung them to -70 degrees with an 18-degree outward tilt each,
@@ -275,13 +333,6 @@ func _apply_dig_posture() -> void:
 	## rather than splayed. `platform_yaw` then swings the whole platform off to
 	## one side for a defender who could not square up, which is the thing worth
 	## seeing.
-	## **Positive, and that is a fix.** Rotating an arm about +X by theta puts its
-	## tip at (up, z) = (-cos theta, -sin theta), and the rig faces -Z -- so a
-	## *negative* lead swings the platform out behind the player. It had been
-	## negative since the pose existed, along with every other arm angle in this
-	## file, and it was invisible because the only tool that photographed a dig
-	## stood behind the row. The instrument was wrong, so what it certified was
-	## wrong. See `docs/design/POSE_ORIENTATION.md`.
 	var lead := 46.0 - hip_pitch * 0.30
 	## Converging, not splayed -- and this sign was inverted too. Rotating an arm
 	## about +Z by theta moves its hand to x = sin theta, so the *left* arm needs a
@@ -293,8 +344,17 @@ func _apply_dig_posture() -> void:
 	## eye against a camera standing behind the player, where two arms swung out
 	## behind the back happen to overlap and read as joined.
 	var spread := 26.0
+	## Stretched, not swung. On an off-axis dig the two arms are doing different
+	## jobs: the near one is already on the ball, and the far one is chasing it
+	## across the body. So the far arm carries extra yaw and converges less --
+	## it has further to go and cannot afford to be pulled inward as hard.
+	##
+	## Both arms rotating identically is what made the old off-axis pose read as
+	## a shrug with a twist. A platform that is genuinely reaching is asymmetric.
+	var far_arm_yaw := platform_yaw + (16.0 if torso_yaw != 0.0 else 0.0)
+	var far_arm_spread := spread * (0.45 if torso_yaw != 0.0 else 1.0)
 	left_arm.rotation_degrees = Vector3(
-		lead, platform_yaw, spread + platform_roll
+		lead, far_arm_yaw, far_arm_spread + platform_roll
 	)
 	right_arm.rotation_degrees = Vector3(
 		lead, platform_yaw, -spread + platform_roll
@@ -309,6 +369,37 @@ func _apply_dig_posture() -> void:
 	## them different actions rather than two similar frames.
 	_set_elbow(left_arm, 0.0)
 	_set_elbow(right_arm, 0.0)
+
+
+## Point the head at a spot on the court, independently of where the body faces.
+##
+## `world_yaw` is an absolute heading in the same convention `set_pose` uses --
+## `atan2(-dx, -dz)` for a direction in court space. The turn is stored relative
+## to the body and clamped, so a target behind the player turns the head as far
+## as a neck goes and no further; the body has to do the rest.
+func look_toward(world_yaw: float, pitch_degrees: float = 0.0) -> void:
+	var relative := angle_difference(facing_yaw, world_yaw)
+	look_yaw = clampf(
+		relative,
+		-deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
+		deg_to_rad(HEAD_YAW_LIMIT_DEGREES),
+	)
+	look_pitch = deg_to_rad(clampf(
+		pitch_degrees, -HEAD_PITCH_LIMIT_DEGREES, HEAD_PITCH_LIMIT_DEGREES
+	))
+	_apply_head_look()
+
+
+## Forget the target and face straight ahead again.
+func clear_look() -> void:
+	look_yaw = 0.0
+	look_pitch = 0.0
+	_apply_head_look()
+
+
+func _apply_head_look() -> void:
+	if head != null:
+		head.rotation = Vector3(look_pitch, look_yaw, 0.0)
 
 
 ## Bend one arm at the elbow. Positive folds the forearm forward, matching the
@@ -346,6 +437,10 @@ func set_pose(
 	## leave the defender walking around bent for the rest of the rally.
 	for leg in [left_leg, right_leg]:
 		(leg.get_node("Knee") as Node3D).rotation_degrees = Vector3.ZERO
+	## The head keeps its own heading through a pose change. Everything else here
+	## is reset each frame; the look is not, because it is a decision about what
+	## the voli is watching rather than a property of the action they are in.
+	_apply_head_look()
 	## Elbows go back to the ready bend for the same reason -- and the ready bend
 	## is not zero, because a nobody stands with their arms locked straight. It
 	## deepens a little as the arms swing, which is what a moving player's do.
@@ -473,11 +568,29 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	arm_length_scale = clampf(
 		(wingspan_cm / height_cm) / reference_ratio, 0.78, 1.24
 	)
-	var arm_length := float(Dictionary(silhouette.get("arm", {})).get("height", 0.88))
-	for arm_path in ["BodyPivot/LeftArm/Mesh", "BodyPivot/RightArm/Mesh"]:
-		var arm_mesh := get_node(arm_path) as MeshInstance3D
-		arm_mesh.scale.y = arm_length_scale
-		arm_mesh.position.y = -arm_length * 0.5 * arm_length_scale
+	## Scales the *whole two-bone chain*, elbow included.
+	##
+	## This ran straight after `_build_silhouette` and rewrote the upper arm's
+	## mesh to half the length of the entire arm -- correct while an arm was one
+	## capsule, and wrong the moment it became two. The mesh then reached right
+	## past the elbow, which sat at the upper bone's proper end, so every bent
+	## pose came out as a T: a forearm crossing an upper arm at its middle.
+	##
+	## Correct-then-clobbered, and the third time in this file: something builds
+	## the right thing and a later line that predates it puts the old thing back.
+	## The tell is always the same -- a length is measured from a whole where the
+	## code below it works in parts.
+	var upper_length := arm_bone_lengths.x
+	var fore_length := arm_bone_lengths.y
+	for arm in [left_arm, right_arm]:
+		var upper_mesh := arm.get_node("Mesh") as MeshInstance3D
+		upper_mesh.scale.y = arm_length_scale
+		upper_mesh.position.y = -upper_length * 0.5 * arm_length_scale
+		var elbow := arm.get_node("Elbow") as Node3D
+		elbow.position.y = -upper_length * arm_length_scale
+		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
+		fore_mesh.scale.y = arm_length_scale
+		fore_mesh.position.y = -fore_length * 0.5 * arm_length_scale
 	identity_label.position.y = (
 		float(silhouette.get("rig_height", REFERENCE_RIG_HEIGHT_M)) + 0.26
 	) * body_height_scale

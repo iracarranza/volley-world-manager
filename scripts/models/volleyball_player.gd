@@ -130,8 +130,8 @@ extends Resource
 ## Distribution is uniform in every region without exception -- see
 ## `PlayerGenerator.BODY_TYPES`. That is a fixed property of the world, not a
 ## tuning value.
-@export_enum("Homi", "Avi", "Cani", "Feli", "Ursi", "Simi")
-var body_type: String = "Homi"
+@export_enum("Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi")
+var body_type: String = "Vegi"
 @export_range(1, 100) var adaptability: int = 50
 
 ## How much a player backs themselves -- whether they take the shot on or take
@@ -488,7 +488,11 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.dominant_hand = str(data.get("dominant_hand", "Right"))
 	## Saves written before body types load as Homi, the no-modifier baseline,
 	## so an old career is unchanged rather than silently re-rolled.
-	player.body_type = str(data.get("body_type", "Homi"))
+	## Saves written before Vegi replaced Homi still carry the old string.
+	## Dropping it would leave those volis with a body type nothing can draw.
+	player.body_type = str(data.get("body_type", "Vegi"))
+	if player.body_type == "Homi":
+		player.body_type = "Vegi"
 	player.ego = clampi(int(data.get("ego", 50)), 1, 100)
 	player.home_region = str(data.get("home_region", ""))
 	player.club_region = str(data.get("club_region", player.home_region))
