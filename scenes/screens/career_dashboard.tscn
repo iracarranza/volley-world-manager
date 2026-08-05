@@ -729,6 +729,16 @@ clip_text = true
 text = "Team [T]"
 metadata/section = "Team"
 
+[node name="ClubNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+clip_text = true
+text = "Club"
+metadata/section = "Club"
+
 [node name="TransfersNav" type="Button" parent="NavDropdown/NavClip/DropdownPanel/NavMargin/Nav"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(88, 0)
@@ -758,6 +768,75 @@ toggle_mode = true
 clip_text = true
 text = "Sixnet [X]"
 metadata/section = "Sixnet"
+
+[node name="Club" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections"]
+layout_mode = 2
+
+[node name="ClubSubTabs" type="TabContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+tabs_visible = true
+
+[node name="Staff" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs"]
+layout_mode = 2
+
+[node name="StaffSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_active = true
+
+[node name="StaffActions" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff"]
+layout_mode = 2
+
+[node name="HireButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff/StaffActions"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Interview candidates"
+
+[node name="StaffNote" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff/StaffActions"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Hiring is not implemented yet."
+
+[node name="Accommodations" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs"]
+layout_mode = 2
+
+[node name="MealRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
+layout_mode = 2
+
+[node name="MealLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/MealRow"]
+layout_mode = 2
+text = "This week's table"
+
+[node name="MealOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations/MealRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+
+[node name="PasteRow" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AccommodationsSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Accommodations"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_active = true
+
+[node name="Sponsorships" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs"]
+layout_mode = 2
+
+[node name="SponsorshipSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Sponsorships"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_active = true
 
 [node name="AdvanceReveal" type="Control" parent="."]
 unique_name_in_owner = true

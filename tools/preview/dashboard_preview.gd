@@ -64,6 +64,13 @@ func _ready() -> void:
 			var tabs := _dashboard.find_child("TeamSubTabs", true, false)
 			if tabs != null:
 				tabs.current_tab = maxi(tabs.get_tab_count() - 1, 0)],
+		["12_club_staff", func() -> void: _dashboard._navigate("Club")],
+		["12b_club_food", func() -> void:
+			var t := _dashboard.find_child("ClubSubTabs", true, false)
+			if t != null: t.current_tab = 1],
+		["12c_club_sponsors", func() -> void:
+			var t := _dashboard.find_child("ClubSubTabs", true, false)
+			if t != null: t.current_tab = 2],
 		["12_transfers", func() -> void: _dashboard._navigate("Transfers")],
 		["13_competition", func() -> void: _dashboard._navigate("Competition")],
 		["14_sixnet", func() -> void: _dashboard._navigate("Sixnet")],

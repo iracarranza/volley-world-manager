@@ -137,6 +137,11 @@ const WHEEL_TOOLTIPS := {
 @onready var lineup_status_option: OptionButton = %LineupStatusOption
 @onready var roster_status_label: Label = %RosterStatusLabel
 @onready var team_summary: RichTextLabel = %TeamSummary
+@onready var staff_summary: RichTextLabel = %StaffSummary
+@onready var meal_option: OptionButton = %MealOption
+@onready var paste_row: HBoxContainer = %PasteRow
+@onready var accommodations_summary: RichTextLabel = %AccommodationsSummary
+@onready var sponsorship_summary: RichTextLabel = %SponsorshipSummary
 @onready var identity_finance_panel: RichTextLabel = %IdentityFinancePanel
 @onready var training_option: OptionButton = %TrainingOption
 @onready var training_description: Label = %TrainingDescription
@@ -171,7 +176,8 @@ var _advance_tween: Tween
 
 
 func _ready() -> void:
-	for button in [%HomeNav, %RosterNav, %TeamNav, %TransfersNav, %CompetitionNav, %SixnetNav]:
+	for button in [%HomeNav, %RosterNav, %TeamNav, %ClubNav, %TransfersNav,
+			%CompetitionNav, %SixnetNav]:
 		button.pressed.connect(_navigate.bind(button.get_meta("section")))
 		_nav_buttons.append(button)
 	current_section_button.pressed.connect(_toggle_nav_dropdown)
@@ -425,7 +431,12 @@ func _click_catcher_input(event: InputEvent) -> void:
 
 
 func _navigate(section_name: String) -> void:
-	var names := ["Home", "Roster", "Team", "Transfers", "Competition", "Sixnet"]
+	## Order here is tab index, not menu order. `Club` was appended to the
+	## `Sections` container so the existing six kept their indices, while its nav
+	## button sits between Team and Transfers where it belongs to a reader.
+	var names := [
+		"Home", "Roster", "Team", "Transfers", "Competition", "Sixnet", "Club",
+	]
 	sections.current_tab = maxi(names.find(section_name), 0)
 	current_section_button.text = "%s   ▸   [Tab]" % section_name
 	## Every nav button and every keyboard shortcut routes through here, so
@@ -434,6 +445,130 @@ func _navigate(section_name: String) -> void:
 		button.button_pressed = str(button.get_meta("section")) == section_name
 	_close_nav_dropdown()
 	section_title.text = section_name
+	if section_name == "Club":
+		_refresh_club()
+
+
+
+## The Club section: staff, accommodations, sponsorships.
+##
+## Deliberately inert. Every control here is laid out and populated with
+## plausible sample data, nothing persists, and nothing reaches the simulation.
+## The point is to see the shape and judge the information density before any of
+## it is built -- and to make the systems visible as *intended* rather than
+## leaving them as a doc nobody opens.
+##
+## Every panel says so on its own face. A stub that does not announce itself is
+## indistinguishable from a feature that is broken.
+const CLUB_UNBUILT := "[i]Not implemented. Shown to judge layout.[/i]"
+
+## Sample staff. Four roles, each owning one resource -- see CLUB_LIFE.md.
+const SAMPLE_STAFF: Array = [
+	["Assistant Coach", "Rennik Vaal", "Landavol", "Training throughput",
+		"Runs the week's sessions. Better coaches convert the same hours into more."],
+	["Scout", "Ilse Bramwell", "Kesh Highlands", "Information confidence",
+		"A weak scout does not give you worse volis. It gives you a blurrier roster."],
+	["Chef / Nutritionist", "Marta Oyelaran", "Landavol", "Morale and nourishment",
+		"Cooks Landavol and Kesh cuisine well. Can hold three separate plans a week."],
+	["Physio", "Tobar Enns", "Sud Marine", "Condition and recovery",
+		"Owns fatigue. Occasionally owns the complaints that follow it."],
+]
+
+const SAMPLE_MEALS: Array[String] = [
+	"Supergruel", "Field rations", "Canteen standard", "Prepared table",
+	"Vollyslommy",
+]
+
+## Two to four pastes on a block, bounded by the chef. Sample mix only.
+const SAMPLE_PASTES: Array = [
+	["Sharp ferment", 40], ["Smoky char", 25], ["Clean umami", 20],
+]
+
+
+func _refresh_club() -> void:
+	_refresh_staff()
+	_refresh_accommodations()
+	_refresh_sponsorships()
+
+
+func _refresh_staff() -> void:
+	var lines: Array[String] = ["[b]Staff[/b]  %s" % CLUB_UNBUILT, ""]
+	for entry in SAMPLE_STAFF:
+		lines.append("[b]%s[/b] · %s" % [str(entry[0]), str(entry[1])])
+		lines.append("    Region: %s    Owns: %s" % [str(entry[2]), str(entry[3])])
+		lines.append("    [i]%s[/i]" % str(entry[4]))
+		lines.append("")
+	lines.append("Four roles, two tiers. Two make volis better; two keep them")
+	lines.append("knowable and available.")
+	staff_summary.text = "\n".join(lines)
+
+
+func _refresh_accommodations() -> void:
+	if meal_option.item_count == 0:
+		for meal in SAMPLE_MEALS:
+			meal_option.add_item(meal)
+		meal_option.selected = 2
+		meal_option.disabled = true
+	## The paste board, as chips. The real control drags pastes onto a food block
+	## and offers a raw number editor for anyone who wants to type the ratio --
+	## operable by feel, inspectable by number, neither the authoritative one.
+	for child in paste_row.get_children():
+		child.queue_free()
+	var caption := Label.new()
+	caption.text = "Pastes"
+	paste_row.add_child(caption)
+	for paste in SAMPLE_PASTES:
+		var chip := Button.new()
+		chip.text = "%s  %d%%" % [str(paste[0]), int(paste[1])]
+		chip.disabled = true
+		paste_row.add_child(chip)
+	var add_chip := Button.new()
+	add_chip.text = "+"
+	add_chip.disabled = true
+	paste_row.add_child(add_chip)
+	accommodations_summary.text = "\n".join([
+		"[b]Accommodations[/b]  %s" % CLUB_UNBUILT,
+		"",
+		"The table is squad-wide by default. Feeding volis separately is possible",
+		"and costs more each time, the way bespoke costs more than mass production.",
+		"",
+		"A block holds two to four pastes; how many is the chef's ceiling. Holding",
+		"one ratio too long sours it, so there is no settled best meal.",
+		"",
+		"[b]Lodging[/b] — home, or a room in a region somebody was not raised in.",
+		"",
+		"Sample squad reaction:",
+		"    Feli · Rusa Kentaro — [i]happy; this is close to home cooking[/i]",
+		"    Vegi · Odile Ferrand — [i]tiring of the ferment[/i]",
+		"    Avi · Sanne Rooijakkers — [i]\"I think I'm allergic to Xervyan food.\"[/i]",
+		"",
+		"[i]That last one may not be true. Volis report what they feel, not what",
+		"is happening to them.[/i]",
+	])
+
+
+func _refresh_sponsorships() -> void:
+	sponsorship_summary.text = "\n".join([
+		"[b]Sponsorships[/b]  %s" % CLUB_UNBUILT,
+		"",
+		"An organisation approaches a [i]voli[/i], not the club, and keeps paying",
+		"only while the terms are met. Failing costs their morale and your standing",
+		"with that sponsor — never the club's survival.",
+		"",
+		"[b]Active[/b]",
+		"    Rusa Kentaro — Harbour Produce Co.",
+		"        Play in 5 consecutive fixtures.        [color=#7fbf6a]4 / 5[/color]",
+		"    Odile Ferrand — Kesh Ironworks",
+		"        Record 20 digs across 5 matches.       [color=#c9a227]11 / 20[/color]",
+		"",
+		"[b]Offered[/b]",
+		"    Sanne Rooijakkers — Vollyslommy Kitchens",
+		"        Keep a sweet paste on the table all month.",
+		"        [i]Collides with what the chef would otherwise cook.[/i]",
+		"",
+		"[i]Requirements a rival's volis are chasing would read fuzzier than this;",
+		"how much you can see is the scout's business.[/i]",
+	])
 
 
 func _refresh_home() -> void:
