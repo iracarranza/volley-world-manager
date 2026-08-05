@@ -146,12 +146,17 @@ const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 ## slightly reduces movement-derived coverage fails outright. The identity gate on
 ## defensive attack goes with it.
 ##
-## That is the stride model's own design intent unfinished, not this switch
-## misbehaving: its header argues physique should enter locomotion honestly --
-## height buying stride while mass costs turnover -- and the turnover half was
-## never built. Price mass in `cadence_hz`, re-measure, then open this. Do not
-## reach for `mass_factor` as a multiplier on the outside; that is the crude
-## penalty the stride model was written to replace.
+## **That blocker is now closed.** `cadence_hz` prices mass, centred on the
+## population so only the deviation is new, at a sensitivity solved against the
+## gate that says a longer stride must still make the taller player faster --
+## because mass grows with height too, and at full strength it cancelled the
+## stride gain exactly, which would have made height buy nothing.
+##
+## With mass priced and this open: the ratchet reads **0.643 and the drift
+## assertion passes**, and the mass-coverage gate passes. One blocker remains
+## instead of two -- the gate asserting that a defensive attacking identity lowers
+## both error risk and terminal pressure across six career seeds. That is the last
+## thing between this and shipping, and it is named rather than guessed at.
 const ENABLE_UNIFIED_SPEED_MODEL: bool = false
 
 ## Decide the block contest on when the blocker jumped, not only on how tall
