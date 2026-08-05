@@ -42,6 +42,15 @@ const TERMS: Array[String] = [
 	"opportunity", "read_bonus", "reach_margin_meters",
 ]
 
+## The claim's own inputs, which the dig terms are downstream of. `timing` and
+## `never reached it` carried the gap for several passes without anyone being able
+## to say *which* input produced it, because only one side of the net stamped its
+## arrival.
+const ARRIVAL_TERMS: Array[String] = [
+	"distance_meters", "physical_reach_meters", "assigned_reach_meters",
+	"available_time", "reaction_delay",
+]
+
 
 func _initialize() -> void:
 	var sides := {"home": _empty(), "opponent": _empty()}
@@ -73,6 +82,33 @@ func _initialize() -> void:
 			term, home_value, opponent_value, absf(home_value - opponent_value),
 		])
 	print("")
+	print("%-24s %10s %10s %10s" % ["claim input", "home", "opponent", "gap"])
+	for term in ARRIVAL_TERMS:
+		var home_value := _arrival_mean(sides.home, term)
+		var opponent_value := _arrival_mean(sides.opponent, term)
+		print("%-24s %10.4f %10.4f %10.4f" % [
+			term, home_value, opponent_value, absf(home_value - opponent_value),
+		])
+	## The one number every claim input is downstream of: how long the defender had
+	## because of how long the ball was in the air.
+	print("%-24s %10.4f %10.4f %10.4f" % [
+		"attack flight (all digs)", _mean(sides.home, "flight_time"),
+		_mean(sides.opponent, "flight_time"),
+		absf(_mean(sides.home, "flight_time")
+			- _mean(sides.opponent, "flight_time")),
+	])
+	var home_claimed := float(sides.home.claimed) / maxf(float(sides.home.count), 1.0)
+	var opponent_claimed := float(sides.opponent.claimed) \
+		/ maxf(float(sides.opponent.count), 1.0)
+	print("%-24s %10.4f %10.4f %10.4f" % [
+		"claim search found one", home_claimed, opponent_claimed,
+		absf(home_claimed - opponent_claimed),
+	])
+	print("%-24s %10d %10d" % [
+		"digs with no arrival", int(sides.home.no_arrival),
+		int(sides.opponent.no_arrival),
+	])
+	print("")
 	var home_digs := float(sides.home.successes) / maxf(float(sides.home.count), 1.0)
 	var opponent_digs := float(sides.opponent.successes) \
 		/ maxf(float(sides.opponent.count), 1.0)
@@ -99,7 +135,8 @@ func _initialize() -> void:
 
 
 func _empty() -> Dictionary:
-	return {"count": 0, "successes": 0, "unreached": 0, "sums": {}}
+	return {"count": 0, "successes": 0, "unreached": 0, "claimed": 0,
+		"no_arrival": 0, "arrivals": 0, "sums": {}}
 
 
 func _mean(side: Dictionary, term: String) -> float:
@@ -107,6 +144,13 @@ func _mean(side: Dictionary, term: String) -> float:
 	if not sums.has(term):
 		return 0.0
 	return float(sums[term]) / maxf(float(side.count), 1.0)
+
+
+func _arrival_mean(side: Dictionary, term: String) -> float:
+	var sums: Dictionary = side.sums
+	if not sums.has(term):
+		return 0.0
+	return float(sums[term]) / maxf(float(side.arrivals), 1.0)
 
 
 func _collect(result: Resource, sides: Dictionary) -> void:
@@ -129,5 +173,22 @@ func _collect(result: Resource, sides: Dictionary) -> void:
 		var sums: Dictionary = bucket.sums
 		for term in TERMS:
 			sums[term] = float(sums.get(term, 0.0)) + float(terms.get(term, 0.0))
+		var arrival: Dictionary = Dictionary(event.metadata.get("arrival", {}))
+		## Averaged over the rows that *have* an arrival, not over all digs. The
+		## first version divided by every dig, and the home side reaches the
+		## nearest-defender fallback on 47 of 156 -- which silently scaled its
+		## claim means down by 1.43 and made the opponent look like the one
+		## standing further from the ball when the reverse was true.
+		if arrival.is_empty():
+			bucket.no_arrival += 1
+		else:
+			bucket.arrivals += 1
+			for term in ARRIVAL_TERMS:
+				sums[term] = float(sums.get(term, 0.0)) \
+					+ float(arrival.get(term, 0.0))
+		sums["flight_time"] = float(sums.get("flight_time", 0.0)) \
+			+ float(event.metadata.get("flight_time", 0.0))
+		if bool(event.metadata.get("claimed", false)):
+			bucket.claimed += 1
 		bucket.sums = sums
 		sides[side] = bucket

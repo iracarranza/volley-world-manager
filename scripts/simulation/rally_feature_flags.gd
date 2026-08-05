@@ -64,3 +64,24 @@ const ALLOW_DEVELOPMENT_BLOCK_OVERRIDE: bool = true
 ## own terms. Do not widen the bound to close this.
 const ENABLE_GEOMETRIC_ATTACK: bool = true
 const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
+
+## One opponent swing, one flight time.
+##
+## The same ball is currently solved twice with two different launch angles. The
+## drawn arc uses the hitter's own shot shape; the home defender's budget is
+## re-solved through `_opponent_attack_type`, a *defensive* classifier whose "Short
+## tip" branch covers everything landing inside y 0.80 -- most of the court. So most
+## opponent swings are lobbed at 22-32 degrees for timing purposes and hit flat at
+## 5-14 for drawing purposes, and the outcome disagrees with the picture.
+##
+## This is a correctness fix rather than a tuning choice, and it is off anyway,
+## because it makes the home floor defence stronger before the block has been
+## re-tuned for it: with one flight, home defenders go from 0.739 s to 0.832 s, the
+## attack-symmetry ratchet moves 0.656 to 0.672, and the funnelling-block gate
+## stops separating (13 against 13 on a sample of about fifty).
+##
+## Promotion waits on the same thing the shared shot rule does -- see the finding
+## above `_hit_type` in `rally_simulator.gd` and `docs/BACKLOG.md` §8. The order is:
+## widen the block-intent samples, land this, re-separate the dials. Do not widen a
+## bound to close it.
+const ENABLE_UNIFIED_DIG_FLIGHT: bool = false

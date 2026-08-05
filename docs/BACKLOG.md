@@ -236,6 +236,83 @@ mechanism discriminates between setters far less than it looks like it does.
 That is a set-quality calibration problem, not a delivery one, and it points
 the opposite way from the "both teams highly capable" baseline the design wants.
 
+### The dig asymmetry is an attack-shape defect, not a defence defect
+
+Three passes chased the 0.20 dig gap as a claim or positioning problem — the
+parallel implementation, then the staging, then the timing term. It is neither.
+`tools/run_dig_terms_split.gd` now stamps and reports the claim's own inputs on
+both sides of the net (the opponent side never stamped its arrival at all, which
+is why this could be seen and not attributed), and they say:
+
+| claim input | home | opponent | gap |
+| --- | ---: | ---: | ---: |
+| attack flight seconds | 0.739 | 0.490 | **0.249** |
+| available_time | 0.419 | 0.165 | 0.254 |
+| reaction_delay | 0.325 | 0.333 | 0.008 |
+| physical_reach_meters | 2.505 | 1.763 | 0.742 |
+| distance_meters | 1.526 | 1.863 | 0.338 |
+
+Reaction delay is equal and raw speed is identical by construction. The reach
+gap is *entirely* the time gap: `physical_reach = base + speed × available_time`,
+and one side has two and a half times the clock. Home defenders are digging lobs.
+
+**Two causes, both upstream of the defence.**
+
+1. **The two sides choose their shot by different rules.**
+   `_choose_opponent_attack` downgrades to a roll shot or tip below a set quality
+   of 0.38, and opponent first-ball sets have a *median of 0.344* — so it fires on
+   more than half their attacks. The opponent essentially never spikes; it rolls
+   the ball over at 20–32° instead of 5–14°. The home side has no such rule and
+   swings at everything.
+
+2. **One opponent swing is solved twice with two different launch angles.** The
+   drawn arc uses the hitter's shot shape; the home defender's budget is re-solved
+   through `_opponent_attack_type`, a *defensive* classifier whose "Short tip"
+   branch covers everything landing inside y 0.80 — most of the court. Outcome and
+   picture disagree, which is this section's own headline defect showing up in a
+   place nobody had looked.
+
+**Both fixes are written and both are withheld, for the same reason.** The fix
+for (2) is behind `ENABLE_UNIFIED_DIG_FLIGHT`, off. The fix for (1) — one shared
+`_compromised_shot_type` — was implemented and withdrawn; the finding sits above
+`_hit_type`. Either one strengthens the home floor defence before the block has
+been re-tuned for it, and the two block-intent gates (a sealing block stuffs
+more, a funnelling one deflects more) separate by two or three counts on a sample
+of about fifty. Against an opponent that swings they stop separating, identically
+at every threshold tried between 0.18 and 0.30. That is a real re-tune, not a
+fixture to re-baseline.
+
+Order of work: **widen the block-intent samples, then land the two fixes, then
+re-separate the dials against a swinging opponent.** Do not widen a bound to
+close either.
+
+Worth carrying: a change to how many random numbers a rally consumes
+re-sequences every seeded outcome after it. Drawing the improvisation roll
+conditionally flipped both block gates on the re-sequencing alone. Draw
+unconditionally, gate afterwards.
+
+### Set quality collapses on two of the four paths
+
+From `tools/run_set_quality_histogram.gd`, and relevant because everything above
+is downstream of it:
+
+| path | n | p25 | median | mean | kill | error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| home first ball | 312 | 0.323 | 0.634 | 0.524 | 0.571 | 0.154 |
+| home transition | 115 | 0.100 | 0.100 | 0.185 | 0.557 | 0.122 |
+| opponent first ball | 277 | 0.080 | 0.344 | 0.389 | 0.350 | **0.477** |
+| opponent transition | 41 | 0.080 | 0.152 | 0.290 | 0.488 | 0.366 |
+
+Two saturated floors: 70% of home transition sets land on exactly 0.100 and over
+a quarter of opponent sets on exactly 0.080. The floors are not creating the low
+values, they are piling them up — the underlying execution genuinely produces
+less. The transition path loses about 70% of its capability to three penalties at
+once (capability_penalty 0.203, geometry_difficulty 0.160, arrival −0.073).
+
+And the opponent errors on **47.7%** of its first-ball attacks against the home
+side's 15.4%. On identical rosters. That is the largest single asymmetry in the
+engine and it is not in the dig.
+
 ### Not landed — the distance still to go
 
 **Serve in/out is a coin flip disconnected from the drawn ball.** Both serve

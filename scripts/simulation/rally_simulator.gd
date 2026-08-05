@@ -1328,6 +1328,19 @@ func resolve(
 		"approach_start_position",
 		_approach_start_position(set_target, hitter_start, false)
 	))
+	## **Not yet routed through `_compromised_shot_type`.**
+	##
+	## The home hitter should make the same compromise the opponent does -- a set
+	## too poor to swing at gets rolled over -- and the shared rule is written and
+	## ready. What blocks it is not the rule: adding a decision here consumes one
+	## more random number per home attack, which re-sequences every seeded rally
+	## after it, and the two block-intent gates separate by two or three counts on
+	## a sample of about fifty. They flip on the re-sequencing alone, identically
+	## at every threshold tried, so the suite cannot tell a re-tuned block from a
+	## re-shuffled stream.
+	##
+	## Those gates need a larger sample before this lands. Recorded in
+	## `docs/BACKLOG.md` §8 with the measurement.
 	var attack_angle := _attack_launch_angle_degrees(
 		hitter, hit_type, float(result.attack_quality)
 	)
@@ -1795,6 +1808,13 @@ func resolve(
 			"movement_start": opponent_defense.start,
 			"movement_duration": opponent_defense.travel_time,
 			"reach_margin_meters": opponent_defense.reach_margin_meters,
+			## The whole arrival, as the home side has always stamped. Without it
+			## the two sides could not be compared on the terms the claim is
+			## actually decided on -- distance to the ball, reach, time available --
+			## so a 0.48 m reach-margin gap could be seen and not attributed.
+			"arrival": Dictionary(opponent_defense.get("arrival", {})),
+			"claimed": bool(opponent_defense.get("claimed", false)),
+			"flight_time": opponent_defense_time,
 			"movement_target": opponent_defender_reach,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states. Deriving it from
@@ -2830,10 +2850,42 @@ func _resolve_opponent_transition(
 		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
 		home_target = deflection_target
 	var attack_type := _opponent_attack_type(home_target)
+	## **The dig's flight budget is the flight that was drawn.**
+	##
+	## This was the whole dig asymmetry, and it was never a defensive defect. The
+	## same opponent swing was solved twice with two different launch angles: the
+	## drawn arc used the hitter's own shot shape, and the defender's budget was
+	## re-solved through `_opponent_attack_type` -- a *defensive* classifier, whose
+	## "Short tip" branch covers everything landing inside y 0.80, which is most of
+	## the court. So most opponent swings were lobbed at 22-32 degrees for timing
+	## purposes and hit flat at 5-14 degrees for drawing purposes.
+	##
+	## Measured on identical rosters: home defenders got 0.739 s of flight and
+	## opponent defenders 0.490 s, and every downstream term inherited exactly that
+	## gap -- reaction delay was equal at 0.325 s against 0.333 s, and physical
+	## reach differed by 0.74 m purely because one side had 2.5x the time to travel.
+	## Three earlier passes chased this as a claim or positioning problem.
+	##
+	## `attack_type` above still classifies the ball for the *defence* -- which is
+	## what it was written for -- and no longer decides how fast it flies.
 	var attack_time := float(RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(opponent_contact, home_target),
 		_attack_launch_angle_degrees(opponent_hitter, attack_type, opponent_attack),
 	).duration_seconds)
+	if RallyFeatureFlagsModel.ENABLE_UNIFIED_DIG_FLIGHT:
+		attack_time = float(opponent_attack_trajectory.get("duration", attack_time))
+		if block_outcome in ["touch", "funnel"]:
+			## Off the hands the ball is going somewhere else, so the remaining
+			## flight is genuinely a new solve -- on the hitter's shot shape, not
+			## the defence's.
+			attack_time = float(RallyKinematics.solve_launch_arc(
+				RallyKinematics.court_distance_meters(
+					opponent_contact, home_target
+				),
+				_attack_launch_angle_degrees(
+					opponent_hitter, str(attack_choice.attack_type), opponent_attack
+				),
+			).duration_seconds)
 	if block_outcome == "touch":
 		attack_time += 0.24
 	elif block_outcome == "funnel":
@@ -2851,6 +2903,7 @@ func _resolve_opponent_transition(
 	)
 	var defender := defense_claim.get("player") as VolleyballPlayer
 	var defender_arrived := defender != null
+	var home_claimed := defender_arrived
 	if defender == null:
 		defender = _nearest_floor_defender(players, lineup, defensive_plan, home_target)
 	if defender == null:
@@ -2934,6 +2987,7 @@ func _resolve_opponent_transition(
 			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"responsibility_fit": responsibility_fit,
 			"flight_time": attack_time, "arrival": defense_arrival,
+			"claimed": home_claimed,
 			"support_count": support_count,
 			"movement_start": defender_start,
 			"movement_target": defender_reach,
@@ -4076,6 +4130,7 @@ func _choose_opponent_defender(
 	)
 	var claimant := claim.get("player") as VolleyballPlayer
 	var arrival: Dictionary = claim.get("arrival", {})
+	var claimed := claimant != null
 	if claimant == null:
 		## Nobody could reach it. The search says so by returning no player, and
 		## the ball still has to be described as landing on somebody, so the
@@ -4103,6 +4158,7 @@ func _choose_opponent_defender(
 	var fallback_margin := CoverageModel.court_distance_meters(start, target)
 	return {
 		"player": claimant,
+		"claimed": claimed,
 		"start": start,
 		"distance_meters": fallback_margin,
 		"travel_time": travel_time,
@@ -7229,6 +7285,36 @@ func _best_home_server(
 	# Service ownership follows rotational zone 1. The server's attributes still
 	# determine quality; the strongest server cannot replace the legal server.
 	return _player_by_id(players, lineup.player_at_slot(1))
+
+
+## **Finding, not yet a change: the two sides choose their shot by different
+## rules, and that is where the dig asymmetry comes from.**
+##
+## `_choose_opponent_attack` downgrades to a roll shot or a tip when the set is
+## below 0.38. Measured, opponent first-ball sets have a median of 0.344, so it
+## fires on more than half of their attacks: the opponent essentially never spikes,
+## it rolls the ball over at 20-32 degrees instead of 5-14. The home side has no
+## such rule and swings at everything.
+##
+## That single difference is the whole dig asymmetry. On identical rosters, home
+## defenders dig with 0.739 s of flight and opponent defenders with 0.490 s, while
+## reaction delay comes out equal (0.325 s against 0.333 s) and raw speed is
+## identical -- so reach margin differs by 0.48 m purely because one side is
+## digging lobs. Three earlier passes read this as a claim or positioning problem;
+## `tools/run_dig_terms_split.gd` now reports the claim inputs directly, and it is
+## the flight time.
+##
+## Sharing the rule was implemented and then **withdrawn**, because it takes the
+## block with it. The two block-intent gates -- a sealing block stuffs more, a
+## funnelling one deflects more -- separate by two or three counts on a sample of
+## about fifty, and they were separated against an opponent that lobbed most of its
+## attacks. Against an opponent that swings they stop separating, identically at
+## every threshold tried between 0.18 and 0.30. That is a real re-tune of the
+## block, not a fixture to re-baseline, and it needs a larger sample before either
+## can be judged.
+##
+## Recorded in `docs/BACKLOG.md` §8. The order is: widen the block-intent samples,
+## then share the rule, then re-separate the dials against a swinging opponent.
 
 
 func _hit_type(assignment: HitterAssignment, hitter: VolleyballPlayer) -> String:
