@@ -158,6 +158,25 @@ const PLATES: Array[Dictionary] = [
 		"camera": [Vector3(0.0, 1.62, -10.4), Vector3(-2.0, 180.0, 0.0), 30.0],
 		"spacing": 1.72,
 	},
+	## What the contact *did* to them, which is a different axis from how strained
+	## it was. The four states are drawn as bodies rather than markers, so the
+	## plate is the test: a special move that needs an icon to be understood has
+	## not been drawn.
+	{
+		"name": "09b_dig_recovery",
+		"caption": "recovery",
+		"subjects": ["Pear", "Cani", "Pepper", "Ursi"],
+		"pose": [1, 0.0, 0.0],
+		"postures": ["planted", "moving", "off-axis", "planted"],
+		"recoveries": ["platform", "knee", "fall", "blown_away"],
+		"faces": ["deadpan", "tired", "worried", "cross"],
+		"yaws": [-34.0, 56.0, 40.0, 70.0],
+		## Wider than any other plate: a fall and a blown-away sprawl across far
+		## more floor than a standing figure, and at the row default they overlapped
+		## into each other.
+		"camera": [Vector3(0.0, 1.55, -15.4), Vector3(-5.0, 180.0, 0.0), 34.0],
+		"spacing": 3.50,
+	},
 	{
 		"name": "09_dig_postures",
 		"caption": "posture",
@@ -255,6 +274,12 @@ func _shoot(plate: Dictionary) -> void:
 				label = str(faces[index % faces.size()])
 			"posture":
 				label = str(postures[index % postures.size()])
+			"recovery":
+				label = str(
+					plate.get("recoveries", ["platform"])[
+						index % Array(plate.get("recoveries", ["platform"])).size()
+					]
+				)
 			"body":
 				label = wanted if body_type == "Vegi" else body_type
 			_:
@@ -277,6 +302,9 @@ func _shoot(plate: Dictionary) -> void:
 		)
 		if not postures.is_empty():
 			actor.contact_posture = str(postures[index % postures.size()])
+		var recoveries: Array = plate.get("recoveries", [])
+		if not recoveries.is_empty():
+			actor.contact_recovery = str(recoveries[index % recoveries.size()])
 		var phases: Array = plate.get("phases", [])
 		var phase := float(phases[index]) if index < phases.size() \
 			else float(pose[2])

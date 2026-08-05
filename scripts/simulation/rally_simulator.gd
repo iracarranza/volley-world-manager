@@ -675,6 +675,12 @@ func resolve(
 			"contact_posture": str(Dictionary(shadow_summary.get(
 				"shadow_decision", {}
 			)).get("selected_action", "continuous reception")),
+			## Carried across rather than recomputed. The live layer replaces
+			## where the ball went, not what the contact did to the passer, and
+			## its own posture vocabulary ("continuous reception") is not one of
+			## the four the recovery bands are written against -- recomputing
+			## from it would silently return everyone to their feet.
+			"contact_recovery": str(reception_pass.contact_recovery),
 		}
 	var pass_trajectory: Dictionary = reception_pass.trajectory
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
@@ -704,6 +710,7 @@ func resolve(
 			"body_alignment": reception_pass.body_alignment,
 			"platform_feasibility": reception_pass.platform_feasibility,
 			"contact_posture": reception_pass.contact_posture,
+			"contact_recovery": reception_pass.contact_recovery,
 			"desired_pass_target": desired_pass_target,
 			"setter_release_target": preferred_release,
 			"actual_pass_target": reception_pass.destination,
@@ -1953,6 +1960,7 @@ func _resolve_home_serve(
 			"body_alignment": opponent_pass.body_alignment,
 			"platform_feasibility": opponent_pass.platform_feasibility,
 			"contact_posture": opponent_pass.contact_posture,
+			"contact_recovery": opponent_pass.contact_recovery,
 			"setter_release_target": opponent_setter_release,
 			"actual_pass_target": opponent_pass_destination})
 	if not reception_success:
@@ -4990,11 +4998,76 @@ func _reception_pass_result(
 		"body_alignment": body_alignment,
 		"platform_feasibility": platform_feasibility,
 		"contact_posture": posture,
+		"contact_recovery": _reception_recovery(
+			receiver, posture, execution, serve_force
+		),
 		"trajectory": _ball_trajectory(
 			"reception_pass", contact_position, destination,
 			flight_time, lerpf(1.1, 2.8, execution), rally_clock
 		),
 	}
+
+
+## Whether a defender stayed on their feet, and what happened to them if not.
+##
+## `contact_posture` says how *strained* the contact was; this says what the
+## strain did to the player. They are separate axes on purpose: a reaching
+## contact taken well leaves a defender standing, and a planted contact taken
+## into a ball travelling far too fast does not.
+##
+## Four states, in ascending cost, and every one of them is legible from the
+## stands without a caption:
+##
+## - **platform** -- stayed up, played it off the forearms.
+## - **knee** -- went down on one knee to finish the play. Follows a *reaching*
+##   or *moving* contact taken poorly, or comes from a defender whose reception
+##   stability is low enough that they go down on ordinary balls too.
+## - **fall** -- went to the floor. Follows an *off-axis* contact taken poorly,
+##   or a defender with low reception balance -- being unable to square up and
+##   being unable to stay up are the same failing seen twice.
+## - **blown_away** -- did not play it so much as get hit by it. Requires *both*
+##   a badly taken contact **and** a ball arriving hard, which is why it cannot
+##   come from a reaching contact: a defender already stretched for a ball is
+##   not standing in front of it.
+##
+## The costs are what make this more than a pose. A knee or a fall takes the
+## defender out of the next contact; being blown away takes them out of the
+## rally. That is the first time a defensive *success* has a price, which is the
+## whole reason the knee was worth modelling -- see `docs/design/CLUB_LIFE.md` on
+## failure being legible and gentle.
+##
+## Thresholds are named rather than inline so the four bands can be retuned as a
+## set. A recovery state that fires on a third of contacts is wallpaper; one that
+## fires on none is a pose nobody sees.
+const RECOVERY_POOR_EXECUTION: float = 0.36
+const RECOVERY_DIRE_EXECUTION: float = 0.20
+const RECOVERY_LOW_STABILITY: float = 0.34
+const RECOVERY_LOW_BALANCE: float = 0.34
+const RECOVERY_HEAVY_FORCE: float = 0.70
+
+
+func _reception_recovery(
+	receiver: VolleyballPlayer,
+	posture: String,
+	execution: float,
+	incoming_force: float,
+) -> String:
+	var stability := _rating(receiver, "reception_stability")
+	var balance := _rating(receiver, "reception_balance")
+	var poor := execution < RECOVERY_POOR_EXECUTION
+	var dire := execution < RECOVERY_DIRE_EXECUTION
+
+	## Checked first, because being knocked off a ball overrides every softer
+	## thing that could also have been true of the same contact.
+	if dire and incoming_force >= RECOVERY_HEAVY_FORCE \
+			and posture in ["planted", "off-axis", "moving"]:
+		return "blown_away"
+	if (posture == "off-axis" and poor) or balance < RECOVERY_LOW_BALANCE:
+		return "fall"
+	if (poor and posture in ["reaching", "moving"]) \
+			or stability < RECOVERY_LOW_STABILITY:
+		return "knee"
+	return "platform"
 
 
 ## Who is physically taking this second contact, and from where.

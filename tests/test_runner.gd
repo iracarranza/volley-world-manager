@@ -706,7 +706,55 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 			and REGIONS_SCRIPT.demonym("Kutre den Lyn") == "Kutrén",
 		"every legacy region name resolves to a live region, renames included",
 	)
+	_test_reception_recovery_bands()
 	_test_minor_region_behaviour()
+
+
+## The four recovery states have to be reachable and ordered.
+##
+## A band nobody ever lands in is a pose that only exists in a preview, and a
+## band everybody lands in is wallpaper. This pins the *shape* rather than the
+## rates: a worse contact never produces a gentler outcome, and being blown away
+## genuinely requires a hard ball rather than merely a bad touch.
+func _test_reception_recovery_bands() -> void:
+	var simulator := RallySimulator.new()
+	## Built directly rather than generated: the bands are read off two
+	## attributes, and a generated roster would vary them from run to run.
+	var sturdy := VolleyballPlayer.new()
+	sturdy.reception_stability = 78
+	sturdy.reception_balance = 78
+	var frail := VolleyballPlayer.new()
+	frail.reception_stability = 12
+	frail.reception_balance = 74
+
+	_check(
+		simulator._reception_recovery(sturdy, "planted", 0.80, 0.30) == "platform",
+		"a good contact on a steady defender leaves them on their feet",
+	)
+	_check(
+		simulator._reception_recovery(sturdy, "reaching", 0.22, 0.30) == "knee",
+		"a poor reaching contact puts a defender on one knee",
+	)
+	_check(
+		simulator._reception_recovery(frail, "planted", 0.85, 0.20) == "knee",
+		"low reception stability goes down even on an ordinary ball",
+	)
+	_check(
+		simulator._reception_recovery(sturdy, "off-axis", 0.22, 0.30) == "fall",
+		"a poor off-axis contact puts a defender on the floor",
+	)
+	## The pair that matters: same defender, same terrible contact, and the only
+	## difference is how hard the ball was travelling.
+	_check(
+		simulator._reception_recovery(sturdy, "planted", 0.10, 0.90) == "blown_away"
+			and simulator._reception_recovery(sturdy, "planted", 0.10, 0.20) != "blown_away",
+		"being blown away needs a hard ball, not only a bad touch",
+	)
+	## A defender already stretched for a ball is not standing in front of it.
+	_check(
+		simulator._reception_recovery(sturdy, "reaching", 0.10, 0.95) != "blown_away",
+		"a reaching contact is never a blow-away, however hard the ball",
+	)
 
 
 ## The minor tier only earns its place if it behaves differently from the

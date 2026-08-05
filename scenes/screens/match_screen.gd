@@ -217,6 +217,7 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 			peak * sin(progress * PI), progress,
 			event.end_position - event.start_position, true,
 			_contact_posture(event),
+			_contact_recovery(event),
 		)
 		await get_tree().process_frame
 
@@ -232,6 +233,14 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 ##
 ## Defaults to `planted` for every other contact type, which is what the pose
 ## code treats as an ordinary athletic stance.
+## What the contact did to the defender. Same source as the posture and read the
+## same way -- playback never decides either.
+func _contact_recovery(event: RallyEvent) -> String:
+	if event == null or event.metadata == null:
+		return "platform"
+	return str(event.metadata.get("contact_recovery", "platform"))
+
+
 func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
@@ -260,6 +269,7 @@ func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress:
 			event_actor, int(event.event_type),
 			event_peak * outgoing_weight, progress, event_direction, true,
 			_contact_posture(event),
+			_contact_recovery(event),
 		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
 	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:

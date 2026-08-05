@@ -185,6 +185,7 @@ func set_player_pose(
 	direction: Vector2,
 	highlighted: bool,
 	contact_posture: String = "planted",
+	contact_recovery: String = "platform",
 ) -> void:
 	if not player_actors.has(player_id):
 		return
@@ -194,6 +195,7 @@ func set_player_pose(
 	## strained this contact was; the court's job is to hand that verdict to the
 	## actor, not to form a second opinion from the positions.
 	actor.contact_posture = contact_posture
+	actor.contact_recovery = contact_recovery
 	actor.set_pose(event_type, elevation, phase, direction, highlighted)
 
 

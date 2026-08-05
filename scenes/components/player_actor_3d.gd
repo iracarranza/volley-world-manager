@@ -43,6 +43,10 @@ var arm_bone_lengths: Vector2 = Vector2(0.40, 0.48)
 ## the edge of their range the ball was, and how well their body could face it.
 ## Playback reads that verdict rather than inventing a pose.
 var contact_posture: String = "planted"
+## What the contact *did* to them, as opposed to how strained it was.
+## `_reception_recovery` decides this; playback draws it and does not invent it.
+## "platform", "knee", "fall" or "blown_away" -- see `rally_simulator.gd`.
+var contact_recovery: String = "platform"
 ## Which of the five faces the actor is wearing. Purely presentational today --
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
 ## than being derived from state that does not exist.
@@ -411,6 +415,139 @@ func _apply_dig_posture() -> void:
 	## them different actions rather than two similar frames.
 	_set_elbow(left_arm, 0.0)
 	_set_elbow(right_arm, 0.0)
+	_apply_recovery_state()
+
+
+## The four things that can happen to a defender who plays a ball.
+##
+## Layered *over* the posture rather than replacing it, because the two are
+## independent: a reaching contact that puts someone on one knee still started
+## as a reach, and the pose should say both. So this only adds -- it drops the
+## hips, folds a leg, rolls the body -- and never rewrites what the platform was
+## doing.
+##
+## Each state is drawn as a *body*, not as a tint or a marker. A special move
+## that needs an icon to be understood has not been drawn.
+func _apply_recovery_state() -> void:
+	if contact_recovery == "platform":
+		return
+	## Where the feet are *now*, before this state folds them. The posture already
+	## put them on the floor, crouch and all, so this is the height the body has
+	## to come back to -- measuring against a bare y = 0 instead would quietly
+	## undo whatever sink the dig itself asked for.
+	var contact_floor := _lowest_body_point()
+	## And where the hips are, for the same reason. A roll of forty degrees turns
+	## the body about the *feet*, which slides the whole rig sideways off the spot
+	## it was standing on -- the fallen voli ended up beside its own floor marker
+	## rather than on it.
+	var contact_hips := _hip_offset_from_actor()
+	match contact_recovery:
+		"knee":
+			## A half-kneel: one shin folded flat behind, the other leg braced in
+			## front. Asymmetry is the whole read -- two knees down is kneeling,
+			## one is a player who *went* down to finish a play.
+			##
+			## The two legs are posed to reach the *same* depth below the hip, so
+			## the down knee and the braced foot arrive at the floor together. A
+			## pose where one reaches further leaves the other hanging in the air
+			## once the body is planted, which is what "kneeling in mid-air"
+			## actually was.
+			body_pivot.rotation.x -= deg_to_rad(14.0)
+			left_leg.rotation_degrees.x = -12.0
+			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = -100.0
+			right_leg.rotation_degrees.x = 75.0
+			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = -43.0
+		"fall":
+			## Off their feet and onto a hip, still facing the ball. Rolled rather
+			## than dropped: a defender who falls has been taken sideways, and the
+			## roll is what separates this from a deeper crouch. Both legs fold
+			## tight so nothing props the body back up.
+			body_pivot.rotation.x -= deg_to_rad(26.0)
+			body_pivot.rotation.z += deg_to_rad(42.0)
+			## Thighs well past horizontal, so the folded legs finish at hip height
+			## and the *hip* becomes the lowest thing on the body. With the legs
+			## reaching lower than the hip the floor solve plants a shoe instead
+			## and leaves the body standing over it, which is a crouch.
+			left_leg.rotation_degrees.x = 128.0
+			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = -118.0
+			right_leg.rotation_degrees.x = 138.0
+			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = -126.0
+		"blown_away":
+			## Not a play, an impact. The body pitches *backward* -- the only pose
+			## in the game that does, since a block bends forward at -0.12 -- the
+			## arms are driven up and back off the ball rather than held on it, and
+			## the legs come up in front. The backward pitch is the entire tell:
+			## everything else a defender does goes toward the ball.
+			body_pivot.rotation.x += deg_to_rad(42.0)
+			body_pivot.rotation.z += deg_to_rad(12.0)
+			left_arm.rotation_degrees = Vector3(-138.0, 0.0, -34.0)
+			right_arm.rotation_degrees = Vector3(-146.0, 0.0, 30.0)
+			_set_elbow(left_arm, 52.0)
+			_set_elbow(right_arm, 44.0)
+			## Past horizontal, so the feet finish *above* the hip and the body
+			## plants on its back rather than on a shoe.
+			left_leg.rotation_degrees.x = 110.0
+			right_leg.rotation_degrees.x = 95.0
+			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = -60.0
+			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = -50.0
+			## Eyes still up the line the ball came from, because they are being
+			## pushed away from it rather than turning from it.
+			look_pitch = deg_to_rad(-HEAD_PITCH_LIMIT_DEGREES)
+			_apply_head_look()
+		_:
+			return
+	_settle_to_floor(contact_floor, contact_hips)
+
+
+## Drop the posed body until its lowest part rests on the court.
+##
+## This replaced three hand-tuned drops, and the reason is worth keeping: a drop
+## written as a number is a claim about how far a *particular* pose lifts a
+## *particular* body off the floor, and both halves of that claim change with
+## every silhouette and every angle. The three numbers were tuned by eye on one
+## portfolio plate of four subjects; measured, they put a shoe up to 0.6 m
+## underground on the same four.
+##
+## Solving it instead makes the pose the only thing an author has to get right.
+## Whatever reaches lowest -- a knee, a shoe, a hip, a hand -- is what the body
+## comes to rest on, which is also what "landing" means.
+func _settle_to_floor(floor_height: float, hips: Vector3) -> void:
+	var drift := hips - _hip_offset_from_actor()
+	body_pivot.position.x += drift.x
+	body_pivot.position.z += drift.z
+	body_pivot.position.y += floor_height - _lowest_body_point()
+
+
+## Where the hips sit relative to the actor. Read from the shorts, which is the
+## one mesh that is the hip rather than merely near it.
+func _hip_offset_from_actor() -> Vector3:
+	return (global_transform.affine_inverse() * shorts.global_transform).origin
+
+
+## The lowest point of the body, in the actor's own space.
+##
+## Measured relative to `self` rather than in world space so it survives the
+## actor being moved or turned on the court, and taken from mesh bounds rather
+## than from bone maths because the shoe hangs off the shin and the produce
+## bodies are spheres -- neither is where a limb length says it is.
+func _lowest_body_point() -> float:
+	var into_actor := global_transform.affine_inverse()
+	var lowest := INF
+	var pending: Array[Node] = [body_pivot]
+	while not pending.is_empty():
+		var current: Node = pending.pop_back()
+		for child in current.get_children():
+			pending.append(child)
+		if not (current is VisualInstance3D):
+			continue
+		var visual := current as VisualInstance3D
+		if not visual.visible or visual is Label3D:
+			continue
+		var box := visual.get_aabb()
+		var placement := into_actor * visual.global_transform
+		for corner in 8:
+			lowest = minf(lowest, (placement * box.get_endpoint(corner)).y)
+	return 0.0 if is_inf(lowest) else lowest
 
 
 ## Point the head at a spot on the court, independently of where the body faces.
