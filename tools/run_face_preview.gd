@@ -14,11 +14,16 @@ const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 
-## In the order they should be compared, not the order they are declared.
-## neutral and flat sit next to each other on purpose -- they are the pair most
-## at risk of being the same face, since the only difference is mouth width.
+## One row per eye state, three mouths across. Laid out as the grid actually is
+## rather than as a flat list, because the claim being checked is that the *pair*
+## produces the label -- and that is only visible when the row holds the eyes
+## constant and varies the mouth.
+const ROW_FULL: Array[String] = ["happy", "neutral", "worried"]
+const ROW_HALF: Array[String] = ["devious", "suspicious", "cross"]
+const ROW_FLAT: Array[String] = ["relaxed", "deadpan", "tired"]
 const ORDER: Array[String] = [
-	"happy", "neutral", "flat", "worried", "cross",
+	"happy", "neutral", "worried", "devious", "suspicious", "cross",
+	"relaxed", "deadpan", "tired",
 ]
 
 ## Close enough to judge the drawing, and far enough to judge whether it
@@ -36,8 +41,12 @@ const ORDER: Array[String] = [
 ## that read badly could equally have been a bad expression or a bad fit to that
 ## head, and there was no way to tell which from the picture.
 const SHOTS: Array = [
-	## Five expressions, one body. This is the sheet that judges the drawing.
-	["faces_expressions", Vector3(0.0, 1.62, -4.5), 38.0, ORDER, ["Turnip"]],
+	## The three rows of the grid. Eyes held constant across each, mouth varying,
+	## so what the row demonstrates is that one pair of eyes under three different
+	## mouths lands on three different words.
+	["faces_row_full", Vector3(0.0, 1.66, -3.2), 32.0, ROW_FULL, ["Turnip"]],
+	["faces_row_half", Vector3(0.0, 1.66, -3.2), 32.0, ROW_HALF, ["Turnip"]],
+	["faces_row_flat", Vector3(0.0, 1.66, -3.2), 32.0, ROW_FLAT, ["Turnip"]],
 	## One expression, five bodies. This is the sheet that judges the fit -- and
 	## the one that exposed the muzzle and the beak sitting on top of the mouth.
 	["faces_bodies", Vector3(0.0, 1.68, -5.0), 40.0, ["happy"], BODIES],
@@ -46,16 +55,6 @@ const SHOTS: Array = [
 	## one is indistinguishable in a wide shot from a mouth that was never built.
 	["faces_snouts", Vector3(0.0, 1.80, -2.2), 26.0,
 		["happy", "cross"], ["Feli", "Avi"]],
-	## The pair whose whole difference is the direction the brows tilt, one per
-	## frame and dead centre. They shipped swapped once, and neither the row
-	## sheet nor a two-up close-up could settle it: a head photographed from 30
-	## degrees off axis has its eyes sheared by perspective, which is the same
-	## visual signal as a tilt. One subject, centred, is the only framing in
-	## which this claim can be checked at all.
-	["faces_brow_worried", Vector3(0.0, 1.74, -1.7), 22.0,
-		["worried"], ["Turnip"]],
-	["faces_brow_cross", Vector3(0.0, 1.74, -1.7), 22.0,
-		["cross"], ["Turnip"]],
 	## And whether any of it survives the distance a match is actually watched at.
 	["faces_match", Vector3(0.0, 2.05, -9.6), 46.0, ORDER, BODIES],
 ]

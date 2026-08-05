@@ -113,6 +113,38 @@ flavour text.
 that they become noise to be dismissed. Once every few weeks, always about
 something real, and every one gets read.
 
+### What their faces are for
+
+Volis have faces (`scripts/data/face_expressions.gd`): nine of them, and the
+name is derived rather than authored -- three eye states by three mouth shapes,
+and the label is whatever the pair reads as. Narrowed eyes under a smile *is*
+devious; it is called that because of what it is made of.
+
+**Unresolved: whether a face is who someone is, or a report on how they are
+doing.** Both, is the proposal, and the split matters:
+
+- A **resting face** as a trait -- stable, part of how you recognise a voli
+  across a season, and what makes a roster look inhabited rather than staffed.
+- A **live expression** that overrides it when something is actually true: a real
+  complaint, a morale drop, a ratio worn through.
+
+Neither alone works. Purely a trait and the expression system can never say
+anything, so the art budget bought decoration. Purely state-driven and a settled
+squad is a wall of identical neutrals, which is worse than no faces at all.
+
+If the live half is built, it inherits both existing rules. It is a **signal, not
+a readout** -- a worried face says something is off, not what, and the voli may
+be as wrong about it as their utterances are. And it stays **rare**: three
+worried volis every week is wallpaper, and the resting face should be what you
+see nearly always.
+
+Assigned at random today, hashed from the voli's id so it is at least stable.
+
+**They do not read at match distance.** Eyes survive as dots and mouth curves do
+not, so this is a roster and close-up feature unless the match camera comes in.
+Worth knowing before anything is designed around reading a voli's mood from the
+court.
+
 ## 1b. Where social conflict comes from
 
 The open problem: social systems need conflict to be about anything, and the

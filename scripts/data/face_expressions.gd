@@ -10,52 +10,55 @@ extends RefCounted
 ## Small solids projected onto the head's surface curve with it and light with
 ## it, which is what makes the face belong to the head rather than sit on it.
 ##
-## Five expressions, deliberately few. These read at playback scale, where a head
-## is a few dozen pixels tall and the only things that survive are the *sign* of
-## the mouth curve and the *tilt* of the eyes. Subtler sets do not survive the
-## distance, and a face nobody can read at match scale is a face that only exists
-## in the roster.
+## **A face is a pair, and the name is a lookup.** Three eye states and three
+## mouth shapes, and the label is whatever that combination reads as. Nothing is
+## authored per expression.
+##
+## The first version did it the other way round -- five named faces, each with
+## its own hand-picked numbers -- and it produced a "happy" that everybody read
+## as *devious*, because a smile under narrowed eyes is a scheme rather than a
+## delight. With the name derived from the parts that cannot happen: narrowed
+## eyes plus a smile *is* devious, and it is called that because of what it is
+## made of rather than what it was meant to be.
+##
+## It also turns five faces into nine for no extra authoring, and every new eye
+## state would add three more.
 
 const NEUTRAL: String = "neutral"
 
-## The five, and what each is for.
+## How open the eyes are, and how they tilt.
 ##
-## `mouth_curve` is signed: positive lifts the corners above the centre (a
-## smile), negative drops them below it. `eye_tilt` is signed too, in degrees,
-## and it is the whole difference between worried and cross -- inner ends raised
-## reads as concern, inner ends lowered reads as a scowl, and nothing else about
-## the two faces needs to differ. `eye_squash` flattens the eye toward a line.
-const EXPRESSIONS := {
-	## Corners up, eyes squeezed by the cheeks.
-	"happy": {
-		"mouth_curve": 1.00, "mouth_half_width": 0.36,
-		"eye_tilt": 5.0, "eye_squash": 0.66,
-	},
-	## The default. Short flat mouth -- the `:l` of the pair.
-	"neutral": {
-		"mouth_curve": 0.00, "mouth_half_width": 0.19,
-		"eye_tilt": 0.0, "eye_squash": 1.00,
-	},
-	## The long neutral, `:|`. Same zero curve, twice the width.
-	##
-	## Worth having as its own expression rather than as a wider neutral: a mouth
-	## drawn right across the face with no curve at all is not a milder version of
-	## anything, it is its own reading -- deadpan, unimpressed, waiting. It is the
-	## face for a voli who has been told something and has not decided yet.
-	"flat": {
-		"mouth_curve": 0.00, "mouth_half_width": 0.44,
-		"eye_tilt": 0.0, "eye_squash": 0.58,
-	},
-	## Corners down, inner brow ends up.
-	"worried": {
-		"mouth_curve": -0.62, "mouth_half_width": 0.26,
-		"eye_tilt": 17.0, "eye_squash": 1.12,
-	},
-	## Corners further down, narrower, inner brow ends down.
-	"cross": {
-		"mouth_curve": -0.95, "mouth_half_width": 0.21,
-		"eye_tilt": -21.0, "eye_squash": 0.88,
-	},
+## Tilt belongs to the eye state rather than to the expression, which is the
+## whole reason the grid works. Narrowed eyes tilt inner-end-down, and that one
+## fact does three jobs at once: narrowed under a frown is *cross*, narrowed
+## under a flat mouth is *suspicious*, and narrowed under a smile is *devious*.
+## Wide eyes tilt slightly the other way, which reads as open under a smile and
+## as concern under a frown. Flat eyes have no tilt to give.
+const EYES := {
+	"full": {"squash": 1.18, "tilt": 7.0},
+	"half": {"squash": 0.66, "tilt": -20.0},
+	"flat": {"squash": 0.26, "tilt": 0.0},
+}
+
+## `curve` is signed: positive lifts the corners above the centre.
+##
+## The flat mouth is the widest of the three on purpose. A straight line drawn
+## right across the face is not a milder smile or a milder frown -- it is its own
+## reading, and the width is what stops it looking like a curve that failed.
+const MOUTHS := {
+	"smile": {"curve": 1.00, "half_width": 0.34},
+	"flat": {"curve": 0.00, "half_width": 0.42},
+	"frown": {"curve": -0.85, "half_width": 0.28},
+}
+
+## eye state -> mouth shape -> what that combination reads as.
+##
+## The single source of truth for which expressions exist. Adding a row or a
+## column adds faces without touching anything else.
+const GRID := {
+	"full": {"smile": "happy", "flat": "neutral", "frown": "worried"},
+	"half": {"smile": "devious", "flat": "suspicious", "frown": "cross"},
+	"flat": {"smile": "relaxed", "flat": "deadpan", "frown": "tired"},
 }
 
 ## Where the features sit, in head-normalised coordinates: u across, v up, both
@@ -89,15 +92,36 @@ const MUZZLE_LIFT: float = 0.13
 const MUZZLE_V_COMPRESS: float = 0.50
 
 
+## Every expression the grid produces, sorted so the order never depends on
+## dictionary iteration.
 static func names() -> Array[String]:
 	var result: Array[String] = []
-	for key in EXPRESSIONS:
-		result.append(str(key))
+	for eye_state in GRID:
+		for mouth_shape in GRID[eye_state]:
+			result.append(str(GRID[eye_state][mouth_shape]))
+	result.sort()
 	return result
 
 
 static func has(expression: String) -> bool:
-	return expression in EXPRESSIONS
+	return not components(expression).is_empty()
+
+
+## What an expression is made of: `[eye state, mouth shape]`, empty if unknown.
+##
+## Scanned rather than stored as a second table. Nine entries is nothing to walk,
+## and a reverse map would be a copy of `GRID` that could disagree with it.
+static func components(expression: String) -> Array[String]:
+	for eye_state in GRID:
+		for mouth_shape in GRID[eye_state]:
+			if str(GRID[eye_state][mouth_shape]) == expression:
+				return [str(eye_state), str(mouth_shape)]
+	return []
+
+
+## What a given pair reads as. The inverse of `components`.
+static func label(eye_state: String, mouth_shape: String) -> String:
+	return str(Dictionary(GRID.get(eye_state, {})).get(mouth_shape, NEUTRAL))
 
 
 ## A stable face per voli.
@@ -109,11 +133,9 @@ static func has(expression: String) -> bool:
 ##
 ## This is a placeholder for a real decision, not the decision: see
 ## `docs/design/CLUB_LIFE.md` on whether an expression is part of who a voli is
-## or a report on how they are doing. Random is what you use while that is
-## unresolved, because it at least makes the roster look inhabited.
+## or a report on how they are doing.
 static func for_player(player_id: int) -> String:
 	var ordered := names()
-	ordered.sort()
 	return ordered[absi(hash("face:%d" % player_id)) % ordered.size()]
 
 
@@ -123,23 +145,29 @@ static func for_player(player_id: int) -> String:
 ## `radius` is the head's horizontal semi-axis and `half_height` its vertical
 ## one -- heads are slightly wide ellipsoids rather than spheres, so a face
 ## authored against a single radius would sit too high and too narrow.
+##
 ## `mouth_override`, when given, moves the mouth off the skull and onto whatever
 ## is already sticking out of the face. See `_build_face` -- it is derived from
 ## the body type's own cosmetics rather than restated here, so a muzzle that
 ## moves takes its mouth with it.
-##   `anchor` -- head-local centre to draw the mouth around
-##   `scale`  -- width multiplier, since a muzzle is narrower than a skull
-##   `omit`   -- the part *is* the mouth; draw eyes only
+##   `anchor`      -- head-local centre to draw the mouth around
+##   `radius`      -- the muzzle's own horizontal semi-axis
+##   `half_height` -- and its vertical one
+##   `scale`       -- width multiplier, since a muzzle is narrower than a skull
+##   `omit`        -- the part *is* the mouth; draw eyes only
 static func parts(
 	expression: String, radius: float, half_height: float,
 	mouth_override: Dictionary = {}
 ) -> Array[Dictionary]:
-	var spec: Dictionary = EXPRESSIONS.get(
-		expression, EXPRESSIONS[NEUTRAL]
-	)
+	var pair := components(expression)
+	if pair.is_empty():
+		pair = components(NEUTRAL)
+	var eye_spec: Dictionary = EYES[pair[0]]
+	var mouth_spec: Dictionary = MOUTHS[pair[1]]
+
 	var result: Array[Dictionary] = []
-	var squash := float(spec.get("eye_squash", 1.0))
-	var tilt := float(spec.get("eye_tilt", 0.0))
+	var squash := float(eye_spec.get("squash", 1.0))
+	var tilt := float(eye_spec.get("tilt", 0.0))
 	for side in [-1.0, 1.0]:
 		result.append({
 			"name": "EyeL" if side < 0.0 else "EyeR",
@@ -150,8 +178,8 @@ static func parts(
 				FEATURE_DEPTH * radius,
 			),
 			"position": _surface(EYE_U * side, EYE_V, radius, half_height),
-			## Mirrored, so a positive tilt raises the *inner* end on both sides
-			## rather than rotating the whole face one way.
+			## Mirrored, so a tilt moves the *inner* end on both sides rather than
+			## rotating the whole face one way.
 			##
 			## Negated because the rig faces -Z: a positive rotation about Z reads
 			## as *clockwise* to anyone standing in front of the voli, which lifts
@@ -167,8 +195,8 @@ static func parts(
 
 	var mouth_scale := float(mouth_override.get("scale", 1.0))
 	var anchor: Variant = mouth_override.get("anchor")
-	var half_width := float(spec.get("mouth_half_width", 0.2)) * mouth_scale
-	var curve := float(spec.get("mouth_curve", 0.0))
+	var half_width := float(mouth_spec.get("half_width", 0.2)) * mouth_scale
+	var curve := float(mouth_spec.get("curve", 0.0))
 	var step := 2.0 * half_width / float(MOUTH_SEGMENTS - 1)
 	for index in range(MOUTH_SEGMENTS):
 		var u := -half_width + step * float(index)
@@ -182,9 +210,9 @@ static func parts(
 			position = _surface(u, v, radius, half_height)
 		else:
 			## Wrapped onto the muzzle exactly the way it wraps a head, by handing
-			## `_surface` the muzzle's own semi-axes. The first attempt drew the
-			## mouth flat and offset it from the head's dimensions, which put it on
-			## the muzzle's bottom lip where it disappeared over the curve.
+			## `_surface` the muzzle's own semi-axes. An earlier attempt drew the
+			## mouth flat and offset it from the *head's* dimensions, which put it
+			## on the muzzle's bottom lip where it disappeared over the curve.
 			position = (anchor as Vector3) + _surface(
 				u / maxf(mouth_scale, 0.001),
 				v * MUZZLE_V_COMPRESS,
