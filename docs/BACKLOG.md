@@ -1932,3 +1932,36 @@ printing `primary_close` and `assist_close` per side against the 0.34 gate, and
 find which input to the close differs. Do not change `WALL_JOIN_CLOSE` first;
 a gate that is correct against one distribution and wrong against another is the
 symptom, not the cause.
+
+### The close is binary, so the gate is not the question
+
+`tools/run_block_close_probe.gd` -- and nothing needed adding, both closes have
+been on the BLOCK event all along.
+
+```
+primary close       n      p10      p25      p50      p75      p90  below gate
+home               56    0.000    0.000    1.000    1.000    1.000         38%
+opponent          160    1.000    1.000    1.000    1.000    1.000          0%
+```
+
+**It is not a fraction.** Every percentile is either 0.000 or 1.000: the primary
+blocker is either fully closed or not there at all, and nothing in between is
+ever produced. `WALL_JOIN_CLOSE = 0.34` is therefore not cutting a distribution
+-- any value strictly between 0 and 1 gives the identical answer, and moving it
+would have changed nothing while looking like a fix.
+
+So this is not the section 2 shape after all. It is a producer emitting a
+**boolean through a float-shaped channel**, and the two producers disagree about
+whether zero is reachable: `_form_opponent_block`'s primary is closed on every
+one of 160 blocks, `_form_home_block`'s fails to close on 38% of 56.
+
+The assist is worse and symmetric, which is the useful control: it reads 0.000
+through the p75 on *both* sides and is present on 12% of home blocks against 21%
+of the opponent's. A double block is close to nonexistent in this engine on
+either side of the net, and that is a separate finding from the primary's.
+
+**Next, and it is now a narrow question:** what makes `_form_home_block` return a
+`primary_close` of exactly zero, and why can `_form_opponent_block` never return
+one? Two producers, one of which has a failure state the other does not. Print
+the inputs to the close on the 38% before changing either -- and do not touch
+`WALL_JOIN_CLOSE`, which this measurement has now ruled out.
