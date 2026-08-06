@@ -2056,3 +2056,36 @@ and the preset window are each now measured and cleared. The block bands are fin
 where they can be observed. What the wall needs is an opponent whose sets are not
 uniformly slow and a home side whose sets are not uniformly high, and both of
 those are the offence.
+
+---
+
+## The ratchet passes when the fixes land together, and that changes the plan
+
+Nothing in this thread had shipped. Four measured, correct simulation fixes were
+built and every one switched off, because each individually moved the
+attack-symmetry ratchet -- a *do not drift further* gate that any change to the
+balance fails, **including a correct one**. Respecting it one fix at a time
+guarantees that nothing ever lands, and that is what happened.
+
+Turned on together -- `ENABLE_CLAMPED_ARRIVAL_MARGIN`,
+`ENABLE_CLAMPED_CONTACT_LANE`, `ENABLE_HOME_MIDDLE_OFFENSE` -- **the ratchet
+clears.** It is not in the failure list at all. Individually the same three read
+0.654 and 0.340, which bracket centre; together they land inside the bound.
+
+Five failures remain, and they are a bounded list rather than another chain:
+
+| failure | read |
+|---|---|
+| Gate 44 block event identity with no rollout policy | probably sequence sensitivity, needs confirming |
+| Gate 49 ordinary resolution of the same seed | same family as above |
+| a funnelling block deflects more than a sealing one (25 vs 31) | the known intent gate |
+| neither block intent is strictly better than the other | the known intent gate |
+| extreme hitter displacement reduces arrival and attack quality | new, unexamined |
+
+**So the block work is real after all, but it is these two intent gates against a
+wall that now has closing time to lose -- not the outcome bands, which stayed
+measured and fine throughout.**
+
+Left off in this commit because shipping five failures is worse than shipping
+none. But the sequencing is now settled: land the three together, work the five,
+and stop building single fixes against a gate that no single fix can pass.
