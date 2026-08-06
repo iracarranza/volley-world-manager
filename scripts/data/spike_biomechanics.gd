@@ -50,6 +50,13 @@ const FOLLOW_END: float = 0.45
 ## Narrow on purpose: it is a label for the instant, not a phase with a duration.
 const CONTACT_BAND: float = 0.04
 
+## When the swing arm starts returning to a neutral hang.
+##
+## Well after `FOLLOW_END`, because the follow-through does not stop when the
+## legs land. Set here rather than reusing `FOLLOW_END` so the two can be tuned
+## apart -- they are different events happening to different limbs.
+const ARM_RECOVER_START: float = 0.72
+
 ## How far the arm swings behind the hips on the double-arm backswing.
 ##
 ## Positive rotates the arm backward on this rig. Both arms do this together --
@@ -150,6 +157,18 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	var elbow_release := window(p, COCK_END + 0.03, 0.02)
 	var follow := window(p, 0.0, FOLLOW_END)
 	var land := window(p, FOLLOW_END, 1.0)
+	## The arm finishes after the feet do.
+	##
+	## Shoulder and elbow used to return to rest on `land`, the same window the
+	## legs absorb on -- so the swing arm snapped back to a neutral hang the
+	## instant the follow-through ended, and the spike stopped looking like a
+	## spike a beat before it stopped being one. A real follow-through carries
+	## down and across the body and is still unwinding while the hitter is already
+	## on the floor.
+	##
+	## The same proximal-to-distal rule the rest of this file runs on, applied to
+	## the end of the action rather than the start of it.
+	var arm_recover := window(p, ARM_RECOVER_START, 1.0)
 
 	## The shoulder walks back through the plant, up through the takeoff, into
 	## the cock, through the ball, and across the body.
@@ -158,7 +177,7 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	shoulder = lerpf(shoulder, SHOULDER_COCK_DEGREES, tuck)
 	shoulder = lerpf(shoulder, SHOULDER_CONTACT_DEGREES, strike)
 	shoulder = lerpf(shoulder, SHOULDER_FOLLOW_DEGREES, follow)
-	shoulder = lerpf(shoulder, -16.0, land)
+	shoulder = lerpf(shoulder, -16.0, arm_recover)
 
 	## And the elbow lags it. Folding early and opening late is the entire
 	## difference between a whip and a windmill, so these windows deliberately
@@ -166,7 +185,7 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	var elbow := lerpf(28.0, ELBOW_COCK_DEGREES, maxf(lift, tuck))
 	elbow = lerpf(elbow, ELBOW_CONTACT_DEGREES, elbow_release)
 	elbow = lerpf(elbow, ELBOW_FOLLOW_DEGREES, follow)
-	elbow = lerpf(elbow, 22.0, land)
+	elbow = lerpf(elbow, 22.0, arm_recover)
 
 	## The guide arm is not decoration. It reaches at the ball through the cock
 	## and is pulled down hard through contact -- that pull is what rotates the

@@ -3,6 +3,15 @@ extends RefCounted
 
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
+const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
+
+## Which surfaces get a drawn edge. The same tiers the halftone screens, minus
+## the raised panel: the largest surface on the screen wants the quietest edge,
+## and a hand-drawn line around the whole content area reads as a border rather
+## than as craft.
+const INKED_TIERS: Array[StringName] = [
+	&"CardPanel", &"DashboardCard", &"InsetPanel",
+]
 
 const PRIMARY_ACTIONS := [
 	"NewCareerButton", "NextButton", "CreateCareerButton", "AdvanceWeekButton",
@@ -106,6 +115,33 @@ static func _screen_surface(control: Control, light_mode: bool) -> void:
 	control.material = UIHalftone.material_for(
 		control.theme_type_variation, light_mode
 	)
+	_ink_surface(control)
+
+
+## Give this surface a drawn edge, once.
+##
+## Added as a child rather than painted by the panel itself, because a
+## `PanelContainer` draws its stylebox *under* its contents and an edge drawn
+## there would be covered by whatever the card holds. The outline is marked
+## exempt so the next style pass walks straight past it, and reused rather than
+## recreated so repeated passes -- a theme switch, a resize -- do not stack
+## twenty of them on one card.
+static func _ink_surface(control: Control) -> void:
+	var wanted := control.theme_type_variation in INKED_TIERS
+	var existing := control.get_node_or_null("InkOutline") as UIInkOutline
+	if not wanted:
+		if existing != null:
+			existing.queue_free()
+		return
+	if existing != null:
+		existing.queue_redraw()
+		return
+	var outline := UIInkOutline.new()
+	outline.name = "InkOutline"
+	## Seeded from the panel's own name, so a card's edge is stable across runs
+	## and two cards side by side never draw the same imperfection.
+	outline.ink_seed = int(String(control.name).hash() & 0x7FFFFFFF)
+	control.add_child(outline)
 
 
 static func _style_button(button: Button) -> void:
