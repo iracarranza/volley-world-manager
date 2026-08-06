@@ -1562,6 +1562,12 @@ func resolve(
 			## not be checked against its own distribution from a live rally --
 			## which is how both of them came to be set without one.
 			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			## How much of a wall this swing actually faced. `block_wall` drops any
+			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
+			## of the wall is decided there and nowhere else -- and the resolver
+			## reports "no wall" without saying who was dropped or how close they
+			## were to arriving.
+			"wall_size": int(geometric.get("wall_size", 0)),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -3036,6 +3042,12 @@ func _resolve_opponent_transition(
 			## not be checked against its own distribution from a live rally --
 			## which is how both of them came to be set without one.
 			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			## How much of a wall this swing actually faced. `block_wall` drops any
+			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
+			## of the wall is decided there and nowhere else -- and the resolver
+			## reports "no wall" without saying who was dropped or how close they
+			## were to arriving.
+			"wall_size": int(geometric.get("wall_size", 0)),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -3771,6 +3783,12 @@ func _resolve_home_continuation(
 			## not be checked against its own distribution from a live rally --
 			## which is how both of them came to be set without one.
 			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			## How much of a wall this swing actually faced. `block_wall` drops any
+			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
+			## of the wall is decided there and nowhere else -- and the resolver
+			## reports "no wall" without saying who was dropped or how close they
+			## were to arriving.
+			"wall_size": int(geometric.get("wall_size", 0)),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -7583,6 +7601,15 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		),
 		"block_edge_gap_meters": record.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(record.get("block_contact_kind", "")),
+		## How many blockers were in the wall this swing met.
+		##
+		## `block_wall` drops any blocker whose close fraction is below
+		## `WALL_JOIN_CLOSE`, so this is the only figure that says whether "no
+		## wall" means nobody was assigned or nobody arrived -- and those want
+		## opposite fixes. It was in the record and this curator did not forward
+		## it, which is the same dropped-key shape that hid `block_miss_reason`
+		## for as long.
+		"wall_size": int(record.get("wall_size", 0)),
 		"net_height_over_block_meters": float(
 			record.get("net_height_over_block_meters", 0.0)
 		),

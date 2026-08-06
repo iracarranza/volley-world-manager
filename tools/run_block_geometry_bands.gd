@@ -47,6 +47,7 @@ func _initialize() -> void:
 	var kinds := {"home": {}, "opponent": {}}
 	var swings := {"home": 0, "opponent": 0}
 	var misses := {"home": {}, "opponent": {}}
+	var walls := {"home": {}, "opponent": {}}
 	for serving_home in [true, false]:
 		manager.match_state.serving_home = serving_home
 		for seed_value in range(5000, 5000 + RALLIES):
@@ -62,6 +63,8 @@ func _initialize() -> void:
 				if not depths.has(side):
 					continue
 				swings[side] = int(swings[side]) + 1
+				var wall_size := int(event.metadata.get("wall_size", -1))
+				walls[side][wall_size] = int(walls[side].get(wall_size, 0)) + 1
 				var reason := str(event.metadata.get("block_miss_reason", ""))
 				var kind := str(event.metadata.get("block_contact_kind", ""))
 				if kind.is_empty():
@@ -101,6 +104,21 @@ func _initialize() -> void:
 			int(kinds[side].get("touch", 0)),
 			int(kinds[side].get("tool", 0)),
 		])
+	print("")
+	print("how many blockers were in the wall at all")
+	for side in ["home", "opponent"]:
+		var keys: Array = walls[side].keys()
+		keys.sort()
+		var line := "  %-9s" % side
+		var total := 0
+		for key in keys:
+			total += int(walls[side][key])
+		for key in keys:
+			line += " %d=%d (%.0f%%)" % [
+				int(key), int(walls[side][key]),
+				float(walls[side][key]) / maxf(float(total), 1.0) * 100.0,
+			]
+		print(line)
 	print("")
 	print("why the wall was missed")
 	for side in ["home", "opponent"]:

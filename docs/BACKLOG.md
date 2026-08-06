@@ -1899,3 +1899,36 @@ shadow-trace determinism check and the 2D court's trace acceptance immediately:
 compare equal to a byte-identical copy. Absent is the right encoding for "no
 contact" anyway. Worth adding to the determinism entry in `FAILURE_MODES.md`:
 a sentinel that fails its own equality test is not a sentinel.
+
+### Found: the home wall is absent on 45% of opponent swings
+
+`wall_size` is now forwarded to the ATTACK event -- it was in
+`_geometric_swing_record` and `_geometric_promotion` did not pass it on, the same
+dropped-key shape that hid `block_miss_reason` for as long.
+
+```
+how many blockers were in the wall at all
+  home attacks      1=145 (78%)   2=40 (22%)                 <- never zero
+  opponent attacks  0=54 (45%)    1=51 (42%)   2=15 (12%)
+```
+
+**The opponent's wall is never absent. The home wall is absent on nearly half of
+opponent swings.** That is the whole reason the home wall contacts 5% of balls
+against the opponent wall's 31%, and it is upstream of every band -- a threshold
+cannot be tuned on a wall that is not there.
+
+`GeometricAttackPromotion.block_wall` drops any blocker whose close fraction is
+under `WALL_JOIN_CLOSE = 0.34`, and that is the only gate that can produce a
+`wall_size` of zero from a formation that named a primary. So the home blockers
+are failing to close on 45% of swings while the opponent's blockers always close.
+
+Two producers, as usual: `_form_home_block` and `_form_opponent_block`. The home
+one is handed a constant `DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS`
+(1.10 s) as its pass-to-release window; the opponent's is handed
+`second_contact_window + cont_release_interval`, computed live. **Note the
+direction before assuming: the home wall gets the larger, constant window and
+still fails to close.** So the window is unlikely to be the term -- start by
+printing `primary_close` and `assist_close` per side against the 0.34 gate, and
+find which input to the close differs. Do not change `WALL_JOIN_CLOSE` first;
+a gate that is correct against one distribution and wrong against another is the
+symptom, not the cause.
