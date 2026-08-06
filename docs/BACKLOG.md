@@ -1108,3 +1108,58 @@ come *out* of the announcer text when the visual channel goes in, not sit
 alongside it -- otherwise the number remains the thing people read. And the
 channel has to survive a colourblind viewer, so solidity, breakage and shape
 have to carry the signal alongside hue rather than hue carrying it alone.
+
+
+## The floor defence: two asymmetries and a threshold between them
+
+Measured over 200 rallies on identically-seeded squads.
+
+The floor defence is not weak and the rally cap is not the cause. Defenders are
+claimed and attempt on 126 of 212 attacks, and every successful dig leads to an
+attack -- 34 home plus 18 opponent successes against exactly 52 attacks
+following a defence. The transition works. `MAX_EXCHANGES` binds in 1.0%.
+
+What is wrong is that the two sides' dig contests sit in different places:
+
+  side       attack quality   dig quality   dig success
+  home             0.400          0.524          62%
+  opponent         0.325          0.354          25%
+
+`_dig_contest` asks `dig_quality + noise > attack_quality + DIG_ATTACKER_ADVANTAGE`,
+with the advantage a fixed 0.20. So:
+
+  home digger      0.524 against 0.325 + 0.20 = 0.525   -- exactly on the line
+  opponent digger  0.354 against 0.400 + 0.20 = 0.600   -- 0.246 below it
+
+One contest is decided by execution noise; the other is decided before the noise
+is drawn. That is the same defect this repository keeps finding -- a threshold
+that lands inside one distribution and outside another -- and it is why the
+identity gates saturate, why home swings kill 83-91%, and why the median rally
+contains one swing.
+
+**Both models are already shared.** Selection goes through
+`CoverageModel.choose_claimant` on both sides, and both call `_dig_contest`. The
+home path is if anything stricter, since it also requires `defender_arrived`. So
+this is not another simplified parallel implementation to unify; the inputs
+differ, not the code.
+
+Two gaps feed it and they compound:
+
+- **dig quality, 0.524 against 0.354.** The larger of the two. Where it comes
+  from has not been decomposed -- `_dig_terms` builds it from reception,
+  anticipation, dig_control and lateral_speed against posture, support count and
+  arrival margin, and which of those diverge is the next measurement, not a
+  guess.
+- **attack quality, 0.400 against 0.325.** Smaller, and already tracked by the
+  attack-symmetry ratchet.
+
+Order matters here. Closing the dig-quality gap without knowing which term
+carries it would be tuning, and closing the attack gap first changes the
+distribution the dig threshold is being judged against. Decompose the dig terms
+per side first; the 0.17 gap has to have a named source before anything moves.
+
+And `DIG_ATTACKER_ADVANTAGE = 0.20` should be re-derived once they are
+comparable, against the dig-success rate the sport actually shows -- roughly
+35-45% against a live swing, which sits between the 62% and 25% measured here.
+Neither current figure is right, so this is not a case of raising the weaker one
+to match the stronger.
