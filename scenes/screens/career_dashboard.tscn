@@ -356,7 +356,9 @@ horizontal_alignment = 1
 
 [node name="ScoutingToggle" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(124, 30)
 layout_mode = 2
+size_flags_horizontal = 4
 toggle_mode = true
 text = "Known"
 
@@ -375,14 +377,6 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 6
 
-[node name="AttributePrevButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(30, 0)
-layout_mode = 2
-size_flags_vertical = 3
-tooltip_text = "Previous attribute groups"
-text = "◀"
-
 [node name="RawProfile" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -390,6 +384,7 @@ theme_override_constants/separation = 2
 
 [node name="RawHeader" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="RawTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
 unique_name_in_owner = true
@@ -406,19 +401,28 @@ theme_override_font_sizes/font_size = 12
 text = "1 / 2"
 vertical_alignment = 1
 
+[node name="AttributePrevButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(42, 38)
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "Previous attribute groups"
+text = "◀"
+
+[node name="AttributeNextButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(42, 38)
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "Next attribute groups"
+text = "▶"
+
 [node name="AttributeColumns" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 14
 
-[node name="AttributeNextButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(30, 0)
-layout_mode = 2
-size_flags_vertical = 3
-tooltip_text = "Next attribute groups"
-text = "▶"
 
 [node name="RosterStatusLabel" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer"]
 unique_name_in_owner = true

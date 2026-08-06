@@ -1537,6 +1537,59 @@ func _test_minor_region_behaviour() -> void:
 			and ATTRIBUTE_PROFILE_SCRIPT.grade_color_hex(49.0) == "ff6b6b",
 		"attribute report colors follow the parent S/A/B/C/D grade tiers",
 	)
+	## A grade has to be readable on the page it is written on, and the two
+	## pages are opposite. The single shared table put C at "f2f4f7" -- as near
+	## white as makes no difference -- so on cream paper the most common grade on
+	## a roster was not hard to read, it was absent, and a player's whole middle
+	## band came out as a column of blank space.
+	var light_page := UI_PALETTE_SCRIPT.color(&"surface_raised", true)
+	var dark_page := UI_PALETTE_SCRIPT.color(&"surface_raised", false)
+	var every_grade_reads := true
+	for tier: String in ["S", "A", "B", "C", "D"]:
+		var on_paper: Color = UI_PALETTE_SCRIPT.grade_color(tier, true)
+		var on_screen: Color = UI_PALETTE_SCRIPT.grade_color(tier, false)
+		if absf(on_paper.get_luminance() - light_page.get_luminance()) < 0.25:
+			every_grade_reads = false
+		if absf(on_screen.get_luminance() - dark_page.get_luminance()) < 0.25:
+			every_grade_reads = false
+	_check(
+		every_grade_reads,
+		"every grade tier is legible against the page it is written on",
+	)
+	## The same failure, one level up. Every button tier below draws no fill --
+	## `draw_center = false`, because the edge is drawn by hand instead -- so the
+	## label sits directly on the panel behind it and its colour has to be a page
+	## ink. Both themes still carried the colour chosen back when the stylebox
+	## painted: near-white on cream for the light primary, near-canvas on dark
+	## for the dark one. "Save Weekly Training Focus" was invisible in both.
+	var unpainted_reads := true
+	var unpainted_failures := PackedStringArray()
+	for tier: String in [
+		"PrimaryAction", "SecondaryAction", "QuietAction", "DangerAction",
+		"NavAction", "ChoiceChip",
+	]:
+		for entry: Array in [[DARK_UI_THEME, false], [LIGHT_UI_THEME, true]]:
+			var theme_resource: Theme = entry[0]
+			var is_light: bool = entry[1]
+			var box := theme_resource.get_stylebox("normal", tier) as StyleBoxFlat
+			if box == null or box.draw_center:
+				## A tier that paints its own ground supplies its own contrast.
+				continue
+			var page := UI_PALETTE_SCRIPT.color(&"surface_raised", is_light)
+			for state: String in ["font_color", "font_pressed_color"]:
+				if not theme_resource.has_color(state, tier):
+					continue
+				var written: Color = theme_resource.get_color(state, tier)
+				if absf(written.get_luminance() - page.get_luminance()) >= 0.25:
+					continue
+				unpainted_reads = false
+				unpainted_failures.append("%s/%s" % [tier, state])
+	_check(
+		unpainted_reads,
+		"unpainted button tiers are written in an ink the page can show: %s" % [
+			unpainted_failures,
+		],
+	)
 	var test_wheel := ATTRIBUTE_WHEEL_SCRIPT.new()
 	test_wheel.size = Vector2(1000.0, 500.0)
 	test_wheel.set_profile(summary_profile, ATTRIBUTE_PROFILE_SCRIPT.PROFILE_TOOLTIPS)

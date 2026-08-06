@@ -1863,6 +1863,11 @@ func _fill_attribute_column(
 ) -> void:
 	var column := _attribute_column_boxes[column_index]
 	var rows: Array = _attribute_column_rows[column_index]
+	## Which page these numbers are being written on. Every colour below is a
+	## per-datum override, which is exactly why it has to be asked here: the
+	## style pass cannot repaint them without destroying the grade they carry,
+	## so this is the only place that knows both the value and the theme.
+	var light_mode: bool = UIPaletteScript.control_is_light(self)
 	var position_keys: Array = Array(VolleyballPlayer.POSITION_WEIGHTS.get(
 		player.position_role, []
 	))
@@ -1898,15 +1903,19 @@ func _fill_attribute_column(
 		if is_position_key:
 			name_label.add_theme_font_override("font", KEY_ATTRIBUTE_FONT)
 			name_label.add_theme_font_size_override("font_size", 13)
-			name_label.add_theme_color_override("font_color", Color("f6f1de"))
+			name_label.add_theme_color_override(
+				"font_color", UIPaletteScript.color(&"ink", light_mode)
+			)
 		else:
 			name_label.remove_theme_font_override("font")
 			name_label.add_theme_font_size_override("font_size", 13)
-			name_label.add_theme_color_override("font_color", Color("8fa1b6"))
+			name_label.add_theme_color_override(
+				"font_color", UIPaletteScript.color(&"ink_faint", light_mode)
+			)
 		var score := int(player.get(attribute_key))
 		value_label.text = str(score)
 		value_label.add_theme_color_override("font_color",
-			Color(AttributeProfiles.grade_color_hex(float(score))))
+			Color(AttributeProfiles.grade_color_hex(float(score), light_mode)))
 
 
 func _key_attributes(player: VolleyballPlayer) -> String:

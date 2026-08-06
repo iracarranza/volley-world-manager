@@ -54,6 +54,23 @@ const LIGHT := {
 	"court_post": Color("176f72"),
 }
 
+## What a grade is written in.
+##
+## Two tables, and it has to be two. These are the only colours in the interface
+## that are *data* rather than decoration -- the number says what it is by what
+## it is written in -- so they cannot be theme tokens, and for a long time they
+## were one table used in both themes on the reasoning that a grade means the
+## same thing on either page.
+##
+## Which is true of the meaning and false of the pigment. The dark table is five
+## bright inks for a dark page, and C is `f2f4f7` -- as near white as makes no
+## difference. Put that on cream paper and the most common grade on the roster,
+## the one every average attribute carries, is invisible. Not hard to read:
+## absent. A player's whole middle band read as a column of blank space.
+##
+## So the light table is the same five *hues* taken down to values that survive
+## being written on paper, and C stops being "no colour" and becomes the page's
+## own muted ink -- which is what average should look like anyway.
 const GRADE_COLORS := {
 	"S": Color("ffd84d"),
 	"A": Color("58d68d"),
@@ -62,18 +79,27 @@ const GRADE_COLORS := {
 	"D": Color("ff6b6b"),
 }
 
+const GRADE_COLORS_LIGHT := {
+	"S": Color("9a6b06"),
+	"A": Color("1f7a4d"),
+	"B": Color("1f5f96"),
+	"C": Color("4e6b64"),
+	"D": Color("b1332f"),
+}
+
 
 static func color(token: StringName, light_mode: bool = false) -> Color:
 	var palette: Dictionary = LIGHT if light_mode else DARK
 	return Color(palette.get(token, Color.MAGENTA))
 
 
-static func grade_color(tier: String) -> Color:
-	return Color(GRADE_COLORS.get(tier, GRADE_COLORS.C))
+static func grade_color(tier: String, light_mode: bool = false) -> Color:
+	var table: Dictionary = GRADE_COLORS_LIGHT if light_mode else GRADE_COLORS
+	return Color(table.get(tier, table.C))
 
 
-static func grade_color_hex(tier: String) -> String:
-	return grade_color(tier).to_html(false)
+static func grade_color_hex(tier: String, light_mode: bool = false) -> String:
+	return grade_color(tier, light_mode).to_html(false)
 
 
 static func control_is_light(control: Control) -> bool:

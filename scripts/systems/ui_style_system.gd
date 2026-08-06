@@ -5,6 +5,7 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
 const UIPaperWindowScript := preload("res://scenes/components/paper_window.gd")
+const UIPaperTabsScript := preload("res://scenes/components/paper_tabs.gd")
 
 ## Which surfaces get a drawn edge.
 ##
@@ -144,6 +145,8 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 		_paper_window(control)
 	elif control is ScrollContainer:
 		_paper_window(control)
+	elif control is TabContainer:
+		_paper_tabs(control as TabContainer)
 
 
 static func _clear_legacy_presentation_overrides(control: Control) -> void:
@@ -277,6 +280,21 @@ static func _paper_window(control: Control) -> void:
 	var window := UIPaperWindowScript.new()
 	window.name = "PaperWindow"
 	control.add_child(window)
+
+
+## Cut the index tabs into a tab row, once.
+##
+## Parented to the `TabBar` rather than to the `TabContainer`, because only the
+## bar knows where its tabs ended up -- `get_tab_rect` is on the bar, and the
+## widths depend on the labels. The bar is a plain `Control`, so a full-rect
+## child is not laid out by anything and simply lies on it.
+static func _paper_tabs(tabs: TabContainer) -> void:
+	var bar := tabs.get_tab_bar()
+	if bar == null or bar.get_node_or_null("PaperTabs") != null:
+		return
+	var cut := UIPaperTabsScript.new()
+	cut.name = "PaperTabs"
+	bar.add_child(cut)
 
 
 static func _style_button(button: Button) -> void:

@@ -191,8 +191,8 @@ static func grade_tier(score: float) -> String:
 	return "D"
 
 
-static func grade_color_hex(score: float) -> String:
-	return UIPalette.grade_color_hex(grade_tier(score))
+static func grade_color_hex(score: float, light_mode: bool = false) -> String:
+	return UIPalette.grade_color_hex(grade_tier(score), light_mode)
 
 
 static func axis_tooltip(axis_name: String, description: String = "") -> String:

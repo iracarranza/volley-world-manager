@@ -252,32 +252,18 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[sub_resource type="StyleBoxFlat" id="TabSelected"]
+[sub_resource type="StyleBoxEmpty" id="TabSelected"]
 content_margin_left = 18.0
 content_margin_top = 10.0
 content_margin_right = 18.0
-content_margin_bottom = 10.0
-bg_color = Color(0.851, 0.294, 0.239, 1)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 5
-border_color = Color(0.851, 0.294, 0.239, 1)
-corner_radius_top_left = 11
-corner_radius_top_right = 19
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 13
+content_margin_bottom = 12.0
 
-[sub_resource type="StyleBoxFlat" id="TabUnselected"]
+[sub_resource type="StyleBoxEmpty" id="TabUnselected"]
 content_margin_left = 18.0
 content_margin_top = 10.0
 content_margin_right = 18.0
-content_margin_bottom = 10.0
-bg_color = Color(0, 0, 0, 0)
-corner_radius_top_left = 11
-corner_radius_top_right = 19
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 13
+content_margin_bottom = 12.0
+
 [sub_resource type="StyleBoxFlat" id="TooltipPanel"]
 content_margin_left = 12.0
 content_margin_top = 9.0
@@ -516,8 +502,8 @@ CheckButton/colors/font_hover_color = Color(0.086, 0.498, 0.475, 1)
 CheckButton/colors/font_pressed_color = Color(0.851, 0.294, 0.239, 1)
 CheckButton/fonts/font = ExtResource("2_body")
 ChoiceChip/base_type = &"Button"
-ChoiceChip/colors/font_hover_pressed_color = Color(1, 0.976, 0.914, 1)
-ChoiceChip/colors/font_pressed_color = Color(1, 0.976, 0.914, 1)
+ChoiceChip/colors/font_hover_pressed_color = Color(0.702, 0.208, 0.161, 1)
+ChoiceChip/colors/font_pressed_color = Color(0.851, 0.294, 0.239, 1)
 ChoiceChip/styles/hover_pressed = SubResource("PrimaryHoverInked")
 ChoiceChip/styles/normal = SubResource("ButtonNormalInked")
 ChoiceChip/styles/pressed = SubResource("PrimaryNormalInked")
@@ -582,9 +568,9 @@ OptionButton/styles/pressed = SubResource("ButtonPressed")
 PanelContainer/styles/panel = SubResource("PanelCard")
 PopupPanel/styles/panel = SubResource("PanelRaised")
 PrimaryAction/base_type = &"Button"
-PrimaryAction/colors/font_color = Color(1, 0.976, 0.914, 1)
-PrimaryAction/colors/font_hover_color = Color(1, 1, 0.96, 1)
-PrimaryAction/colors/font_pressed_color = Color(1, 0.976, 0.914, 1)
+PrimaryAction/colors/font_color = Color(0.851, 0.294, 0.239, 1)
+PrimaryAction/colors/font_hover_color = Color(0.702, 0.208, 0.161, 1)
+PrimaryAction/colors/font_pressed_color = Color(0.702, 0.208, 0.161, 1)
 PrimaryAction/font_sizes/font_size = 15
 PrimaryAction/styles/hover = SubResource("PrimaryHoverInked")
 PrimaryAction/styles/normal = SubResource("PrimaryNormalInked")
@@ -617,12 +603,14 @@ SectionHeading/fonts/font = ExtResource("1_heading")
 StatLabel/base_type = &"Label"
 StatLabel/colors/font_color = Color(0.086, 0.498, 0.475, 1)
 StatLabel/font_sizes/font_size = 13
-TabContainer/colors/font_selected_color = Color(1, 0.976, 0.914, 1)
-TabContainer/colors/font_unselected_color = Color(0.306, 0.42, 0.392, 1)
+TabContainer/colors/font_selected_color = Color(0.09, 0.239, 0.208, 1)
+TabContainer/colors/font_unselected_color = Color(0.463, 0.545, 0.514, 1)
 TabContainer/font_sizes/font_size = 14
 TabContainer/styles/panel = SubResource("PanelTabBody")
 TabContainer/styles/tab_selected = SubResource("TabSelected")
 TabContainer/styles/tab_unselected = SubResource("TabUnselected")
+TabContainer/styles/tab_hovered = SubResource("TabUnselected")
+TabContainer/styles/tab_focus = SubResource("TabUnselected")
 TooltipLabel/colors/font_color = Color(0.09, 0.239, 0.208, 1)
 TooltipLabel/fonts/font = ExtResource("2_body")
 TooltipPanel/styles/panel = SubResource("TooltipPanel")
