@@ -1071,3 +1071,40 @@ quality composite.
 **Playback payoff:** ball speed becomes visibly different between a driven ball
 and a roll shot. Duration is currently back-solved from distance, so speed is
 implied and barely varies.
+
+
+## Playback legibility: quality belongs in the picture, not in the text
+
+Eighteen announcer strings in `rally_simulator.gd` hand the player a raw
+percentage: `"%d%% pressure toward the receiver"`, `"%d%% reception quality"`,
+`"T%d set for %s · %d%% accuracy"`, `"%d%% close speed"`, `"%d%% recycle
+control"`. These are model internals wearing a sentence, and they are the wrong
+answer to a real question.
+
+The question is genuine and gets harder as the simulation gets more granular:
+with block jump timing, contact depth, arm state and set tightness all now
+deciding outcomes, a viewer cannot tell *how the rally is going* from the player
+models alone. A good pass and a shanked one look nearly identical in flight.
+
+The fix is a visual channel rather than a numeric one, on the ball and its trail
+rather than on the body:
+
+- **pass / reception quality** — trail colour and solidity. A clean pass keeps a
+  solid trail; a poor one degrades toward a muted, broken trail.
+- **set quality** — an overlay on the ball as it leaves the setter, warning
+  toward red as delivery error grows. This is the one that needs it most,
+  because set quality drives tempo, approach and everything after it.
+- **contact severity** — a distinct marker for the outcomes that already have
+  names in the resolver but no picture: a lift, a tool, a block that got hands
+  on it but did not stop it.
+
+Every quantity needed is already stamped on the events -- `quality` on each
+`RallyEvent`, plus `attack_effectiveness`, `contact_recovery`, `block_miss_reason`
+and the trajectory dictionaries. Nothing new needs measuring; this is a
+presentation layer over data the resolver already produces.
+
+Two constraints worth stating now, before it is built. The percentages should
+come *out* of the announcer text when the visual channel goes in, not sit
+alongside it -- otherwise the number remains the thing people read. And the
+channel has to survive a colourblind viewer, so solidity, breakage and shape
+have to carry the signal alongside hue rather than hue carrying it alone.
