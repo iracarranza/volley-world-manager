@@ -96,11 +96,23 @@ static func _sweep(
 		if population == &"generated":
 			## Both sides, or the measurement compares a real squad against a
 			## squad of clones and reads the difference as a balance finding.
+			##
+			## And both from the *same* seed. `base_seed + 5000` drew the two
+			## rosters independently, which is a different imbalance rather than a
+			## fix for the first one: each career became a lopsided matchup, and
+			## the metrics measured over it saturated. `home_kill_rate` read 0.906
+			## here against 0.465 on identically-seeded squads -- so the identity
+			## gates were comparing two numbers pinned near a ceiling, and one of
+			## them came out bit-identical between identities.
+			##
+			## An identity comparison has to hold everything except the identity
+			## constant. Two squads generated alike is exactly that; clones are the
+			## right control here, not a hazard.
 			ExecutionScaleModel.apply_generated_attributes(
 				manager.players, base_seed
 			)
 			ExecutionScaleModel.apply_generated_attributes(
-				manager.opponent_team.players, base_seed + 5000
+				manager.opponent_team.players, base_seed
 			)
 		manager.match_state.serving_home = serving_home
 		for index in range(maxi(sample_count, 1)):

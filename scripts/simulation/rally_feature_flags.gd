@@ -170,17 +170,24 @@ const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 ## agreeing to four decimals is a metric with no headroom, not a property this
 ## switch removed.
 ##
-## `home_kill_rate` is `home_attack_wins / home_attack_attempts`, and the
-## numerator counts rallies whose outcome was a kill -- at most one per rally --
-## against a denominator of attack attempts. For that ratio to read 0.90 the
-## denominator has to be effectively one, which is `MAX_EXCHANGES = 4` and short
-## rallies showing through in a figure that reads like a kill percentage and is
-## not one. The flagged `MAX_EXCHANGES` and this are the same finding twice.
+## **Correction: the metric is not malformed.** An earlier reading of this called
+## `home_kill_rate` a rally-level numerator over a swing-level denominator, and
+## blamed `MAX_EXCHANGES`. Both were checked and both were wrong. All three attack
+## events tag their side correctly, so the denominator counts every home swing,
+## and the raw figures are 48 wins from 53 attempts -- a well-formed kills-per-swing
+## ratio. The cap binds in 1.0% of rallies and explains nothing.
 ##
-## So the blocker is a measurement to repair, not a bound to widen. Give the kill
-## rate a denominator that can vary before asking it to separate two identities.
-## Do not raise the sample count to make this pass -- the margin is 0.0004 on a
-## saturated metric and no sample size rescues that.
+## What saturates it is the thing itself: **home swings kill 83-91% of the time**,
+## against 46.5% measured on identically-seeded squads outside this harness. Part
+## of that was the harness drawing its two rosters from different seeds, which is
+## now fixed and moved the figure 0.906 to 0.830. The rest is the balance problem
+## every flag in this file already names -- the median rally contains one swing,
+## and the floor defence almost never keeps a ball alive.
+##
+## So this blocker is not a measurement to repair. It is the floor defence, which
+## is the same blocker `ENABLE_GEOMETRIC_ATTACK` has recorded from the start. The
+## gate saturates because the property it measures is genuinely lopsided, and no
+## sample size rescues a 0.0004 margin on a quantity pinned near its ceiling.
 const ENABLE_UNIFIED_SPEED_MODEL: bool = false
 
 ## Decide the block contest on when the blocker jumped, not only on how tall

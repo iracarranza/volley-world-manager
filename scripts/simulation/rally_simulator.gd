@@ -58,19 +58,27 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 const RallyKinematicsModel := preload(
 	"res://scripts/simulation/rally_kinematics.gd"
 )
-## FLAGGED, NOT DERIVED. How many attack exchanges a rally may contain before it
-## is cut off.
+## How many attack exchanges a rally may contain. Measured, and it is a backstop
+## rather than a rule.
 ##
-## No reason has ever been recorded for four, and it is not obvious one exists: a
-## rally ends when a ball hits the floor or goes out, and how many times it
-## crosses the net before that is an outcome, not an input. A cap is a loop guard,
-## and a loop guard set at the *median rally length of the sport it is bounding*
-## is not a guard, it is a rule -- every rally that would have run five exchanges
-## is being ended by this line rather than by play.
+## Flagged in the constant audit on the guess that a cap of four sat at the median
+## rally length and was therefore ending rallies that play should have ended. That
+## guess was wrong. Over 200 rallies the swing distribution is:
 ##
-## What it should be is a runaway backstop set far above anything real, with the
-## rally-length distribution measured underneath it. If long rallies then turn out
-## to be too common, that is the floor defence to fix, not this number.
+##   swings per rally    0    1    2    3    5
+##   rallies            40  123   26    9    2
+##
+## The cap binds in 1.0% of rallies -- two of two hundred -- which is what a
+## runaway guard should look like.
+##
+## **What the same measurement does say is worse, and is not about this number.**
+## The median rally contains *one* swing. 123 of 200 rallies end on the first
+## attack and only 37 ever reach a second. A rally in this sport is a sequence of
+## transitions; here it is almost always a single exchange, which means the floor
+## defence essentially never keeps a ball alive. That is the same finding as a
+## home kill rate of 0.83-0.91 per swing seen from the other side, and it is the
+## floor defence that every geometric-attack flag comment already names as the
+## blocker. Raising this constant would change none of it.
 const MAX_EXCHANGES: int = 4
 
 ## `OPPONENT_SERVE`, `OPPONENT_BLOCK` and `OPPONENT_DEFENSE` were flat
