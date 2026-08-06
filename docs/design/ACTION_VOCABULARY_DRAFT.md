@@ -5,6 +5,13 @@ Status: the vocabulary below is **a draft, not implemented**. The spectacle
 score and the flow rebalance described in the second half **are implemented**
 (`scripts/models/match_state.gd`).
 
+Re-checked 2026-08-06 at `1ee4c96` and still exactly true. Not one name from the
+tables below — Ace, Platform dime, Shank, Dime, Tool off the block — appears
+anywhere in `scripts/`. The engine names actions internally (`selected_action`
+in the attack rollout path) but those are mechanism labels, not the reader-facing
+vocabulary this file is about. `rally_spectacle()` is live and consumed by
+`match_state.gd`.
+
 ## The problem this solves
 
 A rally is currently legible as a sequence of phases -- serve, reception, set,

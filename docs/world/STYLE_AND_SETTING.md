@@ -379,10 +379,17 @@ depends on an answer, don't guess:
 - Below the flagship academies, how does the regional-org-to-academy pipeline
   actually work as a player-facing mechanic (is it visible at all right now,
   or purely lore until recruitment/scouting needs it)?
-- The Sixnet, standings, and region power now exist as real background state
-  (`career.sixnet_slots`/`region_power`/`region_overlay`), but the player has
-  no screen to see any of it yet -- worth a minimal standings/bracket view,
-  and if so, does it live in `career_dashboard.gd` or its own screen?
+- ~~The Sixnet, standings and region power exist as background state but the
+  player has no screen to see any of it.~~ **Answered, 2026-08-06.** The
+  dashboard's Sixnet section renders both stages — the seeded upper bracket plus
+  the qualifier's advancing two, then the lower bracket with its advancement
+  markers — followed by every participant's strength and Sixnet form, all read
+  from `career.sixnet_slots` / `sixnet_championship_standings` /
+  `sixnet_qualifier_standings` / `region_strength` / `sixnet_form`
+  (`career_dashboard.gd:_refresh_sixnet`). It lives in the dashboard rather than
+  its own screen. What is still missing is *history*: the view is this season
+  only, so a region's rise or fall over a career is state the game holds and
+  never shows.
 - Now that flagship slots are established as contested rather than fixed
   (see Ispayk/A'ace), does the player's own academy ever get a shot at
   Sixnet contention as a mechanic, or does that stay aspirational flavor?

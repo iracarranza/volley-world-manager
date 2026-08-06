@@ -4,9 +4,41 @@ Partially implemented. The field split, legacy-save migration, real-population
 `home_region` measurement, positional prime/depth aggregation, annual refresh,
 and strength-based drift thresholds are live. Prestige, prime history, tier
 affinity, specialty-budget conservation, and challenge relegation remain design
-work. Current measured strength spans roughly 70-82 across six 1,200-player
-worlds; constants below that concern normalization or later systems remain
-proposals until those systems land.
+work.
+
+**Re-measured 2026-08-06 at `1ee4c96`** with
+`tools/run_region_strength_diagnostic.gd` (six worlds of 1,200, seeds 4242 /
+99991 / 17331 / 28003 / 44119 / 55291). The span quoted here previously —
+"roughly 70-82" — is wrong and had been for some time. Six-world averages now
+run **62.4 to 77.4**, and individual worlds reach 58.8 at the bottom:
+
+| region | mean | worst world | best world |
+| --- | ---: | ---: | ---: |
+| Ispayk | 77.4 | 76.3 | 79.5 |
+| Taktikã | 76.2 | 73.2 | 79.1 |
+| Spëddigh | 76.1 | 73.7 | 80.3 |
+| Landavol | 75.5 | 71.6 | 78.6 |
+| Xérvu | 75.3 | 74.1 | 77.8 |
+| Bloc du Larg | 75.2 | 71.9 | 77.2 |
+| Pāwa Hitō | 74.4 | 70.5 | 79.3 |
+| A'ace | 70.7 | 68.7 | 72.8 |
+| Rhen Tempaol | 70.1 | 67.6 | 73.5 |
+| Tu'ul ys Feynt | 68.9 | 67.6 | 71.5 |
+| Lo-onğ Ralī | 68.2 | 65.2 | 71.8 |
+| Bompaşao | 67.4 | 62.5 | 70.0 |
+| Kutré Lyn | 66.6 | 62.8 | 68.3 |
+| Zaitgaist | 62.4 | 58.8 | 65.7 |
+
+Two things follow. The **top seven are inside 3.0 points of each other and
+their per-world ranges overlap completely** — no one of them is reliably the
+strongest region, and which comes first is a property of the seed rather than of
+the world. The tail is the opposite: Zaitgaist is 4.2 points clear of the next
+region up and never once places above it, so the bottom of the table *is* stable
+and the top is not. Any normalization constant below that assumes a fixed
+70-point floor is calibrated against a floor that does not exist.
+
+Constants below that concern normalization or later systems remain proposals
+until those systems land.
 
 ---
 

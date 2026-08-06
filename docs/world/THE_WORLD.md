@@ -150,8 +150,23 @@ well-meaning future work. Each of these was decided against on purpose.
 - **No mystery about the manager.** "Arguably alien" is an accepted fact of the
   role, never a puzzle to solve or a joke to explain, and it is never confirmed or
   denied on the page.
-- **No permanent flagships.** The six Sixnet slots are contested, not owned. A
-  legendary program can fall out; money can buy in.
+- **No permanent flagships.** Nothing in the bracket is owned. A legendary
+  program can fall out; money can buy in.
+
+  Two numbers, and they are not the same number. **Eight** regions hold Sixnet
+  bracket slots — four upper, four lower. **Six** contest the championship: the
+  four seeded, plus the two who come up through the lower bracket's round robin,
+  which is what makes the name honest. This line said "the six Sixnet slots"
+  until 2026-08-06, which read as a slot count and contradicted §3 of this same
+  page; `STYLE_AND_SETTING.md` §"The six flagship slots aren't permanent" has
+  always had it right. (`Regions.SIXNET_PARTICIPANTS`,
+  `SixnetLeague.UPPER_SLOT_IDS` / `LOWER_SLOT_IDS` /
+  `QUALIFIER_ADVANCE_COUNT = 2`.)
+
+  Ispayk and A'ace each hold a *starting* slot, both at the bottom of their
+  bracket — `lower_4` for the fallen flagship, `upper_4` for the one that bought
+  its way to the top table — and from their first season on they promote and
+  relegate like anybody else. "Always starts" is a starting condition, not a pin.
 - **No spiralling failure.** Failure is legible and gentle. A lost sponsorship
   costs morale and standing, never the club's survival. A bad month of meals is a
   bad month.

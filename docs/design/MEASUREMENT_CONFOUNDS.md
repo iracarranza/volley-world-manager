@@ -71,6 +71,21 @@ hardcoded the `RallyEvent.EventType` order from memory. `SET_DECISION` is index
 exactly like an event-ordering defect: `POINT` before `SET_DECISION`, a rally
 with no `SET`. There was no defect. Read the enum, do not recall it.
 
+## Instruments added since, and what each is for
+
+Written down because a probe with no recorded reading conditions becomes a
+number somebody quotes out of context, which is the failure this whole file
+exists to prevent.
+
+| probe | answers | read it under |
+| --- | --- | --- |
+| `run_block_timing_probe.gd` | when the wall goes up relative to the swing | gap is signed; a positive median means the block *follows* the attack, which is the defect it found (86/86 blocks preceded by their attack, p50 0.55 s) |
+| `run_reception_agreement_probe.gd` | whether reception outcomes are binary | histogram, not mean. A spread mean can hide a two-bucket distribution, and "is reception binary" is exactly a question about shape |
+| `run_recovery_band_probe.gd` | how the posture bands are populated | the bands are ordered thresholds on posture-normalised shortfall, so a band can be emptied by *tightening a neighbour*. Read all four counts or none |
+| `run_contact_continuity_probe.gd` | whether consecutive contacts are spatially continuous | decompose by contact pair. The pooled 27% discontinuity was entirely Attack→Block and Block→Defense; every other pair was clean |
+| `run_joint_rate_probe.gd` | per-joint angular velocity during playback | per action, never pooled. A spike elbow runs 2846°/s and a block sweep needs 718°/s, so a global rate limit derived from a pooled figure is wrong for both |
+| `run_region_strength_diagnostic.gd` | positional prime/depth strength per region | six worlds minimum, and read the per-world range beside the mean. The top seven regions' ranges overlap completely; only the tail is stable |
+
 ## Open residuals
 
 Recorded because each is a thing that is *known to be imprecise* rather than a

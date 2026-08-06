@@ -1,7 +1,15 @@
 # Club life: staff, sponsorships, and what a voli has to say
 
-Living draft. Nothing here is built, and the thinking that produced it is not
-finished. It is written down at this size because the pieces have started to
+Living draft. **The systems here are not built; the screens for them are.** As
+of 2026-08-06 the career dashboard has a Club section with Staff, Accommodations
+and Sponsorships sub-tabs, laid out and filled with plausible sample data. None
+of it persists and none of it reaches the simulation — every panel says so on its
+own face, deliberately, because a stub that does not announce itself is
+indistinguishable from a feature that does not work. Treat those screens as this
+document's shape made visible for judging information density, not as an
+implementation to extend.
+
+The thinking that produced this document is also not finished. It is written down at this size because the pieces have started to
 depend on each other, and a design that has begun to interlock is one you can
 no longer hold a corner of at a time.
 

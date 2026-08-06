@@ -9,6 +9,10 @@ both generation paths wired. The flat-distribution rule in §1 is enforced by
 `_test_body_type_distribution_is_flat`, which fails naming the region and the
 type if anyone weights it.
 
+Re-checked 2026-08-06 at `1ee4c96`: still accurate. `body_type` appears in
+`player_generator.gd` and `volleyball_player.gd` and in no system-fit code path,
+so §2 has not moved.
+
 Not landed: **the `SystemFitProfile` shifts of §2**, which is the layer that
 makes a type a tactical answer rather than a power level. Until those exist,
 body types are stat blocks — precisely what §2 says the feature must not be.

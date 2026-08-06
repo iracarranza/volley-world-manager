@@ -1,9 +1,34 @@
 # Tempo, set height, and the hitter's approach
 
-Status: **Links 1-2 hold and are gated. Link 3 is measured: the deficit is real, small
-and tempo-ordered, which is what step 4 needs to be worth building.** No structural fix
-is outstanding — the one I thought I had found is withdrawn below, with the measurement
-that disproves it.
+Status as of 2026-08-06 (`1ee4c96`): **steps 1, 2 and 2b are built. Step 3 is
+not. Step 4 is half built by a different route than the one planned, and the
+other half is a published value nobody reads.** No structural fix is
+outstanding — the one I thought I had found is withdrawn below, with the
+measurement that disproves it.
+
+Where each step actually stands:
+
+| step | state |
+| --- | --- |
+| 1. Set peak height from tempo | built and gated |
+| 2. Publish the budget | built — `approach_budget` on the ATTACK event |
+| 2b. Place the mark from the set | withdrawn; it already did |
+| 3. Spend it in playback | **not built** |
+| 4. Spend it in the resolver | **half built** |
+
+Step 4's first half arrived sideways. A compromised approach does cost attack
+quality, but through `resolved_approach` rather than through the budget:
+`_geometric_swing` reads `jump_multiplier` and `_approach_execution_fit(hitter,
+resolved_approach)`, so a hitter who arrives badly swings worse. The second half
+— an early departure feeding the block's read — does not exist.
+
+**And `approach_budget` itself is read by nobody.** It is computed on every home
+attack, stamped onto the event, and consumed at zero call sites outside the
+function that builds it. That is this project's signature defect class: a value
+that is built, published, looks consumed because it appears in a dict, and
+changes no outcome. Either spend it (steps 3 and 4) or delete it; leaving it
+published is the state in which it silently stops agreeing with the model it was
+derived from.
 
 ## The chain
 

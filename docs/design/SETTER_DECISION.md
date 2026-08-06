@@ -1,6 +1,41 @@
 # The setter decides
 
+Status as of 2026-08-06 (`1ee4c96`): **the hole below has been half filled, and
+the half that was filled was filled by a different mechanism than this doc
+proposes.** Read the premise as history.
+
+What is live now:
+
+- **The opponent chooses situationally.** `_choose_opponent_attack` scores every
+  entry from `OpponentTeam.eligible_hitters(setter_id)` on attack power,
+  accuracy and approach timing, weighted by the delivered set quality, with a
+  quick-demand penalty that only bites on a bad pass and a lateness term taken
+  from the candidate's own reachable contact against the set's flight time. The
+  lateness term is deliberately the dominant one: it was worth 0.12 against 0.42
+  for arm strength, so the biggest hitter won the swing from anywhere on court
+  and playback slid a back-row opposite across the whole net in the 0.3 s a
+  quick is in the air.
+- **The home side chooses partially.** Whether the called play is followed at
+  all is gated on the setter's `decision_making` and `tactical_discipline`
+  against the reception quality, and `_fallback_hitter` scores every front-row
+  attacker on the swing they would actually take rather than returning the
+  nearest outside hitter. The front-row middle is a conditional option gated on
+  `OFFENSE_QUICK_PASS_FLOOR`, because a quick is not a shot you can run off a
+  bad pass.
+
+What is still missing is the part this document is actually about: **the choice
+is not a decision the setter makes, it is a score the simulator computes.**
+There is no setter-side read, no cost to concentration, and no way for the same
+situation to be answered differently by two different setters beyond the rating
+terms already in the score. Sections 4 ("What the setter is deciding") and 5
+("Concentration, and the price of it") remain unbuilt, and they are the reason
+to keep this file.
+
 ## The hole this fills
+
+*Written before any of the above. The paragraph below was true when it was
+written and is now false in its particulars; it is kept because the argument it
+opens is not.*
 
 Nobody in this engine chooses who attacks.
 

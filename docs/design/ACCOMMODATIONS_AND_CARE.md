@@ -1,6 +1,9 @@
 # Accommodations: food, flavour, and lodging
 
-Draft. Nothing here is built. `CLUB_LIFE.md` holds the frame around this --
+Draft. **No mechanic here is built.** An inert Accommodations screen exists
+under the dashboard's Club section, populated with sample data that persists
+nowhere; see the status note at the top of `CLUB_LIFE.md`. `CLUB_LIFE.md` holds
+the frame around this --
 the audience thesis, staff, sponsorships and what a voli has to say -- and
 should be read first; this is the food and lodging detail. Both are written down
 while the simulation work they sit on top of is still in flight, so that when

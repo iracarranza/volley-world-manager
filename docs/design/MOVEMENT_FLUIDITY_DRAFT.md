@@ -2,7 +2,15 @@
 
 Review date: 2026-07-31
 
-Status: **STEPS 1-3 COMPLETE; STEP 4 IN PROGRESS (GATE 50)**
+Status: **ALL FOUR STEPS BUILT.** Gate 50 landed the shadow movement system and
+Gate 51 carried its continuous samples through to the shadow summary and onto
+the 2D court (`SHADOW_LAYER_CONTINUOUS`). The header of this file said "step 4
+in progress" for long enough that its own body contradicted it -- the paragraph
+immediately below has said "steps 1 through 4 are built" since Gate 51.
+
+Still shadow-only: continuous reachability informs no live outcome. There is no
+rollout flag, audit or promotion for it, which is the pattern every other slice
+in this engine went through before it was allowed to decide anything.
 
 The goal is for playback to be a byproduct of the simulator: the drawing layer
 should sample what the simulator computed, never invent anything, and therefore
