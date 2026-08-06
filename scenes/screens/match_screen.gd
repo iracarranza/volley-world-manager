@@ -541,6 +541,7 @@ func _display_trajectory(
 	trajectory: Dictionary,
 ) -> Dictionary:
 	var display := trajectory.duplicate(true)
+	_terminate_at_next_contact(display, next_contact)
 	var start_height := _event_contact_height(event)
 	var end_height := _event_contact_height(next_contact) \
 		if next_contact != null else 0.12
@@ -578,6 +579,65 @@ func _display_trajectory(
 	display["apex_height_meters"] = apex_height
 	display["height_contract"] = "absolute_3d_presentation"
 	return display
+
+
+## Stop the drawn ball where it was actually next touched.
+##
+## An event's `end_position` is where its *own* contact was aimed -- for an
+## attack, the spot on the far floor the hitter went for. That is real data and
+## the simulator is right to keep it. But it is not where the ball got to when
+## somebody intercepted it on the way, and playback was drawing the whole aimed
+## flight regardless.
+##
+## Measured across 736 consecutive contact pairs, the damage is confined to
+## exactly the two pairs where an interception happens:
+##
+##     Serve -> Reception     0.00 m
+##     Reception -> Set       0.00 m
+##     Set -> Attack          0.00 m
+##     Attack -> Block        5.68 m mean, 10.76 m worst
+##     Block -> Defense       3.29 m mean, 11.16 m worst
+##     Defense -> Set         0.11 m
+##
+## So a blocked spike drew its ball past the block, on to a floor target several
+## metres away, and the block then began from the net -- which reads as the ball
+## teleporting backward, or as the next contact happening somewhere nobody is
+## standing. Twenty-seven per cent of all contact pairs were discontinuous.
+##
+## Retargeting is a *presentation* decision and belongs here rather than in the
+## resolver: the aimed landing point is a fact about the attack, and where the
+## ball actually got to is a fact about the rally. Both stay true.
+##
+## The control point moves with the end. This is a quadratic Bezier, so leaving
+## the control where it was would swing the shortened arc wide of both contacts
+## -- the ball would finish in the right place having taken a route it never
+## took. Rescaling it along the original curve keeps the shape of the flight and
+## simply cuts it short, which is what an interception does.
+func _terminate_at_next_contact(
+	display: Dictionary, next_contact: RallyEvent
+) -> void:
+	if next_contact == null:
+		## Nothing touched it next, so the aimed landing point is the truth: this
+		## is a ball hitting the floor.
+		return
+	terminate_trajectory(display, Vector2(next_contact.start_position))
+
+
+## The geometry, on its own so it can be checked without a screen to run it in.
+static func terminate_trajectory(display: Dictionary, touched: Vector2) -> void:
+	var start := Vector2(display.get("start_position", Vector2(0.5, 0.5)))
+	var aimed := Vector2(display.get("end_position", start))
+	if aimed.distance_to(touched) < 0.0005:
+		return
+	var control := Vector2(display.get("control_position", start.lerp(aimed, 0.5)))
+	## Where along the aimed flight the interception sits, so the arc is cut at
+	## the same fraction its control point is rescaled by.
+	var travelled := start.distance_to(aimed)
+	var share := clampf(
+		start.distance_to(touched) / maxf(travelled, 0.0001), 0.05, 1.0
+	)
+	display["end_position"] = touched
+	display["control_position"] = start.lerp(control, share)
 
 
 func _event_contact_height(event: RallyEvent) -> float:

@@ -211,6 +211,7 @@ func _initialize() -> void:
 	_test_ball_flight_from_contact_height()
 	_test_spike_biomechanics_sequence()
 	_test_recovery_bands_are_ordered()
+	_test_a_drawn_ball_stops_where_it_was_touched()
 	_test_gait_separates_walking_from_running()
 	_test_landing_absorbs_and_returns_to_neutral()
 	_test_block_is_a_jump_not_a_shape()
@@ -11957,6 +11958,66 @@ func _test_spike_biomechanics_sequence() -> void:
 		and str(SpikeBiomechanics.resolve(-0.05, RIGHT).phase_name) == "acceleration"
 		and str(SpikeBiomechanics.resolve(0.8, RIGHT).phase_name) == "landing",
 		"the swing names its own phase",
+	)
+
+
+## A ball that was intercepted stops at the interception.
+##
+## An event's `end_position` is where its own contact was *aimed* -- for an
+## attack, a spot on the far floor. Playback drew that whole aimed flight even
+## when a blocker touched the ball at the net, so the ball flew past the block
+## to a target several metres away and the next contact then began from
+## somewhere else. Measured over 736 consecutive contact pairs, 27% were
+## discontinuous, entirely in the two pairs where an interception happens:
+## Attack to Block averaged 5.68 m and Block to Defense 3.29 m, worst case
+## 11.16 m -- most of the length of the court.
+func _test_a_drawn_ball_stops_where_it_was_touched() -> void:
+	var aimed := {
+		"start_position": Vector2(0.5, 0.9),
+		"control_position": Vector2(0.5, 0.5),
+		"end_position": Vector2(0.5, 0.1),
+	}
+	var touched := Vector2(0.5, 0.55)
+	var display: Dictionary = aimed.duplicate(true)
+	MatchScreen.terminate_trajectory(display, touched)
+	_check(
+		Vector2(display["end_position"]).is_equal_approx(touched),
+		"the flight ends where the next contact begins",
+	)
+	## The control point has to come with it. This is a quadratic Bezier, so a
+	## shortened curve keeping its original control swings wide of both ends --
+	## the ball would arrive in the right place having taken a route it never
+	## took.
+	_check(
+		Vector2(display["control_position"]).distance_to(
+			Vector2(aimed["start_position"])
+		) < Vector2(aimed["control_position"]).distance_to(
+			Vector2(aimed["start_position"])
+		),
+		"the arc is cut short rather than bent",
+	)
+	## A ball nobody touched keeps its aimed landing point, because that is a
+	## ball hitting the floor and the aim is what happened.
+	var untouched: Dictionary = aimed.duplicate(true)
+	MatchScreen.terminate_trajectory(untouched, Vector2(aimed["end_position"]))
+	_check(
+		Vector2(untouched["end_position"]).is_equal_approx(
+			Vector2(aimed["end_position"])
+		)
+			and Vector2(untouched["control_position"]).is_equal_approx(
+				Vector2(aimed["control_position"])
+			),
+		"an uncontested flight is left exactly as it was",
+	)
+	## And the ball still travels: an interception right on top of the hitter
+	## must not collapse the flight to a zero-length curve.
+	var immediate: Dictionary = aimed.duplicate(true)
+	MatchScreen.terminate_trajectory(immediate, Vector2(0.5, 0.89))
+	_check(
+		Vector2(immediate["control_position"]).distance_to(
+			Vector2(immediate["start_position"])
+		) > 0.0,
+		"a contact taken early still draws a flight",
 	)
 
 
