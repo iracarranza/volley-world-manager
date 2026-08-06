@@ -97,12 +97,64 @@ const COVERAGE_RUN: int = 5
 ## narrower line as well as a fainter one.
 const COVERAGE_WIDTH_FLOOR: float = 0.72
 
+## The two ways this edge can be drawn.
+##
+## `INK` is a continuous broad-nib stroke. `STITCH` is a running stitch: discrete
+## lens-shaped marks with gaps between them, which is what the old chain of
+## segments accidentally resembled once its per-joint beading fell on a regular
+## fourteen-pixel beat. One is a pen, the other is thread, and the halftone
+## underneath reads differently against each -- ink on printed stock, or a
+## sampler worked on it.
+enum Stroke { INK, STITCH }
+
+## What the interface uses. One line to switch the whole page.
+const DEFAULT_STROKE: Stroke = Stroke.STITCH
+
+## How long each visible mark is, and how much cloth shows between two of them.
+##
+## The pair is only a *request*: the spacing is rescaled so a whole number of
+## stitches fits the perimeter exactly, because a sampler is planned to come out
+## even and a border that closes with a half-stitch looks like a mistake rather
+## than like handwork.
+const STITCH_LENGTH: float = 9.0
+const STITCH_GAP: float = 4.5
+
+## How many quads make up one mark. Enough for the taper to read as a curve
+## rather than as a chamfer.
+const STITCH_SEGMENTS: int = 5
+
+## What the mark tapers to at each end, as a share of its middle.
+##
+## A stitch is thread pulled taut and pushed through cloth at both ends, so it
+## is fullest mid-span and disappears into the fabric at the ends. Drawn as a
+## rectangle it reads as a dash, which is a dotted border and carries a
+## conventional meaning -- disabled, placeholder -- that this is not.
+const STITCH_END_RATIO: float = 0.22
+
+## How far alternate stitches sit off the true line, in pixels. Hand sewing
+## does not track a ruled edge; consecutive marks sit a hair either side of it.
+const STITCH_ALTERNATE_OFFSET: float = 0.55
+
+## The gauge of the thread.
+##
+## Constant, and deliberately not the nib width. Floss has one thickness
+## wherever it goes -- it is not held at an angle and it does not pool at a
+## turn. Drawn through `_stroke_width` the marks inherited the nib's
+## direction dependence, so the vertical runs came out nearly as wide as they
+## were long and read as a row of beads rather than as stitches.
+const STITCH_WIDTH: float = 2.6
+
+
 ## Which panel this is, for the wander. Assigned by whoever creates the outline;
 ## identical seeds draw identical edges, which is the point.
 @export var ink_seed: int = 0
 
 ## Corner radius to follow, so the pen turns where the stylebox turns.
 @export var corner_radius: float = 10.0
+
+## Which of the two treatments this outline draws. Per-instance so a preview can
+## put both on screen at once.
+@export var stroke_style: Stroke = DEFAULT_STROKE
 
 
 func _ready() -> void:
@@ -174,10 +226,13 @@ func _draw() -> void:
 		widths[index] = _stroke_width(points[index], shortest, tangent) \
 			* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage)
 		alphas[index] = ink.a * coverage
+	if stroke_style == Stroke.STITCH:
+		_draw_stitches(points, ink, shortest)
+		return
 	## Two passes. `draw_polygon` has no antialiasing of its own, so a bare
 	## ribbon has hard edges; a wider, fainter one underneath feathers them.
-	_draw_ribbon(points, normals, widths, alphas, ink, FEATHER_PIXELS, FEATHER_ALPHA)
-	_draw_ribbon(points, normals, widths, alphas, ink, 0.0, 1.0)
+	_draw_ribbon(points, normals, widths, alphas, ink, FEATHER_PIXELS, FEATHER_ALPHA, true)
+	_draw_ribbon(points, normals, widths, alphas, ink, 0.0, 1.0, true)
 
 
 ## One closed ribbon, as quads that share their edges with their neighbours.
@@ -191,9 +246,13 @@ func _draw_ribbon(
 	ink: Color,
 	widen: float,
 	alpha_scale: float,
+	closed: bool,
 ) -> void:
 	var count := points.size()
-	for index in range(count):
+	## A ring wraps; a single stitch is an open run and must not join its last
+	## point back to its first.
+	var last := count if closed else count - 1
+	for index in range(last):
 		var next_index := (index + 1) % count
 		var here := widths[index] * 0.5 + widen
 		var there := widths[next_index] * 0.5 + widen
@@ -208,6 +267,113 @@ func _draw_ribbon(
 		var near := Color(ink, alphas[index] * alpha_scale)
 		var far := Color(ink, alphas[next_index] * alpha_scale)
 		draw_polygon(quad, PackedColorArray([near, far, far, near]))
+
+
+## Work the edge as a running stitch.
+##
+## Marks are laid along *arc length* rather than per path point, so their size
+## and spacing are the same on a long side and a tight corner -- thread does not
+## get shorter because the cloth turns. What the corners do instead is show
+## their construction: a stitch is straight, so a rounded corner comes out as a
+## visible fan of short chords rather than as a curve. That is how a real
+## sampler handles a curve, and it is the detail that separates this from a
+## dashed border.
+func _draw_stitches(points: PackedVector2Array, ink: Color, shortest: float) -> void:
+	var count := points.size()
+	var cumulative := PackedFloat32Array()
+	cumulative.resize(count + 1)
+	cumulative[0] = 0.0
+	for index in range(count):
+		var here: Vector2 = points[index]
+		var there: Vector2 = points[(index + 1) % count]
+		cumulative[index + 1] = cumulative[index] + here.distance_to(there)
+	var perimeter := cumulative[count]
+	if perimeter < STITCH_LENGTH * 2.0:
+		return
+	## Rescale the pitch so a whole number of stitches closes the loop exactly.
+	## A border that comes back round and overlaps its own first mark by a third
+	## reads as a mistake; a sampler is counted out before it is sewn.
+	var wanted := STITCH_LENGTH + STITCH_GAP
+	var stitches := maxi(int(round(perimeter / wanted)), 3)
+	var pitch := perimeter / float(stitches)
+	var mark := pitch * STITCH_LENGTH / wanted
+	for stitch in range(stitches):
+		var start_distance := float(stitch) * pitch
+		## Alternating either side of the true line, and a little shorter or
+		## longer, so no two consecutive marks are identical.
+		var side := 1.0 if stitch % 2 == 0 else -1.0
+		var offset := side * STITCH_ALTERNATE_OFFSET \
+			* (0.6 + _unit(stitch + 8123) * 0.8)
+		var length := mark * (0.85 + _unit(stitch + 2711) * 0.3)
+		_draw_one_stitch(
+			points, cumulative, perimeter, start_distance, length, offset,
+			ink, shortest, stitch
+		)
+
+
+## One mark: a short ribbon whose width swells at mid-span and tapers into the
+## cloth at both ends.
+func _draw_one_stitch(
+	points: PackedVector2Array,
+	cumulative: PackedFloat32Array,
+	perimeter: float,
+	start_distance: float,
+	length: float,
+	offset: float,
+	ink: Color,
+	shortest: float,
+	stitch: int,
+) -> void:
+	var stitch_points := PackedVector2Array()
+	var normals := PackedVector2Array()
+	var widths := PackedFloat32Array()
+	var alphas := PackedFloat32Array()
+	var coverage := _coverage(stitch)
+	for step in range(STITCH_SEGMENTS + 1):
+		var along := float(step) / float(STITCH_SEGMENTS)
+		var distance := fposmod(start_distance + along * length, perimeter)
+		var here := _point_at(points, cumulative, perimeter, distance)
+		var ahead := _point_at(
+			points, cumulative, perimeter, fposmod(distance + 0.75, perimeter)
+		)
+		var tangent := ahead - here
+		tangent = tangent.normalized() if tangent.length_squared() > 0.000001 \
+			else Vector2.RIGHT
+		var normal := tangent.orthogonal()
+		stitch_points.append(here + normal * offset)
+		normals.append(normal)
+		## The lens. `sin` over the mark rather than a triangle, so the taper
+		## reads as thread rounding into the cloth rather than as a sharpened
+		## pencil.
+		var lens := lerpf(STITCH_END_RATIO, 1.0, sin(along * PI))
+		widths.append(STITCH_WIDTH * lens)
+		alphas.append(ink.a * coverage)
+	_draw_ribbon(
+		stitch_points, normals, widths, alphas, ink,
+		FEATHER_PIXELS, FEATHER_ALPHA, false
+	)
+	_draw_ribbon(stitch_points, normals, widths, alphas, ink, 0.0, 1.0, false)
+
+
+## Where a given distance along the closed path falls, in local coordinates.
+func _point_at(
+	points: PackedVector2Array,
+	cumulative: PackedFloat32Array,
+	perimeter: float,
+	distance: float,
+) -> Vector2:
+	var count := points.size()
+	var target := clampf(distance, 0.0, perimeter)
+	## Linear scan rather than a binary search: a panel edge is a couple of
+	## hundred points and this runs once per redraw, not per frame.
+	for index in range(count):
+		if target <= cumulative[index + 1]:
+			var span := cumulative[index + 1] - cumulative[index]
+			var share := 0.0 if span < 0.0001 else (target - cumulative[index]) / span
+			return Vector2(points[index]).lerp(
+				Vector2(points[(index + 1) % count]), share
+			)
+	return points[0]
 
 
 ## The path the pen takes, already wandered.
