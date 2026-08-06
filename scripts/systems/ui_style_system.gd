@@ -22,6 +22,26 @@ const INKED_TIERS: Array[StringName] = [
 	&"NavAction", &"ChoiceChip",
 ]
 
+## Which of those get sewn rather than drawn.
+##
+## The surfaces, and not the controls -- which is a split with a claim behind it
+## rather than a compromise between two treatments. **The page is sewn and the
+## controls are written on it.** A card is a piece of worked cloth; a button is
+## something somebody marked on it, and the two being made differently is what
+## says which is which.
+##
+## It also settles where each treatment is weakest. A running stitch on a small
+## control is a dashed border, which conventionally means *disabled*, and the
+## smallest elements are the most numerous ones. A broad nib around a large
+## panel is a heavy frame competing with its own contents. Sorting by size sorts
+## both problems at once, and surface-versus-control is what size means here.
+##
+## `DashboardCard` is a `Button` and still belongs with the surfaces: it is a
+## card that happens to be pressable, and it is the size of a card.
+const STITCHED_TIERS: Array[StringName] = [
+	&"CardPanel", &"DashboardCard", &"InsetPanel", &"RaisedPanel",
+]
+
 const PRIMARY_ACTIONS := [
 	"NewCareerButton", "NextButton", "CreateCareerButton", "AdvanceWeekButton",
 	"PlayMatchButton", "CallPlayButton", "SavePlayButton", "ApplyTrainingButton",
@@ -142,11 +162,19 @@ static func _ink_surface(control: Control) -> void:
 		if existing != null:
 			existing.queue_free()
 		return
+	var wanted_style := UIInkOutline.Stroke.STITCH \
+		if control.theme_type_variation in STITCHED_TIERS \
+		else UIInkOutline.Stroke.INK
 	if existing != null:
+		## Reassigned on every pass, not only at creation. The outline is reused
+		## across theme switches and resizes, so a tier that changed treatment
+		## would otherwise keep whichever one it was born with.
+		existing.stroke_style = wanted_style
 		existing.queue_redraw()
 		return
 	var outline := UIInkOutline.new()
 	outline.name = "InkOutline"
+	outline.stroke_style = wanted_style
 	## Seeded from the panel's own name, so a card's edge is stable across runs
 	## and two cards side by side never draw the same imperfection.
 	outline.ink_seed = int(String(control.name).hash() & 0x7FFFFFFF)
