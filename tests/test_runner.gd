@@ -12103,6 +12103,43 @@ func _test_block_is_a_jump_not_a_shape() -> void:
 		"the block reports which stage it is in",
 	)
 
+	## The feet and the arms are on one timeline, not two.
+	##
+	## Elevation used to be playback's own curve, stated separately from the pose
+	## -- which is a second timeline free to disagree with the first, and the way
+	## a blocker ends up pressing while standing on the floor. It now comes from
+	## the same windows the joints do.
+	_check(
+		BlockBiomechanics.elevation_at(-1.0) == 0.0
+			and BlockBiomechanics.elevation_at(BlockBiomechanics.LOAD_END) == 0.0,
+		"a blocker is on the floor until the legs finish driving",
+	)
+	_check(
+		BlockBiomechanics.elevation_at(0.0) > 0.98,
+		"the apex lands on the ball (%.2f)" % BlockBiomechanics.elevation_at(0.0),
+	)
+	_check(
+		BlockBiomechanics.elevation_at(1.0) == 0.0
+			and BlockBiomechanics.elevation_at(BlockBiomechanics.HOLD_END) > 0.3,
+		"the wall is still up at the end of the hold and down by the end",
+	)
+	## Playback anchors the *press* to the hitter's contact by handing this model
+	## `progress - 1.0` across the set's flight. That only works if the press
+	## really is at phase 0 -- if the peak drifted, every block would be early or
+	## late by however far it drifted.
+	var highest := -1.0
+	var highest_at := -2.0
+	for step in range(0, 401):
+		var phase := -1.0 + float(step) / 200.0
+		var lift := BlockBiomechanics.elevation_at(phase)
+		if lift > highest:
+			highest = lift
+			highest_at = phase
+	_check(
+		absf(highest_at) < 0.02,
+		"the highest point of the jump is contact itself (%.3f)" % highest_at,
+	)
+
 
 ## The first phase at which a predicate becomes true across the block, or +INF.
 func _first_block_phase(predicate: Callable) -> float:

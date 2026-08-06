@@ -236,10 +236,43 @@ func trajectory_world_velocity(trajectory: Dictionary, progress: float) -> Vecto
 
 
 func set_ball_trajectory_sample(trajectory: Dictionary, progress: float) -> void:
+	var ball_position := trajectory_world_position(trajectory, progress)
 	ball_actor.set_flight_sample(
-		trajectory_world_position(trajectory, progress),
+		ball_position,
 		trajectory_world_velocity(trajectory, progress),
 	)
+	_watch_the_ball(ball_position)
+
+
+## Everybody on the court follows the ball with their eyes.
+##
+## `PlayerActor3D` has had a full head-look since the rig gained a neck -- an
+## absolute heading in, clamped to what a neck can actually do, stored relative
+## to the body so a player can watch the ball without turning to it. It had
+## never been called. Twelve volis stared straight ahead through every rally
+## while the machinery to do otherwise sat there complete.
+##
+## Driven from the ball's own sampled position rather than from the event's end
+## point, so a head tracks the *flight* and not the destination -- watching
+## where a ball is going to land is what a spectator does, not a player.
+func _watch_the_ball(ball_position: Vector3) -> void:
+	for raw_id in player_actors:
+		var actor := player_actors[raw_id] as PlayerActor3D
+		if actor == null:
+			continue
+		var offset := ball_position - actor.global_position
+		var flat := Vector2(offset.x, offset.z)
+		if flat.length_squared() < 0.0004:
+			continue
+		## Same convention as every other heading in the rig: Godot's forward is
+		## -Z, so a direction (dx, dz) is `atan2(-dx, -dz)`. `flat` already holds
+		## that pair, so the world's z is its y.
+		var heading := atan2(-flat.x, -flat.y)
+		## Pitch from the ball's height above the eyes rather than above the
+		## floor -- a tall voli looks *down* at a ball a short one looks up at.
+		var eye_height := actor.global_position.y + actor.shoulder_offset.y + 0.18
+		var rise := ball_position.y - eye_height
+		actor.look_toward(heading, rad_to_deg(atan2(rise, flat.length())))
 
 
 func cycle_camera() -> String:

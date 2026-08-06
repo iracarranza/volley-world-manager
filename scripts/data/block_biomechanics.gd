@@ -177,6 +177,37 @@ static func resolve(phase: float) -> Dictionary:
 	}
 
 
+## How far off the floor the blocker is at this instant, 0 to 1.
+##
+## Lives here rather than in playback because it is not free: the feet have to
+## leave the ground when the legs finish driving and be back down after the arms
+## withdraw, and both of those moments are defined by the windows above. Stated
+## separately it is a second timeline free to disagree with the first, which is
+## how a blocker ends up pressing while still standing on the floor.
+func elevation(phase: float) -> float:
+	return elevation_at(phase)
+
+
+## Static twin, for callers that have no instance. Same curve.
+static func elevation_at(phase: float) -> float:
+	var p := clampf(phase, -1.0, 1.0)
+	if p <= LOAD_END:
+		return 0.0
+	if p <= 0.0:
+		## Rising through the drive and the press, peaking on the ball.
+		return sin((p - LOAD_END) / (0.0 - LOAD_END) * PI * 0.5)
+	## Held near the top while the wall is up, then down. Landing is the actor's
+	## own overlay from there.
+	if p >= LANDED_PHASE:
+		return 0.0
+	return cos(p / LANDED_PHASE * PI * 0.5)
+
+
+## When the blocker is back on the floor. After `HOLD_END`, because the hands
+## come down on the way down rather than after it.
+const LANDED_PHASE: float = 0.78
+
+
 ## Which named stage this instant belongs to, so a diagnostic can say where a
 ## block is rather than printing seven angles.
 static func phase_name(phase: float) -> String:

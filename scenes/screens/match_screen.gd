@@ -123,9 +123,19 @@ func _run_rally(generation: int) -> void:
 			## visible hitch immediately before every set.
 			continue
 		var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
-		var next_contact := _next_contact_event(events, event_index + 1)
+		var next_index := _next_contact_index(events, event_index + 1)
+		var next_contact: RallyEvent = null
+		var after_next: RallyEvent = null
+		if next_index >= 0:
+			next_contact = events[next_index] as RallyEvent
+			## One further ahead, because a block has to be *in the air* by the
+			## time the hitter swings -- see `_apply_contact_poses`.
+			after_next = _next_contact_event(events, next_index + 1)
 		if not trajectory.is_empty():
-			await _play_flight(event, next_contact, trajectory, event_index, events.size(), generation)
+			await _play_flight(
+				event, next_contact, after_next, trajectory,
+				event_index, events.size(), generation
+			)
 		else:
 			## An event the ball spends no time on costs no time.
 			##
@@ -171,6 +181,7 @@ func _gap_to_next(events: Array, event_index: int) -> float:
 func _play_flight(
 	event: RallyEvent,
 	next_contact: RallyEvent,
+	after_next: RallyEvent,
 	trajectory: Dictionary,
 	event_index: int,
 	event_count: int,
@@ -191,7 +202,7 @@ func _play_flight(
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.set_ball_trajectory_sample(display_trajectory, progress)
 		match_court_3d.apply_movement_plan(movement_plan, progress)
-		_apply_contact_poses(event, next_contact, progress)
+		_apply_contact_poses(event, next_contact, after_next, progress)
 		progress_bar.value = (
 			(float(event_index) + progress) / maxf(float(event_count), 1.0)
 		) * 100.0
@@ -247,7 +258,12 @@ func _contact_posture(event: RallyEvent) -> String:
 	return str(event.metadata.get("contact_posture", "planted"))
 
 
-func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress: float) -> void:
+func _apply_contact_poses(
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	after_next: RallyEvent,
+	progress: float,
+) -> void:
 	match_court_3d.reset_player_poses()
 	var event_actor := int(event.actor_id)
 	var event_peak := _event_elevation(event, event_actor)
@@ -293,17 +309,79 @@ func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress:
 	## played out completely, snapped back to fully cocked at the frame of
 	## contact, and played again. Elevation was already continuous across that
 	## seam, so only the arms jumped.
+	var next_is_block := next_contact.event_type == RallyEventModel.EventType.BLOCK
 	if not same_actor or not draw_outgoing:
+		## A block is the one contact whose pose does *not* wind up across the
+		## flight that reaches it.
+		##
+		## Every other contact is prepared for while the ball is on its way: the
+		## phase runs -1 to 0 across the incoming flight and the contact lands at
+		## the end of it. A block does not work that way. The wall has to be at
+		## full extension **when the hitter swings**, not when the ball arrives at
+		## it -- so its wind-up belongs to the *set's* flight, and the attack's
+		## flight is the hold.
+		##
+		## Drawn the old way it was always late, and measurably so: every block in
+		## a 120-rally sample was immediately preceded by its attack, and the gap
+		## between the two ran to 1.19 s. The blocker therefore started their jump
+		## at the moment of the hitter's contact and reached the top of it only
+		## when the ball got there. On a fast swing that is a fraction of a
+		## second and reads as sloppy timing; on a slow roll shot it is a full
+		## second of a blocker standing flat-footed watching the ball come.
+		##
+		## So the positive half of the phase runs here, and the negative half is
+		## drawn one window earlier, below.
+		var next_phase := progress if next_is_block else progress - 1.0
+		var next_lift := BlockBiomechanics.elevation_at(next_phase) \
+			if next_is_block else incoming_weight
 		match_court_3d.set_player_pose(
 			next_actor, int(next_contact.event_type),
-			next_peak * incoming_weight, progress - 1.0, next_direction, true,
+			next_peak * next_lift, next_phase, next_direction, true,
 		)
 	var next_assist := int(next_contact.metadata.get("assist_id", -1))
-	if next_assist >= 0 and next_contact.event_type == RallyEventModel.EventType.BLOCK:
+	if next_assist >= 0 and next_is_block:
 		match_court_3d.set_player_pose(
 			next_assist, int(next_contact.event_type),
-			_event_elevation(next_contact, next_assist) * smoothstep(0.48, 1.0, progress),
-			progress - 1.0, next_direction, true,
+			_event_elevation(next_contact, next_assist)
+				* BlockBiomechanics.elevation_at(progress),
+			progress, next_direction, true,
+		)
+	_apply_early_block(after_next, next_contact, progress)
+
+
+## Put the wall up while the ball is still on its way to the hitter.
+##
+## Called with the contact *two* ahead: when the current flight is the set and
+## the next contact is the attack, `after_next` is the block that attack will
+## meet. Posing it here is what lets a blocker be in the air at the swing --
+## `progress - 1.0` puts the press exactly at the end of this window, which is
+## the instant of the hitter's contact.
+##
+## Guarded on the middle event being the attack, because "two contacts ahead" is
+## only the right anchor when the thing in between is what the block is timed
+## against.
+func _apply_early_block(
+	after_next: RallyEvent, next_contact: RallyEvent, progress: float
+) -> void:
+	if after_next == null or next_contact == null:
+		return
+	if after_next.event_type != RallyEventModel.EventType.BLOCK:
+		return
+	if next_contact.event_type != RallyEventModel.EventType.ATTACK:
+		return
+	var phase := progress - 1.0
+	var lift := BlockBiomechanics.elevation_at(phase)
+	var direction := after_next.end_position - after_next.start_position
+	for blocker_id in [
+		int(after_next.actor_id),
+		int(after_next.metadata.get("assist_id", -1)),
+	]:
+		if blocker_id < 0:
+			continue
+		match_court_3d.set_player_pose(
+			blocker_id, RallyEventModel.EventType.BLOCK,
+			_event_elevation(after_next, blocker_id) * lift,
+			phase, direction, true,
 		)
 
 
@@ -545,6 +623,25 @@ func _event_is_home(event: RallyEvent) -> bool:
 	if side == "opponent":
 		return false
 	return match_court_3d.home_player_ids.has(int(event.actor_id))
+
+
+## Where the next real contact sits, or -1. Split out from
+## `_next_contact_event` so a caller that needs the one *after* it can carry on
+## scanning from the right place rather than guessing at an offset -- the
+## sequence contains `SET_DECISION` and `POINT` entries that are not contacts,
+## so "index + 1" is not the next contact and "index + 2" is not the one after.
+func _next_contact_index(events: Array[Resource], start_index: int) -> int:
+	for index in range(start_index, events.size()):
+		var candidate := events[index] as RallyEvent
+		if candidate == null:
+			continue
+		if candidate.event_type in [
+			RallyEventModel.EventType.SET_DECISION,
+			RallyEventModel.EventType.POINT,
+		]:
+			continue
+		return index
+	return -1
 
 
 func _next_contact_event(events: Array[Resource], start_index: int) -> RallyEvent:

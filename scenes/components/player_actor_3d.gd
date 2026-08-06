@@ -648,6 +648,32 @@ func _ground_the_feet(elevation: float, baseline_knee: float) -> void:
 		* (1.0 - clampf(elevation, 0.0, 1.0))
 
 
+## When in a contact's phase the player stops running and starts squaring up.
+##
+## Not one number, because the actions differ in a way anyone who has played
+## will recognise. A defender waiting on a serve is facing the ball almost the
+## whole time -- they are shuffling, not travelling, and the platform has to be
+## pointed at the ball well before it arrives. A hitter is the opposite: they
+## run their approach facing where they are going and only turn to the ball in
+## the last stride, because turning early is how you approach badly.
+##
+## A blocker never turns to the ball at all. They face the net, which is where
+## `contact_direction` happens to point anyway, so their value is nominal.
+const SQUARE_UP_PHASE := {
+	RallyEventModel.EventType.RECEPTION: -0.85,
+	RallyEventModel.EventType.DEFENSE: -0.85,
+	RallyEventModel.EventType.SET: -0.70,
+	RallyEventModel.EventType.SERVE: -0.90,
+	RallyEventModel.EventType.BLOCK: -1.0,
+	RallyEventModel.EventType.ATTACK: -0.35,
+}
+const DEFAULT_SQUARE_UP_PHASE: float = -0.60
+
+
+func _square_up_phase(event_type: int) -> float:
+	return float(SQUARE_UP_PHASE.get(event_type, DEFAULT_SQUARE_UP_PHASE))
+
+
 ## How high off the floor counts as airborne, in normalised elevation.
 ##
 ## Above the noise that a settling interpolation puts on a grounded player, and
@@ -824,9 +850,21 @@ func set_pose(
 		## and y spans 18 m, so the angle remains slightly aspect-compressed.
 		## That is a much smaller error than the sign and is left for a caller
 		## that knows the court dimensions.
-		## The contact actor faces the ball, which overrides whatever their
-		## footwork was pointing them at.
-		_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
+		## The contact actor faces the ball -- but only once they are close
+		## enough to contact to be squaring up for it.
+		##
+		## This override used to run for the whole window, and that is what made
+		## every player strafe. A hitter is posed as the upcoming contact from
+		## phase -1, so they faced across the net for the entire approach and slid
+		## sideways to their mark; a receiver ran to the ball crab-wise. Facing
+		## is set from travel in `set_tactical_position` every frame, and this was
+		## overwriting it on every one of them.
+		##
+		## Nothing here interpolates the turn: `_turn_toward` is already rate
+		## limited, so simply declining to override until the squaring-up point
+		## produces the turn for free, at a speed a body can actually manage.
+		if phase >= _square_up_phase(event_type) or not is_contact_actor:
+			_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
 		_ground_the_feet(elevation, gait_knee)
 		return
