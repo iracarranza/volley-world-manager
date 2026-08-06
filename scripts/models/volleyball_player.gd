@@ -27,6 +27,17 @@ extends Resource
 @export_range(1, 100) var reputation: int = 20
 @export_enum("Available", "Resting", "Injured", "Suspended") var availability: String = "Available"
 
+## How many weeks this club has had this voli under its own eyes.
+##
+## The observation half of `ScoutingSystem.confidence()` -- a scout tells you
+## about somebody you have never met, and time tells you the rest. Saturates
+## after about a season and a half, so this climbing forever costs nothing.
+##
+## Stored on the voli rather than in a per-career table keyed by id, because a
+## voli who moves clubs takes their history with them and a side table would have
+## to be told about every transfer to stay correct.
+@export var weeks_observed: int = 0
+
 @export_category("Physical")
 @export_range(150.0, 220.0, 0.5) var height_cm: float = 188.0
 @export_range(50.0, 130.0, 0.5) var mass_kg: float = 82.0
@@ -444,6 +455,7 @@ func to_dict() -> Dictionary:
 		"position_familiarity": position_familiarity.duplicate(true),
 		"situation_experience": situation_experience.duplicate(true),
 		"position_training_target": position_training_target,
+		"weeks_observed": weeks_observed,
 		"attribute_ceilings": attribute_ceilings.duplicate(true),
 	}
 
@@ -511,6 +523,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.stride_length_m = clampf(float(
 		data.get("stride_length_m", player.default_stride_length_m())
 	), 0.55, 1.15)
+	player.weeks_observed = int(data.get("weeks_observed", 0))
 	player.attribute_ceilings = Dictionary(data.get("attribute_ceilings", {})).duplicate(true)
 	player.refresh_system_fit_profiles()
 	return player

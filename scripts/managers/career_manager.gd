@@ -207,6 +207,13 @@ func advance_week() -> String:
 		## rested squad more tired and fixture-to-fixture fatigue only climbed.
 		recover_weekly_fatigue(player)
 		player.current_form *= 0.92
+		## A week spent under your own eyes. The other half of scouting
+		## confidence, and the half a scout cannot buy: `ScoutingSystem`
+		## saturates this after about a season and a half, so it is free to
+		## climb without bound.
+		player.weeks_observed += 1
+	for member in career.staff:
+		member.weeks_employed += 1
 	save_career()
 	week_advanced.emit(last_training_report)
 	career_changed.emit()

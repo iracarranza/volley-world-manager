@@ -211,6 +211,7 @@ func _initialize() -> void:
 	_test_ball_flight_from_contact_height()
 	_test_spike_biomechanics_sequence()
 	_test_surface_screen_and_card_variation()
+	_test_scouting_confidence_and_fog()
 	_test_attack_courses_are_relative_to_the_hitter()
 	_test_attack_power_is_a_choice()
 	_test_hitters_read_a_blurred_picture()
@@ -11976,3 +11977,164 @@ func _test_surface_screen_and_card_variation() -> void:
 		"an ordinary button is not mistaken for a card",
 	)
 	root.free()
+
+
+## Scouting: a fog you cannot re-roll, cannot bias, and cannot mistake for truth.
+func _test_scouting_confidence_and_fog() -> void:
+	## Confidence orders the way the design says it does: your own building beats
+	## the market, a scout matters far more for the market than for your own
+	## squad, and watching somebody saturates.
+	var unknown := ScoutingSystem.confidence(false, 0, 0)
+	var scouted := ScoutingSystem.confidence(false, 0, 90)
+	var own := ScoutingSystem.confidence(true, 0, 0)
+	var settled := ScoutingSystem.confidence(true, 40, 90)
+	_check(
+		unknown < scouted and scouted < own and own < settled,
+		"confidence rises from stranger to settled squad member (%.2f %.2f %.2f %.2f)"
+			% [unknown, scouted, own, settled],
+	)
+	_check(
+		ScoutingSystem.confidence(false, 0, 100) - ScoutingSystem.confidence(false, 0, 0)
+		> ScoutingSystem.confidence(true, 0, 100) - ScoutingSystem.confidence(true, 0, 0),
+		"a scout is worth more on the market than in your own gym",
+	)
+	_check(
+		is_equal_approx(
+			ScoutingSystem.confidence(true, 26, 50),
+			ScoutingSystem.confidence(true, 400, 50),
+		),
+		"watching somebody saturates",
+	)
+
+	## Not a slot machine. Read the same voli twice and get the same answer, or a
+	## player can close and reopen the panel until the prospect looks good.
+	var first := ScoutingSystem.reported_value(64.0, 0.2, 4211, "attack_power")
+	var second := ScoutingSystem.reported_value(64.0, 0.2, 4211, "attack_power")
+	_check(is_equal_approx(first, second), "an estimate does not change when re-read")
+	_check(
+		not is_equal_approx(
+			first, ScoutingSystem.reported_value(64.0, 0.2, 4211, "reception")
+		),
+		"two attributes are not wrong by the same amount",
+	)
+	_check(
+		not is_equal_approx(
+			first, ScoutingSystem.reported_value(64.0, 0.2, 9182, "attack_power")
+		),
+		"two volis are not wrong by the same amount",
+	)
+
+	## Complete information shows the number, with no residual fuzz to explain.
+	_check(
+		is_equal_approx(
+			ScoutingSystem.reported_value(71.0, 1.0, 12, "serve_power"), 71.0
+		),
+		"full confidence reports the truth",
+	)
+	## Except for potential, which no amount of watching resolves.
+	_check(
+		ScoutingSystem.error_width(1.0, true) > 0.0,
+		"potential keeps a floor of uncertainty at any confidence",
+	)
+	var potential_always_wider := true
+	var tied_at := -1.0
+	for step in range(0, 21):
+		var level := float(step) / 20.0
+		if ScoutingSystem.error_width(level, true) \
+				<= ScoutingSystem.error_width(level, false):
+			potential_always_wider = false
+			tied_at = level
+	_check(
+		potential_always_wider,
+		"potential is less knowable than an observable attribute at every confidence (tied at %.2f)"
+			% tied_at,
+	)
+
+	## Monotone: more confidence is never a wider band.
+	var widest := ScoutingSystem.error_width(0.0)
+	var monotone := true
+	var broke_at := 0.0
+	for step in range(1, 21):
+		var level := float(step) / 20.0
+		var width := ScoutingSystem.error_width(level)
+		if width > widest + 0.0001:
+			monotone = false
+			broke_at = level
+		widest = width
+	_check(
+		monotone,
+		"the band never widens as confidence rises (broke at %.2f)" % broke_at,
+	)
+
+	## **Centred, including at the ends of the scale.** A symmetric error that is
+	## clamped rather than reflected throws away half the distribution for a voli
+	## near 100, so every elite prospect reads low and the scout looks pessimistic
+	## rather than uncertain. Measured across the population rather than asserted.
+	for true_value in [12.0, 50.0, 94.0]:
+		var total := 0.0
+		var count := 0
+		for player_id in range(1, 601):
+			total += ScoutingSystem.reported_value(
+				true_value, 0.15, player_id, "attack_power"
+			)
+			count += 1
+		var mean := total / float(count)
+		_check(
+			absf(mean - true_value) < 2.0,
+			"the fog is centred at %.0f (mean %.2f)" % [true_value, mean],
+		)
+
+	## And it never reports something off the scale.
+	var lowest := 200.0
+	var highest := -200.0
+	for player_id in range(1, 401):
+		for true_value in [1.0, 3.0, 50.0, 99.0, 100.0]:
+			var reported := ScoutingSystem.reported_value(
+				true_value, 0.0, player_id, "potential", true
+			)
+			lowest = minf(lowest, reported)
+			highest = maxf(highest, reported)
+	_check(
+		lowest >= 1.0 and highest <= 100.0,
+		"an estimate stays on the scale (%.2f to %.2f)" % [lowest, highest],
+	)
+
+	## The band is quoted around the estimate, not around the answer -- a band
+	## centred on the truth would leak the truth to anyone who read its midpoint.
+	var band := ScoutingSystem.reported_band(40.0, 0.1, 777, "block_timing")
+	var estimate := ScoutingSystem.reported_value(40.0, 0.1, 777, "block_timing")
+	_check(
+		absf((band.x + band.y) * 0.5 - estimate) < 0.001,
+		"the quoted range is centred on the estimate, not the truth",
+	)
+
+	## The best scout, not the sum of mediocre ones.
+	var weak := VolleyballStaffMember.new()
+	weak.role = VolleyballStaffMember.ROLE_SCOUT
+	weak.rating = 40
+	var strong := VolleyballStaffMember.new()
+	strong.role = VolleyballStaffMember.ROLE_SCOUT
+	strong.rating = 72
+	var chef := VolleyballStaffMember.new()
+	chef.role = VolleyballStaffMember.ROLE_CHEF
+	chef.rating = 99
+	_check(
+		ScoutingSystem.scout_rating([weak, strong, chef]) == 72,
+		"two mediocre scouts do not add up to a good one",
+	)
+	_check(
+		ScoutingSystem.scout_rating([chef]) == 0,
+		"a chef does not scout",
+	)
+	_check(ScoutingSystem.scout_rating([]) == 0, "an unstaffed club scouts nothing")
+
+	## Round-trips, because staff live in the save file.
+	var restored := VolleyballStaffMember.from_dict(strong.to_dict())
+	_check(
+		restored.role == strong.role and restored.rating == strong.rating,
+		"a staff member survives a save",
+	)
+	_check(
+		restored.resource_owned() == "information confidence",
+		"a scout owns information confidence",
+	)

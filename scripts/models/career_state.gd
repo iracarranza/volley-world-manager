@@ -2,6 +2,7 @@ class_name VolleyballCareerState
 extends Resource
 
 const Regions := preload("res://scripts/data/regions.gd")
+const StaffMember := preload("res://scripts/models/staff_member.gd")
 
 @export var save_id: String = "career_1"
 @export var career_name: String = "New Career"
@@ -13,6 +14,10 @@ const Regions := preload("res://scripts/data/regions.gd")
 @export var reputation: int = 10
 @export var finances: int = 100000
 @export var training_focus: String = "Team Practice"
+## Who you employ. Empty is a valid, meaningful state rather than an unset one:
+## a club with no scout sees its own squad clearly and the transfer market as a
+## fog, which is exactly what `ScoutingSystem` returns for a scout rating of 0.
+@export var staff: Array[Resource] = []
 @export var fixtures: Array[Resource] = []
 @export var transfer_pool: Array[Resource] = []
 @export var active_fixture_id: int = -1
@@ -73,7 +78,11 @@ func to_dict() -> Dictionary:
 	var market_ids: Array[int] = []
 	for player in transfer_pool:
 		market_ids.append(int(player.id))
+	var staff_data: Array[Dictionary] = []
+	for member in staff:
+		staff_data.append(member.to_dict())
 	return {"save_id": save_id, "career_name": career_name,
+		"staff": staff_data,
 		"organization_name": organization_name, "organization_type": organization_type,
 		"region": region, "identity": identity, "absolute_week": absolute_week,
 		"reputation": reputation, "finances": finances,
@@ -106,6 +115,12 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.reputation = clampi(int(data.get("reputation", 10)), 0, 100)
 	state.finances = int(data.get("finances", 100000))
 	state.training_focus = str(data.get("training_focus", "Team Practice"))
+	## Absent in every save written before staff existed, which loads as an
+	## unstaffed club rather than needing a migration -- and an unstaffed club is
+	## a state the systems already handle, because it is what a new career starts
+	## as.
+	for staff_data in data.get("staff", []):
+		state.staff.append(StaffMember.from_dict(staff_data))
 	for fixture_data in data.get("fixtures", []):
 		state.fixtures.append(VolleyballFixture.from_dict(fixture_data))
 	## Current saves list transfer-listed players by id and let
