@@ -5089,22 +5089,30 @@ func _test_gate_forty_four_shadow_block_hypotheses() -> void:
 	## Test 9: Gate 44 has no rollout policy and no production flag -- the
 	## shadow block evaluation runs every rally, so the only thing to verify
 	## is that it never contaminates the official BLOCK event's identity.
-	var official_manager := GAME_MANAGER_SCRIPT.new()
-	official_manager.seed_vertical_slice_data()
-	official_manager.match_state.serving_home = false
-	## Shares Gate 42's fixture seed; see the note there for why it moved.
-	var official_result: Resource = official_manager.resolve_active_rally(300082)
-	var official_block_seen := false
+	## Searched rather than pinned. The assertion is about what the shadow layer
+	## may touch, and it needs *a* block to inspect -- which seed supplies one is
+	## incidental. Pinned to a single seed it failed the moment the offence
+	## changed, reporting a contamination regression that had not happened.
+	var official_result: Resource = _rally_containing_a_block(300082)
+	var official_block_seen := official_result != null
 	var official_block_contaminated := false
-	for raw_event in official_result.events:
+	for raw_event in (official_result.events if official_result != null else []):
 		var event := raw_event as RallyEvent
 		if event != null and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
-			official_block_seen = true
 			if event.metadata.has("commitment_fingerprint") \
 					or event.metadata.has("shadow_block"):
 				official_block_contaminated = true
+	## Split, because the conjunction could not say which half failed -- and the
+	## two halves mean completely different things. Contamination is a real
+	## regression in what the shadow layer touches; a seed that stopped producing
+	## a block at all is a fixture that has drifted out from under the assertion,
+	## and no property of the block model is implicated.
 	_check(
-		official_block_seen and not official_block_contaminated,
+		official_block_seen,
+		"Gate 44 fixture seed still produces a block to inspect",
+	)
+	_check(
+		not official_block_contaminated,
 		"Gate 44 official block event identity is preserved with no rollout policy active",
 	)
 
@@ -5546,23 +5554,23 @@ func _test_gate_forty_nine_development_live_block() -> void:
 		"Gate 49 promotes the same block twice for one seed",
 	)
 	## Ordinary resolution of the same seed must never promote.
-	var ordinary_manager := GAME_MANAGER_SCRIPT.new()
-	ordinary_manager.seed_vertical_slice_data()
-	ordinary_manager.match_state.serving_home = false
-	var ordinary_result: Resource = ordinary_manager.resolve_active_rally(
-		LIVE_BLOCK_SEED
-	)
+	## Searched, for the same reason as Gate 44's -- see the note there.
+	var ordinary_result: Resource = _rally_containing_a_block(LIVE_BLOCK_SEED)
 	var ordinary_promoted := false
-	var ordinary_block_seen := false
-	for raw_event in ordinary_result.events:
+	var ordinary_block_seen := ordinary_result != null
+	for raw_event in (ordinary_result.events if ordinary_result != null else []):
 		var event := raw_event as RallyEvent
 		if event != null \
 				and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
-			ordinary_block_seen = true
 			if bool(event.metadata.get("continuous_block", false)):
 				ordinary_promoted = true
+	## Split for the same reason as Gate 44's.
 	_check(
-		ordinary_block_seen and not ordinary_promoted,
+		ordinary_block_seen,
+		"Gate 49 fixture seed still produces a block to inspect",
+	)
+	_check(
+		not ordinary_promoted,
 		"Gate 49 leaves ordinary resolution of the same seed on the official block",
 	)
 
@@ -12138,3 +12146,29 @@ func _test_scouting_confidence_and_fog() -> void:
 		restored.resource_owned() == "information confidence",
 		"a scout owns information confidence",
 	)
+
+
+## The first rally at or after `from_seed` that contains a BLOCK event, or null.
+##
+## Two identity gates pinned a single seed to find a block to inspect, and both
+## started failing the moment the offence changed which rallies reach the net --
+## reporting a contamination regression that had not happened while the property
+## they guard was still perfectly intact.
+##
+## A fixture that has to *contain* something is a fixture that drifts. Searching
+## for one keeps the assertion exactly as strict, because it still fails if no
+## seed in the range produces a block at all.
+func _rally_containing_a_block(from_seed: int, span: int = 24) -> Resource:
+	for offset in range(span):
+		var manager := GAME_MANAGER_SCRIPT.new()
+		manager.seed_vertical_slice_data()
+		manager.match_state.serving_home = false
+		var result: Resource = manager.resolve_active_rally(from_seed + offset)
+		if result == null:
+			continue
+		for raw_event in result.events:
+			var event := raw_event as RallyEvent
+			if event != null \
+					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				return result
+	return null

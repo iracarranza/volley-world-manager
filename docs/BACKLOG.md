@@ -2089,3 +2089,56 @@ measured and fine throughout.**
 Left off in this commit because shipping five failures is worse than shipping
 none. But the sequencing is now settled: land the three together, work the five,
 and stop building single fixes against a gate that no single fix can pass.
+
+---
+
+## What the rally simulator work is for, and what is actually blocking it
+
+Written after a long thread that diagnosed a great deal and shipped no simulation
+behaviour, because the diagnosis kept going one layer deeper instead of naming
+the shape of the problem.
+
+**The goal:** outcomes should fall out of geometry and attributes rather than out
+of a quality scalar compared against a threshold. The geometric attack, the
+locomotion model, the shadow systems and the kinematics solver are all that same
+move, and most of it is built.
+
+**Five recurring defects, in the order they cost the most:**
+
+1. **Values computed and then dropped before anything can use them.** Curator
+   functions copy a dictionary field by field and silently lose whatever was
+   added upstream -- `block_miss_reason`, `wall_size`, the approach deficit's
+   terms, the block close's inputs, the shot type before it was downgraded. The
+   cost is not the missing feature; it is that no question can be answered
+   without first re-plumbing the answer.
+2. **A value computed, the thing it described moved, and nobody re-read it.**
+   `_reachable_contact` pulls a hitter's contact back and the arrival margin, the
+   lane and the wall all keep describing the old one.
+3. **Thresholds outside the range they cut, so branches never fire.**
+   `OPPONENT_QUICK_CALL_PASS` is 0.68 against a pass distribution whose p90 is
+   0.567; `_apply_identity_tempo` tests 0.66/0.34 against presets clustered on
+   0.50. **This is the direct enemy of the goal** -- an attribute that only
+   matters inside a branch that never runs cannot produce depth.
+4. **Constants where a decision belongs.** `_fallback_hitter` only ever considers
+   Outside Hitters, so the middle never attacks; `_fallback_assignment` always
+   says tempo 3.
+5. **Two implementations of one fact**, most of all the two sides of the net.
+
+**The limiter, named:** *the model plays one rally over and over.* Home is 92%
+high-ball swings, 82% to a single pin, with no quick and no pipe ever. The
+opponent is 97% rolls. Attributes cannot create depth in a system that only runs
+one play -- and worse, every constant in the engine was fitted against that one
+play, which is why the wall collapses the moment a quick appears.
+
+**The structural half:** the calibration gates enforce the degeneracy. The
+attack-symmetry ratchet fails any change that moves the balance, so the only
+changes that pass are the ones that do not matter. That is how a shelf of
+correct, measured, disabled fixes accumulates, and this thread added four more to
+it before noticing.
+
+**What unblocks it:** fix the degeneracy before tuning anything else. Land the
+offence variety, accept that every downstream constant is then mis-calibrated,
+and re-fit them against a fixture that plays a real match. That is a bigger and
+noisier change than this thread has been making, and the small safe changes
+provably cannot land -- measured: three of them together clear the ratchet that
+each of them fails alone.
