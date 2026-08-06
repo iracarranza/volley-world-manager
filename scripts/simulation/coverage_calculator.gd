@@ -67,6 +67,18 @@ static func evaluate_arrival(
 		"distance_meters": distance,
 		"reaction_delay": reaction_delay,
 		"available_time": available_time,
+		## The four terms `physical_reach` is built from, published rather than
+		## summed away. `reach_margin_meters` is the sole input to the dig's
+		## `timing` factor and it runs 1.058 m for the home defence against
+		## 0.242 m for the opponent's -- a gap that carries the whole dig
+		## asymmetry and has survived every change made to the attack it defends.
+		## A total cannot be attributed, and these five terms want five different
+		## fixes in five different files.
+		"ball_time_seconds": ball_time_seconds,
+		"base_reach_meters": base_reach,
+		"movement_speed_mps": movement_speed,
+		"acceleration_factor": acceleration_factor,
+		"travel_distance_meters": travel_distance,
 		"physical_reach_meters": physical_reach,
 		"assigned_reach_meters": assigned_reach,
 		"reach_margin_meters": reach_margin,

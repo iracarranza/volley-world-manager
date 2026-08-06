@@ -34,6 +34,11 @@ func _initialize() -> void:
 	)
 	var sets := {"home": [], "opponent": []}
 	var kinds := {"home": {}, "opponent": {}}
+	## `_hit_type` returns "High-ball swing" for any tempo 3 assignment, and 92% of
+	## home swings come out as one. Either the tempo call never varies or the name
+	## does -- and those want completely different fixes, so count the tempo
+	## itself rather than inferring it from the label.
+	var tempos := {"home": {}, "opponent": {}}
 	for serving_home in [true, false]:
 		manager.match_state.serving_home = serving_home
 		for seed_value in range(5000, 5000 + RALLIES):
@@ -52,6 +57,9 @@ func _initialize() -> void:
 						and kinds.has(side):
 					var kind := str(event.metadata.get("attack_type", "?"))
 					kinds[side][kind] = int(kinds[side].get(kind, 0)) + 1
+					if event.metadata.has("tempo"):
+						var tempo := int(event.metadata.tempo)
+						tempos[side][tempo] = int(tempos[side].get(tempo, 0)) + 1
 	manager.free()
 
 	print("Shot downgrade -- %d rallies x 2 serving sides" % RALLIES)
@@ -84,6 +92,21 @@ func _initialize() -> void:
 		var line := "  %-9s" % side
 		for key in keys:
 			line += " %s=%d" % [str(key), int(kinds[side][key])]
+		print(line)
+	print("")
+	print("tempo actually called")
+	for side in ["home", "opponent"]:
+		var keys: Array = tempos[side].keys()
+		keys.sort()
+		var line := "  %-9s" % side
+		var total := 0
+		for key in keys:
+			total += int(tempos[side][key])
+		for key in keys:
+			line += " T%d=%d (%.0f%%)" % [
+				int(key), int(tempos[side][key]),
+				float(tempos[side][key]) / maxf(float(total), 1.0) * 100.0,
+			]
 		print(line)
 	print("")
 	print("A threshold above the median is not an exception branch, it is the")

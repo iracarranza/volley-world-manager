@@ -1680,3 +1680,72 @@ sole input to `timing`, it carries the whole of the dig gap, and it has now
 survived every change made this session. Start by asking what it is measured
 against on each side, per FAILURE_MODES.md 14 -- print what arrives before
 touching what produces it.
+
+---
+
+## The reach margin, decomposed -- and it is an offensive defect
+
+`reach_margin_meters` is the sole input to the dig's `timing` factor and carries
+the whole dig asymmetry. `CoverageCalculator.evaluate_arrival` now returns the
+six terms it was summing away, and `tools/run_reach_margin_probe.gd` reads them
+off the DEFENSE events rather than recomputing any of them.
+
+| term | home | opponent | gap |
+|---|---|---|---|
+| ball_time_seconds | 0.824 | 0.520 | **+0.304** |
+| reaction_delay | 0.348 | 0.319 | +0.029 |
+| movement_speed_mps | 3.751 | 3.779 | -0.028 |
+| acceleration_factor | 0.873 | 0.863 | +0.010 |
+| base_reach_meters | 1.240 | 1.268 | -0.027 |
+| travel_distance_meters | 1.604 | 0.803 | **+0.801** |
+| distance_meters | 1.506 | 1.828 | **-0.323** |
+| reach_margin_meters | 1.339 | 0.242 | +1.097 |
+
+Four of the six are symmetric to within 3%, which rules out locomotion, reach and
+reaction outright. The margin is **time (73%) and distance (27%)**, nothing else.
+
+### The two defences never face the same shot
+
+Splitting by the swing that caused each dig ends the argument:
+
+| side | attack defended | n | ball_time | reach_margin |
+|---|---|---|---|---|
+| home | Roll shot | 37 | 0.826 | 1.268 |
+| home | Emergency tip | 6 | 0.853 | 1.610 |
+| opponent | High-ball swing | 69 | 0.520 | 0.242 |
+
+**No overlap at all.** Ball time is a property of the shot -- a roll is lofted
+and hangs 0.83 s, a high ball arrives in 0.52 s -- so the home defence gets a
+third of a second more on every ball it ever sees, and the "defensive gap" is
+two sides being fed completely different diets.
+
+Both diets are degenerate, in opposite directions:
+
+```
+home      Controlled roll=5   High-ball swing=169  Tempo swing=11
+opponent  Emergency tip=14    Power swing=3        Roll shot=103
+home tempo    T2=16 (9%)   T3=169 (91%)   -- never T0, never T1
+```
+
+The home side high-balls 92% of its swings and **never once runs a quick**. The
+opponent rolls 97% of theirs. Neither side plays volleyball.
+
+### Correcting the earlier withdrawal
+
+This file previously recorded "the opponent's shot mix is not upstream of the dig
+asymmetry", on the evidence that `ENABLE_CLAMPED_ARRIVAL_MARGIN` moved the mix
+without moving the gap. **That reasoning was wrong**, and the error is worth
+keeping because it is a general one: the flag changed only the *opponent's* mix,
+and only from 97% rolls to 75% rolls. It never touched the home side's 92%
+high-ball diet, which is the entire diet the opponent's defence faces -- the half
+of the comparison that reads 0.242 m. A lever that moves one quarter of one side
+of a two-sided comparison is not a test of the mechanism.
+
+The mix is the mechanism. The lever was too small and pointed at one side.
+
+**Next: why the home offence never calls a quick.** `_hit_type` returns
+"High-ball swing" for any tempo 3 assignment, and 91% of home assignments are
+tempo 3 with none below 2. `_tempo_call` starts from a requested tempo and only
+quickens on a good pass, so either the request is a constant or its thresholds
+sit outside the pass-quality distribution it cuts -- the section 2 shape, and the
+two want different fixes. Measure the requested tempo before changing either.
