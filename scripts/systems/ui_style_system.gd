@@ -39,10 +39,10 @@ const INKED_TIERS: Array[StringName] = [
 ## `DashboardCard` is a `Button` and still belongs with the surfaces: it is a
 ## card that happens to be pressable, and it is the size of a card.
 ##
-## The controls keep the nib and gain a highlighter under it. The two are doing
-## different jobs -- the pen says where the word is, the highlighter says
-## somebody marked it -- so a control wants both rather than a choice between
-## being drawn and being marked.
+## The controls keep the nib, and gain a highlighter that is not there at rest.
+## Hovering *is* the act of marking, so the wash sweeps on under the pointer and
+## off again -- which puts the hover affordance in the page's own vocabulary
+## instead of the instant colour swap it replaces.
 const STITCHED_TIERS: Array[StringName] = [
 	&"CardPanel", &"DashboardCard", &"InsetPanel", &"RaisedPanel",
 ]
@@ -215,15 +215,16 @@ static func _ink_surface(control: Control) -> void:
 		## across theme switches and resizes, so a tier that changed treatment
 		## would otherwise keep whichever one it was born with.
 		existing.stroke_style = wanted_style
-		existing.highlighted = not sewn
+		existing.hover_highlight = not sewn
 		existing.queue_redraw()
 		return
 	var outline := UIInkOutline.new()
 	outline.name = "InkOutline"
 	outline.stroke_style = wanted_style
-	## Controls are written *and* marked: the nib draws the word and the
-	## highlighter goes over it. Surfaces are sewn and get neither.
-	outline.highlighted = not sewn
+	## Controls are written at rest and marked when pointed at: the nib draws the
+	## word, and hovering is the act of going over it. Surfaces are sewn and get
+	## neither.
+	outline.hover_highlight = not sewn
 	## Seeded from the panel's own name, so a card's edge is stable across runs
 	## and two cards side by side never draw the same imperfection.
 	outline.ink_seed = int(String(control.name).hash() & 0x7FFFFFFF)

@@ -158,9 +158,39 @@ const CUT_NICK_CHANCE: float = 0.16
 const CUT_NICK_PIXELS: float = 2.3
 
 ## Loose threads, where the stitching has worked its way out of the weave.
-const FRAY_COUNT: int = 7
-const FRAY_LENGTH: float = 7.5
-const FRAY_WIDTH: float = 1.5
+## Fraying is flavour, not structure. At seven per panel the strands were a
+## feature of the design rather than a thing you notice on second look, and a
+## patch that is coming apart at seven points is a patch about to fall off.
+const FRAY_COUNT: int = 3
+const FRAY_LENGTH: float = 5.5
+const FRAY_WIDTH: float = 1.1
+## Faint, for the same reason. These sit under the threshold where the eye
+## counts them.
+const FRAY_ALPHA: float = 0.34
+
+## How far inside the cloth the stitching runs.
+##
+## A seam is sewn *in from* the edge -- there has to be material outside it or
+## there is nothing for the thread to hold. Running the stitches along the true
+## boundary made the card stop exactly where its sewing did, which reads as a
+## drawn border that happens to be dashed rather than as cloth with a seam in
+## it.
+const SEAM_INSET: float = 5.0
+
+## The perforated silhouette: how far the tabs stand out from the edge, how wide
+## each one is, and how far apart their centres run.
+##
+## A stamp's edge, or the wire stubs left in a cut-up cross-stitch template --
+## the little remnants of where a sheet was separated. Drawn *outward* in the
+## card's own colour rather than bitten inward in the page's, because the page
+## under a card carries the halftone and a backdrop doodle, and painting over
+## either would leave a visible flat patch where the perforation should be.
+const PERFORATION_DEPTH: float = 3.4
+const PERFORATION_WIDTH: float = 4.2
+const PERFORATION_PITCH: float = 9.0
+const PERFORATION_STUB_WIDTH: float = 1.4
+## Fainter than the seam. These are remnants, not part of the sewing.
+const PERFORATION_ALPHA: float = 0.42
 
 ## A highlighter is a wide chisel drawn once across a word.
 ##
@@ -188,9 +218,10 @@ const HIGHLIGHT_EDGE_WAVE: float = 1.4
 ## covers the word, not the whole line.
 const HIGHLIGHT_INSET: float = 2.0
 
-## Below this saturation a tier's fill is page-coloured rather than a real
-## colour, and marking in it would be marking in nothing.
-const HIGHLIGHT_MIN_SATURATION: float = 0.18
+## How long the swipe takes, in seconds. Short: this is a pointer landing on a
+## control, not a transition. Long enough that the direction is legible, because
+## a mark that appears all at once is a colour change rather than a stroke.
+const HIGHLIGHT_SWEEP_SECONDS: float = 0.16
 
 
 ## Which panel this is, for the wander. Assigned by whoever creates the outline;
@@ -208,19 +239,27 @@ const HIGHLIGHT_MIN_SATURATION: float = 0.18
 		if is_inside_tree():
 			queue_redraw()
 
-## Whether this control has also been gone over with a highlighter.
+## Whether pointing at this control marks it.
 ##
-## Additive rather than a third stroke style, because the two are doing
-## different jobs and a control wants both: the pen says where the word is and
-## the highlighter says somebody marked it. Making them exclusive would have
-## meant choosing between a control that is drawn and one that is marked, when
-## what reads is a word that is drawn *and* marked.
-@export var highlighted: bool = false:
+## The highlighter is not a *state* of the button, it is something that happens
+## to it: hovering is the act of going over the word. So the band is absent at
+## rest -- the control is just written -- and sweeps on under the pointer.
+##
+## Which also answers what the mark is for. A permanent wash on every control is
+## decoration; one that arrives when you point at something is the hover
+## affordance doing its job in the page's own vocabulary, instead of the instant
+## colour swap it replaces.
+@export var hover_highlight: bool = false:
 	set(value):
-		highlighted = value
+		hover_highlight = value
 		if is_inside_tree():
 			_sync_draw_order()
+			_bind_hover()
 			queue_redraw()
+
+## How much of the sweep has been laid down, 0 to 1, and where it is heading.
+var highlight_sweep: float = 0.0
+var _sweep_target: float = 0.0
 
 
 func _ready() -> void:
@@ -241,6 +280,46 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	resized.connect(queue_redraw)
 	_sync_draw_order()
+	_bind_hover()
+
+
+## Watch the control this outline belongs to, so the mark follows the pointer.
+##
+## The outline itself cannot be asked -- it is `MOUSE_FILTER_IGNORE`, which it
+## has to be or it would eat the clicks meant for the button underneath it. So
+## it listens to its parent instead.
+func _bind_hover() -> void:
+	var parent := get_parent() as Control
+	if parent == null:
+		return
+	if hover_highlight:
+		if not parent.mouse_entered.is_connected(_on_parent_hover):
+			parent.mouse_entered.connect(_on_parent_hover)
+			parent.mouse_exited.connect(_on_parent_unhover)
+		return
+	if parent.mouse_entered.is_connected(_on_parent_hover):
+		parent.mouse_entered.disconnect(_on_parent_hover)
+		parent.mouse_exited.disconnect(_on_parent_unhover)
+	highlight_sweep = 0.0
+	set_process(false)
+
+
+func _on_parent_hover() -> void:
+	_sweep_target = 1.0
+	set_process(true)
+
+
+func _on_parent_unhover() -> void:
+	_sweep_target = 0.0
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	var step := delta / maxf(HIGHLIGHT_SWEEP_SECONDS, 0.001)
+	highlight_sweep = move_toward(highlight_sweep, _sweep_target, step)
+	queue_redraw()
+	if is_equal_approx(highlight_sweep, _sweep_target):
+		set_process(false)
 
 
 ## A highlighter goes *under* the word.
@@ -251,7 +330,7 @@ func _ready() -> void:
 ## `show_behind_parent` puts it before the parent's own drawing instead, so the
 ## order becomes band, then stylebox, then text.
 func _sync_draw_order() -> void:
-	show_behind_parent = highlighted
+	show_behind_parent = hover_highlight
 
 
 func _notification(what: int) -> void:
@@ -305,9 +384,11 @@ func _draw() -> void:
 			* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage)
 		alphas[index] = ink.a * coverage
 	## The mark goes down first, under everything else this node draws.
-	if highlighted:
-		_draw_highlight()
+	if hover_highlight and highlight_sweep > 0.001:
+		_draw_highlight(highlight_sweep)
 	if stroke_style == Stroke.STITCH:
+		## Silhouette first, so the seam sits on top of the cloth it is holding.
+		_draw_perforation()
 		_draw_stitches(points, ink, shortest)
 		_draw_fraying(points, ink)
 		return
@@ -357,14 +438,16 @@ func _draw_ribbon(
 ## here, so the theme stays the single place that decides what a primary action
 ## is coloured. The stylebox itself is transparent for these tiers -- this band
 ## *is* the fill, not a decoration over one.
-func _draw_highlight() -> void:
+func _draw_highlight(sweep: float) -> void:
 	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA)
 	var top := HIGHLIGHT_INSET
 	var bottom := size.y - HIGHLIGHT_INSET
 	## Where the hand started and stopped. Each end draws its own overshoot, so
 	## one usually runs past the word and the other falls short of it.
 	var left := -HIGHLIGHT_OVERSHOOT * (_unit(11) * 1.4 - 0.4)
-	var right := size.x + HIGHLIGHT_OVERSHOOT * (_unit(29) * 1.4 - 0.4)
+	var full_right := size.x + HIGHLIGHT_OVERSHOOT * (_unit(29) * 1.4 - 0.4)
+	## As far as the tip has travelled. The stroke is laid down, not faded in.
+	var right := lerpf(left, full_right, clampf(sweep, 0.0, 1.0))
 	## The chisel. Both ends lean the same way, because the tip is held at one
 	## angle for the whole stroke.
 	var shear := HIGHLIGHT_SHEAR
@@ -406,21 +489,13 @@ func _draw_highlight() -> void:
 
 ## What this control gets marked in.
 ##
-## A highlighter is *contrast*, and that is the trap the first attempt fell into.
-## Reading the parent's stylebox is right for a tier whose fill is a real colour
-## -- a primary action is coral, a danger action is red, and going over one in
-## its own colour is what actually happens. But the neutral tiers were authored
-## with a fill near the page colour, because they used to be filled boxes with a
-## border doing the work. Marked in that, the swipe was invisible.
-##
-## So: the tier's own colour when it has one, the theme accent when it does not.
-## Saturation is what separates them, and it is a property of the colour rather
-## than a list of tier names somebody has to keep in step.
+## The same ink the nib is using. A highlighter that contrasts with the line it
+## covers is two marks arguing; one that matches is the same hand going back
+## over its own writing, which is what a marked word actually looks like. It is
+## also where the idea came from -- the nib's varying weight was what read as
+## highlighter in the first place, so the wash belongs in its colour.
 func _highlighter_ink() -> Color:
-	var fill := _resolved_fill()
-	if fill.s >= HIGHLIGHT_MIN_SATURATION:
-		return fill
-	return UIPalette.color(&"accent", UIPalette.control_is_light(self))
+	return UIPalette.color(&"stroke_strong", UIPalette.control_is_light(self))
 
 
 ## What colour the surface underneath would have painted itself.
@@ -527,6 +602,74 @@ func _draw_one_stitch(
 	_draw_ribbon(stitch_points, normals, widths, alphas, ink, 0.0, 1.0, false)
 
 
+## The cut silhouette: tabs left where the patch was separated from its sheet.
+##
+## Regularly spaced, because a perforation is punched on a pitch -- this is the
+## one place on the panel where evenness is correct rather than a tell. What
+## varies is which tabs survived: some were torn away cleanly and some kept a
+## stub, so a share of them are drawn short or skipped entirely.
+##
+## Drawn as *stubs* rather than as paper tabs, which is both closer to the
+## reference and the only thing that reads. A tab in the card's own colour is
+## invisible here -- card and page are within a few percent of each other in the
+## light theme, so a silhouette with no line in it has no contrast to work with.
+## And a cut cross-stitch template does not leave paper behind: it leaves short
+## lengths of the wire that held it, which are line-like. So these are stubs in
+## the thread's colour, standing off the edge at the perforation pitch.
+func _draw_perforation() -> void:
+	var ink := UIPalette.color(&"stroke_strong", UIPalette.control_is_light(self))
+	var rect := Rect2(
+		Vector2(EDGE_INSET, EDGE_INSET),
+		size - Vector2(EDGE_INSET, EDGE_INSET) * 2.0
+	)
+	## Each side walked separately. The corners are left alone: a stamp's corner
+	## is where the two perforations meet and neither one runs through it.
+	var margin := PERFORATION_PITCH
+	_perforate_run(
+		Vector2(rect.position.x + margin, rect.position.y),
+		Vector2(rect.end.x - margin, rect.position.y), Vector2.UP, ink, 0
+	)
+	_perforate_run(
+		Vector2(rect.end.x, rect.position.y + margin),
+		Vector2(rect.end.x, rect.end.y - margin), Vector2.RIGHT, ink, 97
+	)
+	_perforate_run(
+		Vector2(rect.end.x - margin, rect.end.y),
+		Vector2(rect.position.x + margin, rect.end.y), Vector2.DOWN, ink, 211
+	)
+	_perforate_run(
+		Vector2(rect.position.x, rect.end.y - margin),
+		Vector2(rect.position.x, rect.position.y + margin), Vector2.LEFT, ink, 349
+	)
+
+
+## One side's worth of tabs.
+func _perforate_run(
+	from: Vector2, to: Vector2, outward: Vector2, ink: Color, salt: int
+) -> void:
+	var span := from.distance_to(to)
+	if span < PERFORATION_PITCH * 2.0:
+		return
+	var count := maxi(int(span / PERFORATION_PITCH), 1)
+	var along := (to - from) / float(count)
+	var across := Vector2(-outward.y, outward.x) * (PERFORATION_WIDTH * 0.5)
+	for index in range(1, count):
+		var roll := _unit(salt + index * 13)
+		## A third of the tabs tore away flush. Their absence is what makes the
+		## rest read as remnants rather than as a decorative scallop.
+		if roll < 0.34:
+			continue
+		var centre := from + along * float(index)
+		## Length varies with what survived the cut; direction leans a little,
+		## because a snipped wire does not stay perpendicular.
+		var depth := outward * PERFORATION_DEPTH * (0.5 + roll * 0.9)
+		var lean := across.normalized() * (roll - 0.5) * PERFORATION_WIDTH * 0.4
+		draw_line(
+			centre, centre + depth + lean,
+			Color(ink, ink.a * PERFORATION_ALPHA), PERFORATION_STUB_WIDTH, true
+		)
+
+
 ## Loose threads, worked out of the weave at a few points around the edge.
 ##
 ## Drawn *outward* only, and short. A patch frays at its cut edge because the
@@ -565,7 +708,7 @@ func _draw_fraying(points: PackedVector2Array, ink: Color) -> void:
 			var middle := here.lerp(tip, 0.55) + bow
 			draw_polyline(
 				PackedVector2Array([here, middle, tip]),
-				Color(ink, ink.a * 0.55), FRAY_WIDTH, true
+				Color(ink, ink.a * FRAY_ALPHA), FRAY_WIDTH, true
 			)
 
 
@@ -596,9 +739,10 @@ func _point_at(
 ## join instead of meeting -- four separately jittered edges leave visible gaps
 ## exactly where a real line is heaviest.
 func _outline_points() -> PackedVector2Array:
+	## A drawn line sits on the edge; a seam sits in from it.
+	var inset := EDGE_INSET + (SEAM_INSET if stroke_style == Stroke.STITCH else 0.0)
 	var rect := Rect2(
-		Vector2(EDGE_INSET, EDGE_INSET),
-		size - Vector2(EDGE_INSET, EDGE_INSET) * 2.0
+		Vector2(inset, inset), size - Vector2(inset, inset) * 2.0
 	)
 	## Four radii, not one. The panel styleboxes deliberately round each corner
 	## differently -- 9/20/12/16 on a card -- which is most of what stops them
