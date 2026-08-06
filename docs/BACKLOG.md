@@ -1393,11 +1393,46 @@ x = 0.498 -- dead centre. A wider shape taking balls in the middle is a gap
 explains why the nearest defender is a metre away on both axes at once while the
 claimant is picking near-optimally out of what it has.
 
-Before changing any position: confirm the width difference is the cause and not
-another artifact. The discriminator is the per-row gap between the two defenders
-straddling the ball's x, against the ball's distance from each -- a shape that is
-merely wide but still covers has small straddle gaps, and one with a hole has
-large ones.
+### Straddle measured -- there is no hole, and no lateral story at all
+
+`tools/run_straddle_probe.gd`:
+
+  side       dug     n   straddle gap   to nearer edge   outside
+  home       yes    16         1.94 m           0.58 m         1
+  home       no     34         1.56 m           0.35 m        17
+  opponent   yes    11         2.14 m           0.75 m         0
+  opponent   no     58         1.99 m           0.50 m         9
+
+Gaps run 1.56-2.14 m across all four rows and failures do not have wider ones --
+home failures have the *narrowest* gap of the four. So the wider opponent shape
+is evenly wide, not holed.
+
+`to nearer edge` then runs backwards: balls that are **not** dug sit laterally
+*closer* to a straddling defender (0.35 m and 0.50 m) than balls that are
+(0.58 m and 0.75 m). Lateral proximity does not predict success, and on this
+evidence mildly anti-predicts it.
+
+**Positioning is ruled out.** Across the whole decomposition the defence has
+better capability (0.695 against 0.644), a better claimant (0.034 m of concession
+against 0.118 m), easier ball placement (1.60 m off centre against 2.64 m), no
+hole in its shape, and no lateral disadvantage where it fails. It still digs
+23.6% against 56.4%.
+
+**What has never been ruled out is time.** Flight time given to the defender is
+0.526 s home against 0.339 s opponent -- 36% less -- and that traces to
+`_opponent_attack_type`, whose "Short tip" branch covers everything landing
+inside y 0.80, so the home defence is timing a *lob* while the opponent defence
+times a spike. It is the one term that has survived every measurement, and it is
+already documented behind `ENABLE_UNIFIED_ATTACK_SHAPE`, which does not fix it
+alone because the arc it unifies onto is the lobbed one.
+
+One separate observation, small and worth a look on its own: 17 of 51 home
+failures had **nobody on one flank of the ball at all**, against 1 of 17
+successes. That is a different defect from a gap -- it is the ball going outside
+the shape entirely -- and it is specific to the home side.
+
+Sample sizes on the success rows are small (16 and 11); treat the success columns
+as indicative and the failure columns as solid.
 
 Worth noting the home rows do not follow the same pattern -- home successes
 travel *further* than home failures, 2.80 m against 1.56 m. A side that succeeds
