@@ -1835,3 +1835,67 @@ overwrites `assignment.tempo` from `TRANSITION_TEMPO_BASE` a line after
 ball. A quick is a first-tempo ball by definition, so the tempo is no longer the
 transition setter's to call once the lane is chosen. Section 7, found by counting
 lanes against tempos rather than by reading the diff.
+
+---
+
+## The block bands are not the defect, and cannot be tuned as specified
+
+`STUFF_DEPTH_METERS` and `TOOL_EDGE_MARGIN_METERS` are the live bands under
+`ENABLE_GEOMETRIC_ATTACK`; the `BLOCK_*_MARGIN` constants are legacy. Neither
+geometric band had ever been checked against its own distribution, because both
+quantities were computed inside `_block_contact` and consumed there. They are now
+published on every ATTACK event and `tools/run_block_geometry_bands.gd` reads
+them.
+
+**Where the bands sit, on the side that has a sample:**
+
+```
+attacked   swings  contacted   stuff  touch   tool
+home          185         57      12     31     14
+opponent      120          6       2      0      4
+```
+
+Against the opponent's wall, `depth_below` runs p10 0.049, p50 0.130, p75 0.183,
+p90 0.262 and the 0.21 band cuts 21% of it -- **inside the spread, near the top,
+which is what a stuff band should be.** Partial outcomes outnumber terminal
+stuffs 45 to 12. The bands are doing their job wherever they can be observed.
+
+**Why it cannot be tuned:** the other side of the comparison is *six balls*. The
+home wall contacts 5% of opponent swings against the opponent wall's 31%, and its
+six contacts all sit above the stuff band (p10 0.299 against a 0.21 band), so a
+touch by the home wall is arithmetically impossible. That is not a band that
+needs moving -- it is a sample that cannot support a decision, and moving a band
+to make six balls come out differently is fitting a constant to noise.
+
+**Why the wall is not there:**
+
+```
+why the wall was missed (opponent swings, 120)
+  (none)=39   around=30   no wall=31   over=14   contacted=6
+```
+
+**The home wall does not form at all on 31 of 120 opponent swings**, and is beaten
+around on 30 more. The equivalent row for the opponent's wall carries no "no
+wall" at all. That is the defect, and it sits upstream of every band.
+
+**So the dependency in the flag comments is backwards.** Three flags
+(`ENABLE_UNIFIED_ATTACK_SHAPE`, `ENABLE_UNIFIED_RECEPTION_SKILL`,
+`ENABLE_HOME_MIDDLE_OFFENSE`) are each held waiting for "the block outcome bands
+to be re-separated". The bands cannot be separated while one wall barely
+participates, and turning the offence flags on does not fix it -- measured with
+`ENABLE_HOME_MIDDLE_OFFENSE` and `ENABLE_CLAMPED_ARRIVAL_MARGIN` both on, the home
+wall still contacted exactly 6 balls with an identical depth distribution.
+
+**Next, and it is a different question from the one this section was opened to
+answer: why does the home wall fail to form on a quarter of opponent swings?**
+`_form_home_block` is the producer. Ask what it returns on those 31 rows before
+changing anything in it.
+
+### One defect this instrumentation introduced
+
+Stamping the two quantities as `NAN` when no contact happened broke the
+shadow-trace determinism check and the 2D court's trace acceptance immediately:
+**NaN is not equal to itself**, so a metadata dictionary carrying one can never
+compare equal to a byte-identical copy. Absent is the right encoding for "no
+contact" anyway. Worth adding to the determinism entry in `FAILURE_MODES.md`:
+a sentinel that fails its own equality test is not a sentinel.

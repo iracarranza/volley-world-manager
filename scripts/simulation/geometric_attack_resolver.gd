@@ -302,6 +302,21 @@ static func resolve_swing(
 		## a diagnostic nobody asks for. Over the top is a reach problem and around
 		## the edge is a positioning one, and they want opposite fixes.
 		"block_miss_reason": str(resolved.get("block_miss_reason", "")),
+		## The two quantities the outcome bands actually cut, published rather
+		## than consumed inside `_block_contact`. `STUFF_DEPTH_METERS` cuts the
+		## first and `TOOL_EDGE_MARGIN_METERS` the second, and neither could be
+		## checked against its own distribution because neither left the function
+		## that computed it -- which is how a band comes to sit outside the spread
+		## it is meant to divide.
+		"block_depth_below_reach_meters": Dictionary(
+			resolved.get("block", {})
+		).get("depth_below_reach_meters", null),
+		"block_edge_gap_meters": Dictionary(
+			resolved.get("block", {})
+		).get("edge_gap_meters", null),
+		"block_contact_kind": str(
+			Dictionary(resolved.get("block", {})).get("kind", "")
+		),
 		"net_height_over_block_meters": float(
 			resolved.get("net_height_over_block_meters", 0.0)
 		),

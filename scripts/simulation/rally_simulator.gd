@@ -1556,6 +1556,24 @@ func resolve(
 			"target_reason": attack_choice.reason,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			## The two quantities the block's outcome bands cut, on the event
+			## rather than only in the shadow summary. `_geometric_swing_record`
+			## is a developer surface nothing in production reads, so a band could
+			## not be checked against its own distribution from a live rally --
+			## which is how both of them came to be set without one.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
+			## Absent rather than NaN when the wall was never touched.
+			##
+			## NaN is not equal to itself, so a metadata dictionary carrying one
+			## can never compare equal to a byte-identical copy of itself -- which
+			## broke the shadow-trace determinism check and the 2D court's trace
+			## acceptance the moment these were added. Absence says "no contact"
+			## more clearly than a sentinel does anyway.
+			"block_depth_below_reach_meters": geometric.get(
+				"block_depth_below_reach_meters", null
+			),
+			"block_edge_gap_meters": geometric.get("block_edge_gap_meters", null),
 			"geometric_out_reason": str(geometric.get("out_reason", "")),
 			"attack_missed": attack_missed,
 			"attack_effectiveness": attack_effectiveness,
@@ -3012,6 +3030,24 @@ func _resolve_opponent_transition(
 			## error rate of 0.411 against the home side's 0.184 could be seen
 			## and not explained.
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			## The two quantities the block's outcome bands cut, on the event
+			## rather than only in the shadow summary. `_geometric_swing_record`
+			## is a developer surface nothing in production reads, so a band could
+			## not be checked against its own distribution from a live rally --
+			## which is how both of them came to be set without one.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
+			## Absent rather than NaN when the wall was never touched.
+			##
+			## NaN is not equal to itself, so a metadata dictionary carrying one
+			## can never compare equal to a byte-identical copy of itself -- which
+			## broke the shadow-trace determinism check and the 2D court's trace
+			## acceptance the moment these were added. Absence says "no contact"
+			## more clearly than a sentinel does anyway.
+			"block_depth_below_reach_meters": geometric.get(
+				"block_depth_below_reach_meters", null
+			),
+			"block_edge_gap_meters": geometric.get("block_edge_gap_meters", null),
 			"geometric_out_reason": str(geometric.get("out_reason", "")),
 			"attack_missed": bool(geometric.get("attack_missed", false)),
 			"transition_preparation": opponent_preparation.duplicate(true),
@@ -3729,6 +3765,24 @@ func _resolve_home_continuation(
 			"swing_downgraded": continuation_downgraded,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			## The two quantities the block's outcome bands cut, on the event
+			## rather than only in the shadow summary. `_geometric_swing_record`
+			## is a developer surface nothing in production reads, so a band could
+			## not be checked against its own distribution from a live rally --
+			## which is how both of them came to be set without one.
+			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
+			## Absent rather than NaN when the wall was never touched.
+			##
+			## NaN is not equal to itself, so a metadata dictionary carrying one
+			## can never compare equal to a byte-identical copy of itself -- which
+			## broke the shadow-trace determinism check and the 2D court's trace
+			## acceptance the moment these were added. Absence says "no contact"
+			## more clearly than a sentinel does anyway.
+			"block_depth_below_reach_meters": geometric.get(
+				"block_depth_below_reach_meters", null
+			),
+			"block_edge_gap_meters": geometric.get("block_edge_gap_meters", null),
 			"geometric_out_reason": str(geometric.get("out_reason", "")),
 			"attack_missed": attack_missed,
 			"movement_start": hitter_start,
@@ -7447,6 +7501,11 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		## key nothing downstream can read, however faithfully the layers below
 		## carry it.
 		"block_miss_reason": str(swing.get("block_miss_reason", "")),
+		"block_depth_below_reach_meters": swing.get(
+			"block_depth_below_reach_meters", null
+		),
+		"block_edge_gap_meters": swing.get("block_edge_gap_meters", null),
+		"block_contact_kind": str(swing.get("block_contact_kind", "")),
 		"net_height_over_block_meters": float(
 			swing.get("net_height_over_block_meters", 0.0)
 		),
@@ -7519,6 +7578,11 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		## and around the edge is a positioning one; they want opposite fixes and
 		## the outcome alone cannot tell them apart.
 		"block_miss_reason": str(record.get("block_miss_reason", "")),
+		"block_depth_below_reach_meters": record.get(
+			"block_depth_below_reach_meters", null
+		),
+		"block_edge_gap_meters": record.get("block_edge_gap_meters", null),
+		"block_contact_kind": str(record.get("block_contact_kind", "")),
 		"net_height_over_block_meters": float(
 			record.get("net_height_over_block_meters", 0.0)
 		),
