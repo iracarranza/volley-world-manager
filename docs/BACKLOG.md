@@ -2197,3 +2197,31 @@ picks the front-row Outside Hitter nearest a pin and gets the same one every
 rally, so the second outside and the opposite never swing. Four tempos and two
 lanes is not a finished offence, and this is the next degeneracy after the tempo
 pricing.
+
+### Correction, and a better reading of the tempo asymmetry
+
+The previous entry said `ENABLE_HITTER_PRESET_WINDOW` was inert because the
+home first-ball path's dictionary does not carry `preparation_time_seconds`.
+**That was wrong.** The edit adding the call had not applied -- one level of
+indentation off in the anchor -- so the function was defined and never called.
+The identical figures were explained with a data story rather than one `grep`
+for the call site, which would have answered it in a single command.
+
+Wired properly the credit does arrive, and it makes the pricing **worse**:
+Defensive moves 0.3774 to 0.3795 on kill rate while the other three identities
+do not move at all.
+
+That negative result is the useful part. `preparation_time_seconds` is
+`set_contact_time - release_time`, so it is **not** a fixed pass-to-release
+period the two sides share -- it grows with slower sets and collapses to zero on
+quick ones, which is exactly why only the slow-setting identity responded.
+Crediting the hitter with it widens the high ball's advantage instead of
+narrowing it.
+
+**So the asymmetry is not "the blocker is paid and the hitter is not".** It is
+that the blocker's window arrives as a *constant* (`DEFAULT_SET_RELEASE_SECONDS +
+DEFAULT_SECOND_CONTACT_SECONDS`, 1.10 s) while the hitter's shrinks to nothing
+precisely when tempo is doing work. Fixing that means giving the hitter a release
+that does not depend on the set's own flight -- they leave on the pass, and the
+pass is the same pass whatever the setter then does with it. Different fix,
+still open.

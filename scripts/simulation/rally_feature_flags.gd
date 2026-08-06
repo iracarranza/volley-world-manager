@@ -574,15 +574,28 @@ const ENABLE_LIVE_TEMPO_CALL: bool = true
 ## The hitter's share is deliberately larger than the blocker's best. A hitter
 ## knows the play and leaves on the pass; a blocker is guessing until the set is
 ## up.
-## **OFF, AND CURRENTLY INERT -- the wiring is not finished.** Turning it on
-## changes nothing: the identity calibration returns byte-identical figures
-## across roughly two thousand rallies with it either way. `preparation_time_seconds`
-## is produced in exactly one place (`ApproachMechanics.prepare_approach`) and the
-## dictionary the home first-ball path reads it from does not carry it, so the
-## credit resolves to zero every time.
+## **OFF, because wiring it correctly showed the reasoning behind it was wrong.**
 ##
-## Which is the same defect one layer further out, and worth saying plainly: the
-## fix for "a published value reaches no consumer" was itself a published value
-## reaching no consumer. Do not turn this on until a probe shows the credit
-## arriving non-zero at the swing -- print it at the destination first.
+## It was first reported inert because "the dictionary does not carry the key".
+## That was wrong, and the way it was wrong is worth keeping: the edit that added
+## the call had simply not applied -- one level of indentation off in the anchor
+## -- so the function existed and nothing called it. The identical figures were
+## explained with a data story instead of a single grep for the call site, which
+## would have taken one command and said so immediately.
+##
+## Wired properly, the credit does arrive, and it makes the tempo pricing
+## *worse*: Defensive moves 0.3774 to 0.3795 on kill rate and the other three
+## identities do not move at all.
+##
+## The mechanism was misread. `preparation_time_seconds` is
+## `set_contact_time - release_time`, so it is not a fixed pass-to-release period
+## the two sides share -- it **grows with slower sets and is zero for quick ones**,
+## which is why only the identity that slows sets down responded. Crediting the
+## hitter with it therefore widens the advantage of the high ball rather than
+## narrowing it.
+##
+## So the real asymmetry is not "the blocker is paid and the hitter is not". It is
+## that the blocker's window is passed in as a *constant* while the hitter's is a
+## quantity that shrinks to nothing exactly when tempo matters. That is the thing
+## to fix, and it is a different fix from this one.
 const ENABLE_HITTER_PRESET_WINDOW: bool = false

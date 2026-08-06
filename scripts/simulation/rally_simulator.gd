@@ -1357,7 +1357,12 @@ func resolve(
 				)
 				hitter_move_time = float(hitter_leg.seconds)
 				live_velocities[hitter.id] = hitter_leg.exit_velocity
-				hitter_arrival_margin = float(set_flight_time) - hitter_move_time
+				## Plus the part of the pre-set window the hitter was already running
+				## in. The blocker has always been credited with its own share of the
+				## same window; see `HITTER_PRESET_SHARE`.
+				hitter_arrival_margin = float(set_flight_time) \
+					+ _hitter_preset_credit(approach_preparation) \
+					- hitter_move_time
 	var intended_contact_before_clamp := set_target
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, float(set_flight_time)
