@@ -102,8 +102,21 @@ static func material_for(tier: StringName, light_mode: bool) -> ShaderMaterial:
 ## and warm-on-warm is the case the light theme has always been at risk of losing
 ## separation in.
 static func tint(light_mode: bool) -> Color:
+	## Dark screens *upward*, toward `stroke`, so the dots lift off the surface
+	## rather than sinking into it.
+	##
+	## They used to tint toward `canvas`, on the reasoning that a surface is
+	## lifted off the canvas and screening it back toward the canvas is what
+	## depth means. That is sound and it is invisible: `surface` #10283a against
+	## `canvas` #08131f is a luminance gap of about 0.07, so even at a strength of
+	## 0.30 the print could not be seen without being told it was there -- which
+	## is exactly how it was reported.
+	##
+	## Lighter ink on a dark ground is also the more honest reference. A screen
+	## print on dark stock is laid *on top* in a lighter colour; nothing about the
+	## craft this is imitating involves printing shadow.
 	return UIPalette.color(&"ink_muted", true) if light_mode \
-		else UIPalette.color(&"canvas", false)
+		else UIPalette.color(&"stroke", false)
 
 
 ## Dropped whenever the theme changes, because every cached material carries a
