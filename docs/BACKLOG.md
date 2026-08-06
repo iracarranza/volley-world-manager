@@ -1493,6 +1493,32 @@ It also explains the shape of what debug playback shows. The tool only ever runs
 the opponent serving, so what is watched is the home side attacking out of serve
 receive against a side that answers with rolls.
 
-Next: find the second `set_quality`. Trace what `_choose_opponent_attack` is
-handed against what the SET event stamps, and reconcile them before touching the
-downgrade thresholds -- which are, on this evidence, correctly placed.
+### The second `set_quality`, found -- and a third one implied
+
+`opponent_set_quality` is computed twice in the same function, and the code says
+so: line 2376 computes it from `set_geometry.difficulty`, whose target is the
+placeholder `(0.50, 0.48)`, and hands it to `_choose_opponent_attack`; line 2469
+recomputes it from `resolved_set_geometry.difficulty` once the contact is final,
+and *that* is what the SET event stamps.
+
+So shot selection decides roll-against-swing on a set that was never delivered.
+`ENABLE_DELIVERED_SET_SHOT_CHOICE` re-applies the gate against the resolved
+value, carrying the improvisation draw forward rather than redrawing it.
+
+**It changes almost nothing: 3 power swings become 4 out of 120.** At a delivered
+quality of 0.755 the gate would leave roughly four swings in five intact, so the
+resolved value this reads must also be low.
+
+Which means there are three numbers, not two: the estimate, the resolved value,
+and whatever the SET event's 0.755 median is -- because it is demonstrably not the
+resolved value the code assigns immediately before stamping it. **Re-attribute
+the 0.755 first.** It is the only figure suggesting the opponent's sets are good,
+and the conclusion that the downgrade thresholds are correctly placed rests
+entirely on it. If that number is something else, the thresholds are back in
+question.
+
+The machinery added is sound regardless: the improvisation draw is now taken
+unconditionally and gated afterwards, because `set_quality < 0.38 or rng.randf()`
+short-circuited and made draw counts depend on the branch. That is the rule in
+FAILURE_MODES.md section 8, and correcting it re-sequences one rally in three
+hundred with the flag off.

@@ -102,6 +102,52 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## suspicion. Do not widen a bound to close it.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 
+## Choose roll-against-swing on the set that was delivered, not on an estimate.
+##
+## `opponent_set_quality` is computed twice. The first reads
+## `set_geometry.difficulty`, whose target is a placeholder `(0.50, 0.48)` because
+## the contact does not exist yet; the second reads the resolved geometry once it
+## does, and that is what the SET event stamps. Shot selection ran on the first.
+##
+## They are not close. The SET event reports a median of 0.755 while shot
+## selection was reading about 0.344, and the result is that **97% of opponent
+## attacks are rolls or tips -- three power swings in a hundred and twenty** --
+## even though only 11% of their sets fall below the compromise threshold and
+## their sets are *better* than the home side's (0.755 against 0.682).
+##
+## The thresholds were never the problem. The number fed to them was.
+##
+## This sits above most of the dig asymmetry measured in `docs/BACKLOG.md`. A
+## side that rolls nearly every ball hands the other a slow lofted ball to read,
+## which is 0.526 s of defensive flight against 0.339 s, which is the reach
+## margin, the 56.4%-against-23.6% dig rate, the saturated identity gates and the
+## symmetry ratchet.
+##
+## Who swings stays decided on the estimate -- that ordering is genuinely circular,
+## since the contact sets the difficulty and the difficulty sets the shot. Only
+## what the hitter does with the ball is re-read.
+##
+## **Off, and it does not work yet -- which is itself the finding.** Turned on, the
+## opponent's mix goes from 3 power swings to 4 out of 120. If the delivered
+## quality were the 0.755 the SET event reports, the gate would leave roughly four
+## swings in five intact, so the quality this reads is *also* low.
+##
+## That means there are three numbers, not two. The estimate shot selection first
+## reads, the resolved value recomputed before the SET event, and whatever the SET
+## event's 0.755 median actually is -- because it is demonstrably not the second
+## one. Re-attribute that 0.755 before going further: it is the only figure
+## suggesting the opponent's sets are good, and every argument that the thresholds
+## are correctly placed rests on it.
+##
+## One caveat on the machinery, which is sound and worth keeping either way. The
+## improvisation draw is now taken unconditionally and gated afterwards, per the
+## rule in FAILURE_MODES.md section 8. The original `set_quality < 0.38 or
+## rng.randf() < ...` short-circuited, so the draw was skipped whenever the first
+## clause held -- making draw counts depend on the branch. Fixing that is correct
+## and it does re-sequence: one rally in three hundred changes shot type with this
+## flag *off*.
+const ENABLE_DELIVERED_SET_SHOT_CHOICE: bool = false
+
 ## One speed model for every player, in every subsystem.
 ##
 ## There are two live today and which one a player gets depends on which

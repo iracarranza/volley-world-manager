@@ -2471,6 +2471,41 @@ func _resolve_opponent_transition(
 			+ _execution_error(opponent_setter, "set_accuracy", 0.12),
 		0.08, 0.94,
 	)
+	## Decide roll-against-swing on the set that was delivered.
+	##
+	## `_choose_opponent_attack` had to pick a hitter before the contact existed,
+	## so it read the *first* `opponent_set_quality` above -- computed against
+	## `set_geometry.difficulty`, whose target is the placeholder `(0.50, 0.48)`
+	## rather than the contact the setter actually found. The two are not close:
+	## the SET event stamps a median of 0.755 while shot selection was reading
+	## about 0.344, and the consequence was that 97% of opponent attacks came out
+	## as rolls or tips -- three power swings in a hundred and twenty -- despite
+	## only 11% of their sets falling below the compromise threshold.
+	##
+	## That is upstream of most of the dig asymmetry. A side that rolls nearly
+	## every ball hands the other side a slow lofted one to read, which is the
+	## 0.526 s of defensive flight time against 0.339 s, and everything the reach
+	## margin and the dig rate inherit from it.
+	##
+	## Re-applied here rather than fixed in place because the ordering is genuinely
+	## circular: the contact decides the set's difficulty and the set's difficulty
+	## decides the shot. Who swings stays chosen on the estimate; only what they
+	## do with it is re-read. The improvisation draw is carried from the first
+	## decision rather than redrawn, so the number of draws a rally consumes is
+	## unchanged and no seeded outcome downstream is re-sequenced.
+	if RallyFeatureFlagsModel.ENABLE_DELIVERED_SET_SHOT_CHOICE \
+			and attack_choice.has("intended_type"):
+		var delivered_type := str(attack_choice.intended_type)
+		if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
+			delivered_type = _compromised_shot_type(
+				opponent_hitter, delivered_type, opponent_set_quality
+			)
+		elif opponent_set_quality < 0.38 \
+				or float(attack_choice.improvise_roll) \
+					< 0.12 + _rating(opponent_hitter, "decision_making") * 0.08:
+			delivered_type = "Roll shot" if opponent_set_quality >= 0.30 \
+				else "Emergency tip"
+		attack_choice["attack_type"] = delivered_type
 	var set_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(opponent_setter_position, opponent_contact),
 		_set_launch_angle_degrees(opponent_setter, opponent_tempo, opponent_set_quality),
@@ -4670,12 +4705,20 @@ func _choose_opponent_attack(
 	var travel_time := float(chosen.travel_time)
 	var intended_type := "Quick attack" \
 		if code.begins_with("M") and set_quality >= 0.46 else "Power swing"
+	## Drawn unconditionally and gated afterwards, so the number of draws a rally
+	## consumes does not depend on the branch taken. The improvisation roll is
+	## also returned, because the shot type decided here is provisional: it is
+	## chosen against a set quality computed for a *placeholder* target, and the
+	## real one is not known until the contact is final. Re-deciding later with a
+	## fresh draw would consume a second number and re-sequence every seeded
+	## outcome after it.
+	var improvise_roll := rng.randf()
 	var attack_type := intended_type
 	if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
 		attack_type = _compromised_shot_type(best, intended_type, set_quality)
 	else:
 		if set_quality < 0.38 \
-				or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
+				or improvise_roll < 0.12 + _rating(best, "decision_making") * 0.08:
 			attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
 	var target := open_target
 	if attack_type in ["Roll shot", "Emergency tip"]:
@@ -4684,7 +4727,9 @@ func _choose_opponent_attack(
 		target.y = rng.randf_range(0.80, 0.93)
 	return {"player": best, "start": start, "contact": contact,
 		"target": target, "travel_time": travel_time,
-		"attack_type": attack_type, "direction": _attack_direction(contact_x, target)}
+		"attack_type": attack_type, "intended_type": intended_type,
+		"improvise_roll": improvise_roll,
+		"direction": _attack_direction(contact_x, target)}
 
 
 func _home_target_hint(defensive_plan: Resource) -> Vector2:
