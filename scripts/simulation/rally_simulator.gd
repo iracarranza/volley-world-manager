@@ -1372,8 +1372,23 @@ func resolve(
 					+ _hitter_preset_credit(approach_preparation) \
 					- hitter_move_time
 	var intended_contact_before_clamp := set_target
+	## The clamp's budget, not just the set's flight.
+	##
+	## This is where tempo was being priced backwards. `_reachable_contact` drags
+	## the contact back toward the hitter whenever their travel exceeds the budget,
+	## and the budget was the set flight alone -- so a quicker set clamped harder,
+	## the contact ended further off the net, and `CLAMPED_CONTACT_SEVERITY` billed
+	## the swing for it. Kill rate came out monotone in tempo shift, 0.3239 for the
+	## identity that speeds sets up against 0.3774 for the one that slows them down.
+	##
+	## A quick hitter is not travelling during the set. They left on the pass and
+	## are already at the net when the setter touches it, which is the whole reason
+	## a first-tempo ball beats a block. Crediting the release window here is what
+	## makes that true of the model rather than only of the sport.
+	var hitter_contact_budget := float(set_flight_time) \
+		+ _hitter_preset_credit(approach_preparation)
 	set_target = _reachable_contact(
-		hitter_start, set_target, hitter_move_time, float(set_flight_time)
+		hitter_start, set_target, hitter_move_time, hitter_contact_budget
 	)
 	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
 	var contact_displacement := _clamp_displacement_meters(

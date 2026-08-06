@@ -2258,3 +2258,52 @@ Two things are still missing and neither is a constant:
   and are write-only against the home side -- half a scouting system that has
   never been read. Wiring it is the next step and it replaces the placeholder
   rather than tuning it.
+
+---
+
+## Tempo pricing: the channel is found, and one constant cannot fix it
+
+The channel is **not** the arrival margin. `ENABLE_CLAMPED_ARRIVAL_MARGIN` already
+floors that at zero, so crediting it changes almost nothing. It is the **contact
+clamp**: `_reachable_contact`'s budget is `set_flight_time` alone, so a quicker
+set clamps harder, the contact ends further off the net, and
+`CLAMPED_CONTACT_SEVERITY` bills the swing for it. Quick sets were being charged
+for being quick.
+
+Crediting the release window into that budget confirms the diagnosis and
+overshoots badly:
+
+| `HITTER_PRESET_SHARE` | Physical (quick) | Defensive (slow) | ordering | mean kill |
+|---|---|---|---|---|
+| 0 (off) | 0.3239 | 0.3774 | **wrong** | 0.344 |
+| 0.18 | 0.5409 | 0.5894 | **wrong** | 0.560 |
+| 0.82 | 0.7731 | 0.7260 | **correct** | 0.746 |
+
+**No value of this constant does both jobs.** The correct ordering only appears
+once the credit is large enough to relieve the clamp almost everywhere, and by
+then home kill rate has gone from 0.344 to 0.746. At a share small enough to keep
+the aggregate anywhere near its calibrated value, the ordering is still inverted.
+
+### What that actually tells us
+
+The contact clamp is doing enormous work in the current model. A home kill rate
+of 0.344 is substantially produced by hitters being dragged off the net rather
+than by anything about the swing, the block or the defence -- which is worth
+knowing independently of tempo.
+
+And the fix is not a bigger budget for everyone. **A quick hitter is not
+travelling during the set at all**: they leave on the pass and are standing at
+the net when the setter touches it, which is precisely why a first-tempo ball
+beats a block. Modelling that as "more time to travel" relieves every hitter's
+clamp uniformly and inflates the whole offence; modelling it as "a first-tempo
+hitter starts at their contact point" costs the aggregate nothing and prices
+tempo correctly by construction.
+
+**Next: make the approach start tempo-dependent**, so a T0/T1 hitter's
+`hitter_move_time` is near zero because they are already there, and a T3 hitter
+still has to run. That is a change to `_approach_start_position` and the
+preparation staging, not to any constant, and it should leave slow-ball kill
+rates where they are.
+
+`ENABLE_HITTER_PRESET_WINDOW` is left off with both call sites wired, so the next
+attempt starts from a measured baseline rather than re-deriving the channel.
