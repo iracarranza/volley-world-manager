@@ -1633,3 +1633,50 @@ are the same shape and a future sweep will surface them again:
 the staged formation's `primary_close`/`assist_close` and feeds the swing's
 quality. Whether it should reflect the post-commitment adjustment is a design
 question about when pressure is felt, not a stale read. Left alone.
+
+---
+
+## Withdrawn: the opponent's shot mix is not upstream of the dig asymmetry
+
+Recorded because it was asserted twice, in a commit message and in this file, and
+it is wrong.
+
+The claim was that a side rolling nearly every ball hands the other side a slow
+lofted one to read, and that this was "upstream of most of the dig asymmetry".
+`ENABLE_CLAMPED_ARRIVAL_MARGIN` takes the opponent from 3 power swings in 119 to
+27 in 110 -- a change of shot mix from 3% to 25% -- which is the largest lever
+anyone has found on that mix. The dig terms barely notice:
+
+| term | flags off | arrival margin on | both clamp flags on |
+|---|---|---|---|
+| timing gap | +0.290 | +0.285 | +0.285 |
+| reach margin gap | +0.816 m | +0.790 m | +0.790 m |
+| home dig quality | 0.374 | 0.365 | 0.365 |
+
+The opponent's own defensive rows are byte-identical across all three, which is
+correct and worth stating: they defend *home* attacks, and the home swing never
+clamps, so nothing about it moved.
+
+**So the defensive asymmetry survives an eightfold change in the attack it
+defends.** Both clamp fixes are still right -- they are stale reads and the
+correctness argument does not depend on what they buy -- but neither is the
+defensive fix, and the mix is not the cause.
+
+### The gap is one number, not two
+
+`_defense_terms` computes `timing` as
+`(reach_margin + DIG_REACH_MARGIN_METERS) / DIG_REACH_MARGIN_METERS`. It is a
+pure function of the reach margin. The probe prints them as separate rows, and
+reading a "timing gap" beside a "reach margin gap" as two pieces of evidence
+double-counts one fact -- which is how the timing term came to be guessed at as a
+cause on its own.
+
+There is no time in the dig model at all. Ball speed reaches it only through
+whatever sets `reach_margin_meters`, which is why a 3%-to-25% swing in the shot
+mix moved the home defence's margin by 0.025 m.
+
+**Next: `reach_margin_meters`, 1.058 m home against 0.242 m opponent.** It is the
+sole input to `timing`, it carries the whole of the dig gap, and it has now
+survived every change made this session. Start by asking what it is measured
+against on each side, per FAILURE_MODES.md 14 -- print what arrives before
+touching what produces it.
