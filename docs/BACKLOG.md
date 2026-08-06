@@ -1569,3 +1569,67 @@ unconditionally and gated afterwards, because `set_quality < 0.38 or rng.randf()
 short-circuited and made draw counts depend on the branch. That is the rule in
 FAILURE_MODES.md section 8, and correcting it re-sequences one rally in three
 hundred with the flag off.
+
+---
+
+## The stale-derivation audit
+
+`tools/audit_stale_derivations.py` sweeps every `.gd` file for the shape behind
+the arrival-margin defect: a local derived from `X`, `X` then reassigned, and the
+derived value read afterwards without being refreshed. It is deliberately noisy
+-- 57 candidates across `scripts/`, most of them benign -- and reports candidates
+for a human read, not verdicts.
+
+```
+python3 tools/audit_stale_derivations.py scripts
+```
+
+Triage of the 57:
+
+**Confirmed defects, both from the same clamp, both now flagged off.**
+
+| what | where | binds on |
+|---|---|---|
+| `hitter_arrival_margin` derived pre-clamp | all three swings | 74% of opponent swings |
+| `opponent_lane` derived pre-clamp | opponent transition | 36% of opponent swings |
+
+The lane one is `ENABLE_CLAMPED_CONTACT_LANE`. `opponent_lane` is read off the
+contact the set aimed at, three hundred lines before `_reachable_contact` moves
+that contact; the wall is then restaged against the new contact but the old lane,
+familiarity accrues to a lane nobody swung from, and `_geometric_swing` resolves
+the ball along the old lane's natural course -- which is precisely the failure the
+lane fix was written to stop. 40 of the 43 drifted swings are one migration,
+Right Quick to Right Pin: a middle who cannot reach the quick is dragged back
+down their own approach, which runs outward, and arrives at the pin still
+labelled a quick. `tools/run_lane_drift_probe.gd`; the flag takes it to 0%.
+
+**Confirmed, but latent behind a flag that is off.** On the home path,
+`_compromised_shot_type` rewrites `hit_type` *after* `swing_deficit` has been
+charged against the power swing and already spent against `attack_quality`, so a
+hitter who backs down to a roll pays the overreach penalty for the swing they
+declined. The `using_live_attack` rollout branch has the same ordering. The
+opponent path re-reads the shot before its deficit, so the asymmetry is
+one-sided. Recorded on `ENABLE_UNIFIED_ATTACK_SHAPE`, which must not land until
+the ordering is fixed. Nothing exercises this today; the sweep found it, not a
+rally.
+
+**Deliberate, and each already says so in the code.** Worth listing, because they
+are the same shape and a future sweep will surface them again:
+
+- `set_arc` / `continuation_set_arc` are not re-solved after the clamp.
+  `_retarget_set_event` explains it: a setter delivering short lofts the ball
+  rather than releasing earlier, so the hang time stays and only the landing
+  point moves -- and re-solving would be circular, since a shorter ball flies for
+  less time, which shortens the runway that caused the clamp.
+- `opponent_capability` is read after `opponent_tempo_call` is downgraded. The
+  setter is billed for what they attempted and delivers what they can; that is
+  the model.
+- `home_block_formation` is staged against the pre-clamp contact on purpose --
+  blockers commit during the set's flight. The adjustment they make once the
+  hitter commits is `_wall_stage_x`, which *is* recomputed.
+- `intended_attack_target` is kept precisely because `attack_target` moves.
+
+**Unresolved, and not claimed either way.** `home_block_pressure` is derived from
+the staged formation's `primary_close`/`assist_close` and feeds the swing's
+quality. Whether it should reflect the post-commitment adjustment is a design
+question about when pressure is felt, not a stale read. Left alone.

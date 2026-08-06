@@ -2757,6 +2757,26 @@ func _resolve_opponent_transition(
 		set_flight_time,
 	)
 	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
+	## And so does the lane.
+	##
+	## `opponent_lane` was read off the contact the set *aimed* at, three hundred
+	## lines above. The clamp then moves that contact, and everything the lane
+	## decides was left pointing at the old one: the wall is restaged below against
+	## the new contact but the old lane, familiarity accrues to a lane the hitter
+	## did not swing from, and `_geometric_swing` resolves the ball along the old
+	## lane's natural course.
+	##
+	## Measured at 36% of opponent swings (`tools/run_lane_drift_probe.gd`), and
+	## not scattered: 40 of the 43 are one migration, Right Quick to Right Pin. A
+	## middle who cannot reach the quick gets dragged back down their own approach,
+	## which runs outward, and arrives at the pin still labelled a quick.
+	##
+	## Same clamp and same shape as the stale arrival margin above -- see
+	## FAILURE_MODES.md 15. Flagged separately because it is a different
+	## consequence with a different blast radius: this one moves the wall and the
+	## ball's course, not the hitter's billing.
+	if RallyFeatureFlagsModel.ENABLE_CLAMPED_CONTACT_LANE:
+		opponent_lane = CourtConstants.lane_at_x(opponent_contact.x)
 	## And the wall moves with it.
 	##
 	## The wall above was staged against the contact the set was *aimed* at.
@@ -2917,6 +2937,10 @@ func _resolve_opponent_transition(
 			roundi(opponent_attack * 100.0),
 		],
 		{"side": "opponent", "lane_x": opponent_contact.x,
+			## Beside `lane_x`, which is the contact this swing was actually struck
+			## from, so the two can be compared. The home ATTACK event has always
+			## stamped its lane; this one never did.
+			"lane": opponent_lane,
 			## The contact this swing was *asked* for, beside the one it got.
 			## `hitter_start` and `hitter_travel_time` were already stamped, so the
 			## only missing term was the ask -- and without it nothing downstream

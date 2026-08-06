@@ -100,6 +100,17 @@ const ALLOW_DEVELOPMENT_GEOMETRIC_ATTACK: bool = true
 ## block's outcome bands genuinely need re-separating against an opponent that
 ## swings -- that is the remaining work, and it is now a known quantity instead of a
 ## suspicion. Do not widen a bound to close it.
+## **Fix the ordering before turning this on.** On the home path
+## `_compromised_shot_type` rewrites `hit_type` *after* `swing_deficit` has
+## already been charged against the power swing and spent against
+## `result.attack_quality` -- so a hitter who backs down to a roll still pays the
+## overreach penalty for the swing they declined. The opponent path re-reads the
+## shot before its deficit, so this asymmetry appears only here. Found by the
+## stale-derivation sweep (`FAILURE_MODES.md` 15), not by a rally, because the
+## flag is off and nothing exercises it.
+##
+## The `using_live_attack` rollout branch replaces `hit_type` at the same point
+## and has the same problem.
 const ENABLE_UNIFIED_ATTACK_SHAPE: bool = false
 
 ## Choose roll-against-swing on the set that was delivered, not on an estimate.
@@ -474,3 +485,25 @@ const ENABLE_UNIFIED_RECEPTION_SKILL: bool = false
 ## ratchet -- was calibrated against a side that rolled nearly every ball. Turn
 ## it on together with that re-tune, not before it.
 const ENABLE_CLAMPED_ARRIVAL_MARGIN: bool = false
+
+
+## Read the hitter's lane off the contact they actually struck.
+##
+## The second defect of the same shape as `ENABLE_CLAMPED_ARRIVAL_MARGIN`, from
+## the same clamp. `opponent_lane` is derived from the contact the set aimed at;
+## `_reachable_contact` then moves that contact, and the lane is never re-read.
+## Everything it decides therefore points at a swing that did not happen -- the
+## wall is restaged against the new contact but the old lane, familiarity accrues
+## to the wrong lane, and the ball is resolved along the wrong natural course,
+## which is the failure mode the lane fix itself was written to stop ("it sent
+## right-side swings across the wrong diagonal and out").
+##
+## 36% of opponent swings, and 40 of those 43 are a single migration: Right Quick
+## to Right Pin. A middle who cannot reach the quick is dragged back down their
+## own approach, which runs outward, and arrives at the pin still labelled a
+## quick. `tools/run_lane_drift_probe.gd`.
+##
+## FLAGGED because it moves the wall and the ball's course on a third of opponent
+## swings, and both were calibrated with the drift present. Lands with the block
+## outcome-band re-tune.
+const ENABLE_CLAMPED_CONTACT_LANE: bool = false
