@@ -1453,3 +1453,46 @@ the engine has never been watched, including the entire home-serving branch whos
 opponent-side transition attack and continuation dig are two of the three dig
 sites measured above. Make the service side selectable in the fixture before
 drawing further conclusions from what debug displays.
+
+
+## The opponent never spikes, and it is not the threshold
+
+`tools/run_shot_downgrade_probe.gd`, 150 rallies x 2 serving sides:
+
+  attack types produced
+    home      High-ball swing=169  Tempo swing=11   Controlled roll=5
+    opponent  Roll shot=103        Emergency tip=14  Power swing=3
+
+96% of home attacks are swings. 97% of opponent attacks are rolls or tips --
+three power swings in a hundred and twenty.
+
+The obvious suspect is the downgrade threshold sitting above the distribution it
+cuts, which is the most common defect in this repository. It is not that:
+
+  set quality      n     p10     p25     p50     p75     p90   below compromise
+  home           185   0.100   0.326   0.682   0.722   0.762     46 (25%)
+  opponent       120   0.259   0.627   0.755   0.798   0.861     13 (11%)
+
+**The opponent's sets are better than the home side's** -- median 0.755 against
+0.682 -- and only 11% fall below the 0.30 compromise threshold. The legacy branch
+downgrades below 0.38 or on a 12-20% improvisation roll, and neither can turn an
+11% tail into 97% of attacks.
+
+So the `set_quality` that shot selection reads is not the `set_quality` stamped on
+the SET event. `ENABLE_UNIFIED_ATTACK_SHAPE` quotes a median of 0.344 for the same
+quantity the event reports at 0.755. One name, two numbers, and the one shot
+selection reads is roughly half the one the setter actually delivered.
+
+**This is the root of the entire dig chain.** An opponent that rolls 97% of the
+time hands the home defence a slow lofted ball -- which is the 0.526 s of flight
+against the opponent's 0.339 s, which is the reach margin, which is the 56.4%
+against 23.6% dig rate, which is the saturated identity gates and the symmetry
+ratchet. Every measurement in this section is downstream of it.
+
+It also explains the shape of what debug playback shows. The tool only ever runs
+the opponent serving, so what is watched is the home side attacking out of serve
+receive against a side that answers with rolls.
+
+Next: find the second `set_quality`. Trace what `_choose_opponent_attack` is
+handed against what the SET event stamps, and reconcile them before touching the
+downgrade thresholds -- which are, on this evidence, correctly placed.
