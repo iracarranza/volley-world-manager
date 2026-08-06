@@ -1238,13 +1238,24 @@ fallback and reproduces the old behaviour exactly. Reverted rather than shipped,
 because a comment asserting it reconciles a 0.75 m disagreement while provably
 changing nothing is a false claim left in the source.
 
-What that rules out is worth keeping: the gap is **not** the claim and the draw
-starting from two positions. Both are already measuring from the same place. The
-next candidates are that the two are measuring to different *targets* -- the
-claim uses the `landing_point` handed to `choose_claimant`, the drawn journey
-uses the event's `start_position`, and nothing has confirmed those are the same
-point -- or that `distance_meters` is overwritten downstream between the claim
-and the stamp. Check which of the two figures is wrong before assuming either.
+**And the disagreement was never real.** Dumping the `arrival` dict rather than
+reasoning about it showed that most are *empty* -- only claimed digs carry one.
+So "claim distance" was averaged over 44 home rows and "drawn distance" over 78.
+A denominator mismatch in the probe, not a defect in the engine.
+
+On matched rows -- the same subset on both sides -- the two agree exactly:
+
+  side       rows with arrival   claim dist   drawn dist   reach margin
+  home            44 of 78         1.506 m      1.506 m       1.339 m
+  opponent        69 of 106        1.828 m      1.828 m       0.242 m
+
+So the resolver and playback never disagreed, and no anchor needed reconciling.
+
+**What survives is real.** The opponent defender is 0.32 m further from the ball
+and has 1.1 m less reach margin, measured on matched rows, while digging balls
+that land *more centrally* than the ones the home defence covers. That is
+positioning or claimant choice, and it is now the only live candidate -- the
+ball, the anchors, and the measurement itself have each been ruled out.
 
 Both want their own fix. Neither is the attack-symmetry ratchet, and treating
 them as one thing is what produced the wrong answer above.

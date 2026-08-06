@@ -33,6 +33,8 @@ calibration, answer all six *before* writing code.
    changes wearing one name. (§5)
 6. **Does the thing I am about to trust actually run what the game runs?** Check
    the calibration, the harness, the test, and the flag-off path. (§6)
+7. **Work backwards from what demonstrably arrives.** Before adding a value and
+   hoping it reaches the far end, print what is *already* at the far end. (§14)
 
 ---
 
@@ -303,3 +305,42 @@ recorded until both halves could land together.
 - A hypothesis that dies on measurement is worth recording. Two died on the block
   jump work -- the jump multiplier and a supposed 7x involvement gap -- and both
   are written down so they are not raised again.
+
+
+---
+
+## 14. Work backwards from what arrives
+
+The most repeated shape of wasted work here is not a wrong theory. It is a
+correct-looking change that turns out to affect nothing:
+
+- `block_miss_reason` stamped through four layers and arriving empty, because a
+  curator in the middle dropped it.
+- An `anchor` added to `evaluate_arrival` and read on both sides of the net, to
+  reconcile a 0.75 m disagreement. Byte-identical rallies -- the key never
+  arrived, every call took the fallback, and the disagreement was never real.
+- A deflection bonus added to the third dig site. Correct, and the branch never
+  fires in the sample.
+- A `movement_start` key added to an event that already had one eleven lines up.
+
+Each cost a full measure-and-verify cycle to discover, and each was avoidable by
+one cheap step: **print what is at the destination before changing what is at the
+source.**
+
+Dump the keys actually present on the event, the dict, the record. Then trace
+backwards to whatever wrote them. This finds curators that drop fields, branches
+that never fire, and values that were already there -- before any of them cost a
+rebuild.
+
+It also finds the subtler thing. Dumping the `arrival` dict on a DEFENSE event
+showed that most of them are *empty*: only claimed digs carry one. So a
+comparison of "claim distance" against "drawn distance" was silently comparing
+44 rows against 78, and the 0.75 m gap between them was a denominator mismatch,
+not a defect in the engine. On matched rows the two agree to three decimals.
+
+That is the same defect as the "7x involvement gap" between harness and rally,
+which was per-block-formed against per-swing. Twice in one day, from the same
+habit of trusting a number without checking what it was averaged over.
+
+**The rule:** when a measurement surprises you, inspect the *rows* before
+inspecting the model.
