@@ -82,17 +82,32 @@ const ABSENCE_MARKERS := {
 ## per-rally records both reports are built from. Driving both serving sides
 ## matters: the shadow pipeline only runs on opponent serves, so a sweep that
 ## forgets to alternate silently measures half the engine.
+## `principle_overrides` sets named principles on the home team *after* the
+## identity is applied, so a caller can hold six of the seven constant and move
+## the seventh.
+##
+## The presets co-vary heavily -- Physical is high on every principle and
+## Defensive is low on every one -- so a ranking taken across identities cannot
+## say which principle produced a difference. That is the confound this file's
+## own design doc warns about, arriving from a direction nobody had checked: not
+## two numbers taken under different conditions, but seven conditions moved at
+## once and one number read off the end.
 static func _sweep(
 	sample_count: int,
 	base_seed: int,
 	population: StringName = DEFAULT_POPULATION,
 	identity_name: String = "Balanced",
+	principle_overrides: Dictionary = {},
 ) -> Array[Dictionary]:
 	var records: Array[Dictionary] = []
 	for serving_home in [true, false]:
 		var manager := GameManagerModel.new()
 		manager.seed_vertical_slice_data()
 		manager.team.apply_identity(identity_name)
+		for principle_name in principle_overrides:
+			manager.team.principles.set(
+				principle_name, float(principle_overrides[principle_name])
+			)
 		if population == &"generated":
 			## Both sides, or the measurement compares a real squad against a
 			## squad of clones and reads the difference as a balance finding.
@@ -214,8 +229,11 @@ static func outcome_calibration(
 	base_seed: int = 900000,
 	population: StringName = DEFAULT_POPULATION,
 	identity_name: String = "Balanced",
+	principle_overrides: Dictionary = {},
 ) -> Dictionary:
-	var records := _sweep(sample_count, base_seed, population, identity_name)
+	var records := _sweep(
+		sample_count, base_seed, population, identity_name, principle_overrides
+	)
 	if records.is_empty():
 		return {"fixture_valid": false}
 
