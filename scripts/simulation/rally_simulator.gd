@@ -405,6 +405,22 @@ const LIVE_TEMPO_VARIATION_FLOOR: float = 0.48
 const LIVE_COMMITMENT_HIGH: float = 0.56
 const LIVE_COMMITMENT_LOW: float = 0.44
 
+## How much of the pre-set window the hitter is credited with.
+##
+## The blocker already gets `preset_window * preset_share`, 0.26 to 0.72 of it
+## depending on their read -- and the hitter got nothing at all, despite both
+## reading the same pass. That is why running quick *cost* the offence: measured
+## across the six identities, kill rate fell monotonically with tempo shift,
+## 0.3774 for the identity that slows sets down against 0.3239 for the one that
+## speeds them up. A first-tempo ball squeezed the attacker and left the wall's
+## head start untouched.
+##
+## Higher than the blocker's best share, and deliberately: a hitter knows the
+## play and starts their approach off the pass, while a blocker cannot commit
+## until the set is up and is guessing until then. The pre-set window is worth
+## more to the person who already knows where they are going.
+const HITTER_PRESET_SHARE: float = 0.82
+
 ## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
@@ -5676,6 +5692,20 @@ static func _reachable_contact(
 ##
 ## So the clamp had removed a consequence rather than relocating it. This is the
 ## consequence, in the channel it actually belongs to.
+## The part of the pre-set window the hitter gets to run in.
+##
+## Reads `preparation_time_seconds`, which the approach model already computes
+## and already publishes -- it was simply never spent by anything. A value that
+## exists, is correct, and reaches no consumer is the commonest defect in this
+## engine and this is one more instance of it.
+static func _hitter_preset_credit(preparation: Dictionary) -> float:
+	if not RallyFeatureFlagsModel.ENABLE_HITTER_PRESET_WINDOW:
+		return 0.0
+	return maxf(
+		float(preparation.get("preparation_time_seconds", 0.0)), 0.0
+	) * HITTER_PRESET_SHARE
+
+
 static func _clamp_displacement_meters(before: Vector2, after: Vector2) -> float:
 	if not RallyFeatureFlagsModel.ENABLE_CLAMPED_ARRIVAL_MARGIN:
 		return 0.0

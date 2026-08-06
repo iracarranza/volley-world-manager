@@ -2142,3 +2142,58 @@ and re-fit them against a fixture that plays a real match. That is a bigger and
 noisier change than this thread has been making, and the small safe changes
 provably cannot land -- measured: three of them together clear the ratchet that
 each of them fails alone.
+
+---
+
+## Tempo is now live, and the model prices it backwards
+
+With the four offence flags on, the one remaining suite failure is the
+Defensive-identity gate, and it is a real finding rather than a fixture problem.
+Measured across six career seeds at 48 samples:
+
+| identity | tempo shift | home attack error | home kill rate |
+|---|---|---|---|
+| Physical | -1 (quicker) | 0.1398 | **0.3239** |
+| Fast Tempo | -1 (quicker) | 0.1478 | 0.3335 |
+| Balanced | 0 | 0.1350 | 0.3443 |
+| Defensive | +1 (slower) | 0.1406 | **0.3774** |
+
+**Monotone in tempo shift.** Running quick costs the offence five points of kill
+rate, so no bench would ever call one -- the opposite of the sport, and the
+opposite of what the tempo work was for.
+
+### The cause is an asymmetry nobody had noticed
+
+The blocker's closing clock is `set_flight_time + preset_window * preset_share`
+-- 26% to 72% of the pass-to-release window, scaled by how well they read it. The
+hitter's clock is `set_flight_time` **alone**.
+
+Both are reading the same pass and only one of them is paid for it. So shortening
+the set squeezes the attacker and leaves the wall's head start untouched, and
+tempo comes out priced the wrong way round. If anything the hitter should get the
+*larger* share: they know the play and leave on the pass, while a blocker is
+guessing until the set is up.
+
+### And the fix for it is inert, which is the same defect again
+
+`ENABLE_HITTER_PRESET_WINDOW` reads `preparation_time_seconds` -- a value the
+approach model already computes and publishes -- and credits the hitter with it.
+It changes nothing: the identity calibration returns byte-identical figures with
+it on or off across roughly two thousand rallies.
+
+`preparation_time_seconds` is produced in exactly one place,
+`ApproachMechanics.prepare_approach`, and the dictionary the home first-ball path
+reads from does not carry it. So the attempted fix for "a published value reaches
+no consumer" is itself a published value reaching no consumer.
+
+**Next, and it is one probe:** print the credit at the swing and find which
+dictionary actually carries `preparation_time_seconds` on the home first-ball
+path. Do not turn the flag on until it arrives non-zero.
+
+### Still degenerate: the home side has two lanes
+
+Home lanes read Front Quick 84, Right Pin 110, **Left Pin zero**. `_fallback_hitter`
+picks the front-row Outside Hitter nearest a pin and gets the same one every
+rally, so the second outside and the opposite never swing. Four tempos and two
+lanes is not a finished offence, and this is the next degeneracy after the tempo
+pricing.

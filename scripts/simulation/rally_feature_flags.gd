@@ -556,3 +556,33 @@ const ENABLE_HOME_MIDDLE_OFFENSE: bool = true
 ## FLAGGED, and it belongs with `ENABLE_HOME_MIDDLE_OFFENSE`: one adds the lane a
 ## quick needs, this adds the tempo. Neither is worth much alone.
 const ENABLE_LIVE_TEMPO_CALL: bool = true
+
+
+## Pay the hitter for reading the pass, the way the blocker already is.
+##
+## `_form_home_block` gives every blocker `preset_window * preset_share` -- 26%
+## to 72% of the pass-to-release window, scaled by how well they read it -- on
+## top of the set's own flight. The hitter's clock was the set flight alone.
+##
+## So both sides read the same pass and only one was credited for it, which
+## priced tempo backwards. Measured across the six identities, kill rate fell
+## monotonically with tempo shift: 0.3774 for Defensive, which slows sets down,
+## against 0.3239 for Physical, which speeds them up. Running quick cost the
+## offence five points of kill rate, so no bench would ever call one -- the
+## opposite of the sport, and the opposite of what the tempo work was for.
+##
+## The hitter's share is deliberately larger than the blocker's best. A hitter
+## knows the play and leaves on the pass; a blocker is guessing until the set is
+## up.
+## **OFF, AND CURRENTLY INERT -- the wiring is not finished.** Turning it on
+## changes nothing: the identity calibration returns byte-identical figures
+## across roughly two thousand rallies with it either way. `preparation_time_seconds`
+## is produced in exactly one place (`ApproachMechanics.prepare_approach`) and the
+## dictionary the home first-ball path reads it from does not carry it, so the
+## credit resolves to zero every time.
+##
+## Which is the same defect one layer further out, and worth saying plainly: the
+## fix for "a published value reaches no consumer" was itself a published value
+## reaching no consumer. Do not turn this on until a probe shows the credit
+## arriving non-zero at the swing -- print it at the destination first.
+const ENABLE_HITTER_PRESET_WINDOW: bool = false
