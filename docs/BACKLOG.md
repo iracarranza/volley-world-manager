@@ -1965,3 +1965,37 @@ either side of the net, and that is a separate finding from the primary's.
 one? Two producers, one of which has a failure state the other does not. Print
 the inputs to the close on the 38% before changing either -- and do not touch
 `WALL_JOIN_CLOSE`, which this measurement has now ruled out.
+
+### Located: the close formula is continuous, so the input must be bimodal
+
+`_blocker_close_fraction` ends:
+
+```gdscript
+clampf(1.0 - maxf(required_seconds - usable_time, 0.0)
+       / BLOCK_CLOSE_FAILURE_SECONDS, 0.0, 1.0)
+```
+
+with `BLOCK_CLOSE_FAILURE_SECONDS = 0.45`. **That is a wide ramp, not a narrow
+one** -- any deficit between 0 and 0.45 s returns an intermediate close. The
+formula is not what makes the output binary.
+
+So the deficit `required_seconds - usable_time` must itself be bimodal: at or
+below zero, or beyond 0.45 s, with 56 samples and nothing in between.
+
+**Hypothesis, not yet measured.** The primary is chosen as the blocker *nearest*
+the attack, and a front row has three slots. So the nearest blocker is either
+already standing in the lane -- deficit strongly negative, close 1.0 -- or a whole
+slot away, which at block-close speed from a standstill is far more than 0.45 s
+of deficit. There is no intermediate distance for a three-slot row to produce,
+which would make the binary a consequence of the *court*, not of any constant.
+
+If that holds, the fix is not a constant at all. It is that a real block closes
+by a blocker who starts moving on the read rather than one who starts from a
+standstill when the ball is already up -- and `BLOCK_PLANT_SECONDS` plus the
+preset window are where that would have to come from.
+
+**The discriminating measurement:** print `required_seconds`, `usable_time` and
+their difference for every close, per side. If the difference is bimodal the
+hypothesis holds and the constants are innocent; if it is spread across 0 to
+0.45 s and the *output* is still binary, something downstream is rounding it and
+that is a different defect entirely. Measure before touching either constant.
