@@ -31,7 +31,14 @@ func _draw() -> void:
 	_draw_scrap(Vector2(size.x * 0.06, size.y * 0.68), Vector2(320.0, 190.0), 0.075, accent)
 	_draw_court_doodle(Vector2(size.x * 0.73, size.y * 0.18), light_mode)
 	_draw_ball_doodle(Vector2(size.x * 0.13, size.y * 0.79), minf(size.x, size.y) * 0.105, ink)
-	_draw_starburst(Vector2(size.x * 0.58, size.y * 0.12), 30.0, 15.0, accent)
+	## A sun by day and a moon by night. The backdrop is the same page in both
+	## themes and the doodles on it are the same doodles -- except this one, which
+	## is the only thing on the sheet that has any business changing with the
+	## light.
+	if light_mode:
+		_draw_starburst(Vector2(size.x * 0.58, size.y * 0.12), 30.0, 15.0, accent)
+	else:
+		_draw_crescent(Vector2(size.x * 0.58, size.y * 0.12), 30.0, accent)
 	_draw_stitches(Vector2(size.x * 0.43, size.y * 0.91), 190.0, ink)
 
 
@@ -83,6 +90,46 @@ func _draw_starburst(center: Vector2, outer: float, inner: float, color: Color) 
 		var radius := outer if index % 2 == 0 else inner
 		var angle := TAU * float(index) / 16.0 - PI * 0.5
 		points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+	draw_colored_polygon(points, color)
+
+
+## A crescent, as the lune between two overlapping circles.
+##
+## Drawn as one polygon rather than by punching a hole in a disc, because the
+## backdrop already has ruled lines and paper scraps under it -- overdrawing the
+## bite in the page colour would erase them and leave a visible disc where the
+## shadow should be transparent.
+func _draw_crescent(center: Vector2, outer: float, color: Color) -> void:
+	## The shadow: a second circle, nearly as large, pushed to one side. How far
+	## it is pushed is how full the moon is.
+	var shadow_radius := outer * 0.86
+	var shadow_offset := outer * 0.46
+	## Where the two circles cross. Those are the horns, and both arcs have to
+	## start and end there or the shape will not close.
+	var cross_x := (
+		shadow_offset * shadow_offset - shadow_radius * shadow_radius
+		+ outer * outer
+	) / (2.0 * shadow_offset)
+	var cross_y := sqrt(maxf(outer * outer - cross_x * cross_x, 0.0))
+	var lit_start := atan2(cross_y, cross_x)
+	var shadow_start := atan2(cross_y, cross_x - shadow_offset)
+	var points := PackedVector2Array()
+	var steps := 32
+	## The lit limb, taken the long way round -- away from the shadow.
+	for index in range(steps + 1):
+		var angle := lerpf(lit_start, TAU - lit_start, float(index) / float(steps))
+		points.append(center + Vector2(cos(angle), sin(angle)) * outer)
+	## Then back along the terminator, which is the near edge of the shadow
+	## circle rather than a straight line -- that curve is the whole difference
+	## between a crescent and a segment of an orange.
+	for index in range(steps + 1):
+		var angle := lerpf(
+			TAU - shadow_start, shadow_start, float(index) / float(steps)
+		)
+		points.append(
+			center + Vector2(shadow_offset, 0.0)
+			+ Vector2(cos(angle), sin(angle)) * shadow_radius
+		)
 	draw_colored_polygon(points, color)
 
 
