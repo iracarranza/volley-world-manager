@@ -204,6 +204,7 @@ var selected_individual_training_id: int = -1
 
 var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
+var _nav_tape: UITapeMeasure = null
 var _nav_tween: Tween
 var _roster_list_expanded: bool = false
 var _attribute_page: int = 0
@@ -219,6 +220,7 @@ func _ready() -> void:
 		button.pressed.connect(_navigate.bind(button.get_meta("section")))
 		_nav_buttons.append(button)
 	current_section_button.pressed.connect(_toggle_nav_dropdown)
+	_build_tape()
 	click_catcher.gui_input.connect(_click_catcher_input)
 	nav_dropdown.visible = false
 	advance_catcher.gui_input.connect(_advance_catcher_input)
@@ -377,6 +379,36 @@ func refresh() -> void:
 ## is parented directly to this Control (not to any Container) on purpose: a
 ## Control inside a Container has its position rewritten on every layout pass,
 ## which would fight the tween below and snap the panel back mid-slide.
+## The drawer's surface, and the tab that stands in for it when it is shut.
+##
+## Built here rather than in the scene because both pieces are pure drawing with
+## no layout of their own -- the same reason the ink outlines are added by the
+## style pass. The tape goes *behind* the panel so the nav buttons sit on it,
+## and inside `nav_clip` so the clip that already animates the drawer open
+## reveals the tape along with it. That clip was always a horizontal expansion;
+## it just had nothing on it that looked like it was being pulled out.
+func _build_tape() -> void:
+	var tape := UITapeMeasure.new()
+	tape.name = "TapeBand"
+	tape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	nav_clip.add_child(tape)
+	nav_clip.move_child(tape, 0)
+	_nav_tape = tape
+	## And the tang on the closed strip. Anchored to the right end of the
+	## section button, because that is where the tape would be if it were out.
+	var tab := UITapeMeasure.new()
+	tab.name = "TapeTab"
+	tab.tab_only = true
+	tab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tab.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	tab.custom_minimum_size = Vector2(14.0, 0.0)
+	tab.offset_left = -18.0
+	tab.offset_right = -4.0
+	tab.offset_top = 7.0
+	tab.offset_bottom = -7.0
+	current_section_button.add_child(tab)
+
+
 func _toggle_nav_dropdown() -> void:
 	if _nav_dropdown_open:
 		_close_nav_dropdown()
@@ -441,6 +473,10 @@ func _open_nav_dropdown() -> void:
 			+ (current_section_button.size.y - drawer_height) * 0.5,
 	)
 	nav_clip.size = Vector2(0.0, drawer_height)
+	## The tape is always its full extended length; the clip is the window.
+	if _nav_tape != null:
+		_nav_tape.position = Vector2.ZERO
+		_nav_tape.size = Vector2(target_width, drawer_height)
 	dropdown_panel.position = Vector2.ZERO
 	dropdown_panel.size = Vector2(target_width, drawer_height)
 	dropdown_panel.modulate.a = 1.0

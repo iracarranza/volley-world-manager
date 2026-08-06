@@ -282,7 +282,8 @@ static func _style_panel(panel: PanelContainer) -> void:
 	var node_name := String(panel.name)
 	if node_name in ["ContentPanel", "QuestionPanel", "MenuPanel"]:
 		panel.theme_type_variation = &"RaisedPanel"
-	elif node_name.ends_with("Strip") or node_name.ends_with("Bar"):
+	elif node_name.ends_with("Strip") or node_name.ends_with("Bar") \
+			or node_name == "DropdownPanel":
 		## A bar is where a control lives, not a surface in its own right.
 		##
 		## `NavStrip` holds one button and a line of hint text, and drawing an
@@ -294,6 +295,12 @@ static func _style_panel(panel: PanelContainer) -> void:
 		## Matched on the suffix rather than on the one node that has the problem,
 		## because the mistake is structural -- a panel whose only content is a
 		## control -- and the next one will be named the same way.
+		##
+		## `DropdownPanel` joins them for a different reason: it is the section
+		## drawer, and the drawer's surface is a tape measure drawn underneath
+		## it. A sewn panel over a tape would be two surfaces claiming the same
+		## rectangle -- and a stitched thing that extends is the contradiction
+		## the tape exists to resolve.
 		panel.theme_type_variation = &"BareRegion"
 	elif node_name.contains("Preview") or node_name.contains("News") \
 			or node_name.contains("Placeholder"):
