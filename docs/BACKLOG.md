@@ -1749,3 +1749,89 @@ tempo 3 with none below 2. `_tempo_call` starts from a requested tempo and only
 quickens on a good pass, so either the request is a constant or its thresholds
 sit outside the pass-quality distribution it cuts -- the section 2 shape, and the
 two want different fixes. Measure the requested tempo before changing either.
+
+---
+
+## The home offence was two hitters and a high ball
+
+`_fallback_hitter` runs on **every ball the calibration fixture plays**, because
+no play is ever called. It looked only for Outside Hitters, and
+`_fallback_assignment` chose a lane from which half of the court the hitter
+happened to stand in -- which can only ever produce a pin.
+
+```
+home lanes    Left Pin=34    Right Pin=151    (no quick, no pipe, ever)
+home tempo    T2=16 (9%)     T3=169 (91%)     (never T0, never T1)
+```
+
+The middle never attacked. And `_hit_type` reads "Quick attack" off the **lane**,
+never off the tempo, so no amount of tempo variation could have produced one.
+
+### Two independent thresholds outside their distributions
+
+Home pass quality measures p10 0.291, p25 0.350, **p50 0.419**, p75 0.494, **p90
+0.567** (`tools/run_shot_downgrade_probe.gd`).
+
+- `OPPONENT_QUICK_CALL_PASS = 0.68` is **above the p90**. The quicken branch of
+  `_tempo_call` fires essentially never.
+- `OPPONENT_SLOW_CALL_PASS = 0.38` sits between p25 and the median, so it fires
+  on roughly a third of balls.
+
+The tempo call is therefore a **one-way ratchet toward the slowest set in the
+game**. Not fixed here: the constant is shared with the opponent's path, whose
+pass distribution is a different shape (p50 0.276 against 0.419), and one
+constant cut against two distributions wants its own measurement rather than a
+value tuned until one side looks right.
+
+`_apply_identity_tempo` is the same shape a third time. Its thresholds are 0.66
+and 0.34 against a preset table clustered on 0.50, so for **Balanced -- the
+default and the calibration fixture's identity -- the entire function is inert**:
+
+| identity | commitment | shift | tempo_variation | varies? |
+|---|---|---|---|---|
+| Balanced | 0.500 | 0 | 0.50 | **no** |
+| Technical | 0.425 | 0 | 0.42 | **no** |
+| Physical | 0.815 | -1 | 0.38 | no |
+| Defensive | 0.225 | +1 | 0.24 | no |
+| Fast Tempo | 0.843 | -1 | 0.88 | yes |
+| Development | 0.510 | 0 | 0.72 | yes |
+
+### `ENABLE_HOME_MIDDLE_OFFENSE`, and what it costs
+
+With the flag on, the middle attacks on the best quarter of passes
+(`OFFENSE_QUICK_PASS_FLOOR = 0.494`, solved as the measured p75):
+
+```
+home lanes    Front Quick=74   Right Pin=106
+home tempo    T1=74 (41%)      T3=106 (59%)
+```
+
+**The dig asymmetry mostly disappears with it**, which is the confirmation that
+it was never a defensive defect:
+
+| | flag off | flag on |
+|---|---|---|
+| reach margin gap | +1.097 m | **+0.271 m** |
+| ball_time gap | +0.304 s | +0.149 s |
+| distance gap | -0.323 m | -0.168 m |
+
+**Left off, and not because it is doubtful.** The attack-symmetry ratchet goes
+0.654 to **0.340** -- the same distance off centre, in the opposite direction --
+and the block-intent gates fail again. A home side that runs a first-tempo ball
+41% of the time is being blocked by a wall calibrated against a side that only
+ever hit pins, and the wall now loses. That is the same blocker
+`ENABLE_UNIFIED_ATTACK_SHAPE` and `ENABLE_UNIFIED_RECEPTION_SKILL` are waiting
+behind: **re-separate the block's outcome bands against sides that actually
+attack**, then land all three together and re-measure. Do not widen the bound.
+
+The ratchet flipping sign rather than merely moving is itself the useful reading:
+0.654 and 0.340 bracket the answer, so the three held flags are unlikely to
+compound in the same direction.
+
+**One defect this introduced and the counts caught.** The first version produced
+74 quick *lanes* against 35 first-tempo balls, because the continuation path
+overwrites `assignment.tempo` from `TRANSITION_TEMPO_BASE` a line after
+`_fallback_assignment` sets it -- a middle running a quick approach under a high
+ball. A quick is a first-tempo ball by definition, so the tempo is no longer the
+transition setter's to call once the lane is chosen. Section 7, found by counting
+lanes against tempos rather than by reading the diff.

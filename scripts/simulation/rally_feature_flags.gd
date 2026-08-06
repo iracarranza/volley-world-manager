@@ -507,3 +507,26 @@ const ENABLE_CLAMPED_ARRIVAL_MARGIN: bool = false
 ## swings, and both were calibrated with the drift present. Lands with the block
 ## outcome-band re-tune.
 const ENABLE_CLAMPED_CONTACT_LANE: bool = false
+
+
+## Let the home middle attack.
+##
+## The home offence was two hitters and a high ball. `_fallback_hitter` -- which
+## runs on every ball the calibration fixture plays, because no play is ever
+## called -- looked only for Outside Hitters, and `_fallback_assignment` chose a
+## lane from which half of the court the hitter stood in, which can only ever
+## produce a pin. Measured over 185 home swings: Left Pin 34, Right Pin 151, and
+## not one quick or pipe.
+##
+## That is not a cosmetic gap. `_hit_type` reads "Quick attack" off the *lane*
+## and never off the tempo, so no amount of tempo variation could have produced
+## one; and because a quick is the only fast ball the home side has, every home
+## attack flew for 0.520 s while every opponent attack flew for 0.826 s -- which
+## `tools/run_reach_margin_probe.gd` shows is 73% of the dig asymmetry that three
+## separate investigations went looking for in the defence.
+##
+## FLAGGED because it changes what the opponent's block and floor defence are
+## asked to solve on every good pass, and both were calibrated against a side
+## that only ever hit pins. Expect the attack-symmetry ratchet to move; measure
+## before deciding which way is correct.
+const ENABLE_HOME_MIDDLE_OFFENSE: bool = false

@@ -357,8 +357,39 @@ const DIG_REACH_MARGIN_METERS: float = 0.45
 
 ## Where a pass stops supporting a quicker call and starts forcing a slower one.
 ## Asserted rather than swept -- see `_tempo_call`.
+## **Measured against the distribution it cuts, and it is outside it.**
+##
+## Home pass quality runs p10 0.291, p25 0.350, p50 0.419, p75 0.494, p90 0.567
+## (`tools/run_shot_downgrade_probe.gd`). A quick-call floor of 0.68 sits above
+## the ninetieth percentile, so the quicken branch of `_tempo_call` fires
+## essentially never -- while `OPPONENT_SLOW_CALL_PASS` at 0.38 sits between the
+## first quartile and the median and fires on roughly a third of balls. The tempo
+## call is therefore a one-way ratchet toward the slowest set in the game, which
+## is most of why 91% of home swings are tempo 3.
+##
+## Not moved here, because it is shared with the opponent's path and their pass
+## distribution is a different shape (p50 0.276 against the home side's 0.419) --
+## one constant cut against two distributions is its own problem and wants its
+## own measurement rather than a value tuned until the home side looks right.
 const OPPONENT_QUICK_CALL_PASS: float = 0.68
 const OPPONENT_SLOW_CALL_PASS: float = 0.38
+
+## How good a pass has to be before the middle is a live option.
+##
+## Solved against the measured home pass distribution rather than chosen: 0.494
+## is the p75, so a floor there makes the quick available on roughly the best
+## quarter of balls. Real offences run a first-tempo ball on more than that, but
+## a quarter is a mix rather than a special case, and it is a figure that can be
+## raised once the middle's swing is calibrated instead of one that has to be
+## walked back.
+##
+## Deliberately *not* 0.68. That is `OPPONENT_QUICK_CALL_PASS`, which sits above
+## this distribution's ninetieth percentile -- see the note there.
+const OFFENSE_QUICK_PASS_FLOOR: float = 0.494
+
+## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
+## everything else, which is the deliberate high-ball call and not a defect.
+const QUICK_TEMPO_CALL: int = 1
 
 ## How much the attacker is favoured when swing and dig are equally good. A
 ## clean swing beats a set defence more often than not, so an even contest is
@@ -1022,7 +1053,9 @@ func resolve(
 			)
 	var hitter := _player_by_id(players, assignment.player_id) if assignment != null else null
 	if hitter == null or hitter.id == setter.id:
-		hitter = _fallback_hitter(players, lineup, setter.id)
+		hitter = _fallback_hitter(
+			players, lineup, setter.id, float(result.reception_quality)
+		)
 		assignment = _fallback_assignment(hitter, lineup)
 	var base_tempo := int(assignment.tempo)
 	assignment = _apply_identity_tempo(assignment, float(result.reception_quality))
@@ -3356,14 +3389,28 @@ func _resolve_home_continuation(
 		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		defense_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
-	var hitter := _fallback_hitter(players, lineup, setter.id)
+	var hitter := _fallback_hitter(players, lineup, setter.id, incoming_quality)
 	var assignment := _fallback_assignment(hitter, lineup)
 	## The same read the opponent's setter makes, off the same base. This path
 	## took `_fallback_assignment`'s literal 3 and never varied it, so a home
 	## setter given a clean dig and the judgment to use it ran the same high
 	## ball as one scrambling -- and the histogram's `tempo_demand` term of
 	## 0.000 on this path was that constant showing up as a cost nobody paid.
-	assignment.tempo = _tempo_call(setter, TRANSITION_TEMPO_BASE, incoming_quality)
+	## Correct, then clobbered -- caught by counting the lanes against the tempos.
+	##
+	## `_fallback_assignment` gives a quick its first-tempo ball, and this line
+	## then overwrote it with a transition call based on `TRANSITION_TEMPO_BASE`,
+	## which is 3. The result was 74 quick *lanes* against 35 first-tempo balls:
+	## a middle running a quick approach under a high ball, which is neither of
+	## the two things it could have been.
+	##
+	## A quick is a first-tempo ball by definition -- that is what makes it a
+	## quick -- so the tempo is not the transition setter's to call once the lane
+	## has been chosen. Everything else still reads the dig.
+	if assignment.lane not in ["Front Quick", "Right Quick"]:
+		assignment.tempo = _tempo_call(
+			setter, TRANSITION_TEMPO_BASE, incoming_quality
+		)
 	var exchange_penalty := float(exchange_number) * 0.04
 	## What this setter can actually deliver off this ball.
 	##
@@ -6893,11 +6940,33 @@ func _downgraded_assignment(
 	return adjusted
 
 
+## Who swings when no play was called -- which, on the calibration fixture, is
+## every single ball.
+##
+## `pass_quality` below zero means "not supplied", which keeps every existing
+## caller on the old behaviour without a second function.
 func _fallback_hitter(
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
 	excluded_player_id: int = -1,
+	pass_quality: float = -1.0,
 ) -> VolleyballPlayer:
+	## The middle, on a pass that allows one.
+	##
+	## This function has only ever looked for Outside Hitters, falling through to
+	## "any front-row body" if there were none -- so a front-row middle was never
+	## chosen while an outside hitter existed, which is always. Measured over 185
+	## home swings: Left Pin 34, Right Pin 151, and not one quick or pipe in the
+	## sample. The home offence was two hitters and a high ball.
+	##
+	## Gated on the pass because a quick is not a shot you can run off a bad one,
+	## which is the whole reason the middle is a *conditional* option rather than
+	## simply another name in the list.
+	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE \
+			and pass_quality >= OFFENSE_QUICK_PASS_FLOOR:
+		var middle := _front_row_middle(players, lineup, excluded_player_id)
+		if middle != null:
+			return middle
 	var outside_candidates: Array[VolleyballPlayer] = []
 	for slot_number in range(1, 7):
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
@@ -7959,16 +8028,54 @@ func _hit_type(assignment: HitterAssignment, hitter: VolleyballPlayer) -> String
 	return "Tempo swing"
 
 
-func _fallback_assignment(hitter: VolleyballPlayer, lineup: RotationLineup) -> HitterAssignment:
+## The lane and tempo for a swing nobody called a play for.
+##
+## The lane used to be decided by which half of the court the hitter happened to
+## stand in, which can only ever produce a pin -- and `_hit_type` reads
+## "Quick attack" off the *lane*, never off the tempo, so no amount of tempo
+## variation could have produced one. A middle assigned a pin is a middle
+## running a pin approach, which is not what a middle does and not what the
+## block has to solve.
+##
+## The tempo 3 default is deliberate and stays: a set nobody called is a safe
+## high ball. What changes is that a quick is now a lane a middle can be given,
+## and a quick is a first-tempo ball by definition.
+func _fallback_assignment(
+	hitter: VolleyballPlayer,
+	lineup: RotationLineup,
+) -> HitterAssignment:
 	var assignment := HitterAssignment.new()
 	assignment.player_id = hitter.id
 	assignment.start_position = CourtConstants.slot_position(
 		lineup.slot_for_player(hitter.id)
 	)
-	assignment.lane = "Left Pin" if assignment.start_position.x <= 0.5 \
-		else "Right Pin"
+	var left_side := assignment.start_position.x <= 0.5
+	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE \
+			and hitter.position_role == "Middle Blocker" \
+			and CourtConstants.is_front_row_slot(lineup.slot_for_player(hitter.id)):
+		assignment.lane = "Front Quick" if left_side else "Right Quick"
+		assignment.tempo = QUICK_TEMPO_CALL
+		return assignment
+	assignment.lane = "Left Pin" if left_side else "Right Pin"
 	assignment.tempo = 3
 	return assignment
+
+
+## The front-row middle, if there is one who is not already committed elsewhere.
+func _front_row_middle(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	excluded_player_id: int,
+) -> VolleyballPlayer:
+	for slot_number in range(1, 7):
+		if not CourtConstants.is_front_row_slot(slot_number):
+			continue
+		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+		if candidate != null and candidate.id != excluded_player_id \
+				and candidate.position_role == "Middle Blocker" \
+				and lineup.is_attack_eligible(candidate.id):
+			return candidate
+	return null
 
 
 func _assignment_from_dict(data: Dictionary) -> HitterAssignment:
