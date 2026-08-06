@@ -15,9 +15,30 @@ scripts/systems/           mostly stateless gameplay calculations
 scripts/managers/          stateful coordinators and workflows
 scripts/simulation/        rally, coverage, movement, and legality logic
 scripts/tactics/           play validation and tactical demand
+tools/preview/             throwaway scenes for looking at a change
 tests/                     headless automated checks
 docs/textbook/             this learning resource
+docs/design/               design records for systems that were reasoned about
 ```
+
+## Where the interface lives
+
+Presentation is deliberately split three ways, and knowing which of the three a
+change belongs in is most of the work:
+
+```text
+scripts/data/ui_palette.gd          colour tokens, one source of truth
+scripts/systems/ui_style_system.gd  decides what every Control *is* (its tier)
+scenes/components/*.gd              draws the treatments a tier implies
+scenes/themes/*.tres                padding, fonts, colours copied from the palette
+```
+
+The drawn components are `ink_outline.gd` (the sewn seam and the nib, plus the
+highlighter), `tape_measure.gd` (the section menu), `paper_window.gd` (scroll
+regions), `paper_tabs.gd` (tab rows) and `star_sticker.gd`. None of them is
+referenced from a `.tscn` — the style pass adds them as children at runtime, so
+a new screen gets the treatment without knowing they exist. See
+[UI_VISUAL_SYSTEM.md](../../design/UI_VISUAL_SYSTEM.md).
 
 ## Choosing where code belongs
 

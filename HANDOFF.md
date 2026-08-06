@@ -15,7 +15,19 @@
   tendencies; clubs begin with ten senior players and stronger finances, while
   academies begin with twelve younger, higher-potential players.
 - Navigate a career dashboard with reusable summary cards and dedicated Home,
-  Roster, Team, Transfers/Recruitment and Competition screens.
+  Roster, Team, Club, Transfers/Recruitment, Competition and Sixnet screens.
+  Navigation collapses to a single strip: the button is the case of a tape
+  measure, and Tab (or pressing it) rolls the section menu out along the band.
+- Read the interface as a manager's working journal rather than a styled
+  application. Card surfaces are cut-out patches with a sewn seam, controls are
+  written with a broad nib and marked with a highlighter under the pointer,
+  scrolling regions are slips of paper threaded under the page through hand-cut
+  slits, and tab rows are index tabs cut into a divider. Every treatment is
+  drawn at runtime by `scripts/systems/ui_style_system.gd` from the tier it
+  assigns each `Control`, so a new screen is styled without knowing any of it
+  exists. The full account is in
+  [docs/design/UI_VISUAL_SYSTEM.md](docs/design/UI_VISUAL_SYSTEM.md); if you are
+  about to add a screen or a control, read it first.
 - Inspect individual player identity, availability, age, experience, satisfaction,
   reputation, match confidence, fatigue, position-weighted ability, potential,
   measurements and every raw attribute from the Roster screen. View a seven-axis

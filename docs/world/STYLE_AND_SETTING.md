@@ -200,10 +200,26 @@ design rule this implies.
 ## Visual style
 
 Reference points: **PEAK** and **R.E.P.O.** (simple, rounded, toy-like,
-physically a little goofy character models over a minimal, friendly, flat-color
-UI); a third reference the user named, **Mecha Chameleon**, is not one this
-doc's author (Claude) could verify firsthand -- treat the two confirmed
-references as the throughline until someone checks that one.
+physically a little goofy character models); a third reference the user named,
+**Mecha Chameleon**, is not one this doc's author (Claude) could verify
+firsthand -- treat the two confirmed references as the throughline until someone
+checks that one.
+
+> **The "minimal, friendly, flat-color UI" half of that is superseded**, and the
+> interface has moved somewhere more specific: it is a manager's working
+> journal, and every element on the page is a physical thing. Cards are cut-out
+> patches sewn on, controls are written with a broad nib and marked with a
+> highlighter when you point at them, the section menu is a tape measure that
+> rolls out of its case, scrolling regions are slips of paper threaded under the
+> page, and tab rows are index tabs cut into a divider.
+>
+> This does not fight the character direction -- it sharpens the same tension.
+> The plush-toy cast is what the *simulation* looks like; the journal is what
+> the *manager's desk* looks like. Both sit against a spreadsheet-deep model,
+> and neither apologises for it.
+>
+> See [docs/design/UI_VISUAL_SYSTEM.md](../design/UI_VISUAL_SYSTEM.md) for the
+> object classes and the rules that follow from them.
 
 The gameplay underneath is inspired by **Football Manager**: dense management
 systems, real progression, real consequences. The intended tension is
