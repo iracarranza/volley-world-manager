@@ -559,6 +559,19 @@ var home_principles: Resource
 var opponent_principles: Resource
 var identity_effects: Dictionary = {}
 var rally_seed: int = 0
+## Names available to player-facing narration, filled in as the rally reaches
+## each contact.
+##
+## `RallyExplanations` substitutes these into headline, explanation and factor
+## text. Threading them through the ~20 `factor()` call sites individually would
+## have meant proving each name was in scope at each one; accumulating them here
+## means a line can only name a role the rally has already resolved, which is
+## the same constraint stated once.
+##
+## A per-call `values` dictionary merges *over* this, so a line about the
+## opponent's hitter can override `hitter` without disturbing the home name the
+## rest of the rally uses.
+var narration: Dictionary = {}
 
 
 func resolve(
@@ -571,9 +584,20 @@ func resolve(
 	seed_value: int,
 	development_continuous_reception: bool = false,
 	team_principles: Resource = null,
+	home_team_name: String = "",
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
+	## Commentary names both benches, and the simulator knew neither. The
+	## opponent's name was reachable through `opponent_team` all along; the home
+	## side's had to be passed, because the resolver deliberately never sees the
+	## `VolleyballTeam` it is resolving for.
+	narration = {
+		"team": home_team_name if not home_team_name.is_empty() else "the home side",
+		"opponent": str(opponent_team.team_name) \
+			if opponent_team != null and "team_name" in opponent_team \
+			else "the opposition",
+	}
 	geometric_swing_index = 0
 	geometric_serves = {}
 	geometric_development_open = development_continuous_reception
@@ -625,7 +649,10 @@ func resolve(
 	if opponent_server == null:
 		opponent_server = opponent_team.best_server() as VolleyballPlayer
 	var server_name := opponent_server.display_name
+	narration["server"] = server_name
 	var setter := _player_by_id(players, lineup.active_setter_id())
+	if setter != null:
+		narration["setter"] = setter.display_name
 	## Weights are relative importance and are normalised by their own total, so
 	## this is a genuine 0-1 quality rather than one capped at the coefficient
 	## sum. They previously added to 0.72, which meant an opponent server with
@@ -720,6 +747,8 @@ func resolve(
 	var receiver_arrived := receiver != null
 	if receiver == null:
 		receiver = _nearest_reception_player(players, lineup, defensive_plan, serve_landing)
+	if receiver != null:
+		narration["receiver"] = receiver.display_name
 	var receiver_zone: Resource = defensive_plan.zone_for(
 		receiver.id, DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 	) if defensive_plan != null and receiver != null else null
@@ -952,11 +981,13 @@ func resolve(
 			"persistent_state_update": live_reception_integration.duplicate(true) \
 				if using_live_reception else {}})
 	if seam_conflict:
-		result.key_factors.append(ExplanationText.factor("seam_conflict"))
+		result.key_factors.append(_factor("seam_conflict"))
 	if not reception_success:
+		## `ace` fires from both benches. The outcome is the same event; the
+		## sentence is not, so the conceded side takes its own explanation key.
 		return _finish(result, "ace", false, receiver.id, {
 			"server": server_name,
-		})
+		}, "ace_conceded")
 	var setter_rollout_requested := using_live_reception \
 		and development_continuous_reception and OS.is_debug_build() \
 		and RallyFeatureFlagsModel.ALLOW_DEVELOPMENT_SETTER_OVERRIDE
@@ -1083,6 +1114,11 @@ func resolve(
 		reception_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		reception_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
+	## Re-stated because an emergency second contact replaces the setter named
+	## at the top of the rally, and the commentary should name whoever actually
+	## took the ball.
+	if setter != null:
+		narration["setter"] = setter.display_name
 
 	var follow_threshold := 0.22 + _rating(setter, "decision_making") * 0.35 \
 		+ _rating(setter, "tactical_discipline") * 0.18
@@ -1116,6 +1152,8 @@ func resolve(
 			players, lineup, setter.id, float(result.reception_quality)
 		)
 		assignment = _fallback_assignment(hitter, lineup)
+	if hitter != null:
+		narration["hitter"] = hitter.display_name
 	var base_tempo := int(assignment.tempo)
 	assignment = _apply_identity_tempo(assignment, float(result.reception_quality))
 	identity_effects["attack_selection"] = {
@@ -1127,12 +1165,12 @@ func resolve(
 		"tempo_variation": float(home_principles.tempo_variation),
 	}
 	if active_play == null:
-		result.key_factors.append(ExplanationText.factor("default_offense"))
+		result.key_factors.append(_factor("default_offense"))
 	else:
-		result.key_factors.append(ExplanationText.factor(
+		result.key_factors.append(_factor(
 			"play_followed" if result.play_was_followed else "play_abandoned"
 		))
-	result.key_factors.append(ExplanationText.factor(
+	result.key_factors.append(_factor(
 		"good_pass" if result.reception_quality >= 0.58 else "poor_pass"
 	))
 	_add_event(result, RallyEventModel.EventType.SET_DECISION, setter.id, setter.display_name,
@@ -1173,7 +1211,7 @@ func resolve(
 	var resolved_tempo := int(setter_capability.resolved_tempo)
 	if bool(setter_capability.tempo_downgraded):
 		assignment = _downgraded_assignment(assignment, resolved_tempo)
-		result.key_factors.append(ExplanationText.factor("play_abandoned"))
+		result.key_factors.append(_factor("play_abandoned"))
 	var tempo_demand := float(3 - resolved_tempo) * 0.055 \
 		* lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
 	## The lane the setter is *aiming* at. `_set_geometry` reads this rather than
@@ -1287,7 +1325,7 @@ func resolve(
 	)) if using_live_setter else set_contact
 	rally_clock = set_contact_time
 	if assignment.tempo <= 1:
-		result.key_factors.append(ExplanationText.factor("fast_tempo"))
+		result.key_factors.append(_factor("fast_tempo"))
 
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
@@ -1796,7 +1834,7 @@ func resolve(
 	## back here only to explain the rally.
 	var adaptation_bonus := float(block_resolution.get("adaptation_bonus", 0.0))
 	if adaptation_bonus >= 0.035:
-		result.key_factors.append(ExplanationText.factor("opponent_adapted"))
+		result.key_factors.append(_factor("opponent_adapted"))
 	## The contest is the whole answer. A flat 18-48% "beaten block still gets a
 	## hand on it" roll used to run on top of it, on this side of the net only.
 	## It duplicated the contest's own `funnel` band, and because it was written
@@ -1910,6 +1948,7 @@ func resolve(
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
 	var opponent_blocker_name := opponent_blocker.display_name \
 		if opponent_blocker != null else "Open block"
+	narration["opponent_blocker"] = opponent_blocker_name
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker_id,
 		opponent_blocker_name,
 		Vector2(set_target.x, 0.47), post_block_target, block_outcome != "miss",
@@ -1947,14 +1986,18 @@ func resolve(
 	## block was scored as a hitter who had been stopped by it. This claims the
 	## point before the recycle branch can take the ball back into home coverage.
 	if not geometric.is_empty() and bool(geometric.hitter_point):
-		result.key_factors.append(ExplanationText.factor("attack_control"))
+		result.key_factors.append(_factor("attack_control"))
+		## `EXPLANATIONS` has no bare `kill` -- only the called/improvised/default
+		## triplet. Without this key the geometric hitter-point path fell through
+		## to "The point was decided by the final contact." on every kill it
+		## claimed, which is two of the four kill paths in the engine.
 		return _finish(result, "kill", true, hitter.id, {
 			"setter": setter.display_name,
 			"hitter": hitter.display_name,
 			"play": result.active_play_name,
-		})
+		}, _kill_key(active_play, result))
 	if blocked:
-		result.key_factors.append(ExplanationText.factor("strong_block"))
+		result.key_factors.append(_factor("strong_block"))
 		return _finish(result, "blocked", false, hitter.id, {
 			"hitter": hitter.display_name,
 		})
@@ -2008,7 +2051,7 @@ func resolve(
 			return _finish(result, "blocked", false, hitter.id, {
 				"hitter": hitter.display_name,
 			})
-		result.key_factors.append(ExplanationText.factor("attack_recycled"))
+		result.key_factors.append(_factor("attack_recycled"))
 		## A ball that came off the block is not a clean one. The coverage
 		## contact's own control is what the setter has to work with, and a
 		## formed wall degrades it further -- which is the only channel a
@@ -2139,21 +2182,18 @@ func resolve(
 	opponent_live_positions[opponent_defender.id] = opponent_defender_reach
 	rally_clock = maxf(rally_clock, opponent_dig_time)
 	if dug:
-		result.key_factors.append(ExplanationText.factor("strong_defense"))
+		result.key_factors.append(_factor("strong_defense"))
 		return _resolve_opponent_transition(
 			result, players, lineup, hitter, opponent_pass_target,
 			opponent_team, defensive_plan, 1, defense_strength, false,
 			opponent_defender.id,
 		)
-	result.key_factors.append(ExplanationText.factor("attack_control"))
-	var kill_key := "kill_default" if active_play == null else (
-		"kill_called" if result.play_was_followed else "kill_improvised"
-	)
+	result.key_factors.append(_factor("attack_control"))
 	return _finish(result, "kill", true, hitter.id, {
 		"setter": setter.display_name,
 		"hitter": hitter.display_name,
 		"play": result.active_play_name,
-	}, kill_key)
+	}, _kill_key(active_play, result))
 
 
 func _resolve_home_serve(
@@ -2164,6 +2204,8 @@ func _resolve_home_serve(
 	defensive_plan: Resource,
 ) -> Resource:
 	var server := _best_home_server(players, lineup)
+	if server != null:
+		narration["server"] = server.display_name
 	var serve_risk := 0.5
 	if defensive_plan != null:
 		serve_risk = float(defensive_plan.serve_risk)
@@ -3273,6 +3315,7 @@ func _resolve_opponent_transition(
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
+	narration["blocker"] = blocker_name
 	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
 		Vector2(opponent_contact.x, 0.53), Vector2(opponent_contact.x, 0.50),
 		block_outcome != "miss", home_block,
@@ -3322,11 +3365,11 @@ func _resolve_opponent_transition(
 			"blocker": blocker_name,
 		})
 	if block_outcome == "touch":
-		result.key_factors.append(ExplanationText.factor("block_touch"))
+		result.key_factors.append(_factor("block_touch"))
 		opponent_attack = maxf(opponent_attack - 0.10 - home_block * 0.05, 0.12)
 		home_target = deflection_target
 	elif block_outcome == "funnel":
-		result.key_factors.append(ExplanationText.factor("block_funnel"))
+		result.key_factors.append(_factor("block_funnel"))
 		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
 		home_target = deflection_target
 	var attack_type := _opponent_attack_type(home_target)
@@ -3482,7 +3525,7 @@ func _resolve_opponent_transition(
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": home_dig_time})
 	_note_recovery(defender, home_dig_recovery, home_dig_time)
-	result.key_factors.append(ExplanationText.factor(
+	result.key_factors.append(_factor(
 		"defense_assignment_fit" if responsibility_fit >= 0.02 \
 		else "defense_assignment_stretch"
 	))
@@ -3546,7 +3589,15 @@ func _resolve_home_continuation(
 		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		defense_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
+<<<<<<< Updated upstream
 	var hitter := _fallback_hitter(players, lineup, setter.id, incoming_quality)
+=======
+	var hitter := _fallback_hitter(players, lineup, setter.id)
+	if setter != null:
+		narration["setter"] = setter.display_name
+	if hitter != null:
+		narration["hitter"] = hitter.display_name
+>>>>>>> Stashed changes
 	var assignment := _fallback_assignment(hitter, lineup)
 	## The same read the opponent's setter makes, off the same base. This path
 	## took `_fallback_assignment`'s literal 3 and never varied it, so a home
@@ -3960,6 +4011,8 @@ func _resolve_home_continuation(
 			"hitter": hitter.display_name,
 		})
 	var opponent_blocker := block_result.primary as VolleyballPlayer
+	if opponent_blocker != null:
+		narration["opponent_blocker"] = opponent_blocker.display_name
 	var assisting_blocker := block_result.assist as VolleyballPlayer
 	var primary_close := float(block_result.primary_close)
 	var assist_close := float(block_result.assist_close)
@@ -4057,12 +4110,15 @@ func _resolve_home_continuation(
 			_swing_reaches_net(continuation_attack_trajectory, rally_clock),
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
-		result.key_factors.append(ExplanationText.factor("attack_control"))
+		result.key_factors.append(_factor("attack_control"))
+		## The continuation always runs the fallback assignment, so this is a
+		## default-offense kill regardless of what play was called first ball --
+		## the same reason the sibling path below already passes `kill_default`.
 		return _finish(result, "kill", true, hitter.id, {
 			"setter": setter.display_name,
 			"hitter": hitter.display_name,
 			"play": "Default T3 Outside",
-		})
+		}, "kill_default")
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
 	## A transition dig is the same act as any other; the defender is simply
@@ -6671,7 +6727,31 @@ func _resolve_attack_coverage(
 
 
 func _finish_serve_error(result: Resource, server_name: String) -> Resource:
-	return _finish(result, "serve_error", true, -1, {"server": server_name})
+	## Their error, our point -- the mirror of the home `serve_error` path.
+	return _finish(
+		result, "serve_error", true, -1, {"server": server_name},
+		"opponent_serve_error",
+	)
+
+
+## Which of the three kill explanations a finished swing earns.
+##
+## Was inline at one of the four kill sites and absent from the other three, so
+## the two geometric hitter-point paths asked `EXPLANATIONS` for a `kill` key
+## that does not exist.
+static func _kill_key(active_play: OffensivePlay, result: Resource) -> String:
+	if active_play == null:
+		return "kill_default"
+	return "kill_called" if bool(result.play_was_followed) else "kill_improvised"
+
+
+## A factor line with the rally's names filled in.
+##
+## Factor lines carry placeholders now, and `ExplanationText.factor` cannot
+## reach `narration` on its own -- it is a static on a data script with no
+## simulator to ask.
+func _factor(key: String) -> String:
+	return ExplanationText.factor(key, narration)
 
 
 func _finish(
@@ -6687,11 +6767,16 @@ func _finish(
 	result.decisive_actor_id = decisive_actor_id
 	result.recovery_fatigue = recovery_fatigue_cost.duplicate()
 	var chosen_key := explanation_key if not explanation_key.is_empty() else outcome
-	result.explanation = ExplanationText.explanation(chosen_key, values)
+	## The caller's names win over the accumulated ones: an opponent's hitter is
+	## passed explicitly precisely because `narration["hitter"]` holds ours.
+	var filled := narration.duplicate()
+	filled.merge(values, true)
+	result.explanation = ExplanationText.explanation(chosen_key, filled)
+	result.headline = ExplanationText.headline(outcome, filled)
 	var end_position := Vector2(0.5, 0.90) if home_won else Vector2(0.5, 0.12)
 	_add_event(result, RallyEventModel.EventType.POINT, decisive_actor_id,
 		"Home" if home_won else "Opponent", end_position, end_position,
-		home_won, 1.0, ExplanationText.headline(outcome), result.explanation)
+		home_won, 1.0, result.headline, result.explanation)
 	result.analysis = _build_rally_analysis(result)
 	for serve_key in geometric_serves:
 		result.analysis[serve_key] = geometric_serves[serve_key]

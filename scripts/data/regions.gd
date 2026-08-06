@@ -4,21 +4,24 @@ extends RefCounted
 const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 
 const DEFINITIONS := {
-	"Landavol": {"tagline": "No dominant tradition -- clubs here develop players broadly rather than toward one specialty.",
+	## Taglines name their own people, so each one contains a demonym that is
+	## still being settled -- these do not currently match `DEMONYMS` below, and
+	## the two need a sweep once the words are chosen.
+	"Landavol": {"tagline": "Landavoli training is intentionally broad, allowing their volis to specialize into anything -- or everything, if they want.",
 		"physical": 2, "technical": 2, "mental": 2, "names": ["Mila", "Luka", "Nora", "Ivo", "Toma", "Elin", "Sven", "Kaja"]},
-	"Spëddigh": {"tagline": "Compact community gyms prize relentless work, tempo pressure and rapid transitions.",
+	"Spëddigh": {"tagline": "The close-knit and compact Spëddich give rise to quick transition attackers who push every play to be faster and tighter.",
 		"physical": 2, "technical": 3, "mental": 2, "names": ["Edda", "Siv", "Nils", "Veya", "Tekk", "Orri", "Fenn", "Lïv"]},
-	"Pāwa Hitō": {"tagline": "Conditioning halls build relentless transition attackers who can strike at full quality deep into a rally.",
+	"Pāwa Hitō": {"tagline": "Conditioning halls mold the Hitōue into relentless attackers -- nightmarish power and quality deep into a rally.",
 		"physical": 4, "technical": 1, "mental": 1, "names": ["Aki", "Hana", "Ren", "Sora", "Yuna", "Kai", "Mio", "Taro"]},
-	"Bloc du Larg": {"tagline": "Methodical halls teach net control, court reading and patient structure.",
+	"Bloc du Larg": {"tagline": "Larçgan culture prizes methodical court reading, perfecting its structure at the net above all else to keep complete control.",
 		"physical": 2, "technical": 2, "mental": 3, "names": ["Luc", "Mire", "Noé", "Ciel", "Aude", "Remy", "Léon", "Véra"]},
-	"Xérvu": {"tagline": "Serving academies drill relentless toss discipline, spin variation and first-strike aggression.",
+	"Xérvu": {"tagline": "Ancient and new rhythms reverberate through Xérvyan courts -- a combination of individualism and deep respect for routine creates devastating, unpredictable serves.",
 		"physical": 2, "technical": 4, "mental": 1, "names": ["Kofi", "Amara", "Zola", "Kwame", "Aziza", "Tendai", "Njeri", "Baraka"]},
-	"Taktikã": {"tagline": "Tactical schools reward composed intelligence, adaptable systems and execution insulated from emotion.",
+	"Taktikã": {"tagline": "Taktikiãn volleyball demands cerebral players who strip the game down to its roots; emotion has no place in finding the optimal path.",
 		"physical": 1, "technical": 1, "mental": 4, "names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"]},
-	"Ispayk": {"tagline": "Once a Sixnet flagship, now a proud, cash-strapped program clawing back toward relevance -- birthplace of the set-and-spike, where large-framed bomberinos still end rallies with the crushing bomba.",
+	"Ispayk": {"tagline": "The cradle of the set-and-spike has lost its relevance to the modernization of the sport, but veteran and new Ispakyanos alike keep perfecting the bomberino's crushing bomba.",
 		"physical": 4, "technical": 2, "mental": 1, "names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"]},
-	"A'ace": {"tagline": "The circuit's newest flagship-in-waiting, buying in overnight the star talent a young program hasn't had time to grow -- all the resources, none of the history.",
+	"A'ace": {"tagline": "A'ace'ni volleyball may as well have been born yesterday, but the power of program funding defies history. The world's premier volis dictate their tactics season to season.",
 		"physical": 3, "technical": 2, "mental": 1, "names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"]},
 
 	## Minor regions. Small programs that never contest the Sixnet, with

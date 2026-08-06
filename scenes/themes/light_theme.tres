@@ -1,7 +1,7 @@
 [gd_resource type="Theme" format=3 uid="uid://cgp1kkcj4ls46"]
 
-[ext_resource type="FontFile" path="res://Cherry_Bomb_One/CherryBombOne-Regular.ttf" id="1_heading"]
-[ext_resource type="Font" path="res://scenes/themes/body_font.tres" id="2_body"]
+[ext_resource type="FontFile" uid="uid://c7p6mbo4vtrcv" path="res://Cherry_Bomb_One/CherryBombOne-Regular.ttf" id="1_heading"]
+[ext_resource type="FontVariation" path="res://scenes/themes/body_font.tres" id="2_body"]
 
 [sub_resource type="StyleBoxFlat" id="ButtonDisabled"]
 content_margin_left = 14.0
@@ -124,7 +124,7 @@ corner_radius_top_left = 11
 corner_radius_top_right = 22
 corner_radius_bottom_right = 13
 corner_radius_bottom_left = 18
-shadow_color = Color(0.086, 0.498, 0.475, 0.30)
+shadow_color = Color(0.086, 0.498, 0.475, 0.3)
 shadow_size = 3
 shadow_offset = Vector2(4, 5)
 
@@ -303,8 +303,8 @@ Button/colors/font_disabled_color = Color(0.463, 0.545, 0.514, 1)
 Button/colors/font_focus_color = Color(0.09, 0.239, 0.208, 1)
 Button/colors/font_hover_color = Color(0.05, 0.2, 0.17, 1)
 Button/colors/font_pressed_color = Color(0.35, 0.08, 0.06, 1)
-Button/fonts/font = ExtResource("1_heading")
 Button/font_sizes/font_size = 14
+Button/fonts/font = ExtResource("1_heading")
 Button/styles/disabled = SubResource("ButtonDisabled")
 Button/styles/focus = SubResource("ButtonHover")
 Button/styles/hover = SubResource("ButtonHover")
@@ -336,12 +336,12 @@ DisplayHeading/colors/font_color = Color(0.09, 0.239, 0.208, 1)
 DisplayHeading/colors/font_shadow_color = Color(0.851, 0.294, 0.239, 0.24)
 DisplayHeading/constants/shadow_offset_x = 3
 DisplayHeading/constants/shadow_offset_y = 4
-DisplayHeading/fonts/font = ExtResource("1_heading")
 DisplayHeading/font_sizes/font_size = 30
+DisplayHeading/fonts/font = ExtResource("1_heading")
 EyebrowLabel/base_type = &"Label"
 EyebrowLabel/colors/font_color = Color(0.851, 0.294, 0.239, 1)
-EyebrowLabel/fonts/font = ExtResource("1_heading")
 EyebrowLabel/font_sizes/font_size = 12
+EyebrowLabel/fonts/font = ExtResource("1_heading")
 FrontmostPanel/base_type = &"PopupPanel"
 FrontmostPanel/styles/panel = SubResource("PanelRaised")
 GridContainer/constants/h_separation = 10
@@ -353,8 +353,8 @@ InsetPanel/base_type = &"PanelContainer"
 InsetPanel/styles/panel = SubResource("PanelInset")
 ItemList/colors/font_color = Color(0.09, 0.239, 0.208, 1)
 ItemList/colors/font_selected_color = Color(0.32, 0.08, 0.06, 1)
-ItemList/fonts/font = ExtResource("2_body")
 ItemList/constants/line_separation = 6
+ItemList/fonts/font = ExtResource("2_body")
 ItemList/styles/panel = SubResource("ListPanel")
 ItemList/styles/selected = SubResource("ListSelected")
 ItemList/styles/selected_focus = SubResource("ListSelected")
@@ -401,20 +401,20 @@ RaisedPanel/styles/panel = SubResource("PanelRaised")
 RichTextLabel/colors/default_color = Color(0.09, 0.239, 0.208, 1)
 RichTextLabel/colors/font_outline_color = Color(0.09, 0.239, 0.208, 0.72)
 RichTextLabel/colors/font_shadow_color = Color(1, 1, 1, 0)
-RichTextLabel/fonts/normal_font = ExtResource("2_body")
-RichTextLabel/fonts/bold_font = ExtResource("1_heading")
 RichTextLabel/constants/line_separation = 4
+RichTextLabel/constants/outline_size = 1
 RichTextLabel/constants/table_h_separation = 14
 RichTextLabel/constants/table_v_separation = 4
-RichTextLabel/constants/outline_size = 1
+RichTextLabel/fonts/bold_font = ExtResource("1_heading")
+RichTextLabel/fonts/normal_font = ExtResource("2_body")
 SecondaryAction/base_type = &"Button"
 SectionHeading/base_type = &"Label"
 SectionHeading/colors/font_color = Color(0.09, 0.239, 0.208, 1)
 SectionHeading/colors/font_shadow_color = Color(0.851, 0.294, 0.239, 0.18)
 SectionHeading/constants/shadow_offset_x = 2
 SectionHeading/constants/shadow_offset_y = 3
-SectionHeading/fonts/font = ExtResource("1_heading")
 SectionHeading/font_sizes/font_size = 20
+SectionHeading/fonts/font = ExtResource("1_heading")
 StatLabel/base_type = &"Label"
 StatLabel/colors/font_color = Color(0.086, 0.498, 0.475, 1)
 StatLabel/font_sizes/font_size = 13

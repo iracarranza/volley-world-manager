@@ -5,7 +5,6 @@ signal career_exit_requested
 const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
-const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const ENABLE_3D_MATCH_PLAYBACK: bool = false
@@ -2027,9 +2026,11 @@ func _show_shadow_reception_debug(
 
 func _show_rally_result(result: Resource) -> void:
 	rally_event_label.text = "Rally complete · %d discrete events" % result.events.size()
+	## The resolved headline, not a fresh lookup: headlines carry placeholders
+	## now and this call site has no names to fill them with.
 	rally_result_title.text = "%s · %s" % [
 		"HOME POINT" if result.home_team_won else "OPPONENT POINT",
-		ExplanationText.headline(result.terminal_outcome),
+		result.headline,
 	]
 	rally_result_explanation.text = result.explanation
 	dashboard_event_label.text = rally_result_title.text

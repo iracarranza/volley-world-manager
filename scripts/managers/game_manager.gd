@@ -476,6 +476,7 @@ func resolve_active_rally(
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,
 		development_continuous_reception,
 		team.principles if team != null else null,
+		team.team_name if team != null else "",
 	)
 
 

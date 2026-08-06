@@ -31,4 +31,12 @@ extends Resource
 ## post-rally step for exactly this.
 @export var recovery_fatigue: Dictionary = {}
 @export var explanation: String = ""
+## The resolved headline, filled in by `RallySimulator._finish`.
+##
+## Stored rather than re-derived from `terminal_outcome` at display time,
+## because headlines now carry `{hitter}`-style placeholders and the UI has no
+## access to the names that fill them. `main.gd` called
+## `RallyExplanations.headline(terminal_outcome)` with no values and would print
+## the raw tokens.
+@export var headline: String = ""
 @export var ending_reason: StringName = &""
