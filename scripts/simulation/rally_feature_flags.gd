@@ -599,3 +599,19 @@ const ENABLE_LIVE_TEMPO_CALL: bool = true
 ## quantity that shrinks to nothing exactly when tempo matters. That is the thing
 ## to fix, and it is a different fix from this one.
 const ENABLE_HITTER_PRESET_WINDOW: bool = false
+
+
+## Make the run-up point at the net.
+##
+## `approach_start_position` picks a start offset from a lane angle and then
+## blends it toward wherever the hitter is standing, so the angle it solved for
+## is discarded whenever the voli is out of position. The runway got the right
+## *distance* and the wrong *direction*: a tempo-2 outside ran parallel to the
+## tape and arrived sideways, which is visible in playback and was reported from
+## it rather than found in a probe.
+##
+## The lateral leg is not negotiable -- they have to reach the pin -- so the depth
+## gives instead, lengthening the runway until the angle is inside
+## `MAX_APPROACH_ANGLE_DEGREES`. That keeps the destination and the shape, and it
+## costs the hitter time, which is the honest price of being out of position.
+const ENABLE_PERPENDICULAR_APPROACH: bool = true

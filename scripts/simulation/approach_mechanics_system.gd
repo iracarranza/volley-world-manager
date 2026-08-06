@@ -295,6 +295,15 @@ static func evaluate_takeoff(
 const APPROACH_ANGLE_MIDDLE_DEGREES: float = 8.0
 const APPROACH_ANGLE_PIN_DEGREES: float = 30.0
 const APPROACH_DEPTH: float = 0.11
+
+## How far off perpendicular a run-up may end up.
+##
+## The angle chosen up front is only a *starting* offset; the route blend can
+## flatten it arbitrarily, and nothing checked the result. A real approach comes
+## in between about 15 and 45 degrees off the net's perpendicular -- past that it
+## stops being an approach and becomes a shuffle along the tape, which is what a
+## tempo-2 outside was drawn doing.
+const MAX_APPROACH_ANGLE_DEGREES: float = 42.0
 ## Wide enough to begin outside the sideline, because that is where an outside
 ## hitter's approach actually begins. Holding them on court capped the angle at
 ## exactly the pins that need it most.
@@ -332,6 +341,25 @@ static func approach_start_position(
 	var start_x := clampf(
 		base_x + outward, APPROACH_START_MIN_X, APPROACH_START_MAX_X
 	)
+	## Run *into* the net, not along it.
+	##
+	## `APPROACH_ROUTE_BLEND` pulls the start toward wherever the hitter happens
+	## to be standing, so a voli who is wide of their lane gets a start that is
+	## barely ahead of the contact and mostly beside it. The angle computed above
+	## is then thrown away: the runway solved for the right *distance* and the
+	## wrong *direction*, and a tempo-2 outside came out running parallel to the
+	## tape and arriving sideways.
+	##
+	## The lateral leg is not negotiable -- they do have to get to the pin -- so
+	## the depth is what gives. Lengthening the runway until the angle is legal
+	## keeps both the destination and the shape of the approach, and it costs the
+	## hitter time, which is the honest price of being out of position.
+	if FeatureFlags.ENABLE_PERPENDICULAR_APPROACH:
+		var lateral_run := absf(target.x - start_x) * CourtConstants.COURT_WIDTH_METERS
+		var forward_run := maxf(forward_meters, 0.01)
+		if lateral_run / forward_run > tan(deg_to_rad(MAX_APPROACH_ANGLE_DEGREES)):
+			forward_meters = lateral_run / tan(deg_to_rad(MAX_APPROACH_ANGLE_DEGREES))
+			depth = forward_meters / CourtConstants.COURT_LENGTH_METERS
 	if side == &"opponent":
 		return Vector2(start_x, clampf(target.y - depth, 0.04, 0.46))
 	return Vector2(start_x, clampf(target.y + depth, 0.54, 0.96))

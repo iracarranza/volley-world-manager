@@ -2307,3 +2307,25 @@ rates where they are.
 
 `ENABLE_HITTER_PRESET_WINDOW` is left off with both call sites wired, so the next
 attempt starts from a measured baseline rather than re-deriving the channel.
+
+### The run-up now points at the net
+
+Reported from playback rather than found in a probe: a tempo-2 outside ran
+*parallel* to the tape and arrived sideways.
+
+`approach_start_position` computes a lane angle -- 8 degrees at the middle, 30 at
+the pin -- and then blends the start toward wherever the hitter is standing, so a
+voli out of position gets a mark barely ahead of the contact and mostly beside
+it. **The angle it solved for was discarded.** The runway had the right distance
+and the wrong direction, and nothing checked the result.
+
+`ENABLE_PERPENDICULAR_APPROACH` checks it. The lateral leg is not negotiable --
+they do have to reach the pin -- so the depth gives instead: the runway lengthens
+until the run is inside `MAX_APPROACH_ANGLE_DEGREES` (42, past which an approach
+stops being an approach and becomes a shuffle along the tape). Destination and
+shape both survive, and it costs the hitter time, which is the honest price of
+being out of position.
+
+Suite unchanged at 870 checks / 1 failing with it on. **Not visually confirmed** --
+the geometry is checked and the regression suite is clean, but nobody has watched
+a tempo-2 outside since. Worth one playback pass.
