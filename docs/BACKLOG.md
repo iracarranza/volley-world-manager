@@ -1204,10 +1204,32 @@ and leaves the opponent's at 0.338, widening the gap -- which is precisely what
 that flag already records ("the arc it unifies on is the lobbed one"). So the
 mechanism is identified and the existing flag does not fix it alone.
 
-**Distance.** 1.506 m against 1.828 m, and the claim rate is 56% against 36%.
-This is positioning and is independent of the ball. Not yet decomposed -- whether
-it is starting shape, zone assignment, or the claimant conceding more often on
-that side is the next measurement.
+**Distance -- decomposed, and the gap does not survive it.**
+
+Ball placement was ruled out first, and in the opposite direction to the guess.
+The home defence digs balls landing 2.64 m off centre; the opponent defence digs
+balls landing 1.60 m off centre. Placement *favours* the opponent defence, which
+covers more central balls and still reports travelling further.
+
+Then the two available measurements of "distance to the ball" turned out to
+disagree, and to disagree in opposite directions:
+
+  source                                    home      opponent
+  arrival.distance_meters (the claim used)  1.51 m      1.83 m
+  movement_start -> ball (playback draws)   2.26 m      1.77 m
+
+On the opponent side they agree within 0.06 m. On the home side they differ by
+0.75 m. The cause is two anchors for one defender: the claimant scores zones
+anchored at `floor_phase_positions`, the staged defensive shape for this attack,
+while `defender_start` reads `live_positions` -- so the claim is computed from
+one position and the journey is drawn from another.
+
+**So the direction of the distance gap is not established.** By the claim's own
+figures the opponent travels further; by the stamped movement the home defender
+does. One of the two is describing a defender who is not there. Reconcile the
+anchors before decomposing further -- and note this also means the home dig's
+`reach_margin` of 1.058 m is measured from a position playback does not agree
+with, which puts the earlier "0.816 m margin gap" itself in question.
 
 Both want their own fix. Neither is the attack-symmetry ratchet, and treating
 them as one thing is what produced the wrong answer above.
