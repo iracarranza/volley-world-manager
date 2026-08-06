@@ -6,6 +6,10 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
+const GaitBiomechanicsScript := preload("res://scripts/data/gait_biomechanics.gd")
+const LandingBiomechanicsScript := preload(
+	"res://scripts/data/landing_biomechanics.gd"
+)
 
 @onready var body_pivot: Node3D = $BodyPivot
 @onready var torso: MeshInstance3D = $BodyPivot/Torso
@@ -66,6 +70,23 @@ var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
 var locomotion_bob: float = 0.0
 var has_world_position: bool = false
+## How fast this voli is currently travelling, in metres per second, smoothed.
+##
+## Derived from the distance between successive placements rather than from the
+## simulator, because playback interpolates positions and the smoothed rate of
+## the drawn motion is what the gait has to match -- a gait driven by the
+## simulator's own speed would be right about the player and wrong about the
+## figure on screen.
+var ground_speed_mps: float = 0.0
+## Whether this voli was off the floor on a previous frame, and what they were
+## doing when they left it. A landing is *observed* rather than announced: the
+## actor already sees elevation and event type every frame, so no caller has to
+## learn to report a touchdown.
+var _was_airborne: bool = false
+var _airborne_action: String = "default"
+## Seconds remaining in the current landing, counting down from the action's own
+## duration. Zero means the voli is on their feet.
+var _landing_remaining: float = 0.0
 
 ## Thigh share of total leg length. Slightly over half, which is roughly true
 ## and is the ratio that keeps a folded knee reading as a knee.
@@ -190,10 +211,20 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			world_position.x - self.position.x,
 			world_position.z - self.position.z,
 		).length()
+		## Speed, smoothed, before anything reads it.
+		##
+		## A single frame's displacement is far too noisy to drive a gait -- one
+		## long frame would flip a walker into a sprint and back. The smoothing is
+		## asymmetric on purpose: quick to pick speed up and slower to let it go,
+		## so a player who is genuinely accelerating gets their run immediately
+		## and one who stops decelerates out of it over a step rather than
+		## freezing mid-stride.
+		var frame_time := maxf(get_process_delta_time(), 0.0001)
+		var instant_speed := travelled / frame_time
+		var smoothing := 0.45 if instant_speed > ground_speed_mps else 0.18
+		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
 		if travelled > 0.0001:
 			stride_cycle += travelled / maxf(stride_length_m, 0.30)
-			gait_blend = 1.0
-			locomotion_bob = absf(sin(stride_cycle * TAU)) * 0.035
 			## Face where you are going.
 			##
 			## Facing was only ever set from a contact direction, and only the
@@ -212,9 +243,6 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 				-(world_position.x - self.position.x),
 				-(world_position.z - self.position.z),
 			))
-		else:
-			gait_blend = 0.0
-			locomotion_bob = 0.0
 	has_world_position = true
 	tactical_position = position
 	self.position = world_position
@@ -581,6 +609,96 @@ func _apply_head_look() -> void:
 		head.rotation = Vector3(look_pitch, look_yaw, 0.0)
 
 
+## How high off the floor counts as airborne, in normalised elevation.
+##
+## Above the noise that a settling interpolation puts on a grounded player, and
+## well below the elevation any real jump reaches.
+const AIRBORNE_ELEVATION: float = 0.14
+const GROUNDED_ELEVATION: float = 0.03
+
+
+## Notice a touchdown and start the landing clock.
+##
+## Deliberately *observed* rather than announced. The actor is handed elevation
+## and event type every frame already, so the alternative -- a caller that has to
+## remember to report a landing, and a `set_pose` signature carrying the previous
+## action -- would put the burden on three call sites to describe something this
+## one can simply see happen.
+func _track_landing(event_type: int, elevation: float) -> void:
+	if elevation >= AIRBORNE_ELEVATION:
+		_was_airborne = true
+		_airborne_action = _landing_action_name(event_type)
+	elif _was_airborne and elevation <= GROUNDED_ELEVATION:
+		_was_airborne = false
+		_landing_remaining = LandingBiomechanicsScript.duration_seconds(
+			_airborne_action
+		)
+	elif _landing_remaining > 0.0:
+		_landing_remaining = maxf(_landing_remaining - get_process_delta_time(), 0.0)
+
+
+## Which landing an event leaves behind. A jump serve lands like a serve, a
+## spike like a spike, and a block like a block; everything else that somehow
+## got airborne gets the neutral absorb.
+func _landing_action_name(event_type: int) -> String:
+	match event_type:
+		RallyEventModel.EventType.ATTACK:
+			return "attack"
+		RallyEventModel.EventType.BLOCK:
+			return "block"
+		RallyEventModel.EventType.SERVE:
+			return "serve"
+	return "default"
+
+
+## Fold this voli into the landing they are partway through.
+##
+## Applied over the gait rather than instead of it, so a hitter who lands and
+## immediately starts moving is absorbing *and* stepping, which is what actually
+## happens. The knee takes the deeper of the two, because a leg cannot be both
+## folding to absorb a landing and straight for a stride.
+func _apply_landing() -> void:
+	var duration := LandingBiomechanicsScript.duration_seconds(_airborne_action)
+	var progress := 1.0 - _landing_remaining / maxf(duration, 0.0001)
+	var landing := LandingBiomechanicsScript.resolve(progress, _airborne_action)
+	body_pivot.rotation.x += float(landing.torso_pitch_radians)
+	var lead_leg := left_leg if dominant_hand == "Left" else right_leg
+	var trail_leg := right_leg if dominant_hand == "Left" else left_leg
+	lead_leg.rotation_degrees.x += float(landing.lead_hip_degrees)
+	trail_leg.rotation_degrees.x += float(landing.trail_hip_degrees)
+	var fold := float(landing.knee_degrees)
+	for leg in [left_leg, right_leg]:
+		var knee := leg.get_node("Knee") as Node3D
+		knee.rotation_degrees.x = minf(knee.rotation_degrees.x, fold)
+	## And the hips come down by exactly what the folded leg is shorter by.
+	##
+	## This rig has a hip and a knee and no ankle, so bending the knee swings the
+	## whole shin backward and lifts the shoe clear of the floor -- a voli
+	## absorbing a landing while hovering above it. Derived from the fold and this
+	## voli's own bone lengths rather than stated as a constant, so the two can
+	## never disagree: a deeper absorb is automatically a lower one, and a taller
+	## voli with longer shins drops further for the same angle.
+	var straight := leg_bone_lengths.x + leg_bone_lengths.y
+	var folded := leg_bone_lengths.x + leg_bone_lengths.y * cos(deg_to_rad(fold))
+	body_pivot.position.y += folded - straight
+	## A blocker's hands are still up on the touchdown frame and come down after
+	## the feet; everyone else's swing down and forward for balance. `arm_hold`
+	## carries which of those this is, so the two are one expression.
+	##
+	## Blended into the gait's swing by how much landing is left rather than
+	## assigned over it. Assigned, the arms would snap from the landing's value
+	## back to the stride's on the frame the timer expires -- a pop at exactly the
+	## moment this overlay exists to remove one.
+	var arm := float(landing.arm_degrees)
+	var arm_weight := maxf(float(landing.absorb), float(landing.arm_hold))
+	left_arm.rotation_degrees.x = lerpf(
+		left_arm.rotation_degrees.x, arm, arm_weight
+	)
+	right_arm.rotation_degrees.x = lerpf(
+		right_arm.rotation_degrees.x, arm, arm_weight
+	)
+
+
 ## Bend one arm at the elbow. Positive folds the forearm forward, matching the
 ## knee's convention of positive folding the shank back -- both are "toward the
 ## way the joint actually goes".
@@ -616,34 +734,50 @@ func set_pose(
 	is_contact_actor: bool,
 ) -> void:
 	_ensure_node_bindings()
+	_track_landing(event_type, elevation)
 	var lift := clampf(elevation, 0.0, 1.0) * 0.82
+	## Every joint of the walk-to-run comes from `GaitBiomechanics`, which knows
+	## the difference between the two. This branch used to be a single sine at a
+	## fixed 32-degree amplitude with the knees explicitly zeroed on the next
+	## line, so every voli on the court walked at exactly one speed with legs
+	## that never bent, whether they were strolling to a seat or sprinting for a
+	## dig.
+	var gait := GaitBiomechanicsScript.resolve(stride_cycle, ground_speed_mps)
+	gait_blend = float(gait.gait_blend)
+	locomotion_bob = float(gait.bob_meters)
 	body_pivot.position = Vector3(0.0, lift + locomotion_bob, 0.0)
-	body_pivot.rotation = Vector3.ZERO
+	body_pivot.rotation = Vector3(float(gait.torso_pitch_radians), 0.0, 0.0)
 	body_pivot.scale = Vector3.ONE * body_height_scale
-	var gait_angle := sin(stride_cycle * TAU) * 32.0 * gait_blend
-	## Arms counter-swing against the legs, which is what walking looks like and
-	## what a pair of hanging sticks does not. Opposite arm to leg, and shallower,
-	## because an arm swings less than the leg driving it.
-	left_arm.rotation_degrees = Vector3(-gait_angle * 0.46, 0.0, -12.0)
-	right_arm.rotation_degrees = Vector3(gait_angle * 0.46, 0.0, 12.0)
+	left_arm.rotation_degrees = Vector3(float(gait.left_arm_degrees), 0.0, -12.0)
+	right_arm.rotation_degrees = Vector3(float(gait.right_arm_degrees), 0.0, 12.0)
 	left_arm.position = Vector3(-shoulder_offset.x, shoulder_offset.y, 0.0)
 	right_arm.position = Vector3(shoulder_offset.x, shoulder_offset.y, 0.0)
-	left_leg.rotation_degrees = Vector3(gait_angle, 0.0, 0.0)
-	right_leg.rotation_degrees = Vector3(-gait_angle, 0.0, 0.0)
-	## Knees straighten every frame before a pose folds them, so a dig does not
-	## leave the defender walking around bent for the rest of the rally.
-	for leg in [left_leg, right_leg]:
-		(leg.get_node("Knee") as Node3D).rotation_degrees = Vector3.ZERO
+	left_leg.rotation_degrees = Vector3(float(gait.left_hip_degrees), 0.0, 0.0)
+	right_leg.rotation_degrees = Vector3(float(gait.right_hip_degrees), 0.0, 0.0)
+	## The knees now carry the gait rather than being flattened. They are still
+	## rewritten from scratch every frame, which is what stops a dig leaving the
+	## defender bent for the rest of the rally.
+	(left_leg.get_node("Knee") as Node3D).rotation_degrees = Vector3(
+		float(gait.left_knee_degrees), 0.0, 0.0
+	)
+	(right_leg.get_node("Knee") as Node3D).rotation_degrees = Vector3(
+		float(gait.right_knee_degrees), 0.0, 0.0
+	)
 	## The head keeps its own heading through a pose change. Everything else here
 	## is reset each frame; the look is not, because it is a decision about what
 	## the voli is watching rather than a property of the action they are in.
 	_apply_head_look()
 	## Elbows go back to the ready bend for the same reason -- and the ready bend
-	## is not zero, because a nobody stands with their arms locked straight. It
-	## deepens a little as the arms swing, which is what a moving player's do.
-	var swing_bend := absf(gait_angle) * 0.30
-	_set_elbow(left_arm, READY_ELBOW_BEND + swing_bend)
-	_set_elbow(right_arm, READY_ELBOW_BEND + swing_bend)
+	## is not zero, because a nobody stands with their arms locked straight. The
+	## gait carries them from nearly straight at a walk to a runner's right angle.
+	var carried_elbow := maxf(READY_ELBOW_BEND, float(gait.elbow_degrees))
+	_set_elbow(left_arm, carried_elbow)
+	_set_elbow(right_arm, carried_elbow)
+	## The landing sits on top of the gait and under the contact pose: a voli who
+	## has just come down is absorbing it whatever else they are doing, and a voli
+	## who is playing the ball right now is doing that instead.
+	if not is_contact_actor and _landing_remaining > 0.0:
+		_apply_landing()
 	shadow.scale = Vector3.ONE * lerpf(1.0, 1.35, elevation)
 	shadow.transparency = lerpf(0.0, 0.58, elevation)
 	if contact_direction.length_squared() > 0.0001:

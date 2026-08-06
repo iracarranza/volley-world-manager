@@ -210,6 +210,8 @@ func _initialize() -> void:
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
 	_test_spike_biomechanics_sequence()
+	_test_gait_separates_walking_from_running()
+	_test_landing_absorbs_and_returns_to_neutral()
 	_test_surface_screen_and_card_variation()
 	_test_scouting_confidence_and_fog()
 	_test_attack_courses_are_relative_to_the_hitter()
@@ -11909,6 +11911,167 @@ func _test_spike_biomechanics_sequence() -> void:
 		and str(SpikeBiomechanics.resolve(-0.05, RIGHT).phase_name) == "acceleration"
 		and str(SpikeBiomechanics.resolve(0.8, RIGHT).phase_name) == "landing",
 		"the swing names its own phase",
+	)
+
+
+## A walk and a run differ in where the body is highest, not in how fast it goes.
+##
+## The rig's locomotion was one sine at one amplitude with the knees explicitly
+## zeroed, so a sprinting libero and a strolling setter moved identically. The
+## replacement is a single continuous model, and the one claim that makes it a
+## model rather than a lookup table is the vertical inversion: highest over the
+## planted leg at a walk, lowest there at a run. That is a claim about a sign,
+## and a sign is checkable without eyes on a screen.
+func _test_gait_separates_walking_from_running() -> void:
+	var walk_midstance := GaitBiomechanics.WALK_STANCE_SHARE * 0.5
+	var run_midstance := GaitBiomechanics.RUN_STANCE_SHARE * 0.5
+	var walking: Dictionary = GaitBiomechanics.resolve(walk_midstance, 1.1)
+	var running: Dictionary = GaitBiomechanics.resolve(run_midstance, 5.5)
+	_check(
+		float(walking.bob_meters) > 0.0,
+		"a walk vaults -- hips high over the planted leg (%+.4f m)"
+			% float(walking.bob_meters),
+	)
+	_check(
+		float(running.bob_meters) < 0.0,
+		"a run springs -- hips low over the planted leg (%+.4f m)"
+			% float(running.bob_meters),
+	)
+
+	## Standing is not a gait. Every joint has to be at rest, or a player waiting
+	## for a serve is frozen mid-stride rather than standing there.
+	var standing: Dictionary = GaitBiomechanics.resolve(0.37, 0.0)
+	_check(
+		absf(float(standing.right_hip_degrees)) < 0.01
+			and absf(float(standing.right_knee_degrees)) < 0.01
+			and absf(float(standing.bob_meters)) < 0.0001,
+		"a stationary voli stands rather than freezing mid-stride",
+	)
+
+	## Deepest knee fold over a whole stride, which is the most legible single
+	## difference between the two gaits at a glance.
+	var walk_fold := 0.0
+	var run_fold := 0.0
+	var walk_arm := 0.0
+	var run_arm := 0.0
+	for step in range(120):
+		var cycle := float(step) / 120.0
+		var slow: Dictionary = GaitBiomechanics.resolve(cycle, 1.1)
+		var fast: Dictionary = GaitBiomechanics.resolve(cycle, 5.5)
+		walk_fold = minf(walk_fold, float(slow.right_knee_degrees))
+		run_fold = minf(run_fold, float(fast.right_knee_degrees))
+		walk_arm = maxf(walk_arm, absf(float(slow.right_arm_degrees)))
+		run_arm = maxf(run_arm, absf(float(fast.right_arm_degrees)))
+	_check(
+		run_fold < walk_fold * 1.8,
+		"a run folds the knee far deeper than a walk (%.0f vs %.0f degrees)"
+			% [run_fold, walk_fold],
+	)
+	_check(
+		run_arm > walk_arm * 2.0,
+		"a run drives the arms harder than a walk (%.0f vs %.0f degrees)"
+			% [run_arm, walk_arm],
+	)
+	_check(
+		float(GaitBiomechanics.resolve(0.0, 5.5).elbow_degrees) > 60.0
+			and float(GaitBiomechanics.resolve(0.0, 1.1).elbow_degrees) < 30.0,
+		"a runner carries a bent elbow and a walker does not",
+	)
+
+	## The two legs are half a stride apart. Without this a gait is a hop, and a
+	## hop is what an off-by-one in the phase offset produces.
+	var opposed := 0
+	for step in range(120):
+		var cycle := float(step) / 120.0
+		var frame: Dictionary = GaitBiomechanics.resolve(cycle, 3.0)
+		if float(frame.left_hip_degrees) * float(frame.right_hip_degrees) < 0.0:
+			opposed += 1
+	_check(
+		opposed > 80,
+		"the legs oppose each other through most of the stride (%d of 120)"
+			% opposed,
+	)
+
+	## Continuity across the wrap. A stride that jumps between its last sample
+	## and its first is a stutter every step, which is the failure mode that is
+	## hardest to see and most obvious once seen.
+	var before: Dictionary = GaitBiomechanics.resolve(0.999, 3.0)
+	var after: Dictionary = GaitBiomechanics.resolve(1.001, 3.0)
+	_check(
+		absf(float(before.right_hip_degrees) - float(after.right_hip_degrees)) < 1.0
+			and absf(
+				float(before.right_knee_degrees) - float(after.right_knee_degrees)
+			) < 3.0,
+		"the stride joins up where it wraps",
+	)
+
+
+## A landing has to end exactly where a stand begins.
+##
+## The overlay is added on top of whatever else the actor is doing, so any
+## residual left at the end of it is a permanent offset -- a voli who landed once
+## in the first set and has been standing fractionally crouched ever since. That
+## is the failure this test exists for; the rest is shape.
+func _test_landing_absorbs_and_returns_to_neutral() -> void:
+	for action in ["attack", "block", "serve", "default"]:
+		var finished: Dictionary = LandingBiomechanics.resolve(1.0, action)
+		_check(
+			absf(float(finished.knee_degrees)) < 0.01
+				and absf(float(finished.torso_pitch_radians)) < 0.001
+				and absf(float(finished.lead_hip_degrees)) < 0.01,
+			"a %s landing finishes at neutral" % action,
+		)
+		## Nobody lands on locked legs, and the overlay takes over from the spike
+		## pose partway through -- so a curve starting at zero would snap the knee
+		## straight on the handoff frame before folding it again.
+		_check(
+			float(LandingBiomechanics.resolve(0.0, action).knee_degrees) < -5.0,
+			"a %s landing touches down already flexed" % action,
+		)
+
+	## Depth follows what caused the jump. A hitter has nothing asking them to be
+	## ready and collapses; a blocker cannot afford to and stays over their feet.
+	var deepest := {}
+	for action in ["attack", "block"]:
+		var fold := 0.0
+		for step in range(41):
+			fold = minf(
+				fold,
+				float(
+					LandingBiomechanics.resolve(float(step) / 40.0, action).knee_degrees
+				),
+			)
+		deepest[action] = fold
+	_check(
+		float(deepest["attack"]) < float(deepest["block"]),
+		"a hitter absorbs deeper than a blocker (%.0f vs %.0f degrees)"
+			% [deepest["attack"], deepest["block"]],
+	)
+	_check(
+		LandingBiomechanics.duration_seconds("block")
+			< LandingBiomechanics.duration_seconds("attack"),
+		"a blocker gets back on their feet sooner than a hitter",
+	)
+	## The one arm difference that reads: a blocker's hands are still up when
+	## their feet land, and come down after them.
+	_check(
+		float(LandingBiomechanics.resolve(0.0, "block").arm_degrees) > 100.0
+			and float(LandingBiomechanics.resolve(0.6, "block").arm_degrees) < 60.0,
+		"a blocker's hands come down after their feet",
+	)
+	## An unknown action falls back rather than failing. Playback should never be
+	## able to crash on an event type this table has not heard of.
+	_check(
+		str(LandingBiomechanics.resolve(0.5, "somersault").action) == "default",
+		"an unmodelled action lands on the neutral absorb",
+	)
+
+	## Peak absorb arrives early and the recovery out of it takes longer than the
+	## drop into it. A symmetric curve reads as a squat rather than as a catch.
+	_check(
+		LandingBiomechanics.ABSORB_PEAK < 0.5,
+		"the absorb peaks before the halfway point (%.2f)"
+			% LandingBiomechanics.ABSORB_PEAK,
 	)
 
 
