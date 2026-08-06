@@ -1226,10 +1226,25 @@ one position and the journey is drawn from another.
 
 **So the direction of the distance gap is not established.** By the claim's own
 figures the opponent travels further; by the stamped movement the home defender
-does. One of the two is describing a defender who is not there. Reconcile the
-anchors before decomposing further -- and note this also means the home dig's
-`reach_margin` of 1.058 m is measured from a position playback does not agree
-with, which puts the earlier "0.816 m margin gap" itself in question.
+does. One of the two is describing a defender who is not there.
+
+**Attempted and reverted: the anchor is not the cause.** The obvious reading is
+that `evaluate_arrival` measures from `zone.center` while `defender_start` reads
+`live_positions`, so having the arrival report its anchor and both callers use it
+should collapse the two figures onto one. Implemented on both sides and it
+changed *nothing* -- byte-identical rallies, the claim still 1.506 m and the drawn
+journey still 2.257 m. The `anchor` key never arrives, so every call takes the
+fallback and reproduces the old behaviour exactly. Reverted rather than shipped,
+because a comment asserting it reconciles a 0.75 m disagreement while provably
+changing nothing is a false claim left in the source.
+
+What that rules out is worth keeping: the gap is **not** the claim and the draw
+starting from two positions. Both are already measuring from the same place. The
+next candidates are that the two are measuring to different *targets* -- the
+claim uses the `landing_point` handed to `choose_claimant`, the drawn journey
+uses the event's `start_position`, and nothing has confirmed those are the same
+point -- or that `distance_meters` is overwritten downstream between the claim
+and the stamp. Check which of the two figures is wrong before assuming either.
 
 Both want their own fix. Neither is the attack-symmetry ratchet, and treating
 them as one thing is what produced the wrong answer above.
