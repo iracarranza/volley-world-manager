@@ -1517,6 +1517,53 @@ and the conclusion that the downgrade thresholds are correctly placed rests
 entirely on it. If that number is something else, the thresholds are back in
 question.
 
+### Resolved: the 0.755 was real, and the set-quality gate was never the cause
+
+The 0.755 stands. It is the resolved `opponent_set_quality`, stamped where the
+code says it is; there is no third number. Re-applying the shot gate against it
+barely moved the mix for a much simpler reason -- **the gate is not what turns
+opponent swings into rolls.**
+
+There are two independent rewrites of a shot type, and only the second one's
+output was ever published. `tools/run_downgrade_attribution_probe.gd` separates
+them, and both `intended_type` and `chosen_type` are now stamped on every ATTACK
+event so the split is legible without a probe:
+
+| opponent swings | asked for a power family | after the set-quality gate | after `backs_off` |
+|---|---|---|---|
+| 119 | 119 | 88 | **3** |
+
+The set-quality gate costs 31 swings. `AttemptJudgment.backs_off`, reading the
+approach, costs 85. Two earlier investigations went after the gate.
+
+`tools/run_backoff_terms_probe.gd` then itemises the approach deficit, which
+`attack_family_deficit_terms()` now returns rather than summing away:
+
+| side | rating | lateral | runup | **arrival margin** | power access | total |
+|---|---|---|---|---|---|---|
+| home | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| opponent | 0.000 | 0.000 | 0.000 | **0.662** | 0.296 | 0.958 |
+
+The arrival margin reads -0.461 s for the opponent against +0.288 s for the home
+side -- and it is **stale**. See `ENABLE_CLAMPED_ARRIVAL_MARGIN` and
+`FAILURE_MODES.md` §15: `_reachable_contact` moves the contact back to whatever
+the hitter reaches as the ball arrives, so the clamp makes them punctual by
+construction, and all three swings kept billing the pre-clamp figure.
+
+With the flag on: opponent power swings 3/119 -> 27/110, back-off rate 71% ->
+49%, and the arrival term disappears (0.004 mean, fires on 0% of swings).
+
+**Left off, because it is large rather than doubtful.** Every downstream band was
+calibrated against a side that rolled nearly every ball. It lands with the block
+outcome-band re-tune, alongside `ENABLE_UNIFIED_ATTACK_SHAPE` and
+`ENABLE_UNIFIED_RECEPTION_SKILL`.
+
+**Next, and it is the last term standing:** the opponent's remaining deficit is
+entirely `power_access` -- run-up quality 0.337 against a 0.52 floor, where the
+home side reads 0.687. Two sides, identical code, half the run-up. Note also that
+`approach_in_system` reads **0% on both sides**, which no swing in the game has
+ever satisfied; that is a §2 candidate in its own right.
+
 The machinery added is sound regardless: the improvisation draw is now taken
 unconditionally and gated afterwards, because `set_quality < 0.38 or rng.randf()`
 short-circuited and made draw counts depend on the branch. That is the rule in

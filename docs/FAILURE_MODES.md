@@ -35,6 +35,10 @@ calibration, answer all six *before* writing code.
    the calibration, the harness, the test, and the flag-off path. (§6)
 7. **Work backwards from what demonstrably arrives.** Before adding a value and
    hoping it reaches the far end, print what is *already* at the far end. (§14)
+8. **Is this reading still true after the thing that changed it?** A quantity
+   derived before a correction, and read after it, describes a world that no
+   longer exists. Find every derived value downstream of anything you move.
+   (§15)
 
 ---
 
@@ -344,3 +348,49 @@ habit of trusting a number without checking what it was averaged over.
 
 **The rule:** when a measurement surprises you, inspect the *rows* before
 inspecting the model.
+---
+
+## 15. A reading that outlived the thing it described
+
+**What it looks like.** `_reachable_contact` exists to spare a hitter who cannot
+make the ideal contact: it pulls the contact back along their route to the point
+they reach as the ball arrives. Once it binds, the hitter is on time *by
+construction*. All three swings went on charging `hitter_arrival_margin`, which
+was computed one line earlier against the contact that no longer existed.
+
+So the ball was moved to the hitter *and* the hitter was penalised for not
+reaching where it used to be. Measured, the opponent's mean arrival margin read
+-0.461 s against the home side's +0.288 s, and that stale term alone was 0.662
+of their 0.958 mean approach deficit -- the reason they backed off 71% of swings
+against the home side's 2%, and through that, the reason they almost never
+spiked, which is upstream of most of the dig asymmetry.
+
+**Why it survived so long.** Both sides run the identical code. The defect is
+symmetric; only its *binding* is asymmetric, because only the opponent's hitter
+routinely fails to make the contact inside the set's flight. A grep for
+asymmetry finds nothing, and a side-by-side reading of the two functions finds
+nothing, because there is nothing there to find.
+
+It also survived a partial fix. On the home path, `resolved_approach` **is**
+re-evaluated against the clamped contact, with a comment explaining exactly why
+-- "a clamped contact would then have been scored on a runway nobody ran." The
+same author, at the same moment, left the margin stale two lines above. Half the
+downstream readings were refreshed and half were not, which is why the remaining
+half looked deliberate.
+
+**How it was found.** Not by reading the code. By splitting one published
+outcome into the two independent rewrites behind it: every swing passes a
+set-quality gate *and* an approach gate, and only the second one's output was
+ever stamped on an event. Two separate investigations had already attributed
+"the opponent never spikes" to the first gate -- once by reading a threshold
+against a distribution, once by re-applying that threshold against the resolved
+set quality -- and neither moved the mix, because the first gate costs 31 swings
+and the second costs 85. Itemising the second gate's five terms then put the
+cause on one of them.
+
+**The rule:** anything that *moves* a quantity invalidates every value derived
+from its old position. Before the change, list what reads it; after the change,
+re-read them all or say in the code why one is deliberately left alone. And when
+a model publishes a single verdict assembled from several independent
+judgements, publish the judgements too -- an unattributable total sends
+investigations to the wrong file, repeatedly.

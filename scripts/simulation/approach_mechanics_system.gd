@@ -373,35 +373,64 @@ static func attack_family_deficit(
 	arrival_margin: float,
 	family: String,
 ) -> float:
+	var terms := attack_family_deficit_terms(
+		player, profile, arrival_margin, family
+	)
+	return float(terms.get("total", 0.0))
+
+
+## The same shortfall, itemised.
+##
+## Kept as the single implementation with `attack_family_deficit()` reading its
+## total, rather than a parallel diagnostic that recomputes the sum -- a second
+## copy of this arithmetic would be free to drift from the one the game plays,
+## and then a probe could report a term the swing never paid.
+##
+## Worth having because the total on its own is unattributable. The opponent
+## backed off 71% of swings against the home side's 2%, and nothing published
+## could say whether that was ratings, the run-up, or arriving late -- three
+## fixes in entirely different files.
+static func attack_family_deficit_terms(
+	player: VolleyballPlayer,
+	profile: Dictionary,
+	arrival_margin: float,
+	family: String,
+) -> Dictionary:
+	var terms := {
+		"rating": 0.0, "lateral_control": 0.0, "runup_quality": 0.0,
+		"arrival_margin": 0.0, "power_access": 0.0, "total": 0.0,
+	}
 	if player == null:
-		return 0.0
+		return terms
 	var requirement: Dictionary = ATTACK_FAMILY_REQUIREMENTS.get(family, {})
 	if requirement.is_empty():
-		return 0.0
-	var deficit := 0.0
+		return terms
 	if requirement.has("rating"):
-		deficit += maxf(
+		terms["rating"] = maxf(
 			float(requirement["rating_floor"])
 			- float(player.get(str(requirement["rating"]))),
 			0.0,
 		) / 100.0
 	if requirement.has("lateral_control"):
-		deficit += maxf(
+		terms["lateral_control"] = maxf(
 			float(requirement["lateral_control"])
 			- float(profile.get("lateral_control", 0.0)), 0.0
 		)
 	if requirement.has("runup_quality"):
-		deficit += maxf(
+		terms["runup_quality"] = maxf(
 			float(requirement["runup_quality"])
 			- float(profile.get("runup_quality", 0.0)), 0.0
 		)
 	if requirement.has("arrival_margin"):
-		deficit += maxf(
+		terms["arrival_margin"] = maxf(
 			float(requirement["arrival_margin"]) - arrival_margin, 0.0
 		) / ARRIVAL_DEFICIT_SCALE
 	if bool(requirement.get("power_access", false)):
-		deficit += _power_access_deficit(profile)
-	return deficit
+		terms["power_access"] = _power_access_deficit(profile)
+	terms["total"] = float(terms["rating"]) + float(terms["lateral_control"]) \
+		+ float(terms["runup_quality"]) + float(terms["arrival_margin"]) \
+		+ float(terms["power_access"])
+	return terms
 
 
 ## The run-up shortfall behind a failed `power_access`. The profile reports the

@@ -1277,6 +1277,7 @@ func resolve(
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, float(set_flight_time)
 	)
+	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
 	_retarget_set_event(
 		set_event, set_target, "set", float(set_flight_time),
 		float(set_trajectory.get(
@@ -1346,6 +1347,15 @@ func resolve(
 		hit_type, available_attacks, float(result.set_quality), hitter_arrival_margin
 	)
 	identity_effects["attack_selection"]["hit_type"] = hit_type
+	## What this hitter meant to do, kept before the run-up can talk them out of it.
+	##
+	## Every swing in the game passes through two independent downgrades -- the
+	## set-quality gate that picks the shot, and `backs_off` below, which rewrites
+	## it again from the approach. Only the second one's *output* was ever
+	## published, so a side that almost never spikes looked identical whether its
+	## sets were bad or its run-ups were, and three separate investigations went
+	## looking for the cause in the first gate.
+	var intended_hit_type := hit_type
 	## Capability is not permission at the third contact either.
 	##
 	## This used to silently rewrite a power swing into a roll shot whenever the
@@ -1355,10 +1365,11 @@ func resolve(
 	## the hitter's own judgment decides whether to take the safer ball, and
 	## swinging anyway costs quality in proportion to how far outside their
 	## approach the swing sits.
-	var swing_deficit := ApproachMechanicsModel.attack_family_deficit(
+	var swing_deficit_terms := ApproachMechanicsModel.attack_family_deficit_terms(
 		hitter, resolved_approach, hitter_arrival_margin,
 		ApproachMechanicsModel.attack_family_for_hit_type(hit_type),
 	)
+	var swing_deficit := float(swing_deficit_terms.total)
 	var swing_downgraded := AttemptJudgmentModel.backs_off(hitter, swing_deficit)
 	if swing_downgraded:
 		hit_type = "Controlled roll" if "controlled_roll" in available_attacks \
@@ -1504,6 +1515,11 @@ func resolve(
 				float(set_flight_time), int(assignment.tempo),
 			),
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
+			"intended_type": intended_hit_type,
+			"swing_downgraded": swing_downgraded,
+			"swing_deficit_terms": swing_deficit_terms,
+			"swing_runup_quality": float(resolved_approach.get("runup_quality", 0.0)),
+			"swing_in_system": bool(resolved_approach.get("approach_in_system", false)),
 			"target_reason": attack_choice.reason,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
@@ -2740,6 +2756,7 @@ func _resolve_opponent_transition(
 		opponent_approach_start, opponent_contact, opponent_move_time,
 		set_flight_time,
 	)
+	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
 	## And the wall moves with it.
 	##
 	## The wall above was staged against the contact the set was *aimed* at.
@@ -2810,13 +2827,18 @@ func _resolve_opponent_transition(
 	## the opponent's target is chosen before the run-up is evaluated, so a
 	## downgraded swing still flies at the spot the full swing had picked. That
 	## understates the downgrade and is the remaining asymmetry here.
-	var opponent_swing_deficit := ApproachMechanicsModel.attack_family_deficit(
+	var opponent_deficit_terms := ApproachMechanicsModel.attack_family_deficit_terms(
 		opponent_hitter, opponent_approach, hitter_arrival_margin,
 		ApproachMechanicsModel.attack_family_for_hit_type(
 			str(attack_choice.attack_type)
 		),
 	)
-	if AttemptJudgmentModel.backs_off(opponent_hitter, opponent_swing_deficit):
+	var opponent_swing_deficit := float(opponent_deficit_terms.total)
+	var opponent_chosen_type := str(attack_choice.attack_type)
+	var opponent_swing_downgraded := AttemptJudgmentModel.backs_off(
+		opponent_hitter, opponent_swing_deficit
+	)
+	if opponent_swing_downgraded:
 		attack_choice["attack_type"] = "Roll shot"
 		opponent_swing_deficit = ApproachMechanicsModel.attack_family_deficit(
 			opponent_hitter, opponent_approach, hitter_arrival_margin,
@@ -2904,6 +2926,17 @@ func _resolve_opponent_transition(
 			),
 			"set_flight_seconds": set_flight_time,
 			"attack_type": attack_choice.attack_type,
+			## Both downgrades, separately. `intended_type` is what the position and
+			## the set called for, `chosen_type` what the set-quality gate left, and
+			## `attack_type` what the run-up left after that. Collapsing the three
+			## into one published figure is why "the opponent never spikes" was
+			## attributed to the set-quality gate twice before it was measured.
+			"intended_type": attack_choice.get("intended_type", ""),
+			"chosen_type": opponent_chosen_type,
+			"swing_downgraded": opponent_swing_downgraded,
+			"swing_deficit_terms": opponent_deficit_terms,
+			"swing_runup_quality": float(opponent_approach.get("runup_quality", 0.0)),
+			"swing_in_system": bool(opponent_approach.get("approach_in_system", false)),
 			"attack_direction": attack_choice.direction,
 			"hitter_start": attack_choice.start,
 			"hitter_travel_time": attack_choice.travel_time,
@@ -3453,6 +3486,7 @@ func _resolve_home_continuation(
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, continuation_flight_time
 	)
+	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
 	var set_event_for_staging := result.events[-1] as RallyEvent
 	_retarget_set_event(
 		set_event_for_staging, set_target, "set", continuation_flight_time,
@@ -3511,11 +3545,15 @@ func _resolve_home_continuation(
 	## Same rule as the first-ball swing: capability shapes the outcome, it does
 	## not remove the option.
 	var continuation_hit_type := _hit_type(assignment, hitter)
+	var continuation_intended_type := continuation_hit_type
 	var continuation_deficit := ApproachMechanicsModel.attack_family_deficit(
 		hitter, continuation_approach, hitter_arrival_margin,
 		ApproachMechanicsModel.attack_family_for_hit_type(continuation_hit_type),
 	)
-	if AttemptJudgmentModel.backs_off(hitter, continuation_deficit):
+	var continuation_downgraded := AttemptJudgmentModel.backs_off(
+		hitter, continuation_deficit
+	)
+	if continuation_downgraded:
 		continuation_hit_type = "Controlled roll" \
 			if "controlled_roll" in continuation_actions else "Emergency tip"
 		continuation_deficit = ApproachMechanicsModel.attack_family_deficit(
@@ -3616,6 +3654,8 @@ func _resolve_home_continuation(
 		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0),
 		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
 			"attack_type": continuation_hit_type,
+			"intended_type": continuation_intended_type,
+			"swing_downgraded": continuation_downgraded,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
 			"geometric_out_reason": str(geometric.get("out_reason", "")),
@@ -4705,20 +4745,32 @@ func _choose_opponent_attack(
 	var travel_time := float(chosen.travel_time)
 	var intended_type := "Quick attack" \
 		if code.begins_with("M") and set_quality >= 0.46 else "Power swing"
-	## Drawn unconditionally and gated afterwards, so the number of draws a rally
-	## consumes does not depend on the branch taken. The improvisation roll is
-	## also returned, because the shot type decided here is provisional: it is
-	## chosen against a set quality computed for a *placeholder* target, and the
-	## real one is not known until the contact is final. Re-deciding later with a
-	## fresh draw would consume a second number and re-sequence every seeded
-	## outcome after it.
-	var improvise_roll := rng.randf()
+	## Drawn ahead of the branch, so the number of draws a rally consumes does not
+	## depend on which way the branch goes, and returned alongside the shot, because
+	## the shot decided here is provisional: it is chosen against a set quality
+	## computed for a *placeholder* target, and the real one is not known until the
+	## contact is final. Re-deciding later with a fresh draw would consume a second
+	## number and re-sequence every seeded outcome after it.
+	##
+	## Gated on the flag that needs it, because the original `set_quality < 0.38 or
+	## rng.randf()` short-circuits: hoisting the draw is the correct shape but it is
+	## not free, and taken unconditionally with the flag off it re-sequenced roughly
+	## one rally in three hundred and moved the attack-symmetry ratchet 0.654 to
+	## 0.660 while delivering nothing. A flag that is off has to be byte-identical
+	## or the reading it is measured against is not the one it will ship into.
+	var improvise_roll := 0.0
 	var attack_type := intended_type
 	if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
+		improvise_roll = rng.randf()
 		attack_type = _compromised_shot_type(best, intended_type, set_quality)
-	else:
+	elif RallyFeatureFlagsModel.ENABLE_DELIVERED_SET_SHOT_CHOICE:
+		improvise_roll = rng.randf()
 		if set_quality < 0.38 \
 				or improvise_roll < 0.12 + _rating(best, "decision_making") * 0.08:
+			attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
+	else:
+		if set_quality < 0.38 \
+				or rng.randf() < 0.12 + _rating(best, "decision_making") * 0.08:
 			attack_type = "Roll shot" if set_quality >= 0.30 else "Emergency tip"
 	var target := open_target
 	if attack_type in ["Roll shot", "Emergency tip"]:
@@ -5368,6 +5420,33 @@ static func _reachable_contact(
 	return hitter_start.lerp(
 		intended_contact, clampf(flight_time / hitter_move_time, 0.0, 1.0)
 	)
+
+
+## The lateness that survives the clamp above.
+##
+## `_reachable_contact` exists precisely so a hitter who cannot get to the ideal
+## contact strikes the ball short of it instead of missing -- it pulls the
+## contact back to the point they reach as the ball arrives. So once it binds,
+## the hitter is on time *by construction*, and the margin is zero.
+##
+## Both swings kept billing the pre-clamp figure. The opponent's hitter was
+## therefore charged a mean 0.461 s of lateness against a contact they no longer
+## took: the ball was moved to them and they were penalised for not reaching
+## where it used to be. That single stale number was 0.662 of their 0.958 mean
+## approach deficit, and it is why they backed off 71% of their swings against
+## the home side's 2% -- the two sides run identical code and only this term
+## binds on one of them.
+##
+## Returned from beside the clamp rather than recomputed at each call site, so
+## the rule about when lateness survives lives in one place.
+static func _clamped_arrival_margin(margin_before_clamp: float) -> float:
+	if not RallyFeatureFlagsModel.ENABLE_CLAMPED_ARRIVAL_MARGIN:
+		return margin_before_clamp
+	## Exact against `_reachable_contact`'s own arithmetic: it either returns the
+	## intended contact untouched, leaving a non-negative margin alone, or scales
+	## the route so arrival lands on the ball. It shares that function's
+	## constant-speed approximation of the route and adds no second one.
+	return maxf(margin_before_clamp, 0.0)
 
 
 ## Land the set where the swing now happens.

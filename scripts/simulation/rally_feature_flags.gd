@@ -442,3 +442,35 @@ const ENABLE_BLOCK_CROSSING_READ: bool = false
 ## bands are re-tuned for an opponent that swings, alongside `ENABLE_UNIFIED_ATTACK_SHAPE`.
 ## Do not widen the ratchet to close this.
 const ENABLE_UNIFIED_RECEPTION_SKILL: bool = false
+
+
+## Stop billing a hitter for lateness to a contact they were spared.
+##
+## `_reachable_contact` exists so a hitter who cannot make the ideal contact
+## strikes the ball short of it instead of missing it: it pulls the contact back
+## along their route to the point they reach as the ball arrives. Once it binds
+## they are, by construction, on time. All three swings kept charging the
+## pre-clamp arrival margin anyway, so the ball was moved to the hitter *and*
+## the hitter was penalised for not reaching where it used to be.
+##
+## Measured, and it is the whole of the "opponent never spikes" story. Splitting
+## the two independent shot downgrades apart (`tools/run_downgrade_attribution_probe.gd`)
+## shows 119 opponent swings asked for a power family, 88 surviving the
+## set-quality gate, and 3 surviving `AttemptJudgment.backs_off` -- so the gate
+## that two earlier attempts went after costs 31 swings and the approach deficit
+## costs 85. Itemising that deficit (`tools/run_backoff_terms_probe.gd`) puts
+## 0.662 of its 0.958 mean on the stale arrival margin alone, which runs -0.461 s
+## against the home side's +0.288 s.
+##
+## The two sides run identical code. Only this term binds on one of them, because
+## only the opponent's hitter routinely fails to make the contact inside the set's
+## flight -- and the clamp that fixes that is the same clamp whose result nobody
+## re-read.
+##
+## FLAGGED, NOT BECAUSE IT IS DOUBTFUL BUT BECAUSE IT IS LARGE. Removing a term
+## worth 0.662 of a 0.958 deficit will move the opponent from 3 power swings in
+## 119 to most of them, and every downstream band -- the block's stuff/touch
+## split, the dig rates that inherit opponent flight time, the attack-symmetry
+## ratchet -- was calibrated against a side that rolled nearly every ball. Turn
+## it on together with that re-tune, not before it.
+const ENABLE_CLAMPED_ARRIVAL_MARGIN: bool = false
