@@ -27,21 +27,39 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 ## Short enough that the line reads as continuously varying and long enough that
 ## a full card is not hundreds of draw calls. At 14 a dashboard card's edge is
 ## about fifty segments.
-const SEGMENT_LENGTH: float = 14.0
+const SEGMENT_LENGTH: float = 6.0
 
 ## How far the line may stray from true, in pixels.
 ##
 ## Small on purpose, and smaller than it first shipped. At 1.15 the wobble was
 ## the loudest thing about the line; a drawn edge is mostly straight, and what
 ## says "hand" is the *variation in the ink*, not the deviation of the path.
-const WANDER_PIXELS: float = 0.62
+const WANDER_PIXELS: float = 0.40
 
 ## Pen width along a run, and what it becomes at a corner.
 ##
 ## Thicker at corners because that is where a hand slows and the ink pools, which
 ## is the detail that sells a drawn line more than the wander does.
-const STROKE_WIDTH: float = 1.6
-const CORNER_WIDTH: float = 2.7
+## The nib, at its widest and at its narrowest.
+##
+## A broad pen is not a round one with jitter. Its width depends on the
+## *direction of travel* relative to the angle the nib is held at: fully across
+## the nib is the full width of the edge, along it is almost nothing. That is
+## the entire reason calligraphy reads as calligraphy, and it is structural
+## rather than noise -- the same stroke drawn twice comes out the same.
+##
+## Thicker than the line it replaces, and it has to be: at 1.6 px a width
+## *ratio* has nowhere to show. `NIB_ANGLE_DEGREES` near the horizontal is what
+## makes a rounded rectangle interesting -- the top and bottom runs travel
+## nearly along the nib and come out light, the sides travel across it and come
+## out heavy, and the corners sweep between the two.
+const STROKE_WIDTH: float = 5.4
+const NIB_ANGLE_DEGREES: float = 22.0
+## What is left when travelling straight along the nib. Not zero: a nib run
+## exactly along its own edge still leaves a hairline, and a border that
+## genuinely vanishes on its top run reads as a bug.
+const NIB_MIN_RATIO: float = 0.38
+const CORNER_WIDTH: float = 6.6
 
 ## How much of the run either side of a corner is affected by the pooling, as a
 ## fraction of the shortest side.
@@ -50,6 +68,14 @@ const CORNER_SHARE: float = 0.14
 ## Inset from the panel's own rect, so the line sits on the edge rather than half
 ## outside it.
 const EDGE_INSET: float = 1.0
+
+## The feathering pass: how far past the true edge it reaches, and how faint.
+##
+## `draw_polygon` does not antialias, so the ribbon needs its own soft edge. One
+## wider pass at low alpha is enough at this stroke weight and costs one extra
+## quad per segment.
+const FEATHER_PIXELS: float = 0.7
+const FEATHER_ALPHA: float = 0.32
 
 ## How much ink the ball can fail to lay down, at worst.
 ##
@@ -109,21 +135,79 @@ func _draw() -> void:
 	var light_mode := UIPalette.control_is_light(self)
 	var ink := UIPalette.color(&"stroke_strong", light_mode)
 	var points := _outline_points()
-	if points.size() < 2:
+	## The path closes by repeating its first point. A ribbon walks the ring
+	## cyclically, so that duplicate would draw one zero-length quad at the seam.
+	if points.size() > 1 and points[0].is_equal_approx(points[points.size() - 1]):
+		points.remove_at(points.size() - 1)
+	if points.size() < 3:
 		return
+	var count := points.size()
 	var shortest := minf(size.x, size.y)
-	for index in range(points.size() - 1):
-		var from: Vector2 = points[index]
-		var to: Vector2 = points[index + 1]
-		var midpoint := (from + to) * 0.5
+	## Everything the ribbon needs, resolved once per point on the centreline.
+	##
+	## Per *point*, not per segment, and that is the whole of the rewrite. The
+	## edge was drawn as a chain of independent antialiased `draw_line` calls,
+	## which put three separate discontinuities at every joint: two overlapping
+	## antialiased quads compositing into a darker blob, a width sampled fresh
+	## for each segment, and an alpha sampled fresh as well. Measured on a
+	## straight run, the stroke swelled from 2 to 4 pixels with its strongest
+	## periodicity at exactly `SEGMENT_LENGTH` -- a regular bead every 14 px,
+	## which over a halftone reads as cross-stitch rather than as ink.
+	##
+	## Resolving at the points and letting adjacent quads *share* their edge
+	## vertices removes all three at once: nothing overlaps, and width and alpha
+	## become continuous along the stroke instead of stepping at each seam.
+	var normals := PackedVector2Array()
+	var widths := PackedFloat32Array()
+	var alphas := PackedFloat32Array()
+	normals.resize(count)
+	widths.resize(count)
+	alphas.resize(count)
+	for index in range(count):
+		var previous: Vector2 = points[(index - 1 + count) % count]
+		var following: Vector2 = points[(index + 1) % count]
+		var tangent := following - previous
+		tangent = tangent.normalized() if tangent.length_squared() > 0.000001 \
+			else Vector2.RIGHT
+		normals[index] = tangent.orthogonal()
 		var coverage := _coverage(index)
-		draw_line(
-			from, to,
-			Color(ink, ink.a * coverage),
-			_stroke_width(midpoint, shortest)
-				* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage),
-			true,
-		)
+		widths[index] = _stroke_width(points[index], shortest, tangent) \
+			* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage)
+		alphas[index] = ink.a * coverage
+	## Two passes. `draw_polygon` has no antialiasing of its own, so a bare
+	## ribbon has hard edges; a wider, fainter one underneath feathers them.
+	_draw_ribbon(points, normals, widths, alphas, ink, FEATHER_PIXELS, FEATHER_ALPHA)
+	_draw_ribbon(points, normals, widths, alphas, ink, 0.0, 1.0)
+
+
+## One closed ribbon, as quads that share their edges with their neighbours.
+##
+## `widen` grows the half-width for the feathering pass; `alpha_scale` fades it.
+func _draw_ribbon(
+	points: PackedVector2Array,
+	normals: PackedVector2Array,
+	widths: PackedFloat32Array,
+	alphas: PackedFloat32Array,
+	ink: Color,
+	widen: float,
+	alpha_scale: float,
+) -> void:
+	var count := points.size()
+	for index in range(count):
+		var next_index := (index + 1) % count
+		var here := widths[index] * 0.5 + widen
+		var there := widths[next_index] * 0.5 + widen
+		## Wound consistently so every quad faces the same way: out along one
+		## edge, across, and back along the other.
+		var quad := PackedVector2Array([
+			points[index] + normals[index] * here,
+			points[next_index] + normals[next_index] * there,
+			points[next_index] - normals[next_index] * there,
+			points[index] - normals[index] * here,
+		])
+		var near := Color(ink, alphas[index] * alpha_scale)
+		var far := Color(ink, alphas[next_index] * alpha_scale)
+		draw_polygon(quad, PackedColorArray([near, far, far, near]))
 
 
 ## The path the pen takes, already wandered.
@@ -259,7 +343,16 @@ func _coverage(index: int) -> float:
 
 ## Thicker where the hand slows: at the corners, and never in the middle of a
 ## straight run.
-func _stroke_width(point: Vector2, shortest: float) -> float:
+func _stroke_width(point: Vector2, shortest: float, tangent: Vector2) -> float:
+	## The nib first: how much of its edge this direction of travel presents.
+	##
+	## `sin` of the angle between travel and the nib, so travelling across the
+	## nib is 1 and along it is 0. Absolute, because a nib does not care which
+	## way along its edge you go.
+	var nib := deg_to_rad(NIB_ANGLE_DEGREES)
+	var presented := absf(sin(tangent.angle() - nib))
+	var base := STROKE_WIDTH * lerpf(NIB_MIN_RATIO, 1.0, presented)
+	var corner_base := CORNER_WIDTH * lerpf(NIB_MIN_RATIO, 1.0, presented)
 	var band := maxf(shortest * CORNER_SHARE, 6.0)
 	var to_edge := minf(
 		minf(point.x, size.x - point.x),
@@ -276,7 +369,7 @@ func _stroke_width(point: Vector2, shortest: float) -> float:
 	)
 	if to_edge > band:
 		corner_proximity = 0.0
-	return lerpf(STROKE_WIDTH, CORNER_WIDTH, corner_proximity)
+	return lerpf(base, corner_base, corner_proximity)
 
 
 ## A stable 0-1 from this outline's seed and a step along its path.
