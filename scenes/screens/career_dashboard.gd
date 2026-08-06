@@ -7,6 +7,7 @@ signal title_requested
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Scouting := preload("res://scripts/systems/scouting_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const Regions := preload("res://scripts/data/regions.gd")
@@ -139,6 +140,8 @@ var roster_environment: Environment = null
 @onready var raw_page_label: Label = %RawPageLabel
 @onready var raw_title: Label = %RawTitle
 @onready var player_attribute_wheel: VolleyballPlayerAttributeWheel = %PlayerAttributeWheel
+@onready var scouting_toggle: Button = %ScoutingToggle
+@onready var wheel_caption: Label = %WheelCaption
 @onready var transfer_player_attribute_wheel: VolleyballPlayerAttributeWheel = %TransferPlayerAttributeWheel
 @onready var team_attribute_wheel: VolleyballPlayerAttributeWheel = %TeamAttributeWheel
 @onready var team_wheel_caption: Label = %TeamWheelCaption
@@ -183,6 +186,15 @@ var roster_environment: Environment = null
 
 var selected_transfer_id: int = -1
 var selected_fixture_id: int = -1
+## Which half of the record is on screen: what has been demonstrated, or what
+## the scout projects.
+##
+## Two views rather than one blended figure, because they answer different
+## questions and blending them hides which you are looking at. Known is the
+## record -- what this voli has actually shown, and for somebody in your own
+## building that is close to exact. Scouted is a projection of a ceiling that
+## has not happened yet, and it stays uncertain no matter how long you watch.
+var showing_scouted_view: bool = false
 var selected_roster_id: int = -1
 ## The individual-training tab carries its own selection rather than sharing
 ## `selected_roster_id`: it is a separate list on a separate tab, and letting
@@ -225,6 +237,7 @@ func _ready() -> void:
 	training_option.item_selected.connect(_training_selected)
 	roster_list_toggle.pressed.connect(_toggle_roster_list)
 	roster_list.item_selected.connect(_roster_selected)
+	scouting_toggle.toggled.connect(_scouting_view_toggled)
 	player_dossier_button.pressed.connect(_open_player_dossier)
 	individual_training_roster_list.item_selected.connect(_individual_training_selected)
 	player_attribute_wheel.expand_requested.connect(_open_player_attribute_lab)
@@ -1592,16 +1605,83 @@ func _player_dossier_text(player: VolleyballPlayer) -> String:
 	]
 
 
+## Switching the view repaints both wheels, because the transfer market shows
+## the same split and a toggle that only reached one of them would read as a
+## roster setting rather than a way of looking at volis.
+func _scouting_view_toggled(pressed: bool) -> void:
+	showing_scouted_view = pressed
+	var player := GameManager.player_by_id(selected_roster_id)
+	if player != null:
+		_refresh_player_wheel(player)
+	if selected_transfer_id >= 0:
+		var target := _market_player(selected_transfer_id)
+		if target != null:
+			_apply_scouted_profile(
+				transfer_player_attribute_wheel, target,
+				scouting_confidence(target),
+			)
+
+
 func _refresh_player_wheel(player: VolleyballPlayer) -> void:
-	## Fully accurate today: this reads the player's real generated ceilings,
-	## the same data `potential` is scored from. When scouting exists, an
-	## unscouted prospect's outer line should come from an estimate derived
-	## from this data (a range, a fogged band) rather than this data itself --
-	## the ceilings stay real; what changes is whether the viewer is shown them
-	## directly.
-	player_attribute_wheel.set_profile(
-		AttributeProfiles.summary_profile(player), AttributeProfiles.PROFILE_TOOLTIPS,
-		true, AttributeProfiles.summary_profile(player, true),
+	## The ceilings are still real. What changed is whether the viewer is shown
+	## them directly -- `ScoutingSystem` blurs the copy on its way to the screen
+	## and never writes anything back, so the wheel is a report rather than a
+	## second store of the same fact.
+	var known := scouting_confidence(player)
+	scouting_toggle.button_pressed = showing_scouted_view
+	scouting_toggle.text = "Scouted" if showing_scouted_view else "Known"
+	scouting_toggle.tooltip_text = (
+		"Projected ceiling, and how sure the club is of it."
+		if showing_scouted_view
+		else "What this voli has actually shown."
+	)
+	_apply_scouted_profile(player_attribute_wheel, player, known)
+	wheel_caption.text = "%s  /  %s  /  SELECT TO EXPAND" % [
+		"SCOUT PROJECTION" if showing_scouted_view else "OBSERVED RECORD",
+		Scouting.confidence_summary(known).to_upper(),
+	]
+
+
+## How well this club knows this voli.
+##
+## One function, so the wheel, the caption and anything added later cannot
+## disagree about it. A voli on the roster is one you watch every day; anyone
+## else is whatever your scout can tell you, which with no scout is very little.
+func scouting_confidence(player: VolleyballPlayer) -> float:
+	if player == null:
+		return 0.0
+	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
+		else []
+	return Scouting.confidence(
+		GameManager.player_by_id(player.id) != null,
+		player.weeks_observed,
+		Scouting.scout_rating(staff),
+	)
+
+
+## Paint one wheel with whichever view is selected.
+##
+## The scouted view draws the projection as the outer line *and* the observed
+## record inside it, because a ceiling with nothing to compare against says
+## nothing about how far a voli still has to travel. The known view drops the
+## outer line entirely rather than drawing it accurately -- showing a true
+## ceiling under a caption that says "observed" would be the whole point of this
+## given away in the one place nobody would check.
+func _apply_scouted_profile(
+	wheel: VolleyballPlayerAttributeWheel,
+	player: VolleyballPlayer,
+	known: float,
+) -> void:
+	var observed := Scouting.fogged_profile(
+		AttributeProfiles.summary_profile(player), known, player.id
+	)
+	var projected := {}
+	if showing_scouted_view:
+		projected = Scouting.fogged_profile(
+			AttributeProfiles.summary_profile(player, true), known, player.id, true
+		)
+	wheel.set_profile(
+		observed, AttributeProfiles.PROFILE_TOOLTIPS, true, projected
 	)
 
 
@@ -1776,12 +1856,12 @@ func _transfer_selected(index: int) -> void:
 		player.display_name, player.position_role, player.age,
 		AttributeProfiles.grade(float(player.current_ability_score())),
 		AttributeProfiles.grade(float(player.potential)), _key_attributes(player)]
-	## Same full-summary view as the roster's "Player Profile" wheel, with the
-	## same accurate potential outline -- see the note in
-	## `_refresh_player_wheel()` for what changes here once scouting exists.
-	transfer_player_attribute_wheel.set_profile(
-		AttributeProfiles.summary_profile(player), AttributeProfiles.PROFILE_TOOLTIPS,
-		true, AttributeProfiles.summary_profile(player, true),
+	## The market is where the fog actually bites. A voli you have never employed
+	## sits at the prospect baseline, so with no scout on the payroll this wheel
+	## is close to a guess -- which is the intended failure: a bad scout does not
+	## give you worse volis, it gives you a blurrier roster.
+	_apply_scouted_profile(
+		transfer_player_attribute_wheel, player, scouting_confidence(player)
 	)
 	sign_button.disabled = false
 	sign_button.text = "Add to Testing Roster"

@@ -44,11 +44,16 @@ const MAX_ERROR_POINTS: float = 22.0
 
 ## Confidence for a voli in your own building, before tenure and before a scout.
 ##
-## High, and it should be: you watch these people train every day. What a scout
-## adds for your own squad is not *who they are* but *what they will become* --
-## which is why the potential band below stays wider than the ability one at the
-## same confidence.
-const ROSTER_BASE_CONFIDENCE: float = 0.58
+## High, and it has to be higher than it first looked. At 0.58 a voli you watch
+## every day carried a nine-point error on observable attributes, while the raw
+## attribute table beside the wheel showed their exact figures -- one fact with
+## two answers on the same screen, and the vaguer one attached to somebody in
+## your own gym. You know what your own players can do.
+##
+## What a scout adds for your own squad is therefore not *who they are* but
+## *what they will become*, and that is carried by the potential terms below
+## rather than by this. The market is where this number is meant to bite.
+const ROSTER_BASE_CONFIDENCE: float = 0.86
 
 ## Confidence for somebody you have never employed. Low enough that an unscouted
 ## market is genuinely a gamble.
@@ -189,16 +194,22 @@ static func reports_precisely(confidence_level: float) -> bool:
 
 
 ## How the club would describe its own certainty, for a caption.
+##
+## Deliberately none of these words is "Known" or "Scouted". Those two name the
+## *views* -- which half of the record you are looking at -- and reusing them for
+## how sure the club is put "OBSERVED RECORD / SCOUTED" on screen, where the
+## second word reads as the view you are not currently in. A caption that can be
+## misread as a control is worse than a vaguer caption.
 static func confidence_summary(confidence_level: float) -> String:
 	if confidence_level >= 0.90:
-		return "Known"
+		return "Certain"
 	if confidence_level >= PRECISE_REPORT_CONFIDENCE:
-		return "Well scouted"
+		return "Confident"
 	if confidence_level >= 0.55:
-		return "Scouted"
+		return "Fair read"
 	if confidence_level >= 0.30:
-		return "Glimpsed"
-	return "Unknown"
+		return "Hazy"
+	return "Guesswork"
 
 
 ## A whole summary profile as the club sees it.
