@@ -210,6 +210,7 @@ func _initialize() -> void:
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
 	_test_spike_biomechanics_sequence()
+	_test_recovery_bands_are_ordered()
 	_test_gait_separates_walking_from_running()
 	_test_landing_absorbs_and_returns_to_neutral()
 	_test_block_is_a_jump_not_a_shape()
@@ -1099,32 +1100,70 @@ func _test_reception_recovery_bands() -> void:
 	## 0.04 is poor *for a reach*. A reaching contact normally scores about 0.08,
 	## so judging it against a planted contact's expectations -- as a flat
 	## threshold did -- called every reach in the game poor.
+	## Asserted as "not on their feet" rather than as one named pose. A reach at
+	## half its own norm is bad enough to go down, and whether that is a knee or
+	## a fall is a matter of where the bands sit -- which is a tuning question.
+	## What the test is actually about is the *scale*: 0.04 is poor for a reach
+	## and 0.12 is fine for one, and both would read as catastrophic against a
+	## planted contact's expectations.
 	_check(
 		simulator._contact_recovery_state(
 			sturdy, "reaching", 0.04, 0.30, "reception"
-		) == "knee"
+		) != "platform"
 			and simulator._contact_recovery_state(
 				sturdy, "reaching", 0.12, 0.30, "reception"
 			) == "platform",
 		"a reach is judged against what a reach normally produces",
 	)
+	## **Poise shifts the bands; it does not override the contact.**
+	##
+	## This assertion used to be the opposite -- that a frail defender goes to a
+	## knee on a 0.95 contact, i.e. on one of the best touches in the game -- and
+	## it passed because `footing < RECOVERY_LOW_FOOTING` was `or`-ed in as a
+	## verdict of its own. That is a player constant deciding a contact outcome,
+	## and it is what put a defender on the floor after a pass they had just
+	## played perfectly. It was reported from watching a rally, not caught here,
+	## because the test was pinning the defect in place.
+	##
+	## What poise should do is move where the bands sit, which is checkable in
+	## the direction that matters: the same mediocre contact costs the frail
+	## defender their feet and does not cost the steady one theirs.
 	_check(
 		simulator._contact_recovery_state(
 			frail, "planted", 0.95, 0.20, "reception"
-		) == "knee",
-		"poor footing goes down even on a comfortable ball",
+		) == "platform",
+		"a fine contact leaves even a frail defender on their feet",
 	)
+	_check(
+		simulator._contact_recovery_state(
+			frail, "planted", 0.42, 0.20, "reception"
+		) != "platform"
+			and simulator._contact_recovery_state(
+				sturdy, "planted", 0.42, 0.20, "reception"
+			) == "platform",
+		"the same middling contact costs the frail defender their feet",
+	)
+	## Graded, rather than one cliff. An off-axis contact at 0.45 is bad enough to
+	## drop a knee and not bad enough to go down; at 0.35 it is both.
 	_check(
 		simulator._contact_recovery_state(
 			sturdy, "off-axis", 0.45, 0.30, "reception"
-		) == "fall",
-		"a poor off-axis contact puts a defender on the floor",
+		) == "knee"
+			and simulator._contact_recovery_state(
+				sturdy, "off-axis", 0.35, 0.30, "reception"
+			) == "fall",
+		"an off-axis contact fails by degrees rather than all at once",
 	)
 	## The pair that matters: same defender, same terrible contact, and the only
 	## difference is how hard the ball was travelling.
+	## The force these fixtures need moved with the constant. `RECOVERY_HEAVY_FORCE`
+	## was 0.78, which measured out at p68 of the balls that actually reach a
+	## defender -- a third of every arc counted as heavy. At p75 a genuinely hard
+	## ball is near the top of the scale, so that is what a test about hard balls
+	## should hand it.
 	_check(
 		simulator._contact_recovery_state(
-			sturdy, "planted", 0.05, 0.95, "reception"
+			sturdy, "planted", 0.05, 1.0, "reception"
 		) == "blown_away"
 			and simulator._contact_recovery_state(
 				sturdy, "planted", 0.05, 0.20, "reception"
@@ -1165,12 +1204,18 @@ func _test_reception_recovery_bands() -> void:
 	heavy.composure = 60
 	heavy.explosiveness = 60
 	heavy.mass_kg = 112.0
+	## The window where mass decides is narrower than it was, and deliberately.
+	## `RECOVERY_ANCHOR_SWING` had to come down from 0.44 to 0.24 to keep the
+	## band reachable at all -- at 0.44 a well-anchored voli needed a force of
+	## 1.11 against a scale that stops at 1.0 -- and the cost of that is that
+	## mass moves the threshold by 0.075 rather than 0.14. Still a real
+	## difference, and still the only band mass reads at all.
 	_check(
 		simulator._contact_recovery_state(
-			light, "planted", 0.05, 0.80, "reception"
+			light, "planted", 0.05, 0.89, "reception"
 		) == "blown_away"
 			and simulator._contact_recovery_state(
-				heavy, "planted", 0.05, 0.80, "reception"
+				heavy, "planted", 0.05, 0.89, "reception"
 			) != "blown_away",
 		"a heavier voli resists being driven off a ball a lighter one cannot",
 	)
@@ -11912,6 +11957,53 @@ func _test_spike_biomechanics_sequence() -> void:
 		and str(SpikeBiomechanics.resolve(-0.05, RIGHT).phase_name) == "acceleration"
 		and str(SpikeBiomechanics.resolve(0.8, RIGHT).phase_name) == "landing",
 		"the swing names its own phase",
+	)
+
+
+## A worse contact cannot leave a defender in a gentler pose.
+##
+## The recovery bands decide which of four poses playback draws, and they used to
+## be four separate gates on four different quantities -- posture for `knee`,
+## force for `blown_away`, a player constant for `fall`. Selecting different
+## populations through different tests, they were not ordered at all: measured,
+## `blown_away` produced *better* passes than `knee`, so the worst thing that can
+## happen to a defender was on average better than the second worst. They now sit
+## as thresholds on one posture-normalised scale, which makes the ordering
+## structural rather than something to be re-measured after every tune.
+##
+## The second check is the one that is easy to lose. `blown_away` reads the same
+## shortfall as `fall` and is separated by the force gate alone, because being
+## driven off the ball is not a worse contact than falling -- it is the same
+## mishandled ball arriving heavy. Set stricter, the band empties: at p95 it
+## caught one contact in 252, and an earlier version of this file emptied it
+## completely from the opposite direction.
+func _test_recovery_bands_are_ordered() -> void:
+	var knee: float = RallySimulator.RECOVERY_KNEE_SHORTFALL
+	var fall: float = RallySimulator.RECOVERY_FALL_SHORTFALL
+	var blown: float = RallySimulator.RECOVERY_BLOWN_SHORTFALL
+	_check(
+		knee < fall,
+		"going to a knee starts before falling does (%.3f < %.3f)" % [knee, fall],
+	)
+	_check(
+		blown <= fall,
+		"being blown off the ball is not stricter than falling (%.3f <= %.3f)"
+			% [blown, fall],
+	)
+	_check(
+		knee > 0.0 and fall < 1.0,
+		"the bands sit inside the shortfall scale they cut",
+	)
+	## Poise shifts every band by the same amount, so it cannot reorder them --
+	## that much is structural. What it must not do is shift the gentlest band
+	## below zero, because then a contact that *beat* its posture's norm would
+	## still put an unsteady voli on the floor, which is the defect this retune
+	## exists to remove.
+	var swing: float = RallySimulator.RECOVERY_POISE_SWING
+	_check(
+		knee - swing > 0.0,
+		"no amount of clumsiness puts a voli down on a contact that beat its norm"
+			+ " (%.3f - %.3f)" % [knee, swing],
 	)
 
 

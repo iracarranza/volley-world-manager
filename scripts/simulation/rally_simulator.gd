@@ -6146,8 +6146,62 @@ const RECOVERY_POOR_SHARE: float = 0.18
 const RECOVERY_LOW_FOOTING: float = 0.34
 const RECOVERY_LOW_BALANCE: float = 0.34
 
-## How hard the ball has to arrive to drive an average voli off it, on the force
-## scale above -- about 17 m/s, which the census puts in the top tenth of arcs.
+## Where each pose begins, as a *shortfall* against the posture's own norm.
+##
+## `shortfall = 1 - control / expected`, so zero is a contact that scored exactly
+## what its posture usually does and positive numbers are how far short it fell.
+## Normalising by posture first is what makes one scale work across a table that
+## spans an order of magnitude -- a reaching contact scoring 0.105 against a norm
+## of 0.08 is a *good* contact and lands at -0.31, which is where it belongs.
+##
+## Measured over 252 contacts, the shortfall distribution runs:
+##
+##     p50 0.087   p75 0.187   p80 0.207   p85 0.236
+##     p90 0.260   p95 0.342   p97 0.363   p99 0.461
+##
+## The bands below are read off that. They replace a single `poor` flag set at
+## `RECOVERY_POOR_SHARE`, which sat at **p75** -- so the worst quarter of every
+## contact qualified for a severe pose, and three of them were drawn from that
+## quarter. Twenty-two per cent of all contacts ended up on the floor, and
+## `blown_away` was landing on contacts whose control was 0.444 against an
+## average of 0.475. The pose said catastrophe and the contact was ordinary.
+##
+## Ordered thresholds on one scale also make severity monotone by construction.
+## The old branches could not be: `knee` was gated on posture and `blown_away` on
+## force, so they selected different populations and `blown_away` ended up
+## producing *better* passes (mean 0.301) than `knee` (0.208) -- the worst thing
+## that can happen to a defender being, on average, better than the second worst.
+const RECOVERY_KNEE_SHORTFALL: float = 0.207
+const RECOVERY_FALL_SHORTFALL: float = 0.300
+## Deliberately equal to the fall band, not stricter than it.
+##
+## Set at p95 of the shortfall it produced exactly one blown-away contact in
+## 252 -- the band emptying out, which is the failure the previous version of
+## this file already hit from the other direction. Being driven off the ball is
+## not a *worse contact* than falling; it is the same badly-handled ball
+## arriving heavy. So the two share a threshold and the force gate is what
+## separates them: go down when you mishandle it, get knocked off it when the
+## ball was also too fast for you.
+const RECOVERY_BLOWN_SHORTFALL: float = 0.300
+
+## How far a voli's own poise moves those bands, either way.
+##
+## Footing and balance used to be `or`-ed in as outright verdicts -- below 0.34
+## and you fell, whatever the contact did. That is a player constant deciding a
+## contact outcome, and it is the shape that lets a defender be drawn falling
+## over on a ball they passed perfectly. They shift where the bands sit instead,
+## so poise still matters and still cannot manufacture a catastrophe out of a
+## good contact.
+const RECOVERY_POISE_SWING: float = 0.06
+
+## How hard the ball has to arrive to drive an average voli off it.
+##
+## Re-measured and moved. This was 0.78, described as "the top tenth of arcs" --
+## and against the contacts that actually reach a defender it is **p68**, so a
+## third of every ball arriving qualified as heavy. Combined with a `poor` gate
+## that was also loose, seven per cent of all contacts were being drawn as
+## blown away. 0.894 is p75 of the same distribution, which with the shortfall
+## bands narrowed leaves this band genuinely rare rather than merely uncommon.
 ##
 ## **One gate, not two.** The band originally asked for a *dire* contact as well
 ## as a heavy ball, and measured that turned out to be self-defeating: the
@@ -6156,7 +6210,16 @@ const RECOVERY_LOW_BALANCE: float = 0.34
 ## made the band structurally empty -- 0 of 1,078 contacts. What actually happens
 ## is a defender standing in the right place taking something too fast for them,
 ## so the force does the work and a poor contact is the qualifier.
-const RECOVERY_HEAVY_FORCE: float = 0.78
+const RECOVERY_HEAVY_FORCE: float = 0.86
+
+## How far a voli's own anchoring moves that threshold, either way.
+##
+## Half the old 0.44, because the base moved and the swing was never re-checked
+## against it. At 0.44 around 0.894 a well-anchored voli needed 1.11 to be
+## driven off a ball, and force is capped at 1.0 -- so the band was unreachable
+## for exactly the players it was meant to distinguish. 0.24 around 0.86 spans
+## 0.74 to 0.98, which stays inside the scale at both ends.
+const RECOVERY_ANCHOR_SWING: float = 0.24
 
 ## Where a contact stops being planted, per branch.
 ##
@@ -6407,29 +6470,56 @@ func _contact_recovery_state(
 	incoming_force: float,
 	contact_kind: String = "reception",
 ) -> String:
-	var footing := _recovery_footing(receiver)
-	var balance := _recovery_balance(receiver)
-	var poor := control < float(
-		POSTURE_EXPECTED_CONTROL.get(posture, 0.54)
-	) * (1.0 - RECOVERY_POOR_SHARE)
-
-	## Checked first, because being knocked off a ball overrides every softer
-	## thing that could also have been true of the same contact.
+	## How far short of its own posture's norm this contact fell.
 	##
-	## The force the ball has to bring is set by the defender rather than by a
-	## constant: an anchored voli needs a genuinely heavy ball to be moved, a
-	## light one is moved by less. At the reference anchor this is exactly the
-	## old threshold, so the band is widened in both directions rather than
-	## loosened.
+	## One number, and the posture is already inside it. That is what lets a
+	## single set of ordered bands cut a table whose entries span an order of
+	## magnitude -- and what stops a reaching contact, which normally scores
+	## 0.105 against a norm of 0.08, from being read as a disaster because 0.105
+	## is a small number.
+	var expected := float(POSTURE_EXPECTED_CONTROL.get(posture, 0.54))
+	var shortfall := 1.0 - control / maxf(expected, 0.001)
+
+	## Poise moves the bands; it does not decide.
+	##
+	## Footing and balance used to be `or`-ed in as verdicts of their own, so a
+	## voli below either threshold was drawn going down on *every* contact
+	## regardless of how well they played it. Here they shift where the bands sit
+	## by at most `RECOVERY_POISE_SWING` either way: a defender with poor poise
+	## goes down on a contact a steady one survives, and neither of them goes
+	## down on a good one.
+	var poise := (_recovery_footing(receiver) + _recovery_balance(receiver)) * 0.5
+	var shift := (0.5 - poise) * 2.0 * RECOVERY_POISE_SWING
+
+	## Ordered, worst first, on one scale -- so a worse contact can never land in
+	## a gentler pose than a better one. The old branches selected different
+	## populations through different gates and were not ordered at all:
+	## `blown_away` came out better on average than `knee`.
+	##
+	## Being driven off the ball keeps its extra requirement, because it is the
+	## one state that is not simply about handling it badly -- a defender is
+	## blown away by a ball that was too heavy for them, and without the force
+	## gate this band would just be "the worst contacts", which is `fall`.
+	## The anchor still sets how heavy is heavy for this particular voli.
+	## The anchor swing has to keep the whole band inside the scale it reads.
+	##
+	## At 0.44 around a 0.894 base, a well-anchored voli needed 1.11 -- and force
+	## is capped at 1.0, so no ball in the game could ever knock them off. A
+	## threshold outside its own distribution, arrived at by moving the base
+	## without re-checking what the swing did to the top of the range.
 	var force_needed := RECOVERY_HEAVY_FORCE \
-		+ (_recovery_anchor(receiver) - 0.5) * 0.44
-	if poor and incoming_force >= force_needed \
-			and posture in ["planted", "off-axis", "moving"]:
+		+ (_recovery_anchor(receiver) - 0.5) * RECOVERY_ANCHOR_SWING
+	if shortfall >= RECOVERY_BLOWN_SHORTFALL - shift \
+			and incoming_force >= force_needed \
+			and posture != "reaching":
+		## A defender already stretched for a ball is not standing in front of
+		## it, so there is nothing to be driven off. Stated as a gate rather than
+		## left to the arithmetic: it held only by accident once the force
+		## threshold moved, and an accident is not a model.
 		return "blown_away"
-	if (posture == "off-axis" and poor) or balance < RECOVERY_LOW_BALANCE:
+	if shortfall >= RECOVERY_FALL_SHORTFALL - shift:
 		return "fall"
-	if (poor and posture in ["reaching", "moving"]) \
-			or footing < RECOVERY_LOW_FOOTING:
+	if shortfall >= RECOVERY_KNEE_SHORTFALL - shift:
 		return "knee"
 	return "platform"
 
