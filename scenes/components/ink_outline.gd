@@ -144,6 +144,54 @@ const STITCH_ALTERNATE_OFFSET: float = 0.55
 ## were long and read as a row of beads rather than as stitches.
 const STITCH_WIDTH: float = 2.6
 
+## How a cut edge differs from a drawn one.
+##
+## Scissors do not wander -- they travel in short straight facets and leave the
+## occasional nick where the blade was reopened. So a sewn panel's outline holds
+## its offset for a few steps and then steps to a new one, instead of drifting
+## smoothly the way a pen does. That faceting is most of what reads as "cut out
+## and stitched on" rather than "drawn around".
+const CUT_FACET_STEPS: int = 4
+const CUT_DEPTH_PIXELS: float = 1.15
+## How often the blade leaves a deeper nick, and how much deeper.
+const CUT_NICK_CHANCE: float = 0.16
+const CUT_NICK_PIXELS: float = 2.3
+
+## Loose threads, where the stitching has worked its way out of the weave.
+const FRAY_COUNT: int = 7
+const FRAY_LENGTH: float = 7.5
+const FRAY_WIDTH: float = 1.5
+
+## A highlighter is a wide chisel drawn once across a word.
+##
+## Not an outline at all -- it is a band of translucent colour *behind* the text,
+## and everything that says "highlighter" rather than "coloured rectangle" is at
+## its edges. The tip is a flat chisel, so the ends of the stroke are angled
+## rather than square. The hand does not stop exactly on the word, so the band
+## overshoots at one end and falls short at the other. And the ink is laid down
+## in one pass, so it is denser where the tip pressed and thinner where it
+## lifted.
+## Translucent, and by a lot. At 0.85 the band was a fill: it covered the page
+## completely, took the tone of the paper out from under the word, and made
+## every control read as a primary action. A highlighter puts a wash over
+## something you can still see -- the halftone, the paper, the tone of the ink
+## underneath all survive it, and that survival is the whole effect.
+const HIGHLIGHT_ALPHA: float = 0.30
+## How far past the box the stroke runs at each end, in pixels. Signed per end
+## and seeded, so no two buttons are covered the same way.
+const HIGHLIGHT_OVERSHOOT: float = 5.0
+## The chisel angle, as a horizontal shear of the two ends.
+const HIGHLIGHT_SHEAR: float = 4.5
+## How much the band's top and bottom edges wander, in pixels.
+const HIGHLIGHT_EDGE_WAVE: float = 1.4
+## How far in from the top and bottom of the box the band sits. A highlighter
+## covers the word, not the whole line.
+const HIGHLIGHT_INSET: float = 2.0
+
+## Below this saturation a tier's fill is page-coloured rather than a real
+## colour, and marking in it would be marking in nothing.
+const HIGHLIGHT_MIN_SATURATION: float = 0.18
+
 
 ## Which panel this is, for the wander. Assigned by whoever creates the outline;
 ## identical seeds draw identical edges, which is the point.
@@ -154,7 +202,25 @@ const STITCH_WIDTH: float = 2.6
 
 ## Which of the two treatments this outline draws. Per-instance so a preview can
 ## put both on screen at once.
-@export var stroke_style: Stroke = DEFAULT_STROKE
+@export var stroke_style: Stroke = DEFAULT_STROKE:
+	set(value):
+		stroke_style = value
+		if is_inside_tree():
+			queue_redraw()
+
+## Whether this control has also been gone over with a highlighter.
+##
+## Additive rather than a third stroke style, because the two are doing
+## different jobs and a control wants both: the pen says where the word is and
+## the highlighter says somebody marked it. Making them exclusive would have
+## meant choosing between a control that is drawn and one that is marked, when
+## what reads is a word that is drawn *and* marked.
+@export var highlighted: bool = false:
+	set(value):
+		highlighted = value
+		if is_inside_tree():
+			_sync_draw_order()
+			queue_redraw()
 
 
 func _ready() -> void:
@@ -174,6 +240,18 @@ func _ready() -> void:
 	## of the seven inked surfaces on the dashboard were blank.
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	resized.connect(queue_redraw)
+	_sync_draw_order()
+
+
+## A highlighter goes *under* the word.
+##
+## A child `CanvasItem` normally draws after its parent, which is right for an
+## outline at the perimeter and completely wrong for a band that covers the
+## control -- it would paint over the label it is supposed to be marking.
+## `show_behind_parent` puts it before the parent's own drawing instead, so the
+## order becomes band, then stylebox, then text.
+func _sync_draw_order() -> void:
+	show_behind_parent = highlighted
 
 
 func _notification(what: int) -> void:
@@ -226,8 +304,12 @@ func _draw() -> void:
 		widths[index] = _stroke_width(points[index], shortest, tangent) \
 			* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage)
 		alphas[index] = ink.a * coverage
+	## The mark goes down first, under everything else this node draws.
+	if highlighted:
+		_draw_highlight()
 	if stroke_style == Stroke.STITCH:
 		_draw_stitches(points, ink, shortest)
+		_draw_fraying(points, ink)
 		return
 	## Two passes. `draw_polygon` has no antialiasing of its own, so a bare
 	## ribbon has hard edges; a wider, fainter one underneath feathers them.
@@ -267,6 +349,96 @@ func _draw_ribbon(
 		var near := Color(ink, alphas[index] * alpha_scale)
 		var far := Color(ink, alphas[next_index] * alpha_scale)
 		draw_polygon(quad, PackedColorArray([near, far, far, near]))
+
+
+## One swipe of a chisel-tip highlighter across the control.
+##
+## The colour comes from the parent's own stylebox rather than from a constant
+## here, so the theme stays the single place that decides what a primary action
+## is coloured. The stylebox itself is transparent for these tiers -- this band
+## *is* the fill, not a decoration over one.
+func _draw_highlight() -> void:
+	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA)
+	var top := HIGHLIGHT_INSET
+	var bottom := size.y - HIGHLIGHT_INSET
+	## Where the hand started and stopped. Each end draws its own overshoot, so
+	## one usually runs past the word and the other falls short of it.
+	var left := -HIGHLIGHT_OVERSHOOT * (_unit(11) * 1.4 - 0.4)
+	var right := size.x + HIGHLIGHT_OVERSHOOT * (_unit(29) * 1.4 - 0.4)
+	## The chisel. Both ends lean the same way, because the tip is held at one
+	## angle for the whole stroke.
+	var shear := HIGHLIGHT_SHEAR
+	var points := PackedVector2Array()
+	## Along the top edge, wandering, then back along the bottom.
+	var steps := maxi(int(size.x / 9.0), 4)
+	for index in range(steps + 1):
+		var along := float(index) / float(steps)
+		points.append(Vector2(
+			lerpf(left + shear, right + shear, along),
+			top + (_unit(index + 601) - 0.5) * HIGHLIGHT_EDGE_WAVE
+		))
+	for index in range(steps + 1):
+		var along := 1.0 - float(index) / float(steps)
+		points.append(Vector2(
+			lerpf(left - shear, right - shear, along),
+			bottom + (_unit(index + 1409) - 0.5) * HIGHLIGHT_EDGE_WAVE
+		))
+	draw_colored_polygon(points, band)
+	## The denser leading edge. A chisel tip lays down more ink where it first
+	## touches down and drags less as it goes, so a second, narrower pass along
+	## the top of the band is what stops it reading as a flat rectangle.
+	var lead := PackedVector2Array()
+	for index in range(steps + 1):
+		var along := float(index) / float(steps)
+		lead.append(Vector2(
+			lerpf(left + shear, right + shear, along),
+			top + (_unit(index + 601) - 0.5) * HIGHLIGHT_EDGE_WAVE
+		))
+	for index in range(steps + 1):
+		var along := 1.0 - float(index) / float(steps)
+		lead.append(Vector2(
+			lerpf(left + shear * 0.4, right + shear * 0.4, along),
+			lerpf(top, bottom, 0.34)
+				+ (_unit(index + 2803) - 0.5) * HIGHLIGHT_EDGE_WAVE
+		))
+	draw_colored_polygon(lead, Color(band, HIGHLIGHT_ALPHA * 0.28))
+
+
+## What this control gets marked in.
+##
+## A highlighter is *contrast*, and that is the trap the first attempt fell into.
+## Reading the parent's stylebox is right for a tier whose fill is a real colour
+## -- a primary action is coral, a danger action is red, and going over one in
+## its own colour is what actually happens. But the neutral tiers were authored
+## with a fill near the page colour, because they used to be filled boxes with a
+## border doing the work. Marked in that, the swipe was invisible.
+##
+## So: the tier's own colour when it has one, the theme accent when it does not.
+## Saturation is what separates them, and it is a property of the colour rather
+## than a list of tier names somebody has to keep in step.
+func _highlighter_ink() -> Color:
+	var fill := _resolved_fill()
+	if fill.s >= HIGHLIGHT_MIN_SATURATION:
+		return fill
+	return UIPalette.color(&"accent", UIPalette.control_is_light(self))
+
+
+## What colour the surface underneath would have painted itself.
+##
+## Read from the parent's stylebox for the same reason the corner radii are:
+## there should be one place that decides what a tier looks like, and a second
+## copy of the palette here would be free to drift from it.
+func _resolved_fill() -> Color:
+	var parent := get_parent() as Control
+	if parent != null:
+		var variation := parent.theme_type_variation
+		for style_name: StringName in [&"normal", &"panel"]:
+			if not parent.has_theme_stylebox(style_name, variation):
+				continue
+			var box := parent.get_theme_stylebox(style_name, variation) as StyleBoxFlat
+			if box != null:
+				return box.bg_color
+	return UIPalette.color(&"accent", UIPalette.control_is_light(self))
 
 
 ## Work the edge as a running stitch.
@@ -353,6 +525,48 @@ func _draw_one_stitch(
 		FEATHER_PIXELS, FEATHER_ALPHA, false
 	)
 	_draw_ribbon(stitch_points, normals, widths, alphas, ink, 0.0, 1.0, false)
+
+
+## Loose threads, worked out of the weave at a few points around the edge.
+##
+## Drawn *outward* only, and short. A patch frays at its cut edge because the
+## weave has nothing holding it there any more, so the strands stand off the
+## boundary rather than lying across the panel. Two or three per point, splayed,
+## because a single strand reads as a stray line rather than as fraying.
+func _draw_fraying(points: PackedVector2Array, ink: Color) -> void:
+	var count := points.size()
+	for index in range(FRAY_COUNT):
+		## Spread around the ring, then jittered, so the frays are not evenly
+		## spaced -- cloth does not give way on a schedule.
+		var position := int(
+			(float(index) / float(FRAY_COUNT) + _unit(index + 6151) * 0.09)
+			* float(count)
+		) % count
+		var here: Vector2 = points[position]
+		var ahead: Vector2 = points[(position + 1) % count]
+		var tangent := ahead - here
+		if tangent.length_squared() < 0.000001:
+			continue
+		tangent = tangent.normalized()
+		## Outward is the side away from the panel, which for a clockwise ring is
+		## the *negative* normal.
+		var outward := -tangent.orthogonal()
+		var strands := 2 + int(_unit(index + 7717) * 2.0)
+		for strand in range(strands):
+			var seed_value := index * 31 + strand
+			var splay := (_unit(seed_value + 1223) - 0.5) * 1.3
+			var length := FRAY_LENGTH * (0.45 + _unit(seed_value + 4457) * 0.75)
+			var direction := (outward + tangent * splay).normalized()
+			## Curled rather than straight: a loose thread does not stand to
+			## attention. The mid-point is pushed off the line so the strand
+			## reads as slack.
+			var tip := here + direction * length
+			var bow := tangent * (splay * length * 0.35)
+			var middle := here.lerp(tip, 0.55) + bow
+			draw_polyline(
+				PackedVector2Array([here, middle, tip]),
+				Color(ink, ink.a * 0.55), FRAY_WIDTH, true
+			)
 
 
 ## Where a given distance along the closed path falls, in local coordinates.
@@ -488,9 +702,26 @@ func _resolved_radii() -> Vector4:
 ## wavelength and jitters on a short one -- a single frequency reads as a
 ## regular ripple, which is a spring rather than a hand.
 func _wander(step: int) -> float:
+	if stroke_style == Stroke.STITCH:
+		return _cut_offset(step)
 	var slow := _unit(step / 3 + 1) - 0.5
 	var fast := _unit(step + 977) - 0.5
 	return (slow * 1.4 + fast * 0.6) * WANDER_PIXELS
+
+
+## Where a *cut* edge sits, as opposed to a drawn one.
+##
+## Held flat across a facet and then stepped, because that is what a blade does.
+## Interpolating between facets would put the drift back and lose the whole
+## point; the discontinuity is the shape of the cut.
+func _cut_offset(step: int) -> float:
+	var facet := step / CUT_FACET_STEPS
+	var offset := (_unit(facet + 5171) - 0.5) * 2.0 * CUT_DEPTH_PIXELS
+	if _unit(facet + 9277) < CUT_NICK_CHANCE:
+		## A nick goes inward only. A blade that slipped takes cloth away; it
+		## cannot add any.
+		offset -= _unit(facet + 3391) * CUT_NICK_PIXELS
+	return offset
 
 
 ## How much ink reached the paper on this segment.

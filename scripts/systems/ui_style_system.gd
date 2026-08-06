@@ -38,9 +38,23 @@ const INKED_TIERS: Array[StringName] = [
 ##
 ## `DashboardCard` is a `Button` and still belongs with the surfaces: it is a
 ## card that happens to be pressable, and it is the size of a card.
+##
+## The controls keep the nib and gain a highlighter under it. The two are doing
+## different jobs -- the pen says where the word is, the highlighter says
+## somebody marked it -- so a control wants both rather than a choice between
+## being drawn and being marked.
 const STITCHED_TIERS: Array[StringName] = [
 	&"CardPanel", &"DashboardCard", &"InsetPanel", &"RaisedPanel",
 ]
+
+## How far apart two patches can be in tone. Small: the surfaces should read as
+## cut from related cloth, not as a colour-coded key.
+const PATCH_TINT_SPREAD: float = 0.045
+
+## The page is not a patch. `RaisedPanel` is the thing the patches are sewn
+## *onto*, so tinting it shifts the whole sheet rather than one scrap -- and a
+## whole-page colour shift reads as a theme bug, not as cloth.
+const UNTINTED_TIERS: Array[StringName] = [&"RaisedPanel"]
 
 const PRIMARY_ACTIONS := [
 	"NewCareerButton", "NextButton", "CreateCareerButton", "AdvanceWeekButton",
@@ -145,6 +159,37 @@ static func _screen_surface(control: Control, light_mode: bool) -> void:
 		control.theme_type_variation, light_mode
 	)
 	_ink_surface(control)
+	_vary_patch_colour(control)
+
+
+## No two patches are cut from the same scrap.
+##
+## A sewn panel is a piece of cloth somebody had, not a swatch from a system, so
+## a row of six identical rectangles is the one thing that gives the whole
+## metaphor away. The shift is small -- a few percent of hue and value -- because
+## the point is that the surfaces are *not quite* the same rather than that they
+## are different colours.
+##
+## `self_modulate` rather than a stylebox override, for two reasons: overrides
+## are stripped by this same pass on the next run, and `modulate` would tint the
+## card's contents along with the card.
+static func _vary_patch_colour(control: Control) -> void:
+	if not control.theme_type_variation in STITCHED_TIERS \
+			or control.theme_type_variation in UNTINTED_TIERS:
+		control.self_modulate = Color.WHITE
+		return
+	var seed_value := int(String(control.name).hash() & 0x7FFFFFFF)
+	## Two independent draws from the same seed: one warms or cools the patch,
+	## the other lightens or darkens it. Multiplied through `self_modulate`, so
+	## they are shifts in the cloth rather than replacement colours.
+	var warmth := (float(seed_value % 1000) / 1000.0 - 0.5) * PATCH_TINT_SPREAD
+	var shade := (float((seed_value / 1000) % 1000) / 1000.0 - 0.5) \
+		* PATCH_TINT_SPREAD * 0.5
+	control.self_modulate = Color(
+		1.0 + warmth - shade,
+		1.0 - shade,
+		1.0 - warmth - shade,
+	)
 
 
 ## Give this surface a drawn edge, once.
@@ -162,19 +207,23 @@ static func _ink_surface(control: Control) -> void:
 		if existing != null:
 			existing.queue_free()
 		return
-	var wanted_style := UIInkOutline.Stroke.STITCH \
-		if control.theme_type_variation in STITCHED_TIERS \
+	var sewn := control.theme_type_variation in STITCHED_TIERS
+	var wanted_style := UIInkOutline.Stroke.STITCH if sewn \
 		else UIInkOutline.Stroke.INK
 	if existing != null:
 		## Reassigned on every pass, not only at creation. The outline is reused
 		## across theme switches and resizes, so a tier that changed treatment
 		## would otherwise keep whichever one it was born with.
 		existing.stroke_style = wanted_style
+		existing.highlighted = not sewn
 		existing.queue_redraw()
 		return
 	var outline := UIInkOutline.new()
 	outline.name = "InkOutline"
 	outline.stroke_style = wanted_style
+	## Controls are written *and* marked: the nib draws the word and the
+	## highlighter goes over it. Surfaces are sewn and get neither.
+	outline.highlighted = not sewn
 	## Seeded from the panel's own name, so a card's edge is stable across runs
 	## and two cards side by side never draw the same imperfection.
 	outline.ink_seed = int(String(control.name).hash() & 0x7FFFFFFF)
