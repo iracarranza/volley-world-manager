@@ -387,6 +387,24 @@ const OPPONENT_SLOW_CALL_PASS: float = 0.38
 ## this distribution's ninetieth percentile -- see the note there.
 const OFFENSE_QUICK_PASS_FLOOR: float = 0.494
 
+## The three tempo gates, re-sited on the distributions they actually cut.
+##
+## Every one of them was set outside its own spread, which is why 91% of home
+## swings came out at tempo 3 and `tempo_variation` and `transition_commitment`
+## were attributes that changed nothing for the default identity.
+##
+##   quick call        pass quality p75 is 0.494 home, 0.486 opponent; the old
+##                     0.68 sat above *both* p90s and never fired once
+##   tempo variation   presets run 0.24-0.88 with Balanced on 0.50
+##   commitment        blended presets run 0.225-0.843, three of six in 0.42-0.51
+##
+## Each is placed at or just below the median of its own table, so the default
+## identity is inside every gate rather than outside all three.
+const LIVE_QUICK_CALL_PASS: float = 0.49
+const LIVE_TEMPO_VARIATION_FLOOR: float = 0.48
+const LIVE_COMMITMENT_HIGH: float = 0.56
+const LIVE_COMMITMENT_LOW: float = 0.44
+
 ## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
@@ -5305,7 +5323,10 @@ func _tempo_call(
 		SetterCapabilityModel.QUICK_TEMPO, SetterCapabilityModel.SLOWEST_TEMPO,
 	)
 	## Lower is quicker: tempo 0 is the first-tempo ball, 3 the high one.
-	if pass_quality >= OPPONENT_QUICK_CALL_PASS:
+	var quick_floor := OPPONENT_QUICK_CALL_PASS
+	if RallyFeatureFlagsModel.ENABLE_LIVE_TEMPO_CALL:
+		quick_floor = LIVE_QUICK_CALL_PASS
+	if pass_quality >= quick_floor:
 		called -= 1
 	elif pass_quality < OPPONENT_SLOW_CALL_PASS:
 		called += 1
@@ -7036,11 +7057,31 @@ func _apply_identity_tempo(
 		float(home_principles.transition_commitment),
 		0.45,
 	)
-	if commitment >= 0.66:
+	var high_gate := 0.66
+	var low_gate := 0.34
+	if RallyFeatureFlagsModel.ENABLE_LIVE_TEMPO_CALL:
+		## Same defect, same table. `commitment` is a blend of two principles and
+		## across the six presets it reads 0.225, 0.425, 0.500, 0.510, 0.815,
+		## 0.843 -- so gates at 0.66/0.34 sorted three identities and left the
+		## middle three, Balanced included, with no commitment effect at all.
+		## Narrowed to sit inside the cluster rather than outside it.
+		high_gate = LIVE_COMMITMENT_HIGH
+		low_gate = LIVE_COMMITMENT_LOW
+	if commitment >= high_gate:
 		tempo_shift -= 1
-	elif commitment <= 0.34:
+	elif commitment <= low_gate:
 		tempo_shift += 1
-	if float(home_principles.tempo_variation) >= 0.66 and reception_quality >= 0.48:
+	var variation_floor := 0.66
+	if RallyFeatureFlagsModel.ENABLE_LIVE_TEMPO_CALL:
+		## The presets run 0.24 to 0.88 with four of six between 0.38 and 0.72,
+		## and Balanced -- the default, and the calibration fixture's identity --
+		## sits exactly on 0.50. A gate at 0.66 therefore excluded the default and
+		## three others, so `tempo_variation` was an attribute that did nothing for
+		## two thirds of the identities that carry it. Moved below the median of
+		## its own preset table.
+		variation_floor = LIVE_TEMPO_VARIATION_FLOOR
+	if float(home_principles.tempo_variation) >= variation_floor \
+			and reception_quality >= 0.48:
 		tempo_shift += [-1, 0, 1][posmod(rally_seed, 3)]
 	adjusted.tempo = clampi(adjusted.tempo + tempo_shift, 0, 3)
 	return adjusted

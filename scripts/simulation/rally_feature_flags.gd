@@ -484,7 +484,7 @@ const ENABLE_UNIFIED_RECEPTION_SKILL: bool = false
 ## split, the dig rates that inherit opponent flight time, the attack-symmetry
 ## ratchet -- was calibrated against a side that rolled nearly every ball. Turn
 ## it on together with that re-tune, not before it.
-const ENABLE_CLAMPED_ARRIVAL_MARGIN: bool = false
+const ENABLE_CLAMPED_ARRIVAL_MARGIN: bool = true
 
 
 ## Read the hitter's lane off the contact they actually struck.
@@ -506,7 +506,7 @@ const ENABLE_CLAMPED_ARRIVAL_MARGIN: bool = false
 ## FLAGGED because it moves the wall and the ball's course on a third of opponent
 ## swings, and both were calibrated with the drift present. Lands with the block
 ## outcome-band re-tune.
-const ENABLE_CLAMPED_CONTACT_LANE: bool = false
+const ENABLE_CLAMPED_CONTACT_LANE: bool = true
 
 
 ## Let the home middle attack.
@@ -529,4 +529,30 @@ const ENABLE_CLAMPED_CONTACT_LANE: bool = false
 ## asked to solve on every good pass, and both were calibrated against a side
 ## that only ever hit pins. Expect the attack-symmetry ratchet to move; measure
 ## before deciding which way is correct.
-const ENABLE_HOME_MIDDLE_OFFENSE: bool = false
+const ENABLE_HOME_MIDDLE_OFFENSE: bool = true
+
+
+## Let the tempo call actually vary.
+##
+## Three separate gates decide whether a set is quick, and every one of them was
+## set outside the distribution it cuts -- so none of them ever fired, and 91% of
+## home swings came out at tempo 3 with none below 2.
+##
+##   `OPPONENT_QUICK_CALL_PASS` 0.68, against pass quality whose p90 is 0.567
+##   home and 0.588 opponent. The quicken branch of `_tempo_call` has never run.
+##   `tempo_variation >= 0.66`, against a preset table running 0.24 to 0.88 with
+##   Balanced -- the default -- on exactly 0.50.
+##   `commitment >= 0.66 / <= 0.34`, against blended presets that put three of
+##   six identities between 0.42 and 0.51.
+##
+## The consequence is the degeneracy everything else in this branch traces back
+## to. One tempo means one set flight, which means the opposing wall always has
+## the same closing time, which means the block, the dig and the symmetry gates
+## were all calibrated against a single repeated rally. And it means
+## `tempo_control`, `set_disguise` and `tempo_variation` are attributes that
+## cannot express themselves -- which is the opposite of what the attribute set
+## exists for.
+##
+## FLAGGED, and it belongs with `ENABLE_HOME_MIDDLE_OFFENSE`: one adds the lane a
+## quick needs, this adds the tempo. Neither is worth much alone.
+const ENABLE_LIVE_TEMPO_CALL: bool = true
