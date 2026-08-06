@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scenes/components/dashboard_card.gd" id="1"]
 
 [node name="DashboardCard" type="Button"]
-custom_minimum_size = Vector2(224, 122)
+custom_minimum_size = Vector2(224, 146)
 size_flags_horizontal = 3
 script = ExtResource("1")
 
@@ -27,6 +27,7 @@ mouse_filter = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(38, 38)
 layout_mode = 2
+size_flags_vertical = 0
 theme_override_font_sizes/font_size = 24
 text = "•"
 horizontal_alignment = 1
@@ -36,6 +37,7 @@ mouse_filter = 2
 [node name="Text" type="VBoxContainer" parent="Margin/Row"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 0
 mouse_filter = 2
 
 [node name="TitleLabel" type="Label" parent="Margin/Row/Text"]

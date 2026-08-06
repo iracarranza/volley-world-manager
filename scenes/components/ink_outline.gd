@@ -185,7 +185,11 @@ const SEAM_INSET: float = 5.0
 ## card's own colour rather than bitten inward in the page's, because the page
 ## under a card carries the halftone and a backdrop doodle, and painting over
 ## either would leave a visible flat patch where the perforation should be.
-const PERFORATION_DEPTH: float = 3.4
+## Shorter than they started. At 3.4 px the stubs stood far enough off the edge
+## to be counted, which makes them a scalloped border -- a decorative edge
+## treatment, which is the opposite of a remnant. Cut back, they register as
+## roughness along the boundary and only resolve into wire when looked at.
+const PERFORATION_DEPTH: float = 2.2
 const PERFORATION_WIDTH: float = 4.2
 const PERFORATION_PITCH: float = 9.0
 const PERFORATION_STUB_WIDTH: float = 1.4
@@ -209,7 +213,7 @@ const PERFORATION_ALPHA: float = 0.42
 const HIGHLIGHT_ALPHA: float = 0.30
 ## How far past the box the stroke runs at each end, in pixels. Signed per end
 ## and seeded, so no two buttons are covered the same way.
-const HIGHLIGHT_OVERSHOOT: float = 5.0
+const HIGHLIGHT_OVERSHOOT: float = 6.5
 ## The chisel angle, as a horizontal shear of the two ends.
 const HIGHLIGHT_SHEAR: float = 4.5
 ## How much the band's top and bottom edges wander, in pixels.
@@ -218,10 +222,51 @@ const HIGHLIGHT_EDGE_WAVE: float = 1.4
 ## covers the word, not the whole line.
 const HIGHLIGHT_INSET: float = 2.0
 
+## The other three ways a mark misses.
+##
+## Only the two ends varied, which meant every control on the page was covered
+## by a band of the same height, in the same place, at the same angle -- the
+## overshoot was the one degree of freedom and it read as a template with a
+## random number in it. What actually differs between two swipes of a
+## highlighter is where the band sat relative to the word (`DRIFT`), whether the
+## hand ran level or downhill across it (`TILT`), and how the tip happened to be
+## held that time (`SHEAR_SPREAD`, as a multiplier on the chisel angle). All
+## three are drawn per control from its own seed, so a given button is always
+## marked the same way and no two are marked alike.
+const HIGHLIGHT_DRIFT: float = 3.2
+const HIGHLIGHT_TILT: float = 3.0
+const HIGHLIGHT_SHEAR_SPREAD: float = 1.1
+
+## How often the stroke is laid down right to left instead.
+##
+## A right-handed hand going back over a line does not always start at the same
+## end, and the direction of a sweep is the most legible thing about it. Under a
+## half, so left-to-right still reads as the norm and the others as the
+## exception rather than as a coin toss.
+const HIGHLIGHT_REVERSE_CHANCE: float = 0.30
+
 ## How long the swipe takes, in seconds. Short: this is a pointer landing on a
 ## control, not a transition. Long enough that the direction is legible, because
 ## a mark that appears all at once is a colour change rather than a stroke.
+##
+## Paired with a width, because a fixed duration is a fixed *duration* and not a
+## fixed speed: at 0.16 s flat, a 60 px chip and a 320 px row were marked in the
+## same time, so the hand went five times faster across the long one. The eye
+## reads that as two different gestures. Instead the time is scaled by the
+## control's width against this reference -- one hand speed everywhere -- and
+## then compressed, because a stroke five times as long taking five times as
+## long to arrive is a hover affordance that has stopped being responsive.
 const HIGHLIGHT_SWEEP_SECONDS: float = 0.16
+const HIGHLIGHT_SWEEP_REFERENCE_WIDTH: float = 150.0
+## How much of the width difference the duration actually takes on. At 1.0 the
+## speed is genuinely constant and long buttons feel slow; at 0 it is back to a
+## fixed duration. Below half, so a longer button is marked in *slightly* more
+## time and therefore visibly faster -- which is what a hand does when it has
+## further to go and the same amount of patience.
+const HIGHLIGHT_SWEEP_LENGTH_SHARE: float = 0.42
+## Never quicker than this, whatever the arithmetic says, or the mark on a small
+## chip stops being a stroke and becomes a state change.
+const HIGHLIGHT_SWEEP_FLOOR: float = 0.09
 
 
 ## Which panel this is, for the wander. Assigned by whoever creates the outline;
@@ -314,8 +359,18 @@ func _on_parent_unhover() -> void:
 	set_process(true)
 
 
+## How long this particular control takes to be gone over.
+func _sweep_seconds() -> float:
+	var stretch := lerpf(
+		1.0,
+		maxf(size.x, 1.0) / HIGHLIGHT_SWEEP_REFERENCE_WIDTH,
+		HIGHLIGHT_SWEEP_LENGTH_SHARE
+	)
+	return maxf(HIGHLIGHT_SWEEP_SECONDS * stretch, HIGHLIGHT_SWEEP_FLOOR)
+
+
 func _process(delta: float) -> void:
-	var step := delta / maxf(HIGHLIGHT_SWEEP_SECONDS, 0.001)
+	var step := delta / maxf(_sweep_seconds(), 0.001)
 	highlight_sweep = move_toward(highlight_sweep, _sweep_target, step)
 	queue_redraw()
 	if is_equal_approx(highlight_sweep, _sweep_target):
@@ -440,51 +495,83 @@ func _draw_ribbon(
 ## *is* the fill, not a decoration over one.
 func _draw_highlight(sweep: float) -> void:
 	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA)
-	var top := HIGHLIGHT_INSET
-	var bottom := size.y - HIGHLIGHT_INSET
+	## Where the band sat relative to the word this time, and whether the hand
+	## ran level across it. Both drawn from the control's own seed.
+	var drift := (_unit(53) - 0.5) * HIGHLIGHT_DRIFT
+	var squeeze := (_unit(73) - 0.5) * HIGHLIGHT_DRIFT * 0.6
+	var top := HIGHLIGHT_INSET + drift - squeeze
+	var bottom := size.y - HIGHLIGHT_INSET + drift + squeeze
+	var tilt := (_unit(97) - 0.5) * HIGHLIGHT_TILT
 	## Where the hand started and stopped. Each end draws its own overshoot, so
 	## one usually runs past the word and the other falls short of it.
-	var left := -HIGHLIGHT_OVERSHOOT * (_unit(11) * 1.4 - 0.4)
-	var full_right := size.x + HIGHLIGHT_OVERSHOOT * (_unit(29) * 1.4 - 0.4)
+	var behind := -HIGHLIGHT_OVERSHOOT * (_unit(11) * 2.2 - 0.7)
+	var beyond := size.x + HIGHLIGHT_OVERSHOOT * (_unit(29) * 2.2 - 0.7)
+	## Which end the swipe began at. Reversed, the tip enters from the right and
+	## the band grows leftward -- same geometry, opposite travel.
+	var reversed := _unit(131) < HIGHLIGHT_REVERSE_CHANCE
+	var anchor := beyond if reversed else behind
+	var far := behind if reversed else beyond
 	## As far as the tip has travelled. The stroke is laid down, not faded in.
-	var right := lerpf(left, full_right, clampf(sweep, 0.0, 1.0))
+	var tip := lerpf(anchor, far, clampf(sweep, 0.0, 1.0))
 	## The chisel. Both ends lean the same way, because the tip is held at one
-	## angle for the whole stroke.
-	var shear := HIGHLIGHT_SHEAR
-	var points := PackedVector2Array()
-	## Along the top edge, wandering, then back along the bottom.
+	## angle for the whole stroke -- but not at the same angle on every control.
+	var shear := HIGHLIGHT_SHEAR * (0.45 + _unit(157) * HIGHLIGHT_SHEAR_SPREAD)
+	if reversed:
+		shear = -shear
 	var steps := maxi(int(size.x / 9.0), 4)
+	## The band, and the denser leading edge inside it. A chisel lays down more
+	## ink where it first touches down and drags less as it goes, so a second,
+	## narrower pass along the top is what stops it reading as a flat rectangle.
+	## Both are the same run of the tip, so they share one builder -- the lead
+	## simply stops a third of the way down instead of at the bottom.
+	draw_colored_polygon(
+		_highlight_band(anchor, tip, shear, top, bottom, tilt, steps, 601, 1409),
+		band
+	)
+	draw_colored_polygon(
+		_highlight_band(
+			anchor, tip, shear, top, lerpf(top, bottom, 0.34), tilt, steps,
+			601, 2803, 0.4
+		),
+		Color(band, HIGHLIGHT_ALPHA * 0.28)
+	)
+
+
+## One pass of the tip, as a closed strip: along the upper edge and back along
+## the lower one, both wandering.
+##
+## `tilt` runs the whole band downhill or up across its travel, which is the
+## difference between a mark somebody made and a rectangle somebody placed.
+func _highlight_band(
+	from: float,
+	to: float,
+	shear: float,
+	top: float,
+	bottom: float,
+	tilt: float,
+	steps: int,
+	top_salt: int,
+	bottom_salt: int,
+	bottom_shear_share: float = -1.0,
+) -> PackedVector2Array:
+	var lower_shear := -shear if bottom_shear_share < 0.0 \
+		else shear * bottom_shear_share
+	var points := PackedVector2Array()
 	for index in range(steps + 1):
 		var along := float(index) / float(steps)
 		points.append(Vector2(
-			lerpf(left + shear, right + shear, along),
-			top + (_unit(index + 601) - 0.5) * HIGHLIGHT_EDGE_WAVE
+			lerpf(from + shear, to + shear, along),
+			top + tilt * (along - 0.5)
+				+ (_unit(index + top_salt) - 0.5) * HIGHLIGHT_EDGE_WAVE
 		))
 	for index in range(steps + 1):
 		var along := 1.0 - float(index) / float(steps)
 		points.append(Vector2(
-			lerpf(left - shear, right - shear, along),
-			bottom + (_unit(index + 1409) - 0.5) * HIGHLIGHT_EDGE_WAVE
+			lerpf(from + lower_shear, to + lower_shear, along),
+			bottom + tilt * (along - 0.5)
+				+ (_unit(index + bottom_salt) - 0.5) * HIGHLIGHT_EDGE_WAVE
 		))
-	draw_colored_polygon(points, band)
-	## The denser leading edge. A chisel tip lays down more ink where it first
-	## touches down and drags less as it goes, so a second, narrower pass along
-	## the top of the band is what stops it reading as a flat rectangle.
-	var lead := PackedVector2Array()
-	for index in range(steps + 1):
-		var along := float(index) / float(steps)
-		lead.append(Vector2(
-			lerpf(left + shear, right + shear, along),
-			top + (_unit(index + 601) - 0.5) * HIGHLIGHT_EDGE_WAVE
-		))
-	for index in range(steps + 1):
-		var along := 1.0 - float(index) / float(steps)
-		lead.append(Vector2(
-			lerpf(left + shear * 0.4, right + shear * 0.4, along),
-			lerpf(top, bottom, 0.34)
-				+ (_unit(index + 2803) - 0.5) * HIGHLIGHT_EDGE_WAVE
-		))
-	draw_colored_polygon(lead, Color(band, HIGHLIGHT_ALPHA * 0.28))
+	return points
 
 
 ## What this control gets marked in.

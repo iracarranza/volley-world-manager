@@ -294,6 +294,38 @@ corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 6
 
+[sub_resource type="StyleBoxEmpty" id="ScrollTrackV"]
+content_margin_left = 7.0
+content_margin_right = 7.0
+
+[sub_resource type="StyleBoxEmpty" id="ScrollTrackH"]
+content_margin_top = 7.0
+content_margin_bottom = 7.0
+
+[sub_resource type="StyleBoxEmpty" id="ScrollGrabber"]
+
+[sub_resource type="StyleBoxFlat" id="PanelSubcardInked"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.09, 0.22, 0.294, 1)
+corner_radius_top_left = 9
+corner_radius_top_right = 20
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxFlat" id="PanelSubcardInkedActive"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.122, 0.267, 0.345, 1)
+corner_radius_top_left = 9
+corner_radius_top_right = 20
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 16
+
 [sub_resource type="StyleBoxFlat" id="PanelCardInked"]
 content_margin_left = 8.0
 content_margin_top = 6.0
@@ -468,6 +500,15 @@ TapeAction/styles/normal = SubResource("TapeActionBox")
 TapeAction/styles/hover = SubResource("TapeActionBox")
 TapeAction/styles/pressed = SubResource("TapeActionBox")
 TapeAction/styles/focus = SubResource("TapeActionBox")
+TapeCase/base_type = &"Button"
+TapeCase/colors/font_color = Color(0.16, 0.12, 0.03, 1)
+TapeCase/colors/font_hover_color = Color(0.32, 0.22, 0.04, 1)
+TapeCase/colors/font_pressed_color = Color(0.32, 0.22, 0.04, 1)
+TapeCase/font_sizes/font_size = 14
+TapeCase/styles/normal = SubResource("TapeActionBox")
+TapeCase/styles/hover = SubResource("TapeActionBox")
+TapeCase/styles/pressed = SubResource("TapeActionBox")
+TapeCase/styles/focus = SubResource("TapeActionBox")
 CardPanel/base_type = &"PanelContainer"
 CardPanel/styles/panel = SubResource("PanelCardInked")
 CheckButton/colors/font_color = Color(0.961, 0.941, 0.863, 1)
@@ -485,9 +526,9 @@ DangerAction/colors/font_color = Color(1, 0.78, 0.75, 1)
 DangerAction/styles/hover = SubResource("DangerNormalInked")
 DangerAction/styles/normal = SubResource("DangerNormalInked")
 DashboardCard/base_type = &"Button"
-DashboardCard/styles/hover = SubResource("PanelCardInkedActive")
-DashboardCard/styles/normal = SubResource("PanelCardInked")
-DashboardCard/styles/pressed = SubResource("PanelCardInkedActive")
+DashboardCard/styles/hover = SubResource("PanelSubcardInkedActive")
+DashboardCard/styles/normal = SubResource("PanelSubcardInked")
+DashboardCard/styles/pressed = SubResource("PanelSubcardInkedActive")
 DataList/base_type = &"ItemList"
 DisplayHeading/base_type = &"Label"
 DisplayHeading/colors/font_color = Color(1, 0.973, 0.89, 1)
@@ -586,3 +627,13 @@ TooltipPanel/styles/panel = SubResource("TooltipPanel")
 VBoxContainer/constants/separation = 8
 VSeparator/styles/separator = SubResource("Separator")
 VSplitContainer/constants/separation = 14
+VScrollBar/styles/scroll = SubResource("ScrollTrackV")
+VScrollBar/styles/scroll_focus = SubResource("ScrollTrackV")
+VScrollBar/styles/grabber = SubResource("ScrollGrabber")
+VScrollBar/styles/grabber_highlight = SubResource("ScrollGrabber")
+VScrollBar/styles/grabber_pressed = SubResource("ScrollGrabber")
+HScrollBar/styles/scroll = SubResource("ScrollTrackH")
+HScrollBar/styles/scroll_focus = SubResource("ScrollTrackH")
+HScrollBar/styles/grabber = SubResource("ScrollGrabber")
+HScrollBar/styles/grabber_highlight = SubResource("ScrollGrabber")
+HScrollBar/styles/grabber_pressed = SubResource("ScrollGrabber")

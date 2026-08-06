@@ -4,6 +4,7 @@ extends RefCounted
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
+const UIPaperWindowScript := preload("res://scenes/components/paper_window.gd")
 
 ## Which surfaces get a drawn edge.
 ##
@@ -54,7 +55,15 @@ const PATCH_TINT_SPREAD: float = 0.045
 ## The page is not a patch. `RaisedPanel` is the thing the patches are sewn
 ## *onto*, so tinting it shifts the whole sheet rather than one scrap -- and a
 ## whole-page colour shift reads as a theme bug, not as cloth.
-const UNTINTED_TIERS: Array[StringName] = [&"RaisedPanel"]
+##
+## `DashboardCard` is here for a related reason found on the finished page. The
+## six section cards do not sit on the sheet the way separate scraps do -- they
+## are a *block* inside one card, six panes of the same cut, and giving each its
+## own tone made the group read as six unrelated things that happen to be in a
+## grid. Cut from one piece, they carry one colour and the stitching is what
+## separates them, which is what a set of panels on a single patch looks like.
+## Their stylebox takes the containing card's own fill for the same reason.
+const UNTINTED_TIERS: Array[StringName] = [&"RaisedPanel", &"DashboardCard"]
 
 const PRIMARY_ACTIONS := [
 	"NewCareerButton", "NextButton", "CreateCareerButton", "AdvanceWeekButton",
@@ -129,8 +138,12 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 		_screen_surface(control, light_mode)
 	elif control is RichTextLabel:
 		control.theme_type_variation = &"BodyCopy"
+		_paper_window(control)
 	elif control is ItemList:
 		control.theme_type_variation = &"DataList"
+		_paper_window(control)
+	elif control is ScrollContainer:
+		_paper_window(control)
 
 
 static func _clear_legacy_presentation_overrides(control: Control) -> void:
@@ -231,9 +244,46 @@ static func _ink_surface(control: Control) -> void:
 	control.add_child(outline)
 
 
+## A button that paints nothing and says nothing is not a control -- it is a
+## region of the screen that happens to be clickable.
+##
+## The match centre found this the hard way. `OpenTacticalWorkspaceButton` is a
+## flat, textless `Button` stretched over the whole 680x390 tactical preview so
+## that clicking the court opens the full board. Classified by widget kind it is
+## a `SecondaryAction` like any other, so it was given a nib outline round the
+## entire court and a highlighter wash that swept over the court on hover. The
+## tactical screen had become a highlighted button.
+##
+## The lesson is not that the button was too big. It is that "is a `Button`" and
+## "is a control the reader is meant to see" are different questions, and this
+## file was only ever asking the first. A hit area is transparent by
+## construction -- `flat` means it draws no stylebox, and empty `text` with no
+## icon means there is nothing written on it -- so there is nothing for a pen to
+## outline and nothing for a marker to go over. It gets a tier of its own,
+## outside every decorated list, and the pass leaves it alone.
+static func _is_hit_area(button: Button) -> bool:
+	return button.flat and button.text.is_empty() and button.icon == null
+
+
+## Thread a scrolling region under the page, once.
+##
+## Added the same way the drawn edges are -- as an exempt child the next pass
+## walks past, reused rather than recreated -- because it answers the same
+## question about the same node and putting it anywhere else would mean two
+## places deciding what a surface looks like.
+static func _paper_window(control: Control) -> void:
+	if control.get_node_or_null("PaperWindow") != null:
+		return
+	var window := UIPaperWindowScript.new()
+	window.name = "PaperWindow"
+	control.add_child(window)
+
+
 static func _style_button(button: Button) -> void:
 	var node_name := String(button.name)
-	if node_name in PRIMARY_ACTIONS:
+	if _is_hit_area(button):
+		button.theme_type_variation = &"HitArea"
+	elif node_name in PRIMARY_ACTIONS:
 		button.theme_type_variation = &"PrimaryAction"
 	elif node_name in DANGER_ACTIONS:
 		button.theme_type_variation = &"DangerAction"
@@ -254,7 +304,16 @@ static func _style_button(button: Button) -> void:
 		## drawer can never be shorter than these buttons demand, so their
 		## content margins are what actually set its height.
 		button.theme_type_variation = &"TapeAction"
-	elif node_name in ["CurrentSectionButton", "ThemeToggle"]:
+	elif node_name == "CurrentSectionButton":
+		## The menu button is not a button with a tape measure next to it -- it
+		## *is* the case the tape comes out of, drawn by `UITapeMeasure` under
+		## its own label. So it takes `TapeAction`'s dark-on-yellow lettering and
+		## nothing else: no box, no outline, no wash. See `HIT_AREA` below for
+		## why a control being large is not a reason to stop treating it as one;
+		## this is the other half of that -- a control that is an *object* rather
+		## than a written word, and objects are not marked with a highlighter.
+		button.theme_type_variation = &"TapeCase"
+	elif node_name == "ThemeToggle":
 		button.theme_type_variation = &"NavAction"
 	elif button.has_method("set_summary") or node_name.ends_with("Card"):
 		## Matched on what the button *is*, not on what the scene file called it.

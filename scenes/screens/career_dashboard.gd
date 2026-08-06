@@ -205,9 +205,25 @@ var selected_individual_training_id: int = -1
 var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
 var _nav_tape: UITapeMeasure = null
+var _nav_case: UITapeMeasure = null
+var _nav_tang: UITapeMeasure = null
 
 ## How far the tape starts back inside its case, in pixels.
-const TAPE_EMERGENCE_OVERLAP: float = 6.0
+##
+## Measured to the *far side of the slot*, not to the housing's outer edge. The
+## drawer is drawn over the case rather than behind it, so the band's first few
+## pixels land on the mouth -- which is what fills the opening instead of
+## stopping short of it and leaving the seam the button used to show.
+const TAPE_EMERGENCE_OVERLAP: float = 7.0
+
+## How tall the slot is before the drawer has ever been opened and measured.
+const NAV_SLOT_FALLBACK: float = 22.0
+
+## How long the tape takes to come out, and how long the spring takes to take it
+## back. The recoil is the shorter of the two on purpose: pulling is work and
+## letting go is not.
+const NAV_PULL_SECONDS: float = 0.28
+const NAV_RECOIL_SECONDS: float = 0.20
 var _nav_tween: Tween
 var _roster_list_expanded: bool = false
 var _attribute_page: int = 0
@@ -393,23 +409,55 @@ func refresh() -> void:
 func _build_tape() -> void:
 	var tape := UITapeMeasure.new()
 	tape.name = "TapeBand"
+	tape.piece = UITapeMeasure.Piece.BAND
 	tape.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nav_clip.add_child(tape)
 	nav_clip.move_child(tape, 0)
 	_nav_tape = tape
-	## And the tang on the closed strip. Anchored to the right end of the
-	## section button, because that is where the tape would be if it were out.
-	var tab := UITapeMeasure.new()
-	tab.name = "TapeTab"
-	tab.tab_only = true
-	tab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tab.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	tab.custom_minimum_size = Vector2(14.0, 0.0)
-	tab.offset_left = -18.0
-	tab.offset_right = -4.0
-	tab.offset_top = 7.0
-	tab.offset_bottom = -7.0
-	current_section_button.add_child(tab)
+	## The housing, under the menu button's own label.
+	##
+	## The button used to be an ordinary control standing next to a tape, which
+	## is why the two never joined: one was written on the page and the other was
+	## an object lying on it, and no amount of closing the gap between them makes
+	## a written word into the thing a steel band comes out of. Now the button
+	## *is* the case -- the shell, the reel and the slot are all this drawing, and
+	## the tape emerges from the slot rather than from beside a rectangle.
+	var case := UITapeMeasure.new()
+	case.name = "TapeCase"
+	case.piece = UITapeMeasure.Piece.CASE
+	case.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	case.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	current_section_button.add_child(case)
+	_nav_case = case
+	## And the tang, sitting in the mouth of that slot while the tape is in.
+	var tang := UITapeMeasure.new()
+	tang.name = "TapeTang"
+	tang.piece = UITapeMeasure.Piece.TANG
+	tang.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tang.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	tang.custom_minimum_size = Vector2(14.0, 0.0)
+	tang.offset_left = -16.0
+	tang.offset_right = -2.0
+	current_section_button.add_child(tang)
+	_nav_tang = tang
+	_set_slot_height(NAV_SLOT_FALLBACK)
+
+
+## Tell the case how big a band comes through it, and hang the tang in that gap.
+##
+## One figure, set once, read by three drawings. The slot, the tang and the tape
+## are the same opening seen at three moments, and letting each derive its own
+## height from its own parent is how a tape ends up wider than the hole it came
+## out of.
+func _set_slot_height(slot_height: float) -> void:
+	if _nav_case != null:
+		_nav_case.slot_height = slot_height
+	if _nav_tang != null:
+		var margin := maxf(
+			(current_section_button.size.y - slot_height) * 0.5, 2.0
+		)
+		_nav_tang.offset_top = margin
+		_nav_tang.offset_bottom = -margin
 
 
 func _toggle_nav_dropdown() -> void:
@@ -462,6 +510,13 @@ func _open_nav_dropdown() -> void:
 	## first. The panel's own minimum is the floor -- the buttons on the tape
 	## still need room -- and `TapeAction` is what makes that minimum small.
 	var drawer_height := panel_minimum.y
+	_set_slot_height(drawer_height)
+	## There is one tang, and it is riveted to the end of the tape. While the
+	## band is out it is out there with it, so the copy sitting in the slot has
+	## to go -- otherwise the hook is in two places at once and the join between
+	## case and tape is a piece of metal rather than nothing at all.
+	if _nav_tang != null:
+		_nav_tang.visible = false
 	var available_width := strip_rect.end.x - 10.0 - origin_x
 	var target_width := maxf(available_width, panel_minimum.x)
 	if target_width > available_width:
@@ -499,9 +554,16 @@ func _open_nav_dropdown() -> void:
 	dropdown_panel.modulate.a = 1.0
 	if _nav_tween != null:
 		_nav_tween.kill()
+	## Pulled, not opened.
+	##
+	## A hand drawing a tape out is fastest the instant it starts -- the spring
+	## has not loaded yet and the reel is already spinning -- and spends the rest
+	## of the travel slowing down against it. `TRANS_QUINT` is a long enough tail
+	## for the last inch to visibly *arrive* rather than stop; `TRANS_CUBIC` at
+	## this duration was closer to a panel sliding than to a band being pulled.
 	_nav_tween = create_tween().set_parallel(true) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_nav_tween.tween_property(nav_clip, "size:x", target_width, 0.20)
+		.set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	_nav_tween.tween_property(nav_clip, "size:x", target_width, NAV_PULL_SECONDS)
 	## The hint occupies the strip the drawer expands across, and it exists to
 	## say "press Tab" -- which has just happened. It fades rather than snapping
 	## off so the drawer looks like it is taking the space over.
@@ -546,11 +608,25 @@ func _close_nav_dropdown() -> void:
 	click_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if _nav_tween != null:
 		_nav_tween.kill()
+	## Released, not closed.
+	##
+	## The other half of the same object. A spring-loaded reel does not start at
+	## full speed: the lock lets go, the band creeps, and then it is gone. That
+	## hesitation is the whole tell -- `EASE_IN` over a short travel, so almost
+	## all of the distance is covered in the last third of an already-short
+	## window and the tape reads as *sucked* in rather than retracted at a
+	## steady rate.
 	_nav_tween = create_tween().set_parallel(true) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	_nav_tween.tween_property(nav_clip, "size:x", 0.0, 0.14)
-	_nav_tween.tween_property(nav_hint, "modulate:a", 1.0, 0.14)
-	_nav_tween.chain().tween_callback(func() -> void: nav_dropdown.visible = false)
+		.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN)
+	_nav_tween.tween_property(nav_clip, "size:x", 0.0, NAV_RECOIL_SECONDS)
+	## The hint comes back on the pen's timing, not the spring's: it is writing
+	## on the page, so it has no business snapping.
+	_nav_tween.tween_property(nav_hint, "modulate:a", 1.0, 0.18)
+	_nav_tween.chain().tween_callback(func() -> void:
+		nav_dropdown.visible = false
+		## Back in the slot, and only once the band has finished arriving there.
+		if _nav_tang != null:
+			_nav_tang.visible = true)
 
 
 func _click_catcher_input(event: InputEvent) -> void:
@@ -566,7 +642,12 @@ func _navigate(section_name: String) -> void:
 		"Home", "Roster", "Team", "Transfers", "Competition", "Sixnet", "Club",
 	]
 	sections.current_tab = maxi(names.find(section_name), 0)
-	current_section_button.text = "%s   ▸   [Tab]" % section_name
+	## The case is not a readout.
+	##
+	## It used to relabel itself with whichever section was open, which put the
+	## current section in two places -- here and on the section title a few
+	## pixels below -- and made the one object on the page that is a *tool* into
+	## a status line. A tape measure says what it is, not what you last measured.
 	## Every nav button and every keyboard shortcut routes through here, so
 	## highlighting and dismissal both only need saying once.
 	for button in _nav_buttons:
