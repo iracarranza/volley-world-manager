@@ -122,6 +122,13 @@ const HEAD_PITCH_LIMIT_DEGREES: float = 24.0
 ## up to a ball never looks sluggish, slow enough that the turn is visible.
 const FACING_TURN_RATE: float = 12.0
 
+## How far a player has to actually move before their travel sets their heading.
+##
+## A centimetre. Below that, the displacement between two frames is mostly
+## rounding and its *direction* is noise -- which is what had players spinning on
+## the spot while nominally standing still.
+const TRAVEL_HEADING_FLOOR_METERS: float = 0.01
+
 const REFERENCE_HEIGHT_CM: float = 188.0
 const REFERENCE_WINGSPAN_CM: float = 191.0
 ## Each silhouette states its own shoe-to-scalp height, and every one of them is
@@ -226,14 +233,23 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
 		if travelled > 0.0001:
 			stride_cycle += travelled / maxf(stride_length_m, 0.30)
-			## Face where you are going.
-			##
-			## Facing was only ever set from a contact direction, and only the
-			## contact actor is posed -- so every other player on the court
-			## translated without ever turning. A setter walking back to their
-			## release seat during serve receive slid there backwards, still
-			## facing the net, which is the "sliding" half of what reads as
-			## teleporting.
+		## Face where you are going -- but only when you are going somewhere.
+		##
+		## The threshold used to be the same 0.1 mm that advances the stride, and
+		## at that scale the displacement between two frames is mostly rounding.
+		## Its *direction* is then almost pure noise, so a player standing still
+		## was handed a new random heading every frame and spun on the spot. It
+		## read as endearing, apparently, which is the most dangerous kind of
+		## bug: a player rotating while running is not a style, it is the facing
+		## system being driven by numerical dust.
+		##
+		## A centimetre of travel is well under a single frame of real running
+		## and far above the noise floor.
+		if travelled > TRAVEL_HEADING_FLOOR_METERS:
+			## Before any of this existed, facing came only from a contact
+			## direction and only the contact actor was posed -- so every other
+			## player translated without ever turning, and a setter walking back
+			## to their release seat slid there backwards.
 			##
 			## Rate-limited by the same turn speed a contact facing uses, so a
 			## player rounding a corner leans into it rather than snapping. The
@@ -863,7 +879,22 @@ func set_pose(
 		## Nothing here interpolates the turn: `_turn_toward` is already rate
 		## limited, so simply declining to override until the squaring-up point
 		## produces the turn for free, at a speed a body can actually manage.
-		if phase >= _square_up_phase(event_type) or not is_contact_actor:
+		if event_type == RallyEventModel.EventType.BLOCK:
+			## A blocker faces the net. Always, and not the ball.
+			##
+			## Every other contact takes its heading from where the ball is
+			## going, and a block was doing the same -- from the *deflection*,
+			## which points wherever the ball came off the hands. A stuffed ball
+			## goes back into the hitter's court, so the blocker was handed a
+			## heading pointing behind them and turned through 180 degrees in
+			## mid-air while the announcer read out the block forming. Posing the
+			## block a window earlier made it worse: two full flights to spin in
+			## rather than one.
+			##
+			## The net runs along z = 0, so facing it is a matter of which side
+			## the blocker stands on, and nothing about the ball enters into it.
+			_turn_toward(0.0 if position.z > 0.0 else PI)
+		elif phase >= _square_up_phase(event_type) or not is_contact_actor:
 			_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
 		_ground_the_feet(elevation, gait_knee)
