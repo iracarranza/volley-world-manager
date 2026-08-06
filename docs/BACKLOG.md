@@ -1253,9 +1253,40 @@ So the resolver and playback never disagreed, and no anchor needed reconciling.
 
 **What survives is real.** The opponent defender is 0.32 m further from the ball
 and has 1.1 m less reach margin, measured on matched rows, while digging balls
-that land *more centrally* than the ones the home defence covers. That is
-positioning or claimant choice, and it is now the only live candidate -- the
-ball, the anchors, and the measurement itself have each been ruled out.
+that land *more centrally* than the ones the home defence covers.
+
+### Claimant choice, decomposed -- and ruled out
+
+The opponent DEFENSE event now stamps `opponent_phase_targets`, mirroring the
+`home_phase_targets` the home dig has always carried. Without it the opponent's
+*best available* defender was unmeasurable and "their shape is worse" could only
+be asserted. With it:
+
+  side       chosen   best available   penalty   closer teammates
+  home       1.613 m       1.495 m     0.118 m         0.20
+  opponent   1.828 m       1.794 m     0.034 m         0.07
+
+The opponent's claimant is **better** than the home one -- it concedes 0.034 m
+against 0.118 m, and passes over 0.07 closer teammates against 0.20. Both sides
+run the same `choose_claimant`, and neither is picking badly.
+
+**The entire gap is `best_available`: 1.495 m against 1.794 m.** Even the
+opponent's *closest* defender is 0.30 m further from the ball than the home
+side's closest. There is no defender to choose who is any nearer.
+
+So: not the rally cap, not dig ratings (the opponent's capability is *higher*),
+not the dig contest, not ball placement (which favours them), not the anchors,
+not the measurement, and not the claim. **The opponent's staged defensive shape
+is positioned 0.30 m worse for the balls it actually faces**, and that is the one
+thing left standing.
+
+Where to look: the home side stages through `_home_floor_phase_positions` with
+`floor_phase_positions` computed per attack, the opponent through
+`_floor_phase_positions(..., opponent_side = true)` into `opponent_live_positions`.
+Aggregate depth and lateral spread come out similar -- home 3.72 m / 1.25 m
+against opponent 4.07 m / 1.20 m -- so the shape is not obviously wrong in bulk.
+What has not been checked is whether it *shades* to the attack the way the home
+shape does. A symmetric shape and a targeted shape can have identical means.
 
 Both want their own fix. Neither is the attack-symmetry ratchet, and treating
 them as one thing is what produced the wrong answer above.

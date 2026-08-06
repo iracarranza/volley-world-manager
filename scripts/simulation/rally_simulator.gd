@@ -1946,6 +1946,13 @@ func resolve(
 			"arrival": Dictionary(opponent_defense.get("arrival", {})),
 			"claimed": bool(opponent_defense.get("claimed", false)),
 			"flight_time": opponent_defense_time,
+			## The shape this dig was claimed out of. The home dig event has
+			## carried `home_phase_targets` all along and this one carried
+			## nothing, so the two sides' defensive shapes could not be compared
+			## -- only the distance each ended up covering, which is the result
+			## rather than the reason. Without it the opponent's best-available
+			## defender is unmeasurable and "their shape is worse" stays a guess.
+			"opponent_phase_targets": opponent_live_positions.duplicate(true),
 			"movement_target": opponent_defender_reach,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states. Deriving it from
