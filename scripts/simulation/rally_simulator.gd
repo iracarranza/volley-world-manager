@@ -8543,6 +8543,14 @@ func _dig_contest(
 ## least when they already sealed it. That is the shape of a real double block,
 ## and it makes beating one blocker ordinary while a well-formed double is the
 ## thing a hitter genuinely has to solve.
+func _block_wall_quality(primary_skill: float, assist_skill: float) -> float:
+	var solo := clampf(primary_skill, 0.0, 1.0) * BLOCK_SOLO_SHARE
+	return clampf(
+		solo + (1.0 - solo) * clampf(assist_skill, 0.0, 1.0) * BLOCK_ASSIST_SHARE,
+		0.05, 0.98,
+	)
+
+
 ## How much of this wall's pre-set movement was a decision rather than a
 ## reaction.
 ##
@@ -8561,14 +8569,6 @@ func _assist_committed_share(commitment: float, read_quality: float) -> float:
 		(commitment_signal - ASSIST_COMMIT_SIGNAL_FLOOR)
 			/ ASSIST_COMMIT_SIGNAL_SPAN,
 		0.0, 1.0,
-	)
-
-
-func _block_wall_quality(primary_skill: float, assist_skill: float) -> float:
-	var solo := clampf(primary_skill, 0.0, 1.0) * BLOCK_SOLO_SHARE
-	return clampf(
-		solo + (1.0 - solo) * clampf(assist_skill, 0.0, 1.0) * BLOCK_ASSIST_SHARE,
-		0.05, 0.98,
 	)
 
 
