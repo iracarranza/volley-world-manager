@@ -1355,3 +1355,44 @@ comparable, against the dig-success rate the sport actually shows -- roughly
 35-45% against a live swing, which sits between the 62% and 25% measured here.
 Neither current figure is right, so this is not a case of raising the weaker one
 to match the stronger.
+
+
+### Depth split by outcome: the opponent defence only wins deep balls
+
+`tools/run_defensive_depth_probe.gd`, metres from the net:
+
+  side       dug     n   ball depth   stood at   travel
+  home       yes    44        3.67       3.75      2.80
+  home       no     34        4.22       3.68      1.56
+  opponent   yes    25        6.26       6.60      1.42
+  opponent   no     81        3.76       3.29      1.88
+
+The opponent's 25 successes are deep-court diggers standing at 6.60 m taking
+balls at 6.26 m. Its 81 failures are balls at 3.76 m with the defender standing
+at 3.29 m -- **roughly the right depth**, 0.47 m adrift, and still 1.88 m from the
+ball. That leaves a lateral component of about 1.82 m.
+
+**So the shape is not too deep. It is beside the ball rather than behind it.**
+The failures are short-and-mid balls lost sideways, which is where 76% of what
+the opponent faces goes, and it matches the playback report of a defender who
+cannot reach after moving 1.3-2.2 m.
+
+Worth noting the home rows do not follow the same pattern -- home successes
+travel *further* than home failures, 2.80 m against 1.56 m. A side that succeeds
+on the long journeys and fails on the short ones is not a positioning story, and
+the home path additionally gates on `defender_arrived`. Do not assume the two
+sides fail for the same reason.
+
+### The debug path only ever shows one service side
+
+`scenes/main/main.gd:487` sets `serving_home = false` unconditionally before
+running a shadow-debug rally and restores it afterwards. Every debug rally
+therefore has the opponent serving, and no seed exists that starts with a home
+serve.
+
+That is why observation from debug reports "the vast majority of home attacks out
+of solid serve receive" -- serve receive is the only phase the tool can show. Half
+the engine has never been watched, including the entire home-serving branch whose
+opponent-side transition attack and continuation dig are two of the three dig
+sites measured above. Make the service side selectable in the fixture before
+drawing further conclusions from what debug displays.
