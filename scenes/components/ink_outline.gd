@@ -31,10 +31,10 @@ const SEGMENT_LENGTH: float = 14.0
 
 ## How far the line may stray from true, in pixels.
 ##
-## Small on purpose. Past about a pixel and a half the panel stops looking hand
-## drawn and starts looking broken -- the eye reads a wobbly rectangle as a
-## rendering fault long before it reads it as craft.
-const WANDER_PIXELS: float = 1.15
+## Small on purpose, and smaller than it first shipped. At 1.15 the wobble was
+## the loudest thing about the line; a drawn edge is mostly straight, and what
+## says "hand" is the *variation in the ink*, not the deviation of the path.
+const WANDER_PIXELS: float = 0.62
 
 ## Pen width along a run, and what it becomes at a corner.
 ##
@@ -51,6 +51,26 @@ const CORNER_SHARE: float = 0.14
 ## outside it.
 const EDGE_INSET: float = 1.0
 
+## How much ink the ball can fail to lay down, at worst.
+##
+## A ballpoint does not deposit an even line: the ball picks up ink in bursts, so
+## a stroke runs solid, thins over a stretch where the bearing is dry, and comes
+## back. That starvation is what a real pen line looks like up close, and it is a
+## different thing from the path wandering -- one is where the line goes, the
+## other is how much of it arrives.
+##
+## 0.62 leaves the driest stretch faint but never absent. A line that genuinely
+## breaks reads as a rendering gap rather than as ink.
+const COVERAGE_DEPTH: float = 0.62
+
+## How many segments a dry stretch lasts. A pen starves over a run and re-inks;
+## per-segment noise would be a dotted line, which is a different instrument.
+const COVERAGE_RUN: int = 5
+
+## How much thinner the stroke goes where it is starved. A dry ball lays down a
+## narrower line as well as a fainter one.
+const COVERAGE_WIDTH_FLOOR: float = 0.72
+
 ## Which panel this is, for the wander. Assigned by whoever creates the outline;
 ## identical seeds draw identical edges, which is the point.
 @export var ink_seed: int = 0
@@ -64,7 +84,17 @@ func _ready() -> void:
 	## drawn over, and it must never be restyled by the pass that created it.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_meta("ui_style_exempt", true)
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	## `set_anchors_and_offsets_preset`, not `set_anchors_preset`.
+	##
+	## The latter takes `keep_offsets = false` to mean "recompute the offsets so
+	## the control keeps the rect it already has" -- it changes which edges the
+	## control is anchored to and deliberately leaves it exactly where it was.
+	## Read as "snap to full rect" it looks right and does nothing, which is what
+	## happened: under a `PanelContainer` the outline was fitted by the container
+	## and drew correctly, and under every `Button` it kept its content-derived
+	## rect of 163x0 and returned at the size guard without painting a pixel. Six
+	## of the seven inked surfaces on the dashboard were blank.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	resized.connect(queue_redraw)
 
 
@@ -86,9 +116,12 @@ func _draw() -> void:
 		var from: Vector2 = points[index]
 		var to: Vector2 = points[index + 1]
 		var midpoint := (from + to) * 0.5
+		var coverage := _coverage(index)
 		draw_line(
-			from, to, ink,
-			_stroke_width(midpoint, shortest),
+			from, to,
+			Color(ink, ink.a * coverage),
+			_stroke_width(midpoint, shortest)
+				* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage),
 			true,
 		)
 
@@ -103,35 +136,85 @@ func _outline_points() -> PackedVector2Array:
 		Vector2(EDGE_INSET, EDGE_INSET),
 		size - Vector2(EDGE_INSET, EDGE_INSET) * 2.0
 	)
-	var radius := clampf(corner_radius, 0.0, minf(rect.size.x, rect.size.y) * 0.5)
-	var corners := [
+	var radius := clampf(
+		_resolved_radius(), 0.0, minf(rect.size.x, rect.size.y) * 0.5
+	)
+	## The ring in draw order, clockwise from the top: each side's straight run,
+	## then the arc that turns onto the next side.
+	var side_starts := [
 		rect.position + Vector2(radius, 0.0),
-		rect.position + Vector2(rect.size.x - radius, 0.0),
 		rect.position + Vector2(rect.size.x, radius),
-		rect.position + Vector2(rect.size.x, rect.size.y - radius),
 		rect.position + Vector2(rect.size.x - radius, rect.size.y),
-		rect.position + Vector2(radius, rect.size.y),
 		rect.position + Vector2(0.0, rect.size.y - radius),
+	]
+	var side_ends := [
+		rect.position + Vector2(rect.size.x - radius, 0.0),
+		rect.position + Vector2(rect.size.x, rect.size.y - radius),
+		rect.position + Vector2(radius, rect.size.y),
 		rect.position + Vector2(0.0, radius),
 	]
+	var arc_centres := [
+		rect.position + Vector2(rect.size.x - radius, radius),
+		rect.position + Vector2(rect.size.x - radius, rect.size.y - radius),
+		rect.position + Vector2(radius, rect.size.y - radius),
+		rect.position + Vector2(radius, radius),
+	]
+	var outward := [Vector2.UP, Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT]
 	var path := PackedVector2Array()
 	var step := 0
-	for index in range(corners.size()):
-		var from: Vector2 = corners[index]
-		var to: Vector2 = corners[(index + 1) % corners.size()]
-		var span := from.distance_to(to)
-		var divisions := maxi(int(span / SEGMENT_LENGTH), 1)
-		var normal := (to - from).orthogonal().normalized() \
-			if span > 0.001 else Vector2.ZERO
+	for side in range(4):
+		var from: Vector2 = side_starts[side]
+		var to: Vector2 = side_ends[side]
+		var divisions := maxi(int(from.distance_to(to) / SEGMENT_LENGTH), 1)
 		for division in range(divisions):
-			var along := float(division) / float(divisions)
 			step += 1
 			path.append(
-				from.lerp(to, along) + normal * _wander(step)
+				from.lerp(to, float(division) / float(divisions))
+					+ outward[side] * _wander(step)
+			)
+		if radius <= 0.5:
+			continue
+		## The turn onto the next side, walked around rather than cut across.
+		##
+		## This was a single straight segment between the two corner points --
+		## a 45-degree chamfer. The stylebox behind it is rounded, so the panel's
+		## own corner sat *outside* the ink and the one place the eye looks for
+		## the hand was the one place the line was provably machine-made.
+		var start_angle := -PI * 0.5 + float(side) * PI * 0.5
+		var arc_steps := maxi(int(radius * PI * 0.5 / SEGMENT_LENGTH) + 1, 4)
+		for division in range(arc_steps):
+			var angle := start_angle \
+				+ PI * 0.5 * float(division) / float(arc_steps)
+			step += 1
+			## Wander applied along the radius, so the pen strays off the curve
+			## the same way it strays off a straight -- perpendicular to travel.
+			path.append(
+				arc_centres[side]
+					+ Vector2(cos(angle), sin(angle)) * (radius + _wander(step))
 			)
 	if path.size() > 0:
 		path.append(path[0])
 	return path
+
+
+## What radius the surface underneath actually uses.
+##
+## Read from the parent's own stylebox rather than carried as a constant here:
+## the two themes are free to round their panels differently, and a pen that
+## turns at a radius the panel does not use traces an edge that is not there.
+## `corner_radius` stays as the fallback for a parent with no flat stylebox.
+func _resolved_radius() -> float:
+	var parent := get_parent() as Control
+	if parent == null:
+		return corner_radius
+	var variation := parent.theme_type_variation
+	for style_name: StringName in [&"panel", &"normal"]:
+		if not parent.has_theme_stylebox(style_name, variation):
+			continue
+		var box := parent.get_theme_stylebox(style_name, variation) as StyleBoxFlat
+		if box != null:
+			return float(box.corner_radius_top_left)
+	return corner_radius
 
 
 ## How far off true the pen is at this point along the chain.
@@ -143,6 +226,20 @@ func _wander(step: int) -> float:
 	var slow := _unit(step / 3 + 1) - 0.5
 	var fast := _unit(step + 977) - 0.5
 	return (slow * 1.4 + fast * 0.6) * WANDER_PIXELS
+
+
+## How much ink reached the paper on this segment.
+##
+## Cubed, so most of the stroke is fully inked and only occasionally does the
+## ball run dry -- a linear draw would leave the whole line permanently patchy,
+## which reads as a bad texture rather than as a pen. The slow term holds a dry
+## stretch across several segments the way a real bearing does; the fast term is
+## the grain within it.
+func _coverage(index: int) -> float:
+	var starve := _unit(index / COVERAGE_RUN + 313)
+	var grain := _unit(index + 4409)
+	var dry := pow(starve, 3.0) * 0.82 + pow(grain, 5.0) * 0.18
+	return clampf(1.0 - COVERAGE_DEPTH * dry, 0.0, 1.0)
 
 
 ## Thicker where the hand slows: at the corners, and never in the middle of a
