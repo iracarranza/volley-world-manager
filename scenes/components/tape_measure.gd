@@ -34,12 +34,17 @@ const MAJOR_EVERY: int = 5
 const MINOR_HEIGHT: float = 0.20
 const MAJOR_HEIGHT: float = 0.38
 
-## The hook: the folded metal tang riveted to the end of the tape. Width is
-## across the tape's travel, and it stands slightly proud of the tape on both
-## edges, which is what stops it disappearing into the band.
-const HOOK_WIDTH: float = 7.0
-const HOOK_PROUD: float = 2.5
-const HOOK_COLOR := Color("8d8f96")
+## The hook: the folded metal tang riveted to the end of the tape.
+##
+## Set *in* from the tape's edges rather than standing proud of them. A tang
+## that overhangs is a flag on a stick; a real one is a plate riveted to the
+## band, narrower than it, with its corners rounded off so it does not catch --
+## and it is the rounding that makes it read as a piece of pressed metal rather
+## than as a grey rectangle marking the end.
+const HOOK_WIDTH: float = 8.0
+const HOOK_INSET: float = 2.5
+const HOOK_RADIUS: float = 2.4
+const HOOK_COLOR := Color("9aa0a8")
 
 ## How far the leading edge is drawn back from the clip, so the hook sits *at*
 ## the end of the revealed tape rather than half outside it.
@@ -52,6 +57,10 @@ const HOOK_MARGIN: float = 1.0
 ## metal, so they are one drawing routine rather than a control and a glyph that
 ## have to be kept looking alike.
 @export var tab_only: bool = false
+
+## Where the whole denominations fall, in local x. Set by whoever lays out the
+## drawer; empty falls back to an even pitch.
+var major_marks: PackedFloat32Array = PackedFloat32Array()
 
 
 func _ready() -> void:
@@ -96,42 +105,94 @@ func _draw() -> void:
 ## Measured from the *case* end rather than from the leading edge, so a
 ## graduation stays put on the tape as it extends instead of sliding along it.
 ## A tape whose markings move when you pull it is a barber's pole.
+##
+## Where the majors fall is handed in by the drawer rather than derived from a
+## pitch. The section buttons sit on the tape, and a rule whose whole
+## denominations land at arbitrary points between them looks like two unrelated
+## things sharing a strip; landing them on the button edges makes the buttons
+## look measured out along the tape, which is what a scale is for.
 func _draw_graduations(revealed: float) -> void:
 	var ink := Color(TAPE_DARK, 0.85)
-	var index := 1
-	var x := MINOR_PITCH
-	while x < revealed - HOOK_WIDTH:
-		var major := index % MAJOR_EVERY == 0
-		var height := size.y * (MAJOR_HEIGHT if major else MINOR_HEIGHT)
-		draw_line(
-			Vector2(x, size.y - height), Vector2(x, size.y - 1.0),
-			ink, 1.0 if major else 1.0
-		)
-		index += 1
-		x += MINOR_PITCH
+	var majors := major_marks if not major_marks.is_empty() \
+		else _even_majors(revealed)
+	var previous := 0.0
+	for major_x in majors:
+		if major_x > revealed - HOOK_WIDTH:
+			break
+		_draw_tick(major_x, MAJOR_HEIGHT, ink)
+		## Minors subdivide whatever gap the layout left, so they stay evenly
+		## spaced within each denomination even when the buttons are not equal.
+		var gap := major_x - previous
+		if gap > MINOR_PITCH * 1.5:
+			var divisions := maxi(int(round(gap / MINOR_PITCH)), 2)
+			for step in range(1, divisions):
+				_draw_tick(
+					previous + gap * float(step) / float(divisions),
+					MINOR_HEIGHT, ink
+				)
+		previous = major_x
+
+
+## Where the majors would fall with nothing to align to.
+func _even_majors(revealed: float) -> PackedFloat32Array:
+	var marks := PackedFloat32Array()
+	var x := MINOR_PITCH * float(MAJOR_EVERY)
+	while x < revealed:
+		marks.append(x)
+		x += MINOR_PITCH * float(MAJOR_EVERY)
+	return marks
+
+
+func _draw_tick(x: float, share: float, ink: Color) -> void:
+	var height := size.y * share
+	draw_line(Vector2(x, size.y - height), Vector2(x, size.y - 1.0), ink, 1.0)
 
 
 ## The tang on the end. An L of folded steel: a plate across the tape and a lip
 ## turned up at the tip, which is the part you hook over an edge.
 func _draw_hook(centre_x: float, height: float) -> void:
-	var top := -HOOK_PROUD
-	var bottom := height + HOOK_PROUD
+	var top := HOOK_INSET
+	var bottom := maxf(height - HOOK_INSET, top + HOOK_RADIUS * 2.0)
 	var plate := Rect2(
 		Vector2(centre_x - HOOK_WIDTH * 0.5, top),
 		Vector2(HOOK_WIDTH, bottom - top)
 	)
-	draw_rect(plate, HOOK_COLOR)
-	## The turned lip, and a highlight down the fold. Two rectangles and a line,
-	## because at seven pixels across anything more is mud.
-	draw_rect(
-		Rect2(plate.position, Vector2(HOOK_WIDTH * 0.38, plate.size.y)),
-		Color(HOOK_COLOR.lightened(0.35), 0.9)
+	_draw_rounded(plate, HOOK_RADIUS, HOOK_COLOR)
+	## The turned lip, caught by the light down one side, and the shadow of the
+	## fold down the other. Rounded with the plate so the highlight follows its
+	## edge instead of squaring off inside it.
+	_draw_rounded(
+		Rect2(plate.position, Vector2(HOOK_WIDTH * 0.40, plate.size.y)),
+		HOOK_RADIUS, Color(HOOK_COLOR.lightened(0.42), 0.95)
 	)
 	draw_line(
-		Vector2(plate.end.x - 0.5, plate.position.y),
-		Vector2(plate.end.x - 0.5, plate.end.y),
-		Color(HOOK_COLOR.darkened(0.4), 0.8), 1.0
+		Vector2(plate.end.x - 1.0, plate.position.y + HOOK_RADIUS),
+		Vector2(plate.end.x - 1.0, plate.end.y - HOOK_RADIUS),
+		Color(HOOK_COLOR.darkened(0.45), 0.75), 1.0
 	)
+
+
+## A rounded rectangle, as a polygon.
+##
+## `draw_rect` has no corner radius and a `StyleBoxFlat` would need a resource
+## per colour, so the tang builds its own -- four quarter-arcs and the straight
+## runs between them.
+func _draw_rounded(rect: Rect2, radius: float, color: Color) -> void:
+	var r := minf(radius, minf(rect.size.x, rect.size.y) * 0.5)
+	var points := PackedVector2Array()
+	var corners := [
+		[Vector2(rect.end.x - r, rect.position.y + r), -PI * 0.5],
+		[Vector2(rect.end.x - r, rect.end.y - r), 0.0],
+		[Vector2(rect.position.x + r, rect.end.y - r), PI * 0.5],
+		[Vector2(rect.position.x + r, rect.position.y + r), PI],
+	]
+	for corner in corners:
+		var centre: Vector2 = corner[0]
+		var start: float = corner[1]
+		for step in range(5):
+			var angle := start + PI * 0.5 * float(step) / 4.0
+			points.append(centre + Vector2(cos(angle), sin(angle)) * r)
+	draw_colored_polygon(points, color)
 
 
 ## How much tape is currently out, in pixels.

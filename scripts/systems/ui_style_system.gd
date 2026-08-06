@@ -239,7 +239,22 @@ static func _style_button(button: Button) -> void:
 		button.theme_type_variation = &"DangerAction"
 	elif node_name in QUIET_ACTIONS:
 		button.theme_type_variation = &"QuietAction"
-	elif node_name.ends_with("Nav") or node_name in ["CurrentSectionButton", "ThemeToggle"]:
+	elif node_name.ends_with("Nav"):
+		## The section buttons live *on the tape*, which is why they get a tier
+		## of their own rather than sharing the strip's.
+		##
+		## Neither control treatment belongs there. A highlighter sweep over a
+		## steel rule is nonsense -- nobody goes over a tape measure with a
+		## marker -- and a stitched edge is worse, since the whole reason the
+		## drawer became a tape is that cloth cannot extend. `TapeAction` sits
+		## outside `INKED_TIERS`, so it gets no outline, no wash and no seam: a
+		## label printed on the rule.
+		##
+		## It is also the tier that makes the tape *thinner than its case*. The
+		## drawer can never be shorter than these buttons demand, so their
+		## content margins are what actually set its height.
+		button.theme_type_variation = &"TapeAction"
+	elif node_name in ["CurrentSectionButton", "ThemeToggle"]:
 		button.theme_type_variation = &"NavAction"
 	elif button.has_method("set_summary") or node_name.ends_with("Card"):
 		## Matched on what the button *is*, not on what the scene file called it.

@@ -85,7 +85,7 @@ theme_override_constants/separation = 8
 
 [node name="CurrentSectionButton" type="Button" parent="Margin/Root/Body/NavStrip/NavStripMargin/NavStripRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(232, 34)
+custom_minimum_size = Vector2(178, 44)
 layout_mode = 2
 tooltip_text = "Open the navigation menu. Tab also opens and closes it."
 text = "Home   ▸   [Tab]"

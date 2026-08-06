@@ -205,6 +205,9 @@ var selected_individual_training_id: int = -1
 var _nav_buttons: Array[Button] = []
 var _nav_dropdown_open: bool = false
 var _nav_tape: UITapeMeasure = null
+
+## How far the tape starts back inside its case, in pixels.
+const TAPE_EMERGENCE_OVERLAP: float = 6.0
 var _nav_tween: Tween
 var _roster_list_expanded: bool = false
 var _attribute_page: int = 0
@@ -432,8 +435,11 @@ func _open_nav_dropdown() -> void:
 		return
 	_nav_dropdown_open = true
 	var strip_rect := nav_strip.get_global_rect()
+	## Emerging from *inside* the case, not starting clear of it. The eight-pixel
+	## gap was what made the tape look like a separate object parked next to a
+	## button; overlapping the housing is what joins them.
 	var origin_x := current_section_button.global_position.x \
-		+ current_section_button.size.x + 8.0
+		+ current_section_button.size.x - TAPE_EMERGENCE_OVERLAP
 	## Both spans are taken from the panel's own combined minimum rather than
 	## from the strip's button or a literal. `Control.size` is silently clamped
 	## up to that minimum and the clipper is not, so any figure below it slices
@@ -450,7 +456,12 @@ func _open_nav_dropdown() -> void:
 	## fixed 1280x720 base so a resized window only ever hands the strip more
 	## room. A wider theme font is what would actually reach it.
 	var panel_minimum := dropdown_panel.get_combined_minimum_size()
-	var drawer_height := maxf(panel_minimum.y, current_section_button.size.y)
+	## The tape is *thinner than its case*, which is the whole of "it comes out
+	## of that". Taking the button's height made the two the same size and the
+	## drawer read as a second strip rather than as something housed in the
+	## first. The panel's own minimum is the floor -- the buttons on the tape
+	## still need room -- and `TapeAction` is what makes that minimum small.
+	var drawer_height := panel_minimum.y
 	var available_width := strip_rect.end.x - 10.0 - origin_x
 	var target_width := maxf(available_width, panel_minimum.x)
 	if target_width > available_width:
@@ -477,6 +488,12 @@ func _open_nav_dropdown() -> void:
 	if _nav_tape != null:
 		_nav_tape.position = Vector2.ZERO
 		_nav_tape.size = Vector2(target_width, drawer_height)
+		## Deferred, and this is the part the comment below promised and the
+		## first cut did not do. Asked during the same frame the drawer opens,
+		## the `HBoxContainer` has not laid its children out yet and every button
+		## but the first still reports x = 0 -- so the marks came back collapsed
+		## on the origin and the tape drew one denomination and then stopped.
+		_refresh_tape_marks.call_deferred()
 	dropdown_panel.position = Vector2.ZERO
 	dropdown_panel.size = Vector2(target_width, drawer_height)
 	dropdown_panel.modulate.a = 1.0
@@ -489,6 +506,37 @@ func _open_nav_dropdown() -> void:
 	## say "press Tab" -- which has just happened. It fades rather than snapping
 	## off so the drawer looks like it is taking the space over.
 	_nav_tween.tween_property(nav_hint, "modulate:a", 0.0, 0.12)
+
+
+## Where the tape's whole denominations fall: on the section buttons' own edges.
+##
+## Handed to the tape rather than derived inside it, because only the drawer
+## knows where its buttons ended up -- they stretch to fill, so their widths
+## depend on the strip. A rule whose numbers land at arbitrary points between
+## the buttons reads as two unrelated things sharing a strip; landing them on
+## the edges makes the buttons look measured out along the tape.
+##
+## Deferred by a frame on the first open, because the `HBoxContainer` has not
+## laid its children out until then and every button would report x = 0.
+func _refresh_tape_marks() -> void:
+	if _nav_tape == null:
+		return
+	var row := dropdown_panel.find_child("Nav", true, false) as Control
+	if row == null:
+		return
+	var origin := _nav_tape.global_position.x
+	var marks := PackedFloat32Array()
+	for child in row.get_children():
+		var button := child as Control
+		if button == null or not button.visible:
+			continue
+		## Global rather than local, because the button sits under a margin
+		## inside a panel inside the clip and adding those offsets up by hand is
+		## three chances to be wrong about a layout that can change.
+		marks.append(button.get_global_rect().end.x - origin)
+	marks.sort()
+	_nav_tape.major_marks = marks
+	_nav_tape.queue_redraw()
 
 
 func _close_nav_dropdown() -> void:
