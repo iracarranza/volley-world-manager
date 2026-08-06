@@ -136,15 +136,17 @@ layout_mode = 2
 size_flags_vertical = 3
 tabs_visible = true
 
-[node name="Overview" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs"]
+[node name="Overview" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs"]
 layout_mode = 2
+theme_override_constants/separation = 14
 
 [node name="Inbox" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs"]
 layout_mode = 2
 
 [node name="HomeCards" type="GridContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview"]
 layout_mode = 2
-size_flags_horizontal = 3
+size_flags_horizontal = 0
+size_flags_vertical = 0
 columns = 3
 
 [node name="RosterCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
@@ -164,7 +166,10 @@ icon_text = "T"
 [node name="ClubCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
+section_id = "Club"
+title_text = "Club"
+summary_text = "Staff, accommodations and sponsorships."
+icon_text = "C"
 
 [node name="TransfersCard" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview/HomeCards" instance=ExtResource("2")]
 unique_name_in_owner = true
@@ -187,8 +192,10 @@ title_text = "Sixnet"
 summary_text = "World league standings and regional power."
 icon_text = "X"
 
-[node name="HomeBody" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview"]
+[node name="HomeBody" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Home/HomeSubTabs/Overview"]
+custom_minimum_size = Vector2(240, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 12
 

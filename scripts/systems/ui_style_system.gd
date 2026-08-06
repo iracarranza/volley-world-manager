@@ -277,6 +277,15 @@ static func _is_hit_area(button: Button) -> bool:
 static func _paper_window(control: Control) -> void:
 	if control.get_node_or_null("PaperWindow") != null:
 		return
+	## Two nodes on the one parent. The slip is a different sheet from the card
+	## it is threaded into, so something has to paint it -- and that something
+	## must draw *before* the region's own text while the cuts and their shadows
+	## draw *after* it. A `CanvasItem` gets one side of its parent or the other,
+	## so this takes both.
+	var slip := UIPaperWindowScript.new()
+	slip.name = "PaperSlip"
+	slip.backing = true
+	control.add_child(slip)
 	var window := UIPaperWindowScript.new()
 	window.name = "PaperWindow"
 	control.add_child(window)

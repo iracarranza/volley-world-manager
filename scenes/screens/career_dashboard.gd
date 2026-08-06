@@ -119,6 +119,7 @@ const WHEEL_TOOLTIPS := {
 ## swap rather than a weight -- which is heavier than a bold body face and
 ## reads at the 13px this band runs at.
 const KEY_ATTRIBUTE_FONT := preload("res://Cherry_Bomb_One/CherryBombOne-Regular.ttf")
+const StarStickerScript := preload("res://scenes/components/star_sticker.gd")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const InboxEventsScript := preload("res://scripts/data/inbox_events.gd")
 const RosterActorScene := preload("res://scenes/components/player_actor_3d.tscn")
@@ -1462,6 +1463,11 @@ func _build_attribute_columns() -> void:
 			## Both labels opt out of `UIStyle`. Their colours are data rather
 			## than decoration -- a grade band on the value, position relevance on
 			## the name -- and the styling pass strips every override it finds.
+			var star := StarStickerScript.new()
+			star.name = "Star"
+			star.custom_minimum_size = Vector2(15.0, 15.0)
+			star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			row.add_child(star)
 			var name_label := Label.new()
 			name_label.name = "Name"
 			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1900,18 +1906,18 @@ func _fill_attribute_column(
 		## good 48. Keys are now the heading face at full-strength ink against a
 		## muted body face, so relevance is legible without spending a hue.
 		var is_position_key := attribute_key in position_keys
-		if is_position_key:
-			name_label.add_theme_font_override("font", KEY_ATTRIBUTE_FONT)
-			name_label.add_theme_font_size_override("font_size", 13)
-			name_label.add_theme_color_override(
-				"font_color", UIPaletteScript.color(&"ink", light_mode)
-			)
-		else:
-			name_label.remove_theme_font_override("font")
-			name_label.add_theme_font_size_override("font_size", 13)
-			name_label.add_theme_color_override(
-				"font_color", UIPaletteScript.color(&"ink_faint", light_mode)
-			)
+		var star: Control = row.get_node("Star")
+		star.visible = is_position_key
+		## Seeded from the attribute rather than from the row, so a given
+		## attribute is crooked the same way wherever it appears and two stars in
+		## the same column are never put on at the same angle.
+		star.sticker_seed = int(attribute_key.hash() & 0x7FFFFFFF)
+		## One face, one weight, one colour, for every row. The list is a list.
+		name_label.remove_theme_font_override("font")
+		name_label.add_theme_font_size_override("font_size", 13)
+		name_label.add_theme_color_override(
+			"font_color", UIPaletteScript.color(&"ink", light_mode)
+		)
 		var score := int(player.get(attribute_key))
 		value_label.text = str(score)
 		value_label.add_theme_color_override("font_color",

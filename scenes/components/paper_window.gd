@@ -75,6 +75,31 @@ const SLOT_END_MARGIN: float = 7.0
 ## The fold across the tab, where it turns back on itself after coming through.
 const TAB_FOLD_ALPHA: float = 0.40
 
+## The slip is a different sheet, and has to look like one.
+##
+## Everything else here says "there is paper under the page" -- the cuts, the
+## shadow falling into them, the tab coming back through -- and then the region
+## itself was exactly the colour of the card it was cut into, which quietly
+## contradicts all of it. Two sheets the same colour are one sheet with lines
+## drawn on it.
+##
+## So the slip takes the page's inset tone, mixed back toward the surface it
+## lies under. Not `surface_inset` straight: that token is meant for a well
+## sunk into the page and at full strength it is a hole, whereas a slip is a
+## *sheet* -- something that came from a different pad, not somewhere the page
+## stops.
+const SLIP_INSET_SHARE: float = 0.55
+
+
+## Whether this node paints the slip rather than the cuts over it.
+##
+## One script, two nodes on the same parent, because a `CanvasItem` draws either
+## before its parent or after it and this needs both: the slip goes under the
+## region's own text, and the cuts and their shadows go over it. A single node
+## would have to pick, and picking "behind" puts the page's shadow *under* the
+## words it is supposed to be falling across.
+@export var backing: bool = false
+
 
 ## Which bars this region has. Resolved once at ready, because the answer comes
 ## from the parent's class rather than from its state.
@@ -95,6 +120,8 @@ func _ready() -> void:
 	if parent == null:
 		return
 	_seed = int(String(parent.name).hash() & 0x7FFFFFFF)
+	if backing:
+		show_behind_parent = true
 	## A `Container` lays its children out and would fit this overlay to the
 	## content area, then scroll it along with the content -- the window would
 	## slide with the paper, which is the one thing a window must not do.
@@ -145,12 +172,41 @@ func _draw() -> void:
 		return
 	var light_mode := UIPalette.control_is_light(self)
 	var ink := UIPalette.color(&"stroke_strong", light_mode)
+	if backing:
+		if _scrollable(_vertical) or _scrollable(_horizontal):
+			_draw_slip(light_mode)
+		return
 	if _scrollable(_vertical):
 		_draw_window(_vertical, true, ink)
 		_draw_pull(_vertical, true, ink, light_mode)
 	if _scrollable(_horizontal):
 		_draw_window(_horizontal, false, ink)
 		_draw_pull(_horizontal, false, ink, light_mode)
+
+
+## The sheet itself, laid in the window before anything is written on it.
+##
+## Bounded by the cuts rather than by the control's rect, so its own edges are
+## the ones the page was opened along -- a slip whose colour stops at a straight
+## line half a pixel inside a jagged cut is two edges disagreeing about where the
+## paper ends.
+func _draw_slip(light_mode: bool) -> void:
+	var surface := UIPalette.color(&"surface_raised", light_mode)
+	var slip := surface.lerp(
+		UIPalette.color(&"surface_inset", light_mode), SLIP_INSET_SHARE
+	)
+	var top := _cut_path(SLIT_WIDTH * 0.5 + 0.5, true, 1302) \
+		if _scrollable(_vertical) else PackedVector2Array([
+			Vector2(0.0, 0.0), Vector2(size.x, 0.0)
+		])
+	var bottom := _cut_path(size.y - SLIT_WIDTH * 0.5 - 0.5, true, 2603) \
+		if _scrollable(_vertical) else PackedVector2Array([
+			Vector2(0.0, size.y), Vector2(size.x, size.y)
+		])
+	var sheet := PackedVector2Array(top)
+	for index in range(bottom.size() - 1, -1, -1):
+		sheet.append(bottom[index])
+	draw_colored_polygon(sheet, slip)
 
 
 ## Whether this bar has anything to say. A region that fits its content is not a

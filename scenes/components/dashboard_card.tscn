@@ -3,8 +3,7 @@
 [ext_resource type="Script" path="res://scenes/components/dashboard_card.gd" id="1"]
 
 [node name="DashboardCard" type="Button"]
-custom_minimum_size = Vector2(224, 146)
-size_flags_horizontal = 3
+custom_minimum_size = Vector2(214, 172)
 script = ExtResource("1")
 
 [node name="Margin" type="MarginContainer" parent="."]
@@ -12,35 +11,28 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 18.0
-offset_top = 8.0
-offset_right = -18.0
-offset_bottom = -8.0
+offset_left = 14.0
+offset_top = 10.0
+offset_right = -14.0
+offset_bottom = -10.0
 mouse_filter = 2
 
-[node name="Row" type="HBoxContainer" parent="Margin"]
+[node name="Stack" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 4
+alignment = 0
 mouse_filter = 2
 
-[node name="IconLabel" type="Label" parent="Margin/Row"]
+[node name="IconLabel" type="Label" parent="Margin/Stack"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(38, 38)
+custom_minimum_size = Vector2(34, 34)
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 26
 text = "•"
-horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
-[node name="Text" type="VBoxContainer" parent="Margin/Row"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 0
-mouse_filter = 2
-
-[node name="TitleLabel" type="Label" parent="Margin/Row/Text"]
+[node name="TitleLabel" type="Label" parent="Margin/Stack"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
@@ -49,14 +41,13 @@ mouse_filter = 2
 autowrap_mode = 2
 max_lines_visible = 2
 
-[node name="SummaryLabel" type="Label" parent="Margin/Row/Text"]
+[node name="SummaryLabel" type="Label" parent="Margin/Stack"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(166, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.7, 0.8, 1)
 theme_override_font_sizes/font_size = 11
 text = "Summary"
 autowrap_mode = 2
-max_lines_visible = 3
+max_lines_visible = 4
 text_overrun_behavior = 3
 mouse_filter = 2
