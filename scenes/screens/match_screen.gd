@@ -212,7 +212,7 @@ func _play_flight(
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.set_ball_trajectory_sample(display_trajectory, progress)
 		match_court_3d.apply_movement_plan(movement_plan, progress)
-		_apply_contact_poses(event, next_contact, after_next, progress)
+		_apply_contact_poses(event, next_contact, after_next, progress, duration)
 		progress_bar.value = (
 			(float(event_index) + progress) / maxf(float(event_count), 1.0)
 		) * 100.0
@@ -273,6 +273,7 @@ func _apply_contact_poses(
 	next_contact: RallyEvent,
 	after_next: RallyEvent,
 	progress: float,
+	window_seconds: float = 1.0,
 ) -> void:
 	match_court_3d.reset_player_poses()
 	var event_actor := int(event.actor_id)
@@ -298,7 +299,7 @@ func _apply_contact_poses(
 		var outgoing_phase := progress
 		var outgoing_lift := outgoing_weight
 		if event.event_type == RallyEventModel.EventType.BLOCK:
-			outgoing_phase = lerpf(BlockBiomechanics.HOLD_END, 1.0, progress)
+			outgoing_phase = _block_withdraw_phase(progress, window_seconds)
 			outgoing_lift = BlockBiomechanics.elevation_at(outgoing_phase)
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
@@ -308,7 +309,7 @@ func _apply_contact_poses(
 		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
 	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
-		var assist_phase := lerpf(BlockBiomechanics.HOLD_END, 1.0, progress)
+		var assist_phase := _block_withdraw_phase(progress, window_seconds)
 		match_court_3d.set_player_pose(
 			event_assist, int(event.event_type),
 			_event_elevation(event, event_assist)
@@ -363,7 +364,7 @@ func _apply_contact_poses(
 		## up, came down, and went up again. That is the block replaying itself.
 		##
 		## This window is the hold, so it ends where the hold ends.
-		var next_phase := progress * BlockBiomechanics.HOLD_END \
+		var next_phase := _block_hold_phase(progress) \
 			if next_is_block else progress - 1.0
 		var next_lift := BlockBiomechanics.elevation_at(next_phase) \
 			if next_is_block else incoming_weight
@@ -373,13 +374,48 @@ func _apply_contact_poses(
 		)
 	var next_assist := int(next_contact.metadata.get("assist_id", -1))
 	if next_assist >= 0 and next_is_block:
+		## Through the same helper as the actor above. These were two call sites
+		## computing the same phase independently, and when the actor's mapping
+		## was corrected this one was not -- so the second blocker went on
+		## running the whole hold-and-withdraw during the attack's flight and
+		## then started again for the deflection, replaying the wall while the
+		## caption still read "block forms".
+		var assist_hold := _block_hold_phase(progress)
 		match_court_3d.set_player_pose(
 			next_assist, int(next_contact.event_type),
 			_event_elevation(next_contact, next_assist)
-				* BlockBiomechanics.elevation_at(progress),
-			progress, next_direction, true,
+				* BlockBiomechanics.elevation_at(assist_hold),
+			assist_hold, next_direction, true,
 		)
 	_apply_early_block(after_next, next_contact, progress)
+
+
+## How long a blocker takes to come down and absorb it, in seconds.
+##
+## A descent is governed by gravity, not by when the next contact happens. The
+## block's withdraw was mapped linearly onto its own flight window, so a
+## deflection that took a second and a half lowered the blocker over a second and
+## a half -- they sank rather than fell. Bounding it in real time means a long
+## window leaves them standing on the floor waiting, which is what actually
+## happens, and a short one still finishes the motion.
+const BLOCK_DESCENT_SECONDS: float = 0.42
+
+
+## Where the block's phase sits during the attack's flight -- the hold.
+##
+## One helper for both blockers. These were two call sites doing the same
+## arithmetic separately, and correcting one and not the other is exactly how
+## the second blocker ended up replaying the wall.
+func _block_hold_phase(progress: float) -> float:
+	return progress * BlockBiomechanics.HOLD_END
+
+
+## And where it sits during the block's own flight -- the withdraw and landing,
+## paced by `BLOCK_DESCENT_SECONDS` rather than by the length of the window.
+func _block_withdraw_phase(progress: float, window_seconds: float) -> float:
+	var elapsed := progress * maxf(window_seconds, 0.0001)
+	var descent := clampf(elapsed / BLOCK_DESCENT_SECONDS, 0.0, 1.0)
+	return lerpf(BlockBiomechanics.HOLD_END, 1.0, descent)
 
 
 ## Put the wall up while the ball is still on its way to the hitter.

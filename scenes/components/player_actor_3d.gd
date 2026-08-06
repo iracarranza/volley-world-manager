@@ -298,7 +298,16 @@ func set_highlighted(highlighted: bool) -> void:
 ##
 ## The depths are ordered so the two that matter tactically -- planted against
 ## reaching -- are unmistakably different at a glance from a court camera.
-func _apply_dig_posture() -> void:
+## `weight` is how far into the platform this instant is, 0 to 1.
+##
+## Wrapping the blend around the whole pose rather than threading it through
+## forty assignments: the joints are captured before the pose runs and eased
+## back toward those captured values afterwards. What is being eased *from* is
+## therefore whatever the frame already had -- the gait, mid-stride -- so a
+## passer running to the ball keeps running and the platform arrives under them.
+func _apply_dig_posture(weight: float = 1.0) -> void:
+	var blend := clampf(weight, 0.0, 1.0)
+	var before := _capture_joints()
 	var knee_bend := 34.0
 	var hip_pitch := -18.0
 	## Small, because the fold now does most of the lowering itself. A squat that
@@ -461,6 +470,64 @@ func _apply_dig_posture() -> void:
 	_set_elbow(left_arm, 0.0)
 	_set_elbow(right_arm, 0.0)
 	_apply_recovery_state()
+	if blend < 0.999:
+		_blend_joints_toward(before, 1.0 - blend)
+
+
+## Every joint this pose writes, as it stands right now.
+##
+## Kept as a plain dictionary of the values rather than a Transform3D snapshot,
+## because only the components the dig actually touches should come back -- the
+## facing, the head look and the elevation are decided elsewhere and must
+## survive the blend untouched.
+func _capture_joints() -> Dictionary:
+	return {
+		"pivot_y": body_pivot.position.y,
+		"pivot_rotation": body_pivot.rotation,
+		"left_arm": left_arm.rotation_degrees,
+		"right_arm": right_arm.rotation_degrees,
+		"left_elbow": (left_arm.get_node("Elbow") as Node3D).rotation_degrees,
+		"right_elbow": (right_arm.get_node("Elbow") as Node3D).rotation_degrees,
+		"left_leg": left_leg.rotation_degrees,
+		"right_leg": right_leg.rotation_degrees,
+		"left_knee": (left_leg.get_node("Knee") as Node3D).rotation_degrees,
+		"right_knee": (right_leg.get_node("Knee") as Node3D).rotation_degrees,
+	}
+
+
+## Ease back toward a captured set of joints by `amount`.
+func _blend_joints_toward(captured: Dictionary, amount: float) -> void:
+	var t := clampf(amount, 0.0, 1.0)
+	body_pivot.position.y = lerpf(body_pivot.position.y, float(captured.pivot_y), t)
+	body_pivot.rotation = body_pivot.rotation.lerp(Vector3(captured.pivot_rotation), t)
+	left_arm.rotation_degrees = left_arm.rotation_degrees.lerp(
+		Vector3(captured.left_arm), t
+	)
+	right_arm.rotation_degrees = right_arm.rotation_degrees.lerp(
+		Vector3(captured.right_arm), t
+	)
+	var left_elbow := left_arm.get_node("Elbow") as Node3D
+	var right_elbow := right_arm.get_node("Elbow") as Node3D
+	left_elbow.rotation_degrees = left_elbow.rotation_degrees.lerp(
+		Vector3(captured.left_elbow), t
+	)
+	right_elbow.rotation_degrees = right_elbow.rotation_degrees.lerp(
+		Vector3(captured.right_elbow), t
+	)
+	left_leg.rotation_degrees = left_leg.rotation_degrees.lerp(
+		Vector3(captured.left_leg), t
+	)
+	right_leg.rotation_degrees = right_leg.rotation_degrees.lerp(
+		Vector3(captured.right_leg), t
+	)
+	var left_knee := left_leg.get_node("Knee") as Node3D
+	var right_knee := right_leg.get_node("Knee") as Node3D
+	left_knee.rotation_degrees = left_knee.rotation_degrees.lerp(
+		Vector3(captured.left_knee), t
+	)
+	right_knee.rotation_degrees = right_knee.rotation_degrees.lerp(
+		Vector3(captured.right_knee), t
+	)
 
 
 ## The four things that can happen to a defender who plays a ball.
@@ -684,6 +751,17 @@ const SQUARE_UP_PHASE := {
 	RallyEventModel.EventType.ATTACK: -0.35,
 }
 const DEFAULT_SQUARE_UP_PHASE: float = -0.60
+
+## When a passer starts bringing their arms together, and when the platform is
+## fully formed.
+##
+## Both on the signed contact phase, so they scale with the flight rather than
+## being a fixed number of milliseconds -- a passer has as long as the ball
+## takes, and a short serve leaves less of it. The platform is complete a little
+## *before* contact, which is what a passer is trying to do: get set, then let
+## the ball arrive at a surface that is already still.
+const PLATFORM_PHASE: float = -0.34
+const PLATFORM_SET_PHASE: float = -0.08
 
 
 func _square_up_phase(event_type: int) -> float:
@@ -939,7 +1017,21 @@ func set_pose(
 			## margin, how deep into the edge of their range the ball was, and how
 			## well their body could face it. Playback reads it; it does not
 			## invent it.
-			_apply_dig_posture()
+			##
+			## **But not for the whole flight.** A passer runs to the ball with
+			## their arms swinging and forms the platform in the last stride --
+			## nobody travels with their forearms already locked together. This
+			## branch ran from phase -1, so a receiver crossed several metres of
+			## court holding a finished platform out in front of them, which is
+			## the single most obviously wrong thing a defender can do.
+			##
+			## Blended rather than switched, and by phase rather than by a timer,
+			## so the arms come together over the approach to contact and are
+			## there when the ball is. Before the blend starts the gait owns the
+			## arms, which is what running looks like.
+			if phase >= PLATFORM_PHASE:
+				_apply_dig_posture(smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase))
+
 		RallyEventModel.EventType.SET:
 			## A set is a *motion*, and drawing only its middle threw away the
 			## half that reads. Preparation is arms up with the elbows carried
