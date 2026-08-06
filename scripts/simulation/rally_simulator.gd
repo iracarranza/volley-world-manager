@@ -1833,6 +1833,9 @@ func resolve(
 			"deflection_target": post_block_target,
 			"coverage_segments": opponent_block_segments,
 			"primary_close": primary_close,
+			"primary_close_terms": Dictionary(
+				block_resolution.get("primary_close_terms", {})
+			),
 			"assist_close": assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			## The wall that was staged, not a second one computed from the
@@ -3187,6 +3190,9 @@ func _resolve_opponent_transition(
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
 			"primary_close": block_result.primary_close,
+			"primary_close_terms": Dictionary(
+				block_result.get("primary_close_terms", {})
+			),
 			"assist_close": block_result.assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			"primary_position": Vector2(home_wall_positions.primary_position),
@@ -3919,6 +3925,9 @@ func _resolve_home_continuation(
 		"Opponent block · exchange %d" % exchange_number,
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
 		"primary_close": primary_close, "assist_close": assist_close,
+		"primary_close_terms": Dictionary(
+			block_result.get("primary_close_terms", {})
+		),
 		"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 		"primary_position": Vector2(cont_wall.primary_position),
 		"assist_position": Vector2(cont_wall.assist_position),
@@ -4148,9 +4157,10 @@ func _form_opponent_block(
 	## and plays the floor. This side had no such term at all, which made the
 	## block philosophy a home-only lever on an axis both benches should own.
 	close_time += (float(opponent_principles.block_commitment) - 0.5) * 0.18
-	var primary_close := _blocker_close_fraction(
+	var primary_terms := _blocker_close_terms(
 		primary, lineup, attack_x, close_time
 	)
+	var primary_close := float(primary_terms.fraction)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	for candidate in front_blockers:
@@ -4173,6 +4183,8 @@ func _form_opponent_block(
 		"assist": assist,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		## Itemised, the same way the home wall reports it.
+		"primary_close_terms": primary_terms,
 		"quality": block_quality,
 		"coverage_segments": _home_block_segments(
 			attack_x, primary, primary_close, assist, assist_close
@@ -7176,9 +7188,10 @@ func _form_home_block(
 		close_time += 0.10 if pin_attack else -0.08
 	elif strategy == "Commit Middle":
 		close_time += 0.10 if not pin_attack else -0.09
-	var primary_close := _blocker_close_fraction(
+	var primary_terms := _blocker_close_terms(
 		primary, lineup, attack_x, close_time
 	)
+	var primary_close := float(primary_terms.fraction)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	for candidate in front_blockers:
@@ -7201,6 +7214,9 @@ func _form_home_block(
 		"assist": assist,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		## The itemised close, so a binary output can be attributed to whichever
+		## of its inputs is bimodal.
+		"primary_close_terms": primary_terms,
 		"quality": block_quality,
 		"outcome": "miss",
 		"coverage_segments": _home_block_segments(
@@ -7235,8 +7251,34 @@ func _blocker_close_fraction(
 	attack_x: float,
 	available_time: float,
 ) -> float:
+	return float(_blocker_close_terms(
+		blocker, lineup, attack_x, available_time
+	).fraction)
+
+
+## The same close, itemised.
+##
+## Kept as the single implementation with `_blocker_close_fraction()` reading its
+## `fraction`, rather than a parallel diagnostic -- a second copy of this
+## arithmetic could drift from the one the wall is built from, and then a probe
+## would report a close no blocker ever had.
+##
+## Worth having because the close came out **binary**: measured across 56 home
+## blocks every percentile was either 0.000 or 1.000, on a formula whose ramp is
+## 0.45 s wide and perfectly capable of returning anything between. Something in
+## its inputs is bimodal and the total cannot say which.
+func _blocker_close_terms(
+	blocker: VolleyballPlayer,
+	lineup: RotationLineup,
+	attack_x: float,
+	available_time: float,
+) -> Dictionary:
 	if blocker == null:
-		return 0.0
+		return {
+			"fraction": 0.0, "required_seconds": 0.0, "usable_time": 0.0,
+			"deficit_seconds": 0.0, "lane_delta": 0.0, "footwork_meters": 0.0,
+			"reaction_delay": 0.0, "available_time": available_time,
+		}
 	var slot_number := lineup.slot_for_player(blocker.id)
 	var start_position: Vector2 = live_positions.get(
 		blocker.id, CourtConstants.slot_position(slot_number)
@@ -7278,10 +7320,23 @@ func _blocker_close_fraction(
 		RallyPlayerState.MovementMode.BLOCK_CLOSE,
 	)
 	var usable_time := maxf(movement_time - BLOCK_PLANT_SECONDS, 0.0)
-	return clampf(
-		1.0 - maxf(required_seconds - usable_time, 0.0) / BLOCK_CLOSE_FAILURE_SECONDS,
-		0.0, 1.0,
-	)
+	var deficit := required_seconds - usable_time
+	return {
+		"fraction": clampf(
+			1.0 - maxf(deficit, 0.0) / BLOCK_CLOSE_FAILURE_SECONDS, 0.0, 1.0
+		),
+		"required_seconds": required_seconds,
+		"usable_time": usable_time,
+		"deficit_seconds": deficit,
+		## How far along the net the blocker had to travel, before and after the
+		## arms are credited. If the deficit is bimodal this is why: a three-slot
+		## front row offers "already there" or "a whole slot away" and nothing in
+		## between.
+		"lane_delta": lane_delta,
+		"footwork_meters": absf(footwork_x - start_x) * CourtConstants.COURT_WIDTH_METERS,
+		"reaction_delay": reaction_delay,
+		"available_time": available_time,
+	}
 
 
 ## How well this hitter's run-up served the swing, as a fraction of an ideal

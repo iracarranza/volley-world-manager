@@ -36,6 +36,9 @@ func _initialize() -> void:
 	var primary := {"home": [], "opponent": []}
 	var assist := {"home": [], "opponent": []}
 	var has_assist := {"home": 0, "opponent": 0}
+	## The discriminating measurement. The close formula ramps over 0.45 s and can
+	## return anything in between, so a binary output means a bimodal input.
+	var terms := {"home": [], "opponent": []}
 	for serving_home in [true, false]:
 		manager.match_state.serving_home = serving_home
 		for seed_value in range(5000, 5000 + RALLIES):
@@ -50,6 +53,11 @@ func _initialize() -> void:
 				var side := str(event.metadata.get("side", ""))
 				if not primary.has(side):
 					continue
+				var itemised := Dictionary(
+					event.metadata.get("primary_close_terms", {})
+				)
+				if not itemised.is_empty():
+					terms[side].append(itemised)
 				if event.metadata.has("primary_close"):
 					primary[side].append(float(event.metadata.primary_close))
 				if event.metadata.has("assist_close"):
@@ -71,6 +79,43 @@ func _initialize() -> void:
 	print("")
 	_report("assist close", assist)
 	print("")
+	print("What the close is built from. `deficit` is required - usable; at or")
+	print("below zero the close is 1.0, at or beyond %.2f it is 0.0, and anything"
+		% 0.45)
+	print("between returns a fraction. A bimodal deficit is the whole story.")
+	print("")
+	for key in [
+		"available_time", "reaction_delay", "usable_time", "required_seconds",
+		"deficit_seconds", "footwork_meters",
+	]:
+		print("  %-18s home %7.3f   opponent %7.3f" % [
+			key, _mean(terms["home"], key), _mean(terms["opponent"], key),
+		])
+	print("")
+	print("deficit_seconds, bucketed. If the middle buckets are empty the close")
+	print("is binary because its input is, and no constant in the block model can")
+	print("change that.")
+	print("")
+	print("%-10s %8s %10s %12s %12s %10s" % [
+		"side", "n", "<= 0", "0 to 0.225", "0.225 to .45", "> 0.45"])
+	for side in ["home", "opponent"]:
+		var pool: Array = terms[side]
+		if pool.is_empty():
+			continue
+		var buckets := [0, 0, 0, 0]
+		for row in pool:
+			var value := float(Dictionary(row).get("deficit_seconds", 0.0))
+			if value <= 0.0:
+				buckets[0] += 1
+			elif value <= 0.225:
+				buckets[1] += 1
+			elif value <= 0.45:
+				buckets[2] += 1
+			else:
+				buckets[3] += 1
+		print("%-10s %8d %10d %12d %12d %10d" % [
+			side, pool.size(), buckets[0], buckets[1], buckets[2], buckets[3]])
+	print("")
 	for side in ["home", "opponent"]:
 		var total: int = (assist[side] as Array).size()
 		print("  %-9s assist present on %d of %d blocks (%.0f%%)" % [
@@ -78,6 +123,15 @@ func _initialize() -> void:
 			float(has_assist[side]) / maxf(float(total), 1.0) * 100.0,
 		])
 	quit()
+
+
+func _mean(pool: Array, key: String) -> float:
+	if pool.is_empty():
+		return 0.0
+	var total := 0.0
+	for row in pool:
+		total += float(Dictionary(row).get(key, 0.0))
+	return total / float(pool.size())
 
 
 func _report(label: String, pools: Dictionary) -> void:

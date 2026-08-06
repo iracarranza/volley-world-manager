@@ -1999,3 +1999,60 @@ their difference for every close, per side. If the difference is bimodal the
 hypothesis holds and the constants are innocent; if it is spread across 0 to
 0.45 s and the *output* is still binary, something downstream is rounding it and
 that is a different defect entirely. Measure before touching either constant.
+
+### The discriminator ran, and it refutes the hypothesis
+
+```
+deficit_seconds, bucketed
+side              n       <= 0   0 to 0.225   0.225 to .45     > 0.45
+home             56         31            4              2         19
+opponent        160        158            2              0          0
+```
+
+**The middle buckets are not empty.** Six of 56 home closes land between the
+extremes. The deficit is strongly bimodal, not binary, and the three-slot-row
+explanation is wrong.
+
+**And the "binary close" reading was a percentile artifact.** Six intermediate
+values out of 56 is 11% -- enough that no decile lands on one, so p10 through p90
+all read 0.000 or 1.000 while the distribution underneath was never two-valued.
+That is section 3 in its plainest form: the percentiles were correct and the
+sentence drawn from them ("nothing in between is ever produced") was not. The
+bucket counts were four lines of work and would have said so immediately.
+
+### What the term actually is
+
+```
+                    home    opponent
+available_time     0.967      1.586
+usable_time        0.431      1.029
+required_seconds   0.345      0.272
+footwork_meters    0.365      0.153
+deficit_seconds   -0.087     -0.757
+```
+
+**`available_time` -- and the previous entry predicted the opposite.** It reasoned
+that the home wall is handed a constant 1.10 s pass-to-release window against the
+opponent's live one, so the window could not be the term. Measured, the home wall
+has 0.967 s of closing time against the opponent wall's 1.586 s: **less than
+two-thirds of it, and less than half once the plant comes off.** Required time and
+footwork are near-identical between the sides. The window is the whole story.
+
+The reason closes the loop on the last four sections. `close_time` is built on
+`set_flight_time`, and each wall closes during the *other* side's set. The home
+side sets tempo 3 on 91% of balls, so the opponent's wall gets ~0.9 s to close and
+always makes it. The opponent sets fast, so the home wall gets ~0.5 s and misses
+45% of the time.
+
+**So the home wall's absence, the block's 5%-vs-31% contact gap, the untunable
+outcome bands, and the dig asymmetry are all one defect: the home offence never
+varies tempo.** It is also why `ENABLE_HOME_MIDDLE_OFFENSE` flipped the symmetry
+ratchet to 0.340 rather than merely moving it -- adding quicks takes closing time
+away from the opponent's wall, which had been getting all it wanted.
+
+**Next: land the tempo work rather than anything in the block.** No constant in
+the block model is implicated -- `WALL_JOIN_CLOSE`, `BLOCK_CLOSE_FAILURE_SECONDS`
+and the preset window are each now measured and cleared. The block bands are fine
+where they can be observed. What the wall needs is an opponent whose sets are not
+uniformly slow and a home side whose sets are not uniformly high, and both of
+those are the offence.
