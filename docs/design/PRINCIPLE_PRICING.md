@@ -3,9 +3,8 @@
 Date: 2026-08-06
 Measured at: `ecd04b4`.
 
-Status: **the measurement is done and the defect is located. No fix is applied
-here.** The last section says exactly what to change and why it was not changed
-in the same pass.
+Status: **measured, one defect fixed, half the gate closed.** §8 records what
+the fix did, what it did not do, and the one band it moved the wrong way.
 
 This exists because a suite gate has been red for a long time under a diagnosis
 nobody had tested — "tempo priced backwards" — and the first thing an isolated
@@ -178,7 +177,7 @@ inert.
 
 ---
 
-## 6. Why no fix in this pass
+## 6. Why no fix in the first pass
 
 The change is a rebalance of the block, and the block's outcome rates sit in
 `REFERENCE_BANDS` with several suite checks on them. `MEASUREMENT_CONFOUNDS.md`
@@ -205,3 +204,124 @@ finding are worth landing on their own; the balance change wants its own pass.
 4. Settle whether `pin_focus` is inert in the fixture or inert everywhere. If
    everywhere, it is a principle the player can set that does nothing, which is
    worse than a missing feature because it reads as working.
+
+
+---
+
+## 8. What the fix did — 2026-08-06, `ccb59b6`+
+
+### The change
+
+One term, in both walls, touching only the assist blocker.
+
+The block's closing budget is mostly *pre-set*. Measured, the window ahead of
+the set runs 0.78–1.07 s and barely moves with tempo, while the set's own
+flight runs 0.20–0.99 s:
+
+| tempo | set flight | close budget | pre-set portion |
+| ---: | ---: | ---: | ---: |
+| 0 | 0.204 | 0.988 | 0.784 (79%) |
+| 1 | 0.380 | 1.266 | 0.886 |
+| 2 | 0.440 | 1.372 | 0.932 |
+| 3 | 0.993 | 2.064 | 1.071 |
+
+At tempo 0, **79% of the blocker's closing time is credited before the ball is
+set**. For the primary that is fair — they are by definition the blocker
+already nearest the attacked lane, so their pre-set time is spent reading. For
+the assist, who has to cross a slot, it credits them with having crossed it
+before the lane was chosen.
+
+`ASSIST_COMMIT_FLIGHT_SECONDS` now bounds what the assist's read can buy by how
+much post-set time they have to *finish* the crossing. Anticipation still pays;
+it just cannot substitute for the ball existing.
+
+The constant is anchored on `primary_close_terms.required_seconds`, which runs
+0.58–0.67 s across tempos 0–2 — the measured cost of a close, and therefore the
+post-set time an assist needs before committing is worth it. **Set to 0.65.**
+Tried first at 0.95, taken from the high ball's own flight, and that was far too
+severe: double blocks fell to 18% at tempo 1 and 24% at tempo 2, which deletes
+the ordinary read block rather than the one that should not have formed.
+
+### Double-block rate by tempo
+
+| tempo | before | at 0.95 | **at 0.65** |
+| ---: | ---: | ---: | ---: |
+| 0 | 0.368 | 0.000 | **0.000** |
+| 1 | 0.823 | 0.182 | **0.374** |
+| 2 | 0.883 | 0.239 | **0.460** |
+| 3 | 0.960 | 0.962 | **0.960** |
+
+A zero-tempo ball now never draws a double block, which is the correction that
+started this: zero tempo is a setter capability, and it has to be *committed*
+to rather than read. The 1→2→3 band has real slope where it was flat.
+
+### What it fixed, and what it did not
+
+The gate's two clauses moved apart completely.
+
+| clause | before | after |
+| --- | ---: | ---: |
+| error rate, Defensive − Physical | −0.0008 | **−0.0352** |
+| kill rate, Defensive − Physical | +0.0574 | +0.0501 |
+
+**The error-rate clause is genuinely fixed.** It was passing on 0.6% — a margin
+indistinguishable from noise, and three of these gates have historically gone
+red purely from an unrelated change shifting the RNG stream. It now passes on
+22%, and for the right reason: a decisive side pressing quick tempo against a
+wall that can no longer double it takes more risk and errs more (0.1440 →
+0.1592) while a conservative one errs less (0.1432 → 0.1241).
+
+**The kill-rate clause is not fixed.** Isolated, `decisiveness` still runs
+0.3875 / 0.3170 / 0.2765 against 0.3977 / 0.3237 / 0.2825 before — essentially
+unmoved. The block was not what was pricing it.
+
+That is a useful negative result. The remaining inversion is **entirely on the
+hitter's side of the chain**: a quicker set costs 35% of the hitter's arrival
+margin, and the identity lever only moves the mean tempo from 1.97 to 1.25,
+where the double-block difference is now 9 points. Nine points of block relief
+does not pay for a third of the approach. Whatever fixes the second clause is a
+change to what a rushed approach costs, not to the wall.
+
+### The regression this caused, and the state it landed in
+
+`stuff_rate` moved from **0.0333 (inside, margin +0.0033) to 0.0243 (outside,
+margin −0.0057)** on the default calibration fixture. Fewer double blocks means
+fewer terminal blocks; that is the change working as designed, and it crossed a
+floor it was already sitting on.
+
+It should be read against the fixture's actual state, which is worse than one
+metric. Measured at 160 samples, **five of eight reference metrics were already
+outside their bands before this change**:
+
+| metric | before | after | band |
+| --- | ---: | ---: | --- |
+| side_out_rate | 0.531 ✗ | 0.556 ✗ | [0.58, 0.78] |
+| ace_rate | 0.000 ✗ | 0.000 ✗ | [0.02, 0.10] |
+| serve_error_rate | 0.141 ✓ | 0.141 ✓ | [0.08, 0.20] |
+| kill_rate | 0.311 ✗ | 0.298 ✗ | [0.38, 0.60] |
+| attack_error_rate | 0.267 ✗ | 0.285 ✗ | [0.06, 0.20] |
+| stuff_rate | 0.033 ✓ | **0.024 ✗** | [0.03, 0.14] |
+| block_touch_rate | 0.051 ✗ | 0.038 ✗ | [0.15, 0.45] |
+| mean_contacts | 6.67 ✓ | 6.67 ✓ | [4.0, 9.0] |
+
+`block_touch_rate` at 0.051 against a floor of 0.15 is the one to notice: the
+wall on this fixture already touches the ball **three times less often than the
+reference band expects**, and that predates this work entirely. Which is worth
+holding beside §4's finding that double blocks *form* on 82% of swings —
+formation and contact are not the same thing, and the gap between them is
+large and unexamined.
+
+**Nothing gates on any of this.** The suite reports 925 checks with the one
+known failure both before and after; the reference bands are computed, printed
+into `outside_reference`, and asserted nowhere. A fixture five metrics out of
+band that no test objects to is its own finding, and a bigger one than the gate
+this pass set out to close.
+
+### Next
+
+1. The hitter's side of the tempo chain — what a rushed approach costs — is
+   what the kill-rate clause is waiting on.
+2. Recalibrate the fixture, or the bands, or gate on them. At present they are
+   documentation.
+3. `block_touch_rate` at a third of its floor, against 82% double-block
+   formation, wants explaining before either of the above is tuned against it.

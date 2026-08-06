@@ -120,6 +120,22 @@ const BLOCK_LATERAL_REACH_METERS: float = 0.45
 ## is released, and a blocker who commits early to the wrong lane is worse off
 ## than one who waited. That uncertainty is what `read_quality` models, so this
 ## is the share a blocker spends moving rather than waiting.
+## How long a set has to be in the air before an assist blocker can bank the
+## whole of their pre-set read.
+##
+## Anchored on the measured cost of a close, not on the length of a high ball.
+## `primary_close_terms.required_seconds` runs 0.58-0.67 s across tempos 0-2 --
+## that is what crossing to a lane actually takes -- so an assist needs about
+## that much *post-set* time before anticipating the lane is worth committing
+## to. Below it they are guessing and cannot recover if they guess wrong.
+##
+## Set at the high end of that band. Tried at 0.95 first, taken from the high
+## ball's own flight, and it was far too severe: double blocks fell to 18% at
+## tempo 1 and 24% at tempo 2, which deletes the ordinary read block rather than
+## the one that should not have formed. Mean set flight for reference: 0.204 s
+## at tempo 0, 0.392 at tempo 1, 0.426 at tempo 2, 1.006 at tempo 3.
+const ASSIST_COMMIT_FLIGHT_SECONDS: float = 0.65
+
 const BLOCK_PRESET_SHARE_MISREAD: float = 0.26
 const BLOCK_PRESET_SHARE_READ: float = 0.72
 
@@ -4338,13 +4354,37 @@ func _form_opponent_block(
 		primary, lineup, attack_x, close_time
 	)
 	var primary_close := float(primary_terms.fraction)
+	## The assist cannot have crossed the court before the setter touched it.
+	##
+	## Both blockers were handed the same budget, and that budget is mostly
+	## *pre-set*: measured, the window ahead of the set runs 0.78-1.07 s and
+	## barely moves with tempo, while the set's own flight runs 0.20-0.99 s. At
+	## tempo 0 that is 79% of the closing time credited before the ball exists.
+	##
+	## For the primary that is fair, and deliberately untouched here. The primary
+	## is by definition the blocker already nearest the attacked lane, so their
+	## pre-set time is spent reading rather than travelling. The assist is the one
+	## who has to cross a slot, and crediting them with having crossed it before
+	## the lane was chosen is what made a first-tempo ball draw a double block
+	## 37% of the time.
+	##
+	## Anticipation still pays -- `preset_share` is the read, and it stays. What
+	## it now buys is bounded by whether there is time to *finish* the crossing
+	## once the set confirms it. A high ball leaves the whole window usable; a
+	## first-tempo ball leaves almost none, which is the entire reason a quick set
+	## beats a double block, and the reason a zero ball has to be committed to
+	## rather than read.
+	var assist_commitment := clampf(
+		maxf(set_flight_time, 0.0) / ASSIST_COMMIT_FLIGHT_SECONDS, 0.0, 1.0
+	)
+	var assist_close_time := close_time - maxf(preset_window_seconds, 0.0) 		* preset_share * (1.0 - assist_commitment)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	for candidate in front_blockers:
 		if candidate.id == primary.id:
 			continue
 		var close_fraction := _blocker_close_fraction(
-			candidate, lineup, attack_x, close_time
+			candidate, lineup, attack_x, assist_close_time
 		)
 		if close_fraction > assist_close:
 			assist = candidate
@@ -7597,13 +7637,37 @@ func _form_home_block(
 		primary, lineup, attack_x, close_time
 	)
 	var primary_close := float(primary_terms.fraction)
+	## The assist cannot have crossed the court before the setter touched it.
+	##
+	## Both blockers were handed the same budget, and that budget is mostly
+	## *pre-set*: measured, the window ahead of the set runs 0.78-1.07 s and
+	## barely moves with tempo, while the set's own flight runs 0.20-0.99 s. At
+	## tempo 0 that is 79% of the closing time credited before the ball exists.
+	##
+	## For the primary that is fair, and deliberately untouched here. The primary
+	## is by definition the blocker already nearest the attacked lane, so their
+	## pre-set time is spent reading rather than travelling. The assist is the one
+	## who has to cross a slot, and crediting them with having crossed it before
+	## the lane was chosen is what made a first-tempo ball draw a double block
+	## 37% of the time.
+	##
+	## Anticipation still pays -- `preset_share` is the read, and it stays. What
+	## it now buys is bounded by whether there is time to *finish* the crossing
+	## once the set confirms it. A high ball leaves the whole window usable; a
+	## first-tempo ball leaves almost none, which is the entire reason a quick set
+	## beats a double block, and the reason a zero ball has to be committed to
+	## rather than read.
+	var assist_commitment := clampf(
+		maxf(set_flight_time, 0.0) / ASSIST_COMMIT_FLIGHT_SECONDS, 0.0, 1.0
+	)
+	var assist_close_time := close_time - maxf(preset_window_seconds, 0.0) 		* preset_share * (1.0 - assist_commitment)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	for candidate in front_blockers:
 		if candidate.id == primary.id:
 			continue
 		var close_fraction := _blocker_close_fraction(
-			candidate, lineup, attack_x, close_time
+			candidate, lineup, attack_x, assist_close_time
 		)
 		if close_fraction > assist_close:
 			assist = candidate
