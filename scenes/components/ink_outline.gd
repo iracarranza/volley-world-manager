@@ -136,28 +136,38 @@ func _outline_points() -> PackedVector2Array:
 		Vector2(EDGE_INSET, EDGE_INSET),
 		size - Vector2(EDGE_INSET, EDGE_INSET) * 2.0
 	)
-	var radius := clampf(
-		_resolved_radius(), 0.0, minf(rect.size.x, rect.size.y) * 0.5
-	)
+	## Four radii, not one. The panel styleboxes deliberately round each corner
+	## differently -- 9/20/12/16 on a card -- which is most of what stops them
+	## reading as machine-cut rectangles, and a pen tracing one radius around all
+	## four undoes exactly that.
+	var limit := minf(rect.size.x, rect.size.y) * 0.5
+	var radii := _resolved_radii()
+	var top_left := clampf(radii.x, 0.0, limit)
+	var top_right := clampf(radii.y, 0.0, limit)
+	var bottom_right := clampf(radii.z, 0.0, limit)
+	var bottom_left := clampf(radii.w, 0.0, limit)
 	## The ring in draw order, clockwise from the top: each side's straight run,
-	## then the arc that turns onto the next side.
+	## then the arc that turns onto the next side. A side's ends are set by the
+	## two corners it runs between, so the runs shorten and lengthen with them.
 	var side_starts := [
-		rect.position + Vector2(radius, 0.0),
-		rect.position + Vector2(rect.size.x, radius),
-		rect.position + Vector2(rect.size.x - radius, rect.size.y),
-		rect.position + Vector2(0.0, rect.size.y - radius),
+		rect.position + Vector2(top_left, 0.0),
+		rect.position + Vector2(rect.size.x, top_right),
+		rect.position + Vector2(rect.size.x - bottom_right, rect.size.y),
+		rect.position + Vector2(0.0, rect.size.y - bottom_left),
 	]
 	var side_ends := [
-		rect.position + Vector2(rect.size.x - radius, 0.0),
-		rect.position + Vector2(rect.size.x, rect.size.y - radius),
-		rect.position + Vector2(radius, rect.size.y),
-		rect.position + Vector2(0.0, radius),
+		rect.position + Vector2(rect.size.x - top_right, 0.0),
+		rect.position + Vector2(rect.size.x, rect.size.y - bottom_right),
+		rect.position + Vector2(bottom_left, rect.size.y),
+		rect.position + Vector2(0.0, top_left),
 	]
+	var arc_radii := [top_right, bottom_right, bottom_left, top_left]
 	var arc_centres := [
-		rect.position + Vector2(rect.size.x - radius, radius),
-		rect.position + Vector2(rect.size.x - radius, rect.size.y - radius),
-		rect.position + Vector2(radius, rect.size.y - radius),
-		rect.position + Vector2(radius, radius),
+		rect.position + Vector2(rect.size.x - top_right, top_right),
+		rect.position
+			+ Vector2(rect.size.x - bottom_right, rect.size.y - bottom_right),
+		rect.position + Vector2(bottom_left, rect.size.y - bottom_left),
+		rect.position + Vector2(top_left, top_left),
 	]
 	var outward := [Vector2.UP, Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT]
 	var path := PackedVector2Array()
@@ -172,6 +182,7 @@ func _outline_points() -> PackedVector2Array:
 				from.lerp(to, float(division) / float(divisions))
 					+ outward[side] * _wander(step)
 			)
+		var radius: float = arc_radii[side]
 		if radius <= 0.5:
 			continue
 		## The turn onto the next side, walked around rather than cut across.
@@ -197,24 +208,28 @@ func _outline_points() -> PackedVector2Array:
 	return path
 
 
-## What radius the surface underneath actually uses.
+## What radii the surface underneath actually uses, clockwise from the top left.
 ##
-## Read from the parent's own stylebox rather than carried as a constant here:
+## Read from the parent's own stylebox rather than carried as constants here:
 ## the two themes are free to round their panels differently, and a pen that
 ## turns at a radius the panel does not use traces an edge that is not there.
 ## `corner_radius` stays as the fallback for a parent with no flat stylebox.
-func _resolved_radius() -> float:
+func _resolved_radii() -> Vector4:
 	var parent := get_parent() as Control
-	if parent == null:
-		return corner_radius
-	var variation := parent.theme_type_variation
-	for style_name: StringName in [&"panel", &"normal"]:
-		if not parent.has_theme_stylebox(style_name, variation):
-			continue
-		var box := parent.get_theme_stylebox(style_name, variation) as StyleBoxFlat
-		if box != null:
-			return float(box.corner_radius_top_left)
-	return corner_radius
+	if parent != null:
+		var variation := parent.theme_type_variation
+		for style_name: StringName in [&"panel", &"normal"]:
+			if not parent.has_theme_stylebox(style_name, variation):
+				continue
+			var box := parent.get_theme_stylebox(style_name, variation) as StyleBoxFlat
+			if box != null:
+				return Vector4(
+					float(box.corner_radius_top_left),
+					float(box.corner_radius_top_right),
+					float(box.corner_radius_bottom_right),
+					float(box.corner_radius_bottom_left),
+				)
+	return Vector4(corner_radius, corner_radius, corner_radius, corner_radius)
 
 
 ## How far off true the pen is at this point along the chain.

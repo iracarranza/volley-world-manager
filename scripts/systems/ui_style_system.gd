@@ -5,12 +5,19 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
 
-## Which surfaces get a drawn edge. The same tiers the halftone screens, minus
-## the raised panel: the largest surface on the screen wants the quietest edge,
-## and a hand-drawn line around the whole content area reads as a border rather
-## than as craft.
+## Which surfaces get a drawn edge.
+##
+## Every panel tier, and the completeness is the point. This started as three of
+## the four on the theory that the largest surface wanted the quietest edge --
+## which was a guess, and wrong in the direction that matters: with the cards
+## drawn by hand and the frame around them cut by machine, the *mixture* is what
+## the eye catches. One instrument drew the page or it did not.
+##
+## `FrontmostPanel` is the exception and cannot be otherwise: it dresses
+## `PopupPanel`, which derives from `Window`, has no `CanvasItem` to draw
+## through, and keeps its stylebox border for that reason.
 const INKED_TIERS: Array[StringName] = [
-	&"CardPanel", &"DashboardCard", &"InsetPanel",
+	&"CardPanel", &"DashboardCard", &"InsetPanel", &"RaisedPanel",
 ]
 
 const PRIMARY_ACTIONS := [

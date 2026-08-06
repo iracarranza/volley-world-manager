@@ -293,6 +293,50 @@ corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 6
 
+[sub_resource type="StyleBoxFlat" id="PanelCardInked"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.063, 0.157, 0.227, 0.98)
+corner_radius_top_left = 9
+corner_radius_top_right = 20
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxFlat" id="PanelCardInkedActive"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.09, 0.22, 0.294, 1)
+corner_radius_top_left = 9
+corner_radius_top_right = 20
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxFlat" id="PanelInsetInked"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.027, 0.063, 0.102, 1)
+corner_radius_top_left = 13
+corner_radius_top_right = 5
+corner_radius_bottom_right = 13
+corner_radius_bottom_left = 7
+
+[sub_resource type="StyleBoxFlat" id="PanelRaisedInked"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.09, 0.22, 0.294, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 24
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 19
+
 [resource]
 default_base_scale = 1.0
 default_font = ExtResource("2_body")
@@ -311,7 +355,7 @@ Button/styles/hover = SubResource("ButtonHover")
 Button/styles/normal = SubResource("ButtonNormal")
 Button/styles/pressed = SubResource("ButtonPressed")
 CardPanel/base_type = &"PanelContainer"
-CardPanel/styles/panel = SubResource("PanelCard")
+CardPanel/styles/panel = SubResource("PanelCardInked")
 CheckButton/colors/font_color = Color(0.961, 0.941, 0.863, 1)
 CheckButton/colors/font_hover_color = Color(0.333, 0.788, 0.757, 1)
 CheckButton/colors/font_pressed_color = Color(0.949, 0.784, 0.294, 1)
@@ -327,9 +371,9 @@ DangerAction/colors/font_color = Color(1, 0.78, 0.75, 1)
 DangerAction/styles/hover = SubResource("DangerNormal")
 DangerAction/styles/normal = SubResource("DangerNormal")
 DashboardCard/base_type = &"Button"
-DashboardCard/styles/hover = SubResource("PanelRaised")
-DashboardCard/styles/normal = SubResource("PanelCard")
-DashboardCard/styles/pressed = SubResource("PanelRaised")
+DashboardCard/styles/hover = SubResource("PanelCardInkedActive")
+DashboardCard/styles/normal = SubResource("PanelCardInked")
+DashboardCard/styles/pressed = SubResource("PanelCardInkedActive")
 DataList/base_type = &"ItemList"
 DisplayHeading/base_type = &"Label"
 DisplayHeading/colors/font_color = Color(1, 0.973, 0.89, 1)
@@ -350,7 +394,7 @@ HBoxContainer/constants/separation = 10
 HSeparator/styles/separator = SubResource("Separator")
 HSplitContainer/constants/separation = 14
 InsetPanel/base_type = &"PanelContainer"
-InsetPanel/styles/panel = SubResource("PanelInset")
+InsetPanel/styles/panel = SubResource("PanelInsetInked")
 ItemList/colors/font_color = Color(0.961, 0.941, 0.863, 1)
 ItemList/colors/font_selected_color = Color(1, 0.93, 0.67, 1)
 ItemList/constants/line_separation = 6
@@ -397,7 +441,7 @@ QuietAction/colors/font_color = Color(0.663, 0.741, 0.776, 1)
 QuietAction/styles/hover = SubResource("ButtonHover")
 QuietAction/styles/normal = SubResource("QuietNormal")
 RaisedPanel/base_type = &"PanelContainer"
-RaisedPanel/styles/panel = SubResource("PanelRaised")
+RaisedPanel/styles/panel = SubResource("PanelRaisedInked")
 RichTextLabel/colors/default_color = Color(0.961, 0.941, 0.863, 1)
 RichTextLabel/colors/font_shadow_color = Color(0, 0, 0, 0.28)
 RichTextLabel/constants/line_separation = 4
