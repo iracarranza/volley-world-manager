@@ -413,6 +413,23 @@ const DIG_EXECUTION_NOISE: float = 0.10
 ## the ball out.
 const ATTACK_OVERREACH_SEVERITY: float = 1.60
 
+## What a metre of dragged-back contact costs the swing.
+##
+## `_reachable_contact` spares a hitter who cannot make the ideal contact by
+## moving the ball to them, and `ENABLE_CLAMPED_ARRIVAL_MARGIN` correctly stops
+## billing them for lateness afterwards. But hitting from a metre further off the
+## net is genuinely worse -- a flatter angle over the tape and a longer ball to
+## the floor -- and with the lateness gone nothing charged that at all. Measured
+## on the displacement fixture, a hitter dragged 0.74 m back came out marginally
+## *better* for it.
+##
+## Sized against the term it replaces rather than chosen. The old lateness charge
+## reached the swing through `swing_deficit * ATTACK_OVERREACH_SEVERITY`, and the
+## arrival component of that deficit ran about 0.66 for a clamped opponent swing
+## -- roughly a metre of drag for roughly a point of deficit. This is that same
+## exchange rate expressed in the channel the cost actually belongs to.
+const CLAMPED_CONTACT_SEVERITY: float = 0.22
+
 ## Sum of the opponent serve-quality weights, used to normalise them.
 const OPPONENT_SERVE_WEIGHT_TOTAL: float = 0.72
 
@@ -1307,10 +1324,14 @@ func resolve(
 				hitter_move_time = float(hitter_leg.seconds)
 				live_velocities[hitter.id] = hitter_leg.exit_velocity
 				hitter_arrival_margin = float(set_flight_time) - hitter_move_time
+	var intended_contact_before_clamp := set_target
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, float(set_flight_time)
 	)
 	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
+	var contact_displacement := _clamp_displacement_meters(
+		intended_contact_before_clamp, set_target
+	)
 	_retarget_set_event(
 		set_event, set_target, "set", float(set_flight_time),
 		float(set_trajectory.get(
@@ -1414,6 +1435,13 @@ func resolve(
 	if swing_deficit > 0.0:
 		result.attack_quality = clampf(
 			float(result.attack_quality) - swing_deficit * ATTACK_OVERREACH_SEVERITY,
+			0.0, 1.0,
+		)
+	## And the ball they had to be spared to reach. See `CLAMPED_CONTACT_SEVERITY`.
+	if contact_displacement > 0.0:
+		result.attack_quality = clampf(
+			float(result.attack_quality)
+				- contact_displacement * CLAMPED_CONTACT_SEVERITY,
 			0.0, 1.0,
 		)
 	var opponent_defenders: Array[Vector2] = []
@@ -2812,11 +2840,15 @@ func _resolve_opponent_transition(
 	var opponent_move_time := float(opponent_leg.seconds)
 	opponent_live_velocities[opponent_hitter.id] = opponent_leg.exit_velocity
 	hitter_arrival_margin = set_flight_time - opponent_move_time
+	var opponent_contact_before_clamp := opponent_contact
 	opponent_contact = _reachable_contact(
 		opponent_approach_start, opponent_contact, opponent_move_time,
 		set_flight_time,
 	)
 	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
+	var opponent_contact_displacement := _clamp_displacement_meters(
+		opponent_contact_before_clamp, opponent_contact
+	)
 	## And so does the lane.
 	##
 	## `opponent_lane` was read off the contact the set *aimed* at, three hundred
@@ -2927,6 +2959,15 @@ func _resolve_opponent_transition(
 	if opponent_swing_deficit > 0.0:
 		opponent_attack = clampf(
 			opponent_attack - opponent_swing_deficit * ATTACK_OVERREACH_SEVERITY,
+			0.0, 1.0,
+		)
+	## The same charge as the home swing's, so the clamp costs both sides the
+	## same thing. Leaving it on one side is how the two halves of the net came
+	## to be two different games in the first place.
+	if opponent_contact_displacement > 0.0:
+		opponent_attack = clampf(
+			opponent_attack
+				- opponent_contact_displacement * CLAMPED_CONTACT_SEVERITY,
 			0.0, 1.0,
 		)
 	## The same geometric swing the home first ball resolves in shadow, on the
@@ -3608,10 +3649,14 @@ func _resolve_home_continuation(
 	var hitter_move_time := float(continuation_leg.seconds)
 	live_velocities[hitter.id] = continuation_leg.exit_velocity
 	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
+	var continuation_contact_before_clamp := set_target
 	set_target = _reachable_contact(
 		hitter_start, set_target, hitter_move_time, continuation_flight_time
 	)
 	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
+	var continuation_displacement := _clamp_displacement_meters(
+		continuation_contact_before_clamp, set_target
+	)
 	var set_event_for_staging := result.events[-1] as RallyEvent
 	_retarget_set_event(
 		set_event_for_staging, set_target, "set", continuation_flight_time,
@@ -3688,6 +3733,11 @@ func _resolve_home_continuation(
 	if continuation_deficit > 0.0:
 		attack_quality = clampf(
 			attack_quality - continuation_deficit * ATTACK_OVERREACH_SEVERITY,
+			0.0, 1.0,
+		)
+	if continuation_displacement > 0.0:
+		attack_quality = clampf(
+			attack_quality - continuation_displacement * CLAMPED_CONTACT_SEVERITY,
 			0.0, 1.0,
 		)
 	## The same wall that pressured the swing, now contested against it. Forming
@@ -5594,6 +5644,23 @@ static func _reachable_contact(
 ##
 ## Returned from beside the clamp rather than recomputed at each call site, so
 ## the rule about when lateness survives lives in one place.
+## How far the reachability clamp had to drag the contact, in metres.
+##
+## The other half of `_clamped_arrival_margin`, and it was missing. Sparing a
+## hitter the lateness is correct -- they are not late to a contact that was
+## moved to them -- but hitting from further off the net is *worse*, and nothing
+## charged them for it. Measured on the displacement fixture: a hitter dragged
+## 0.74 m back off the tape came out with attack quality 0.247 -> 0.252, very
+## slightly *better* for having been displaced across the court.
+##
+## So the clamp had removed a consequence rather than relocating it. This is the
+## consequence, in the channel it actually belongs to.
+static func _clamp_displacement_meters(before: Vector2, after: Vector2) -> float:
+	if not RallyFeatureFlagsModel.ENABLE_CLAMPED_ARRIVAL_MARGIN:
+		return 0.0
+	return RallyKinematics.court_distance_meters(before, after)
+
+
 static func _clamped_arrival_margin(margin_before_clamp: float) -> float:
 	if not RallyFeatureFlagsModel.ENABLE_CLAMPED_ARRIVAL_MARGIN:
 		return margin_before_clamp

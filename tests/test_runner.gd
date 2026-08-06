@@ -10470,6 +10470,7 @@ func _test_spatial_timing_and_tactical_positions() -> void:
 	)
 	baseline_setter_zone.enabled = false
 	var position_effect_observed := false
+	var displacement_report := "(not reached)"
 	var speed_effect_observed := false
 	var timeline_observed := false
 	for seed_value in range(9100, 9500):
@@ -10490,10 +10491,30 @@ func _test_spatial_timing_and_tactical_positions() -> void:
 				moved_attack = event
 				break
 		if base_attack != null and moved_attack != null:
+			## The property is that extreme displacement *hurts the swing*. It used
+			## to be read off the arrival margin, because the model expressed
+			## displacement as lateness -- but `_reachable_contact` moves the ball
+			## to a hitter who cannot reach it, so they are genuinely not late, and
+			## `ENABLE_CLAMPED_ARRIVAL_MARGIN` stopped pretending otherwise.
+			##
+			## The cost now lands where it belongs: the contact is dragged back off
+			## the net and the swing pays for the worse position. Asserted on both,
+			## so the test still fails if displacement stops costing anything --
+			## which it briefly did, and this check is what caught it.
 			position_effect_observed = (
-				float(moved_attack.metadata.get("arrival_margin", 0.0))
-				< float(base_attack.metadata.get("arrival_margin", 0.0)) - 0.60
-				and float(moved_attack.quality) < float(base_attack.quality)
+				float(moved_attack.start_position.y)
+					> float(base_attack.start_position.y) + 0.01
+				and float(moved_attack.quality) < float(base_attack.quality) - 0.05
+			)
+			displacement_report = (
+				"margin %.3f -> %.3f   quality %.3f -> %.3f   contact_y %.3f -> %.3f"
+				% [
+					float(base_attack.metadata.get("arrival_margin", 0.0)),
+					float(moved_attack.metadata.get("arrival_margin", 0.0)),
+					float(base_attack.quality), float(moved_attack.quality),
+					float(base_attack.start_position.y),
+					float(moved_attack.start_position.y),
+				]
 			)
 			var original_speed := displaced.player_by_id(2).transition_speed
 			displaced.player_by_id(2).transition_speed = 98
@@ -10518,7 +10539,11 @@ func _test_spatial_timing_and_tactical_positions() -> void:
 			previous_time = event_time
 		if position_effect_observed and speed_effect_observed and timeline_observed:
 			break
-	_check(position_effect_observed, "extreme hitter displacement reduces arrival and attack quality")
+	_check(
+		position_effect_observed,
+		"extreme hitter displacement reduces arrival and attack quality [%s]"
+			% displacement_report,
+	)
 	_check(speed_effect_observed, "transition speed changes calculated marker travel time")
 	_check(timeline_observed, "rally events expose a monotonic shared clock and duration")
 
