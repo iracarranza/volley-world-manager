@@ -3589,7 +3589,7 @@ func _resolve_home_continuation(
 		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		defense_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
-<<<<<<< Updated upstream
+>>>>>>> Updated upstream
 	var hitter := _fallback_hitter(players, lineup, setter.id, incoming_quality)
 =======
 	var hitter := _fallback_hitter(players, lineup, setter.id)
