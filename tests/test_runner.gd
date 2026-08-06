@@ -208,6 +208,7 @@ func _initialize() -> void:
 	_test_rally_spectacle_and_flow_separation()
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
+	_test_spike_biomechanics_sequence()
 	_test_attack_courses_are_relative_to_the_hitter()
 	_test_attack_power_is_a_choice()
 	_test_hitters_read_a_blurred_picture()
@@ -11727,4 +11728,176 @@ func _test_scouting_crosses_the_net_in_both_directions() -> void:
 		late_mean > early_mean,
 		"the home block reads the opponent better after facing them (%.4f -> %.4f)"
 			% [early_mean, late_mean],
+	)
+
+
+## The spike is a chain, and the chain has an order.
+##
+## Pose work is the one part of this project with no numeric surface to check,
+## which is exactly why the attack pose could sit for months drawing a hitter
+## cocked behind their own head at the frame of contact. `SpikeBiomechanics` is a
+## pure function of phase precisely so that this test can exist.
+func _test_spike_biomechanics_sequence() -> void:
+	const RIGHT := 1.0
+	var contact: Dictionary = SpikeBiomechanics.resolve(0.0, RIGHT)
+	var cock: Dictionary = SpikeBiomechanics.resolve(
+		SpikeBiomechanics.COCK_END, RIGHT
+	)
+	var plant: Dictionary = SpikeBiomechanics.resolve(-1.0, RIGHT)
+	## The *deepest* part of the plant, which is its end rather than its start --
+	## at -1.0 the load has not begun yet, which is what this test asserted the
+	## first time it was written.
+	var loaded: Dictionary = SpikeBiomechanics.resolve(
+		SpikeBiomechanics.PLANT_END, RIGHT
+	)
+
+	## The defect this whole change exists to fix: at contact the arm is over the
+	## ball, not behind the head. -180 is straight overhead, so anything shallower
+	## than that is still cocked.
+	_check(
+		float(contact.striking_shoulder_degrees) < -180.0,
+		"spike contact reaches past vertical (%.1f)"
+			% float(contact.striking_shoulder_degrees),
+	)
+	_check(
+		float(contact.striking_elbow_degrees) < 20.0,
+		"spike contact extends the elbow (%.1f)"
+			% float(contact.striking_elbow_degrees),
+	)
+	## And the plant is on the floor with the arms behind, which is the half of
+	## the action the old single-sweep pose did not draw at all.
+	_check(
+		float(plant.striking_shoulder_degrees) > 20.0,
+		"spike plants with the arm behind the hips (%.1f)"
+			% float(plant.striking_shoulder_degrees),
+	)
+	_check(
+		float(loaded.knee_degrees) < -50.0,
+		"spike plants with the knees loaded (%.1f)" % float(loaded.knee_degrees),
+	)
+
+	## Proximal to distal. The knee reaches full extension before the shoulder
+	## reaches contact, and the elbow opens after the shoulder has -- if these
+	## ever run together the pose is a windmill again and nothing else in this
+	## file would notice.
+	## Measured as "half of the travel from the cocked value to the contact
+	## value", scanning forward from the cock. A bare threshold does not work
+	## here: the elbow starts the whole action at 28 degrees, so "elbow below 60"
+	## is true at the plant and reports the ordering backwards, which is what the
+	## first version of this check did.
+	var knee_extended_at := _first_phase_where(
+		-1.0, func(row: Dictionary) -> bool:
+			return float(row.knee_degrees) > -12.0
+	)
+	var shoulder_driving_at := _midpoint_phase(
+		SpikeBiomechanics.COCK_END, "striking_shoulder_degrees", cock, contact
+	)
+	var elbow_opening_at := _midpoint_phase(
+		SpikeBiomechanics.COCK_END, "striking_elbow_degrees", cock, contact
+	)
+	_check(
+		knee_extended_at < shoulder_driving_at,
+		"knees extend before the shoulder drives (%.2f before %.2f)"
+			% [knee_extended_at, shoulder_driving_at],
+	)
+	_check(
+		shoulder_driving_at <= elbow_opening_at,
+		"the elbow opens no earlier than the shoulder (%.2f then %.2f)"
+			% [shoulder_driving_at, elbow_opening_at],
+	)
+
+	## The bow: the trunk is arched backward at the cock and flexed forward
+	## through the follow-through. A spike with no sign change here has no torso
+	## in it, which is what the fixed -0.16 lean was.
+	_check(
+		float(cock.torso_pitch_radians) > 0.0,
+		"the trunk arches at the cock (%.3f)" % float(cock.torso_pitch_radians),
+	)
+	_check(
+		float(SpikeBiomechanics.resolve(0.30, RIGHT).torso_pitch_radians) < -0.2,
+		"the trunk flexes through the follow-through",
+	)
+
+	## Handedness mirrors the twist and nothing else -- the swing is the same
+	## swing either way.
+	var left: Dictionary = SpikeBiomechanics.resolve(
+		SpikeBiomechanics.COCK_END, -1.0
+	)
+	_check(
+		is_equal_approx(
+			float(left.torso_twist_degrees), -float(cock.torso_twist_degrees)
+		),
+		"handedness mirrors the trunk twist",
+	)
+	_check(
+		is_equal_approx(
+			float(left.striking_shoulder_degrees),
+			float(cock.striking_shoulder_degrees),
+		),
+		"handedness does not change the swing itself",
+	)
+
+	## Continuity. The pose is sampled every frame across two playback windows,
+	## so a discontinuity anywhere in phase is a limb visibly teleporting -- the
+	## exact symptom that started this. Nothing may jump more than a few degrees
+	## between adjacent samples.
+	var worst_jump := 0.0
+	var worst_at := 0.0
+	var previous: Dictionary = SpikeBiomechanics.resolve(-1.0, RIGHT)
+	for step in range(1, 401):
+		var phase := -1.0 + float(step) / 200.0
+		var current: Dictionary = SpikeBiomechanics.resolve(phase, RIGHT)
+		for key in [
+			"striking_shoulder_degrees", "striking_elbow_degrees",
+			"guide_shoulder_degrees", "knee_degrees",
+		]:
+			var jump: float = absf(float(current[key]) - float(previous[key]))
+			if jump > worst_jump:
+				worst_jump = jump
+				worst_at = phase
+		previous = current
+	## Sized to separate a whip from a teleport, not to forbid speed. The elbow
+	## genuinely travels 111 degrees through contact and playback samples the
+	## pose far more coarsely than this loop does; the defect this guards against
+	## was a limb jumping more than a hundred degrees in a single frame.
+	_check(
+		worst_jump < 9.0,
+		"the swing is continuous in phase (worst %.2f degrees at %.2f)"
+			% [worst_jump, worst_at],
+	)
+
+	## And it names where it is, so a diagnostic can report a phase rather than
+	## nine angles.
+	_check(
+		str(SpikeBiomechanics.resolve(-0.9, RIGHT).phase_name) == "plant"
+		and str(SpikeBiomechanics.resolve(-0.05, RIGHT).phase_name) == "acceleration"
+		and str(SpikeBiomechanics.resolve(0.8, RIGHT).phase_name) == "landing",
+		"the swing names its own phase",
+	)
+
+
+## The first phase at which a predicate becomes true, scanning the whole swing.
+## Returns +INF if it never does, so an ordering check fails loudly rather than
+## comparing two zeroes.
+func _first_phase_where(from_phase: float, predicate: Callable) -> float:
+	for step in range(0, 401):
+		var phase := -1.0 + float(step) / 200.0
+		if phase < from_phase:
+			continue
+		if bool(predicate.call(SpikeBiomechanics.resolve(phase, 1.0))):
+			return phase
+	return INF
+
+
+## Where a joint is halfway between two named poses. Scanning for a *fraction of
+## its own travel* rather than an absolute angle is what makes two segments with
+## completely different ranges comparable in time.
+func _midpoint_phase(
+	from_phase: float, key: String, start: Dictionary, finish: Dictionary
+) -> float:
+	var midpoint := (float(start[key]) + float(finish[key])) * 0.5
+	var descending := float(finish[key]) < float(start[key])
+	return _first_phase_where(from_phase, func(row: Dictionary) -> bool:
+		return float(row[key]) < midpoint if descending \
+			else float(row[key]) > midpoint
 	)

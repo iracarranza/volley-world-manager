@@ -590,6 +590,24 @@ func _set_elbow(arm: Node3D, bend_degrees: float) -> void:
 		elbow.rotation_degrees = Vector3(bend_degrees, 0.0, 0.0)
 
 
+## Pose this voli for one instant of one contact.
+##
+## **`phase` is signed, and contact is at 0.** It runs -1 at the start of the
+## wind-up, through 0 at the moment the ball is struck, to +1 at the end of the
+## follow-through -- which means it spans *two* playback windows: the negative
+## half plays during the incoming ball's flight and the positive half during the
+## outgoing one.
+##
+## It used to be 0 to 1 within each window independently, and the cost of that
+## was not subtle. Every contact pose was drawn one whole window late: the
+## attacker was cocked behind their head at the frame the ball left their hand,
+## the server the same, the setter still gathering. Worse, the attacker is posed
+## in *both* windows -- once as the upcoming contact and once as the current one
+## -- so the entire swing played through during the approach, snapped back to
+## fully cocked at the instant of contact, and played again while the ball was
+## already crossing the net. Elevation was continuous across that boundary and
+## only the arms teleported, which is why it read as a broken limb rather than a
+## timing error.
 func set_pose(
 	event_type: int,
 	elevation: float,
@@ -649,7 +667,15 @@ func set_pose(
 	match event_type:
 		RallyEventModel.EventType.SERVE:
 			body_pivot.rotation.x = -0.10
-			var serve_swing := clampf(phase * 1.8, 0.0, 1.0)
+			## Contact is at phase 0, so the toss and the swing happen on the
+			## negative side and only the follow-through is left afterwards. Read
+			## the old way -- `phase * 1.8`, starting at zero -- the server was
+			## drawn fully cocked at the instant the ball left their hand and swung
+			## through it while the serve was already crossing the net.
+			##
+			## Saturates just before zero so the arm is at full extension *through*
+			## the ball rather than arriving exactly on it.
+			var serve_swing := clampf((phase + 1.0) * 1.25, 0.0, 1.0)
 			## Up and a little in front at contact, and the toss arm raised in
 			## front rather than behind the shoulder.
 			striking_arm.rotation_degrees.x = -190.0 * serve_swing
@@ -688,7 +714,10 @@ func set_pose(
 			## The elbow does the work: at 98 degrees the forearms are vertical
 			## beside the head, and opening toward 22 is the push. Rotating the
 			## shoulder alone would swing the whole arm through the ball.
-			var release := clampf(phase, 0.0, 1.0)
+			## Same correction as the serve: the preparation runs up to contact at
+			## phase 0, not away from it. Drawn the old way the setter was still
+			## gathering the ball at the moment it left their hands.
+			var release := clampf(phase + 1.0, 0.0, 1.0)
 			var set_pitch := lerpf(96.0, 132.0, release)
 			## **The hands are together, because the ball is between them.**
 			##
@@ -701,7 +730,11 @@ func set_pose(
 			## Positive rolls the hand toward the centreline, so the left arm
 			## takes `+flare` and the right `-flare` -- the opposite of what a
 			## spread would use.
-			var follow := clampf((release - 0.78) / 0.22, 0.0, 1.0)
+			## The follow-through opens the hands outward once the ball has gone,
+			## so it is keyed off the positive side of contact rather than off the
+			## tail of the release -- which, now that the release saturates at
+			## contact, would have opened them while the ball was still in them.
+			var follow := clampf(phase / 0.45, 0.0, 1.0)
 			var set_flare := lerpf(lerpf(21.0, 15.0, release), -20.0, follow)
 			left_arm.rotation_degrees = Vector3(set_pitch, 0.0, set_flare)
 			right_arm.rotation_degrees = Vector3(set_pitch, 0.0, -set_flare)
@@ -709,23 +742,37 @@ func set_pose(
 			_set_elbow(left_arm, set_elbow)
 			_set_elbow(right_arm, set_elbow)
 		RallyEventModel.EventType.ATTACK:
-			body_pivot.rotation.x = -0.16
-			left_leg.rotation_degrees.x = 18.0
-			right_leg.rotation_degrees.x = -26.0
-			guide_arm.rotation_degrees.x = -95.0
-			var swing := clampf(phase, 0.0, 1.0)
-			## Sweeps *over the top*: cocked up and back at -160, carrying on
-			## through vertical to -260, which is forward and slightly up. Going
-			## the other way -- increasing toward -80 -- swung the arm down behind
-			## the player, which is what it used to do.
-			striking_arm.rotation_degrees.x = -160.0 - 100.0 * swing
-			## Elbow high and folded behind the head, opening through contact. A
-			## straight arm rotating from behind the ear is a windmill; a hitter is
-			## a whip, and the difference is visible from any distance the attack
-			## is watched at.
-			_set_elbow(striking_arm, lerpf(112.0, 6.0, swing))
-			## The guide arm pulls down bent, which is what it actually does.
-			_set_elbow(guide_arm, 46.0)
+			## Every joint comes from `SpikeBiomechanics`, which staggers them so
+			## the legs extend before the trunk arches, the trunk before the
+			## shoulder, and the elbow opens last. This branch used to interpolate
+			## one `swing` value into all of them at once, which moved the whole
+			## body as a single rigid unit -- and held the legs at a fixed stride
+			## and the torso at a fixed lean for the entire action, so a spike had
+			## no jump in it at all.
+			##
+			## Kept in its own module rather than inline because it is the only
+			## pose in the game complex enough that it cannot be checked by
+			## reading it, and a pure function of phase is one the suite can test.
+			var swing := SpikeBiomechanics.resolve(
+				phase, -1.0 if dominant_hand == "Left" else 1.0
+			)
+			body_pivot.rotation.x = float(swing.torso_pitch_radians)
+			## Hip-shoulder separation. Applied here rather than by turning the
+			## actor, because `_turn_toward` is where the voli is *looking* and
+			## this is the trunk winding against it.
+			body_pivot.rotation.y += deg_to_rad(float(swing.torso_twist_degrees))
+			var lead_leg := left_leg if dominant_hand == "Left" else right_leg
+			var trail_leg := right_leg if dominant_hand == "Left" else left_leg
+			lead_leg.rotation_degrees.x = float(swing.lead_hip_degrees)
+			trail_leg.rotation_degrees.x = float(swing.trail_hip_degrees)
+			for leg in [left_leg, right_leg]:
+				(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
+					swing.knee_degrees
+				)
+			striking_arm.rotation_degrees.x = float(swing.striking_shoulder_degrees)
+			_set_elbow(striking_arm, float(swing.striking_elbow_degrees))
+			guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
+			_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
 		RallyEventModel.EventType.BLOCK:
 			## A block *presses*. Straight up is a player reaching; over the net
 			## is a player taking space, and the difference is a slight forward

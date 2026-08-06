@@ -283,17 +283,27 @@ func _apply_contact_poses(event: RallyEvent, next_contact: RallyEvent, progress:
 	var next_actor := int(next_contact.actor_id)
 	var next_peak := _event_elevation(next_contact, next_actor)
 	var next_direction := next_contact.end_position - next_contact.start_position
+	## The wind-up half of the phase, which is why it is `progress - 1`.
+	##
+	## `set_pose` takes a signed phase with contact at zero, so the approach runs
+	## -1 to 0 across the *incoming* ball's flight and the follow-through runs 0
+	## to +1 across the outgoing one. Passing bare `progress` here handed the
+	## upcoming contact a phase that ran 0 to 1 during its approach and then
+	## restarted at 0 the moment it became the current event -- so the swing
+	## played out completely, snapped back to fully cocked at the frame of
+	## contact, and played again. Elevation was already continuous across that
+	## seam, so only the arms jumped.
 	if not same_actor or not draw_outgoing:
 		match_court_3d.set_player_pose(
 			next_actor, int(next_contact.event_type),
-			next_peak * incoming_weight, progress, next_direction, true,
+			next_peak * incoming_weight, progress - 1.0, next_direction, true,
 		)
 	var next_assist := int(next_contact.metadata.get("assist_id", -1))
 	if next_assist >= 0 and next_contact.event_type == RallyEventModel.EventType.BLOCK:
 		match_court_3d.set_player_pose(
 			next_assist, int(next_contact.event_type),
 			_event_elevation(next_contact, next_assist) * smoothstep(0.48, 1.0, progress),
-			progress, next_direction, true,
+			progress - 1.0, next_direction, true,
 		)
 
 
