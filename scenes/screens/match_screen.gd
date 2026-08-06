@@ -194,8 +194,11 @@ func _play_flight(
 	event_count: int,
 	generation: int,
 ) -> void:
-	var duration := clampf(float(trajectory.get("duration", 0.5)), 0.08, 3.5)
+	## Read from the *display* trajectory, not the source one. A flight cut short
+	## at an interception carries a shortened duration, and taking the original
+	## would spend the full time on the shortened path.
 	var display_trajectory := _display_trajectory(event, next_contact, trajectory)
+	var duration := clampf(float(display_trajectory.get("duration", 0.5)), 0.08, 3.5)
 	var movement_plan := _build_movement_plan(event, next_contact)
 	var elapsed := 0.0
 	match_court_3d.ball_actor.reset_flight()
@@ -288,18 +291,29 @@ func _apply_contact_poses(
 	var same_actor := next_contact != null and int(next_contact.actor_id) == event_actor
 	var draw_outgoing := not same_actor or outgoing_weight >= incoming_weight
 	if draw_outgoing:
+		## A block arrives here already partway through its own phase. The hold
+		## ran during the attack's flight, so this window -- the deflection's --
+		## is the withdraw and the landing, and starting it at 0 would replay the
+		## wall going up for a third time.
+		var outgoing_phase := progress
+		var outgoing_lift := outgoing_weight
+		if event.event_type == RallyEventModel.EventType.BLOCK:
+			outgoing_phase = lerpf(BlockBiomechanics.HOLD_END, 1.0, progress)
+			outgoing_lift = BlockBiomechanics.elevation_at(outgoing_phase)
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
-			event_peak * outgoing_weight, progress, event_direction, true,
+			event_peak * outgoing_lift, outgoing_phase, event_direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
 		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
 	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
+		var assist_phase := lerpf(BlockBiomechanics.HOLD_END, 1.0, progress)
 		match_court_3d.set_player_pose(
 			event_assist, int(event.event_type),
-			_event_elevation(event, event_assist) * outgoing_weight,
-			progress, event_direction, true,
+			_event_elevation(event, event_assist)
+				* BlockBiomechanics.elevation_at(assist_phase),
+			assist_phase, event_direction, true,
 		)
 	if next_contact == null:
 		return
@@ -338,7 +352,19 @@ func _apply_contact_poses(
 		##
 		## So the positive half of the phase runs here, and the negative half is
 		## drawn one window earlier, below.
-		var next_phase := progress if next_is_block else progress - 1.0
+		## The positive half of a block's phase is split across *two* windows, not
+		## spent entirely in this one.
+		##
+		## A block spans three flights: the set's, during which the wall goes up;
+		## the attack's, during which it holds while the ball crosses to it; and
+		## its own deflection's, during which it comes down. Running 0 to 1 here
+		## played the hold *and* the withdraw while the ball was still arriving,
+		## and then the block's own window started over from 0 -- so the wall went
+		## up, came down, and went up again. That is the block replaying itself.
+		##
+		## This window is the hold, so it ends where the hold ends.
+		var next_phase := progress * BlockBiomechanics.HOLD_END \
+			if next_is_block else progress - 1.0
 		var next_lift := BlockBiomechanics.elevation_at(next_phase) \
 			if next_is_block else incoming_weight
 		match_court_3d.set_player_pose(
@@ -612,6 +638,13 @@ func _terminate_at_next_contact(
 		## Nothing touched it next, so the aimed landing point is the truth: this
 		## is a ball hitting the floor.
 		return
+	if not next_contact.success:
+		## And a contact that *failed* is a ball nobody touched. A defender who
+		## could not reach the line attack after moving a metre did not stop it;
+		## dragging the flight to their feet drew the ball teleporting into
+		## somebody who visibly never played it, then bouncing off nothing.
+		## The aimed landing point is where it actually went.
+		return
 	terminate_trajectory(display, Vector2(next_contact.start_position))
 
 
@@ -630,6 +663,15 @@ static func terminate_trajectory(display: Dictionary, touched: Vector2) -> void:
 	)
 	display["end_position"] = touched
 	display["control_position"] = start.lerp(control, share)
+	## The time has to come down with the distance.
+	##
+	## Cutting the path and keeping the duration was the whole of "the ball
+	## freezes in place": a spike intercepted 30% of the way to its floor target
+	## still spent the full flight covering that third, so it crawled from the
+	## hitter to the block over most of a second and then sat there. The ball is
+	## the same ball travelling at the same speed; it simply stops sooner.
+	if display.has("duration"):
+		display["duration"] = maxf(float(display["duration"]) * share, 0.08)
 
 
 func _event_contact_height(event: RallyEvent) -> float:
