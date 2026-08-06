@@ -1280,13 +1280,66 @@ not the measurement, and not the claim. **The opponent's staged defensive shape
 is positioned 0.30 m worse for the balls it actually faces**, and that is the one
 thing left standing.
 
-Where to look: the home side stages through `_home_floor_phase_positions` with
-`floor_phase_positions` computed per attack, the opponent through
-`_floor_phase_positions(..., opponent_side = true)` into `opponent_live_positions`.
-Aggregate depth and lateral spread come out similar -- home 3.72 m / 1.25 m
-against opponent 4.07 m / 1.20 m -- so the shape is not obviously wrong in bulk.
-What has not been checked is whether it *shades* to the attack the way the home
-shape does. A symmetric shape and a targeted shape can have identical means.
+### Shading, checked -- neither side does it
+
+`tools/run_defensive_shading_probe.gd` measures how far each shape's centroid
+moves per metre the attack lane moves:
+
+  side       n    lane sd   centroid sd   slope
+  home      50      0.250        0.014    0.019
+  opponent  69      0.025        0.009    0.085
+
+**Neither shape shades.** Centroid movement is 0.014 and 0.009 in normalised x --
+0.13 m and 0.08 m across the whole sample -- so both are effectively static and
+shading is ruled out as the differentiator. The opponent's 0.085 slope is fitting
+noise; with a centroid spread of 0.009 against a lane spread of 0.025 there is
+nothing there to regress.
+
+That both sides stage a fixed shape is worth knowing on its own. A defence that
+does not move with the attack is a defence that cannot be out-positioned *or*
+well-positioned, and the 0.30 m best-available gap therefore comes from where the
+two fixed shapes sit relative to where balls arrive, not from one reacting better
+than the other.
+
+### The unlooked-for finding: home attacks come from one place
+
+`lane sd` is 0.025 for the attacks the opponent defends and 0.250 for the attacks
+the home side defends -- a factor of ten. The home hitter contacts at an almost
+fixed x, about 0.22 m of spread, while opponent contacts range over 2.25 m.
+
+The home offence is not using the width of the court. That is upstream of the dig
+question and probably upstream of several others: a fixed contact lane means the
+crossing point, the block's staging and the defence's shape are all being asked
+to cover a distribution that barely exists on one side and is wide on the other.
+It also sits directly beside the reported playback behaviour of an outside hitter
+running parallel to the net rather than into it, which would be the same defect
+seen from the approach end.
+
+Measure the contact-x distribution per side and per lane assignment before
+touching the defensive shape; a 0.30 m shape gap is small next to an offence that
+attacks from one spot.
+
+**Observed independently in debug playback, and it matches term for term.** Out
+of solid serve receive the home offence overwhelmingly plays: a T2 set, a
+controlled roll against a *single* blocker, into short court, landing where the
+nearest defender has to cover 1.3-2.2 m and cannot.
+
+Every one of those has a number beside it already:
+
+- *one place* -- contact-x spread of 0.025 against the opponent's 0.250
+- *single blocker* -- 190 one-blocker walls against 126 doubles
+- *controlled roll* -- the shot-type downgrade `ENABLE_UNIFIED_ATTACK_SHAPE`
+  documents, where a set quality below 0.38 drops the swing to a roll
+- *1.3-2.2 m and cannot* -- opponent dig distance of 1.828 m at a 25% success rate
+
+So this is not a defensive hole being exploited by a varied offence. It is **one
+shot, repeated**, because the decision layer has found a dominant option and has
+no reason to leave it. The defence being 0.30 m out of position is the least
+interesting thing in that sentence.
+
+That reframes the order of work. Shot selection comes before defensive shape:
+a defence tuned against an offence that plays one ball from one place will be
+mistuned the moment the offence stops doing that.
 
 Both want their own fix. Neither is the attack-symmetry ratchet, and treating
 them as one thing is what produced the wrong answer above.
