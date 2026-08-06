@@ -6687,6 +6687,16 @@ func _test_3d_playback_contract() -> void:
 		"movement_start": Vector2(0.32, 0.24),
 		"movement_target": block.start_position,
 		"assist_id": 102,
+		## The reacting unit comes from the resolver now, not from playback.
+		##
+		## This fixture used to omit it and rely on `_support_target`, which lerped
+		## *every* player on the court toward the action by a fixed fraction --
+		## so the assist blocker appeared in the plan because everybody did. Real
+		## attacks publish these: measured over 60 rallies, 54 of 59 carry
+		## `opponent_phase_targets` with 5.1 positions each, which is the block
+		## being staged. The behaviour is unchanged in the game; the test was
+		## leaning on the invention rather than on the data.
+		"opponent_phase_targets": {102: Vector2(0.60, 0.47)},
 	}
 	var movement_plan := screen._build_movement_plan(attack, block)
 	_check(
@@ -6694,6 +6704,23 @@ func _test_3d_playback_contract() -> void:
 			and Vector2(movement_plan[101]["target"]).is_equal_approx(block.start_position)
 			and movement_plan.has(102),
 		"3D transitions move the next contact actor and the reacting unit together",
+	)
+	## And the other half of the same rule: a player the resolver said nothing
+	## about, who is not playing the ball, stays where they are. Twelve volis
+	## used to edge toward every contact for the whole rally -- including through
+	## serve receive, where the resolver publishes no positions at all and so had
+	## no opinion being followed.
+	var bystander := 0
+	for raw_player_id in screen.match_court_3d.live_positions:
+		var player_id := int(raw_player_id)
+		if player_id in [101, 102, int(attack.actor_id)]:
+			continue
+		if movement_plan.has(player_id):
+			bystander += 1
+	_check(
+		bystander == 0,
+		"players with no published target and no ball to play stay put (%d moved)"
+			% bystander,
 	)
 	_check(
 		screen._event_elevation(attack, 1) > 0.8

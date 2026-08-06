@@ -25,6 +25,13 @@ var playback_generation: int = 0
 ## started somewhere else. Kept rather than absorbed: each entry is a leg the
 ## simulator timed from a position playback never walked them to, and the list
 ## going up is how that gets noticed.
+##
+## "How that gets noticed" was aspirational until now. This array was declared,
+## cleared at the start of every rally, and appended to -- and read by nothing,
+## anywhere, ever. It is an instrument recording exactly the "the player
+## credited with that touch was never standing there" symptom, and the symptom
+## had to be reported by somebody watching a rally because nothing consulted the
+## thing built to catch it. `playback_geometry_report()` is the missing half.
 var playback_start_mismatches: Array[Dictionary] = []
 var playback_paused: bool = false
 var skip_requested: bool = false
@@ -389,19 +396,37 @@ func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictio
 	var plan := {}
 	if next_contact == null:
 		return plan
-	var action_target := Vector2(next_contact.metadata.get(
-		"movement_target", next_contact.start_position
-	))
-	var event_is_home := _event_is_home(next_contact)
-	for raw_player_id in match_court_3d.live_positions:
-		var player_id := int(raw_player_id)
-		var start := Vector2(match_court_3d.live_positions[raw_player_id])
-		var home_team := match_court_3d.home_player_ids.has(player_id)
-		var target := _support_target(
-			start, action_target, int(next_contact.event_type), home_team, event_is_home
-		)
-		if start.distance_to(target) > 0.002:
-			plan[player_id] = {"start": start, "target": target}
+	## Where the ball will next be played from. The event's own `start_position`,
+	## not its `movement_target` -- those disagree by more than 15 cm on 39% of
+	## contacts and by up to 5.7 m, and the one the *ball* is drawn to is the
+	## contact position. A player driven to the other one stands away from the
+	## ball they are supposedly playing.
+	var action_target := Vector2(next_contact.start_position)
+	## Nobody moves unless something actually says they move.
+	##
+	## This loop used to hand every player on the court a target, computed by
+	## lerping them toward the action by a fixed fraction -- 0.08 if they were
+	## front row, 0.15 if not, 0.18 for a block, and so on. Not derived from
+	## anything: not whether the player could reach the ball, not whether they
+	## had a role in the phase, not what the resolver thought. Twelve volis
+	## edged toward every contact for the whole rally because a 2D top-down view
+	## once needed the court to look alive.
+	##
+	## The measurement that settles it: across 60 rallies the resolver publishes
+	## explicit positions for 54 of 59 attacks and 36 of 47 defences -- and for
+	## **zero** serves and **zero** receptions. So during serve receive, the
+	## phase where the drift is most obvious, there was no underlying opinion at
+	## all. Every metre of that movement was invented here.
+	##
+	## What replaces it is nothing. A player moves if the resolver placed them,
+	## or if they are the one playing the ball. Otherwise they hold their
+	## position and watch it, which is now a thing they can visibly do -- the
+	## head tracks the ball and the body turns to travel. Standing still is a
+	## legitimate thing for a volleyball player to do, and it is far better than
+	## drifting for a reason nobody can name.
+	##
+	## If serve-receive movement turns out to matter, the fix is for the resolver
+	## to publish it, not for playback to make it up.
 	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
 	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
 	var staged_id := int(event.metadata.get("staged_next_actor_id", -1))
@@ -476,39 +501,6 @@ func _set_plan_target(plan: Dictionary, player_id: int, target: Vector2) -> void
 		return
 	var start := Vector2(match_court_3d.live_positions[player_id])
 	plan[player_id] = {"start": start, "target": target}
-
-
-func _support_target(
-	position: Vector2,
-	action_target: Vector2,
-	event_type: int,
-	home_team: bool,
-	event_is_home: bool,
-) -> Vector2:
-	var local_position := position if home_team else Vector2(position.x, 1.0 - position.y)
-	var local_action := action_target if home_team else Vector2(action_target.x, 1.0 - action_target.y)
-	var own_phase := home_team == event_is_home
-	var front_row := local_position.y < 0.72
-	var target := local_position
-	if own_phase:
-		match event_type:
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-				target = local_position.lerp(local_action, 0.08 if front_row else 0.15)
-			RallyEventModel.EventType.SET:
-				target = local_position.lerp(Vector2(local_action.x, 0.62), 0.16)
-			RallyEventModel.EventType.ATTACK:
-				target = local_position.lerp(Vector2(local_action.x, 0.68), 0.12)
-			RallyEventModel.EventType.BLOCK:
-				target = local_position.lerp(Vector2(local_action.x, 0.54), 0.18)
-	else:
-		match event_type:
-			RallyEventModel.EventType.SET, RallyEventModel.EventType.ATTACK:
-				var depth := 0.56 if front_row else clampf(local_position.y, 0.74, 0.92)
-				target = local_position.lerp(Vector2(local_action.x, depth), 0.18)
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-				target = local_position.lerp(Vector2(local_action.x, local_position.y), 0.04)
-	target = Vector2(clampf(target.x, 0.05, 0.95), clampf(target.y, 0.52, 0.97))
-	return target if home_team else Vector2(target.x, 1.0 - target.y)
 
 
 func _event_elevation(event: RallyEvent, player_id: int) -> float:
@@ -674,6 +666,38 @@ func _event_contact_height(event: RallyEvent) -> float:
 		RallyEventModel.EventType.BLOCK:
 			return jumping_reach * 0.96
 	return float(event.metadata.get("contact_height_meters", 1.0))
+
+
+## What the last rally's geometry actually looked like, as numbers.
+##
+## The consumer `playback_start_mismatches` never had. Every entry is a contact
+## whose actor was standing somewhere other than where the resolver timed their
+## journey from -- so a summary of them is a direct measure of how often a
+## player is drawn playing a ball from a position they were never at.
+##
+## Returned rather than printed so a harness can assert on it and a debug view
+## can show it, which is the difference between an instrument and a habit.
+func playback_geometry_report() -> Dictionary:
+	if playback_start_mismatches.is_empty():
+		return {"count": 0, "worst_meters": 0.0, "mean_meters": 0.0, "by_event": {}}
+	var total := 0.0
+	var worst := 0.0
+	var by_event := {}
+	for entry in playback_start_mismatches:
+		var distance := float(entry.get("distance", 0.0))
+		total += distance
+		worst = maxf(worst, distance)
+		var key := int(entry.get("event_type", -1))
+		by_event[key] = int(by_event.get(key, 0)) + 1
+	## The stored distance is in normalised court units; metres is what anybody
+	## reading this actually wants, and the court is 9 m by 18 m.
+	var scale := 13.5
+	return {
+		"count": playback_start_mismatches.size(),
+		"worst_meters": worst * scale,
+		"mean_meters": total / float(playback_start_mismatches.size()) * scale,
+		"by_event": by_event,
+	}
 
 
 func _event_is_home(event: RallyEvent) -> bool:

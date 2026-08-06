@@ -150,6 +150,22 @@ func set_player_position(player_id: int, position: Vector2) -> void:
 
 
 func apply_movement_plan(plan: Dictionary, progress: float) -> void:
+	## Everyone gets sampled, including the players who are not going anywhere.
+	##
+	## The actor's gait is driven by the distance between successive placements,
+	## so a player who stops being placed keeps whatever speed they last had --
+	## and `set_pose` reads that every frame, so they hold a mid-stride pose
+	## indefinitely. Frozen mid-stride is exactly the thing the gait model's own
+	## test forbids at zero speed, arrived at from outside the model.
+	##
+	## Re-placing a stationary player at their current position costs a Vector2
+	## compare and lets their speed estimate decay to zero, which puts their legs
+	## under them. It matters much more now that standing still is the default
+	## rather than something almost nobody did.
+	for raw_player_id in live_positions:
+		if plan.has(raw_player_id):
+			continue
+		set_player_position(int(raw_player_id), Vector2(live_positions[raw_player_id]))
 	for raw_player_id in plan:
 		var player_id := int(raw_player_id)
 		var movement: Dictionary = plan[raw_player_id]
