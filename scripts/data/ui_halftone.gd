@@ -67,6 +67,30 @@ const LIGHT_SCALE: float = 0.55
 ## puts a dozen up at once. Keyed by tier *and* theme because the tint differs.
 static var _cache: Dictionary = {}
 
+## The window height the screen was sized against.
+##
+## 720, because that is what every render used while the tiers were being tuned.
+## The dot period is in pixels, so without this the print gets proportionally
+## finer as the window grows and vanishes at fullscreen -- reported from the app,
+## and the sort of thing a fixed-size preview harness can never show.
+const REFERENCE_VIEWPORT_HEIGHT: float = 720.0
+
+## Applied to every cached material, and remembered so materials built later in
+## the session start at the right size rather than at 1.0.
+static var _viewport_scale: float = 1.0
+
+
+## Resize the screen for a window of this height.
+static func set_viewport_height(height: float) -> void:
+	var scale := clampf(
+		maxf(height, 1.0) / REFERENCE_VIEWPORT_HEIGHT, 0.25, 4.0
+	)
+	if is_equal_approx(scale, _viewport_scale):
+		return
+	_viewport_scale = scale
+	for material in _cache.values():
+		(material as ShaderMaterial).set_shader_parameter("viewport_scale", scale)
+
 
 ## The material this surface should draw itself through, or null if the tier is
 ## not screened. Callers assign it to `CanvasItem.material`, which applies to the
@@ -89,6 +113,7 @@ static func material_for(tier: StringName, light_mode: bool) -> ShaderMaterial:
 	)
 	material.set_shader_parameter("angle_degrees", SCREEN_ANGLE_DEGREES)
 	material.set_shader_parameter("tint", tint(light_mode))
+	material.set_shader_parameter("viewport_scale", _viewport_scale)
 	_cache[key] = material
 	return material
 

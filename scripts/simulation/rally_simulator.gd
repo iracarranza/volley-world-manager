@@ -3589,15 +3589,11 @@ func _resolve_home_continuation(
 		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		defense_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
->>>>>>> Updated upstream
 	var hitter := _fallback_hitter(players, lineup, setter.id, incoming_quality)
-=======
-	var hitter := _fallback_hitter(players, lineup, setter.id)
 	if setter != null:
 		narration["setter"] = setter.display_name
 	if hitter != null:
 		narration["hitter"] = hitter.display_name
->>>>>>> Stashed changes
 	var assignment := _fallback_assignment(hitter, lineup)
 	## The same read the opponent's setter makes, off the same base. This path
 	## took `_fallback_assignment`'s literal 3 and never varied it, so a home

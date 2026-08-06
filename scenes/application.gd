@@ -15,6 +15,15 @@ const SETTINGS_PATH := "user://settings.cfg"
 
 
 func _ready() -> void:
+	## Keep the halftone screen the same size relative to the window.
+	##
+	## The dot period is in pixels, so a maximised window prints a finer and
+	## finer screen until it is gone. Connected here rather than inside
+	## `UIHalftone` because the palette module has no scene tree of its own and
+	## should not acquire one to learn about a resize.
+	var window_viewport := get_viewport()
+	window_viewport.size_changed.connect(_sync_halftone_scale)
+	_sync_halftone_scale()
 	title_screen.new_career_requested.connect(_show_new_career)
 	title_screen.career_load_requested.connect(_load_career)
 	title_screen.theme_requested.connect(_apply_theme)
@@ -73,6 +82,10 @@ func _load_theme() -> void:
 	if config.load(SETTINGS_PATH) == OK:
 		theme_name = str(config.get_value("presentation", "theme", "dark"))
 	_apply_theme(theme_name, false)
+
+
+func _sync_halftone_scale() -> void:
+	UIHalftone.set_viewport_height(float(get_viewport().get_visible_rect().size.y))
 
 
 func _apply_theme(theme_name: String, persist: bool = true) -> void:

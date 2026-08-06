@@ -48,10 +48,21 @@ uniform float angle_degrees : hint_range(0.0, 90.0) = 15.0;
 // badly at this size; this is antialiasing, not a stylistic softening.
 uniform float edge_softness : hint_range(0.001, 0.5) = 0.12;
 
+// How much to grow the screen for this viewport.
+//
+// `period` is in *pixels*, so at a larger window the dots stay the same physical
+// size and the print reads as finer and finer -- at fullscreen it disappears
+// into the surface. A halftone screen is a property of the artwork, not of the
+// monitor: it should occupy the same fraction of a panel at any resolution.
+//
+// Driven from `UIHalftone.set_viewport_height()` rather than derived in here, so
+// there is one place that decides what counts as the reference size.
+uniform float viewport_scale : hint_range(0.25, 4.0) = 1.0;
+
 void fragment() {
 	float theta = radians(angle_degrees);
 	mat2 screen = mat2(vec2(cos(theta), -sin(theta)), vec2(sin(theta), cos(theta)));
-	vec2 cell = fract((screen * FRAGCOORD.xy) / period) - 0.5;
+	vec2 cell = fract((screen * FRAGCOORD.xy) / (period * viewport_scale)) - 0.5;
 	// `1.0 - smoothstep` so the dot is where the mask is high; the multiply by
 	// COLOR.a is what keeps the screen inside the stylebox rather than printing
 	// it across the panel's rounded corners and its transparent margin.
