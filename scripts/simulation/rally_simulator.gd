@@ -136,6 +136,26 @@ const BLOCK_LATERAL_REACH_METERS: float = 0.45
 ## at tempo 0, 0.392 at tempo 1, 0.426 at tempo 2, 1.006 at tempo 3.
 const ASSIST_COMMIT_FLIGHT_SECONDS: float = 0.65
 
+## What a wall that *committed* keeps when the ball comes quick.
+##
+## Bounding the assist by the set's flight alone produced zero double blocks at
+## tempo 0 -- every rally, every wall, every roster. That is not a model of
+## anything, it is a threshold driving a degenerate distribution, which is the
+## same defect this engine keeps being caught by elsewhere. Committing to a lane
+## before the set is exactly how a first-tempo ball gets doubled, and a blocker
+## who reads early and adapts fast should sometimes be there too.
+##
+## So only the *reactive* share of the pre-set credit is bounded by the flight.
+## The committed share survives whatever the tempo, because committing is a
+## decision taken before the tempo is known. Its cost is already priced: a wall
+## that commits and guesses wrong has moved away from where the ball went.
+##
+## Floor and span are set so the median wall -- commitment and read both near
+## 0.5 -- keeps little, while a genuinely committed or fast-reading one keeps
+## most of it.
+const ASSIST_COMMIT_SIGNAL_FLOOR: float = 0.46
+const ASSIST_COMMIT_SIGNAL_SPAN: float = 0.34
+
 const BLOCK_PRESET_SHARE_MISREAD: float = 0.26
 const BLOCK_PRESET_SHARE_READ: float = 0.72
 
@@ -4349,7 +4369,8 @@ func _form_opponent_block(
 	## home side (0.82) reaches its wall while a Defensive one (0.26) holds back
 	## and plays the floor. This side had no such term at all, which made the
 	## block philosophy a home-only lever on an axis both benches should own.
-	close_time += (float(opponent_principles.block_commitment) - 0.5) * 0.18
+	var commitment_principle := float(opponent_principles.block_commitment)
+	close_time += (commitment_principle - 0.5) * 0.18
 	var primary_terms := _blocker_close_terms(
 		primary, lineup, attack_x, close_time
 	)
@@ -4374,10 +4395,18 @@ func _form_opponent_block(
 	## first-tempo ball leaves almost none, which is the entire reason a quick set
 	## beats a double block, and the reason a zero ball has to be committed to
 	## rather than read.
-	var assist_commitment := clampf(
+	var assist_reaction := clampf(
 		maxf(set_flight_time, 0.0) / ASSIST_COMMIT_FLIGHT_SECONDS, 0.0, 1.0
 	)
-	var assist_close_time := close_time - maxf(preset_window_seconds, 0.0) 		* preset_share * (1.0 - assist_commitment)
+	## Only the *reactive* share is bounded by the flight. What the wall
+	## already committed to survives whatever the tempo.
+	var assist_usable_preset := lerpf(
+		assist_reaction, 1.0,
+		_assist_committed_share(commitment_principle, read_quality),
+	)
+	var assist_close_time := close_time \
+		- maxf(preset_window_seconds, 0.0) * preset_share \
+		* (1.0 - assist_usable_preset)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	for candidate in front_blockers:
@@ -7618,9 +7647,8 @@ func _form_home_block(
 		+ maxf(preset_window_seconds, 0.0) * preset_share \
 		+ (1.0 - set_quality) * 0.10
 	close_time += lerpf(-0.09, 0.09, read_quality)
-	var identity_commitment_seconds := (
-		float(home_principles.block_commitment) - 0.5
-	) * 0.18
+	var commitment_principle := float(home_principles.block_commitment)
+	var identity_commitment_seconds := (commitment_principle - 0.5) * 0.18
 	close_time += identity_commitment_seconds
 	identity_effects["block_commitment"] = {
 		"principle": float(home_principles.block_commitment),
@@ -7657,10 +7685,18 @@ func _form_home_block(
 	## first-tempo ball leaves almost none, which is the entire reason a quick set
 	## beats a double block, and the reason a zero ball has to be committed to
 	## rather than read.
-	var assist_commitment := clampf(
+	var assist_reaction := clampf(
 		maxf(set_flight_time, 0.0) / ASSIST_COMMIT_FLIGHT_SECONDS, 0.0, 1.0
 	)
-	var assist_close_time := close_time - maxf(preset_window_seconds, 0.0) 		* preset_share * (1.0 - assist_commitment)
+	## Only the *reactive* share is bounded by the flight. What the wall
+	## already committed to survives whatever the tempo.
+	var assist_usable_preset := lerpf(
+		assist_reaction, 1.0,
+		_assist_committed_share(commitment_principle, read_quality),
+	)
+	var assist_close_time := close_time \
+		- maxf(preset_window_seconds, 0.0) * preset_share \
+		* (1.0 - assist_usable_preset)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	for candidate in front_blockers:
@@ -8507,6 +8543,27 @@ func _dig_contest(
 ## least when they already sealed it. That is the shape of a real double block,
 ## and it makes beating one blocker ordinary while a well-formed double is the
 ## thing a hitter genuinely has to solve.
+## How much of this wall's pre-set movement was a decision rather than a
+## reaction.
+##
+## A blocker who committed keeps their head start whatever the tempo -- that is
+## what committing *is*, and it is the only way a first-tempo ball ever draws
+## two blockers. What a quick set takes away is the ability to *react*: to read
+## the set, change your mind, and still arrive in time.
+##
+## Both walls read the same two inputs, so neither bench gets a block philosophy
+## the other lacks. The home wall's explicit Commit Pin / Commit Middle call
+## shifts its closing time separately and on top of this.
+func _assist_committed_share(commitment: float, read_quality: float) -> float:
+	var commitment_signal := clampf(commitment, 0.0, 1.0) * 0.5 \
+		+ clampf(read_quality, 0.0, 1.0) * 0.5
+	return clampf(
+		(commitment_signal - ASSIST_COMMIT_SIGNAL_FLOOR)
+			/ ASSIST_COMMIT_SIGNAL_SPAN,
+		0.0, 1.0,
+	)
+
+
 func _block_wall_quality(primary_skill: float, assist_skill: float) -> float:
 	var solo := clampf(primary_skill, 0.0, 1.0) * BLOCK_SOLO_SHARE
 	return clampf(

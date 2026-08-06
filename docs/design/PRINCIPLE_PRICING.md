@@ -325,3 +325,79 @@ this pass set out to close.
    documentation.
 3. `block_touch_rate` at a third of its floor, against 82% double-block
    formation, wants explaining before either of the above is tuned against it.
+
+
+---
+
+## 9. The correction — commitment, not just flight
+
+§8's fix produced **zero double blocks at tempo 0. Every rally, every wall,
+every roster.** That is not a model of anything. It is a threshold driving a
+degenerate distribution, which is the same defect class §5 names — arrived at
+by fixing a different instance of it.
+
+The reasoning was wrong, not just the constant. Bounding the assist by the
+set's flight alone says *no one can be there on a quick ball*, and that is
+false in the sport for two named reasons:
+
+- **Commit blocking exists.** A blocker who decided before the set to be at the
+  middle is there when the middle is set. That is what committing is for, and
+  it is the standard answer to a first-tempo offence.
+- **Blockers read.** A fast reader who picks the setter's body early gets there
+  sometimes, and should.
+
+So only the **reactive** share of the pre-set credit is bounded by the flight.
+The committed share survives whatever the tempo, because committing is a
+decision taken *before* the tempo is known. Its cost is already priced
+elsewhere: a wall that commits and guesses wrong has moved away from where the
+ball went.
+
+`_assist_committed_share(commitment, read_quality)` reads the wall's own
+`block_commitment` principle and its measured read, and is applied identically
+on both sides of the net so neither bench gets a block philosophy the other
+lacks. The floor and span put the median wall — both inputs near 0.5 — near
+zero committed share, and a genuinely committed or fast-reading one near full.
+
+### Double-block rate by tempo, all three versions
+
+| tempo | original | flight-only | **committed-aware** |
+| ---: | ---: | ---: | ---: |
+| 0 | 0.368 | 0.000 | **0.053** |
+| 1 | 0.823 | 0.374 | **0.577** |
+| 2 | 0.883 | 0.460 | **0.635** |
+| 3 | 0.960 | 0.960 | **0.959** |
+
+A zero ball now draws a second blocker about one time in twenty, and when it
+does it is because that wall committed or read it — not because the arithmetic
+allowed it.
+
+### Gate state
+
+| clause | original | flight-only | committed-aware |
+| --- | ---: | ---: | ---: |
+| error rate, Defensive − Physical | −0.0008 | −0.0352 | **−0.0195** |
+| kill rate, Defensive − Physical | +0.0574 | +0.0501 | **+0.0415** |
+
+The error clause still passes on 13% where it used to pass on 0.6%. The kill
+clause still fails, but the gap is 28% smaller than where this started — and
+notably the gentler fix closes *more* of it than the severe one did, so the
+mechanism is not simply "fewer double blocks".
+
+`stuff_rate` recovered most of what §8 cost: 0.0284 against a 0.030 floor
+(margin −0.0016) where the flight-only version read 0.0243 (−0.0057) and the
+baseline 0.0333 (+0.0033). Still a hair outside, on a fixture where five other
+metrics are far outside and nothing gates on any of them. Tuning the two new
+constants to chase a metric sitting within noise of its floor, on that fixture,
+would be fitting to noise.
+
+Suite unchanged throughout: 925 checks, the one known failure.
+
+### A caveat on every number in this document
+
+These are **static sweeps**. The defensive plan, the blocking strategy and the
+identity are fixed for the whole run; nothing learns, scouts, or adjusts
+between rallies. A real match has a bench that watches a quick offence work
+twice and starts committing to it, and that feedback loop is exactly what
+decides whether running quick stays profitable. None of it is modelled here, so
+every rate above should be read as "what this configuration does against that
+one", not as what the game does over a set.
