@@ -1372,10 +1372,32 @@ balls at 6.26 m. Its 81 failures are balls at 3.76 m with the defender standing
 at 3.29 m -- **roughly the right depth**, 0.47 m adrift, and still 1.88 m from the
 ball. That leaves a lateral component of about 1.82 m.
 
-**So the shape is not too deep. It is beside the ball rather than behind it.**
-The failures are short-and-mid balls lost sideways, which is where 76% of what
-the opponent faces goes, and it matches the playback report of a defender who
-cannot reach after moving 1.3-2.2 m.
+**"Beside the ball rather than behind it" was wrong, and wrong by construction.**
+That read compared mean stood-at depth (3.29 m) against mean ball depth (3.76 m)
+and called the 0.47 m remainder the depth component. A difference of means is not
+the mean of the differences, and here the two disagree badly.
+
+Decomposing the *nearest* defender's offset per row instead:
+
+  side       nearest lateral   nearest depth   ball x   shape width
+  home              0.69 m          1.20 m      0.422        5.18 m
+  opponent          0.97 m          1.38 m      0.498        6.05 m
+
+Depth dominates on both sides, not lateral. Both axes are worse for the
+opponent, by 0.28 m laterally and 0.18 m in depth.
+
+**The standout is the last column.** The opponent's shape spans 6.05 m of a 9 m
+court against the home side's 5.18 m, while the balls it concedes arrive at
+x = 0.498 -- dead centre. A wider shape taking balls in the middle is a gap
+*between* defenders rather than a shape standing in the wrong place, and it
+explains why the nearest defender is a metre away on both axes at once while the
+claimant is picking near-optimally out of what it has.
+
+Before changing any position: confirm the width difference is the cause and not
+another artifact. The discriminator is the per-row gap between the two defenders
+straddling the ball's x, against the ball's distance from each -- a shape that is
+merely wide but still covers has small straddle gaps, and one with a hole has
+large ones.
 
 Worth noting the home rows do not follow the same pattern -- home successes
 travel *further* than home failures, 2.80 m against 1.56 m. A side that succeeds
