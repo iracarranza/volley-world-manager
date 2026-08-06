@@ -2,6 +2,7 @@ class_name VolleyballUIStyleSystem
 extends RefCounted
 
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
+const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 
 const PRIMARY_ACTIONS := [
 	"NewCareerButton", "NextButton", "CreateCareerButton", "AdvanceWeekButton",
@@ -34,6 +35,9 @@ static func reveal(screen: Control) -> void:
 static func _style_node(node: Node, light_mode: bool) -> void:
 	if node is PopupPanel:
 		(node as PopupPanel).theme_type_variation = &"FrontmostPanel"
+		## Not screened, and it cannot be: `PopupPanel` derives from `Window`, so
+		## it is not a `CanvasItem` and has no material to draw itself through.
+		## Its contents are ordinary panels and get the treatment on their own.
 		return
 	if node is ColorRect:
 		_style_color_rect(node as ColorRect, light_mode)
@@ -65,10 +69,12 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 	_clear_legacy_presentation_overrides(control)
 	if control is Button:
 		_style_button(control as Button)
+		_screen_surface(control, light_mode)
 	elif control is Label:
 		_style_label(control as Label)
 	elif control is PanelContainer:
 		_style_panel(control as PanelContainer)
+		_screen_surface(control, light_mode)
 	elif control is RichTextLabel:
 		control.theme_type_variation = &"BodyCopy"
 	elif control is ItemList:
@@ -88,6 +94,20 @@ static func _clear_legacy_presentation_overrides(control: Control) -> void:
 			)
 
 
+## Lay the halftone screen over a surface, reading the tier the lines above just
+## assigned to it.
+##
+## Deliberately after the variation rather than beside it, so there is exactly
+## one place that decides what a panel *is* and this only asks. A tier with no
+## entry in `UIHalftone.TIERS` clears the material instead of leaving whatever
+## was there, because the style pass runs again on every theme switch and a
+## surface that stops being screened has to actually stop.
+static func _screen_surface(control: Control, light_mode: bool) -> void:
+	control.material = UIHalftone.material_for(
+		control.theme_type_variation, light_mode
+	)
+
+
 static func _style_button(button: Button) -> void:
 	var node_name := String(button.name)
 	if node_name in PRIMARY_ACTIONS:
@@ -98,7 +118,16 @@ static func _style_button(button: Button) -> void:
 		button.theme_type_variation = &"QuietAction"
 	elif node_name.ends_with("Nav") or node_name in ["CurrentSectionButton", "ThemeToggle"]:
 		button.theme_type_variation = &"NavAction"
-	elif node_name == "DashboardCard":
+	elif button.has_method("set_summary") or node_name.ends_with("Card"):
+		## Matched on what the button *is*, not on what the scene file called it.
+		##
+		## This read `node_name == "DashboardCard"`, which is the name of the root
+		## node inside `dashboard_card.tscn` -- and an instanced scene takes the
+		## name its parent gives it. Every card on the dashboard is called
+		## `RosterCard`, `TeamCard`, `ClubCard` and so on, so the condition never
+		## fired once and all seven rendered as ordinary secondary buttons. The
+		## `DashboardCard` variation is defined in both themes and had never been
+		## reachable.
 		button.theme_type_variation = &"DashboardCard"
 	elif button.toggle_mode:
 		button.theme_type_variation = &"ChoiceChip"

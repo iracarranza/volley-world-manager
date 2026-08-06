@@ -4,6 +4,7 @@ const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
 const LightTheme := preload("res://scenes/themes/light_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
+const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -81,6 +82,11 @@ func _apply_theme(theme_name: String, persist: bool = true) -> void:
 	new_career_screen.set_light_mode(resolved == "light")
 	if match_center.has_method("set_light_mode"):
 		match_center.set_light_mode(resolved == "light")
+	## Before the style pass, not after. Every cached halftone material carries a
+	## tint for the theme it was built under, so a switch that reuses them leaves
+	## every panel screened in the previous theme's ink -- close enough to right
+	## that nothing looks broken, which is the worst kind of stale.
+	UIHalftone.clear_cache()
 	UIStyleSystem.apply(self, resolved == "light")
 	for palette_node in get_tree().get_nodes_in_group("ui_palette_3d"):
 		if palette_node.has_method("apply_ui_palette"):

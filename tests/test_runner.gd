@@ -4,6 +4,7 @@ const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
+const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
@@ -209,6 +210,7 @@ func _initialize() -> void:
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
 	_test_spike_biomechanics_sequence()
+	_test_surface_screen_and_card_variation()
 	_test_attack_courses_are_relative_to_the_hitter()
 	_test_attack_power_is_a_choice()
 	_test_hitters_read_a_blurred_picture()
@@ -11901,3 +11903,76 @@ func _midpoint_phase(
 		return float(row[key]) < midpoint if descending \
 			else float(row[key]) > midpoint
 	)
+
+
+## The halftone screen, and the variation it exposed as unreachable.
+func _test_surface_screen_and_card_variation() -> void:
+	## Every tier resolves. A tier named here but not styled is a surface that
+	## silently draws flat, which is how `FrontmostPanel` earned its comment.
+	for tier in UIHalftone.TIERS:
+		_check(
+			UIHalftone.material_for(StringName(tier), false) != null,
+			"halftone tier %s builds a material" % str(tier),
+		)
+	_check(
+		UIHalftone.material_for(&"NotATier", false) == null,
+		"an unknown tier is not screened",
+	)
+
+	## Elevation runs the way ink does: the recessed surface carries more of it.
+	## Inverted, this becomes a drop shadow with extra steps.
+	var inset: float = float(UIHalftone.TIERS[&"InsetPanel"].strength)
+	var card: float = float(UIHalftone.TIERS[&"CardPanel"].strength)
+	var raised: float = float(UIHalftone.TIERS[&"RaisedPanel"].strength)
+	_check(
+		inset > card and card > raised,
+		"screen density falls as a surface rises (%.3f > %.3f > %.3f)"
+			% [inset, card, raised],
+	)
+
+	## The two themes cannot share a strength -- see `LIGHT_SCALE`.
+	var dark_material := UIHalftone.material_for(&"CardPanel", false)
+	var light_material := UIHalftone.material_for(&"CardPanel", true)
+	_check(
+		float(light_material.get_shader_parameter("strength"))
+			< float(dark_material.get_shader_parameter("strength")),
+		"the light theme screens more lightly than the dark one",
+	)
+	_check(
+		dark_material.get_shader_parameter("tint")
+			!= light_material.get_shader_parameter("tint"),
+		"each theme screens with its own ink",
+	)
+	## And a cached material must not outlive the theme it was tinted for.
+	UIHalftone.clear_cache()
+	_check(
+		UIHalftone.material_for(&"CardPanel", false) != dark_material,
+		"clearing the cache rebuilds the materials",
+	)
+
+	## The bug the screen exposed: `DashboardCard` is defined in both themes and
+	## was matched on the root node name inside `dashboard_card.tscn`, which no
+	## instance ever carries -- an instanced scene takes the name its parent gives
+	## it. All seven dashboard cards rendered as ordinary secondary buttons.
+	var root := Control.new()
+	var card_button := Button.new()
+	card_button.name = "RosterCard"
+	root.add_child(card_button)
+	var plain := Button.new()
+	plain.name = "SomeButton"
+	root.add_child(plain)
+	UIStyleSystemScript.apply(root, false)
+	_check(
+		card_button.theme_type_variation == &"DashboardCard",
+		"an instanced dashboard card gets the card variation (got %s)"
+			% str(card_button.theme_type_variation),
+	)
+	_check(
+		card_button.material != null,
+		"a dashboard card is screened",
+	)
+	_check(
+		plain.theme_type_variation == &"SecondaryAction",
+		"an ordinary button is not mistaken for a card",
+	)
+	root.free()
