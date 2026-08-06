@@ -1153,10 +1153,47 @@ Two gaps feed it and they compound:
 - **attack quality, 0.400 against 0.325.** Smaller, and already tracked by the
   attack-symmetry ratchet.
 
-Order matters here. Closing the dig-quality gap without knowing which term
-carries it would be tuning, and closing the attack gap first changes the
-distribution the dig threshold is being judged against. Decompose the dig terms
-per side first; the 0.17 gap has to have a named source before anything moves.
+### Decomposed
+
+`tools/run_dig_terms_probe.gd`, 150 rallies x 2 serving sides, identically
+seeded squads:
+
+  term                    home   opponent    gap
+  quality                0.374     0.346   +0.028
+  capability             0.644     0.695   -0.051
+  timing                 0.880     0.590   +0.290
+  posture                0.017     0.047   -0.030
+  support                0.013     0.009   +0.005
+  opportunity            0.914     0.693   +0.221
+  recovery               1.000     1.000   +0.000
+  reach_margin_meters    1.058     0.242   +0.816
+  contested_against      0.326     0.446   -0.120
+
+**Capability is better for the opponent**, not worse -- 0.695 against 0.644 --
+so this is not an attribute gap and no amount of buffing dig ratings addresses
+it. Posture, support and recovery are all near-identical or favour the opponent.
+
+The whole gap is `reach_margin_meters`, 1.058 m against 0.242 m, flowing through
+`timing` into `opportunity` into `quality`. The opponent defender arrives with a
+quarter of a metre to spare where the home defender has a full metre.
+
+Both claimant calls are structurally identical -- same function, same zone
+construction, same recovery penalties -- and both sides are staged into their
+defensive shape before the claim. So the margin gap is not in how the defence is
+resolved. It is `contested_against`: the opponent digs a 0.446 attack where the
+home side digs a 0.326 one, and a harder, faster ball arrives sooner and leaves
+less margin.
+
+**Which means the floor defence is not the root.** It is the attack asymmetry,
+seen from the receiving end -- the same 0.400-against-0.325 gap the symmetry
+ratchet tracks. Fixing the dig would be treating the symptom, exactly as the
+crossing-read was before the contact depth was found.
+
+One genuine defect was found and fixed on the way: the opponent's *continuation*
+dig passed its raw flight time while the other two dig sites both add 0.24 s for
+a block touch and 0.06 s for a funnel. Three sites, one rule -- but it changed
+the measured terms not at all, because that branch never fires in this sample.
+Recorded as fixed and immaterial rather than as a win.
 
 And `DIG_ATTACKER_ADVANTAGE = 0.20` should be re-derived once they are
 comparable, against the dig-success rate the sport actually shows -- roughly

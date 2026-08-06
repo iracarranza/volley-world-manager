@@ -3725,8 +3725,18 @@ func _resolve_home_continuation(
 	## where the ball went, and handed `_defense_execution` a flat zero arrival
 	## margin -- a defender who is always exactly on time for a ball they never
 	## had to move to, chosen by a search that could not lose.
+	## A deflected ball takes longer to arrive, and the defender behind it gets
+	## that time. Both other dig sites already add it -- the home dig off an
+	## opponent swing and the opponent dig off the home first ball -- and this one
+	## did not, so the same block touch bought the home defence 0.24 s and bought
+	## this defence nothing. Three sites, one rule.
+	var cont_defense_time := continuation_attack_flight
+	if block_outcome == "touch":
+		cont_defense_time += 0.24
+	elif block_outcome == "funnel":
+		cont_defense_time += 0.06
 	var cont_defense := _choose_opponent_defender(
-		opponent_team, attack_target, continuation_attack_flight
+		opponent_team, attack_target, cont_defense_time
 	)
 	var opponent_defender := cont_defense.player as VolleyballPlayer
 	## What this defender knows, and what their body costs them.
