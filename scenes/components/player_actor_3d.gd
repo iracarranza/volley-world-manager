@@ -7,6 +7,7 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
 const GaitBiomechanicsScript := preload("res://scripts/data/gait_biomechanics.gd")
+const BlockBiomechanicsScript := preload("res://scripts/data/block_biomechanics.gd")
 const LandingBiomechanicsScript := preload(
 	"res://scripts/data/landing_biomechanics.gd"
 )
@@ -609,6 +610,44 @@ func _apply_head_look() -> void:
 		head.rotation = Vector3(look_pitch, look_yaw, 0.0)
 
 
+## Keep the shoes on the floor when a pose folds a knee.
+##
+## This rig has a hip and a knee and no ankle, so bending the knee swings the
+## whole shin backward and lifts the shoe clear of the ground. Every pose that
+## crouches was doing it in mid-air: a hitter absorbing a landing four
+## centimetres above the floor, a blocker loading into a squat while hovering,
+## a defender digging off the ground. It was fixed once inside the landing and
+## then found again in the block, which is the signal that it belongs here --
+## it is a property of the *rig*, not of any one action.
+##
+## Two things keep it honest:
+##
+## **Only the extra fold counts.** `baseline_knee` is what the gait had already
+## produced, and the gait owns its own vertical travel through `bob_meters`.
+## Compensating the total would count a runner's stance compression twice.
+##
+## **Only while a foot is down.** In flight the hips are ballistic and the foot
+## is free, so a tucked knee lifts the shoe rather than lowering the body --
+## which is exactly what a spike's tuck and a block's flight should look like.
+## `elevation` is how much of that applies.
+##
+## The leg that matters is the *straighter* one, because that is the one holding
+## the voli up. During a stride the deeply folded leg is the swing leg with
+## nothing under it.
+func _ground_the_feet(elevation: float, baseline_knee: float) -> void:
+	var current := maxf(
+		(left_leg.get_node("Knee") as Node3D).rotation_degrees.x,
+		(right_leg.get_node("Knee") as Node3D).rotation_degrees.x,
+	)
+	if current >= baseline_knee - 0.01:
+		return
+	var shank := leg_bone_lengths.y
+	var before := shank * cos(deg_to_rad(baseline_knee))
+	var after := shank * cos(deg_to_rad(current))
+	body_pivot.position.y += (after - before) \
+		* (1.0 - clampf(elevation, 0.0, 1.0))
+
+
 ## How high off the floor counts as airborne, in normalised elevation.
 ##
 ## Above the noise that a settling interpolation puts on a grounded player, and
@@ -670,17 +709,6 @@ func _apply_landing() -> void:
 	for leg in [left_leg, right_leg]:
 		var knee := leg.get_node("Knee") as Node3D
 		knee.rotation_degrees.x = minf(knee.rotation_degrees.x, fold)
-	## And the hips come down by exactly what the folded leg is shorter by.
-	##
-	## This rig has a hip and a knee and no ankle, so bending the knee swings the
-	## whole shin backward and lifts the shoe clear of the floor -- a voli
-	## absorbing a landing while hovering above it. Derived from the fold and this
-	## voli's own bone lengths rather than stated as a constant, so the two can
-	## never disagree: a deeper absorb is automatically a lower one, and a taller
-	## voli with longer shins drops further for the same angle.
-	var straight := leg_bone_lengths.x + leg_bone_lengths.y
-	var folded := leg_bone_lengths.x + leg_bone_lengths.y * cos(deg_to_rad(fold))
-	body_pivot.position.y += folded - straight
 	## A blocker's hands are still up on the touchdown frame and come down after
 	## the feet; everyone else's swing down and forward for balance. `arm_hold`
 	## carries which of those this is, so the two are one expression.
@@ -778,6 +806,11 @@ func set_pose(
 	## who is playing the ball right now is doing that instead.
 	if not is_contact_actor and _landing_remaining > 0.0:
 		_apply_landing()
+	## What the gait alone would have folded the supporting knee to, kept so the
+	## grounding below can tell a pose's crouch apart from a stride's.
+	var gait_knee := maxf(
+		float(gait.left_knee_degrees), float(gait.right_knee_degrees)
+	)
 	shadow.scale = Vector3.ONE * lerpf(1.0, 1.35, elevation)
 	shadow.transparency = lerpf(0.0, 0.58, elevation)
 	if contact_direction.length_squared() > 0.0001:
@@ -795,6 +828,7 @@ func set_pose(
 		## footwork was pointing them at.
 		_turn_toward(atan2(-contact_direction.x, -contact_direction.y))
 	if not is_contact_actor:
+		_ground_the_feet(elevation, gait_knee)
 		return
 	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
 	var guide_arm := right_arm if dominant_hand == "Left" else left_arm
@@ -908,30 +942,50 @@ func set_pose(
 			guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
 			_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
 		RallyEventModel.EventType.BLOCK:
-			## A block *presses*. Straight up is a player reaching; over the net
-			## is a player taking space, and the difference is a slight forward
-			## lean with the arms angled ahead of vertical rather than on it.
+			## Every joint comes from `BlockBiomechanics`, which sequences them
+			## the way `SpikeBiomechanics` sequences a swing.
 			##
-			## The legs kick forward, not back. A blocker leaves the floor from a
-			## squat and the shins swing under and *ahead* of the body on the way
-			## up -- trailing them behind is a hurdler, not a jump.
-			body_pivot.rotation.x = -0.12
-			left_leg.rotation_degrees.x = 26.0
-			right_leg.rotation_degrees.x = 22.0
+			## This was the last static pose in the rig -- one set of angles with
+			## no phase in it -- so the arms teleported to full extension on the
+			## frame playback first posed this actor, held there for the whole
+			## flight, and dropped out just as abruptly. What the peak of the
+			## motion looks like is unchanged; the model is the route into and
+			## out of it.
+			##
+			## A block *presses*: straight up is a player reaching, over the net
+			## is a player taking space, and the difference is a forward lean
+			## plus a shoulder shrug that arrives after the arms are already up.
+			## The legs kick forward, not back -- a blocker leaves the floor from
+			## a squat and the shins swing under and ahead of them on the way up.
+			var wall := BlockBiomechanicsScript.resolve(phase)
+			body_pivot.rotation.x = float(wall.torso_pitch_radians)
+			left_leg.rotation_degrees.x = float(wall.lead_hip_degrees)
+			right_leg.rotation_degrees.x = float(wall.trail_hip_degrees)
 			for leg in [left_leg, right_leg]:
 				## Backward, like every other knee in the file.
-				(leg.get_node("Knee") as Node3D).rotation_degrees.x = -34.0
-			left_arm.position.y = shoulder_offset.y + 0.06
-			right_arm.position.y = shoulder_offset.y + 0.06
-			left_arm.rotation_degrees = Vector3(158.0, 0.0, -8.0)
-			right_arm.rotation_degrees = Vector3(158.0, 0.0, 8.0)
-			## Straight, and deliberately so. A block that bends at the elbow is
-			## a block that gets driven back through the net, and keeping these
-			## near zero is what makes a block read as a *wall* next to a set's
-			## folded triangle -- the two poses put the arms in nearly the same
-			## place, and the elbow is the only thing telling them apart.
-			_set_elbow(left_arm, 4.0)
-			_set_elbow(right_arm, 4.0)
+				(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
+					wall.knee_degrees
+				)
+			var girdle := float(wall.shoulder_lift_meters)
+			left_arm.position.y = shoulder_offset.y + girdle
+			right_arm.position.y = shoulder_offset.y + girdle
+			var reach := float(wall.shoulder_degrees)
+			var spread := float(wall.hand_spread_degrees)
+			left_arm.rotation_degrees = Vector3(reach, 0.0, -spread)
+			right_arm.rotation_degrees = Vector3(reach, 0.0, spread)
+			## Straight at the press, and deliberately so. A block that bends at
+			## the elbow is a block that gets driven back through the net, and
+			## keeping it near zero *there* is what makes a block read as a wall
+			## next to a set's folded triangle -- the two poses put the arms in
+			## nearly the same place, and the elbow is the only thing telling
+			## them apart. It folds again either side of the press, which is the
+			## ready posture a blocker waits in.
+			_set_elbow(left_arm, float(wall.elbow_degrees))
+			_set_elbow(right_arm, float(wall.elbow_degrees))
+	## Last, after whichever branch ran, so every pose that crouches does it with
+	## its feet on the ground rather than above it.
+	_ground_the_feet(elevation, gait_knee)
+
 
 func _apply_material_color(
 	mesh: MeshInstance3D, color: Color, alpha: float = 1.0

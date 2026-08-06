@@ -337,6 +337,12 @@ corner_radius_top_right = 24
 corner_radius_bottom_right = 14
 corner_radius_bottom_left = 19
 
+[sub_resource type="StyleBoxEmpty" id="PanelTabBody"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+
 [resource]
 default_base_scale = 1.0
 default_font = ExtResource("2_body")
@@ -465,7 +471,7 @@ StatLabel/font_sizes/font_size = 13
 TabContainer/colors/font_selected_color = Color(1, 0.976, 0.914, 1)
 TabContainer/colors/font_unselected_color = Color(0.306, 0.42, 0.392, 1)
 TabContainer/font_sizes/font_size = 14
-TabContainer/styles/panel = SubResource("PanelInset")
+TabContainer/styles/panel = SubResource("PanelTabBody")
 TabContainer/styles/tab_selected = SubResource("TabSelected")
 TabContainer/styles/tab_unselected = SubResource("TabUnselected")
 TooltipLabel/colors/font_color = Color(0.09, 0.239, 0.208, 1)

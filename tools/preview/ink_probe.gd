@@ -40,7 +40,75 @@ func _process(_delta: float) -> void:
 	print("--- inked surfaces ---")
 	for line in report:
 		print(line)
+	print("--- stacked edges ---")
+	_report_stacking()
 	get_tree().quit()
+
+
+## Which drawn edges run parallel to another one close enough to read as a
+## doubled line rather than as two separate surfaces.
+##
+## Any surface that *draws an edge at all* counts here, whether that edge is a
+## pen line or a stylebox border -- the eye does not care which system produced
+## it, only that there are three lines within twenty pixels of each other.
+func _report_stacking() -> void:
+	var edged: Array = []
+	_collect_edged(_dashboard, edged)
+	var flagged := 0
+	for outer in edged:
+		for inner in edged:
+			if outer == inner:
+				continue
+			var outer_rect: Rect2 = outer["rect"]
+			var inner_rect: Rect2 = inner["rect"]
+			if not outer_rect.encloses(inner_rect):
+				continue
+			## The four gaps between the two edges. Only the smallest matters:
+			## one side running close is enough to read as a doubled line.
+			var gaps := [
+				inner_rect.position.x - outer_rect.position.x,
+				inner_rect.position.y - outer_rect.position.y,
+				outer_rect.end.x - inner_rect.end.x,
+				outer_rect.end.y - inner_rect.end.y,
+			]
+			var tightest: float = gaps.min()
+			if tightest > 16.0:
+				continue
+			flagged += 1
+			print(
+				"%-22s (%s) inside %-22s (%s) -- %.0f px apart"
+				% [
+					inner["name"], inner["kind"], outer["name"], outer["kind"],
+					tightest,
+				]
+			)
+	if flagged == 0:
+		print("none within 16 px")
+
+
+func _collect_edged(node: Node, into: Array) -> void:
+	if node is Control:
+		var control := node as Control
+		var variation := String(control.theme_type_variation)
+		var kind := ""
+		if control.get_node_or_null("InkOutline") != null:
+			kind = "ink"
+		elif control is PanelContainer or control is TabContainer:
+			var style_name := &"panel"
+			if control.has_theme_stylebox(style_name, control.theme_type_variation):
+				var box := control.get_theme_stylebox(
+					style_name, control.theme_type_variation
+				) as StyleBoxFlat
+				if box != null and box.border_width_left > 0:
+					kind = "border"
+		if not kind.is_empty() and control.is_visible_in_tree():
+			into.append({
+				"name": String(control.name),
+				"kind": "%s/%s" % [kind, variation if not variation.is_empty() else "-"],
+				"rect": Rect2(control.global_position, control.size),
+			})
+	for child in node.get_children():
+		_collect_edged(child, into)
 
 
 func _walk(node: Node, tiers: Dictionary, report: Array[String]) -> void:

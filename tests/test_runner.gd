@@ -212,6 +212,7 @@ func _initialize() -> void:
 	_test_spike_biomechanics_sequence()
 	_test_gait_separates_walking_from_running()
 	_test_landing_absorbs_and_returns_to_neutral()
+	_test_block_is_a_jump_not_a_shape()
 	_test_surface_screen_and_card_variation()
 	_test_scouting_confidence_and_fog()
 	_test_attack_courses_are_relative_to_the_hitter()
@@ -12004,6 +12005,112 @@ func _test_gait_separates_walking_from_running() -> void:
 			) < 3.0,
 		"the stride joins up where it wraps",
 	)
+
+
+## A block reads, loads, drives, presses, holds and withdraws -- in that order.
+##
+## The pose was static, so the arms went from a neutral hang to full extension in
+## one frame. A rate limit cannot fix that: it has to sit above the fastest
+## legitimate motion, and the spike's elbow runs at about 2,800 degrees per
+## second, so any ceiling that leaves the whip intact resolves a 158-degree snap
+## in three frames. Hence a decomposed model, and hence this test -- the ordering
+## is the whole of what it buys, and ordering is checkable.
+func _test_block_is_a_jump_not_a_shape() -> void:
+	var ready_stance: Dictionary = BlockBiomechanics.resolve(-1.0)
+	var loaded: Dictionary = BlockBiomechanics.resolve(BlockBiomechanics.READ_END)
+	var press: Dictionary = BlockBiomechanics.resolve(0.0)
+	var withdrawn: Dictionary = BlockBiomechanics.resolve(1.0)
+
+	## The defect this exists to fix: at the start of the action the blocker is
+	## standing there, not already at the top of a wall.
+	_check(
+		float(ready_stance.shoulder_degrees) < 90.0
+			and float(ready_stance.elbow_degrees) > 30.0,
+		"a block starts in a ready posture, hands low and elbows folded (%.0f / %.0f)"
+			% [ready_stance.shoulder_degrees, ready_stance.elbow_degrees],
+	)
+	## And the peak is the pose that was already judged to look right, unchanged.
+	_check(
+		absf(float(press.shoulder_degrees) - 158.0) < 0.01
+			and absf(float(press.elbow_degrees) - 4.0) < 0.01,
+		"the press still lands on the wall the static pose drew",
+	)
+	_check(
+		float(withdrawn.shoulder_degrees) < 60.0,
+		"the arms come back down (%.0f)" % float(withdrawn.shoulder_degrees),
+	)
+	_check(
+		float(loaded.knee_degrees) < -50.0
+			and float(loaded.torso_pitch_radians) < -0.2,
+		"a blocker loads into a squat before leaving the floor (%.0f deg, %+.2f rad)"
+			% [loaded.knee_degrees, loaded.torso_pitch_radians],
+	)
+
+	## Proximal to distal, the same rule the spike runs on: the legs are already
+	## driving while the arms are still low, and the shoulder girdle shrugs last.
+	## Without this a block is every joint moving at once, which is a mannequin
+	## easing rather than a person jumping -- exactly what a global smoother
+	## would have produced.
+	var knee_drives := _first_block_phase(func(frame: Dictionary) -> bool:
+		return float(frame.knee_degrees) > -30.0
+	)
+	var arms_rise := _first_block_phase(func(frame: Dictionary) -> bool:
+		return float(frame.shoulder_degrees) > 120.0
+	)
+	var girdle_lifts := _first_block_phase(func(frame: Dictionary) -> bool:
+		return float(frame.shoulder_lift_meters) > 0.03
+	)
+	_check(
+		knee_drives < arms_rise and arms_rise < girdle_lifts,
+		"legs drive, then arms rise, then the shoulders shrug (%.2f < %.2f < %.2f)"
+			% [knee_drives, arms_rise, girdle_lifts],
+	)
+	## The shrug has to finish *on* the ball. Penetration arriving after contact
+	## is a blocker who reached over the net once the ball had gone past.
+	_check(
+		float(press.shoulder_lift_meters)
+			> float(BlockBiomechanics.resolve(-0.2).shoulder_lift_meters),
+		"the shoulders are still rising into contact",
+	)
+
+	## Continuity across the whole action. Any joint that jumps between adjacent
+	## samples is a joint that will read as teleporting at playback rate.
+	var previous: Dictionary = BlockBiomechanics.resolve(-1.0)
+	var worst := 0.0
+	var worst_key := ""
+	for step in range(1, 401):
+		var phase := -1.0 + float(step) / 200.0
+		var current: Dictionary = BlockBiomechanics.resolve(phase)
+		for key in [
+			"shoulder_degrees", "elbow_degrees", "knee_degrees",
+			"lead_hip_degrees", "trail_hip_degrees",
+		]:
+			var jump := absf(float(current[key]) - float(previous[key]))
+			if jump > worst:
+				worst = jump
+				worst_key = key
+		previous = current
+	_check(
+		worst < 6.0,
+		"no block joint jumps between samples (worst %s at %.1f degrees)"
+			% [worst_key, worst],
+	)
+
+	_check(
+		str(BlockBiomechanics.resolve(-0.9).phase_name) == "read"
+			and str(BlockBiomechanics.resolve(-0.02).phase_name) == "press"
+			and str(BlockBiomechanics.resolve(0.9).phase_name) == "withdraw",
+		"the block reports which stage it is in",
+	)
+
+
+## The first phase at which a predicate becomes true across the block, or +INF.
+func _first_block_phase(predicate: Callable) -> float:
+	for step in range(0, 401):
+		var phase := -1.0 + float(step) / 200.0
+		if bool(predicate.call(BlockBiomechanics.resolve(phase))):
+			return phase
+	return INF
 
 
 ## A landing has to end exactly where a stand begins.

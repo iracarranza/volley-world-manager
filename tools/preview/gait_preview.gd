@@ -38,6 +38,7 @@ func _ready() -> void:
 	await _shoot_gait("run", 5.2)
 	await _shoot_landing("land_attack", "attack")
 	await _shoot_landing("land_block", "block")
+	await _shoot_block()
 	get_tree().quit()
 
 
@@ -126,6 +127,43 @@ func _shoot_landing(shot_name: String, action: String) -> void:
 			RallyEventModel.EventType.SERVE, 0.0, 0.0, Vector2(0.0, -1.0), false
 		)
 	await _capture(stage, shot_name)
+
+
+## Sampled at the stage boundaries plus the press and the hold, so no stage is
+## represented only by an endpoint.
+const BLOCK_SAMPLES: Array[float] = [
+	-1.00, -0.52, -0.30, -0.08, 0.00, 0.34, 0.66, 1.00,
+]
+
+
+func _shoot_block() -> void:
+	var stage := _stage()
+	for index in range(BLOCK_SAMPLES.size()):
+		var phase := BLOCK_SAMPLES[index]
+		var actor := _place(
+			stage, index, BLOCK_SAMPLES.size(),
+			"%+.2f %s" % [phase, BlockBiomechanics.phase_name(phase)],
+		)
+		actor.set_pose(
+			RallyEventModel.EventType.BLOCK, _block_elevation(phase), phase,
+			Vector2(0.0, -1.0), true,
+		)
+	await _capture(stage, "block")
+
+
+## A jump, not a hover: on the floor through the read and the load, peaking at
+## the press, and back down through the withdraw.
+func _block_elevation(phase: float) -> float:
+	if phase <= BlockBiomechanics.LOAD_END:
+		return 0.0
+	if phase <= 0.0:
+		return sin(
+			(phase - BlockBiomechanics.LOAD_END)
+				/ (0.0 - BlockBiomechanics.LOAD_END) * PI * 0.5
+		)
+	if phase >= 0.8:
+		return 0.0
+	return cos(phase / 0.8 * PI * 0.5)
 
 
 func _capture(stage: Node3D, shot_name: String) -> void:
