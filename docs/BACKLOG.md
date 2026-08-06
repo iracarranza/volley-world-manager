@@ -1184,10 +1184,33 @@ resolved. It is `contested_against`: the opponent digs a 0.446 attack where the
 home side digs a 0.326 one, and a harder, faster ball arrives sooner and leaves
 less margin.
 
-**Which means the floor defence is not the root.** It is the attack asymmetry,
-seen from the receiving end -- the same 0.400-against-0.325 gap the symmetry
-ratchet tracks. Fixing the dig would be treating the symptom, exactly as the
-crossing-read was before the contact depth was found.
+**That "which means the attack asymmetry" was asserted, not measured, and it is
+wrong.** `reach_margin` has two inputs -- time available and distance to cover --
+and both were assumed to follow from the ball being harder. Measured separately:
+
+  side       flight time given   distance to ball   dig success
+  home             0.526 s            1.506 m           56.4%
+  opponent         0.339 s            1.828 m           23.6%
+
+The opponent defender gets 36% less time *and* 21% more distance. Two
+independent defects, stacked, and neither is "the home attack is stronger".
+
+**Time.** The home defence's budget is re-solved through `_opponent_attack_type`,
+whose "Short tip" branch covers everything landing inside y 0.80, so most
+opponent swings are *lobbed* for timing purposes while being hit flat for drawing
+purposes. The home defence is timing a lob. Confirmed by test rather than
+inference: opening `ENABLE_UNIFIED_ATTACK_SHAPE` moves home flight 0.526 to 0.621
+and leaves the opponent's at 0.338, widening the gap -- which is precisely what
+that flag already records ("the arc it unifies on is the lobbed one"). So the
+mechanism is identified and the existing flag does not fix it alone.
+
+**Distance.** 1.506 m against 1.828 m, and the claim rate is 56% against 36%.
+This is positioning and is independent of the ball. Not yet decomposed -- whether
+it is starting shape, zone assignment, or the claimant conceding more often on
+that side is the next measurement.
+
+Both want their own fix. Neither is the attack-symmetry ratchet, and treating
+them as one thing is what produced the wrong answer above.
 
 One genuine defect was found and fixed on the way: the opponent's *continuation*
 dig passed its raw flight time while the other two dig sites both add 0.24 s for
