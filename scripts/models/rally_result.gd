@@ -16,6 +16,22 @@ extends Resource
 ## snapshot instead of whichever tactical-planner view happens to be open.
 @export var initial_home_positions: Dictionary = {}
 @export var initial_opponent_positions: Dictionary = {}
+## Where each side stands when the ball is on the *other* side of the net --
+## the floor-defence posture, as opposed to the serve-receive formation above.
+##
+## Both come from opinions the simulator already holds and already uses:
+## `DefensivePlan.defender_position` for the home side, and the opponent team's
+## own `court_position(id, "defense")`. Until now they shaped only the first
+## frame of a rally. Playback had no notion of a position to *return* to, so
+## once the serve was away every player either had an explicit target for the
+## phase or stood exactly where the last contact left them -- which is most of
+## why a rally looked lifeless once the invented drift was removed.
+##
+## Carried on the result rather than fetched live, for the same reason the
+## initial snapshot is: a replay must not depend on whichever plan happens to be
+## open in the tactical view later.
+@export var home_base_positions: Dictionary = {}
+@export var opponent_base_positions: Dictionary = {}
 ## Presentation identity captured with the rally so replay does not depend on
 ## whichever roster is active later (or mirror every attacker onto one arm).
 @export var player_handedness: Dictionary = {}

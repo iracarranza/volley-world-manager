@@ -634,6 +634,19 @@ func resolve(
 	var result: Resource = RallyResultModel.new()
 	result.initial_home_positions = live_positions.duplicate(true)
 	result.initial_opponent_positions = opponent_live_positions.duplicate(true)
+	## The posture each side holds while the ball is on the other side.
+	##
+	## Computed by asking `_initial_*_positions` for the *defending* arrangement
+	## regardless of who is actually serving, because that is exactly what a
+	## floor-defence posture is. Reusing those functions rather than reaching
+	## into the plan again keeps one answer to "where does this player stand" --
+	## the alternative was a second derivation free to drift from the first.
+	result.home_base_positions = _initial_home_positions(
+		lineup, defensive_plan, false, false
+	)
+	result.opponent_base_positions = _initial_opponent_positions(
+		opponent_team, false, false
+	)
 	result.player_handedness = _playback_handedness(players, opponent_team)
 	result.player_physical_profiles = _playback_physical_profiles(players, opponent_team)
 	result.active_play_name = active_play.play_name \
@@ -5135,10 +5148,16 @@ func _attack_direction(contact_x: float, target: Vector2) -> String:
 	return "cross-court"
 
 
+## `stage_server` is false when the caller wants a *resting* arrangement rather
+## than the opening snapshot. The serve-origin placement below is correct for the
+## first frame of a rally and wrong for anywhere else -- a base posture that puts
+## somebody behind the baseline would have them walk back off the court every
+## time the ball crossed the net.
 func _initial_home_positions(
 	lineup: RotationLineup,
 	defensive_plan: Resource,
 	receiving: bool,
+	stage_server: bool = true,
 ) -> Dictionary:
 	var positions := {}
 	for slot_number in range(1, 7):
@@ -5152,7 +5171,7 @@ func _initial_home_positions(
 		## So playback drew the ball leaving from a point nobody was standing at, a
 		## metre or so behind a player who never moved. They walk in afterwards; see
 		## the SERVE event's own `movement_target`.
-		if not receiving and slot_number == 1:
+		if stage_server and not receiving and slot_number == 1:
 			positions[player_id] = CourtConstants.serve_origin(position.x, true)
 			continue
 		if defensive_plan != null:
@@ -5168,9 +5187,12 @@ func _initial_home_positions(
 	return positions
 
 
+## `stage_server` as above: false asks for the resting arrangement, which must
+## not park anybody behind their own baseline.
 func _initial_opponent_positions(
 	opponent_team: Resource,
 	receiving: bool,
+	stage_server: bool = true,
 ) -> Dictionary:
 	var positions := {}
 	if opponent_team == null:
@@ -5180,7 +5202,7 @@ func _initial_opponent_positions(
 		reception_zones = _opponent_reception_coverage(opponent_team).zones
 	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
 	var serving_id := opponent_lineup.player_at_slot(1) \
-		if opponent_lineup != null and not receiving else -1
+		if stage_server and opponent_lineup != null and not receiving else -1
 	for player_resource in opponent_team.on_court_players():
 		var player := player_resource as VolleyballPlayer
 		if player == null:

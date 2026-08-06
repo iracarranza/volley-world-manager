@@ -210,6 +210,7 @@ func _initialize() -> void:
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
 	_test_spike_biomechanics_sequence()
+	_test_every_rally_publishes_a_resting_posture()
 	_test_recovery_bands_are_ordered()
 	_test_a_drawn_ball_stops_where_it_was_touched()
 	_test_gait_separates_walking_from_running()
@@ -12045,6 +12046,65 @@ func _test_a_drawn_ball_stops_where_it_was_touched() -> void:
 			Vector2(immediate["start_position"])
 		) > 0.0,
 		"a contact taken early still draws a flight",
+	)
+
+
+## Every rally says where each side stands when the ball is not theirs.
+##
+## Playback had no notion of a position to return to, so once the invented drift
+## was deleted a rally went still: every player either had an explicit target for
+## the phase or stood exactly where the last contact left them. The posture that
+## fixes that is not new -- `DefensivePlan.defender_position` and the opponent's
+## `court_position(id, "defense")` have placed everybody on the opening frame of
+## every rally all along, and the 2D tactical view has read them the whole time.
+##
+## Two ways this fails quietly and both are checked. An empty posture leaves the
+## court exactly as still as before while looking wired up; an off-court one
+## walks players through their own baseline, which is where the *serving*
+## arrangement legitimately puts somebody and a resting arrangement never should.
+func _test_every_rally_publishes_a_resting_posture() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var rallies := 0
+	var thin := 0
+	var off_court := 0
+	var served_from_base := 0
+	for seed_value in range(7300, 7320):
+		manager.match_state.serving_home = seed_value % 2 == 0
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		rallies += 1
+		for posture: Dictionary in [
+			result.home_base_positions, result.opponent_base_positions
+		]:
+			if posture.size() < 6:
+				thin += 1
+			for key in posture:
+				var point := Vector2(posture[key])
+				if point.x < 0.02 or point.x > 0.98 \
+						or point.y < 0.02 or point.y > 0.98:
+					off_court += 1
+				## The serve origin sits behind the baseline. Correct for the
+				## opening snapshot, and never correct for a posture somebody
+				## returns to every time the ball crosses the net.
+				if point.y < 0.06 or point.y > 0.94:
+					served_from_base += 1
+	manager.free()
+	_check(rallies > 0, "the resting-posture probe resolved rallies at all")
+	_check(
+		thin == 0,
+		"every rally publishes a full six-player posture for both sides (%d thin)"
+			% thin,
+	)
+	_check(
+		off_court == 0,
+		"no resting position is outside the court (%d were)" % off_court,
+	)
+	_check(
+		served_from_base == 0,
+		"the resting posture never parks anybody behind a baseline (%d did)"
+			% served_from_base,
 	)
 
 

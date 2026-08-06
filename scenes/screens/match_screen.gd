@@ -453,8 +453,25 @@ func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictio
 	##
 	## If serve-receive movement turns out to matter, the fix is for the resolver
 	## to publish it, not for playback to make it up.
+	_apply_base_positions(plan, event, next_contact)
 	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
 	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
+	## The player who just made this contact goes where their own event said they
+	## go afterwards.
+	##
+	## Only the *next* contact's actor was ever moved, so a `movement_target` on
+	## the event being played was published and never read. The server is the
+	## visible case: they are staged behind the baseline because that is where a
+	## serve is legally struck, the serve event carries the walk-in target, and
+	## playback left them standing outside the court until something else
+	## happened to move them. With the invented drift gone that became "the
+	## server does not move at all until the opposing set".
+	var event_actor_id := int(event.actor_id)
+	if event_actor_id >= 0 and event.metadata.has("movement_target") \
+			and match_court_3d.live_positions.has(event_actor_id):
+		_set_plan_target(
+			plan, event_actor_id, Vector2(event.metadata["movement_target"])
+		)
 	var staged_id := int(event.metadata.get("staged_next_actor_id", -1))
 	if staged_id >= 0:
 		_set_plan_target(
@@ -515,6 +532,48 @@ func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictio
 				next_contact.metadata["approach_start_position"]
 			)
 	return plan
+
+
+## Send the side that is *not* about to play the ball back to its posture.
+##
+## The one thing playback had no notion of: a position to return to. Every
+## player either had an explicit target for the phase or stood exactly where the
+## last contact left them, so once the drift was removed a rally went still.
+##
+## The posture is not invented here. `DefensivePlan.defender_position` and the
+## opponent team's `court_position(id, "defense")` already say where each player
+## stands on defence, and both already place everybody for the first frame of
+## every rally -- the `tactical_court` view has read them all along. Playback
+## simply never asked a second time.
+##
+## Applied first, so anything the resolver said about this specific phase --
+## staged blockers, an approach mark, the next contact's own target -- is laid
+## over the top rather than fighting it. A base position is where you go when
+## nothing more specific is being asked of you.
+##
+## Only the defending side moves. While the ball is on your own side you are
+## setting, approaching or hitting, and the resolver has opinions about all
+## three; a floor-defence posture would drag a hitter out of their approach.
+## And nobody returns to base during the serve, because the receiving formation
+## *is* their posture for that phase and they are already standing in it.
+func _apply_base_positions(
+	plan: Dictionary, event: RallyEvent, next_contact: RallyEvent
+) -> void:
+	if active_result == null:
+		return
+	if event.event_type == RallyEventModel.EventType.SERVE:
+		return
+	var next_is_home := _event_is_home(next_contact)
+	## The side about to play the ball is busy; the other side resets.
+	var resting: Dictionary = active_result.opponent_base_positions if next_is_home \
+		else active_result.home_base_positions
+	for raw_player_id in resting:
+		var player_id := int(raw_player_id)
+		if not match_court_3d.live_positions.has(player_id):
+			continue
+		if player_id == int(next_contact.actor_id):
+			continue
+		_set_plan_target(plan, player_id, Vector2(resting[raw_player_id]))
 
 
 func _apply_explicit_targets(plan: Dictionary, targets: Dictionary) -> void:
