@@ -421,6 +421,14 @@ const LIVE_COMMITMENT_LOW: float = 0.44
 ## more to the person who already knows where they are going.
 const HITTER_PRESET_SHARE: float = 0.82
 
+## How far a set-distribution nudge can outrank raw attacking ability.
+##
+## Sized so it reorders candidates who are close and never overrides a clear
+## difference: the scored terms span roughly 0-1, so five steps of 0.03 move a
+## contender by at most 0.12 -- about a grade band. A bigger value would feed the
+## worst hitter as often as the best, which is not distribution, it is noise.
+const SET_SPREAD_STEP: float = 0.03
+
 ## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
@@ -7194,6 +7202,52 @@ func _fallback_hitter(
 		var middle := _front_row_middle(players, lineup, excluded_player_id)
 		if middle != null:
 			return middle
+	## Every front-row attacker, scored -- not "the outside hitter, and if there
+	## is more than one, whichever stands nearer a pin".
+	##
+	## That rule is deterministic in the rotation, so it returned the same voli
+	## every rally and the opposite never swung at all. Measured over 194 home
+	## attacks it produced Front Quick 84, Right Pin 110 and **Left Pin zero** --
+	## a two-lane offence, which no amount of tempo variety can widen.
+	##
+	## Scored on the swing they would actually take, so a strong opposite gets the
+	## ball ahead of a weak outside and the lane follows from who was chosen rather
+	## than deciding who is chosen.
+	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE:
+		var best_attacker: VolleyballPlayer = null
+		var best_score := -1.0
+		for slot_number in range(1, 7):
+			if not CourtConstants.is_front_row_slot(slot_number):
+				continue
+			var contender := _player_by_id(players, lineup.player_at_slot(slot_number))
+			if contender == null or contender.id == excluded_player_id \
+					or contender.position_role == "Libero" \
+					or not lineup.is_attack_eligible(contender.id):
+				continue
+			var score := _power_rating(contender, "attack_power") * 0.46 \
+				+ _rating(contender, "attack_accuracy") * 0.28 \
+				+ _rating(contender, "approach_timing") * 0.16 \
+				+ _rating(contender, "shot_variety") * 0.10
+			## And spread the ball, because ability alone is still one lane.
+			##
+			## Ranking on the swing picked the best attacker every rally, which moved
+			## the whole offence from Right Pin to Left Pin and left it just as narrow.
+			## A setter who always feeds their best hitter is a setter the block reads
+			## in one rotation, and distribution is the thing that stops that.
+			##
+			## **Deliberately a placeholder, and worth naming as one.** The real term
+			## is a setter decision against what the opponent is anticipating --
+			## `OpponentTeam.anticipated_lane()` and `Familiarity` already track it and
+			## are write-only against the home side today. This is a deterministic
+			## per-rally spread standing in for that until it is wired: it consumes no
+			## random draw, so it re-sequences nothing, and it is small enough that a
+			## clearly better hitter still gets the ball.
+			score += float(posmod(rally_seed + contender.id * 31, 5)) * SET_SPREAD_STEP
+			if score > best_score:
+				best_score = score
+				best_attacker = contender
+		if best_attacker != null:
+			return best_attacker
 	var outside_candidates: Array[VolleyballPlayer] = []
 	for slot_number in range(1, 7):
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))

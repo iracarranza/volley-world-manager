@@ -2225,3 +2225,36 @@ precisely when tempo is doing work. Fixing that means giving the hitter a releas
 that does not depend on the set's own flight -- they leave on the pass, and the
 pass is the same pass whatever the setter then does with it. Different fix,
 still open.
+
+### Set distribution: partial, and the remaining gap is named
+
+`_fallback_hitter` picked "the front-row outside hitter, nearest a pin", which is
+deterministic in the rotation -- the same voli every rally, so the opposite never
+swung and the offence had two lanes.
+
+It now scores every front-row attacker on the swing they would take, plus a
+deterministic per-rally spread (`SET_SPREAD_STEP`) so the ball does not always go
+to the same best hitter.
+
+| | before | after |
+|---|---|---|
+| home lanes | Front Quick 84, Right Pin 110, **Left Pin 0** | Front Quick 86, Left Pin 88 |
+| home T1 share | 30% | 33% |
+
+**Honest reading: this fixed the balance, not the variety.** The ball is now
+shared between attackers instead of fed to one, which is real -- but the lane
+count is still two, because scoring alone just moved the offence from one pin to
+the other before the spread evened it out.
+
+Two things are still missing and neither is a constant:
+
+- **The lane is derived from where the hitter stands**, not chosen.
+  `_fallback_assignment` reads `start_position.x <= 0.5`, so whichever attackers
+  the scoring picks decide the lane as a side effect. A right-side attack has to
+  be a *call*, not a consequence of a slot.
+- **The spread is a placeholder and says so in the code.** The real term is a
+  setter deciding against what the opponent anticipates.
+  `OpponentTeam.anticipated_lane()` and `Familiarity` already track exactly that
+  and are write-only against the home side -- half a scouting system that has
+  never been read. Wiring it is the next step and it replaces the placeholder
+  rather than tuning it.
