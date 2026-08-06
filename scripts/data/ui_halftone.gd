@@ -33,6 +33,19 @@ const TIERS := {
 	&"CardPanel": {"period": 6.0, "radius": 0.29, "strength": 0.30},
 	&"DashboardCard": {"period": 6.0, "radius": 0.27, "strength": 0.26},
 	&"RaisedPanel": {"period": 7.5, "radius": 0.24, "strength": 0.17},
+	## Buttons screen finer and lighter than the surfaces they sit on.
+	##
+	## A control is nearer the reader than the card holding it, and dot density
+	## is this interface's only depth cue -- a button screened at a card's weight
+	## reads as a hole in the card rather than as something resting on it. The
+	## primary action is screened lightest of all, because it is the nearest
+	## thing on the page and the one the eye is meant to land on first.
+	&"SecondaryAction": {"period": 4.5, "radius": 0.24, "strength": 0.20},
+	&"QuietAction": {"period": 4.5, "radius": 0.24, "strength": 0.16},
+	&"NavAction": {"period": 4.5, "radius": 0.24, "strength": 0.16},
+	&"ChoiceChip": {"period": 4.5, "radius": 0.23, "strength": 0.18},
+	&"DangerAction": {"period": 4.5, "radius": 0.25, "strength": 0.22},
+	&"PrimaryAction": {"period": 4.0, "radius": 0.22, "strength": 0.13},
 }
 
 ## `FrontmostPanel` is absent on purpose. It is the variation given to

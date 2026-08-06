@@ -18,6 +18,8 @@ const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
 ## through, and keeps its stylebox border for that reason.
 const INKED_TIERS: Array[StringName] = [
 	&"CardPanel", &"DashboardCard", &"InsetPanel", &"RaisedPanel",
+	&"PrimaryAction", &"SecondaryAction", &"QuietAction", &"DangerAction",
+	&"NavAction", &"ChoiceChip",
 ]
 
 const PRIMARY_ACTIONS := [
@@ -202,6 +204,19 @@ static func _style_panel(panel: PanelContainer) -> void:
 	var node_name := String(panel.name)
 	if node_name in ["ContentPanel", "QuestionPanel", "MenuPanel"]:
 		panel.theme_type_variation = &"RaisedPanel"
+	elif node_name.ends_with("Strip") or node_name.ends_with("Bar"):
+		## A bar is where a control lives, not a surface in its own right.
+		##
+		## `NavStrip` holds one button and a line of hint text, and drawing an
+		## edge around it put a second pen line 12 px outside the button's own --
+		## the doubled-line problem again, arriving from the opposite direction
+		## this time. The button has to keep its edge, because the edge is what
+		## says it can be pressed; so the wrapper gives up its own.
+		##
+		## Matched on the suffix rather than on the one node that has the problem,
+		## because the mistake is structural -- a panel whose only content is a
+		## control -- and the next one will be named the same way.
+		panel.theme_type_variation = &"BareRegion"
 	elif node_name.contains("Preview") or node_name.contains("News") \
 			or node_name.contains("Placeholder"):
 		panel.theme_type_variation = &"InsetPanel"
