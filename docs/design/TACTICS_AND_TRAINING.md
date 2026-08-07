@@ -1,9 +1,12 @@
 # Tactics and training
 
-Status as of 2026-08-07 (`f55ebac`): **the declare half exists and is
-half-broken; the demonstrate half does not exist at all.** This file is the
-design record for both, written because the argument below has lived only in
-conversation and has had to be re-explained from scratch more than once.
+Status as of 2026-08-07 (`bde2856`): **one of the three pages exists, one is
+built but mis-scoped, and one does not exist at all.** This file is the design
+record, written because the argument below has lived only in conversation and
+has had to be re-explained from scratch more than once.
+
+Read **§0 first** -- it is the settled structure, and the sections after it are
+the reasoning that produced it.
 
 What is live now:
 
@@ -19,8 +22,112 @@ What is live now:
   "how well does this squad know this system" would need.
 
 What does not exist: any input loop where the manager *demonstrates* something,
-any learned distribution, and any screen that shows the gap between what was
-declared and what was drilled.
+any learned-preference state distinct from ratings, any preset decomposed into
+comparable asks, and any score of a tactic against what the squad is
+comfortable with.
+
+Mapped onto §0's three pages:
+
+| Page | State |
+|---|---|
+| Attribute training | **built.** Squads, focus, pools, fractional progress. |
+| Match training | **not built.** The tab exists and is a second way into attribute training. |
+| Tactical planner | **built, in the wrong place, and only half the job.** It draws a plan; it does not decompose presets or score fit. |
+
+---
+
+## 0. The clipboard has three pages, and they are a cycle
+
+The settled structure. Open the clipboard and flip between three pages:
+
+| Page | What it changes | The unit it changes |
+|---|---|---|
+| **Attribute training** | current ability, upward toward the potential ceiling | the 0-100 ratings |
+| **Match training** | *comfort and preference*, not ability | coordinates, tempos, zones, postures |
+| **Tactical planner** | a declared plan | presets, then specifics |
+
+They are not three menus. They are a loop:
+
+1. The planner is where you **declare** a tactic -- from a preset ("Feed
+   Opposite", "Combination Play", "Pipe and Middle"; "Funnel into Line",
+   "Spread Block") and then specified further.
+2. The tactic is **scored against what the squad is actually comfortable
+   with**. Every ask a tactic makes -- this hitter at this coordinate, at this
+   tempo, this blocker bunched rather than spread, this defender covering that
+   locus -- is a thing match training tracks, so the fit is directly comparable
+   rather than inferred.
+3. That score is **what tells you which match training to run.** The tactic
+   names the gap; the drill closes it.
+4. Match training moves the comfort values toward what the tactic asked for.
+   Familiarity rises, and the same tactic scores better next week.
+
+**Attribute training sits outside the loop, deliberately.** It raises the
+ceiling of what is possible and has nothing to say about any particular tactic.
+A hitter with enormous attack power whose comfortable coordinate is at the pin
+still cannot run your combination play, and no amount of strength work will
+change that -- only drilling the coordinate will. The two are different verbs on
+different state and neither substitutes for the other.
+
+**Focus belongs to attribute training only.** Low/medium/high, the attribute
+pool, striking off versus aiming at -- all of it is about directing a rating
+upward, so it has no meaning on the other two pages. The current build applies
+focus to everything, which is wrong.
+
+## 0.1 The state split this implies
+
+Three kinds of per-voli state, and keeping them apart is the load-bearing
+decision:
+
+- **Ratings** -- 0-100, player-facing, in `ABILITY_ATTRIBUTES`. Capability.
+  Attribute training moves these.
+- **Bands** -- `SystemFitProfile`, an ideal and a tolerance, read directly by
+  the simulator. Today these are *derived from ratings* by
+  `refresh_system_fit_profiles`.
+- **Learned preferences** -- comfortable coordinates per zone, comfortable
+  tempos, the loci and courses a voli can dig, block posture comfort. Match
+  training moves these. Mostly not player-facing as numbers; shown as marks on
+  a court.
+
+**The tension to resolve before building.** Match training is supposed to move
+"comfortable hitting tempos", but the set-release band is *computed* from
+`tempo_control`, `hand_control` and `adaptability`. As it stands, match training
+cannot move it without either overriding the derivation or layering on top of
+it.
+
+The layered form is the one that serves the fiction:
+
+```
+band = derived-from-ratings  +  learned offset from match training
+```
+
+Attribute training moves the first term -- what this voli is naturally capable
+of. Match training moves the second -- what *this manager* taught them. Which is
+exactly "a professional knows how to hit a slide; they do not know this
+manager's slide", expressed as arithmetic rather than as flavour.
+
+There is a precedent already in the engine: `HitterPlacementModel` keeps a
+`placement_memory` per voli per lane, learned *during rallies* from what worked.
+That is the same kind of state match training would write. Whether the two share
+one channel is a real decision and probably yes -- a match that keeps punishing
+a drilled coordinate should un-teach it, which is the "places that work are
+gravitated towards" mechanic. But it means drills and matches compete, and that
+should be chosen rather than discovered.
+
+## 0.2 What a preset actually has to be
+
+A preset cannot be a label. For step 2 above to work, "Combination Play" has to
+decompose into concrete asks in the same space the preferences live in --
+per-slot lane, tempo, coordinate, and for the defensive presets a block posture
+and a set of covered loci. Only then can it be scored against what the squad is
+comfortable with.
+
+**That decomposition is the real work of the planner**, and it is worth more
+than the drawing tools. A preset that is only a name gives the fit score nothing
+to compare.
+
+**Score per ask, not per tactic.** One familiarity number for a whole tactic
+tells you it is going badly and nothing about what to do. A number per ask tells
+you which drill to run, which is the entire point of the loop.
 
 ---
 
