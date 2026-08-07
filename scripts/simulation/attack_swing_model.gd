@@ -58,6 +58,25 @@ static func vertical_spread_degrees(
 	) * maxf(spread_multiplier, 0.0)
 
 
+## How far off the intended bearing this swing can be expected to land, in
+## degrees, one standard deviation.
+##
+## The horizontal twin of `vertical_spread_degrees`, and it exists for a reason
+## the vertical one does not. A bearing error does not only move where the ball
+## lands -- it changes how far the ball has to fly to reach the tape at all, and
+## a shot swung a few degrees flatter across the court crosses far more ground
+## getting there. A hitter budgeting only for vertical error is budgeting for
+## half of what can put the ball in the net.
+static func bearing_spread_degrees(
+	accuracy: float,
+	spread_multiplier: float,
+) -> float:
+	return lerpf(
+		BEARING_SPREAD_WORST_DEGREES, BEARING_SPREAD_BEST_DEGREES,
+		clampf(accuracy, 0.0, 1.0),
+	) * maxf(spread_multiplier, 0.0)
+
+
 static func deliver(
 	intended_bearing_degrees: float,
 	intended_vertical_angle_degrees: float,
@@ -70,12 +89,10 @@ static func deliver(
 ) -> Dictionary:
 	var precision := clampf(accuracy, 0.0, 1.0)
 	var widen := maxf(spread_multiplier, 0.0)
-	var bearing_spread := lerpf(
-		BEARING_SPREAD_WORST_DEGREES, BEARING_SPREAD_BEST_DEGREES, precision
-	) * widen
-	var vertical_spread := lerpf(
-		VERTICAL_SPREAD_WORST_DEGREES, VERTICAL_SPREAD_BEST_DEGREES, precision
-	) * widen
+	## Through the same two functions the hitter aimed against, so the spread a
+	## swing is judged by cannot drift from the spread it was planned around.
+	var bearing_spread := bearing_spread_degrees(precision, widen)
+	var vertical_spread := vertical_spread_degrees(precision, widen)
 
 	var bearing_error := bearing_draw * bearing_spread
 	var vertical_error := vertical_draw * vertical_spread

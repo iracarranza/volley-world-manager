@@ -94,6 +94,74 @@ const NET_FEASIBILITY_STEPS: int = 9
 ## model's intent, not to a feasibility search quietly turning a spike into one.
 const NET_SPEED_RELIEF_STEPS: int = 6
 const NET_SPEED_RELIEF_FLOOR: float = 0.45
+## The furthest a bearing error is allowed to stretch the path to the tape when
+## a hitter is budgeting for it, as a multiple of the path they aimed on.
+##
+## Needed because the stretch is `1 / cos` of the error against the net normal
+## and runs away without bound as a course approaches parallel with the tape. A
+## sharp cross-court swing off the pin genuinely does fly a long way before it
+## crosses, but a hitter does not plan around the degenerate tail of that -- they
+## plan around a swing that misses by about as much as their swings miss by. Two
+## is roughly a 60-degree course budgeting for its own worst realistic day.
+const NET_PATH_STRETCH_CAP: float = 2.0
+## How many standard deviations of vertical execution error a hitter aims to
+## clear the tape by.
+##
+## It was one, implicitly, by multiplying the spread by itself once -- and one
+## sigma is the margin that puts a sixth of your swings in the net on purpose.
+## That is what the measurement showed: 5th-percentile clearance sat 0.10 m under
+## a planned 0.15 m margin at 2.50 m off the net, exactly one sigma low, with net
+## rates of 0.22-0.33 to match. The bearing budget above is worth 1-3 points of
+## that; this is worth the rest.
+##
+## Two rather than three because the relief search below has to be able to find
+## the bar. A margin nothing can clear does not stop a hitter swinging -- it drops
+## them through to `forced` and flies the same flat ball with no plan at all,
+## which is how the previous attempt at this moved the 4.00 m net rate by a point
+## and a half in the wrong direction.
+const NET_CLEARANCE_SPREAD_SIGMAS: float = 2.0
+## The least air a hitter will accept over the tape when the margin they wanted
+## is not on offer.
+##
+## `NET_CLEARANCE_MARGIN_METERS` and the sigma budget above are what a hitter
+## *aims* for. This is the tape. They were the same branch: the search looked for
+## the margin, and anything that missed it fell through to `forced` and flew a
+## ball with no plan behind it -- including balls that cleared the net by twenty
+## centimetres and merely missed the preference. Measured, `forced` was 0.15 of
+## swings at 2.50 m off the net and 0.36 at 4.00 m, and it netted 86-95% of them,
+## which made it 64% and 77% of all net errors at those depths. The netted balls
+## averaged +0.04 standard deviations of vertical error -- they were not misses,
+## they were plans into the tape.
+##
+## A preference you cannot afford is a preference you drop. A net you cannot
+## clear is a different problem, and only that one is allowed to force a swing.
+const NET_CLEARANCE_FLOOR_METERS: float = 0.03
+## How much of the air between a hitter's contact point and the tape may be spent
+## on safety margin, leaving the rest for the ball to fall through.
+##
+## The bound that was missing, and the one that made every other number here
+## misbehave. A swing cannot arrive at the net higher than it left the hand --
+## only a lofted ball does that, and it is a different shot. So the margin a
+## hitter asks for is capped by the headroom they actually have, which for a
+## 2.91 m reach is 2.81 m of contact against a 2.43 m tape: 0.38 m, all in.
+##
+## Unbounded, the distance-scaled margin computed to 0.27 m at 2.50 m off the net
+## and 0.43 m at 4.00 m. The second is more headroom than exists. The search was
+## asking for a ball that cannot be struck, failing to find one, and dropping
+## through to `forced` -- which is why `forced` ran 0.14 and 0.34 of swings at
+## those depths while relieving the pace all the way to 20% of full moved it by
+## nothing at all. It was never a pace problem. It was a request for altitude
+## nobody had.
+##
+## Half, because the remainder has to cover the ball falling on the way: about
+## 0.06 m over 2.7 m and 0.15 m over 4.3 m at a driven pace.
+## How short a hitter will settle for when they cannot carry the ball to where
+## they aimed, as a fraction of the distance they wanted.
+##
+## A quarter, because past that it is not the same shot -- a ball dropped at a
+## third of its intended distance is a tip, and tips are chosen by the power
+## model's intent rather than arrived at by a feasibility search.
+const NET_SHORTFALL_FLOOR: float = 0.25
 ## How much of a spike's execution spread a serve carries.
 ##
 ## A serve is struck from a standstill, off a self-toss, with no set to read and
@@ -229,6 +297,9 @@ static func resolve_swing(
 		AttackSwingModel.vertical_spread_degrees(
 			_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier)
 		),
+		AttackSwingModel.bearing_spread_degrees(
+			_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier)
+		),
 	)
 	var intended_angle := float(launch.angle_degrees)
 	aim_distance = float(launch.aim_distance)
@@ -292,6 +363,13 @@ static func resolve_swing(
 		"natural_bearing_degrees": natural,
 		"swing_range_degrees": swing_range,
 		"power": chosen,
+		## Whether the feasibility search found a solution over the tape or fell
+		## through and flew the ball anyway. Published for the same reason the two
+		## block quantities below are: `forced` is the branch that turns a raised
+		## bar into more balls in the net rather than fewer, so a change to the
+		## margin cannot be read without it.
+		"launch_mode": str(launch.mode),
+		"launch_cleared": bool(launch.cleared),
 		"delivered": delivered,
 		"resolution": resolved,
 		"signature_move": move,
@@ -400,6 +478,7 @@ static func resolve_serve(
 		contact, bearing, speed, contact_height_meters, distance, distance,
 		attacking_negative_y,
 		AttackSwingModel.vertical_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
+		AttackSwingModel.bearing_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 	)
 	speed = float(launch.speed_mps)
 	var delivered := AttackSwingModel.deliver(
@@ -456,9 +535,35 @@ static func _feasible_launch(
 	far_meters: float,
 	attacking_negative_y: bool,
 	vertical_spread_degrees: float,
+	bearing_spread_degrees: float,
 ) -> Dictionary:
-	var ground_to_net := _ground_distance_to_net(
+	## The path the hitter aimed on, and the longer one a bearing error puts them
+	## on -- and it is the longer one every check below is made against.
+	##
+	## The vertical budget alone was measured holding at a tight set and failing
+	## everywhere else: net errors ran 0.000-0.073 at 0.36 m, 0.147-0.253 at
+	## 1.20 m and 0.233-0.367 at 2.50 m, with 5th-percentile clearance falling
+	## from 0.112 m (sitting right on the flat margin, exactly as designed) to
+	## 0.038 m. A margin that grows with distance was being computed on a distance
+	## the ball did not fly. Horizontal error lengthens the path, the ball has to
+	## stay in the air over the extra ground, and nothing budgeted for it -- the
+	## netted balls off the pin flew 3.70 m to the tape against 3.25 m for the
+	## ones that cleared.
+	var aimed_to_net := _ground_distance_to_net(
 		contact, bearing_degrees, attacking_negative_y
+	)
+	var ground_to_net := minf(
+		maxf(
+			_ground_distance_to_net(
+				contact, bearing_degrees + bearing_spread_degrees,
+				attacking_negative_y,
+			),
+			_ground_distance_to_net(
+				contact, bearing_degrees - bearing_spread_degrees,
+				attacking_negative_y,
+			),
+		),
+		aimed_to_net * NET_PATH_STRETCH_CAP,
 	)
 	## How much air *this* swing needs, rather than how much air any swing needs.
 	##
@@ -472,14 +577,33 @@ static func _feasible_launch(
 	## It travels with the speed relief below and not on its own. Measured alone it
 	## moved the 4.00 m net rate by a point and a half, because a higher bar with no
 	## way to hit softer only sends more solves down the `forced` branch.
-	var needed := CourtConstants.NET_HEIGHT_METERS + maxf(
+	var wanted := maxf(
 		NET_CLEARANCE_MARGIN_METERS,
-		ground_to_net * tan(deg_to_rad(maxf(vertical_spread_degrees, 0.0))),
+		ground_to_net * tan(deg_to_rad(
+			maxf(vertical_spread_degrees, 0.0) * NET_CLEARANCE_SPREAD_SIGMAS
+		)),
 	)
+	var needed := CourtConstants.NET_HEIGHT_METERS + wanted
 	var reach := maxf(far_meters, aim_distance)
-	var best_driven := 0.0
-	var best_distance := aim_distance
 	var full_speed := maxf(speed_mps, BallFlightModel.MIN_SPEED_MPS)
+	## The least-bad swing seen anywhere in the search, kept in case nothing
+	## clears.
+	##
+	## The fallback used to be the flattest thing tried -- the driven solve at full
+	## pace, from the first relief step, chosen because it was the first thing
+	## written to `best_driven` and never because it was any good. So a hitter who
+	## could not get the ball over swung the one ball least likely to get over,
+	## and that branch is where the residual net errors live: measured at 2.50 m
+	## off the net, `forced` ran 0.10-0.20 of swings against net rates of
+	## 0.16-0.30, tracking it lane for lane.
+	##
+	## A hitter who cannot clear the tape still tries to clear the tape. This
+	## keeps the highest ball the search found instead, which is the same swing
+	## they were always going to take, aimed at the problem.
+	var fallback_height := -INF
+	var fallback_angle := AttackPowerModel.DRIVEN_REFERENCE_ANGLE_DEGREES
+	var fallback_distance := aim_distance
+	var fallback_speed := full_speed
 
 	## Full pace first, then progressively less of it. A hitter who cannot get the
 	## ball over at full pace takes pace off; they do not swing through the tape.
@@ -498,15 +622,19 @@ static func _feasible_launch(
 			if not bool(solved.get("driven_found", false)):
 				continue
 			var angle := float(solved.driven_angle_degrees)
-			if _height_at_net(speed, angle, contact_height_meters, ground_to_net) \
-					>= needed:
+			var height := _height_at_net(
+				speed, angle, contact_height_meters, ground_to_net
+			)
+			if height >= needed:
 				return {
 					"angle_degrees": angle, "aim_distance": probe,
 					"speed_mps": speed, "mode": "driven", "cleared": true,
 				}
-			if relief_step == 0:
-				best_driven = angle
-				best_distance = probe
+			if height > fallback_height:
+				fallback_height = height
+				fallback_angle = angle
+				fallback_distance = probe
+				fallback_speed = speed
 		## Nothing driven gets over at this pace. Try lifting it instead, before
 		## giving up any more speed -- arc is cheaper than pace.
 		var lofted_solve := BallFlightModel.solve_angle_for_range(
@@ -514,18 +642,86 @@ static func _feasible_launch(
 		)
 		if bool(lofted_solve.get("lofted_found", false)):
 			var lofted := float(lofted_solve.lofted_angle_degrees)
-			if _height_at_net(
-					speed, lofted, contact_height_meters, ground_to_net
-				) >= needed:
+			var lofted_height := _height_at_net(
+				speed, lofted, contact_height_meters, ground_to_net
+			)
+			if lofted_height >= needed:
 				return {
 					"angle_degrees": lofted, "aim_distance": aim_distance,
 					"speed_mps": speed, "mode": "lofted", "cleared": true,
 				}
+			if lofted_height > fallback_height:
+				fallback_height = lofted_height
+				fallback_angle = lofted
+				fallback_distance = aim_distance
+				fallback_speed = speed
+	## Nothing above was even solvable: this hitter cannot carry the ball to where
+	## they aimed at the pace they chose, so every probe came back with a negative
+	## discriminant and the search never evaluated a real trajectory.
+	##
+	## The sweep above only ever probes *longer* and only ever relieves speed
+	## *downward*, and both are the wrong direction for this failure -- which is
+	## why relieving all the way to 20% of full pace moved it by nothing. The
+	## failure grows with depth because every target is further away from four
+	## metres back than from thirty-six centimetres: `unsolved` ran 0.06 of swings
+	## at 0.36 m and 0.15 at 4.00 m, and it put the ball in the net 100% of the
+	## time from 1.20 m out, making it the single largest source of net errors at
+	## every depth past the tightest.
+	##
+	## A hitter who cannot drive it that far hits it shorter. The ball goes over
+	## and lands in front of the defence, which is a weak attack -- and a weak
+	## attack is a thing this game can already resolve. A ball into the tape is
+	## not what happens when someone is asked for more than they have.
+	##
+	## Shortening on its own is not the answer, and measuring it said so: it
+	## cleared `unsolved` to zero but the shortened balls still netted 0.65 at
+	## 2.50 m and 0.85 at 4.00 m, because a driven solve onto a *nearer* target is
+	## a steeper solve, and steeper from four metres back is further into the
+	## tape. The shortened candidates have to face the same clearance test as
+	## every other candidate, and they have to be allowed to arc -- lifting it is
+	## the whole point of giving up the distance.
+	if fallback_height == -INF:
+		for step in range(NET_FEASIBILITY_STEPS):
+			var shortened := aim_distance * lerpf(
+				1.0, NET_SHORTFALL_FLOOR,
+				float(step + 1) / float(NET_FEASIBILITY_STEPS)
+			)
+			var short_solve := BallFlightModel.solve_angle_for_range(
+				full_speed, shortened, contact_height_meters
+			)
+			for branch in [&"lofted", &"driven"]:
+				if not bool(short_solve.get("%s_found" % branch, false)):
+					continue
+				var short_angle := float(
+					short_solve.get("%s_angle_degrees" % branch, 0.0)
+				)
+				var short_height := _height_at_net(
+					full_speed, short_angle, contact_height_meters, ground_to_net
+				)
+				if short_height >= needed:
+					return {
+						"angle_degrees": short_angle,
+						"aim_distance": shortened,
+						"speed_mps": full_speed,
+						"mode": "shortened", "cleared": true,
+					}
+				if short_height > fallback_height:
+					fallback_height = short_height
+					fallback_angle = short_angle
+					fallback_distance = shortened
+					fallback_speed = full_speed
+
+	## Nothing on offer met the margin. Take the highest ball the search found if
+	## it gets over the tape at all -- that is a hitter giving up the shot they
+	## wanted, not a hitter giving up on the net.
+	var over := CourtConstants.NET_HEIGHT_METERS + NET_CLEARANCE_FLOOR_METERS
 	return {
-		"angle_degrees": best_driven if best_driven != 0.0
-			else AttackPowerModel.DRIVEN_REFERENCE_ANGLE_DEGREES,
-		"aim_distance": best_distance, "speed_mps": full_speed,
-		"mode": "forced", "cleared": false,
+		"angle_degrees": fallback_angle,
+		"aim_distance": fallback_distance,
+		"speed_mps": fallback_speed,
+		"mode": ("scraped" if fallback_height >= over
+			else ("unsolved" if fallback_height == -INF else "forced")),
+		"cleared": fallback_height >= over,
 	}
 
 
