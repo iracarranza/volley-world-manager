@@ -78,10 +78,37 @@ const QUIET_ACTIONS := [
 const DANGER_ACTIONS := ["DeleteButton", "ExitButton"]
 
 
-static func apply(root: Node, light_mode: bool) -> void:
-	_style_node(root, light_mode)
+## Which medium a subtree is made of.
+##
+## The whole application used to be one: every screen got the sewn treatment,
+## because the journal was the whole interface and the treatment *was* the
+## interface. It is not any more. The desk has several objects on it and they are
+## made of different things -- a journal is cloth and thread, a clipboard and a
+## scouting folder are paper somebody drew on -- and giving all of them the same
+## stitched edge says they are the same object seen twice.
+##
+## A screen declares its medium by setting `MEDIUM_META` on its root. The walk
+## carries the nearest declaration downward, so a screen states it once.
+##
+## **Drawn is the default and sewn is the exception**, which is the way round
+## that matters: a screen added later is plain until somebody decides it is part
+## of the journal, rather than silently inheriting the journal's identity.
+const MEDIUM_META := &"ui_medium"
+## Cloth: a running stitch around every surface, no highlighter.
+const MEDIUM_SEWN := &"sewn"
+## Paper: a broad-nib pen edge, and controls that take a highlighter.
+const MEDIUM_DRAWN := &"drawn"
+
+
+static func apply(
+	root: Node, light_mode: bool, medium: StringName = MEDIUM_DRAWN
+) -> void:
+	var subtree_medium := medium
+	if root.has_meta(MEDIUM_META):
+		subtree_medium = StringName(root.get_meta(MEDIUM_META))
+	_style_node(root, light_mode, subtree_medium)
 	for child in root.get_children():
-		apply(child, light_mode)
+		apply(child, light_mode, subtree_medium)
 
 
 static func reveal(screen: Control) -> void:
@@ -94,7 +121,7 @@ static func reveal(screen: Control) -> void:
 	tween.tween_property(screen, "position", resting_position, 0.26)
 
 
-static func _style_node(node: Node, light_mode: bool) -> void:
+static func _style_node(node: Node, light_mode: bool, medium: StringName) -> void:
 	if node is PopupPanel:
 		(node as PopupPanel).theme_type_variation = &"FrontmostPanel"
 		## Not screened, and it cannot be: `PopupPanel` derives from `Window`, so
@@ -131,12 +158,12 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 	_clear_legacy_presentation_overrides(control)
 	if control is Button:
 		_style_button(control as Button)
-		_screen_surface(control, light_mode)
+		_screen_surface(control, light_mode, medium)
 	elif control is Label:
 		_style_label(control as Label)
 	elif control is PanelContainer:
-		_style_panel(control as PanelContainer)
-		_screen_surface(control, light_mode)
+		_style_panel(control as PanelContainer, medium)
+		_screen_surface(control, light_mode, medium)
 	elif control is RichTextLabel:
 		control.theme_type_variation = &"BodyCopy"
 		_paper_window(control)
@@ -188,11 +215,13 @@ static func _clear_legacy_presentation_overrides(control: Control) -> void:
 ## entry in `UIHalftone.TIERS` clears the material instead of leaving whatever
 ## was there, because the style pass runs again on every theme switch and a
 ## surface that stops being screened has to actually stop.
-static func _screen_surface(control: Control, light_mode: bool) -> void:
+static func _screen_surface(
+	control: Control, light_mode: bool, medium: StringName
+) -> void:
 	control.material = UIHalftone.material_for(
 		control.theme_type_variation, light_mode
 	)
-	_ink_surface(control)
+	_ink_surface(control, medium)
 	_vary_patch_colour(control)
 
 
@@ -234,14 +263,20 @@ static func _vary_patch_colour(control: Control) -> void:
 ## exempt so the next style pass walks straight past it, and reused rather than
 ## recreated so repeated passes -- a theme switch, a resize -- do not stack
 ## twenty of them on one card.
-static func _ink_surface(control: Control) -> void:
+static func _ink_surface(control: Control, medium: StringName) -> void:
 	var wanted := control.theme_type_variation in INKED_TIERS
 	var existing := control.get_node_or_null("InkOutline") as UIInkOutline
 	if not wanted:
 		if existing != null:
 			existing.queue_free()
 		return
-	var sewn := control.theme_type_variation in STITCHED_TIERS
+	## Sewn only where the tier asks for it *and* the screen is made of cloth.
+	## On a drawn page the same surface takes the pen edge instead, which is the
+	## one alternative the ink system already has -- so the clipboard and the
+	## folders read as paper without inventing a third treatment nobody has
+	## finished designing.
+	var sewn := medium == MEDIUM_SEWN \
+		and control.theme_type_variation in STITCHED_TIERS
 	var wanted_style := UIInkOutline.Stroke.STITCH if sewn \
 		else UIInkOutline.Stroke.INK
 	if existing != null:
@@ -397,7 +432,7 @@ static func _style_label(label: Label) -> void:
 		label.theme_type_variation = &"MutedLabel"
 
 
-static func _style_panel(panel: PanelContainer) -> void:
+static func _style_panel(panel: PanelContainer, medium: StringName) -> void:
 	var node_name := String(panel.name)
 	if node_name in ["ContentPanel", "QuestionPanel", "MenuPanel"]:
 		panel.theme_type_variation = &"RaisedPanel"

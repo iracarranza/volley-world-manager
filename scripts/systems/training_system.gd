@@ -30,8 +30,11 @@ const ACTIVITIES := {
 		"description": "Coordinate block reads, lateral closing and floor anticipation."},
 	"Strength & Jump": {"blocks": 3, "attributes": ["explosiveness", "jump_reach", "stamina"], "fatigue": 0.09, "satisfaction": -0.005, "familiarity": 0.0, "cohesion": 0.0,
 		"description": "Build explosive capacity and conditioning at a higher fatigue cost."},
+	## `situation_experience` was in this pool and should never have been: it is a
+	## `Dictionary` of per-situation records, not a 0-100 rating, so a week aimed
+	## at it called `int({})` and threw. A pool holds ratings only.
 	"Film Review": {"blocks": 2, "attributes": ["anticipation", "decision_making",
-		"tactical_discipline", "court_vision", "situation_experience"], "fatigue": 0.005,
+		"tactical_discipline", "court_vision"], "fatigue": 0.005,
 		"satisfaction": -0.005, "familiarity": 0.03, "cohesion": 0.005,
 		"description": "Watch the tape. Reads, decisions and discipline, at almost no cost to the legs."},
 	"Team Meeting": {"blocks": 1, "attributes": ["composure", "leadership",
@@ -227,7 +230,21 @@ static func _train_player(
 	)
 	var gained := 0
 	for attribute_name in selected:
-		var current := int(player.get(attribute_name))
+		## Skip anything that is not a rating.
+		##
+		## `int(value)` throws on a `Dictionary` or an `Array`, and the throw
+		## happens per voli per week in the middle of advancing the season -- so a
+		## single bad pool entry produced a wall of identical errors a long way
+		## from the list that caused them. `situation_experience` was the entry
+		## that found this; the guard is here so the next one costs a skipped
+		## attribute rather than a broken week.
+		var value: Variant = player.get(attribute_name)
+		if typeof(value) != TYPE_INT and typeof(value) != TYPE_FLOAT:
+			push_warning(
+				"Training pool entry '%s' is not a rating; skipped." % attribute_name
+			)
+			continue
+		var current := int(value)
 		## A player's own ceiling where one is set, their potential otherwise, and
 		## never below where they already are.
 		var ceiling := maxi(

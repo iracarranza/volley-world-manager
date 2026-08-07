@@ -38,6 +38,14 @@ func _ready() -> void:
 	var window_viewport := get_viewport()
 	window_viewport.size_changed.connect(_sync_halftone_scale)
 	_sync_halftone_scale()
+	## The journal is the one object made of cloth.
+	##
+	## The stitched treatment was the whole interface when the journal was the
+	## whole interface. It is not any more -- the clipboard, the folders and the
+	## planner are paper somebody drew on -- so the sewn edge is declared here,
+	## once, on the one screen it belongs to. Everything else takes the pen.
+	journal.set_meta(UIStyleSystem.MEDIUM_META, UIStyleSystem.MEDIUM_SEWN)
+
 	title_screen.new_career_requested.connect(_show_new_career)
 	title_screen.career_load_requested.connect(_load_career)
 	title_screen.theme_requested.connect(_apply_theme)

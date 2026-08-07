@@ -2041,6 +2041,33 @@ func _test_minor_region_behaviour() -> void:
 		"team practice builds the system faster than any other session and a strength circuit builds none of it",
 	)
 
+	## Every attribute a session can train has to be a rating.
+	##
+	## `_train_player` reads them with `int(...)`, which throws on a `Dictionary`
+	## or an `Array` -- and it throws per voli per week from inside the season
+	## advance, a long way from the pool that caused it. `situation_experience` is
+	## a per-situation record rather than a 0-100 number and was briefly in the
+	## Film Review pool; this is the check that would have caught it at the list.
+	## A bare model rather than a voli off the roster. The roster's contents
+	## depend on what ran before this, and reaching into it cost twenty checks
+	## when the list happened to be empty: the index error aborted the rest of
+	## this function rather than failing one assertion. The question here is about
+	## the *shape* of an attribute, which every default already answers.
+	var pool_probe := VolleyballPlayer.new()
+	var non_rating_entries: Array[String] = []
+	for pooled_activity in TRAINING_SYSTEM_SCRIPT.activity_names():
+		var pooled: Dictionary = TRAINING_SYSTEM_SCRIPT.description(pooled_activity)
+		for pooled_attribute in Array(pooled.get("attributes", [])):
+			var pooled_value: Variant = pool_probe.get(str(pooled_attribute))
+			if typeof(pooled_value) != TYPE_INT and typeof(pooled_value) != TYPE_FLOAT:
+				non_rating_entries.append(
+					"%s/%s" % [pooled_activity, str(pooled_attribute)]
+				)
+	_check(
+		non_rating_entries.is_empty(),
+		"every trainable attribute is a rating, not a record: %s" % [non_rating_entries],
+	)
+
 	var format := MATCH_FORMAT_SCRIPT.new()
 	format.best_of_sets = 3
 	format.regular_set_target = 25

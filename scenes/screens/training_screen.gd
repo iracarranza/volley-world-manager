@@ -29,6 +29,9 @@ const TrainingSystem := preload("res://scripts/systems/training_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
 const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
 const TrainingRegimenModel := preload("res://scripts/models/training_regimen.gd")
+const TrainingProjection := preload("res://scripts/systems/training_projection.gd")
+const SystemFitBandsScript := preload("res://scenes/components/system_fit_bands.gd")
+
 
 signal back_requested
 signal schedule_requested
@@ -365,6 +368,8 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 				]
 			_add_line(_detail, "Aimed at %d. The week's progress is split between them, so fewer moves each further.%s" % [named, tail])
 
+	_add_band_panel(regimen, description)
+
 	## Who is doing it. A squad is the other half of a regimen.
 	_add_heading(_detail, "Squad")
 	var squad_row := HFlowContainer.new()
@@ -383,6 +388,54 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 		var member := int(player.id)
 		toggle.pressed.connect(func() -> void: _toggle_member(activity, member))
 		squad_row.add_child(toggle)
+
+
+## What this session does to the windows a rally actually reads.
+##
+## The panel used to answer "what does this session do" with a familiarity
+## percentage, which is a number about a number. The planner was legible because
+## it drew the consequence; this draws the consequence too. A system-fit band is
+## an ideal and a tolerance the simulator reads directly, and the attributes a
+## session trains are the same ones those bands are derived from -- so aiming a
+## week somewhere moves a window, visibly, and the projection is produced by
+## running the real training path on a copy rather than by a second formula that
+## would be free to disagree with the first.
+func _add_band_panel(regimen: TrainingRegimen, description: Dictionary) -> void:
+	if _game_manager == null or _game_manager.players.is_empty():
+		return
+	_add_heading(_detail, "The windows this session works on")
+	var touched := TrainingProjection.axes_touched(
+		description, _game_manager.players[0]
+	)
+	if touched.is_empty():
+		## Said rather than drawn as flat bars. A strength circuit moves
+		## explosiveness and jump reach, which none of these windows is derived
+		## from -- a fact about the session, not a null result.
+		_add_line(_detail, "None. This session works on attributes the rally reads \
+somewhere other than these four windows.")
+		return
+	if regimen.player_ids.is_empty():
+		for axis in touched:
+			_add_line(_detail, "· %s — %s" % [str(axis.label), str(axis.note)])
+		_add_line(_detail, "Assign a squad below to see where each voli sits.")
+		return
+	for axis in touched:
+		_add_line(_detail, "%s — %s" % [str(axis.label), str(axis.note)])
+		var rows := TrainingProjection.squad_rows(
+			axis, _game_manager.players, regimen
+		)
+		if rows.is_empty():
+			continue
+		var bands := SystemFitBandsScript.new()
+		bands.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bands.set_rows(rows, str(axis.unit), int(axis.decimals))
+		_detail.add_child(bands)
+		var direction := TrainingProjection.direction_sentence(axis)
+		if not direction.is_empty():
+			_add_line(_detail, direction)
+	_add_line(_detail, "The tick is where a voli naturally sits; the bar is how much \
+room they have to be wrong. A week moves these far less than the gap between two \
+volis does, so the useful question is who to put on the session.")
 
 
 ## What a full-turnout week of this session is worth to the club rather than to
