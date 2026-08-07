@@ -1007,14 +1007,21 @@ func _test_no_attack_is_struck_illegally() -> void:
 			illegal, back_row,
 		],
 	)
-	## And the finding this audit turned up, which points the opposite way from the
-	## defect it was looking for: the opponent takes about two thirds of its attacks
-	## from the back row and the home side takes none at all. A team with no pipe is
-	## a team the block can compress on, and nothing was measuring it.
+	## And the finding this audit turned up, which pointed the opposite way from
+	## the defect it was looking for: the opponent took about two thirds of its
+	## attacks from the back row and the home side took none at all. A team with no
+	## pipe is a team the block can compress on, and nothing was measuring it.
+	##
+	## This asserted `home_back_row == 0` -- a limitation pinned so it could not
+	## drift unnoticed, which is the right way to hold a known gap. The gap is
+	## closed: `_fallback_hitter` scanned front-row slots only, so of the five
+	## lanes in `CourtConstants.LANES` the home offence could produce four, and
+	## everything the fifth needed downstream already existed. Now that it swings
+	## from the back row the assertion inverts, and the legality check above --
+	## which has always covered both sides -- is what keeps it honest.
 	_check(
-		home_back_row == 0,
-		"the home side still has no back-row attack (%d found) -- see BACKLOG §8"
-			% home_back_row,
+		home_back_row > 0,
+		"the home side attacks from the back row (%d observed)" % home_back_row,
 	)
 
 

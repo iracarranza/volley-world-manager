@@ -552,6 +552,22 @@ const QUICK_OPTION_BONUS: float = 0.06
 ## hitter as readily as a strong one.
 const SET_DISTRIBUTION_SHARPNESS: float = 6.0
 
+## What running the pipe is worth, and what the extra ground costs.
+##
+## Smaller than the quick's bonus because a pipe does not beat the block by
+## arriving early -- it beats it by arriving somewhere the wall is not looking
+## while two front-row hitters hold their attention. The travel term is scaled by
+## `transition_speed`, which is the attribute for exactly this and had almost
+## nowhere to express itself: a hitter who cannot get from defensive base to
+## behind the attack line in the time the pass buys is not a pipe option, whoever
+## else they are.
+const PIPE_OPTION_BONUS: float = 0.05
+const PIPE_TRAVEL_COST: float = 0.12
+
+## A pipe is a second-tempo ball: faster than the high outside set it competes
+## with, slower than the quick it runs behind.
+const PIPE_TEMPO_CALL: int = 2
+
 ## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
@@ -7669,19 +7685,39 @@ func _fallback_hitter(
 	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE:
 		var scored: Array[Dictionary] = []
 		for slot_number in range(1, 7):
-			if not CourtConstants.is_front_row_slot(slot_number):
-				continue
 			var contender := _player_by_id(players, lineup.player_at_slot(slot_number))
 			if contender == null or contender.id == excluded_player_id \
 					or contender.position_role == "Libero" \
 					or not lineup.is_attack_eligible(contender.id):
 				continue
-			var is_middle := contender.position_role == "Middle Blocker"
+			var front_row := CourtConstants.is_front_row_slot(slot_number)
+			var is_middle := front_row \
+				and contender.position_role == "Middle Blocker"
 			## A middle with no quick to run is a hitter with no shot: they cannot
 			## be set a high ball outside, so they leave the pool rather than being
 			## fed something they do not hit.
 			if is_middle and not quick_is_on:
 				continue
+			## The back row swings too, on a ball that allows it.
+			##
+			## This loop skipped every back-row slot, so the pipe was unreachable by
+			## any code path on this side of the net -- five lanes in
+			## `CourtConstants.LANES`, four the offence could produce, and the one it
+			## could not is the one that occupies the middle blocker and stops a
+			## front-row-only offence being read three-wide. Everything else it needs
+			## already existed: `LANE_X`, a `lane_target` behind the attack line, the
+			## "Pipe attack" hit type, an approach profile, and a play validator that
+			## has always required back-row hitters to use this lane.
+			##
+			## Gated on the same pass the quick is, and for the same reason: a hitter
+			## running from four metres back needs the ball where they expected it.
+			## A middle blocker in the back row is not a pipe hitter -- they are
+			## resting, and in this squad they are usually about to be substituted.
+			if not front_row:
+				if not RallyFeatureFlagsModel.ENABLE_HOME_PIPE_OFFENSE \
+						or not quick_is_on \
+						or contender.position_role == "Middle Blocker":
+					continue
 			var score := _power_rating(contender, "attack_power") * 0.46 \
 				+ _rating(contender, "attack_accuracy") * 0.28 \
 				+ _rating(contender, "approach_timing") * 0.16 \
@@ -7691,6 +7727,14 @@ func _fallback_hitter(
 			## privileged, so a strong pin still out-scores a weak middle.
 			if is_middle:
 				score += QUICK_OPTION_BONUS
+			## And the pipe is worth something for the same reason, with the extra
+			## metres of run priced against it: it arrives on a wall watching two
+			## front-row hitters, but the hitter has further to travel and less of
+			## the set to read.
+			elif not front_row:
+				score += PIPE_OPTION_BONUS \
+					- (1.0 - _rating(contender, "transition_speed")) \
+						* PIPE_TRAVEL_COST
 			## And spread the ball, because ability alone is still one lane.
 			##
 			## Ranking on the swing picked the best attacker every rally, which moved
@@ -8964,9 +9008,18 @@ func _fallback_assignment(
 	assignment.start_position = CourtConstants.slot_position(
 		lineup.slot_for_player(hitter.id)
 	)
+	var slot_number := lineup.slot_for_player(hitter.id)
 	var left_side := assignment.start_position.x <= 0.5
+	## A back-row swing is a pipe and nothing else. `PlayValidator` has said so
+	## since the plays were written -- "back-row hitters must use the Pipe lane" --
+	## and this is the fallback offence finally agreeing with it.
+	if RallyFeatureFlagsModel.ENABLE_HOME_PIPE_OFFENSE \
+			and slot_number >= 1 and not CourtConstants.is_front_row_slot(slot_number):
+		assignment.lane = "Pipe"
+		assignment.tempo = PIPE_TEMPO_CALL
+		return assignment
 	var is_middle := hitter.position_role == "Middle Blocker" \
-		and CourtConstants.is_front_row_slot(lineup.slot_for_player(hitter.id))
+		and CourtConstants.is_front_row_slot(slot_number)
 	if not RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE:
 		assignment.lane = "Left Pin" if left_side else "Right Pin"
 		assignment.tempo = 3

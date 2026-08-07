@@ -558,6 +558,30 @@ const ENABLE_HOME_MIDDLE_OFFENSE: bool = true
 const ENABLE_LIVE_TEMPO_CALL: bool = true
 
 
+## Let the back row swing.
+##
+## The third in the sequence `ENABLE_HOME_MIDDLE_OFFENSE` and
+## `ENABLE_LIVE_TEMPO_CALL` started: one added the lane a quick needs, one added
+## the tempo, and this adds the only lane the home offence still could not
+## produce. `_fallback_hitter` scanned front-row slots exclusively, so of the five
+## lanes in `CourtConstants.LANES` the offence could reach four, and the missing
+## one is the one that occupies a middle blocker and stops a three-hitter front
+## being read as a three-hitter front.
+##
+## Everything downstream of the decision already existed and had for some time:
+## `LANE_X` carries the pipe at 0.50, `lane_target` puts it behind the attack
+## line at 0.66 rather than on the net, `_hit_type` names it "Pipe attack",
+## `ApproachMechanicsSystem` gives that hit type a power-attack profile,
+## `ShadowAttackSystem._fallback_lane` returns it for any back-row slot, and
+## `PlayValidator` has required back-row hitters to use it since the plays were
+## written. What was missing was a caller.
+##
+## Gated on the same pass quality the quick is. A hitter running from four metres
+## behind the attack line needs the ball where they expected it, and a pipe off a
+## scrambled pass is a free ball with extra steps.
+const ENABLE_HOME_PIPE_OFFENSE: bool = true
+
+
 ## Pay the hitter for reading the pass, the way the blocker already is.
 ##
 ## `_form_home_block` gives every blocker `preset_window * preset_share` -- 26%

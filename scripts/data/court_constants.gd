@@ -62,6 +62,12 @@ const LANE_X := {
 	"Pipe": 0.50,
 }
 
+## How deep a pipe is set, as a share of court length from the far end line. Four
+## metres off the net on an 18 m court: a metre behind the attack line, which is
+## the room a back-row hitter needs to take off legally and still be swinging
+## forward when they meet the ball.
+const PIPE_SET_DEPTH: float = 0.5 + 4.0 / 18.0
+
 const TEMPOS: Array[int] = [0, 1, 2, 3]
 
 ## Rotation-order reference grid: two rows of three, used to verify overlap
@@ -194,9 +200,17 @@ static func slot_position(slot_number: int) -> Vector2:
 	return ROTATION_SLOT_POSITIONS.get(slot_number, UNRESOLVED_SLOT_POSITION)
 
 
+## Where a set to this lane is aimed, in the hitter's own half.
+##
+## The pipe's target was 0.66, which is 0.007 *in front of* the attack line at
+## 0.6667 -- so a back-row hitter was being aimed at a ball they cannot legally
+## take off in front of, and execution spread put two take-offs in 28 over the
+## line. A pipe is set about a metre behind the three-metre line rather than on
+## it, which is 4 m from the net on an 18 m court, and that is where the
+## measured take-offs already clustered: median 0.721 against this 0.722.
 static func lane_target(lane_name: String) -> Vector2:
 	var lane_x := float(LANE_X.get(lane_name, 0.5))
-	var target_y := 0.66 if lane_name == "Pipe" else 0.53
+	var target_y := PIPE_SET_DEPTH if lane_name == "Pipe" else 0.53
 	return Vector2(lane_x, target_y)
 
 

@@ -304,7 +304,7 @@ re-sequences every seeded outcome after it. Drawing the improvisation roll
 conditionally flipped both block gates on the re-sequencing alone. Draw
 unconditionally, gate afterwards.
 
-### The missing row filter is not reachable — and the home side has no pipe
+### The missing row filter is not reachable — and the home side had no pipe
 
 `OpponentTeam.eligible_hitters()` filters by position code and never reads the
 row, which is why "a back-row player can be picked as a front-row attacker" was on
@@ -330,6 +330,31 @@ The home playbook has no pipe at all, so the block can compress on it with nothi
 to lose, and nothing was measuring that. This is a bigger offensive asymmetry than
 the filter would have been a fix for, and it sits on the *home* side — the
 opposite of every other asymmetry in this section.
+
+**Closed.** `_fallback_hitter` iterated front-row slots only, so of the five lanes
+in `CourtConstants.LANES` the home offence could reach four and the fifth was
+unreachable by any code path. Everything downstream of the decision already
+existed and had for some time — `LANE_X` carries the pipe, `_hit_type` names it
+"Pipe attack", `ApproachMechanicsSystem` gives that a power-attack profile,
+`ShadowAttackSystem._fallback_lane` returns it for any back-row slot, and
+`PlayValidator` has required back-row hitters to use it since the plays were
+written. What was missing was a caller. Back-row attackers are candidates now,
+behind `ENABLE_HOME_PIPE_OFFENSE`, gated on the same pass quality the quick is
+and excluding the libero, the setter and a resting middle.
+
+Fixing it exposed a second thing the absence had hidden: `lane_target` aimed the
+pipe at 0.66 against an attack line at 0.6667, a centimetre the wrong side of it,
+and execution spread put 2 take-offs in 28 in front of the line. A pipe is set
+about a metre behind the three-metre line rather than on it, which is where the
+measured take-offs already clustered — median 0.721 against the 0.722 the
+constant now names. Minimum take-off moved 0.652 → 0.740, illegal take-offs 2 →
+0.
+
+The home lane mix, measured over 74 swings: Left Pin 0.338, Right Pin 0.284,
+Front Quick 0.270, Pipe 0.108. `_test_no_attack_is_struck_illegally()` asserted
+`home_back_row == 0` to hold the gap in place; it now asserts the opposite, with
+the legality half of the same test — which always covered both sides —
+keeping it honest.
 
 ### Withdrawn: the approach mark is placed from the set already
 
