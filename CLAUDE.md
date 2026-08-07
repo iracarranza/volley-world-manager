@@ -38,6 +38,7 @@ Then, by subject:
 | Working on | Read |
 |---|---|
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
+| The title screen | `docs/design/TITLE_SCREEN.md` |
 | Anything visual | `docs/design/UI_VISUAL_SYSTEM.md` and `UI_VISUAL_SYSTEM_CONSTRAINTS.md` |
 | Setter choice, who swings | `docs/design/SETTER_DECISION.md` |
 | Tempo, set height, approach | `docs/design/TEMPO_AND_APPROACH.md` |
@@ -73,7 +74,11 @@ away.
   ribbon, card. A page built from a bare `MarginContainer` gets no background,
   which is invisible in the dark theme and unreadable in the light one.
 - **Only the journal wears the stitched/scrapbook treatment.** Other objects are
-  other media.
+  other media. The rule is about *objects on the desk* -- the clipboard is paper
+  somebody drew on, the folders are card -- so that picking one up feels like
+  picking up a different thing. The title screen is exempt because it is not an
+  object on the desk but the **room the desk is in**, and a room may be drawn in
+  the journal's hand without being the journal. See `docs/design/TITLE_SCREEN.md`.
 - **Comments say why, not what.** The house style explains the decision and,
   where a previous version was wrong, what it got wrong and how that was
   measured.
