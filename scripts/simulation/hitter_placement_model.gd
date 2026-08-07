@@ -132,7 +132,8 @@ static func _depth(
 	var jitter := _signed_hash(
 		rally_seed + hitter.id * 271 + swing_index * 23, 1.0
 	) * clampf(float(hitter.unpredictability) / 100.0, 0.0, 1.0)
-	var metres := span * 0.5 * (seat * settle + jitter * 0.5)
+	var metres := span * 0.5 * (seat * settle + jitter * 0.5) \
+		+ float(learned.y) * settle
 	return clampf(
 		base + metres / CourtConstants.COURT_LENGTH_METERS,
 		CourtConstants.NET_Y + TIGHTNESS_FLOOR_METERS
@@ -173,7 +174,23 @@ static func learn(
 		float(learned.x) * MEMORY_RETENTION + offset * rate * direction,
 		-MEMORY_LIMIT_METERS, MEMORY_LIMIT_METERS,
 	)
-	memory[lane] = Vector2(moved, learned.y)
+	## Both axes, not just the one along the net. A hitter learns "that was too
+	## far off the net" the same way they learn "that was too far inside", and
+	## recording only x would leave the y half of the memory permanently zero --
+	## a value written by nobody and read by `_depth`, which is the built-and-
+	## unconsumed shape from the other direction.
+	##
+	## It has no effect while `ENABLE_HITTER_TIGHTNESS` is off, by construction:
+	## `_depth` returns the lane's own depth and never reads this. It is written
+	## anyway so the two halves land together and the flag is the only thing
+	## deciding whether tightness is live.
+	var depth_offset := (contacted.y - CourtConstants.lane_target(lane).y) \
+		* CourtConstants.COURT_LENGTH_METERS
+	var moved_depth := clampf(
+		float(learned.y) * MEMORY_RETENTION + depth_offset * rate * direction,
+		-MEMORY_LIMIT_METERS, MEMORY_LIMIT_METERS,
+	)
+	memory[lane] = Vector2(moved, moved_depth)
 
 
 ## Match-scoped and deliberately not exported. A hitter's habits inside one match

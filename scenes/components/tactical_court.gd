@@ -1,6 +1,10 @@
 class_name TacticalCourt
 extends Control
 
+const HitterPlacementModel := preload(
+	"res://scripts/simulation/hitter_placement_model.gd"
+)
+
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const RotationLegalityModel := preload("res://scripts/simulation/rotation_legality.gd")
@@ -96,6 +100,10 @@ var opponent_team: Resource
 var opponent_players_by_id: Dictionary = {}
 var show_opponents: bool = false
 var assignments: Array[HitterAssignment] = []
+## A fixed seed for the board's preview of where hitters want the ball. The
+## tactical view is not a rally, so it shows each hitter's settled spot rather
+## than a particular swing's jitter.
+const LANE_PREVIEW_SEED: int = 0
 var primary_hitter_id: int = -1
 var secondary_hitter_id: int = -1
 var selected_player_id: int = -1
@@ -1054,14 +1062,31 @@ func _draw() -> void:
 	_draw_rally_playback()
 
 
+## Lanes as the stretches of net they are, rather than five dots.
+##
+## These were drawn at `lane_target`, which was the whole of what a lane meant
+## when the setter aimed at a constant. A lane is a region a hitter works inside
+## now, so the guide draws the region and marks its centre -- otherwise the board
+## shows a target the game no longer aims at.
 func _draw_lane_guides() -> void:
 	for lane_name in CourtConstants.LANES:
-		var target := _court_to_local(CourtConstants.lane_target(lane_name))
+		var span: Vector2 = CourtConstants.lane_range(lane_name)
+		var depth: float = CourtConstants.lane_target(lane_name).y
+		var left := _court_to_local(Vector2(span.x, depth))
+		var right := _court_to_local(Vector2(span.y, depth))
 		var guide_color: Color = palette["line"]
+		guide_color.a = 0.28
+		draw_line(left, right, guide_color, 3.0)
+		## The ends of the region, so a lane reads as bounded rather than as a
+		## line that happens to stop.
+		var tick := Vector2(0.0, 5.0)
+		draw_line(left - tick, left + tick, guide_color, 2.0)
+		draw_line(right - tick, right + tick, guide_color, 2.0)
+		var centre := (left + right) * 0.5
 		guide_color.a = 0.45
-		draw_circle(target, 5.0, guide_color)
+		draw_circle(centre, 3.0, guide_color)
 		draw_string(
-			ThemeDB.fallback_font, target + Vector2(-28, -10), lane_name,
+			ThemeDB.fallback_font, centre + Vector2(-28, -10), lane_name,
 			HORIZONTAL_ALIGNMENT_CENTER, 56, 11, _with_alpha(palette["text"], 0.68),
 		)
 
@@ -1069,7 +1094,12 @@ func _draw_lane_guides() -> void:
 func _draw_assignments() -> void:
 	for assignment in assignments:
 		var start := _court_to_local(assignment.start_position)
-		var target := _court_to_local(CourtConstants.lane_target(assignment.lane))
+		## Where this hitter actually wants it, which is what the setter is aiming
+		## at -- not the middle of their lane.
+		var target := _court_to_local(HitterPlacementModel.preferred_point(
+			players_by_id.get(assignment.player_id) as VolleyballPlayer,
+			str(assignment.lane), LANE_PREVIEW_SEED, 0
+		))
 		var path_color: Color = palette["path"]
 		if assignment.player_id == secondary_hitter_id:
 			path_color = palette["secondary_path"]
