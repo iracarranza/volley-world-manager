@@ -143,6 +143,25 @@ func fixture_by_id(fixture_id: int) -> Resource:
 	return null
 
 
+## The regimens this week runs, defaulting to the whole roster on one activity.
+##
+## A career with no regimens set is every career saved before squads existed and
+## every new one before the manager opens the screen, so the default has to be
+## the behaviour they already had rather than nobody training.
+func active_regimens() -> Array:
+	if career == null:
+		return []
+	if not career.training_regimens.is_empty():
+		return career.training_regimens
+	var default_regimen := TrainingRegimen.new()
+	default_regimen.squad_name = "Full Squad"
+	default_regimen.activity = career.training_focus
+	default_regimen.focus = TrainingRegimen.Focus.MEDIUM
+	for player in _game_manager().players:
+		default_regimen.player_ids.append(int(player.id))
+	return [default_regimen]
+
+
 func set_training_focus(activity_name: String) -> String:
 	if career == null:
 		return "No active career."
@@ -185,7 +204,8 @@ func advance_week() -> String:
 		return "Play the scheduled fixture before advancing the week."
 	SixnetLeague.ensure_bootstrapped(career)
 	last_training_report = Training.apply_week(
-		career.training_focus, _game_manager().players, _game_manager().team
+		active_regimens(), _game_manager().players, _game_manager().team,
+		int(career.absolute_week),
 	)
 	var pre_year: int = Calendar.state_for_week(career.absolute_week).year
 	career.absolute_week += 1

@@ -1842,15 +1842,55 @@ func _test_minor_region_behaviour() -> void:
 	team.tactical_familiarity = 0.30
 	var prior_familiarity := team.tactical_familiarity
 	var prior_discipline := club_roster[0].tactical_discipline
-	var report: Dictionary = TRAINING_SYSTEM_SCRIPT.apply_week(
-		"Team Practice", club_roster, team
-	)
+	## A regimen rather than an activity name: training is per squad now, and a
+	## squad-wide week is the one-regimen case of that rather than a separate
+	## code path.
+	var practice_regimen := TrainingRegimen.new()
+	practice_regimen.squad_name = "Full Squad"
+	practice_regimen.activity = "Team Practice"
+	practice_regimen.focus = TrainingRegimen.Focus.HIGH
+	practice_regimen.attributes = ["tactical_discipline"]
+	for roster_player in club_roster:
+		practice_regimen.player_ids.append(int(roster_player.id))
+	## Several weeks, because progress is a fraction now and a single week at
+	## the honest rate does not have to cross a whole point. Asserting on one
+	## week would be asserting that the rate is at least 1.0, which is the
+	## coarseness the fraction exists to remove.
+	var report: Dictionary = {}
+	var total_improvements := 0
+	for training_week in range(6):
+		report = TRAINING_SYSTEM_SCRIPT.apply_week(
+			[practice_regimen], club_roster, team, training_week
+		)
+		total_improvements += int(report.attribute_improvements)
 	_check(team.tactical_familiarity > prior_familiarity,
 		"team practice raises tactical familiarity")
-	_check(club_roster[0].tactical_discipline >= prior_discipline,
+	_check(club_roster[0].tactical_discipline > prior_discipline,
 		"weekly training applies defined attribute development")
-	_check(int(report.attribute_improvements) > 0,
+	_check(total_improvements > 0,
 		"training produces a report with concrete improvements")
+	## High focus aimed at one attribute has to beat the same weeks spread over
+	## the activity's whole pool, or focus is a label.
+	var spread_roster: Array[VolleyballPlayer] = []
+	for roster_player in club_roster:
+		spread_roster.append(roster_player.duplicate(true) as VolleyballPlayer)
+	for spread_player in spread_roster:
+		spread_player.tactical_discipline = prior_discipline
+		spread_player.training_progress = {}
+	var spread_regimen := TrainingRegimen.new()
+	spread_regimen.activity = "Team Practice"
+	spread_regimen.focus = TrainingRegimen.Focus.LOW
+	for roster_player in spread_roster:
+		spread_regimen.player_ids.append(int(roster_player.id))
+	var spread_team := VolleyballTeam.new()
+	for training_week in range(6):
+		TRAINING_SYSTEM_SCRIPT.apply_week(
+			[spread_regimen], spread_roster, spread_team, training_week
+		)
+	_check(
+		club_roster[0].tactical_discipline > spread_roster[0].tactical_discipline,
+		"high focus on one attribute outpaces a low-focus week over the same pool",
+	)
 	var format := MATCH_FORMAT_SCRIPT.new()
 	format.best_of_sets = 3
 	format.regular_set_target = 25

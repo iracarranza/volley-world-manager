@@ -18,6 +18,12 @@ extends Resource
 ## an estimate derived from this data rather than this data itself, not
 ## changing what is stored here.
 @export var attribute_ceilings: Dictionary = {}
+## Fractional progress toward the next point of each attribute.
+##
+## Training used to move an attribute by a whole point or not at all, so the
+## smallest change the model could express was also the largest and there was no
+## such thing as a slow week. This carries the remainder between weeks.
+@export var training_progress: Dictionary = {}
 ## Long-term relationship with the player's current club. Unlike the old
 ## `morale` field this does not directly modify rally execution; playing time,
 ## results and management decisions move it over weeks and matches.
@@ -457,6 +463,7 @@ func to_dict() -> Dictionary:
 		"position_training_target": position_training_target,
 		"weeks_observed": weeks_observed,
 		"attribute_ceilings": attribute_ceilings.duplicate(true),
+		"training_progress": training_progress.duplicate(true),
 	}
 
 
@@ -525,6 +532,7 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	), 0.55, 1.15)
 	player.weeks_observed = int(data.get("weeks_observed", 0))
 	player.attribute_ceilings = Dictionary(data.get("attribute_ceilings", {})).duplicate(true)
+	player.training_progress = Dictionary(data.get("training_progress", {})).duplicate(true)
 	player.refresh_system_fit_profiles()
 	return player
 

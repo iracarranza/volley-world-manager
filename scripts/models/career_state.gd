@@ -13,7 +13,13 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 @export var absolute_week: int = 1
 @export var reputation: int = 10
 @export var finances: int = 100000
+## The single squad-wide activity the club used to run. Kept because a career
+## saved before regimens existed has one, and it seeds the default squad.
 @export var training_focus: String = "Team Practice"
+## What each training squad is doing this week. Empty means the whole roster
+## trains together on `training_focus`, which is what every career did before
+## squads existed.
+@export var training_regimens: Array[TrainingRegimen] = []
 ## Who you employ. Empty is a valid, meaningful state rather than an unset one:
 ## a club with no scout sees its own squad clearly and the transfer market as a
 ## fog, which is exactly what `ScoutingSystem` returns for a scout rating of 0.
@@ -86,7 +92,9 @@ func to_dict() -> Dictionary:
 		"organization_name": organization_name, "organization_type": organization_type,
 		"region": region, "identity": identity, "absolute_week": absolute_week,
 		"reputation": reputation, "finances": finances,
-		"training_focus": training_focus, "fixtures": fixture_data,
+		"training_focus": training_focus,
+		"training_regimens": _regimen_data(),
+		"fixtures": fixture_data,
 		"transfer_pool_ids": market_ids, "active_fixture_id": active_fixture_id,
 		"match_format": match_format.to_dict() if match_format != null else {},
 		"region_strength": region_strength.duplicate(true),
@@ -115,6 +123,10 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.reputation = clampi(int(data.get("reputation", 10)), 0, 100)
 	state.finances = int(data.get("finances", 100000))
 	state.training_focus = str(data.get("training_focus", "Team Practice"))
+	for regimen_data in data.get("training_regimens", []):
+		state.training_regimens.append(
+			TrainingRegimen.from_dict(Dictionary(regimen_data))
+		)
 	## Absent in every save written before staff existed, which loads as an
 	## unstaffed club rather than needing a migration -- and an unstaffed club is
 	## a state the systems already handle, because it is what a new career starts
@@ -155,3 +167,10 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	for birth_year in data.get("golden_birth_years", []):
 		state.golden_birth_years.append(int(birth_year))
 	return state
+
+
+func _regimen_data() -> Array:
+	var rows: Array = []
+	for regimen in training_regimens:
+		rows.append(regimen.to_dict())
+	return rows
