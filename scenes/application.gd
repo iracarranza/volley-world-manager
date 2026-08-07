@@ -5,6 +5,7 @@ const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
 const LightTheme := preload("res://scenes/themes/light_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
+const ScreenWipeScript := preload("res://scenes/components/screen_wipe.gd")
 const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -12,6 +13,8 @@ const SETTINGS_PATH := "user://settings.cfg"
 @onready var new_career_screen: VolleyballNewCareerScreen = %NewCareerScreen
 @onready var career_dashboard: VolleyballCareerDashboard = %CareerDashboard
 @onready var match_center: Control = %MatchCenter
+
+var _wipe: ScreenWipe = null
 
 
 func _ready() -> void:
@@ -33,6 +36,12 @@ func _ready() -> void:
 	career_dashboard.title_requested.connect(_show_title)
 	career_dashboard.play_match_requested.connect(_show_match)
 	call_deferred("_connect_match_center_signal")
+	## Added in code rather than the scene because it has to be the last child --
+	## later siblings draw over earlier ones -- and a node whose whole job is to
+	## cover everything is easier to keep last here than in a .tscn somebody will
+	## reorder.
+	_wipe = ScreenWipeScript.new()
+	add_child(_wipe)
 	_load_theme()
 	_show_title()
 
@@ -42,7 +51,19 @@ func _connect_match_center_signal() -> void:
 		match_center.career_exit_requested.connect(_show_dashboard)
 
 
+## Every screen change goes through here, so the wipe does too.
+##
+## The swap itself is handed to the wipe as a callable and happens while the
+## sheet is across, which is why the outgoing screen is never seen being torn
+## down. The first call has no wipe -- there is nothing to leave.
 func _show_only(screen: Control) -> void:
+	if _wipe == null or not _wipe.is_inside_tree():
+		_swap_to(screen)
+		return
+	_wipe.play(func() -> void: _swap_to(screen))
+
+
+func _swap_to(screen: Control) -> void:
 	for candidate in [title_screen, new_career_screen, career_dashboard, match_center]:
 		candidate.visible = candidate == screen
 	UIStyleSystem.reveal(screen)
@@ -91,6 +112,14 @@ func _sync_halftone_scale() -> void:
 func _apply_theme(theme_name: String, persist: bool = true) -> void:
 	var resolved := "light" if theme_name == "light" else "dark"
 	theme = LightTheme if resolved == "light" else DarkTheme
+	## The sheet is paper in the light theme and ink in the dark one. A wipe that
+	## kept one colour would be the only element in the game that ignores the
+	## theme, and it covers the whole screen.
+	if _wipe != null:
+		_wipe.set_palette(
+			Color(0.94, 0.92, 0.86) if resolved == "light" else Color(0.09, 0.10, 0.13),
+			Color(0.20, 0.18, 0.14) if resolved == "light" else Color(0.02, 0.02, 0.03),
+		)
 	title_screen.set_theme_name(resolved)
 	new_career_screen.set_light_mode(resolved == "light")
 	if match_center.has_method("set_light_mode"):
