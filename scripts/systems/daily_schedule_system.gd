@@ -255,6 +255,71 @@ static func assign_rehab(schedule: DailySchedule, blocks: int = REHAB_BLOCKS) ->
 			placed += 1
 
 
+## Blocks the club owes somebody, laid on the day before the manager sees it.
+##
+## `SPONSOR` and `TRAVEL` were enum values with nothing to create them, which is
+## the same shape as an attribute nothing reads: the model could express the
+## obligation and the game never handed one out. These are what hand them out.
+##
+## A sponsor appearance lands in the evening, where a club would actually put one
+## -- it is the social block that goes, not the training. Travel takes the
+## morning, because a squad that flew overnight is not training at nine.
+const SPONSOR_BLOCKS: int = 3
+const TRAVEL_BLOCKS: int = 6
+
+
+## An appearance the club owes. Takes social time first, then free time, and
+## never training -- a sponsor who costs the squad a session is a different
+## decision and belongs to the manager, not to the calendar.
+static func assign_sponsor_block(
+	schedule: DailySchedule,
+	blocks: int = SPONSOR_BLOCKS,
+) -> void:
+	_lay_obligation(
+		schedule, blocks, DailyScheduleModel.Activity.SPONSOR,
+		[DailyScheduleModel.Activity.SOCIAL, DailyScheduleModel.Activity.FREE],
+		TRAINING_LATEST_BLOCK - 4,
+	)
+
+
+## The morning after a flight. Takes whatever the morning had, including
+## training, because that is the point of jet lag.
+static func assign_travel_block(
+	schedule: DailySchedule,
+	blocks: int = TRAVEL_BLOCKS,
+) -> void:
+	_lay_obligation(
+		schedule, blocks, DailyScheduleModel.Activity.TRAVEL,
+		[
+			DailyScheduleModel.Activity.FREE,
+			DailyScheduleModel.Activity.TRAINING,
+			DailyScheduleModel.Activity.SOCIAL,
+		],
+		SLEEP_BLOCKS_IDEAL,
+	)
+
+
+## Lay `blocks` of `activity` from `start`, consuming only what `takeable`
+## allows. Never touches sleep or meals -- an obligation that skips a squad's
+## night or their food is a bug, not a hard week.
+static func _lay_obligation(
+	schedule: DailySchedule,
+	blocks: int,
+	activity: int,
+	takeable: Array,
+	start: int,
+) -> void:
+	if schedule == null:
+		return
+	var placed := 0
+	for index in range(maxi(start, 0), schedule.blocks.size()):
+		if placed >= blocks:
+			return
+		if int(schedule.blocks[index]) in takeable:
+			schedule.blocks[index] = activity
+			placed += 1
+
+
 static func _duration_label(blocks: int) -> String:
 	var minutes := blocks * DailyScheduleModel.MINUTES_PER_BLOCK
 	if minutes % 60 == 0:

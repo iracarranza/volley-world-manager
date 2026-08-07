@@ -197,14 +197,105 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 		button.pressed.connect(func() -> void: _set_focus(chosen))
 		focus_row.add_child(button)
 
-	## The pool this activity can move, so a manager choosing at high focus is
-	## choosing from what the session can actually train rather than from every
-	## attribute in the game.
-	_add_heading(_detail, "Attributes this session can move")
-	var pool := Label.new()
-	pool.text = ", ".join(PackedStringArray(Array(description.get("attributes", []))))
-	pool.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_detail.add_child(pool)
+	## What this session can move, and -- at high focus -- which of it the manager
+	## is naming. The pool is the activity's own, so a manager choosing is choosing
+	## from what the session can actually train rather than from every attribute in
+	## the game.
+	##
+	## At LOW the list is shown greyed, because a low-focus squad does not get to
+	## choose and the screen should say so rather than offering buttons that do
+	## nothing. At MEDIUM a picked attribute is *struck off*; at HIGH it is *aimed
+	## at*. Same control, opposite meaning, so the label says which.
+	var regimen := _regimen_for(activity)
+	_add_heading(_detail, _pool_heading(int(regimen.focus)))
+	var pool_row := HFlowContainer.new()
+	_detail.add_child(pool_row)
+	for attribute_name in Array(description.get("attributes", [])):
+		var chip := Button.new()
+		chip.toggle_mode = true
+		chip.text = str(attribute_name).capitalize()
+		chip.button_pressed = str(attribute_name) in regimen.attributes
+		chip.disabled = int(regimen.focus) == TrainingRegimenModel.Focus.LOW
+		## Say when an attribute is not yet read by a rally. A manager aiming a
+		## high-focus week at one of these would watch the number climb and see
+		## nothing change on court, and a screen that does not say so is selling
+		## a decision that is not one.
+		if not TrainingSystem.is_simulated(str(attribute_name)):
+			chip.text += " *"
+			chip.tooltip_text = "Not yet read by a rally — trains, but does not show up on court."
+		var picked := str(attribute_name)
+		chip.pressed.connect(func() -> void: _toggle_attribute(activity, picked))
+		pool_row.add_child(chip)
+	var has_unsimulated := false
+	for attribute_name in Array(description.get("attributes", [])):
+		if not TrainingSystem.is_simulated(str(attribute_name)):
+			has_unsimulated = true
+	if has_unsimulated:
+		_add_line(_detail, "* trains, but no rally reads it yet.")
+	if int(regimen.focus) == TrainingRegimenModel.Focus.HIGH:
+		var named := regimen.attributes.size()
+		_add_line(_detail, "Aimed at %d. The week's progress is split between them, so fewer moves each further." % named)
+
+	## Who is doing it. A squad is the other half of a regimen and the screen had
+	## no way to set it, so every regimen was an activity nobody was assigned to.
+	_add_heading(_detail, "Squad")
+	var squad_row := HFlowContainer.new()
+	_detail.add_child(squad_row)
+	for player in (_game_manager.players if _game_manager != null else []):
+		var toggle := Button.new()
+		toggle.toggle_mode = true
+		toggle.text = str(player.display_name)
+		toggle.button_pressed = int(player.id) in regimen.player_ids
+		## A voli already claimed by another session cannot be in two places, and
+		## the screen says which rather than silently refusing the click.
+		var claimed := _claimed_elsewhere(int(player.id), activity)
+		if not claimed.is_empty():
+			toggle.disabled = true
+			toggle.tooltip_text = "Already training with %s." % claimed
+		var member := int(player.id)
+		toggle.pressed.connect(func() -> void: _toggle_member(activity, member))
+		squad_row.add_child(toggle)
+
+
+## Which other session has this voli, if any.
+func _claimed_elsewhere(player_id: int, activity: String) -> String:
+	if _career_manager == null or _career_manager.career == null:
+		return ""
+	for regimen in _career_manager.career.training_regimens:
+		if str(regimen.activity) == activity:
+			continue
+		if player_id in regimen.player_ids:
+			return str(regimen.squad_name)
+	return ""
+
+
+func _pool_heading(focus: int) -> String:
+	match focus:
+		TrainingRegimenModel.Focus.HIGH:
+			return "Aim the week at"
+		TrainingRegimenModel.Focus.MEDIUM:
+			return "Strike off"
+	return "This session can move (low focus takes them at random)"
+
+
+func _toggle_attribute(activity: String, attribute_name: String) -> void:
+	var regimen := _regimen_for(activity)
+	if attribute_name in regimen.attributes:
+		regimen.attributes.erase(attribute_name)
+	else:
+		regimen.attributes.append(attribute_name)
+	_open_phase_panel(_open_phase, activity)
+	refresh()
+
+
+func _toggle_member(activity: String, player_id: int) -> void:
+	var regimen := _regimen_for(activity)
+	if player_id in regimen.player_ids:
+		regimen.player_ids.erase(player_id)
+	else:
+		regimen.player_ids.append(player_id)
+	_open_phase_panel(_open_phase, activity)
+	refresh()
 
 
 func _set_focus(level: int) -> void:
@@ -212,11 +303,22 @@ func _set_focus(level: int) -> void:
 		return
 	var regimen := _regimen_for(_open_activity)
 	regimen.focus = level
+	_open_phase_panel(_open_phase, _open_activity)
 	refresh()
 
 
 ## The regimen this activity runs under, creating it if the club has not set one.
 func _regimen_for(activity: String) -> TrainingRegimen:
+	## A detached regimen when there is no career to hang it on. The screen is
+	## reachable before a career is loaded -- from a debug jump, or the moment
+	## after a save is cleared -- and it crashed on the null rather than drawing
+	## an empty week.
+	if _career_manager == null or _career_manager.career == null:
+		var orphan := TrainingRegimen.new()
+		orphan.squad_name = activity
+		orphan.activity = activity
+		orphan.focus = TrainingRegimenModel.Focus.MEDIUM
+		return orphan
 	var career = _career_manager.career
 	for existing in career.training_regimens:
 		if str(existing.activity) == activity:

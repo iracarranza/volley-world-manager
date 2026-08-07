@@ -20,6 +20,13 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 ## trains together on `training_focus`, which is what every career did before
 ## squads existed.
 @export var training_regimens: Array[TrainingRegimen] = []
+## What the manager has marked each prospect as: sign, keep an eye on, seen
+## enough. Keyed by player id.
+##
+## On the career rather than the scouting screen, because a note you have to
+## re-make every time you open the page is not a note. It survives a save for the
+## same reason a shortlist does.
+@export var scouting_marks: Dictionary = {}
 ## Who you employ. Empty is a valid, meaningful state rather than an unset one:
 ## a club with no scout sees its own squad clearly and the transfer market as a
 ## fog, which is exactly what `ScoutingSystem` returns for a scout rating of 0.
@@ -94,6 +101,7 @@ func to_dict() -> Dictionary:
 		"reputation": reputation, "finances": finances,
 		"training_focus": training_focus,
 		"training_regimens": _regimen_data(),
+		"scouting_marks": scouting_marks.duplicate(true),
 		"fixtures": fixture_data,
 		"transfer_pool_ids": market_ids, "active_fixture_id": active_fixture_id,
 		"match_format": match_format.to_dict() if match_format != null else {},
@@ -123,6 +131,10 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.reputation = clampi(int(data.get("reputation", 10)), 0, 100)
 	state.finances = int(data.get("finances", 100000))
 	state.training_focus = str(data.get("training_focus", "Team Practice"))
+	for raw_key in Dictionary(data.get("scouting_marks", {})):
+		state.scouting_marks[int(raw_key)] = int(
+			data.scouting_marks[raw_key]
+		)
 	for regimen_data in data.get("training_regimens", []):
 		state.training_regimens.append(
 			TrainingRegimen.from_dict(Dictionary(regimen_data))

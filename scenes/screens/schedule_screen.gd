@@ -188,6 +188,8 @@ func _paint(index: int) -> void:
 func _refresh_readout(schedule: DailySchedule) -> void:
 	for child in _readout.get_children():
 		child.queue_free()
+	if _game_manager == null:
+		return
 	var report: Dictionary = DailyScheduleSystem.evaluate(schedule)
 	_line("%s of sleep · %d meals · %d social" % [
 		_duration(int(report.get("sleep_blocks", 0))),

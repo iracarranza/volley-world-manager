@@ -572,7 +572,7 @@ func _apply_light_mode(light_mode: bool) -> void:
 	background.color = Color("e8f0eb") if light_mode else Color("070b13")
 	tactical_court.set_theme_mode(light_mode)
 	match_preview_court.set_theme_mode(light_mode)
-	theme_toggle.text = "Theme: Molten Light" if light_mode else "Theme: Mikasa Dark"
+	theme_toggle.text = "Theme: Molten" if light_mode else "Theme: Mikasa"
 	_update_interface_scale()
 	var secondary_text := Color("315f4b") if light_mode else Color("b9cce0")
 	court_instructions.add_theme_color_override("font_color", secondary_text)

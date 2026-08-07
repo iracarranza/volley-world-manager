@@ -35,6 +35,33 @@ const ACTIVITIES := {
 }
 
 
+## Attributes a session can raise that no rally currently reads.
+##
+## Recorded rather than removed, and surfaced on the training screen, because
+## either fix on its own is worse than saying so. Dropping them from the pools
+## deletes design intent that the generator, the scout report and the attribute
+## wheel all still carry; leaving them unmarked sells the manager a decision --
+## a whole high-focus week aimed at `feinting` -- that changes nothing on court.
+##
+## Audited by searching `scripts/simulation` for each name, excluding the
+## calibration harnesses and shadow systems, which measure rather than decide.
+## `unpredictability` was on this list until `HitterPlacementModel` gave it a
+## job, which is the shape the rest of these want: a mechanism that needs them,
+## not a coefficient that mentions them.
+const UNSIMULATED_ATTRIBUTES: Array[String] = [
+	"arm_speed",
+	"feinting",
+	"serve_variation",
+	"set_disguise",
+	"stamina",
+	"situation_experience",
+]
+
+
+static func is_simulated(attribute_name: String) -> bool:
+	return attribute_name not in UNSIMULATED_ATTRIBUTES
+
+
 static func activity_names() -> Array[String]:
 	var result: Array[String] = []
 	for activity_name in ACTIVITIES:

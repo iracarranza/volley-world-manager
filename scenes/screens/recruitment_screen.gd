@@ -26,10 +26,6 @@ signal back_requested
 var _career_manager: Node = null
 var _game_manager: Node = null
 var _list: VBoxContainer = null
-## Prospect id to mark. Lives on the screen rather than the model for now: a mark
-## is a manager's note to themselves, and until signing consumes it there is
-## nothing for the career to remember.
-var _marks: Dictionary = {}
 
 
 func bind(career_manager: Node, game_manager: Node) -> void:
@@ -132,7 +128,7 @@ func _row_for(prospect) -> Control:
 	row.flat = true
 	row.custom_minimum_size = Vector2(0.0, 30.0)
 	var prospect_id := int(prospect.id)
-	var mark := int(_marks.get(prospect_id, MARK_NONE))
+	var mark := _mark_for(prospect_id)
 
 	var line := HBoxContainer.new()
 	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -173,9 +169,20 @@ func _column(
 	parent.add_child(label)
 
 
+## Marks live on the career, not the screen. A note you have to re-make every
+## time you open the page is not a note, and a shortlist that forgets itself
+## between sessions is worse than none.
+func _mark_for(prospect_id: int) -> int:
+	if _career_manager == null or _career_manager.career == null:
+		return MARK_NONE
+	return int(_career_manager.career.scouting_marks.get(prospect_id, MARK_NONE))
+
+
 func _cycle(prospect_id: int) -> void:
-	var next := (int(_marks.get(prospect_id, MARK_NONE)) + 1) % 4
-	_marks[prospect_id] = next
+	if _career_manager == null or _career_manager.career == null:
+		return
+	_career_manager.career.scouting_marks[prospect_id] = \
+		(_mark_for(prospect_id) + 1) % 4
 	refresh()
 
 

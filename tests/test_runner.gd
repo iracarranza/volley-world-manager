@@ -1989,6 +1989,35 @@ func _test_minor_region_behaviour() -> void:
 		"rehab takes free time or training and never sleep or a meal",
 	)
 
+	## Obligations are laid on the day by the club, not requested from the
+	## manager, and neither of them may cost the squad its night or its food.
+	var sponsor_day := DailySchedule.new()
+	var sponsor_sleep := sponsor_day.count_of(DailySchedule.Activity.SLEEP)
+	var sponsor_meals := sponsor_day.count_of(DailySchedule.Activity.MEAL)
+	var sponsor_training := sponsor_day.count_of(DailySchedule.Activity.TRAINING)
+	DailyScheduleSystem.assign_sponsor_block(sponsor_day)
+	_check(
+		sponsor_day.count_of(DailySchedule.Activity.SPONSOR) > 0
+			and sponsor_day.count_of(DailySchedule.Activity.SLEEP) == sponsor_sleep
+			and sponsor_day.count_of(DailySchedule.Activity.MEAL) == sponsor_meals
+			and sponsor_day.count_of(DailySchedule.Activity.TRAINING)
+				== sponsor_training,
+		"a sponsor appearance takes social time and never sleep, food or training",
+	)
+	var travel_day := DailySchedule.new()
+	var travel_sleep := travel_day.count_of(DailySchedule.Activity.SLEEP)
+	var travel_meals := travel_day.count_of(DailySchedule.Activity.MEAL)
+	DailyScheduleSystem.assign_travel_block(travel_day)
+	var travel_report: Dictionary = DailyScheduleSystem.evaluate(travel_day)
+	_check(
+		travel_day.count_of(DailySchedule.Activity.TRAVEL) > 0
+			and travel_day.count_of(DailySchedule.Activity.SLEEP) == travel_sleep
+			and travel_day.count_of(DailySchedule.Activity.MEAL) == travel_meals
+			and float(travel_report.effective_training_blocks)
+				< float(day_report.effective_training_blocks),
+		"a travel day costs training blocks but never sleep or food",
+	)
+
 	var format := MATCH_FORMAT_SCRIPT.new()
 	format.best_of_sets = 3
 	format.regular_set_target = 25

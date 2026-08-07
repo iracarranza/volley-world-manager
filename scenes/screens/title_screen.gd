@@ -30,8 +30,12 @@ func _ready() -> void:
 	delete_button.pressed.connect(_confirm_delete)
 	%DeleteConfirmation.confirmed.connect(_delete_selected)
 	save_list.item_selected.connect(_select_save)
-	theme_option.add_item("Midnight Court")
-	theme_option.add_item("Daylight Gym")
+	## The themes have one pair of names, and these are they. The title screen
+	## called them Midnight Court and Daylight Gym while the match centre called
+	## the same two themes Mikasa Dark and Molten Light -- two names for one thing,
+	## in the two places a player is most likely to see both.
+	theme_option.add_item("Mikasa")
+	theme_option.add_item("Molten")
 	theme_option.item_selected.connect(_theme_selected)
 	refresh_saves()
 
