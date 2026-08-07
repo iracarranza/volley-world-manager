@@ -1891,6 +1891,66 @@ func _test_minor_region_behaviour() -> void:
 		club_roster[0].tactical_discipline > spread_roster[0].tactical_discipline,
 		"high focus on one attribute outpaces a low-focus week over the same pool",
 	)
+	## The day is the budget the training screen spends.
+	##
+	## Two things have to hold or the schedule is decoration: a session the day
+	## cannot pay for must not happen, and it must say so rather than vanishing.
+	var day_schedule := DailySchedule.new()
+	var day_report: Dictionary = DailyScheduleSystem.evaluate(day_schedule)
+	_check(
+		int(day_report.sleep_blocks) >= DailyScheduleSystem.SLEEP_BLOCKS_MINIMUM
+			and int(day_report.meal_blocks) == DailyScheduleSystem.MEALS_EXPECTED
+			and float(day_report.effective_training_blocks) > 0.0
+			and Array(day_report.warnings).is_empty(),
+		"the default day sleeps, eats, trains and raises no warnings",
+	)
+	var starved := DailySchedule.new()
+	for block_index in range(starved.blocks.size()):
+		starved.blocks[block_index] = DailySchedule.Activity.TRAINING
+	var starved_report: Dictionary = DailyScheduleSystem.evaluate(starved)
+	_check(
+		float(starved_report.recovery) < float(day_report.recovery)
+			and Array(starved_report.warnings).size() >= 3,
+		"a day of nothing but training recovers less and warns about it",
+	)
+	## Off-hours training still happens and is worth less, which is the trade the
+	## whole screen exists to offer.
+	_check(
+		float(starved_report.effective_training_blocks)
+			< float(starved_report.training_blocks),
+		"training scheduled outside the sensible window yields less than it costs",
+	)
+	var budget_regimen := TrainingRegimen.new()
+	budget_regimen.activity = "Strength & Jump"
+	budget_regimen.focus = TrainingRegimen.Focus.HIGH
+	budget_regimen.attributes = ["explosiveness"]
+	for roster_player in club_roster:
+		budget_regimen.player_ids.append(int(roster_player.id))
+	var broke_report: Dictionary = TRAINING_SYSTEM_SCRIPT.apply_week(
+		[budget_regimen], club_roster, VolleyballTeam.new(), 0, 1.0
+	)
+	_check(
+		int(broke_report.attribute_improvements) == 0
+			and Array(broke_report.unaffordable).size() == 1,
+		"a session the day cannot pay for does not happen and is reported",
+	)
+	## And a roster that all runs its own day costs cohesion.
+	var team_day := DailySchedule.new()
+	var split := {}
+	for roster_player in club_roster:
+		var personal_day := DailySchedule.new()
+		for block_index in range(personal_day.blocks.size()):
+			personal_day.blocks[block_index] = DailySchedule.Activity.FREE
+		split[roster_player.id] = personal_day
+	var split_report: Dictionary = DailyScheduleSystem.evaluate_roster(
+		team_day, split, club_roster.size()
+	)
+	_check(
+		float(split_report.cohesion) < 0.0
+			and int(split_report.independent_count) == club_roster.size(),
+		"a squad all on its own schedules loses cohesion",
+	)
+
 	var format := MATCH_FORMAT_SCRIPT.new()
 	format.best_of_sets = 3
 	format.regular_set_target = 25

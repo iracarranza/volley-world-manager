@@ -6,6 +6,7 @@ const FixtureModel := preload("res://scripts/models/fixture.gd")
 const MatchFormatModel := preload("res://scripts/models/match_format.gd")
 const Generator := preload("res://scripts/systems/player_generator.gd")
 const Training := preload("res://scripts/systems/training_system.gd")
+const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
 const Calendar := preload("res://scripts/data/calendar_rules.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const WorldPopulation := preload("res://scripts/systems/world_population.gd")
@@ -203,10 +204,40 @@ func advance_week() -> String:
 			and not bool(fixture.completed):
 		return "Play the scheduled fixture before advancing the week."
 	SixnetLeague.ensure_bootstrapped(career)
+	## The day sets the training budget. A club that scheduled one session does
+	## not get to run three regimens because the screen let them be typed in.
+	var day: Dictionary = DailyScheduleSystem.evaluate(
+		_game_manager().team.daily_schedule
+	)
 	last_training_report = Training.apply_week(
 		active_regimens(), _game_manager().players, _game_manager().team,
 		int(career.absolute_week),
+		float(day.get("effective_training_blocks", 0.0)),
 	)
+	last_training_report["day"] = day
+	## And the day pays the squad back: sleep and meals are what recovery is.
+	var roster: Dictionary = DailyScheduleSystem.evaluate_roster(
+		_game_manager().team.daily_schedule,
+		_game_manager().team.personal_schedules,
+		_game_manager().players.size(),
+	)
+	for player in _game_manager().players:
+		player.fatigue = clampf(
+			player.fatigue - float(day.get("recovery", 0.0)), 0.0, 1.0
+		)
+		var personal: Dictionary = Dictionary(roster.get("per_player", {})).get(
+			player.id, {}
+		)
+		player.satisfaction = clampf(
+			player.satisfaction + float(day.get("satisfaction", 0.0))
+				+ float(personal.get("satisfaction", 0.0)),
+			0.0, 1.0,
+		)
+	_game_manager().team.cohesion = clampf(
+		float(_game_manager().team.cohesion) + float(roster.get("cohesion", 0.0)),
+		0.0, 1.0,
+	)
+	last_training_report["roster_schedule"] = roster
 	var pre_year: int = Calendar.state_for_week(career.absolute_week).year
 	career.absolute_week += 1
 	var post_year: int = Calendar.state_for_week(career.absolute_week).year

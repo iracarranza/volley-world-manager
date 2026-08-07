@@ -4,23 +4,33 @@ extends RefCounted
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
+const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
+
+## Every activity costs blocks of the day, and they are not the same size.
+##
+## A serving session is two blocks and a strength circuit is three, so a club
+## with two training blocks scheduled cannot run the circuit at all. That is the
+## whole reason the schedule and the training screen are one system rather than
+## two: the day is the budget, and `DailyScheduleSystem.evaluate` is what says
+## how large it is. Blocks scheduled outside the sensible window are worth less
+## than one apiece, so moving a session to 04:00 to fit another in fits less in.
 
 const ACTIVITIES := {
-	"Team Practice": {"attributes": ["tactical_discipline", "court_vision", "leadership"], "fatigue": 0.05, "satisfaction": 0.01, "familiarity": 0.035, "cohesion": 0.03,
+	"Team Practice": {"blocks": 3, "attributes": ["tactical_discipline", "court_vision", "leadership"], "fatigue": 0.05, "satisfaction": 0.01, "familiarity": 0.035, "cohesion": 0.03,
 		"description": "Build collective systems, tactical discipline and court vision."},
-	"Serving": {"attributes": ["serve_power", "serve_technique", "serve_placement",
+	"Serving": {"blocks": 2, "attributes": ["serve_power", "serve_technique", "serve_placement",
 		"serve_consistency", "serve_aggression", "serve_variation"], "fatigue": 0.06,
 		"satisfaction": 0.0, "familiarity": 0.01, "cohesion": 0.0,
 		"description": "Develop serve power, contact, placement, reliability, risk and variation."},
-	"Serve Receive": {"attributes": ["reception", "reception_balance", "reception_stability", "dig_control", "work_rate"], "fatigue": 0.055, "satisfaction": 0.005, "familiarity": 0.02, "cohesion": 0.01,
+	"Serve Receive": {"blocks": 2, "attributes": ["reception", "reception_balance", "reception_stability", "dig_control", "work_rate"], "fatigue": 0.055, "satisfaction": 0.005, "familiarity": 0.02, "cohesion": 0.01,
 		"description": "Train platform control, movement balance and stability under pace."},
-	"Attack & Transition": {"attributes": ["attack_power", "attack_accuracy", "approach_timing", "arm_speed", "tooling", "feinting", "finesse", "shot_variety", "transition_speed", "work_rate"], "fatigue": 0.08, "satisfaction": 0.005, "familiarity": 0.02, "cohesion": 0.005,
+	"Attack & Transition": {"blocks": 3, "attributes": ["attack_power", "attack_accuracy", "approach_timing", "arm_speed", "tooling", "feinting", "finesse", "shot_variety", "transition_speed", "work_rate"], "fatigue": 0.08, "satisfaction": 0.005, "familiarity": 0.02, "cohesion": 0.005,
 		"description": "Improve transition speed, approach timing and terminal attacking."},
-	"Blocking & Defense": {"attributes": ["block_timing", "anticipation", "lateral_speed", "dig_control", "work_rate"], "fatigue": 0.07, "satisfaction": 0.0, "familiarity": 0.025, "cohesion": 0.01,
+	"Blocking & Defense": {"blocks": 3, "attributes": ["block_timing", "anticipation", "lateral_speed", "dig_control", "work_rate"], "fatigue": 0.07, "satisfaction": 0.0, "familiarity": 0.025, "cohesion": 0.01,
 		"description": "Coordinate block reads, lateral closing and floor anticipation."},
-	"Strength & Jump": {"attributes": ["explosiveness", "jump_reach", "stamina"], "fatigue": 0.09, "satisfaction": -0.005, "familiarity": 0.0, "cohesion": 0.0,
+	"Strength & Jump": {"blocks": 3, "attributes": ["explosiveness", "jump_reach", "stamina"], "fatigue": 0.09, "satisfaction": -0.005, "familiarity": 0.0, "cohesion": 0.0,
 		"description": "Build explosive capacity and conditioning at a higher fatigue cost."},
-	"Recovery": {"attributes": [], "fatigue": -0.20, "satisfaction": 0.03, "familiarity": -0.005, "cohesion": 0.005,
+	"Recovery": {"blocks": 2, "attributes": [], "fatigue": -0.20, "satisfaction": 0.03, "familiarity": -0.005, "cohesion": 0.005,
 		"description": "Reduce fatigue and restore satisfaction; tactical familiarity may soften slightly."},
 }
 
@@ -55,6 +65,10 @@ static func apply_week(
 	players: Array[VolleyballPlayer],
 	team: Resource,
 	week: int = 0,
+	## What the day affords. Negative means "do not check" -- every caller that
+	## predates the schedule keeps working, and a fixture that only wants to test
+	## attribute movement does not have to build a day first.
+	available_blocks: float = -1.0,
 ) -> Dictionary:
 	var by_id := {}
 	for player in players:
@@ -63,11 +77,27 @@ static func apply_week(
 	var position_progress := 0.0
 	var squads: Array[Dictionary] = []
 	var trained_ids := {}
+	var unaffordable: Array[Dictionary] = []
+	var remaining_blocks := available_blocks
 	for entry in regimens:
 		var regimen: TrainingRegimen = entry as TrainingRegimen
 		if regimen == null:
 			continue
 		var activity := description(regimen.activity)
+		## A regimen the day cannot pay for does not happen. It is reported rather
+		## than silently dropped, because a session that vanished without saying so
+		## is the manager wondering why nobody improved.
+		var block_cost := float(activity.get("blocks", 2))
+		if available_blocks >= 0.0:
+			if block_cost > remaining_blocks + 0.001:
+				unaffordable.append({
+					"squad_name": regimen.squad_name,
+					"activity": regimen.activity,
+					"blocks_required": block_cost,
+					"blocks_left": remaining_blocks,
+				})
+				continue
+			remaining_blocks -= block_cost
 		var squad_improved := 0
 		var squad_fatigue := 0.0
 		var squad_size := 0
@@ -117,6 +147,10 @@ static func apply_week(
 		"attribute_improvements": improved,
 		"position_familiarity_progress": position_progress,
 		"players_trained": trained_ids.size(),
+		"blocks_available": available_blocks,
+		"blocks_spent": (available_blocks - remaining_blocks) \
+			if available_blocks >= 0.0 else 0.0,
+		"unaffordable": unaffordable,
 	}
 
 

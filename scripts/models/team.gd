@@ -20,6 +20,13 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var libero_ids: Array[int] = []
 @export var depth_chart: Dictionary = {}
 @export var starting_player_ids: Array[int] = []
+## The club's day, and the volis who keep their own.
+##
+## A personal schedule is a copy of the club's that somebody has changed, so the
+## interesting quantity is the difference rather than the schedule -- see
+## `DailyScheduleSystem.evaluate_roster`.
+@export var daily_schedule: DailySchedule = DailySchedule.new()
+@export var personal_schedules: Dictionary = {}
 @export_range(6, 18) var roster_limit: int = 14
 
 
@@ -108,7 +115,18 @@ func to_dict() -> Dictionary:
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
 		"libero_ids": libero_ids.duplicate(), "depth_chart": depth_chart.duplicate(true),
 		"starting_player_ids": starting_player_ids.duplicate(),
+		"daily_schedule": daily_schedule.to_dict() if daily_schedule != null else {},
+		"personal_schedules": _personal_schedule_data(),
 		"roster_limit": roster_limit}
+
+
+func _personal_schedule_data() -> Dictionary:
+	var rows := {}
+	for player_id in personal_schedules:
+		var schedule: DailySchedule = personal_schedules[player_id] as DailySchedule
+		if schedule != null:
+			rows[str(player_id)] = schedule.to_dict()
+	return rows
 
 
 static func from_dict(data: Dictionary) -> VolleyballTeam:
@@ -128,6 +146,12 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	)
 	for raw_id in data.get("player_ids", []):
 		team.player_ids.append(int(raw_id))
+	if data.has("daily_schedule") and not Dictionary(data.daily_schedule).is_empty():
+		team.daily_schedule = DailySchedule.from_dict(Dictionary(data.daily_schedule))
+	for raw_key in Dictionary(data.get("personal_schedules", {})):
+		team.personal_schedules[int(raw_key)] = DailySchedule.from_dict(
+			Dictionary(data.personal_schedules[raw_key])
+		)
 	team.captain_id = int(data.get("captain_id", -1))
 	for raw_id in data.get("libero_ids", []):
 		team.libero_ids.append(int(raw_id))
