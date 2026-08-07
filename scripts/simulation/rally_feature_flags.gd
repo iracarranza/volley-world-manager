@@ -589,36 +589,42 @@ const ENABLE_HOME_PIPE_OFFENSE: bool = true
 ## against depth measured 0.013 / 0.072 / 0.151 / 0.385 at 0.36 / 1.20 / 2.50 /
 ## 4.00 m in the isolated harness.
 ##
-## **OFF, and the sweep that put it here was mis-measured.** Recorded honestly
-## because the correction matters more than the first reading did.
+## **Built, measured live, and still OFF -- for a third reason, which is the
+## only honest one so far.**
 ##
-## The sweep took the nominal spread from 3.20 m peak-to-peak to zero and every
-## rate sat inside its own noise -- net 0.044 against 0.043 at the ends, stuff
-## 0.044 / 0.048, error 0.153 / 0.151, kill 0.377 / 0.376. That was read as the
-## axis being inert. It is not. Three things were wrong with the reading:
+## The first sweep read every rate as flat and called the axis inert. That was a
+## mis-measurement three ways over: `_depth` scaled the hitter's stable seat by
+## `1 - unpredictability`, so a nominal 3.20 m applied as +/-0.4 to +/-0.9 m
+## against a squad running 42-74 there; `SET_DELIVERY_STDEV_WORST_M` lays
+## +/-1.4 m of scatter on top of it; and the summary pooled lanes, so the front
+## lanes' half metre and the pipe's four swamped everything.
 ##
-##   the knob could not reach its own range
-##       `_depth` applies `span * 0.5 * (seat * settle)` with
-##       `settle = 1 - unpredictability`, and the squad runs unpredictability
-##       42-74, so settle is 0.26-0.58. A nominal 3.20 m applied as +/-0.4 to
-##       +/-0.9 m -- a quarter of what the constant claimed.
-##   the noise on top was larger than the signal
-##       `SET_DELIVERY_STDEV_WORST_M` 0.40 at a 3.5-sigma limit is +/-1.4 m of
-##       delivery scatter, wider than the intent variation underneath it.
-##   the measurement pooled lanes
-##       depth was summarised across all lanes at once, so the front lanes'
-##       0.54 m intent and the pipe's 4.00 m dominated everything. Per lane the
-##       delivered spans are 2.18 / 1.49 / 1.93 / 1.47 m, not the single 5 m
-##       distribution the pooled figure showed.
+## All three are fixed. `LANE_ZONE` gives every lane its own depth range so a
+## quick is tight because quicks are tight, the seat is no longer multiplied by
+## settle -- unpredictability widens the jitter and resists the *learned* bias,
+## which is what refusing to settle actually means -- and the measurement is per
+## lane. Held against the same zones with the flag off:
 ##
-## The axis stays off because it is not yet built right, not because depth does
-## not matter -- the isolated harness measured net errors 0.013 to 0.385 across
-## it. Two things want fixing first. `settle` multiplies the hitter's stable
-## preference, so an unpredictable hitter ends up with *no* preferred depth
-## rather than a varying one, which is backwards: unpredictability should widen
-## the jitter and leave the seat alone. And a lane wants a 3D centre -- an x
-## range and a depth range per zone -- so the front lanes and the pipe carry
-## their own depth by construction instead of sharing one constant.
+##   tightness   net    stuff  err    kill
+##   off         0.054  0.032  0.167  0.371
+##   on          0.049  0.044  0.198  0.368
+##
+## Errors move 3.1 points and stuffs 1.2. The axis is live.
+##
+## It is off because turning it on costs two gates that are not its fault and are
+## not cheap. `continuation set and transition attack trajectories meet at one
+## contact time` breaks: `_reachable_contact` drags the transition contact after
+## `continuation_flight_time` has already been computed, so a large enough drag
+## desynchronises the set's end time from the attack's start time -- latent
+## until something made the drags big. And `fast-tempo identity produces shorter
+## rallies than defensive identity` moves, unexplained.
+##
+## A third finding came out of the same measurement and outlives this flag: with
+## tightness *off*, Front Quick aims at its zone centre of 0.55 m and delivers a
+## 5th percentile of 1.13 m. That is `_reachable_contact` pulling the contact
+## back toward a hitter who cannot reach a tight ball inside a tempo-1 flight,
+## and it means quick hitters routinely strike from about a metre further off the
+## net than the play intends.
 const ENABLE_HITTER_TIGHTNESS: bool = false
 
 

@@ -51,11 +51,6 @@ const MEMORY_RETENTION: float = 0.93
 ## metres. A habit, not a relocation -- and it keeps the bias inside the lane
 ## without the clamp being the thing that decides placement.
 const MEMORY_LIMIT_METERS: float = 1.10
-## How wide a spread of preferred tightness the squad shows, peak to peak, in
-## metres off the net. Deliberately swept from an implausible value downward
-## rather than guessed, because the attack chain's response to depth is the
-## steepest curve in the model.
-const TIGHTNESS_RANGE_METERS: float = 0.70
 ## No set is tighter than this. A ball closer to the tape than a hand is not a
 ## set a hitter asks for, it is one the setter lost.
 const TIGHTNESS_FLOOR_METERS: float = 0.18
@@ -106,8 +101,22 @@ static func preferred_point(
 	)
 
 
-## How tight to the net this hitter wants it. Phase A holds the lane's own depth;
-## `ENABLE_HITTER_TIGHTNESS` is what makes this an axis.
+## How tight to the net this hitter wants it, inside the depth their lane allows.
+##
+## The zone owns the range now, so a quick is tight because quicks are tight and
+## a pipe is deep because pipes are deep, rather than every lane sharing one
+## constant with a special case bolted on for the pipe. That also makes this
+## measurable: contact depth can be summarised per lane instead of pooled across
+## lanes whose depths have nothing to do with each other, which is what made the
+## first sweep of this unreadable.
+##
+## `seat` is not scaled by `settle`, and that was the bug in the first cut. An
+## unpredictable hitter should have a preferred depth they vary *around*, not no
+## preference at all -- multiplying the seat by `1 - unpredictability` gave the
+## least predictable hitters the most rigidly central depth, which is backwards.
+## Unpredictability widens the jitter. It resists the *learned* bias, because
+## refusing to settle is refusing to be taught, and it leaves the innate seat
+## alone -- the same shape the along-the-net axis already had.
 static func _depth(
 	hitter: VolleyballPlayer,
 	lane: String,
@@ -116,30 +125,20 @@ static func _depth(
 	rally_seed: int,
 	swing_index: int,
 ) -> float:
-	var base := CourtConstants.lane_target(lane).y
+	var range_m := CourtConstants.lane_depth_range_meters(lane)
+	var centre_m := (range_m.x + range_m.y) * 0.5
 	if not FeatureFlags.ENABLE_HITTER_TIGHTNESS:
-		return base
-	## How far off the net this hitter likes it, in metres, added to the lane's
-	## own depth.
-	##
-	## The steepest response in the attack chain, and worth stating before the
-	## numbers move: net-error rate against contact depth was measured this branch
-	## at 0.013 / 0.072 / 0.151 / 0.385 for 0.36 / 1.20 / 2.50 / 4.00 m. Anything
-	## that varies depth varies attack errors hard, so this is deliberately behind
-	## its own flag and its own constant rather than folded into the x placement.
-	var span := TIGHTNESS_RANGE_METERS
-	var seat := _signed_hash(hitter.id * 6151 + hash(lane) * 3, 1.0)
+		return CourtConstants.NET_Y + centre_m / CourtConstants.COURT_LENGTH_METERS
+	var half_m := maxf((range_m.y - range_m.x) * 0.5, 0.01)
+	var seat := _signed_hash(hitter.id * 6151 + hash(lane) * 3, 1.0) * half_m
 	var jitter := _signed_hash(
 		rally_seed + hitter.id * 271 + swing_index * 23, 1.0
-	) * clampf(float(hitter.unpredictability) / 100.0, 0.0, 1.0)
-	var metres := span * 0.5 * (seat * settle + jitter * 0.5) \
-		+ float(learned.y) * settle
-	return clampf(
-		base + metres / CourtConstants.COURT_LENGTH_METERS,
-		CourtConstants.NET_Y + TIGHTNESS_FLOOR_METERS
-			/ CourtConstants.COURT_LENGTH_METERS,
-		0.96,
+	) * clampf(float(hitter.unpredictability) / 100.0, 0.0, 1.0) * half_m
+	var metres := clampf(
+		centre_m + seat + jitter + float(learned.y) * settle,
+		range_m.x, range_m.y,
 	)
+	return CourtConstants.NET_Y + metres / CourtConstants.COURT_LENGTH_METERS
 
 
 ## Move this hitter's spot toward what worked and away from what did not.
@@ -184,8 +183,10 @@ static func learn(
 	## `_depth` returns the lane's own depth and never reads this. It is written
 	## anyway so the two halves land together and the flag is the only thing
 	## deciding whether tightness is live.
-	var depth_offset := (contacted.y - CourtConstants.lane_target(lane).y) \
-		* CourtConstants.COURT_LENGTH_METERS
+	var depth_range := CourtConstants.lane_depth_range_meters(lane)
+	var depth_offset := (contacted.y - CourtConstants.NET_Y) \
+		* CourtConstants.COURT_LENGTH_METERS \
+		- (depth_range.x + depth_range.y) * 0.5
 	var moved_depth := clampf(
 		float(learned.y) * MEMORY_RETENTION + depth_offset * rate * direction,
 		-MEMORY_LIMIT_METERS, MEMORY_LIMIT_METERS,

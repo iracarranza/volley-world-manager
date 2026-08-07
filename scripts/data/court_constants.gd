@@ -62,38 +62,66 @@ const LANE_X := {
 	"Pipe": 0.50,
 }
 
-## The stretch of net each lane actually covers, as normalised x.
+## The region of court each lane actually covers -- along the net and off it.
 ##
 ## `LANE_X` is one point per lane and was being used as though it were the lane
 ## itself: `lane_target` returned it, the setter aimed at it, and the only reason
 ## two attacks ever landed in different places was execution scatter around a
 ## constant. Measured over 300 rallies that produced four bands about 1.5 m wide
-## with dead net between them -- 0.2-1.7 m, 2.6-4.1 m and 7.2-8.6 m, leaving a
-## 3.1 m stretch in the middle-right of the net where no ball was ever contacted,
-## which is where the slide lives.
+## with dead net between them, and a 3.1 m stretch where no ball was ever struck.
 ##
-## A lane is a region a hitter works inside, not a dot. `LANE_X` stays as each
-## region's centre so every consumer that wants one representative point keeps
-## working.
-const LANE_RANGE := {
-	"Left Pin": Vector2(0.02, 0.24),
-	"Front Quick": Vector2(0.28, 0.50),
-	"Right Quick": Vector2(0.50, 0.72),
-	"Right Pin": Vector2(0.76, 0.98),
-	## The pipe is a back-row lane and works the middle third rather than a pin.
-	"Pipe": Vector2(0.35, 0.65),
+## Depth belongs here for the same reason x does. Holding one shared depth
+## constant for every lane meant the pipe's four metres and a pin's half metre
+## were the same field, so the only way to summarise contact depth was to pool
+## lanes that have nothing to do with each other -- which is exactly what made
+## the first tightness sweep unreadable. A zone owns both of its axes.
+##
+## `depth_m` is metres from the tape on the hitter's own side. Quicks live tight
+## because that is what makes them quick; the pins have room to be set off the
+## net; the pipe is a back-row ball and sits behind the attack line.
+##
+## Every range is centred on the constant it replaced -- 0.54 m for the front
+## lanes, 4.00 m for the pipe -- so that with `ENABLE_HITTER_TIGHTNESS` off the
+## engine behaves exactly as it did. Zone centres that quietly moved the base
+## depth would make the flag one of two things changing behaviour, and then
+## nothing measured against it means anything.
+const LANE_ZONE := {
+	"Left Pin": {"x": Vector2(0.02, 0.24), "depth_m": Vector2(0.25, 0.83)},
+	"Front Quick": {"x": Vector2(0.28, 0.50), "depth_m": Vector2(0.19, 0.89)},
+	"Right Quick": {"x": Vector2(0.50, 0.72), "depth_m": Vector2(0.19, 0.89)},
+	"Right Pin": {"x": Vector2(0.76, 0.98), "depth_m": Vector2(0.25, 0.83)},
+	## Behind the three-metre line with room to spare, because delivery scatter
+	## reaches +/-1.4 m and a zone edge is not a legality guarantee while the
+	## delivery can cross it -- measured at 3 back-row swings in 124 struck in
+	## front of the line from a zone starting at 3.20 m.
+	"Pipe": {"x": Vector2(0.35, 0.65), "depth_m": Vector2(3.40, 4.60)},
 }
 
 
 static func lane_range(lane_name: String) -> Vector2:
-	return LANE_RANGE.get(lane_name, Vector2(0.40, 0.60))
+	return Vector2(LANE_ZONE.get(lane_name, {}).get("x", Vector2(0.40, 0.60)))
 
 
-## How deep a pipe is set, as a share of court length from the far end line. Four
-## metres off the net on an 18 m court: a metre behind the attack line, which is
-## the room a back-row hitter needs to take off legally and still be swinging
-## forward when they meet the ball.
-const PIPE_SET_DEPTH: float = 0.5 + 4.0 / 18.0
+## How far off the net this lane may be set, in metres, as a min/max pair.
+static func lane_depth_range_meters(lane_name: String) -> Vector2:
+	return Vector2(
+		LANE_ZONE.get(lane_name, {}).get("depth_m", Vector2(0.30, 0.90))
+	)
+
+
+## The middle of a lane's region, which is what a caller wanting one
+## representative point should get.
+static func lane_target(lane_name: String) -> Vector2:
+	var span := lane_range(lane_name)
+	var depth := lane_depth_range_meters(lane_name)
+	return Vector2(
+		(span.x + span.y) * 0.5,
+		NET_Y + (depth.x + depth.y) * 0.5 / COURT_LENGTH_METERS,
+	)
+
+
+
+
 
 const TEMPOS: Array[int] = [0, 1, 2, 3]
 
@@ -226,19 +254,6 @@ const UNRESOLVED_SLOT_POSITION := Vector2(-1.0, -1.0)
 static func slot_position(slot_number: int) -> Vector2:
 	return ROTATION_SLOT_POSITIONS.get(slot_number, UNRESOLVED_SLOT_POSITION)
 
-
-## Where a set to this lane is aimed, in the hitter's own half.
-##
-## The pipe's target was 0.66, which is 0.007 *in front of* the attack line at
-## 0.6667 -- so a back-row hitter was being aimed at a ball they cannot legally
-## take off in front of, and execution spread put two take-offs in 28 over the
-## line. A pipe is set about a metre behind the three-metre line rather than on
-## it, which is 4 m from the net on an 18 m court, and that is where the
-## measured take-offs already clustered: median 0.721 against this 0.722.
-static func lane_target(lane_name: String) -> Vector2:
-	var lane_x := float(LANE_X.get(lane_name, 0.5))
-	var target_y := PIPE_SET_DEPTH if lane_name == "Pipe" else 0.53
-	return Vector2(lane_x, target_y)
 
 
 ## Which lane a contact at this x belongs to.
