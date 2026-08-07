@@ -4409,18 +4409,22 @@ func _form_opponent_block(
 		* (1.0 - assist_usable_preset)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
+	var assist_net_x := 0.5
 	for candidate in front_blockers:
 		if candidate.id == primary.id:
 			continue
-		var close_fraction := _blocker_close_fraction(
+		var candidate_terms := _blocker_close_terms(
 			candidate, lineup, attack_x, assist_close_time
 		)
+		var close_fraction := float(candidate_terms.fraction)
 		if close_fraction > assist_close:
 			assist = candidate
 			assist_close = close_fraction
+			assist_net_x = float(candidate_terms.get("closed_net_x", 0.5))
 	if assist_close < 0.34:
 		assist = null
 		assist_close = 0.0
+		assist_net_x = 0.5
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
 	var block_quality := _block_wall_quality(primary_skill, assist_skill)
@@ -4429,6 +4433,10 @@ func _form_opponent_block(
 		"assist": assist,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		## The reached positions, so the geometric wall stands where the blockers
+		## closed to rather than where they began.
+		"primary_net_x": float(primary_terms.get("closed_net_x", 0.5)),
+		"assist_net_x": assist_net_x,
 		## Itemised, the same way the home wall reports it.
 		"primary_close_terms": primary_terms,
 		"quality": block_quality,
@@ -7699,18 +7707,22 @@ func _form_home_block(
 		* (1.0 - assist_usable_preset)
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
+	var assist_net_x := 0.5
 	for candidate in front_blockers:
 		if candidate.id == primary.id:
 			continue
-		var close_fraction := _blocker_close_fraction(
+		var candidate_terms := _blocker_close_terms(
 			candidate, lineup, attack_x, assist_close_time
 		)
+		var close_fraction := float(candidate_terms.fraction)
 		if close_fraction > assist_close:
 			assist = candidate
 			assist_close = close_fraction
+			assist_net_x = float(candidate_terms.get("closed_net_x", 0.5))
 	if assist_close < 0.34:
 		assist = null
 		assist_close = 0.0
+		assist_net_x = 0.5
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
 	var block_quality := _block_wall_quality(primary_skill, assist_skill)
@@ -7719,6 +7731,10 @@ func _form_home_block(
 		"assist": assist,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
+		## The reached positions, so the geometric wall stands where the blockers
+		## closed to rather than where they began.
+		"primary_net_x": float(primary_terms.get("closed_net_x", 0.5)),
+		"assist_net_x": assist_net_x,
 		## The itemised close, so a binary output can be attributed to whichever
 		## of its inputs is bimodal.
 		"primary_close_terms": primary_terms,
@@ -7826,10 +7842,26 @@ func _blocker_close_terms(
 	)
 	var usable_time := maxf(movement_time - BLOCK_PLANT_SECONDS, 0.0)
 	var deficit := required_seconds - usable_time
+	var fraction := clampf(
+		1.0 - maxf(deficit, 0.0) / BLOCK_CLOSE_FAILURE_SECONDS, 0.0, 1.0
+	)
 	return {
-		"fraction": clampf(
-			1.0 - maxf(deficit, 0.0) / BLOCK_CLOSE_FAILURE_SECONDS, 0.0, 1.0
-		),
+		"fraction": fraction,
+		## Where this blocker actually ended up, in normalised court x.
+		##
+		## `footwork_x` is where they were *going*; the fraction says how much of
+		## that they got, so the reached position is the two together. Until this
+		## was returned it was computed and discarded, and the geometric wall
+		## asked `live_positions` instead -- which is where the blocker *started*.
+		## So the block closed in the timing model and stood still in the geometry
+		## model, and the wall was drawn at the blocker's rotation slot rather than
+		## at the lane they had just travelled to. Measured on Front Quick, whose
+		## lane sits at x 0.400 against a middle blocker's slot near 0.5, that is a
+		## 0.9 m gap -- wider than any half-width the wall could plausibly have, so
+		## every such ball classified as beating the block "around". It is why
+		## doubling `BLOCKER_HALF_WIDTH_METERS` converted four balls out of
+		## fifty-eight: the wall was never within reach of the ball to begin with.
+		"closed_net_x": lerpf(start_x, footwork_x, fraction),
 		"required_seconds": required_seconds,
 		"usable_time": usable_time,
 		"deficit_seconds": deficit,

@@ -255,7 +255,13 @@ static func block_wall(
 				clampf(reach_effort, 0.0, 1.0) / BLOCKER_REACH_EFFORT
 			)
 		wall.append({
-			"net_x": _blocker_net_x(blocker, fallback_positions, live_positions),
+			## Where they closed to, when the formation knows. `live_positions`
+			## is the blocker's starting slot, so falling back to it puts the
+			## wall at the rotation grid instead of at the lane.
+			"net_x": float(formation.get(
+				"%s_net_x" % role,
+				_blocker_net_x(blocker, fallback_positions, live_positions),
+			)),
 			"reach_height_m": timed_reach if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING \
 				else blocker.jumping_reach_cm(
 					clampf(reach_effort, 0.0, 1.0)

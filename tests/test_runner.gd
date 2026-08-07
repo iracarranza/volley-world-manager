@@ -7236,6 +7236,8 @@ func _test_attack_targets_are_continuous() -> void:
 				"intended": Vector2(event.metadata.get("intended_target", event.end_position)),
 				"missed": bool(event.metadata.get("attack_missed", false)),
 				"continuation": "exchange" in str(event.headline).to_lower(),
+				"off_the_block": str(event.metadata.get("geometric_outcome", "")) \
+					in ["tool", "high_hands"],
 			})
 	var distinct := {}
 	var occupied_cells := {}
@@ -7276,7 +7278,14 @@ func _test_attack_targets_are_continuous() -> void:
 				contradictory_landings += 1
 		else:
 			legal_successes += 1
-			if not landing_in:
+			## A ball deflected off the hands may legally land outside the court
+			## and still be the attacker's point -- the block touched it last.
+			## That is the whole of what a tool and a High Hands are, and this
+			## check asserted it could never happen, which was true only while
+			## neither outcome ever fired. Once blockers stood where they closed
+			## to rather than at their rotation slot, the block started meeting
+			## the ball and one tool landed out.
+			if not landing_in and not bool(attack.off_the_block):
 				contradictory_landings += 1
 	_check(
 		legal_successes > 0 and visible_misses > 0 and contradictory_landings == 0,
