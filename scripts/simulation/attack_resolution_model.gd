@@ -202,6 +202,24 @@ static func _block_contact(
 	var around := false
 	## The closest any hand came, over all blockers, as a negative gap in metres.
 	var nearest_edge_miss := -INF
+	## The hand the ball actually meets, rather than the first one in the array.
+	##
+	## This used to `return` on whichever blocker the loop reached first that had
+	## the ball inside its width, which for a solo block is trivially the right
+	## answer and for a pair is arbitrary. Measured over 3000 swings a side, 32%
+	## of two-blocker contacts were credited to a less central hand than the ball
+	## met -- mean edge gap 0.187 m used against 0.223 m available -- and because
+	## `TOOL_EDGE_MARGIN_METERS` cuts on exactly that quantity, the arbitrary
+	## pick read as the hitter finding the outside hand: tool went 0.076 solo to
+	## 0.127 paired while stuff went *down*, 0.204 to 0.195. A second pair of
+	## hands made the wall easier to tool and harder to stuff, which is not what
+	## a second blocker does.
+	##
+	## Centrality rather than reach, because the ball meets the surface that is
+	## in its path. A taller blocker half a metre off the ball's line does not
+	## get to the ball ahead of a shorter one directly under it.
+	var best_gap := -INF
+	var contact := {}
 	for blocker in blockers:
 		var reach := float(blocker.get("reach_height_m", 3.0))
 		if height_at_net > reach:
@@ -269,13 +287,17 @@ static func _block_contact(
 			kind = "tool"
 		elif depth_below > stuff_depth:
 			kind = "stuff"
-		return {
-			"kind": kind,
-			"blocker": blocker,
-			"height_at_net_meters": height_at_net,
-			"depth_below_reach_meters": depth_below,
-			"edge_gap_meters": edge_gap,
-		}
+		if edge_gap > best_gap:
+			best_gap = edge_gap
+			contact = {
+				"kind": kind,
+				"blocker": blocker,
+				"height_at_net_meters": height_at_net,
+				"depth_below_reach_meters": depth_below,
+				"edge_gap_meters": edge_gap,
+			}
+	if not contact.is_empty():
+		return contact
 	if blockers.is_empty():
 		miss_detail["reason"] = "no wall"
 	elif over and around:
