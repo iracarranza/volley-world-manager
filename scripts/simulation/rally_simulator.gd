@@ -536,6 +536,22 @@ const SET_SPREAD_STEP: float = 0.03
 ## read lane, small enough that a one-lane hitter still swings where they can.
 const LANE_ANTICIPATED_PENALTY: float = 0.42
 
+## What running the middle is worth over hitting a pin, on a ball where the quick
+## is available.
+##
+## The middle beats the block by arriving before it, which no attribute on the
+## hitter expresses -- so without a term for it a middle is priced as a hitter
+## with a shorter approach and never gets set. With it the middle is one good
+## option among several, which is what the position is.
+const QUICK_OPTION_BONUS: float = 0.06
+## How sharply the set goes to the best option rather than being shared out.
+##
+## Six, measured: it leaves the strongest front-row attacker taking a clear
+## plurality while the others stay live. Raise it and the offence narrows toward
+## the argmax this replaced; drop it toward one and the setter feeds a weak
+## hitter as readily as a strong one.
+const SET_DISTRIBUTION_SHARPNESS: float = 6.0
+
 ## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
@@ -7628,11 +7644,17 @@ func _fallback_hitter(
 	## Gated on the pass because a quick is not a shot you can run off a bad one,
 	## which is the whole reason the middle is a *conditional* option rather than
 	## simply another name in the list.
-	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE \
-			and pass_quality >= OFFENSE_QUICK_PASS_FLOOR:
-		var middle := _front_row_middle(players, lineup, excluded_player_id)
-		if middle != null:
-			return middle
+	## Whether a quick is on at all. The middle is *eligible* on this ball, not
+	## entitled to it.
+	##
+	## This used to return the front-row middle outright the moment the pass
+	## allowed one, ahead of the scored selection below -- so a good pass meant the
+	## middle, every time, and the scoring only ever ran on balls nobody could run
+	## a quick off. With the fixture squad given real attributes that produced
+	## Front Quick 0.716 of 74 swings: the monoculture moved lanes rather than
+	## breaking up, which is what a bypass does to a decision.
+	var quick_is_on := RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE \
+		and pass_quality >= OFFENSE_QUICK_PASS_FLOOR
 	## Every front-row attacker, scored -- not "the outside hitter, and if there
 	## is more than one, whichever stands nearer a pin".
 	##
@@ -7645,8 +7667,7 @@ func _fallback_hitter(
 	## ball ahead of a weak outside and the lane follows from who was chosen rather
 	## than deciding who is chosen.
 	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE:
-		var best_attacker: VolleyballPlayer = null
-		var best_score := -1.0
+		var scored: Array[Dictionary] = []
 		for slot_number in range(1, 7):
 			if not CourtConstants.is_front_row_slot(slot_number):
 				continue
@@ -7655,10 +7676,21 @@ func _fallback_hitter(
 					or contender.position_role == "Libero" \
 					or not lineup.is_attack_eligible(contender.id):
 				continue
+			var is_middle := contender.position_role == "Middle Blocker"
+			## A middle with no quick to run is a hitter with no shot: they cannot
+			## be set a high ball outside, so they leave the pool rather than being
+			## fed something they do not hit.
+			if is_middle and not quick_is_on:
+				continue
 			var score := _power_rating(contender, "attack_power") * 0.46 \
 				+ _rating(contender, "attack_accuracy") * 0.28 \
 				+ _rating(contender, "approach_timing") * 0.16 \
 				+ _rating(contender, "shot_variety") * 0.10
+			## What a quick is worth when it is on: fast, in front of a wall that
+			## has not formed, and the reason to run one at all. Priced rather than
+			## privileged, so a strong pin still out-scores a weak middle.
+			if is_middle:
+				score += QUICK_OPTION_BONUS
 			## And spread the ball, because ability alone is still one lane.
 			##
 			## Ranking on the swing picked the best attacker every rally, which moved
@@ -7673,12 +7705,9 @@ func _fallback_hitter(
 			## per-rally spread standing in for that until it is wired: it consumes no
 			## random draw, so it re-sequences nothing, and it is small enough that a
 			## clearly better hitter still gets the ball.
-			score += float(posmod(rally_seed + contender.id * 31, 5)) * SET_SPREAD_STEP
-			if score > best_score:
-				best_score = score
-				best_attacker = contender
-		if best_attacker != null:
-			return best_attacker
+			scored.append({"player": contender, "score": maxf(score, 0.02)})
+		if not scored.is_empty():
+			return _distributed_choice(scored)
 	var outside_candidates: Array[VolleyballPlayer] = []
 	for slot_number in range(1, 7):
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
@@ -8996,6 +9025,41 @@ func _fallback_assignment(
 	## definition and a pin ball off this offence is a high one.
 	assignment.tempo = QUICK_TEMPO_CALL if quick_lane else 3
 	return assignment
+
+
+## One of these hitters, in proportion to how good an option they are.
+##
+## An argmax was the wrong shape here and the measurements said so twice. The
+## scores this ranks are close together -- four front-row attackers land inside
+## about a tenth of each other -- so picking the maximum makes the offence a step
+## function of its own constants: moving `QUICK_OPTION_BONUS` from 0.14 to 0.06,
+## six hundredths, took Front Quick from 0.568 to 0.176 and Left Pin from 0.203
+## to 0.595. A distribution that flips on a constant that small is not measuring
+## the constant, it is measuring which side of a tie it fell.
+##
+## `SET_SPREAD_STEP` was a deterministic stand-in for this and its own comment
+## called itself a placeholder. This replaces it. A setter distributes: the best
+## option gets the ball most often and everybody else gets it sometimes, which is
+## also the only thing that stops a block reading one rotation.
+##
+## Sharpness rather than a flat share, so the gap between hitters still matters.
+## It consumes one draw, which re-sequences the rally -- an accepted cost, since
+## the alternative is an offence decided by rounding.
+func _distributed_choice(scored: Array[Dictionary]) -> VolleyballPlayer:
+	var total := 0.0
+	var weights: Array[float] = []
+	for entry in scored:
+		var weight := pow(float(entry.score), SET_DISTRIBUTION_SHARPNESS)
+		weights.append(weight)
+		total += weight
+	if total <= 0.0:
+		return scored[0].player as VolleyballPlayer
+	var roll := rng.randf() * total
+	for index in range(scored.size()):
+		roll -= weights[index]
+		if roll <= 0.0:
+			return scored[index].player as VolleyballPlayer
+	return scored[scored.size() - 1].player as VolleyballPlayer
 
 
 ## The front-row middle, if there is one who is not already committed elsewhere.
