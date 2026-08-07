@@ -589,28 +589,36 @@ const ENABLE_HOME_PIPE_OFFENSE: bool = true
 ## against depth measured 0.013 / 0.072 / 0.151 / 0.385 at 0.36 / 1.20 / 2.50 /
 ## 4.00 m in the isolated harness.
 ##
-## **OFF, because it was swept and measured inert.** Taking the spread of
-## preferred tightness from an implausible 3.20 m peak-to-peak down to zero, over
-## 300 rallies a step:
+## **OFF, and the sweep that put it here was mis-measured.** Recorded honestly
+## because the correction matters more than the first reading did.
 ##
-##   range_m  n    net    stuff  err    kill   contact depth p05/p50/p95
-##      3.20  183  0.044  0.044  0.153  0.377  0.18 / 1.32 / 4.74
-##      2.00  186  0.043  0.038  0.156  --     0.22 / 1.26 / 4.93
-##      1.20  183  0.071  0.049  0.169  --     0.27 / 1.29 / 5.10
-##      0.70  188  0.064  0.048  0.160  --     0.29 / 1.28 / 5.18
-##      0.35  187  0.053  0.059  0.150  --     0.31 / 1.22 / 5.26
-##      0.00  186  0.043  0.048  0.151  0.376  0.30 / 1.22 / 5.33
+## The sweep took the nominal spread from 3.20 m peak-to-peak to zero and every
+## rate sat inside its own noise -- net 0.044 against 0.043 at the ends, stuff
+## 0.044 / 0.048, error 0.153 / 0.151, kill 0.377 / 0.376. That was read as the
+## axis being inert. It is not. Three things were wrong with the reading:
 ##
-## Every rate sits inside its own noise across the whole sweep, including between
-## the two ends. The reason is in the last column: contact depth already spans
-## 0.3 m to 5.3 m *with this at zero*, so whatever decides where a hitter meets
-## the ball is not the set target's depth, and moving that target by three metres
-## is lost inside a five-metre distribution that was already there.
+##   the knob could not reach its own range
+##       `_depth` applies `span * 0.5 * (seat * settle)` with
+##       `settle = 1 - unpredictability`, and the squad runs unpredictability
+##       42-74, so settle is 0.26-0.58. A nominal 3.20 m applied as +/-0.4 to
+##       +/-0.9 m -- a quarter of what the constant claimed.
+##   the noise on top was larger than the signal
+##       `SET_DELIVERY_STDEV_WORST_M` 0.40 at a 3.5-sigma limit is +/-1.4 m of
+##       delivery scatter, wider than the intent variation underneath it.
+##   the measurement pooled lanes
+##       depth was summarised across all lanes at once, so the front lanes'
+##       0.54 m intent and the pipe's 4.00 m dominated everything. Per lane the
+##       delivered spans are 2.18 / 1.49 / 1.93 / 1.47 m, not the single 5 m
+##       distribution the pooled figure showed.
 ##
-## The lever is real -- the isolated harness proves depth matters enormously --
-## but it is not this one. Finding which model owns live contact depth is the
-## prerequisite, and until then an enabled flag here would be a knob that moves
-## nothing, which is the shape this branch has spent its time removing.
+## The axis stays off because it is not yet built right, not because depth does
+## not matter -- the isolated harness measured net errors 0.013 to 0.385 across
+## it. Two things want fixing first. `settle` multiplies the hitter's stable
+## preference, so an unpredictable hitter ends up with *no* preferred depth
+## rather than a varying one, which is backwards: unpredictability should widen
+## the jitter and leave the seat alone. And a lane wants a 3D centre -- an x
+## range and a depth range per zone -- so the front lanes and the pipe carry
+## their own depth by construction instead of sharing one constant.
 const ENABLE_HITTER_TIGHTNESS: bool = false
 
 
