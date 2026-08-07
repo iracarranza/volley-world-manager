@@ -2018,6 +2018,29 @@ func _test_minor_region_behaviour() -> void:
 		"a travel day costs training blocks but never sleep or food",
 	)
 
+	## The collective half of training, which the screen now quotes per session.
+	## A session's familiarity and cohesion yields are the only thing separating
+	## Team Practice from a strength circuit once the attribute pools are on
+	## screen beside each other, so the ordering they imply is worth holding: team
+	## practice builds the system fastest, and conditioning builds none of it.
+	var practice: Dictionary = TRAINING_SYSTEM_SCRIPT.description("Team Practice")
+	var circuit: Dictionary = TRAINING_SYSTEM_SCRIPT.description("Strength & Jump")
+	var strongest := true
+	for activity_name in TRAINING_SYSTEM_SCRIPT.activity_names():
+		if activity_name == "Team Practice":
+			continue
+		var other: Dictionary = TRAINING_SYSTEM_SCRIPT.description(activity_name)
+		if float(other.get("familiarity", 0.0)) >= float(practice.familiarity):
+			strongest = false
+	_check(
+		strongest
+			and float(practice.familiarity) > 0.0
+			and float(practice.cohesion) > 0.0
+			and is_zero_approx(float(circuit.get("familiarity", 0.0)))
+			and is_zero_approx(float(circuit.get("cohesion", 0.0))),
+		"team practice builds the system faster than any other session and a strength circuit builds none of it",
+	)
+
 	var format := MATCH_FORMAT_SCRIPT.new()
 	format.best_of_sets = 3
 	format.regular_set_target = 25

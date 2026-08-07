@@ -124,6 +124,14 @@ func refresh() -> void:
 	for warning in Array(day.get("warnings", [])):
 		_add_line(_sidebar, "· %s" % str(warning))
 
+	## Where the club stands on the collective half, so the per-session yields in
+	## the phase panel read against something rather than floating.
+	_add_heading(_sidebar, "What the club knows")
+	_add_line(_sidebar, "System familiarity %d%% · cohesion %d%%" % [
+		roundi(float(_game_manager.team.tactical_familiarity) * 100.0),
+		roundi(float(_game_manager.team.cohesion) * 100.0),
+	])
+
 	_add_heading(_sidebar, "Squad fatigue")
 	var players: Array = _game_manager.players
 	var total := 0.0
@@ -178,12 +186,39 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 		"" if int(description.get("blocks", 2)) == 1 else "s",
 	])
 
+	## The other half of a session, and the half the screen used to hide.
+	##
+	## A week does two separate things: it moves individual attributes, and it
+	## moves what the club knows collectively -- how well the system is understood
+	## and how well the squad plays together. Both were already in the model, paid
+	## out per squad and scaled by how much of the roster turned up, but only the
+	## attribute half was ever drawn. So a manager comparing Team Practice against
+	## Strength & Jump saw two attribute pools and none of the reason to run the
+	## first: it builds three and a half times the familiarity, and the strength
+	## circuit builds none.
+	##
+	## Written as the week's yield at full turnout, because that is the number the
+	## model applies when a squad is the whole roster and it is the honest ceiling
+	## for a smaller one.
+	var in_match := _in_match_line(description)
+	if not in_match.is_empty():
+		_add_line(_detail, in_match)
+
+	var regimen := _regimen_for(activity)
+
+	## Three levels, exactly one of them true. A `ButtonGroup` is what makes that
+	## the control's own rule rather than something the handler has to maintain,
+	## and `button_pressed` is seeded from the stored focus so the screen opens
+	## showing what this session is actually set to -- the first cut drew three
+	## identical unpressed buttons, so the one piece of state the panel exists to
+	## edit was the one piece it did not display.
 	var focus_row := HBoxContainer.new()
 	focus_row.add_theme_constant_override("separation", 8)
 	_detail.add_child(focus_row)
 	var focus_label := Label.new()
 	focus_label.text = "Focus"
 	focus_row.add_child(focus_label)
+	var focus_group := ButtonGroup.new()
 	for level: int in [
 		TrainingRegimenModel.Focus.LOW,
 		TrainingRegimenModel.Focus.MEDIUM,
@@ -191,8 +226,10 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 	]:
 		var button := Button.new()
 		button.toggle_mode = true
+		button.button_group = focus_group
 		button.text = TrainingRegimenModel.focus_name(level)
 		button.tooltip_text = _focus_blurb(level)
+		button.button_pressed = int(regimen.focus) == level
 		var chosen: int = level
 		button.pressed.connect(func() -> void: _set_focus(chosen))
 		focus_row.add_child(button)
@@ -206,7 +243,6 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 	## choose and the screen should say so rather than offering buttons that do
 	## nothing. At MEDIUM a picked attribute is *struck off*; at HIGH it is *aimed
 	## at*. Same control, opposite meaning, so the label says which.
-	var regimen := _regimen_for(activity)
 	_add_heading(_detail, _pool_heading(int(regimen.focus)))
 	var pool_row := HFlowContainer.new()
 	_detail.add_child(pool_row)
@@ -232,9 +268,25 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 			has_unsimulated = true
 	if has_unsimulated:
 		_add_line(_detail, "* trains, but no rally reads it yet.")
+	## What the week will *actually* be aimed at, rather than how many chips are
+	## lit. The model caps a high-focus week at HIGH_FOCUS_MAX and falls back to a
+	## random draw when nothing valid is named, so a count of the chips would
+	## overstate both ends -- it would promise eight aimed attributes when six is
+	## the ceiling, and promise one when zero means the week is not aimed at all.
 	if int(regimen.focus) == TrainingRegimenModel.Focus.HIGH:
-		var named := regimen.attributes.size()
-		_add_line(_detail, "Aimed at %d. The week's progress is split between them, so fewer moves each further." % named)
+		var named := TrainingFocusModel.selected_attributes(
+			regimen, Array(description.get("attributes", [])), 0, 0
+		).size()
+		if regimen.attributes.is_empty():
+			_add_line(_detail, "Nothing named yet, so this week is worked loosely — pick attributes above to aim it.")
+		else:
+			var over := regimen.attributes.size() - named
+			var tail := ""
+			if over > 0:
+				tail = " %d more will not be trained; a week can be aimed at %d at most." % [
+					over, TrainingFocusModel.HIGH_FOCUS_MAX,
+				]
+			_add_line(_detail, "Aimed at %d. The week's progress is split between them, so fewer moves each further.%s" % [named, tail])
 
 	## Who is doing it. A squad is the other half of a regimen and the screen had
 	## no way to set it, so every regimen was an activity nobody was assigned to.
@@ -255,6 +307,22 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 		var member := int(player.id)
 		toggle.pressed.connect(func() -> void: _toggle_member(activity, member))
 		squad_row.add_child(toggle)
+
+
+## What a full-turnout week of this session is worth to the club rather than to
+## the individual. Empty when an activity moves neither, so a strength circuit
+## does not carry a line saying it builds nothing.
+func _in_match_line(description: Dictionary) -> String:
+	var familiarity := float(description.get("familiarity", 0.0))
+	var cohesion := float(description.get("cohesion", 0.0))
+	if is_zero_approx(familiarity) and is_zero_approx(cohesion):
+		return ""
+	var parts: Array[String] = []
+	if not is_zero_approx(familiarity):
+		parts.append("system familiarity %+.1f%%" % (familiarity * 100.0))
+	if not is_zero_approx(cohesion):
+		parts.append("cohesion %+.1f%%" % (cohesion * 100.0))
+	return "In match, at full turnout: %s a week." % ", ".join(parts)
 
 
 ## Which other session has this voli, if any.
