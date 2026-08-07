@@ -100,6 +100,17 @@ trigger, no copy.
 staff system: no hiring, no coaching effects, no staff model. Confirmed as
 placeholder-only scope at the time; still open.
 
+## 6a. Title screen, rendered in full — before the training work
+
+Explicitly sequenced ahead of the clipboard and the day loop (§0.9 of
+`docs/design/TACTICS_AND_TRAINING.md`). The title screen has a written spec
+already -- the "ui write up" -- and it is the one screen every session begins
+on, so it sets the reading for everything after it. The clipboard draft that
+exists now (Tactics / Development tabs, fit strip) is deliberately parked at
+draft fidelity until this lands.
+
+Held rather than started, so the order is a decision rather than an accident.
+
 ---
 
 ## 7. Continuous movement for all twelve players

@@ -64,8 +64,31 @@ const CUT_NICK_PIXELS: float = 2.4
 ## first cut of this had it the other way round -- a tall bar in a track -- which
 ## is a scrollbar grabber wearing paper, not a tab.
 const TAB_ACROSS: float = 26.0
-const TAB_ALONG: float = 13.0
 const TAB_RADIUS: float = 2.5
+
+## How long the tab is along its slot, and why it is not simply proportional.
+##
+## A scrollbar grabber's length is the share of the content on screen, and the
+## tab should say the same thing: a slip threaded under a long page is a small
+## tab in a long slot, and one under a page that nearly fits is almost as long as
+## the slot itself. It was a flat 13 px, which said nothing about anything.
+##
+## Straight proportionality does not survive contact with the real regions.
+## Measured across the journal, the clipboard, the folders and the planner with a
+## career loaded, the three regions that actually scroll show 0.158, 0.770 and
+## 0.891 of their own content on tracks of 449, 449 and 236 px -- so a
+## `track * fraction` tab would be 71 px, 346 px and 210 px long against a tab
+## 26 px wide. A 346x26 tab is not a tab; it is the bar in a track this shape was
+## chosen to avoid, and the comment above says so.
+##
+## So the fraction is mapped into a band that stays tab-shaped at both ends. The
+## ceiling is below `TAB_ACROSS` because the moment a tab is longer along the cut
+## than it is across it, it stops reading as something pushed through a slit. The
+## floor is what a pointer can still catch. Over the measured range that band
+## prints 11.1 px, 18.9 px and 20.6 px -- a visible two-to-one, which is the
+## readout the flat constant never gave.
+const TAB_ALONG_MIN: float = 9.0
+const TAB_ALONG_MAX: float = 21.0
 
 ## How far the cut it rides in is set in from the region's far edge, and how far
 ## short of the two window slits it stops.
@@ -209,6 +232,18 @@ func _draw_slip(light_mode: bool) -> void:
 	draw_colored_polygon(sheet, slip)
 
 
+## The tab's length along its slot: the share of the content this region shows,
+## squeezed into the band that keeps it a tab rather than a bar.
+##
+## Inverse in the way that matters -- the more there is under the page, the less
+## of it is on screen, and the smaller the tab that says so.
+func _tab_along(bar: ScrollBar) -> float:
+	var span := bar.max_value - bar.min_value
+	if span <= 0.0:
+		return TAB_ALONG_MAX
+	return lerpf(TAB_ALONG_MIN, TAB_ALONG_MAX, clampf(bar.page / span, 0.0, 1.0))
+
+
 ## Whether this bar has anything to say. A region that fits its content is not a
 ## slip threaded under anything -- it is just writing on the page.
 func _scrollable(bar: ScrollBar) -> bool:
@@ -273,15 +308,16 @@ func _draw_pull(
 	## through.
 	var reach := maxf(span - bar.page, 0.0001)
 	var progress := clampf((bar.value - bar.min_value) / reach, 0.0, 1.0)
+	var tab_along := _tab_along(bar)
 	var along := lerpf(
-		SLOT_END_MARGIN + TAB_ALONG * 0.5,
-		track - SLOT_END_MARGIN - TAB_ALONG * 0.5,
+		SLOT_END_MARGIN + tab_along * 0.5,
+		track - SLOT_END_MARGIN - tab_along * 0.5,
 		progress
 	)
 	var centre := Vector2(at, along) if vertical else Vector2(along, at)
 	var half := (
-		Vector2(TAB_ACROSS, TAB_ALONG) if vertical
-		else Vector2(TAB_ALONG, TAB_ACROSS)
+		Vector2(TAB_ACROSS, tab_along) if vertical
+		else Vector2(tab_along, TAB_ACROSS)
 	) * 0.5
 	var rect := Rect2(centre - half, half * 2.0)
 	## Standing proud of the page, so it has a shadow of its own -- and needs
