@@ -46,7 +46,27 @@ static func evaluate_arrival(
 	var base_reach := _base_reach_meters(player, contact_skill)
 	var physical_reach := base_reach + travel_distance
 	var assigned_reach := float(zone.radius_meters)
-	var reachable := distance <= minf(physical_reach, assigned_reach)
+	## Legs, not paperwork.
+	##
+	## This was `distance <= minf(physical_reach, assigned_reach)`, so a zone
+	## radius could declare a ball unreachable that the player had the time and
+	## the speed to get to. A zone is a responsibility -- who is *supposed* to
+	## take this -- and it was being enforced as a leash on where a body may go.
+	##
+	## The signature of the bug is what happens when you add time. Mapping the
+	## receiving half at 1.2 s and 1.8 s of serve flight, the entire short row
+	## just behind the attack line goes from unreachable to
+	## reachable-but-refused, and never to reachable: more flight time moves
+	## `physical_reach` and does nothing at all, because `assigned_reach` is the
+	## binding term and it does not know the ball is in the air. That is why a
+	## short serve had no answer, and it is the wrong reason for a defence to
+	## fail -- the sport's answer to a short serve is that somebody runs in.
+	##
+	## The assignment still decides *who*: `zone_margin` below already carries it
+	## into `claim_score`, so a passer reaching outside their zone is a worse
+	## claimant than one inside theirs and only takes the ball when nobody better
+	## can. What it no longer does is stop them.
+	var reachable := distance <= physical_reach
 	## Named for what it is. This is a *distance* -- how much further this
 	## player could have reached than the ball actually needed them to -- and it
 	## was called `arrival_margin`, which is the name the rest of the engine uses

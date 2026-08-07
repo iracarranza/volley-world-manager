@@ -174,6 +174,58 @@ const BLOCK_UNCLOSED_SHARE: float = 0.18
 const BLOCK_SOLO_SHARE: float = 0.62
 ## How much of what the primary left open a sealed assist covers.
 const BLOCK_ASSIST_SHARE: float = 0.34
+## How far past touching reach envelopes two blockers separate before the assist
+## is worth nothing at all.
+##
+## Half a metre, which is about a ball's width plus the arm the hitter needs to
+## get through it. Inside that the two are still a wall with a soft spot; past it
+## they are two solo blockers who happen to be jumping at the same time.
+const WALL_SEAM_OPEN_METERS: float = 0.50
+
+## Search resolution for the serve's scan of the receiving half, and how the two
+## terms of its score trade off. Sample points for a search, not a menu -- the
+## chosen point is perturbed by the server's placement afterwards.
+const SERVE_SCAN_COLUMNS: int = 11
+const SERVE_SCAN_ROWS: int = 7
+## How many metres of drift from the requested zone one metre of daylight is
+## worth. Below 1.0 the named zone leads and the seam only breaks ties within
+## it, which is the intended reading: the bench picks the zone, the server picks
+## the gap inside it.
+const SERVE_SEAM_WEIGHT: float = 0.0
+## How much credit open floor earns, by how much of it the server is willing to
+## chase -- the timid end and the aggressive end of the same scale.
+##
+## Aggression belongs here rather than in a flat constant. A server told to sit
+## on the zone hits the zone; one told to attack goes hunting for the seam, and
+## the difference between those two is most of what serve aggression means.
+##
+## The ceiling is bounded because openness that nobody can cover is not a seam,
+## it is the model handing out points. At 2.2 m -- roughly "no passer reaches
+## this" -- an earlier cut of this walked the aim a metre and a half past the
+## zone it was given and parked it behind the passing line on every serve.
+const SERVE_SEAM_REWARD_TIMID_METERS: float = 0.7
+const SERVE_SEAM_REWARD_BOLD_METERS: float = 1.8
+## How many widths of a server's own placement scatter have to fit between the
+## aim point and the nearest line before they will treat that floor as bankable.
+##
+## Two, for the same reason the net clearance margin is two: one is the margin
+## that puts a sixth of your attempts over the line by construction.
+const SERVE_SAFETY_SPREADS: float = 2.0
+## How much short of a server's maximum carry the ball has to land before the
+## distance stops costing them anything. Inside this the target fades rather than
+## cutting off, because a ball at the edge of someone's range is not impossible,
+## it is unreliable -- and unreliable is what this term is for.
+const SERVE_CARRY_SLACK_METERS: float = 2.5
+## How far from the zone the bench called the server will look for a gap.
+##
+## A metre and a half, which is about a passer's width plus a step. Without a
+## bound the scan is free to answer a different question than it was asked: the
+## openness reward keeps growing toward the corner while the drift penalty grows
+## only linearly, so "Zone 5" resolved a metre deeper and half a metre wider than
+## Zone 5 -- measured at y 0.88-0.93 against a baseline of 0.83-0.88. That is not
+## finding the seam in a zone, it is picking a different zone, and the bench
+## already made that call.
+const SERVE_SEAM_SEARCH_RADIUS_METERS: float = 1.5
 
 ## How much a formed block takes off the swing hit into it. The primary carries
 ## most of it; a sealed assist adds the rest of the wall.
@@ -283,6 +335,18 @@ const TRANSITION_BALL_RECOVERY: float = 0.40
 ## wall. Without this a block touch recycled at full quality and a blocker was
 ## worth nothing unless they stuffed it outright.
 const BLOCK_DEFLECTION_CARRY: float = 0.55
+## How far below the top of the hands a ball has to be met before the wall stops
+## it dead rather than deflecting it back into play, and where the two extremes
+## land on the hitter's own side.
+##
+## `attack_resolution_model.gd` already cuts a stuff at its own depth band; this
+## is the softer question of where the ones that stay alive come down. A ball off
+## the fingertips keeps its pace and carries to `FAR_Y`; one buried under the
+## hands drops near the tape at `NEAR_Y`. The interval is the one the scalar
+## version drew uniformly over, now placed by the contact instead of by chance.
+const BLOCK_DEFLECTION_STOP_METERS: float = 0.30
+const BLOCK_DEFLECTION_NEAR_Y: float = 0.56
+const BLOCK_DEFLECTION_FAR_Y: float = 0.74
 
 ## How the opponent's swing is priced against arrival.
 ##
@@ -735,7 +799,8 @@ func resolve(
 	var serve_error := rng.randf() < serve_error_chance
 	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_landing := _serve_landing_point(
-		intended_target, opponent_server, players, lineup, true
+		intended_target, opponent_server, players, lineup, true,
+		_receive_formation_positions(lineup, false), opponent_serve_origin,
 	)
 	## Gate E: the same serve through the shared ballistics, in shadow.
 	_geometric_serve_record(
@@ -1903,8 +1968,9 @@ func resolve(
 	# A positional partial block is the same continuation class as the older
 	# "recycle" result: the home attack-coverage unit must play the deflection.
 	var recycled := block_outcome in ["recycle", "touch", "funnel"]
-	var recycle_target := _attack_coverage_target(set_target, block_strength) \
-		if recycled else Vector2(set_target.x, 0.50)
+	var recycle_target := _attack_coverage_target(
+		set_target, block_strength, geometric
+	) if recycled else Vector2(set_target.x, 0.50)
 	var net_contact := Vector2(set_target.x, 0.50)
 	var attack_event: Resource = result.events[-1]
 	## A block that never touches the ball must not shorten the shot.
@@ -2282,7 +2348,12 @@ func _resolve_home_serve(
 		defensive_plan.serve_target if defensive_plan != null else "Zone 5"
 	)
 	var opponent_landing := _serve_landing_point(
-		target_name, server, [], null, false
+		target_name, server, [], null, false,
+		## The receiving side, which this call did not previously have in any
+		## form -- it passed an empty roster and a null lineup, so a home serve
+		## was aimed at one of four fixed dots with no idea who was under them.
+		_receive_formation_positions(opponent_team.current_lineup(), true),
+		CourtConstants.serve_origin(0.82, true),
 	)
 	_geometric_serve_record(
 		"geometric_serve_home", server,
@@ -4427,7 +4498,12 @@ func _form_opponent_block(
 		assist_net_x = 0.5
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
-	var block_quality := _block_wall_quality(primary_skill, assist_skill)
+	## Positions as well as skills: an assist that closed to the far side of the
+	## tape is not the same wall as one that closed shoulder to shoulder.
+	var block_quality := _block_wall_quality(
+		primary_skill, assist_skill,
+		float(primary_terms.get("closed_net_x", 0.5)), assist_net_x,
+	)
 	return {
 		"primary": primary,
 		"assist": assist,
@@ -4550,11 +4626,51 @@ func _resolve_opponent_block(
 	)
 
 
-func _attack_coverage_target(set_target: Vector2, block_quality: float) -> Vector2:
-	var spread := lerpf(0.14, 0.05, clampf(block_quality, 0.0, 1.0))
+## Where a ball deflected off the wall comes down on the hitter's own side.
+##
+## It used to be drawn around the *set* target with a spread widened by a block
+## quality scalar, which is the pre-geometric block API surviving into a world
+## that knows where the hands are. The scalar and the coordinates were being
+## published side by side in the same dictionary -- `_form_opponent_block`
+## returns `primary_net_x`, `assist_net_x` *and* `quality` -- and this read the
+## scalar.
+##
+## A deflection comes off the hands, so it leaves from where the ball met the
+## tape, not from where the setter put the ball. And how far back it carries is
+## a question about how solidly it was met: a ball taken well below the top of
+## the hands is stopped and drops near the net, while one that grazes the top
+## keeps most of its pace and travels. `block_depth_below_reach_meters` is
+## exactly that quantity and is already forwarded here.
+func _attack_coverage_target(
+	set_target: Vector2,
+	block_quality: float,
+	geometric: Dictionary,
+) -> Vector2:
+	var depth: Variant = geometric.get("block_depth_below_reach_meters", null)
+	if depth == null:
+		## No geometry on this swing -- the legacy contest is still the official
+		## resolver when the promotion flag is closed.
+		var legacy_spread := lerpf(0.14, 0.05, clampf(block_quality, 0.0, 1.0))
+		return Vector2(
+			clampf(set_target.x + rng.randf_range(-legacy_spread, legacy_spread),
+				0.08, 0.92),
+			rng.randf_range(0.54, 0.70),
+		)
+	## 1 for a ball off the fingertips, 0 for one buried under the hands.
+	var carry := 1.0 - clampf(
+		float(depth) / BLOCK_DEFLECTION_STOP_METERS, 0.0, 1.0
+	)
+	## Sideways scatter for the same reason: a solid contact goes back the way it
+	## came, a glancing one squirts off the hand. The range is the one the scalar
+	## version used, now keyed to the contact rather than to a skill.
+	var spread := lerpf(0.05, 0.14, carry)
 	return Vector2(
-		clampf(set_target.x + rng.randf_range(-spread, spread), 0.08, 0.92),
-		rng.randf_range(0.54, 0.70),
+		clampf(
+			float(geometric.get("net_crossing_x", set_target.x))
+				+ rng.randf_range(-spread, spread),
+			0.08, 0.92,
+		),
+		lerpf(BLOCK_DEFLECTION_NEAR_Y, BLOCK_DEFLECTION_FAR_Y, carry),
 	)
 
 
@@ -7725,7 +7841,12 @@ func _form_home_block(
 		assist_net_x = 0.5
 	var primary_skill := _block_contact_skill(primary, primary_close)
 	var assist_skill := _block_contact_skill(assist, assist_close) if assist != null else 0.0
-	var block_quality := _block_wall_quality(primary_skill, assist_skill)
+	## Positions as well as skills: an assist that closed to the far side of the
+	## tape is not the same wall as one that closed shoulder to shoulder.
+	var block_quality := _block_wall_quality(
+		primary_skill, assist_skill,
+		float(primary_terms.get("closed_net_x", 0.5)), assist_net_x,
+	)
 	return {
 		"primary": primary,
 		"assist": assist,
@@ -8575,11 +8696,42 @@ func _dig_contest(
 ## least when they already sealed it. That is the shape of a real double block,
 ## and it makes beating one blocker ordinary while a well-formed double is the
 ## thing a hitter genuinely has to solve.
-func _block_wall_quality(primary_skill: float, assist_skill: float) -> float:
+func _block_wall_quality(
+	primary_skill: float,
+	assist_skill: float,
+	primary_net_x: float,
+	assist_net_x: float,
+) -> float:
 	var solo := clampf(primary_skill, 0.0, 1.0) * BLOCK_SOLO_SHARE
+	## What the assist is worth depends on whether it arrived beside the primary
+	## or somewhere else along the tape.
+	##
+	## This took two skill numbers and no positions, which is the same history as
+	## the coverage target above: the wall became two placed pairs of hands at
+	## resolution and stayed two scalars here. Two blockers standing 40 cm apart
+	## and two standing a metre and a half apart returned the same number, and
+	## the second of those is not a wall -- it is a seam with a person on either
+	## side of it. Both formations publish the closed positions in the same
+	## dictionary as this figure.
 	return clampf(
-		solo + (1.0 - solo) * clampf(assist_skill, 0.0, 1.0) * BLOCK_ASSIST_SHARE,
+		solo + (1.0 - solo) * clampf(assist_skill, 0.0, 1.0)
+			* BLOCK_ASSIST_SHARE * _wall_join_fraction(primary_net_x, assist_net_x),
 		0.05, 0.98,
+	)
+
+
+## How much of a joined wall these two blockers actually make, 1 for shoulder to
+## shoulder and 0 for far enough apart that the ball goes between them.
+##
+## Sealed while their reach envelopes still overlap, opening linearly from there.
+## The widths are the geometric resolver's own, so the seam this opens is the
+## same seam that model will find the ball going through.
+func _wall_join_fraction(primary_net_x: float, assist_net_x: float) -> float:
+	var gap := absf(primary_net_x - assist_net_x) \
+		* CourtConstants.COURT_WIDTH_METERS
+	var sealed_within := 2.0 * GeometricAttackPromotionModel.BLOCKER_HALF_WIDTH_METERS
+	return clampf(
+		1.0 - (gap - sealed_within) / WALL_SEAM_OPEN_METERS, 0.0, 1.0
 	)
 
 
@@ -8815,10 +8967,15 @@ func _serve_landing_point(
 	home_players: Array,
 	lineup: RotationLineup,
 	landing_on_home_side: bool,
+	receivers: Array[Vector2] = [],
+	serve_origin: Vector2 = Vector2(0.5, 0.5),
 ) -> Vector2:
 	var home_y := 0.84 if landing_on_home_side else 0.16
 	var short_y := 0.67 if landing_on_home_side else 0.33
 	var intended := Vector2(0.20, home_y)
+	## What the bench asked for. This stays a named call, because choosing a zone
+	## is the manager's decision and not something to be solved away.
+	var seam_weight := SERVE_SEAM_WEIGHT
 	match target_name:
 		"Zone 1":
 			intended = Vector2(0.80, home_y)
@@ -8826,8 +8983,29 @@ func _serve_landing_point(
 			intended = Vector2(0.50, short_y)
 		"Weak Passer":
 			intended = _weak_passer_target(home_players, lineup, landing_on_home_side)
+			## The one intent that is aimed at a person rather than at a gap, so
+			## it must not then be pulled off them toward the nearest seam.
+			seam_weight = 0.0
 		_:
 			intended = Vector2(0.20, home_y)
+	## Where the zone actually is, given who is standing in the way.
+	##
+	## The four anchors above used to *be* the answer: a serve landed on one of
+	## four fixed dots regardless of how the receiving side had lined up, while
+	## reception resolved against a real seam formation with per-passer arrival
+	## margins and body penalties. The receive was geometry at resolution and a
+	## menu of four points at selection, and nothing made the two agree -- the
+	## home serve did not even take the receivers as an argument, and was called
+	## with an empty array.
+	##
+	## The named zone still decides roughly where the ball goes. Within that, the
+	## serve now finds the gap: a passer standing on Zone 5 makes Zone 5 a worse
+	## place to serve than the seam beside it, which is the entire reason a
+	## server looks at the other side before they toss.
+	intended = _open_serve_point(
+		intended, receivers, landing_on_home_side, seam_weight,
+		server, serve_origin,
+	)
 	var accuracy := _rating(server, "serve_placement")
 	var deviation := lerpf(0.105, 0.018, accuracy)
 	var min_y := 0.54 if landing_on_home_side else 0.04
@@ -8836,6 +9014,164 @@ func _serve_landing_point(
 		clampf(intended.x + rng.randf_range(-deviation, deviation), 0.06, 0.94),
 		clampf(intended.y + rng.randf_range(-deviation * 0.65, deviation * 0.65), min_y, max_y),
 	)
+
+
+## The best point to serve near a requested zone, given where the passers are
+## *and* what this server can actually hit.
+##
+## Three terms. How far the ball lands from the nearest passer and how far it
+## strays from the zone the bench asked for are both in metres, so they trade off
+## without a fudge factor. The third is the one that keeps this honest: the open
+## floor is only worth what the server can bank.
+##
+## Without it this function is an argmax over openness, and openness is maximised
+## exactly where the ball is nearly out -- so it replaced four hardcoded dots
+## with one computed dot in the deep corner, chosen identically on every serve by
+## every server. That is worse than the menu it replaced, because at least the
+## menu's dots were inside the court on purpose.
+##
+## `confidence` is the share of this server's own error distribution that still
+## lands in, times whether the ball carries that far at all. It is not a rule
+## that gates zones by attribute -- it is the arithmetic of a spread against a
+## line, and the gating falls out: a server whose placement scatters 1.5 m has
+## no business aiming 0.4 m off the sideline, so for them the corner scores as
+## the empty floor it is, and they take the anchor. A server who scatters 25 cm
+## gets to attack it. Nobody is told which; they are priced.
+func _open_serve_point(
+	anchor: Vector2,
+	receivers: Array[Vector2],
+	landing_on_home_side: bool,
+	seam_weight: float,
+	server: VolleyballPlayer,
+	serve_origin: Vector2,
+) -> Vector2:
+	if receivers.is_empty() or seam_weight <= 0.0 or server == null:
+		return anchor
+	var min_y := 0.54 if landing_on_home_side else 0.04
+	var max_y := 0.96 if landing_on_home_side else 0.46
+	## The same spread the landing point is perturbed by below, read here so the
+	## server aims against the error they are about to make.
+	var spread := lerpf(0.105, 0.018, _rating(server, "serve_placement"))
+	## And the same speed the geometric serve is struck at.
+	var reach_meters := _serve_carry_meters(server)
+	## How far this server is willing to chase a gap.
+	var reward_cap := lerpf(
+		SERVE_SEAM_REWARD_TIMID_METERS, SERVE_SEAM_REWARD_BOLD_METERS,
+		_rating(server, "serve_aggression"),
+	)
+	var best := anchor
+	var best_score := -1.0e9
+	for column in range(SERVE_SCAN_COLUMNS):
+		var x := lerpf(
+			0.08, 0.92, float(column) / float(SERVE_SCAN_COLUMNS - 1)
+		)
+		for row in range(SERVE_SCAN_ROWS):
+			var candidate := Vector2(x, lerpf(
+				min_y, max_y, float(row) / float(SERVE_SCAN_ROWS - 1)
+			))
+			var drift := CoverageModel.court_distance_meters(anchor, candidate)
+			if drift > SERVE_SEAM_SEARCH_RADIUS_METERS:
+				continue
+			var nearest := 99.0
+			for receiver in receivers:
+				nearest = minf(
+					nearest,
+					CoverageModel.court_distance_meters(receiver, candidate),
+				)
+			var score := seam_weight \
+				* minf(nearest, reward_cap) \
+				* _serve_confidence(
+					candidate, spread, reach_meters, serve_origin,
+					landing_on_home_side,
+				) - drift
+			if score > best_score:
+				best_score = score
+				best = candidate
+	return best
+
+
+## How much of a serve aimed here this server keeps on the court, near enough.
+##
+## Two independent ways to fail, multiplied: scattering over a line, and not
+## carrying that far in the first place.
+func _serve_confidence(
+	candidate: Vector2,
+	spread: float,
+	reach_meters: float,
+	serve_origin: Vector2,
+	landing_on_home_side: bool,
+) -> float:
+	## Distance to the nearest line the ball can go over, in metres. The two axes
+	## are not the same scale, so neither are the two margins.
+	var side_margin := minf(candidate.x, 1.0 - candidate.x) \
+		* CourtConstants.COURT_WIDTH_METERS
+	var end_margin := ((1.0 - candidate.y) if landing_on_home_side else candidate.y) \
+		* CourtConstants.COURT_LENGTH_METERS
+	var margin := minf(side_margin, end_margin)
+	## The spread arrives on each axis at that axis' own scale; take the worse.
+	var scatter := maxf(
+		spread * CourtConstants.COURT_WIDTH_METERS,
+		spread * 0.65 * CourtConstants.COURT_LENGTH_METERS,
+	)
+	var inside := clampf(
+		margin / maxf(scatter * SERVE_SAFETY_SPREADS, 0.001), 0.0, 1.0
+	)
+	if reach_meters <= 0.0:
+		return inside
+	var carry := CoverageModel.court_distance_meters(serve_origin, candidate)
+	return inside * clampf(
+		(reach_meters - carry) / SERVE_CARRY_SLACK_METERS + 1.0, 0.0, 1.0
+	)
+
+
+## How far this server's ball travels before it lands, at the flat end of their
+## repertoire. The ceiling and the angle are the geometric serve's own, so the
+## floor a server cannot serve past here is the floor they cannot serve past
+## there.
+func _serve_carry_meters(server: VolleyballPlayer) -> float:
+	var speed := GeometricAttackResolverModel.AttackPowerModel \
+		.available_ceiling_mps(_rating(server, "serve_power"), 1.0, 1.0) \
+		* lerpf(0.82, 1.0, _rating(server, "serve_technique"))
+	var flight: Dictionary = RallyKinematicsModel.BallFlightModel.solve_flight(
+		speed, _serve_launch_angle_degrees(server, 0.6),
+		GeometricAttackPromotionModel.serve_contact_height_meters(server),
+	)
+	return float(flight.range_meters)
+
+
+## Where the passers stand when the ball is struck, for the side about to
+## receive it. The same formation the reception resolves against.
+##
+## The passers only -- not all six. `serve_receive_formation` returns a position
+## for every slot, including the setter and the front row parked at the net on
+## their staging marks, and scoring against all six sends the serve away from
+## people who were never going to pass it and into the corners. That cost 44
+## reception and setter gates on the first run: a serve aimed at nobody is also a
+## serve nobody receives.
+func _receive_formation_positions(
+	lineup: RotationLineup,
+	opponent_side: bool,
+) -> Array[Vector2]:
+	var positions: Array[Vector2] = []
+	if lineup == null:
+		return positions
+	var setter_slot := lineup.slot_for_player(lineup.active_setter_id())
+	if setter_slot < 1:
+		return positions
+	var formation := CourtConstants.serve_receive_formation(
+		setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1,
+		opponent_side,
+	)
+	var passer_slots := CourtConstants.serve_receive_passer_slots(
+		setter_slot,
+		int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+		]["passer_count"]),
+	)
+	for slot_number in passer_slots:
+		if formation.has(slot_number):
+			positions.append(Vector2(formation[slot_number]))
+	return positions
 
 
 func _weak_passer_target(

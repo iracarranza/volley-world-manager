@@ -286,8 +286,12 @@ static func block_values(
 				(index + 1) % players.size()
 			] as VolleyballPlayer
 			assist_skill = simulator._block_contact_skill(partner, assist_close)
+		## Sealed positions, because this harness is measuring what the *skill*
+		## terms are worth. A seam is a separate quantity with its own scale, and
+		## letting it vary here would fold two answers into one column.
 		values.append(simulator._block_wall_quality(
-			simulator._block_contact_skill(player, close_fraction), assist_skill
+			simulator._block_contact_skill(player, close_fraction), assist_skill,
+			0.5, 0.5,
 		))
 	return values
 
