@@ -39,6 +39,9 @@ calibration, answer all six *before* writing code.
    derived before a correction, and read after it, describes a world that no
    longer exists. Find every derived value downstream of anything you move.
    (§15)
+9. **Is there an unowned ratio here?** Two audited quantities combined produce a
+   third that nothing checks. Measure its distribution and bound it against a
+   model that already has an opinion. (§16)
 
 ---
 
@@ -394,3 +397,44 @@ re-read them all or say in the code why one is deliberately left alone. And when
 a model publishes a single verdict assembled from several independent
 judgements, publish the judgements too -- an unattributable total sends
 investigations to the wrong file, repeatedly.
+
+## 16. Nothing bounds a quantity the model never claimed to own
+
+**What it looks like.** Playback drew every player's leg by lerping them from
+where they were to where the plan said, across the ball's flight. There is no
+speed anywhere in that sentence. Distance and time both came from elsewhere --
+the resolver's positions and the ball's kinematics -- and the quantity that
+falls out of dividing one by the other was owned by nobody, so nothing ever
+checked it.
+
+Measured over 600 rallies and 15,314 planned legs: median 0.00 m/s (most bodies
+stand still, which is correct), p90 4.53, **p99 13.38, max 57.11 m/s**. The
+worst case was a 4.49 m return to defensive base drawn inside a 0.079 s
+attack-to-block window. Six percent of base-posture legs and fifteen percent of
+legs belonging to the player about to touch the ball exceeded 7 m/s, which is
+about the fastest a human covers ground on a volleyball court.
+
+**Why it survived.** Every input was individually defensible. The positions came
+from the resolver, the durations came from the ball model, and both had been
+audited. The engine already owned a locomotion model that answers exactly this
+question -- `LocomotionModel.maximum_speed` -- and playback simply never asked
+it, because playback was not understood to be making a physical claim. It was
+"drawing", and drawing does not get calibrated.
+
+**How the wrong instrument nearly closed it.** The reported symptom was a block
+that replayed itself while bodies teleported. The first measurement taken was
+the blocker's base position against the block contact point over the attack's
+flight, which printed a plausible-looking 15.9 m/s for the assisting blocker.
+That number was an artefact: the simulator *does* stage blockers during the
+set's flight, one window earlier, so the attack window was the wrong window.
+Re-measured correctly, the wall slides 3.6 cm inside the attack flight -- the
+staging was never the problem. The real number only appeared when the question
+changed from "is this specific body being dragged?" to "how fast is *every*
+planned leg being drawn?"
+
+**The rule:** when two audited quantities are combined, the ratio between them
+is a third quantity, and it is unowned by default. Name it, measure its
+distribution, and bound it against whatever model in the engine already has an
+opinion about it -- there usually is one. And a symptom seen on screen names a
+*moment*, not a cause: measure the whole population the moment belongs to before
+measuring the moment.

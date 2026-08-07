@@ -36,15 +36,19 @@ Mapped onto §0's three pages:
 
 ---
 
-## 0. The clipboard has three pages, and they are a cycle
+## 0. Three things, and they are a cycle
 
-The settled structure. Open the clipboard and flip between three pages:
+> **Amended by §0.9.** This section was written when all three lived on the
+> clipboard as pages. Two still do. The third -- match training -- turned out not
+> to be a page at all: it is an appointment in the day, and running it is a live
+> event. What each *does* is unchanged and still correct; only where you stand
+> when you do it has moved. Read §0.9 before building any of this.
 
-| Page | What it changes | The unit it changes |
-|---|---|---|
-| **Attribute training** | current ability, upward toward the potential ceiling | the 0-100 ratings |
-| **Match training** | *comfort and preference*, not ability | coordinates, tempos, zones, postures |
-| **Tactical planner** | a declared plan | presets, then specifics |
+| Thing | Where it happens | What it changes | The unit it changes |
+|---|---|---|---|
+| **Attribute training** | clipboard page | current ability, upward toward the potential ceiling | the 0-100 ratings |
+| **Match training** | *a session, in the day* | *comfort and preference*, not ability | coordinates, tempos, zones, postures |
+| **Tactical planner** | clipboard page | a declared plan | presets, then specifics |
 
 They are not three menus. They are a loop:
 
@@ -161,7 +165,7 @@ Three layers of state, and one rule that applies to all of them:
 |---|---|---|
 | **Tactics** | declarative intent -- attack this way, defend this way | the planner page |
 | **Individual instructions** | the tactic decomposed into per-voli asks | the planner, one level down |
-| **Training** | what closes the gap the asks declare | the two training pages |
+| **Training** | what closes the gap the asks declare | attribute training on the clipboard; match training in the day's session (§0.9) |
 
 **Individual instructions are generated, not authored.** They arrive filled in
 from the preset and the squad's own comfort; the player edits exceptions. That is
@@ -256,6 +260,89 @@ gets injured and the screen asks for a re-audit of all of it. A management game
 is mostly its maintenance interaction, and that is a different problem from
 onboarding. The weekly loop should be: the fit score names the worst gap, you
 drill that, done -- one decision, not thirty-six.
+
+## 0.9 Drills are an appointment, not a page
+
+The structural correction. **Drills come out of the clipboard entirely.** They
+are not a menu you configure; they are an hour in the day you either attend or
+do not, and attending is a live event on the same footing as a match.
+
+### The day
+
+The day advances an hour at a time. The hour that matters is **the start of
+training**, and the day's shape is a property of the roster rather than a
+setting:
+
+- Each voli has a window -- when they wake, when they can still work. Traits
+  move it: an **Early Riser** wakes before the squad, a **Night Owl** is
+  serviceable at ten in the evening.
+- The team's session can only start at the **earliest hour the squad it needs
+  is actually awake**, so the day you get is composed from the people you
+  signed. A squad of night owls has a different clock than a squad of early
+  risers, and neither was chosen from a dropdown.
+- Not every day has a session.
+
+At the session hour the game asks one question: **are you taking this one?**
+
+- **No** -- the assistant coach runs it. It resolves, it moves the numbers, you
+  see the result. This is the whole of the maintenance interaction on a normal
+  day, and it must stay one keypress.
+- **Yes** -- the drill session opens as a live event, and you participate. Your
+  inputs are the demonstration (§1), so the session is where the demonstration
+  physically happens.
+
+This is what §4's two constraints were asking for, arrived at from the other
+direction: a thing you can skip with an honest auto-result, and a thing worth
+attending when you choose to. Neither is achievable by a screen with a
+dropdown on it, which is why the drill page was never going to work.
+
+### Time is the resource, and it is contested
+
+Training does not cost "training points". It costs **hours**, and the hours have
+other claimants: fitness upkeep, sleep, social time, sponsorship obligations.
+Buying more session time means taking it from one of those, and taking it has a
+cost somewhere else. This is the mechanism that makes a training decision a
+decision at all -- without it, the answer to "should I drill this?" is always
+yes.
+
+That makes the planner load-bearing rather than decorative: it stops being
+"choose this week's focus" and becomes the day's hours laid out, which is what a
+planner on a desk is for.
+
+### Why you would train at all
+
+The list, and the last one is the one this game has that FM does not:
+
+1. An attribute is declining.
+2. A match exposed a weakness, or an opponent's weakness worth exploiting.
+3. You changed the tactic, and the squad has not been taught it.
+4. **A match taught somebody something you did not ask for.** A hitter kept
+   getting away with a coordinate half a metre off the one you declared, so
+   they drifted toward it (§0.1's shared channel, which is now the agreed
+   design). You can **revert** it or **encourage** it -- and either way you are
+   spending the same hour.
+
+(4) is the strongest justification for the whole structure, because it closes
+the loop with an observed cause: the match wrote the drift, the clipboard shows
+it, the session is where you answer it.
+
+### What this costs, and the thing to measure first
+
+A forty-week season at an hour a tick is a few thousand ticks. If a meaningful
+fraction of them stop and ask something, the game is unplayable by week ten --
+which is §0.8's failure mode wearing a clock instead of a roster.
+
+So the number to measure before building the loop, not after: **how many hours
+in a simulated season actually raise a prompt.** Not how many *could*, and not
+what a threshold is nominally set to -- the count, over a real season, on a real
+roster. A per-hour advance that prompts on 4% of hours is a rhythm; one that
+prompts on 30% is a chore, and it will not announce which one it is.
+
+### What this does *not* change
+
+Everything §1-§5 says about what a rep writes, and everything §0.1 says about
+the state split, is unaffected. Match training still moves learned preferences
+and only those. It just does it in a room instead of on a page.
 
 ---
 
@@ -401,10 +488,19 @@ Naming, settled:
 | Title screen | Saves, theme, the room | `title_screen.gd` |
 | The journal | The club: home, roster, team, transfers, competition | `journal_screen.gd` |
 | The desk | The menu -- zoom out from the journal | *not built* |
-| Training clipboard | Tactics *and* drills | `training_screen.gd` |
+| Training clipboard | Tactics and development -- what you declare and what you raise | `training_screen.gd` |
 | Scouting folders | Prospects and marks | `scouting_screen.gd` |
-| The planner | The daily schedule | `schedule_screen.gd` |
+| The planner | The day's hours, and what claims them | `schedule_screen.gd` |
+| The session | A drill session, run live | *not built* -- see §0.9 |
 | Match centre | The match, and in-match adjustments only | `match_screen.gd` |
+
+The clipboard carries **two** tabs, not three: **Tactics** (declare) and
+**Development** (raise). Drills are not on it -- they are the session, and the
+session is an appointment in the day (§0.9). What the clipboard keeps is the
+**fit strip** that names the gap: `Rotation 1 · 4 asks · 1 unfamiliar ⟨ Ivo 4 ·
+slide coordinate ⟩ →`, which points at *tomorrow's session* rather than at a
+tab. That is the week-forty maintenance interaction in full: open the clipboard,
+the strip names one gap, mark it for the session, leave.
 
 Only the journal wears the scrapbook / cross-stitch treatment. The other objects
 are different media and want different ones -- see

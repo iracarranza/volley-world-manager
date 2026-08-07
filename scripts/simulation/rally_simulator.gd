@@ -5569,6 +5569,22 @@ func _physical_playback_profile(player: VolleyballPlayer) -> Dictionary:
 		"body_type": player.body_type,
 		"standing_reach_meters": player.standing_reach_cm() / 100.0,
 		"jumping_reach_meters": player.jumping_reach_cm() / 100.0,
+		## How fast this body can actually be moved across the floor.
+		##
+		## Playback had no notion of a speed limit: it lerped every planned leg
+		## across whatever window the ball happened to be in the air for. Measured
+		## over 600 rallies that printed a p99 of 13.4 m/s and a worst case of
+		## 57.1 m/s -- a 4.49 m transition drawn inside a 0.079 s attack-to-block
+		## window. Bolt runs at 12.
+		##
+		## The same `LocomotionModel.maximum_speed` the engine times traversals
+		## with, so the drawn pace and the simulated one come from one model rather
+		## than from a constant invented in the view. `TRANSITION` because that is
+		## the mode a player crossing the court between phases is in; fatigue is
+		## already inside `cadence_hz`, so a tired voli is drawn tired.
+		"transition_speed_mps": LocomotionModel.maximum_speed(
+			player, RallyPlayerState.MovementMode.TRANSITION
+		),
 	}
 
 

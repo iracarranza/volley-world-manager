@@ -7027,6 +7027,56 @@ func _test_3d_playback_contract() -> void:
 			and screen._event_elevation(block, 102) == 0.85,
 		"3D contact poses consume resolved attack and assisting-blocker elevation",
 	)
+
+	## A leg is drawn at a speed a body can produce.
+	##
+	## Nothing used to bound this: the plan lerped every player across the ball's
+	## flight whatever the distance, which measured p99 13.38 m/s and a worst case
+	## of 57.11 m/s over 600 rallies. The fixture below asks the assisting blocker
+	## to cross 14 m of court inside a 0.30 s window, which unpaced would draw a
+	## 47 m/s slide.
+	screen.player_physical_profiles[102]["transition_speed_mps"] = 3.0
+	screen.player_physical_profiles[101]["transition_speed_mps"] = 3.0
+	block.metadata["opponent_phase_targets"] = {102: Vector2(0.10, 0.90)}
+	screen.playback_leg_overspeed.clear()
+	var paced_window := 0.30
+	var paced_plan := screen._build_movement_plan(attack, block, paced_window)
+	var assist_seconds := float(paced_plan.get(102, {}).get("seconds", 0.0))
+	var assist_metres := screen._leg_metres(paced_plan.get(102, {}))
+	var assist_drawn := assist_metres * clampf(
+		paced_window / maxf(assist_seconds, 0.0001), 0.0, 1.0
+	) / paced_window
+	_check(
+		assist_seconds > paced_window and assist_drawn <= 3.05,
+		"a planned leg is paced at the player's own top speed, not the ball's flight (%.2f m/s)"
+			% assist_drawn,
+	)
+	## ...with exactly one exception, and it is recorded rather than hidden. The
+	## player about to touch the ball keeps the ball's window, because drawing the
+	## contact happening away from the ball is the worse lie -- but the resolver
+	## and the drawn position disagreeing by that much is a real defect and has to
+	## stay countable.
+	_check(
+		not paced_plan.get(101, {}).has("seconds")
+			and screen.playback_leg_overspeed.size() == 1
+			and int(screen.playback_leg_overspeed[0]["player_id"]) == 101,
+		"the contact leg keeps the ball's window and its overspeed is recorded (%d entries)"
+			% screen.playback_leg_overspeed.size(),
+	)
+
+	## The wall goes up once. A block that stopped the ball dead has no outgoing
+	## trajectory -- 79.3% of all blocks, measured -- so it is drawn by the
+	## contact-pulse path, which restarted the phase at 0 and played a whole
+	## second jump. The withdraw has to begin where the hold ended.
+	var withdraw_start := screen._block_withdraw_phase(0.0, 0.5)
+	var withdraw_end := screen._block_withdraw_phase(1.0, 1.0)
+	var withdraw_middle := screen._block_withdraw_phase(0.5, 0.5)
+	_check(
+		is_equal_approx(withdraw_start, BlockBiomechanics.HOLD_END)
+			and withdraw_middle >= withdraw_start
+			and is_equal_approx(withdraw_end, 1.0),
+		"a block's withdraw starts where its hold ended, so the wall never re-forms",
+	)
 	screen.free()
 
 

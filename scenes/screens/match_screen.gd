@@ -33,6 +33,12 @@ var playback_generation: int = 0
 ## had to be reported by somebody watching a rally because nothing consulted the
 ## thing built to catch it. `playback_geometry_report()` is the missing half.
 var playback_start_mismatches: Array[Dictionary] = []
+## Legs playback had to draw faster than a body moves. Only the contact leg is
+## ever allowed to overspeed -- see `_pace_plan` -- so a growing list here is the
+## same symptom as the array above, seen from the other end: the drawn position
+## has drifted far enough from the timed one that the touch cannot be reached
+## honestly.
+var playback_leg_overspeed: Array[Dictionary] = []
 var playback_paused: bool = false
 var skip_requested: bool = false
 var playback_active: bool = false
@@ -98,6 +104,7 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	)
 	match_court_3d.ball_actor.reset_flight()
 	playback_start_mismatches.clear()
+	playback_leg_overspeed.clear()
 	progress_bar.value = 0.0
 	await _run_rally(generation)
 	if generation != playback_generation:
@@ -199,7 +206,7 @@ func _play_flight(
 	## would spend the full time on the shortened path.
 	var display_trajectory := _display_trajectory(event, next_contact, trajectory)
 	var duration := clampf(float(display_trajectory.get("duration", 0.5)), 0.08, 3.5)
-	var movement_plan := _build_movement_plan(event, next_contact)
+	var movement_plan := _build_movement_plan(event, next_contact, duration)
 	var elapsed := 0.0
 	match_court_3d.ball_actor.reset_flight()
 	while elapsed < duration:
@@ -211,13 +218,13 @@ func _play_flight(
 		elapsed += get_process_delta_time() * playback_speed
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.set_ball_trajectory_sample(display_trajectory, progress)
-		match_court_3d.apply_movement_plan(movement_plan, progress)
+		match_court_3d.apply_movement_plan(movement_plan, progress, duration)
 		_apply_contact_poses(event, next_contact, after_next, progress, duration)
 		progress_bar.value = (
 			(float(event_index) + progress) / maxf(float(event_count), 1.0)
 		) * 100.0
 		await get_tree().process_frame
-	match_court_3d.finish_movement_plan(movement_plan)
+	match_court_3d.finish_movement_plan(movement_plan, duration)
 	match_court_3d.reset_player_poses()
 
 
@@ -232,11 +239,40 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 		elapsed += get_process_delta_time() * playback_speed
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.reset_player_poses()
+		var direction := event.end_position - event.start_position
+		## A block that stopped the ball dead has no outgoing trajectory, so it
+		## arrives here rather than in `_apply_contact_poses` -- and that is
+		## **79.3%** of all blocks, measured over 600 rallies. Every one of them was
+		## drawn with `phase = progress` running 0 to 1 and elevation
+		## `sin(progress * PI)`, which is a whole jump: the wall went up and came
+		## down again, having already gone up during the set's flight and held
+		## through the attack's. That is the block replaying itself, and the fix
+		## that landed in `_apply_contact_poses` never reached this path because
+		## this path only draws blocks the *other* 20.7% of the time.
+		##
+		## Here the wall is already up. This window is the withdraw, so it starts
+		## where the hold ended, and both blockers come down together.
+		if event.event_type == RallyEventModel.EventType.BLOCK:
+			var phase := _block_withdraw_phase(progress, duration)
+			var lift := BlockBiomechanics.elevation_at(phase)
+			for blocker_id in [
+				int(event.actor_id), int(event.metadata.get("assist_id", -1)),
+			]:
+				if blocker_id < 0:
+					continue
+				match_court_3d.set_player_pose(
+					blocker_id, int(event.event_type),
+					_event_elevation(event, blocker_id) * lift,
+					phase, direction, true,
+					_contact_posture(event),
+					_contact_recovery(event),
+				)
+			await get_tree().process_frame
+			continue
 		var peak := _event_elevation(event, int(event.actor_id))
 		match_court_3d.set_player_pose(
 			int(event.actor_id), int(event.event_type),
-			peak * sin(progress * PI), progress,
-			event.end_position - event.start_position, true,
+			peak * sin(progress * PI), progress, direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
 		)
@@ -454,7 +490,9 @@ func _apply_early_block(
 		)
 
 
-func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictionary:
+func _build_movement_plan(
+	event: RallyEvent, next_contact: RallyEvent, window_seconds: float = 0.0
+) -> Dictionary:
 	var plan := {}
 	if next_contact == null:
 		return plan
@@ -567,7 +605,79 @@ func _build_movement_plan(event: RallyEvent, next_contact: RallyEvent) -> Dictio
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["approach_start_position"]
 			)
+	_pace_plan(plan, window_seconds, next_actor_id)
 	return plan
+
+
+## What is drawn as sprinting must be something a body can do.
+##
+## Playback lerped every planned leg across the ball's flight, whatever the
+## distance. Over 600 rallies that printed a median of 0.00 m/s -- most bodies
+## are standing still, which is right -- and a p99 of 13.4 m/s, with a worst case
+## of 57.1 m/s: a 4.49 m transition drawn inside a 0.079 s attack-to-block
+## window. Six of every hundred returns to base posture and fifteen of every
+## hundred legs belonging to the player about to touch the ball were over 7 m/s,
+## which is roughly the fastest a human covers ground on a volleyball court.
+##
+## Legs are now paced at the player's own `transition_speed_mps`, published by
+## the simulator from the same `LocomotionModel` that times traversals, and a leg
+## too long for its window simply is not finished when the window ends. The next
+## plan starts from where the body got to, so the walk continues.
+##
+## The one exception is the leg belonging to the player about to play the ball.
+## Pacing that one would draw the contact happening away from the ball, which is
+## a worse lie than a fast walk -- the resolver has already decided this player
+## makes this touch. It keeps the ball's window and the overspeed is recorded in
+## `playback_leg_overspeed` rather than absorbed, because the real cause is
+## playback's own accumulated drift and it should stay countable.
+const PLAUSIBLE_TOP_SPEED_MPS: float = 7.0
+
+
+func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) -> void:
+	if window_seconds <= 0.0:
+		return
+	for raw_player_id in plan:
+		var player_id := int(raw_player_id)
+		var movement: Dictionary = plan[raw_player_id]
+		var metres := _leg_metres(movement)
+		if metres <= 0.0001:
+			continue
+		var speed := _transition_speed(player_id)
+		var needed := metres / window_seconds
+		if player_id == contact_actor_id:
+			if needed > PLAUSIBLE_TOP_SPEED_MPS:
+				playback_leg_overspeed.append({
+					"player_id": player_id,
+					"metres": metres,
+					"window_seconds": window_seconds,
+					"speed": needed,
+				})
+			continue
+		movement["seconds"] = maxf(window_seconds, metres / maxf(speed, 0.01))
+
+
+## The length of the drawn journey in metres, corner included.
+func _leg_metres(movement: Dictionary) -> float:
+	var start := Vector2(movement.get("start", Vector2.ZERO))
+	var target := Vector2(movement.get("target", start))
+	var waypoint: Variant = movement.get("waypoint", null)
+	if waypoint is Vector2:
+		var corner := Vector2(waypoint)
+		return _court_metres(start, corner) + _court_metres(corner, target)
+	return _court_metres(start, target)
+
+
+func _court_metres(from_position: Vector2, to_position: Vector2) -> float:
+	var delta := to_position - from_position
+	return Vector2(
+		delta.x * match_court_3d.court_width, delta.y * match_court_3d.court_length
+	).length()
+
+
+func _transition_speed(player_id: int) -> float:
+	var profile: Dictionary = player_physical_profiles.get(player_id, {})
+	return maxf(float(profile.get("transition_speed_mps", 0.0)), 0.01) \
+		if profile.has("transition_speed_mps") else PLAUSIBLE_TOP_SPEED_MPS
 
 
 ## Send the side that is *not* about to play the ball back to its posture.

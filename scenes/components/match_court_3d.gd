@@ -149,7 +149,47 @@ func set_player_position(player_id: int, position: Vector2) -> void:
 	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
 
 
-func apply_movement_plan(plan: Dictionary, progress: float) -> void:
+## How far along its own journey a leg is, which is not how far along the ball is.
+##
+## Every leg used to be sampled at the ball's `progress`, so a long walk inside a
+## short flight was simply drawn fast -- unboundedly so. A plan entry may now
+## carry `seconds`, the time the leg actually takes at the player's own top
+## speed; where it does, the leg is sampled against that clock and is allowed to
+## still be in progress when the flight ends. The next window's plan starts from
+## wherever the body got to, so an unfinished leg continues rather than snapping.
+##
+## Entries without `seconds`, and calls that pass no window, keep the old
+## behaviour exactly: the leg is the flight.
+func _plan_fraction(
+	movement: Dictionary, progress: float, window_seconds: float
+) -> float:
+	var leg_seconds := float(movement.get("seconds", 0.0))
+	if leg_seconds <= 0.0 or window_seconds <= 0.0:
+		return clampf(progress, 0.0, 1.0)
+	return clampf(progress * window_seconds / leg_seconds, 0.0, 1.0)
+
+
+## Where a leg is at a given fraction of itself, corner included.
+func _plan_sample(movement: Dictionary, fraction: float, fallback: Vector2) -> Vector2:
+	var start := Vector2(movement.get("start", fallback))
+	var target := Vector2(movement.get("target", start))
+	var waypoint: Variant = movement.get("waypoint", null)
+	if not (waypoint is Vector2):
+		return start.lerp(target, fraction)
+	var corner := Vector2(waypoint)
+	var first_distance := start.distance_to(corner)
+	var second_distance := corner.distance_to(target)
+	var corner_fraction := first_distance / maxf(first_distance + second_distance, 0.0001)
+	if fraction <= corner_fraction:
+		return start.lerp(corner, fraction / maxf(corner_fraction, 0.0001))
+	return corner.lerp(
+		target, (fraction - corner_fraction) / maxf(1.0 - corner_fraction, 0.0001)
+	)
+
+
+func apply_movement_plan(
+	plan: Dictionary, progress: float, window_seconds: float = 0.0
+) -> void:
 	## Everyone gets sampled, including the players who are not going anywhere.
 	##
 	## The actor's gait is driven by the distance between successive placements,
@@ -169,28 +209,26 @@ func apply_movement_plan(plan: Dictionary, progress: float) -> void:
 	for raw_player_id in plan:
 		var player_id := int(raw_player_id)
 		var movement: Dictionary = plan[raw_player_id]
-		var start := Vector2(movement.get("start", live_positions.get(player_id, Vector2.ZERO)))
-		var target := Vector2(movement.get("target", start))
-		var waypoint: Variant = movement.get("waypoint", null)
-		var sample := start.lerp(target, progress)
-		if waypoint is Vector2:
-			var corner := Vector2(waypoint)
-			var first_distance := start.distance_to(corner)
-			var second_distance := corner.distance_to(target)
-			var corner_progress := first_distance / maxf(first_distance + second_distance, 0.0001)
-			if progress <= corner_progress:
-				sample = start.lerp(corner, progress / maxf(corner_progress, 0.0001))
-			else:
-				sample = corner.lerp(
-					target, (progress - corner_progress) / maxf(1.0 - corner_progress, 0.0001)
-				)
-		set_player_position(player_id, sample)
+		var fallback: Vector2 = live_positions.get(player_id, Vector2.ZERO)
+		set_player_position(player_id, _plan_sample(
+			movement, _plan_fraction(movement, progress, window_seconds), fallback
+		))
 
 
-func finish_movement_plan(plan: Dictionary) -> void:
+## Settle every leg where the window actually left it.
+##
+## This used to snap unconditionally to `target`, which was harmless while every
+## leg finished with the flight and is not harmless now that a leg may be paced
+## slower than the ball. A leg still travelling is left where it got to and
+## picked up by the next window's plan, which starts from live positions.
+func finish_movement_plan(plan: Dictionary, window_seconds: float = 0.0) -> void:
 	for raw_player_id in plan:
+		var player_id := int(raw_player_id)
 		var movement: Dictionary = plan[raw_player_id]
-		set_player_position(int(raw_player_id), Vector2(movement.get("target", Vector2.ZERO)))
+		var fallback: Vector2 = live_positions.get(player_id, Vector2.ZERO)
+		set_player_position(player_id, _plan_sample(
+			movement, _plan_fraction(movement, 1.0, window_seconds), fallback
+		))
 
 
 func set_player_pose(
