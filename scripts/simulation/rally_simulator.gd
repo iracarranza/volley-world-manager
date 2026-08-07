@@ -1432,7 +1432,13 @@ func resolve(
 	set_target = _delivered_point(
 		intended_set_target, float(result.set_quality),
 		SET_DELIVERY_STDEV_WORST_M, SET_DELIVERY_STDEV_BEST_M,
-		HOME_SET_DELIVERY_MIN_Y, HOME_SET_DELIVERY_MAX_Y,
+		## Per lane, because the pipe has an attack line to respect and the pins
+		## do not. Clamping the *intent* behind the line is not enough while the
+		## delivery can scatter across it.
+		CourtConstants.lane_delivery_min_y(
+			assignment.lane, HOME_SET_DELIVERY_MIN_Y
+		),
+		HOME_SET_DELIVERY_MAX_Y,
 	)
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
@@ -3895,7 +3901,10 @@ func _resolve_home_continuation(
 	var set_target := _delivered_point(
 		intended_set_target, set_quality,
 		SET_DELIVERY_STDEV_WORST_M, SET_DELIVERY_STDEV_BEST_M,
-		HOME_SET_DELIVERY_MIN_Y, HOME_SET_DELIVERY_MAX_Y,
+		CourtConstants.lane_delivery_min_y(
+			assignment.lane, HOME_SET_DELIVERY_MIN_Y
+		),
+		HOME_SET_DELIVERY_MAX_Y,
 	)
 	var continuation_set_arc := RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(set_contact, set_target),

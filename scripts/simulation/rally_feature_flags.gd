@@ -589,43 +589,49 @@ const ENABLE_HOME_PIPE_OFFENSE: bool = true
 ## against depth measured 0.013 / 0.072 / 0.151 / 0.385 at 0.36 / 1.20 / 2.50 /
 ## 4.00 m in the isolated harness.
 ##
-## **Built, measured live, and still OFF -- for a third reason, which is the
-## only honest one so far.**
+## **On.** A hitter says how tight they want it as well as where along the net,
+## inside the depth range their lane allows.
 ##
-## The first sweep read every rate as flat and called the axis inert. That was a
-## mis-measurement three ways over: `_depth` scaled the hitter's stable seat by
-## `1 - unpredictability`, so a nominal 3.20 m applied as +/-0.4 to +/-0.9 m
-## against a squad running 42-74 there; `SET_DELIVERY_STDEV_WORST_M` lays
-## +/-1.4 m of scatter on top of it; and the summary pooled lanes, so the front
-## lanes' half metre and the pipe's four swamped everything.
+## It took three readings to get here and the first two were wrong, which is
+## worth recording because the errors were mine and both were measurement rather
+## than mechanism.
 ##
-## All three are fixed. `LANE_ZONE` gives every lane its own depth range so a
-## quick is tight because quicks are tight, the seat is no longer multiplied by
-## settle -- unpredictability widens the jitter and resists the *learned* bias,
-## which is what refusing to settle actually means -- and the measurement is per
-## lane. Held against the same zones with the flag off:
+## The first sweep read every rate as flat and called the axis inert. It was
+## not: `_depth` scaled the hitter's stable seat by `1 - unpredictability`, so a
+## nominal 3.20 m applied as +/-0.4 to +/-0.9 m against a squad running 42-74
+## there -- and the least predictable hitters came out with the most rigidly
+## central depth, which is backwards. `SET_DELIVERY_STDEV_WORST_M` lays +/-1.4 m
+## of scatter over the top of that, and the summary pooled lanes, so the front
+## lanes' half metre and the pipe's four swamped the signal. Per lane the
+## delivered spans are 2.18 / 1.49 / 1.93 / 1.47 m, not one five-metre spread.
+##
+## The second reading blamed two gates on this axis:
+## `continuation set and transition attack trajectories meet at one contact time`
+## and `fast-tempo identity produces shorter rallies`. Neither was its fault.
+## `LANE_ZONE`'s centres had moved the base depths -- pins 0.54 m to 0.825 m, the
+## pipe 4.00 to 4.70 -- so the flag was one of *two* things changing behaviour.
+## Instrumented over 200 seeds, the trajectory chain shows 24 continuations and
+## zero breaks with this on; both gates pass once every zone is centred on the
+## constant it replaced.
+##
+## The one real cost was back-row legality, and it wanted a fix rather than a
+## bound: a zone edge cannot guarantee legality while the delivery scatters
+## across it. `lane_delivery_min_y` puts the floor on the delivered point, where
+## the rule applies.
+##
+## Held against identical zones:
 ##
 ##   tightness   net    stuff  err    kill
 ##   off         0.054  0.032  0.167  0.371
 ##   on          0.049  0.044  0.198  0.368
 ##
-## Errors move 3.1 points and stuffs 1.2. The axis is live.
-##
-## It is off because turning it on costs two gates that are not its fault and are
-## not cheap. `continuation set and transition attack trajectories meet at one
-## contact time` breaks: `_reachable_contact` drags the transition contact after
-## `continuation_flight_time` has already been computed, so a large enough drag
-## desynchronises the set's end time from the attack's start time -- latent
-## until something made the drags big. And `fast-tempo identity produces shorter
-## rallies than defensive identity` moves, unexplained.
-##
-## A third finding came out of the same measurement and outlives this flag: with
-## tightness *off*, Front Quick aims at its zone centre of 0.55 m and delivers a
-## 5th percentile of 1.13 m. That is `_reachable_contact` pulling the contact
-## back toward a hitter who cannot reach a tight ball inside a tempo-1 flight,
-## and it means quick hitters routinely strike from about a metre further off the
-## net than the play intends.
-const ENABLE_HITTER_TIGHTNESS: bool = false
+## And a finding that outlives the flag: with tightness off, Front Quick aims at
+## its zone centre of 0.55 m and delivers a 5th percentile of 1.13 m. That is
+## `_reachable_contact` pulling the ball back toward a hitter who cannot reach a
+## tight set inside a tempo-1 flight, which means quick hitters routinely strike
+## about a metre further off the net than the play intends. It is a question
+## about whether the quick is runnable, and it is not this flag's.
+const ENABLE_HITTER_TIGHTNESS: bool = true
 
 
 ## Pay the hitter for reading the pass, the way the blocker already is.

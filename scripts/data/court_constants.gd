@@ -103,6 +103,33 @@ static func lane_range(lane_name: String) -> Vector2:
 
 
 ## How far off the net this lane may be set, in metres, as a min/max pair.
+## The nearest a set to this lane may be *delivered*, as normalised y on the
+## hitter's own half.
+##
+## A zone edge is not a legality guarantee. Delivery scatter reaches about
+## +/-1.4 m, so a back-row zone starting behind the three-metre line still puts
+## balls in front of it -- measured at 3 back-row swings in 124 from a zone
+## starting at 3.20 m, and 2 in 119 from one starting at 3.40 m. Moving the zone
+## back again only trades legality for a pipe nobody would set. The floor belongs
+## on the delivered point, where the rule actually applies.
+##
+## Front-row lanes keep the general floor: they have no attack line to respect.
+static func lane_delivery_min_y(lane_name: String, general_min_y: float) -> float:
+	if lane_name != "Pipe":
+		return general_min_y
+	return maxf(
+		general_min_y,
+		NET_Y + (ATTACK_LINE_METERS + BACK_ROW_TAKEOFF_MARGIN_METERS)
+			/ COURT_LENGTH_METERS,
+	)
+
+
+## Where the attack line sits, and how much room behind it a back-row set is
+## placed so the hitter takes off legally rather than exactly on the line.
+const ATTACK_LINE_METERS: float = 3.0
+const BACK_ROW_TAKEOFF_MARGIN_METERS: float = 0.35
+
+
 static func lane_depth_range_meters(lane_name: String) -> Vector2:
 	return Vector2(
 		LANE_ZONE.get(lane_name, {}).get("depth_m", Vector2(0.30, 0.90))
