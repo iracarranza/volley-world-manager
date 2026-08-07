@@ -176,3 +176,105 @@ In rough order of how much they buy:
    artifact that will move the next time anything upstream does.
 4. **Explain the attack-quality distribution.** Half of all swings below 0.10
    is upstream of most of the numbers in this file.
+
+
+---
+
+# Addendum: how often do the signature moves decide a point?
+
+Measured 2026-08-07 at `ecb51c0`. `tools/run_signature_move_probe.gd`, same
+fixture: six careers × 60 rallies × both serving sides, 381 home swings.
+
+`SignatureMoveModel` defines the two ways a swing beats a block it has
+physically met — **Block Crush** (the power route: struck harder than the hands
+can absorb) and **High Hands** (the accuracy route: placed on the outside edge
+of the hands, within a 2.6° aim tolerance). The design intent put to them is
+that they appear occasionally for a B-tier hitter, can be depended on by an A,
+and are expected regularly from an S.
+
+## What actually happens
+
+| attacking tier | swings | block_crush | high_hands | signature share |
+| --- | ---: | ---: | ---: | ---: |
+| S | 4 | 0 | 0 | 0.000 |
+| A | 9 | 0 | 0 | 0.000 |
+| B | 304 | **0** | **2** | 0.007 |
+| C | 64 | 0 | 0 | 0.000 |
+
+**Block Crush fires zero times in 381 swings. High Hands fires twice**, both
+from B-tier hitters. The intended progression is not weak — it is absent, and
+the one tier it does appear in is the wrong one.
+
+Raw outcome tallies, all tiers pooled: `in` 310, `out` 15, `stuff` 11, `tool`
+4, `touch` 1, `high_hands` 2, `block_crush` 0.
+
+## Three independent causes, none of them the move model
+
+### 1. The swing almost never meets the block
+
+`resolve_contact` only runs when `block_kind` is `tool` or `stuff` — the ball
+has to have hit hands. **310 of 381 swings (81%) resolve as `in`: the block was
+never physically met.** Total contacts of any kind: 16, or 4.2%.
+
+So the two moves get roughly sixteen opportunities in three hundred and
+eighty-one swings, and converted two of them. This is the same root as the
+funnel finding above and as `block_touch_rate` sitting at 0.046 against a band
+floor of 0.15. **Everything conditional on the block touching the ball is
+starved by the same upstream fact.** Fix that and both findings move together.
+
+### 2. The charge threshold sits in the tail of its own distribution
+
+`charge = capability × 0.55 + confidence × 0.25 + flow × 0.20`. At neutral
+confidence and flow those contribute 0.225, so with `AVAILABILITY_THRESHOLD =
+0.62` a player needs **capability ≥ 0.7182** for the move to be available at
+all. Measured across the 48 players in six generated rosters:
+
+| capability | min | p50 | p90 | max | clearing 0.7182 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| crush | 0.390 | 0.668 | 0.761 | 0.784 | 12 / 48 (25%) |
+| high_hands | 0.430 | 0.719 | 0.859 | 0.964 | 24 / 48 (50%) |
+
+Crush is gated at roughly the 75th percentile, and **the best crush capability
+in six full rosters is 0.784** — giving a charge of 0.656 against a 0.62
+threshold, 0.036 of headroom. Nobody is ever comfortably able to do it; the
+strongest hitter in the world is marginal. That is the signature defect class
+again, and this instance is worse than most: the threshold is not merely inside
+the distribution, it is near its ceiling.
+
+High Hands clears twice as often and still fires twice, which confirms cause 1
+dominates — availability is not the binding constraint when there is nothing to
+be available *for*.
+
+### 3. There is no A or S sample to observe the progression with
+
+Attacking grade across all 48 generated players: **B 31, C 11, A 3, S 2, D 1.**
+
+Four S-tier and nine A-tier *swings* in the entire measurement. Even a
+correctly tuned model could not show a B/A/S progression on this population,
+and more to the point a player would rarely have an A or S hitter to see it
+with. Whether that distribution is intended is a generation question, not a
+move question, but it bounds anything stated in tiers.
+
+## What this means for the intent
+
+The B-occasionally / A-dependably / S-regularly progression is reachable, but
+not by touching `SignatureMoveModel` — its internals are fine and its two
+routes are keyed to genuinely different attributes, which is the hard part.
+Three separate things gate it, in order of how much they cost:
+
+1. **The block has to touch the ball.** At 4.2% contact there is nothing to
+   crush or tool. This is one fix shared with the funnel finding above.
+2. **Re-seat the charge threshold against the measured capability
+   distribution.** Crush at p75 with a population ceiling of 0.784 means "elite"
+   and "barely able" are the same player. Either lower the threshold or widen
+   what capability can reach.
+3. **Decide whether 5 of 48 players being A-or-better attackers is intended.**
+   Tier-stated design targets are unobservable below some supply of tiers.
+
+## A correction
+
+The first attempt at this probe added `geometric_outcome` to the ATTACK event
+metadata on the reasoning that the resolver computed the signature outcome and
+the curator dropped it. **It was already there** — three sites, already
+published. The compiler caught the duplicate key. The attribution was never
+missing; only a probe that read it was.
