@@ -129,6 +129,134 @@ to compare.
 tells you it is going badly and nothing about what to do. A number per ask tells
 you which drill to run, which is the entire point of the loop.
 
+## 0.3 Is this too much for a player? Only if it is all exposed
+
+The question that produced the rest of this section: a system with ratings,
+bands, learned preferences, presets, asks, zones, tempos and postures sounds
+like six spreadsheets before every match.
+
+The answer is that **model complexity and decision complexity are different
+quantities and only the second one costs anything.** The rally already computes
+forty things nobody sees. What would sink this is not how many properties exist
+but how many the player has to touch each week.
+
+Football Manager is the proof, and it is worth being precise about *why* it
+works rather than just citing it. FM's individual instructions are a large
+surface and its mandatory decision count is near zero, because **every
+instruction defaults from the role**. Pick a role and eight things are set
+without being seen; override the two you care about. The modularity is
+available, never imposed.
+
+Volleyball earns *more* modularity than football, not less: six players, discrete
+phases, and role specificity tight enough that a "case" is exact -- the middle in
+rotation 3 -- rather than fuzzy. Cases are enumerable here, so case-by-case is
+cheaper. That is an argument for the engine resolving many cases internally, not
+for showing the player more of them.
+
+### The layers
+
+Three layers of state, and one rule that applies to all of them:
+
+| Layer | What it holds | Where it surfaces |
+|---|---|---|
+| **Tactics** | declarative intent -- attack this way, defend this way | the planner page |
+| **Individual instructions** | the tactic decomposed into per-voli asks | the planner, one level down |
+| **Training** | what closes the gap the asks declare | the two training pages |
+
+**Individual instructions are generated, not authored.** They arrive filled in
+from the preset and the squad's own comfort; the player edits exceptions. That is
+what makes the layer free for somebody who ignores it, and it is exactly the FM
+structure above.
+
+Note that "an advanced surface for exact values" is deliberately *not* a fourth
+layer -- see §0.6.
+
+## 0.4 Every ask resolves from somewhere
+
+The rule that makes "coarse by default" actually work. Each ask takes the first
+of these that has an opinion:
+
+1. **The voli's own comfort** -- do what you already do
+2. **The preset** -- where the preset has an opinion
+3. **The manager's edit** -- overrides both
+
+The first entry is load-bearing and easy to leave implicit, which would be a
+mistake: if the coarse default meant *unset*, the simulator would have to invent
+a value, and a system that is simple to operate and impossible to reason about is
+worse than a complicated one.
+
+It also means **a blank tactic is a real playable position, not a stub.**
+Everything defaulting to comfort is maximum familiarity and no edge -- a
+legitimate way to play, and the honest baseline every edit is measured against.
+Every edit past that is an explicit trade: better shape, worse familiarity, until
+it is drilled.
+
+## 0.5 The grain follows the thing being learned
+
+What unit does a drill act on -- position, player, squad? The answer is that it
+is **not a choice the player makes**, and it is not uniform either. Each
+trainable has a natural grain that comes from the physical fact:
+
+| Trainable | Grain | Why |
+|---|---|---|
+| Hitting coordinate | per voli, per lane | a coordinate is personal |
+| Tempo comfort | per hitter–**setter pair** | tempo is a relationship, not a property of either |
+| Dig loci and courses | per **rotation slot** | who takes deep line depends on where you stand, and volleyball rotates |
+| Block posture (bunch/spread, commit/read) | per blocking **pair** | a block is two people agreeing |
+
+"Per position or per player" is the obvious heuristic and it misses the two hard
+cases, both of which are relationships rather than properties. A hitter who has
+run first tempo for years has not run it *with this setter*, and that is the
+interesting fact.
+
+**Watch the pair matrices.** Tempo per hitter × setter is already six entries;
+per lane as well it is thirty and the cost has exploded. Prefer a per-hitter
+value with a per-setter modifier -- same fiction, linear cost.
+
+## 0.6 Granularity, not modes
+
+The tempting shape is a simple mode and an advanced mode. It is a trap: two
+interfaces, one of them under-tested, and a mapping between them that leaks the
+moment they disagree. It also frames depth as something you graduate to, which
+makes the simple path feel like training wheels rather than a way to play.
+
+The food-paste principle is stronger than a mode switch and worth stating in its
+own terms: **draw the ratio with a finger or type the numbers -- there is one
+ratio.** Two input methods writing the same state on the same object. Nothing to
+keep in sync, nothing to outgrow.
+
+So the coarse control and the exact control are the same control at different
+zoom. A hitting coordinate is a mark you drag on a court *and* a pair of numbers;
+a block posture is a slider *and* a distance in metres. Not two screens.
+
+## 0.7 Rotations are the multiplier, and they are already 6x
+
+The real scope risk, and the one that a tidy layering does not solve on its own:
+`DefensivePlan`, `RotationLineup` and `OffensivePlay` each carry
+`rotation_number` in 1..6 today. Four clean layers each at six times the surface
+is still six times the administration.
+
+Football has no equivalent -- a football tactic has one state, not six.
+
+**Author one rotation and derive the rest.** Rotations are a rigid permutation,
+and a system is mostly rotation-invariant: the differences between them are
+mechanical (who is front row, who is behind the setter). Two authored rotations
+-- one serve-receive, one serving -- covers the genuine difference. Per-rotation
+authoring stays available for anyone who wants it.
+
+If six rotations stay mandatory, the subsystem dies of admin however good the
+rest of it is.
+
+## 0.8 The failure mode to design against
+
+Not week one. Presets and comfort-defaults handle a new player fine.
+
+**Week forty**, with three tactics, six rotations and eleven volis, when somebody
+gets injured and the screen asks for a re-audit of all of it. A management game
+is mostly its maintenance interaction, and that is a different problem from
+onboarding. The weekly loop should be: the fit score names the worst gap, you
+drill that, done -- one decision, not thirty-six.
+
 ---
 
 ## 1. The idea worth protecting
