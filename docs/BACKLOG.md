@@ -1146,6 +1146,107 @@ channel has to survive a colourblind viewer, so solidity, breakage and shape
 have to carry the signal alongside hue rather than hue carrying it alone.
 
 
+## Captions name the outcome and never the cause
+
+The other half of the entry above, and not a duplicate of it. That one asks
+*how is the rally going* and answers it with a picture. This one asks **why did
+this voli succeed or fail**, and a coloured trail cannot answer it.
+
+Sampled verbatim from playback:
+
+```
+[Defense] Nemi defends
+    63% defensive contact against a 23% attack. Perimeter defense met the seam
+    attack responsibility behind the read block. Arrived with 1.85 m to spare;
+    1 nearby teammate supported the zone.
+[Block] Boro · Stuff
+    Primary close 100%; block quality 59%. Sena assisted at 100% close.
+```
+
+Outcome, geometry and system are all there. **No attribute is named anywhere.**
+The reader cannot tell whether Nemi dug that because she reads early, because
+the plan put her in the right place, or because the swing was weak -- and those
+three have completely different consequences for who to sign, who to drill and
+what to declare.
+
+This is the player-facing instance of the defect FAILURE_MODES §15 arrived at
+from the engine side: *when a model publishes a single verdict assembled from
+several independent judgements, publish the judgements too.* There it sent
+investigations to the wrong file. Here it stops the player learning the system
+at all.
+
+**The rule the copy should follow: name the term that decided it, not the
+total.** One or two contributors, chosen by which term moved the result furthest
+from its baseline -- derived, not authored, so it cannot drift from the model
+the way a hand-written string would. `_defense_terms` already itemises exactly
+this and throws the itemisation away.
+
+### The handedness case, and the correction it needs
+
+Raised as the motivating example: handedness affects reception of spikes and the
+player has no way of knowing. The first half is true, the assumed mechanism is
+not, and the difference matters for what the caption should say.
+
+Handedness does **not** go through spin, rebound or any physics. It goes through
+`Familiarity.read_modifier` via a `hand:left` / `hand:right` read tag, which is
+about the *defender's accumulated experience*, not the ball. Measured, 13.2% of
+generated volis are left-handed (53 of 400), so the `hand:left` tag accumulates
+roughly seven times slower than `hand:right` and stays chronically unfamiliar.
+A caption explaining this as spin would be a lie about the model. The true
+sentence is closer to *"Mira has seen few left-handed swings"*.
+
+And before any of that gets written, one thing has to be fixed: **the vertical
+slice contains zero left-handers, 0 of 14.** `Familiarity.initialize_player`
+only rolls a hand when it is handed an rng, and `game_manager.gd:380` -- the
+slice's own call site -- does not pass one, so every player keeps the `"Right"`
+export default. Every measurement ever taken on the slice, the whole 941-check
+suite included, has run with this channel pinned off. Writing player-facing copy
+for a mechanic the test data never exercises is the §6 failure mode with a
+caption on it.
+
+While measuring that: `Ambidextrous` appeared **0 times in 400** generated
+volis. Not unreachable -- 8 of 400 clear its `improvisation >= 82 and
+hand_control >= 75` gate, and 16% of those is an expected 1.3 -- but that is one
+voli in roughly 312, which is rare enough that its behaviour has never been
+observed and probably never validated. Worth deciding whether that is the
+intended rate.
+
+## A character for the manager
+
+Two halves, and they should be judged separately because one is nearly free and
+the other is premature.
+
+**The clipboard flip is good and cheap.** A left-handed manager holds the
+clipboard with the clip on the right, so the rail and detail columns mirror.
+It costs a layout reversal, it is instantly legible, and it pays off the desk
+metaphor the whole interface is built on -- an object that responds to who is
+holding it is exactly what "a desk with things on it" is promising. Nothing in
+the simulation has to move for it to be worth having.
+
+**"Coaches left-handed hitters slightly more effectively" is the wrong shape.**
+It is a hidden multiplier on a population of 13.2%, which is about 1.6 volis in
+a twelve-player squad -- below the noise floor of a season, and unobservable
+even in principle. That is a knob that cannot reach its own stated range, which
+is the failure this repository keeps re-finding.
+
+The mechanism that *is* available is better and already designed: §0.9 gives the
+game an assistant coach who runs every session the manager skips. A manager with
+real parameters makes that assistant meaningful -- **what you are good at is
+what you do not have to attend.** That is a resource decision the player makes
+every day and can watch resolve, rather than a number they never see.
+
+**The avatar is premature until something shows it.** Body type, proportion and
+colour all have a renderer already: generation assigns `body_type`, and
+`PlayerActor3D` reads height, wingspan and stride to build a body. Reusing it
+for a manager is cheap. But the manager never stands on court, and the desk, the
+sponsorship obligations and the journal photo that would display them do not
+exist yet. Build the surface first, or the creator produces something seen once
+and never again.
+
+Suggested order: clipboard flip now; manager parameters when the assistant coach
+exists to express them; avatar when there is a page with a face on it.
+
+
 ## The floor defence: two asymmetries and a threshold between them
 
 Measured over 200 rallies on identically-seeded squads.
