@@ -278,3 +278,89 @@ metadata on the reasoning that the resolver computed the signature outcome and
 the curator dropped it. **It was already there** — three sites, already
 published. The compiler caught the duplicate key. The attribution was never
 missing; only a probe that read it was.
+
+
+---
+
+# Addendum 2: why the block never touches the ball (A1/A2)
+
+Measured 2026-08-07 at `885b522`. The 4.2% contact rate starves the funnel,
+Block Crush and High Hands simultaneously, so it was worth chasing before any
+of them.
+
+## A1 — the misses are lateral
+
+`block_miss_reason` was already computed and already on the event. Over 141
+home swings:
+
+| geometric outcome | n | share |
+| --- | ---: | ---: |
+| in | 106 | 75.2% |
+| net | 21 | 14.9% |
+| out | 9 | 6.4% |
+| stuff | 3 | 2.1% |
+| tool | 2 | 1.4% |
+
+| why the wall was missed | n | share of the 106 |
+| --- | ---: | ---: |
+| around | 80 | 75.5% |
+| over and around | 8 | 7.5% |
+| no wall | 11 | 10.4% |
+| over | 7 | 6.6% |
+
+**83% of misses are lateral.** Height is 6.6% — so anything aimed at block
+reach or jump would have been aimed at the wrong axis.
+
+Also ruled out: `_choose_attack_target(hitter, contact, hit_type, defenders,
+mirrored)` takes only floor defenders. The attack is not steering around the
+wall, because it cannot see it.
+
+## A2 — but the wall is not narrow, and widening it does nothing
+
+The first reading of A2 was that the misses were marginal: mean 0.59 m, median
+0.48 m past the edge, against a production `BLOCKER_HALF_WIDTH_METERS` of
+**0.34** (0.68 m of sealed net per blocker, where a real pair of hands seals
+0.8–1.0 m). One constant, one fix.
+
+**That was wrong, and the experiment says so.** Set to 0.60 — nearly double —
+the outcome mix barely moved:
+
+| | 0.34 | 0.60 |
+| --- | ---: | ---: |
+| contacts (stuff + tool + touch) | 3.5% | 3.7% |
+| `in` | 75.2% | 69.4% |
+| `around` share of misses | 75.5% | 74.2% |
+
+Widening each blocker by 0.26 m converted **four balls out of fifty-eight**.
+And the residual miss distribution at the *wider* setting is not marginal at
+all:
+
+| around-miss, absolute | p10 | p25 | p50 | p75 | p90 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| metres past the edge | 0.069 | 0.218 | 0.380 | 0.800 | **1.216** |
+
+A p90 of 1.2 m past the edge, with the wall already at 0.60 half-width, is not
+a wall that is slightly too narrow. **It is a wall standing somewhere the ball
+is not.** The constant was reverted; there is no evidence for changing it and
+the drastic setting slightly raised `net` and `out`.
+
+## What the mean was hiding
+
+Mean 0.59 and median 0.48 read as "just misses". The quantiles read as two
+populations: a group genuinely at the edge (p10 0.07, p25 0.22) and a long tail
+out past a metre. Widening converts the first group and cannot touch the
+second, which is exactly what happened. **A mean is not a diagnosis when the
+fix is a threshold.**
+
+## Next check
+
+Compare `net_crossing_x` against the primary blocker's `net_x` — both are
+available, the first on the geometric record and the second from
+`GeometricAttackPromotion._blocker_net_x(blocker, fallback_positions,
+live_positions)`. If the gap is metre-scale, the wall is being positioned from
+stale or wrong coordinates, and no width or reach constant will ever reach the
+ball.
+
+That would also explain `no wall` at 10.4% alongside a 58–64% double-block
+formation rate: the formation says two blockers are up, and the geometry says
+there is nothing at the ball.
