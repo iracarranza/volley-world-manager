@@ -3,6 +3,11 @@ extends Control
 
 signal play_match_requested
 signal title_requested
+## Training and recruitment are their own screens now rather than tabs. The
+## dashboard raises these; `Application` owns the routing, the same way it owns
+## every other screen change.
+signal training_requested
+signal recruitment_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -253,6 +258,26 @@ func _ready() -> void:
 	attribute_next_button.pressed.connect(_step_attribute_page.bind(1))
 	%SaveButton.pressed.connect(_save)
 	%TitleButton.pressed.connect(func() -> void: title_requested.emit())
+	## Training and scouting left the dashboard for their own screens, so the
+	## header gains the two doors. Added in code beside the existing header
+	## buttons rather than in the .tscn, because they are routing rather than
+	## layout and the routing lives here.
+	var header := %TitleButton.get_parent()
+	if header != null:
+		var training_button := Button.new()
+		training_button.text = "Training"
+		training_button.pressed.connect(
+			func() -> void: training_requested.emit()
+		)
+		header.add_child(training_button)
+		header.move_child(training_button, %TitleButton.get_index())
+		var scouting_button := Button.new()
+		scouting_button.text = "Scouting"
+		scouting_button.pressed.connect(
+			func() -> void: recruitment_requested.emit()
+		)
+		header.add_child(scouting_button)
+		header.move_child(scouting_button, %TitleButton.get_index())
 	advance_week_button.pressed.connect(_confirm_advance)
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
 	_name_team_sub_tabs()

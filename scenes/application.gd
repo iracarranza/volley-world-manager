@@ -6,6 +6,10 @@ const LightTheme := preload("res://scenes/themes/light_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const ScreenWipeScript := preload("res://scenes/components/screen_wipe.gd")
+const TrainingScreenScript := preload("res://scenes/screens/training_screen.gd")
+const RecruitmentScreenScript := preload(
+	"res://scenes/screens/recruitment_screen.gd"
+)
 const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -15,6 +19,11 @@ const SETTINGS_PATH := "user://settings.cfg"
 @onready var match_center: Control = %MatchCenter
 
 var _wipe: ScreenWipe = null
+## Built in code rather than in `main.tscn`, because both are whole-screen
+## Controls with no scene content of their own -- everything they show is drawn
+## from the career. A .tscn for either would be an empty node with a script.
+var _training_screen: VolleyballTrainingScreen = null
+var _recruitment_screen: VolleyballRecruitmentScreen = null
 
 
 func _ready() -> void:
@@ -40,6 +49,19 @@ func _ready() -> void:
 	## later siblings draw over earlier ones -- and a node whose whole job is to
 	## cover everything is easier to keep last here than in a .tscn somebody will
 	## reorder.
+	_training_screen = TrainingScreenScript.new()
+	_training_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_training_screen.visible = false
+	add_child(_training_screen)
+	_training_screen.back_requested.connect(_show_dashboard)
+	_recruitment_screen = RecruitmentScreenScript.new()
+	_recruitment_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_recruitment_screen.visible = false
+	add_child(_recruitment_screen)
+	_recruitment_screen.back_requested.connect(_show_dashboard)
+	career_dashboard.training_requested.connect(_show_training)
+	career_dashboard.recruitment_requested.connect(_show_recruitment)
+	## Last, so the sheet covers everything including the screens added above.
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
 	_load_theme()
@@ -64,8 +86,12 @@ func _show_only(screen: Control) -> void:
 
 
 func _swap_to(screen: Control) -> void:
-	for candidate in [title_screen, new_career_screen, career_dashboard, match_center]:
-		candidate.visible = candidate == screen
+	for candidate in [
+		title_screen, new_career_screen, career_dashboard, match_center,
+		_training_screen, _recruitment_screen,
+	]:
+		if candidate != null:
+			candidate.visible = candidate == screen
 	UIStyleSystem.reveal(screen)
 
 
@@ -137,3 +163,13 @@ func _apply_theme(theme_name: String, persist: bool = true) -> void:
 		var config := ConfigFile.new()
 		config.set_value("presentation", "theme", resolved)
 		config.save(SETTINGS_PATH)
+
+
+func _show_training() -> void:
+	_training_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_training_screen)
+
+
+func _show_recruitment() -> void:
+	_recruitment_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_recruitment_screen)
