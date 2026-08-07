@@ -529,6 +529,13 @@ const HITTER_PRESET_SHARE: float = 0.82
 ## worst hitter as often as the best, which is not distribution, it is noise.
 const SET_SPREAD_STEP: float = 0.03
 
+## How much a lane is worth avoiding once the other bench is sitting on it.
+##
+## Sized against `SET_SPREAD_STEP`'s ladder and the `shot_variety` term it
+## competes with: big enough that a hitter with a repertoire will be moved off a
+## read lane, small enough that a one-lane hitter still swings where they can.
+const LANE_ANTICIPATED_PENALTY: float = 0.42
+
 ## A quick is a first-tempo ball by definition. Tempo 3 stays the default for
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
@@ -659,6 +666,18 @@ var home_principles: Resource
 var opponent_principles: Resource
 var identity_effects: Dictionary = {}
 var rally_seed: int = 0
+## Whether this rally's setter can actually deliver a first-tempo ball, taken
+## from their own shadow read rather than guessed from the pass.
+##
+## `ShadowSetterResponseSystem._set_options` has decided this all along -- gated
+## on arrival balance, confidence and `tempo_control` -- and published it into
+## evidence, the rollout audit and the progression calibration. Three consumers,
+## none of them the rally. The setter decided whether to run a quick and the
+## rally never asked.
+var setter_can_run_quick: bool = false
+## The lane the other bench has learned to expect from this offence, so the
+## offence can answer it. Empty until they have seen enough to have an opinion.
+var opponent_anticipated_lane: String = ""
 ## Names available to player-facing narration, filled in as the rally reaches
 ## each contact.
 ##
@@ -721,6 +740,10 @@ func resolve(
 		) * 0.6,
 	}
 	rally_clock = 0.0
+	setter_can_run_quick = false
+	opponent_anticipated_lane = str(
+		opponent_team.anticipated_lane()
+	) if opponent_team != null else ""
 	shadow_reception_trace = null
 	## Nobody starts a rally on the floor.
 	player_recovery = {}
@@ -1137,10 +1160,17 @@ func resolve(
 			players, lineup, defensive_plan, opponent_team,
 			active_play, false, seed_value
 		)
+	var setter_response := Dictionary(
+		shadow_summary.get("shadow_setter_response", {})
+	)
+	## Physically executable rather than perceived: a setter who believes they can
+	## run a quick and cannot is a setter who shanks it, and that is the failure
+	## classifier's business, not the offence's menu.
+	setter_can_run_quick = "quick_tempo_set" in Array(
+		setter_response.get("selected_physically_executable_actions", [])
+	)
 	var shadow_attack := ShadowAttackSystemModel.evaluate(
-		attack_state,
-		Dictionary(shadow_summary.get("shadow_setter_response", {})),
-		receiver.id, seed_value + 1700003,
+		attack_state, setter_response, receiver.id, seed_value + 1700003,
 	)
 	shadow_summary["shadow_attack"] = shadow_attack
 	## Gate 44: shadow-only attack-to-block observation. Always evaluated
@@ -8906,14 +8936,65 @@ func _fallback_assignment(
 		lineup.slot_for_player(hitter.id)
 	)
 	var left_side := assignment.start_position.x <= 0.5
-	if RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE \
-			and hitter.position_role == "Middle Blocker" \
-			and CourtConstants.is_front_row_slot(lineup.slot_for_player(hitter.id)):
-		assignment.lane = "Front Quick" if left_side else "Right Quick"
-		assignment.tempo = QUICK_TEMPO_CALL
+	var is_middle := hitter.position_role == "Middle Blocker" \
+		and CourtConstants.is_front_row_slot(lineup.slot_for_player(hitter.id))
+	if not RallyFeatureFlagsModel.ENABLE_HOME_MIDDLE_OFFENSE:
+		assignment.lane = "Left Pin" if left_side else "Right Pin"
+		assignment.tempo = 3
 		return assignment
-	assignment.lane = "Left Pin" if left_side else "Right Pin"
-	assignment.tempo = 3
+
+	## The lane a hitter *can* be set, rather than the one their rotation slot
+	## implies.
+	##
+	## This was `"Left Pin" if x <= 0.5 else "Right Pin"` -- a lookup on where the
+	## chosen hitter happened to be standing, with no decision anywhere in it. Four
+	## lanes were reachable in principle and two in practice: measured over 67 home
+	## swings, Right Pin 0.821 and Front Quick 0.179, with Left Pin, Right Quick
+	## and Pipe at zero. Lane and tempo were bound together on the same lookup, so
+	## `_apply_identity_tempo` could only ever redistribute tempo *within* a lane
+	## it had no say in -- which is why 55 of 55 Right Pin swings came out at tempo
+	## 3 and every attribute meant to create variety measured as inert.
+	##
+	## A hitter gets their natural lane and one they can be moved to. The middle
+	## runs the quick in front of the setter or slides behind it; a pin hitter can
+	## be brought inside on a shoot. Both alternatives are quick balls, so both are
+	## gated on the setter being able to deliver one -- which the setter has been
+	## deciding in shadow all along.
+	var natural := ("Front Quick" if left_side else "Right Quick") if is_middle \
+		else ("Left Pin" if left_side else "Right Pin")
+	var lanes: Array[String] = [natural]
+	if setter_can_run_quick:
+		var alternative := ("Right Quick" if left_side else "Front Quick") \
+			if is_middle else ("Front Quick" if left_side else "Right Quick")
+		if alternative != natural:
+			lanes.append(alternative)
+
+	var best_lane := natural
+	var best_score := -1.0e9
+	for index in range(lanes.size()):
+		var lane := lanes[index]
+		## Their own lane is what they rehearse; being moved off it is a thing
+		## only a hitter with a repertoire can be asked to do.
+		var score := 1.0 if lane == natural else _rating(hitter, "shot_variety")
+		## And not into the one the other bench has learned to expect.
+		##
+		## `OpponentTeam.anticipated_lane()` is already read twice in this file --
+		## both times to *reward the block* for having read the lane. The offence
+		## could be punished for repeating itself and had no way to stop.
+		if opponent_anticipated_lane != "" and lane == opponent_anticipated_lane:
+			score -= LANE_ANTICIPATED_PENALTY
+		## The same seed-derived spread the hitter choice uses: no random draw, so
+		## nothing downstream re-sequences.
+		score += float(posmod(rally_seed + hitter.id * 17 + index * 7, 5)) \
+			* SET_SPREAD_STEP
+		if score > best_score:
+			best_score = score
+			best_lane = lane
+	assignment.lane = best_lane
+	var quick_lane := best_lane in ["Front Quick", "Right Quick"]
+	## Tempo follows the lane, because a quick is a first-tempo ball by
+	## definition and a pin ball off this offence is a high one.
+	assignment.tempo = QUICK_TEMPO_CALL if quick_lane else 3
 	return assignment
 
 
