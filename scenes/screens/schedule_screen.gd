@@ -16,12 +16,25 @@ extends Control
 
 const DailyScheduleModel := preload("res://scripts/models/daily_schedule.gd")
 const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
+const ScreenShell := preload("res://scenes/components/screen_shell.gd")
+
+## Blocks per row on the strip.
+##
+## Thirty-six in one row does not fit. Each block is a themed `Button`, and the
+## theme's font and padding put its minimum width near 37px rather than the 26
+## asked for -- so the row demanded about 1315px, forced the column wider than
+## the window, and carried the header's right-aligned Back button off the screen
+## with it. The screen had no scroll, so Back was simply unreachable.
+##
+## Eighteen is also the better read: the day breaks at noon, and two half-days
+## stacked is a clearer picture of a schedule than one long ribbon.
+const BLOCKS_PER_ROW: int = 18
 
 signal back_requested
 
 var _career_manager: Node = null
 var _game_manager: Node = null
-var _strip: HBoxContainer = null
+var _strip: VBoxContainer = null
 var _readout: VBoxContainer = null
 var _roster_list: ItemList = null
 var _brush: int = DailyScheduleModel.Activity.TRAINING
@@ -41,27 +54,12 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, 24)
-	add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
-	margin.add_child(column)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	column.add_child(header)
-	var title := Label.new()
-	title.text = "Daily Schedule"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	var back_button := Button.new()
-	back_button.text = "Back"
+	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
-	header.add_child(back_button)
+	var shell := ScreenShell.build(
+		self, "Daily Schedule", [back_button] as Array[Button]
+	)
+	var column := shell.content
 
 	## The brushes. One per assignable activity -- the locked ones are not here,
 	## because a manager does not get to schedule somebody's rehab away.
@@ -84,8 +82,8 @@ func _build() -> void:
 		button.pressed.connect(func() -> void: _brush = chosen)
 		brushes.add_child(button)
 
-	_strip = HBoxContainer.new()
-	_strip.add_theme_constant_override("separation", 2)
+	_strip = VBoxContainer.new()
+	_strip.add_theme_constant_override("separation", 4)
 	column.add_child(_strip)
 
 	var body := HBoxContainer.new()
@@ -159,7 +157,19 @@ func refresh() -> void:
 		return
 	for child in _strip.get_children():
 		child.queue_free()
+	var row: HBoxContainer = null
 	for index in range(schedule.blocks.size()):
+		if index % BLOCKS_PER_ROW == 0:
+			row = HBoxContainer.new()
+			row.add_theme_constant_override("separation", 2)
+			_strip.add_child(row)
+			## The clock the row starts at, so the strip says where in the day it
+			## is without needing a tooltip per block.
+			var stamp := Label.new()
+			stamp.text = DailyScheduleModel.clock_label(index)
+			stamp.custom_minimum_size = Vector2(62.0, 0.0)
+			stamp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			row.add_child(stamp)
 		var block := Button.new()
 		var value := int(schedule.blocks[index])
 		block.custom_minimum_size = Vector2(26.0, 46.0)
@@ -171,7 +181,7 @@ func refresh() -> void:
 		block.disabled = DailyScheduleModel.is_locked(value)
 		var slot := index
 		block.pressed.connect(func() -> void: _paint(slot))
-		_strip.add_child(block)
+		row.add_child(block)
 	_refresh_readout(schedule)
 
 

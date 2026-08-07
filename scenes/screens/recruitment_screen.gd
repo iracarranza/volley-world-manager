@@ -16,6 +16,8 @@ extends Control
 ## every prospect carries a state the manager set, and the row is drawn to look
 ## like that state was made with a pen.
 
+const ScreenShell := preload("res://scenes/components/screen_shell.gd")
+
 const MARK_NONE: int = 0
 const MARK_SIGN: int = 1
 const MARK_WATCH: int = 2
@@ -39,27 +41,10 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, 24)
-	add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 12)
-	margin.add_child(column)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	column.add_child(header)
-	var title := Label.new()
-	title.text = "Scouting"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	var back_button := Button.new()
-	back_button.text = "Back"
+	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
-	header.add_child(back_button)
+	var shell := ScreenShell.build(self, "Scouting", [back_button] as Array[Button])
+	var column := shell.content
 
 	var hint := Label.new()
 	hint.text = "Click a name to cycle: sign · keep an eye on · seen enough."

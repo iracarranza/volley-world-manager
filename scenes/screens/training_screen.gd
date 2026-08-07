@@ -9,19 +9,25 @@ extends Control
 ## that has to pay for the sessions, there is enough to decide that it wants a
 ## room of its own.
 ##
-## The front page is the flowchart -- the rally as a loop you can click -- with
-## the week's state beside it: what last week actually did, what the day affords,
-## and how tired the squad is. Clicking a phase opens its own panel, laid out the
-## way the tactical planner is: the thing you are editing on the left, the roster
-## you are assigning on the right.
+## The room has two halves, because training does. **Attribute** work runs from
+## the weight room to the meeting room -- conditioning, then the technical
+## sessions that drill one phase, then film and talk, which cost nothing
+## physically and move reads and decisions. **In-match** work is the rally
+## itself: the same phases, but arranged as the loop a point actually travels,
+## because what a squad drills against the ball is a different question from what
+## numbers it is trying to raise.
+##
+## Both halves share the panel below them -- pick a session either way and you
+## are setting the same regimen -- and both share the week's state on the right,
+## which is what a manager needs *before* choosing rather than after.
 
+const ScreenShell := preload("res://scenes/components/screen_shell.gd")
 const TrainingFlowchartScript := preload(
 	"res://scenes/components/training_flowchart.gd"
 )
 const TrainingSystem := preload("res://scripts/systems/training_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
 const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
-const DailyScheduleModel := preload("res://scripts/models/daily_schedule.gd")
 const TrainingRegimenModel := preload("res://scripts/models/training_regimen.gd")
 
 signal back_requested
@@ -30,6 +36,8 @@ signal schedule_requested
 var _career_manager: Node = null
 var _game_manager: Node = null
 var _flowchart: TrainingFlowchart = null
+var _modes: TabContainer = null
+var _activity_rail: VBoxContainer = null
 var _detail: VBoxContainer = null
 var _sidebar: VBoxContainer = null
 var _open_phase: String = ""
@@ -39,6 +47,7 @@ var _open_activity: String = ""
 func bind(career_manager: Node, game_manager: Node) -> void:
 	_career_manager = career_manager
 	_game_manager = game_manager
+	_populate_rail()
 	refresh()
 
 
@@ -47,61 +56,137 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_%s" % side, 24)
-	add_child(margin)
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
-	margin.add_child(column)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 12)
-	column.add_child(header)
-	var title := Label.new()
-	title.text = "Training"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	var schedule_button := Button.new()
-	schedule_button.text = "Daily Schedule"
+	var schedule_button := ScreenShell.action(
+		"Daily Schedule", "The day pays for these sessions."
+	)
 	schedule_button.pressed.connect(func() -> void: schedule_requested.emit())
-	header.add_child(schedule_button)
-	var back_button := Button.new()
-	back_button.text = "Back"
+	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
-	header.add_child(back_button)
+	var shell := ScreenShell.build(
+		self, "Training", [schedule_button, back_button] as Array[Button]
+	)
 
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 16)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(body)
+	shell.content.add_child(body)
 
-	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 2.2
-	body.add_child(left)
+	## The two halves. Visible tabs, unlike the dashboard's outer sections, which
+	## hide theirs because a separate nav strip names them -- here the tabs are
+	## the only thing saying there are two ways to train.
+	_modes = TabContainer.new()
+	_modes.tabs_visible = true
+	_modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_modes.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_modes.size_flags_stretch_ratio = 2.6
+	body.add_child(_modes)
 
-	_flowchart = TrainingFlowchartScript.new()
-	_flowchart.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_flowchart.phase_selected.connect(_open_phase_panel)
-	left.add_child(_flowchart)
-
-	_detail = VBoxContainer.new()
-	_detail.add_theme_constant_override("separation", 8)
-	left.add_child(_detail)
+	_modes.add_child(_build_attribute_mode())
+	_modes.add_child(_build_match_mode())
 
 	_sidebar = VBoxContainer.new()
-	_sidebar.add_theme_constant_override("separation", 10)
-	_sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_sidebar.custom_minimum_size = Vector2(320.0, 0.0)
+	_sidebar.add_theme_constant_override("separation", 8)
+	_sidebar.custom_minimum_size = Vector2(300.0, 0.0)
 	body.add_child(_sidebar)
 
 
-## The week's state, beside the chart: what the day affords, what last week did,
-## and how tired everybody is. All three are things a manager needs before
-## choosing this week's sessions rather than after.
+## The attribute half: a rail of sessions ordered body-first, and the panel that
+## sets whichever one is picked.
+func _build_attribute_mode() -> Control:
+	var page := VBoxContainer.new()
+	page.name = "Attributes"
+	page.add_theme_constant_override("separation", 8)
+
+	var caption := Label.new()
+	caption.text = "From the weight room to the meeting room. \
+Sessions near the top cost the legs; sessions near the bottom cost the day."
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(caption)
+
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 14)
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(split)
+
+	var rail_scroll := ScrollContainer.new()
+	rail_scroll.set_meta("ui_style_exempt", true)
+	rail_scroll.custom_minimum_size = Vector2(230.0, 0.0)
+	rail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	split.add_child(rail_scroll)
+	_activity_rail = VBoxContainer.new()
+	_activity_rail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_activity_rail.add_theme_constant_override("separation", 4)
+	rail_scroll.add_child(_activity_rail)
+
+	split.add_child(_build_detail_scroll())
+	return page
+
+
+## The in-match half: the rally as a loop you click.
+func _build_match_mode() -> Control:
+	var page := VBoxContainer.new()
+	page.name = "In Match"
+	page.add_theme_constant_override("separation", 8)
+
+	var caption := Label.new()
+	caption.text = "The rally, in the order a point travels it. \
+Pick the moment you want drilled against a live ball."
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(caption)
+
+	_flowchart = TrainingFlowchartScript.new()
+	_flowchart.phase_selected.connect(_open_phase_panel)
+	## The chart takes the larger share and the panel the rest. Both stretch, so
+	## the ring stays round on a tall window instead of the chart sitting at its
+	## minimum with dead page under it.
+	_flowchart.size_flags_stretch_ratio = 1.7
+	page.add_child(_flowchart)
+	return page
+
+
+## One detail panel, shared by both halves.
+##
+## Both modes set the same regimen, so two panels would be two views of one piece
+## of state and would need keeping in step. This one is reparented as the mode
+## changes instead, which cannot drift.
+func _build_detail_scroll() -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	## Exempt from the paper-window treatment every other scrolling region wears.
+	## That treatment threads a slip and an overlay onto the region assuming the
+	## region paints its own content -- true of an `ItemList`, false here, where
+	## the content is child nodes the overlay is a sibling of and draws over. The
+	## panel came out as an empty sheet with a scrollbar.
+	scroll.set_meta("ui_style_exempt", true)
+	_detail = VBoxContainer.new()
+	_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail.add_theme_constant_override("separation", 8)
+	scroll.add_child(_detail)
+	return scroll
+
+
+## The rail of attribute sessions, body first.
+func _populate_rail() -> void:
+	if _activity_rail == null:
+		return
+	for child in _activity_rail.get_children():
+		child.queue_free()
+	for activity_name in TrainingSystem.ATTRIBUTE_TRAINING_ORDER:
+		var description := TrainingSystem.description(activity_name)
+		var button := Button.new()
+		button.text = activity_name
+		button.tooltip_text = str(description.get("description", ""))
+		button.custom_minimum_size = Vector2(0.0, 34.0)
+		var chosen := str(activity_name)
+		button.pressed.connect(func() -> void: _open_phase_panel(chosen, chosen))
+		_activity_rail.add_child(button)
+
+
+## The week's state: what the day affords, what the club knows, how tired the
+## squad is, and what last week actually did. All four are things a manager needs
+## before choosing this week's sessions rather than after.
 func refresh() -> void:
 	if _sidebar == null:
 		return
@@ -124,8 +209,6 @@ func refresh() -> void:
 	for warning in Array(day.get("warnings", [])):
 		_add_line(_sidebar, "· %s" % str(warning))
 
-	## Where the club stands on the collective half, so the per-session yields in
-	## the phase panel read against something rather than floating.
 	_add_heading(_sidebar, "What the club knows")
 	_add_line(_sidebar, "System familiarity %d%% · cohesion %d%%" % [
 		roundi(float(_game_manager.team.tactical_familiarity) * 100.0),
@@ -170,16 +253,26 @@ func refresh() -> void:
 			])
 
 
-## One phase's own panel. Laid out the way the tactical planner is: what you are
+## One session's own panel. Laid out the way the tactical planner is: what you are
 ## editing, then who you are assigning to it.
 func _open_phase_panel(phase_id: String, activity: String) -> void:
+	if _detail == null:
+		return
 	_open_phase = phase_id
 	_open_activity = activity
+	## The panel follows the mode the click came from, so a phase picked on the
+	## flowchart opens under the flowchart rather than on the tab next door.
+	var host: Control = _modes.get_child(mini(_modes.current_tab, _modes.get_child_count() - 1))
+	var scroll: Control = _detail.get_parent()
+	if scroll.get_parent() != host and not host.is_ancestor_of(scroll):
+		scroll.get_parent().remove_child(scroll)
+		host.add_child(scroll)
 	for child in _detail.get_children():
 		child.queue_free()
 	var description := TrainingSystem.description(activity)
 
-	_add_heading(_detail, "%s · %s" % [phase_id.capitalize(), activity])
+	_add_heading(_detail, activity if phase_id == activity
+		else "%s · %s" % [phase_id.capitalize(), activity])
 	_add_line(_detail, str(description.get("description", "")))
 	_add_line(_detail, "Costs %d training block%s of the day." % [
 		int(description.get("blocks", 2)),
@@ -189,17 +282,10 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 	## The other half of a session, and the half the screen used to hide.
 	##
 	## A week does two separate things: it moves individual attributes, and it
-	## moves what the club knows collectively -- how well the system is understood
-	## and how well the squad plays together. Both were already in the model, paid
-	## out per squad and scaled by how much of the roster turned up, but only the
-	## attribute half was ever drawn. So a manager comparing Team Practice against
-	## Strength & Jump saw two attribute pools and none of the reason to run the
-	## first: it builds three and a half times the familiarity, and the strength
-	## circuit builds none.
-	##
-	## Written as the week's yield at full turnout, because that is the number the
-	## model applies when a squad is the whole roster and it is the honest ceiling
-	## for a smaller one.
+	## moves what the club knows collectively. Both were already paid out per
+	## squad, scaled by turnout, but only the attribute half was ever drawn -- so
+	## a manager comparing Team Practice against Strength & Jump saw two attribute
+	## pools and none of the reason to run the first.
 	var in_match := _in_match_line(description)
 	if not in_match.is_empty():
 		_add_line(_detail, in_match)
@@ -207,11 +293,8 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 	var regimen := _regimen_for(activity)
 
 	## Three levels, exactly one of them true. A `ButtonGroup` is what makes that
-	## the control's own rule rather than something the handler has to maintain,
-	## and `button_pressed` is seeded from the stored focus so the screen opens
-	## showing what this session is actually set to -- the first cut drew three
-	## identical unpressed buttons, so the one piece of state the panel exists to
-	## edit was the one piece it did not display.
+	## the control's own rule, and `button_pressed` is seeded from the stored
+	## focus so the screen opens showing what this session is set to.
 	var focus_row := HBoxContainer.new()
 	focus_row.add_theme_constant_override("separation", 8)
 	_detail.add_child(focus_row)
@@ -235,17 +318,14 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 		focus_row.add_child(button)
 
 	## What this session can move, and -- at high focus -- which of it the manager
-	## is naming. The pool is the activity's own, so a manager choosing is choosing
-	## from what the session can actually train rather than from every attribute in
-	## the game.
-	##
-	## At LOW the list is shown greyed, because a low-focus squad does not get to
-	## choose and the screen should say so rather than offering buttons that do
-	## nothing. At MEDIUM a picked attribute is *struck off*; at HIGH it is *aimed
-	## at*. Same control, opposite meaning, so the label says which.
+	## is naming. At LOW the list is shown greyed, because a low-focus squad does
+	## not get to choose and the screen should say so rather than offering buttons
+	## that do nothing. At MEDIUM a picked attribute is *struck off*; at HIGH it
+	## is *aimed at*. Same control, opposite meaning, so the label says which.
 	_add_heading(_detail, _pool_heading(int(regimen.focus)))
 	var pool_row := HFlowContainer.new()
 	_detail.add_child(pool_row)
+	var has_unsimulated := false
 	for attribute_name in Array(description.get("attributes", [])):
 		var chip := Button.new()
 		chip.toggle_mode = true
@@ -254,25 +334,22 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 		chip.disabled = int(regimen.focus) == TrainingRegimenModel.Focus.LOW
 		## Say when an attribute is not yet read by a rally. A manager aiming a
 		## high-focus week at one of these would watch the number climb and see
-		## nothing change on court, and a screen that does not say so is selling
-		## a decision that is not one.
+		## nothing change on court.
 		if not TrainingSystem.is_simulated(str(attribute_name)):
 			chip.text += " *"
 			chip.tooltip_text = "Not yet read by a rally — trains, but does not show up on court."
+			has_unsimulated = true
 		var picked := str(attribute_name)
 		chip.pressed.connect(func() -> void: _toggle_attribute(activity, picked))
 		pool_row.add_child(chip)
-	var has_unsimulated := false
-	for attribute_name in Array(description.get("attributes", [])):
-		if not TrainingSystem.is_simulated(str(attribute_name)):
-			has_unsimulated = true
+	if Array(description.get("attributes", [])).is_empty():
+		_add_line(_detail, "Moves no attributes — this one is for the legs.")
 	if has_unsimulated:
 		_add_line(_detail, "* trains, but no rally reads it yet.")
+
 	## What the week will *actually* be aimed at, rather than how many chips are
-	## lit. The model caps a high-focus week at HIGH_FOCUS_MAX and falls back to a
-	## random draw when nothing valid is named, so a count of the chips would
-	## overstate both ends -- it would promise eight aimed attributes when six is
-	## the ceiling, and promise one when zero means the week is not aimed at all.
+	## lit. The model caps a high-focus week and falls back to a random draw when
+	## nothing valid is named, so a count of the chips would overstate both ends.
 	if int(regimen.focus) == TrainingRegimenModel.Focus.HIGH:
 		var named := TrainingFocusModel.selected_attributes(
 			regimen, Array(description.get("attributes", [])), 0, 0
@@ -288,8 +365,7 @@ func _open_phase_panel(phase_id: String, activity: String) -> void:
 				]
 			_add_line(_detail, "Aimed at %d. The week's progress is split between them, so fewer moves each further.%s" % [named, tail])
 
-	## Who is doing it. A squad is the other half of a regimen and the screen had
-	## no way to set it, so every regimen was an activity nobody was assigned to.
+	## Who is doing it. A squad is the other half of a regimen.
 	_add_heading(_detail, "Squad")
 	var squad_row := HFlowContainer.new()
 	_detail.add_child(squad_row)
@@ -419,5 +495,3 @@ func _add_line(parent: Node, text: String) -> void:
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	parent.add_child(label)
-
-

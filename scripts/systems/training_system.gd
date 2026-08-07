@@ -30,9 +30,38 @@ const ACTIVITIES := {
 		"description": "Coordinate block reads, lateral closing and floor anticipation."},
 	"Strength & Jump": {"blocks": 3, "attributes": ["explosiveness", "jump_reach", "stamina"], "fatigue": 0.09, "satisfaction": -0.005, "familiarity": 0.0, "cohesion": 0.0,
 		"description": "Build explosive capacity and conditioning at a higher fatigue cost."},
+	"Film Review": {"blocks": 2, "attributes": ["anticipation", "decision_making",
+		"tactical_discipline", "court_vision", "situation_experience"], "fatigue": 0.005,
+		"satisfaction": -0.005, "familiarity": 0.03, "cohesion": 0.005,
+		"description": "Watch the tape. Reads, decisions and discipline, at almost no cost to the legs."},
+	"Team Meeting": {"blocks": 1, "attributes": ["composure", "leadership",
+		"adaptability", "improvisation"], "fatigue": 0.0, "satisfaction": 0.02,
+		"familiarity": 0.02, "cohesion": 0.045,
+		"description": "Talk it through. The cheapest hour in the week and the one that builds the room."},
 	"Recovery": {"blocks": 2, "attributes": [], "fatigue": -0.20, "satisfaction": 0.03, "familiarity": -0.005, "cohesion": 0.005,
 		"description": "Reduce fatigue and restore satisfaction; tactical familiarity may soften slightly."},
 }
+
+
+## The activities in order from the body to the head, which is how the attribute
+## side of the training screen lays them out.
+##
+## The order is a claim: a week's work runs from conditioning, through the
+## technical sessions that drill a phase, to the room-based work that moves reads
+## and decisions and costs nothing physically. It is worth stating once here
+## rather than leaving the screen to hard-code a list it would then have to keep
+## in step with `ACTIVITIES`.
+const ATTRIBUTE_TRAINING_ORDER: Array[String] = [
+	"Strength & Jump",
+	"Serving",
+	"Serve Receive",
+	"Attack & Transition",
+	"Blocking & Defense",
+	"Team Practice",
+	"Film Review",
+	"Team Meeting",
+	"Recovery",
+]
 
 
 ## Attributes a session can raise that no rally currently reads.
