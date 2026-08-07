@@ -1,30 +1,26 @@
 class_name VolleyballTrainingScreen
 extends Control
 
-## Training, out of the roster menu and into its own place.
+## The clipboard: two pages, and a strip that ties them to tomorrow.
 ##
-## It used to be a dropdown on the journal's Team tab: pick one activity
-## for the whole club, press Apply. That is the entire decision the old model
-## could express, so the screen was honest about it. With squads, focus and a day
-## that has to pay for the sessions, there is enough to decide that it wants a
-## room of its own.
+## Per `docs/design/TACTICS_AND_TRAINING.md` §0.9, drills are no longer a page
+## here -- they are an appointment in the day, run live. That leaves the
+## clipboard with the two halves that *are* pages: **Tactics**, where a plan is
+## declared (a preset, then specifics, decomposed to per-voli asks); and
+## **Development**, the attribute work that raises the 0-100 ceiling, which was
+## this screen's whole "Attribute" mode before the split. The fit strip below the
+## ribbon is the connective tissue the doc calls for -- it names the worst gap
+## between what Tactics just asked for and what the squad is actually
+## comfortable with, and points at the session that would close it rather than at
+## a tab, because there is no third tab to point at any more.
 ##
-## The room has two halves, because training does. **Attribute** work runs from
-## the weight room to the meeting room -- conditioning, then the technical
-## sessions that drill one phase, then film and talk, which cost nothing
-## physically and move reads and decisions. **In-match** work is the rally
-## itself: the same phases, but arranged as the loop a point actually travels,
-## because what a squad drills against the ball is a different question from what
-## numbers it is trying to raise.
-##
-## Both halves share the panel below them -- pick a session either way and you
-## are setting the same regimen -- and both share the week's state on the right,
-## which is what a manager needs *before* choosing rather than after.
+## This pass is a visual draft, not the finished mechanic. The Tactics tab's
+## presets and the strip's ask/familiarity numbers are placeholders -- §0.2 and
+## §0.4 have not been built yet -- laid out at the fidelity the finished screen
+## should have, so the shape can be judged before the model exists.
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
-const TrainingFlowchartScript := preload(
-	"res://scenes/components/training_flowchart.gd"
-)
+const TacticalCourtScript := preload("res://scenes/components/tactical_court.gd")
 const TrainingSystem := preload("res://scripts/systems/training_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
 const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
@@ -38,8 +34,11 @@ signal schedule_requested
 
 var _career_manager: Node = null
 var _game_manager: Node = null
-var _flowchart: TrainingFlowchart = null
 var _modes: TabContainer = null
+var _fit_strip: HBoxContainer = null
+var _tactical_court: TacticalCourt = null
+var _rotation_option: OptionButton = null
+var _selected_preset: String = "Combination Play"
 var _activity_rail: VBoxContainer = null
 var _detail: VBoxContainer = null
 var _sidebar: VBoxContainer = null
@@ -66,17 +65,20 @@ func _build() -> void:
 	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	var shell := ScreenShell.build(
-		self, "Training", [schedule_button, back_button] as Array[Button]
+		self, "Clipboard", [schedule_button, back_button] as Array[Button]
 	)
+
+	shell.content.add_child(_build_fit_strip())
 
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 16)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	shell.content.add_child(body)
 
-	## The two halves. Visible tabs, unlike the dashboard's outer sections, which
-	## hide theirs because a separate nav strip names them -- here the tabs are
-	## the only thing saying there are two ways to train.
+	## Two pages, in the causal order §0 gives them: declare, then raise. Visible
+	## tabs, unlike the dashboard's outer sections, which hide theirs because a
+	## separate nav strip names them -- here the tabs are the only thing saying
+	## there are two ways to use this clipboard.
 	_modes = TabContainer.new()
 	_modes.tabs_visible = true
 	_modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -84,8 +86,8 @@ func _build() -> void:
 	_modes.size_flags_stretch_ratio = 2.6
 	body.add_child(_modes)
 
-	_modes.add_child(_build_attribute_mode())
-	_modes.add_child(_build_match_mode())
+	_modes.add_child(_build_tactics_page())
+	_modes.add_child(_build_development_page())
 
 	_sidebar = VBoxContainer.new()
 	_sidebar.add_theme_constant_override("separation", 8)
@@ -93,11 +95,136 @@ func _build() -> void:
 	body.add_child(_sidebar)
 
 
-## The attribute half: a rail of sessions ordered body-first, and the panel that
-## sets whichever one is picked.
-func _build_attribute_mode() -> Control:
+## The strip the doc calls for: what a declared tactic is asking of the squad,
+## and the one gap worth training next, pointing at the session rather than at a
+## tab -- there is no drill tab left to point at. `Rotation` narrows which of the
+## six authored plans the strip is reading, per §0.7: a filter on one control, not
+## a navigation level of its own.
+##
+## The ask count and the named gap are placeholders. Decomposing a preset into
+## per-voli asks (§0.2) and scoring them against learned comfort (§0.4) are both
+## unbuilt; this strip is laid out at the shape the finished one should have.
+func _build_fit_strip() -> Control:
+	var panel := PanelContainer.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	panel.add_child(row)
+
+	var rotation_label := Label.new()
+	rotation_label.text = "Rotation"
+	row.add_child(rotation_label)
+
+	_rotation_option = OptionButton.new()
+	for rotation_number in range(1, 7):
+		_rotation_option.add_item("R%d" % rotation_number)
+	_rotation_option.select(0)
+	row.add_child(_rotation_option)
+
+	var sep := VSeparator.new()
+	row.add_child(sep)
+
+	var summary := Label.new()
+	summary.text = "4 asks · 1 unfamiliar"
+	row.add_child(summary)
+
+	var arrow_sep := VSeparator.new()
+	row.add_child(arrow_sep)
+
+	var gap := Label.new()
+	gap.text = "⟨ Ivo 4 · slide coordinate ⟩"
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(gap)
+
+	var to_session := Label.new()
+	to_session.text = "→ tomorrow's session"
+	row.add_child(to_session)
+	return panel
+
+
+## Tactics: declare a plan, see what it costs the squad. A preset rail on the
+## left names the intent; the court on the right shows the rotation it lands on.
+## The specifics one level down (§0.3's "individual instructions") are not drawn
+## yet -- this pass establishes the two halves and the ratio between them.
+func _build_tactics_page() -> Control:
 	var page := VBoxContainer.new()
-	page.name = "Attributes"
+	page.name = "Tactics"
+	page.add_theme_constant_override("separation", 8)
+
+	var caption := Label.new()
+	caption.text = "Declare how this rotation attacks and defends. \
+A blank tactic is every voli's own comfort -- maximum familiarity, no edge."
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(caption)
+
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 14)
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(split)
+
+	var preset_scroll := ScrollContainer.new()
+	preset_scroll.set_meta("ui_style_exempt", true)
+	preset_scroll.custom_minimum_size = Vector2(210.0, 0.0)
+	preset_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	split.add_child(preset_scroll)
+
+	var preset_rail := VBoxContainer.new()
+	preset_rail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preset_rail.add_theme_constant_override("separation", 4)
+	preset_scroll.add_child(preset_rail)
+
+	_add_heading(preset_rail, "Attack")
+	var attack_group := ButtonGroup.new()
+	for preset_name in ["Feed Opposite", "Combination Play", "Pipe and Middle"]:
+		_add_preset_button(preset_rail, preset_name, attack_group)
+	_add_heading(preset_rail, "Defense")
+	var defense_group := ButtonGroup.new()
+	for preset_name in ["Funnel into Line", "Spread Block"]:
+		_add_preset_button(preset_rail, preset_name, defense_group)
+
+	var court_column := VBoxContainer.new()
+	court_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	court_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	court_column.add_theme_constant_override("separation", 6)
+	split.add_child(court_column)
+
+	_tactical_court = TacticalCourtScript.new()
+	_tactical_court.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tactical_court.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	court_column.add_child(_tactical_court)
+
+	var declared := Label.new()
+	declared.name = "DeclaredLabel"
+	declared.text = "Declared: %s" % _selected_preset
+	court_column.add_child(declared)
+	return page
+
+
+func _add_preset_button(
+	parent: Node, preset_name: String, group: ButtonGroup
+) -> void:
+	var button := Button.new()
+	button.toggle_mode = true
+	button.button_group = group
+	button.text = preset_name
+	button.button_pressed = preset_name == _selected_preset
+	button.pressed.connect(func() -> void: _select_preset(preset_name))
+	parent.add_child(button)
+
+
+func _select_preset(preset_name: String) -> void:
+	_selected_preset = preset_name
+	var court_column: Node = _tactical_court.get_parent()
+	var declared := court_column.get_node("DeclaredLabel") as Label
+	if declared != null:
+		declared.text = "Declared: %s" % preset_name
+
+
+## Development: a rail of attribute sessions ordered body-first, and the panel
+## that sets whichever one is picked. This is the screen's original "Attribute"
+## mode, unchanged -- only the name and its neighbour on the clipboard moved.
+func _build_development_page() -> Control:
+	var page := VBoxContainer.new()
+	page.name = "Development"
 	page.add_theme_constant_override("separation", 8)
 
 	var caption := Label.new()
@@ -125,33 +252,12 @@ Sessions near the top cost the legs; sessions near the bottom cost the day."
 	return page
 
 
-## The in-match half: the rally as a loop you click.
-func _build_match_mode() -> Control:
-	var page := VBoxContainer.new()
-	page.name = "In Match"
-	page.add_theme_constant_override("separation", 8)
-
-	var caption := Label.new()
-	caption.text = "The rally, in the order a point travels it. \
-Pick the moment you want drilled against a live ball."
-	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	page.add_child(caption)
-
-	_flowchart = TrainingFlowchartScript.new()
-	_flowchart.phase_selected.connect(_open_phase_panel)
-	## The chart takes the larger share and the panel the rest. Both stretch, so
-	## the ring stays round on a tall window instead of the chart sitting at its
-	## minimum with dead page under it.
-	_flowchart.size_flags_stretch_ratio = 1.7
-	page.add_child(_flowchart)
-	return page
-
-
-## One detail panel, shared by both halves.
+## The one detail panel Development uses.
 ##
-## Both modes set the same regimen, so two panels would be two views of one piece
-## of state and would need keeping in step. This one is reparented as the mode
-## changes instead, which cannot drift.
+## Kept as its own scroll (rather than inlined into `_build_development_page`)
+## because `_open_phase_panel` reparents it as sessions are picked -- the pattern
+## carries over from when a second page shared it. There is only one page left
+## to reparent it onto now.
 func _build_detail_scroll() -> ScrollContainer:
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
