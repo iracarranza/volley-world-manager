@@ -58,6 +58,9 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 const RallyKinematicsModel := preload(
 	"res://scripts/simulation/rally_kinematics.gd"
 )
+const HitterPlacementModel := preload(
+	"res://scripts/simulation/hitter_placement_model.gd"
+)
 ## How many attack exchanges a rally may contain. Measured, and it is a backstop
 ## rather than a rule.
 ##
@@ -707,6 +710,9 @@ var rally_seed: int = 0
 ## none of them the rally. The setter decided whether to run a quick and the
 ## rally never asked.
 var setter_can_run_quick: bool = false
+## Which swing of this rally is being placed, so a hitter who swings twice does
+## not ask for the identical coordinate both times.
+var swing_index: int = 0
 ## The lane the other bench has learned to expect from this offence, so the
 ## offence can answer it. Empty until they have seen enough to have an opinion.
 var opponent_anticipated_lane: String = ""
@@ -773,6 +779,7 @@ func resolve(
 	}
 	rally_clock = 0.0
 	setter_can_run_quick = false
+	swing_index = 0
 	opponent_anticipated_lane = str(
 		opponent_team.anticipated_lane()
 	) if opponent_team != null else ""
@@ -1392,7 +1399,13 @@ func resolve(
 		* lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
 	## The lane the setter is *aiming* at. `_set_geometry` reads this rather than
 	## where the ball ends up, because difficulty is a property of the attempt.
-	var intended_set_target := CourtConstants.lane_target(assignment.lane)
+	## The hitter says where, inside the lane the bench called; the setter tries
+	## to put it there. `lane_target` remains the lane's centre and is what this
+	## falls back to when there is no hitter to ask.
+	var intended_set_target := HitterPlacementModel.preferred_point(
+		hitter, assignment.lane, rally_seed, swing_index
+	)
+	swing_index += 1
 	var set_target := intended_set_target
 	var set_geometry := _set_geometry(
 		setter, setter_start, set_contact, intended_set_target, preferred_release
@@ -1749,9 +1762,11 @@ func resolve(
 	var geometric := _geometric_promotion(
 		Dictionary(shadow_summary["geometric_attack"])
 	)
+	## The ball this hitter is actually standing under. It read the lane constant,
+	## which was harmless while the lane *was* the target and is a different point
+	## now that the hitter picks one and the setter misses it by some amount.
 	var attack_choice := _choose_attack_target(
-		hitter, CourtConstants.lane_target(assignment.lane), hit_type,
-		opponent_defenders,
+		hitter, set_target, hit_type, opponent_defenders,
 	)
 	if using_live_attack:
 		result.attack_quality = clampf(float(selected_live_attack.get(
@@ -2027,6 +2042,21 @@ func resolve(
 		## hands were rather than about two quality scalars.
 		block_outcome = str(geometric.block_outcome)
 	var blocked := block_outcome == "stuff"
+	## What this swing taught the hitter about where they were standing.
+	##
+	## Read off the terminal outcome rather than off `attack_quality`, because
+	## `attack_quality >= 0.25` is a threshold on the same axis the reward would
+	## be bucketing -- the circular measurement that made a clean cliff appear in
+	## the attack-error table earlier in this branch. A kill is a kill and a stuff
+	## or an error is not, and both are decided somewhere else.
+	## Only swings that ended the rally teach anything. A ball that was dug is
+	## neither a spot that worked nor one that did not -- counting it as a failure
+	## would punish every hitter for the defence merely doing its job, and most
+	## swings are dug.
+	var killed := bool(geometric.get("hitter_point", false))
+	var lost := blocked or bool(geometric.get("attack_missed", false))
+	if killed or lost:
+		HitterPlacementModel.learn(hitter, assignment.lane, set_target, killed)
 	# A positional partial block is the same continuation class as the older
 	# "recycle" result: the home attack-coverage unit must play the deflection.
 	var recycled := block_outcome in ["recycle", "touch", "funnel"]
@@ -3833,7 +3863,10 @@ func _resolve_home_continuation(
 	## difficulty is a property of the attempt, so geometry is read off the
 	## intent rather than off where the ball ended up. Same rule as the first
 	## ball, which reads `intended_set_target` for exactly this reason.
-	var intended_set_target := CourtConstants.lane_target(assignment.lane)
+	var intended_set_target := HitterPlacementModel.preferred_point(
+		hitter, assignment.lane, rally_seed, swing_index
+	)
+	swing_index += 1
 	var cont_release_target: Vector2 = defensive_plan.setter_release_target(
 		lineup.active_setter_id()
 	) if defensive_plan != null else Vector2(0.50, 0.60)

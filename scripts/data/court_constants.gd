@@ -62,6 +62,33 @@ const LANE_X := {
 	"Pipe": 0.50,
 }
 
+## The stretch of net each lane actually covers, as normalised x.
+##
+## `LANE_X` is one point per lane and was being used as though it were the lane
+## itself: `lane_target` returned it, the setter aimed at it, and the only reason
+## two attacks ever landed in different places was execution scatter around a
+## constant. Measured over 300 rallies that produced four bands about 1.5 m wide
+## with dead net between them -- 0.2-1.7 m, 2.6-4.1 m and 7.2-8.6 m, leaving a
+## 3.1 m stretch in the middle-right of the net where no ball was ever contacted,
+## which is where the slide lives.
+##
+## A lane is a region a hitter works inside, not a dot. `LANE_X` stays as each
+## region's centre so every consumer that wants one representative point keeps
+## working.
+const LANE_RANGE := {
+	"Left Pin": Vector2(0.02, 0.24),
+	"Front Quick": Vector2(0.28, 0.50),
+	"Right Quick": Vector2(0.50, 0.72),
+	"Right Pin": Vector2(0.76, 0.98),
+	## The pipe is a back-row lane and works the middle third rather than a pin.
+	"Pipe": Vector2(0.35, 0.65),
+}
+
+
+static func lane_range(lane_name: String) -> Vector2:
+	return LANE_RANGE.get(lane_name, Vector2(0.40, 0.60))
+
+
 ## How deep a pipe is set, as a share of court length from the far end line. Four
 ## metres off the net on an 18 m court: a metre behind the attack line, which is
 ## the room a back-row hitter needs to take off legally and still be swinging
