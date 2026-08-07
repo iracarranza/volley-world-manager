@@ -121,6 +121,24 @@ var defensive_mode: bool = false
 var defensive_plan: Resource
 var defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
 var defensive_phase: int = 0
+## The smallest this court can usefully be drawn, in each orientation.
+##
+## It has to follow the orientation, and it did not: the scene declared a flat
+## `custom_minimum_size` of 400x500 -- portrait, matching the portrait default of
+## the flag below -- while every host that actually instantiates it calls
+## `set_landscape_orientation(true)` and parents it to an `AspectRatioContainer`
+## with `ratio = 2.0`. A container cannot shrink a child below its minimum, so
+## the court stayed 400x500 and the container centred the overflow: it laid out
+## at y = -155, a third of it above the panel, with the lane labels cut off
+## mid-word. It looked correct only in the workspace popup, which happened to be
+## wide enough to hide the problem.
+##
+## Both ratios are 2:1 the same way the container is, so the two declarations
+## agree instead of fighting. A full court is 9m by 18m and `_court_rect` keeps a
+## 34px margin, so the landscape minimum is a 372px-wide court plus its margins.
+const MINIMUM_PORTRAIT := Vector2(220.0, 440.0)
+const MINIMUM_LANDSCAPE := Vector2(440.0, 220.0)
+
 var landscape_orientation: bool = false
 var live_player_positions: Dictionary = {}
 var opponent_live_player_positions: Dictionary = {}
@@ -228,6 +246,7 @@ func set_visualization_layers(layers: int) -> void:
 
 func set_landscape_orientation(enabled: bool) -> void:
 	landscape_orientation = enabled
+	custom_minimum_size = MINIMUM_LANDSCAPE if enabled else MINIMUM_PORTRAIT
 	queue_redraw()
 
 

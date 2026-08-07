@@ -144,7 +144,25 @@ static func _style_node(node: Node, light_mode: bool) -> void:
 		control.theme_type_variation = &"DataList"
 		_paper_window(control)
 	elif control is ScrollContainer:
-		_paper_window(control)
+		## Deliberately bare.
+		##
+		## `_paper_window` threads a backing slip and a cut overlay onto a region
+		## on the assumption that the region paints its own content -- true of an
+		## `ItemList` or a `RichTextLabel`, whose text is drawn by the control
+		## itself before its children draw. A `ScrollContainer`'s content *is*
+		## child nodes, so the overlay is their sibling and draws straight over
+		## them.
+		##
+		## That blanked the tactical planner: the whole editor column -- mode
+		## switch, block strategy, floor system, serve targeting, every control
+		## the planner exists for -- rendered underneath an opaque slip, leaving a
+		## dark panel with a scrollbar. The training screen hit the same thing and
+		## was patched locally with `ui_style_exempt`; this is the general fix, and
+		## those local exemptions are now redundant rather than load-bearing.
+		##
+		## A scrolling region still reads as one: it sits inside a panel that is
+		## already sewn, which is where the paper was coming from anyway.
+		pass
 	elif control is TabContainer:
 		_paper_tabs(control as TabContainer)
 
