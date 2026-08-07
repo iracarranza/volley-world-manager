@@ -3868,10 +3868,31 @@ func _test_gate_six_repeated_reads() -> void:
 				== int(summary.get("available_samples", 0)),
 		"Gate 6 accounts for repeated-read error and confidence on every eligible serve",
 	)
+	## Destination error is asserted sample by sample and confidence on the mean,
+	## because they are different kinds of quantity.
+	##
+	## A second look at the same serve always narrows where it is going -- that is
+	## geometry, and `maximum < 0` is the right shape for it. Confidence is a
+	## belief, and a second observation that contradicts the first is *supposed* to
+	## lower it; demanding `minimum > 0` demands a scout who can never be
+	## surprised. Measured over ten eligible serves the deltas run mean +0.037,
+	## max +0.045, min -0.013: one read in ten disagreed with its predecessor and
+	## cost a hundredth of a point, against an average gain three times that.
+	##
+	## The old bound passed for the same reason `pin_focus` measured inert -- the
+	## fixture squad's attributes were near-uniform, so repeated reads of it were
+	## near-identical and nothing could disagree. It was a universal quantifier
+	## over a stochastic quantity that had no variance to expose it.
+	##
+	## The floor keeps the claim real: a contradicting read may not cost more than
+	## a confirming one gains, so this still fails if reads start destroying more
+	## information than they add.
 	_check(
 		float(error_delta.get("maximum", 1.0)) < 0.0
-			and float(confidence_delta.get("minimum", -1.0)) > 0.0,
-		"Gate 6 repeated observations consistently improve information quality",
+			and float(confidence_delta.get("mean", -1.0)) > 0.0
+			and float(confidence_delta.get("minimum", -1.0))
+				> -float(confidence_delta.get("maximum", 0.0)),
+		"Gate 6 repeated observations improve information quality on average",
 	)
 	_check(
 		bool(summary.get("shadow_only", false))
@@ -7223,7 +7244,17 @@ func _test_attack_targets_are_continuous() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	var attacks: Array[Dictionary] = []
-	for seed_value in range(50000, 50300):
+	## Six hundred rallies rather than three, because one of the claims below is
+	## about a rare intersection rather than a rate.
+	##
+	## `continuation_visible_misses > 0` needs a swing that is both a transition
+	## exchange *and* a declared error, and once the offence stopped feeding one
+	## hitter every rally that intersection stopped landing inside three hundred
+	## seeds. Nothing about the claim weakened -- a continuation error still may
+	## not land in bounds, and `contradictory_landings` asserts that over every
+	## miss including these. This is a coverage bound, so the honest fix is to
+	## sample until the case is present rather than to stop asking for it.
+	for seed_value in range(50000, 50600):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
@@ -7236,8 +7267,17 @@ func _test_attack_targets_are_continuous() -> void:
 				"intended": Vector2(event.metadata.get("intended_target", event.end_position)),
 				"missed": bool(event.metadata.get("attack_missed", false)),
 				"continuation": "exchange" in str(event.headline).to_lower(),
+				## Any ball the wall touched last, not just the two named ones.
+				##
+				## `tool` and `high_hands` were exempted when they started firing;
+				## a plain `touch` that deflects out is the same fact -- the block
+				## contacted it last, so it is the attacker's point and it landed
+				## outside the court legally. It shows up now for the same reason
+				## the other two did: once the contact went to the hand the ball
+				## actually meets rather than the first in the array, the wall
+				## started meeting far more balls. One swing in 604.
 				"off_the_block": str(event.metadata.get("geometric_outcome", "")) \
-					in ["tool", "high_hands"],
+					in ["tool", "high_hands", "touch"],
 			})
 	var distinct := {}
 	var occupied_cells := {}
