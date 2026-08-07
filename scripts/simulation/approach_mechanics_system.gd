@@ -116,7 +116,8 @@ static func prepare_for_attack(
 	)
 	var target := Vector2(assignment.get("target", Vector2(0.5, 0.53)))
 	var start := approach_start_position(
-		target, str(assignment.get("lane", "Left Pin")), side
+		target, str(assignment.get("lane", "Left Pin")), side, null,
+		APPROACH_DEPTH, int(assignment.get("tempo", 3)),
 	)
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
 	## Run *through* the approach mark, not to it. This is the leg that ends
@@ -294,7 +295,46 @@ static func evaluate_takeoff(
 ## available swing is centred on it too.
 const APPROACH_ANGLE_MIDDLE_DEGREES: float = 8.0
 const APPROACH_ANGLE_PIN_DEGREES: float = 30.0
+## How long a run-up is, as a share of court length, at the slowest tempo.
+##
+## The angle already knew the difference between a middle and a pin -- 8 degrees
+## against 30 -- but the *runway* was this one number for everybody, and tempo
+## was not an argument at all. So a middle running a first-tempo quick backed off
+## 2.52 m exactly like an outside hitter running a tempo-3 high ball, could not
+## cover it inside the set's flight, and had the contact dragged back through
+## their own approach: Front Quick aimed at 0.54 m off the net and delivered a
+## median of 1.92 m.
+##
+## A quick is a two-step approach and a high ball is a four-step one. `_lane` sat
+## unused in this function's signature for exactly this reason -- the shape was
+## anticipated and never wired -- and tempo is the honest driver rather than
+## lane, because it is what makes a shoot to the pin a different run from a high
+## ball to the same place.
 const APPROACH_DEPTH: float = 0.11
+## The share of the full runway each tempo gets, indexed by tempo 0 to 3.
+##
+## A quick is a two-to-three step approach and a high ball is a four-step one --
+## about 2.2 m against 3.3 m, a ratio near 0.67 -- so the fast end of this scale
+## belongs in that neighbourhood and not lower. Swept against the kill-rate
+## reference band of 0.38-0.60, over 300 rallies a step:
+##
+##   scale                       n    net    stuff  err    kill
+##   0.42 / 0.55 / 0.78 / 1.0   164  0.061  0.043  0.134  0.646
+##   0.58 / 0.70 / 0.86 / 1.0   169  0.065  0.047  0.154  0.544
+##   0.72 / 0.82 / 0.92 / 1.0   181  0.055  0.033  0.149  0.459
+##
+## All three hold attack error and stuff inside their bands; the first puts kill
+## above its band outright. The third is chosen because 0.72 is the ratio the
+## footwork implies, and it lands mid-band as a consequence rather than as the
+## reason -- 0.42 would be a one-metre run-up, which is not an approach.
+const APPROACH_DEPTH_BY_TEMPO: Array[float] = [0.72, 0.82, 0.92, 1.0]
+
+
+## The runway this tempo affords, as a share of court length.
+static func approach_depth_for_tempo(tempo: int) -> float:
+	return APPROACH_DEPTH * float(
+		APPROACH_DEPTH_BY_TEMPO[clampi(tempo, 0, APPROACH_DEPTH_BY_TEMPO.size() - 1)]
+	)
 
 ## How far off perpendicular a run-up may end up.
 ##
@@ -323,7 +363,13 @@ static func approach_start_position(
 	side: StringName = &"home",
 	current_position: Variant = null,
 	depth: float = APPROACH_DEPTH,
+	tempo: int = -1,
 ) -> Vector2:
+	## Tempo shortens the runway when the caller knows it. Left optional rather
+	## than required so a caller with no tempo to hand keeps the full run-up,
+	## which is the behaviour this function had for every caller before.
+	if tempo >= 0:
+		depth = approach_depth_for_tempo(tempo)
 	var pin_distance := absf(target.x - 0.50)
 	var wideness := clampf(pin_distance / 0.38, 0.0, 1.0)
 	var angle := lerpf(

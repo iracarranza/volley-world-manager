@@ -575,6 +575,11 @@ const PIPE_TEMPO_CALL: int = 2
 ## everything else, which is the deliberate high-ball call and not a defect.
 const QUICK_TEMPO_CALL: int = 1
 
+## A shoot is the pin lane run at the quick's tempo -- a flat, fast ball to the
+## antenna that arrives before the block can travel to it. Second tempo rather
+## than first, because it has further to fly than a quick does.
+const SHOOT_TEMPO_CALL: int = 2
+
 ## How much the attacker is favoured when swing and dig are equally good. A
 ## clean swing beats a set defence more often than not, so an even contest is
 ## not a coin flip.
@@ -1592,7 +1597,9 @@ func resolve(
 					hitter, hitter_start, set_target, "transition",
 					Vector2(approach_preparation.get(
 						"approach_start_position",
-						_approach_start_position(set_target, hitter_start, false)
+						_approach_start_position(
+							set_target, hitter_start, false, assignment.tempo
+						)
 					)),
 					prepared_actor.velocity,
 				)
@@ -1818,7 +1825,9 @@ func resolve(
 		using_live_attack = false
 	var approach_start := Vector2(approach_preparation.get(
 		"approach_start_position",
-		_approach_start_position(set_target, hitter_start, false)
+		_approach_start_position(
+			set_target, hitter_start, false, assignment.tempo
+		)
 	))
 ## The same compromise the opponent makes. A hitter handed an unplayable set
 	## rolls it over rather than swinging at it, and until now only one side of the
@@ -4043,7 +4052,9 @@ func _resolve_home_continuation(
 	)
 	var continuation_approach_start := Vector2(transition_preparation.get(
 		"approach_start_position",
-		_approach_start_position(set_target, hitter_start, false)
+		_approach_start_position(
+			set_target, hitter_start, false, assignment.tempo
+		)
 	))
 	## Same rule as the first-ball swing: capability shapes the outcome, it does
 	## not remove the option.
@@ -5813,6 +5824,7 @@ func _approach_start_position(
 	contact_position: Vector2,
 	current_position: Vector2,
 	opponent_side: bool,
+	tempo: int = -1,
 ) -> Vector2:
 	var local_contact := Vector2(
 		contact_position.x, 1.0 - contact_position.y
@@ -5829,6 +5841,12 @@ func _approach_start_position(
 	var approach_depth := 0.135 * lerpf(
 		0.88, 1.12, clampf(pin_distance / 0.34, 0.0, 1.0)
 	)
+	## Tempo shortens it, when the caller knows which ball this is. A quick and a
+	## high ball to the same point are not the same run-up, and this fallback had
+	## the same single depth the shared model did.
+	if tempo >= 0:
+		approach_depth *= ApproachMechanicsModel.approach_depth_for_tempo(tempo) \
+			/ ApproachMechanicsModel.APPROACH_DEPTH
 	var approach := ApproachMechanicsModel.approach_start_position(
 		local_contact, "", &"home", local_current, approach_depth
 	)
@@ -9086,20 +9104,33 @@ func _fallback_assignment(
 	## deciding in shadow all along.
 	var natural := ("Front Quick" if left_side else "Right Quick") if is_middle \
 		else ("Left Pin" if left_side else "Right Pin")
-	var lanes: Array[String] = [natural]
+	## A middle's alternative is the other side of the setter -- the slide. A pin
+	## hitter's is not a different lane at all: it is their *own* lane run fast,
+	## which is a shoot. Sending an outside hitter to the middle to "run a quick"
+	## was the wrong model of the same idea, and it moved a hitter across the
+	## court to do something they can do where they stand.
+	var lanes: Array[Dictionary] = [{"lane": natural, "tempo": -1}]
 	if setter_can_run_quick:
-		var alternative := ("Right Quick" if left_side else "Front Quick") \
-			if is_middle else ("Front Quick" if left_side else "Right Quick")
-		if alternative != natural:
-			lanes.append(alternative)
+		if is_middle:
+			var slide := "Right Quick" if left_side else "Front Quick"
+			if slide != natural:
+				lanes.append({"lane": slide, "tempo": -1})
+		else:
+			lanes.append({"lane": natural, "tempo": SHOOT_TEMPO_CALL})
 
 	var best_lane := natural
+	var best_tempo := -1
 	var best_score := -1.0e9
 	for index in range(lanes.size()):
-		var lane := lanes[index]
+		var lane := str(lanes[index]["lane"])
+		var option_tempo := int(lanes[index]["tempo"])
 		## Their own lane is what they rehearse; being moved off it is a thing
 		## only a hitter with a repertoire can be asked to do.
-		var score := 1.0 if lane == natural else _rating(hitter, "shot_variety")
+		## Their own lane at their own tempo is what they rehearse. Being moved
+		## across the court, or asked to run their lane fast, are both things only
+		## a hitter with a repertoire can be asked to do.
+		var score := 1.0 if lane == natural and option_tempo < 0 \
+			else _rating(hitter, "shot_variety")
 		## And not into the one the other bench has learned to expect.
 		##
 		## `OpponentTeam.anticipated_lane()` is already read twice in this file --
@@ -9114,9 +9145,14 @@ func _fallback_assignment(
 		if score > best_score:
 			best_score = score
 			best_lane = lane
+			best_tempo = option_tempo
 	assignment.lane = best_lane
+	if best_tempo >= 0:
+		## A shoot: the pin, run at a tempo that beats the wall forming on it.
+		assignment.tempo = best_tempo
+		return assignment
 	var quick_lane := best_lane in ["Front Quick", "Right Quick"]
-	## Tempo follows the lane, because a quick is a first-tempo ball by
+	## Otherwise tempo follows the lane, because a quick is a first-tempo ball by
 	## definition and a pin ball off this offence is a high one.
 	assignment.tempo = QUICK_TEMPO_CALL if quick_lane else 3
 	return assignment
