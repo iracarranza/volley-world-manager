@@ -158,7 +158,7 @@ panel, raised panel, and inset/well panel.
 
 | file | overrides |
 | --- | ---: |
-| `career_dashboard.tscn` | 85 |
+| `journal_screen.tscn` | 85 |
 | `main.tscn` | 57 |
 | `new_career_screen.tscn` | 44 |
 | `title_screen.tscn` | 43 |

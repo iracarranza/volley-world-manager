@@ -1,4 +1,4 @@
-class_name VolleyballRecruitmentScreen
+class_name VolleyballScoutingScreen
 extends Control
 
 ## The scouting list, as a list a scout would actually keep.

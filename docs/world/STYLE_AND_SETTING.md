@@ -386,7 +386,7 @@ depends on an answer, don't guess:
   markers — followed by every participant's strength and Sixnet form, all read
   from `career.sixnet_slots` / `sixnet_championship_standings` /
   `sixnet_qualifier_standings` / `region_strength` / `sixnet_form`
-  (`career_dashboard.gd:_refresh_sixnet`). It lives in the dashboard rather than
+  (`journal_screen.gd:_refresh_sixnet`). It lives in the dashboard rather than
   its own screen. What is still missing is *history*: the view is this season
   only, so a region's rise or fall over a career is state the game holds and
   never shows.

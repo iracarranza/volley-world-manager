@@ -72,7 +72,7 @@ const AXIS_CONTRIBUTORS := {
 ## screen that needs to group `VolleyballPlayer.ABILITY_ATTRIBUTES` -- the
 ## wheel's detailed view and the raw attribute-profile text -- reads this
 ## rather than keeping its own list. Two independent copies used to exist
-## (this file's wheel categories and `career_dashboard.gd`'s `ATTRIBUTE_GROUPS`)
+## (this file's wheel categories and `journal_screen.gd`'s `ATTRIBUTE_GROUPS`)
 ## with different category names and no attribute-accuracy in either, which is
 ## exactly the kind of thing that drifts silently: adding an attribute meant
 ## updating two lists by hand, and nothing enforced that both were updated.

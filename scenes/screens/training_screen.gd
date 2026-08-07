@@ -3,7 +3,7 @@ extends Control
 
 ## Training, out of the roster menu and into its own place.
 ##
-## It used to be a dropdown on the career dashboard's Team tab: pick one activity
+## It used to be a dropdown on the journal's Team tab: pick one activity
 ## for the whole club, press Apply. That is the entire decision the old model
 ## could express, so the screen was honest about it. With squads, focus and a day
 ## that has to pay for the sessions, there is enough to decide that it wants a

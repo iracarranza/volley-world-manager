@@ -12,7 +12,7 @@ extends Node
 ## A scene rather than `--script`: autoloads (CareerManager, GameManager) are
 ## not initialised in script mode, and the dashboard needs both.
 
-const DASHBOARD := preload("res://scenes/screens/career_dashboard.tscn")
+const DASHBOARD := preload("res://scenes/screens/journal_screen.tscn")
 
 ## One width, deliberately. The project stretches `canvas_items` from a fixed
 ## 1280x720 base with an expanding aspect, so controls always lay out against

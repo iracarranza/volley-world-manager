@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://hdpgke72p25v" path="res://scenes/application.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/screens/title_screen.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/screens/new_career_screen.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://scenes/screens/career_dashboard.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/screens/journal_screen.tscn" id="4"]
 [ext_resource type="PackedScene" uid="uid://cf25mxv5ivoek" path="res://scenes/main/main.tscn" id="5"]
 [ext_resource type="Theme" uid="uid://ddg0o485om0in" path="res://scenes/themes/dark_theme.tres" id="6"]
 
@@ -26,7 +26,7 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 1
 
-[node name="CareerDashboard" parent="." unique_id=421942805 instance=ExtResource("4")]
+[node name="Journal" parent="." unique_id=421942805 instance=ExtResource("4")]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1

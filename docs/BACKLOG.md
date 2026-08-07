@@ -79,7 +79,7 @@ wheel are all in. Two Roster-tab items from the agreed plan are not in the
 current scene:
 
 - **Reserved space for the 3D player visualizer.** The `RosterExtra` column
-  holding `Placeholder3D` is gone from `career_dashboard.tscn`; the Roster
+  holding `Placeholder3D` is gone from `journal_screen.tscn`; the Roster
   profile is now `IdentityPanel` + `WheelPanel` only. The user asked for the
   space to exist before the feature does.
 - **Biography block.** `home_region` / `club_region` / `traits` are surfaced

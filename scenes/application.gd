@@ -7,8 +7,8 @@ const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const ScreenWipeScript := preload("res://scenes/components/screen_wipe.gd")
 const TrainingScreenScript := preload("res://scenes/screens/training_screen.gd")
-const RecruitmentScreenScript := preload(
-	"res://scenes/screens/recruitment_screen.gd"
+const ScoutingScreenScript := preload(
+	"res://scenes/screens/scouting_screen.gd"
 )
 const ScheduleScreenScript := preload("res://scenes/screens/schedule_screen.gd")
 const SETTINGS_PATH := "user://settings.cfg"
@@ -16,7 +16,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var title_screen: VolleyballTitleScreen = %TitleScreen
 @onready var new_career_screen: VolleyballNewCareerScreen = %NewCareerScreen
-@onready var career_dashboard: VolleyballCareerDashboard = %CareerDashboard
+@onready var journal: VolleyballJournalScreen = %Journal
 @onready var match_center: Control = %MatchCenter
 
 var _wipe: ScreenWipe = null
@@ -24,7 +24,7 @@ var _wipe: ScreenWipe = null
 ## Controls with no scene content of their own -- everything they show is drawn
 ## from the career. A .tscn for either would be an empty node with a script.
 var _training_screen: VolleyballTrainingScreen = null
-var _recruitment_screen: VolleyballRecruitmentScreen = null
+var _scouting_screen: VolleyballScoutingScreen = null
 var _schedule_screen: VolleyballScheduleScreen = null
 
 
@@ -43,9 +43,9 @@ func _ready() -> void:
 	title_screen.theme_requested.connect(_apply_theme)
 	title_screen.exit_requested.connect(func() -> void: get_tree().quit())
 	new_career_screen.back_requested.connect(_show_title)
-	new_career_screen.career_created.connect(_show_dashboard)
-	career_dashboard.title_requested.connect(_show_title)
-	career_dashboard.play_match_requested.connect(_show_match)
+	new_career_screen.career_created.connect(_show_journal)
+	journal.title_requested.connect(_show_title)
+	journal.play_match_requested.connect(_show_match)
 	call_deferred("_connect_match_center_signal")
 	## Added in code rather than the scene because it has to be the last child --
 	## later siblings draw over earlier ones -- and a node whose whole job is to
@@ -55,20 +55,20 @@ func _ready() -> void:
 	_training_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_training_screen.visible = false
 	add_child(_training_screen)
-	_training_screen.back_requested.connect(_show_dashboard)
-	_recruitment_screen = RecruitmentScreenScript.new()
-	_recruitment_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_recruitment_screen.visible = false
-	add_child(_recruitment_screen)
-	_recruitment_screen.back_requested.connect(_show_dashboard)
+	_training_screen.back_requested.connect(_show_journal)
+	_scouting_screen = ScoutingScreenScript.new()
+	_scouting_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scouting_screen.visible = false
+	add_child(_scouting_screen)
+	_scouting_screen.back_requested.connect(_show_journal)
 	_schedule_screen = ScheduleScreenScript.new()
 	_schedule_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_schedule_screen.visible = false
 	add_child(_schedule_screen)
 	_schedule_screen.back_requested.connect(_show_training)
 	_training_screen.schedule_requested.connect(_show_schedule)
-	career_dashboard.training_requested.connect(_show_training)
-	career_dashboard.recruitment_requested.connect(_show_recruitment)
+	journal.training_requested.connect(_show_training)
+	journal.scouting_requested.connect(_show_scouting)
 	## Last, so the sheet covers everything including the screens added above.
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
@@ -78,7 +78,7 @@ func _ready() -> void:
 
 func _connect_match_center_signal() -> void:
 	if match_center:
-		match_center.career_exit_requested.connect(_show_dashboard)
+		match_center.career_exit_requested.connect(_show_journal)
 
 
 ## Every screen change goes through here, so the wipe does too.
@@ -95,8 +95,8 @@ func _show_only(screen: Control) -> void:
 
 func _swap_to(screen: Control) -> void:
 	for candidate in [
-		title_screen, new_career_screen, career_dashboard, match_center,
-		_training_screen, _recruitment_screen, _schedule_screen,
+		title_screen, new_career_screen, journal, match_center,
+		_training_screen, _scouting_screen, _schedule_screen,
 	]:
 		if candidate != null:
 			candidate.visible = candidate == screen
@@ -118,12 +118,12 @@ func _show_new_career() -> void:
 func _load_career(save_id: String) -> void:
 	var error := CareerManager.load_career(save_id)
 	if error.is_empty():
-		_show_dashboard()
+		_show_journal()
 
 
-func _show_dashboard() -> void:
-	career_dashboard.refresh()
-	_show_only(career_dashboard)
+func _show_journal() -> void:
+	journal.refresh()
+	_show_only(journal)
 
 
 func _show_match() -> void:
@@ -178,9 +178,9 @@ func _show_training() -> void:
 	_show_only(_training_screen)
 
 
-func _show_recruitment() -> void:
-	_recruitment_screen.bind(CareerManager, get_node("/root/GameManager"))
-	_show_only(_recruitment_screen)
+func _show_scouting() -> void:
+	_scouting_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_scouting_screen)
 
 
 func _show_schedule() -> void:

@@ -268,6 +268,42 @@ const HIGHLIGHT_SWEEP_LENGTH_SHARE: float = 0.42
 ## chip stops being a stroke and becomes a state change.
 const HIGHLIGHT_SWEEP_FLOOR: float = 0.09
 
+## The width past which a control stops being highlighted at all.
+##
+## Scaling the duration fixed the *speed* problem and left the real one, which is
+## that a highlighter marks a word or a phrase. Nobody drags a highlighter across
+## a whole ruled line -- and the widest controls here are whole lines: a scouting
+## row runs the width of the card. At 1100px the sweep took 0.36s, which is far
+## too long for a hover affordance, and no amount of curve tuning makes a
+## full-line wash the right instrument.
+##
+## So above this width the instrument changes rather than the timing. A pen
+## underline is what a hand actually does to a whole line, it arrives in one
+## quick pass whatever the width, and it does not read as a highlighted button.
+const HIGHLIGHT_MAX_WIDTH: float = 360.0
+
+## How long an underline takes, whatever it is under.
+##
+## Fixed rather than width-scaled, and that is not the mistake the sweep made: a
+## highlighter is a chisel dragged at a hand's pace, so its duration has to
+## follow its length, while an underline is a flick from the wrist that arrives
+## at about the same speed under a short phrase or a long one.
+const UNDERLINE_SECONDS: float = 0.13
+## Where the rule sits, as a share of the control's height.
+##
+## Not an inset from the bottom, which is what the first cut used: at three
+## pixels up from the edge the line landed exactly on the control's own drawn
+## outline and was invisible against it. A control's label is centred, so the
+## rule wants to be just under the text -- about seven tenths down -- which on a
+## 46px button leaves it clear of both the type above and the border below.
+const UNDERLINE_BASELINE: float = 0.70
+## Never closer than this to the bottom edge, so a short control cannot push the
+## rule back onto its own border.
+const UNDERLINE_EDGE_CLEARANCE: float = 6.0
+const UNDERLINE_WIDTH: float = 2.0
+## How far the pen runs past each end of the control.
+const UNDERLINE_OVERSHOOT: float = 5.0
+
 
 ## Which panel this is, for the wander. Assigned by whoever creates the outline;
 ## identical seeds draw identical edges, which is the point.
@@ -323,9 +359,16 @@ func _ready() -> void:
 	## rect of 163x0 and returned at the size guard without painting a pixel. Six
 	## of the seven inked surfaces on the dashboard were blank.
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	resized.connect(queue_redraw)
+	## Draw order follows the width, and the width arrives with the first layout
+	## pass -- so it has to be re-decided on resize, not settled here.
+	resized.connect(_on_resized)
 	_sync_draw_order()
 	_bind_hover()
+
+
+func _on_resized() -> void:
+	_sync_draw_order()
+	queue_redraw()
 
 
 ## Watch the control this outline belongs to, so the mark follows the pointer.
@@ -359,8 +402,15 @@ func _on_parent_unhover() -> void:
 	set_process(true)
 
 
+## Whether this control is long enough that a highlighter is the wrong tool.
+func _is_underlined() -> bool:
+	return size.x > HIGHLIGHT_MAX_WIDTH
+
+
 ## How long this particular control takes to be gone over.
 func _sweep_seconds() -> float:
+	if _is_underlined():
+		return UNDERLINE_SECONDS
 	var stretch := lerpf(
 		1.0,
 		maxf(size.x, 1.0) / HIGHLIGHT_SWEEP_REFERENCE_WIDTH,
@@ -384,8 +434,68 @@ func _process(delta: float) -> void:
 ## control -- it would paint over the label it is supposed to be marking.
 ## `show_behind_parent` puts it before the parent's own drawing instead, so the
 ## order becomes band, then stylebox, then text.
+## Which side of the parent this node draws on, and it depends on the instrument.
+##
+## A highlighter belongs behind: band, then stylebox, then text, so the wash sits
+## under the word the way a real one does. An underline does not -- it is a pen
+## mark on the paper, and behind a filled stylebox a two-pixel line is simply
+## swamped. Drawn in front it reads, and it still sits below the label because it
+## is placed below the label rather than because of draw order.
+##
+## Width is only known once the control has been laid out, so this is re-run on
+## resize rather than settled in `_ready`.
 func _sync_draw_order() -> void:
 	show_behind_parent = hover_highlight
+	_sync_underline_layer()
+
+
+## The rule that draws in front, while the rest of this node draws behind.
+##
+## One `CanvasItem` gets one side of its parent, and this node needs both: the
+## perimeter ink belongs behind the stylebox with the highlighter, and the rule
+## belongs in front of it. Behind, a two-pixel line is swamped -- the highlighter
+## survives back there only because it is a wash across the whole control and the
+## eye reads the tint shift, which a line does not get.
+##
+## So the rule is a sibling laid on the same parent, added after this node and
+## therefore drawn after it. Same shape as the paper window's slip-and-window
+## pair, for the same reason.
+func _sync_underline_layer() -> void:
+	var parent := get_parent() as Control
+	if parent == null:
+		return
+	var wanted := hover_highlight and _is_underlined()
+	var existing := parent.get_node_or_null("InkUnderline") as UIInkOutline.UnderlineLayer
+	if not wanted:
+		if existing != null:
+			existing.queue_free()
+		return
+	if existing != null:
+		existing.outline = self
+		existing.queue_redraw()
+		return
+	var layer := UnderlineLayer.new()
+	layer.name = "InkUnderline"
+	layer.outline = self
+	parent.add_child(layer)
+	parent.move_child(layer, parent.get_child_count() - 1)
+
+
+## A bare surface whose only job is to be on the other side of the parent.
+##
+## It holds no state of its own -- the geometry, the seed and the sweep all live
+## on the outline it belongs to, and this simply asks that node to paint onto it.
+class UnderlineLayer extends Control:
+	var outline: UIInkOutline = null
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_meta("ui_style_exempt", true)
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		if outline != null and is_instance_valid(outline):
+			outline.paint_underline(self)
 
 
 func _notification(what: int) -> void:
@@ -494,6 +604,10 @@ func _draw_ribbon(
 ## is coloured. The stylebox itself is transparent for these tiers -- this band
 ## *is* the fill, not a decoration over one.
 func _draw_highlight(sweep: float) -> void:
+	## Underlined controls paint nothing here -- their mark is on the layer in
+	## front of the parent, which repaints itself off the same sweep.
+	if _is_underlined():
+		return
 	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA)
 	## Where the band sat relative to the word this time, and whether the hand
 	## ran level across it. Both drawn from the control's own seed.
@@ -535,6 +649,53 @@ func _draw_highlight(sweep: float) -> void:
 		),
 		Color(band, HIGHLIGHT_ALPHA * 0.28)
 	)
+
+
+## A rule drawn under a whole line, for controls a highlighter would be wrong on.
+##
+## Always left to right. The 30% chance of a reversed stroke is right for a
+## highlighter -- a hand going back over a word does not always start at the same
+## end -- and wrong here, because underlining is a reading gesture that follows
+## the text, and a long row is exactly where a backwards stroke is most visible.
+##
+## The line lifts slightly at its far end rather than stopping square: a pen
+## leaving the paper thins out, and the last few pixels of a flick are the part
+## that says a hand did it.
+func paint_underline(surface: CanvasItem) -> void:
+	var travelled := clampf(highlight_sweep, 0.0, 1.0)
+	if travelled <= 0.001:
+		return
+	var ink := Color(_highlighter_ink(), HIGHLIGHT_ALPHA * 2.4)
+	var start := -UNDERLINE_OVERSHOOT
+	var finish := size.x + UNDERLINE_OVERSHOOT
+	var tip := lerpf(start, finish, travelled)
+	## Where the rule sits, and how much it runs downhill -- both from the
+	## control's own seed, so one row is not a copy of the row above it.
+	var baseline := minf(
+		size.y * UNDERLINE_BASELINE, size.y - UNDERLINE_EDGE_CLEARANCE
+	) + (_unit(211) - 0.5) * 2.0
+	var fall := (_unit(223) - 0.5) * 3.0
+
+	var steps := maxi(int((tip - start) / 12.0), 2)
+	var points := PackedVector2Array()
+	for index in range(steps + 1):
+		var along := float(index) / float(steps)
+		var x := lerpf(start, tip, along)
+		var y := baseline + fall * along + _wander(index * 7 + 311)
+		points.append(Vector2(x, y))
+	if points.size() < 2:
+		return
+	surface.draw_polyline(points, ink, UNDERLINE_WIDTH, true)
+	## The lift. Only once the stroke is most of the way across, because a pen
+	## that thins from the moment it lands is a pen that never pressed down.
+	if travelled > 0.72:
+		var tail := points[points.size() - 1]
+		var before := points[points.size() - 2]
+		var direction := (tail - before).normalized()
+		surface.draw_line(
+			tail, tail + direction * 4.0,
+			Color(ink, ink.a * 0.45), UNDERLINE_WIDTH * 0.6, true
+		)
 
 
 ## One pass of the tip, as a closed strip: along the upper edge and back along

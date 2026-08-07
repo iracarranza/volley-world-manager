@@ -3,7 +3,7 @@ extends RefCounted
 
 ## The anatomy every full-screen page in this game shares.
 ##
-## The career dashboard established it in `.tscn` form and the three screens
+## The journal established it in `.tscn` form and the three screens
 ## added since -- training, the daily schedule, scouting -- were each built in
 ## code from a bare `MarginContainer`, so each one drew its title as a loose
 ## label on the raw page and floated its controls with nothing under them. They
@@ -11,7 +11,7 @@ extends RefCounted
 ## body, and in Molten no background at all, because the backdrop node is part of
 ## the anatomy too and none of them had one.
 ##
-## Rather than copy the dashboard's node tree into three scripts, this builds it
+## Rather than copy the journal's node tree into three scripts, this builds it
 ## once. A screen calls `build` and gets back the content box to fill; the
 ## ribbon, the card and the page under both are the shell's business.
 ##
@@ -21,7 +21,7 @@ extends RefCounted
 
 const UIBackdrop := preload("res://scenes/components/ui_backdrop.gd")
 
-## Matched to `career_dashboard.tscn` rather than chosen. Two pages an inch apart
+## Matched to `journal_screen.tscn` rather than chosen. Two pages an inch apart
 ## in their margins read as a bug in the one the player sees second.
 const PAGE_MARGIN_X: int = 18
 const PAGE_MARGIN_Y: int = 14
@@ -72,7 +72,7 @@ static func build(
 	margin.add_child(root)
 
 	## The ribbon. Title on the left taking the slack, actions on the right, in
-	## the dashboard's own order and at its own type size.
+	## the journal's own order and at its own type size.
 	var ribbon := HBoxContainer.new()
 	ribbon.add_theme_constant_override("separation", RIBBON_SEPARATION)
 	root.add_child(ribbon)
@@ -107,7 +107,7 @@ static func build(
 	return shell
 
 
-## A ribbon action, built the way the dashboard's header buttons are.
+## A ribbon action, built the way the journal's ribbon buttons are.
 static func action(text: String, tooltip: String = "") -> Button:
 	var button := Button.new()
 	button.text = text

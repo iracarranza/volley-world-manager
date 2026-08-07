@@ -21,13 +21,44 @@ extends Control
 ## half lingers slightly.
 const COVER_SECONDS: float = 0.20
 const REVEAL_SECONDS: float = 0.28
+
+## How long the sheet sits still, fully across, before it leaves.
+##
+## Without this the swap was visible under the sheet, and the cause was not the
+## timing but the geometry: the sheet was exactly one screen wide, so it covered
+## the screen for a single instant and the reveal began on the very next frame.
+## The incoming screen got one frame to lay itself out, and a Godot container
+## does not finish laying out in one frame -- so the trailing edge uncovered a
+## page that was still settling.
+##
+## A hold is the cheaper half of the fix. Roughly seven frames at 60Hz, which is
+## enough for the incoming screen's containers to resolve and short enough that
+## it reads as the sheet being set down rather than as a pause.
+const HOLD_SECONDS: float = 0.12
+
+## How much wider than the screen the sheet is drawn.
+##
+## The other half of the fix. At exactly 1.0 there is no position where the sheet
+## covers with any margin, so a single frame of drift at either end shows the
+## page behind it. A quarter of a screen of slack means "covered" is a range
+## rather than a point.
+const SHEET_SCALE: float = 1.25
+
 ## How far past the edge the sheet starts and ends, as a share of width. A sheet
 ## that starts exactly at the edge shows its corner on the first frame.
 const OVERSHOOT: float = 0.08
 
+## Where the sheet's left edge sits, in screen widths, at each stage.
+##
+## Fully clear to the left, centred over the screen with the slack split evenly
+## either side, then fully clear to the right.
+const START_POSITION: float = -SHEET_SCALE - OVERSHOOT
+const COVERED_POSITION: float = -(SHEET_SCALE - 1.0) * 0.5
+const END_POSITION: float = 1.0 + OVERSHOOT
+
 signal covered
 
-var _sheet_position: float = -1.0 - OVERSHOOT
+var _sheet_position: float = START_POSITION
 var _tween: Tween = null
 var _sheet_color: Color = Color(0.09, 0.10, 0.13, 1.0)
 var _edge_color: Color = Color(0.02, 0.02, 0.03, 1.0)
@@ -56,18 +87,24 @@ func play(midpoint: Callable) -> void:
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
 	visible = true
-	_sheet_position = -1.0 - OVERSHOOT
+	_sheet_position = START_POSITION
 	queue_redraw()
 	_tween = create_tween()
-	_tween.tween_method(_set_sheet_position, -1.0 - OVERSHOOT, 0.0, COVER_SECONDS) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_tween.tween_method(
+		_set_sheet_position, START_POSITION, COVERED_POSITION, COVER_SECONDS
+	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	## The swap happens at the *start* of the hold rather than at the instant of
+	## coverage, so the incoming screen has the whole hold to lay itself out
+	## before anything of it is uncovered.
 	_tween.tween_callback(func() -> void:
 		if midpoint.is_valid():
 			midpoint.call()
 		covered.emit()
 	)
-	_tween.tween_method(_set_sheet_position, 0.0, 1.0 + OVERSHOOT, REVEAL_SECONDS) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_tween.tween_interval(HOLD_SECONDS)
+	_tween.tween_method(
+		_set_sheet_position, COVERED_POSITION, END_POSITION, REVEAL_SECONDS
+	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_tween.tween_callback(func() -> void: visible = false)
 
 
@@ -80,11 +117,12 @@ func _draw() -> void:
 	if not visible:
 		return
 	var offset := _sheet_position * size.x
-	draw_rect(Rect2(Vector2(offset, 0.0), size), _sheet_color)
+	var sheet_width := size.x * SHEET_SCALE
+	draw_rect(Rect2(Vector2(offset, 0.0), Vector2(sheet_width, size.y)), _sheet_color)
 	## The lead edge. Two lines rather than a gradient: the interface is drawn
 	## with a pen everywhere else, and a soft edge here would be the only airbrush
 	## in the game.
-	var edge_x := offset + size.x
+	var edge_x := offset + sheet_width
 	draw_line(
 		Vector2(edge_x, 0.0), Vector2(edge_x, size.y), _edge_color, 3.0
 	)

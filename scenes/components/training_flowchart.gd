@@ -3,25 +3,22 @@ extends Control
 
 ## The training screen's front page: the rally as a loop you can click.
 ##
-## Training was a dropdown on the career dashboard's Team tab -- one activity for
+## Training was a dropdown on the journal's Team tab -- one activity for
 ## the whole club, chosen from a list, with no sense that the phases of a rally
 ## are separate things a squad can be sent at. A flowchart says the thing the
 ## list could not: these are the six moments a point is decided in, they happen
 ## in an order, and the order comes back round.
 ##
-## The edges are the engine's real phase order rather than a tidy ring. Serve
-## receive is its own node because the engine treats it as its own phase -- its
-## own formation, its own zone type, its own claim path -- while floor defence
-## sits with blocking, because the block is what defines the space the floor
-## covers. Transition is drawn as the edge back to setting, because that is what
-## it is: the same offence, entered from a dig instead of a pass.
+## The edges are the engine's real phase order. Serve receive is its own node
+## because the engine treats it as its own phase -- its own formation, its own
+## zone type, its own claim path -- while floor defence sits with blocking,
+## because the block is what defines the space the floor covers. Transition is
+## drawn as the edge back to setting, because that is what it is: the same
+## offence, entered from a dig instead of a pass.
 
 ## The phases, their place on the chart in normalised space, and the training
 ## activity each one sends a squad to.
 ##
-## Positions are laid out as a loop that reads left to right along the top and
-## back along the bottom, so the eye follows a point through a rally rather than
-## around a circle with no start.
 ## The rally is not a row of boxes. It is a circuit that comes back round, and
 ## the drawing should say so before any label does.
 ##
@@ -31,9 +28,10 @@ extends Control
 ## arm on the left, because a point is *entered* once and then loops until it
 ## ends; and physical work sits under the arm because it is what everything else
 ## is standing on rather than a phase of anything.
-const RING_CENTRE := Vector2(0.66, 0.50)
-const RING_RADIUS := Vector2(0.22, 0.31)
-
+##
+## The ring is written as literal positions rather than derived from a centre and
+## a radius: the entry arm is not on the ring, so a generated ring would have to
+## be overridden for three of the seven nodes anyway.
 const NODES: Array[Dictionary] = [
 	{
 		"id": "serve", "label": "Serving", "activity": "Serving",
@@ -77,9 +75,8 @@ const NODES: Array[Dictionary] = [
 ## the transition loop back into offence.
 ##
 ## `bow` is which way the edge arcs: positive bends one way off the straight
-## line, negative the other, zero draws straight. The signs are chosen so the top
-## row arcs upward and the bottom row arcs downward, which makes the whole figure
-## read as one circuit turning anticlockwise rather than as seven separate links.
+## line, negative the other, zero draws straight.
+##
 ## Every ring edge bows *outward* from the ring's centre, by the same amount, so
 ## the four of them together trace one continuous circle rather than four
 ## separate links that happen to meet. That is the whole trick behind the

@@ -1,4 +1,4 @@
-class_name VolleyballCareerDashboard
+class_name VolleyballJournalScreen
 extends Control
 
 signal play_match_requested
@@ -7,7 +7,7 @@ signal title_requested
 ## dashboard raises these; `Application` owns the routing, the same way it owns
 ## every other screen change.
 signal training_requested
-signal recruitment_requested
+signal scouting_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -274,7 +274,7 @@ func _ready() -> void:
 		var scouting_button := Button.new()
 		scouting_button.text = "Scouting"
 		scouting_button.pressed.connect(
-			func() -> void: recruitment_requested.emit()
+			func() -> void: scouting_requested.emit()
 		)
 		header.add_child(scouting_button)
 		header.move_child(scouting_button, %TitleButton.get_index())
@@ -378,10 +378,14 @@ func _input(event: InputEvent) -> void:
 			_hide_advance_reveal()
 			_toggle_nav_dropdown()
 		KEY_ESCAPE:
-			if not _advance_revealed and not _nav_dropdown_open:
+			## Escape dismisses the Advance Week reveal and nothing else. Tab is
+			## already the nav dropdown's toggle, so having Escape close it too
+			## was a second key doing a job that had one -- and it spends Escape,
+			## which the desk wants: from the journal, Escape should mean "step
+			## back and look at the whole desk", not "close a menu Tab opened".
+			if not _advance_revealed:
 				return
 			_hide_advance_reveal()
-			_close_nav_dropdown()
 		KEY_H:
 			_navigate("Home")
 		KEY_R:

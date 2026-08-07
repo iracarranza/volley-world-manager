@@ -30,7 +30,7 @@ func _ready() -> void:
 	)
 	if not error.is_empty():
 		print("career error: %s" % error)
-	var packed := load("res://scenes/screens/career_dashboard.tscn") as PackedScene
+	var packed := load("res://scenes/screens/journal_screen.tscn") as PackedScene
 	_dashboard = packed.instantiate()
 	add_child(_dashboard)
 	if _dashboard.has_method("set_light_mode"):

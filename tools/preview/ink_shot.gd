@@ -23,7 +23,7 @@ func _ready() -> void:
 	manager.create_career(
 		"Preview Career", "Harbor City VC", "Landavol", "Club", "Balanced"
 	)
-	var packed := load("res://scenes/screens/career_dashboard.tscn") as PackedScene
+	var packed := load("res://scenes/screens/journal_screen.tscn") as PackedScene
 	_dashboard = packed.instantiate()
 	add_child(_dashboard)
 	if _dashboard.has_method("set_light_mode"):

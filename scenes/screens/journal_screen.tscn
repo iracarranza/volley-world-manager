@@ -1,11 +1,11 @@
 [gd_scene load_steps=5 format=3]
 
-[ext_resource type="Script" path="res://scenes/screens/career_dashboard.gd" id="1"]
+[ext_resource type="Script" path="res://scenes/screens/journal_screen.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/dashboard_card.tscn" id="2"]
 [ext_resource type="Script" path="res://scenes/components/player_attribute_wheel.gd" id="3_wheel"]
 [ext_resource type="Script" path="res://scenes/components/ui_backdrop.gd" id="4_backdrop"]
 
-[node name="CareerDashboard" type="Control"]
+[node name="Journal" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
