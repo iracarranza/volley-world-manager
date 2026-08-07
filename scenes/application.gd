@@ -10,6 +10,7 @@ const TrainingScreenScript := preload("res://scenes/screens/training_screen.gd")
 const RecruitmentScreenScript := preload(
 	"res://scenes/screens/recruitment_screen.gd"
 )
+const ScheduleScreenScript := preload("res://scenes/screens/schedule_screen.gd")
 const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -24,6 +25,7 @@ var _wipe: ScreenWipe = null
 ## from the career. A .tscn for either would be an empty node with a script.
 var _training_screen: VolleyballTrainingScreen = null
 var _recruitment_screen: VolleyballRecruitmentScreen = null
+var _schedule_screen: VolleyballScheduleScreen = null
 
 
 func _ready() -> void:
@@ -59,6 +61,12 @@ func _ready() -> void:
 	_recruitment_screen.visible = false
 	add_child(_recruitment_screen)
 	_recruitment_screen.back_requested.connect(_show_dashboard)
+	_schedule_screen = ScheduleScreenScript.new()
+	_schedule_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_schedule_screen.visible = false
+	add_child(_schedule_screen)
+	_schedule_screen.back_requested.connect(_show_training)
+	_training_screen.schedule_requested.connect(_show_schedule)
 	career_dashboard.training_requested.connect(_show_training)
 	career_dashboard.recruitment_requested.connect(_show_recruitment)
 	## Last, so the sheet covers everything including the screens added above.
@@ -88,7 +96,7 @@ func _show_only(screen: Control) -> void:
 func _swap_to(screen: Control) -> void:
 	for candidate in [
 		title_screen, new_career_screen, career_dashboard, match_center,
-		_training_screen, _recruitment_screen,
+		_training_screen, _recruitment_screen, _schedule_screen,
 	]:
 		if candidate != null:
 			candidate.visible = candidate == screen
@@ -173,3 +181,8 @@ func _show_training() -> void:
 func _show_recruitment() -> void:
 	_recruitment_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_show_only(_recruitment_screen)
+
+
+func _show_schedule() -> void:
+	_schedule_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_schedule_screen)
