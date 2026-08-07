@@ -179,6 +179,82 @@ static func evaluate_roster(
 	}
 
 
+## Traits that move a voli's workable hours.
+##
+## `traits` has been on `VolleyballPlayer` since the model was written and read
+## by nothing -- it turned up in the inert-attribute audit alongside `arm_speed`
+## and `feinting`. This gives it its first job, and the schedule is the natural
+## place for it: whether somebody can train at dawn is exactly the kind of fact a
+## trait should carry, and it is a fact with a consequence rather than a label on
+## a profile page.
+##
+## The shift is in blocks and applies to both ends of the sensible window, so an
+## early riser gains morning and loses evening rather than gaining a longer day.
+## Nobody gets more hours; they get different ones.
+const TRAIT_WINDOW_SHIFT := {
+	"Early Riser": -4,
+	"Night Owl": 5,
+}
+## A voli carrying rehab has that many blocks taken out of their day by the
+## physio before the manager sees it.
+const REHAB_BLOCKS: int = 2
+
+
+## The hours this voli can work, as a start/end pair of block indices.
+static func training_window_for(player: VolleyballPlayer) -> Vector2i:
+	var shift := 0
+	if player != null:
+		for trait_name in player.traits:
+			shift += int(TRAIT_WINDOW_SHIFT.get(str(trait_name), 0))
+	return Vector2i(
+		clampi(TRAINING_EARLIEST_BLOCK + shift, 0, DailyScheduleModel.BLOCKS_PER_DAY),
+		clampi(TRAINING_LATEST_BLOCK + shift, 0, DailyScheduleModel.BLOCKS_PER_DAY),
+	)
+
+
+## How much of this voli's scheduled training actually lands, given their own
+## hours rather than the club's.
+##
+## The club-wide `evaluate` uses the default window because a club schedule has
+## no single owner; this is what a personal schedule is judged by, and it is why
+## a night owl on their own late schedule is not being punished for it.
+static func personal_training_yield(
+	schedule: DailySchedule,
+	player: VolleyballPlayer,
+) -> float:
+	if schedule == null:
+		return 0.0
+	var window := training_window_for(player)
+	var total := 0.0
+	for index in range(schedule.blocks.size()):
+		if int(schedule.blocks[index]) != DailyScheduleModel.Activity.TRAINING:
+			continue
+		total += 1.0 if index >= window.x and index < window.y \
+			else OFF_HOURS_TRAINING_YIELD
+	return total
+
+
+## Put the physio's blocks on a day. Called when a voli picks up a knock, so the
+## manager finds the time already gone rather than being asked to donate it.
+static func assign_rehab(schedule: DailySchedule, blocks: int = REHAB_BLOCKS) -> void:
+	if schedule == null:
+		return
+	var placed := 0
+	for index in range(TRAINING_EARLIEST_BLOCK, schedule.blocks.size()):
+		if placed >= blocks:
+			return
+		## Takes free time first and training second. It never takes sleep or a
+		## meal -- a physio who books rehab over somebody's only meal is not a
+		## trade the manager should be handed.
+		var current := int(schedule.blocks[index])
+		if current in [
+			DailyScheduleModel.Activity.FREE,
+			DailyScheduleModel.Activity.TRAINING,
+		]:
+			schedule.blocks[index] = DailyScheduleModel.Activity.REHAB
+			placed += 1
+
+
 static func _duration_label(blocks: int) -> String:
 	var minutes := blocks * DailyScheduleModel.MINUTES_PER_BLOCK
 	if minutes % 60 == 0:

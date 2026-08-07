@@ -1951,6 +1951,44 @@ func _test_minor_region_behaviour() -> void:
 		"a squad all on its own schedules loses cohesion",
 	)
 
+	## Traits move a voli's hours without lengthening their day, and rehab takes
+	## time from the manager rather than asking for it.
+	var owl := club_roster[0].duplicate(true) as VolleyballPlayer
+	owl.traits = ["Night Owl"]
+	var lark := club_roster[0].duplicate(true) as VolleyballPlayer
+	lark.traits = ["Early Riser"]
+	var owl_window: Vector2i = DailyScheduleSystem.training_window_for(owl)
+	var lark_window: Vector2i = DailyScheduleSystem.training_window_for(lark)
+	_check(
+		owl_window.x > lark_window.x and owl_window.y > lark_window.y
+			and (owl_window.y - owl_window.x) == (lark_window.y - lark_window.x),
+		"trait windows shift a voli's hours without lengthening their day",
+	)
+	var late_day := DailySchedule.new()
+	for block_index in range(late_day.blocks.size()):
+		late_day.blocks[block_index] = DailySchedule.Activity.FREE
+	for block_index in range(31, 34):
+		late_day.blocks[block_index] = DailySchedule.Activity.TRAINING
+	_check(
+		DailyScheduleSystem.personal_training_yield(late_day, owl)
+			> DailyScheduleSystem.personal_training_yield(late_day, lark),
+		"a late session lands better for a night owl than for an early riser",
+	)
+	var rehab_day := DailySchedule.new()
+	var training_before := rehab_day.count_of(DailySchedule.Activity.TRAINING)
+	var sleep_before := rehab_day.count_of(DailySchedule.Activity.SLEEP)
+	var meals_before := rehab_day.count_of(DailySchedule.Activity.MEAL)
+	DailyScheduleSystem.assign_rehab(rehab_day)
+	_check(
+		rehab_day.count_of(DailySchedule.Activity.REHAB)
+				== DailyScheduleSystem.REHAB_BLOCKS
+			and rehab_day.count_of(DailySchedule.Activity.SLEEP) == sleep_before
+			and rehab_day.count_of(DailySchedule.Activity.MEAL) == meals_before
+			and rehab_day.count_of(DailySchedule.Activity.TRAINING)
+				<= training_before,
+		"rehab takes free time or training and never sleep or a meal",
+	)
+
 	var format := MATCH_FORMAT_SCRIPT.new()
 	format.best_of_sets = 3
 	format.regular_set_target = 25
