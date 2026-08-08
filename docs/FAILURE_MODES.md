@@ -438,3 +438,38 @@ distribution, and bound it against whatever model in the engine already has an
 opinion about it -- there usually is one. And a symptom seen on screen names a
 *moment*, not a cause: measure the whole population the moment belongs to before
 measuring the moment.
+
+## 17. A number tuned against one instance of a thing, applied to every instance
+
+**What it looks like.** The tactic sheet draws volis as stickers: a traced
+outline, a shaded body, and a die-cut border of constant weight. Constant weight
+is the point of the object, so the border was a constant -- `STICKER_BORDER =
+3.4` px -- and it was chosen while looking at a blocker who filled a third of
+the sheet.
+
+Then the sizing was fixed. A voli stopped being drawn at a share of the panel
+and started being drawn at the metres they occupy, which is correct and which
+made a plan-view figure about thirty pixels tall. At thirty pixels a 3.4 px cut
+on each side meets in the middle: every sticker rendered as a featureless white
+blob on a dark board.
+
+**Why it survived, and how it was nearly misdiagnosed twice.** The blobs were
+white, and the shading palette had a real bug in it at the same time -- `_shade`
+opened with `var light_mode := true`, a stub written in the shape of a decision,
+so the dark theme was being painted in the light palette. Fixing that changed
+nothing visible, which was the useful result: it meant the palette was not what
+was being seen. The second guess was that the posterise was collapsing to one
+tone. Measured over the 5,006 opaque pixels of a block bake, the render's
+luminance runs 0.000 to 0.799 with a median of 0.283, and the three tone buckets
+came out 283 / 1,397 / 3,326 -- spread across all three, exactly as designed, and
+none of it visible under the border. Only after both candidates were measured
+and cleared was the border the remaining suspect.
+
+**The rule:** a constant is only constant with respect to something. Write down
+what -- pixels, metres, or a share of the object it belongs to -- and check that
+the answer still holds at the smallest and largest instance the code can
+produce. "Constant weight" was a claim about the *object*, and the object varies
+in size on screen, so the honest encoding is a share with a floor and a ceiling.
+A stub written as a plausible-looking assignment (`var light_mode := true`) is
+the same defect wearing different clothes: it reads as a decision and it is
+actually an unasked question.

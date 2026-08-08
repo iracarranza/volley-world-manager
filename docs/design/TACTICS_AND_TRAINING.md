@@ -366,6 +366,37 @@ quarter answers neither, and **that is its job**: it is the only view where
 depth and lateral position are legible at once, so it is what you look at to
 *read* a plan the other two authored.
 
+### The three views are one camera, and the unit is the metre
+
+The views are three positions on a single orbit around the court, written as a
+yaw and an elevation: three quarter stands 38° round from square-on and 30°
+above the floor, along the net swings to 76° and drops to 12°, top down carries
+on to 90° and 90°. Reading them in that order *is* the orbit, and keeping the
+swing in one direction is why the near court stays on the left in all three -- a
+view that flips which end is yours is one a coach has to re-learn on every
+toggle.
+
+Everything on the sheet is placed in metres and projected through that one map:
+the net is 2.43 m because it is 2.43 m, the attack line is 3 m back, a voli is
+as tall as the bake says they are. **A view's pixels-per-metre is derived, not
+chosen** -- project the box of world it has to hold, measure what comes back,
+divide by what the panel has.
+
+This is the correction of a specific class of mistake rather than a
+generalisation for its own sake. Each view used to build its own geometry from
+shares of the panel, and the consequences were all of one kind: the same net drew
+at two different heights depending on which view you were in, a blocker came out
+roughly four metres tall in the plan view because shrinking the court grew the
+voli, the plan view showed half a court, three quarter drew a shallow oblique
+while baking its bodies at 14° of yaw -- which is not three quarters of anything
+-- and a voli dropped in one view reappeared somewhere unrelated in another,
+because the sheet was remembering where the cursor had been rather than where
+the voli was.
+
+The rule that falls out: **a placement is stored in court metres, never in
+panel shares.** A share is only the same place while the panel and the camera
+both hold still, and neither does.
+
 ### The empty cells are a design gap, not a state to handle
 
 Six of the twelve cells are blank. Two pieces of interface behaviour exist only

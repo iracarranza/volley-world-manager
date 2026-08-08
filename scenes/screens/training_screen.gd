@@ -253,6 +253,12 @@ func _sticky_chosen(heading: String, option: String) -> void:
 func _request_headshots() -> void:
 	if _worksheet == null or _worksheet.stickers() == null:
 		return
+	## Wired here rather than where the page is built, because the worksheet's own
+	## `_ready` has not run at build time -- the page is assembled before it is
+	## added to the tab container -- so its baker is still null. The same reason
+	## this whole call is deferred.
+	if not _worksheet.stickers().stickers_reset.is_connected(_request_headshots):
+		_worksheet.stickers().stickers_reset.connect(_request_headshots)
 	var squad := _tray_profiles()
 	for slot in range(squad.size()):
 		var profile: Dictionary = squad[slot]
@@ -308,7 +314,7 @@ func _drop_voli(slot: int, at: Vector2) -> void:
 	if local.x < 0.0 or local.y < 0.0 \
 			or local.x > _worksheet.size.x or local.y > _worksheet.size.y:
 		return
-	_worksheet.place_voli(slot, local / _worksheet.size)
+	_worksheet.place_voli(slot, local)
 
 
 ## Picking a phase, and picking a view.

@@ -36,6 +36,11 @@ extends Node
 const ACTOR_SCENE := preload("res://scenes/components/player_actor_3d.tscn")
 
 signal sticker_ready(key: String)
+## Fired when the cache is dropped, so whoever asked for a sticker knows to ask
+## again. There is no way to repaint a baked one -- the tones are burnt into the
+## texture -- so a theme change is a rebake, and the alternative is a caller
+## holding a texture in the wrong palette forever.
+signal stickers_reset
 
 ## What the bake renders into. Bigger than it is drawn, so the border trace has
 ## sub-pixel detail to simplify away rather than the staircase it would get from
@@ -62,6 +67,16 @@ const TONE_LIGHT_DARK := Color(0.72, 0.70, 0.66)
 const TONE_MID_DARK := Color(0.48, 0.45, 0.46)
 const TONE_DARK_DARK := Color(0.26, 0.24, 0.29)
 
+## Which of the two palettes the bakes are being laid down in.
+##
+## Was a local `var light_mode := true` inside `_shade`, which is a stub written
+## as if it were a decision -- so the dark theme got the light palette and every
+## voli came out a near-white blob on a near-black sheet, with a pale die-cut
+## border on a pale body and no edge at all. The tell was that the figures were
+## the brightest thing on a dark board, which is exactly what the sticky note's
+## own comment warns against.
+var light_mode: bool = true
+
 var _viewport: SubViewport = null
 var _actor: PlayerActor3D = null
 var _camera: Camera3D = null
@@ -76,10 +91,41 @@ class Sticker extends RefCounted:
 	var texture: ImageTexture
 	var contours: Array = []
 	var aspect: float = 1.0
+	## How many world metres tall the cropped image is.
+	##
+	## The bake camera is orthogonal, so its `size` *is* the world height of the
+	## uncropped frame -- and once the crop is known, so is the world height of
+	## what survived. That turns "how big should this sticker be" from a number
+	## somebody picked into arithmetic: metres times the view's pixels-per-metre.
+	## Without it a voli was drawn at a share of the panel and came out roughly
+	## four metres tall in a plan view.
+	var world_height: float = 2.0
+	## And how far the bottom edge of the crop sits *below* the voli's own ground
+	## point, in metres on the same axis. Negative for anything airborne.
+	##
+	## This is what lets a caller place a sticker by saying where the voli is
+	## **standing** rather than where the image goes. A jumping body's crop starts
+	## above the floor, and by exactly the height of the jump the pose already
+	## contains -- so a drawing that anchors the crop's bottom to the floor puts a
+	## blocker at full extension flat on the ground, which is what it did. The
+	## alternative was writing the jump out a second time in the drawing code,
+	## where it drifts the moment the pose changes.
+	var ground_offset: float = 0.0
 
 
 func sticker(key: String) -> Sticker:
 	return _baked.get(key, null) as Sticker
+
+
+## Drop every baked sticker, because the palette they were baked in is no longer
+## the one on screen. Callers re-request off `stickers_reset`.
+func set_palette(is_light: bool) -> void:
+	if light_mode == is_light:
+		return
+	light_mode = is_light
+	_baked.clear()
+	_queue.clear()
+	stickers_reset.emit()
 
 
 ## Ask for a pose. Returns immediately; `sticker_ready` fires when the bake lands.
@@ -178,7 +224,13 @@ func _bake(job: Dictionary) -> void:
 	_camera.position = focus + Vector3(
 		0.0, sin(-pitch) * radius, cos(-pitch) * radius
 	)
-	_camera.look_at(focus, Vector3.UP)
+	## The up hint is world up *projected into the camera's own plane*, which for
+	## anything short of straight down is the same thing `Vector3.UP` would give.
+	## At straight down it is not: UP is parallel to the look direction there, and
+	## `look_at` has no basis to build, so the plan-view bake came out of a
+	## degenerate transform. This is perpendicular to the look direction at every
+	## pitch by construction.
+	_camera.look_at(focus, Vector3(0.0, cos(pitch), sin(pitch)))
 
 	for _index in range(3):
 		await get_tree().process_frame
@@ -213,6 +265,13 @@ func _bake(job: Dictionary) -> void:
 	built.contours = _trace(cropped)
 	built.texture = ImageTexture.create_from_image(_shade(cropped))
 	built.aspect = bounds.size.x / bounds.size.y
+	built.world_height = _camera.size * (bounds.size.y / float(BAKE_SIZE.y))
+	## Where the crop's bottom edge is relative to the voli's own feet, measured
+	## down the camera's vertical axis in metres. The camera looks at `focus`, so
+	## the frame centre is that point; the ground under the voli is `focus.y` metres
+	## of world-up below it, which the tilt foreshortens by `cos(pitch)`.
+	built.ground_offset = (bounds.end.y / float(BAKE_SIZE.y) - 0.5) * _camera.size \
+		- focus.y * cos(pitch)
 	_baked[str(job["key"])] = built
 	sticker_ready.emit(str(job["key"]))
 
@@ -250,7 +309,6 @@ func _body_bounds(image: Image) -> Rect2:
 ## and cooler and more saturated in the shadow, which is what a coloured pencil
 ## does and what a greyscale ramp cannot.
 func _shade(source: Image) -> Image:
-	var light_mode := true
 	var shaded := Image.create(
 		source.get_width(), source.get_height(), false, Image.FORMAT_RGBA8
 	)

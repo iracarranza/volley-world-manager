@@ -54,15 +54,84 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 ## One scale per view instead, in pixels per metre, fitted to whatever the panel
 ## has. Then a net is 2.43 m in both because it is 2.43 m, and the check is
 ## arithmetic rather than eyesight.
+## Where each view stands, as a pair of angles.
+##
+## `theta` swings around the court and `phi` tilts above it -- 0 is standing on
+## the floor, 90 is directly overhead. One pair per view drives *both* the
+## drawing and the bake camera, so a body can no longer be seen from a different
+## angle than the court it is standing on. They disagreed before: three quarter
+## drew a shallow oblique and baked its volis at 14 degrees of yaw, which is not
+## three quarters of anything.
+## One camera, orbiting. Three quarter stands 38 degrees round from square-on and
+## 30 above the floor; the along-net view swings to 80 and drops to 12; the plan
+## view carries on to 90 and 90. Reading them in that order is the orbit, and
+## keeping them in one direction is why the near court stays on the left in all
+## three -- a view that flips which end is yours is a view a coach has to
+## re-learn every time they toggle.
+##
+## Twelve degrees of tilt in the along-net view rather than nothing at all. At a
+## true zero the two ends of the net sit on one line and the far half of the court
+## does not exist, which is geometrically honest and useless: the reason to sight
+## down the tape is to measure distances *from* it, and a viewer with no far side
+## has nothing to measure them against.
+const VIEW_ANGLES := {
+	VIEW_TOP_DOWN: Vector2(90.0, 90.0),
+	VIEW_THREE_QUARTER: Vector2(38.0, 30.0),
+	VIEW_ALONG_NET: Vector2(76.0, 14.0),
+}
+
+## And how much of the world each view has to hold, as a box in metres.
+##
+## This is the other half of the same fix. Angles alone do not fix a scale: the
+## drawing still has to decide what is in frame, and every view used to decide
+## that separately in shares of the panel. Given a box, the fit is arithmetic --
+## project its eight corners, take the extent, divide -- and a metre means the
+## same thing everywhere within a view because there is only one number.
+##
+## The boxes differ because the views are for different questions, not because
+## somebody liked a framing. Top down holds the **whole court**, both halves,
+## because a plan view that stops at the net cannot show a rally. Three quarter
+## keeps the near court and six metres past the net, which is as far as an
+## attack's consequences reach. Along the net crops depth hardest, because it is
+## a ruler for distances *from* the tape and everything it measures is inside
+## seven metres.
+const VIEW_BOX := {
+	VIEW_TOP_DOWN: [Vector3(-5.1, -9.8, 0.0), Vector3(5.1, 9.8, 0.0)],
+	VIEW_THREE_QUARTER: [Vector3(-5.4, -5.0, 0.0), Vector3(5.4, 8.6, 3.3)],
+	VIEW_ALONG_NET: [Vector3(-4.9, -3.2, 0.0), Vector3(4.9, 7.2, 3.3)],
+}
+
 const NET_HEIGHT_M: float = 2.43
 const COURT_HALF_M: float = 9.0
 const COURT_WIDTH_M: float = 9.0
+const HALF_WIDTH_M: float = 4.5
+const ATTACK_LINE_M: float = 3.0
 ## Headroom above the tape for a blocker's hands, and a margin so nothing touches
 ## the edge of the sheet.
 const HEADROOM_M: float = 1.25
-const MARGIN_SHARE: float = 0.08
+const MARGIN_SHARE: float = 0.07
+## The band across the top the heading lives in, and the strip along the foot the
+## "nothing to set from here" line needs. Taken out of the fit rather than drawn
+## over, because a court that runs under its own title is a court nobody sized.
+const HEAD_SHARE: float = 0.17
+const FOOT_SHARE: float = 0.09
 
-const STICKER_BORDER: float = 3.4
+## Constant *for a given sticker*, not constant in pixels.
+##
+## It was a flat 3.4 px, tuned against a blocker who filled a third of the sheet.
+## Once a voli was sized off the metres they actually occupy, a plan-view figure
+## came out about thirty pixels tall and a 3.4 px cut on each side met in the
+## middle -- the body vanished under its own edge and every sticker read as a
+## white blob. The render underneath was innocent: measured, its luminance runs
+## 0.00 to 0.80 with a median of 0.28, so the posterise was spreading across all
+## three tones exactly as intended and none of it was visible.
+##
+## A share of the sticker's height with a floor and a ceiling. A die cut does not
+## vary with what is printed on it, but it also does not scale with a drawing --
+## and what is being kept here is the *look* of a cut edge, which is a proportion.
+const STICKER_BORDER_SHARE: float = 0.022
+const STICKER_BORDER_MIN: float = 0.9
+const STICKER_BORDER_MAX: float = 3.4
 const STICKER_SHADOW_OFFSET := Vector2(3.0, 4.0)
 const STICKER_SHADOW_ALPHA: float = 0.26
 
@@ -247,6 +316,8 @@ func _ready() -> void:
 	_stickers.name = "VoliStickers"
 	add_child(_stickers)
 	_stickers.sticker_ready.connect(_on_sticker_ready)
+	_stickers.stickers_reset.connect(_request_stickers)
+	_stickers.light_mode = light_mode
 	_request_stickers()
 
 
@@ -273,11 +344,17 @@ func stickers() -> UIVoliSticker:
 ## Where the camera stands for each view, so a body is seen from where the
 ## drawing is seen from. A sticker baked head-on and dropped into a plan view is
 ## a figure standing up out of the floor.
-const BAKE_ANGLES := {
-	VIEW_TOP_DOWN: Vector2(0.0, -62.0),
-	VIEW_THREE_QUARTER: Vector2(-14.0, -8.0),
-	VIEW_ALONG_NET: Vector2(-78.0, -4.0),
-}
+##
+## **Derived, not listed.** They used to be their own table and the two tables
+## disagreed: three quarter drew a shallow oblique and baked its volis at 14
+## degrees of yaw and 8 of pitch, which is not three quarters of anything, and
+## top down drew straight down and baked at 62. A body seen from one angle
+## standing on a floor drawn from another is the same defect as a net that is two
+## different heights -- two drawings of one scene that do not agree about where
+## the viewer is. One table now, and the bake reads it.
+func _bake_angles(for_view: String) -> Vector2:
+	var angles: Vector2 = VIEW_ANGLES.get(for_view, Vector2(-38.0, 32.0))
+	return Vector2(-angles.x, -angles.y)
 
 ## How high the baked blockers are jumping, shared by the bake and the placement
 ## so the two cannot drift.
@@ -308,7 +385,7 @@ func _sticker_key(who: String, for_view: String) -> String:
 ## blink in the middle of a view toggle, which is where it would be felt.
 func _request_stickers() -> void:
 	for for_view in VIEWS:
-		var angles: Vector2 = BAKE_ANGLES.get(for_view, Vector2.ZERO)
+		var angles := _bake_angles(for_view)
 		for profile in BLOCKER_PROFILES:
 			var built: Dictionary = (profile as Dictionary).duplicate()
 			_stickers.request(
@@ -319,20 +396,29 @@ func _request_stickers() -> void:
 
 
 ## Lay a baked sticker down: shadow, shaded body, then the cut border.
-## `feet` is where the body touches the floor, not where its middle is.
 ##
-## Anchoring by the centre meant the figure's contact point moved whenever the
-## pose or the crop changed, so a blocker floated a good forty pixels above the
-## shadow drawn at their own feet. Anchoring by the bottom of the box makes the
-## two agree by construction rather than by a constant somebody tuned.
-func _draw_sticker(key: String, feet: Vector2, height: float) -> bool:
+## `ground` is the projection of the patch of floor the voli is standing on, and
+## `scale` is the view's pixels per metre. **Nothing here picks a size.** The bake
+## knows how many metres tall the crop is and how far its bottom edge sits from
+## the voli's own ground point, so both the height and the lift are arithmetic.
+##
+## Two tuned numbers died to get here. The height was a share of the panel, which
+## made a blocker about four metres tall in the plan view -- shrink the court and
+## the voli grew. The lift was `BLOCK_ELEVATION * 0.82`, the jump written out a
+## second time in the drawing, so a pose change silently left the body hanging off
+## its own shadow. Both now come off the render that is already being drawn.
+func _draw_sticker(key: String, ground: Vector2, scale: float) -> bool:
 	if _stickers == null:
 		return false
 	var built: UIVoliSticker.Sticker = _stickers.sticker(key)
 	if built == null or built.contours.is_empty():
 		return false
+	var height := built.world_height * scale
 	var box := Vector2(height * built.aspect, height)
-	var origin := feet - Vector2(box.x * 0.5, box.y)
+	var origin := Vector2(
+		ground.x - box.x * 0.5,
+		ground.y + built.ground_offset * scale - box.y
+	)
 
 	## 1. The shadow. Without it a sticker is a shape with a thick outline; with
 	## it the shape is above the paper.
@@ -347,14 +433,17 @@ func _draw_sticker(key: String, feet: Vector2, height: float) -> bool:
 	if built.texture != null:
 		draw_texture_rect(built.texture, Rect2(origin, box), false)
 
-	## 3. The cut edge, at constant weight, hugging its own outline.
+	## 3. The cut edge, hugging its own outline at a weight this sticker can carry.
+	var cut := clampf(
+		height * STICKER_BORDER_SHARE, STICKER_BORDER_MIN, STICKER_BORDER_MAX
+	)
 	for contour in built.contours:
 		var edge := PackedVector2Array()
 		for point in (contour as PackedVector2Array):
 			edge.append(origin + point * box)
 		if edge.size() >= 3:
-			draw_polyline(edge, _ink(), STICKER_BORDER, true)
-			draw_line(edge[edge.size() - 1], edge[0], _ink(), STICKER_BORDER, true)
+			draw_polyline(edge, _ink(), cut, true)
+			draw_line(edge[edge.size() - 1], edge[0], _ink(), cut, true)
 	return true
 
 
@@ -365,6 +454,11 @@ func set_light_mode(value: bool) -> void:
 
 func _sync_theme() -> void:
 	light_mode = UIPalette.control_is_light(self)
+	## The stickers carry their palette in the pixels, so a theme switch has to
+	## reach them too -- they are the one thing on this sheet that cannot be
+	## repainted at draw time.
+	if _stickers != null:
+		_stickers.set_palette(light_mode)
 	queue_redraw()
 
 
@@ -426,9 +520,23 @@ func set_overlay(enabled: bool) -> void:
 	queue_redraw()
 
 
-## Put a voli on the court at a unit position.
+## Put a voli where the sheet was clicked, stored as **the place on the court**
+## rather than the place on the page.
+##
+## `at` is local pixels; what is kept is metres. A share of the panel is only the
+## same court position while the panel and the camera both hold still, and
+## neither does -- a voli dropped in the plan view reappeared somewhere unrelated
+## the moment the view changed, because the sheet was remembering the cursor
+## instead of the voli.
 func place_voli(slot: int, at: Vector2) -> void:
-	placements[slot] = at
+	var frame := _view_frame()
+	var on_court := _unproject_floor(at, frame["scale"], frame["origin"])
+	## Refused rather than clamped when it lands off the court. A clamp would put
+	## a voli on the sideline and say nothing; not placing them says the drop
+	## missed, which is what happened.
+	if absf(on_court.x) > HALF_WIDTH_M + 1.0 or absf(on_court.y) > COURT_HALF_M + 1.0:
+		return
+	placements[slot] = on_court
 	queue_redraw()
 
 
@@ -493,6 +601,13 @@ func _draw() -> void:
 	## theme colour lookup per redraw is nothing next to a few hundred strokes,
 	## and it cannot be out of date.
 	light_mode = UIPalette.control_is_light(self)
+	## And the stickers with it. `theme_changed` does not always fire -- a page
+	## built before it is added to its tab container gets its theme by inheritance
+	## rather than by signal -- so the board painted itself dark while the bodies
+	## stayed in the light palette and read as white blobs. Reading it here is the
+	## same fix, and for the same reason, as reading the board colour here.
+	if _stickers != null:
+		_stickers.set_palette(light_mode)
 	draw_rect(Rect2(Vector2.ZERO, size), _board_color())
 	_draw_graph()
 
@@ -554,229 +669,171 @@ func _draw_eraser(progress: float) -> void:
 	)
 
 
+## One routine for all three views.
+##
+## It used to be three, dispatched on `view`, and that dispatch was the defect:
+## each branch built its own court out of shares of the panel, so the same net
+## drew at two different heights, the plan view showed half a court, and a voli
+## dropped in one view landed somewhere else in another. There is only one court;
+## what changes is where you stand.
 func _draw_phase(which: String, alpha: float, reveal: float = 1.0) -> void:
-	match view:
-		VIEW_TOP_DOWN:
-			_draw_top_down(which, alpha, reveal)
-		VIEW_ALONG_NET:
-			_draw_along_net(which, alpha, reveal)
-		_:
-			_draw_three_quarter(which, alpha, reveal)
+	_draw_view(which, alpha, reveal)
 
 
-func _draw_three_quarter(which: String, alpha: float, reveal: float) -> void:
-	## Three quarter draws the wall whatever the phase, because that is the only
-	## thing this angle is better at than the other two. A phase with nothing to
-	## adjust from here still gets the picture -- the view is for reading.
-	_draw_block_phase(alpha, reveal)
-	if which != "Block":
-		_marker_text(
-			"%s — nothing to set from here" % which.to_upper(),
-			Vector2(size.x * 0.06, size.y * 0.95), 13,
-			_ink(), alpha * 0.6, reveal
-		)
-
-
-## Sighted straight down the tape from the antenna: the net is a line, and what
-## the view is *for* is everything measured perpendicular to it.
-func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
+## Every view draws the same three things in the same order -- the floor, then
+## whatever stands on it, then the phase's own marks -- and differs only in where
+## the camera is. The heading and the "nothing to set from here" line are shared
+## too, because they are page furniture rather than drawing.
+func _draw_view(which: String, alpha: float, reveal: float) -> void:
 	var ink := _ink()
-	var board_bottom := size.y - 13.0
+	var frame := _view_frame()
+	var scale: float = frame["scale"]
+	var origin: Vector2 = frame["origin"]
 
-	## Sighting down the tape: what runs across the sheet is the **depth of both
-	## courts** -- nine metres either side of the net -- and what runs up it is
-	## height. One scale for both, so the net is 2.43 m of an eighteen-metre span
-	## and not two thirds of the panel, which is what it was.
-	##
-	## That was the disproportion: this view sized the net off `size.y` and the
-	## three-quarter view sized it off its own share, so the same net came out
-	## roughly twice as tall here.
-	## Six metres either side rather than the full nine.
-	##
-	## A crop, not a distortion -- the scale is still one number for both axes, so
-	## the net is still 2.43 m. But nothing this view exists to measure lives
-	## beyond six metres: set tightness is under a metre off the tape, a setter
-	## releases inside three, and the deepest defender this view has an opinion
-	## about is at six. Fitting eighteen metres in put all of that in the middle
-	## third of the sheet and left the net a hundred pixels tall in a panel three
-	## times that.
-	const ALONG_NET_REACH_M: float = 6.0
-	var scale := _metres(
-		Vector2(ALONG_NET_REACH_M * 2.0, NET_HEIGHT_M + HEADROOM_M)
-	)
-	var floor_y := board_bottom - size.y * 0.08
-	var net_x := size.x * 0.5
-	var tape_top := floor_y - NET_HEIGHT_M * scale
-
-	_marker_text(which.to_upper(), Vector2(size.x * 0.05, size.y * 0.13), 24, ink, alpha, reveal)
-
-	## Not quite square on.
-	##
-	## At a true 90 degrees the net is one line and the far half of the court does
-	## not exist -- geometrically honest and useless, because the reason to sight
-	## down the tape is to measure distances *from* it and a viewer with no far
-	## side has nothing to measure them against. A couple of degrees opens the net
-	## into a narrow band and brings the far court into frame, at almost no cost to
-	## the near-side distances this view exists to show.
-	## Lifted off the floor plane, not just off square.
-	##
-	## Two degrees of yaw opened the net into a band but left the eye level with
-	## the floor, so the near and far halves of the court lay on the same line and
-	## only one of them could be drawn. Raising the viewpoint separates them: the
-	## far sideline rises away from the near one, and the strip between the two
-	## *is* the court, which is what makes a defender's depth something you can
-	## point at rather than infer.
-	##
-	## `rise` is how far a metre of depth away from the viewer lifts on the page.
-	## Small: this view still measures heights against the net, and a steep lift
-	## would foreshorten exactly the axis it exists to show.
-	## The offset a metre of depth away from the viewer gets on the page, as one
-	## vector: sideways and up. Both together read as a court receding; the lift
-	## alone reads as a court standing on its edge, which is what 0.16 gave --
-	## nine metres of it lifted the far sideline a hundred pixels and took the net
-	## with it, so a 2.43 m net drew twice its own height.
-	var yaw := NET_HEIGHT_M * scale * 0.30
-	var rise := 0.055
-
-	## The court as a band between two sidelines rather than as one rule. The near
-	## line is where the viewer stands; the far one is nine metres across the
-	## court and lifted by the raised viewpoint.
-	var far_lift := COURT_WIDTH_M * scale * rise
-	var near_left := Vector2(size.x * 0.05, floor_y)
-	var near_right := Vector2(size.x * 0.95, floor_y)
-	var far_left := near_left + Vector2(yaw, -far_lift)
-	var far_right := near_right + Vector2(yaw, -far_lift)
-	_marker_line(near_left, near_right, ink, alpha, reveal, 3, MARKER_WIDTH * 1.2)
-	_marker_line(far_left, far_right, Color(ink, 0.52), alpha, reveal, 9, MARKER_WIDTH * 0.8)
-	## The two ends, closing the band into a floor.
-	_marker_line(near_left, far_left, Color(ink, 0.34), alpha, reveal, 17, MARKER_WIDTH * 0.5)
-	_marker_line(near_right, far_right, Color(ink, 0.34), alpha, reveal, 19, MARKER_WIDTH * 0.5)
-	## The attack lines three metres either side, drawn right across the band so
-	## they read as lines on a floor rather than as ticks on a rule.
-	for side: float in [-1.0, 1.0]:
-		var at: float = net_x + side * 3.0 * scale
-		_marker_line(
-			Vector2(at, floor_y), Vector2(at + yaw, floor_y - far_lift),
-			Color(ink, 0.44), alpha, reveal, 5 + int(side * 3.0), MARKER_WIDTH * 0.55
-		)
-	## Metre marks along the floor, which is what turns a line into a ruler -- and
-	## this view is a ruler before it is anything else.
-	for metre in range(-6, 7):
-		if metre == 0:
-			continue
-		var tick := net_x + float(metre) * scale
-		_marker_line(
-			Vector2(tick, floor_y), Vector2(tick, floor_y + (7.0 if metre % 3 == 0 else 4.0)),
-			Color(ink, 0.40 if metre % 3 == 0 else 0.24), alpha, reveal,
-			200 + metre, MARKER_WIDTH * 0.35
-		)
 	_marker_text(
-		"near", Vector2(size.x * 0.06, floor_y - 6.0), 11, Color(ink, 0.55), alpha, reveal
+		which.to_upper(), Vector2(size.x * 0.05, size.y * 0.12), 24, ink, alpha, reveal
 	)
 	_marker_text(
-		"far", Vector2(size.x * 0.06 + yaw, floor_y - far_lift - 6.0), 11,
+		view.to_lower(), Vector2(size.x * 0.05, size.y * 0.155), 12,
 		Color(ink, 0.45), alpha, reveal
 	)
 
-	## The net as a narrow band: near tape, far tape, mesh between.
-	var near_top := Vector2(net_x, tape_top)
-	var near_foot := Vector2(net_x, floor_y)
-	## The net crosses the whole band, so its far foot sits on the far sideline.
-	var far_top := near_top + Vector2(yaw, -far_lift)
-	var far_foot := near_foot + Vector2(yaw, -far_lift)
-	_marker_line(near_top, near_foot, ink, alpha, reveal, 11, MARKER_WIDTH * 1.5)
-	_marker_line(far_top, far_foot, Color(ink, 0.58), alpha, reveal, 13, MARKER_WIDTH * 0.9)
-	_marker_line(near_top, far_top, ink, alpha, reveal, 15, MARKER_WIDTH * 1.2)
-	for step in range(1, 8):
-		var down := float(step) / 8.0
-		_marker_line(
-			near_top.lerp(near_foot, down), far_top.lerp(far_foot, down),
-			Color(ink, 0.22), alpha, reveal, 60 + step, MARKER_WIDTH * 0.40
-		)
-	## The padded post beyond the far tape, hatched like the three-quarter one so
-	## the two views agree about what a post is made of.
-	_hatch(
-		Rect2(Vector2(net_x + yaw - 4.0, floor_y - NET_HEIGHT_M * scale * 0.62),
-			Vector2(8.0, NET_HEIGHT_M * scale * 0.62)),
-		Color(ink, 0.30), alpha, reveal, 91
-	)
-	_marker_text(
-		"2.43", Vector2(net_x + yaw + 9.0, tape_top + 4.0), 12,
-		Color(ink, 0.7), alpha, reveal
-	)
+	_draw_court(scale, origin, ink, alpha, reveal)
+	if view == VIEW_TOP_DOWN:
+		## From straight above a net is a line, and drawing the mesh would be drawing
+		## a wall edge-on -- so the plan view gets the tape and the antennae and
+		## nothing else, and spends the space on the zones instead.
+		_draw_zone_numerals(scale, origin, ink, alpha, reveal)
+		for at: float in [-HALF_WIDTH_M, HALF_WIDTH_M]:
+			_marker_circle(
+				_floor_at(at, 0.0, scale, origin), 4.0, MARKER_RED, alpha, reveal,
+				451 + int(at)
+			)
+	else:
+		_draw_net(scale, origin, ink, alpha, reveal)
 
 	match which:
+		"Block":
+			_draw_blockers(scale, origin, ink, alpha, reveal)
 		"Attack":
-			## Set tightness is a horizontal distance from the tape, and the
-			## setter's release is another -- both are exactly what this view
-			## measures and neither is visible from above.
-			var release := net_x - size.x * 0.16
-			var apex := Vector2(release + size.x * 0.05, tape_top - size.y * 0.10)
-			_marker_line(
-				Vector2(release, floor_y), Vector2(release, floor_y - size.y * 0.18),
-				ink, alpha, reveal, 11, MARKER_WIDTH * 0.7
-			)
-			_marker_text("S", Vector2(release - 5.0, floor_y - size.y * 0.20), 15, ink, alpha, reveal)
-			var arc := PackedVector2Array()
-			for step in range(17):
-				var t := float(step) / 16.0
-				var point := Vector2(release, floor_y - size.y * 0.20).lerp(
-					Vector2(net_x - size.x * 0.03, tape_top + size.y * 0.03), t
-				)
-				point.y -= sin(t * PI) * size.y * 0.16
-				arc.append(point)
-			_marker_stroke(arc, MARKER_RED, alpha, reveal, 13, MARKER_WIDTH * 0.8, false)
-			_draw_measure(
-				Vector2(net_x, tape_top - 18.0), Vector2(release, tape_top - 18.0),
-				"release", ink, alpha, reveal, 17
-			)
-			_draw_measure(
-				Vector2(net_x, apex.y), Vector2(net_x - size.x * 0.05, apex.y),
-				"tightness", MARKER_RED, alpha, reveal, 19
-			)
+			_draw_attack_marks(scale, origin, ink, alpha, reveal)
 		"Floor":
-			## How tight the back row plays: a distance from the net, which is the
-			## same axis and the reason both live on this view.
-			for entry in [[0.20, "follow"], [0.34, "deep"]]:
-				var share: float = entry[0]
-				var label: String = entry[1]
-				var at := net_x + size.x * share
-				_marker_circle(Vector2(at, floor_y - 14.0), 11.0, ink, alpha, reveal, 31 + int(share * 100.0))
-				_draw_measure(
-					Vector2(net_x, floor_y + 16.0), Vector2(at, floor_y + 16.0),
-					label, MARKER_RED if share < 0.3 else ink, alpha, reveal,
-					41 + int(share * 100.0)
-				)
-		_:
-			_marker_text(
-				"%s — nothing to set from here" % which.to_upper(),
-				Vector2(size.x * 0.06, size.y * 0.95), 13, ink, alpha * 0.6, reveal
-			)
+			_draw_floor_marks(scale, origin, ink, alpha, reveal)
+
+	if overlay_on:
+		_draw_serve_overlay(which, scale, origin, ink, alpha, reveal)
+
+	## Anything dragged out of the tray, standing where it was dropped -- which is
+	## stored in metres, so it is the same place in all three views.
+	for raw_slot: int in placements:
+		var spot: Vector2 = placements[raw_slot]
+		_draw_voli(
+			_sticker_key("tall" if raw_slot % 2 == 0 else "wing", view),
+			spot.x, spot.y, scale, origin, ink, alpha, reveal, 500 + raw_slot * 7
+		)
+
+	if adjustment_for(view, which).is_empty():
+		_marker_text(
+			"%s — nothing to set from here" % which.to_upper(),
+			Vector2(size.x * 0.06, size.y * 0.955), 13, ink, alpha * 0.6, reveal
+		)
+	else:
+		_draw_zone_bars(_rail_rect(), alpha, reveal)
 
 
-## The floor under a three-quarter net: the centre line beneath the tape, the
-## attack line three metres back, and the near sideline. Enough to stand on.
-func _draw_floor_three_quarter(
-	origin: Vector2, span: Vector2, ink: Color, alpha: float, reveal: float
+## What an attack is adjusted by, in the places it is actually adjusted.
+##
+## The two views answer different halves of one question and always did -- lane
+## priority is an (x, y) and set tightness is a distance from the tape -- so the
+## marks differ by view rather than the drawing differing by view. That is the
+## whole argument for two axes instead of six pages.
+func _draw_attack_marks(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
 ) -> void:
-	var scale := span.y / NET_HEIGHT_M
-	## Depth is drawn through the same axonometric map the net uses, so the floor
-	## and the net cannot disagree about where the far side is.
-	for entry in [[0.0, 0.62, 131], [3.0 / COURT_HALF_M * 1.9, 0.34, 137]]:
-		var depth: float = entry[0]
-		var weight: float = entry[1]
-		var salt: int = entry[2]
-		_marker_line(
-			_net_point(origin, span, -0.04, 0.0, depth),
-			_net_point(origin, span, 1.04, 0.0, depth),
-			Color(ink, weight), alpha, reveal, salt, MARKER_WIDTH * 0.7
+	var setter := Vector3(1.8, 0.6, 0.0)
+	_marker_circle(
+		_project(setter, scale, origin), 10.0, ink, alpha, reveal, 71
+	)
+	_marker_text(
+		"S", _project(setter, scale, origin) + Vector2(-4.0, -13.0), 14,
+		ink, alpha, reveal
+	)
+	if view == VIEW_ALONG_NET:
+		## Set tightness and the setter's release are horizontal distances from the
+		## tape, which is exactly what an elevation down the net measures and what a
+		## plan view cannot show at all.
+		var release := _project(Vector3(1.8, 2.4, 2.1), scale, origin)
+		var arc := PackedVector2Array()
+		for step in range(17):
+			var t := float(step) / 16.0
+			arc.append(_project(
+				Vector3(
+					lerpf(1.8, -1.2, t),
+					lerpf(2.4, 0.4, t),
+					lerpf(2.1, 3.1, t) + sin(t * PI) * 0.55
+				),
+				scale, origin
+			))
+		_marker_stroke(arc, MARKER_RED, alpha, reveal, 13, MARKER_WIDTH * 0.8, false)
+		_draw_measure(
+			_floor_at(1.8, 0.0, scale, origin), _floor_at(1.8, 2.4, scale, origin),
+			"release", ink, alpha, reveal, 17
 		)
-	for u in [-0.04, 1.04]:
-		_marker_line(
-			_net_point(origin, span, u, 0.0, 0.0),
-			_net_point(origin, span, u, 0.0, 3.0 / COURT_HALF_M * 1.9),
-			Color(ink, 0.34), alpha, reveal, 141 + int(u * 10.0), MARKER_WIDTH * 0.5
+		_draw_measure(
+			_project(Vector3(-1.2, 0.0, 3.1), scale, origin),
+			_project(Vector3(-1.2, 0.4, 3.1), scale, origin),
+			"tightness", MARKER_RED, alpha, reveal, 19
 		)
+		return
+	## Lanes: where the ball is going, on the floor of the other court. Kept inside
+	## four and a half metres of the net so the three-quarter crop still contains
+	## the head of every arrow -- an arrow whose point is off the sheet says nothing.
+	for raw: Vector2 in [Vector2(-3.6, -4.2), Vector2(0.4, -4.6), Vector2(3.8, -3.8)]:
+		var target := _in_frame(raw)
+		_marker_arrow(
+			_project(setter, scale, origin),
+			_floor_at(target.x, target.y, scale, origin),
+			MARKER_RED, alpha, reveal, 81 + int(raw.x * 9.0)
+		)
+	var caption := _in_frame(Vector2(0.0, -2.2))
+	_marker_text(
+		"lanes", _floor_at(caption.x, caption.y, scale, origin), 13,
+		MARKER_RED, alpha, reveal
+	)
+
+
+## Where the floor defence stands. Six real positions in metres, so the shape a
+## coach sets here is the shape playback will show.
+func _draw_floor_marks(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	var spots := [
+		Vector2(-3.2, 1.1), Vector2(3.2, 1.2), Vector2(-3.4, 6.4),
+		Vector2(0.2, 7.4), Vector2(3.4, 6.0),
+	]
+	for index in range(spots.size()):
+		var spot: Vector2 = spots[index]
+		_marker_circle(
+			_floor_at(spot.x, spot.y, scale, origin), 9.0, ink, alpha, reveal,
+			121 + index * 13
+		)
+	if view == VIEW_ALONG_NET:
+		## How tight the back row plays for the block follow is a distance from the
+		## net, and this is the one view that can put a number on it.
+		for entry: Array in [[1.6, "follow"], [6.4, "deep"]]:
+			var depth: float = entry[0]
+			_draw_measure(
+				_floor_at(0.0, 0.0, scale, origin),
+				_floor_at(0.0, depth, scale, origin),
+				str(entry[1]), MARKER_RED if depth < 3.0 else ink,
+				alpha, reveal, 41 + int(depth * 10.0)
+			)
+		return
+	## Clear of the zone numerals, which live on the lane centres -- the label sat
+	## on top of the "3" and the two read as one mark.
+	_marker_text(
+		"cover", _floor_at(-1.5, 3.2, scale, origin), 13, MARKER_RED, alpha, reveal
+	)
 
 
 ## Serve target, or serve receive, marked over whatever court is already drawn.
@@ -785,35 +842,88 @@ func _draw_floor_three_quarter(
 ## the ball in, or a shape over the zone you are covering -- so they share a
 ## routine and differ in direction and colour.
 func _draw_serve_overlay(
-	court: Rect2, which: String, ink: Color, alpha: float, reveal: float
+	which: String, scale: float, origin: Vector2, ink: Color,
+	alpha: float, reveal: float
 ) -> void:
 	if which == "Attack":
-		var from := court.position + Vector2(court.size.x * 0.5, court.size.y * 1.06)
-		for target in [Vector2(0.16, 0.22), Vector2(0.84, 0.26)]:
-			_marker_arrow(
-				from, court.position + court.size * target,
-				MARKER_RED, alpha * 0.9, reveal, 301 + int(target.x * 90.0)
+		## The serve as the **flight it actually is**, not an arrow on a map: from
+		## behind the endline, up over the tape, down into the zone. Drawn through
+		## the same projection as everything else, so it is a curve in three views
+		## rather than a straight line that only made sense in one -- and so the
+		## picture is of the thing playback will show.
+		var toss := _serve_origin()
+		for raw: Vector2 in [Vector2(-3.2, -6.6), Vector2(3.0, -5.4)]:
+			var target := _in_frame(raw)
+			var flight := PackedVector2Array()
+			for step in range(19):
+				var t := float(step) / 18.0
+				flight.append(_project(
+					Vector3(
+						lerpf(toss.x, target.x, t), lerpf(toss.y, target.y, t),
+						lerpf(1.9, 0.4, t) + sin(t * PI) * 2.2
+					),
+					scale, origin
+				))
+			_marker_stroke(
+				flight, MARKER_RED, alpha * 0.9, reveal, 301 + int(raw.x * 9.0),
+				MARKER_WIDTH * 0.7, false
+			)
+			_marker_circle(
+				_floor_at(target.x, target.y, scale, origin), 8.0,
+				MARKER_RED, alpha * 0.8, reveal, 311 + int(raw.x * 9.0)
 			)
 		_marker_text(
-			"serve target", from + Vector2(-30.0, 16.0), 12, MARKER_RED, alpha, reveal
+			"serve target",
+			_floor_at(toss.x, toss.y, scale, origin) + Vector2(-24.0, 16.0), 12,
+			MARKER_RED, alpha, reveal
 		)
 		return
 	## Serve receive: the three-passer seam, shaded rather than arrowed, because
 	## what is being declared is an area of responsibility and not a direction.
-	for share in [0.24, 0.52, 0.80]:
+	var passers := [Vector2(-2.9, 5.6), Vector2(0.1, 6.8), Vector2(3.0, 5.4)]
+	for index in range(passers.size()):
+		var at: Vector2 = passers[index]
 		_marker_ellipse(
-			court.position + court.size * Vector2(share, 0.70),
-			Vector2(court.size.x * 0.15, court.size.y * 0.14),
-			Color(ink, 0.5), alpha, reveal, 321 + int(share * 100.0)
+			_floor_at(at.x, at.y, scale, origin),
+			Vector2(0.9 * scale, 0.9 * scale * maxf(sin(_tilt()), 0.14)),
+			Color(ink, 0.5), alpha, reveal, 321 + index * 11
 		)
+	var seam := _floor_at(-1.4, 6.2, scale, origin)
 	_hatch(
-		Rect2(court.position + court.size * Vector2(0.32, 0.56),
-			court.size * Vector2(0.20, 0.30)),
+		Rect2(seam - Vector2(0.7, 0.7) * scale * 0.6, Vector2(1.4, 1.4) * scale * 0.6),
 		Color(MARKER_RED, 0.30), alpha, reveal, 341
 	)
 	_marker_text(
-		"seam", court.position + court.size * Vector2(0.34, 0.52), 12,
-		MARKER_RED, alpha, reveal
+		"seam", seam + Vector2(-14.0, -18.0), 12, MARKER_RED, alpha, reveal
+	)
+
+
+## Where the server stands, pulled inside whatever the view can see.
+##
+## A serve begins a metre behind the endline, which is ten metres out and past the
+## crop of two of the three views -- so the flight started off the sheet and the
+## first thing on the page was already halfway to the net. Clamped rather than
+## dropped: a serve that begins at the edge of the frame is still a serve.
+func _serve_origin() -> Vector3:
+	var at := _in_frame(Vector2(2.6, 10.0))
+	return Vector3(at.x, at.y, 0.0)
+
+
+## Any place on the court, pulled inside what this view holds.
+##
+## The marks are written in real metres -- a serve begins ten metres out, a cross
+## lane lands seven metres past the net -- and two of the three views crop tighter
+## than that. Clamping is the only honest answer: the mark still points the right
+## way and still means the right thing, it just stops at the edge of the frame
+## instead of being drawn over the priority rail, which is where an unclamped
+## serve target was landing.
+func _in_frame(at: Vector2) -> Vector2:
+	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var low: Vector3 = box[0]
+	var high: Vector3 = box[1]
+	return Vector2(
+		clampf(at.x, low.x + 0.3, high.x - 0.3),
+		clampf(at.y, low.y + 0.3, high.y - 0.3)
 	)
 
 
@@ -853,9 +963,14 @@ func _draw_measure(
 	alpha: float, reveal: float, salt: int
 ) -> void:
 	_marker_line(from, to, color, alpha * 0.8, reveal, salt, MARKER_WIDTH * 0.30)
-	for at in [from, to]:
+	## Ticks across the rule, not up the page. They were vertical, which is the same
+	## thing only when the rule happens to be horizontal -- and none of the rules on
+	## a projected court are, so every tick sat at a different angle to the line it
+	## was supposed to cap.
+	var across := (to - from).normalized().orthogonal() * 5.0
+	for at: Vector2 in [from, to]:
 		_marker_line(
-			at + Vector2(0.0, -5.0), at + Vector2(0.0, 5.0),
+			at - across, at + across,
 			color, alpha * 0.8, reveal, salt + 1, MARKER_WIDTH * 0.30
 		)
 	_marker_text(
@@ -863,349 +978,370 @@ func _draw_measure(
 	)
 
 
-## Straight down on the floor. Positions, lanes and coverage -- everything whose
-## answer is a place rather than a height.
-func _draw_top_down(which: String, alpha: float, reveal: float) -> void:
-	var ink := _ink()
-	var board_bottom := size.y - 13.0
-	_marker_text(which.to_upper(), Vector2(size.x * 0.05, size.y * 0.13), 24, ink, alpha, reveal)
-
-	## One half court, net along the top.
-	var court := Rect2(
-		size.x * 0.10, size.y * 0.22, size.x * 0.52, board_bottom - size.y * 0.34
-	)
-	_marker_line(
-		court.position, court.position + Vector2(court.size.x, 0.0),
-		ink, alpha, reveal, 5, MARKER_WIDTH * 1.1
-	)
-	_marker_rect(court, ink, alpha, reveal, 9)
-	## The three-metre line, which is the only other line on a half court and the
-	## one every one of these phases is measured against.
-	var attack_line := court.position.y + court.size.y * 0.34
-	_marker_line(
-		Vector2(court.position.x, attack_line),
-		Vector2(court.end.x, attack_line),
-		Color(ink, 0.55), alpha, reveal, 13, MARKER_WIDTH * 0.5
-	)
-
-	match which:
-		"Serve Receive":
-			for spot in [Vector2(0.20, 0.72), Vector2(0.50, 0.84), Vector2(0.80, 0.70)]:
-				_marker_circle(
-					court.position + court.size * spot, 12.0, ink, alpha, reveal,
-					51 + int(spot.x * 90.0)
-				)
-			_marker_ellipse(
-				court.position + court.size * Vector2(0.35, 0.78),
-				Vector2(50.0, 34.0), MARKER_RED, alpha * 0.9, reveal, 63
-			)
-			_marker_text("seam", court.position + court.size * Vector2(0.28, 0.60), 13, MARKER_RED, alpha, reveal)
-		"Attack":
-			var setter := court.position + court.size * Vector2(0.62, 0.20)
-			_marker_circle(setter, 11.0, ink, alpha, reveal, 71)
-			for target in [Vector2(0.10, 0.10), Vector2(0.40, 0.06), Vector2(0.88, 0.12)]:
-				_marker_arrow(
-					setter, court.position + court.size * target,
-					MARKER_RED, alpha, reveal, 81 + int(target.x * 90.0)
-				)
-			_marker_text("lanes", court.position + court.size * Vector2(0.42, 0.30), 13, MARKER_RED, alpha, reveal)
-		"Block":
-			for share in [0.34, 0.52]:
-				_marker_circle(
-					court.position + Vector2(court.size.x * share, 12.0),
-					11.0, ink, alpha, reveal, 101 + int(share * 100.0)
-				)
-			_marker_arrow(
-				court.position + court.size * Vector2(0.44, 0.12),
-				court.position + court.size * Vector2(0.20, 0.52),
-				MARKER_RED, alpha, reveal, 113
-			)
-			_marker_text("funnel", court.position + court.size * Vector2(0.24, 0.58), 13, MARKER_RED, alpha, reveal)
-		_:
-			for spot in [Vector2(0.16, 0.30), Vector2(0.84, 0.32), Vector2(0.20, 0.82),
-					Vector2(0.50, 0.92), Vector2(0.80, 0.80)]:
-				_marker_circle(
-					court.position + court.size * spot, 10.0, ink, alpha, reveal,
-					121 + int(spot.x * 80.0 + spot.y * 17.0)
-				)
-			_marker_text("cover", court.position + court.size * Vector2(0.44, 0.50), 13, MARKER_RED, alpha, reveal)
-
-	## The overlay, on the same court rather than on a different one.
-	if overlay_on:
-		_draw_serve_overlay(court, which, ink, alpha, reveal)
-
-	## Anything dragged out of the tray, standing where it was dropped.
-	for raw_slot in placements:
-		var at: Vector2 = placements[raw_slot]
-		var spot := Vector2(at.x * size.x, at.y * size.y)
-		_marker_ellipse(
-			spot, Vector2(13.0, 6.0), Color(ink, 0.42), alpha, reveal,
-			401 + int(raw_slot) * 7
-		)
-		if not _draw_sticker(
-			_sticker_key("tall" if int(raw_slot) % 2 == 0 else "wing", view),
-			spot, size.y * 0.30
-		):
-			_marker_circle(spot - Vector2(0.0, 16.0), 9.0, ink, alpha, reveal, 411 + int(raw_slot))
-
-	if adjustment_for(view, which).is_empty():
-		_marker_text(
-			"%s — nothing to set from here" % which.to_upper(),
-			Vector2(size.x * 0.06, size.y * 0.95), 13, ink, alpha * 0.6, reveal
-		)
-	else:
-		_draw_zone_bars(
-			Rect2(size.x * 0.68, size.y * 0.40, size.x * 0.27, board_bottom - size.y * 0.54),
-			alpha, reveal
-		)
+## Projection is deliberately not a camera: an axonometric map with no
+## perspective divide, because a drawing has no focal length and a vanishing
+## point would make the sheet look rendered rather than drawn.
 
 
-## The block phase, drawn the way an illustrator draws blockers at a net: a
-## three-quarter view from slightly above, which is roughly the broadcast angle
-## lifted a little.
+## One projection for every view: world metres in, pixels out.
 ##
-## Was a flat elevation, straight on. That is the honest engineering view and it
-## is the wrong one here -- straight on, two blockers at different depths sit at
-## exactly the same height on the page, so the one thing the picture exists to
-## show (who is where along the net, and how the seam between them opens) is the
-## one thing it flattens. A slight rotation and a slight lift give the net a
-## receding edge, and the moment the net recedes the blockers have positions
-## along it.
+## `world` is (along the net, depth from the net, height off the floor) in
+## metres, with the net at y = 0, the near court at positive y and the far court
+## at negative. Rotate by `theta`, tilt by `phi`, drop the third axis.
 ##
-## Projection is deliberately not a camera. `_net_point` is an axonometric map --
-## along the net, up, and across it -- with no perspective divide, because a
-## marker drawing does not have a focal length and a vanishing point would make
-## the board look rendered rather than drawn.
-## Screen y grows downward, which is the trap: written as `+ u * skew` the right
-## antenna sank instead of rising and the net read as a fence falling over. The
-## right-hand end of a net seen from the left and slightly above is *further
-## away*, so it sits higher on the page and a little shorter.
-const NET_SKEW: float = 0.13
-## Where the far side of the net lands relative to the near side: up, and back to
-## the left. No perspective divide -- a marker drawing has no focal length, and a
-## vanishing point would make the board look rendered rather than drawn.
-const NET_DEPTH := Vector2(-30.0, -22.0)
-
-
-## u runs along the net (0 left antenna, 1 right), v is height (0 floor, 1 tape
-## top), w is depth across the net (0 near side, 1 far).
-## Pixels per metre for a view, fitted to the panel.
-##
-## `world` is the extent the view has to hold, in metres: how wide across, how
-## tall up. The smaller of the two fits wins, so nothing is cropped and the two
-## axes stay at the same scale -- an anisotropic fit would make the net the right
-## height and the wrong width, which is the defect this exists to stop.
-func _metres(world: Vector2) -> float:
-	var usable := size * (1.0 - MARGIN_SHARE * 2.0) - Vector2(0.0, 13.0)
-	return minf(usable.x / maxf(world.x, 0.001), usable.y / maxf(world.y, 0.001))
-
-
-func _net_point(origin: Vector2, span: Vector2, u: float, v: float, w: float) -> Vector2:
+## Everything on the sheet goes through this now. The three views used to build
+## their own geometry from shares of the panel, which is why a net could be two
+## different heights and a voli could stand on a floor drawn at an angle nobody
+## had baked them at.
+func _project(world: Vector3, scale: float, origin: Vector2) -> Vector2:
+	var angles: Vector2 = VIEW_ANGLES.get(view, Vector2(-38.0, 32.0))
+	var theta := deg_to_rad(angles.x)
+	var phi := deg_to_rad(angles.y)
+	var flat_x := world.x * cos(theta) - world.y * sin(theta)
+	var flat_y := world.x * sin(theta) + world.y * cos(theta)
 	return origin + Vector2(
-		u * span.x + w * NET_DEPTH.x,
-		-v * span.y - u * span.x * NET_SKEW + w * NET_DEPTH.y
+		flat_x * scale,
+		(flat_y * sin(phi) - world.z * cos(phi)) * scale
 	)
 
 
-func _draw_block_phase(alpha: float, reveal: float) -> void:
-	var ink := _ink()
-	var board_bottom := size.y - 13.0
-	## Sized in metres rather than in shares of the panel: 9 m of net across and
-	## 2.43 m of it up, at one scale, with headroom above the tape for hands.
-	var scale := _metres(Vector2(COURT_WIDTH_M * 1.55, NET_HEIGHT_M + HEADROOM_M))
-	var span := Vector2(COURT_WIDTH_M * scale, NET_HEIGHT_M * scale)
-	var origin := Vector2(size.x * 0.09, board_bottom - size.y * 0.07)
+## The floor, which is most of what gets projected -- shorthand for z = 0.
+func _floor_at(along: float, depth: float, scale: float, origin: Vector2) -> Vector2:
+	return _project(Vector3(along, depth, 0.0), scale, origin)
 
-	_marker_text("BLOCK", Vector2(size.x * 0.06, size.y * 0.15), 26, ink, alpha, reveal)
 
-	## The floor first, because everything else stands on it and because the
-	## shadows the stickers cast need somewhere to fall. A court drawn with no
-	## floor gives a blocker nothing to be above.
-	_draw_floor_three_quarter(origin, span, ink, alpha, reveal)
+## And back again: a point on the sheet to the place on the floor under it.
+##
+## Needed because a drop lands in pixels and has to be *stored* in metres. Storing
+## the pixel share instead is what let a voli dropped in one view reappear
+## somewhere unrelated in another -- the sheet remembered where the cursor was
+## rather than where the voli is, so the answer changed when the camera did.
+##
+## Solvable in closed form because the map is linear and z is known: two equations
+## in two unknowns, and `sin(phi)` is never zero for any view that can see a floor
+## at all.
+func _unproject_floor(at: Vector2, scale: float, origin: Vector2) -> Vector2:
+	var angles: Vector2 = VIEW_ANGLES.get(view, Vector2(-38.0, 32.0))
+	var theta := deg_to_rad(angles.x)
+	var phi := deg_to_rad(angles.y)
+	var flat_x := (at.x - origin.x) / maxf(scale, 0.001)
+	var flat_y := (at.y - origin.y) / maxf(scale * sin(phi), 0.001)
+	return Vector2(
+		flat_x * cos(theta) + flat_y * sin(theta),
+		-flat_x * sin(theta) + flat_y * cos(theta)
+	)
 
-	## The two tapes, top and bottom, and the band between them.
-	var tape_top_left := _net_point(origin, span, 0.0, 1.0, 0.0)
-	var tape_top_right := _net_point(origin, span, 1.0, 1.0, 0.0)
-	var tape_low_left := _net_point(origin, span, 0.0, 0.46, 0.0)
-	var tape_low_right := _net_point(origin, span, 1.0, 0.46, 0.0)
+
+## Where the camera stands and how big a metre is, fitted to the panel.
+##
+## The whole of the sizing lives here now. Project the box's eight corners at
+## unit scale, measure the extent that comes back, divide by what the panel has:
+## one number, derived, per view. Nothing downstream is allowed to pick a size --
+## a voli is `world_height * scale` pixels tall and a net is 2.43 * scale,
+## because those are the metres they are.
+##
+## The defect this replaces: every view computed its own geometry from shares of
+## the panel, so a blocker came out about four metres tall in the plan view and
+## the same net drew at two different heights depending on which view you were in.
+func _view_frame() -> Dictionary:
+	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var low: Vector3 = box[0]
+	var high: Vector3 = box[1]
+	var least := Vector2(INF, INF)
+	var most := Vector2(-INF, -INF)
+	for along: float in [low.x, high.x]:
+		for depth: float in [low.y, high.y]:
+			for height: float in [low.z, high.z]:
+				var flat := _project(Vector3(along, depth, height), 1.0, Vector2.ZERO)
+				least = Vector2(minf(least.x, flat.x), minf(least.y, flat.y))
+				most = Vector2(maxf(most.x, flat.x), maxf(most.y, flat.y))
+	var extent := most - least
+	var rail := _rail_rect()
+	var usable := Vector2(
+		rail.position.x - size.x * MARGIN_SHARE * 2.0,
+		size.y * (1.0 - HEAD_SHARE - FOOT_SHARE)
+	)
+	var scale := minf(
+		usable.x / maxf(extent.x, 0.001), usable.y / maxf(extent.y, 0.001)
+	)
+	var centre := Vector2(
+		size.x * MARGIN_SHARE + usable.x * 0.5,
+		size.y * HEAD_SHARE + usable.y * 0.5
+	)
+	return {"scale": scale, "origin": centre - (least + most) * 0.5 * scale}
+
+
+## The strip down the right the priority bars live in.
+##
+## Reserved in **every** view and phase, not only where the bars are drawn. They
+## used to be laid over whatever court was there, which meant the court had to be
+## drawn small enough to dodge them and the dodge was per view. Taking the strip
+## out of the fit instead keeps the court in the same place when the phase
+## changes, which is the whole reason the wipe reads as one board being reworked
+## rather than as two boards.
+func _rail_rect() -> Rect2:
+	return Rect2(
+		size.x * 0.795, size.y * (HEAD_SHARE + 0.10),
+		size.x * 0.175, size.y * (1.0 - HEAD_SHARE - FOOT_SHARE - 0.18)
+	)
+
+
+## The court on the floor plane, drawn the same way in every view.
+##
+## One routine, not three. The sidelines, the endlines, the centre line under the
+## tape, the two attack lines and the six rotation zones are the same court seen
+## from three places -- what differs is the projection, and that is already one
+## function. Drawing them per view is how the plan view ended up showing half a
+## court while the three-quarter one showed a strip and neither agreed with the
+## net standing on them.
+##
+## Both halves, always, with the far one lighter. A coach reads a plan by seeing
+## where the ball has to end up, and half a court cannot show that -- but the
+## half being planned still has to be the one the eye goes to first.
+func _draw_court(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var near: float = minf((box[1] as Vector3).y, COURT_HALF_M)
+	var far: float = maxf((box[0] as Vector3).y, -COURT_HALF_M)
+
+	## The centre line, under the tape. Heaviest floor line in the drawing, because
+	## it is the one every measurement on this sheet is taken from.
+	_marker_line(
+		_floor_at(-HALF_WIDTH_M, 0.0, scale, origin),
+		_floor_at(HALF_WIDTH_M, 0.0, scale, origin),
+		ink, alpha, reveal, 401, MARKER_WIDTH * 0.9
+	)
+	## Sidelines, running the whole depth the view holds.
+	for side: float in [-HALF_WIDTH_M, HALF_WIDTH_M]:
+		_marker_line(
+			_floor_at(side, far, scale, origin),
+			_floor_at(side, near, scale, origin),
+			Color(ink, 0.72), alpha, reveal, 405 + int(side), MARKER_WIDTH * 0.7
+		)
+	## Endlines, but only where the view actually reaches one. Drawing a line at
+	## the crop instead would say the court ends there, which is a lie the along-net
+	## view in particular cannot afford -- it is cropped at seven metres of an
+	## eighteen-metre court.
+	for depth: float in [far, near]:
+		if absf(absf(depth) - COURT_HALF_M) > 0.05:
+			continue
+		_marker_line(
+			_floor_at(-HALF_WIDTH_M, depth, scale, origin),
+			_floor_at(HALF_WIDTH_M, depth, scale, origin),
+			Color(ink, 0.72), alpha, reveal, 411 + int(depth), MARKER_WIDTH * 0.7
+		)
+	## The attack lines, three metres either side.
+	for depth: float in [-ATTACK_LINE_M, ATTACK_LINE_M]:
+		if depth < far or depth > near:
+			continue
+		_marker_line(
+			_floor_at(-HALF_WIDTH_M, depth, scale, origin),
+			_floor_at(HALF_WIDTH_M, depth, scale, origin),
+			Color(ink, 0.46 if depth > 0.0 else 0.30), alpha, reveal,
+			417 + int(depth), MARKER_WIDTH * 0.5
+		)
+	## And the two lane divisions that turn the near half into the six zones a
+	## rotation is named after. Faint: they are not painted on a real floor, they
+	## are the coach's own construction lines, which is exactly what a pencil is for.
+	for lane: float in [-1.5, 1.5]:
+		_marker_line(
+			_floor_at(lane, 0.0, scale, origin),
+			_floor_at(lane, minf(near, COURT_HALF_M), scale, origin),
+			Color(ink, 0.22), alpha, reveal, 423 + int(lane * 2.0), MARKER_WIDTH * 0.4
+		)
+
+
+## The rotation numbers, written into their own zones.
+##
+## Plan view only. They are the one label on the sheet that names a place rather
+## than a quantity, and a place is only unambiguous from above -- in three quarter
+## the back-row numerals land on top of the front-row ones, which is worse than
+## not having them.
+func _draw_zone_numerals(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	var cells := [
+		[-3.0, 1.5, "4"], [0.0, 1.5, "3"], [3.0, 1.5, "2"],
+		[-3.0, 6.0, "5"], [0.0, 6.0, "6"], [3.0, 6.0, "1"],
+	]
+	for cell in cells:
+		_marker_text(
+			str(cell[2]),
+			_floor_at(float(cell[0]), float(cell[1]), scale, origin) + Vector2(-5.0, 6.0),
+			16, Color(ink, 0.46), alpha, reveal
+		)
+
+
+## The net, in metres, standing on the floor the court routine just drew.
+##
+## A net is 2.43 m to the top of the tape and one metre deep, so the mesh hangs
+## between 1.43 and 2.33 and the tape occupies the last hundred millimetres. All
+## three of those numbers used to be shares of a span, which is why the same net
+## could be two different heights in two views of one court.
+func _draw_net(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	var mesh_low: float = NET_HEIGHT_M - 1.0
+	var tape_low: float = NET_HEIGHT_M - 0.10
+
+	var to := func(along: float, height: float) -> Vector2:
+		return _project(Vector3(along, 0.0, height), scale, origin)
 
 	## A net tape is a folded band with a cable through it, so it draws as **two**
-	## lines a few millimetres apart with the cable's sag between them -- not as
-	## one heavy stroke. That doubling is most of what turns a diagram of a net
-	## into a drawing of one.
-	var tape_depth := span.y * 0.045
-	_marker_line(tape_top_left, tape_top_right, ink, alpha, reveal, 11, MARKER_WIDTH * 1.5)
+	## lines a few millimetres apart with the cable's sag between them -- not as one
+	## heavy stroke. That doubling is most of what turns a diagram of a net into a
+	## drawing of one.
 	_marker_line(
-		tape_top_left + Vector2(0.0, tape_depth),
-		tape_top_right + Vector2(0.0, tape_depth),
-		ink, alpha, reveal, 12, MARKER_WIDTH * 1.1
+		to.call(-HALF_WIDTH_M, NET_HEIGHT_M), to.call(HALF_WIDTH_M, NET_HEIGHT_M),
+		ink, alpha, reveal, 11, MARKER_WIDTH * 1.4
 	)
-	## The cable sags between the posts. Straight, a net reads as a fence.
+	_marker_line(
+		to.call(-HALF_WIDTH_M, tape_low), to.call(HALF_WIDTH_M, tape_low),
+		ink, alpha, reveal, 12, MARKER_WIDTH * 1.0
+	)
+	## The cable sags between the posts. Straight, a net reads as a fence. Six
+	## centimetres, which is about what a tensioned net actually gives.
 	var sag := PackedVector2Array()
 	for step in range(13):
 		var t := float(step) / 12.0
-		var point := tape_top_left.lerp(tape_top_right, t)
-		point.y += sin(t * PI) * span.y * 0.035 + tape_depth * 0.5
-		sag.append(point)
+		var along := lerpf(-HALF_WIDTH_M, HALF_WIDTH_M, t)
+		sag.append(to.call(along, NET_HEIGHT_M - 0.05 - sin(t * PI) * 0.06))
 	_marker_stroke(sag, Color(ink, 0.55), alpha, reveal, 15, MARKER_WIDTH * 0.5, false)
-	_marker_line(tape_low_left, tape_low_right, ink, alpha, reveal, 23, MARKER_WIDTH * 1.2)
+	_marker_line(
+		to.call(-HALF_WIDTH_M, mesh_low), to.call(HALF_WIDTH_M, mesh_low),
+		ink, alpha, reveal, 23, MARKER_WIDTH * 1.1
+	)
 
 	## The mesh, hung from the sagging cable rather than from a straight line, so
 	## the squares stretch at the posts and slacken in the middle the way they do.
 	var columns := 15
 	for index in range(columns + 1):
-		var u := float(index) / float(columns)
-		var head := tape_top_left.lerp(tape_top_right, u)
-		head.y += sin(u * PI) * span.y * 0.035 + tape_depth
+		var t := float(index) / float(columns)
+		var along := lerpf(-HALF_WIDTH_M, HALF_WIDTH_M, t)
 		_marker_line(
-			head, _net_point(origin, span, u, 0.46, 0.0),
-			Color(ink, 0.40), alpha, reveal, 40 + index, MARKER_WIDTH * 0.55
+			to.call(along, tape_low - sin(t * PI) * 0.06), to.call(along, mesh_low),
+			Color(ink, 0.36), alpha, reveal, 40 + index, MARKER_WIDTH * 0.5
 		)
 	for index in range(1, 4):
-		var v := lerpf(0.46, 0.97, float(index) / 4.0)
+		var height := lerpf(mesh_low, tape_low, float(index) / 4.0)
 		_marker_line(
-			_net_point(origin, span, 0.0, v, 0.0),
-			_net_point(origin, span, 1.0, v, 0.0),
-			Color(ink, 0.34), alpha, reveal, 60 + index, MARKER_WIDTH * 0.50
+			to.call(-HALF_WIDTH_M, height), to.call(HALF_WIDTH_M, height),
+			Color(ink, 0.30), alpha, reveal, 60 + index, MARKER_WIDTH * 0.45
 		)
 
-	## The posts. A net without them is hanging from nothing, and they are also
-	## the only vertical reference in a drawing whose every other line is skewed.
-	for entry in [[0.0, 71], [1.0, 79]]:
-		var u: float = entry[0]
+	## The posts, half a metre outside the sideline where they belong, and the only
+	## strictly vertical reference in a drawing whose every other line is skewed.
+	for entry: Array in [[-1.0, 71], [1.0, 79]]:
+		var side: float = entry[0]
 		var salt: int = entry[1]
-		var foot := _net_point(origin, span, u, 0.0, 0.10)
-		var crown := _net_point(origin, span, u, 1.16, 0.10)
-		_marker_line(foot, crown, ink, alpha, reveal, salt, MARKER_WIDTH * 1.3)
-		## The padded sleeve over the bottom two-thirds: two rules across the post
-		## and a hatched face, which is how a sleeve reads at this size.
-		var sleeve_top := foot.lerp(crown, 0.62)
-		_marker_line(
-			foot + Vector2(-7.0, 0.0), foot + Vector2(7.0, 0.0),
-			ink, alpha, reveal, salt + 1, MARKER_WIDTH * 0.7
-		)
-		_marker_line(
-			sleeve_top + Vector2(-6.0, 0.0), sleeve_top + Vector2(6.0, 0.0),
-			ink, alpha, reveal, salt + 2, MARKER_WIDTH * 0.7
-		)
-		_hatch(
-			Rect2(foot + Vector2(-6.0, 0.0), Vector2(12.0, sleeve_top.y - foot.y)),
-			Color(ink, 0.30), alpha, reveal, salt + 3
-		)
-		## And the guy line back to the floor, which is the detail that says the
-		## post is under tension rather than planted.
-		_marker_line(
-			crown, foot + Vector2(-26.0 if u < 0.5 else 26.0, 6.0),
-			Color(ink, 0.34), alpha, reveal, salt + 5, MARKER_WIDTH * 0.35
-		)
-
-	## The antennae, in red, standing dead vertical -- the only strictly vertical
-	## lines in the drawing, which is exactly how they read on a court.
-	for entry in [[0.0, 91], [1.0, 97]]:
-		var u: float = entry[0]
-		var salt: int = entry[1]
-		_marker_line(
-			_net_point(origin, span, u, 1.34, 0.0),
-			_net_point(origin, span, u, 0.40, 0.0),
-			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 1.4
-		)
-		## Banded, the way an antenna is.
-		for band in range(1, 5):
-			var v := lerpf(0.40, 1.34, float(band) / 5.0)
-			_marker_line(
-				_net_point(origin, span, u, v, 0.0) + Vector2(-3.0, 0.0),
-				_net_point(origin, span, u, v, 0.0) + Vector2(3.0, 0.0),
-				Color(MARKER_RED, 0.5), alpha, reveal, salt + band, MARKER_WIDTH * 0.8
+		var at: float = side * (HALF_WIDTH_M + 0.5)
+		var foot := _project(Vector3(at, 0.0, 0.0), scale, origin)
+		var crown := _project(Vector3(at, 0.0, NET_HEIGHT_M + 0.25), scale, origin)
+		_marker_line(foot, crown, ink, alpha, reveal, salt, MARKER_WIDTH * 1.2)
+		## The padded sleeve over the bottom two metres, drawn as a ladder of short
+		## rules across the post rather than as a hatched panel. Hatching a shape ten
+		## pixels wide and sixty tall does not read as padding; it reads as a mistake,
+		## which is what it looked like when the rect finally had a positive height --
+		## the previous version's was negative, so `_hatch` returned early and nobody
+		## noticed the fill had never been drawn at all.
+		for rung in range(5):
+			var mark := _project(
+				Vector3(at, 0.0, lerpf(0.10, 2.0, float(rung) / 4.0)), scale, origin
 			)
-
-	## Cross-hatched shade under the tape, where the net's own shadow falls on the
-	## mesh. Two crossing sets rather than one, because a single direction reads as
-	## texture and two read as shadow.
-	## Lighter than the mesh it falls on, or it stops being shade and becomes
-	## another layer of net.
-	_hatch(
-		Rect2(tape_top_left + Vector2(0.0, tape_depth), Vector2(span.x, span.y * 0.14)),
-		Color(ink, 0.10), alpha, reveal, 121
-	)
-
-	## The blockers, as stickers rather than as drawn figures.
-	##
-	## They fall back to the drawn arch while the bake is still running -- a few
-	## frames at startup -- because a body that pops in is better than a hole, and
-	## the fallback is the same figure the sheet used before.
-	var blockers := [
-		[0.30, "tall"], [0.52, "wing"],
-	]
-	for index in range(blockers.size()):
-		var u: float = blockers[index][0]
-		var key: String = _sticker_key(str(blockers[index][1]), view)
-		var salt := 90 + index * 29
-		var head := _net_point(origin, span, u, 1.15, 0.55)
-		var radius := 15.0
-		## Scaled off the net rather than off the panel: a blocker is about a
-		## third again the height of the tape from the floor, and pinning the
-		## sticker to the drawing is what keeps the two in proportion when the
-		## sheet resizes.
-		## In metres, off the net rather than off the panel: a blocker at full
-		## extension reaches about 3.4 m, so against a 2.43 m net they stand about
-		## a net and a half tall. Tying it to `span.y` -- which *is* 2.43 m of
-		## pixels -- keeps the two in proportion at every panel size.
-		var sticker_height := span.y * (3.40 / NET_HEIGHT_M) * 0.80
-		## The shadow the body casts on the floor, drawn *into* the drawing rather
-		## than under the sticker: a pencil ellipse at the voli's feet, hatched, in
-		## the same hand as the court. The sticker's own drop shadow says it is a
-		## sticker; this one says the voli is standing somewhere.
-		var feet := _net_point(origin, span, u, 0.0, 0.55)
+			_marker_line(
+				mark + Vector2(-4.0, 0.0), mark + Vector2(4.0, 0.0),
+				Color(ink, 0.34 if rung > 0 and rung < 4 else 0.62), alpha, reveal,
+				salt + 1 + rung, MARKER_WIDTH * 0.5
+			)
+		## And the base plate, which is what says the post is standing on the floor
+		## rather than growing out of it.
 		_marker_ellipse(
-			feet, Vector2(span.y * 0.20, span.y * 0.070),
-			Color(ink, 0.42), alpha, reveal, salt + 71
+			foot, Vector2(0.30 * scale, 0.30 * scale * maxf(sin(_tilt()), 0.10)),
+			Color(ink, 0.34), alpha, reveal, salt + 9
 		)
-		_hatch(
-			Rect2(feet - Vector2(span.y * 0.17, span.y * 0.05),
-				Vector2(span.y * 0.34, span.y * 0.10)),
-			Color(ink, 0.22), alpha, reveal, salt + 83
+
+	## The antennae, in red, standing on the sideline. Eighty centimetres of them
+	## clears the tape, which is the rule and also what makes them read as antennae
+	## rather than as two more posts.
+	for entry: Array in [[-HALF_WIDTH_M, 91], [HALF_WIDTH_M, 97]]:
+		var at: float = entry[0]
+		var salt: int = entry[1]
+		_marker_line(
+			_project(Vector3(at, 0.0, NET_HEIGHT_M + 0.80), scale, origin),
+			_project(Vector3(at, 0.0, mesh_low), scale, origin),
+			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 1.3
 		)
-		## Raised off their own shadow by the jump the pose already contains.
-		##
-		## Anchoring at the feet put a blocker at full extension flat on the floor,
-		## which is a contradiction the shadow made obvious: the ellipse says "this
-		## voli is standing here" and a block says they are not. `set_pose` lifts
-		## the body by `elevation * 0.82` metres, so the drawing lifts by the same
-		## number of metres through the same scale, and the gap between body and
-		## shadow *is* the jump rather than a constant that looked about right.
-		var lift := BLOCK_ELEVATION * 0.82 * (span.y / NET_HEIGHT_M)
-		var placed := _draw_sticker(key, feet - Vector2(0.0, lift), sticker_height)
-		if not placed:
-			var arch := PackedVector2Array()
-			for step in range(17):
-				var t := float(step) / 16.0
-				var angle := lerpf(PI * 0.92, PI * 0.08, t)
-				arch.append(
-					head + Vector2(cos(angle), -sin(angle))
-						* Vector2(radius * 1.85, radius * 1.55)
-				)
-			_marker_stroke(arch, ink, alpha, reveal, salt + 5, MARKER_WIDTH * 1.4, false)
-			_marker_circle(head, radius, ink, alpha, reveal, salt)
+		for band in range(1, 5):
+			var height := lerpf(mesh_low, NET_HEIGHT_M + 0.80, float(band) / 5.0)
+			var mark := _project(Vector3(at, 0.0, height), scale, origin)
 			_marker_line(
-				head + Vector2(0.0, radius * 0.9),
-				_net_point(origin, span, u, 0.62, 0.55),
-				ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.4
+				mark + Vector2(-3.0, 0.0), mark + Vector2(3.0, 0.0),
+				Color(MARKER_RED, 0.5), alpha, reveal, salt + band, MARKER_WIDTH * 0.7
 			)
-		_marker_text(
-			"%d" % (index + 1), head + Vector2(-6.0, -radius * 1.9),
-			16, MARKER_RED, alpha, reveal
+
+
+## A voli on the floor: the shadow they cast, then the sticker over it.
+##
+## `ground` is where they *stand*, in metres, and nothing here decides how big
+## they are -- `_draw_sticker` reads that off the bake. That is the fix for a
+## blocker who came out roughly four metres tall in the plan view: the size was a
+## share of the panel, so shrinking the court grew the voli.
+func _draw_voli(
+	key: String, along: float, depth: float, scale: float, origin: Vector2,
+	ink: Color, alpha: float, reveal: float, salt: int
+) -> bool:
+	var ground := _floor_at(along, depth, scale, origin)
+	## The shadow, drawn *into* the drawing rather than under the sticker: a pencil
+	## ellipse at the voli's feet, hatched, in the same hand as the court. The
+	## sticker's own drop shadow says it is a sticker; this one says the voli is
+	## standing somewhere. A third of a metre across, so it is a body's footprint
+	## and not a puddle.
+	var foot := Vector2(0.34 * scale, 0.34 * scale * maxf(sin(_tilt()), 0.12))
+	_marker_ellipse(ground, foot, Color(ink, 0.42), alpha, reveal, salt + 71)
+	_hatch(
+		Rect2(ground - foot * 0.8, foot * 1.6), Color(ink, 0.22), alpha, reveal, salt + 83
+	)
+	return _draw_sticker(key, ground, scale)
+
+
+## The tilt of the current view, in radians above the floor.
+func _tilt() -> float:
+	return deg_to_rad(float((VIEW_ANGLES.get(view, Vector2(-38.0, 32.0)) as Vector2).y))
+
+
+## The wall at the net, from whichever side the view is standing on.
+##
+## Two blockers, 0.35 m off the tape, 0.9 m apart -- the distances they actually
+## take up, so the seam between them is the seam a real pair leaves rather than a
+## gap somebody drew. They fall back to a drawn arch while the bake is still
+## running, because a body that pops in is better than a hole.
+func _draw_blockers(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	var wall: Array = [[-1.15, "tall"], [-0.25, "wing"]]
+	for index in range(wall.size()):
+		var along: float = wall[index][0]
+		var key := _sticker_key(str(wall[index][1]), view)
+		var salt := 90 + index * 29
+		if _draw_voli(key, along, 0.35, scale, origin, ink, alpha, reveal, salt):
+			continue
+		## The fallback figure, at the reach the pose would have had.
+		var head := _project(Vector3(along, 0.35, 2.80), scale, origin)
+		_marker_circle(head, 13.0, ink, alpha, reveal, salt)
+		_marker_line(
+			head + Vector2(0.0, 12.0),
+			_project(Vector3(along, 0.35, 1.40), scale, origin),
+			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.3
 		)
 
-	## The seam between them, circled the way somebody circles the thing they
-	## want you to look at.
-	var seam_u: float = (float(blockers[0][0]) + float(blockers[1][0])) * 0.5
-	var seam := _net_point(origin, span, seam_u, 1.17, 0.48)
-	_marker_ellipse(seam, Vector2(44.0, 38.0), MARKER_RED, alpha * 0.9, reveal, 137)
-
-	_draw_zone_bars(
-		Rect2(size.x * 0.68, size.y * 0.40, size.x * 0.27, board_bottom - size.y * 0.54),
-		alpha, reveal
+	## The seam between them, circled the way somebody circles the thing they want
+	## you to look at.
+	var seam := _project(
+		Vector3((float(wall[0][0]) + float(wall[1][0])) * 0.5, 0.35, 2.95),
+		scale, origin
 	)
+	_marker_ellipse(seam, Vector2(38.0, 32.0), MARKER_RED, alpha * 0.9, reveal, 137)
 
 
 ## The priority bars. Black for the level, red for the one being pointed at, and
@@ -1267,69 +1403,6 @@ func _draw_zone_bars(area: Rect2, alpha: float, reveal: float) -> void:
 		Vector2(area.position.x - 6.0, baseline),
 		Vector2(area.position.x + area.size.x + 6.0, baseline),
 		ink, alpha, reveal, 399, 13
-	)
-
-
-func _draw_receive_phase(alpha: float, reveal: float) -> void:
-	var ink := _ink()
-	_marker_text(
-		"SERVE RECEIVE", Vector2(size.x * 0.08, size.y * 0.16), 26, ink, alpha, reveal
-	)
-	## A half court in plan, because reception is a floor-shape problem.
-	var court := Rect2(size.x * 0.10, size.y * 0.24, size.x * 0.46, size.y * 0.54)
-	_marker_rect(court, ink, alpha, reveal, 11)
-	_marker_line(
-		court.position + Vector2(0.0, court.size.y * 0.34),
-		court.position + Vector2(court.size.x, court.size.y * 0.34),
-		Color(ink, 0.55), alpha * 0.7, reveal, 27
-	)
-	for spot in [Vector2(0.22, 0.68), Vector2(0.50, 0.80), Vector2(0.78, 0.66)]:
-		_marker_circle(
-			court.position + court.size * spot, 10.0, ink, alpha, reveal,
-			41 + int(spot.x * 100.0)
-		)
-	_marker_text(
-		"seam", court.position + court.size * Vector2(0.30, 0.44), 13,
-		MARKER_RED, alpha, reveal
-	)
-	_marker_ellipse(
-		court.position + court.size * Vector2(0.36, 0.72), Vector2(56.0, 30.0),
-		MARKER_RED, alpha * 0.9, reveal, 63
-	)
-
-
-func _draw_attack_phase(alpha: float, reveal: float) -> void:
-	var ink := _ink()
-	_marker_text(
-		"ATTACK", Vector2(size.x * 0.08, size.y * 0.16), 26, ink, alpha, reveal
-	)
-	var net_y := size.y * 0.34
-	_marker_line(
-		Vector2(size.x * 0.08, net_y), Vector2(size.x * 0.72, net_y), ink, alpha, reveal, 7, 11
-	)
-	var setter := Vector2(size.x * 0.44, size.y * 0.52)
-	_marker_circle(setter, 11.0, ink, alpha, reveal, 19)
-	_marker_text("S", setter + Vector2(-5.0, 5.0), 14, ink, alpha, reveal)
-	for target in [Vector2(size.x * 0.15, size.y * 0.42), Vector2(size.x * 0.66, size.y * 0.44)]:
-		_marker_arrow(setter, target, MARKER_RED, alpha, reveal, 31 + int(target.x))
-
-
-func _draw_floor_phase(alpha: float, reveal: float) -> void:
-	var ink := _ink()
-	_marker_text(
-		"FLOOR", Vector2(size.x * 0.08, size.y * 0.16), 26, ink, alpha, reveal
-	)
-	var court := Rect2(size.x * 0.10, size.y * 0.26, size.x * 0.52, size.y * 0.50)
-	_marker_rect(court, ink, alpha, reveal, 5)
-	for spot in [Vector2(0.18, 0.26), Vector2(0.50, 0.20), Vector2(0.82, 0.28),
-			Vector2(0.22, 0.76), Vector2(0.78, 0.74)]:
-		_marker_circle(
-			court.position + court.size * spot, 9.0, ink, alpha, reveal,
-			51 + int(spot.x * 90.0 + spot.y * 13.0)
-		)
-	_marker_text(
-		"cover", court.position + court.size * Vector2(0.42, 0.52), 13,
-		MARKER_RED, alpha, reveal
 	)
 
 
@@ -1584,9 +1657,10 @@ func _ink() -> Color:
 
 
 func _zone_at(at: Vector2) -> int:
-	var area := Rect2(
-		size.x * 0.68, size.y * 0.40, size.x * 0.27, size.y - 13.0 - size.y * 0.54
-	)
+	## The same rectangle the bars are drawn in, asked for rather than restated --
+	## the two were written out separately and drifted, so a wheel over the bottom
+	## of a bar changed nothing.
+	var area := _rail_rect()
 	if not area.grow(10.0).has_point(at):
 		return -1
 	var slot := area.size.x / float(ZONE_COUNT)
