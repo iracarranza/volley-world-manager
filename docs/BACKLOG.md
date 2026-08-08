@@ -2618,3 +2618,34 @@ to ball flight and locomotion, and "posture bands the resolver already decides"
 may be the right grain. Not decided. If it is built, it belongs next to
 `LocomotionModel` rather than in the actor, because the actor draws conclusions
 and does not reach them.
+
+## A reaching dig is a lunge, and the rig can only make both legs do one thing
+
+The four dig postures are drawn from one leg model: a thigh angle, twice that at
+the knee, and a hip roll, applied to both legs identically apart from a fore-aft
+stride offset. That is enough for planted, moving and off-axis. It is not enough
+for **reaching**, which in this sport means a lunge -- one leg folded under the
+body, the other nearly straight and thrown out to the side, the whole base
+asymmetric and the weight over the folded one.
+
+The constraint is measurable rather than aesthetic. A folded leg cannot splay
+far, because only the part of the shank still pointing downward travels sideways
+when the hip rolls out. At the 0.34 m crouch a reaching dig now takes, the hip
+abduction limit caps the base at about 0.78 m -- and that is the *widest of the
+four*, so it reads as a deep squat rather than as a player at the edge of their
+range. Asking for more silently gets less, which is why the number in the code is
+0.78 and not the 0.92 the pose wants.
+
+What it needs is per-leg parameters: a `crouch_metres` and a `stance_metres` for
+each side rather than one pair for both, with the grounding solve run against the
+lower foot as it already is. That is a contained change to `_pose_dig_legs` and
+its two solvers. It is held because the whole body model is being overhauled
+first, and a lunge is exactly the pose whose legibility depends on the knee and
+hip geometry that overhaul will replace.
+
+Adjacent and cheaper: the platform still finishes **0.30 m above the hip joint**
+at contact, rising to 0.45 through the drive. A real passing platform is at or
+below the waist with the hands nearer the knees. The forearm pitch is a single
+`lead` angle authored in degrees, and it should be solved from a target platform
+height in metres the same way the stance and the crouch now are -- the same fix,
+one joint further up.

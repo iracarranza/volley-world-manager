@@ -11,6 +11,10 @@ const BlockBiomechanicsScript := preload("res://scripts/data/block_biomechanics.
 const LandingBiomechanicsScript := preload(
 	"res://scripts/data/landing_biomechanics.gd"
 )
+const ServeBiomechanicsScript := preload(
+	"res://scripts/data/serve_biomechanics.gd"
+)
+const SetBiomechanicsScript := preload("res://scripts/data/set_biomechanics.gd")
 
 @onready var body_pivot: Node3D = $BodyPivot
 @onready var torso: MeshInstance3D = $BodyPivot/Torso
@@ -88,10 +92,29 @@ var _airborne_action: String = "default"
 ## Seconds remaining in the current landing, counting down from the action's own
 ## duration. Zero means the voli is on their feet.
 var _landing_remaining: float = 0.0
+## Whether the pose that just ran already put the feet on the floor itself, in
+## which case `_ground_the_feet` must not do it a second time. Consumed on read.
+var _feet_already_grounded: bool = false
 
 ## Thigh share of total leg length. Slightly over half, which is roughly true
 ## and is the ratio that keeps a folded knee reading as a knee.
 const THIGH_SHARE: float = 0.54
+
+## How far in front of the ankle the shoe sits, in rig units.
+##
+## Named rather than inlined because the stance solve needs it: a deeply folded
+## knee swings the shoe's own forward offset sideways along with the shank, and
+## leaving it out put a reaching dig's feet 12 percent wider than the stance it
+## was asked for.
+const SHOE_FORWARD_OFFSET: float = 0.06
+
+## How far a leg can swing out from under the hip, in degrees.
+##
+## Roughly what a squatting athlete has and well short of a gymnast's. It exists
+## because the stance is asked for in metres and some widths are simply not
+## available at some depths -- see `_stance_roll`.
+const HIP_ABDUCTION_LIMIT_DEGREES: float = 42.0
+
 
 ## Upper-arm share of total arm length. Slightly under half, because the lower
 ## segment carries the hand as well as the forearm.
@@ -354,25 +377,49 @@ func set_highlighted(highlighted: bool) -> void:
 ## back toward those captured values afterwards. What is being eased *from* is
 ## therefore whatever the frame already had -- the gait, mid-stride -- so a
 ## passer running to the ball keeps running and the platform arrives under them.
-func _apply_dig_posture(weight: float = 1.0) -> void:
+func _apply_dig_posture(weight: float = 1.0, drive: float = 0.0) -> void:
 	var blend := clampf(weight, 0.0, 1.0)
+	var push := clampf(drive, 0.0, 1.0)
 	var before := _capture_joints()
-	## Deep enough that the platform has somewhere to be.
+	## **How far the hips drop below standing**, in metres.
 	##
-	## Measured on the old numbers, a planted passer held their hands **0.27 m
-	## above the hip** and 0.44 m in front, with the trunk folded 4.3 degrees --
-	## which is a person standing up with their arms out, not a person passing.
-	## A platform is a flat surface below the waist and in front of the body, and
-	## the only way to put it there is to get the shoulders down: fold at the hips
-	## and let the knees carry it, which is also the only way to hold it without
-	## falling forward.
-	var knee_bend := 46.0
-	var hip_pitch := -30.0
-	## Small, because the fold now does most of the lowering itself. A squat that
-	## bends the right way already shortens the leg's vertical span; the explicit
-	## drop is only the extra sink the hips add, and at the old values the two
-	## together pushed the feet through the floor.
-	var drop := 0.055
+	## In metres for the same reason the stance is, and after the same discovery.
+	## The knee angle this replaces could not reach the depth it was supposed to
+	## mean: a squat folds the thigh forward and the shank back by equal amounts,
+	## so the leg stays a chevron of length `span * cos(thigh_lift)` and a
+	## 58-degree knee lowers a voli by **0.08 m**. The pose looked deeper than that
+	## only because a separate hand-tuned `drop` pushed the whole body down and the
+	## feet went through the floor with it -- 0.06 m under on a planted dig and
+	## 0.19 m under on a reaching one. Depth that comes from sinking the figure
+	## into the court is depth you cannot see, which is why a passer read as
+	## someone leaning forward rather than someone getting low.
+	##
+	## Stated as a drop, the number is checkable against a photograph: a passer in
+	## a serve-receive stance is a quarter of a metre below their standing height,
+	## and one digging at the edge of their range is nearly half.
+	var crouch_metres := 0.26
+	var hip_pitch := -26.0
+	## **How far apart the feet are**, as an outward roll on each leg.
+	##
+	## The stance had no width at all: measured, the two shoes sat 0.302 m apart in
+	## every posture at every phase, which is exactly the hip width -- the legs
+	## hung straight down from the pelvis and the only thing that moved was the
+	## fold. A passer standing with their feet under their hips and their trunk
+	## pitched forward is not low, they are *leaning*, and that is precisely how
+	## the pose read.
+	##
+	## Rolling the legs out is also what makes the crouch cost nothing in balance:
+	## a wide base is why a defender can put their shoulders in front of their toes
+	## without falling over it, so the width and the depth belong together and are
+	## set together per posture.
+	##
+	## **In metres between the shoes, not in degrees at the hip.** The roll needed
+	## to hold a given width depends on how folded the knee is -- a straightening
+	## leg reaches further sideways at the same angle -- so a fixed roll made the
+	## feet slide apart by 22 cm as the legs drove through contact. Feet do not
+	## move during a pass. The angle is solved from the width instead, which also
+	## makes this a number a reader can check against a stance they have seen.
+	var stance_metres := 0.76
 	var platform_yaw := 0.0
 	var platform_roll := 0.0
 	## How far the whole body twists toward the ball, and how far the *far* leg
@@ -385,7 +432,11 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 	## almost upright, and an upright trunk is what put the platform up at chest
 	## height -- the arms cannot reach down and forward from shoulders that have
 	## not come down and forward themselves.
-	var body_tilt := -11.0
+	##
+	## Eased back from -11 once the knee and the stance took over the lowering.
+	## Tilt and depth are two ways to get the shoulders down and they read
+	## completely differently: depth reads as an athlete, tilt reads as a stoop.
+	var body_tilt := -8.0
 	## Mid-stride offsets, so a defender who arrived on the move is caught on the
 	## move rather than standing still in a lower stance.
 	var stride := 0.0
@@ -396,14 +447,25 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 			## planted stance is the whole body committing forward -- a lunge is
 			## a player who has given up their balance to get there, and a
 			## crouch is not.
-			knee_bend = 84.0
-			hip_pitch = -44.0
-			drop = 0.09
+			crouch_metres = 0.34
+			hip_pitch = -40.0
+			## Widest of the four. A ball at the edge of the range is reached by
+			## splitting the base, not by folding further over a narrow one, and
+			## the split is what tells this apart from a deep planted dig at the
+			## size a sticker is actually drawn.
+			##
+			## Not wider, though it should be: a folded leg cannot splay far, so
+			## at this depth the hip clamp caps the base near 0.78 and asking for
+			## more silently gets less. The pose a real reaching dig makes is a
+			## *lunge* -- one leg folded under, one nearly straight and thrown out
+			## to the side -- and this rig can only make both legs do the same
+			## thing at once. Recorded in the backlog rather than faked here.
+			stance_metres = 0.78
 			platform_roll = 10.0
 			## Enough lean to read as committed, not so much that the figure folds
 			## into a ball. At -26 the torso came down over the knees and the legs
 			## disappeared behind it, which loses the very thing the knee is for.
-			body_tilt = -14.0
+			body_tilt = -12.0
 		"off-axis":
 			## Got there, could not square up. The ball is off to one side and the
 			## platform stretches out after it -- but the interesting part is what
@@ -418,9 +480,11 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 			##
 			## Without the twist this was a player standing square with both arms
 			## swung sideways, which is not a posture anybody has ever been in.
-			knee_bend = 52.0
-			hip_pitch = -24.0
-			drop = 0.06
+			crouch_metres = 0.24
+			hip_pitch = -22.0
+			## Wide, but not split: the reach here is sideways and it is bought with
+			## the twist, not with the base.
+			stance_metres = 0.72
 			platform_yaw = 30.0
 			platform_roll = 14.0
 			torso_yaw = -22.0
@@ -429,13 +493,28 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 			## Caught mid-step. The two legs are deliberately *unequal*: one is
 			## still driving, the other is already planting, which is what makes
 			## this read as arriving rather than as a shallower version of planted.
-			knee_bend = 58.0
-			hip_pitch = -34.0
-			drop = 0.07
+			crouch_metres = 0.21
+			hip_pitch = -30.0
+			## Narrowest, and for the opposite reason to the others: one foot is
+			## still in the air. A player mid-step has not set their base yet, so a
+			## wide one here would read as arriving and standing still at once.
+			stance_metres = 0.58
 			stride = 30.0
 		_:
 			pass
-	body_pivot.position.y -= drop * body_height_scale
+	## The drive: knees and hips extending under a platform that does not move.
+	##
+	## Applied after the posture is chosen rather than as four more posture
+	## constants, because it is the same action whichever posture a defender got
+	## there in -- a lunging dig extends out of a deeper start, not differently.
+	## The trunk comes up with it, which is what carries the pass toward the target.
+	##
+	## The stance does *not* extend with it. Feet do not move during a pass; the
+	## legs straighten between them, so the base stays as wide as it was set and
+	## only the angles unwind.
+	crouch_metres = lerpf(crouch_metres, crouch_metres * 0.28, push)
+	hip_pitch = lerpf(hip_pitch, hip_pitch * 0.35, push)
+	body_tilt = lerpf(body_tilt, body_tilt * 0.30, push)
 	body_pivot.rotation.x = deg_to_rad(hip_pitch * 0.24 + body_tilt)
 	body_pivot.rotation.y = deg_to_rad(torso_yaw)
 	## **The head keeps watching the ball.**
@@ -457,36 +536,44 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 	## Eyes up the incoming line rather than down at the platform.
 	look_pitch = deg_to_rad(-HEAD_PITCH_LIMIT_DEGREES * 0.45)
 	_apply_head_look()
-	for index in [0, 1]:
-		var leg: Node3D = left_leg if index == 0 else right_leg
-		## Thigh forward, shank back under it. Splitting the fold across both
-		## bones is what keeps the foot near the floor instead of swinging the
-		## whole leg out in front.
-		##
-		## `far_leg_lead` is added to the left leg only, because `torso_yaw` is
-		## authored for a ball off to the player's right and the left side is the
-		## one that has to travel. `stride` splits the pair the other way, one
-		## forward and one back.
-		var lead_for_leg := (far_leg_lead if index == 0 else 0.0) \
-			+ (stride if index == 0 else -stride)
-		## **A knee folds backward.**
-		##
-		## This had the thigh swinging back and the shank swinging *forward*,
-		## which puts the joint's point behind the leg -- a knee bending the wrong
-		## way. It survived because a crouch of roughly the right height is still a
-		## crouch of roughly the right height, and the tell is the one detail the
-		## knee was added to show.
-		##
-		## Correct squat: the thigh rotates forward as the hips drop, and the
-		## shank folds back by the same amount so it finishes near vertical and
-		## the foot stays under the body. Equal and opposite is what keeps the
-		## foot on the floor at any depth.
-		var thigh_lift := knee_bend * 0.45
-		leg.rotation_degrees.x = thigh_lift + lead_for_leg
-		var knee := leg.get_node("Knee") as Node3D
-		## The trailing leg stays straighter -- it is still pushing.
-		knee.rotation_degrees.x = -thigh_lift \
-			* (0.6 if index == 1 and stride > 0.0 else 1.0) * 2.0
+	## Legs posed, then *checked and corrected against the rig itself*.
+	##
+	## `_crouch_thigh_lift` is a closed form and it is close, but it is not exact:
+	## the roll and the fold compose through three nested bases and the trunk pitch
+	## swings the whole lower body with it, and every one of those costs the model
+	## a centimetre or two. Left at the first guess, a planted dig asked for 0.26 m
+	## and got 0.19.
+	##
+	## So the guess is posed, the hips are read where they actually landed, and the
+	## residual is spent at the rate the geometry gives -- `span * sin(lift)` per
+	## radian, the derivative of the chevron's own height.
+	##
+	## Four passes rather than one, because that rate is only right for a symmetric
+	## squat. The `moving` posture splits the legs by a stride and takes the
+	## trailing knee 40 percent straighter, so the step it needs is a fraction of
+	## the step the formula predicts and a single correction landed it at 0.14 m
+	## against the 0.21 it asked for. A slope in the right direction and the wrong
+	## magnitude still converges; it just needs the iterations.
+	##
+	## Measured after, at the moment the platform is set: planted 0.252 against
+	## 0.252 asked, reaching 0.330 against 0.330, off-axis 0.233 against 0.233,
+	## and `moving` 0.176 against 0.204 -- the one posture whose legs are doing
+	## two different things is the one still three centimetres shy, which is worth
+	## knowing rather than rounding away.
+	var span := (
+		leg_bone_lengths.x + leg_bone_lengths.y
+	) * leg_length_scale * body_height_scale
+	var thigh_lift := _crouch_thigh_lift(crouch_metres, stance_metres)
+	for _pass in 4:
+		_pose_dig_legs(thigh_lift, stance_metres, far_leg_lead, stride)
+		var per_degree := maxf(
+			span * sin(deg_to_rad(thigh_lift)) * PI / 180.0, 0.0005
+		)
+		thigh_lift = clampf(
+			thigh_lift + (crouch_metres - _dig_hip_drop(span)) / per_degree,
+			0.0, 82.0
+		)
+	_pose_dig_legs(thigh_lift, stance_metres, far_leg_lead, stride)
 	## The platform: two arms held *together* in front, not spread.
 	##
 	## The old dig swung them to -70 degrees with an 18-degree outward tilt each,
@@ -501,7 +588,10 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 	## planted hip pitch the forearms finish about eighty degrees off vertical in
 	## world terms, which is a platform, and the extra reach is exactly what the
 	## deeper knee is paying for.
-	var lead := 52.0 - hip_pitch * 0.30
+	## Lifting a little through the drive -- the platform follows the ball toward
+	## the target rather than being left behind by a body that stood up out of it.
+	## Small: the arms are the one thing in a pass that is *not* supposed to travel.
+	var lead := 52.0 - hip_pitch * 0.30 + 13.0 * push
 	## Converging, not splayed -- and this sign was inverted too. Rotating an arm
 	## about +Z by theta moves its hand to x = sin theta, so the *left* arm needs a
 	## positive roll to bring its hand toward the centreline and the right arm a
@@ -540,6 +630,178 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 	_apply_recovery_state()
 	if blend < 0.999:
 		_blend_joints_toward(before, 1.0 - blend)
+	_ground_the_dig(blend)
+
+
+## How far below standing the hips currently are, in metres.
+##
+## Measured against the **lower** shoe, which is the one that will be on the floor
+## once `_ground_the_dig` has run and therefore the one the hip height is really
+## taken from. Reading a nominated leg's own shoe instead is wrong for exactly the
+## posture that has a stride in it -- a foot swung forward is not under the hip,
+## so `moving` asked for a 0.21 m crouch and landed on 0.11.
+func _dig_hip_drop(span: float) -> float:
+	return span - (
+		to_local(left_leg.global_position).y - minf(
+			to_local(
+				(left_leg.get_node("Knee/Shoe") as Node3D).global_position
+			).y,
+			to_local(
+				(right_leg.get_node("Knee/Shoe") as Node3D).global_position
+			).y,
+		)
+	)
+
+
+## Both legs into a squat of the given thigh angle over the given stance.
+##
+## **A knee folds backward.** This once had the thigh swinging back and the shank
+## swinging *forward*, which puts the joint's point behind the leg -- a knee
+## bending the wrong way. It survived because a crouch of roughly the right
+## height is still a crouch of roughly the right height, and the tell is the one
+## detail the knee was added to show.
+##
+## Correct squat: the thigh rotates forward as the hips drop and the shank folds
+## back by twice that, so it finishes the same angle off vertical on the far side
+## and the foot stays under the body at any depth.
+##
+## `far_lead` goes on the left leg only, because the off-axis twist is authored
+## for a ball off to the player's right and the left side is the one that has to
+## step across. `stride` splits the pair the other way, one forward and one back.
+func _pose_dig_legs(
+	thigh_lift: float, apart: float, far_lead: float, stride: float
+) -> void:
+	for index in [0, 1]:
+		var leg: Node3D = left_leg if index == 0 else right_leg
+		var lead_for_leg := (far_lead if index == 0 else 0.0) \
+			+ (stride if index == 0 else -stride)
+		## The trailing leg stays straighter -- it is still pushing.
+		var knee_fold := -thigh_lift \
+			* (0.6 if index == 1 and stride > 0.0 else 1.0) * 2.0
+		(leg.get_node("Knee") as Node3D).rotation_degrees.x = knee_fold
+		## Rolled out as well as folded, by however much this leg needs to put its
+		## shoe on the stance line.
+		##
+		## Rotating a hanging leg about +Z carries its foot toward +x, so the
+		## *left* leg -- which starts at negative x -- needs a negative roll to
+		## travel outward and the right a positive one. Same sign trap the platform
+		## fell into, and the same measurement settles it: with the roll at zero
+		## the shoes sit 0.302 m apart, which is the hip width exactly.
+		##
+		## How far sideways a roll carries the shoe depends on the knee, because
+		## only the part of the shank still pointing downward travels with it. The
+		## fold is therefore resolved first and the roll solved against it -- the
+		## reason the two are in this order and not the obvious one.
+		leg.rotation_degrees = Vector3(
+			thigh_lift + lead_for_leg, 0.0,
+			_stance_roll(apart, knee_fold) * (-1.0 if index == 0 else 1.0)
+		)
+
+
+## The thigh angle that drops the hips by `drop` metres over a stance `apart`.
+##
+## A squat on this rig is a chevron: the thigh swings forward by this angle and
+## the shank folds back by twice it, so the shank finishes the same angle off
+## vertical on the other side and the foot stays under the hip. The pair
+## therefore spans `leg * cos(lift)` vertically, and rolling the whole thing out
+## to make the stance costs another `cos(roll)` on top.
+##
+## Two passes because the roll needed for a given width depends on how folded the
+## knee is, and the fold depends on the roll. It converges immediately -- the
+## second pass moves the answer by under a degree -- so a loop with an exit test
+## would be more machinery than the problem has.
+func _crouch_thigh_lift(drop: float, apart: float) -> float:
+	var span := (
+		leg_bone_lengths.x + leg_bone_lengths.y
+	) * leg_length_scale
+	if span < 0.01:
+		return 0.0
+	var lift := 0.0
+	for _pass in 2:
+		var roll := deg_to_rad(_stance_roll(apart, -lift * 2.0))
+		var want := span - drop / maxf(body_height_scale, 0.01)
+		lift = rad_to_deg(
+			acos(clampf(want / maxf(span * cos(roll), 0.01), 0.0, 1.0))
+		)
+	return lift
+
+
+## The hip roll that puts one shoe half a stance away from the centreline.
+##
+## `apart` is where the two shoes should be, in metres of court. The hip already
+## contributes `hip_offset.x`, and the rest has to come from the leg swinging
+## out: the thigh carries its full length sideways, the shank only the part of it
+## still pointing downward once the knee has folded, which is why a folded leg
+## needs a *larger* roll than a straight one to stand in the same place.
+##
+## Everything below the scale divide is in the rig's own units. `apart` is not,
+## because a stance is a thing you could measure on a court with a tape, and the
+## whole point of expressing it that way is that it stays checkable.
+func _stance_roll(apart: float, knee_degrees: float) -> float:
+	var fold := deg_to_rad(knee_degrees)
+	## `leg_length_scale` is a scale on the leg node itself rather than a longer
+	## pair of bones, so `leg_bone_lengths` is what was authored and not what is
+	## on screen. Left out, a long-legged voli stood 5 percent wider than asked --
+	## small, silent, and exactly the kind of thing a stance in metres exists to
+	## make catchable.
+	var reach := (
+		leg_bone_lengths.x
+		+ leg_bone_lengths.y * cos(fold)
+		- SHOE_FORWARD_OFFSET * sin(fold)
+	) * leg_length_scale
+	if reach < 0.01:
+		return 0.0
+	var out := apart * 0.5 / maxf(body_height_scale, 0.01) - hip_offset.x
+	## **A hip does not abduct to ninety degrees.** Past the limit the solve does
+	## not fail, it saturates -- and a saturated `asin` returning 90 was quietly
+	## catastrophic: `cos(roll)` went to zero, the depth solve divided by it and
+	## the crouch collapsed to standing. The stance a deep squat can hold is
+	## narrower than one taken standing up, and clamping says so instead of
+	## breaking the pose that asked.
+	return clampf(
+		rad_to_deg(asin(clampf(out / reach, -1.0, 1.0))),
+		-HIP_ABDUCTION_LIMIT_DEGREES, HIP_ABDUCTION_LIMIT_DEGREES
+	)
+
+
+## Put the dig's feet on the floor, and let that decide how low the hips are.
+##
+## This replaces four hand-tuned `drop` constants, and it replaces them because
+## they were measurably wrong: the lower shoe finished **0.062 m below the floor**
+## on a planted dig and **0.189 m below it** on a reaching one. A passer sunk a
+## fifth of a metre into the court has the very thing the deep knee was added to
+## show buried under the floorboards, which is a large part of why the pose read
+## as a stoop rather than a squat.
+##
+## The right relationship is the other way round from the one the constants
+## encoded. Hip height is not a number to pick alongside the knee angle -- it is
+## the *consequence* of the knee angle, the hip fold and the stance width
+## together, and any of the three moving changes it. So the shoe is read where it
+## actually ended up and the pelvis is lifted until it sits at the height a
+## straight leg would put it: `hip_offset.y` minus both bones, which is where the
+## ankle lives when a voli is standing up.
+##
+## Read from the finished transforms rather than recomputed from the angles,
+## because the trunk pitch rotates the legs with it on this rig and the blend
+## back toward the gait moves them again. Trigonometry would have to model both;
+## the transforms already have.
+##
+## Scaled by `blend` so a passer still mostly running is still owned by the gait,
+## which does its own vertical travel through `bob_meters`.
+func _ground_the_dig(blend: float) -> void:
+	var rest := (
+		hip_offset.y - leg_bone_lengths.x - leg_bone_lengths.y
+	) * body_height_scale
+	var lowest := minf(
+		to_local(
+			(left_leg.get_node("Knee/Shoe") as Node3D).global_position
+		).y,
+		to_local(
+			(right_leg.get_node("Knee/Shoe") as Node3D).global_position
+		).y,
+	)
+	body_pivot.position.y += (rest - lowest) * clampf(blend, 0.0, 1.0)
+	_feet_already_grounded = true
 
 
 ## Every joint this pose writes, as it stands right now.
@@ -786,6 +1048,13 @@ func _apply_head_look() -> void:
 ## the voli up. During a stride the deeply folded leg is the swing leg with
 ## nothing under it.
 func _ground_the_feet(elevation: float, baseline_knee: float) -> void:
+	## **Unless the pose already did it exactly.** The dig computes its own hip
+	## height from where its feet finished, and this approximation -- which knows
+	## about the shank and nothing about the thigh, the stance or the trunk --
+	## would then lower it again by a number that was never right for a crouch.
+	if _feet_already_grounded:
+		_feet_already_grounded = false
+		return
 	var current := maxf(
 		(left_leg.get_node("Knee") as Node3D).rotation_degrees.x,
 		(right_leg.get_node("Knee") as Node3D).rotation_degrees.x,
@@ -830,6 +1099,21 @@ const DEFAULT_SQUARE_UP_PHASE: float = -0.60
 ## the ball arrive at a surface that is already still.
 const PLATFORM_PHASE: float = -0.34
 const PLATFORM_SET_PHASE: float = -0.08
+## And when the legs finish driving through it.
+##
+## **A pass is played with the legs.** The platform is set early and then held
+## still -- coaches teach actively against swinging it, because an arm swing is
+## what makes a pass unrepeatable -- and what supplies the lift and the direction
+## is the knees and hips extending under a quiet platform. So the drive starts a
+## little before the ball arrives, is already underway at contact, and carries on
+## afterwards: the follow-through of a pass is the body rising and travelling
+## toward the target, not the arms going anywhere.
+##
+## Before this the posture simply froze at `PLATFORM_SET_PHASE` and stayed frozen
+## for the whole outgoing flight -- a passer crouched at full depth watching the
+## ball they had already played.
+const PLATFORM_DRIVE_START: float = -0.14
+const PLATFORM_DRIVE_END: float = 0.34
 
 
 func _square_up_phase(event_type: int) -> float:
@@ -1049,27 +1333,37 @@ func set_pose(
 	var guide_arm := right_arm if dominant_hand == "Left" else left_arm
 	match event_type:
 		RallyEventModel.EventType.SERVE:
-			body_pivot.rotation.x = -0.10
-			## Contact is at phase 0, so the toss and the swing happen on the
-			## negative side and only the follow-through is left afterwards. Read
-			## the old way -- `phase * 1.8`, starting at zero -- the server was
-			## drawn fully cocked at the instant the ball left their hand and swung
-			## through it while the serve was already crossing the net.
-			##
-			## Saturates just before zero so the arm is at full extension *through*
-			## the ball rather than arriving exactly on it.
-			var serve_swing := clampf((phase + 1.0) * 1.25, 0.0, 1.0)
-			## Up and a little in front at contact, and the toss arm raised in
-			## front rather than behind the shoulder.
-			striking_arm.rotation_degrees.x = -190.0 * serve_swing
-			guide_arm.rotation_degrees.x = 100.0
-			## Cocked, then thrown. The arm straightens *through* the swing rather
-			## than travelling as a rigid stick, which is where the whip comes
-			## from -- and it is the reason a serve now reads as a serve at the
-			## moment before contact rather than only at contact.
-			_set_elbow(striking_arm, lerpf(96.0, 8.0, serve_swing))
-			## The toss arm stays long. A toss with a bent elbow is a bad toss.
-			_set_elbow(guide_arm, 12.0)
+			## Every joint comes from `ServeBiomechanics`, for the same reason the
+			## spike and the block have their own modules: this branch was two
+			## lines that saturated at -0.20 and then held, so a server cocked,
+			## swung, and stood frozen with their arm overhead for the whole
+			## outgoing flight -- no follow-through, no weight transfer, no toss
+			## arm coming down, and no legs at all.
+			var toss := ServeBiomechanicsScript.resolve(
+				phase, -1.0 if dominant_hand == "Left" else 1.0
+			)
+			body_pivot.rotation.x = float(toss.torso_pitch_radians)
+			## The trunk winding against the facing, applied here rather than by
+			## turning the actor -- `_turn_toward` is where the voli is looking.
+			body_pivot.rotation.y += deg_to_rad(float(toss.torso_twist_degrees))
+			var serve_lead := left_leg if dominant_hand == "Left" else right_leg
+			var serve_trail := right_leg if dominant_hand == "Left" else left_leg
+			serve_lead.rotation_degrees.x = float(toss.lead_hip_degrees)
+			serve_trail.rotation_degrees.x = float(toss.trail_hip_degrees)
+			for leg in [left_leg, right_leg]:
+				(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
+					toss.knee_degrees
+				)
+			## Two axes on the hitting arm, as on the spike: the roll is what
+			## carries the elbow out away from the ribs on the way back and brings
+			## the hand across the body on the way down.
+			striking_arm.rotation_degrees = Vector3(
+				float(toss.striking_shoulder_degrees), 0.0,
+				float(toss.striking_abduction_degrees)
+			)
+			_set_elbow(striking_arm, float(toss.striking_elbow_degrees))
+			guide_arm.rotation_degrees.x = float(toss.guide_shoulder_degrees)
+			_set_elbow(guide_arm, float(toss.guide_elbow_degrees))
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
 			## A dig is drawn by bending, not by squashing.
 			##
@@ -1098,46 +1392,40 @@ func set_pose(
 			## there when the ball is. Before the blend starts the gait owns the
 			## arms, which is what running looks like.
 			if phase >= PLATFORM_PHASE:
-				_apply_dig_posture(smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase))
+				_apply_dig_posture(
+					smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase),
+					smoothstep(PLATFORM_DRIVE_START, PLATFORM_DRIVE_END, phase)
+				)
 
 		RallyEventModel.EventType.SET:
-			## A set is a *motion*, and drawing only its middle threw away the
-			## half that reads. Preparation is arms up with the elbows carried
-			## wide and the hands at the forehead; the release is that same shape
-			## extending -- elbows opening, upper arms rising, hands finishing
-			## above and in front. Phase runs one into the other rather than
-			## picking a frame.
-			##
-			## The elbow does the work: at 98 degrees the forearms are vertical
-			## beside the head, and opening toward 22 is the push. Rotating the
-			## shoulder alone would swing the whole arm through the ball.
-			## Same correction as the serve: the preparation runs up to contact at
-			## phase 0, not away from it. Drawn the old way the setter was still
-			## gathering the ball at the moment it left their hands.
-			var release := clampf(phase + 1.0, 0.0, 1.0)
-			var set_pitch := lerpf(96.0, 132.0, release)
-			## **The hands are together, because the ball is between them.**
-			##
-			## The flare was signed the wrong way and spread the forearms apart
-			## through the whole motion, so both halves of a set were drawn as a
-			## player holding nothing. A set is two hands cupping one ball: the
-			## forearms converge for the preparation *and* the push, and only the
-			## follow-through opens outward once the ball has gone.
-			##
-			## Positive rolls the hand toward the centreline, so the left arm
-			## takes `+flare` and the right `-flare` -- the opposite of what a
-			## spread would use.
-			## The follow-through opens the hands outward once the ball has gone,
-			## so it is keyed off the positive side of contact rather than off the
-			## tail of the release -- which, now that the release saturates at
-			## contact, would have opened them while the ball was still in them.
-			var follow := clampf(phase / 0.45, 0.0, 1.0)
-			var set_flare := lerpf(lerpf(21.0, 15.0, release), -20.0, follow)
+			## Every joint comes from `SetBiomechanics`. What was here got the
+			## preparation right and stopped: the release saturated at contact, so
+			## past phase 0 the setter held the finish for the whole outgoing flight
+			## with their hands stopped where the ball had been. The legs were never
+			## touched at all, which left a setter standing straight-legged while
+			## their arms did the work -- and a set is a push from the floor.
+			var push := SetBiomechanicsScript.resolve(
+				phase, -1.0 if dominant_hand == "Left" else 1.0
+			)
+			body_pivot.rotation.x = float(push.torso_pitch_radians)
+			## Only the rise. The dip comes free from the knee fold below, which
+			## `_ground_the_feet` turns into a body drop -- subtracting a crouch
+			## here as well would lower the setter twice and put their shoes
+			## through the floor, which is what the dig was doing.
+			body_pivot.position.y += float(push.rise_metres) * body_height_scale
+			var split := float(push.hip_split_degrees)
+			left_leg.rotation_degrees.x = -split
+			right_leg.rotation_degrees.x = split
+			for leg in [left_leg, right_leg]:
+				(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
+					push.knee_degrees
+				)
+			var set_pitch := float(push.shoulder_degrees)
+			var set_flare := float(push.flare_degrees)
 			left_arm.rotation_degrees = Vector3(set_pitch, 0.0, set_flare)
 			right_arm.rotation_degrees = Vector3(set_pitch, 0.0, -set_flare)
-			var set_elbow := lerpf(98.0, 22.0, release)
-			_set_elbow(left_arm, set_elbow)
-			_set_elbow(right_arm, set_elbow)
+			_set_elbow(left_arm, float(push.elbow_degrees))
+			_set_elbow(right_arm, float(push.elbow_degrees))
 		RallyEventModel.EventType.ATTACK:
 			## Every joint comes from `SpikeBiomechanics`, which staggers them so
 			## the legs extend before the trunk arches, the trunk before the
@@ -1478,7 +1766,7 @@ func _build_silhouette() -> void:
 		shank_mesh.position = Vector3(0.0, -shank_length * 0.5, 0.0)
 		var shoe := knee.get_node("Shoe") as MeshInstance3D
 		shoe.mesh = BodyTypeModelsScript.build_mesh(shoe_spec)
-		shoe.position = Vector3(0.0, -shank_length, -0.06)
+		shoe.position = Vector3(0.0, -shank_length, -SHOE_FORWARD_OFFSET)
 		## A box foot is authored lying flat already; only the capsule shoe
 		## needs standing on its side to become a foot rather than a leg.
 		shoe.rotation_degrees = Vector3(

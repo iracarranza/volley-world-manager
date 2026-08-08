@@ -533,3 +533,57 @@ at exactly 13.0 px spacing interleaved with lines at exactly 22.0 px -- the
 worksheet's own squared paper, and `UIPrintedRule`'s layout grid drawn over it
 because the rule was added to the panel last and therefore drew last. Neither
 grid was wrong. **Count the things before measuring one of them.**
+
+## 20. Depth that came from sinking the figure through the floor
+
+**What it looks like.** A passing voli read as someone *leaning forward* rather
+than someone getting low. The pose had a knee angle, a hip fold, a body tilt and
+a per-posture `drop`, all four hand-tuned, and it had been looked at many times.
+
+Measured on the rig, four things were true at once and none of them was visible
+on a 200-pixel sticker:
+
+| what | measured |
+|---|---|
+| feet apart, every posture, every phase | **0.302 m** -- exactly the hip width |
+| hip drop below standing, planted dig | **0.08 m** from a 58-degree knee |
+| lower shoe, planted dig | **0.062 m below the floor** |
+| lower shoe, reaching dig | **0.189 m below the floor** |
+
+The legs hung straight down from the pelvis and the only thing that ever moved
+was the fold. What looked like depth was the whole body being pushed down into
+the court by `drop`, taking the feet with it -- so the deep knee the pose existed
+to show was underneath the floorboards, and the only part of the crouch left
+above it was the trunk pitch. Hence: a lean.
+
+**Why the knob could not do its job.** A squat on this rig folds the thigh
+forward by *t* and the shank back by 2*t*, so the leg stays a chevron of height
+`leg * cos(t)` -- and `cos` is flat near zero. A 58-degree knee is a 26-degree
+thigh, and 26 degrees of cosine is 8 centimetres on a 0.74 m leg. The angle could
+not reach the depth it was supposed to mean, so a second knob was added beside it
+that could, and that one lied about where the ground was. §0's defect exactly,
+with an accomplice.
+
+**The fix, and the general shape of it:** state the thing you mean, in the unit
+you mean it in, and solve the angles from it. The stance is now `stance_metres`
+and the depth `crouch_metres` -- both distances a person could measure on a court
+with a tape -- and the hip roll and thigh angle are derived. Then two smaller
+rules fell out of doing that:
+
+- **A derived value has to be checked against the rig, not against the algebra.**
+  The closed form for the thigh angle was 7 cm short, because the roll and the
+  fold compose through three nested bases and the trunk pitch swings the lower
+  body with it. It now poses, reads the hips back off the transforms, and spends
+  the residual. Same reasoning as reading the shoe's actual position to ground
+  the feet rather than recomputing where it ought to be.
+- **A saturating solve must not be allowed to poison what depends on it.**
+  `asin` clamped to 90 degrees when a stance was too wide for the fold, `cos(90)`
+  is zero, the depth solve divided by it, and the crouch collapsed to standing --
+  a wider stance producing a *shallower* squat. The hip abduction limit is now
+  explicit at 42 degrees, and a width that is not available at a given depth
+  quietly comes out narrower instead of destroying the pose that asked for it.
+
+**Adjacent, same pass:** a probe that measures a stance must measure it on the
+floor plane and not across one axis. Reading only `x`, an off-axis dig -- which
+twists the whole body -- reported 20 cm narrower than it was, because the
+separation had rotated out of the axis being measured.

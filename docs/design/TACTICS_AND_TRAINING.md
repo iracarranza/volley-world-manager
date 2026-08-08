@@ -616,35 +616,74 @@ merely drawn.
 7. **The tray is the first seven of the roster** when no lineup is declared,
    and the libero slot is whatever fell into it.
 
-### The spike, frame by frame
+### Every contact, frame by frame
 
-`tools/preview/spike_strip.tscn` bakes fourteen phases of the swing side on,
-at one scale, each standing on its own ground line, and writes a contact sheet.
-It exists because a swing whose entire claim is that the joints are *staggered* --
-legs, then trunk, then shoulder, then elbow -- cannot be judged from one frame,
-and because the sheet's figures come out of the same bake the strip does.
+`tools/preview/contact_strip.tscn` bakes any of the five contacts as a contact
+sheet -- one cell per phase, two camera angles, one scale, every cell standing on
+its own ground line -- and writes `user://<action>_sheet.png`:
 
-The first pass of it found two things the numbers alone had hidden, and both are
-now fixed in `SpikeBiomechanics`:
+```
+xvfb-run -a godot --path . res://tools/preview/contact_strip.tscn -- serve
+```
 
-- **The guide arm went up and behind.** Measured, its hand sat half a metre
-  *behind* the shoulder through the cock -- both arms swung back together and the
-  guide had nothing to guide. It now points straight out at the ball, held there
-  until well after the striking shoulder has started forward, then pulled down.
-  Measured after: +0.53 m ahead through the cock, falling to -0.56 by the
-  follow-through.
-- **The elbow opened with the shoulder rather than after it.** The release window
-  started three hundredths of a phase behind the shoulder's, which is no lag at
-  all: the elbow was already half open at -0.06 while the shoulder was two thirds
-  of the way to the ball, so upper arm and forearm swung as one segment. It now
-  holds -46 degrees through -0.06 and snaps open over the last tenth.
+With no argument it does all five. It replaces `spike_strip` and `receive_strip`,
+which were the same tool twice with a different table of phases at the top.
 
-`receive_strip.tscn` is the same idea for the four dig postures, two angles each.
+It exists because every one of these actions is a *sequence* whose whole claim is
+an ordering -- legs, then trunk, then shoulder, then elbow; the platform set
+before the legs drive; the hands opening only after the ball has gone -- and a
+single frame cannot show an ordering. And it bakes through `UIVoliSticker`, the
+same path the sheet uses, so what the strip shows is what gets drawn.
+
+**Two angles per action, never one.** Each pose has an axis it is blind to from
+the obvious camera: a swing's abduction does not exist side on, a passing
+platform is edge-on from behind, a block's seal is invisible from the side. The
+tool's first version baked the spike side on only, which is exactly the view the
+missing axis does not appear in -- a contact sheet blind to the defect it exists
+to find.
+
+What the strips have found so far, all now fixed in the models:
+
+- **The guide arm on a spike went up and behind.** Measured, its hand sat half a
+  metre *behind* the shoulder through the cock -- both arms swung back together
+  and the guide had nothing to guide. It now points straight out at the ball,
+  held there until well after the striking shoulder has started forward.
+- **The spike's elbow opened with the shoulder rather than after it**, so upper
+  arm and forearm swung as one segment. It now holds -46 degrees through -0.06
+  and snaps open over the last tenth.
+- **The swing had no abduction at all**, so the whole action happened in one
+  plane and read as a hinge. The elbow now goes out as well as back.
+- **The serve and the set both stopped at the ball.** The serve was two lines
+  that saturated at -0.20: a server cocked, swung, then stood frozen with their
+  arm overhead for the entire outgoing flight -- no follow-through, no weight
+  transfer, no toss arm coming down, and no legs at all. The set was the mirror
+  image, its release saturating exactly at contact with the hands stopped where
+  the ball had been, and its legs never touched. Both now have their own modules,
+  `ServeBiomechanics` and `SetBiomechanics`, built the way `SpikeBiomechanics`
+  and `BlockBiomechanics` are: a pure function of phase that runs through the
+  contact and out the other side.
+- **The pass had no stance and no depth.** See `FAILURE_MODES.md` §20 -- the
+  feet were 0.302 m apart in every posture at every phase, a 58-degree knee
+  lowered the hips 8 cm, and the rest of the crouch was the figure being pushed
+  through the floor. The dig now takes a stance and a crouch **in metres** and
+  solves the angles from them; `tools/preview/stance_probe.tscn` prints the feet,
+  hips, head and forearms of all four postures across the contact, which is how
+  each of those numbers was found.
+
+The block needed nothing: it was decomposed into `BlockBiomechanics` earlier and
+the strip confirms the full arc -- read, load, drive, press, hold, withdraw, land.
 
 What is still weak is the **geometry, not the animation**: the striking arm is
 two similar-length capsules with nothing at the joint, so even a correctly
-sequenced whip reads as a stick rotating. That is a body-model problem and is
-first on the list above.
+sequenced whip reads as a stick rotating, and a blocker's raised arms read as two
+rectangles floating beside the torso. That is a body-model problem and is first
+on the list above.
+
+A reaching dig is the one pose the rig cannot currently make. A real one is a
+*lunge* -- one leg folded under, one nearly straight and thrown out to the side --
+and both legs here can only do the same thing at once, so at full depth the hip
+abduction limit caps the base near 0.78 m and it reads as a deep squat instead.
+In `BACKLOG.md`.
 
 ### The zoom is a third axis, and it is the one that can run away
 
