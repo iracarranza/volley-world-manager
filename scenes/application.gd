@@ -20,6 +20,9 @@ const SETTINGS_PATH := "user://settings.cfg"
 @onready var match_center: Control = %MatchCenter
 
 var _wipe: ScreenWipe = null
+## Whether any screen has been shown yet. The first one arrives rather than being
+## wiped to -- see `_show_only`.
+var _has_shown: bool = false
 ## Built in code rather than in `main.tscn`, because both are whole-screen
 ## Controls with no scene content of their own -- everything they show is drawn
 ## from the career. A .tscn for either would be an empty node with a script.
@@ -95,7 +98,14 @@ func _connect_match_center_signal() -> void:
 ## sheet is across, which is why the outgoing screen is never seen being torn
 ## down. The first call has no wipe -- there is nothing to leave.
 func _show_only(screen: Control) -> void:
-	if _wipe == null or not _wipe.is_inside_tree():
+	## **The first call really has no wipe now.** The comment above said so and the
+	## code did not: the guard tested whether the wipe existed, and by this point it
+	## has just been added, so opening the game played a full wipe over a window
+	## that had never been drawn -- half a second of sheet across a blank screen
+	## during the exact frames a cold start is busiest. Nothing to leave means
+	## nothing to cover.
+	if not _has_shown or _wipe == null or not _wipe.is_inside_tree():
+		_has_shown = true
 		_swap_to(screen)
 		return
 	_wipe.play(func() -> void: _swap_to(screen))

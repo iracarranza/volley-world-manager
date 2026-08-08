@@ -85,7 +85,28 @@ func set_palette(sheet: Color, edge: Color) -> void:
 ## timing -- handing over the swap is the whole interface.
 func play(midpoint: Callable) -> void:
 	if _tween != null and _tween.is_valid():
+		## **Killed mid-travel is the one state this must not be left in.** A tween
+		## stops where it stopped, so a wipe interrupted while the sheet was across
+		## left the screen covered with no animation running to uncover it -- and a
+		## covered screen still passes clicks through, because the sheet ignores the
+		## mouse. The game is then running, responding and completely hidden, which
+		## reads as a freeze rather than as a stuck animation.
 		_tween.kill()
+		visible = false
+		_sheet_position = START_POSITION
+	## No sheet before the window has a size.
+	##
+	## The first screen change happens inside `Application._ready()`, where this
+	## control has been added but nothing has been laid out, so `size.x` is zero and
+	## `_draw` paints a sheet of no width. The wipe would be invisible and the swap
+	## would still be held behind it for half a second of nothing. Better to make
+	## the swap immediately and let the incoming screen's own reveal do the work.
+	if size.x < 1.0 or size.y < 1.0:
+		if midpoint.is_valid():
+			midpoint.call()
+		covered.emit()
+		visible = false
+		return
 	visible = true
 	_sheet_position = START_POSITION
 	queue_redraw()

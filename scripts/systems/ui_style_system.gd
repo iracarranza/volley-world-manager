@@ -118,14 +118,63 @@ static func apply(
 		apply(child, light_mode, subtree_medium)
 
 
+## Where a revealed screen comes to rest, and the tween carrying it there.
+##
+## Both remembered on the screen itself, because `reveal` is static and a screen
+## can be revealed again before the last one has finished.
+const REVEAL_HOME := &"ui_reveal_home"
+const REVEAL_TWEEN := &"ui_reveal_tween"
+const REVEAL_RISE: float = 10.0
+const REVEAL_FADE_SECONDS: float = 0.20
+const REVEAL_TRAVEL_SECONDS: float = 0.26
+
+
+## The incoming screen lifting into place.
+##
+## **The screen must end up visible even if this animation never runs.** What was
+## here set `modulate.a = 0.0` outright and relied on a tween to bring it back, so
+## any way the tween could fail to finish -- killed by a second reveal, the node
+## leaving the tree mid-flight -- left a screen that is present, laid out and
+## fully clickable while being completely transparent. That does not look like a
+## bug in an animation. It looks like the game has frozen: the page is there, the
+## mouse works, and nothing on screen ever responds.
+##
+## So the fade is expressed as `.from(0.0)` rather than as an assignment. The
+## property's *final* value is the tween's business and is 1.0 by construction;
+## the starting value is only applied once the tween actually begins. A reveal
+## that never runs now degrades to a screen that simply appears, which is the
+## right failure.
+##
+## The resting position gets the same treatment for a different reason. It used
+## to be read off `screen.position` at call time -- but a screen revealed twice in
+## quick succession is sampled mid-flight, so "home" became home plus whatever the
+## last animation had not finished travelling, and the page crept down the window
+## a few pixels per visit. It is recorded once and reused.
 static func reveal(screen: Control) -> void:
-	var resting_position := screen.position
-	screen.modulate.a = 0.0
-	screen.position = resting_position + Vector2(0.0, 10.0)
+	## Guarded with `has_meta` rather than `get_meta(key, default)`, which pushes an
+	## error for a missing key even when handed a default -- and an error per screen
+	## change is exactly the kind of noise that hides a real one.
+	if screen.has_meta(REVEAL_TWEEN):
+		var running: Variant = screen.get_meta(REVEAL_TWEEN)
+		if running is Tween and (running as Tween).is_valid():
+			(running as Tween).kill()
+	var home := screen.position
+	if screen.has_meta(REVEAL_HOME):
+		home = Vector2(screen.get_meta(REVEAL_HOME))
+	screen.set_meta(REVEAL_HOME, home)
+	## Killing a tween leaves the property wherever it stopped, so the previous
+	## reveal is finished by hand before the next one starts from a known place.
+	screen.modulate.a = 1.0
+	screen.position = home
 	var tween := screen.create_tween().set_parallel(true)
 	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(screen, "modulate:a", 1.0, 0.20)
-	tween.tween_property(screen, "position", resting_position, 0.26)
+	tween.tween_property(
+		screen, "modulate:a", 1.0, REVEAL_FADE_SECONDS
+	).from(0.0)
+	tween.tween_property(
+		screen, "position", home, REVEAL_TRAVEL_SECONDS
+	).from(home + Vector2(0.0, REVEAL_RISE))
+	screen.set_meta(REVEAL_TWEEN, tween)
 
 
 static func _style_node(node: Node, light_mode: bool, medium: StringName) -> void:
