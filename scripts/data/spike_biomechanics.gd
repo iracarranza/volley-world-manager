@@ -83,7 +83,7 @@ const SHOULDER_LIFT_DEGREES: float = -124.0
 ## can then stand up out of it. The power comes from the shoulder pivoting forward
 ## and the forearm extending, so the load has to leave both of those with somewhere
 ## to travel.
-const SHOULDER_COCK_DEGREES: float = -128.0
+const SHOULDER_COCK_DEGREES: float = -136.0
 const SHOULDER_CONTACT_DEGREES: float = -204.0
 const SHOULDER_FOLLOW_DEGREES: float = -252.0
 
@@ -179,7 +179,20 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	## segment moving 7 degrees per sample is indistinguishable from one
 	## teleporting, at the sampling rate playback actually runs at.
 	var strike := window(p, COCK_END, 0.0)
-	var elbow_release := window(p, COCK_END + 0.03, 0.02)
+	## **The elbow holds its fold while the shoulder travels, then extends.**
+	##
+	## It opened over (-0.11, 0.02) against a shoulder driving over (-0.14, 0.00) --
+	## a lag of three hundredths of a phase, which is no lag at all. Measured
+	## through the swing, the elbow was already half open by -0.06 while the
+	## shoulder was only two thirds of the way to the ball, so upper arm and forearm
+	## swung as one segment and the whole action read as a straight stick rotating.
+	## The frame-by-frame strip is what made it obvious; a single frame cannot show
+	## an ordering.
+	##
+	## Now it stays folded until the shoulder is most of the way forward and snaps
+	## open over the last tenth. That is what a whip is, and it is the difference
+	## between an arm that hits the ball and an arm that arrives with it.
+	var elbow_release := window(p, -0.075, 0.035)
 	var follow := window(p, 0.0, FOLLOW_END)
 	var land := window(p, FOLLOW_END, 1.0)
 	## The arm finishes after the feet do.
@@ -212,16 +225,29 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	elbow = lerpf(elbow, ELBOW_FOLLOW_DEGREES, follow)
 	elbow = lerpf(elbow, 22.0, arm_recover)
 
-	## The guide arm is not decoration. It reaches at the ball through the cock
-	## and is pulled down hard through contact -- that pull is what rotates the
-	## trunk, and a hitter drawn without it looks like they are swinging at
-	## something out of reach.
-	var guide := lerpf(BACKSWING_DEGREES, -148.0, maxf(lift, tuck))
-	guide = lerpf(guide, -34.0, snap)
-	guide = lerpf(guide, -12.0, follow)
-	guide = lerpf(guide, -8.0, land)
-	var guide_elbow := lerpf(24.0, 18.0, tuck)
-	guide_elbow = lerpf(guide_elbow, 74.0, snap)
+	## The guide arm is not decoration. It **points at the ball** through the cock
+	## and is pulled down hard as the striking arm comes forward -- that pull is
+	## what rotates the trunk, and a hitter drawn without it looks like they are
+	## swinging at something out of reach.
+	##
+	## It used to go to -148, which measured out as the hand half a metre *behind*
+	## the shoulder and rising: both arms swung back together and the guide had
+	## nothing to guide. Straight out instead -- 84 degrees is very nearly
+	## horizontal on this rig, elbow almost locked -- which is what a hitter does
+	## with it: the non-hitting hand tracks the ball and the swing comes through
+	## underneath it.
+	##
+	## And it is held there. `guide_pull` starts a whole tenth of a phase after the
+	## shoulder does, because the sequence is *reach, then pull*: pulling with the
+	## shoulder would make the two arms one gesture again.
+	var guide_pull := window(p, COCK_END + 0.08, 0.06)
+	var guide := lerpf(BACKSWING_DEGREES, 84.0, maxf(lift, tuck))
+	guide = lerpf(guide, 18.0, guide_pull)
+	guide = lerpf(guide, 6.0, follow)
+	guide = lerpf(guide, 0.0, land)
+	## Nearly straight while it reaches, folding as it is pulled in.
+	var guide_elbow := lerpf(24.0, 4.0, tuck)
+	guide_elbow = lerpf(guide_elbow, 68.0, guide_pull)
 	guide_elbow = lerpf(guide_elbow, 46.0, follow)
 
 	## The bow, and its release.

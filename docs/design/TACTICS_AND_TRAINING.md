@@ -624,17 +624,27 @@ It exists because a swing whose entire claim is that the joints are *staggered* 
 legs, then trunk, then shoulder, then elbow -- cannot be judged from one frame,
 and because the sheet's figures come out of the same bake the strip does.
 
-What it shows today, and the first two are body-model problems rather than
-animation problems:
+The first pass of it found two things the numbers alone had hidden, and both are
+now fixed in `SpikeBiomechanics`:
 
-- **The striking arm reads as one straight stick from the cock to the landing.**
-  The upper arm and forearm are similar-length capsules with nothing at the joint,
-  so the whip -- the shoulder driving and the elbow opening one beat behind it --
-  is in the numbers and not in the silhouette. The load pose itself reads; the
-  transition does not.
-- **The guide arm is nearly invisible**, which loses the trunk rotation it is
-  supposed to be causing.
-- The jump, the plant, the arch and the landing all read correctly.
+- **The guide arm went up and behind.** Measured, its hand sat half a metre
+  *behind* the shoulder through the cock -- both arms swung back together and the
+  guide had nothing to guide. It now points straight out at the ball, held there
+  until well after the striking shoulder has started forward, then pulled down.
+  Measured after: +0.53 m ahead through the cock, falling to -0.56 by the
+  follow-through.
+- **The elbow opened with the shoulder rather than after it.** The release window
+  started three hundredths of a phase behind the shoulder's, which is no lag at
+  all: the elbow was already half open at -0.06 while the shoulder was two thirds
+  of the way to the ball, so upper arm and forearm swung as one segment. It now
+  holds -46 degrees through -0.06 and snaps open over the last tenth.
+
+`receive_strip.tscn` is the same idea for the four dig postures, two angles each.
+
+What is still weak is the **geometry, not the animation**: the striking arm is
+two similar-length capsules with nothing at the joint, so even a correctly
+sequenced whip reads as a stick rotating. That is a body-model problem and is
+first on the list above.
 
 ### The zoom is a third axis, and it is the one that can run away
 
