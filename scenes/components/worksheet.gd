@@ -33,6 +33,19 @@ extends Control
 ## every stroke is a texture rather than a hand.
 
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
+const VoliStickerScript := preload("res://scenes/components/voli_sticker.gd")
+const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+
+## The sticker border, and the shadow that proves it has thickness.
+##
+## Constant weight is the point. Every other line on this sheet varies with the
+## hand -- the tooth, the pressure drift, the wander -- and this one does not,
+## because a die cut does not. That single difference is what separates a sticker
+## lying *on* the paper from a drawing worked *into* it, and it is why the bodies
+## can be bold while the court behind them stays quiet.
+const STICKER_BORDER: float = 3.4
+const STICKER_SHADOW_OFFSET := Vector2(3.0, 4.0)
+const STICKER_SHADOW_ALPHA: float = 0.26
 
 signal phase_changed(phase: String)
 signal view_changed(view: String)
@@ -166,6 +179,7 @@ var _wipe: float = 1.0
 var _wipe_tween: Tween = null
 var _hovered_zone: int = -1
 var _seed: int = 0
+var _stickers: UIVoliSticker = null
 
 
 func _ready() -> void:
@@ -184,6 +198,75 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(420.0, 300.0)
 	_seed = int(String(name).hash() & 0x7FFFFFFF)
 	resized.connect(queue_redraw)
+	## The bake needs frames, so it cannot happen inside `_draw`. Ask for the
+	## poses now and redraw when each lands; until then the figures simply are not
+	## there, which is honest -- a half-traced body would be worse than none.
+	_stickers = VoliStickerScript.new()
+	_stickers.name = "VoliStickers"
+	add_child(_stickers)
+	_stickers.sticker_ready.connect(func(_key: String) -> void: queue_redraw())
+	_request_stickers()
+
+
+## The poses the sheet draws, asked for once.
+##
+## Two blockers rather than one sticker used twice: they are different volis, and
+## the whole reason to trace the rig is that a 201 cm middle and a 186 cm wing
+## come out as visibly different people. The profiles are placeholders until the
+## sheet is reading a real lineup.
+func _request_stickers() -> void:
+	_stickers.request(
+		"block_tall", RallyEventModel.EventType.BLOCK, 0.85, 0.0,
+		{
+			"height_cm": 201.0, "wingspan_cm": 209.0, "stride_length_m": 0.93,
+			"body_type": "Vegi", "dominant_hand": "Right",
+			"standing_reach_meters": 2.62, "jumping_reach_meters": 3.42,
+		},
+		-14.0
+	)
+	_stickers.request(
+		"block_wing", RallyEventModel.EventType.BLOCK, 0.85, 0.0,
+		{
+			"height_cm": 186.0, "wingspan_cm": 190.0, "stride_length_m": 0.84,
+			"body_type": "Cani", "dominant_hand": "Left",
+			"standing_reach_meters": 2.44, "jumping_reach_meters": 3.24,
+		},
+		9.0
+	)
+
+
+## Lay a baked sticker down: shadow, shaded body, then the cut border.
+func _draw_sticker(key: String, centre: Vector2, height: float) -> bool:
+	if _stickers == null:
+		return false
+	var built: UIVoliSticker.Sticker = _stickers.sticker(key)
+	if built == null or built.contours.is_empty():
+		return false
+	var box := Vector2(height * built.aspect, height)
+	var origin := centre - box * 0.5
+
+	## 1. The shadow. Without it a sticker is a shape with a thick outline; with
+	## it the shape is above the paper.
+	for contour in built.contours:
+		var shadowed := PackedVector2Array()
+		for point in (contour as PackedVector2Array):
+			shadowed.append(origin + point * box + STICKER_SHADOW_OFFSET)
+		if shadowed.size() >= 3:
+			draw_colored_polygon(shadowed, Color(0.0, 0.0, 0.0, STICKER_SHADOW_ALPHA))
+
+	## 2. The body, carrying the mesh's own light and shade.
+	if built.texture != null:
+		draw_texture_rect(built.texture, Rect2(origin, box), false)
+
+	## 3. The cut edge, at constant weight, hugging its own outline.
+	for contour in built.contours:
+		var edge := PackedVector2Array()
+		for point in (contour as PackedVector2Array):
+			edge.append(origin + point * box)
+		if edge.size() >= 3:
+			draw_polyline(edge, _ink(), STICKER_BORDER, true)
+			draw_line(edge[edge.size() - 1], edge[0], _ink(), STICKER_BORDER, true)
+	return true
 
 
 func set_light_mode(value: bool) -> void:
@@ -426,17 +509,43 @@ func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
 
 	_marker_text(which.to_upper(), Vector2(size.x * 0.05, size.y * 0.13), 24, ink, alpha, reveal)
 
-	## The floor, and the net standing on it edge-on -- a post and the tape seen
-	## as a single vertical, because from here the net has no width.
+	## Not quite square on.
+	##
+	## At a true 90 degrees the net is one line and the far half of the court does
+	## not exist -- which is geometrically honest and useless, because the whole
+	## reason to sight down the tape is to see distances *from* it, and a viewer
+	## with no far side has nothing to measure them against. A couple of degrees
+	## off square opens the net into a narrow band and brings the far antenna into
+	## frame, at a cost of almost no distortion to the near-side distances this
+	## view exists to show.
+	const NET_YAW_OFFSET: float = 18.0
 	_marker_line(
 		Vector2(size.x * 0.06, floor_y), Vector2(size.x * 0.94, floor_y),
-		ink, alpha, reveal, 3, MARKER_WIDTH * 0.9
+		ink, alpha, reveal, 3, MARKER_WIDTH * 1.3
 	)
+	## The near tape, the far tape a fraction to the side and above it, and the
+	## mesh between them read as a narrow parallelogram.
+	var near_top := Vector2(net_x, tape_top)
+	var near_foot := Vector2(net_x, floor_y)
+	var far_top := near_top + Vector2(NET_YAW_OFFSET, -7.0)
+	var far_foot := near_foot + Vector2(NET_YAW_OFFSET, -7.0)
+	_marker_line(near_top, near_foot, ink, alpha, reveal, 7, MARKER_WIDTH * 1.6)
+	_marker_line(far_top, far_foot, Color(ink, 0.62), alpha, reveal, 9, MARKER_WIDTH * 0.9)
+	_marker_line(near_top, far_top, ink, alpha, reveal, 5, MARKER_WIDTH * 1.1)
+	## The mesh across that band, and the far sideline beyond it: what the two
+	## extra degrees bought.
+	for step in range(1, 7):
+		var down := float(step) / 7.0
+		_marker_line(
+			near_top.lerp(near_foot, down), far_top.lerp(far_foot, down),
+			Color(ink, 0.26), alpha, reveal, 60 + step, MARKER_WIDTH * 0.45
+		)
 	_marker_line(
-		Vector2(net_x, tape_top), Vector2(net_x, floor_y),
-		ink, alpha, reveal, 7, MARKER_WIDTH * 1.05
+		Vector2(net_x + NET_YAW_OFFSET + 14.0, floor_y - 7.0),
+		Vector2(size.x * 0.94, floor_y - 7.0),
+		Color(ink, 0.40), alpha, reveal, 71, MARKER_WIDTH * 0.6
 	)
-	_marker_text("net", Vector2(net_x + 8.0, tape_top - 6.0), 13, ink, alpha * 0.8, reveal)
+	_marker_text("net", Vector2(net_x + NET_YAW_OFFSET + 8.0, tape_top - 6.0), 13, ink, alpha * 0.8, reveal)
 
 	match which:
 		"Attack":
@@ -671,31 +780,44 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 	## Two blockers on the far side, reaching over. Depth is what the projection
 	## bought: a blocker at w = 1 sits up and left of one at the same u on the
 	## near side, so the wall reads as being beyond the net rather than on it.
-	var blockers := [0.30, 0.52]
+	## The blockers, as stickers rather than as drawn figures.
+	##
+	## They fall back to the drawn arch while the bake is still running -- a few
+	## frames at startup -- because a body that pops in is better than a hole, and
+	## the fallback is the same figure the sheet used before.
+	var blockers := [
+		[0.30, "block_tall"], [0.52, "block_wing"],
+	]
 	for index in range(blockers.size()):
-		var u: float = blockers[index]
+		var u: float = blockers[index][0]
+		var key: String = blockers[index][1]
 		var salt := 90 + index * 29
 		var head := _net_point(origin, span, u, 1.15, 0.55)
 		var radius := 15.0
-		## The arms as **one arch**, hand to hand over the head, because that is
-		## one gesture and an illustrator draws it without lifting. Two separate
-		## arm strokes came out as sticks flying off a figure that was not there.
-		var arch := PackedVector2Array()
-		var steps := 16
-		for step in range(steps + 1):
-			var t := float(step) / float(steps)
-			var angle := lerpf(PI * 0.92, PI * 0.08, t)
-			arch.append(
-				head + Vector2(cos(angle), -sin(angle)) * Vector2(radius * 1.85, radius * 1.55)
-			)
-		_marker_stroke(arch, ink, alpha, reveal, salt + 5, MARKER_WIDTH * 1.4, false)
-		## The head sits inside the arch, and the shoulders hang off its foot.
-		_marker_circle(head, radius, ink, alpha, reveal, salt)
-		_marker_line(
-			head + Vector2(0.0, radius * 0.9),
-			_net_point(origin, span, u, 0.62, 0.55),
-			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.4
+		## Scaled off the net rather than off the panel: a blocker is about a
+		## third again the height of the tape from the floor, and pinning the
+		## sticker to the drawing is what keeps the two in proportion when the
+		## sheet resizes.
+		var sticker_height := span.y * 1.15
+		var placed := _draw_sticker(
+			key, head + Vector2(0.0, sticker_height * 0.30), sticker_height
 		)
+		if not placed:
+			var arch := PackedVector2Array()
+			for step in range(17):
+				var t := float(step) / 16.0
+				var angle := lerpf(PI * 0.92, PI * 0.08, t)
+				arch.append(
+					head + Vector2(cos(angle), -sin(angle))
+						* Vector2(radius * 1.85, radius * 1.55)
+				)
+			_marker_stroke(arch, ink, alpha, reveal, salt + 5, MARKER_WIDTH * 1.4, false)
+			_marker_circle(head, radius, ink, alpha, reveal, salt)
+			_marker_line(
+				head + Vector2(0.0, radius * 0.9),
+				_net_point(origin, span, u, 0.62, 0.55),
+				ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.4
+			)
 		_marker_text(
 			"%d" % (index + 1), head + Vector2(-6.0, -radius * 1.9),
 			16, MARKER_RED, alpha, reveal
@@ -703,7 +825,7 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 
 	## The seam between them, circled the way somebody circles the thing they
 	## want you to look at.
-	var seam_u: float = (float(blockers[0]) + float(blockers[1])) * 0.5
+	var seam_u: float = (float(blockers[0][0]) + float(blockers[1][0])) * 0.5
 	var seam := _net_point(origin, span, seam_u, 1.17, 0.48)
 	_marker_ellipse(seam, Vector2(44.0, 38.0), MARKER_RED, alpha * 0.9, reveal, 137)
 
