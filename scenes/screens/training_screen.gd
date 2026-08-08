@@ -20,6 +20,7 @@ extends Control
 ## should have, so the shape can be judged before the model exists.
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
+const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const WhiteboardScript := preload("res://scenes/components/whiteboard.gd")
 const RedPenCircleScript := preload("res://scenes/components/red_pen_circle.gd")
 const TrainingSystem := preload("res://scripts/systems/training_system.gd")
@@ -69,6 +70,11 @@ func _build() -> void:
 		self, "Clipboard", [schedule_button, back_button] as Array[Button],
 		ScreenShell.BACKING_CORK,
 	)
+	## The clipboard is a printed form, not a page out of the journal. Declared
+	## here, once, the same way the journal declares its cloth -- and it is what
+	## takes the halftone screen, the warm stock and the hand-drawn edges off
+	## this object, leaving the marker and the red pen as the only human marks.
+	set_meta(UIStyleSystemScript.MEDIUM_META, UIStyleSystemScript.MEDIUM_FORM)
 
 	shell.content.add_child(_build_fit_strip())
 

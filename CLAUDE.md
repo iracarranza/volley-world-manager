@@ -73,12 +73,19 @@ away.
 - **Full-screen pages are built on `VolleyballScreenShell`** -- backdrop,
   ribbon, card. A page built from a bare `MarginContainer` gets no background,
   which is invisible in the dark theme and unreadable in the light one.
-- **Only the journal wears the stitched/scrapbook treatment.** Other objects are
-  other media. The rule is about *objects on the desk* -- the clipboard is paper
-  somebody drew on, the folders are card -- so that picking one up feels like
-  picking up a different thing. The title screen is exempt because it is not an
-  object on the desk but the **room the desk is in**, and a room may be drawn in
-  the journal's hand without being the journal. See `docs/design/TITLE_SCREEN.md`.
+- **A medium is a whole material, not a border.** `UIStyleSystem` carries a
+  `ui_medium` down the tree and each one owns the *substrate, the stock, the
+  divisions and the hand* together. Changing only the edge is what made the
+  clipboard read as the journal with a different outline.
+
+  | medium | substrate | divisions | who made the marks |
+  |---|---|---|---|
+  | `sewn` -- the journal | halftone, warm cream, per-patch tint | running stitch | everything, by hand |
+  | `form` -- the clipboard | flat stock, cooler, unscreened | printed hairlines, square corners, faint grid | only the annotation: marker, red pen, highlighter |
+  | `drawn` -- default | halftone, pen edge | broad-nib pen | by hand |
+
+  The title screen is exempt from all of it because it is not an object on the
+  desk but the **room the desk is in**. See `docs/design/TITLE_SCREEN.md`.
 - **Comments say why, not what.** The house style explains the decision and,
   where a previous version was wrong, what it got wrong and how that was
   measured.

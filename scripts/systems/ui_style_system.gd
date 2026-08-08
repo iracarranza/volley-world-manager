@@ -7,6 +7,7 @@ const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
 const UIPaperWindowScript := preload("res://scenes/components/paper_window.gd")
 const UIPaperTabsScript := preload("res://scenes/components/paper_tabs.gd")
 const UIPlasticTabsScript := preload("res://scenes/components/plastic_tabs.gd")
+const UIPrintedRuleScript := preload("res://scenes/components/printed_rule.gd")
 
 ## Which surfaces get a drawn edge.
 ##
@@ -99,6 +100,11 @@ const MEDIUM_META := &"ui_medium"
 const MEDIUM_SEWN := &"sewn"
 ## Paper: a broad-nib pen edge, and controls that take a highlighter.
 const MEDIUM_DRAWN := &"drawn"
+## A printed form: no screen, flat stock, hairline rules, and a hand only where
+## somebody added one. See `UIPrintedRule` for why this is a medium rather than
+## another border -- "drawn" turned out to be the journal with a different edge,
+## which is why the clipboard read as the journal.
+const MEDIUM_FORM := &"form"
 
 
 static func apply(
@@ -219,11 +225,15 @@ static func _clear_legacy_presentation_overrides(control: Control) -> void:
 static func _screen_surface(
 	control: Control, light_mode: bool, medium: StringName
 ) -> void:
-	control.material = UIHalftone.material_for(
-		control.theme_type_variation, light_mode
-	)
+	## A printed form is not screened. The halftone is the journal's own
+	## substrate -- a scrapbook of screened reproductions -- and carrying it onto
+	## the clipboard was most of why the two objects looked identical. Office
+	## paper is flat; what varies across it is the print, not the stock.
+	control.material = null if medium == MEDIUM_FORM \
+		else UIHalftone.material_for(control.theme_type_variation, light_mode)
 	_ink_surface(control, medium)
-	_vary_patch_colour(control)
+	_vary_patch_colour(control, medium)
+	_stock_colour(control, medium)
 
 
 ## No two patches are cut from the same scrap.
@@ -237,7 +247,36 @@ static func _screen_surface(
 ## `self_modulate` rather than a stylebox override, for two reasons: overrides
 ## are stripped by this same pass on the next run, and `modulate` would tint the
 ## card's contents along with the card.
-static func _vary_patch_colour(control: Control) -> void:
+## What the sheet is made of.
+##
+## The journal's page is warm cream that has been sitting in a book. Office
+## stock is bleached, cooler and a little brighter, and the difference between
+## the two is legible the moment they are not on the same screen -- which is
+## the test the clipboard was failing.
+##
+## Applied through `self_modulate` so it multiplies the theme's own surface
+## rather than replacing it, which keeps both themes working from one number:
+## Molten's cream cools toward white, Mikasa's slate cools toward blue-grey, and
+## neither needs a second palette.
+const FORM_STOCK_LIGHT := Color(1.045, 1.045, 1.055)
+const FORM_STOCK_DARK := Color(0.93, 0.96, 1.02)
+
+
+static func _stock_colour(control: Control, medium: StringName) -> void:
+	if medium != MEDIUM_FORM:
+		return
+	if not control.theme_type_variation in STITCHED_TIERS:
+		return
+	control.self_modulate = FORM_STOCK_LIGHT \
+		if UIPalette.control_is_light(control) else FORM_STOCK_DARK
+
+
+static func _vary_patch_colour(control: Control, medium: StringName) -> void:
+	## Every sheet in the pad came off the same press. The per-patch tint is the
+	## journal's rule -- "no two patches from the same scrap" -- and it is exactly
+	## backwards for a form, where identical is the point.
+	if medium == MEDIUM_FORM:
+		return
 	if not control.theme_type_variation in STITCHED_TIERS \
 			or control.theme_type_variation in UNTINTED_TIERS:
 		control.self_modulate = Color.WHITE
@@ -276,6 +315,18 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	## one alternative the ink system already has -- so the clipboard and the
 	## folders read as paper without inventing a third treatment nobody has
 	## finished designing.
+	## A printed form takes neither the stitch nor the pen. Its divisions came off
+	## a press, so they are hairlines with square corners and no hand in them at
+	## all -- which is what leaves the marker, the red pen and the highlighter as
+	## the only human marks on the object.
+	if medium == MEDIUM_FORM:
+		if existing != null:
+			existing.queue_free()
+		_printed_rule(control)
+		return
+	var printed := control.get_node_or_null("PrintedRule")
+	if printed != null:
+		printed.queue_free()
 	var sewn := medium == MEDIUM_SEWN \
 		and control.theme_type_variation in STITCHED_TIERS
 	var wanted_style := UIInkOutline.Stroke.STITCH if sewn \
@@ -351,6 +402,23 @@ static func _paper_window(control: Control) -> void:
 ## bar knows where its tabs ended up -- `get_tab_rect` is on the bar, and the
 ## widths depend on the labels. The bar is a plain `Control`, so a full-rect
 ## child is not laid out by anything and simply lies on it.
+## The press rule for one surface, added once. `gridded` only for the panels big
+## enough to be a sheet -- a button is a printed box on the form, not a form.
+static func _printed_rule(control: Control) -> void:
+	var existing := control.get_node_or_null("PrintedRule") as UIPrintedRule
+	var wants_grid := control.theme_type_variation in [
+		&"CardPanel", &"DashboardCard", &"InsetPanel",
+	]
+	if existing != null:
+		existing.gridded = wants_grid
+		existing.queue_redraw()
+		return
+	var rule := UIPrintedRuleScript.new()
+	rule.name = "PrintedRule"
+	rule.gridded = wants_grid
+	control.add_child(rule)
+
+
 static func _paper_tabs(tabs: TabContainer) -> void:
 	var bar := tabs.get_tab_bar()
 	if bar == null:
