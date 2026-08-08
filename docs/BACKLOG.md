@@ -2560,3 +2560,61 @@ Nothing produces the coordinates yet. What should:
   swing" means.
 
 Design in `docs/design/TACTICS_AND_TRAINING.md` §0.12.
+
+## A jumping sticker's height is a constant, and it should be that voli's jump
+
+`UIWorksheet` bakes airborne poses at `BLOCK_ELEVATION = 0.85` and
+`ATTACK_ELEVATION = 1.00`. Both are constants, and they are applied to every
+voli on the sheet -- so a 201 cm middle with a 3.42 m jumping reach and a 178 cm
+libero with 3.10 m leave the floor by exactly the same amount, and the drawing
+says they jump the same.
+
+That is this repository's recurring defect in its plainest form: a quantity the
+model already owns, restated as a number in the drawing. Every profile the sheet
+holds carries `standing_reach_meters` and `jumping_reach_meters`, and the
+difference between them **is** the jump. The elevation should be derived from
+that pair, and where the pose needs a ceiling -- a block is not a maximal jump,
+it is a controlled one off two feet from a standing start -- the ceiling should
+be a share of that voli's own capacity rather than a flat metre.
+
+Two things fall out and both are wanted:
+
+- A tall middle is drawn reaching over the tape and a short libero is not, in a
+  picture whose entire premise is that a metre means a metre.
+- The block page stops being a picture of two identical jumps. Who can get over
+  the net from a standing block is a real tactical fact and the sheet currently
+  hides it.
+
+Deliberately **not built yet**: it changes what every sticker looks like, and the
+body models are being overhauled first. Recorded so it is not re-derived.
+
+## Does a voli fall over? Centre of mass, and balance as the thing that resists
+
+Raised while fixing the passing platform, and worth a real answer rather than a
+constant.
+
+A passer extending their arms further forward has to put their hips further back
+and bend their knees more, or they fall. That is not a drawing rule -- it is
+where the centre of mass is relative to the base of support, and it is the same
+quantity that decides whether a defender who lunges recovers or ends up on the
+floor. The rig already has every input: segment positions from the pose solver,
+segment masses implied by the body type, and foot positions from the gait.
+
+The design question is whether it is worth **computing** rather than asserting:
+
+- **For the drawing**, a centre-of-mass check would stop poses being authored
+  that no body could hold -- which is exactly the mistake the platform had, arms
+  out in front of an almost upright trunk.
+- **For the model**, "did they keep their feet" is already a thing the rally
+  cares about: a defender who goes down cannot play the next ball, and recovery
+  time after a reaching dig is a real cost the simulator approximates today with
+  posture bands rather than physics.
+- **For the attributes**, balance is the obvious resistor -- a higher balance
+  voli tolerates a centre of mass further outside their base before it becomes a
+  fall, and that is a claim the suite could actually test.
+
+Against: it is a physical model in a game that has deliberately kept its physics
+to ball flight and locomotion, and "posture bands the resolver already decides"
+may be the right grain. Not decided. If it is built, it belongs next to
+`LocomotionModel` rather than in the actor, because the actor draws conclusions
+and does not reach them.

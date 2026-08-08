@@ -357,13 +357,22 @@ func set_highlighted(highlighted: bool) -> void:
 func _apply_dig_posture(weight: float = 1.0) -> void:
 	var blend := clampf(weight, 0.0, 1.0)
 	var before := _capture_joints()
-	var knee_bend := 34.0
-	var hip_pitch := -18.0
+	## Deep enough that the platform has somewhere to be.
+	##
+	## Measured on the old numbers, a planted passer held their hands **0.27 m
+	## above the hip** and 0.44 m in front, with the trunk folded 4.3 degrees --
+	## which is a person standing up with their arms out, not a person passing.
+	## A platform is a flat surface below the waist and in front of the body, and
+	## the only way to put it there is to get the shoulders down: fold at the hips
+	## and let the knees carry it, which is also the only way to hold it without
+	## falling forward.
+	var knee_bend := 46.0
+	var hip_pitch := -30.0
 	## Small, because the fold now does most of the lowering itself. A squat that
 	## bends the right way already shortens the leg's vertical span; the explicit
 	## drop is only the extra sink the hips add, and at the old values the two
 	## together pushed the feet through the floor.
-	var drop := 0.035
+	var drop := 0.055
 	var platform_yaw := 0.0
 	var platform_roll := 0.0
 	## How far the whole body twists toward the ball, and how far the *far* leg
@@ -371,7 +380,12 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 	var torso_yaw := 0.0
 	var far_leg_lead := 0.0
 	## Whole-body lean, distinct from the hip pitch that folds the player up.
-	var body_tilt := 0.0
+	##
+	## Non-zero for a planted dig now. `hip_pitch * 0.24` alone left the trunk
+	## almost upright, and an upright trunk is what put the platform up at chest
+	## height -- the arms cannot reach down and forward from shoulders that have
+	## not come down and forward themselves.
+	var body_tilt := -11.0
 	## Mid-stride offsets, so a defender who arrived on the move is caught on the
 	## move rather than standing still in a lower stance.
 	var stride := 0.0
@@ -382,8 +396,8 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 			## planted stance is the whole body committing forward -- a lunge is
 			## a player who has given up their balance to get there, and a
 			## crouch is not.
-			knee_bend = 78.0
-			hip_pitch = -38.0
+			knee_bend = 84.0
+			hip_pitch = -44.0
 			drop = 0.09
 			platform_roll = 10.0
 			## Enough lean to read as committed, not so much that the figure folds
@@ -415,9 +429,9 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 			## Caught mid-step. The two legs are deliberately *unequal*: one is
 			## still driving, the other is already planting, which is what makes
 			## this read as arriving rather than as a shallower version of planted.
-			knee_bend = 44.0
-			hip_pitch = -22.0
-			drop = 0.05
+			knee_bend = 58.0
+			hip_pitch = -34.0
+			drop = 0.07
 			stride = 30.0
 		_:
 			pass
@@ -482,7 +496,12 @@ func _apply_dig_posture(weight: float = 1.0) -> void:
 	## rather than splayed. `platform_yaw` then swings the whole platform off to
 	## one side for a defender who could not square up, which is the thing worth
 	## seeing.
-	var lead := 46.0 - hip_pitch * 0.30
+	## Nearer horizontal, so the platform is a surface out in front rather than two
+	## arms hanging down. Measured against the trunk's own fold: at 52 with a
+	## planted hip pitch the forearms finish about eighty degrees off vertical in
+	## world terms, which is a platform, and the extra reach is exactly what the
+	## deeper knee is paying for.
+	var lead := 52.0 - hip_pitch * 0.30
 	## Converging, not splayed -- and this sign was inverted too. Rotating an arm
 	## about +Z by theta moves its hand to x = sin theta, so the *left* arm needs a
 	## positive roll to bring its hand toward the centreline and the right arm a

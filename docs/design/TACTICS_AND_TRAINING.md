@@ -607,8 +607,34 @@ merely drawn.
    four labels are still a placeholder for a model that does not exist.
 5. **Nothing is persisted.** Formations, the selected pin and the zone focus live
    on the control and die with the screen.
-6. **The tray is the first seven of the roster** when no lineup is declared,
+6. **Airborne stickers all jump the same height.** `BLOCK_ELEVATION` and
+   `ATTACK_ELEVATION` are constants, so a 201 cm middle and a 178 cm libero leave
+   the floor by the same amount on a sheet whose whole premise is that a metre
+   means a metre. Every profile already carries the standing and jumping reaches
+   the answer is the difference of. In `BACKLOG.md`; held because it changes
+   every sticker and the bodies are being overhauled first.
+7. **The tray is the first seven of the roster** when no lineup is declared,
    and the libero slot is whatever fell into it.
+
+### The spike, frame by frame
+
+`tools/preview/spike_strip.tscn` bakes fourteen phases of the swing side on,
+at one scale, each standing on its own ground line, and writes a contact sheet.
+It exists because a swing whose entire claim is that the joints are *staggered* --
+legs, then trunk, then shoulder, then elbow -- cannot be judged from one frame,
+and because the sheet's figures come out of the same bake the strip does.
+
+What it shows today, and the first two are body-model problems rather than
+animation problems:
+
+- **The striking arm reads as one straight stick from the cock to the landing.**
+  The upper arm and forearm are similar-length capsules with nothing at the joint,
+  so the whip -- the shoulder driving and the elbow opening one beat behind it --
+  is in the numbers and not in the silhouette. The load pose itself reads; the
+  transition does not.
+- **The guide arm is nearly invisible**, which loses the trunk rotation it is
+  supposed to be causing.
+- The jump, the plant, the arch and the landing all read correctly.
 
 ### The zoom is a third axis, and it is the one that can run away
 
