@@ -530,6 +530,86 @@ rather than resolved by fiat:
    parameters and the sheet is choosing reps in both cases, or the shot is
    overreaching. Worth settling before opponent placement multiplies it.
 
+## 0.12 A placement is a coordinate, and the pointer is one way to say it
+
+Volis are dropped onto the sheet by dragging them out of the tray. That must not
+be the only way, and the reason is not accessibility -- it is that **everything
+else that will ever place a voli arrives holding numbers**.
+
+Scouting is the case that forces it. What a scouting pass produces is a set of
+places on a court:
+
+- *Where did our block get beaten?* — a point on the tape, and a lane past it.
+- *Where were our worst seams on the floor?* — a gap between two coverage zones,
+  which is a coordinate and a radius.
+- *Where did our attack get stuffed, and where did it get touched?* — two
+  different distributions over the same net, and the difference between them is
+  most of what "adjust the swing" means.
+
+Every one of those is `(along the net, depth from the net)` in metres, and the
+whole point of collecting them is to act on them: open the planner with the
+report's own coordinates already marked, or drop a defender exactly where the
+seam was. A planner that can only be operated by pointing cannot accept any of
+that without pretending to be a mouse -- converting a coordinate to pixels and
+back, losing a few centimetres each way, on a screen whose entire premise is that
+a metre means a metre.
+
+So the model is `place_voli_at(slot, metres, who)` and the drag is a wrapper over
+it that unprojects the cursor first. The screen carries a coordinate field for
+the same reason, but the field is the small half of this: the API is the door
+scouting comes through.
+
+**Not built yet:** the scouting pass itself, and any of the three questions
+above. What exists is the door. Recorded here so the next person to build
+scouting does not have to argue for it.
+
+## 0.13 Where the tactic sheet actually stands
+
+Written on handing the render back, because the next pass is on the bodies and
+whoever picks this up should not have to re-derive what is finished from what is
+merely drawn.
+
+### Settled, and worth not re-opening
+
+- **One camera, three stops.** Three quarter 38°/26°, along the net 76°/14°, top
+  down 90°/90°. Everything is placed in metres and projected through one map, so
+  a net is 2.43 m because it is 2.43 m. §0.10.
+- **The frame is derived.** The view fixes width and height, the phase fixes
+  depth, and pixels-per-metre falls out of fitting that box to the panel. The net
+  is anchored at a fixed share of the band so it does not move when the page does.
+- **A voli's size and lift come off the bake**, not off a constant: `world_height`
+  and `ground_offset` in camera-frame metres. No number in the drawing code
+  decides how big a body is.
+- **Zones are regions you point at**, and a net zone is a volume whose shape
+  depends on the view -- the panel above the tape, a slab around it, or the band
+  of floor ahead of it. Hover shades one; holding it moves the sheet in.
+- **Placement is a coordinate.** §0.12.
+
+### Known weak, in the order it matters
+
+1. **The bodies are the weakest thing on the sheet, and the sheet is now good
+   enough to make that obvious.** They are the 3D rig posed, rendered unshaded,
+   traced and quantised -- which gets kit colour, real proportions and handedness
+   for free, and gets a capsule-and-sphere figure that reads as a toy at a hundred
+   pixels. Flat colour and the arm creases bought legibility; they did not buy a
+   body worth drawing. This is the next pass.
+2. **A passer's platform is invisible from behind.** Every voli faces over the
+   net and all three cameras stand behind them, so the one thing that makes a
+   receive posture legible -- two forearms joined in front -- is occluded by the
+   body. Either receivers get turned to a reading angle rather than their true
+   heading, or the floor pages want a lower camera. Not decided.
+3. **The annotation layer is empty on purpose.** Flights, landing marks, shot
+   labels, dimension lines and the serve overlay all came off: they were a first
+   guess at what a coach writes, and a first guess drawn confidently reads as a
+   decision the game has made. §0.11's model survives; its marks do not.
+4. **The priority rail says "Line / Seam / Cross / Tip" and only means it on the
+   block page.** It is reserved and drawn only there now, which is honest, but the
+   four labels are still a placeholder for a model that does not exist.
+5. **Nothing is persisted.** Formations, the selected pin and the zone focus live
+   on the control and die with the screen.
+6. **The tray is the first seven of the roster** when no lineup is declared,
+   and the libero slot is whatever fell into it.
+
 ### The zoom is a third axis, and it is the one that can run away
 
 Drilling into a single zone -- a coordinate inside an attack zone, a blocking

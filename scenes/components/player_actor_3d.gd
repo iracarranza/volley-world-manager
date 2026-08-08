@@ -163,6 +163,55 @@ func configure(
 	set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 
 
+## Every mesh in the rig, and the subset the arms are made of.
+##
+## Exposed so a caller can paint the whole body one colour and the arms another
+## and read the result back as a mask. The tactic sheet needs that because an arm
+## traced as part of one silhouette disappears the moment it crosses the torso --
+## and a pose is mostly arms, so a figure whose arms have no edge is a figure
+## whose pose cannot be read.
+##
+## Enumerated rather than walked, because "every MeshInstance3D under here"
+## would also collect the shadow quad, the focus ring and the face features, and
+## two of those are not the body.
+func body_meshes() -> Array[MeshInstance3D]:
+	_ensure_node_bindings()
+	var out: Array[MeshInstance3D] = [torso, shorts, head]
+	out.append_array(arm_meshes())
+	for leg in [left_leg, right_leg]:
+		for path in ["Mesh", "Knee/Mesh", "Knee/Shoe"]:
+			var mesh := leg.get_node_or_null(path) as MeshInstance3D
+			if mesh != null:
+				out.append(mesh)
+	for feature in _face_features():
+		if feature is MeshInstance3D:
+			out.append(feature as MeshInstance3D)
+	for cosmetic in _cosmetics():
+		if cosmetic is MeshInstance3D:
+			out.append(cosmetic as MeshInstance3D)
+	return out
+
+
+func arm_meshes() -> Array[MeshInstance3D]:
+	_ensure_node_bindings()
+	var out: Array[MeshInstance3D] = []
+	for arm in [left_arm, right_arm]:
+		for path in ["Mesh", "Elbow/Mesh"]:
+			var mesh := arm.get_node_or_null(path) as MeshInstance3D
+			if mesh != null:
+				out.append(mesh)
+	return out
+
+
+## Paint every mesh flat, for a mask pass. `apply_ui_palette` puts it all back.
+func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
+	for mesh in meshes:
+		var material := StandardMaterial3D.new()
+		material.albedo_color = color
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mesh.material_override = material
+
+
 func apply_ui_palette(light_mode: bool) -> void:
 	_ensure_node_bindings()
 	var team_color := UIPalette.color(

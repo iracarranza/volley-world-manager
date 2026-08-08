@@ -193,10 +193,10 @@ signal zone_priority_changed(zone_index: int, priority: int)
 ## greying and the auto-switch have less to do.
 const PHASES: Array[String] = ["Attack", "Block", "Floor"]
 
-## The overlay each phase can carry, and whether it is on. An overlay is a second
-## layer of marks on the same drawing rather than a different drawing -- the
-## court does not change when you switch to serve targeting, only what is marked
-## on it.
+## The overlay each phase can carry. Nothing draws these yet -- the serve marks
+## went with the rest of the annotation layer -- but the pairing is a design fact
+## worth keeping written down: serve targeting belongs to the attack page and
+## serve receive to the floor page, which is why neither is a phase of its own.
 const OVERLAYS := {
 	"Attack": "Serve target",
 	"Floor": "Serve receive",
@@ -341,41 +341,19 @@ const NET_ZONES: Array[Dictionary] = [
 	{"label": "pipe", "along": 0.0, "depth": 3.2},
 ]
 
-## And what leaves them.
+## Which pin is being planned from, and whose it is.
 ##
-## **This does not choose the shot the rally will play.** It says which shot the
-## voli is drilling from this place, which is a familiarity, not a tactic -- the
-## same distinction the training clipboard runs on everywhere else. What changes
-## on the sheet is the *shape* of the arrow, because a spike, a roll and a tip
-## take visibly different paths out of the same hand and a coach draws them
-## differently.
-##
-## `lift` is how far above the straight line the ball rises, in metres, and
-## `reach` is the share of the contact height it leaves at -- a tip is played off
-## the fingers at full extension, a roll is struck lower with an open hand.
-const SHOTS: Array[Dictionary] = [
-	{"label": "spike", "lift": 0.05, "reach": 1.00},
-	{"label": "roll", "lift": 0.95, "reach": 0.88},
-	{"label": "tip", "lift": 1.70, "reach": 1.02},
-]
-
-## What the drill says, which is the whole point of the page.
-##
-## Where the swing comes from, where it is aimed, what shot is being grooved and
-## whose hand it leaves. Four values, and the sheet is a picture of them.
-signal drill_changed(zone_index: int, target: Vector2, shot_index: int)
+## What is *left* of the drill after the annotation layer came off, and it is the
+## half that was never in doubt: a net zone is selected and a voli can be dropped
+## on it. Where the ball then goes, and what shot it is, were drawn as a guess and
+## are held until they are specified.
+signal drill_changed(zone_index: int)
 
 var drill_zone: int = 2
-var drill_target := Vector2(-2.8, -6.4)
-var drill_shot: int = 0
 var drill_who: String = ""
 
 var phase: String = "Block"
 var view: String = VIEW_THREE_QUARTER
-## Whether the current phase's overlay is showing. One flag, not one per phase:
-## only one phase is on the board at a time, and an overlay belongs to what is
-## being looked at rather than being remembered per page.
-var overlay_on: bool = false
 ## Where volis have been dropped, in unit court space, keyed by tray slot.
 var placements: Dictionary = {}
 var zone_priorities: Array[int] = [3, 2, 1, 2]
@@ -652,6 +630,25 @@ func _draw_sticker(key: String, ground: Vector2, scale: float) -> bool:
 		if edge.size() >= 3:
 			draw_polyline(edge, _ink(), cut, true)
 			draw_line(edge[edge.size() - 1], edge[0], _ink(), cut, true)
+
+	## 4. And the arms, cut separately over the top.
+	##
+	## A pose is mostly arms, and an arm crossing the torso vanishes into the one
+	## outline the silhouette gives -- so a blocker, a spiker at the cock and a
+	## passer on their platform came out as one shape three times. Lighter than the
+	## body's edge, because these are creases inside the sticker rather than the
+	## line it was cut along: a die cut has one edge, and a printed one can have as
+	## many lines as the printer put on it.
+	for contour in built.arm_contours:
+		var crease := PackedVector2Array()
+		for point in (contour as PackedVector2Array):
+			crease.append(origin + point * box)
+		if crease.size() >= 3:
+			draw_polyline(crease, Color(_ink(), 0.80), cut * 0.62, true)
+			draw_line(
+				crease[crease.size() - 1], crease[0], Color(_ink(), 0.80),
+				cut * 0.62, true
+			)
 	return true
 
 
@@ -721,13 +718,6 @@ static func overlay_for(for_phase: String) -> String:
 	return str(OVERLAYS.get(for_phase, ""))
 
 
-func set_overlay(enabled: bool) -> void:
-	if overlay_on == enabled:
-		return
-	overlay_on = enabled
-	queue_redraw()
-
-
 ## Put a voli where the sheet was clicked, stored as **the place on the court**
 ## rather than the place on the page.
 ##
@@ -738,7 +728,23 @@ func set_overlay(enabled: bool) -> void:
 ## instead of the voli.
 func place_voli(slot: int, at: Vector2, who: String = "") -> void:
 	var frame := _view_frame()
-	var on_court := _unproject_floor(at, frame["scale"], frame["origin"])
+	place_voli_at(slot, _unproject_floor(at, frame["scale"], frame["origin"]), who)
+
+
+## The same placement, said in metres.
+##
+## **The drop is the convenience; this is the operation.** A drag is one person
+## pointing at one spot, and everything else that will ever want to put a voli
+## somewhere arrives holding numbers: a scouting report that says the block was
+## beaten down the line at (4.1, 1.2), a rotation preset, a saved formation, a
+## plan restored from a career file. If the only way in is a cursor then none of
+## those can be honoured without simulating a mouse, which is how a coordinate
+## ends up being converted to pixels and back and losing a few centimetres each
+## way.
+##
+## So `place_voli` unprojects and calls this, rather than this being a wrapper
+## round the pointer. See `docs/design/TACTICS_AND_TRAINING.md` §0.12.
+func place_voli_at(slot: int, on_court: Vector2, who: String = "") -> void:
 	## Refused rather than clamped when it lands off the court. A clamp would put
 	## a voli on the sideline and say nothing; not placing them says the drop
 	## missed, which is what happened.
@@ -759,7 +765,7 @@ func place_voli(slot: int, at: Vector2, who: String = "") -> void:
 	if pin >= 0 and not who.is_empty():
 		drill_zone = pin
 		drill_who = who
-		drill_changed.emit(drill_zone, drill_target, drill_shot)
+		drill_changed.emit(drill_zone)
 	placements[slot] = {"at": on_court, "who": who}
 	queue_redraw()
 
@@ -793,9 +799,6 @@ func _set_wipe(value: float) -> void:
 ## by what is under the cursor, not by a mode. A mode would mean a control that
 ## says which of them you are editing, and the whole argument of the page is that
 ## the drawing *is* the control.
-var _dragging_target: bool = false
-
-
 func _gui_input(event: InputEvent) -> void:
 	var frame := _view_frame()
 	var scale: float = frame["scale"]
@@ -803,9 +806,6 @@ func _gui_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
-		if _dragging_target:
-			_move_drill_target(motion.position, scale, origin)
-			return
 		var was_rail := _hovered_zone
 		var was_net := _hovered_net
 		var was_floor := _hovered_floor
@@ -823,7 +823,6 @@ func _gui_input(event: InputEvent) -> void:
 
 	if button.button_index == MOUSE_BUTTON_LEFT:
 		if not button.pressed:
-			_dragging_target = false
 			return
 		## A zone under the cursor takes the click, and taking it means **moving in
 		## on it**. Clicking the one already held lets it go again. That is the whole
@@ -843,16 +842,9 @@ func _gui_input(event: InputEvent) -> void:
 			## A net zone is also where a swing comes from, so holding one picks it.
 			if kind == "net":
 				drill_zone = index
-				drill_changed.emit(drill_zone, drill_target, drill_shot)
+				drill_changed.emit(drill_zone)
 			accept_event()
 			queue_redraw()
-			return
-		## Then the landing mark, which is dragged rather than clicked.
-		if button.position.distance_to(
-			_floor_at(drill_target.x, drill_target.y, scale, origin)
-		) <= 18.0:
-			_dragging_target = true
-			accept_event()
 			return
 		## Nothing under the cursor: pull back out.
 		if focus_kind != "":
@@ -872,41 +864,18 @@ func _gui_input(event: InputEvent) -> void:
 	if step == 0:
 		return
 
-	## A wheel over the priority rail changes a priority; a wheel anywhere on the
-	## drawing changes the shot. Cycled rather than clamped, because three shots is
-	## short enough that wrapping is faster than reversing and there is no "most"
-	## or "least" among them -- they are three different things, not a scale.
+	## A wheel over the priority rail changes a priority. It used to also cycle the
+	## shot type anywhere else on the drawing; the shot was part of the annotation
+	## layer that came off, and a wheel that changes something invisible is a
+	## control nobody can find the effect of.
 	var index := _zone_at(button.position)
-	if index >= 0 and phase == "Block":
-		zone_priorities[index] = clampi(
-			zone_priorities[index] + step, 0, ZONE_MAX_PRIORITY
-		)
-		zone_priority_changed.emit(index, zone_priorities[index])
-		accept_event()
-		queue_redraw()
+	if index < 0 or phase != "Block":
 		return
-	drill_shot = posmod(drill_shot + step, SHOTS.size())
-	drill_changed.emit(drill_zone, drill_target, drill_shot)
-	accept_event()
-	queue_redraw()
-
-
-## Move where the swing is aimed, in metres on the far court.
-##
-## Clamped to the court rather than refused off it, which is the opposite of what
-## a *drop* does and for a reason: a drop that misses is a mistake, and a drag
-## that runs past the sideline is a hand overshooting something it is already
-## holding.
-func _move_drill_target(at: Vector2, scale: float, origin: Vector2) -> void:
-	var on_court := _unproject_floor(at, scale, origin)
-	drill_target = Vector2(
-		clampf(on_court.x, -HALF_WIDTH_M, HALF_WIDTH_M),
-		clampf(
-			on_court.y if phase != "Floor" else -absf(on_court.y),
-			-COURT_HALF_M, -0.6
-		)
+	zone_priorities[index] = clampi(
+		zone_priorities[index] + step, 0, ZONE_MAX_PRIORITY
 	)
-	drill_changed.emit(drill_zone, drill_target, drill_shot)
+	zone_priority_changed.emit(index, zone_priorities[index])
+	accept_event()
 	queue_redraw()
 
 
@@ -1054,22 +1023,25 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 	## arrives. What changes by phase is which end you are standing at, not which
 	## geometry exists.
 	_draw_zone_regions(scale, origin, ink, alpha, reveal)
-	if which != "Block":
-		## The flight belongs to the two pages that aim at a floor. Blocking is about
-		## the wall and the seam in it; a landing mark nine metres away buried the
-		## thing that page is for under a mark about somewhere else.
-		_draw_drill(which, scale, origin, ink, alpha, reveal)
 
+	## The annotation layer is **deliberately empty**.
+	##
+	## There was one: a dashed flight from a pin to a landing mark, a shot label, a
+	## setter and a lane arrow, a seam ring, a serve overlay, dimension lines. All
+	## of it was a first guess at what a coach writes on this sheet, and a first
+	## guess drawn confidently is worse than nothing -- it reads as a decision the
+	## game has made. Taken off until the marks are specified.
+	##
+	## What is left is what the sheet *is*: a court, a net, the zones of both, and
+	## the volis standing in them. Everything removed was a mark somebody makes on
+	## that; nothing removed was part of it.
 	match which:
 		"Block":
 			_draw_blockers(scale, origin, ink, alpha, reveal)
 		"Attack":
-			_draw_attack_marks(scale, origin, ink, alpha, reveal)
+			_draw_attacker(scale, origin, ink, alpha, reveal)
 		"Floor":
 			_draw_floor_marks(scale, origin, ink, alpha, reveal)
-
-	if overlay_on:
-		_draw_serve_overlay(which, scale, origin, ink, alpha, reveal)
 
 	## Anything dragged out of the tray, standing where it was dropped -- which is
 	## stored in metres, so it is the same place in all three views.
@@ -1094,67 +1066,6 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 		## other two pages, and a rail with no strip was still being drawn into the
 		## zero-width rect it got -- a smear of hatching in the top corner.
 		_draw_zone_bars(_rail_rect(), alpha, reveal)
-
-
-## What an attack is adjusted by, in the places it is actually adjusted.
-##
-## The two views answer different halves of one question and always did -- lane
-## priority is an (x, y) and set tightness is a distance from the tape -- so the
-## marks differ by view rather than the drawing differing by view. That is the
-## whole argument for two axes instead of six pages.
-func _draw_attack_marks(
-	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
-) -> void:
-	## Clear of zone 2's mark, which sits at 3.4 along and half a metre off the
-	## tape -- close enough that the setter's ring and the pin's ring were one blot.
-	var setter := Vector3(1.3, 1.5, 0.0)
-	_marker_circle(
-		_project(setter, scale, origin), 10.0, ink, alpha, reveal, 71
-	)
-	_marker_text(
-		"S", _project(setter, scale, origin) + Vector2(-4.0, -13.0), 14,
-		ink, alpha, reveal
-	)
-	if view == VIEW_ALONG_NET:
-		## Set tightness and the setter's release are horizontal distances from the
-		## tape, which is exactly what an elevation down the net measures and what a
-		## plan view cannot show at all.
-		var release := _project(Vector3(1.3, 2.9, 2.1), scale, origin)
-		var arc := PackedVector2Array()
-		for step in range(17):
-			var t := float(step) / 16.0
-			arc.append(_project(
-				Vector3(
-					lerpf(1.3, -1.2, t),
-					lerpf(2.9, 0.4, t),
-					lerpf(2.1, 3.1, t) + sin(t * PI) * 0.55
-				),
-				scale, origin
-			))
-		_marker_stroke(arc, MARKER_RED, alpha, reveal, 13, MARKER_WIDTH * 0.8, false)
-		_draw_measure(
-			_floor_at(1.3, 0.0, scale, origin), _floor_at(1.3, 2.9, scale, origin),
-			"release", ink, alpha, reveal, 17
-		)
-		_draw_measure(
-			_project(Vector3(-1.2, 0.0, 3.1), scale, origin),
-			_project(Vector3(-1.2, 0.4, 3.1), scale, origin),
-			"tightness", MARKER_RED, alpha, reveal, 19
-		)
-		return
-	## The lanes used to be three fixed arrows from the setter into the far court.
-	## They said the same thing the drill arrow now says and said it worse -- three
-	## unchangeable directions against one the manager actually sets -- so what is
-	## left here is the set that feeds it: setter to the chosen pin.
-	var pin: Dictionary = NET_ZONES[clampi(drill_zone, 0, NET_ZONES.size() - 1)]
-	_marker_arrow(
-		_project(setter, scale, origin),
-		_project(
-			Vector3(float(pin["along"]), float(pin["depth"]), NET_HEIGHT_M + 0.45),
-			scale, origin
-		),
-		Color(ink, 0.62), alpha, reveal, 81
-	)
 
 
 ## Where the floor defence stands. Six real positions in metres, so the shape a
@@ -1185,114 +1096,6 @@ func _draw_floor_marks(
 			_floor_at(spot.x, spot.y, scale, origin), 9.0, ink, alpha, reveal,
 			121 + index * 13
 		)
-	if view == VIEW_ALONG_NET:
-		## How tight the back row plays for the block follow is a distance from the
-		## net, and this is the one view that can put a number on it.
-		for entry: Array in [[1.6, "follow"], [6.4, "deep"]]:
-			var depth: float = entry[0]
-			_draw_measure(
-				_floor_at(0.0, 0.0, scale, origin),
-				_floor_at(0.0, depth, scale, origin),
-				str(entry[1]), MARKER_RED if depth < 3.0 else ink,
-				alpha, reveal, 41 + int(depth * 10.0)
-			)
-		return
-	## Clear of the zone numerals, which live on the lane centres -- the label sat
-	## on top of the "3" and the two read as one mark.
-	_marker_text(
-		"cover", _floor_at(-1.5, 3.2, scale, origin), 13, MARKER_RED, alpha, reveal
-	)
-
-
-## Serve target, or serve receive, marked over whatever court is already drawn.
-##
-## Both are the same gesture from opposite ends -- an arrow into a zone you want
-## the ball in, or a shape over the zone you are covering -- so they share a
-## routine and differ in direction and colour.
-func _draw_serve_overlay(
-	which: String, scale: float, origin: Vector2, ink: Color,
-	alpha: float, reveal: float
-) -> void:
-	if which == "Attack":
-		## The serve as the **flight it actually is**, not an arrow on a map: from
-		## behind the endline, up over the tape, down into the zone. Drawn through
-		## the same projection as everything else, so it is a curve in three views
-		## rather than a straight line that only made sense in one -- and so the
-		## picture is of the thing playback will show.
-		var toss := _serve_origin()
-		for raw: Vector2 in [Vector2(-3.2, -6.6), Vector2(3.0, -5.4)]:
-			var target := _in_frame(raw)
-			var flight := PackedVector2Array()
-			for step in range(19):
-				var t := float(step) / 18.0
-				flight.append(_project(
-					Vector3(
-						lerpf(toss.x, target.x, t), lerpf(toss.y, target.y, t),
-						lerpf(1.9, 0.4, t) + sin(t * PI) * 2.2
-					),
-					scale, origin
-				))
-			_marker_stroke(
-				flight, MARKER_RED, alpha * 0.9, reveal, 301 + int(raw.x * 9.0),
-				MARKER_WIDTH * 0.7, false
-			)
-			_marker_circle(
-				_floor_at(target.x, target.y, scale, origin), 8.0,
-				MARKER_RED, alpha * 0.8, reveal, 311 + int(raw.x * 9.0)
-			)
-		_marker_text(
-			"serve target",
-			_floor_at(toss.x, toss.y, scale, origin) + Vector2(-24.0, 16.0), 12,
-			MARKER_RED, alpha, reveal
-		)
-		return
-	## Serve receive: the three-passer seam, shaded rather than arrowed, because
-	## what is being declared is an area of responsibility and not a direction.
-	var passers := [Vector2(-2.9, 5.6), Vector2(0.1, 6.8), Vector2(3.0, 5.4)]
-	for index in range(passers.size()):
-		var at: Vector2 = passers[index]
-		_marker_ellipse(
-			_floor_at(at.x, at.y, scale, origin),
-			Vector2(0.9 * scale, 0.9 * scale * maxf(sin(_tilt()), 0.14)),
-			Color(ink, 0.5), alpha, reveal, 321 + index * 11
-		)
-	var seam := _floor_at(-1.4, 6.2, scale, origin)
-	_hatch(
-		Rect2(seam - Vector2(0.7, 0.7) * scale * 0.6, Vector2(1.4, 1.4) * scale * 0.6),
-		Color(MARKER_RED, 0.30), alpha, reveal, 341
-	)
-	_marker_text(
-		"seam", seam + Vector2(-14.0, -18.0), 12, MARKER_RED, alpha, reveal
-	)
-
-
-## Where the server stands, pulled inside whatever the view can see.
-##
-## A serve begins a metre behind the endline, which is ten metres out and past the
-## crop of two of the three views -- so the flight started off the sheet and the
-## first thing on the page was already halfway to the net. Clamped rather than
-## dropped: a serve that begins at the edge of the frame is still a serve.
-func _serve_origin() -> Vector3:
-	var at := _in_frame(Vector2(2.6, 10.0))
-	return Vector3(at.x, at.y, 0.0)
-
-
-## Any place on the court, pulled inside what this view holds.
-##
-## The marks are written in real metres -- a serve begins ten metres out, a cross
-## lane lands seven metres past the net -- and two of the three views crop tighter
-## than that. Clamping is the only honest answer: the mark still points the right
-## way and still means the right thing, it just stops at the edge of the frame
-## instead of being drawn over the priority rail, which is where an unclamped
-## serve target was landing.
-func _in_frame(at: Vector2) -> Vector2:
-	var box := _world_box()
-	var low: Vector3 = box[0]
-	var high: Vector3 = box[1]
-	return Vector2(
-		clampf(at.x, low.x + 0.3, high.x - 0.3),
-		clampf(at.y, low.y + 0.3, high.y - 0.3)
-	)
 
 
 ## Cross-hatching: two crossing sets of strokes. One direction is texture; two
@@ -1321,29 +1124,6 @@ func _hatch(
 			Color(color, color.a * 0.7), alpha, reveal, salt + 500 + step,
 			MARKER_WIDTH * 0.30
 		)
-
-
-## A dimension line: a rule between two points with ticks at each end and the
-## quantity written over it. Printed forms use these and so do coaches, and it is
-## the one place on the board where a straight line is honest.
-func _draw_measure(
-	from: Vector2, to: Vector2, label: String, color: Color,
-	alpha: float, reveal: float, salt: int
-) -> void:
-	_marker_line(from, to, color, alpha * 0.8, reveal, salt, MARKER_WIDTH * 0.30)
-	## Ticks across the rule, not up the page. They were vertical, which is the same
-	## thing only when the rule happens to be horizontal -- and none of the rules on
-	## a projected court are, so every tick sat at a different angle to the line it
-	## was supposed to cap.
-	var across := (to - from).normalized().orthogonal() * 5.0
-	for at: Vector2 in [from, to]:
-		_marker_line(
-			at - across, at + across,
-			color, alpha * 0.8, reveal, salt + 1, MARKER_WIDTH * 0.30
-		)
-	_marker_text(
-		label, from.lerp(to, 0.5) + Vector2(-16.0, -8.0), 12, color, alpha, reveal
-	)
 
 
 ## Projection is deliberately not a camera: an axonometric map with no
@@ -1415,33 +1195,6 @@ func _view_frame() -> Dictionary:
 	var box := _world_box()
 	var low: Vector3 = box[0]
 	var high: Vector3 = box[1]
-	## The box is a **minimum**, not the whole answer.
-	##
-	## What has to be in frame is what is drawn, and the drill arrow is drawn: a
-	## deep line shot lands nine metres past the net, which is outside every crop
-	## except the plan view's. The first version cropped it, so the arrow ran off
-	## the sheet and the mark it was aiming at was not on the page -- a picture of
-	## an intention with the intention missing.
-	##
-	## Unioned rather than the box being widened to nine metres everywhere, because
-	## then a tip to the short court would be drawn at the scale a line shot needs.
-	## This way the sheet frames what the manager actually asked for: tight for a
-	## tip, wide for a deep line.
-	##
-	## **Attack and floor only.** On the block page the subject is the wall, and
-	## zooming out to hold a nine-metre landing point shrank two blockers to about a
-	## third of the height they read at before -- paying for a mark that page is not
-	## about with the one thing that page is about.
-	if phase != "Block":
-		var target := Vector2(
-			drill_target.x, drill_target.y if phase != "Floor" else absf(drill_target.y)
-		)
-		low = Vector3(
-			minf(low.x, target.x - 0.8), minf(low.y, target.y - 0.8), low.z
-		)
-		high = Vector3(
-			maxf(high.x, target.x + 0.8), maxf(high.y, target.y + 0.8), high.z
-		)
 	var least := Vector2(INF, INF)
 	var most := Vector2(-INF, -INF)
 	for along: float in [low.x, high.x]:
@@ -1771,6 +1524,24 @@ func _tilt() -> float:
 	return deg_to_rad(float((VIEW_ANGLES.get(view, Vector2(-38.0, 32.0)) as Vector2).y))
 
 
+## Whoever is working the selected pin, standing on it.
+##
+## This came off with the drill's dashed arrow and should not have: the arrow was
+## a guess about what a coach writes, and a body standing at a pin is not a mark
+## at all -- it is the same thing the block page draws two of.
+func _draw_attacker(
+	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	if drill_who.is_empty():
+		return
+	var zone: Dictionary = NET_ZONES[clampi(drill_zone, 0, NET_ZONES.size() - 1)]
+	_draw_voli(
+		_sticker_key(drill_who, view, "Attack"),
+		float(zone["along"]), float(zone["depth"]), scale, origin,
+		ink, alpha, reveal, 671
+	)
+
+
 ## The wall at the net, from whichever side the view is standing on.
 ##
 ## Two blockers, 0.35 m off the tape, 0.9 m apart -- the distances they actually
@@ -1809,13 +1580,6 @@ func _draw_blockers(
 			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.3
 		)
 
-	## The seam between them, circled the way somebody circles the thing they want
-	## you to look at.
-	var seam := _project(
-		Vector3((float(wall[0][0]) + float(wall[1][0])) * 0.5, 0.35, 2.95),
-		scale, origin
-	)
-	_marker_ellipse(seam, Vector2(38.0, 32.0), MARKER_RED, alpha * 0.9, reveal, 137)
 
 
 ## The priority bars. Black for the level, red for the one being pointed at, and
@@ -1884,47 +1648,6 @@ func _draw_zone_bars(area: Rect2, alpha: float, reveal: float) -> void:
 # --------------------------------------------------------------------------
 # The drill: where the swing comes from, where it goes, and what shot it is
 # --------------------------------------------------------------------------
-
-## Where a swing is contacted, in metres.
-##
-## Height comes off the voli who is actually swinging rather than off a constant,
-## because the whole reason to drop a *specific* voli onto a pin is that a 201 cm
-## middle and a 178 cm libero contact the ball in different places -- and if the
-## drawing does not show that, the choice of who was decorative.
-func _contact_point(zone_index: int) -> Vector3:
-	var zone: Dictionary = NET_ZONES[clampi(zone_index, 0, NET_ZONES.size() - 1)]
-	var reach := 3.05
-	for profile: Dictionary in _squad():
-		if str(profile.get("key", "")) == drill_who:
-			reach = float(profile.get("jumping_reach_meters", reach))
-			break
-	var shot: Dictionary = SHOTS[clampi(drill_shot, 0, SHOTS.size() - 1)]
-	return Vector3(
-		float(zone["along"]), float(zone["depth"]), reach * float(shot["reach"])
-	)
-
-
-## The ball's path out of that contact, sampled.
-##
-## Not a ballistic solve. This is a drawing of an intention, and the engine's own
-## kinematics answer a different question -- given a launch, where does it land --
-## which is the wrong direction for a coach who already knows where they want it.
-## What the shape has to carry is the *difference between the three shots*, and a
-## lift over the chord does that in one number.
-func _drill_flight(zone_index: int, target: Vector2) -> PackedVector3Array:
-	var from := _contact_point(zone_index)
-	var shot: Dictionary = SHOTS[clampi(drill_shot, 0, SHOTS.size() - 1)]
-	var lift := float(shot["lift"])
-	var out := PackedVector3Array()
-	for step in range(21):
-		var t := float(step) / 20.0
-		out.append(Vector3(
-			lerpf(from.x, target.x, t),
-			lerpf(from.y, target.y, t),
-			lerpf(from.z, 0.06, t) + sin(t * PI) * lift
-		))
-	return out
-
 
 ## A net zone is a **volume**, not a mark on the tape.
 ##
@@ -2147,113 +1870,6 @@ func _focus_box() -> Array:
 		Vector3(low.x - pad, low.y - pad, 0.0),
 		Vector3(high.x + pad, high.y + pad, NET_HEIGHT_M + 1.4),
 	]
-
-
-## The drill itself: the swinging voli, the dashed flight, and the mark it lands
-## on.
-##
-## Dashed because it has not happened. Everything else on this sheet is a
-## statement about the court -- the net is 2.43 m, the attack line is three metres
-## back -- and this is the one mark that is a statement about the *future*, so it
-## is drawn the way a plan is drawn rather than the way a fact is.
-func _draw_drill(
-	which: String, scale: float, origin: Vector2, ink: Color,
-	alpha: float, reveal: float
-) -> void:
-	var incoming := which == "Floor"
-	var zone_index := drill_zone
-	var target := drill_target
-	if incoming:
-		## Floor defence reads the same arrow from the other end: the swing is the
-		## opponent's, so it comes *out* of their net zone and lands on your floor.
-		## One arrow, mirrored, rather than a second concept -- what a defender is
-		## being told to expect is exactly what an attacker is being told to hit.
-		target = Vector2(drill_target.x, absf(drill_target.y))
-	var flight := _drill_flight(zone_index, target)
-	if incoming:
-		var flipped := PackedVector3Array()
-		for point in flight:
-			flipped.append(Vector3(point.x, -point.y, point.z))
-		flight = flipped
-
-	var path := PackedVector2Array()
-	for point in flight:
-		path.append(_project(point, scale, origin))
-	_marker_dashes(path, MARKER_RED, alpha, reveal, 651, MARKER_WIDTH * 0.85)
-
-	## The head, on the ground it is aimed at.
-	var landing := _floor_at(target.x, target.y, scale, origin)
-	_marker_circle(landing, 10.0, MARKER_RED, alpha, reveal, 661)
-	_marker_line(
-		landing + Vector2(-6.0, -6.0), landing + Vector2(6.0, 6.0),
-		MARKER_RED, alpha * 0.8, reveal, 663, MARKER_WIDTH * 0.45
-	)
-	_marker_line(
-		landing + Vector2(6.0, -6.0), landing + Vector2(-6.0, 6.0),
-		MARKER_RED, alpha * 0.8, reveal, 665, MARKER_WIDTH * 0.45
-	)
-	## Written below the mark rather than beside it, clear of the flight, which
-	## arrives from above and would otherwise run through its own label.
-	_marker_text(
-		str(SHOTS[clampi(drill_shot, 0, SHOTS.size() - 1)]["label"]),
-		landing + Vector2(-14.0, 26.0), 13, MARKER_RED, alpha, reveal
-	)
-
-	## And the voli swinging it, if one has been dropped on the pin.
-	if drill_who.is_empty() or incoming:
-		return
-	var zone: Dictionary = NET_ZONES[clampi(zone_index, 0, NET_ZONES.size() - 1)]
-	_draw_voli(
-		_sticker_key(drill_who, view, "Attack"),
-		float(zone["along"]), float(zone["depth"]), scale, origin,
-		ink, alpha, reveal, 671
-	)
-
-
-## A stroke drawn as dashes rather than as a line.
-##
-## Walked by arc length rather than by sample index, because the samples of a
-## flight are dense at the ends and sparse in the middle -- dashing per sample
-## would give a line whose dashes change size along its own length, which reads as
-## a mistake rather than as a dashed line.
-const DASH_ON: float = 7.0
-const DASH_OFF: float = 5.0
-
-
-func _marker_dashes(
-	points: PackedVector2Array, color: Color, alpha: float, reveal: float,
-	salt: int, width: float
-) -> void:
-	if points.size() < 2:
-		return
-	var travelled := 0.0
-	var index := 0
-	while index < points.size() - 1:
-		var from: Vector2 = points[index]
-		var to: Vector2 = points[index + 1]
-		var span := from.distance_to(to)
-		if span < 0.001:
-			index += 1
-			continue
-		var walked := 0.0
-		while walked < span:
-			var cycle := fmod(travelled + walked, DASH_ON + DASH_OFF)
-			var run := minf(
-				(DASH_ON - cycle) if cycle < DASH_ON else (DASH_ON + DASH_OFF - cycle),
-				span - walked
-			)
-			run = maxf(run, 0.5)
-			if cycle < DASH_ON:
-				_marker_stroke(
-					PackedVector2Array([
-						from.lerp(to, walked / span),
-						from.lerp(to, minf(walked + run, span) / span),
-					]),
-					color, alpha, reveal, salt + index, width, false
-				)
-			walked += run
-		travelled += span
-		index += 1
 
 
 # --------------------------------------------------------------------------

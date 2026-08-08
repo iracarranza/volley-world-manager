@@ -48,8 +48,9 @@ var _phase_group: ButtonGroup = null
 var _view_group: ButtonGroup = null
 var _tray: UIRosterTray = null
 var _sticky: UIStickyNote = null
-var _overlay_check: CheckButton = null
 var _drill_label: Label = null
+var _place_along: SpinBox = null
+var _place_depth: SpinBox = null
 var _activity_rail: VBoxContainer = null
 var _detail: VBoxContainer = null
 var _sidebar: VBoxContainer = null
@@ -217,19 +218,14 @@ func _build_tactics_page() -> Control:
 	## stayed empty with nothing to say it had failed.
 	call_deferred("_request_headshots")
 
+	tools.add_child(_build_coordinate_entry())
+
 	_sticky = StickyNoteScript.new()
 	_sticky.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sticky.set_group("Planning", WorksheetScript.PHASES, "Block")
 	_sticky.set_group("Looking from", WorksheetScript.VIEWS, WorksheetScript.VIEW_THREE_QUARTER)
 	_sticky.option_chosen.connect(_sticky_chosen)
 	tools.add_child(_sticky)
-
-	## The overlay toggle belongs with the phase it modifies, not on the note --
-	## it is a property of what is on the board rather than a fourth choice.
-	_overlay_check = CheckButton.new()
-	_overlay_check.text = "Serve target"
-	_overlay_check.toggled.connect(func(on: bool) -> void: _worksheet.set_overlay(on))
-	tools.add_child(_overlay_check)
 
 	## What the sheet currently says, written out.
 	##
@@ -241,9 +237,7 @@ func _build_tactics_page() -> Control:
 	_drill_label.name = "DrillLabel"
 	page.add_child(_drill_label)
 	_worksheet.drill_changed.connect(_drill_written)
-	_drill_written(
-		_worksheet.drill_zone, _worksheet.drill_target, _worksheet.drill_shot
-	)
+	_drill_written(_worksheet.drill_zone)
 
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
@@ -256,29 +250,77 @@ func _build_tactics_page() -> Control:
 ## "Ivo drills a roll from 4, into deep cross." One sentence, rebuilt from the
 ## sheet rather than assembled as the manager clicks -- so it cannot drift from
 ## what is drawn.
-func _drill_written(zone_index: int, target: Vector2, shot_index: int) -> void:
+func _drill_written(zone_index: int) -> void:
 	if _drill_label == null or _worksheet == null:
 		return
 	var zone: Dictionary = WorksheetScript.NET_ZONES[
 		clampi(zone_index, 0, WorksheetScript.NET_ZONES.size() - 1)
 	]
-	var shot: Dictionary = WorksheetScript.SHOTS[
-		clampi(shot_index, 0, WorksheetScript.SHOTS.size() - 1)
-	]
-	var who := "Nobody yet"
+	## Only what the sheet still shows. It used to name the shot and the corner it
+	## was aimed at; both were drawn as a first guess and both came off, and a line
+	## of prose describing marks that are no longer on the page is the worst kind
+	## of stale -- it reads as authoritative and nothing on screen contradicts it.
+	var who := ""
 	for profile in _tray_profiles():
 		if str(profile.get("key", "")) == _worksheet.drill_who:
-			who = str(profile.get("display_name", who))
+			who = str(profile.get("display_name", ""))
 			break
-	## Named the way a coach names a place on the floor, not as coordinates. The
-	## metres are what the model stores; "deep cross" is what a person says.
-	var depth := "deep" if absf(target.y) > 6.0 else "short"
-	var side := "line" if signf(target.x) == signf(float(zone["along"])) else "cross"
-	if absf(target.x) < 1.5:
-		side = "middle"
-	_drill_label.text = "%s drills a %s from %s, into %s %s." % [
-		who, str(shot["label"]), str(zone["label"]), depth, side,
-	]
+	if who.is_empty():
+		_drill_label.text = "Zone %s — drop a voli on the pin." % str(zone["label"])
+		return
+	_drill_label.text = "%s works from %s." % [who, str(zone["label"])]
+
+
+## Place the selected voli at a typed coordinate.
+##
+## Not a shortcut for the drag -- the other way round. Scouting will hand this
+## screen *numbers*: where the block got beaten, which seam on the floor leaked
+## most, where attacks were stuffed or touched. Every one of those is a point on
+## a court, and a planner that can only be operated by pointing cannot accept any
+## of them without pretending to be a mouse. The field is the human end of the
+## same door. See `docs/design/TACTICS_AND_TRAINING.md` §0.12.
+##
+## Metres from the middle of the court and metres from the net, because those are
+## the units the sheet is drawn in and the units a report will quote.
+func _build_coordinate_entry() -> Control:
+	var row := HBoxContainer.new()
+	row.name = "CoordinateEntry"
+	row.add_theme_constant_override("separation", 4)
+
+	_place_along = SpinBox.new()
+	_place_along.min_value = -4.5
+	_place_along.max_value = 4.5
+	_place_along.step = 0.1
+	_place_along.value = 0.0
+	_place_along.tooltip_text = "Metres right of the middle line"
+	_place_along.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(_place_along)
+
+	_place_depth = SpinBox.new()
+	_place_depth.min_value = -9.0
+	_place_depth.max_value = 9.0
+	_place_depth.step = 0.1
+	_place_depth.value = 3.0
+	_place_depth.tooltip_text = "Metres back from the net"
+	_place_depth.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(_place_depth)
+
+	var place := Button.new()
+	place.text = "Place"
+	place.pressed.connect(_place_at_coordinate)
+	row.add_child(place)
+	return row
+
+
+func _place_at_coordinate() -> void:
+	if _worksheet == null or _tray == null or _tray.selected < 0:
+		return
+	var squad := _tray_profiles()
+	var slot: int = _tray.selected
+	var who := str(squad[slot].get("key", "")) if slot < squad.size() else ""
+	_worksheet.place_voli_at(
+		slot, Vector2(float(_place_along.value), float(_place_depth.value)), who
+	)
 
 
 func _sticky_chosen(heading: String, option: String) -> void:
@@ -464,15 +506,6 @@ func _sync_view_availability() -> void:
 				struck.append(phase_name)
 		_sticky.set_disabled("Planning", struck)
 		_sticky.set_chosen("Looking from", _worksheet.view)
-	## The overlay control takes the name of whatever the current phase owns, and
-	## goes away when the phase owns none.
-	if _overlay_check != null:
-		var overlay := WorksheetScript.overlay_for(_worksheet.phase)
-		_overlay_check.visible = not overlay.is_empty()
-		_overlay_check.text = overlay
-		if overlay.is_empty() and _overlay_check.button_pressed:
-			_overlay_check.button_pressed = false
-			_worksheet.set_overlay(false)
 	var page: Node = _worksheet.get_parent()
 	var declared := page.get_node_or_null("DeclaredLabel") as Label
 	if declared == null:

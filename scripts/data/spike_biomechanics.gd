@@ -70,13 +70,38 @@ const BACKSWING_DEGREES: float = 42.0
 ## vertical, which is where a hitter actually meets the ball, and -252 is the
 ## arm continuing down across the body.
 const SHOULDER_LIFT_DEGREES: float = -124.0
-const SHOULDER_COCK_DEGREES: float = -152.0
+## The cock is a **high elbow**, not a raised arm.
+##
+## It was -152, which carries the upper arm to 62 degrees above horizontal --
+## nearly overhead -- and with the elbow folded from there the forearm had nowhere
+## to go but down and behind. Measured on the rig, that pair put the elbow 0.34 m
+## above the shoulder and the hand 0.15 m above it and 0.31 m behind: the hand
+## *below* its own elbow, hanging backward. A hitter never loads there.
+##
+## At -128 the elbow sits 0.25 m up and 0.29 m back -- pulled behind the shoulder
+## line and above it, which is where the tension actually is -- and the forearm
+## can then stand up out of it. The power comes from the shoulder pivoting forward
+## and the forearm extending, so the load has to leave both of those with somewhere
+## to travel.
+const SHOULDER_COCK_DEGREES: float = -128.0
 const SHOULDER_CONTACT_DEGREES: float = -204.0
 const SHOULDER_FOLLOW_DEGREES: float = -252.0
 
 ## The elbow is what makes the arm a whip rather than a stick. It stays folded
 ## deep into the cock and opens *through* contact, one beat behind the shoulder.
-const ELBOW_COCK_DEGREES: float = 118.0
+##
+## **Negative, and the sign was measured rather than reasoned.** The comment on
+## `_set_elbow` says positive folds the forearm forward, and with the upper arm
+## already tipped past vertical at the old cock that sent the hand backward and
+## down instead. Sampling the rig's own node positions settles it: at -128/-46 the
+## hand lands 0.22 m above the elbow and 0.04 m behind it -- a forearm standing
+## very nearly vertical, hand up by the ear. At -152/+118 it landed 0.19 m *below*
+## the elbow and 0.13 m further back.
+##
+## The travel from here to contact is 53 degrees rather than 111. That is still
+## the widest joint excursion in the swing over the narrowest window, and it is
+## still the whip; it is simply a whip that starts from a shape a hitter makes.
+const ELBOW_COCK_DEGREES: float = -46.0
 const ELBOW_CONTACT_DEGREES: float = 7.0
 const ELBOW_FOLLOW_DEGREES: float = 58.0
 

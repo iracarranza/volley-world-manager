@@ -95,6 +95,9 @@ var _working: bool = false
 class Sticker extends RefCounted:
 	var texture: ImageTexture
 	var contours: Array = []
+	## The arms, traced on their own, in the same unit box. Drawn as a second cut
+	## edge over the body's -- not as a second sticker, so no shadow and no fill.
+	var arm_contours: Array = []
 	var aspect: float = 1.0
 	## How many world metres tall the cropped image is.
 	##
@@ -266,6 +269,22 @@ func _bake(job: Dictionary) -> void:
 	)
 	for _index in range(3):
 		await get_tree().process_frame
+	## The yaw goes on **after** the pose, because the pose takes it off.
+	##
+	## `set_pose` ends by calling `_turn_toward`, which writes `rotation.y`
+	## outright -- a block squares to the net at 180 degrees and everything else
+	## turns to face the contact direction, which for the bake's `(0, -1)` is
+	## zero. So the angle set before posing was discarded every time, and every
+	## attack and defence sticker came back chest-on to the reader no matter which
+	## view had asked for it. The blocks looked nearly right only because 180
+	## happens to be close to what three quarter wanted.
+	##
+	## That behaviour is correct on a court -- somebody playing the ball faces the
+	## ball -- and wrong for a drawing, where the body has to be seen from wherever
+	## the reader is standing. Re-applied here rather than suppressed in the rig,
+	## because the rig is not wrong.
+	_actor.rotation_degrees = Vector3(0.0, float(job["yaw"]), 0.0)
+	await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 
 	var image := _viewport.get_texture().get_image()
@@ -281,8 +300,30 @@ func _bake(job: Dictionary) -> void:
 	if bounds.size.x < 4.0 or bounds.size.y < 4.0:
 		return
 	var cropped := image.get_region(Rect2i(bounds))
+
+	## A second pass, for the arms alone.
+	##
+	## Everything flat black, the arms flat white, rendered again: the white pixels
+	## are exactly the arm pixels that are *visible*, occlusion included, because
+	## the depth buffer does the work. Tracing the arms from the colour render
+	## instead would not work -- an arm is painted the same skin colour as the head
+	## -- and hiding the rest of the body would let an arm behind the torso show
+	## through, which is worse than not drawing it.
+	##
+	## Why bother: a pose is mostly arms, and an arm that crosses the torso vanishes
+	## into one outline. A blocker, a spiker at the cock and a passer on their
+	## platform are three arm positions on one body; without an edge round the arms
+	## they are one shape three times.
+	_actor.paint_flat(_actor.body_meshes(), Color.BLACK)
+	_actor.paint_flat(_actor.arm_meshes(), Color.WHITE)
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var arm_mask := _viewport.get_texture().get_image().get_region(Rect2i(bounds))
+	_actor.apply_ui_palette(light_mode)
+
 	var built := Sticker.new()
 	built.contours = _trace(cropped)
+	built.arm_contours = _trace_mask(arm_mask)
 	## Mipmapped, and that is the whole of why the bodies looked smudged.
 	##
 	## A sticker is baked at 256 by 320 and drawn at sixty to a hundred pixels
@@ -379,14 +420,28 @@ func _shade(source: Image) -> Image:
 	return shaded
 
 
+## The silhouette: everything the renderer drew.
 func _trace(image: Image) -> Array:
+	return _walk_mask(image, func(pixel: Color) -> bool: return pixel.a > 0.5)
+
+
+## One part of it, off the mask pass, where the part is white on black.
+func _trace_mask(image: Image) -> Array:
+	return _walk_mask(
+		image,
+		func(pixel: Color) -> bool:
+			return pixel.a > 0.5 and pixel.get_luminance() > 0.5
+	)
+
+
+func _walk_mask(image: Image, keep: Callable) -> Array:
 	var width := image.get_width()
 	var height := image.get_height()
 	var mask := PackedByteArray()
 	mask.resize(width * height)
 	for y in range(height):
 		for x in range(width):
-			mask[y * width + x] = 1 if image.get_pixel(x, y).a > 0.5 else 0
+			mask[y * width + x] = 1 if bool(keep.call(image.get_pixel(x, y))) else 0
 
 	var seen := {}
 	var contours: Array = []

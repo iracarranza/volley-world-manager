@@ -2508,3 +2508,55 @@ being out of position.
 Suite unchanged at 870 checks / 1 failing with it on. **Not visually confirmed** --
 the geometry is checked and the regression suite is clean, but nobody has watched
 a tempo-2 outside since. Worth one playback pass.
+
+## The bodies are the weakest thing on the tactic sheet
+
+The sheet is now good enough that the figures on it are the problem. What is
+there is the match rig -- `PlayerActor3D` -- posed, rendered unshaded, traced
+into a silhouette, quantised to a printed palette, and drawn with a die-cut
+border and a separate crease round the arms.
+
+That buys a lot for free: real height and wingspan, body type, handedness, the
+club's kit colour, and a pose that comes from the same biomechanics the match
+plays. It also inherits what the rig is: capsules and spheres, built to read at
+court distance in three dimensions. At a hundred pixels on paper it reads as a
+toy.
+
+**What the sticker pipeline should keep**, because it is the part that works:
+
+- Size and ground offset measured off the bake in metres, so nothing downstream
+  picks a size.
+- The bake camera driven by the view's own angles, and the body's heading applied
+  *after* `set_pose` -- the rig turns to face the ball, which is right on a court
+  and wrong in a drawing.
+- Flat unshaded colour, saturation capped, quantised. Lit and posterised was mud.
+- Silhouette trace plus a separate arm trace, so a pose survives the arms
+  crossing the torso.
+
+**What has to change** is the rig's own geometry for this use, and the honest
+options are three:
+
+1. **A second, drawn rig** for stickers only -- shapes authored to read small,
+   sharing the skeleton and the pose solver so the biomechanics stay one thing.
+2. **Better meshes on the one rig**, which improves the match view too and is the
+   larger job.
+3. **Give up on tracing** and draw the figures as 2D from the pose data -- keeps
+   handedness and proportion, loses the free 3D consistency.
+
+Not chosen. See `docs/design/TACTICS_AND_TRAINING.md` §0.13 for the rest of the
+sheet's known weaknesses, and the receive-posture occlusion problem in particular
+-- a passer's platform is invisible from behind, and every camera stands behind
+them.
+
+## Scouting produces coordinates, and the planner now has a door for them
+
+`place_voli_at(slot, metres, who)` exists and the drag is a wrapper over it.
+Nothing produces the coordinates yet. What should:
+
+- Where the block got beaten, as points on the tape with the lane past each.
+- The worst seams on the floor, as a gap between coverage zones.
+- Where attacks were stuffed against where they were touched -- two distributions
+  over one net, and the difference between them is most of what "adjust the
+  swing" means.
+
+Design in `docs/design/TACTICS_AND_TRAINING.md` §0.12.
