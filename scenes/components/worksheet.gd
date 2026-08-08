@@ -76,7 +76,7 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 ## has nothing to measure them against.
 const VIEW_ANGLES := {
 	VIEW_TOP_DOWN: Vector2(90.0, 90.0),
-	VIEW_THREE_QUARTER: Vector2(38.0, 30.0),
+	VIEW_THREE_QUARTER: Vector2(38.0, 26.0),
 	VIEW_ALONG_NET: Vector2(76.0, 14.0),
 }
 
@@ -101,6 +101,30 @@ const VIEW_BOX := {
 	VIEW_ALONG_NET: [Vector3(-4.9, -3.2, 0.0), Vector3(4.9, 7.2, 3.3)],
 }
 
+## And how much *depth* each phase needs of it.
+##
+## The second axis of the frame, and it exists because the first pass got a real
+## trade wrong. Framing the whole eighteen-metre court in every view made every
+## metre honest and made the drawing small: a pair of blockers that had filled a
+## third of the sheet came out about sixty pixels tall, because the page was
+## paying for sixteen metres of floor that the block page has no opinion about.
+##
+## The fix is not to go back to a net sized off the panel -- that is what made one
+## net two different heights. It is to notice that **how much court is in frame is
+## a property of what you are planning**, exactly like which adjustments are
+## available. Blocking is about the wall and the seam in it, so it holds the net
+## and the ground either side of it. Attack has to reach the far endline because
+## that is where the ball is going. Floor is your court, plus enough of theirs for
+## the swing to come from somewhere.
+##
+## One scale per view survives untouched. What changes is what is inside the box,
+## which is a framing decision, not a measurement.
+const PHASE_DEPTH := {
+	"Attack": Vector2(-9.4, 6.2),
+	"Block": Vector2(-1.8, 3.8),
+	"Floor": Vector2(-4.2, 9.4),
+}
+
 const NET_HEIGHT_M: float = 2.43
 const COURT_HALF_M: float = 9.0
 const COURT_WIDTH_M: float = 9.0
@@ -113,8 +137,13 @@ const MARGIN_SHARE: float = 0.07
 ## The band across the top the heading lives in, and the strip along the foot the
 ## "nothing to set from here" line needs. Taken out of the fit rather than drawn
 ## over, because a court that runs under its own title is a court nobody sized.
-const HEAD_SHARE: float = 0.17
-const FOOT_SHARE: float = 0.09
+##
+## Cut from 0.17 and 0.09 when the drawing turned out to be short of presence.
+## The sheet is wide and not tall -- 932 by 421 at the size the clipboard gives it
+## -- so the fit is height-bound in every view, and a quarter of the height going
+## to two lines of text was the cheapest thing on the page to take back.
+const HEAD_SHARE: float = 0.125
+const FOOT_SHARE: float = 0.055
 
 ## Constant *for a given sticker*, not constant in pixels.
 ##
@@ -957,8 +986,13 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 	## arrives. What changes by phase is which end you are standing at, not which
 	## geometry exists.
 	_draw_net_zones(scale, origin, ink, alpha, reveal)
-	_draw_target_zones(scale, origin, ink, alpha, reveal)
-	_draw_drill(which, scale, origin, ink, alpha, reveal)
+	if which != "Block":
+		## The target grid and the flight belong to the two pages that aim at a
+		## floor. Blocking is about the wall and the seam in it; drawing a landing
+		## mark nine metres away on that page buried the thing the page is for under
+		## a mark about somewhere else.
+		_draw_target_zones(scale, origin, ink, alpha, reveal)
+		_draw_drill(which, scale, origin, ink, alpha, reveal)
 
 	match which:
 		"Block":
@@ -1170,7 +1204,7 @@ func _serve_origin() -> Vector3:
 ## instead of being drawn over the priority rail, which is where an unclamped
 ## serve target was landing.
 func _in_frame(at: Vector2) -> Vector2:
-	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var box := _world_box()
 	var low: Vector3 = box[0]
 	var high: Vector3 = box[1]
 	return Vector2(
@@ -1296,7 +1330,7 @@ func _unproject_floor(at: Vector2, scale: float, origin: Vector2) -> Vector2:
 ## the panel, so a blocker came out about four metres tall in the plan view and
 ## the same net drew at two different heights depending on which view you were in.
 func _view_frame() -> Dictionary:
-	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var box := _world_box()
 	var low: Vector3 = box[0]
 	var high: Vector3 = box[1]
 	## The box is a **minimum**, not the whole answer.
@@ -1311,15 +1345,21 @@ func _view_frame() -> Dictionary:
 	## then a tip to the short court would be drawn at the scale a line shot needs.
 	## This way the sheet frames what the manager actually asked for: tight for a
 	## tip, wide for a deep line.
-	var target := Vector2(
-		drill_target.x, drill_target.y if phase != "Floor" else absf(drill_target.y)
-	)
-	low = Vector3(
-		minf(low.x, target.x - 0.8), minf(low.y, target.y - 0.8), low.z
-	)
-	high = Vector3(
-		maxf(high.x, target.x + 0.8), maxf(high.y, target.y + 0.8), high.z
-	)
+	##
+	## **Attack and floor only.** On the block page the subject is the wall, and
+	## zooming out to hold a nine-metre landing point shrank two blockers to about a
+	## third of the height they read at before -- paying for a mark that page is not
+	## about with the one thing that page is about.
+	if phase != "Block":
+		var target := Vector2(
+			drill_target.x, drill_target.y if phase != "Floor" else absf(drill_target.y)
+		)
+		low = Vector3(
+			minf(low.x, target.x - 0.8), minf(low.y, target.y - 0.8), low.z
+		)
+		high = Vector3(
+			maxf(high.x, target.x + 0.8), maxf(high.y, target.y + 0.8), high.z
+		)
 	var least := Vector2(INF, INF)
 	var most := Vector2(-INF, -INF)
 	for along: float in [low.x, high.x]:
@@ -1352,6 +1392,21 @@ func _view_frame() -> Dictionary:
 ## out of the fit instead keeps the court in the same place when the phase
 ## changes, which is the whole reason the wipe reads as one board being reworked
 ## rather than as two boards.
+## The slab of world in frame: the view's width and height, the phase's depth.
+##
+## Asked for in one place because it was read in four and two of them disagreed.
+## The frame was fitted to the phase's depth while the court was *drawn* from the
+## view's, so the plan view laid a near endline three metres past the edge of the
+## sheet -- a court that runs off its own page, which is the same class of defect
+## as a net that is two different heights.
+func _world_box() -> Array:
+	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var low: Vector3 = box[0]
+	var high: Vector3 = box[1]
+	var span: Vector2 = PHASE_DEPTH.get(phase, Vector2(low.y, high.y))
+	return [Vector3(low.x, span.x, low.z), Vector3(high.x, span.y, high.z)]
+
+
 func _rail_rect() -> Rect2:
 	return Rect2(
 		size.x * 0.795, size.y * (HEAD_SHARE + 0.10),
@@ -1374,7 +1429,7 @@ func _rail_rect() -> Rect2:
 func _draw_court(
 	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
 ) -> void:
-	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
+	var box := _world_box()
 	var near: float = minf((box[1] as Vector3).y, COURT_HALF_M)
 	var far: float = maxf((box[0] as Vector3).y, -COURT_HALF_M)
 
@@ -1629,6 +1684,15 @@ func _draw_blockers(
 		var along: float = wall[index][0]
 		var key := _sticker_key(str(wall[index][1]), view, "Block")
 		var salt := 90 + index * 29
+		## Numbered, over their own head. Which blocker is which is the one thing a
+		## picture of a wall cannot say by itself -- two bodies at a net are a wall,
+		## and "the one on the left takes the seam" needs a name for the one on the
+		## left.
+		_marker_text(
+			"%d" % (index + 1),
+			_project(Vector3(along, 0.35, 3.55), scale, origin) + Vector2(-5.0, 0.0),
+			16, MARKER_RED, alpha, reveal
+		)
 		if _draw_voli(key, along, 0.35, scale, origin, ink, alpha, reveal, salt):
 			continue
 		## The fallback figure, at the reach the pose would have had.

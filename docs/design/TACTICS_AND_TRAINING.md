@@ -376,6 +376,21 @@ swing in one direction is why the near court stays on the left in all three -- a
 view that flips which end is yours is one a coach has to re-learn on every
 toggle.
 
+**How much court is in frame is a property of the phase, not the view.** The
+view fixes the angle and therefore how wide and how tall the frame has to be;
+the phase fixes how deep. Blocking holds the net and the ground either side of
+it, attack has to reach the far endline because that is where the ball is going,
+floor is your court plus enough of theirs for the swing to come from somewhere.
+
+That second axis is a correction. The first pass framed the whole eighteen-metre
+court in every view, which made every metre honest and made the drawing small --
+a pair of blockers that had filled a third of the sheet came out about sixty
+pixels tall, because the block page was paying for sixteen metres of floor it has
+no opinion about. The answer is *not* to go back to a net sized off the panel;
+that is what made one net two different heights. One scale per view survives
+untouched. What changed is what is inside the box, which is a framing decision
+rather than a measurement.
+
 Everything on the sheet is placed in metres and projected through that one map:
 the net is 2.43 m because it is 2.43 m, the attack line is 3 m back, a voli is
 as tall as the bake says they are. **A view's pixels-per-metre is derived, not
