@@ -2716,3 +2716,42 @@ Held because it moves *when* styling happens, and the pass is not idempotent in
 an obvious way -- it adds child nodes and strips overrides, and `_printed_rule`
 already has a "did I add this already" branch that suggests the others may not.
 Worth an afternoon and a careful read, not a quick change.
+
+## Removing finesse and shot variety collapses role specialisation
+
+Attempted and reverted. The change itself is small -- `finesse` becomes the mean
+of composure and improvisation, `shot_variety` becomes `decision_making`, both as
+derived read-only properties so the dozen resolver call sites that read them by
+name keep working -- and it takes Attacking from eight attributes to six, which
+is the row that makes the roster page too tall.
+
+What it also does, measured on five seeded Landavol rosters:
+
+| | before | after | test wants |
+|---|---|---|---|
+| setter `set_accuracy` minus libero's | **32.8** | **7.7** | > 10 |
+| libero `reception` minus libero `set_accuracy` | **28.2** | **9.8** | > 10 |
+| libero `set_accuracy` | 50.6 | **65.0** | -- |
+| setter `set_accuracy` | 83.4 | 72.7 | -- |
+
+Roles are still assigned in the right proportions -- Setter 10, Outside Hitter
+15, Middle Blocker 15, Opposite 5, Libero 5, unchanged. What collapses is
+*specialisation*: everyone converges toward the middle, and a libero gains
+fourteen points of setting accuracy they have no business having. This is not
+seed drift. Two near-miss thresholds looked like drift, and measuring the
+baseline is the only reason that reading did not survive.
+
+The mechanism is not yet found. Generation scores each attribute in three tiers
+-- `POSITION_WEIGHTS` primary, `ROLE_SECONDARY` secondary, everything else in
+`ABILITY_ATTRIBUTES` tertiary at -8 -- and `set_accuracy` is tertiary for a
+libero both before and after. Neither of the two obvious candidates explains it:
+deleting the pair from two role lists, and substituting the replacements into
+them, both produce the same collapse.
+
+Worth suspecting next: that the tertiary tier is derived from `ABILITY_ATTRIBUTES`
+by subtraction, so shortening that list changes the size of the tertiary set and
+therefore whatever is normalised across it. Start by printing the three tiers for
+a libero before and after, which is one probe and settles it.
+
+Held rather than shipped. The roster page can find its 38 px elsewhere -- the
+243 px of chrome above it is the better target and costs no content at all.
