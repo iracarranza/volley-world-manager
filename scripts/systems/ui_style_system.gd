@@ -411,12 +411,26 @@ static func _printed_rule(control: Control) -> void:
 	]
 	if existing != null:
 		existing.gridded = wants_grid
+		control.move_child(existing, 0)
 		existing.queue_redraw()
 		return
 	var rule := UIPrintedRuleScript.new()
 	rule.name = "PrintedRule"
 	rule.gridded = wants_grid
 	control.add_child(rule)
+	## **Under** the panel's content, not over it.
+	##
+	## Added last, it drew last, so a card's layout grid was printed *on top of*
+	## whatever the card held. Mostly invisible -- until a surface arrived with a
+	## grid of its own. The tactic sheet is squared paper at 13 px and the card
+	## behind it is ruled at 22, and the two together came out as pairs of lines
+	## with irregular gaps: measured at y=300, one series at exactly 13.0 px and a
+	## second at exactly 22.0 px interleaved through it. Neither grid was wrong.
+	## There were two of them.
+	##
+	## A press prints the grid on the stock and then things are placed on it, which
+	## is what index 0 means here.
+	control.move_child(rule, 0)
 
 
 static func _paper_tabs(tabs: TabContainer) -> void:

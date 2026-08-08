@@ -35,6 +35,7 @@ extends Control
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const VoliStickerScript := preload("res://scenes/components/voli_sticker.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const SpikeBiomechanics := preload("res://scripts/data/spike_biomechanics.gd")
 
 ## The sticker border, and the shadow that proves it has thickness.
 ##
@@ -151,6 +152,10 @@ const MARGIN_SHARE: float = 0.07
 ## to two lines of text was the cheapest thing on the page to take back.
 const HEAD_SHARE: float = 0.125
 const FOOT_SHARE: float = 0.055
+## Where the net sits down the usable band. A shade above the middle, because
+## every view has more court in front of the net than behind it once the far half
+## is cropped, and the drawing balances when the busy half has the room.
+const NET_ANCHOR: float = 0.46
 
 ## Constant *for a given sticker*, not constant in pixels.
 ##
@@ -479,10 +484,34 @@ const ATTACK_ELEVATION: float = 1.00
 ## is a plan for one phase at a time, and what a voli is doing on it is what that
 ## phase asks of them. A blocker on the attack page is drawn attacking because the
 ## page is about the attack.
+##
+## `phase` is the signed contact phase the rig poses on, and for the attack it is
+## **not zero**. Zero is the instant of contact -- the arm already through the
+## ball, elbow open at 7 degrees -- which is the least legible frame of a spike:
+## a straight arm above a head, indistinguishable from a serve or a reach. What
+## reads as a spike is the *load*: `SpikeBiomechanics.COCK_END`, where the elbow
+## is folded to 118 degrees, the shoulder is back at -152 and the trunk is arched.
+## A drawing picks the frame that names the action, which is why illustrators draw
+## the wind-up and photographers shoot the contact.
 const PHASE_POSE := {
-	"Attack": {"event": RallyEventModel.EventType.ATTACK, "elevation": ATTACK_ELEVATION},
-	"Block": {"event": RallyEventModel.EventType.BLOCK, "elevation": BLOCK_ELEVATION},
-	"Floor": {"event": RallyEventModel.EventType.DEFENSE, "elevation": 0.0},
+	"Attack": {
+		"event": RallyEventModel.EventType.ATTACK,
+		"elevation": ATTACK_ELEVATION, "phase": SpikeBiomechanics.COCK_END,
+	},
+	"Block": {
+		"event": RallyEventModel.EventType.BLOCK,
+		"elevation": BLOCK_ELEVATION, "phase": 0.0,
+	},
+	## And the floor pose is the **platform**, a beat before the ball arrives, not
+	## the contact. `PLATFORM_SET_PHASE` is where the rig has the arms joined and
+	## the knees folded -- a passer who is set and waiting, which is the posture the
+	## page is asking a manager to place. At zero the arms have already passed
+	## through and the figure stands up straight, which is a picture of somebody
+	## queuing.
+	"Floor": {
+		"event": RallyEventModel.EventType.DEFENSE,
+		"elevation": 0.0, "phase": -0.08,
+	},
 }
 
 const BLOCKER_PROFILES: Array[Dictionary] = [
@@ -541,8 +570,8 @@ func _request_stickers() -> void:
 				var pose: Dictionary = PHASE_POSE.get(for_phase, PHASE_POSE["Block"])
 				_stickers.request(
 					_sticker_key(who, for_view, for_phase),
-					int(pose["event"]), float(pose["elevation"]), 0.0,
-					profile, angles.x, angles.y
+					int(pose["event"]), float(pose["elevation"]),
+					float(pose.get("phase", 0.0)), profile, angles.x, angles.y
 				)
 
 
@@ -1060,7 +1089,10 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 			"%s — nothing to set from here" % which.to_upper(),
 			Vector2(size.x * 0.06, size.y * 0.955), 13, ink, alpha * 0.6, reveal
 		)
-	else:
+	elif which == "Block":
+		## Only where the bars mean something. The rail gives its strip back on the
+		## other two pages, and a rail with no strip was still being drawn into the
+		## zero-width rect it got -- a smear of hatching in the top corner.
 		_draw_zone_bars(_rail_rect(), alpha, reveal)
 
 
@@ -1130,12 +1162,25 @@ func _draw_attack_marks(
 func _draw_floor_marks(
 	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
 ) -> void:
+	## The defence, as bodies rather than circles. A page about where five volis
+	## stand that draws five rings is a page that has not said who is standing
+	## anywhere -- and the whole reason the rig gets traced is that these are
+	## different people in a readable posture.
 	var spots := [
 		Vector2(-3.2, 1.1), Vector2(3.2, 1.2), Vector2(-3.4, 6.4),
 		Vector2(0.2, 7.4), Vector2(3.4, 6.0),
 	]
+	var roster := _squad()
 	for index in range(spots.size()):
 		var spot: Vector2 = spots[index]
+		var who := str(
+			(roster[index % roster.size()] as Dictionary).get("key", "")
+		)
+		if _draw_voli(
+			_sticker_key(who, view, "Floor"), spot.x, spot.y, scale, origin,
+			ink, alpha, reveal, 121 + index * 13
+		):
+			continue
 		_marker_circle(
 			_floor_at(spot.x, spot.y, scale, origin), 9.0, ink, alpha, reveal,
 			121 + index * 13
@@ -1414,21 +1459,46 @@ func _view_frame() -> Dictionary:
 	var scale := minf(
 		usable.x / maxf(extent.x, 0.001), usable.y / maxf(extent.y, 0.001)
 	)
-	var centre := Vector2(
-		size.x * MARGIN_SHARE + usable.x * 0.5,
-		size.y * HEAD_SHARE + usable.y * 0.5
+	var frame := Rect2(
+		Vector2(size.x * MARGIN_SHARE, size.y * HEAD_SHARE), usable
 	)
-	return {"scale": scale, "origin": centre - (least + most) * 0.5 * scale}
+	## The net lands in the same place whatever the phase is.
+	##
+	## Centring the *box* meant the net moved: attack holds -7.6 to 4.4 metres of
+	## depth and block holds -1.4 to 3.0, so the net -- which is at zero -- sits
+	## below the middle of one and above the middle of the other, and switching
+	## page slid it down the sheet. Two drawings of one court that disagree about
+	## where the court is.
+	##
+	## Anchor the world origin instead, and let the box fall where it falls. The
+	## clamp below only moves it when the box would otherwise leave the sheet, which
+	## is the one case where staying put would be worse.
+	var anchored := frame.position + Vector2(frame.size.x * 0.46, frame.size.y * NET_ANCHOR)
+	var drawn := Rect2(anchored + least * scale, extent * scale)
+	var nudge := Vector2.ZERO
+	if drawn.size.x <= frame.size.x:
+		nudge.x = maxf(frame.position.x - drawn.position.x, 0.0) \
+			+ minf(frame.end.x - drawn.end.x, 0.0)
+	else:
+		nudge.x = frame.position.x + (frame.size.x - drawn.size.x) * 0.5 - drawn.position.x
+	if drawn.size.y <= frame.size.y:
+		nudge.y = maxf(frame.position.y - drawn.position.y, 0.0) \
+			+ minf(frame.end.y - drawn.end.y, 0.0)
+	else:
+		nudge.y = frame.position.y + (frame.size.y - drawn.size.y) * 0.5 - drawn.position.y
+	return {"scale": scale, "origin": anchored + nudge}
 
 
-## The strip down the right the priority bars live in.
+## The strip down the right the priority bars live in, and **only on the page
+## that has bars**.
 ##
-## Reserved in **every** view and phase, not only where the bars are drawn. They
-## used to be laid over whatever court was there, which meant the court had to be
-## drawn small enough to dodge them and the dodge was per view. Taking the strip
-## out of the fit instead keeps the court in the same place when the phase
-## changes, which is the whole reason the wipe reads as one board being reworked
-## rather than as two boards.
+## It was reserved everywhere so the court would not jump between phases. The net
+## anchor does that job properly now, and reserving it everywhere had a cost the
+## attack page could not pay: the far court is where an attack lands, the far
+## court is on the right in every view, and eighteen percent of the width taken
+## out of the right meant the floor being aimed at was the floor you could not
+## see. The bars are a block control -- "how much do we prioritise the line" -- so
+## they take their strip on the block page and give it back on the other two.
 ## The slab of world in frame: the view's width and height, the phase's depth.
 ##
 ## Asked for in one place because it was read in four and two of them disagreed.
@@ -1449,6 +1519,8 @@ func _world_box() -> Array:
 
 
 func _rail_rect() -> Rect2:
+	if phase != "Block":
+		return Rect2(Vector2(size.x * (1.0 - MARGIN_SHARE), size.y * 0.2), Vector2.ZERO)
 	return Rect2(
 		size.x * 0.795, size.y * (HEAD_SHARE + 0.10),
 		size.x * 0.175, size.y * (1.0 - HEAD_SHARE - FOOT_SHARE - 0.18)
@@ -1640,16 +1712,29 @@ func _draw_voli(
 	ink: Color, alpha: float, reveal: float, salt: int
 ) -> bool:
 	var ground := _floor_at(along, depth, scale, origin)
-	## The shadow, drawn *into* the drawing rather than under the sticker: a pencil
-	## ellipse at the voli's feet, hatched, in the same hand as the court. The
-	## sticker's own drop shadow says it is a sticker; this one says the voli is
+	## The shadow, drawn *into* the drawing rather than under the sticker: the
+	## sticker's own drop shadow says it is a sticker, this one says the voli is
 	## standing somewhere. A third of a metre across, so it is a body's footprint
 	## and not a puddle.
-	var foot := Vector2(0.34 * scale, 0.34 * scale * maxf(sin(_tilt()), 0.12))
-	_marker_ellipse(ground, foot, Color(ink, 0.42), alpha, reveal, salt + 71)
-	_hatch(
-		Rect2(ground - foot * 0.8, foot * 1.6), Color(ink, 0.22), alpha, reveal, salt + 83
-	)
+	##
+	## **Projected, not thrown.** It used `_marker_ellipse`, whose whole job is that
+	## "a hand-thrown circle is never round and never axis-aligned" -- it tilts by
+	## up to fourteen degrees and squashes by up to eight percent, both keyed off the
+	## salt. Right for a circle somebody drew round the thing they mean; wrong for a
+	## shadow, which is a disc on the floor seen from one camera, so two of them at
+	## the same view angle *must* be the same shape. They visibly were not.
+	##
+	## A real disc through the same projection instead: same shape for everyone,
+	## correct for the view, and it changes when the camera does because it is the
+	## floor plane rather than a number.
+	var disc := PackedVector2Array()
+	for step in range(25):
+		var turn := TAU * float(step) / 24.0
+		disc.append(_floor_at(
+			along + cos(turn) * 0.34, depth + sin(turn) * 0.34, scale, origin
+		))
+	draw_colored_polygon(disc, Color(ink, 0.16))
+	draw_polyline(disc, Color(ink, 0.38), 1.1, true)
 	if view == VIEW_TOP_DOWN:
 		return _draw_token(key, ground)
 	return _draw_sticker(key, ground, scale)

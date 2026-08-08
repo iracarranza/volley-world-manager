@@ -1148,12 +1148,28 @@ func set_pose(
 	_ground_the_feet(elevation, gait_knee)
 
 
+## Whether this rig is being lit or being *printed*.
+##
+## The tactic sheet bakes volis into stickers and the light and shade came off the
+## mesh, which sounded like an argument for real form and read as mud: a hundred
+## pixels of posterised directional lighting is a smudge, not a body. Unshaded, the
+## render *is* the material colours -- flat regions the eye can name -- and the
+## silhouette does the shaping instead, which is what the die-cut border was
+## always for.
+##
+## A flag rather than a second rig, because it is the same voli with the same kit
+## and the same body type; only the lighting is a lie.
+@export var flat_shading: bool = false
+
+
 func _apply_material_color(
 	mesh: MeshInstance3D, color: Color, alpha: float = 1.0
 ) -> void:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(color, alpha)
 	material.roughness = 0.72
+	if flat_shading:
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	if alpha < 0.999:
 		## Alpha scissor rather than blend would give a stipple; blend is right
 		## for a membrane. Depth draw stays on so two overlapping wings still

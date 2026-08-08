@@ -500,3 +500,36 @@ data the caller does not control, write the loop. The rewrite here is the same
 algorithm on an explicit stack and is four lines longer. Separately: a component
 whose failure mode is *drawing nothing* needs to say so out loud -- silence and
 success look identical, and the log was the only place the truth existed.
+
+## 19. A knob undone by the stage after it
+
+**What it looks like.** Volis on the tactic sheet came out fluorescent -- a
+magenta torso over teal shorts, louder than the red pencil that is the only thing
+on the sheet allowed to shout. The cause was clear enough: kit colours are mixed
+to sit on a lit 3D court, and the sticker bake had just been switched to unshaded
+rendering, so they arrived at full strength.
+
+So a cap went in: clamp saturation to 0.40 before writing the pixel. Rendered
+again, sampled off the sheet: **every ink came back at s = 0.50**, with a 0.40
+cap in the code three lines above it.
+
+**Why.** The next line quantises each channel to `COLOUR_STEPS = 6` so the
+sticker has a countable palette. At v = 0.67 a saturation of 0.40 wants the dark
+channel at 0.40; the nearest sixth is 0.333; and 0.333 against a 0.667 maximum
+*is* a saturation of 0.50. The quantiser was not ignoring the cap -- it was
+rounding straight past it. Every value the cap could produce landed on a step
+that put the saturation back.
+
+**The rule:** a limit is only a limit if it survives everything downstream of it.
+When a value passes through a second stage -- quantised, snapped, rounded,
+re-encoded -- check the limit against the *output*, not the assignment. This is
+§0's defect wearing yet another hat: a knob that cannot reach its own stated
+range, except here the knob could reach it and the next stage undid it. Twelve
+steps and a 0.30 cap now measure out at 0.28-0.38, which is what the cap says.
+
+**Adjacent, same pass:** the sheet's graph paper looked irregular, and it was two
+grids rather than one bad one. Sampling a pixel row across the sheet found lines
+at exactly 13.0 px spacing interleaved with lines at exactly 22.0 px -- the
+worksheet's own squared paper, and `UIPrintedRule`'s layout grid drawn over it
+because the rule was added to the panel last and therefore drew last. Neither
+grid was wrong. **Count the things before measuring one of them.**

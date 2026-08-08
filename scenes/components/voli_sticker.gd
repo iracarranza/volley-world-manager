@@ -24,11 +24,12 @@ extends Node
 ## 1. **The shadow.** The traced contour again, offset and darkened. Without it a
 ##    sticker is a shape with a thick outline; with it the shape is *above* the
 ##    paper. It is doing the same job a drop shadow does and for the same reason.
-## 2. **The body.** The baked render, posterised to a few tones and tinted toward
-##    coloured-pencil hues. Keeping the render is what buys real form -- the
-##    light and shade come off the actual mesh rather than being invented -- and
-##    posterising is what stops it reading as a 3D screenshot pasted onto a
-##    drawing.
+## 2. **The body**, in flat colour. The rig is rendered *unshaded*, so what comes
+##    back is the material colours themselves -- kit, shorts, skin, crown -- as
+##    regions the eye can name. Lit and posterised it looked like real form and
+##    read as mud: a hundred pixels of directional shading is a smudge, not a
+##    body. The silhouette does the shaping instead, which is what the die-cut
+##    border was always for.
 ## 3. **The border.** The traced contour, at constant weight, hugging the edge.
 ##    Constant is the operative word: every other line on this sheet varies with
 ##    the hand, and this one does not, because a die cut does not.
@@ -50,22 +51,26 @@ const BAKE_SIZE := Vector2i(256, 320)
 ## At 1.6 px a pose came out at 42-55 points, measured.
 const SIMPLIFY_TOLERANCE: float = 1.6
 
-## Coloured pencil rather than graphite.
+## How far the flat colours are stepped.
 ##
-## A skilled hand does not shade with one pencil darkened -- they lay a warm tone
-## in the light and a *cooler, more saturated* one in the shadow, because that is
-## what a shadow does to a colour. Three steps, because a posterised render with
-## more than about four tones stops reading as pencil and starts reading as a
-## render with banding.
-const TONE_STEPS: int = 3
-const TONE_LIGHT := Color(0.93, 0.88, 0.79)
-const TONE_MID := Color(0.72, 0.62, 0.56)
-const TONE_DARK := Color(0.42, 0.36, 0.42)
-## And the same three for the dark theme, which is the same drawing under a desk
-## lamp rather than a different one.
-const TONE_LIGHT_DARK := Color(0.72, 0.70, 0.66)
-const TONE_MID_DARK := Color(0.48, 0.45, 0.46)
-const TONE_DARK_DARK := Color(0.26, 0.24, 0.29)
+## The render is already flat -- the rig bakes unshaded -- so this is not
+## posterising light and shade, it is **quantising the palette**: a printed sticker
+## has a countable number of inks, and a value that can only land on one of six
+## levels per channel reads as printed rather than as sampled. Six is enough that
+## two body types are still different colours and few enough that the whole set
+## looks like it came off one press.
+##
+## Twelve, not six. At six the steps are 1/6 apart, which is coarser than the
+## saturation cap below is trying to hold: an ink capped to s=0.40 at v=0.67 wants
+## its dark channel at 0.40, the nearest sixth is 0.333, and the rounding puts the
+## saturation back up to 0.50. Measured off the rendered sheet, that is exactly
+## what came out -- every colour at s=0.50 with a 0.40 cap in the code above it.
+## A knob that cannot survive the stage after it is not a knob.
+const COLOUR_STEPS: float = 12.0
+## And how strong an ink is allowed to get. A club colour still reads as that
+## club's colour at this saturation; it stops competing with the red pencil, which
+## is the only thing on the sheet allowed to shout.
+const INK_SATURATION_CAP: float = 0.30
 
 ## Which of the two palettes the bakes are being laid down in.
 ##
@@ -209,6 +214,9 @@ func _ensure_rig() -> void:
 func _bake(job: Dictionary) -> void:
 	_ensure_rig()
 	var profile: Dictionary = job["profile"]
+	## Flat, before `configure` builds the materials. Set after, it would repaint
+	## nothing -- the meshes already have their `material_override`.
+	_actor.flat_shading = true
 	_actor.configure(1, true, "", str(profile.get("dominant_hand", "Right")), profile)
 	## `configure` paints the kit from the dark palette unconditionally, which is
 	## right for the court and wrong here -- a sticker is going onto a sheet whose
@@ -322,42 +330,52 @@ func _body_bounds(image: Image) -> Rect2:
 	return Rect2(low, high - low)
 
 
-## Posterise the render into coloured-pencil tones.
+## Flatten the render into printed colour.
 ##
-## The render's own luminance is the input, so the form is the mesh's and not an
-## invention -- which is the whole reason to keep the render rather than fill the
-## silhouette flat. What changes is the *palette*: three steps, warm in the light
-## and cooler and more saturated in the shadow, which is what a coloured pencil
-## does and what a greyscale ramp cannot.
+## With the rig unshaded there is nothing to posterise -- every pixel is already
+## its material's own colour -- so the work here is keeping it that way: quantise
+## each channel so the sticker has a countable palette, and keep the renderer's
+## alpha so the edge has partial coverage for the mipmap chain to filter with.
+##
+## The previous version mapped luminance onto three hand-mixed "coloured pencil"
+## tones, which threw away the kit and the skin and replaced a specific voli with
+## a generic grey-brown one. Measured, the render's luminance ran 0.000 to 0.799
+## with a median of 0.283 -- it was spreading across the three tones exactly as
+## designed, and the design was the problem.
 func _shade(source: Image) -> Image:
 	var shaded := Image.create(
 		source.get_width(), source.get_height(), false, Image.FORMAT_RGBA8
 	)
-	## Built rather than written as a ternary between two literals: a typed
-	## `Array[Color]` will not take an untyped array, and the ternary produces one.
-	var tones: Array[Color] = []
-	if light_mode:
-		tones.append_array([TONE_LIGHT, TONE_MID, TONE_DARK])
-	else:
-		tones.append_array([TONE_LIGHT_DARK, TONE_MID_DARK, TONE_DARK_DARK])
+	## The dark theme prints the same sticker on darker stock, so the inks come
+	## down a little rather than being a second palette. `apply_ui_palette` has
+	## already given the rig its theme colours; this is only the paper showing
+	## through.
+	var lift := 1.0 if light_mode else 0.82
 	for y in range(source.get_height()):
 		for x in range(source.get_width()):
 			var pixel := source.get_pixel(x, y)
 			if pixel.a < 0.02:
 				shaded.set_pixel(x, y, Color(0.0, 0.0, 0.0, 0.0))
 				continue
-			var step := clampi(
-				int((1.0 - pixel.get_luminance()) * float(TONE_STEPS)),
-				0, TONE_STEPS - 1
-			)
-			## The renderer's own alpha is kept rather than thresholded to opaque.
+			## Screen colour is not ink.
 			##
-			## The threshold was the other half of the smudge: a hard-edged
-			## silhouette has no partial coverage to filter with, so every boundary
-			## pixel is either all body or all paper and the outline staircases at
-			## any size. The *trace* still cuts at 0.5 -- a contour needs a definite
-			## edge to walk -- but the picture keeps the soft one it was given.
-			shaded.set_pixel(x, y, Color(tones[step], pixel.a))
+			## The kit and the accents are mixed to sit on a lit 3D court, and taken
+			## unshaded straight onto paper they came out fluorescent -- a magenta
+			## torso over teal shorts, which is nobody's kit and is louder than
+			## anything else on the sheet including the red pencil. Capping saturation
+			## and lifting the value is what a press does to a screen colour: the hue
+			## survives, so two clubs are still two colours, and the strength comes
+			## down to something a printed sticker could actually be.
+			var ink := Color.from_hsv(
+				pixel.h, minf(pixel.s, INK_SATURATION_CAP),
+				clampf(pixel.v * lift * 0.70 + 0.28, 0.0, 1.0)
+			)
+			shaded.set_pixel(x, y, Color(
+				roundf(ink.r * COLOUR_STEPS) / COLOUR_STEPS,
+				roundf(ink.g * COLOUR_STEPS) / COLOUR_STEPS,
+				roundf(ink.b * COLOUR_STEPS) / COLOUR_STEPS,
+				pixel.a
+			))
 	return shaded
 
 
