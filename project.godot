@@ -22,7 +22,6 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 GameManager="*res://scripts/managers/game_manager.gd"
 CareerManager="*res://scripts/managers/career_manager.gd"
-ScreenStateProbe="*res://tools/preview/screen_state_probe.gd"
 
 [display]
 
