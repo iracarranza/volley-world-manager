@@ -452,11 +452,30 @@ The sheet's marks became its controls. There are two grids on every view and
 they are the same two on all three, because every phase is an opinion about the
 same pair of places:
 
-- **The net zones** — 4, 3, 2 and the pipe — where a swing leaves. Marked on the
-  tape and clicked there. "Right pin" is a place, and the honest control for a
-  place is the place, which is the same argument that replaced the block
-  priority `OptionButton` with four bars.
-- **The target grid** on the receiving floor, where it lands. Dragged.
+- **The net zones** — 4, 3, 2 and the pipe — where a swing leaves. "Right pin" is
+  a place, and the honest control for a place is the place, which is the same
+  argument that replaced the block priority `OptionButton` with four bars.
+- **The floor zones**, six per half, named the way a coach names them. Which half
+  is the phase's business: attack and block are opinions about *their* floor,
+  floor defence is an opinion about *yours*.
+
+**A net zone is a volume, not a mark on the tape.** It was a circle drawn at
+tape height, which is a symbol for a place rather than the place — and from
+straight above it landed on the tape itself, where nothing happens. What the
+zone actually is depends on what you are looking at it for, so each view gets
+the slab of air its own question lives in:
+
+| view | the zone is | because |
+|---|---|---|
+| three quarter | the panel **above** the tape | that is where a ball crosses |
+| along the net | a slab **around** the tape | the question here is depth off it |
+| top down | the band of floor **ahead** of it | from above, height is nothing |
+
+**Hover shades one; holding it moves the sheet in on it.** Shading every zone is
+a heat map and says nothing; shading one says *this* one. And clicking the zone
+you are already pointing at is the shortest way to say "closer" — a page whose
+whole argument is that the drawing is the interface must not grow a magnifier you
+operate from outside the drawing. Clicking it again lets it go.
 
 Between them runs a **dashed arrow**, and dashed is doing work: everything else
 on the sheet states something about the court (the net is 2.43 m, the attack

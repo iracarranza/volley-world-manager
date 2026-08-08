@@ -275,7 +275,16 @@ func _bake(job: Dictionary) -> void:
 	var cropped := image.get_region(Rect2i(bounds))
 	var built := Sticker.new()
 	built.contours = _trace(cropped)
-	built.texture = ImageTexture.create_from_image(_shade(cropped))
+	## Mipmapped, and that is the whole of why the bodies looked smudged.
+	##
+	## A sticker is baked at 256 by 320 and drawn at sixty to a hundred pixels
+	## tall -- a four-to-one minification. Without mipmaps the sampler takes one
+	## texel in sixteen, so a posterised body with hard tone boundaries comes back
+	## as a chewed edge that crawls whenever the panel resizes. The generation cost
+	## is a third of a millisecond on an image this size and it is paid once.
+	var shaded := _shade(cropped)
+	shaded.generate_mipmaps()
+	built.texture = ImageTexture.create_from_image(shaded)
 	built.aspect = bounds.size.x / bounds.size.y
 	built.world_height = _camera.size * (bounds.size.y / float(BAKE_SIZE.y))
 	## Where the crop's bottom edge is relative to the voli's own feet, measured
@@ -334,14 +343,21 @@ func _shade(source: Image) -> Image:
 	for y in range(source.get_height()):
 		for x in range(source.get_width()):
 			var pixel := source.get_pixel(x, y)
-			if pixel.a < 0.5:
+			if pixel.a < 0.02:
 				shaded.set_pixel(x, y, Color(0.0, 0.0, 0.0, 0.0))
 				continue
 			var step := clampi(
 				int((1.0 - pixel.get_luminance()) * float(TONE_STEPS)),
 				0, TONE_STEPS - 1
 			)
-			shaded.set_pixel(x, y, tones[step])
+			## The renderer's own alpha is kept rather than thresholded to opaque.
+			##
+			## The threshold was the other half of the smudge: a hard-edged
+			## silhouette has no partial coverage to filter with, so every boundary
+			## pixel is either all body or all paper and the outline staircases at
+			## any size. The *trace* still cuts at 0.5 -- a contour needs a definite
+			## edge to walk -- but the picture keeps the soft one it was given.
+			shaded.set_pixel(x, y, Color(tones[step], pixel.a))
 	return shaded
 
 

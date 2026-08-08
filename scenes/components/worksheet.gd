@@ -119,10 +119,17 @@ const VIEW_BOX := {
 ##
 ## One scale per view survives untouched. What changes is what is inside the box,
 ## which is a framing decision, not a measurement.
+##
+## Cropped tighter than the court's own extent on every page, not just the block
+## one. A page that holds eighteen metres so the far endline is present spends its
+## whole vertical budget on floor nobody is looking at; a page that holds twelve
+## puts the drawing back at a size where the bodies read. What falls outside is
+## still *there* -- the marks clamp into frame and the court lines stop at the
+## crop rather than pretending the court ends -- it is simply not on this page.
 const PHASE_DEPTH := {
-	"Attack": Vector2(-9.4, 6.2),
-	"Block": Vector2(-1.8, 3.8),
-	"Floor": Vector2(-4.2, 9.4),
+	"Attack": Vector2(-7.6, 4.4),
+	"Block": Vector2(-1.4, 3.0),
+	"Floor": Vector2(-3.0, 7.6),
 }
 
 const NET_HEIGHT_M: float = 2.43
@@ -393,6 +400,10 @@ func _ready() -> void:
 	## paper edge and a halftone wash, which is the wrong material -- a board is
 	## smooth, and its edge is a tray rather than a torn sheet.
 	set_meta("ui_style_exempt", true)
+	## Stickers are baked at 256 by 320 and drawn at a fraction of that, so the
+	## sampler has to be told there are mipmaps to sample. Without this the
+	## generated chain is never used and the bodies come back chewed.
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	custom_minimum_size = Vector2(420.0, 300.0)
 	_seed = int(String(name).hash() & 0x7FFFFFFF)
 	resized.connect(queue_redraw)
@@ -766,9 +777,15 @@ func _gui_input(event: InputEvent) -> void:
 		if _dragging_target:
 			_move_drill_target(motion.position, scale, origin)
 			return
-		var was := _hovered_zone
+		var was_rail := _hovered_zone
+		var was_net := _hovered_net
+		var was_floor := _hovered_floor
 		_hovered_zone = _zone_at(motion.position) if phase == "Block" else -1
-		if was != _hovered_zone:
+		var under := _zone_under(motion.position, scale, origin)
+		_hovered_net = int(under[1]) if str(under[0]) == "net" else -1
+		_hovered_floor = int(under[1]) if str(under[0]) == "floor" else -1
+		if was_rail != _hovered_zone or was_net != _hovered_net \
+				or was_floor != _hovered_floor:
 			queue_redraw()
 		return
 	if not (event is InputEventMouseButton):
@@ -779,11 +796,25 @@ func _gui_input(event: InputEvent) -> void:
 		if not button.pressed:
 			_dragging_target = false
 			return
-		## The pin first, because its mark sits above the net and nothing else does.
-		var pin := _net_zone_at(button.position, scale, origin)
-		if pin >= 0:
-			drill_zone = pin
-			drill_changed.emit(drill_zone, drill_target, drill_shot)
+		## A zone under the cursor takes the click, and taking it means **moving in
+		## on it**. Clicking the one already held lets it go again. That is the whole
+		## of the zoom control, and it deliberately is not a control: a page whose
+		## argument is that the drawing is the interface should not grow a magnifier
+		## you operate from outside the drawing.
+		var under := _zone_under(button.position, scale, origin)
+		var kind := str(under[0])
+		if kind != "":
+			var index := int(under[1])
+			if focus_kind == kind and focus_index == index:
+				focus_kind = ""
+				focus_index = -1
+			else:
+				focus_kind = kind
+				focus_index = index
+			## A net zone is also where a swing comes from, so holding one picks it.
+			if kind == "net":
+				drill_zone = index
+				drill_changed.emit(drill_zone, drill_target, drill_shot)
 			accept_event()
 			queue_redraw()
 			return
@@ -793,6 +824,13 @@ func _gui_input(event: InputEvent) -> void:
 		) <= 18.0:
 			_dragging_target = true
 			accept_event()
+			return
+		## Nothing under the cursor: pull back out.
+		if focus_kind != "":
+			focus_kind = ""
+			focus_index = -1
+			accept_event()
+			queue_redraw()
 		return
 
 	if not button.pressed:
@@ -969,8 +1007,9 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 	if view == VIEW_TOP_DOWN:
 		## From straight above a net is a line, and drawing the mesh would be drawing
 		## a wall edge-on -- so the plan view gets the tape and the antennae and
-		## nothing else, and spends the space on the zones instead.
-		_draw_zone_numerals(scale, origin, ink, alpha, reveal)
+		## nothing else, and spends the space on the zones instead. The rotation
+		## numerals used to be drawn here too; the zone regions carry them now, which
+		## is where they belong -- a numeral is a name for a region.
 		for at: float in [-HALF_WIDTH_M, HALF_WIDTH_M]:
 			_marker_circle(
 				_floor_at(at, 0.0, scale, origin), 4.0, MARKER_RED, alpha, reveal,
@@ -985,13 +1024,11 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 	## two places: somewhere along the net a ball leaves, and somewhere on a floor it
 	## arrives. What changes by phase is which end you are standing at, not which
 	## geometry exists.
-	_draw_net_zones(scale, origin, ink, alpha, reveal)
+	_draw_zone_regions(scale, origin, ink, alpha, reveal)
 	if which != "Block":
-		## The target grid and the flight belong to the two pages that aim at a
-		## floor. Blocking is about the wall and the seam in it; drawing a landing
-		## mark nine metres away on that page buried the thing the page is for under
-		## a mark about somewhere else.
-		_draw_target_zones(scale, origin, ink, alpha, reveal)
+		## The flight belongs to the two pages that aim at a floor. Blocking is about
+		## the wall and the seam in it; a landing mark nine metres away buried the
+		## thing that page is for under a mark about somewhere else.
 		_draw_drill(which, scale, origin, ink, alpha, reveal)
 
 	match which:
@@ -1400,6 +1437,10 @@ func _view_frame() -> Dictionary:
 ## sheet -- a court that runs off its own page, which is the same class of defect
 ## as a net that is two different heights.
 func _world_box() -> Array:
+	if focus_kind != "" and focus_index >= 0:
+		var held := _focus_box()
+		if not held.is_empty():
+			return held
 	var box: Array = VIEW_BOX.get(view, VIEW_BOX[VIEW_THREE_QUARTER])
 	var low: Vector3 = box[0]
 	var high: Vector3 = box[1]
@@ -1477,27 +1518,6 @@ func _draw_court(
 			_floor_at(lane, 0.0, scale, origin),
 			_floor_at(lane, minf(near, COURT_HALF_M), scale, origin),
 			Color(ink, 0.22), alpha, reveal, 423 + int(lane * 2.0), MARKER_WIDTH * 0.4
-		)
-
-
-## The rotation numbers, written into their own zones.
-##
-## Plan view only. They are the one label on the sheet that names a place rather
-## than a quantity, and a place is only unambiguous from above -- in three quarter
-## the back-row numerals land on top of the front-row ones, which is worse than
-## not having them.
-func _draw_zone_numerals(
-	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
-) -> void:
-	var cells := [
-		[-3.0, 1.5, "4"], [0.0, 1.5, "3"], [3.0, 1.5, "2"],
-		[-3.0, 6.0, "5"], [0.0, 6.0, "6"], [3.0, 6.0, "1"],
-	]
-	for cell in cells:
-		_marker_text(
-			str(cell[2]),
-			_floor_at(float(cell[0]), float(cell[1]), scale, origin) + Vector2(-5.0, 6.0),
-			16, Color(ink, 0.46), alpha, reveal
 		)
 
 
@@ -1821,71 +1841,227 @@ func _drill_flight(zone_index: int, target: Vector2) -> PackedVector3Array:
 	return out
 
 
-## The net zones, drawn on the tape and clickable.
+## A net zone is a **volume**, not a mark on the tape.
 ##
-## Marked on the net rather than listed beside it, for the same reason the
-## priority bars replaced an `OptionButton`: "right pin" is a *place*, and the
-## honest control for a place is the place.
-func _draw_net_zones(
+## It was a circle drawn at the tape's height, which is a symbol for a place
+## rather than the place, and from straight above it landed on the tape itself --
+## where nothing happens. What a net zone actually is depends on what you are
+## looking at it for, and the three views want three different slabs of the same
+## air:
+##
+## | view | the zone is | because |
+## |---|---|---|
+## | three quarter | the panel **above** the tape | that is where a ball crosses |
+## | along the net | a slab **around** the tape | the question here is depth off it |
+## | top down | the patch of floor **ahead** of it | from above, height is nothing |
+##
+## Returned as four world corners in order, so the caller can outline it, fill it
+## or hit-test it without knowing which of the three it got.
+func _net_zone_quad(index: int) -> PackedVector3Array:
+	var zone: Dictionary = NET_ZONES[clampi(index, 0, NET_ZONES.size() - 1)]
+	var mid := float(zone["along"])
+	var half := 1.5
+	var depth := float(zone["depth"])
+	match view:
+		VIEW_TOP_DOWN:
+			## A band just past the tape, not a slab. Three and a half metres deep it
+			## covered the far court's front row entirely and the two grids fought --
+			## a net zone and a floor zone are different questions and must not be the
+			## same rectangle.
+			return PackedVector3Array([
+				Vector3(mid - half, depth - 0.1, 0.0),
+				Vector3(mid + half, depth - 0.1, 0.0),
+				Vector3(mid + half, depth - 1.5, 0.0),
+				Vector3(mid - half, depth - 1.5, 0.0),
+			])
+		VIEW_ALONG_NET:
+			return PackedVector3Array([
+				Vector3(mid, depth + 1.3, NET_HEIGHT_M - 0.1),
+				Vector3(mid, depth - 1.3, NET_HEIGHT_M - 0.1),
+				Vector3(mid, depth - 1.3, NET_HEIGHT_M + 1.3),
+				Vector3(mid, depth + 1.3, NET_HEIGHT_M + 1.3),
+			])
+		_:
+			return PackedVector3Array([
+				Vector3(mid - half, depth, NET_HEIGHT_M - 0.1),
+				Vector3(mid + half, depth, NET_HEIGHT_M - 0.1),
+				Vector3(mid + half, depth, NET_HEIGHT_M + 1.3),
+				Vector3(mid - half, depth, NET_HEIGHT_M + 1.3),
+			])
+
+
+## The six zones of a half court, in metres, as (along, depth) rectangles.
+##
+## Which half depends on the phase, and that is the whole of what the phase means
+## on the floor: attack and block are opinions about **their** floor -- where the
+## ball is going, where it is coming from -- and floor defence is an opinion about
+## **yours**. Numbered the way a coach numbers them, so a zone is something you can
+## say out loud.
+func _floor_zones() -> Array[Dictionary]:
+	var side := 1.0 if phase == "Floor" else -1.0
+	var out: Array[Dictionary] = []
+	var labels := ["4", "3", "2", "5", "6", "1"]
+	for row in range(2):
+		var near_edge := 0.0 if row == 0 else ATTACK_LINE_M
+		var far_edge := ATTACK_LINE_M if row == 0 else COURT_HALF_M
+		for column in range(3):
+			var left := -HALF_WIDTH_M + float(column) * 3.0
+			out.append({
+				"label": labels[row * 3 + column],
+				"low": Vector2(left, minf(near_edge, far_edge) * side),
+				"high": Vector2(left + 3.0, maxf(near_edge, far_edge) * side),
+			})
+	return out
+
+
+func _floor_zone_quad(index: int) -> PackedVector3Array:
+	var zones := _floor_zones()
+	var zone: Dictionary = zones[clampi(index, 0, zones.size() - 1)]
+	var low: Vector2 = zone["low"]
+	var high: Vector2 = zone["high"]
+	return PackedVector3Array([
+		Vector3(low.x, low.y, 0.0), Vector3(high.x, low.y, 0.0),
+		Vector3(high.x, high.y, 0.0), Vector3(low.x, high.y, 0.0),
+	])
+
+
+## Whether any of a zone's footprint falls inside the slab currently in frame.
+func _overlaps_box(quad: PackedVector3Array, box: Array) -> bool:
+	if box.size() < 2:
+		return true
+	var low: Vector3 = box[0]
+	var high: Vector3 = box[1]
+	for point in quad:
+		if point.x >= low.x - 0.2 and point.x <= high.x + 0.2 \
+				and point.y >= low.y - 0.2 and point.y <= high.y + 0.2:
+			return true
+	return false
+
+
+func _flatten(quad: PackedVector3Array, scale: float, origin: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for point in quad:
+		out.append(_project(point, scale, origin))
+	return out
+
+
+## Zones, drawn as the regions they are: outlined always, shaded when pointed at.
+##
+## Shading only the hovered one is the point -- six shaded zones is a heat map and
+## says nothing, one shaded zone says *this* one. The outline stays on every zone
+## so there is something to aim at, and it is a printed hairline rather than a
+## pencil stroke because a zone is a division of the court, not a mark somebody
+## made on it.
+func _draw_zone_regions(
 	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
 ) -> void:
-	for index in range(NET_ZONES.size()):
-		var zone: Dictionary = NET_ZONES[index]
-		var chosen := index == drill_zone
-		var at := _project(
-			Vector3(float(zone["along"]), float(zone["depth"]), NET_HEIGHT_M + 0.30),
-			scale, origin
+	if reveal < 0.99:
+		return
+	var box := _world_box()
+	var floor_zones := _floor_zones()
+	for index in range(floor_zones.size()):
+		## Zones wholly outside the frame are skipped rather than clipped. Drawing
+		## them anyway is what stopped a focused view reading as a close-up: the
+		## twelve rectangles still spanned the whole court and the crop looked like a
+		## slightly larger drawing of the same thing.
+		if not _overlaps_box(_floor_zone_quad(index), box):
+			continue
+		var quad := _flatten(_floor_zone_quad(index), scale, origin)
+		var lit := index == _hovered_floor
+		var held := focus_kind == "floor" and index == focus_index
+		if lit or held:
+			draw_colored_polygon(quad, Color(MARKER_RED if held else ink, 0.13))
+		## An unpointed-at zone is a **division**, not a box: a hairline so faint it
+		## reads as the court being sectioned rather than as twelve rectangles drawn
+		## on top of it. Everything the eye is meant to find is the one that lit up.
+		draw_polyline(
+			quad + PackedVector2Array([quad[0]]),
+			Color(ink, 0.34 if (lit or held) else 0.09), 1.0, true
 		)
-		var mark := MARKER_RED if chosen else Color(ink, 0.45)
-		_marker_circle(at, 11.0 if chosen else 8.0, mark, alpha, reveal, 601 + index * 7)
-		if chosen:
-			## Ringed twice, the way a coach rings the thing they mean.
-			_marker_circle(at, 15.0, mark, alpha * 0.8, reveal, 611 + index)
-		## The label sits a metre into the far court rather than a few pixels above
-		## the mark. A pixel offset is a screen direction and the sheet has three
-		## cameras: straight down, a "4" written fifteen pixels up landed on top of
-		## the rotation numeral for zone 4, which is a different 4 in a different
-		## place, and the two read as one smudged glyph.
+		var zone: Dictionary = floor_zones[index]
+		var middle: Vector2 = (Vector2(zone["low"]) + Vector2(zone["high"])) * 0.5
 		_marker_text(
 			str(zone["label"]),
-			_project(
-				Vector3(float(zone["along"]), float(zone["depth"]) - 1.1, NET_HEIGHT_M + 0.30),
-				scale, origin
-			) + Vector2(-5.0, 0.0),
-			13, mark, alpha, reveal
+			_floor_at(middle.x, middle.y, scale, origin) + Vector2(-5.0, 6.0),
+			15, Color(ink, 0.60 if (lit or held) else 0.22), alpha, reveal
 		)
-		if view == VIEW_TOP_DOWN:
+
+	for index in range(NET_ZONES.size()):
+		if not _overlaps_box(_net_zone_quad(index), box):
 			continue
-		## And the foot of it on the floor, so a zone in the air is anchored to the
-		## patch of court it belongs to. Skipped from straight above, where a plumb
-		## line has no length and draws as a blot on its own mark.
-		_marker_line(
-			at, _floor_at(float(zone["along"]), float(zone["depth"]), scale, origin),
-			Color(mark, 0.22), alpha, reveal, 621 + index, MARKER_WIDTH * 0.30
+		var quad := _flatten(_net_zone_quad(index), scale, origin)
+		var lit := index == _hovered_net
+		var held := focus_kind == "net" and index == focus_index
+		var chosen := index == drill_zone
+		if lit or held:
+			draw_colored_polygon(quad, Color(MARKER_RED, 0.15))
+		var edge := MARKER_RED if (chosen or lit or held) else Color(ink, 0.30)
+		var weight := 0.55 if chosen else (0.70 if (lit or held) else 0.16)
+		draw_polyline(
+			quad + PackedVector2Array([quad[0]]),
+			Color(edge, weight), 1.1, true
+		)
+		var zone: Dictionary = NET_ZONES[index]
+		_marker_text(
+			str(zone["label"]),
+			_project(quad_label_anchor(index), scale, origin) + Vector2(-5.0, -6.0),
+			14, Color(edge, maxf(weight, 0.45)), alpha, reveal
 		)
 
 
-## The six zones of the receiving court, drawn as a target grid.
+## Where a net zone writes its own name: the top edge of its volume, so the label
+## is never inside the region it names and never on the floor numeral underneath.
+func quad_label_anchor(index: int) -> Vector3:
+	var quad := _net_zone_quad(index)
+	return (quad[2] + quad[3]) * 0.5
+
+
+## What the cursor is over, as a kind and an index. Net first: its volume sits
+## above the floor's, so where the two overlap on the page the nearer one wins,
+## which is what a viewer expects of anything drawn in front.
+func _zone_under(at: Vector2, scale: float, origin: Vector2) -> Array:
+	for index in range(NET_ZONES.size()):
+		if Geometry2D.is_point_in_polygon(at, _flatten(_net_zone_quad(index), scale, origin)):
+			return ["net", index]
+	var floor_zones := _floor_zones()
+	for index in range(floor_zones.size()):
+		if Geometry2D.is_point_in_polygon(at, _flatten(_floor_zone_quad(index), scale, origin)):
+			return ["floor", index]
+	return ["", -1]
+
+
+## Hold a zone, and the sheet moves in on it.
 ##
-## The far half, because that is where an attack lands and this is a page about
-## sending a ball somewhere. The near half already carries the rotation numerals;
-## drawing the same grid twice would say the two halves are the same kind of
-## thing, and on this page they are not -- one is where your volis stand and the
-## other is where the ball is going.
-func _draw_target_zones(
-	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
-) -> void:
-	for lane: float in [-1.5, 1.5]:
-		_marker_line(
-			_floor_at(lane, -0.2, scale, origin),
-			_floor_at(lane, -COURT_HALF_M, scale, origin),
-			Color(ink, 0.18), alpha, reveal, 631 + int(lane * 2.0), MARKER_WIDTH * 0.35
-		)
-	_marker_line(
-		_floor_at(-HALF_WIDTH_M, -6.0, scale, origin),
-		_floor_at(HALF_WIDTH_M, -6.0, scale, origin),
-		Color(ink, 0.18), alpha, reveal, 637, MARKER_WIDTH * 0.35
-	)
+## The alternative was a zoom control, and a zoom control on a page whose whole
+## argument is that the drawing is the interface would be the one thing on it you
+## operate from outside the drawing. Clicking the zone you are already pointing at
+## is the shortest way to say "this bit", and clicking it again is the shortest
+## way to take it back.
+var focus_kind: String = ""
+var focus_index: int = -1
+
+var _hovered_net: int = -1
+var _hovered_floor: int = -1
+
+
+func _focus_box() -> Array:
+	var quad := _net_zone_quad(focus_index) if focus_kind == "net" \
+		else _floor_zone_quad(focus_index)
+	if quad.is_empty():
+		return []
+	var low := Vector3(INF, INF, 0.0)
+	var high := Vector3(-INF, -INF, 0.0)
+	for point in quad:
+		low = Vector3(minf(low.x, point.x), minf(low.y, point.y), 0.0)
+		high = Vector3(maxf(high.x, point.x), maxf(high.y, point.y), 0.0)
+	## Padded, because a zone drawn edge to edge has nothing around it to be a zone
+	## *of*. Two and a half metres is about a body either side, which is enough
+	## court for the crop to still read as a court.
+	var pad := 2.5
+	return [
+		Vector3(low.x - pad, low.y - pad, 0.0),
+		Vector3(high.x + pad, high.y + pad, NET_HEIGHT_M + 1.4),
+	]
 
 
 ## The drill itself: the swinging voli, the dashed flight, and the mark it lands
@@ -1994,18 +2170,6 @@ func _marker_dashes(
 		travelled += span
 		index += 1
 
-
-## Which net zone, if any, the cursor is over.
-func _net_zone_at(at: Vector2, scale: float, origin: Vector2) -> int:
-	for index in range(NET_ZONES.size()):
-		var zone: Dictionary = NET_ZONES[index]
-		var mark := _project(
-			Vector3(float(zone["along"]), float(zone["depth"]), NET_HEIGHT_M + 0.30),
-			scale, origin
-		)
-		if at.distance_to(mark) <= 16.0:
-			return index
-	return -1
 
 # --------------------------------------------------------------------------
 # The marker itself
