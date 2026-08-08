@@ -23,6 +23,15 @@ const SpikeBiomechanics := preload("res://scripts/data/spike_biomechanics.gd")
 
 const CELL := Vector2i(190, 260)
 const COLUMNS: int = 7
+## Two angles, because the swing is not in one plane.
+##
+## Side on is where the sequence lives -- the arch, the high elbow, the extension
+## -- and it is blind to exactly the axis that was missing from the model for a
+## long time: the arm going *out* as well as back. From behind, abduction is all
+## you can see and the sagittal ordering is all you cannot. Neither view is
+## sufficient and the pair is, which is the same argument the tactic sheet makes
+## for having three.
+const ANGLES: Array[Vector2] = [Vector2(90.0, -6.0), Vector2(180.0, -8.0)]
 const PHASES: Array[float] = [
 	-1.00, -0.78, -0.62, -0.48, -0.34, -0.20, -0.14,
 	-0.06, 0.00, 0.12, 0.28, 0.45, 0.70, 1.00,
@@ -41,42 +50,43 @@ func _run() -> void:
 	var baker: UIVoliSticker = StickerScript.new()
 	add_child(baker)
 	baker.light_mode = true
-	for index in range(PHASES.size()):
-		var phase: float = PHASES[index]
-		## Elevation follows the jump the phase is in, so the strip shows a hitter
-		## leaving the floor and landing rather than hovering throughout. The rise
-		## starts at the plant and the fall ends past the follow-through, which is
-		## the same window `SpikeBiomechanics` sequences the swing over.
-		var lift := 0.0
-		if phase > SpikeBiomechanics.PLANT_END:
-			lift = clampf(
-				sin((phase - SpikeBiomechanics.PLANT_END) / 1.62 * PI), 0.0, 1.0
+	for angle in range(ANGLES.size()):
+		for index in range(PHASES.size()):
+			var phase: float = PHASES[index]
+			## Elevation follows the jump the phase is in, so the strip shows a
+			## hitter leaving the floor and landing rather than hovering throughout.
+			## The rise starts at the plant and the fall ends past the
+			## follow-through, the same window the swing is sequenced over.
+			var lift := 0.0
+			if phase > SpikeBiomechanics.PLANT_END:
+				lift = clampf(
+					sin((phase - SpikeBiomechanics.PLANT_END) / 1.62 * PI), 0.0, 1.0
+				)
+			baker.request(
+				"f%d%02d" % [angle, index], RallyEventModel.EventType.ATTACK,
+				lift, phase, PROFILE, ANGLES[angle].x, ANGLES[angle].y
 			)
-		## Side on: a swing is a sagittal action. The arch, the high elbow and the
-		## extension all happen in the plane you are looking through here, and any
-		## other angle foreshortens the one thing the strip exists to show.
-		baker.request(
-			"f%02d" % index, RallyEventModel.EventType.ATTACK, lift, phase,
-			PROFILE, 90.0, -6.0
-		)
 	while baker._working or not baker._queue.is_empty():
 		await get_tree().process_frame
 	for _i in range(4):
 		await get_tree().process_frame
 
-	var rows := int(ceil(float(PHASES.size()) / float(COLUMNS)))
+	var per_angle := int(ceil(float(PHASES.size()) / float(COLUMNS)))
+	var rows := per_angle * ANGLES.size()
 	var sheet := Image.create(
 		CELL.x * COLUMNS, CELL.y * rows, false, Image.FORMAT_RGBA8
 	)
 	sheet.fill(Color(0.96, 0.96, 0.94, 1.0))
-	for index in range(PHASES.size()):
+	for slot in range(PHASES.size() * ANGLES.size()):
+		var angle := slot / PHASES.size()
+		var index := slot % PHASES.size()
 		var phase: float = PHASES[index]
 		var lift := 0.0
 		if phase > SpikeBiomechanics.PLANT_END:
 			lift = clampf(
 				sin((phase - SpikeBiomechanics.PLANT_END) / 1.62 * PI), 0.0, 1.0
 			)
-		var built: UIVoliSticker.Sticker = baker.sticker("f%02d" % index)
+		var built: UIVoliSticker.Sticker = baker.sticker("f%d%02d" % [angle, index])
 		if built == null or built.texture == null:
 			print("frame %2d MISSING" % index)
 			continue
@@ -100,7 +110,7 @@ func _run() -> void:
 			continue
 		body.resize(wide, tall, Image.INTERPOLATE_LANCZOS)
 		var column := index % COLUMNS
-		var row := index / COLUMNS
+		var row := angle * per_angle + index / COLUMNS
 		var ground := CELL.y * row + CELL.y - 18
 		sheet.blend_rect(
 			body, Rect2i(Vector2i.ZERO, Vector2i(wide, tall)),
@@ -112,8 +122,8 @@ func _run() -> void:
 		## The floor, so the rise is measurable rather than felt.
 		for x in range(CELL.x * column + 6, CELL.x * column + CELL.x - 6):
 			sheet.set_pixel(x, ground, Color(0.62, 0.60, 0.56, 1.0))
-		print("frame %2d  phase %+.2f  %-14s lift %.2f  %.2f m tall" % [
-			index, phase,
+		print("yaw %3.0f frame %2d  phase %+.2f  %-14s lift %.2f  %.2f m tall" % [
+			ANGLES[angle].x, index, phase,
 			str(SpikeBiomechanics.resolve(phase, 1.0).phase_name),
 			lift, built.world_height,
 		])

@@ -112,6 +112,24 @@ const SHOULDER_FOLLOW_DEGREES: float = -252.0
 ## forward-and-up out of the joint, which was the previous correction and is not
 ## being undone.
 const ELBOW_COCK_DEGREES: float = -64.0
+
+## **The arm is not in one plane, and that was the whole thing missing.**
+##
+## Every angle above rotates about x, so the entire swing happened in the sagittal
+## plane -- elbow straight back, forearm straight up, hand straight over. A hitter
+## does not load like that. The elbow goes back *and out*, and the forearm rises
+## up *and out* of it, which is what puts the hand where a hitter can see it and
+## what makes the shape read as a bow rather than as a hinge.
+##
+## Abduction is that second axis: a roll on the shoulder, outward at the cock and
+## unwound through the ball. It is deliberately not zero at contact either -- the
+## arm comes over the top rather than through the centreline, and a hitter's
+## contact is still a little outside their own shoulder.
+##
+## Signed by handedness like the trunk twist, so a left-hander loads outward on
+## their own side rather than across their body.
+const SHOULDER_ABDUCT_COCK_DEGREES: float = 36.0
+const SHOULDER_ABDUCT_CONTACT_DEGREES: float = 11.0
 const ELBOW_CONTACT_DEGREES: float = 7.0
 const ELBOW_FOLLOW_DEGREES: float = 58.0
 
@@ -246,6 +264,14 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	elbow = lerpf(elbow, ELBOW_FOLLOW_DEGREES, follow)
 	elbow = lerpf(elbow, 22.0, arm_recover)
 
+	## Outward through the load, unwinding into the ball. Its own window rather
+	## than the shoulder's, because the arm comes back into plane a beat *before*
+	## the elbow extends -- the abduction is what the shoulder rotates out of.
+	var abduct := lerpf(6.0, SHOULDER_ABDUCT_COCK_DEGREES, maxf(lift, tuck))
+	abduct = lerpf(abduct, SHOULDER_ABDUCT_CONTACT_DEGREES, window(p, COCK_END, -0.04))
+	abduct = lerpf(abduct, 4.0, follow)
+	abduct = lerpf(abduct, 0.0, arm_recover)
+
 	## The guide arm is not decoration. It **points at the ball** through the cock
 	## and is pulled down hard as the striking arm comes forward -- that pull is
 	## what rotates the trunk, and a hitter drawn without it looks like they are
@@ -304,6 +330,7 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 		"phase_name": phase_name(p),
 		"striking_shoulder_degrees": shoulder,
 		"striking_elbow_degrees": elbow,
+		"striking_abduction_degrees": abduct * hand,
 		"guide_shoulder_degrees": guide,
 		"guide_elbow_degrees": guide_elbow,
 		"torso_pitch_radians": torso,

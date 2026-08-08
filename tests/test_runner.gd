@@ -12338,7 +12338,8 @@ func _test_spike_biomechanics_sequence() -> void:
 		var current: Dictionary = SpikeBiomechanics.resolve(phase, RIGHT)
 		for key in [
 			"striking_shoulder_degrees", "striking_elbow_degrees",
-			"guide_shoulder_degrees", "knee_degrees",
+			"striking_abduction_degrees", "guide_shoulder_degrees",
+			"knee_degrees",
 		]:
 			var jump: float = absf(float(current[key]) - float(previous[key]))
 			if jump > worst_jump:

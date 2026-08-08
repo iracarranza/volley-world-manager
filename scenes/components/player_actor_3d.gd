@@ -1166,7 +1166,13 @@ func set_pose(
 				(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
 					swing.knee_degrees
 				)
-			striking_arm.rotation_degrees.x = float(swing.striking_shoulder_degrees)
+			## Two axes, not one. The roll is the abduction that carries the elbow out
+			## as well as back and stands the forearm up *out* of it -- without it the
+			## whole swing happens in one plane and reads as a hinge.
+			striking_arm.rotation_degrees = Vector3(
+				float(swing.striking_shoulder_degrees), 0.0,
+				float(swing.striking_abduction_degrees)
+			)
 			_set_elbow(striking_arm, float(swing.striking_elbow_degrees))
 			guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
 			_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
