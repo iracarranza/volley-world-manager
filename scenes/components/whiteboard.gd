@@ -33,11 +33,55 @@ extends Control
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 signal phase_changed(phase: String)
+signal view_changed(view: String)
 signal zone_priority_changed(zone_index: int, priority: int)
 
 ## The phases a coach explains one at a time. Ordered the way a rally travels,
 ## which is the same order the drill ring used and for the same reason.
 const PHASES: Array[String] = ["Serve Receive", "Attack", "Block", "Floor"]
+
+## And the ways of looking at the court. These are a **second, independent axis**
+## rather than four more phases: what you can adjust is the intersection of what
+## you are planning and where you are standing to look at it.
+##
+## Each view can only answer the questions its geometry actually contains, which
+## is not a limitation to work around but the reason to have more than one:
+##
+## - **Top down** is a floor-shape view. Positions, lanes, funnels, coverage --
+##   anything whose answer is an (x, y) on the court.
+## - **Along the net** is an elevation, sighted down the tape. Heights and
+##   distances *from* the net: set tightness, how far off the setter releases,
+##   how tight a defender plays for the block follow.
+## - **Three quarter** is neither, and that is its job. It is the only view where
+##   depth and lateral position are both legible at once, so it is what you look
+##   at to read a plan the other two authored rather than to author one.
+const VIEW_TOP_DOWN: String = "Top down"
+const VIEW_THREE_QUARTER: String = "Three quarter"
+const VIEW_ALONG_NET: String = "Along the net"
+const VIEWS: Array[String] = [VIEW_TOP_DOWN, VIEW_THREE_QUARTER, VIEW_ALONG_NET]
+
+## Which phase can be adjusted from which view, and what the adjustment is.
+##
+## An empty cell is a **design gap, not a state to handle**. The greying and the
+## auto-switch below exist because this table currently has holes in it; every
+## hole filled is one fewer piece of interface behaviour that has to explain
+## itself to the player. Written out rather than inferred so the holes are
+## countable -- see `docs/design/TACTICS_AND_TRAINING.md` §0.10.
+const ADJUSTMENTS := {
+	VIEW_TOP_DOWN: {
+		"Serve Receive": "Where the receiving three stand",
+		"Attack": "Lane priority",
+		"Block": "Which way the block funnels",
+		"Floor": "Where each defender stands",
+	},
+	VIEW_THREE_QUARTER: {
+		"Block": "Who takes the seam, and how wide the wall sits",
+	},
+	VIEW_ALONG_NET: {
+		"Attack": "Set tightness, and how far off the net the setter releases",
+		"Floor": "How tight the back row plays for the block follow",
+	},
+}
 
 ## The chisel. `MARKER_ANGLE_DEGREES` is how the tip is held; a stroke travelling
 ## across it comes out at full width and one travelling along it comes out at
@@ -70,6 +114,7 @@ const ZONE_MAX_PRIORITY: int = 3
 const ZONE_LABELS: Array[String] = ["Line", "Seam", "Cross", "Tip"]
 
 var phase: String = "Block"
+var view: String = VIEW_THREE_QUARTER
 var zone_priorities: Array[int] = [3, 2, 1, 2]
 var light_mode: bool = true
 
@@ -118,6 +163,10 @@ func set_phase(value: String) -> void:
 	_ghost_phase = phase
 	phase = value
 	phase_changed.emit(phase)
+	_start_wipe()
+
+
+func _start_wipe() -> void:
 	if _wipe_tween != null and _wipe_tween.is_valid():
 		_wipe_tween.kill()
 	_wipe = 0.0
@@ -125,6 +174,32 @@ func set_phase(value: String) -> void:
 	_wipe_tween.tween_method(_set_wipe, 0.0, 1.0, 0.34)
 	_wipe_tween.set_ease(Tween.EASE_OUT)
 	_wipe_tween.set_trans(Tween.TRANS_CUBIC)
+
+
+## Change where the court is being looked at. Wipes and redraws, exactly like a
+## phase change -- a coach rubbing out a plan view and drawing the same thing from
+## the end of the net is doing one action, not two.
+func set_view(value: String) -> void:
+	if value == view or not value in VIEWS:
+		return
+	_ghost_phase = phase
+	view = value
+	view_changed.emit(view)
+	_start_wipe()
+
+
+## What this view can say about this phase, or an empty string if it cannot.
+static func adjustment_for(for_view: String, for_phase: String) -> String:
+	var by_phase: Dictionary = ADJUSTMENTS.get(for_view, {})
+	return str(by_phase.get(for_phase, ""))
+
+
+## The first phase this view has anything to say about, in rally order.
+static func first_phase_for(for_view: String) -> String:
+	for candidate in PHASES:
+		if not adjustment_for(for_view, candidate).is_empty():
+			return candidate
+	return ""
 
 
 func _set_wipe(value: float) -> void:
@@ -265,16 +340,199 @@ func _draw_squeegee(progress: float) -> void:
 	)
 
 
+## What is on the board is the intersection of the phase and the view, so the
+## dispatch is two-dimensional. The view decides the geometry -- what a court
+## even looks like from here -- and the phase decides what is marked on it.
 func _draw_phase(which: String, alpha: float, reveal: float = 1.0) -> void:
-	match which:
-		"Block":
-			_draw_block_phase(alpha, reveal)
-		"Serve Receive":
-			_draw_receive_phase(alpha, reveal)
-		"Attack":
-			_draw_attack_phase(alpha, reveal)
+	match view:
+		VIEW_TOP_DOWN:
+			_draw_top_down(which, alpha, reveal)
+		VIEW_ALONG_NET:
+			_draw_along_net(which, alpha, reveal)
 		_:
-			_draw_floor_phase(alpha, reveal)
+			_draw_three_quarter(which, alpha, reveal)
+
+
+func _draw_three_quarter(which: String, alpha: float, reveal: float) -> void:
+	## Three quarter draws the wall whatever the phase, because that is the only
+	## thing this angle is better at than the other two. A phase with nothing to
+	## adjust from here still gets the picture -- the view is for reading.
+	_draw_block_phase(alpha, reveal)
+	if which != "Block":
+		_marker_text(
+			"%s — nothing to set from here" % which.to_upper(),
+			Vector2(size.x * 0.06, size.y * 0.95), 13,
+			_ink(), alpha * 0.6, reveal
+		)
+
+
+## Sighted straight down the tape from the antenna: the net is a line, and what
+## the view is *for* is everything measured perpendicular to it.
+func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
+	var ink := _ink()
+	var board_bottom := size.y - 13.0
+	var floor_y := board_bottom - size.y * 0.10
+	var net_x := size.x * 0.50
+	var tape_top := size.y * 0.24
+
+	_marker_text(which.to_upper(), Vector2(size.x * 0.05, size.y * 0.13), 24, ink, alpha, reveal)
+
+	## The floor, and the net standing on it edge-on -- a post and the tape seen
+	## as a single vertical, because from here the net has no width.
+	_marker_line(
+		Vector2(size.x * 0.06, floor_y), Vector2(size.x * 0.94, floor_y),
+		ink, alpha, reveal, 3, MARKER_WIDTH * 0.9
+	)
+	_marker_line(
+		Vector2(net_x, tape_top), Vector2(net_x, floor_y),
+		ink, alpha, reveal, 7, MARKER_WIDTH * 1.05
+	)
+	_marker_text("net", Vector2(net_x + 8.0, tape_top - 6.0), 13, ink, alpha * 0.8, reveal)
+
+	match which:
+		"Attack":
+			## Set tightness is a horizontal distance from the tape, and the
+			## setter's release is another -- both are exactly what this view
+			## measures and neither is visible from above.
+			var release := net_x - size.x * 0.16
+			var apex := Vector2(release + size.x * 0.05, tape_top - size.y * 0.10)
+			_marker_line(
+				Vector2(release, floor_y), Vector2(release, floor_y - size.y * 0.18),
+				ink, alpha, reveal, 11, MARKER_WIDTH * 0.7
+			)
+			_marker_text("S", Vector2(release - 5.0, floor_y - size.y * 0.20), 15, ink, alpha, reveal)
+			var arc := PackedVector2Array()
+			for step in range(17):
+				var t := float(step) / 16.0
+				var point := Vector2(release, floor_y - size.y * 0.20).lerp(
+					Vector2(net_x - size.x * 0.03, tape_top + size.y * 0.03), t
+				)
+				point.y -= sin(t * PI) * size.y * 0.16
+				arc.append(point)
+			_marker_stroke(arc, MARKER_RED, alpha, reveal, 13, MARKER_WIDTH * 0.8, false)
+			_draw_measure(
+				Vector2(net_x, tape_top - 18.0), Vector2(release, tape_top - 18.0),
+				"release", ink, alpha, reveal, 17
+			)
+			_draw_measure(
+				Vector2(net_x, apex.y), Vector2(net_x - size.x * 0.05, apex.y),
+				"tightness", MARKER_RED, alpha, reveal, 19
+			)
+		"Floor":
+			## How tight the back row plays: a distance from the net, which is the
+			## same axis and the reason both live on this view.
+			for entry in [[0.20, "follow"], [0.34, "deep"]]:
+				var share: float = entry[0]
+				var label: String = entry[1]
+				var at := net_x + size.x * share
+				_marker_circle(Vector2(at, floor_y - 14.0), 11.0, ink, alpha, reveal, 31 + int(share * 100.0))
+				_draw_measure(
+					Vector2(net_x, floor_y + 16.0), Vector2(at, floor_y + 16.0),
+					label, MARKER_RED if share < 0.3 else ink, alpha, reveal,
+					41 + int(share * 100.0)
+				)
+		_:
+			_marker_text(
+				"%s — nothing to set from here" % which.to_upper(),
+				Vector2(size.x * 0.06, size.y * 0.95), 13, ink, alpha * 0.6, reveal
+			)
+
+
+## A dimension line: a rule between two points with ticks at each end and the
+## quantity written over it. Printed forms use these and so do coaches, and it is
+## the one place on the board where a straight line is honest.
+func _draw_measure(
+	from: Vector2, to: Vector2, label: String, color: Color,
+	alpha: float, reveal: float, salt: int
+) -> void:
+	_marker_line(from, to, color, alpha * 0.8, reveal, salt, MARKER_WIDTH * 0.30)
+	for at in [from, to]:
+		_marker_line(
+			at + Vector2(0.0, -5.0), at + Vector2(0.0, 5.0),
+			color, alpha * 0.8, reveal, salt + 1, MARKER_WIDTH * 0.30
+		)
+	_marker_text(
+		label, from.lerp(to, 0.5) + Vector2(-16.0, -8.0), 12, color, alpha, reveal
+	)
+
+
+## Straight down on the floor. Positions, lanes and coverage -- everything whose
+## answer is a place rather than a height.
+func _draw_top_down(which: String, alpha: float, reveal: float) -> void:
+	var ink := _ink()
+	var board_bottom := size.y - 13.0
+	_marker_text(which.to_upper(), Vector2(size.x * 0.05, size.y * 0.13), 24, ink, alpha, reveal)
+
+	## One half court, net along the top.
+	var court := Rect2(
+		size.x * 0.10, size.y * 0.22, size.x * 0.52, board_bottom - size.y * 0.34
+	)
+	_marker_line(
+		court.position, court.position + Vector2(court.size.x, 0.0),
+		ink, alpha, reveal, 5, MARKER_WIDTH * 1.1
+	)
+	_marker_rect(court, ink, alpha, reveal, 9)
+	## The three-metre line, which is the only other line on a half court and the
+	## one every one of these phases is measured against.
+	var attack_line := court.position.y + court.size.y * 0.34
+	_marker_line(
+		Vector2(court.position.x, attack_line),
+		Vector2(court.end.x, attack_line),
+		Color(ink, 0.55), alpha, reveal, 13, MARKER_WIDTH * 0.5
+	)
+
+	match which:
+		"Serve Receive":
+			for spot in [Vector2(0.20, 0.72), Vector2(0.50, 0.84), Vector2(0.80, 0.70)]:
+				_marker_circle(
+					court.position + court.size * spot, 12.0, ink, alpha, reveal,
+					51 + int(spot.x * 90.0)
+				)
+			_marker_ellipse(
+				court.position + court.size * Vector2(0.35, 0.78),
+				Vector2(50.0, 34.0), MARKER_RED, alpha * 0.9, reveal, 63
+			)
+			_marker_text("seam", court.position + court.size * Vector2(0.28, 0.60), 13, MARKER_RED, alpha, reveal)
+		"Attack":
+			var setter := court.position + court.size * Vector2(0.62, 0.20)
+			_marker_circle(setter, 11.0, ink, alpha, reveal, 71)
+			for target in [Vector2(0.10, 0.10), Vector2(0.40, 0.06), Vector2(0.88, 0.12)]:
+				_marker_arrow(
+					setter, court.position + court.size * target,
+					MARKER_RED, alpha, reveal, 81 + int(target.x * 90.0)
+				)
+			_marker_text("lanes", court.position + court.size * Vector2(0.42, 0.30), 13, MARKER_RED, alpha, reveal)
+		"Block":
+			for share in [0.34, 0.52]:
+				_marker_circle(
+					court.position + Vector2(court.size.x * share, 12.0),
+					11.0, ink, alpha, reveal, 101 + int(share * 100.0)
+				)
+			_marker_arrow(
+				court.position + court.size * Vector2(0.44, 0.12),
+				court.position + court.size * Vector2(0.20, 0.52),
+				MARKER_RED, alpha, reveal, 113
+			)
+			_marker_text("funnel", court.position + court.size * Vector2(0.24, 0.58), 13, MARKER_RED, alpha, reveal)
+		_:
+			for spot in [Vector2(0.16, 0.30), Vector2(0.84, 0.32), Vector2(0.20, 0.82),
+					Vector2(0.50, 0.92), Vector2(0.80, 0.80)]:
+				_marker_circle(
+					court.position + court.size * spot, 10.0, ink, alpha, reveal,
+					121 + int(spot.x * 80.0 + spot.y * 17.0)
+				)
+			_marker_text("cover", court.position + court.size * Vector2(0.44, 0.50), 13, MARKER_RED, alpha, reveal)
+
+	if adjustment_for(view, which).is_empty():
+		_marker_text(
+			"%s — nothing to set from here" % which.to_upper(),
+			Vector2(size.x * 0.06, size.y * 0.95), 13, ink, alpha * 0.6, reveal
+		)
+	else:
+		_draw_zone_bars(
+			Rect2(size.x * 0.68, size.y * 0.40, size.x * 0.27, board_bottom - size.y * 0.54),
+			alpha, reveal
+		)
 
 
 ## The block phase, drawn the way an illustrator draws blockers at a net: a

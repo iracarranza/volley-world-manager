@@ -344,6 +344,78 @@ Everything §1-§5 says about what a rep writes, and everything §0.1 says about
 the state split, is unaffected. Match training still moves learned preferences
 and only those. It just does it in a room instead of on a page.
 
+## 0.10 The board has two axes, and the empty cells are the design
+
+The tactic board is not one picture with a phase selector on it. It is a
+**matrix**: what you can adjust is the intersection of *what you are planning*
+and *where you are standing to look at the court*.
+
+| | Top down | Three quarter | Along the net |
+|---|---|---|---|
+| **Serve receive** | where the receiving three stand | -- | -- |
+| **Attack** | lane priority | -- | set tightness, setter release distance |
+| **Block** | which way the block funnels | who takes the seam, how wide the wall sits | -- |
+| **Floor** | where each defender stands | -- | how tight the back row plays for the follow |
+
+Each view can only answer the questions its own geometry contains, and that is
+the reason to have more than one rather than a limitation to route around. Top
+down answers *where* -- anything whose answer is a place on the floor. Along the
+net answers *how far from the net* -- set tightness, the setter's release, how
+tight a defender plays the follow, none of which exist in a plan view. Three
+quarter answers neither, and **that is its job**: it is the only view where
+depth and lateral position are legible at once, so it is what you look at to
+*read* a plan the other two authored.
+
+### The empty cells are a design gap, not a state to handle
+
+Six of the twelve cells are blank. Two pieces of interface behaviour exist only
+to cope with that:
+
+- **Greying.** A view that cannot express a phase says so rather than accepting
+  the click and drawing nothing.
+- **Auto-switch.** Choosing a view whose current phase is blank moves the phase.
+
+Both are honest and both are debt. **Every cell filled is one fewer behaviour
+that has to explain itself**, and the target is a table with no holes -- at
+which point greying and auto-switching are deleted rather than tuned.
+
+Two rules the auto-switch has to follow while it exists, because a control that
+silently moves *another* control is how a player loses their model of a screen:
+
+1. **The view wins.** The player just asked for that view; it is the phase that
+   moves. Moving the view instead would mean the two selectors chase each other.
+2. **It has to be visible.** The board says what the current pair adjusts, in
+   words, on the line beneath it -- so "what does this screen do right now" is
+   always written down rather than inferred from which buttons are lit.
+
+### Serve receive has one cell, and that is suspicious
+
+It is a floor shape and nothing else, so top down is the only view with anything
+to say about it. Either it earns cells in the other two -- passer depth against a
+jump serve is an along-the-net question and a real one -- or it is not a peer of
+the other three and belongs somewhere else entirely. Worth settling before the
+zoom level below multiplies it.
+
+### The zoom is a third axis, and it is the one that can run away
+
+Drilling into a single zone -- a coordinate inside an attack zone, a blocking
+behaviour against an attack from this zone, a shot type to expect in this floor
+zone -- is a genuinely different grain, and it is where the most interesting
+instructions live. It is also 3 views x 4 phases x 2 grains = 24 states, which
+is §0.8's week-forty problem arriving early.
+
+The mitigation is to refuse to make it a mode. **You drill in by clicking a mark
+that is already on the board**, and what opens is about that mark. Then the zoom
+level is never a place you can be lost in: it is always "this zone, this phase",
+two clicks from anywhere, and the way out is the way you came.
+
+### What is unbuilt and load-bearing
+
+Marks are drawn, not manipulated. Selecting and dragging a blocker, a defender or
+a coordinate needs every drawn element to carry an identity and a hit rect, which
+is a larger job than the drawing was and is the actual next step -- the views are
+worth nothing until a mark can be moved.
+
 ---
 
 ## 1. The idea worth protecting

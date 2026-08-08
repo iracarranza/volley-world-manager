@@ -41,6 +41,10 @@ var _fit_strip: HBoxContainer = null
 var _whiteboard: UIWhiteboard = null
 var _rotation_option: OptionButton = null
 var _selected_preset: String = "Combination Play"
+var _phase_group: ButtonGroup = null
+var _view_group: ButtonGroup = null
+var _phase_buttons: Array[Button] = []
+var _view_buttons: Array[Button] = []
 var _activity_rail: VBoxContainer = null
 var _detail: VBoxContainer = null
 var _sidebar: VBoxContainer = null
@@ -103,7 +107,10 @@ func _build() -> void:
 
 	_sidebar = VBoxContainer.new()
 	_sidebar.add_theme_constant_override("separation", 8)
-	_sidebar.custom_minimum_size = Vector2(300.0, 0.0)
+	## Narrower than it was. The sidebar is this week's state -- reference a
+	## manager reads before choosing, not a thing they operate -- so it should not
+	## be taking a quarter of the page off the one panel they do operate.
+	_sidebar.custom_minimum_size = Vector2(224.0, 0.0)
 	body.add_child(_sidebar)
 
 
@@ -172,69 +179,148 @@ func _build_tactics_page() -> Control:
 
 	var caption := Label.new()
 	caption.text = "Declare how this rotation attacks and defends. \
-A blank tactic is every voli's own comfort -- maximum familiarity, no edge."
+A blank tactic is every voli's own comfort."
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	page.add_child(caption)
 
-	var split := HBoxContainer.new()
-	split.add_theme_constant_override("separation", 14)
-	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_child(split)
-
-	var preset_scroll := ScrollContainer.new()
-	preset_scroll.set_meta("ui_style_exempt", true)
-	preset_scroll.custom_minimum_size = Vector2(210.0, 0.0)
-	preset_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	split.add_child(preset_scroll)
-
-	var preset_rail := VBoxContainer.new()
-	preset_rail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	preset_rail.add_theme_constant_override("separation", 4)
-	preset_scroll.add_child(preset_rail)
-
-	_add_heading(preset_rail, "Attack")
+	## The board takes the page.
+	##
+	## It was a third column between a 210px preset rail and a 300px sidebar, and
+	## at 1280 that left it about 460px wide -- so the thing the tab exists for was
+	## the smallest panel on it, and the picture was mostly hidden behind furniture
+	## that is reference material. Presets are a choice you make once and read
+	## rarely, so they go on one row above the board where a row of chips costs
+	## height instead of width.
+	var preset_row := HBoxContainer.new()
+	preset_row.add_theme_constant_override("separation", 6)
+	page.add_child(preset_row)
+	_add_rail_label(preset_row, "Attack")
 	var attack_group := ButtonGroup.new()
 	for preset_name in ["Feed Opposite", "Combination Play", "Pipe and Middle"]:
-		_add_preset_button(preset_rail, preset_name, attack_group)
-	_add_heading(preset_rail, "Defense")
+		_add_preset_button(preset_row, preset_name, attack_group)
+	var gap := VSeparator.new()
+	preset_row.add_child(gap)
+	_add_rail_label(preset_row, "Defense")
 	var defense_group := ButtonGroup.new()
 	for preset_name in ["Funnel into Line", "Spread Block"]:
-		_add_preset_button(preset_rail, preset_name, defense_group)
+		_add_preset_button(preset_row, preset_name, defense_group)
 
-	var board_column := VBoxContainer.new()
-	board_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	board_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	board_column.add_theme_constant_override("separation", 6)
-	split.add_child(board_column)
-
-	## Which phase is on the board. A row of four, because four is the whole
-	## vocabulary -- there is no menu here, and picking one is a wipe rather than
-	## a navigation.
+	## Two selectors over one board: **which phase** is being planned and **which
+	## way the net is being looked at**. They are independent axes and the board
+	## draws their intersection, so they belong on two rows rather than in one
+	## list of eight buttons -- see `docs/design/TACTICS_AND_TRAINING.md` §0.10.
 	var phase_row := HBoxContainer.new()
 	phase_row.add_theme_constant_override("separation", 6)
-	board_column.add_child(phase_row)
-	var phase_group := ButtonGroup.new()
+	page.add_child(phase_row)
+	_add_rail_label(phase_row, "Planning")
+	_phase_group = ButtonGroup.new()
 	for phase_name in WhiteboardScript.PHASES:
 		var button := Button.new()
 		button.toggle_mode = true
-		button.button_group = phase_group
+		button.button_group = _phase_group
 		button.text = phase_name
 		button.button_pressed = phase_name == "Block"
+		button.set_meta(&"phase", phase_name)
 		var chosen := str(phase_name)
-		button.pressed.connect(func() -> void: _whiteboard.set_phase(chosen))
+		button.pressed.connect(func() -> void: _choose_phase(chosen))
 		_circle_on_hover(button)
 		phase_row.add_child(button)
+		_phase_buttons.append(button)
+
+	var view_row := HBoxContainer.new()
+	view_row.add_theme_constant_override("separation", 6)
+	page.add_child(view_row)
+	_add_rail_label(view_row, "Looking from")
+	_view_group = ButtonGroup.new()
+	for view_name in WhiteboardScript.VIEWS:
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = _view_group
+		button.text = view_name
+		button.button_pressed = view_name == WhiteboardScript.VIEW_THREE_QUARTER
+		button.set_meta(&"view", view_name)
+		var chosen_view := str(view_name)
+		button.pressed.connect(func() -> void: _choose_view(chosen_view))
+		_circle_on_hover(button)
+		view_row.add_child(button)
+		_view_buttons.append(button)
 
 	_whiteboard = WhiteboardScript.new()
 	_whiteboard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_whiteboard.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	board_column.add_child(_whiteboard)
+	## Tall enough to be the subject and not so tall it pushes its own caption off
+	## the card. Four control rows plus the shell take about 300px of the page; at
+	## 380 the line under the board -- the one that says what the current view and
+	## phase actually adjust -- was clipped.
+	_whiteboard.custom_minimum_size = Vector2(0.0, 300.0)
+	page.add_child(_whiteboard)
 
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
 	declared.text = "Declared: %s  ·  scroll a bar to reprioritise" % _selected_preset
-	board_column.add_child(declared)
+	page.add_child(declared)
+	_sync_view_availability()
 	return page
+
+
+## Picking a phase, and picking a view.
+##
+## The greying is honest -- a view that cannot express a phase should say so
+## rather than accepting the click and drawing nothing. The auto-switch is the
+## part to watch: a control that silently moves *another* control is how a player
+## loses their model of a screen, so it fires only when the chosen combination is
+## genuinely empty, it moves the phase rather than the view (the view is what the
+## player just asked for, so it is the one that must be honoured), and it says so
+## on the board. If §0.10's table ever fills in, both behaviours disappear.
+func _choose_phase(phase_name: String) -> void:
+	if _whiteboard == null:
+		return
+	_whiteboard.set_phase(phase_name)
+	_sync_view_availability()
+
+
+func _choose_view(view_name: String) -> void:
+	if _whiteboard == null:
+		return
+	_whiteboard.set_view(view_name)
+	if WhiteboardScript.adjustment_for(view_name, _whiteboard.phase).is_empty():
+		var fallback := WhiteboardScript.first_phase_for(view_name)
+		if not fallback.is_empty():
+			_whiteboard.set_phase(fallback)
+			for button in _phase_buttons:
+				button.button_pressed = str(button.get_meta(&"phase")) == fallback
+	_sync_view_availability()
+
+
+## Grey every phase this view has nothing to say about, and put what the current
+## pair *does* adjust on the line under the board -- so the answer to "what does
+## this screen do right now" is always written down rather than inferred.
+func _sync_view_availability() -> void:
+	if _whiteboard == null:
+		return
+	for button in _phase_buttons:
+		var phase_name := str(button.get_meta(&"phase"))
+		var adjustment := WhiteboardScript.adjustment_for(_whiteboard.view, phase_name)
+		button.disabled = adjustment.is_empty()
+		button.tooltip_text = adjustment if not adjustment.is_empty() \
+			else "Nothing to set for %s from this view." % phase_name
+	var page: Node = _whiteboard.get_parent()
+	var declared := page.get_node_or_null("DeclaredLabel") as Label
+	if declared == null:
+		return
+	var current := WhiteboardScript.adjustment_for(
+		_whiteboard.view, _whiteboard.phase
+	)
+	declared.text = "%s  ·  %s" % [
+		_selected_preset,
+		current if not current.is_empty() else "reading only from this view",
+	]
+
+
+func _add_rail_label(parent: Node, text: String) -> void:
+	var label := Label.new()
+	label.text = text
+	parent.add_child(label)
 
 
 ## Circle it in red when the cursor is over it. Added as a child so the control
@@ -263,10 +349,13 @@ func _add_preset_button(
 
 func _select_preset(preset_name: String) -> void:
 	_selected_preset = preset_name
-	var board_column: Node = _whiteboard.get_parent()
-	var declared := board_column.get_node("DeclaredLabel") as Label
+	var page: Node = _whiteboard.get_parent()
+	var declared := page.get_node("DeclaredLabel") as Label
 	if declared != null:
-		declared.text = "Declared: %s  ·  scroll a bar to reprioritise" % preset_name
+		declared.text = "%s  ·  %s" % [
+		preset_name,
+		WhiteboardScript.adjustment_for(_whiteboard.view, _whiteboard.phase),
+	]
 
 
 ## Development: a rail of attribute sessions ordered body-first, and the panel
