@@ -202,7 +202,7 @@ func body_meshes() -> Array[MeshInstance3D]:
 	var out: Array[MeshInstance3D] = [torso, shorts, head]
 	out.append_array(arm_meshes())
 	for leg in [left_leg, right_leg]:
-		for path in ["Mesh", "Knee/Mesh", "Knee/Shoe"]:
+		for path in ["Mesh", "Joint", "Knee/Mesh", "Knee/Joint", "Knee/Shoe"]:
 			var mesh := leg.get_node_or_null(path) as MeshInstance3D
 			if mesh != null:
 				out.append(mesh)
@@ -219,7 +219,7 @@ func arm_meshes() -> Array[MeshInstance3D]:
 	_ensure_node_bindings()
 	var out: Array[MeshInstance3D] = []
 	for arm in [left_arm, right_arm]:
-		for path in ["Mesh", "Elbow/Mesh"]:
+		for path in ["Mesh", "Joint", "Elbow/Mesh", "Elbow/Joint"]:
 			var mesh := arm.get_node_or_null(path) as MeshInstance3D
 			if mesh != null:
 				out.append(mesh)
@@ -256,10 +256,17 @@ func apply_ui_palette(light_mode: bool) -> void:
 		## Two bones, as the legs have been since the knee.
 		_apply_material_color(arm.get_node("Mesh"), skin_color)
 		_apply_material_color(arm.get_node("Elbow/Mesh"), skin_color)
+		## The joints are skin too. Left out of this list they kept the default
+		## grey and turned every shoulder and elbow into a bead -- a worse read
+		## than the gap they were added to close.
+		_paint_joint(arm, skin_color)
+		_paint_joint(arm.get_node("Elbow"), skin_color)
 	for leg in [left_leg, right_leg]:
 		## Two bones and a shoe. The shoe hangs off the knee now, not the hip.
 		_apply_material_color(leg.get_node("Mesh"), skin_color)
 		_apply_material_color(leg.get_node("Knee/Mesh"), skin_color)
+		_paint_joint(leg, skin_color)
+		_paint_joint(leg.get_node("Knee"), skin_color)
 		_apply_material_color(leg.get_node("Knee/Shoe"), team_color.darkened(0.55))
 	## A face has to read on a pale turnip and on a near-black aubergine, so the
 	## colour is chosen against the skin's luminance rather than being one ink
@@ -1700,7 +1707,12 @@ func _build_silhouette() -> void:
 	## roughly true and keeps the elbow reading as an elbow rather than as a
 	## midpoint.
 	var arm_spec: Dictionary = silhouette.get("arm", {})
-	arm_spec["shape"] = "cylinder"
+	## **Not a cylinder.** This line is why every voli was a produce with four rods
+	## in it: whatever a body type authored, the rig overwrote it with a shape that
+	## ends in a flat disc. A limb tapers and finishes in a dome -- see
+	## `BodyTypeModels._limb_mesh`, which lathes one because Godot has no tapered
+	## capsule to reach for.
+	arm_spec["shape"] = "limb"
 	var arm_height := float(arm_spec.get("height", 0.88))
 	var upper_length := arm_height * UPPER_ARM_SHARE
 	var fore_length := arm_height - upper_length
@@ -1722,12 +1734,19 @@ func _build_silhouette() -> void:
 		var fore_mesh := elbow.get_node("Mesh") as MeshInstance3D
 		fore_mesh.mesh = BodyTypeModelsScript.build_mesh(fore_spec)
 		fore_mesh.position = Vector3(0.0, -fore_length * 0.5, 0.0)
+		## The shoulder and the elbow, as joints rather than as the gap between
+		## two pills. Rounding the limb ends stopped them reading as rods and left
+		## the other half of the problem standing: a bent elbow opens a wedge on
+		## the outside of the bend, and a shoulder that only touches the torso
+		## reads as an arm resting against a body rather than growing out of one.
+		_joint_ball(arm, float(arm_spec.get("top_radius", 0.09)) * 1.08, 0.0)
+		_joint_ball(elbow, float(arm_spec.get("bottom_radius", 0.08)) * 1.06, 0.0)
 
 	## Legs are placed so the foot lands just above the floor whatever the hip
 	## height and shank length are, rather than by the pair of literals that
 	## happened to suit the one rig.
 	var leg_spec: Dictionary = silhouette.get("leg", {})
-	leg_spec["shape"] = "cylinder"
+	leg_spec["shape"] = "limb"
 	var leg_height := float(leg_spec.get("height", 0.74))
 	var shoe_spec: Dictionary = silhouette.get("shoe", {})
 	## The leg is two bones now, not one.
@@ -1764,6 +1783,8 @@ func _build_silhouette() -> void:
 		var shank_mesh := knee.get_node("Mesh") as MeshInstance3D
 		shank_mesh.mesh = BodyTypeModelsScript.build_mesh(shank_spec)
 		shank_mesh.position = Vector3(0.0, -shank_length * 0.5, 0.0)
+		_joint_ball(leg, float(leg_spec.get("top_radius", 0.11)) * 1.06, 0.0)
+		_joint_ball(knee, float(leg_spec.get("bottom_radius", 0.09)) * 1.08, 0.0)
 		var shoe := knee.get_node("Shoe") as MeshInstance3D
 		shoe.mesh = BodyTypeModelsScript.build_mesh(shoe_spec)
 		shoe.position = Vector3(0.0, -shank_length, -SHOE_FORWARD_OFFSET)
@@ -1775,6 +1796,34 @@ func _build_silhouette() -> void:
 		)
 	_build_cosmetics()
 	_build_face()
+
+
+## The joint ball on a bone, if it has one yet.
+func _paint_joint(bone: Node, color: Color) -> void:
+	var ball := bone.get_node_or_null("Joint") as MeshInstance3D
+	if ball != null:
+		_apply_material_color(ball, color)
+
+
+## A ball at a joint, so two segments read as one limb bending.
+##
+## Named and reused rather than four near-identical blocks, and rebuilt on every
+## body build rather than authored in the scene, because the radius comes from
+## the body type -- a Vegi's arm and an Ursi's are not the same thickness and a
+## joint sized for one is a bead or a boil on the other.
+func _joint_ball(bone: Node3D, radius: float, drop: float) -> void:
+	var existing := bone.get_node_or_null("Joint") as MeshInstance3D
+	var ball := existing if existing != null else MeshInstance3D.new()
+	if existing == null:
+		ball.name = "Joint"
+		bone.add_child(ball)
+	var sphere := SphereMesh.new()
+	sphere.radius = radius
+	sphere.height = radius * 2.0
+	sphere.radial_segments = 10
+	sphere.rings = 5
+	ball.mesh = sphere
+	ball.position = Vector3(0.0, drop, 0.0)
 
 
 ## Ears, beaks, wings, tails, stems and leaves.

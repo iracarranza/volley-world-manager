@@ -739,8 +739,79 @@ static func _avi() -> Dictionary:
 ## purpose: the existing rig already was, there is no asset pipeline in this
 ## project, and a silhouette assembled from primitives can be tuned by editing
 ## a number in this file rather than by re-exporting a mesh.
+## How many sides a lathed limb has, and how many rings each rounded end gets.
+##
+## Twelve is the same count the capsules use, so a limb sits beside a torso
+## without one of them looking faceted next to the other. Three cap rings is the
+## fewest that still reads as round at the shoulder, which is where a limb meets
+## a body and where a flat lid is most obvious.
+const LIMB_SIDES: int = 12
+const LIMB_CAP_RINGS: int = 3
+
+
+## A limb: tapered along its length and rounded at both ends.
+##
+## **This is the shape the complaint was about.** Arms and legs were
+## `CylinderMesh`, and a cylinder has flat lids -- so a voli was a produce with
+## four rods stuck in it, and no amount of colour or pose fixed that, because the
+## problem was the geometry ending in a disc. A limb narrows toward the wrist or
+## ankle and finishes in a dome, and those two facts are most of what separates a
+## drawn body from an assembled one.
+##
+## Lathed by hand rather than reached for from the primitives, because Godot has
+## no tapered capsule: `CapsuleMesh` has one radius and `CylinderMesh` has two
+## radii and no caps worth the name. The profile is a bottom hemisphere scaled to
+## the bottom radius, a straight taper, and a top hemisphere scaled to the top
+## radius -- so a limb is one surface from end to end and the ends belong to it.
+static func _limb_mesh(
+	top_radius: float, bottom_radius: float, height: float
+) -> Mesh:
+	var top := maxf(top_radius, 0.004)
+	var bottom := maxf(bottom_radius, 0.004)
+	var shaft := maxf(height - top - bottom, 0.001)
+	## Each ring as (height above the base, radius there).
+	var profile: Array[Vector2] = []
+	for ring in range(LIMB_CAP_RINGS + 1):
+		var angle := PI * 0.5 * (float(ring) / float(LIMB_CAP_RINGS))
+		profile.append(Vector2(
+			bottom - cos(angle) * bottom, sin(angle) * bottom
+		))
+	profile.append(Vector2(bottom + shaft, top))
+	for ring in range(1, LIMB_CAP_RINGS + 1):
+		var angle := PI * 0.5 * (float(ring) / float(LIMB_CAP_RINGS))
+		profile.append(Vector2(
+			bottom + shaft + sin(angle) * top, cos(angle) * top
+		))
+	## Centred on the origin like every other primitive here, so a limb can be
+	## dropped in where a cylinder was without moving anything that positions it.
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index in range(profile.size() - 1):
+		var lower: Vector2 = profile[index]
+		var upper: Vector2 = profile[index + 1]
+		for side in range(LIMB_SIDES):
+			var a := TAU * float(side) / float(LIMB_SIDES)
+			var b := TAU * float(side + 1) / float(LIMB_SIDES)
+			var points := [
+				Vector3(cos(a) * lower.y, lower.x - height * 0.5, sin(a) * lower.y),
+				Vector3(cos(b) * lower.y, lower.x - height * 0.5, sin(b) * lower.y),
+				Vector3(cos(b) * upper.y, upper.x - height * 0.5, sin(b) * upper.y),
+				Vector3(cos(a) * upper.y, upper.x - height * 0.5, sin(a) * upper.y),
+			]
+			for corner in [0, 2, 1, 0, 3, 2]:
+				surface.add_vertex(points[corner])
+	surface.generate_normals()
+	return surface.commit()
+
+
 static func build_mesh(spec: Dictionary) -> Mesh:
 	match str(spec.get("shape", "capsule")):
+		"limb":
+			return _limb_mesh(
+				float(spec.get("top_radius", 0.09)),
+				float(spec.get("bottom_radius", 0.07)),
+				float(spec.get("height", 0.5)),
+			)
 		"sphere":
 			var sphere := SphereMesh.new()
 			sphere.radius = float(spec.get("radius", 0.3))

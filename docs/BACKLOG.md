@@ -2775,3 +2775,36 @@ what exists before anything is built.
 
 Held from this pass and still true: the body-model overhaul is first on the
 tactic sheet's own list, and nothing on the sheet is persisted.
+
+## Body models: rods are gone, the shoulder join is not
+
+First pass of the overhaul, against the complaint that a voli reads as "a pumpkin
+with four vertical rods".
+
+The rods were literal. `PlayerActor3D._build_body` set `arm_spec["shape"] =
+"cylinder"` and the same for legs, overwriting whatever the body type authored --
+and a `CylinderMesh` ends in a flat disc. Limbs are now a lathed shape,
+`BodyTypeModels._limb_mesh`: tapered along its length with a hemisphere at each
+end, built by hand because Godot has no tapered capsule (`CapsuleMesh` has one
+radius, `CylinderMesh` has two radii and no caps). Joint balls sized from the
+body type's own limb radii close the wedge a bent elbow or knee opens.
+
+**Still assembled at the shoulder.** The arms hang outside the torso silhouette
+with daylight between the shoulder ball and the body, which is now the loudest
+remaining tell. `shoulder_offset.x` is authored per body type against the old
+cylinder arms; a Vegi is a sphere and its arms want to start *inside* that sphere,
+while Cani and Ursi have shoulders to hang from. Fixing it well means deriving
+the offset from the torso profile at shoulder height -- `_torso_radius_at` already
+exists and already does this for the collar.
+
+Also unaddressed, in rough order of how much they cost:
+
+- The torso is one capsule or sphere. A chest that narrows to a waist would do
+  more for the silhouette than anything below the shoulder.
+- Hands and feet are a shoe box and nothing. A hand at the end of a passing
+  platform is the whole shape of a pass.
+- The neck is a cylinder between two spheres.
+
+Judge these on `bodies3d`-style renders -- the rig lit and large -- not on sticker
+bakes. The bake posterises to twelve steps at about a hundred pixels, which is
+precisely where the difference between a rod and a limb disappears.
