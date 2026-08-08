@@ -449,7 +449,6 @@ func _draw() -> void:
 	_draw_phase(phase, 1.0, _wipe)
 	if _wipe < 1.0:
 		_draw_eraser(_wipe)
-	_draw_pencil()
 
 
 ## The printed squares.
@@ -481,33 +480,6 @@ func _draw_graph() -> void:
 		)
 		y += GRAPH_PITCH
 		index += 1
-
-
-## The pencil lying on the sheet, bottom left, where somebody put it down.
-##
-## The whiteboard had an aluminium tray with two markers in it. There is no tray
-## on a piece of paper -- but the object still needs to be somewhere, because it
-## is what says the working was done by hand and by *this* instrument.
-func _draw_pencil() -> void:
-	var body := Color(0.62, 0.52, 0.24) if light_mode else Color(0.46, 0.39, 0.20)
-	var at := Vector2(size.x * 0.035, size.y * 0.93)
-	var along := Vector2(74.0, -9.0)
-	var across := Vector2(along.y, -along.x).normalized() * 3.4
-	draw_colored_polygon(PackedVector2Array([
-		at + across, at + along + across, at + along - across, at - across,
-	]), body)
-	## The sharpened cone and the graphite at the end of it.
-	var tip := at + along * 1.16
-	draw_colored_polygon(PackedVector2Array([
-		at + along + across, tip, at + along - across,
-	]), Color(0.86, 0.78, 0.60) if light_mode else Color(0.60, 0.55, 0.42))
-	draw_colored_polygon(PackedVector2Array([
-		at + along * 1.10 + across * 0.36, tip, at + along * 1.10 - across * 0.36,
-	]), _ink())
-	## And the ferrule at the other end, which is the only bright thing on it.
-	draw_colored_polygon(PackedVector2Array([
-		at + across, at - along * 0.14 + across, at - along * 0.14 - across, at - across,
-	]), Color(0.72, 0.74, 0.76) if light_mode else Color(0.44, 0.47, 0.50))
 
 
 ## The eraser, travelling left to right, lifting the working as it goes.
@@ -591,26 +563,47 @@ func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
 	## side has nothing to measure them against. A couple of degrees opens the net
 	## into a narrow band and brings the far court into frame, at almost no cost to
 	## the near-side distances this view exists to show.
-	var yaw := NET_HEIGHT_M * scale * 0.10
+	## Lifted off the floor plane, not just off square.
+	##
+	## Two degrees of yaw opened the net into a band but left the eye level with
+	## the floor, so the near and far halves of the court lay on the same line and
+	## only one of them could be drawn. Raising the viewpoint separates them: the
+	## far sideline rises away from the near one, and the strip between the two
+	## *is* the court, which is what makes a defender's depth something you can
+	## point at rather than infer.
+	##
+	## `rise` is how far a metre of depth away from the viewer lifts on the page.
+	## Small: this view still measures heights against the net, and a steep lift
+	## would foreshorten exactly the axis it exists to show.
+	## The offset a metre of depth away from the viewer gets on the page, as one
+	## vector: sideways and up. Both together read as a court receding; the lift
+	## alone reads as a court standing on its edge, which is what 0.16 gave --
+	## nine metres of it lifted the far sideline a hundred pixels and took the net
+	## with it, so a 2.43 m net drew twice its own height.
+	var yaw := NET_HEIGHT_M * scale * 0.30
+	var rise := 0.055
 
-	## The floor, and the two attack lines three metres either side of the net --
-	## which is what makes the floor a court rather than a rule.
-	_marker_line(
-		Vector2(size.x * 0.05, floor_y), Vector2(size.x * 0.95, floor_y),
-		ink, alpha, reveal, 3, MARKER_WIDTH * 1.2
-	)
+	## The court as a band between two sidelines rather than as one rule. The near
+	## line is where the viewer stands; the far one is nine metres across the
+	## court and lifted by the raised viewpoint.
+	var far_lift := COURT_WIDTH_M * scale * rise
+	var near_left := Vector2(size.x * 0.05, floor_y)
+	var near_right := Vector2(size.x * 0.95, floor_y)
+	var far_left := near_left + Vector2(yaw, -far_lift)
+	var far_right := near_right + Vector2(yaw, -far_lift)
+	_marker_line(near_left, near_right, ink, alpha, reveal, 3, MARKER_WIDTH * 1.2)
+	_marker_line(far_left, far_right, Color(ink, 0.52), alpha, reveal, 9, MARKER_WIDTH * 0.8)
+	## The two ends, closing the band into a floor.
+	_marker_line(near_left, far_left, Color(ink, 0.34), alpha, reveal, 17, MARKER_WIDTH * 0.5)
+	_marker_line(near_right, far_right, Color(ink, 0.34), alpha, reveal, 19, MARKER_WIDTH * 0.5)
+	## The attack lines three metres either side, drawn right across the band so
+	## they read as lines on a floor rather than as ticks on a rule.
 	for side: float in [-1.0, 1.0]:
 		var at: float = net_x + side * 3.0 * scale
 		_marker_line(
-			Vector2(at, floor_y), Vector2(at + yaw * 0.7, floor_y - yaw * 0.35),
-			Color(ink, 0.42), alpha, reveal, 5 + int(side * 3.0), MARKER_WIDTH * 0.55
+			Vector2(at, floor_y), Vector2(at + yaw, floor_y - far_lift),
+			Color(ink, 0.44), alpha, reveal, 5 + int(side * 3.0), MARKER_WIDTH * 0.55
 		)
-	## And the far sideline, which is the whole payoff of coming off square.
-	_marker_line(
-		Vector2(size.x * 0.05 + yaw, floor_y - yaw * 0.5),
-		Vector2(size.x * 0.95 + yaw * 0.4, floor_y - yaw * 0.5),
-		Color(ink, 0.34), alpha, reveal, 9, MARKER_WIDTH * 0.55
-	)
 	## Metre marks along the floor, which is what turns a line into a ruler -- and
 	## this view is a ruler before it is anything else.
 	for metre in range(-6, 7):
@@ -622,12 +615,20 @@ func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
 			Color(ink, 0.40 if metre % 3 == 0 else 0.24), alpha, reveal,
 			200 + metre, MARKER_WIDTH * 0.35
 		)
+	_marker_text(
+		"near", Vector2(size.x * 0.06, floor_y - 6.0), 11, Color(ink, 0.55), alpha, reveal
+	)
+	_marker_text(
+		"far", Vector2(size.x * 0.06 + yaw, floor_y - far_lift - 6.0), 11,
+		Color(ink, 0.45), alpha, reveal
+	)
 
 	## The net as a narrow band: near tape, far tape, mesh between.
 	var near_top := Vector2(net_x, tape_top)
 	var near_foot := Vector2(net_x, floor_y)
-	var far_top := near_top + Vector2(yaw, -yaw * 0.5)
-	var far_foot := near_foot + Vector2(yaw, -yaw * 0.5)
+	## The net crosses the whole band, so its far foot sits on the far sideline.
+	var far_top := near_top + Vector2(yaw, -far_lift)
+	var far_foot := near_foot + Vector2(yaw, -far_lift)
 	_marker_line(near_top, near_foot, ink, alpha, reveal, 11, MARKER_WIDTH * 1.5)
 	_marker_line(far_top, far_foot, Color(ink, 0.58), alpha, reveal, 13, MARKER_WIDTH * 0.9)
 	_marker_line(near_top, far_top, ink, alpha, reveal, 15, MARKER_WIDTH * 1.2)
@@ -1297,47 +1298,40 @@ func _marker_stroke(
 	if alpha <= 0.001 or path.size() < 2:
 		return
 	var limit := size.x * reveal
-	var ink := Color(color, color.a * MARKER_ALPHA * alpha)
-	var count := path.size()
-	var pressure_phase := _unit(salt * 47 + 5) * TAU
-	var previous_left := Vector2.ZERO
-	var previous_right := Vector2.ZERO
-	var have_previous := false
-	for index in range(count):
-		var point := path[index]
+	var visible := PackedVector2Array()
+	for point in path:
 		if point.x > limit:
 			break
-		var ahead := path[mini(index + 1, count - 1)]
-		var behind := path[maxi(index - 1, 0)]
-		var direction := ahead - behind
-		if direction.length_squared() < 0.000001:
-			direction = Vector2.RIGHT
-		var normal := direction.orthogonal().normalized()
-		## Pressure: a slow drift along the run, never a step. The hand leaning
-		## in and easing off over something it never lifted from.
-		var t := float(index) / float(count - 1)
-		var pressure := 1.0 + sin(pressure_phase + t * TAU * 0.8) * 0.16
-		var half := _tip_width(direction, width) * 0.5 * pressure
-		var left := point + normal * half
-		var right := point - normal * half
-		if have_previous:
-			## The tooth. Graphite catches on the high points of the paper and
-			## skips the low ones, so density varies *along* a stroke -- which is
-			## the difference between a pencil line and a thin marker line, and it
-			## has to be per segment because that is the scale the grain works at.
-			var grain := 0.5 + 0.5 * sin(
-				pressure_phase * 1.7 + float(index) * TOOTH_PITCH
-			)
-			var caught := Color(
-				ink, ink.a * lerpf(1.0 - TOOTH_SKIP, 1.0, grain)
-			)
-			draw_colored_polygon(
-				PackedVector2Array([previous_left, left, right, previous_right]),
-				caught
-			)
-		previous_left = left
-		previous_right = right
-		have_previous = true
+		visible.append(point)
+	if visible.size() < 2:
+		return
+
+	## One antialiased polyline per stroke.
+	##
+	## Strokes were quads -- one `draw_colored_polygon` per segment -- to stop the
+	## joins double-drawing and darkening, which they did when each segment was
+	## its own `draw_line`. That worked and cost the thing nobody wanted to lose:
+	## `draw_colored_polygon` has no antialiasing at all, so every line on the
+	## sheet was a hard-edged staircase. At two and a half pixels wide that is
+	## most of what the eye sees.
+	##
+	## `draw_polyline` is one primitive rather than N, so it does not double-draw
+	## at its own joins *and* it antialiases. What it cannot do is vary width
+	## along its length -- so the width is resolved once per stroke, from the
+	## chisel angle against the stroke's own dominant direction. At a pencil's
+	## width that variation was never visible along a single run anyway; what
+	## reads is the difference *between* strokes, and that survives.
+	var heading := visible[visible.size() - 1] - visible[0]
+	if heading.length_squared() < 0.000001:
+		heading = Vector2.RIGHT
+	var pressure := 1.0 + sin(_unit(salt * 47 + 5) * TAU) * 0.14
+	var drawn := maxf(_tip_width(heading, width) * pressure, 0.6)
+	## The tooth, per stroke rather than per segment. Graphite catches unevenly,
+	## and with the width now constant this is the only channel left that says so.
+	var grain := lerpf(1.0 - TOOTH_SKIP * 0.5, 1.0, _unit(salt * 31 + 17))
+	draw_polyline(
+		visible, Color(color, color.a * MARKER_ALPHA * alpha * grain), drawn, true
+	)
 
 
 ## A stable 0-1 from the board's seed and a salt. Hand-mixed rather than an rng
