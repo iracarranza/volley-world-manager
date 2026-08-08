@@ -43,6 +43,25 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 ## because a die cut does not. That single difference is what separates a sticker
 ## lying *on* the paper from a drawing worked *into* it, and it is why the bodies
 ## can be bold while the court behind them stays quiet.
+## The court, in the units it is actually built in.
+##
+## Every view drew its own geometry from shares of the panel, so the net was
+## whatever fraction of the height that view's author picked -- 0.66 of the panel
+## in the along-net view against roughly a third in three quarter, for the same
+## 2.43 m of net. Two drawings of one object that disagree about its size are two
+## objects.
+##
+## One scale per view instead, in pixels per metre, fitted to whatever the panel
+## has. Then a net is 2.43 m in both because it is 2.43 m, and the check is
+## arithmetic rather than eyesight.
+const NET_HEIGHT_M: float = 2.43
+const COURT_HALF_M: float = 9.0
+const COURT_WIDTH_M: float = 9.0
+## Headroom above the tape for a blocker's hands, and a margin so nothing touches
+## the edge of the sheet.
+const HEADROOM_M: float = 1.25
+const MARGIN_SHARE: float = 0.08
+
 const STICKER_BORDER: float = 3.4
 const STICKER_SHADOW_OFFSET := Vector2(3.0, 4.0)
 const STICKER_SHADOW_ALPHA: float = 0.26
@@ -214,36 +233,69 @@ func _ready() -> void:
 ## the whole reason to trace the rig is that a 201 cm middle and a 186 cm wing
 ## come out as visibly different people. The profiles are placeholders until the
 ## sheet is reading a real lineup.
+## Where the camera stands for each view, so a body is seen from where the
+## drawing is seen from. A sticker baked head-on and dropped into a plan view is
+## a figure standing up out of the floor.
+const BAKE_ANGLES := {
+	VIEW_TOP_DOWN: Vector2(0.0, -62.0),
+	VIEW_THREE_QUARTER: Vector2(-14.0, -8.0),
+	VIEW_ALONG_NET: Vector2(-78.0, -4.0),
+}
+
+## How high the baked blockers are jumping, shared by the bake and the placement
+## so the two cannot drift.
+const BLOCK_ELEVATION: float = 0.85
+
+const BLOCKER_PROFILES := [
+	{
+		"key": "tall", "height_cm": 201.0, "wingspan_cm": 209.0,
+		"stride_length_m": 0.93, "body_type": "Vegi", "dominant_hand": "Right",
+		"standing_reach_meters": 2.62, "jumping_reach_meters": 3.42,
+	},
+	{
+		"key": "wing", "height_cm": 186.0, "wingspan_cm": 190.0,
+		"stride_length_m": 0.84, "body_type": "Cani", "dominant_hand": "Left",
+		"standing_reach_meters": 2.44, "jumping_reach_meters": 3.24,
+	},
+]
+
+
+func _sticker_key(who: String, for_view: String) -> String:
+	return "%s_%s" % [who, for_view.replace(" ", "_")]
+
+
+## Every pose the sheet can show, from every angle it can be looked at.
+##
+## Baked up front rather than on the view change: six bakes at roughly ten
+## milliseconds each is a blink at startup, and doing it lazily would put that
+## blink in the middle of a view toggle, which is where it would be felt.
 func _request_stickers() -> void:
-	_stickers.request(
-		"block_tall", RallyEventModel.EventType.BLOCK, 0.85, 0.0,
-		{
-			"height_cm": 201.0, "wingspan_cm": 209.0, "stride_length_m": 0.93,
-			"body_type": "Vegi", "dominant_hand": "Right",
-			"standing_reach_meters": 2.62, "jumping_reach_meters": 3.42,
-		},
-		-14.0
-	)
-	_stickers.request(
-		"block_wing", RallyEventModel.EventType.BLOCK, 0.85, 0.0,
-		{
-			"height_cm": 186.0, "wingspan_cm": 190.0, "stride_length_m": 0.84,
-			"body_type": "Cani", "dominant_hand": "Left",
-			"standing_reach_meters": 2.44, "jumping_reach_meters": 3.24,
-		},
-		9.0
-	)
+	for for_view in VIEWS:
+		var angles: Vector2 = BAKE_ANGLES.get(for_view, Vector2.ZERO)
+		for profile in BLOCKER_PROFILES:
+			var built: Dictionary = (profile as Dictionary).duplicate()
+			_stickers.request(
+				_sticker_key(str(built["key"]), for_view),
+				RallyEventModel.EventType.BLOCK, BLOCK_ELEVATION, 0.0,
+				built, angles.x, angles.y
+			)
 
 
 ## Lay a baked sticker down: shadow, shaded body, then the cut border.
-func _draw_sticker(key: String, centre: Vector2, height: float) -> bool:
+## `feet` is where the body touches the floor, not where its middle is.
+##
+## Anchoring by the centre meant the figure's contact point moved whenever the
+## pose or the crop changed, so a blocker floated a good forty pixels above the
+## shadow drawn at their own feet. Anchoring by the bottom of the box makes the
+## two agree by construction rather than by a constant somebody tuned.
+func _draw_sticker(key: String, feet: Vector2, height: float) -> bool:
 	if _stickers == null:
 		return false
 	var built: UIVoliSticker.Sticker = _stickers.sticker(key)
 	if built == null or built.contours.is_empty():
 		return false
 	var box := Vector2(height * built.aspect, height)
-	var origin := centre - box * 0.5
+	var origin := feet - Vector2(box.x * 0.5, box.y)
 
 	## 1. The shadow. Without it a sticker is a shape with a thick outline; with
 	## it the shape is above the paper.
@@ -503,49 +555,99 @@ func _draw_three_quarter(which: String, alpha: float, reveal: float) -> void:
 func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
 	var ink := _ink()
 	var board_bottom := size.y - 13.0
-	var floor_y := board_bottom - size.y * 0.10
-	var net_x := size.x * 0.50
-	var tape_top := size.y * 0.24
+
+	## Sighting down the tape: what runs across the sheet is the **depth of both
+	## courts** -- nine metres either side of the net -- and what runs up it is
+	## height. One scale for both, so the net is 2.43 m of an eighteen-metre span
+	## and not two thirds of the panel, which is what it was.
+	##
+	## That was the disproportion: this view sized the net off `size.y` and the
+	## three-quarter view sized it off its own share, so the same net came out
+	## roughly twice as tall here.
+	## Six metres either side rather than the full nine.
+	##
+	## A crop, not a distortion -- the scale is still one number for both axes, so
+	## the net is still 2.43 m. But nothing this view exists to measure lives
+	## beyond six metres: set tightness is under a metre off the tape, a setter
+	## releases inside three, and the deepest defender this view has an opinion
+	## about is at six. Fitting eighteen metres in put all of that in the middle
+	## third of the sheet and left the net a hundred pixels tall in a panel three
+	## times that.
+	const ALONG_NET_REACH_M: float = 6.0
+	var scale := _metres(
+		Vector2(ALONG_NET_REACH_M * 2.0, NET_HEIGHT_M + HEADROOM_M)
+	)
+	var floor_y := board_bottom - size.y * 0.08
+	var net_x := size.x * 0.5
+	var tape_top := floor_y - NET_HEIGHT_M * scale
 
 	_marker_text(which.to_upper(), Vector2(size.x * 0.05, size.y * 0.13), 24, ink, alpha, reveal)
 
 	## Not quite square on.
 	##
 	## At a true 90 degrees the net is one line and the far half of the court does
-	## not exist -- which is geometrically honest and useless, because the whole
-	## reason to sight down the tape is to see distances *from* it, and a viewer
-	## with no far side has nothing to measure them against. A couple of degrees
-	## off square opens the net into a narrow band and brings the far antenna into
-	## frame, at a cost of almost no distortion to the near-side distances this
-	## view exists to show.
-	const NET_YAW_OFFSET: float = 18.0
+	## not exist -- geometrically honest and useless, because the reason to sight
+	## down the tape is to measure distances *from* it and a viewer with no far
+	## side has nothing to measure them against. A couple of degrees opens the net
+	## into a narrow band and brings the far court into frame, at almost no cost to
+	## the near-side distances this view exists to show.
+	var yaw := NET_HEIGHT_M * scale * 0.10
+
+	## The floor, and the two attack lines three metres either side of the net --
+	## which is what makes the floor a court rather than a rule.
 	_marker_line(
-		Vector2(size.x * 0.06, floor_y), Vector2(size.x * 0.94, floor_y),
-		ink, alpha, reveal, 3, MARKER_WIDTH * 1.3
+		Vector2(size.x * 0.05, floor_y), Vector2(size.x * 0.95, floor_y),
+		ink, alpha, reveal, 3, MARKER_WIDTH * 1.2
 	)
-	## The near tape, the far tape a fraction to the side and above it, and the
-	## mesh between them read as a narrow parallelogram.
+	for side: float in [-1.0, 1.0]:
+		var at: float = net_x + side * 3.0 * scale
+		_marker_line(
+			Vector2(at, floor_y), Vector2(at + yaw * 0.7, floor_y - yaw * 0.35),
+			Color(ink, 0.42), alpha, reveal, 5 + int(side * 3.0), MARKER_WIDTH * 0.55
+		)
+	## And the far sideline, which is the whole payoff of coming off square.
+	_marker_line(
+		Vector2(size.x * 0.05 + yaw, floor_y - yaw * 0.5),
+		Vector2(size.x * 0.95 + yaw * 0.4, floor_y - yaw * 0.5),
+		Color(ink, 0.34), alpha, reveal, 9, MARKER_WIDTH * 0.55
+	)
+	## Metre marks along the floor, which is what turns a line into a ruler -- and
+	## this view is a ruler before it is anything else.
+	for metre in range(-6, 7):
+		if metre == 0:
+			continue
+		var tick := net_x + float(metre) * scale
+		_marker_line(
+			Vector2(tick, floor_y), Vector2(tick, floor_y + (7.0 if metre % 3 == 0 else 4.0)),
+			Color(ink, 0.40 if metre % 3 == 0 else 0.24), alpha, reveal,
+			200 + metre, MARKER_WIDTH * 0.35
+		)
+
+	## The net as a narrow band: near tape, far tape, mesh between.
 	var near_top := Vector2(net_x, tape_top)
 	var near_foot := Vector2(net_x, floor_y)
-	var far_top := near_top + Vector2(NET_YAW_OFFSET, -7.0)
-	var far_foot := near_foot + Vector2(NET_YAW_OFFSET, -7.0)
-	_marker_line(near_top, near_foot, ink, alpha, reveal, 7, MARKER_WIDTH * 1.6)
-	_marker_line(far_top, far_foot, Color(ink, 0.62), alpha, reveal, 9, MARKER_WIDTH * 0.9)
-	_marker_line(near_top, far_top, ink, alpha, reveal, 5, MARKER_WIDTH * 1.1)
-	## The mesh across that band, and the far sideline beyond it: what the two
-	## extra degrees bought.
-	for step in range(1, 7):
-		var down := float(step) / 7.0
+	var far_top := near_top + Vector2(yaw, -yaw * 0.5)
+	var far_foot := near_foot + Vector2(yaw, -yaw * 0.5)
+	_marker_line(near_top, near_foot, ink, alpha, reveal, 11, MARKER_WIDTH * 1.5)
+	_marker_line(far_top, far_foot, Color(ink, 0.58), alpha, reveal, 13, MARKER_WIDTH * 0.9)
+	_marker_line(near_top, far_top, ink, alpha, reveal, 15, MARKER_WIDTH * 1.2)
+	for step in range(1, 8):
+		var down := float(step) / 8.0
 		_marker_line(
 			near_top.lerp(near_foot, down), far_top.lerp(far_foot, down),
-			Color(ink, 0.26), alpha, reveal, 60 + step, MARKER_WIDTH * 0.45
+			Color(ink, 0.22), alpha, reveal, 60 + step, MARKER_WIDTH * 0.40
 		)
-	_marker_line(
-		Vector2(net_x + NET_YAW_OFFSET + 14.0, floor_y - 7.0),
-		Vector2(size.x * 0.94, floor_y - 7.0),
-		Color(ink, 0.40), alpha, reveal, 71, MARKER_WIDTH * 0.6
+	## The padded post beyond the far tape, hatched like the three-quarter one so
+	## the two views agree about what a post is made of.
+	_hatch(
+		Rect2(Vector2(net_x + yaw - 4.0, floor_y - NET_HEIGHT_M * scale * 0.62),
+			Vector2(8.0, NET_HEIGHT_M * scale * 0.62)),
+		Color(ink, 0.30), alpha, reveal, 91
 	)
-	_marker_text("net", Vector2(net_x + NET_YAW_OFFSET + 8.0, tape_top - 6.0), 13, ink, alpha * 0.8, reveal)
+	_marker_text(
+		"2.43", Vector2(net_x + yaw + 9.0, tape_top + 4.0), 12,
+		Color(ink, 0.7), alpha, reveal
+	)
 
 	match which:
 		"Attack":
@@ -594,6 +696,59 @@ func _draw_along_net(which: String, alpha: float, reveal: float) -> void:
 				"%s — nothing to set from here" % which.to_upper(),
 				Vector2(size.x * 0.06, size.y * 0.95), 13, ink, alpha * 0.6, reveal
 			)
+
+
+## The floor under a three-quarter net: the centre line beneath the tape, the
+## attack line three metres back, and the near sideline. Enough to stand on.
+func _draw_floor_three_quarter(
+	origin: Vector2, span: Vector2, ink: Color, alpha: float, reveal: float
+) -> void:
+	var scale := span.y / NET_HEIGHT_M
+	## Depth is drawn through the same axonometric map the net uses, so the floor
+	## and the net cannot disagree about where the far side is.
+	for entry in [[0.0, 0.62, 131], [3.0 / COURT_HALF_M * 1.9, 0.34, 137]]:
+		var depth: float = entry[0]
+		var weight: float = entry[1]
+		var salt: int = entry[2]
+		_marker_line(
+			_net_point(origin, span, -0.04, 0.0, depth),
+			_net_point(origin, span, 1.04, 0.0, depth),
+			Color(ink, weight), alpha, reveal, salt, MARKER_WIDTH * 0.7
+		)
+	for u in [-0.04, 1.04]:
+		_marker_line(
+			_net_point(origin, span, u, 0.0, 0.0),
+			_net_point(origin, span, u, 0.0, 3.0 / COURT_HALF_M * 1.9),
+			Color(ink, 0.34), alpha, reveal, 141 + int(u * 10.0), MARKER_WIDTH * 0.5
+		)
+
+
+## Cross-hatching: two crossing sets of strokes. One direction is texture; two
+## are shadow, and the difference is the whole reason to bother.
+func _hatch(
+	area: Rect2, color: Color, alpha: float, reveal: float, salt: int
+) -> void:
+	if area.size.x < 3.0 or area.size.y < 3.0:
+		return
+	var pitch := 5.5
+	var steps := int((area.size.x + area.size.y) / pitch)
+	for step in range(steps):
+		var offset := float(step) * pitch
+		var a := Vector2(area.position.x + offset, area.position.y)
+		var b := a + Vector2(-area.size.y, area.size.y)
+		_marker_line(
+			a.clamp(area.position, area.end), b.clamp(area.position, area.end),
+			color, alpha, reveal, salt + step, MARKER_WIDTH * 0.32
+		)
+	for step in range(0, steps, 2):
+		var offset := float(step) * pitch
+		var a := Vector2(area.position.x + offset - area.size.y, area.position.y)
+		var b := a + Vector2(area.size.y, area.size.y)
+		_marker_line(
+			a.clamp(area.position, area.end), b.clamp(area.position, area.end),
+			Color(color, color.a * 0.7), alpha, reveal, salt + 500 + step,
+			MARKER_WIDTH * 0.30
+		)
 
 
 ## A dimension line: a rule between two points with ticks at each end and the
@@ -722,6 +877,17 @@ const NET_DEPTH := Vector2(-30.0, -22.0)
 
 ## u runs along the net (0 left antenna, 1 right), v is height (0 floor, 1 tape
 ## top), w is depth across the net (0 near side, 1 far).
+## Pixels per metre for a view, fitted to the panel.
+##
+## `world` is the extent the view has to hold, in metres: how wide across, how
+## tall up. The smaller of the two fits wins, so nothing is cropped and the two
+## axes stay at the same scale -- an anisotropic fit would make the net the right
+## height and the wrong width, which is the defect this exists to stop.
+func _metres(world: Vector2) -> float:
+	var usable := size * (1.0 - MARGIN_SHARE * 2.0) - Vector2(0.0, 13.0)
+	return minf(usable.x / maxf(world.x, 0.001), usable.y / maxf(world.y, 0.001))
+
+
 func _net_point(origin: Vector2, span: Vector2, u: float, v: float, w: float) -> Vector2:
 	return origin + Vector2(
 		u * span.x + w * NET_DEPTH.x,
@@ -732,65 +898,135 @@ func _net_point(origin: Vector2, span: Vector2, u: float, v: float, w: float) ->
 func _draw_block_phase(alpha: float, reveal: float) -> void:
 	var ink := _ink()
 	var board_bottom := size.y - 13.0
-	var origin := Vector2(size.x * 0.11, board_bottom - size.y * 0.10)
-	var span := Vector2(size.x * 0.44, size.y * 0.34)
+	## Sized in metres rather than in shares of the panel: 9 m of net across and
+	## 2.43 m of it up, at one scale, with headroom above the tape for hands.
+	var scale := _metres(Vector2(COURT_WIDTH_M * 1.55, NET_HEIGHT_M + HEADROOM_M))
+	var span := Vector2(COURT_WIDTH_M * scale, NET_HEIGHT_M * scale)
+	var origin := Vector2(size.x * 0.09, board_bottom - size.y * 0.07)
 
 	_marker_text("BLOCK", Vector2(size.x * 0.06, size.y * 0.15), 26, ink, alpha, reveal)
 
-	## The two tapes, top and bottom. Both slant, which is what makes the net
-	## recede rather than face the reader.
+	## The floor first, because everything else stands on it and because the
+	## shadows the stickers cast need somewhere to fall. A court drawn with no
+	## floor gives a blocker nothing to be above.
+	_draw_floor_three_quarter(origin, span, ink, alpha, reveal)
+
+	## The two tapes, top and bottom, and the band between them.
 	var tape_top_left := _net_point(origin, span, 0.0, 1.0, 0.0)
 	var tape_top_right := _net_point(origin, span, 1.0, 1.0, 0.0)
 	var tape_low_left := _net_point(origin, span, 0.0, 0.46, 0.0)
 	var tape_low_right := _net_point(origin, span, 1.0, 0.46, 0.0)
-	_marker_line(tape_top_left, tape_top_right, ink, alpha, reveal, 11, MARKER_WIDTH * 1.9)
-	_marker_line(tape_low_left, tape_low_right, ink, alpha, reveal, 23, MARKER_WIDTH * 1.5)
 
-	## The mesh. Thin and faint -- what a net is, visually, is two heavy tapes
-	## with almost nothing between them -- and the verticals stay vertical in
-	## world terms, so they lean with the projection.
-	var columns := 11
+	## A net tape is a folded band with a cable through it, so it draws as **two**
+	## lines a few millimetres apart with the cable's sag between them -- not as
+	## one heavy stroke. That doubling is most of what turns a diagram of a net
+	## into a drawing of one.
+	var tape_depth := span.y * 0.045
+	_marker_line(tape_top_left, tape_top_right, ink, alpha, reveal, 11, MARKER_WIDTH * 1.5)
+	_marker_line(
+		tape_top_left + Vector2(0.0, tape_depth),
+		tape_top_right + Vector2(0.0, tape_depth),
+		ink, alpha, reveal, 12, MARKER_WIDTH * 1.1
+	)
+	## The cable sags between the posts. Straight, a net reads as a fence.
+	var sag := PackedVector2Array()
+	for step in range(13):
+		var t := float(step) / 12.0
+		var point := tape_top_left.lerp(tape_top_right, t)
+		point.y += sin(t * PI) * span.y * 0.035 + tape_depth * 0.5
+		sag.append(point)
+	_marker_stroke(sag, Color(ink, 0.55), alpha, reveal, 15, MARKER_WIDTH * 0.5, false)
+	_marker_line(tape_low_left, tape_low_right, ink, alpha, reveal, 23, MARKER_WIDTH * 1.2)
+
+	## The mesh, hung from the sagging cable rather than from a straight line, so
+	## the squares stretch at the posts and slacken in the middle the way they do.
+	var columns := 15
 	for index in range(columns + 1):
 		var u := float(index) / float(columns)
+		var head := tape_top_left.lerp(tape_top_right, u)
+		head.y += sin(u * PI) * span.y * 0.035 + tape_depth
 		_marker_line(
-			_net_point(origin, span, u, 1.0, 0.0),
-			_net_point(origin, span, u, 0.46, 0.0),
-			Color(ink, 0.42), alpha, reveal, 40 + index, MARKER_WIDTH * 0.60
+			head, _net_point(origin, span, u, 0.46, 0.0),
+			Color(ink, 0.40), alpha, reveal, 40 + index, MARKER_WIDTH * 0.55
 		)
-	for index in range(1, 3):
-		var v := lerpf(0.46, 1.0, float(index) / 3.0)
+	for index in range(1, 4):
+		var v := lerpf(0.46, 0.97, float(index) / 4.0)
 		_marker_line(
 			_net_point(origin, span, 0.0, v, 0.0),
 			_net_point(origin, span, 1.0, v, 0.0),
-			Color(ink, 0.34), alpha, reveal, 60 + index, MARKER_WIDTH * 0.55
+			Color(ink, 0.34), alpha, reveal, 60 + index, MARKER_WIDTH * 0.50
 		)
 
-	## Antennae, in red, because they are the boundary the phase is about. They
-	## stand vertically in the world, so on the page they are the only strictly
-	## vertical lines in the drawing -- which is exactly how they read on a court.
+	## The posts. A net without them is hanging from nothing, and they are also
+	## the only vertical reference in a drawing whose every other line is skewed.
 	for entry in [[0.0, 71], [1.0, 79]]:
+		var u: float = entry[0]
+		var salt: int = entry[1]
+		var foot := _net_point(origin, span, u, 0.0, 0.10)
+		var crown := _net_point(origin, span, u, 1.16, 0.10)
+		_marker_line(foot, crown, ink, alpha, reveal, salt, MARKER_WIDTH * 1.3)
+		## The padded sleeve over the bottom two-thirds: two rules across the post
+		## and a hatched face, which is how a sleeve reads at this size.
+		var sleeve_top := foot.lerp(crown, 0.62)
+		_marker_line(
+			foot + Vector2(-7.0, 0.0), foot + Vector2(7.0, 0.0),
+			ink, alpha, reveal, salt + 1, MARKER_WIDTH * 0.7
+		)
+		_marker_line(
+			sleeve_top + Vector2(-6.0, 0.0), sleeve_top + Vector2(6.0, 0.0),
+			ink, alpha, reveal, salt + 2, MARKER_WIDTH * 0.7
+		)
+		_hatch(
+			Rect2(foot + Vector2(-6.0, 0.0), Vector2(12.0, sleeve_top.y - foot.y)),
+			Color(ink, 0.30), alpha, reveal, salt + 3
+		)
+		## And the guy line back to the floor, which is the detail that says the
+		## post is under tension rather than planted.
+		_marker_line(
+			crown, foot + Vector2(-26.0 if u < 0.5 else 26.0, 6.0),
+			Color(ink, 0.34), alpha, reveal, salt + 5, MARKER_WIDTH * 0.35
+		)
+
+	## The antennae, in red, standing dead vertical -- the only strictly vertical
+	## lines in the drawing, which is exactly how they read on a court.
+	for entry in [[0.0, 91], [1.0, 97]]:
 		var u: float = entry[0]
 		var salt: int = entry[1]
 		_marker_line(
 			_net_point(origin, span, u, 1.34, 0.0),
 			_net_point(origin, span, u, 0.40, 0.0),
-			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 1.5
+			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 1.4
 		)
+		## Banded, the way an antenna is.
+		for band in range(1, 5):
+			var v := lerpf(0.40, 1.34, float(band) / 5.0)
+			_marker_line(
+				_net_point(origin, span, u, v, 0.0) + Vector2(-3.0, 0.0),
+				_net_point(origin, span, u, v, 0.0) + Vector2(3.0, 0.0),
+				Color(MARKER_RED, 0.5), alpha, reveal, salt + band, MARKER_WIDTH * 0.8
+			)
 
-	## Two blockers on the far side, reaching over. Depth is what the projection
-	## bought: a blocker at w = 1 sits up and left of one at the same u on the
-	## near side, so the wall reads as being beyond the net rather than on it.
+	## Cross-hatched shade under the tape, where the net's own shadow falls on the
+	## mesh. Two crossing sets rather than one, because a single direction reads as
+	## texture and two read as shadow.
+	## Lighter than the mesh it falls on, or it stops being shade and becomes
+	## another layer of net.
+	_hatch(
+		Rect2(tape_top_left + Vector2(0.0, tape_depth), Vector2(span.x, span.y * 0.14)),
+		Color(ink, 0.10), alpha, reveal, 121
+	)
+
 	## The blockers, as stickers rather than as drawn figures.
 	##
 	## They fall back to the drawn arch while the bake is still running -- a few
 	## frames at startup -- because a body that pops in is better than a hole, and
 	## the fallback is the same figure the sheet used before.
 	var blockers := [
-		[0.30, "block_tall"], [0.52, "block_wing"],
+		[0.30, "tall"], [0.52, "wing"],
 	]
 	for index in range(blockers.size()):
 		var u: float = blockers[index][0]
-		var key: String = blockers[index][1]
+		var key: String = _sticker_key(str(blockers[index][1]), view)
 		var salt := 90 + index * 29
 		var head := _net_point(origin, span, u, 1.15, 0.55)
 		var radius := 15.0
@@ -798,10 +1034,35 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 		## third again the height of the tape from the floor, and pinning the
 		## sticker to the drawing is what keeps the two in proportion when the
 		## sheet resizes.
-		var sticker_height := span.y * 1.15
-		var placed := _draw_sticker(
-			key, head + Vector2(0.0, sticker_height * 0.30), sticker_height
+		## In metres, off the net rather than off the panel: a blocker at full
+		## extension reaches about 3.4 m, so against a 2.43 m net they stand about
+		## a net and a half tall. Tying it to `span.y` -- which *is* 2.43 m of
+		## pixels -- keeps the two in proportion at every panel size.
+		var sticker_height := span.y * (3.40 / NET_HEIGHT_M) * 0.80
+		## The shadow the body casts on the floor, drawn *into* the drawing rather
+		## than under the sticker: a pencil ellipse at the voli's feet, hatched, in
+		## the same hand as the court. The sticker's own drop shadow says it is a
+		## sticker; this one says the voli is standing somewhere.
+		var feet := _net_point(origin, span, u, 0.0, 0.55)
+		_marker_ellipse(
+			feet, Vector2(span.y * 0.20, span.y * 0.070),
+			Color(ink, 0.42), alpha, reveal, salt + 71
 		)
+		_hatch(
+			Rect2(feet - Vector2(span.y * 0.17, span.y * 0.05),
+				Vector2(span.y * 0.34, span.y * 0.10)),
+			Color(ink, 0.22), alpha, reveal, salt + 83
+		)
+		## Raised off their own shadow by the jump the pose already contains.
+		##
+		## Anchoring at the feet put a blocker at full extension flat on the floor,
+		## which is a contradiction the shadow made obvious: the ellipse says "this
+		## voli is standing here" and a block says they are not. `set_pose` lifts
+		## the body by `elevation * 0.82` metres, so the drawing lifts by the same
+		## number of metres through the same scale, and the gap between body and
+		## shadow *is* the jump rather than a constant that looked about right.
+		var lift := BLOCK_ELEVATION * 0.82 * (span.y / NET_HEIGHT_M)
+		var placed := _draw_sticker(key, feet - Vector2(0.0, lift), sticker_height)
 		if not placed:
 			var arch := PackedVector2Array()
 			for step in range(17):

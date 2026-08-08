@@ -87,9 +87,13 @@ func sticker(key: String) -> Sticker:
 ## Requests are queued rather than run at once because they all share one
 ## viewport and one actor -- rebuilding either per request would cost far more
 ## than the trace does, and the trace is the expensive part.
+## `pitch_degrees` is how far above the voli the camera sits, and it is not a
+## flourish: a sticker baked head-on and dropped into a top-down court is a body
+## standing up out of a plan view. The bake camera has to stand where the *view*
+## stands, so each view keys its own bake and they coexist in the cache.
 func request(
 	key: String, event_type: int, elevation: float, phase: float,
-	profile: Dictionary, yaw_degrees: float = 0.0
+	profile: Dictionary, yaw_degrees: float = 0.0, pitch_degrees: float = 0.0
 ) -> void:
 	if _baked.has(key):
 		return
@@ -99,6 +103,7 @@ func request(
 	_queue.append({
 		"key": key, "event_type": event_type, "elevation": elevation,
 		"phase": phase, "profile": profile, "yaw": yaw_degrees,
+		"pitch": pitch_degrees,
 	})
 	if not _working:
 		_pump()
@@ -157,8 +162,16 @@ func _bake(job: Dictionary) -> void:
 	(_actor.get_node("FocusRing") as Node3D).visible = false
 	(_actor.get_node("IdentityLabel") as Node3D).visible = false
 	_actor.rotation_degrees = Vector3(0.0, float(job["yaw"]), 0.0)
-	_camera.position = Vector3(0.0, 1.9, 4.0)
-	_camera.look_at(Vector3(0.0, 1.6, 0.0), Vector3.UP)
+	## The camera orbits the voli at the view's own pitch, looking at the middle
+	## of the body. At 0 it is level with the chest; at -60 it is most of the way
+	## overhead, which is what a plan view asks for.
+	var pitch := deg_to_rad(float(job["pitch"]))
+	var focus := Vector3(0.0, 1.15, 0.0)
+	var radius := 4.0
+	_camera.position = focus + Vector3(
+		0.0, sin(-pitch) * radius, cos(-pitch) * radius
+	)
+	_camera.look_at(focus, Vector3.UP)
 
 	for _index in range(3):
 		await get_tree().process_frame
