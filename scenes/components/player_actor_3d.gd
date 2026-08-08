@@ -108,6 +108,12 @@ const THIGH_SHARE: float = 0.54
 ## was asked for.
 const SHOE_FORWARD_OFFSET: float = 0.06
 
+## How much of the torso's height the shorts cover.
+##
+## Less than half, deliberately: past that the kit colour becomes the body and the
+## skin becomes a collar, which inverts what a singlet is.
+const SHORTS_TORSO_SHARE: float = 0.34
+
 ## How far a leg can swing out from under the hip, in degrees.
 ##
 ## Roughly what a squatting athlete has and well short of a gymnast's. It exists
@@ -233,6 +239,25 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 		material.albedo_color = color
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mesh.material_override = material
+		## **The line goes with the part it belongs to.**
+		##
+		## The mask pass paints the body black and the arms white and reads the
+		## result back. An ink twin is a child of the mesh it outlines and is not
+		## in either list, so left alone it would stay dark over a white arm and
+		## eat the edge of the very region being measured. Painting it the same
+		## colour means an arm's mask includes its own line, which is what the
+		## trace should see -- the line is part of the arm, not a thing lying on
+		## top of it.
+		var ink := mesh.get_node_or_null("Ink") as MeshInstance3D
+		if ink != null:
+			var ink_material := StandardMaterial3D.new()
+			ink_material.albedo_color = color
+			ink_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			ink_material.cull_mode = BaseMaterial3D.CULL_FRONT
+			ink_material.grow = true
+			ink_material.grow_amount = INK_METRES \
+				if str(mesh.name) in INK_BODY_PARTS else CROWN_INK_METRES
+			ink.material_override = ink_material
 
 
 func apply_ui_palette(light_mode: bool) -> void:
@@ -1623,10 +1648,35 @@ func _apply_physical_profile(profile: Dictionary) -> void:
 	## moved: two functions both placing the shorts is exactly the
 	## correct-then-clobbered shape that has bitten this file three times, so the
 	## one that knows the final hip height owns it outright.
-	var shorts_size: Vector3 = Vector3(
-		silhouette.get("shorts", {}).get("size", Vector3(0.46, 0.20, 0.32))
-	)
-	shorts.position.y = hip_y + shorts_size.y * 0.34
+	## **The shorts are the bottom of the torso, not a box on it.**
+	##
+	## They were a box wider than the body sitting at the waist, and under a drawn
+	## line that box earned an outline of its own -- which is what turned a pair of
+	## shorts into a shelf. A voli in a singlet does not have a ledge at the hip.
+	##
+	## So they are now a section of the torso's own profile: the same shape,
+	## sampled at the height they sit at, a shade wider so they clear it without
+	## fighting for pixels, and less than half its height so they read as the
+	## bottom of a garment rather than as a second body. `_torso_radius_at` is the
+	## same function the collar uses, for the same reason -- a band sized from the
+	## widest point of a round body is a hoop somebody has been posted through.
+	var torso_spec: Dictionary = silhouette.get("torso", {})
+	var torso_height := float(torso_spec.get("height", 0.9)) * squeeze
+	var shorts_height := torso_height * SHORTS_TORSO_SHARE
+	var shorts_spec := {
+		"shape": "cylinder",
+		"top_radius": BodyTypeModelsScript._torso_radius_at(
+			torso_spec, 0.5 - SHORTS_TORSO_SHARE
+		) * 1.03,
+		"bottom_radius": BodyTypeModelsScript._torso_radius_at(
+			torso_spec, 0.5 - SHORTS_TORSO_SHARE * 1.9
+		) * 1.03,
+		"height": shorts_height,
+	}
+	shorts.mesh = BodyTypeModelsScript.build_mesh(shorts_spec)
+	## Hung from the bottom of the torso rather than from the hip joint, because
+	## it is now part of the torso and has to end where the torso does.
+	shorts.position.y = torso.position.y - torso_height * 0.5 + shorts_height * 0.5
 
 	## Scales the *whole two-bone chain*, elbow included.
 	##
@@ -1796,6 +1846,9 @@ func _build_silhouette() -> void:
 		)
 	_build_cosmetics()
 	_build_face()
+	## Last, so every mesh the body build produced -- including the cosmetics and
+	## the face -- gets its line.
+	_apply_ink()
 
 
 ## The joint ball on a bone, if it has one yet.
@@ -1803,6 +1856,71 @@ func _paint_joint(bone: Node, color: Color) -> void:
 	var ball := bone.get_node_or_null("Joint") as MeshInstance3D
 	if ball != null:
 		_apply_material_color(ball, color)
+
+
+## How thick the drawn line is, in metres of world space.
+##
+## **In metres, which is the whole point.** An outline measured in pixels thins as
+## a voli walks upcourt and thickens as they come toward the camera, so the
+## drawing changes weight for reasons that have nothing to do with the drawing.
+## In metres a line is a property of the body, and a voli at the endline carries
+## the same pen as one at the net.
+##
+## The crown is heavier than the body because it is smaller. A crest, a pair of
+## ears or a beak is the thing that says which type this is, occupies a few dozen
+## pixels doing it, and is the one place where more line buys legibility instead
+## of weight.
+const INK_METRES: float = 0.018
+const CROWN_INK_METRES: float = 0.030
+const INK_COLOR := Color(0.06, 0.07, 0.10)
+## Everything else is a cosmetic and takes the heavier line. Named as the body
+## rather than as a list of cosmetics because the body is a closed set and the
+## cosmetics are not -- a new ear or tail should get the crown weight without
+## anybody remembering to add it here.
+const INK_BODY_PARTS: Array[String] = [
+	"Torso", "Shorts", "Head", "Mesh", "Joint", "Shoe", "Kit",
+]
+
+
+## Draw every part of the rig with a line round it.
+##
+## An inverted hull: each mesh gets a twin, grown outward, painted flat and
+## rendered inside-out so only its far side shows. What survives is a band around
+## the silhouette of *that part*, which is why an arm crossing the torso keeps its
+## own edge instead of dissolving into it -- the same separation the sticker trace
+## does in 2D, obtained here for the cost of a second draw call per part.
+##
+## Rebuilt with the body rather than authored in the scene, because the twins have
+## to follow whatever mesh each body type produced.
+func _apply_ink() -> void:
+	_ink_node(self)
+
+
+func _ink_node(node: Node) -> void:
+	for child in node.get_children():
+		_ink_node(child)
+	var mesh_instance := node as MeshInstance3D
+	if mesh_instance == null or mesh_instance.mesh == null:
+		return
+	if mesh_instance.name == "Ink":
+		return
+	## The shadow and the focus ring are marks on the floor, not parts of a body.
+	if mesh_instance == shadow or mesh_instance == focus_ring:
+		return
+	var existing := mesh_instance.get_node_or_null("Ink") as MeshInstance3D
+	var twin := existing if existing != null else MeshInstance3D.new()
+	if existing == null:
+		twin.name = "Ink"
+		mesh_instance.add_child(twin)
+	twin.mesh = mesh_instance.mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = INK_COLOR
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_FRONT
+	material.grow = true
+	material.grow_amount = INK_METRES \
+		if str(mesh_instance.name) in INK_BODY_PARTS else CROWN_INK_METRES
+	twin.material_override = material
 
 
 ## A ball at a joint, so two segments read as one limb bending.

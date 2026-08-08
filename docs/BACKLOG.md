@@ -2888,3 +2888,33 @@ already sit near the universal ratios, there is nothing for the dial to travel.
 fix is bolder authoring and not a bigger multiplier -- and raising the dial would
 be a change that looks like it did something and did not, which is this
 repository's oldest defect and one it has hit twice in this session already.
+
+## The ink is on, and now two outlines are drawn over each other
+
+The rig carries its own line: an inverted hull on every mesh, 0.018 m for the
+body and 0.030 m for ears, crests and beaks. In metres rather than pixels, so a
+voli at the endline carries the same pen as one at the net. It runs everywhere the
+rig does -- the match court, the roster view and the sticker bake -- so the sheet
+and the live view finally agree about what a voli looks like.
+
+The shorts are the torso's own bottom section now, sized from its profile at the
+height they sit at and covering 34 percent of its height, rather than a box wider
+than the body. That was the shelf.
+
+**What is left, and it is a real question rather than a polish item.** At about a
+hundred pixels the drawn line arrives dark, slightly broken and dithered rather
+than as a clean stroke. Two things are fighting for those pixels:
+
+1. `_shade` quantises to twelve colour steps, so a thin dark band lands between
+   steps and speckles.
+2. The sticker already draws a **die-cut border** of its own, plus a lighter arm
+   crease. That was invented precisely because the geometry had no line. It now
+   has one, and drawing both means two outlines over each other at slightly
+   different offsets -- which is most of what the noise is.
+
+The likely answer is to drop the die cut and let the geometry carry the edge, at
+which point the arm crease also becomes redundant because each arm's hull already
+separates it from the torso. Cheaper alternative: keep the die cut and thicken the
+ink for the bake only, which is one constant. Render both before choosing --
+guessing between two plausible causes is what this session has repeatedly had to
+undo.
