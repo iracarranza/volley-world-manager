@@ -2755,3 +2755,23 @@ a libero before and after, which is one probe and settles it.
 
 Held rather than shipped. The roster page can find its 38 px elsewhere -- the
 243 px of chrome above it is the better target and costs no content at all.
+
+## Next, in the manager's own words
+
+Written down because it was said in passing and passing is where plans go to be
+forgotten. Not a design, a direction -- each of these wants its own reading of
+what exists before anything is built.
+
+1. **The rally simulator.** The thread that was running before the tactic sheet
+   and the body models pulled attention sideways. Tasks #62 to #64 and #66 to #68
+   are all pieces of it and are still open.
+2. **The 2D match centre.** Playback today is the 3D court; what the match centre
+   shows around it has not been looked at since the screens were renamed.
+3. **The tactical planner.** The clipboard's worksheet took a projection refactor
+   and a set of selectable zones this pass, but the *planner* -- the daily
+   schedule at `scenes/screens/schedule_screen.gd` -- has not moved, and #69
+   ("build the day: hours, the training appointment, and the live drill session")
+   is the shape of what it needs.
+
+Held from this pass and still true: the body-model overhaul is first on the
+tactic sheet's own list, and nothing on the sheet is persisted.

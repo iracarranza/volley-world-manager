@@ -30,7 +30,33 @@ var game_manager_override: Node
 ## Generated once at career creation and persisted alongside the career in
 ## its own file, because it is megabytes of data that almost never changes
 ## while the career file itself is rewritten every week.
-var world_population: Array[VolleyballPlayer] = []
+## Everyone in the world who is not on the managed roster.
+##
+## **Loaded on first use, not on career load.** Measured: a career's own file is
+## 79 KB and parses in 4 ms, its state rebuilds in 6, and the game state in 8 --
+## eighteen milliseconds for everything the player is about to look at. The world
+## sidecar is 3,880 volis, and rebuilding them took **1.9 seconds of a 1.94 second
+## load**, every time, before the journal could draw a single row.
+##
+## Nothing on the journal, the clipboard, the planner or the match centre reads
+## this. It is the free-agent pool: scouting and transfers want it, and both are
+## screens the player has to choose to open. So the file path is remembered at
+## load and the work happens the first time somebody actually asks -- which for
+## most sessions is never.
+var _world_population: Array[VolleyballPlayer] = []
+var _world_save_id: String = ""
+var _world_loaded: bool = true
+
+var world_population: Array[VolleyballPlayer]:
+	get:
+		if not _world_loaded:
+			_world_loaded = true
+			_read_world_population(_world_save_id)
+		return _world_population
+	set(value):
+		## An outright assignment is an answer, so there is nothing left to defer.
+		_world_loaded = true
+		_world_population = value
 var _world_dirty: bool = false
 ## What the last season's turnover did -- retirements, intake size, whether a
 ## golden generation arrived. Raw material for a news feed; kept in memory
@@ -485,7 +511,11 @@ func load_career(save_id: String) -> String:
 	var payload: Dictionary = parsed
 	career = CareerStateModel.from_dict(payload.get("career", {}))
 	_game_manager().from_dict(payload.get("game_state", {}))
-	_load_world_population(save_id)
+	## Remembered rather than read -- see `world_population`.
+	_world_population = [] as Array[VolleyballPlayer]
+	_world_save_id = save_id
+	_world_loaded = false
+	_world_dirty = false
 	career_loaded.emit()
 	career_changed.emit()
 	return ""
@@ -496,14 +526,14 @@ func load_career(save_id: String) -> String:
 ## sidecar and carries its market inline instead, which `CareerState` has
 ## already loaded by this point -- so that path simply leaves an empty world
 ## rather than failing.
-func _load_world_population(save_id: String) -> void:
-	world_population = [] as Array[VolleyballPlayer]
+func _read_world_population(save_id: String) -> void:
+	_world_population = [] as Array[VolleyballPlayer]
 	_world_dirty = false
 	var file := FileAccess.open(_world_path(save_id), FileAccess.READ)
 	if file != null:
 		var parsed: Variant = JSON.parse_string(file.get_as_text())
 		if parsed is Dictionary:
-			world_population = WorldPopulation.from_dict_array(
+			_world_population = WorldPopulation.from_dict_array(
 				Array((parsed as Dictionary).get("players", []))
 			)
 	## Belt and braces: anyone already on the managed roster is not also a
@@ -512,21 +542,21 @@ func _load_world_population(save_id: String) -> void:
 	for player in _game_manager().players:
 		rostered_ids[int(player.id)] = true
 	var world_free_agents: Array[VolleyballPlayer] = []
-	for player in world_population:
+	for player in _world_population:
 		if not rostered_ids.has(int(player.id)):
 			world_free_agents.append(player)
-	world_population = world_free_agents
+	_world_population = world_free_agents
 	if career.transfer_pool_ids.is_empty():
 		return
 	var by_id := {}
-	for player in world_population:
+	for player in _world_population:
 		by_id[int(player.id)] = player
 	var resolved: Array[VolleyballPlayer] = []
 	for player_id in career.transfer_pool_ids:
 		var player: VolleyballPlayer = by_id.get(int(player_id))
 		if player != null:
 			resolved.append(player)
-			world_population.erase(player)
+			_world_population.erase(player)
 	career.transfer_pool.assign(resolved)
 
 

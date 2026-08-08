@@ -28,13 +28,13 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 18.0
-offset_top = 14.0
+offset_top = 4.0
 offset_right = -18.0
-offset_bottom = -14.0
+offset_bottom = -4.0
 
 [node name="Root" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 4
 
 [node name="Header" type="HBoxContainer" parent="Margin/Root"]
 layout_mode = 2
@@ -66,7 +66,7 @@ text = "Title Screen"
 [node name="Body" type="VBoxContainer" parent="Margin/Root"]
 layout_mode = 2
 size_flags_vertical = 3
-theme_override_constants/separation = 8
+theme_override_constants/separation = 4
 
 [node name="NavStrip" type="PanelContainer" parent="Margin/Root/Body"]
 unique_name_in_owner = true
@@ -75,9 +75,9 @@ layout_mode = 2
 [node name="NavStripMargin" type="MarginContainer" parent="Margin/Root/Body/NavStrip"]
 layout_mode = 2
 theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 6
+theme_override_constants/margin_top = 3
 theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 6
+theme_override_constants/margin_bottom = 3
 
 [node name="NavStripRow" type="HBoxContainer" parent="Margin/Root/Body/NavStrip/NavStripMargin"]
 layout_mode = 2
@@ -107,9 +107,9 @@ size_flags_vertical = 3
 [node name="ContentMargin" type="MarginContainer" parent="Margin/Root/Body/ContentPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 12
+theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 12
+theme_override_constants/margin_bottom = 6
 
 [node name="Content" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin"]
 layout_mode = 2
@@ -117,7 +117,7 @@ layout_mode = 2
 [node name="SectionTitle" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 15
 text = "Home"
 
 [node name="Sections" type="TabContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content"]
