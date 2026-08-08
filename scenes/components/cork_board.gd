@@ -23,7 +23,11 @@ extends Control
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 ## How far the board shows past the page it holds.
-const BOARD_MARGIN: Vector2 = Vector2(9.0, 11.0)
+##
+## Wider than it was. At 9 x 11 the cork was a bevel round the page rather than a
+## board the page was lying on -- the object reads from how much of it you can
+## see, and a clipboard is mostly board with a smaller sheet clamped to it.
+const BOARD_MARGIN: Vector2 = Vector2(21.0, 21.0)
 ## And how far the clamp hangs down over the top of the page.
 const CLAMP_HEIGHT: float = 26.0
 const CLAMP_WIDTH_SHARE: float = 0.26

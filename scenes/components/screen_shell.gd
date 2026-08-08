@@ -32,7 +32,7 @@ const BACKING_CORK: StringName = &"cork"
 ## in their margins read as a bug in the one the player sees second.
 const PAGE_MARGIN_X: int = 18
 ## Extra page margin when a cork board has to show round the card.
-const CORK_MARGIN: int = 12
+const CORK_MARGIN: int = 22
 const PAGE_MARGIN_Y: int = 14
 const ROOT_SEPARATION: int = 10
 const RIBBON_SEPARATION: int = 12
@@ -74,7 +74,12 @@ static func build(
 	var extra := CORK_MARGIN if backing == BACKING_CORK else 0
 	margin.add_theme_constant_override("margin_left", PAGE_MARGIN_X + extra)
 	margin.add_theme_constant_override("margin_right", PAGE_MARGIN_X + extra)
-	margin.add_theme_constant_override("margin_top", PAGE_MARGIN_Y)
+	## The top gets the allowance too. It did not, on the reasoning that the ribbon
+	## already sits above the card -- but the cork draws *outward* from the card's
+	## rect, so at a 30px board margin it painted straight over the title and the
+	## ribbon buttons. The board needs room on every side it shows on, and it shows
+	## on four.
+	margin.add_theme_constant_override("margin_top", PAGE_MARGIN_Y + extra)
 	margin.add_theme_constant_override("margin_bottom", PAGE_MARGIN_Y + extra)
 	screen.add_child(margin)
 

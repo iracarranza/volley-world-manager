@@ -1,34 +1,36 @@
-class_name UIWhiteboard
+class_name UIWorksheet
 extends Control
 
-## The tactic board: a different medium again, and deliberately so.
+## The workspace: a panel of graph paper on the clipboard, worked in pencil.
 ##
-## The journal is cloth and paper somebody sewed. The clipboard is paper somebody
-## drew on. This is the third thing on the desk -- **a board somebody wiped and
-## drew on again**, which is what a coach actually explains a phase with. The
-## match centre's tactical court draws the same information as clean geometry,
-## and clean geometry is the one register this interface does not use anywhere
-## else; a plan explained in exact 1px lines reads as a diagram produced by a
-## machine, not as something a young coach scrawled between sessions.
+## Was a whiteboard, and that was the wrong object. **A whiteboard does not get
+## clipped to a clipboard** -- the two are alternatives, not a stack, and the
+## picture was of one lying on the other. What a coach actually clips down and
+## carries is a sheet of squared paper with the court worked out on it in pencil,
+## which is also why the squares are useful: the grid is a coordinate system you
+## can count along, so "half a square further off the net" is a thing you can
+## say and mean.
 ##
-## Three things separate a marker from the pen `UIInkOutline` draws:
+## Pencil rather than marker, and they behave differently in ways that matter
+## more than colour:
 ##
-## 1. **The tip is a chisel, not a nib.** Same structural idea -- width depends on
-##    the direction of travel relative to the tip's angle -- but blunt at both
-##    ends rather than tapered, because a marker is set down and lifted rather
-##    than swept.
-## 2. **The ink is translucent.** Where two strokes cross, the crossing is
-##    darker. That single property is most of what makes a drawing read as
-##    marker rather than as line art, and it comes free from drawing at alpha
-##    below one instead of being simulated.
-## 3. **The board remembers.** A wipe never takes everything, so the previous
-##    layout stays as a faint smear under the new one. This is also where the
-##    phase change lives: choosing a phase squeegees the board and redraws, and
-##    the ghost is the evidence that something was there before.
+## 1. **Graphite is not opaque and not uniform.** A pencil line is dense where
+##    the tooth of the paper caught it and pale where it skipped, so a stroke is
+##    broken along its length rather than solid. That break is the whole tell.
+## 2. **The side of the tip is a different instrument from the point.** A point
+##    draws a line; laid over, the same pencil shades a broad soft band with a
+##    hard edge on one side and a feathered one on the other. Fills are shaded
+##    that way here rather than hatched, because that is what a hand does when it
+##    wants an area rather than a line.
+## 3. **It can be erased, not wiped.** Changing the phase or the view lifts the
+##    old working with an eraser and leaves the smudge a real eraser leaves, and
+##    the grid *survives underneath* -- because the grid is printed and the
+##    working is not, which is the same print-versus-hand split the whole
+##    clipboard runs on.
 ##
-## Deterministic and seeded, for the same reason the pen is: a wobble redrawn
-## differently every frame is a shimmer, and a wobble shared by every stroke is a
-## texture rather than a hand.
+## Deterministic and seeded, for the same reason the pen and the marker are: a
+## wobble redrawn differently every frame is a shimmer, and a wobble shared by
+## every stroke is a texture rather than a hand.
 
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
@@ -83,30 +85,68 @@ const ADJUSTMENTS := {
 	},
 }
 
-## The chisel. `MARKER_ANGLE_DEGREES` is how the tip is held; a stroke travelling
-## across it comes out at full width and one travelling along it comes out at
-## `MARKER_MIN_RATIO` of that. Wider than the pen's nib because a marker is,
-## and because the width ratio needs somewhere to show.
-const MARKER_WIDTH: float = 7.0
-const MARKER_MIN_RATIO: float = 0.34
+## The point. Narrow -- a pencil is a fraction of a marker's width, and most of
+## why the board read as a board rather than as paper was that every line on it
+## was seven pixels wide.
+##
+## `MARKER_ANGLE_DEGREES` survives as the angle the tip is worn to: a pencil
+## sharpened and then used develops a flat, and a stroke along that flat is wider
+## than one across it. Weaker than a chisel marker's ratio, because a worn point
+## is only slightly directional.
+const MARKER_WIDTH: float = 2.6
+const MARKER_MIN_RATIO: float = 0.62
 const MARKER_ANGLE_DEGREES: float = 31.0
-## Translucent, so crossings darken. Below about 0.55 the strokes stop reading as
-## a single confident line and start looking like a wash.
-const MARKER_ALPHA: float = 0.72
-## How far a hand strays over a run, and how long each drawn segment is.
-const MARKER_WANDER: float = 1.15
-const MARKER_SEGMENT: float = 9.0
+## Graphite is never solid. Kept low so crossings still darken -- two pencil
+## lines over each other genuinely are darker -- but low enough that a single
+## line reads as grey rather than as ink.
+const MARKER_ALPHA: float = 0.62
+## How far a hand strays over a run, and how long each drawn segment is. Shorter
+## segments than the marker had, because the tooth is sampled per segment.
+const MARKER_WANDER: float = 1.05
+const MARKER_SEGMENT: float = 6.0
+
+## The tooth of the paper.
+##
+## A pencil skips. `TOOTH_SKIP` is how much of a stroke's density is modulated by
+## the grain, and `TOOTH_PITCH` is how quickly that grain varies along the run --
+## fast enough to break the line, slow enough that it is not noise.
+const TOOTH_SKIP: float = 0.42
+const TOOTH_PITCH: float = 0.9
+
+## Shading with the side of the tip.
+##
+## `SHADE_WIDTH` is in pixels and not a share of whatever is being filled, which
+## is the mistake the first pass made: scaled to the bar it produced 40px slabs,
+## and the side of a pencil is about a centimetre wide no matter how big the box
+## is. Passes overlap at roughly two-thirds of their width, which is what turns
+## separate strokes into a tone.
+const SHADE_WIDTH: float = 9.0
+const SHADE_STEP: float = 6.0
+const SHADE_ALPHA: float = 0.26
 
 ## What a wipe leaves behind. Low, and lower than it first read: at 0.085 with
 ## the alpha bug above in play the previous heading was still legible under the
 ## new one and the board said "BLOCK RECEIVE".
 const GHOST_ALPHA: float = 0.055
 
-## Marker red. Not the palette's `danger`, which is tuned to mean "this is
-## wrong" in a UI -- this one means "look here", which is what a coach's second
-## pen is for. Warmer and less saturated than an alert red so it can sit next to
-## black on a board without shouting.
-const MARKER_RED := Color(0.78, 0.20, 0.16)
+## The red pencil. A coach's second instrument, and on paper it is a pencil
+## rather than a pen -- the same tooth, the same erasability, so it belongs to
+## the sheet in a way a ballpoint would not. Softer and browner than the marker
+## red it replaces, which was mixed to sit on white plastic.
+const MARKER_RED := Color(0.70, 0.28, 0.24)
+
+## Graph paper.
+##
+## The squares are printed, so they follow the *form's* rules and not the
+## pencil's: fixed pitch in screen pixels, dead straight, and a heavier line every
+## fifth square the way squared paper actually comes. They survive an erase,
+## because print does.
+const GRAPH_PITCH: float = 13.0
+const GRAPH_MAJOR_EVERY: int = 5
+const GRAPH_ALPHA: float = 0.20
+const GRAPH_MAJOR_ALPHA: float = 0.34
+const GRAPH_INK_LIGHT := Color(0.42, 0.55, 0.62)
+const GRAPH_INK_DARK := Color(0.46, 0.58, 0.68)
 
 ## The zone-priority bars. Four zones, each 0 to 3, scrolled to change.
 const ZONE_COUNT: int = 4
@@ -263,86 +303,95 @@ func _draw() -> void:
 	## theme colour lookup per redraw is nothing next to a few hundred strokes,
 	## and it cannot be out of date.
 	light_mode = UIPalette.control_is_light(self)
-	var board := _board_color()
-	draw_rect(Rect2(Vector2.ZERO, size), board)
-	_draw_board_wear(board)
+	draw_rect(Rect2(Vector2.ZERO, size), _board_color())
+	_draw_graph()
 
-	## The previous layout, still faintly there. Fades as the squeegee passes.
-	if not _ghost_phase.is_empty() and _wipe < 1.0:
-		_draw_phase(_ghost_phase, GHOST_ALPHA * (1.0 - _wipe) + GHOST_ALPHA)
-	elif not _ghost_phase.is_empty():
-		_draw_phase(_ghost_phase, GHOST_ALPHA)
+	## The previous working, still faintly there. An eraser lifts graphite; it
+	## does not remove it, and what is left is exactly this.
+	if not _ghost_phase.is_empty():
+		_draw_phase(_ghost_phase, GHOST_ALPHA * (2.0 - _wipe))
 
-
-	## And the new one, drawn in behind the squeegee rather than appearing whole.
 	_draw_phase(phase, 1.0, _wipe)
 	if _wipe < 1.0:
-		_draw_squeegee(_wipe)
-	_draw_tray()
+		_draw_eraser(_wipe)
+	_draw_pencil()
 
 
-## The board is not a flat fill. Years of markers leave a directional haze and a
-## few strokes that never came off at all.
-func _draw_board_wear(board: Color) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = _seed
-	## Faint, and much fainter than the first draft. At half opacity these read as
-	## horizontal banding -- a rendering artefact rather than a used surface --
-	## because a hard-edged full-width rectangle is not what a wipe leaves. What
-	## sells wear is that the eye cannot quite resolve it.
-	var haze := board.darkened(0.028) if light_mode else board.lightened(0.030)
-	for index in range(14):
-		var y := size.y * rng.randf()
-		var height := size.y * rng.randf_range(0.04, 0.16)
-		var inset := size.x * rng.randf_range(0.0, 0.22)
-		draw_rect(
-			Rect2(inset, y, size.x - inset * rng.randf_range(1.0, 2.0), height),
-			Color(haze, 0.55)
+## The printed squares.
+##
+## Fixed pitch in screen pixels rather than as a fraction of the panel, for the
+## same reason the form's grid is: a press does not rescale its grid to fit the
+## sheet, and two panels sharing one grid is most of what makes it read as
+## printed. Every fifth line is heavier, which is what squared paper does and
+## what makes it countable -- the whole reason to work a court out on it.
+func _draw_graph() -> void:
+	var ink := GRAPH_INK_LIGHT if light_mode else GRAPH_INK_DARK
+	var index := 1
+	var x := GRAPH_PITCH
+	while x < size.x:
+		var major := index % GRAPH_MAJOR_EVERY == 0
+		draw_line(
+			Vector2(x, 0.0), Vector2(x, size.y),
+			Color(ink, GRAPH_MAJOR_ALPHA if major else GRAPH_ALPHA), 1.0
 		)
-	## The corner nobody reaches, permanently a little cleaner.
-	draw_rect(
-		Rect2(0.0, size.y * 0.80, size.x * 0.12, size.y * 0.14),
-		Color(board.lightened(0.06) if light_mode else board.darkened(0.10), 0.4)
-	)
+		x += GRAPH_PITCH
+		index += 1
+	index = 1
+	var y := GRAPH_PITCH
+	while y < size.y:
+		var major := index % GRAPH_MAJOR_EVERY == 0
+		draw_line(
+			Vector2(0.0, y), Vector2(size.x, y),
+			Color(ink, GRAPH_MAJOR_ALPHA if major else GRAPH_ALPHA), 1.0
+		)
+		y += GRAPH_PITCH
+		index += 1
 
 
-## The aluminium lip along the bottom, and the two markers lying in it. This is
-## the one part of the board that is an object rather than a surface, and it is
-## what stops the panel reading as a blank rectangle when a phase is empty.
-func _draw_tray() -> void:
-	var tray_height := 13.0
-	var top := size.y - tray_height
-	var metal := Color(0.62, 0.63, 0.66) if light_mode else Color(0.30, 0.32, 0.36)
-	draw_rect(Rect2(0.0, top, size.x, tray_height), metal)
-	draw_line(
-		Vector2(0.0, top), Vector2(size.x, top), Color(metal.darkened(0.30), 0.9), 1.0
-	)
-	## Black on the left, red beside it, both a little rolled from where they
-	## were dropped.
-	var barrel := 46.0
-	for entry in [[24.0, _ink()], [24.0 + barrel + 9.0, MARKER_RED]]:
-		var x: float = entry[0]
-		var color: Color = entry[1]
-		draw_rect(Rect2(x, top + 3.0, barrel, 6.0), color)
-		draw_rect(Rect2(x + barrel, top + 4.2, 7.0, 3.6), Color(color, 0.55))
+## The pencil lying on the sheet, bottom left, where somebody put it down.
+##
+## The whiteboard had an aluminium tray with two markers in it. There is no tray
+## on a piece of paper -- but the object still needs to be somewhere, because it
+## is what says the working was done by hand and by *this* instrument.
+func _draw_pencil() -> void:
+	var body := Color(0.62, 0.52, 0.24) if light_mode else Color(0.46, 0.39, 0.20)
+	var at := Vector2(size.x * 0.035, size.y * 0.93)
+	var along := Vector2(74.0, -9.0)
+	var across := Vector2(along.y, -along.x).normalized() * 3.4
+	draw_colored_polygon(PackedVector2Array([
+		at + across, at + along + across, at + along - across, at - across,
+	]), body)
+	## The sharpened cone and the graphite at the end of it.
+	var tip := at + along * 1.16
+	draw_colored_polygon(PackedVector2Array([
+		at + along + across, tip, at + along - across,
+	]), Color(0.86, 0.78, 0.60) if light_mode else Color(0.60, 0.55, 0.42))
+	draw_colored_polygon(PackedVector2Array([
+		at + along * 1.10 + across * 0.36, tip, at + along * 1.10 - across * 0.36,
+	]), _ink())
+	## And the ferrule at the other end, which is the only bright thing on it.
+	draw_colored_polygon(PackedVector2Array([
+		at + across, at - along * 0.14 + across, at - along * 0.14 - across, at - across,
+	]), Color(0.72, 0.74, 0.76) if light_mode else Color(0.44, 0.47, 0.50))
 
 
-## The squeegee itself: a felt bar with a bright leading edge, travelling left to
-## right. Everything behind it is board; everything in front is the old layout.
-func _draw_squeegee(progress: float) -> void:
+## The eraser, travelling left to right, lifting the working as it goes.
+##
+## A squeegee had a bright leading edge because it is wet. An eraser is dry and
+## does the opposite: it leaves a band of *smudge* behind it, graphite pushed
+## rather than removed, which fades over the following second.
+func _draw_eraser(progress: float) -> void:
 	var x := size.x * progress
-	var felt := Color(0.24, 0.26, 0.30) if light_mode else Color(0.72, 0.74, 0.78)
-	draw_rect(Rect2(x - 9.0, 0.0, 9.0, size.y - 13.0), Color(felt, 0.85))
-	draw_line(
-		Vector2(x, 0.0), Vector2(x, size.y - 13.0),
-		Color(_board_color().lightened(0.35) if light_mode else _board_color().lightened(0.12), 0.9),
-		2.0
+	var rubber := Color(0.94, 0.86, 0.78) if light_mode else Color(0.52, 0.46, 0.42)
+	var smudge := Color(_ink(), 0.10)
+	draw_rect(Rect2(x - 34.0, 0.0, 34.0, size.y), smudge)
+	draw_rect(Rect2(x - 13.0, size.y * 0.32, 13.0, size.y * 0.30), rubber)
+	draw_rect(
+		Rect2(x - 13.0, size.y * 0.32, 13.0, size.y * 0.30),
+		Color(rubber.darkened(0.30), 0.7), false, 1.0
 	)
 
 
-## What is on the board is the intersection of the phase and the view, so the
-## dispatch is two-dimensional. The view decides the geometry -- what a court
-## even looks like from here -- and the phase decides what is marked on it.
 func _draw_phase(which: String, alpha: float, reveal: float = 1.0) -> void:
 	match view:
 		VIEW_TOP_DOWN:
@@ -585,8 +634,8 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 	var tape_top_right := _net_point(origin, span, 1.0, 1.0, 0.0)
 	var tape_low_left := _net_point(origin, span, 0.0, 0.46, 0.0)
 	var tape_low_right := _net_point(origin, span, 1.0, 0.46, 0.0)
-	_marker_line(tape_top_left, tape_top_right, ink, alpha, reveal, 11, MARKER_WIDTH * 1.05)
-	_marker_line(tape_low_left, tape_low_right, ink, alpha, reveal, 23, MARKER_WIDTH * 0.75)
+	_marker_line(tape_top_left, tape_top_right, ink, alpha, reveal, 11, MARKER_WIDTH * 1.9)
+	_marker_line(tape_low_left, tape_low_right, ink, alpha, reveal, 23, MARKER_WIDTH * 1.5)
 
 	## The mesh. Thin and faint -- what a net is, visually, is two heavy tapes
 	## with almost nothing between them -- and the verticals stay vertical in
@@ -597,14 +646,14 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 		_marker_line(
 			_net_point(origin, span, u, 1.0, 0.0),
 			_net_point(origin, span, u, 0.46, 0.0),
-			Color(ink, 0.26), alpha, reveal, 40 + index, MARKER_WIDTH * 0.22
+			Color(ink, 0.42), alpha, reveal, 40 + index, MARKER_WIDTH * 0.60
 		)
 	for index in range(1, 3):
 		var v := lerpf(0.46, 1.0, float(index) / 3.0)
 		_marker_line(
 			_net_point(origin, span, 0.0, v, 0.0),
 			_net_point(origin, span, 1.0, v, 0.0),
-			Color(ink, 0.20), alpha, reveal, 60 + index, MARKER_WIDTH * 0.20
+			Color(ink, 0.34), alpha, reveal, 60 + index, MARKER_WIDTH * 0.55
 		)
 
 	## Antennae, in red, because they are the boundary the phase is about. They
@@ -616,7 +665,7 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 		_marker_line(
 			_net_point(origin, span, u, 1.34, 0.0),
 			_net_point(origin, span, u, 0.40, 0.0),
-			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 0.85
+			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 1.5
 		)
 
 	## Two blockers on the far side, reaching over. Depth is what the projection
@@ -639,13 +688,13 @@ func _draw_block_phase(alpha: float, reveal: float) -> void:
 			arch.append(
 				head + Vector2(cos(angle), -sin(angle)) * Vector2(radius * 1.85, radius * 1.55)
 			)
-		_marker_stroke(arch, ink, alpha, reveal, salt + 5, MARKER_WIDTH * 0.85, false)
+		_marker_stroke(arch, ink, alpha, reveal, salt + 5, MARKER_WIDTH * 1.4, false)
 		## The head sits inside the arch, and the shoulders hang off its foot.
 		_marker_circle(head, radius, ink, alpha, reveal, salt)
 		_marker_line(
 			head + Vector2(0.0, radius * 0.9),
 			_net_point(origin, span, u, 0.62, 0.55),
-			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 0.75
+			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.4
 		)
 		_marker_text(
 			"%d" % (index + 1), head + Vector2(-6.0, -radius * 1.9),
@@ -682,21 +731,29 @@ func _draw_zone_bars(area: Rect2, alpha: float, reveal: float) -> void:
 		## Filled by hatching rather than by a solid rectangle. A marker fills a
 		## shape by going back and forth across it, and the overlaps at the turns
 		## are visible -- which is exactly what the translucent ink gives for free.
-		## Hatched at roughly half the tip's width so the passes overlap. At a 7px
-		## pitch with a full-width tip they read as the rungs of a ladder instead
-		## of as a filled box -- a marker filling a shape leaves visible turns,
-		## not gaps.
-		var pitch := 3.4
-		var steps := maxi(int(height / pitch), 1)
-		for step in range(steps):
-			var y := baseline - float(step) * pitch - 2.0
+		## Shaded with the **side** of the tip, not hatched with the point.
+		##
+		## Hatching was the marker's answer -- a chisel fills a box by going back
+		## and forth and the turns show. A pencil laid over does something else
+		## entirely: a few broad diagonal passes, each soft, overlapping into a
+		## tone. Diagonal because a hand shading a tall box moves across it rather
+		## than along it, and the diagonal is what stops the fill reading as more
+		## rungs on a ladder.
+		var passes := maxi(int(height / SHADE_STEP), 1)
+		for step in range(passes):
+			var y := baseline - float(step) * SHADE_STEP - SHADE_WIDTH * 0.4
 			if y < baseline - height:
 				break
-			_marker_line(
-				Vector2(centre - bar_width * 0.5, y),
-				Vector2(centre + bar_width * 0.5, y),
-				Color(color, 0.55), alpha, reveal, 200 + index * 17 + step,
-				MARKER_WIDTH * 0.62
+			## Each pass leans, because a hand shading a box moves across it at an
+			## angle rather than straight along. The lean is what stops the fill
+			## reading as more rungs on a ladder.
+			_marker_stroke(
+				PackedVector2Array([
+					Vector2(centre - bar_width * 0.5, y + 3.0),
+					Vector2(centre + bar_width * 0.5, y - 3.0),
+				]),
+				Color(color, SHADE_ALPHA), alpha, reveal,
+				200 + index * 17 + step, SHADE_WIDTH, false
 			)
 		## The outline of the box it was filled into, drawn after, so it reads as
 		## the shape rather than as the edge of the hatching.
@@ -881,8 +938,19 @@ func _marker_stroke(
 		var left := point + normal * half
 		var right := point - normal * half
 		if have_previous:
+			## The tooth. Graphite catches on the high points of the paper and
+			## skips the low ones, so density varies *along* a stroke -- which is
+			## the difference between a pencil line and a thin marker line, and it
+			## has to be per segment because that is the scale the grain works at.
+			var grain := 0.5 + 0.5 * sin(
+				pressure_phase * 1.7 + float(index) * TOOTH_PITCH
+			)
+			var caught := Color(
+				ink, ink.a * lerpf(1.0 - TOOTH_SKIP, 1.0, grain)
+			)
 			draw_colored_polygon(
-				PackedVector2Array([previous_left, left, right, previous_right]), ink
+				PackedVector2Array([previous_left, left, right, previous_right]),
+				caught
 			)
 		previous_left = left
 		previous_right = right
@@ -953,7 +1021,7 @@ func _marker_ellipse(
 		var local := Vector2(cos(angle), sin(angle) * squash) * radii
 		path.append(centre + local.rotated(tilt))
 	_marker_stroke(
-		path, color, alpha, reveal, salt, MARKER_WIDTH * 0.80, true
+		path, color, alpha, reveal, salt, MARKER_WIDTH * 1.4, true
 	)
 
 
@@ -1011,19 +1079,20 @@ func _marker_font() -> Font:
 
 
 func _board_color() -> Color:
-	## A whiteboard is not the page. In Molten it is a cooler, flatter white than
-	## the paper around it -- that difference is the whole point, since two
-	## surfaces the same colour are one surface. In Mikasa it is a dark board,
-	## because a lit white rectangle would be the brightest thing in the room and
-	## the theme is a room at night.
-	return Color(0.93, 0.94, 0.95) if light_mode else Color(0.13, 0.15, 0.18)
+	## Graph paper is a *sheet on the sheet*, so it must not be the same colour as
+	## the form it lies on -- two surfaces the same colour are one surface. Squared
+	## paper is faintly cooler and very slightly greener than plain stock, which is
+	## the whole difference and is enough. In Mikasa the same sheet under a desk
+	## lamp: still paper, still lighter than the page around it, nowhere near white.
+	return Color(0.955, 0.960, 0.950) if light_mode else Color(0.19, 0.21, 0.22)
 
 
 func _ink() -> Color:
-	## The dark marker. Black on a white board; on a dark board the same pen
-	## cannot be seen, so the roles swap and the "black" marker is the pale one.
-	## Red stays red in both, which is why it carries the emphasis.
-	return Color(0.11, 0.12, 0.14) if light_mode else Color(0.88, 0.90, 0.93)
+	## Graphite, which is not black -- it is a warm grey with a slight sheen, and
+	## drawn at true black a pencil stops being a pencil. On the dark sheet the
+	## roles swap, because a grey pencil on a grey page cannot be read; red stays
+	## red in both, which is why it carries the emphasis.
+	return Color(0.26, 0.25, 0.27) if light_mode else Color(0.82, 0.84, 0.86)
 
 
 func _zone_at(at: Vector2) -> int:

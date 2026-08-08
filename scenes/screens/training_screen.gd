@@ -21,7 +21,7 @@ extends Control
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
-const WhiteboardScript := preload("res://scenes/components/whiteboard.gd")
+const WorksheetScript := preload("res://scenes/components/worksheet.gd")
 const RedPenCircleScript := preload("res://scenes/components/red_pen_circle.gd")
 const TrainingSystem := preload("res://scripts/systems/training_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
@@ -38,7 +38,7 @@ var _career_manager: Node = null
 var _game_manager: Node = null
 var _modes: TabContainer = null
 var _fit_strip: HBoxContainer = null
-var _whiteboard: UIWhiteboard = null
+var _worksheet: UIWorksheet = null
 var _rotation_option: OptionButton = null
 var _selected_preset: String = "Combination Play"
 var _phase_group: ButtonGroup = null
@@ -167,7 +167,7 @@ func _build_fit_strip() -> Control:
 ## nowhere else -- everything around it is a hand and an instrument, and a plan
 ## rendered in 1px lines reads as machine output sitting inside somebody's
 ## notebook. A phase is not a diagram; it is the thing a young coach scrawls on a
-## board, wipes, and scrawls again, which is what `UIWhiteboard` draws.
+## board, wipes, and scrawls again, which is what `UIWorksheet` draws.
 ##
 ## The phase buttons are the board's own vocabulary rather than the page's:
 ## picking one squeegees what is there and draws the next layout in behind the
@@ -214,7 +214,7 @@ A blank tactic is every voli's own comfort."
 	page.add_child(phase_row)
 	_add_rail_label(phase_row, "Planning")
 	_phase_group = ButtonGroup.new()
-	for phase_name in WhiteboardScript.PHASES:
+	for phase_name in WorksheetScript.PHASES:
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = _phase_group
@@ -232,12 +232,12 @@ A blank tactic is every voli's own comfort."
 	page.add_child(view_row)
 	_add_rail_label(view_row, "Looking from")
 	_view_group = ButtonGroup.new()
-	for view_name in WhiteboardScript.VIEWS:
+	for view_name in WorksheetScript.VIEWS:
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = _view_group
 		button.text = view_name
-		button.button_pressed = view_name == WhiteboardScript.VIEW_THREE_QUARTER
+		button.button_pressed = view_name == WorksheetScript.VIEW_THREE_QUARTER
 		button.set_meta(&"view", view_name)
 		var chosen_view := str(view_name)
 		button.pressed.connect(func() -> void: _choose_view(chosen_view))
@@ -245,15 +245,16 @@ A blank tactic is every voli's own comfort."
 		view_row.add_child(button)
 		_view_buttons.append(button)
 
-	_whiteboard = WhiteboardScript.new()
-	_whiteboard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_whiteboard.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	## Tall enough to be the subject and not so tall it pushes its own caption off
-	## the card. Four control rows plus the shell take about 300px of the page; at
-	## 380 the line under the board -- the one that says what the current view and
-	## phase actually adjust -- was clipped.
-	_whiteboard.custom_minimum_size = Vector2(0.0, 300.0)
-	page.add_child(_whiteboard)
+	_worksheet = WorksheetScript.new()
+	_worksheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_worksheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	## A floor, not a target. The sheet expands to fill whatever the page has
+	## spare, so this only matters when the page is short -- and when it is, the
+	## line *under* the sheet is the thing that gets clipped, which is the one line
+	## saying what the current view and phase adjust. Four control rows, the cork
+	## allowance on both edges and the shell leave about 210px at 720p.
+	_worksheet.custom_minimum_size = Vector2(0.0, 200.0)
+	page.add_child(_worksheet)
 
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
@@ -273,20 +274,20 @@ A blank tactic is every voli's own comfort."
 ## player just asked for, so it is the one that must be honoured), and it says so
 ## on the board. If §0.10's table ever fills in, both behaviours disappear.
 func _choose_phase(phase_name: String) -> void:
-	if _whiteboard == null:
+	if _worksheet == null:
 		return
-	_whiteboard.set_phase(phase_name)
+	_worksheet.set_phase(phase_name)
 	_sync_view_availability()
 
 
 func _choose_view(view_name: String) -> void:
-	if _whiteboard == null:
+	if _worksheet == null:
 		return
-	_whiteboard.set_view(view_name)
-	if WhiteboardScript.adjustment_for(view_name, _whiteboard.phase).is_empty():
-		var fallback := WhiteboardScript.first_phase_for(view_name)
+	_worksheet.set_view(view_name)
+	if WorksheetScript.adjustment_for(view_name, _worksheet.phase).is_empty():
+		var fallback := WorksheetScript.first_phase_for(view_name)
 		if not fallback.is_empty():
-			_whiteboard.set_phase(fallback)
+			_worksheet.set_phase(fallback)
 			for button in _phase_buttons:
 				button.button_pressed = str(button.get_meta(&"phase")) == fallback
 	_sync_view_availability()
@@ -296,20 +297,20 @@ func _choose_view(view_name: String) -> void:
 ## pair *does* adjust on the line under the board -- so the answer to "what does
 ## this screen do right now" is always written down rather than inferred.
 func _sync_view_availability() -> void:
-	if _whiteboard == null:
+	if _worksheet == null:
 		return
 	for button in _phase_buttons:
 		var phase_name := str(button.get_meta(&"phase"))
-		var adjustment := WhiteboardScript.adjustment_for(_whiteboard.view, phase_name)
+		var adjustment := WorksheetScript.adjustment_for(_worksheet.view, phase_name)
 		button.disabled = adjustment.is_empty()
 		button.tooltip_text = adjustment if not adjustment.is_empty() \
 			else "Nothing to set for %s from this view." % phase_name
-	var page: Node = _whiteboard.get_parent()
+	var page: Node = _worksheet.get_parent()
 	var declared := page.get_node_or_null("DeclaredLabel") as Label
 	if declared == null:
 		return
-	var current := WhiteboardScript.adjustment_for(
-		_whiteboard.view, _whiteboard.phase
+	var current := WorksheetScript.adjustment_for(
+		_worksheet.view, _worksheet.phase
 	)
 	declared.text = "%s  ·  %s" % [
 		_selected_preset,
@@ -349,12 +350,12 @@ func _add_preset_button(
 
 func _select_preset(preset_name: String) -> void:
 	_selected_preset = preset_name
-	var page: Node = _whiteboard.get_parent()
+	var page: Node = _worksheet.get_parent()
 	var declared := page.get_node("DeclaredLabel") as Label
 	if declared != null:
 		declared.text = "%s  ·  %s" % [
 		preset_name,
-		WhiteboardScript.adjustment_for(_whiteboard.view, _whiteboard.phase),
+		WorksheetScript.adjustment_for(_worksheet.view, _worksheet.phase),
 	]
 
 
