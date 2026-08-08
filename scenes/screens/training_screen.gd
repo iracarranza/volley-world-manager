@@ -20,7 +20,8 @@ extends Control
 ## should have, so the shape can be judged before the model exists.
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
-const TacticalCourtScript := preload("res://scenes/components/tactical_court.gd")
+const WhiteboardScript := preload("res://scenes/components/whiteboard.gd")
+const RedPenCircleScript := preload("res://scenes/components/red_pen_circle.gd")
 const TrainingSystem := preload("res://scripts/systems/training_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
 const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
@@ -36,7 +37,7 @@ var _career_manager: Node = null
 var _game_manager: Node = null
 var _modes: TabContainer = null
 var _fit_strip: HBoxContainer = null
-var _tactical_court: TacticalCourt = null
+var _whiteboard: UIWhiteboard = null
 var _rotation_option: OptionButton = null
 var _selected_preset: String = "Combination Play"
 var _activity_rail: VBoxContainer = null
@@ -141,10 +142,18 @@ func _build_fit_strip() -> Control:
 	return panel
 
 
-## Tactics: declare a plan, see what it costs the squad. A preset rail on the
-## left names the intent; the court on the right shows the rotation it lands on.
-## The specifics one level down (§0.3's "individual instructions") are not drawn
-## yet -- this pass establishes the two halves and the ratio between them.
+## Tactics: a preset rail on the left, and the board a coach explains it on.
+##
+## The board replaces the tactical court that was here. The court draws the same
+## information as exact geometry, which is the one register this interface uses
+## nowhere else -- everything around it is a hand and an instrument, and a plan
+## rendered in 1px lines reads as machine output sitting inside somebody's
+## notebook. A phase is not a diagram; it is the thing a young coach scrawls on a
+## board, wipes, and scrawls again, which is what `UIWhiteboard` draws.
+##
+## The phase buttons are the board's own vocabulary rather than the page's:
+## picking one squeegees what is there and draws the next layout in behind the
+## wipe.
 func _build_tactics_page() -> Control:
 	var page := VBoxContainer.new()
 	page.name = "Tactics"
@@ -181,22 +190,51 @@ A blank tactic is every voli's own comfort -- maximum familiarity, no edge."
 	for preset_name in ["Funnel into Line", "Spread Block"]:
 		_add_preset_button(preset_rail, preset_name, defense_group)
 
-	var court_column := VBoxContainer.new()
-	court_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	court_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	court_column.add_theme_constant_override("separation", 6)
-	split.add_child(court_column)
+	var board_column := VBoxContainer.new()
+	board_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	board_column.add_theme_constant_override("separation", 6)
+	split.add_child(board_column)
 
-	_tactical_court = TacticalCourtScript.new()
-	_tactical_court.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tactical_court.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	court_column.add_child(_tactical_court)
+	## Which phase is on the board. A row of four, because four is the whole
+	## vocabulary -- there is no menu here, and picking one is a wipe rather than
+	## a navigation.
+	var phase_row := HBoxContainer.new()
+	phase_row.add_theme_constant_override("separation", 6)
+	board_column.add_child(phase_row)
+	var phase_group := ButtonGroup.new()
+	for phase_name in WhiteboardScript.PHASES:
+		var button := Button.new()
+		button.toggle_mode = true
+		button.button_group = phase_group
+		button.text = phase_name
+		button.button_pressed = phase_name == "Block"
+		var chosen := str(phase_name)
+		button.pressed.connect(func() -> void: _whiteboard.set_phase(chosen))
+		_circle_on_hover(button)
+		phase_row.add_child(button)
+
+	_whiteboard = WhiteboardScript.new()
+	_whiteboard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_whiteboard.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	board_column.add_child(_whiteboard)
 
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
-	declared.text = "Declared: %s" % _selected_preset
-	court_column.add_child(declared)
+	declared.text = "Declared: %s  ·  scroll a bar to reprioritise" % _selected_preset
+	board_column.add_child(declared)
 	return page
+
+
+## Circle it in red when the cursor is over it. Added as a child so the control
+## keeps whatever the theme gave it and the pen mark is a separate hand on top,
+## the same way `UIInkOutline` layers over a panel rather than restyling it.
+func _circle_on_hover(control: Control) -> void:
+	if control.get_node_or_null("RedPenCircle") != null:
+		return
+	var circle := RedPenCircleScript.new()
+	circle.name = "RedPenCircle"
+	control.add_child(circle)
 
 
 func _add_preset_button(
@@ -208,15 +246,16 @@ func _add_preset_button(
 	button.text = preset_name
 	button.button_pressed = preset_name == _selected_preset
 	button.pressed.connect(func() -> void: _select_preset(preset_name))
+	_circle_on_hover(button)
 	parent.add_child(button)
 
 
 func _select_preset(preset_name: String) -> void:
 	_selected_preset = preset_name
-	var court_column: Node = _tactical_court.get_parent()
-	var declared := court_column.get_node("DeclaredLabel") as Label
+	var board_column: Node = _whiteboard.get_parent()
+	var declared := board_column.get_node("DeclaredLabel") as Label
 	if declared != null:
-		declared.text = "Declared: %s" % preset_name
+		declared.text = "Declared: %s  ·  scroll a bar to reprioritise" % preset_name
 
 
 ## Development: a rail of attribute sessions ordered body-first, and the panel
