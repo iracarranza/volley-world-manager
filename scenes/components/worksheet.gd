@@ -70,9 +70,27 @@ signal phase_changed(phase: String)
 signal view_changed(view: String)
 signal zone_priority_changed(zone_index: int, priority: int)
 
-## The phases a coach explains one at a time. Ordered the way a rally travels,
-## which is the same order the drill ring used and for the same reason.
-const PHASES: Array[String] = ["Serve Receive", "Attack", "Block", "Floor"]
+## The phases a coach explains one at a time, in the order a rally travels them.
+##
+## Three, not four. Serve receive was its own page and should not have been: it
+## is floor work -- the same six volis in the same plan view deciding where to
+## stand -- and it had exactly one cell in the view matrix, which was the tell.
+## Serving is the same argument pointed the other way: where you aim a serve is
+## an attacking decision, not a phase of its own.
+##
+## Both survive as **overlays** on the phase that owns them, which is what they
+## always were. That also empties two thirds of the matrix's holes, so the
+## greying and the auto-switch have less to do.
+const PHASES: Array[String] = ["Attack", "Block", "Floor"]
+
+## The overlay each phase can carry, and whether it is on. An overlay is a second
+## layer of marks on the same drawing rather than a different drawing -- the
+## court does not change when you switch to serve targeting, only what is marked
+## on it.
+const OVERLAYS := {
+	"Attack": "Serve target",
+	"Floor": "Serve receive",
+}
 
 ## And the ways of looking at the court. These are a **second, independent axis**
 ## rather than four more phases: what you can adjust is the intersection of what
@@ -103,7 +121,6 @@ const VIEWS: Array[String] = [VIEW_TOP_DOWN, VIEW_THREE_QUARTER, VIEW_ALONG_NET]
 ## countable -- see `docs/design/TACTICS_AND_TRAINING.md` §0.10.
 const ADJUSTMENTS := {
 	VIEW_TOP_DOWN: {
-		"Serve Receive": "Where the receiving three stand",
 		"Attack": "Lane priority",
 		"Block": "Which way the block funnels",
 		"Floor": "Where each defender stands",
@@ -187,6 +204,12 @@ const ZONE_LABELS: Array[String] = ["Line", "Seam", "Cross", "Tip"]
 
 var phase: String = "Block"
 var view: String = VIEW_THREE_QUARTER
+## Whether the current phase's overlay is showing. One flag, not one per phase:
+## only one phase is on the board at a time, and an overlay belongs to what is
+## being looked at rather than being remembered per page.
+var overlay_on: bool = false
+## Where volis have been dropped, in unit court space, keyed by tray slot.
+var placements: Dictionary = {}
 var zone_priorities: Array[int] = [3, 2, 1, 2]
 var light_mode: bool = true
 
@@ -223,8 +246,22 @@ func _ready() -> void:
 	_stickers = VoliStickerScript.new()
 	_stickers.name = "VoliStickers"
 	add_child(_stickers)
-	_stickers.sticker_ready.connect(func(_key: String) -> void: queue_redraw())
+	_stickers.sticker_ready.connect(_on_sticker_ready)
 	_request_stickers()
+
+
+## Re-emitted so a screen can populate a tray from the same bake queue rather
+## than standing up a second one.
+signal sticker_baked(key: String)
+
+
+func _on_sticker_ready(key: String) -> void:
+	sticker_baked.emit(key)
+	queue_redraw()
+
+
+func stickers() -> UIVoliSticker:
+	return _stickers
 
 
 ## The poses the sheet draws, asked for once.
@@ -375,6 +412,24 @@ static func first_phase_for(for_view: String) -> String:
 		if not adjustment_for(for_view, candidate).is_empty():
 			return candidate
 	return ""
+
+
+## The overlay this phase owns, or an empty string.
+static func overlay_for(for_phase: String) -> String:
+	return str(OVERLAYS.get(for_phase, ""))
+
+
+func set_overlay(enabled: bool) -> void:
+	if overlay_on == enabled:
+		return
+	overlay_on = enabled
+	queue_redraw()
+
+
+## Put a voli on the court at a unit position.
+func place_voli(slot: int, at: Vector2) -> void:
+	placements[slot] = at
+	queue_redraw()
 
 
 func _set_wipe(value: float) -> void:
@@ -724,6 +779,44 @@ func _draw_floor_three_quarter(
 		)
 
 
+## Serve target, or serve receive, marked over whatever court is already drawn.
+##
+## Both are the same gesture from opposite ends -- an arrow into a zone you want
+## the ball in, or a shape over the zone you are covering -- so they share a
+## routine and differ in direction and colour.
+func _draw_serve_overlay(
+	court: Rect2, which: String, ink: Color, alpha: float, reveal: float
+) -> void:
+	if which == "Attack":
+		var from := court.position + Vector2(court.size.x * 0.5, court.size.y * 1.06)
+		for target in [Vector2(0.16, 0.22), Vector2(0.84, 0.26)]:
+			_marker_arrow(
+				from, court.position + court.size * target,
+				MARKER_RED, alpha * 0.9, reveal, 301 + int(target.x * 90.0)
+			)
+		_marker_text(
+			"serve target", from + Vector2(-30.0, 16.0), 12, MARKER_RED, alpha, reveal
+		)
+		return
+	## Serve receive: the three-passer seam, shaded rather than arrowed, because
+	## what is being declared is an area of responsibility and not a direction.
+	for share in [0.24, 0.52, 0.80]:
+		_marker_ellipse(
+			court.position + court.size * Vector2(share, 0.70),
+			Vector2(court.size.x * 0.15, court.size.y * 0.14),
+			Color(ink, 0.5), alpha, reveal, 321 + int(share * 100.0)
+		)
+	_hatch(
+		Rect2(court.position + court.size * Vector2(0.32, 0.56),
+			court.size * Vector2(0.20, 0.30)),
+		Color(MARKER_RED, 0.30), alpha, reveal, 341
+	)
+	_marker_text(
+		"seam", court.position + court.size * Vector2(0.34, 0.52), 12,
+		MARKER_RED, alpha, reveal
+	)
+
+
 ## Cross-hatching: two crossing sets of strokes. One direction is texture; two
 ## are shadow, and the difference is the whole reason to bother.
 func _hatch(
@@ -836,6 +929,24 @@ func _draw_top_down(which: String, alpha: float, reveal: float) -> void:
 					121 + int(spot.x * 80.0 + spot.y * 17.0)
 				)
 			_marker_text("cover", court.position + court.size * Vector2(0.44, 0.50), 13, MARKER_RED, alpha, reveal)
+
+	## The overlay, on the same court rather than on a different one.
+	if overlay_on:
+		_draw_serve_overlay(court, which, ink, alpha, reveal)
+
+	## Anything dragged out of the tray, standing where it was dropped.
+	for raw_slot in placements:
+		var at: Vector2 = placements[raw_slot]
+		var spot := Vector2(at.x * size.x, at.y * size.y)
+		_marker_ellipse(
+			spot, Vector2(13.0, 6.0), Color(ink, 0.42), alpha, reveal,
+			401 + int(raw_slot) * 7
+		)
+		if not _draw_sticker(
+			_sticker_key("tall" if int(raw_slot) % 2 == 0 else "wing", view),
+			spot, size.y * 0.30
+		):
+			_marker_circle(spot - Vector2(0.0, 16.0), 9.0, ink, alpha, reveal, 411 + int(raw_slot))
 
 	if adjustment_for(view, which).is_empty():
 		_marker_text(

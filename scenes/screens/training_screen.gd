@@ -22,7 +22,10 @@ extends Control
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const WorksheetScript := preload("res://scenes/components/worksheet.gd")
+const RallyEventModelScript := preload("res://scripts/models/rally_event.gd")
 const RedPenCircleScript := preload("res://scenes/components/red_pen_circle.gd")
+const RosterTrayScript := preload("res://scenes/components/roster_tray.gd")
+const StickyNoteScript := preload("res://scenes/components/sticky_note.gd")
 const TrainingSystem := preload("res://scripts/systems/training_system.gd")
 const TrainingFocusModel := preload("res://scripts/systems/training_focus_model.gd")
 const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
@@ -43,8 +46,9 @@ var _rotation_option: OptionButton = null
 var _selected_preset: String = "Combination Play"
 var _phase_group: ButtonGroup = null
 var _view_group: ButtonGroup = null
-var _phase_buttons: Array[Button] = []
-var _view_buttons: Array[Button] = []
+var _tray: UIRosterTray = null
+var _sticky: UIStickyNote = null
+var _overlay_check: CheckButton = null
 var _activity_rail: VBoxContainer = null
 var _detail: VBoxContainer = null
 var _sidebar: VBoxContainer = null
@@ -105,13 +109,7 @@ func _build() -> void:
 	_modes.add_child(_build_tactics_page())
 	_modes.add_child(_build_development_page())
 
-	_sidebar = VBoxContainer.new()
-	_sidebar.add_theme_constant_override("separation", 8)
-	## Narrower than it was. The sidebar is this week's state -- reference a
-	## manager reads before choosing, not a thing they operate -- so it should not
-	## be taking a quarter of the page off the one panel they do operate.
-	_sidebar.custom_minimum_size = Vector2(224.0, 0.0)
-	body.add_child(_sidebar)
+
 
 
 ## The strip the doc calls for: what a declared tactic is asking of the squad,
@@ -178,90 +176,139 @@ func _build_tactics_page() -> Control:
 	page.add_theme_constant_override("separation", 8)
 
 	var caption := Label.new()
-	caption.text = "Declare how this rotation attacks and defends. \
-A blank tactic is every voli's own comfort."
+	caption.text = "Drag a voli from a slot onto the court."
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	page.add_child(caption)
 
-	## The board takes the page.
+	## The sheet takes the page and the tools stand beside it.
 	##
-	## It was a third column between a 210px preset rail and a 300px sidebar, and
-	## at 1280 that left it about 460px wide -- so the thing the tab exists for was
-	## the smallest panel on it, and the picture was mostly hidden behind furniture
-	## that is reference material. Presets are a choice you make once and read
-	## rarely, so they go on one row above the board where a row of chips costs
-	## height instead of width.
-	var preset_row := HBoxContainer.new()
-	preset_row.add_theme_constant_override("separation", 6)
-	page.add_child(preset_row)
-	_add_rail_label(preset_row, "Attack")
-	var attack_group := ButtonGroup.new()
-	for preset_name in ["Feed Opposite", "Combination Play", "Pipe and Middle"]:
-		_add_preset_button(preset_row, preset_name, attack_group)
-	var gap := VSeparator.new()
-	preset_row.add_child(gap)
-	_add_rail_label(preset_row, "Defense")
-	var defense_group := ButtonGroup.new()
-	for preset_name in ["Funnel into Line", "Spread Block"]:
-		_add_preset_button(preset_row, preset_name, defense_group)
-
-	## Two selectors over one board: **which phase** is being planned and **which
-	## way the net is being looked at**. They are independent axes and the board
-	## draws their intersection, so they belong on two rows rather than in one
-	## list of eight buttons -- see `docs/design/TACTICS_AND_TRAINING.md` §0.10.
-	var phase_row := HBoxContainer.new()
-	phase_row.add_theme_constant_override("separation", 6)
-	page.add_child(phase_row)
-	_add_rail_label(phase_row, "Planning")
-	_phase_group = ButtonGroup.new()
-	for phase_name in WorksheetScript.PHASES:
-		var button := Button.new()
-		button.toggle_mode = true
-		button.button_group = _phase_group
-		button.text = phase_name
-		button.button_pressed = phase_name == "Block"
-		button.set_meta(&"phase", phase_name)
-		var chosen := str(phase_name)
-		button.pressed.connect(func() -> void: _choose_phase(chosen))
-		_circle_on_hover(button)
-		phase_row.add_child(button)
-		_phase_buttons.append(button)
-
-	var view_row := HBoxContainer.new()
-	view_row.add_theme_constant_override("separation", 6)
-	page.add_child(view_row)
-	_add_rail_label(view_row, "Looking from")
-	_view_group = ButtonGroup.new()
-	for view_name in WorksheetScript.VIEWS:
-		var button := Button.new()
-		button.toggle_mode = true
-		button.button_group = _view_group
-		button.text = view_name
-		button.button_pressed = view_name == WorksheetScript.VIEW_THREE_QUARTER
-		button.set_meta(&"view", view_name)
-		var chosen_view := str(view_name)
-		button.pressed.connect(func() -> void: _choose_view(chosen_view))
-		_circle_on_hover(button)
-		view_row.add_child(button)
-		_view_buttons.append(button)
+	## The presets are gone from here entirely. They are a choice about the whole
+	## tactic and this page is about placing bodies, so keeping them in view cost
+	## a row of width for something nobody touches while dragging -- and losing
+	## them is what let the two selectors fit on one note.
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page.add_child(body)
 
 	_worksheet = WorksheetScript.new()
 	_worksheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_worksheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	## A floor, not a target. The sheet expands to fill whatever the page has
-	## spare, so this only matters when the page is short -- and when it is, the
-	## line *under* the sheet is the thing that gets clipped, which is the one line
-	## saying what the current view and phase adjust. Four control rows, the cork
-	## allowance on both edges and the shell leave about 210px at 720p.
 	_worksheet.custom_minimum_size = Vector2(0.0, 200.0)
-	page.add_child(_worksheet)
+	body.add_child(_worksheet)
+
+	## The column the week-state sidebar used to hold. What replaces it is the
+	## thing a manager operates rather than the thing they read: seven slots to
+	## pick a voli out of, and the note that says what is being planned.
+	var tools := VBoxContainer.new()
+	tools.add_theme_constant_override("separation", 8)
+	tools.custom_minimum_size = Vector2(196.0, 0.0)
+	body.add_child(tools)
+
+	_tray = RosterTrayScript.new()
+	_tray.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tray.voli_dropped.connect(_drop_voli)
+	tools.add_child(_tray)
+	_worksheet.sticker_baked.connect(_headshot_baked)
+	## Deferred, because the page is built before it is added to the tab container
+	## -- so the worksheet is not in the tree yet, its `_ready` has not run, and
+	## its baker does not exist. Called inline this returned silently and the tray
+	## stayed empty with nothing to say it had failed.
+	call_deferred("_request_headshots")
+
+	_sticky = StickyNoteScript.new()
+	_sticky.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sticky.set_group("Planning", WorksheetScript.PHASES, "Block")
+	_sticky.set_group("Looking from", WorksheetScript.VIEWS, WorksheetScript.VIEW_THREE_QUARTER)
+	_sticky.option_chosen.connect(_sticky_chosen)
+	tools.add_child(_sticky)
+
+	## The overlay toggle belongs with the phase it modifies, not on the note --
+	## it is a property of what is on the board rather than a fourth choice.
+	_overlay_check = CheckButton.new()
+	_overlay_check.text = "Serve target"
+	_overlay_check.toggled.connect(func(on: bool) -> void: _worksheet.set_overlay(on))
+	tools.add_child(_overlay_check)
 
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
-	declared.text = "Declared: %s  ·  scroll a bar to reprioritise" % _selected_preset
+	declared.text = _selected_preset
 	page.add_child(declared)
 	_sync_view_availability()
 	return page
+
+
+func _sticky_chosen(heading: String, option: String) -> void:
+	if heading == "Planning":
+		_choose_phase(option)
+	else:
+		_choose_view(option)
+
+
+## The seven faces, baked through the worksheet's own queue.
+##
+## The same rig, the same trace, a tighter camera -- a face is a very small
+## silhouette. Standing up a second baker would mean a second SubViewport and a
+## second copy of the actor for no gain.
+func _request_headshots() -> void:
+	if _worksheet == null or _worksheet.stickers() == null:
+		return
+	var squad := _tray_profiles()
+	for slot in range(squad.size()):
+		var profile: Dictionary = squad[slot]
+		_worksheet.stickers().request(
+			"head_%d" % slot, RallyEventModelScript.EventType.SERVE, 0.0, -1.0,
+			profile, -8.0, -4.0, true
+		)
+
+
+## Placeholders until the tray is reading a real rotation. Varied deliberately --
+## the whole reason to bake a face rather than draw an icon is that these are
+## different people, and seven identical heads would prove nothing.
+func _tray_profiles() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var bodies := ["Vegi", "Cani", "Avi"]
+	var names := ["Ivo", "Mira", "Sena", "Boro", "Tavi", "Nemi", "Lira"]
+	for slot in range(7):
+		out.append({
+			"height_cm": 178.0 + float((slot * 7) % 26),
+			"wingspan_cm": 182.0 + float((slot * 5) % 28),
+			"stride_length_m": 0.80 + float(slot % 4) * 0.035,
+			"body_type": bodies[slot % bodies.size()],
+			"dominant_hand": "Left" if slot == 2 else "Right",
+			"standing_reach_meters": 2.36 + float(slot % 5) * 0.05,
+			"jumping_reach_meters": 3.10 + float(slot % 6) * 0.06,
+			"display_name": names[slot],
+		})
+	return out
+
+
+func _headshot_baked(key: String) -> void:
+	if not key.begins_with("head_") or _tray == null:
+		return
+	var slot := int(key.trim_prefix("head_"))
+	var built: UIVoliSticker.Sticker = _worksheet.stickers().sticker(key)
+	if built == null:
+		return
+	var squad := _tray_profiles()
+	var display_name := str(squad[slot].get("display_name", "")) if slot < squad.size() else ""
+	_tray.set_headshot(slot, built.texture, display_name)
+
+
+## A voli dropped from the tray onto the sheet.
+##
+## The drop point arrives in screen space because it crossed between two
+## controls, so it is mapped back through the worksheet's own rect -- and refused
+## if it landed anywhere else, which is what makes dropping onto the sidebar do
+## nothing rather than something surprising.
+func _drop_voli(slot: int, at: Vector2) -> void:
+	if _worksheet == null:
+		return
+	var local := at - _worksheet.global_position
+	if local.x < 0.0 or local.y < 0.0 \
+			or local.x > _worksheet.size.x or local.y > _worksheet.size.y:
+		return
+	_worksheet.place_voli(slot, local / _worksheet.size)
 
 
 ## Picking a phase, and picking a view.
@@ -277,6 +324,8 @@ func _choose_phase(phase_name: String) -> void:
 	if _worksheet == null:
 		return
 	_worksheet.set_phase(phase_name)
+	if _sticky != null:
+		_sticky.set_chosen("Planning", phase_name)
 	_sync_view_availability()
 
 
@@ -288,8 +337,8 @@ func _choose_view(view_name: String) -> void:
 		var fallback := WorksheetScript.first_phase_for(view_name)
 		if not fallback.is_empty():
 			_worksheet.set_phase(fallback)
-			for button in _phase_buttons:
-				button.button_pressed = str(button.get_meta(&"phase")) == fallback
+			if _sticky != null:
+				_sticky.set_chosen("Planning", fallback)
 	_sync_view_availability()
 
 
@@ -299,12 +348,22 @@ func _choose_view(view_name: String) -> void:
 func _sync_view_availability() -> void:
 	if _worksheet == null:
 		return
-	for button in _phase_buttons:
-		var phase_name := str(button.get_meta(&"phase"))
-		var adjustment := WorksheetScript.adjustment_for(_worksheet.view, phase_name)
-		button.disabled = adjustment.is_empty()
-		button.tooltip_text = adjustment if not adjustment.is_empty() \
-			else "Nothing to set for %s from this view." % phase_name
+	if _sticky != null:
+		var struck: Array[String] = []
+		for phase_name in WorksheetScript.PHASES:
+			if WorksheetScript.adjustment_for(_worksheet.view, phase_name).is_empty():
+				struck.append(phase_name)
+		_sticky.set_disabled("Planning", struck)
+		_sticky.set_chosen("Looking from", _worksheet.view)
+	## The overlay control takes the name of whatever the current phase owns, and
+	## goes away when the phase owns none.
+	if _overlay_check != null:
+		var overlay := WorksheetScript.overlay_for(_worksheet.phase)
+		_overlay_check.visible = not overlay.is_empty()
+		_overlay_check.text = overlay
+		if overlay.is_empty() and _overlay_check.button_pressed:
+			_overlay_check.button_pressed = false
+			_worksheet.set_overlay(false)
 	var page: Node = _worksheet.get_parent()
 	var declared := page.get_node_or_null("DeclaredLabel") as Label
 	if declared == null:
@@ -312,10 +371,8 @@ func _sync_view_availability() -> void:
 	var current := WorksheetScript.adjustment_for(
 		_worksheet.view, _worksheet.phase
 	)
-	declared.text = "%s  ·  %s" % [
-		_selected_preset,
-		current if not current.is_empty() else "reading only from this view",
-	]
+	declared.text = current if not current.is_empty() \
+		else "Reading only from this view."
 
 
 func _add_rail_label(parent: Node, text: String) -> void:
@@ -389,6 +446,15 @@ Sessions near the top cost the legs; sessions near the bottom cost the day."
 	rail_scroll.add_child(_activity_rail)
 
 	split.add_child(_build_detail_scroll())
+
+	## This week's state lives here now rather than beside every page. It is
+	## reference a manager reads before choosing -- fatigue means, familiarity
+	## percentages -- and Tactics needed that column for the roster tray, which is
+	## a thing you operate rather than read.
+	_sidebar = VBoxContainer.new()
+	_sidebar.add_theme_constant_override("separation", 8)
+	_sidebar.custom_minimum_size = Vector2(224.0, 0.0)
+	split.add_child(_sidebar)
 	return page
 
 

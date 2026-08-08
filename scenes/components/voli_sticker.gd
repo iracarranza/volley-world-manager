@@ -93,7 +93,8 @@ func sticker(key: String) -> Sticker:
 ## stands, so each view keys its own bake and they coexist in the cache.
 func request(
 	key: String, event_type: int, elevation: float, phase: float,
-	profile: Dictionary, yaw_degrees: float = 0.0, pitch_degrees: float = 0.0
+	profile: Dictionary, yaw_degrees: float = 0.0, pitch_degrees: float = 0.0,
+	headshot: bool = false
 ) -> void:
 	if _baked.has(key):
 		return
@@ -103,7 +104,7 @@ func request(
 	_queue.append({
 		"key": key, "event_type": event_type, "elevation": elevation,
 		"phase": phase, "profile": profile, "yaw": yaw_degrees,
-		"pitch": pitch_degrees,
+		"pitch": pitch_degrees, "headshot": headshot,
 	})
 	if not _working:
 		_pump()
@@ -166,7 +167,13 @@ func _bake(job: Dictionary) -> void:
 	## of the body. At 0 it is level with the chest; at -60 it is most of the way
 	## overhead, which is what a plan view asks for.
 	var pitch := deg_to_rad(float(job["pitch"]))
-	var focus := Vector3(0.0, 1.15, 0.0)
+	## A headshot frames the head and shoulders and nothing else, so it looks at
+	## eye height with a much tighter orthogonal size. It is the same rig and the
+	## same trace -- a face is just a very small silhouette -- which is why this is
+	## a framing flag rather than a second baker.
+	var head_only := bool(job.get("headshot", false))
+	var focus := Vector3(0.0, 1.62 if head_only else 1.15, 0.0)
+	_camera.size = 0.95 if head_only else 4.6
 	var radius := 4.0
 	_camera.position = focus + Vector3(
 		0.0, sin(-pitch) * radius, cos(-pitch) * radius
