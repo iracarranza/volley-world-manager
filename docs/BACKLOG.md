@@ -2649,3 +2649,37 @@ below the waist with the hands nearer the knees. The forearm pitch is a single
 `lead` angle authored in degrees, and it should be solved from a target platform
 height in metres the same way the stance and the crouch now are -- the same fix,
 one joint further up.
+
+## The roster page does not fit 720, and minimums cannot be capped
+
+Measured with `tools/preview/layout_probe.tscn`, the journal's Roster tab needed
+**812 px of minimum height in a 720 px window**. A `MarginContainer` that cannot
+fit is not clipped and does not warn -- it is placed at a negative offset, so the
+page grew out through the top *and* bottom edges at once and took the ribbon off
+the screen with it. Nothing is logged. Nothing inside the tree looks wrong.
+
+Two controls were most of it and are trimmed: the roster visualizer's viewport
+(214 to 140) and the attribute wheel (186 to 152). That is 758, and it still
+does not fit.
+
+The remaining 38 px cannot be tuned away honestly:
+
+| | px | can it give? |
+|---|---|---|
+| chrome: ribbon, nav strip, card margins, tab bar | 243 | not looked at yet |
+| attribute table | 251 | no -- eight rows is the longest category, so fewer hides attributes |
+| profile row: visualizer, wheel, identity | 228 | only by making both too small to read |
+
+**A minimum size is a floor and there is no ceiling**, which is the whole problem:
+no container above can recover the space, so every fix is either "make the
+content smaller" or "let it scroll". Tuning the content to fit exactly one window
+size is this repository's named defect wearing a layout hat -- it works at
+1280x720 and breaks the moment anything is added or the window is smaller.
+
+The structural fix is a scroll guarantee: the Roster tab's `RosterPlayer` goes
+inside a `ScrollContainer`, whose vertical minimum is not its child's, so the
+page can never exceed the window and the overflow scrolls inside the card. Held
+because it is scene surgery -- the subtree has dozens of node paths to re-point,
+and `%` unique names make it safe but not quick. The chrome is worth measuring
+first: 243 px of fixed furniture around a 515 px page is a lot, and taking it
+back costs no content at all.

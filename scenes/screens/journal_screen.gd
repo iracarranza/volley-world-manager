@@ -1056,7 +1056,13 @@ func _build_inbox() -> void:
 	frame.add_child(portrait)
 	inbox_portrait_viewport = SubViewport.new()
 	inbox_portrait_viewport.own_world_3d = true
-	inbox_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	## **Only while it is on screen.** `UPDATE_ALWAYS` renders a whole 3D world
+	## every frame for the life of the process, and `application.tscn` builds every
+	## screen at startup -- so this one, the roster's, and the match court's were
+	## all drawing continuously behind the title screen from the moment the game
+	## opened, three worlds nobody was looking at. `WHEN_VISIBLE` is the default for
+	## a viewport in a container and is what this always wanted.
+	inbox_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	inbox_portrait_viewport.msaa_3d = Viewport.MSAA_4X
 	portrait.add_child(inbox_portrait_viewport)
 	## Round, without a mask. The viewport's background is painted the same
@@ -1371,7 +1377,13 @@ func _build_roster_viewport() -> void:
 	var container := SubViewportContainer.new()
 	container.name = "VisualizerViewport"
 	container.stretch = true
-	container.custom_minimum_size = Vector2(0, 214)
+	## 214 was measured against nothing and did not fit. The roster page needed
+	## **812 px in a 720 px window**, so the whole card sat at y = -46 with the
+	## ribbon off the top edge and the attribute table off the bottom -- and a
+	## minimum size is a floor, so no container above it could recover. This is the
+	## largest single contributor and the one with the least to lose: the visualizer
+	## is one voli standing still, and it reads at 140.
+	container.custom_minimum_size = Vector2(0, 140)
 	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container.mouse_filter = Control.MOUSE_FILTER_STOP
 	container.mouse_default_cursor_shape = Control.CURSOR_DRAG
@@ -1380,7 +1392,8 @@ func _build_roster_viewport() -> void:
 
 	roster_viewport = SubViewport.new()
 	roster_viewport.own_world_3d = true
-	roster_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	## Only while it is on screen -- see the inbox portrait above.
+	roster_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	roster_viewport.msaa_3d = Viewport.MSAA_4X
 	container.add_child(roster_viewport)
 

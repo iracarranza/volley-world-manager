@@ -174,8 +174,21 @@ func request(
 func _pump() -> void:
 	if _queue.is_empty():
 		_working = false
+		## **Stop rendering when there is nothing to render.**
+		##
+		## The rig is kept between bakes -- building it is the expensive part and a
+		## sheet re-bakes constantly -- but keeping it did not have to mean keeping
+		## it *drawing*. On `UPDATE_ALWAYS` this viewport renders a posed 3D voli in
+		## its own world every frame forever, long after the last sticker was cut,
+		## and every screen that owns a baker adds another one. They are invisible by
+		## construction: nothing on screen shows this viewport, so nothing about the
+		## sheet looks different whether it is running or not.
+		if _viewport != null:
+			_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 		return
 	_working = true
+	if _viewport != null:
+		_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var job: Dictionary = _queue.pop_front()
 	await _bake(job)
 	_pump()

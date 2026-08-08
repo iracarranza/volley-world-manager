@@ -371,7 +371,7 @@ text = "Known"
 
 [node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 186)
+custom_minimum_size = Vector2(360, 152)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
