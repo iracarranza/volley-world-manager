@@ -279,22 +279,6 @@ theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 columns = 2
 
-[node name="PlayerDossierButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 30)
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Open status, dynamics, key attributes, serve repertoire, traits, and biography."
-text = "Dossier"
-
-[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 30)
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Return this player to the testing pool."
-text = "Release"
-
 [node name="LineupStatusOption" type="OptionButton" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/IdentityPanel/TestingRosterControls"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 30)
@@ -330,12 +314,26 @@ theme_override_constants/margin_bottom = 6
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="VisualizerCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox"]
+[node name="VisualizerHeader" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox"]
 layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PlayerDossierButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox/VisualizerHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 26)
+layout_mode = 2
+tooltip_text = "Dossier: status, dynamics, key attributes, serve repertoire, traits and biography."
+text = "▤"
+
+[node name="VisualizerCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox/VisualizerHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
 theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
 theme_override_font_sizes/font_size = 12
 text = "3D VIEW"
 horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="VisualizerBody" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/VisualizerPanel/VisualizerMargin/VisualizerBox"]
 unique_name_in_owner = true
@@ -349,29 +347,74 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="WheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+[node name="RatingPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+custom_minimum_size = Vector2(132, 0)
 layout_mode = 2
-size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 2
 
-[node name="WheelCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
+[node name="RatingCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RatingPanel"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
 theme_override_font_sizes/font_size = 12
-text = "PLAYER PROFILE  /  SELECT TO EXPAND"
+text = "RATING"
 horizontal_alignment = 1
 
-[node name="ScoutingToggle" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
+[node name="RatingValue" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RatingPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(124, 30)
+layout_mode = 2
+theme_override_font_sizes/font_size = 46
+text = "-"
+horizontal_alignment = 1
+
+[node name="RatingNote" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RatingPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.51, 0.58, 0.68, 1)
+theme_override_font_sizes/font_size = 11
+text = "current"
+horizontal_alignment = 1
+
+[node name="ScoutingToggle" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/RatingPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(42, 38)
 layout_mode = 2
 size_flags_horizontal = 4
 toggle_mode = true
-text = "Known"
+tooltip_text = "Show the scout's projected ceiling instead of what this voli has shown."
+text = "◎"
+
+[node name="WheelPanel" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WheelHeader" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="WheelCaption" type="Label" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel/WheelHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+theme_override_colors/font_color = Color(0.49, 0.66, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "PLAYER PROFILE"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ExpandWheelButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel/WheelHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(42, 38)
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "Open the attribute lab."
+text = "⤢"
 
 [node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(360, 152)
+custom_minimum_size = Vector2(430, 168)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -423,6 +466,13 @@ layout_mode = 2
 size_flags_vertical = 4
 tooltip_text = "Next attribute groups"
 text = "▶"
+
+[node name="ReturnToPoolButton" type="Button" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile/RawHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+tooltip_text = "Return this player to the testing pool."
+text = "Release"
 
 [node name="AttributeColumns" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/RawBand/RawProfile"]
 unique_name_in_owner = true

@@ -179,11 +179,11 @@ func _draw() -> void:
 				draw_circle(point, 2.2, UIPalette.color(&"surface_inset", light_mode))
 	if inline_axis_labels:
 		_draw_inline_axis_labels(font, geometry)
-		if expansion_enabled and not expanded_presentation:
-			draw_string(
-				font, Vector2(5.0, 13.0), "EXPAND", HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-				Color(current, 0.72),
-			)
+		## The word "EXPAND" used to be drawn in the corner of the wheel, which is an
+		## affordance you have to read to find. There is a button carrying the universal
+		## glyph beside the caption now, and two invitations to do the same thing is one
+		## more than the corner had room for.
+
 		return
 	var marker_font_size := 13 if expanded_presentation else 10
 	for index in range(axes.size()):
@@ -229,11 +229,6 @@ func _draw() -> void:
 			font, Vector2(float(geometry.legend_x) + name_width, baseline),
 			value_text, HORIZONTAL_ALIGNMENT_RIGHT, value_width, legend_font_size,
 			accent if not potential_profile.is_empty() else current,
-		)
-	if expansion_enabled and not expanded_presentation:
-		draw_string(
-			font, Vector2(5.0, 13.0), "EXPAND", HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-			Color(current, 0.72),
 		)
 
 

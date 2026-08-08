@@ -147,6 +147,8 @@ var roster_environment: Environment = null
 @onready var raw_title: Label = %RawTitle
 @onready var player_attribute_wheel: VolleyballPlayerAttributeWheel = %PlayerAttributeWheel
 @onready var scouting_toggle: Button = %ScoutingToggle
+@onready var rating_value: Label = %RatingValue
+@onready var rating_note: Label = %RatingNote
 @onready var wheel_caption: Label = %WheelCaption
 @onready var transfer_player_attribute_wheel: VolleyballPlayerAttributeWheel = %TransferPlayerAttributeWheel
 @onready var team_attribute_wheel: VolleyballPlayerAttributeWheel = %TeamAttributeWheel
@@ -286,6 +288,10 @@ func _ready() -> void:
 	roster_list.item_selected.connect(_roster_selected)
 	scouting_toggle.toggled.connect(_scouting_view_toggled)
 	player_dossier_button.pressed.connect(_open_player_dossier)
+	## The wheel already emitted `expand_requested` when clicked, and the caption
+	## said "SELECT TO EXPAND" -- an affordance you have to read to discover. Same
+	## destination, now with a button on it.
+	%ExpandWheelButton.pressed.connect(_open_player_attribute_lab)
 	individual_training_roster_list.item_selected.connect(_individual_training_selected)
 	player_attribute_wheel.expand_requested.connect(_open_player_attribute_lab)
 	team_attribute_wheel.expand_requested.connect(_open_team_attribute_lab)
@@ -1349,10 +1355,15 @@ func _roster_selected(index: int) -> void:
 	if player == null:
 		return
 	selected_roster_id = player.id
-	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]\n[color=#91a5bd]%s / %s  |  Age %d[/color]\n[b]CA[/b] %s -> [b]PA[/b] %s  |  %s-handed\n%.0f cm  |  %.0f kg  |  %.0f cm span" % [
+	## **The rating is not a footnote.** It used to be "CA S -> PA S" set in the
+	## body copy between the age and the handedness, at the same weight as the
+	## wingspan -- the single most consulted number about a voli, written like a
+	## measurement. It has its own block beside the wheel now, and it shows one
+	## number rather than two: what they are, with the scout toggle beside it to
+	## ask what they might become.
+	roster_detail.text = "[font_size=24][b]%s[/b][/font_size]\n[color=#91a5bd]%s / %s  |  Age %d[/color]\n%s-handed\n%.0f cm  |  %.0f kg  |  %.0f cm span" % [
 		player.display_name, player.position_code, player.position_role, player.age,
-		AttributeProfiles.grade(float(player.current_ability_score())),
-		AttributeProfiles.grade(float(player.potential)), player.dominant_hand,
+		player.dominant_hand,
 		player.height_cm, player.mass_kg, player.wingspan_cm,
 	]
 	_refresh_player_wheel(player)
@@ -1842,14 +1853,23 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 	## second store of the same fact.
 	var known := scouting_confidence(player)
 	scouting_toggle.button_pressed = showing_scouted_view
-	scouting_toggle.text = "Scouted" if showing_scouted_view else "Known"
+	## An icon rather than a word, at the size of the pager arrows it sits among.
+	## Filled is the projection, hollow is the record -- the same distinction the
+	## caption spells out underneath, so the glyph never has to carry it alone.
+	scouting_toggle.text = "◉" if showing_scouted_view else "◎"
 	scouting_toggle.tooltip_text = (
 		"Projected ceiling, and how sure the club is of it."
 		if showing_scouted_view
 		else "What this voli has actually shown."
 	)
+	## The rating answers whichever question the toggle is asking.
+	rating_value.text = AttributeProfiles.grade(float(
+		player.potential if showing_scouted_view
+		else player.current_ability_score()
+	))
+	rating_note.text = "projected" if showing_scouted_view else "current"
 	_apply_scouted_profile(player_attribute_wheel, player, known)
-	wheel_caption.text = "%s  /  %s  /  SELECT TO EXPAND" % [
+	wheel_caption.text = "%s  /  %s" % [
 		"SCOUT PROJECTION" if showing_scouted_view else "OBSERVED RECORD",
 		Scouting.confidence_summary(known).to_upper(),
 	]
