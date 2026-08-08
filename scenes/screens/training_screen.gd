@@ -66,7 +66,8 @@ func _build() -> void:
 	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	var shell := ScreenShell.build(
-		self, "Clipboard", [schedule_button, back_button] as Array[Button]
+		self, "Clipboard", [schedule_button, back_button] as Array[Button],
+		ScreenShell.BACKING_CORK,
 	)
 
 	shell.content.add_child(_build_fit_strip())
@@ -85,6 +86,10 @@ func _build() -> void:
 	_modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_modes.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_modes.size_flags_stretch_ratio = 2.6
+	## Plastic binder dividers rather than the journal's cut index tabs. Torn
+	## paper is the journal's own material and it followed the tabs here by
+	## default; a clipboard's dividers are the thing you buy in a packet of five.
+	_modes.set_meta(&"ui_tabs", &"plastic")
 	body.add_child(_modes)
 
 	_modes.add_child(_build_tactics_page())

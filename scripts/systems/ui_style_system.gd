@@ -6,6 +6,7 @@ const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
 const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
 const UIPaperWindowScript := preload("res://scenes/components/paper_window.gd")
 const UIPaperTabsScript := preload("res://scenes/components/paper_tabs.gd")
+const UIPlasticTabsScript := preload("res://scenes/components/plastic_tabs.gd")
 
 ## Which surfaces get a drawn edge.
 ##
@@ -352,10 +353,22 @@ static func _paper_window(control: Control) -> void:
 ## child is not laid out by anything and simply lies on it.
 static func _paper_tabs(tabs: TabContainer) -> void:
 	var bar := tabs.get_tab_bar()
-	if bar == null or bar.get_node_or_null("PaperTabs") != null:
+	if bar == null:
 		return
-	var cut := UIPaperTabsScript.new()
-	cut.name = "PaperTabs"
+	## Which material this row's dividers are. Cut paper is the journal's, and
+	## the default -- it followed the tab row everywhere by inheritance. A screen
+	## that is a different object says so, the same way the medium meta does for
+	## surfaces.
+	var plastic := StringName(tabs.get_meta(&"ui_tabs", &"paper")) == &"plastic"
+	var existing := bar.get_node_or_null("PlasticTabs" if plastic else "PaperTabs")
+	if existing != null:
+		return
+	var stale := bar.get_node_or_null("PaperTabs" if plastic else "PlasticTabs")
+	if stale != null:
+		stale.queue_free()
+	var cut: Control = UIPlasticTabsScript.new() if plastic \
+		else UIPaperTabsScript.new()
+	cut.name = "PlasticTabs" if plastic else "PaperTabs"
 	bar.add_child(cut)
 
 

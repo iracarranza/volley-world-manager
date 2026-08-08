@@ -277,80 +277,128 @@ func _draw_phase(which: String, alpha: float, reveal: float = 1.0) -> void:
 			_draw_floor_phase(alpha, reveal)
 
 
-## The block phase, drawn the way a coach draws it: from behind the net, because
-## a blocker's problem is height and lateral position and a top-down court shows
-## neither.
+## The block phase, drawn the way an illustrator draws blockers at a net: a
+## three-quarter view from slightly above, which is roughly the broadcast angle
+## lifted a little.
+##
+## Was a flat elevation, straight on. That is the honest engineering view and it
+## is the wrong one here -- straight on, two blockers at different depths sit at
+## exactly the same height on the page, so the one thing the picture exists to
+## show (who is where along the net, and how the seam between them opens) is the
+## one thing it flattens. A slight rotation and a slight lift give the net a
+## receding edge, and the moment the net recedes the blockers have positions
+## along it.
+##
+## Projection is deliberately not a camera. `_net_point` is an axonometric map --
+## along the net, up, and across it -- with no perspective divide, because a
+## marker drawing does not have a focal length and a vanishing point would make
+## the board look rendered rather than drawn.
+## Screen y grows downward, which is the trap: written as `+ u * skew` the right
+## antenna sank instead of rising and the net read as a fence falling over. The
+## right-hand end of a net seen from the left and slightly above is *further
+## away*, so it sits higher on the page and a little shorter.
+const NET_SKEW: float = 0.13
+## Where the far side of the net lands relative to the near side: up, and back to
+## the left. No perspective divide -- a marker drawing has no focal length, and a
+## vanishing point would make the board look rendered rather than drawn.
+const NET_DEPTH := Vector2(-30.0, -22.0)
+
+
+## u runs along the net (0 left antenna, 1 right), v is height (0 floor, 1 tape
+## top), w is depth across the net (0 near side, 1 far).
+func _net_point(origin: Vector2, span: Vector2, u: float, v: float, w: float) -> Vector2:
+	return origin + Vector2(
+		u * span.x + w * NET_DEPTH.x,
+		-v * span.y - u * span.x * NET_SKEW + w * NET_DEPTH.y
+	)
+
+
 func _draw_block_phase(alpha: float, reveal: float) -> void:
 	var ink := _ink()
 	var board_bottom := size.y - 13.0
-	var net_top := size.y * 0.30
-	var net_bottom := size.y * 0.62
-	var left := size.x * 0.08
-	var right := size.x * 0.62
+	var origin := Vector2(size.x * 0.11, board_bottom - size.y * 0.10)
+	var span := Vector2(size.x * 0.44, size.y * 0.34)
 
-	_marker_text("BLOCK", Vector2(left, size.y * 0.16), 26, ink, alpha, reveal)
+	_marker_text("BLOCK", Vector2(size.x * 0.06, size.y * 0.15), 26, ink, alpha, reveal)
 
-	## The net: two rails and a slack mesh. Drawn as marker rather than as a
-	## grid, so the squares are uneven the way a hand makes them.
-	_marker_line(Vector2(left, net_top), Vector2(right, net_top), ink, alpha, reveal, 11)
-	_marker_line(
-		Vector2(left, net_bottom), Vector2(right, net_bottom), ink, alpha, reveal, 23
-	)
-	## The mesh, thin and faint. At full marker width it was a fence -- the thing
-	## a net is, visually, is two heavy tapes with almost nothing between them.
-	var columns := 9
+	## The two tapes, top and bottom. Both slant, which is what makes the net
+	## recede rather than face the reader.
+	var tape_top_left := _net_point(origin, span, 0.0, 1.0, 0.0)
+	var tape_top_right := _net_point(origin, span, 1.0, 1.0, 0.0)
+	var tape_low_left := _net_point(origin, span, 0.0, 0.46, 0.0)
+	var tape_low_right := _net_point(origin, span, 1.0, 0.46, 0.0)
+	_marker_line(tape_top_left, tape_top_right, ink, alpha, reveal, 11, MARKER_WIDTH * 1.05)
+	_marker_line(tape_low_left, tape_low_right, ink, alpha, reveal, 23, MARKER_WIDTH * 0.75)
+
+	## The mesh. Thin and faint -- what a net is, visually, is two heavy tapes
+	## with almost nothing between them -- and the verticals stay vertical in
+	## world terms, so they lean with the projection.
+	var columns := 11
 	for index in range(columns + 1):
-		var x := lerpf(left, right, float(index) / float(columns))
+		var u := float(index) / float(columns)
 		_marker_line(
-			Vector2(x, net_top), Vector2(x, net_bottom),
-			Color(ink, 0.30), alpha, reveal, 40 + index, MARKER_WIDTH * 0.26
+			_net_point(origin, span, u, 1.0, 0.0),
+			_net_point(origin, span, u, 0.46, 0.0),
+			Color(ink, 0.26), alpha, reveal, 40 + index, MARKER_WIDTH * 0.22
 		)
 	for index in range(1, 3):
-		var y := lerpf(net_top, net_bottom, float(index) / 3.0)
+		var v := lerpf(0.46, 1.0, float(index) / 3.0)
 		_marker_line(
-			Vector2(left, y), Vector2(right, y),
-			Color(ink, 0.22), alpha, reveal, 60 + index, MARKER_WIDTH * 0.24
-		)
-	## The antennae, in red, because they are the boundary the whole phase is
-	## about.
-	for x in [left, right]:
-		_marker_line(
-			Vector2(x, net_top - 26.0), Vector2(x, net_bottom + 6.0),
-			MARKER_RED, alpha, reveal, 71 + int(x)
+			_net_point(origin, span, 0.0, v, 0.0),
+			_net_point(origin, span, 1.0, v, 0.0),
+			Color(ink, 0.20), alpha, reveal, 60 + index, MARKER_WIDTH * 0.20
 		)
 
-	## Two blockers, as a coach draws a person: a circle and a pair of arms up.
-	## Their x positions are the thing being decided, so they are the marks that
-	## carry the red.
-	##
-	## Sat above the tape rather than over the mesh. Drawn across it they were
-	## lost in it -- a blocker and a net square are the same weight of line, and
-	## the thing being decided has to be the thing you see first.
-	var blockers := [0.34, 0.52]
-	for index in range(blockers.size()):
-		var at := lerpf(left, right, float(blockers[index]))
-		var head := Vector2(at, net_top - 42.0)
-		_marker_circle(head, 13.0, ink, alpha, reveal, 90 + index * 13)
-		## Arms up and slightly forward over the tape, which is the only shape a
-		## blocker has: two lines reaching past the net.
+	## Antennae, in red, because they are the boundary the phase is about. They
+	## stand vertically in the world, so on the page they are the only strictly
+	## vertical lines in the drawing -- which is exactly how they read on a court.
+	for entry in [[0.0, 71], [1.0, 79]]:
+		var u: float = entry[0]
+		var salt: int = entry[1]
 		_marker_line(
-			head + Vector2(-15.0, 8.0), head + Vector2(-9.0, 40.0), ink, alpha, reveal, 101 + index
+			_net_point(origin, span, u, 1.34, 0.0),
+			_net_point(origin, span, u, 0.40, 0.0),
+			MARKER_RED, alpha, reveal, salt, MARKER_WIDTH * 0.85
 		)
+
+	## Two blockers on the far side, reaching over. Depth is what the projection
+	## bought: a blocker at w = 1 sits up and left of one at the same u on the
+	## near side, so the wall reads as being beyond the net rather than on it.
+	var blockers := [0.30, 0.52]
+	for index in range(blockers.size()):
+		var u: float = blockers[index]
+		var salt := 90 + index * 29
+		var head := _net_point(origin, span, u, 1.15, 0.55)
+		var radius := 15.0
+		## The arms as **one arch**, hand to hand over the head, because that is
+		## one gesture and an illustrator draws it without lifting. Two separate
+		## arm strokes came out as sticks flying off a figure that was not there.
+		var arch := PackedVector2Array()
+		var steps := 16
+		for step in range(steps + 1):
+			var t := float(step) / float(steps)
+			var angle := lerpf(PI * 0.92, PI * 0.08, t)
+			arch.append(
+				head + Vector2(cos(angle), -sin(angle)) * Vector2(radius * 1.85, radius * 1.55)
+			)
+		_marker_stroke(arch, ink, alpha, reveal, salt + 5, MARKER_WIDTH * 0.85, false)
+		## The head sits inside the arch, and the shoulders hang off its foot.
+		_marker_circle(head, radius, ink, alpha, reveal, salt)
 		_marker_line(
-			head + Vector2(15.0, 8.0), head + Vector2(9.0, 40.0), ink, alpha, reveal, 111 + index
+			head + Vector2(0.0, radius * 0.9),
+			_net_point(origin, span, u, 0.62, 0.55),
+			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 0.75
 		)
 		_marker_text(
-			"%d" % (index + 1), head + Vector2(-6.0, -20.0), 16,
-			MARKER_RED, alpha, reveal
+			"%d" % (index + 1), head + Vector2(-6.0, -radius * 1.9),
+			16, MARKER_RED, alpha, reveal
 		)
 
 	## The seam between them, circled the way somebody circles the thing they
 	## want you to look at.
-	var seam := lerpf(left, right, (blockers[0] + blockers[1]) * 0.5)
-	_marker_ellipse(
-		Vector2(seam, net_top - 22.0), Vector2(40.0, 52.0),
-		MARKER_RED, alpha * 0.9, reveal, 137
-	)
+	var seam_u: float = (float(blockers[0]) + float(blockers[1])) * 0.5
+	var seam := _net_point(origin, span, seam_u, 1.17, 0.48)
+	_marker_ellipse(seam, Vector2(44.0, 38.0), MARKER_RED, alpha * 0.9, reveal, 137)
 
 	_draw_zone_bars(
 		Rect2(size.x * 0.68, size.y * 0.40, size.x * 0.27, board_bottom - size.y * 0.54),
@@ -489,45 +537,108 @@ func _marker_line(
 	from: Vector2, to: Vector2, color: Color, alpha: float,
 	reveal: float, salt: int, width: float = MARKER_WIDTH
 ) -> void:
-	if alpha <= 0.001:
-		return
-	var limit := size.x * reveal
-	var rng := RandomNumberGenerator.new()
-	rng.seed = _seed + salt * 7919
+	_marker_stroke(
+		_wandering_path(from, to, salt), color, alpha, reveal, salt, width, false
+	)
+
+
+## A run the hand did not lift for.
+##
+## The first draft drew every stroke as a chain of short `draw_line` calls with
+## an independent offset per segment. Two things came out of that and both were
+## wrong. The joins between segments overlap, and since the ink is translucent
+## *every join darkened* -- so a plain straight line was a row of dark ticks, and
+## the overlap that is supposed to mean "two strokes crossed here" meant nothing
+## because it was everywhere. And an independent offset per segment is white
+## noise, which reads as a shaky hand rather than a fast one.
+##
+## So a stroke is now one polygon: a ribbon built along a centreline, filled in a
+## single `draw_colored_polygon`. It cannot overlap itself, so a crossing is the
+## only thing that darkens. The centreline wanders on two slow sine components
+## rather than per-point noise, which bends the run instead of shaking it, and
+## the width drifts slowly along it on a third -- the hand leaning in and easing
+## off over a run it never lifted from.
+func _wandering_path(from: Vector2, to: Vector2, salt: int) -> PackedVector2Array:
+	var path := PackedVector2Array()
 	var length := from.distance_to(to)
 	if length < 0.001:
-		return
-	var steps := maxi(int(length / MARKER_SEGMENT), 1)
+		return path
 	var normal := (to - from).orthogonal().normalized()
-	var previous := from
-	var previous_offset := 0.0
-	for step in range(1, steps + 1):
+	var steps := clampi(int(length / MARKER_SEGMENT), 3, 48)
+	## Two components, seeded: one long bow across the whole run and one shorter
+	## correction. A hand drawing a straight line produces exactly this -- it
+	## leaves true, notices, and comes back.
+	var phase_a := _unit(salt * 31 + 3) * TAU
+	var phase_b := _unit(salt * 31 + 9) * TAU
+	var amplitude := MARKER_WANDER * (0.55 + _unit(salt * 31 + 17) * 0.75)
+	for step in range(steps + 1):
 		var t := float(step) / float(steps)
-		var point := from.lerp(to, t)
-		var offset := rng.randf_range(-MARKER_WANDER, MARKER_WANDER)
-		## Ends settle back onto true, because a hand starts and finishes where
-		## it meant to even when the middle of the run wanders.
-		var settle := sin(t * PI)
-		var a := previous + normal * previous_offset
-		var b := point + normal * offset * settle
-		if a.x > limit and b.x > limit:
-			previous = point
-			previous_offset = offset * settle
-			continue
-		if b.x > limit:
-			var span := maxf(b.x - a.x, 0.0001)
-			b = a.lerp(b, clampf((limit - a.x) / span, 0.0, 1.0))
-		## Multiplied, not replaced. Written as `Color(color, MARKER_ALPHA * alpha)`
-		## this discarded whatever alpha the caller had put on the colour, so every
-		## stroke asked for at 42% -- the net mesh, the ghost of the previous
-		## layout -- came out at full strength. The net read as a fence and the
-		## wiped layout read as a second live drawing on top of the first.
-		draw_line(
-			a, b, Color(color, color.a * MARKER_ALPHA * alpha),
-			_tip_width(b - a, width), true
-		)
-		previous = point
-		previous_offset = offset * settle
+		var bow := sin(phase_a + t * PI) * 0.75 + sin(phase_b + t * TAU * 1.7) * 0.25
+		## Both ends settle onto true: a hand starts and finishes where it meant
+		## to even when the middle of the run drifts.
+		path.append(from.lerp(to, t) + normal * bow * amplitude * sin(t * PI))
+	return path
+
+
+## Fill a centreline as one continuous chisel-tipped ribbon.
+##
+## Emitted as a quad per segment rather than as one polygon down the whole run.
+## The single-polygon form works for an open stroke and silently fails for a
+## closed one: left-side-forward plus right-side-backward round a circle is a
+## *ring*, which is not a simple polygon, and Godot's triangulator drops it --
+## which is why a blocker's head vanished while their arms drew fine.
+##
+## Adjacent quads share an edge exactly, so the run still does not darken against
+## itself; where a path genuinely crosses its own tail, the two quads there do
+## overlap and it darkens, which is the lap that says a circle was thrown round
+## something in a hurry.
+func _marker_stroke(
+	path: PackedVector2Array, color: Color, alpha: float, reveal: float,
+	salt: int, width: float, _closed: bool
+) -> void:
+	if alpha <= 0.001 or path.size() < 2:
+		return
+	var limit := size.x * reveal
+	var ink := Color(color, color.a * MARKER_ALPHA * alpha)
+	var count := path.size()
+	var pressure_phase := _unit(salt * 47 + 5) * TAU
+	var previous_left := Vector2.ZERO
+	var previous_right := Vector2.ZERO
+	var have_previous := false
+	for index in range(count):
+		var point := path[index]
+		if point.x > limit:
+			break
+		var ahead := path[mini(index + 1, count - 1)]
+		var behind := path[maxi(index - 1, 0)]
+		var direction := ahead - behind
+		if direction.length_squared() < 0.000001:
+			direction = Vector2.RIGHT
+		var normal := direction.orthogonal().normalized()
+		## Pressure: a slow drift along the run, never a step. The hand leaning
+		## in and easing off over something it never lifted from.
+		var t := float(index) / float(count - 1)
+		var pressure := 1.0 + sin(pressure_phase + t * TAU * 0.8) * 0.16
+		var half := _tip_width(direction, width) * 0.5 * pressure
+		var left := point + normal * half
+		var right := point - normal * half
+		if have_previous:
+			draw_colored_polygon(
+				PackedVector2Array([previous_left, left, right, previous_right]), ink
+			)
+		previous_left = left
+		previous_right = right
+		have_previous = true
+
+
+## A stable 0-1 from the board's seed and a salt. Hand-mixed rather than an rng
+## object, because these are read a few thousand times a frame.
+func _unit(step: int) -> float:
+	var accumulated := (_seed * 2654435761) ^ (step * 40503)
+	accumulated = accumulated & 0x7FFFFFFF
+	accumulated = accumulated ^ (accumulated >> 13)
+	accumulated = (accumulated * 1103515245 + 12345) & 0x7FFFFFFF
+	return float(accumulated % 65537) / 65537.0
 
 
 ## The chisel: full width across the tip, `MARKER_MIN_RATIO` of it along.
@@ -561,23 +672,31 @@ func _marker_circle(
 	_marker_ellipse(centre, Vector2(radius, radius), color, alpha, reveal, salt)
 
 
-## Drawn as a run of chords rather than as an arc, and deliberately overshooting
-## its own start, because a hand-drawn circle closes past where it began.
+## One lap of the pen, drawn as a single ribbon.
+##
+## Was a run of separate chords, which meant fifteen overlapping joins round
+## every circle and a ring of dark ticks. The overshoot past its own start is
+## kept -- that lap over the beginning is the entire tell of a circle thrown
+## round something quickly -- but now it is the one place the shape crosses
+## itself, so it is the one place that darkens.
 func _marker_ellipse(
 	centre: Vector2, radii: Vector2, color: Color, alpha: float,
 	reveal: float, salt: int
 ) -> void:
-	var segments := 15
-	var rng := RandomNumberGenerator.new()
-	rng.seed = _seed + salt * 6151
-	var start := rng.randf_range(0.0, TAU)
-	var sweep := TAU + rng.randf_range(0.25, 0.55)
-	var previous := centre + Vector2(cos(start), sin(start)) * radii
-	for index in range(1, segments + 1):
+	var segments := 40
+	var start := _unit(salt * 13 + 1) * TAU
+	var sweep := TAU + 0.25 + _unit(salt * 13 + 7) * 0.30
+	## A hand-thrown circle is never round and never axis-aligned.
+	var tilt := (_unit(salt * 13 + 21) - 0.5) * 0.5
+	var squash := 0.92 + _unit(salt * 13 + 33) * 0.16
+	var path := PackedVector2Array()
+	for index in range(segments + 1):
 		var angle := start + sweep * float(index) / float(segments)
-		var point := centre + Vector2(cos(angle), sin(angle)) * radii
-		_marker_line(previous, point, color, alpha, reveal, salt + index * 3, MARKER_WIDTH * 0.78)
-		previous = point
+		var local := Vector2(cos(angle), sin(angle) * squash) * radii
+		path.append(centre + local.rotated(tilt))
+	_marker_stroke(
+		path, color, alpha, reveal, salt, MARKER_WIDTH * 0.80, true
+	)
 
 
 func _marker_arrow(
