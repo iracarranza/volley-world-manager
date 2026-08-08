@@ -83,7 +83,7 @@ const SHOULDER_LIFT_DEGREES: float = -124.0
 ## can then stand up out of it. The power comes from the shoulder pivoting forward
 ## and the forearm extending, so the load has to leave both of those with somewhere
 ## to travel.
-const SHOULDER_COCK_DEGREES: float = -132.0
+const SHOULDER_COCK_DEGREES: float = -122.0
 const SHOULDER_CONTACT_DEGREES: float = -204.0
 const SHOULDER_FOLLOW_DEGREES: float = -252.0
 
@@ -97,20 +97,21 @@ const SHOULDER_FOLLOW_DEGREES: float = -252.0
 ## carries the hand forward and up out of the elbow, which is the direction a
 ## cocked arm actually folds.
 ##
-## **A right angle, not a lean.** At -46 the forearm finished within a couple of
-## degrees of vertical, so upper arm and forearm were near enough collinear to
-## read as one straight segment at the size these are drawn -- the arm looked
-## straight from the load all the way to the extension, which is exactly the
-## thing a cock is not. At -90 against a -132 shoulder the two segments make a
-## chevron: the upper arm goes up and back at 42 degrees above horizontal, the
-## forearm comes up and *forward* at 48, and the hand finishes ahead of its own
-## elbow rather than above it.
+## **A fold the head is not inside.** At -46 the forearm finished within a couple
+## of degrees of vertical against a shoulder already up and back, so the two
+## segments were near enough collinear to read as one straight thing. At -90 they
+## made a chevron -- and the chevron folded the forearm *across the head*, which
+## reads worse than a straight arm because the one segment that should be
+## unmistakable is the one hidden behind a skull.
 ##
-## The travel from here to contact is 94 degrees over a tenth of a phase, which
-## is the widest excursion in the swing over the narrowest window and is what a
-## whip is. The continuity guard samples at 0.005 and caps a jump at 9 degrees;
-## this peaks well inside that.
-const ELBOW_COCK_DEGREES: float = -90.0
+## -64 against a -122 shoulder puts the upper arm nearer horizontal and behind,
+## and stands the forearm up out of it: measured, the elbow sits 0.26 m behind the
+## shoulder and the hand another 0.23 m behind that and 0.47 m up, so the forearm
+## is *above* the upper arm and clear of the head rather than crossing it. Still a
+## real bend -- 64 degrees is a bend anyone would draw -- and still folding
+## forward-and-up out of the joint, which was the previous correction and is not
+## being undone.
+const ELBOW_COCK_DEGREES: float = -64.0
 const ELBOW_CONTACT_DEGREES: float = 7.0
 const ELBOW_FOLLOW_DEGREES: float = 58.0
 
@@ -187,7 +188,14 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	## It was narrower still until the continuity check pointed out that a
 	## segment moving 7 degrees per sample is indistinguishable from one
 	## teleporting, at the sampling rate playback actually runs at.
-	var strike := window(p, COCK_END, 0.0)
+	## The shoulder finishes its drive **before** the ball, not on it.
+	##
+	## Ending at zero meant the arm was still travelling at the instant of contact
+	## and the extension completed afterwards, so the frames either side of the
+	## strike were drawn mid-swing with a bent elbow. A hitter is at full extension
+	## when the hand meets the ball; the last three hundredths are the arm arriving
+	## and waiting, not still arriving.
+	var strike := window(p, COCK_END, -0.03)
 	## **The elbow holds its fold while the shoulder travels, then extends.**
 	##
 	## It opened over (-0.11, 0.02) against a shoulder driving over (-0.14, 0.00) --
@@ -198,10 +206,14 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	## The frame-by-frame strip is what made it obvious; a single frame cannot show
 	## an ordering.
 	##
-	## Now it stays folded until the shoulder is most of the way forward and snaps
-	## open over the last tenth. That is what a whip is, and it is the difference
-	## between an arm that hits the ball and an arm that arrives with it.
-	var elbow_release := window(p, -0.075, 0.035)
+	## Now it stays folded until the shoulder is most of the way forward and then
+	## snaps open -- and it finishes **before** contact. Measured on the old window
+	## the elbow was still at -16 degrees at phase zero and only reached full
+	## extension a tenth later, so the two frames nearest the ball were the two that
+	## looked least like a spike. The lag over the shoulder is what makes it a whip
+	## and it survives: the shoulder's travel centres on -0.085 and the elbow's on
+	## -0.068, so the elbow is still the last joint to go.
+	var elbow_release := window(p, -0.115, -0.02)
 	var follow := window(p, 0.0, FOLLOW_END)
 	var land := window(p, FOLLOW_END, 1.0)
 	## The arm finishes after the feet do.
