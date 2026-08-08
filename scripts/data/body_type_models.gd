@@ -798,7 +798,12 @@ static func _limb_mesh(
 				Vector3(cos(b) * upper.y, upper.x - height * 0.5, sin(b) * upper.y),
 				Vector3(cos(a) * upper.y, upper.x - height * 0.5, sin(a) * upper.y),
 			]
-			for corner in [0, 2, 1, 0, 3, 2]:
+			## Wound outward. Reversed, this built every limb inside-out: the
+			## flat-shaded fill hid it, and an inverted-hull outline did not --
+			## the ink twin showed its near side and filled the limb solid black
+			## instead of drawing a rim round it. Normals face out now, which
+			## lighting wanted anyway.
+			for corner in [0, 1, 2, 0, 2, 3]:
 				surface.add_vertex(points[corner])
 	surface.generate_normals()
 	return surface.commit()

@@ -2808,3 +2808,33 @@ Also unaddressed, in rough order of how much they cost:
 Judge these on `bodies3d`-style renders -- the rig lit and large -- not on sticker
 bakes. The bake posterises to twelve steps at about a hundred pixels, which is
 precisely where the difference between a rod and a limb disappears.
+
+## Drawn, not modelled: the inverted hull, and what it makes redundant
+
+Drafted and rendered, not chosen. `tools/preview/outline_drafts.tscn` puts four
+of them side by side.
+
+Every mesh gets a twin, grown outward a fixed distance, painted flat and rendered
+inside-out so only its far side shows. What is left is a band around the
+silhouette of *that part*, so the line follows each limb and an arm crossing the
+torso keeps its own edge instead of dissolving into it -- which is exactly what
+the sticker trace does in 2D, obtained in 3D for nothing. `grow_amount` is in
+metres, so the line is constant in world space: a voli at the back of the court
+carries the same weight of line as one at the net.
+
+The drafts: 0.008 m reads as a drawn figure that is still a body; 0.018 m is the
+sticker look in three dimensions, and the joints stop being beads and start being
+articulation; lighting under a hard line brings back the posterised mud that flat
+shading was introduced to kill, one layer up.
+
+**What it costs:** about forty lines and no shader. **What it makes redundant:**
+most of the geometry work queued above. A torso that narrows to a waist, better
+hands, a real neck -- all of it is detail *under* a heavy line, and a heavy line
+is what carries legibility. The shoulder join still matters, because a line
+around a floating arm is still a line around a floating arm.
+
+Found by drafting it: the lathed limb was wound **inside-out**. Flat unshaded fill
+hid it completely and the outline did not -- the ink twin showed its near face and
+filled each limb solid black instead of drawing a rim. Normals face out now, which
+lighting wanted anyway and nothing had checked. A rendering technique that fails
+loudly on bad geometry is worth something on its own.
