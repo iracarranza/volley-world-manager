@@ -2838,3 +2838,31 @@ hid it completely and the outline did not -- the ink twin showed its near face a
 filled each limb solid black instead of drawing a rim. Normals face out now, which
 lighting wanted anyway and nothing had checked. A rendering technique that fails
 loudly on bad geometry is worth something on its own.
+
+## The hip block is a ledge, and the type dial may not reach its own range
+
+Drafted in `tools/preview/body_type_drafts.tscn`: Feli, Avi and Cani in the
+receive pose, top row as built and bottom row with the hip hidden and
+`type_expression` at 0.92 instead of 0.45.
+
+**The hip is worth fixing and is small.** It is a box wider than the torso sitting
+at the waist, and under a heavy line it earns an outline of its own -- which is
+what turns shorts into a shelf. All three read better without it. Either size it
+inside the torso profile at that height (`_torso_radius_at` already does this for
+the collar) or drop the mesh and let the kit colour carry it.
+
+**The exaggeration is a real mechanism and an unproven one.** Every body type is
+authored as a complete skeleton and then pulled toward `UNIVERSAL_RATIOS` by
+`type_expression`, whose own comment says 1.0 is the type exactly as authored and
+0.0 is three identical figures. So turning it up invents nothing.
+
+But 0.45 to 0.92 is more than double the type's share and the bottom row barely
+moves -- a couple of centimetres of torso and nothing anyone would name. That is
+the shape of a knob that cannot reach its stated range: if the authored skeletons
+already sit near the universal ratios, there is nothing for the dial to travel.
+
+**Measure before turning it.** Print each type's authored proportions against
+`UNIVERSAL_RATIOS` and see how far apart they actually are. If they are close, the
+fix is bolder authoring and not a bigger multiplier -- and raising the dial would
+be a change that looks like it did something and did not, which is this
+repository's oldest defect and one it has hit twice in this session already.

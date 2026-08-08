@@ -388,7 +388,12 @@ const UNIVERSAL_RATIOS := {
 ## a minority share. Identity is meant to arrive through the parts that are
 ## *added* (a tail, a beak and crest, a produce torso), which stay at full
 ## strength below, not through rebuilding the frame.
-const TYPE_EXPRESSION: float = 0.45
+## A `static var` rather than a `const` so a draft can turn it and look. It is
+## the one honest answer to "can the types be exaggerated systematically" -- they
+## can, because every type *is* authored as a full skeleton and then pulled toward
+## the shared one. Turning this up does not invent anything; it stops discarding
+## what each type already says about itself.
+static var type_expression: float = 0.45
 
 
 ## The full description of one player's body: meshes, attachment points,
@@ -518,7 +523,7 @@ static func _toward_universal(spec: Dictionary) -> Dictionary:
 
 
 static func _pull(authored: float, universal: float) -> float:
-	return universal + (authored - universal) * TYPE_EXPRESSION
+	return universal + (authored - universal) * type_expression
 
 
 ## A vegetable that plays volleyball.
