@@ -83,7 +83,7 @@ const SHOULDER_LIFT_DEGREES: float = -124.0
 ## can then stand up out of it. The power comes from the shoulder pivoting forward
 ## and the forearm extending, so the load has to leave both of those with somewhere
 ## to travel.
-const SHOULDER_COCK_DEGREES: float = -136.0
+const SHOULDER_COCK_DEGREES: float = -132.0
 const SHOULDER_CONTACT_DEGREES: float = -204.0
 const SHOULDER_FOLLOW_DEGREES: float = -252.0
 
@@ -93,15 +93,24 @@ const SHOULDER_FOLLOW_DEGREES: float = -252.0
 ## **Negative, and the sign was measured rather than reasoned.** The comment on
 ## `_set_elbow` says positive folds the forearm forward, and with the upper arm
 ## already tipped past vertical at the old cock that sent the hand backward and
-## down instead. Sampling the rig's own node positions settles it: at -128/-46 the
-## hand lands 0.22 m above the elbow and 0.04 m behind it -- a forearm standing
-## very nearly vertical, hand up by the ear. At -152/+118 it landed 0.19 m *below*
-## the elbow and 0.13 m further back.
+## down instead. Sampling the rig's own node positions settles it: negative
+## carries the hand forward and up out of the elbow, which is the direction a
+## cocked arm actually folds.
 ##
-## The travel from here to contact is 53 degrees rather than 111. That is still
-## the widest joint excursion in the swing over the narrowest window, and it is
-## still the whip; it is simply a whip that starts from a shape a hitter makes.
-const ELBOW_COCK_DEGREES: float = -46.0
+## **A right angle, not a lean.** At -46 the forearm finished within a couple of
+## degrees of vertical, so upper arm and forearm were near enough collinear to
+## read as one straight segment at the size these are drawn -- the arm looked
+## straight from the load all the way to the extension, which is exactly the
+## thing a cock is not. At -90 against a -132 shoulder the two segments make a
+## chevron: the upper arm goes up and back at 42 degrees above horizontal, the
+## forearm comes up and *forward* at 48, and the hand finishes ahead of its own
+## elbow rather than above it.
+##
+## The travel from here to contact is 94 degrees over a tenth of a phase, which
+## is the widest excursion in the swing over the narrowest window and is what a
+## whip is. The continuity guard samples at 0.005 and caps a jump at 9 degrees;
+## this peaks well inside that.
+const ELBOW_COCK_DEGREES: float = -90.0
 const ELBOW_CONTACT_DEGREES: float = 7.0
 const ELBOW_FOLLOW_DEGREES: float = 58.0
 
