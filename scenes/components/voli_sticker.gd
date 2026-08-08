@@ -123,6 +123,13 @@ func set_palette(is_light: bool) -> void:
 	if light_mode == is_light:
 		return
 	light_mode = is_light
+	clear()
+
+
+## Drop the cache without changing anything about how the next bake runs. Used
+## when *who* is being drawn changes rather than how -- a new lineup is new
+## people, and a sticker is a photograph of one specific voli.
+func clear() -> void:
 	_baked.clear()
 	_queue.clear()
 	stickers_reset.emit()
@@ -203,6 +210,11 @@ func _bake(job: Dictionary) -> void:
 	_ensure_rig()
 	var profile: Dictionary = job["profile"]
 	_actor.configure(1, true, "", str(profile.get("dominant_hand", "Right")), profile)
+	## `configure` paints the kit from the dark palette unconditionally, which is
+	## right for the court and wrong here -- a sticker is going onto a sheet whose
+	## theme the caller already knows. Repainting after is the cheap fix and keeps
+	## the kit the same colour as the rest of the interface it is sitting in.
+	_actor.apply_ui_palette(light_mode)
 	## Neither belongs in a silhouette: the shadow is a separate mesh on the floor
 	## and would trace as its own island, and the focus ring is interface.
 	(_actor.get_node("Shadow") as Node3D).visible = false
@@ -411,36 +423,43 @@ func _normalise(points: PackedVector2Array, width: int, height: int) -> PackedVe
 	return out
 
 
+## Douglas-Peucker, on an explicit stack rather than the call stack.
+##
+## It was recursive, and that was fine while the only baked pose was a blocker
+## traced at a few hundred boundary pixels. Adding the attack and defence poses
+## broke it: a crouched dig has a long, convoluted outline, and the split can
+## degenerate to one point per level, so the depth is O(n) in the contour length
+## rather than O(log n). Godot overflowed and every sticker on the sheet came back
+## empty -- and an empty sticker draws as nothing, so the failure was silent
+## except in the log.
+##
+## Nothing about the algorithm changes; only where the pending spans are kept.
 func _simplify(points: PackedVector2Array, tolerance: float) -> PackedVector2Array:
 	if points.size() < 3:
 		return points
 	var keep := {0: true, points.size() - 1: true}
-	_split(points, 0, points.size() - 1, tolerance, keep)
+	var pending: Array[Vector2i] = [Vector2i(0, points.size() - 1)]
+	while not pending.is_empty():
+		var span: Vector2i = pending.pop_back()
+		if span.y <= span.x + 1:
+			continue
+		var worst := 0.0
+		var worst_index := -1
+		for index in range(span.x + 1, span.y):
+			var distance := _line_distance(points[index], points[span.x], points[span.y])
+			if distance > worst:
+				worst = distance
+				worst_index = index
+		if worst < tolerance or worst_index < 0:
+			continue
+		keep[worst_index] = true
+		pending.append(Vector2i(span.x, worst_index))
+		pending.append(Vector2i(worst_index, span.y))
 	var out := PackedVector2Array()
 	for index in range(points.size()):
 		if keep.has(index):
 			out.append(points[index])
 	return out
-
-
-func _split(
-	points: PackedVector2Array, first: int, last: int,
-	tolerance: float, keep: Dictionary
-) -> void:
-	if last <= first + 1:
-		return
-	var worst := 0.0
-	var worst_index := -1
-	for index in range(first + 1, last):
-		var distance := _line_distance(points[index], points[first], points[last])
-		if distance > worst:
-			worst = distance
-			worst_index = index
-	if worst < tolerance or worst_index < 0:
-		return
-	keep[worst_index] = true
-	_split(points, first, worst_index, tolerance, keep)
-	_split(points, worst_index, last, tolerance, keep)
 
 
 func _line_distance(point: Vector2, a: Vector2, b: Vector2) -> float:

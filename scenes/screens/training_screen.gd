@@ -49,6 +49,7 @@ var _view_group: ButtonGroup = null
 var _tray: UIRosterTray = null
 var _sticky: UIStickyNote = null
 var _overlay_check: CheckButton = null
+var _drill_label: Label = null
 var _activity_rail: VBoxContainer = null
 var _detail: VBoxContainer = null
 var _sidebar: VBoxContainer = null
@@ -230,12 +231,54 @@ func _build_tactics_page() -> Control:
 	_overlay_check.toggled.connect(func(on: bool) -> void: _worksheet.set_overlay(on))
 	tools.add_child(_overlay_check)
 
+	## What the sheet currently says, written out.
+	##
+	## The marks are the control, so the words are not a second control -- they are
+	## the receipt. A page whose whole state lives in a drawing needs one line
+	## somewhere that a manager can read back without decoding it, which is the same
+	## argument §0.10 makes for the adjustment line.
+	_drill_label = Label.new()
+	_drill_label.name = "DrillLabel"
+	page.add_child(_drill_label)
+	_worksheet.drill_changed.connect(_drill_written)
+	_drill_written(
+		_worksheet.drill_zone, _worksheet.drill_target, _worksheet.drill_shot
+	)
+
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
 	declared.text = _selected_preset
 	page.add_child(declared)
 	_sync_view_availability()
 	return page
+
+
+## "Ivo drills a roll from 4, into deep cross." One sentence, rebuilt from the
+## sheet rather than assembled as the manager clicks -- so it cannot drift from
+## what is drawn.
+func _drill_written(zone_index: int, target: Vector2, shot_index: int) -> void:
+	if _drill_label == null or _worksheet == null:
+		return
+	var zone: Dictionary = WorksheetScript.NET_ZONES[
+		clampi(zone_index, 0, WorksheetScript.NET_ZONES.size() - 1)
+	]
+	var shot: Dictionary = WorksheetScript.SHOTS[
+		clampi(shot_index, 0, WorksheetScript.SHOTS.size() - 1)
+	]
+	var who := "Nobody yet"
+	for profile in _tray_profiles():
+		if str(profile.get("key", "")) == _worksheet.drill_who:
+			who = str(profile.get("display_name", who))
+			break
+	## Named the way a coach names a place on the floor, not as coordinates. The
+	## metres are what the model stores; "deep cross" is what a person says.
+	var depth := "deep" if absf(target.y) > 6.0 else "short"
+	var side := "line" if signf(target.x) == signf(float(zone["along"])) else "cross"
+	if absf(target.x) < 1.5:
+		side = "middle"
+	_drill_label.text = "%s drills a %s from %s, into %s %s." % [
+		who, str(shot["label"]), str(zone["label"]), depth, side,
+	]
 
 
 func _sticky_chosen(heading: String, option: String) -> void:
@@ -250,6 +293,11 @@ func _sticky_chosen(heading: String, option: String) -> void:
 ## The same rig, the same trace, a tighter camera -- a face is a very small
 ## silhouette. Standing up a second baker would mean a second SubViewport and a
 ## second copy of the actor for no gain.
+## Hand the sheet the lineup, and take the faces back out of its bake queue.
+##
+## One queue, not two. The tray's headshots and the sheet's figures are the same
+## seven volis rendered from the same rig; standing up a second baker would mean
+## a second SubViewport and a second copy of the actor for nothing.
 func _request_headshots() -> void:
 	if _worksheet == null or _worksheet.stickers() == null:
 		return
@@ -257,26 +305,76 @@ func _request_headshots() -> void:
 	## `_ready` has not run at build time -- the page is assembled before it is
 	## added to the tab container -- so its baker is still null. The same reason
 	## this whole call is deferred.
-	if not _worksheet.stickers().stickers_reset.is_connected(_request_headshots):
-		_worksheet.stickers().stickers_reset.connect(_request_headshots)
-	var squad := _tray_profiles()
-	for slot in range(squad.size()):
-		var profile: Dictionary = squad[slot]
-		_worksheet.stickers().request(
-			"head_%d" % slot, RallyEventModelScript.EventType.SERVE, 0.0, -1.0,
-			profile, -8.0, -4.0, true
-		)
+	_worksheet.set_squad(_tray_profiles())
 
 
-## Placeholders until the tray is reading a real rotation. Varied deliberately --
-## the whole reason to bake a face rather than draw an icon is that these are
-## different people, and seven identical heads would prove nothing.
+## The seven the sheet can draw, read off the real lineup where there is one.
+##
+## `key` is what a sticker is filed under, and it is the player's id rather than
+## the tray slot: a slot is a place in a formation and the same voli can be moved
+## between two of them, at which point a slot-keyed bake is a photograph of the
+## wrong person.
 func _tray_profiles() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for player in _lineup():
+		out.append({
+			"key": "v%d" % int(player.id),
+			"height_cm": player.height_cm,
+			"wingspan_cm": player.wingspan_cm,
+			"stride_length_m": player.stride_length_m,
+			"body_type": player.body_type,
+			"dominant_hand": player.dominant_hand,
+			"standing_reach_meters": player.standing_reach_cm() / 100.0,
+			"jumping_reach_meters": player.jumping_reach_cm() / 100.0,
+			"display_name": player.display_name,
+		})
+	if not out.is_empty():
+		return out
+	return _placeholder_profiles()
+
+
+## Six on court plus a libero, in rotation order, from whatever the manager has
+## actually declared. Falls back to the head of the roster so a career with no
+## declared lineup still draws seven different people rather than nothing.
+func _lineup() -> Array:
+	if _game_manager == null:
+		return []
+	var team: Resource = _game_manager.get("team")
+	if team == null:
+		return []
+	var picked: Array = []
+	var seen := {}
+	for raw_id in Array(team.get("starting_player_ids")):
+		var player: VolleyballPlayer = _game_manager.player_by_id(int(raw_id))
+		if player != null and not seen.has(player.id):
+			seen[player.id] = true
+			picked.append(player)
+	for raw_id in Array(team.get("libero_ids")):
+		if picked.size() >= 7:
+			break
+		var libero: VolleyballPlayer = _game_manager.player_by_id(int(raw_id))
+		if libero != null and not seen.has(libero.id):
+			seen[libero.id] = true
+			picked.append(libero)
+	for player in _game_manager.players:
+		if picked.size() >= 7:
+			break
+		if not seen.has(player.id):
+			seen[player.id] = true
+			picked.append(player)
+	return picked
+
+
+## Varied deliberately -- the whole reason to bake a face rather than draw an
+## icon is that these are different people, and seven identical heads would prove
+## nothing. Only reached before a career is bound.
+func _placeholder_profiles() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var bodies := ["Vegi", "Cani", "Avi"]
 	var names := ["Ivo", "Mira", "Sena", "Boro", "Tavi", "Nemi", "Lira"]
 	for slot in range(7):
 		out.append({
+			"key": "p%d" % slot,
 			"height_cm": 178.0 + float((slot * 7) % 26),
 			"wingspan_cm": 182.0 + float((slot * 5) % 28),
 			"stride_length_m": 0.80 + float(slot % 4) * 0.035,
@@ -290,15 +388,18 @@ func _tray_profiles() -> Array[Dictionary]:
 
 
 func _headshot_baked(key: String) -> void:
-	if not key.begins_with("head_") or _tray == null:
+	if not key.ends_with("_head") or _tray == null:
 		return
-	var slot := int(key.trim_prefix("head_"))
+	var who := key.trim_suffix("_head")
 	var built: UIVoliSticker.Sticker = _worksheet.stickers().sticker(key)
 	if built == null:
 		return
 	var squad := _tray_profiles()
-	var display_name := str(squad[slot].get("display_name", "")) if slot < squad.size() else ""
-	_tray.set_headshot(slot, built.texture, display_name)
+	for slot in range(squad.size()):
+		if str(squad[slot].get("key", "")) != who:
+			continue
+		_tray.set_headshot(slot, built.texture, str(squad[slot].get("display_name", "")))
+		return
 
 
 ## A voli dropped from the tray onto the sheet.
@@ -314,7 +415,9 @@ func _drop_voli(slot: int, at: Vector2) -> void:
 	if local.x < 0.0 or local.y < 0.0 \
 			or local.x > _worksheet.size.x or local.y > _worksheet.size.y:
 		return
-	_worksheet.place_voli(slot, local)
+	var squad := _tray_profiles()
+	var who := str(squad[slot].get("key", "")) if slot < squad.size() else ""
+	_worksheet.place_voli(slot, local, who)
 
 
 ## Picking a phase, and picking a view.

@@ -397,18 +397,22 @@ The rule that falls out: **a placement is stored in court metres, never in
 panel shares.** A share is only the same place while the panel and the camera
 both hold still, and neither does.
 
-### The empty cells are a design gap, not a state to handle
+### The empty cells were a design gap, and §0.11 closed them
 
-Six of the twelve cells are blank. Two pieces of interface behaviour exist only
-to cope with that:
+Six of the twelve cells were blank, and two pieces of interface behaviour
+existed only to cope with that -- **greying** (a view that cannot express a phase
+says so rather than accepting the click and drawing nothing) and **auto-switch**
+(choosing a view whose current phase is blank moves the phase). Both were honest
+and both were debt: every cell filled is one fewer behaviour that has to explain
+itself.
 
-- **Greying.** A view that cannot express a phase says so rather than accepting
-  the click and drawing nothing.
-- **Auto-switch.** Choosing a view whose current phase is blank moves the phase.
-
-Both are honest and both are debt. **Every cell filled is one fewer behaviour
-that has to explain itself**, and the target is a table with no holes -- at
-which point greying and auto-switching are deleted rather than tuned.
+The drill filled them. Where a swing comes from and where it is aimed are both
+places on a court, all three views draw the court, so all three can set it. The
+table above is now full, which means greying and auto-switch never fire. They
+are kept -- a new phase or a genuinely view-specific control would reopen a hole,
+and the behaviour should be there when it does -- but they are no longer load
+bearing, and the wording of each cell now says what that view is *better* at
+rather than whether it can say anything at all.
 
 Two rules the auto-switch has to follow while it exists, because a control that
 silently moves *another* control is how a player loses their model of a screen:
@@ -426,6 +430,71 @@ to say about it. Either it earns cells in the other two -- passer depth against 
 jump serve is an along-the-net question and a real one -- or it is not a peer of
 the other three and belongs somewhere else entirely. Worth settling before the
 zoom level below multiplies it.
+
+## 0.11 The drill: a place on the net, a place on the floor, and a shot
+
+The sheet's marks became its controls. There are two grids on every view and
+they are the same two on all three, because every phase is an opinion about the
+same pair of places:
+
+- **The net zones** — 4, 3, 2 and the pipe — where a swing leaves. Marked on the
+  tape and clicked there. "Right pin" is a place, and the honest control for a
+  place is the place, which is the same argument that replaced the block
+  priority `OptionButton` with four bars.
+- **The target grid** on the receiving floor, where it lands. Dragged.
+
+Between them runs a **dashed arrow**, and dashed is doing work: everything else
+on the sheet states something about the court (the net is 2.43 m, the attack
+line is three metres back) and this states something about the future.
+
+**Dropping a voli on a pin makes them the one swinging.** No separate "assign
+hitter" control, because there is nothing one would say that the drop does not.
+Any voli can be dropped on any pin — if you want your setter grooving a right-pin
+swing for a 6-2, the sheet lets you write that down, and refusing it would be the
+interface having an opinion about volleyball that the manager did not ask for.
+
+**Scrolling cycles the shot: spike, roll, tip.** What changes is the *shape* of
+the arrow, because those three take visibly different paths out of one hand.
+
+### What the drill is and is not
+
+It is **familiarity, not tactics.** Writing "Ivo drills a roll from 4 into deep
+cross" does not mean Ivo will play a roll shot there in a match; it means those
+are the reps, and the rally model will find him more comfortable with that
+contact from that place. This is the same split §0.1 draws everywhere else on
+this clipboard: what is *practised* and what is *chosen* are different state, and
+mixing them is how a training screen becomes a cheat menu.
+
+The three phases read one arrow from three sides:
+
+| phase | the same arrow |
+|---|---|
+| **Attack** | outgoing, from your pin to their floor — what is being grooved |
+| **Floor** | incoming, from their pin to your floor — the course being read |
+| **Block** | outgoing, with a wall in its path |
+
+One arrow mirrored, rather than three concepts. What a defender is told to
+expect is exactly what an attacker is told to hit, and drawing them as two
+different things would hide that.
+
+### Open, and deliberately not guessed at
+
+Three questions the concept raised that the build does not answer, recorded
+rather than resolved by fiat:
+
+1. **Do opponents get placed?** A blocker in the arrow's path, a defender under
+   it. It is the obvious way to make floor defence legible — a shot course with
+   nobody to beat is hard to have an opinion about — but it also turns a plan for
+   *your* volis into a plan against a specific imagined opponent, which is a
+   different object and possibly a different page.
+2. **Does the block redirect the arrow?** Drawing a deflection where a blocker
+   stands is honest about what a block does. Whether the sheet should say *kill
+   versus soft block* is the doubtful part: that is technique, and technique is
+   what a drill session trains rather than what a plan declares.
+3. **If blocking technique is drilled rather than planned, why is shot selection
+   planned?** The asymmetry is real and unresolved. Either both are drill
+   parameters and the sheet is choosing reps in both cases, or the shot is
+   overreaching. Worth settling before opponent placement multiplies it.
 
 ### The zoom is a third axis, and it is the one that can run away
 

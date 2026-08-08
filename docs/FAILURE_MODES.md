@@ -473,3 +473,30 @@ in size on screen, so the honest encoding is a share with a floor and a ceiling.
 A stub written as a plausible-looking assignment (`var light_mode := true`) is
 the same defect wearing different clothes: it reads as a decision and it is
 actually an unasked question.
+
+## 18. Recursion depth is an input the caller never sees
+
+**What it looks like.** The sticker baker simplifies each traced silhouette with
+Douglas-Peucker, written the obvious recursive way: find the worst point, keep
+it, recurse on both halves. It worked for a year, because the only pose ever
+baked was a blocker at full extension -- a tall, simple outline that splits
+close to evenly and bottoms out in a few dozen levels.
+
+Adding an attack pose and a dig pose broke it instantly. A crouched body has a
+long, convoluted boundary, and the split degenerates toward one point per level,
+so the depth is O(n) in the contour length rather than O(log n). Godot raised
+"Stack overflow. Check for infinite recursion in your script." -- which is the
+wrong diagnosis, there was no infinite recursion -- and every sticker on the
+sheet came back empty. **An empty sticker draws as nothing**, so the visible
+symptom was a page with no volis on it and no error anywhere near the drawing.
+
+**Why it survived.** Nothing in the signature of `_simplify(points, tolerance)`
+says anything about how deep it will go, and the one input that controls that --
+how gnarly the shape is -- is not a parameter, it is a property of the picture.
+The pose set was the real argument and it was three files away.
+
+**The rule:** a recursive helper's depth is an input, and if it is bounded by
+data the caller does not control, write the loop. The rewrite here is the same
+algorithm on an explicit stack and is four lines longer. Separately: a component
+whose failure mode is *drawing nothing* needs to say so out loud -- silence and
+success look identical, and the log was the only place the truth existed.
