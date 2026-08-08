@@ -1211,6 +1211,48 @@ voli in roughly 312, which is rare enough that its behaviour has never been
 observed and probably never validated. Worth deciding whether that is the
 intended rate.
 
+## Trace the voli silhouette from the rig instead of drawing stick figures
+
+Spiked and measured, not guessed. The worksheet draws blockers and defenders as
+a circle and a few lines, which is the one thing on the clipboard that is a
+symbol rather than a likeness -- and the game already owns a posed 3D body with
+the right height, wingspan, body type and handedness in it.
+
+**It works.** Render the posed `PlayerActor3D` into a `SubViewport` with a
+transparent background, threshold the alpha, trace the boundary, and simplify:
+
+| | block | attack | dig |
+|---|---|---|---|
+| raw boundary points | 652 | 606 | 446 |
+| after Douglas-Peucker at 1.6 px | 55 | 54 | **42** |
+| render + trace | 8.2 ms | 9.1 ms | 9.9 ms |
+
+Forty-two points is nothing to draw, and the output is a *closed polyline*, which
+means it goes straight into `_marker_stroke` -- so the outline comes out in
+pencil with the tooth and the pressure drift on it rather than as a hard vector
+edge. That is the whole reason to trace rather than to model: the drawing stays a
+drawing.
+
+**Nine milliseconds is a bake, not a frame.** At 60 fps that is most of the
+budget for one figure, so the contour is cached per (pose x body type x view) and
+recomputed only when one of those changes. Nothing about it is per-frame.
+
+**The payoff over stick figures is not fidelity, it is identity.** The trace runs
+against the real physical profile, so a 201 cm Vegi middle and a 172 cm Cani
+libero come out as visibly different people on the same sheet -- for free, from
+data that already exists. A stick figure cannot carry that at all.
+
+**Known gap.** A pose where a limb separates from the torso in screen space --
+a blocker with both arms up -- traces as several islands rather than one, and the
+spike's border-follow handles the body cleanly and the detached limbs poorly. A
+production version wants proper marching squares over the alpha rather than a
+neighbour walk. Bounded, known work; it does not change any of the numbers above.
+
+Also worth noting for whoever builds it: `PlayerActor3D.set_pose` returns early
+unless `is_contact_actor` is true, and all the pose-specific limb work is behind
+that gate. Posed with `false` the rig silently stays neutral, which is what made
+the first three traces come out identical.
+
 ## A character for the manager
 
 Two halves, and they should be judged separately because one is nearly free and
