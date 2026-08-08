@@ -2851,6 +2851,28 @@ what turns shorts into a shelf. All three read better without it. Either size it
 inside the torso profile at that height (`_torso_radius_at` already does this for
 the collar) or drop the mesh and let the kit colour carry it.
 
+**Corrected: the first version of this draft changed two things at once.** It hid
+the shorts *and* turned the dial up, so the legs meeting the body differently and
+an Avi's arms sitting differently were read as effects of the hip when they were
+effects of `type_expression` -- which moves `hip_x`, `hip_y`, `shoulder_x`,
+`shoulder_y` and both limb lengths. The tool now changes one thing a row.
+
+Three separate things live at the waist and the first draft ran them together:
+the **shorts**, a box wider than the torso; the **hip joint balls**, spheres at
+each leg root; and the leg **angles**, which come from the pose and from `hip_x`
+and are not a mesh at all. Keeping the angles while losing the shelf needs no new
+work -- it is what hiding the shorts already does.
+
+The joint balls are worth keeping. Without them the thighs read as hanging from
+the body rather than springing off it, and the hip is the only joint that would
+be missing one while the knee, elbow and shoulder all have theirs.
+
+**Ears, crests and beaks were never missing an outline** -- the ink walks every
+mesh. What they lacked was emphasis, and they now carry a heavier line than the
+body: 0.030 m against 0.018. A crown is the smallest thing on a figure and carries
+the whole identity of its type, which makes it the one place a thicker line buys
+legibility rather than weight.
+
 **The exaggeration is a real mechanism and an unproven one.** Every body type is
 authored as a complete skeleton and then pulled toward `UNIVERSAL_RATIOS` by
 `type_expression`, whose own comment says 1.0 is the type exactly as authored and
