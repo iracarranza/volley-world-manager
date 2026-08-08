@@ -2683,3 +2683,36 @@ because it is scene surgery -- the subtree has dozens of node paths to re-point,
 and `%` unique names make it safe but not quick. The chrome is worth measuring
 first: 243 px of fixed furniture around a 515 px page is a lot, and taking it
 back costs no content at all.
+
+## The cold start styles every screen in the game before the title screen answers
+
+Measured in `Application._ready()`:
+
+| | ms |
+|---|---|
+| building every screen | 25 |
+| `_load_theme` -> `UIStyleSystem.apply` over the whole app | **1073** |
+| total | 1219 |
+
+`application.tscn` holds every screen, and the style pass walks the entire tree
+once at boot -- every control of the journal, the match centre, the clipboard,
+the folders and the planner, each getting its overrides stripped, a variation
+assigned, an ink outline or printed rule added as a child and a halftone material
+built. All of it synchronous, all of it before the first frame the player can
+click, and all but the title screen's share of it for screens nobody has opened.
+
+On a machine where the renderer is also compiling pipelines for the first time
+this lands on top of that, which is how a second of styling reads as a game that
+has hung.
+
+The fix is to style a screen the first time it is shown rather than all of them
+at boot: `_swap_to` already runs on every screen change and already calls
+`UIStyleSystem.reveal`, so it is the natural place to call `apply` on a screen
+carrying no "styled" mark yet. `_apply_theme` still has to walk everything,
+because a theme switch changes screens the player is not looking at -- but that
+is a deliberate act with a visible cause, not a cold start.
+
+Held because it moves *when* styling happens, and the pass is not idempotent in
+an obvious way -- it adds child nodes and strips overrides, and `_printed_rule`
+already has a "did I add this already" branch that suggests the others may not.
+Worth an afternoon and a careful read, not a quick change.

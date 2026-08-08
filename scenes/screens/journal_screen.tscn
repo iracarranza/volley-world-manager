@@ -987,6 +987,7 @@ color = Color(0.008, 0.015, 0.03, 0.86)
 
 [node name="AttributeWheelPopup" type="PopupPanel" parent="."]
 unique_name_in_owner = true
+visible = false
 initial_position = 1
 size = Vector2i(1180, 680)
 exclusive = true

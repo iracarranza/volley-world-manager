@@ -300,6 +300,7 @@ text = "Load selected"
 
 [node name="OptionsDialog" type="AcceptDialog" parent="." unique_id=417169172]
 unique_name_in_owner = true
+visible = false
 title = "Options"
 initial_position = 1
 size = Vector2i(440, 210)
@@ -315,5 +316,6 @@ offset_bottom = 114.0
 
 [node name="DeleteConfirmation" type="ConfirmationDialog" parent="." unique_id=2128247499]
 unique_name_in_owner = true
+visible = false
 title = "Delete Career"
 dialog_text = "Permanently delete this career save?"

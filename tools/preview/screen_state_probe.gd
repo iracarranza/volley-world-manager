@@ -31,6 +31,19 @@ var _frames: int = 0
 var _root: Control
 
 
+## Every visible `Window` under a node, however deep -- they are not Controls and
+## do not follow their parent Control's visibility, so a popup inside a screen
+## that was never shown can still be on and holding input.
+func _collect_windows(node: Node, into: Array[String]) -> void:
+	for child in node.get_children():
+		var window := child as Window
+		if window != null and window.visible:
+			into.append("%s exclusive=%s size=%s" % [
+				window.name, window.exclusive, window.size,
+			])
+		_collect_windows(child, into)
+
+
 ## The application, wherever it is. As an autoload this node is a sibling of the
 ## main scene rather than its child, so the parent is `/root` and not the screen
 ## holder -- which is exactly the assumption that made "attach it" ambiguous.
@@ -70,6 +83,18 @@ func _process(delta: float) -> void:
 			control.mouse_filter,
 		])
 	print("[frame %d] %s" % [_frames, ", ".join(shown)])
+	## **Every visible Window, and whether it is exclusive.**
+	##
+	## The blind spot that cost a day. A `Window` is not a `Control`, so it never
+	## appeared in the line above -- and an exclusive one that is visible takes all
+	## input for its viewport, which leaves the mouse position frozen, nothing
+	## taking hover, and clicks queueing until the OS forces a focus change. From
+	## outside that is indistinguishable from a hang, and the log said the screens
+	## were fine because as far as it could see, they were.
+	var windows: Array[String] = []
+	_collect_windows(_root, windows)
+	if not windows.is_empty():
+		print("[windows] %s" % ", ".join(windows))
 	var hovered := get_viewport().gui_get_hovered_control()
 	print("[mouse]   at %s over %s" % [
 		get_viewport().get_mouse_position(),
