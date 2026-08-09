@@ -3430,3 +3430,59 @@ no "this one takes the line, that one covers the tip". `PHASE_POSE` is keyed by
 phase precisely because there was nothing per-voli to key on. That is the gap
 worth closing before the drill session in #69 can mean anything, because a
 session needs per-voli asks to score against learned comfort.
+
+## The shadow is the handle
+
+Stickers are adjustable and removable now, and the grip is the **shadow**.
+
+That is the right handle rather than a convenient one. A sticker is a flat body
+standing up out of the floor, and the one part of it genuinely *on* the floor is
+its shadow -- so it is the part that answers "where does this voli stand" rather
+than "where is this picture". It is also the only part that stays put in the plan
+view, where the body is a pair of shoulders seen from above and there is nothing
+else to take hold of.
+
+Handles are **recorded from the draw**, not recomputed: `_draw_sticker` appends
+the shadow polygon it just drew, tagged with the slot it was drawing for. A
+handle therefore cannot be somewhere the shadow is not. Only placed volis get
+one -- what the phase draws (the blockers, the hitter, the floor marks) is not
+something anybody put there, so it is not something anybody may pick up.
+
+Checked before the zones are, because a voli always stands *on* a zone and the
+two are always under the cursor together. Of the two, the one a hand is reaching
+for is the body it can see.
+
+The drag offset is kept in **court metres**, like everything else on this sheet:
+without it a voli lurches so their feet land under the cursor the moment you
+touch them, and with it in pixels the drag would break on a view change.
+
+**Removal is leaving the court.** No bin to aim at and no second control -- you
+take a voli off the sheet by taking them off the sheet. The bound is the same one
+`place_voli_at` refuses on, deliberately: two different margins leaves a band
+where a drop is neither placed nor removed and the voli springs back, which reads
+as the drag having failed rather than as the sheet having a rule.
+
+**Refusals are notes on the page, not dialogs.** A page whose whole argument is
+that the drawing is the interface cannot answer a click with a modal window --
+that is the one thing on it you would operate from outside the drawing, which is
+the reasoning that kept the zoom out too. Three of them:
+
+- a block page refuses the floor: *"No blockers on the floor — a block is made
+  at the net."*
+- a floor page refuses the net: *"No receivers at the net — this phase is played
+  off it."*
+- either page refuses a spot inside `PLACEMENT_CLEARANCE_M` of another voli.
+
+The attack page takes the whole court and that is not an omission: a hitter
+starts on the floor and finishes at the net, so both are legal. It is the case
+most likely to be broken by somebody tightening the other two, which is why it
+has a test of its own.
+
+Nine checks, including the two easiest ways for the clearance rule to be wrong --
+a voli crowding *themselves* when moved a short way, and taking a voli off twice.
+
+**Still open on placement:** rotation legality. Nothing checks a placement against
+the rotation the lineup is actually in, so a sheet can show an overlap that would
+be a fault. That wants `RotationLegality`, which already exists for the simulator,
+pointed at the sheet's own placements -- and a refusal that names the overlap
+rather than saying "illegal".

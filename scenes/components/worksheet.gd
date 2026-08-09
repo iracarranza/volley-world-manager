@@ -384,6 +384,57 @@ var phase: String = "Block"
 var view: String = VIEW_THREE_QUARTER
 ## Where volis have been dropped, in unit court space, keyed by tray slot.
 var placements: Dictionary = {}
+
+## Which placement is being drawn, so its shadow can be recorded as a handle.
+##
+## Read by `_draw_sticker`, which draws every voli on the sheet and does not
+## otherwise know whether it is drawing a *placed* one. Set around the placements
+## loop and nowhere else, so the blockers, the hitter and the floor marks -- which
+## are drawn from the phase rather than dropped by a manager -- cannot pick up a
+## handle they should not have.
+var _drawing_slot: int = -1
+
+## Every placed voli's shadow, in screen space, exactly as it was drawn.
+##
+## **The shadow is the handle**, which is not a decoration of the idea but the
+## whole of it: a sticker is a flat body standing up out of the floor, and the one
+## part of it that is genuinely *on* the floor is its shadow. It is also the only
+## part that stays where the voli stands in the plan view, where the body is a
+## pair of shoulders seen from above and there is nothing else to take hold of.
+##
+## Recorded from the draw rather than recomputed, so a handle cannot be somewhere
+## the shadow is not. That is the same discipline the ruled paper needed: one
+## number feeding both, rather than two things agreeing by construction until one
+## of them changes.
+var _shadow_handles: Array[Dictionary] = []
+
+## The placement being dragged, and how far the grab was from its own feet.
+##
+## The offset is in **court metres**, not pixels, for the reason everything else
+## on this sheet is: a drag that survives a view change has to be stored in the
+## world rather than on the screen. Without it a voli jumps so their feet land
+## under the cursor the moment you touch them, which is a lurch on every grab.
+var _drag_slot: int = -1
+var _drag_offset: Vector2 = Vector2.ZERO
+var _drag_live: Vector2 = Vector2.ZERO
+
+## What the sheet has just refused to do, and why.
+##
+## A note on the page rather than a dialog. A page whose whole argument is that
+## the drawing is the interface cannot answer a click with a modal window --
+## that is the one thing on it you would have to operate from outside the
+## drawing, which is the same reasoning that kept the zoom out.
+##
+## Cleared on a timer rather than a `_process` loop, and the token is what makes
+## a second refusal safe: the first one's timer still fires, sees a token it does
+## not own, and leaves the newer note alone.
+var _notice: String = ""
+var _notice_token: int = 0
+const NOTICE_SECONDS: float = 2.8
+## How close two volis may stand before a drop is refused, in metres. Under a
+## metre is two bodies in one place; this is a shade over, so a legal pair can
+## still stand shoulder to shoulder at the net.
+const PLACEMENT_CLEARANCE_M: float = 0.85
 var zone_priorities: Array[int] = [3, 2, 1, 2]
 var light_mode: bool = true
 
@@ -684,6 +735,12 @@ func _draw_sticker(key: String, ground: Vector2, scale: float) -> bool:
 			shadowed.append(origin + point * box + STICKER_SHADOW_OFFSET)
 		if shadowed.size() >= 3:
 			draw_colored_polygon(shadowed, Color(0.0, 0.0, 0.0, STICKER_SHADOW_ALPHA))
+			## Kept only for a voli somebody put there. What the phase draws is
+			## not a thing anybody may pick up.
+			if _drawing_slot >= 0:
+				_shadow_handles.append({
+					"slot": _drawing_slot, "poly": shadowed,
+				})
 
 	## 2. The cut edge: the keyline, then the stock it edges.
 	##
@@ -859,6 +916,11 @@ func place_voli_at(slot: int, on_court: Vector2, who: String = "") -> void:
 	## dashed arrow leaving their hand *is* "this voli drills this shot from here".
 	## The catch radius is a metre and a half of court rather than a pixel distance,
 	## so it means the same thing in all three views.
+	## And refused when somebody is already standing there.
+	if _crowded(slot, on_court):
+		_say("Somebody is already standing there.")
+		queue_redraw()
+		return
 	var pin := _nearest_net_zone(on_court)
 	if pin >= 0 and not who.is_empty():
 		drill_zone = pin
@@ -897,6 +959,89 @@ func _set_wipe(value: float) -> void:
 ## by what is under the cursor, not by a mode. A mode would mean a control that
 ## says which of them you are editing, and the whole argument of the page is that
 ## the drawing *is* the control.
+## Which placed voli's shadow is under this point, or -1.
+##
+## Topmost first, because the draw order is the stacking order and two volis
+## close together overlap: the one drawn last is the one on top, and the one on
+## top is the one a hand would take hold of.
+func _shadow_at(at: Vector2) -> int:
+	for index in range(_shadow_handles.size() - 1, -1, -1):
+		var handle: Dictionary = _shadow_handles[index]
+		if Geometry2D.is_point_in_polygon(at, handle["poly"]):
+			return int(handle["slot"])
+	return -1
+
+
+## Say something on the page, briefly.
+func _say(message: String) -> void:
+	_notice = message
+	_notice_token += 1
+	var token := _notice_token
+	queue_redraw()
+	## A sheet can be built and asked things before it is added to anything --
+	## `place_voli_at` is a public method and a career restoring a plan calls it
+	## -- and there is no tree to hang a timer on then. The note is still set, so
+	## it appears with the first draw and the next refusal replaces it.
+	if not is_inside_tree():
+		return
+	var timer := get_tree().create_timer(NOTICE_SECONDS)
+	timer.timeout.connect(func() -> void:
+		if token != _notice_token:
+			return
+		_notice = ""
+		queue_redraw()
+	)
+
+
+## Why this phase will not take a voli on that kind of ground, or "" if it will.
+##
+## Keyed by phase, because that is what the sheet is *about* at the time: a page
+## planning a block is a page about the net, and a floor section on it is scenery
+## for judging distances against rather than somewhere a blocker can stand. The
+## refusal names who cannot go there rather than saying "invalid", because the
+## first is a fact about volleyball and the second is a fact about software.
+func _refusal(kind: String) -> String:
+	match phase:
+		"Block":
+			if kind == "floor":
+				return "No blockers on the floor — a block is made at the net."
+		"Floor":
+			if kind == "net":
+				return "No receivers at the net — this phase is played off it."
+		"Attack":
+			## Both are legal here and that is not an omission: a hitter starts on
+			## the floor and finishes at the net, so an attack page is the one page
+			## where the whole court is somewhere a voli can be.
+			return ""
+	return ""
+
+
+## Whether a voli may stand here, given who is already standing about.
+##
+## Two bodies in one place is not a formation, it is a drawing mistake, and it is
+## an easy one to make when a drop lands within a few pixels of an existing voli
+## in a view that foreshortens depth. Measured in metres so it means the same
+## thing in all three views -- a pixel clearance would be twice as strict along
+## the net as it is across the court.
+func _crowded(slot: int, on_court: Vector2) -> bool:
+	for raw_slot: int in placements:
+		if int(raw_slot) == slot:
+			continue
+		var other: Dictionary = placements[raw_slot]
+		var spot: Vector2 = other.get("at", Vector2.ZERO)
+		if spot.distance_to(on_court) < PLACEMENT_CLEARANCE_M:
+			return true
+	return false
+
+
+## Take a voli off the sheet.
+func remove_voli(slot: int) -> void:
+	if not placements.has(slot):
+		return
+	placements.erase(slot)
+	queue_redraw()
+
+
 func _gui_input(event: InputEvent) -> void:
 	var frame := _view_frame()
 	var scale: float = frame["scale"]
@@ -904,6 +1049,16 @@ func _gui_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
+		## A drag in progress owns the pointer. Written straight to `_drag_live`
+		## rather than through `place_voli_at`, because that refuses anything off
+		## the court -- which is correct for a drop and wrong for a drag, where
+		## leaving the court is how you say "take this one off".
+		if _drag_slot >= 0:
+			_drag_live = _unproject_floor(motion.position, scale, origin) \
+				+ _drag_offset
+			queue_redraw()
+			accept_event()
+			return
 		var was_rail := _hovered_zone
 		var was_net := _hovered_net
 		var was_floor := _hovered_floor
@@ -921,6 +1076,42 @@ func _gui_input(event: InputEvent) -> void:
 
 	if button.button_index == MOUSE_BUTTON_LEFT:
 		if not button.pressed:
+			if _drag_slot < 0:
+				return
+			## Dropped. Off the court is a removal, which is the whole of the
+			## remove gesture: there is no bin to aim at and no second control,
+			## you take a voli off the sheet by taking them off the sheet.
+			var slot := _drag_slot
+			var landed := _drag_live
+			_drag_slot = -1
+			## The same bound `place_voli_at` refuses on, deliberately. Two
+			## different margins leaves a band where a drop is neither placed nor
+			## removed and the voli silently springs back -- which reads as the
+			## drag having failed rather than as the sheet having a rule.
+			if absf(landed.x) > HALF_WIDTH_M + 1.0 \
+					or absf(landed.y) > COURT_HALF_M + 1.0:
+				remove_voli(slot)
+				_say("Taken off the sheet.")
+			else:
+				place_voli_at(slot, landed, str(
+					(placements.get(slot, {}) as Dictionary).get("who", "")
+				))
+			accept_event()
+			queue_redraw()
+			return
+		## **The shadow is the handle, and it is checked before the zones are.**
+		## A voli stands *on* a zone, so the two are always under the cursor
+		## together -- and of the two, the one a hand is reaching for is the body
+		## it can see, not the ground under it.
+		var grabbed := _shadow_at(button.position)
+		if grabbed >= 0:
+			_drag_slot = grabbed
+			var held: Dictionary = placements[grabbed]
+			_drag_live = held.get("at", Vector2.ZERO)
+			_drag_offset = _drag_live - _unproject_floor(
+				button.position, scale, origin
+			)
+			accept_event()
 			return
 		## A zone under the cursor takes the click, and taking it means **moving in
 		## on it**. Clicking the one already held lets it go again. That is the whole
@@ -931,6 +1122,13 @@ func _gui_input(event: InputEvent) -> void:
 		var kind := str(under[0])
 		if kind != "":
 			var index := int(under[1])
+			## Refused before it focuses, so the sheet does not move in on a
+			## place this phase has nothing to say about.
+			var refused := _refusal(kind)
+			if not refused.is_empty():
+				_say(refused)
+				accept_event()
+				return
 			if focus_kind == kind and focus_index == index:
 				focus_kind = ""
 				focus_index = -1
@@ -1143,15 +1341,28 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 
 	## Anything dragged out of the tray, standing where it was dropped -- which is
 	## stored in metres, so it is the same place in all three views.
+	## Rebuilt every draw, immediately before the volis that fill it. Anything
+	## drawn after this loop leaves `_drawing_slot` at -1 and registers nothing.
+	_shadow_handles.clear()
 	for raw_slot: int in placements:
 		var placed: Dictionary = placements[raw_slot]
 		var spot: Vector2 = placed.get("at", Vector2.ZERO)
+		if raw_slot == _drag_slot:
+			spot = _drag_live
 		var who := str(placed.get("who", ""))
 		if who.is_empty():
 			who = "tall" if raw_slot % 2 == 0 else "wing"
+		_drawing_slot = raw_slot
 		_draw_voli(
 			_sticker_key(who, view, which), spot.x, spot.y, scale, origin,
 			ink, alpha, reveal, 500 + raw_slot * 7
+		)
+		_drawing_slot = -1
+
+	if not _notice.is_empty():
+		_marker_text(
+			_notice, Vector2(size.x * 0.06, size.y * 0.075), 15,
+			Color(0.78, 0.32, 0.30), alpha, reveal
 		)
 
 	if adjustment_for(view, which).is_empty():

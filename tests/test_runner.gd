@@ -255,6 +255,7 @@ func _initialize() -> void:
 	_test_team_wheel_amplification()
 	_test_ui_visual_system()
 	_test_worksheet_facing()
+	_test_worksheet_placement()
 	_test_sticker_disk_cache()
 	_test_fatigue_recovers_between_fixtures()
 	_test_errant_attacks_land_outside_the_court()
@@ -13280,3 +13281,74 @@ func _test_sticker_disk_cache() -> void:
 	)
 	VOLI_STICKER_SCRIPT.disk_cache = true
 	baker.free()
+
+
+## A voli can be moved, taken off, and refused a place they cannot stand.
+##
+## The sheet's placement rules were "the drop stores metres and redraws", which
+## meant two volis could occupy one patch of floor, a blocker could be stood in
+## the back court on a page about blocking, and nothing could be taken off once
+## it was on. Each of those is asserted here rather than in a screenshot, because
+## a rule that only exists in a drawing is a rule nobody can regression-test.
+##
+## Not added to the tree: `_ready` stands up a sticker baker with a 3D viewport,
+## and none of that is needed to ask whether a metre is legal.
+func _test_worksheet_placement() -> void:
+	var sheet: UIWorksheet = WORKSHEET_SCRIPT.new()
+
+	sheet.phase = "Block"
+	_check(
+		not sheet._refusal("floor").is_empty()
+			and sheet._refusal("net").is_empty(),
+		"a block page refuses the floor and takes the net",
+	)
+	sheet.phase = "Floor"
+	_check(
+		not sheet._refusal("net").is_empty()
+			and sheet._refusal("floor").is_empty(),
+		"a floor page refuses the net and takes the floor",
+	)
+	## The attack page is the one that takes both, and it is the case most
+	## likely to be broken by somebody tightening the other two: a hitter starts
+	## on the floor and finishes at the net, so the whole court is legal.
+	sheet.phase = "Attack"
+	_check(
+		sheet._refusal("net").is_empty() and sheet._refusal("floor").is_empty(),
+		"an attack page takes the whole court, because a hitter crosses it",
+	)
+
+	sheet.phase = "Floor"
+	sheet.place_voli_at(0, Vector2(1.0, 3.0), "tall")
+	_check(sheet.placements.size() == 1, "a voli dropped on the court stands there")
+	## Just inside the clearance, so this is the near miss rather than a body
+	## dropped on top of another -- which is the drop that actually happens, in a
+	## view that foreshortens depth.
+	sheet.place_voli_at(1, Vector2(1.0, 3.0 + UIWorksheet.PLACEMENT_CLEARANCE_M * 0.5), "wing")
+	_check(
+		sheet.placements.size() == 1,
+		"a voli is refused a place somebody is already standing in",
+	)
+	sheet.place_voli_at(1, Vector2(1.0, 3.0 + UIWorksheet.PLACEMENT_CLEARANCE_M * 2.0), "wing")
+	_check(
+		sheet.placements.size() == 2,
+		"two volis stand together once they are a body apart",
+	)
+	## A slot moving to its *own* spot is not crowding itself, which is the
+	## clearance check's easiest way to be wrong -- it would pin every voli in
+	## place the moment they were dropped.
+	sheet.place_voli_at(0, Vector2(1.2, 3.1), "tall")
+	_check(
+		sheet.placements.size() == 2
+			and (sheet.placements[0] as Dictionary)["at"].is_equal_approx(
+				Vector2(1.2, 3.1)
+			),
+		"a voli may be moved a short way without crowding themselves",
+	)
+	sheet.remove_voli(0)
+	_check(
+		sheet.placements.size() == 1 and not sheet.placements.has(0),
+		"a voli taken off the sheet is off the sheet",
+	)
+	sheet.remove_voli(0)
+	_check(sheet.placements.size() == 1, "taking off a voli twice is not an error")
+	sheet.free()
