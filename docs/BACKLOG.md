@@ -3360,3 +3360,43 @@ is llvmpipe and some is likely first-use pipeline compilation for the coats' new
 meshes, and this environment cannot separate the two. The right next measurement
 is on real hardware, where the question is simply whether a cold clipboard still
 hitches now that it does a third of the work one frame at a time.
+
+## Mesh count: the coats are not the problem, the ink is
+
+Measured, because "the coats' mesh count is my first suspect" was a guess and it
+was wrong. Counted off built actors, body meshes against their `Ink` twins:
+
+| body | coat | body | ink | total |
+|---|---|---|---|---|
+| Feli | none | 37 | 35 | 72 |
+| Feli | patch | 38 | 36 | 74 |
+| Feli | scar | 39 | 37 | 76 |
+| Feli | tabby | 44 | 42 | 86 |
+| Avi | none | 31 | 29 | 60 |
+| Avi | speckle | 36 | 34 | 70 |
+
+A coat is not one part. It is a set of small spheres flattened by a non-uniform
+scale, parented to `BodyPivot` for face marks and to `BodyPivot/LeftArm` or
+`RightArm` for limb marks so they swing with the arm. Each also takes an `Ink`
+twin, so a mark costs two meshes: tabby and spots are seven marks (14 meshes),
+speckle five (10), scar two (4), patch and blaze one (2).
+
+**So the worst coat is +19% on a body that is already 72 meshes, and most are
++3%.** Trimming them is optimising the wrong thing. The `Ink` twin is **35 of
+those 72** -- the outline hull doubles every mesh on every voli, marked or not,
+and it is the only lever on this scale.
+
+Which is the argument for doing the roster sticker test next rather than a mesh
+diet: a sticker needs no ink hull at all, because its border is drawn in 2D by
+the worksheet around the baked contour. Moving the roster view to stickers is a
+~49% cut where a coat diet could never reach 19%.
+
+**Before that test can run:** the roster's `VisualizerViewport` reports **2x140
+px** in every trace. A two-pixel-wide viewport cannot show anything, so whatever
+is starving it needs fixing first, whichever way the test then goes.
+
+**And the one thing the test has to answer, not the easy half:** a sticker is
+baked per view angle. A voli that turns or moves needs either a bake per angle or
+a small set of angles it snaps between. "Does it look right" is the easy question;
+"how many bakes does a rally need" is the one that decides whether playback can
+use them at all.
