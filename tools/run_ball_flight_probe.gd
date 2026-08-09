@@ -58,6 +58,15 @@ const PASS_BANDS: Array[String] = [
 ]
 var pass_bands := {}
 
+## Why a drawn flight crosses the tape below net height.
+##
+## The count alone cannot act. A swing the resolver itself could not get over the
+## net is *correctly* drawn hitting the tape -- that is a hitter with no shot, and
+## the picture is telling the truth. A swing the resolver cleared and the drawing
+## then put into the net is a defect in the drawing. They want opposite responses
+## and look identical in a total.
+var under_causes := {}
+
 
 func _initialize() -> void:
 	var by_pair := {}
@@ -145,6 +154,14 @@ func _initialize() -> void:
 			hang_total / float(values.size()),
 		])
 
+	if not under_causes.is_empty():
+		print("")
+		print("=== why a flight is drawn below the tape ===")
+		var causes := under_causes.keys()
+		causes.sort()
+		for cause in causes:
+			print("  %-38s %4d" % [cause, int(under_causes[cause])])
+
 	if not under_the_net.is_empty():
 		print("")
 		print("=== worst five flights drawn through the net ===")
@@ -220,6 +237,8 @@ func _collect(
 				crossings[key] = []
 			(crossings[key] as Array).append(tape)
 			if tape < NET_HEIGHT_METERS:
+				var cause := _why_under(event)
+				under_causes[cause] = int(under_causes.get(cause, 0)) + 1
 				under_the_net.append({
 					"pair": key, "height": tape,
 					"duration": float(display.get("duration", 0.0)),
@@ -320,3 +339,20 @@ func _legacy_height(legacy: Dictionary, progress: float) -> float:
 	var base := lerpf(start_height, end_height, t)
 	var midpoint := lerpf(start_height, end_height, 0.5)
 	return base + 4.0 * maxf(apex - midpoint, 0.0) * t * (1.0 - t)
+
+
+## Which of the two it is, read off the swing rather than inferred.
+##
+## `launch_cleared` is the resolver's own verdict: it searches angles, then
+## speeds, then a shortened aim, and reports whether anything it found gets the
+## ball over the tape. `launch_mode` names the branch that answered -- `driven`,
+## `lofted`, `shortened`, `scraped`, `forced`, `unsolved` -- and the last two are
+## a hitter who has no shot rather than a drawing that lost one.
+func _why_under(event: Resource) -> String:
+	var metadata: Dictionary = event.metadata
+	if not metadata.has("launch_mode"):
+		return "no geometric record"
+	var mode := str(metadata.get("launch_mode", ""))
+	if not bool(metadata.get("launch_cleared", true)):
+		return "resolver could not clear: %s" % mode
+	return "resolver cleared (%s), drawing lost it" % mode

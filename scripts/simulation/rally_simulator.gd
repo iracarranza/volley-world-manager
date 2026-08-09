@@ -2036,6 +2036,8 @@ func resolve(
 			"target_reason": attack_choice.reason,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			"launch_cleared": bool(geometric.get("launch_cleared", true)),
+			"launch_mode": str(geometric.get("launch_mode", "")),
 			## The two quantities the block's outcome bands cut, on the event
 			## rather than only in the shadow summary. `_geometric_swing_record`
 			## is a developer surface nothing in production reads, so a band could
@@ -3619,6 +3621,8 @@ func _resolve_opponent_transition(
 			## error rate of 0.411 against the home side's 0.184 could be seen
 			## and not explained.
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			"launch_cleared": bool(geometric.get("launch_cleared", true)),
+			"launch_mode": str(geometric.get("launch_mode", "")),
 			## The two quantities the block's outcome bands cut, on the event
 			## rather than only in the shadow summary. `_geometric_swing_record`
 			## is a developer surface nothing in production reads, so a band could
@@ -4464,6 +4468,8 @@ func _resolve_home_continuation(
 			"swing_downgraded": continuation_downgraded,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			"launch_cleared": bool(geometric.get("launch_cleared", true)),
+			"launch_mode": str(geometric.get("launch_mode", "")),
 			## The two quantities the block's outcome bands cut, on the event
 			## rather than only in the shadow summary. `_geometric_swing_record`
 			## is a developer surface nothing in production reads, so a band could
@@ -9233,6 +9239,13 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"bearing_error_degrees": float(delivered.get("bearing_error_degrees", 0.0)),
 		"contact_height_meters": float(swing.get("contact_height_meters", 0.0)),
 		"jump_multiplier": float(swing.get("jump_multiplier", 1.0)),
+		## Whether the resolver found an angle that gets over the tape, and which
+		## branch of its search found it. Both were computed on every swing and
+		## dropped here, so nothing downstream could tell a ball drawn into the net
+		## because the hitter had no shot from one drawn into the net because the
+		## drawing lost the answer. `run_ball_flight_probe` asks exactly that.
+		"launch_cleared": bool(swing.get("launch_cleared", true)),
+		"launch_mode": str(swing.get("launch_mode", "")),
 		"wall_size": int(swing.get("wall_size", 0)),
 		"vertical_angle_degrees": float(delivered.get("vertical_angle_degrees", 0.0)),
 		"block_kind": str(
@@ -9316,6 +9329,13 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		"speed_mps": float(record.get("speed_mps", 0.0)),
 		"launch_angle_degrees": float(record.get("vertical_angle_degrees", 0.0)),
 		"out_reason": str(record.get("out_reason", "")),
+		## The resolver's own verdict on whether this swing could clear the tape,
+		## and which branch of its search answered. Carried the whole way to the
+		## event because the question it settles -- is a ball drawn into the net a
+		## hitter with no shot, or a drawing that lost the answer -- cannot be
+		## asked anywhere else.
+		"launch_cleared": bool(record.get("launch_cleared", true)),
+		"launch_mode": str(record.get("launch_mode", "")),
 		## Why the wall was beaten, when it was. Over the top is a reach problem
 		## and around the edge is a positioning one; they want opposite fixes and
 		## the outcome alone cannot tell them apart.

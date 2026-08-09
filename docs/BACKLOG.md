@@ -4090,3 +4090,62 @@ confident readings of this same gap have already been wrong in one sitting: prin
 `_add_event` publishes it on the home attack and the home continuation and not on
 the opponent's, so the figure is absent rather than false. Worth closing so the
 probe can tell "did not reach the mark" from "was never asked".
+
+---
+
+## The 50 flights below the tape, separated -- and 53 of 55 are one cause
+
+The open item from the spike-launch entry. The count could not be acted on
+because two opposite defects look identical in a total: a swing the resolver
+itself could not get over the net is *correctly* drawn hitting the tape, and a
+swing the resolver cleared and the drawing then put into the net is a defect in
+the drawing.
+
+`GeometricAttackResolver._feasible_launch` already answers this. It searches
+angles, then speeds, then a shortened aim, and returns `cleared` plus a
+`launch_mode` naming the branch that answered -- `driven`, `lofted`,
+`shortened`, `scraped`, `forced`, `unsolved`, of which the last two are a hitter
+with no shot.
+
+    === why a flight is drawn below the tape ===
+      no geometric record                              2
+      resolver cleared (driven), drawing lost it      33
+      resolver cleared (lofted), drawing lost it      13
+      resolver cleared (shortened), drawing lost it    7
+
+**Not one case of the hitter having no shot.** `launch_cleared` is true on every
+flight in the sample, so the design question this was waiting on -- should a
+swing with no clearing angle be drawn honestly into the net, or nudged over --
+does not arise. There are no such swings to decide about.
+
+### It took three layers to ask
+
+`launch_cleared` and `launch_mode` were computed on every swing and dropped three
+times over: `_geometric_swing_record` did not forward them out of the resolver's
+answer, `_geometric_promotion` did not forward them out of the record, and the
+attack event did not publish them. The same failure mode as the spike launch two
+entries above, and the reason the count sat unactionable for a pass.
+
+### What the split says
+
+- **33 driven.** The resolver found a *driven* angle that clears and the drawn
+  ball still ended up in the net. These are the flights the carried angle is
+  supposed to cover, so the carry is not reaching them -- that is the thread to
+  pull.
+- **13 lofted.** Excluded by design: the carry is bounded to angles at or below
+  zero, because carrying a lofted root unconditionally moved the mean height of
+  an untouched attack at the tape from 2.69 m to 5.19 m. Expected, and now named
+  rather than anonymous.
+- **7 shortened.** Swings the resolver had to pull the aim in on to clear at all.
+
+### The signature in the worst cases
+
+    Attack -> Block   0.56 m at the tape, 0.22 s, 3.40 m -> 0.12 m
+    Attack -> Block   0.66 m at the tape, 0.19 s, 2.88 m -> 0.12 m
+
+Every one ends at 0.12 m, which is the floor clamp in `display_trajectory`. The
+carried launch drives the ball into the ground before it reaches the block, so
+the leg's duration and its launch disagree -- the duration is too long for a ball
+descending that steeply over a metre of court. That is a concrete next
+measurement rather than an open question: print the leg's horizontal speed
+against the parent swing's and see which one the duration belongs to.
