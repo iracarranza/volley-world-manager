@@ -44,6 +44,26 @@ const MIN_SLOT: float = 46.0
 
 var headshots: Dictionary = {}
 var names: Dictionary = {}
+
+## Whose portrait is lit, by tray key, while that voli is being moved on the
+## sheet. **This is the answer to "which voli is who".** Seven stickers on a
+## court are seven bodies; the tray is the only place their names live, and until
+## now nothing connected the one you had hold of to the card it came from.
+##
+## Green rather than the marker red, and that is not arbitrary: red on this desk
+## is the pen that carries emphasis and refusal, and a voli being moved is
+## neither. Green is the only signal here that means "this one, right now".
+var lit_key: String = "":
+	set(value):
+		if value == lit_key:
+			return
+		lit_key = value
+		queue_redraw()
+
+## What each slot is called on the sheet, so the lit key can be matched to a
+## card. Set alongside the headshots.
+var keys: Dictionary = {}
+const LIT := Color(0.34, 0.72, 0.44)
 var selected: int = -1
 
 var _hovered: int = -1
@@ -59,6 +79,11 @@ func _ready() -> void:
 
 
 ## Give a slot a face. `texture` is the baked headshot; null empties the slot.
+## The sheet's own name for the voli in a slot, so a lit key can find its card.
+func set_key(slot: int, key: String) -> void:
+	keys[slot] = key
+
+
 func set_headshot(slot: int, texture: Texture2D, display_name: String) -> void:
 	if slot < 0 or slot >= SLOT_COUNT:
 		return
@@ -193,6 +218,12 @@ func _draw_slot(
 
 	## The rotation number, bottom left, small. It is the thing a coach says, so
 	## it stays legible even under a face.
+	## Lit first, under everything else on the card, so it reads as the card
+	## glowing rather than as a rectangle drawn over a portrait.
+	if not lit_key.is_empty() and str(keys.get(slot, "")) == lit_key:
+		draw_rect(rect.grow(-1.0), Color(LIT, 0.30))
+		draw_rect(rect.grow(-1.0), Color(LIT, 0.95), false, 2.4)
+
 	var label := SLOT_LABELS[slot]
 	var at := rect.position + Vector2(4.0, rect.size.y - 5.0)
 	if filled:

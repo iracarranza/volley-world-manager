@@ -256,6 +256,7 @@ func _initialize() -> void:
 	_test_ui_visual_system()
 	_test_worksheet_facing()
 	_test_worksheet_placement()
+	_test_worksheet_behaviour()
 	_test_sticker_disk_cache()
 	_test_fatigue_recovers_between_fixtures()
 	_test_errant_attacks_land_outside_the_court()
@@ -13351,4 +13352,63 @@ func _test_worksheet_placement() -> void:
 	)
 	sheet.remove_voli(0)
 	_check(sheet.placements.size() == 1, "taking off a voli twice is not an error")
+	sheet.free()
+
+
+## A voli can be told what to do, and only things they could actually do.
+##
+## The sheet had no per-voli instruction at all -- `PHASE_POSE` is keyed by phase
+## because there was nothing else to key on -- so a page could say "this is a
+## block" and could not say which blocker closes the line. These are the rules
+## that make an instruction mean something rather than be a label.
+func _test_worksheet_behaviour() -> void:
+	var sheet: UIWorksheet = WORKSHEET_SCRIPT.new()
+	sheet.phase = "Attack"
+	sheet.place_voli_at(0, Vector2(-2.6, 1.2), "tall")
+
+	_check(
+		sheet.behaviour_of(0) == "",
+		"a voli arrives on the sheet without an instruction",
+	)
+	sheet.set_behaviour(0, "spike cross")
+	_check(
+		sheet.behaviour_of(0) == "spike cross",
+		"a voli takes the instruction they are given",
+	)
+	## Toggling the one they already have takes it back off, the same way
+	## clicking a held zone lets it go -- otherwise an instruction can be changed
+	## and never removed.
+	sheet.set_behaviour(0, "spike cross")
+	_check(
+		sheet.behaviour_of(0) == "",
+		"telling a voli what they are already doing takes the instruction off",
+	)
+	## A block instruction on an attack page is not a stricter version of a
+	## legal thing, it is a different vocabulary. Refused rather than stored,
+	## because a stored one would draw an arrow the phase has no meaning for.
+	sheet.set_behaviour(0, "soft block")
+	_check(
+		sheet.behaviour_of(0) == "",
+		"a voli refuses an instruction from another phase's vocabulary",
+	)
+	## Kept per phase, which is the case a single value per voli would lose: the
+	## same voli blocks and digs, and those are two different instructions.
+	sheet.set_behaviour(0, "spike line")
+	sheet.set_behaviour(0, "close line", "Block")
+	_check(
+		sheet.behaviour_of(0, "Attack") == "spike line"
+			and sheet.behaviour_of(0, "Block") == "close line",
+		"a voli carries a separate instruction for each phase",
+	)
+	## And nobody can be told anything if they are not on the sheet.
+	sheet.set_behaviour(4, "spike line")
+	_check(
+		sheet.behaviour_of(4) == "",
+		"a voli who is not on the sheet cannot be given an instruction",
+	)
+	for for_phase in UIWorksheet.PHASES:
+		_check(
+			not Array(UIWorksheet.BEHAVIOURS.get(for_phase, [])).is_empty(),
+			"the %s page has a vocabulary to instruct from" % for_phase,
+		)
 	sheet.free()

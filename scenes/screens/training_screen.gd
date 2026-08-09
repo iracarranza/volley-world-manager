@@ -253,6 +253,15 @@ func _build_tactics_page() -> Control:
 	body.add_child(_worksheet)
 
 	_worksheet.sticker_baked.connect(_headshot_baked)
+	## Holding a voli on the sheet lights their card in the tray, which is the
+	## whole of "which voli is who": the bodies are on the court and the names
+	## are in the tray, and nothing joined the two until this.
+	_worksheet.voli_grabbed.connect(func(who: String) -> void:
+		_tray.lit_key = who
+	)
+	_worksheet.voli_released.connect(func() -> void:
+		_tray.lit_key = ""
+	)
 	## Deferred, because the page is built before it is added to the tab container
 	## -- so the worksheet is not in the tree yet, its `_ready` has not run, and
 	## its baker does not exist. Called inline this returned silently and the tray
@@ -499,6 +508,9 @@ func _headshot_baked(key: String) -> void:
 		if str(squad[slot].get("key", "")) != who:
 			continue
 		_tray.set_headshot(slot, built.texture, str(squad[slot].get("display_name", "")))
+		## The sheet knows a voli by their tray key, so the card has to as well
+		## or the lit-up signal has nothing to match against.
+		_tray.set_key(slot, str(squad[slot].get("key", "")))
 		return
 
 

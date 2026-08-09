@@ -3486,3 +3486,65 @@ the rotation the lineup is actually in, so a sheet can show an overlap that woul
 be a fault. That wants `RotationLegality`, which already exists for the simulator,
 pointed at the sheet's own placements -- and a refusal that names the overlap
 rather than saying "illegal".
+
+## Telling a voli what to do
+
+The sheet had no per-voli instruction at all. `PHASE_POSE` is keyed by phase
+because there was nothing else to key on, so a page could say "this is a block"
+and could not say which blocker closes the line -- which is the entire content of
+a tactical instruction.
+
+**The rail is an instruction now, not a chart.** It held four priority bars: a
+frequency reading of where attacks go, which is a fact about the *opponent* on a
+page about what your own volis should do. Interesting once and never actionable
+-- nothing you could do to the sheet changed it, so it was the one thing on the
+page you could only read. It shows who you are holding, where they are standing
+in a coach's words, and what they are being told.
+
+**Holding a voli is selecting them**, because there is nothing else "select"
+could mean on a sheet you operate by dragging, and a separate click would be a
+second gesture for what the first already said. Their card in the tray lights
+green while you hold them, which is the answer to "which voli is who": seven
+stickers on a court are seven bodies, the names live in the tray, and nothing
+joined the two. Green rather than the marker red on purpose -- red here is the
+pen that carries emphasis and refusal, and a voli being moved is neither.
+
+**The vocabularies are per phase**, and so are the assignments: the same voli
+closes the line when blocking and digs cross when the ball comes down, so a
+single value per voli would make the second overwrite the first.
+
+| phase | options |
+|---|---|
+| Attack | spike line, spike cross, tool, roll, feint |
+| Block | close line, close cross, soft block, kill block |
+| Floor | dig line, dig cross, cover the tip, chase — **provisional** |
+
+Floor is marked provisional because nobody has said it. The attack and block sets
+were named; these are the standard terms for the same distinctions on defence and
+are a proposal, not a decision.
+
+**Every behaviour is a dashed arrow, and the shape is the meaning.** A dashed
+line is what somebody draws for a thing that has not happened -- the solid marks
+on this sheet are where bodies are, and an intention is not a body.
+
+- **line** runs straight over the net on the voli's own axis, so zone 4 and zone
+  2 get different lines on the page from the same instruction.
+- **cross** cuts to the opposite far corner, its direction taken from the
+  hitter's own x. The one shot whose drawing genuinely depends on where they
+  stand, which is why it cannot be a fixed angle -- and a middle correctly gets
+  the shorter of the two, because a middle has less angle than a pin.
+- **tool** is short, flat and level, with no rise at all. Struck *off* the block
+  rather than over it, and a flat mark is the only one of these that says the
+  ball never went up.
+- **feint** is a low short arc landing just past the net; **roll** is the same
+  arc longer and higher, landing deep.
+
+Nine checks, including the two an instruction system most easily gets wrong:
+telling a voli what they are already doing takes the instruction *off* (or it can
+be changed and never removed), and a block instruction on an attack page is
+refused rather than stored (or it would draw an arrow the phase has no meaning
+for).
+
+**Open on this:** nothing consumes an instruction yet. A behaviour is drawn and
+stored and the drill session in #69 does not read it, which is the next join --
+per-voli asks scored against learned comfort is exactly what these are for.

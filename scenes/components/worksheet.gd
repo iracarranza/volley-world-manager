@@ -428,6 +428,9 @@ var _drag_live: Vector2 = Vector2.ZERO
 ## Cleared on a timer rather than a `_process` loop, and the token is what makes
 ## a second refusal safe: the first one's timer still fires, sees a token it does
 ## not own, and leaves the newer note alone.
+## Where each behaviour option was drawn, so a click can find it.
+var _behaviour_rows: Array[Dictionary] = []
+
 var _notice: String = ""
 var _notice_token: int = 0
 const NOTICE_SECONDS: float = 2.8
@@ -435,6 +438,92 @@ const NOTICE_SECONDS: float = 2.8
 ## metre is two bodies in one place; this is a shade over, so a legal pair can
 ## still stand shoulder to shoulder at the net.
 const PLACEMENT_CLEARANCE_M: float = 0.85
+
+## What a voli can be told to do, per phase.
+##
+## **This is the thing the sheet did not have.** A voli on it was a body in a
+## pose, and the pose came from the *phase* -- `PHASE_POSE` is keyed by phase
+## precisely because there was nothing per-voli to key on. So a page could say
+## "this is a block" and could not say "this one closes the line and that one
+## takes the seam", which is the entire content of a tactical instruction.
+##
+## The vocabularies are the real ones. An attacker's options are the shots that
+## are actually distinct in the air -- two of them by direction, three by *how the
+## ball is struck* -- and a blocker's are the two things a block chooses between
+## (where to close) crossed with what it is trying to do (deflect or stop).
+##
+## Floor is provisional and marked as such. The user named the attack and block
+## vocabularies; these are the standard terms for the same distinctions on
+## defence, but nobody has said they are the ones this game wants.
+const BEHAVIOURS := {
+	"Attack": ["spike line", "spike cross", "tool", "roll", "feint"],
+	"Block": ["close line", "close cross", "soft block", "kill block"],
+	"Floor": ["dig line", "dig cross", "cover the tip", "chase"],
+}
+
+## What each voli has been told, keyed by slot **and phase**.
+##
+## Both, because an instruction is about one phase: the same voli closes the line
+## when blocking and digs cross when the ball is coming down, and a single value
+## per voli would make the second overwrite the first. Keyed as a string rather
+## than nested dictionaries so a lookup is one `get` with a default.
+var behaviours: Dictionary = {}
+
+## Whose instruction the rail is showing. Set by taking hold of a voli, which is
+## also how they are moved -- picking one up is the only thing "select" could
+## mean on a sheet you operate by dragging.
+var selected_slot: int = -1
+
+signal behaviour_changed(slot: int, for_phase: String, behaviour: String)
+signal voli_grabbed(who: String)
+signal voli_released()
+
+
+static func _behaviour_key(slot: int, for_phase: String) -> String:
+	return "%d:%s" % [slot, for_phase]
+
+
+## What this voli is doing in this phase, or "" if nobody has said.
+func behaviour_of(slot: int, for_phase: String = "") -> String:
+	var stem := for_phase if not for_phase.is_empty() else phase
+	return str(behaviours.get(_behaviour_key(slot, stem), ""))
+
+
+## Tell a voli what to do. Toggling the instruction they already have takes it
+## back off them, the same way clicking a held zone lets it go.
+func set_behaviour(slot: int, behaviour: String, for_phase: String = "") -> void:
+	var stem := for_phase if not for_phase.is_empty() else phase
+	if not placements.has(slot):
+		return
+	var options: Array = BEHAVIOURS.get(stem, [])
+	if not behaviour.is_empty() and not behaviour in options:
+		return
+	var key := _behaviour_key(slot, stem)
+	if str(behaviours.get(key, "")) == behaviour:
+		behaviours.erase(key)
+	else:
+		behaviours[key] = behaviour
+	behaviour_changed.emit(slot, stem, behaviour_of(slot, stem))
+	queue_redraw()
+
+
+## The name over the sticker, from whoever the sheet was given.
+func _display_name_for(who: String) -> String:
+	for profile: Dictionary in _squad():
+		if str(profile.get("key", "")) == who:
+			var shown := str(profile.get("display_name", ""))
+			return shown if not shown.is_empty() else who
+	return who
+
+
+## Where a voli is standing, said the way a coach would say it.
+func _where_is(on_court: Vector2) -> String:
+	var pin := _nearest_net_zone(on_court)
+	if pin >= 0:
+		return "zone %s" % str(
+			(NET_ZONES[pin] as Dictionary).get("label", pin + 1)
+		)
+	return "back court" if on_court.y > 3.0 else "front court"
 var zone_priorities: Array[int] = [3, 2, 1, 2]
 var light_mode: bool = true
 
@@ -1084,6 +1173,7 @@ func _gui_input(event: InputEvent) -> void:
 			var slot := _drag_slot
 			var landed := _drag_live
 			_drag_slot = -1
+			voli_released.emit()
 			## The same bound `place_voli_at` refuses on, deliberately. Two
 			## different margins leaves a band where a drop is neither placed nor
 			## removed and the voli silently springs back -- which reads as the
@@ -1103,15 +1193,29 @@ func _gui_input(event: InputEvent) -> void:
 		## A voli stands *on* a zone, so the two are always under the cursor
 		## together -- and of the two, the one a hand is reaching for is the body
 		## it can see, not the ground under it.
+		## The rail's options take the click before anything on the court does.
+		## They are drawn over the sheet, so they are in front of it in the one
+		## sense that matters to a pointer.
+		for row: Dictionary in _behaviour_rows:
+			if (row["rect"] as Rect2).has_point(button.position):
+				set_behaviour(selected_slot, str(row["behaviour"]))
+				accept_event()
+				return
 		var grabbed := _shadow_at(button.position)
 		if grabbed >= 0:
 			_drag_slot = grabbed
+			## Taking hold is also selecting. There is nothing else "select" could
+			## mean on a sheet you operate by dragging, and a separate click to
+			## select would be a second gesture for a thing the first already said.
+			selected_slot = grabbed
 			var held: Dictionary = placements[grabbed]
 			_drag_live = held.get("at", Vector2.ZERO)
 			_drag_offset = _drag_live - _unproject_floor(
 				button.position, scale, origin
 			)
+			voli_grabbed.emit(str(held.get("who", "")))
 			accept_event()
+			queue_redraw()
 			return
 		## A zone under the cursor takes the click, and taking it means **moving in
 		## on it**. Clicking the one already held lets it go again. That is the whole
@@ -1359,22 +1463,40 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 		)
 		_drawing_slot = -1
 
+	for raw_slot: int in placements:
+		var told := behaviour_of(int(raw_slot))
+		if told.is_empty():
+			continue
+		var placed_at: Vector2 = (placements[raw_slot] as Dictionary).get(
+			"at", Vector2.ZERO
+		)
+		if int(raw_slot) == _drag_slot:
+			placed_at = _drag_live
+		_draw_behaviour_arrow(
+			told, placed_at, scale, origin, alpha, reveal, 700 + int(raw_slot) * 13
+		)
+
 	if not _notice.is_empty():
 		_marker_text(
 			_notice, Vector2(size.x * 0.06, size.y * 0.075), 15,
 			Color(0.78, 0.32, 0.30), alpha, reveal
 		)
 
+	## **The rail is an instruction, not a chart.**
+	##
+	## It held four priority bars -- a frequency reading of where attacks go,
+	## which is a fact about the *opponent* on a page about what your own volis
+	## should do. Interesting once and never actionable: nothing you could do to
+	## the sheet changed it, so it was the one thing on the page you could only
+	## read. What a coach wants at the right hand is who they are holding and what
+	## that one is being told to do.
+	_draw_instruction(_rail_rect(), ink, alpha, reveal)
+
 	if adjustment_for(view, which).is_empty():
 		_marker_text(
 			"%s — nothing to set from here" % which.to_upper(),
 			Vector2(size.x * 0.06, size.y * 0.955), 13, ink, alpha * 0.6, reveal
 		)
-	elif which == "Block":
-		## Only where the bars mean something. The rail gives its strip back on the
-		## other two pages, and a rail with no strip was still being drawn into the
-		## zero-width rect it got -- a smear of hatching in the top corner.
-		_draw_zone_bars(_rail_rect(), alpha, reveal)
 
 
 ## Where the floor defence stands. Six real positions in metres, so the shape a
@@ -1580,9 +1702,13 @@ func _world_box() -> Array:
 	return [Vector3(low.x, span.x, low.z), Vector3(high.x, span.y, high.z)]
 
 
+## The strip down the right, which every phase has now.
+##
+## It used to collapse to a zero-width rect on anything but Block, because the
+## only thing it ever held was the block page's priority bars. What it holds now
+## is the instruction for whichever voli you are holding, and that is a question
+## every phase has an answer to.
 func _rail_rect() -> Rect2:
-	if phase != "Block":
-		return Rect2(Vector2(size.x * (1.0 - MARGIN_SHARE), size.y * 0.2), Vector2.ZERO)
 	return Rect2(
 		size.x * 0.795, size.y * (HEAD_SHARE + 0.10),
 		size.x * 0.175, size.y * (1.0 - HEAD_SHARE - FOOT_SHARE - 0.18)
@@ -1891,8 +2017,226 @@ func _draw_blockers(
 
 
 
-## The priority bars. Black for the level, red for the one being pointed at, and
-## a hand-ruled baseline under all four.
+## What an instruction looks like on the floor.
+##
+## Every behaviour is a **dashed arrow**, because a dashed line is what somebody
+## draws for a thing that has not happened yet -- the solid marks on this sheet
+## are where bodies are, and an intention is not a body. What differs between
+## them is the *shape*, and the shape is the meaning rather than a decoration:
+##
+## - **line** runs straight over the net on the voli's own axis. "Straight
+##   forward" from wherever they are standing, so a voli in zone 4 and a voli in
+##   zone 2 get different lines on the page and the same instruction.
+## - **cross** cuts to the opposite far corner, so its direction comes off the
+##   hitter's own x. The one shot whose drawing genuinely depends on where they
+##   stand, which is why it cannot be a fixed angle.
+## - **tool** is short, flat and level -- no rise at all. It is a ball struck
+##   *off the block* rather than over it, and a flat mark is the only one of these
+##   that says the ball never went up.
+## - **feint** is a low, short arc that lands just past the net.
+## - **roll** is the same arc drawn longer and higher, landing deep.
+##
+## Block's four are marks at the net rather than flights: where the hands close
+## and what the wall is trying to do.
+const ARROW_STEPS: int = 14
+
+
+func _draw_behaviour_arrow(
+	behaviour: String, from_court: Vector2, scale: float, origin: Vector2,
+	alpha: float, reveal: float, salt: int
+) -> void:
+	## Off the hand rather than off the feet: a shot leaves a body at the height
+	## it was struck, and an arrow starting between the shoes reads as a pass.
+	var lift := 2.5 if phase == "Attack" else 2.3
+	var start := Vector3(from_court.x, from_court.y, lift)
+	var over := -1.0 if from_court.y > 0.0 else 1.0
+	var points: Array[Vector3] = []
+	match behaviour:
+		"spike line":
+			points = [start, Vector3(from_court.x, from_court.y + over * 7.0, 0.0)]
+		"spike cross":
+			## Toward the far corner on the other side of the court from the
+			## hitter. A hitter on the middle gets the shorter of the two, which
+			## is correct: a middle has less angle than a pin.
+			var away := -signf(from_court.x) if absf(from_court.x) > 0.2 else 1.0
+			points = [
+				start,
+				Vector3(away * HALF_WIDTH_M * 0.82, from_court.y + over * 6.0, 0.0),
+			]
+		"tool":
+			## Level, and short. Struck off the block and out, so it never rises
+			## and it does not travel far before it leaves the court.
+			var out := signf(from_court.x) if absf(from_court.x) > 0.2 else 1.0
+			points = [
+				start,
+				Vector3(from_court.x + out * 3.2, from_court.y + over * 1.6, lift),
+			]
+		"feint", "cover the tip":
+			points = _arc(start, Vector3(
+				from_court.x * 0.4, from_court.y + over * 2.6, 0.0
+			), 0.9)
+		"roll", "chase":
+			points = _arc(start, Vector3(
+				from_court.x * 0.3, from_court.y + over * 7.4, 0.0
+			), 2.4)
+		"close line":
+			points = [start, Vector3(
+				from_court.x + signf(from_court.x) * 0.7, from_court.y + over * 0.5,
+				lift + 0.5
+			)]
+		"close cross":
+			points = [start, Vector3(
+				from_court.x - signf(from_court.x) * 0.9, from_court.y + over * 0.5,
+				lift + 0.5
+			)]
+		"soft block":
+			points = _arc(start, Vector3(
+				from_court.x, from_court.y - over * 2.4, 0.0
+			), 1.1)
+		"kill block":
+			points = [start, Vector3(
+				from_court.x, from_court.y + over * 2.2, 0.0
+			)]
+		"dig line":
+			points = _arc(start, Vector3(from_court.x * 0.2, 2.6, 0.0), 1.6)
+		"dig cross":
+			points = _arc(start, Vector3(-from_court.x * 0.5, 2.6, 0.0), 1.6)
+		_:
+			return
+	_dashed_flight(points, scale, origin, alpha, reveal, salt)
+
+
+## A lobbed path from one point to another, `rise` metres over the straight line
+## at its highest. Enough points that the dashes follow the curve rather than
+## cutting it.
+func _arc(from_point: Vector3, to_point: Vector3, rise: float) -> Array[Vector3]:
+	var path: Array[Vector3] = []
+	for step in range(ARROW_STEPS + 1):
+		var t := float(step) / float(ARROW_STEPS)
+		var point := from_point.lerp(to_point, t)
+		point.z += sin(t * PI) * rise
+		path.append(point)
+	return path
+
+
+## Dashes along a path, with a head on the end.
+func _dashed_flight(
+	points: Array[Vector3], scale: float, origin: Vector2, alpha: float,
+	reveal: float, salt: int
+) -> void:
+	if points.size() < 2:
+		return
+	var flat: Array[Vector2] = []
+	for point in points:
+		flat.append(_project(point, scale, origin))
+	## Two-thirds mark, one-third gap, walked along the whole path rather than
+	## per segment -- dashes reset at every segment boundary look like a chain of
+	## short lines, which is what a straight arrow made of two points would give.
+	for index in range(flat.size() - 1):
+		if index % 3 == 2 and flat.size() > 3:
+			continue
+		var a: Vector2 = flat[index]
+		var b: Vector2 = flat[index + 1]
+		if flat.size() == 2:
+			## A two-point path has to be dashed by subdivision instead.
+			for piece in range(ARROW_STEPS):
+				if piece % 3 == 2:
+					continue
+				_marker_line(
+					a.lerp(b, float(piece) / float(ARROW_STEPS)),
+					a.lerp(b, float(piece + 1) / float(ARROW_STEPS)),
+					MARKER_RED, alpha * 0.85, reveal, salt + piece, MARKER_WIDTH
+				)
+			break
+		_marker_line(a, b, MARKER_RED, alpha * 0.85, reveal, salt + index, MARKER_WIDTH)
+	var tip: Vector2 = flat[flat.size() - 1]
+	var before: Vector2 = flat[maxi(flat.size() - 2, 0)]
+	var heading := (tip - before).normalized()
+	if heading == Vector2.ZERO:
+		return
+	var wing := heading.orthogonal() * 5.0
+	_marker_line(
+		tip, tip - heading * 11.0 + wing, MARKER_RED, alpha, reveal,
+		salt + 91, MARKER_WIDTH
+	)
+	_marker_line(
+		tip, tip - heading * 11.0 - wing, MARKER_RED, alpha, reveal,
+		salt + 92, MARKER_WIDTH
+	)
+
+
+## Who is held, where they are, and what they have been told.
+##
+## Drawn rather than built from Controls, like everything else on this sheet: a
+## page whose argument is that the drawing is the interface does not grow a panel
+## of buttons down one side. The option rows are hit-tested from the rects they
+## were drawn into, the same discipline the shadow handles use -- a control cannot
+## be somewhere its mark is not.
+const INSTRUCTION_ROW: float = 26.0
+
+
+func _draw_instruction(
+	area: Rect2, ink: Color, alpha: float, reveal: float
+) -> void:
+	_behaviour_rows.clear()
+	if area.size.x < 8.0:
+		return
+	_marker_text(
+		"SELECTED", area.position + Vector2(0.0, -8.0), 15, ink, alpha, reveal
+	)
+	if selected_slot < 0 or not placements.has(selected_slot):
+		_marker_text(
+			"nobody — take hold of a voli",
+			area.position + Vector2(0.0, 18.0), 13, ink, alpha * 0.6, reveal
+		)
+		return
+
+	var held: Dictionary = placements[selected_slot]
+	var who := str(held.get("who", ""))
+	var spot: Vector2 = held.get("at", Vector2.ZERO)
+	_marker_text(
+		_display_name_for(who), area.position + Vector2(0.0, 20.0),
+		16, ink, alpha, reveal
+	)
+	_marker_text(
+		_where_is(spot), area.position + Vector2(0.0, 38.0),
+		13, MARKER_RED, alpha, reveal
+	)
+
+	var options: Array = BEHAVIOURS.get(phase, [])
+	if options.is_empty():
+		return
+	_marker_text(
+		"BEHAVIOUR", area.position + Vector2(0.0, 68.0), 15, ink, alpha, reveal
+	)
+	var chosen := behaviour_of(selected_slot)
+	for index in range(options.size()):
+		var label := str(options[index])
+		var row := Rect2(
+			area.position + Vector2(-4.0, 78.0 + float(index) * INSTRUCTION_ROW),
+			Vector2(area.size.x + 8.0, INSTRUCTION_ROW - 3.0)
+		)
+		_behaviour_rows.append({"rect": row, "behaviour": label})
+		var picked := label == chosen
+		if picked:
+			## The chosen one is struck through with the marker rather than boxed.
+			## A box is a control; a line through the words is what somebody with
+			## a pen does to the option they have settled on.
+			_marker_line(
+				row.position + Vector2(2.0, row.size.y * 0.55),
+				row.position + Vector2(row.size.x - 6.0, row.size.y * 0.55),
+				MARKER_RED, alpha * 0.55, reveal, 300 + index * 11, MARKER_WIDTH
+			)
+		_marker_text(
+			label, row.position + Vector2(4.0, row.size.y * 0.72),
+			14, MARKER_RED if picked else ink,
+			alpha if picked else alpha * 0.78, reveal
+		)
+
+
+## The priority bars, kept because the block page may still want them somewhere.
+## Black for the level, red for the one being pointed at, and a hand-ruled
+## baseline under all four.
 func _draw_zone_bars(area: Rect2, alpha: float, reveal: float) -> void:
 	var ink := _ink()
 	_marker_text(
