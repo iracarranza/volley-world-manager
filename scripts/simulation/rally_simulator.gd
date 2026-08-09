@@ -1989,8 +1989,7 @@ func resolve(
 	var attack_trajectory := _ball_trajectory(
 		"attack", set_target, attack_target, attack_flight,
 		float(attack_arc.apex_height_meters),
-		rally_clock + set_flight_time,
-		float(attack_arc.get("vertical_speed_mps", NAN)),
+		rally_clock + set_flight_time
 	)
 	if using_live_attack:
 		attack_trajectory = Dictionary(selected_live_attack.get(
@@ -2239,17 +2238,18 @@ func resolve(
 		## crosses the net rather than where it was originally headed -- same
 		## launch angle, shorter distance, so duration/apex still fall out of
 		## the geometry instead of being a separate hardcoded segment.
-		var attack_to_block_arc := _truncated_arc(
-			attack_arc,
-			RallyKinematics.court_distance_meters(set_target, attack_target),
+		var attack_to_block_arc := _swing_arc(
+			Dictionary(shadow_summary.get("geometric_attack", {})),
 			RallyKinematics.court_distance_meters(set_target, net_contact),
+			GeometricAttackPromotionModel.contact_height_meters(
+				hitter, float(resolved_approach.get("jump_multiplier", 1.0))
+			),
 		)
 		attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 			"attack_to_block", set_target, net_contact,
 			float(attack_to_block_arc.duration_seconds),
 			float(attack_to_block_arc.apex_height_meters),
-			float(attack_event.metadata.get("event_time", rally_clock)),
-			float(attack_to_block_arc.get("vertical_speed_mps", NAN)),
+			float(attack_event.metadata.get("event_time", rally_clock))
 		)
 	## Walk the opponent's blockers to their wall during the *set's* flight,
 	## which is when a block actually forms. Without this they were drawn
@@ -3560,8 +3560,7 @@ func _resolve_opponent_transition(
 		"attack", opponent_contact, home_target,
 		float(opponent_attack_arc.duration_seconds),
 		float(opponent_attack_arc.apex_height_meters),
-		opponent_set_contact_time + set_flight_time,
-		float(opponent_attack_arc.get("vertical_speed_mps", NAN)),
+		opponent_set_contact_time + set_flight_time
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
 		opponent_hitter.display_name,
@@ -3705,11 +3704,15 @@ func _resolve_opponent_transition(
 		var opponent_start: Vector2 = Vector2(opponent_flight.get(
 			"start_position", opponent_net_contact
 		))
-		var to_block_arc := _truncated_arc(
-			opponent_attack_arc,
-			RallyKinematics.court_distance_meters(opponent_contact, home_target),
+		var to_block_arc := _swing_arc(
+			Dictionary(_trace_summary().get(
+				"geometric_attack_opponent", {}
+			)),
 			RallyKinematics.court_distance_meters(
 				opponent_start, opponent_net_contact
+			),
+			GeometricAttackPromotionModel.contact_height_meters(
+				opponent_hitter, 1.0
 			),
 		)
 		opponent_attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
@@ -3717,7 +3720,6 @@ func _resolve_opponent_transition(
 			float(to_block_arc.duration_seconds),
 			float(to_block_arc.apex_height_meters),
 			float(opponent_flight.get("start_time", rally_clock)),
-			float(to_block_arc.get("vertical_speed_mps", NAN)),
 		)
 	## Same correction as the home block's: the ball has to arrive before the
 	## hands can touch it.
@@ -4444,7 +4446,6 @@ func _resolve_home_continuation(
 		"attack", set_target, attack_target, continuation_attack_flight,
 		float(continuation_attack_arc.apex_height_meters),
 		cont_set_contact_time + continuation_flight_time,
-		float(continuation_attack_arc.get("vertical_speed_mps", NAN)),
 	)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, attack_quality >= 0.25, attack_quality,
@@ -4575,17 +4576,18 @@ func _resolve_home_continuation(
 		else Vector2(set_target.x, 0.47)
 	if cont_block_contacts:
 		var cont_attack_event: Resource = result.events[-1]
-		var cont_to_block_arc := _truncated_arc(
-			continuation_attack_arc,
-			RallyKinematics.court_distance_meters(set_target, attack_target),
+		var cont_to_block_arc := _swing_arc(
+			Dictionary(_trace_summary().get(
+				"geometric_attack_transition", {}
+			)),
 			RallyKinematics.court_distance_meters(set_target, cont_net_contact),
+			GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		)
 		cont_attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 			"attack_to_block", set_target, cont_net_contact,
 			float(cont_to_block_arc.duration_seconds),
 			float(cont_to_block_arc.apex_height_meters),
 			cont_set_contact_time + continuation_flight_time,
-			float(cont_to_block_arc.get("vertical_speed_mps", NAN)),
 		)
 	var block_event_detail := "Primary close %d%%; block quality %d%%." % [
 		roundi(primary_close * 100.0), roundi(block_quality * 100.0),
@@ -6630,28 +6632,6 @@ func _swing_arc(
 	)
 
 
-## The same swing, drawn only as far as the block.
-##
-## Not a new solve. `_swing_arc` re-solved the driven angle against the *distance
-## to the net*, which asks "what shot lands at the tape" -- so the re-sliced leg
-## was aimed at the block rather than through it, and dived: measured, 111 of 181
-## attack-to-block flights crossed the tape below the net, some of them already
-## on the floor. Truncating a flight must not change its shape, only where it
-## stops, so the leg keeps the parent swing's launch and takes the share of its
-## duration that the shorter distance is worth.
-func _truncated_arc(
-	parent: Dictionary, full_distance: float, short_distance: float
-) -> Dictionary:
-	var share := clampf(
-		short_distance / maxf(full_distance, 0.0001), 0.0, 1.0
-	)
-	var truncated := parent.duplicate(true)
-	truncated["duration_seconds"] = maxf(
-		float(parent.get("duration_seconds", 0.5)) * share, 0.02
-	)
-	return truncated
-
-
 func _ball_trajectory(
 	kind: String,
 	start: Vector2,
@@ -6659,14 +6639,6 @@ func _ball_trajectory(
 	flight_time: float,
 	apex_height: float,
 	start_timestamp: float = -1.0,
-	## How fast the ball was going *up* when it left the contact, signed.
-	##
-	## Optional, and only the struck flights supply it. A drawn segment carries
-	## two endpoints and a duration, which determine a parabola -- but only when
-	## both endpoints are real. A spike cut short at the tape has an endpoint that
-	## is an interception rather than a landing, and reconstructing the launch
-	## from it draws the wrong ball. This is the launch, stated.
-	launch_vertical_mps: float = NAN,
 ) -> Dictionary:
 	var timestamp := rally_clock if start_timestamp < 0.0 else start_timestamp
 	var direction := end - start
@@ -6682,8 +6654,6 @@ func _ball_trajectory(
 	## calibration reads it for the duration/rise invariant.
 	data["apex_rise_meters"] = apex_height
 	data["height_contract"] = "relative_rise"
-	if not is_nan(launch_vertical_mps):
-		data["launch_vertical_mps"] = launch_vertical_mps
 	return data
 
 

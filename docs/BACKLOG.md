@@ -3951,43 +3951,57 @@ centimetres of the hitter's own contact. A curve forced to arrive level after
 most of a second has to be launched upward to spend the time. Attack-to-block is
 181 of 1090 flights and it is the one a viewer watches most closely.
 
-### The fix: carry the launch instead of re-inferring it
+### The fix is known and is **not** in the tree
 
-`struck_arc_from_speed` knows the vertical speed the swing produced and now
-publishes it; `_ball_trajectory` carries it; `BallPresentation` derives the far
-end from it where it is present. Sets, passes and digs are not struck and keep
-the two-contact-height solve, which is the better answer for them.
+The launch is the missing fact. `struck_arc_from_speed` knows the vertical speed
+the swing produced; publishing it, carrying it on the trajectory and deriving the
+far end from it draws every sampled attack descending monotonically. That was
+built, measured, and then reverted -- the diagnosis is solid and the landing is
+not, and the difference is worth being explicit about.
 
-This is `§8`'s own requirement -- outcome, position and drawing out of one
-computation -- reaching the case it had not reached.
+Three variants were tried and each trades one defect for another:
 
-### Two overcorrections on the way, both recorded because both looked right
+| variant | attack-to-block below the tape | suite |
+|---|---|---|
+| as shipped -- far end from the blocker's reach | 0, by lobbing over it | green |
+| far end from the carried launch, leg keeps its own solve | 99 of 181 | green |
+| leg also takes the parent's duration (`_truncated_arc`) | 50 of 181 | **1 red** |
+
+The third is the physically consistent one -- the leg keeps the parent's launch
+*and* the share of its duration the shorter distance is worth, which is the same
+rule the rest of this entry argues for. It fails `a block happens during the
+swing, not after it lands` at 36 of 190, because a proportionally-timed leg ends
+exactly when the ball reaches the tape, and the gate measures the block's stamp
+against that leg rather than against the whole swing. That may well be the gate
+measuring the wrong denominator -- it is the same shape as the funnel gate, which
+asserted the inverse of the truth for two passes -- but 36 of 190 is not the
+190 of 190 that reading predicts, so something else is also moving and it was not
+chased.
+
+Two overcorrections on the way, recorded because both looked right:
 
 1. **Reading the far end off the aimed flight at the truncation fraction.**
    Correct in principle, wrong here: `attack_to_block` trajectories are *already*
    truncated by the resolver, so the aimed flight is the short leg and the ball
    was drawn hitting the floor at the net.
-2. **`_swing_arc` re-solved the driven angle against the distance to the net.**
-   That asks "what shot lands at the tape", so the re-sliced leg aimed at the
-   block rather than through it and dived -- 111 of 181 crossing below the net.
-   `_truncated_arc` now keeps the parent swing's launch and takes the share of
-   its duration the shorter distance is worth, which is the same rule as before:
-   truncating a flight must not change its shape.
+2. **`_swing_arc` re-solves the driven angle against the distance to the net.**
+   That asks "what shot lands at the tape", so the re-sliced leg aims at the
+   block rather than through it and dives -- 111 of 181.
 
-### Open, and newly visible rather than newly caused
+### What the honest curve exposes one layer up
 
-**50 of 181 attack-to-block flights still cross the tape below net height.**
-Before any of this they crossed above it by lobbing, which is clearing the net
-by being wrong. The honest curve exposes a real defect one layer up:
-`GeometricAttackResolver` searches for an angle that clears the net -- that is
-what `_height_at_net` and `NET_SPEED_RELIEF_STEPS` are for -- and `_swing_arc`
-throws that answer away and re-solves the driven root without the constraint. A
-back-row swing struck at the reference angle from four metres back physically
-cannot clear the tape, and the resolver already knows it.
+Whichever variant lands, a large share of attack-to-block flights cross below net
+height, and before any of this they cleared by lobbing -- which is clearing the
+net by being wrong. `GeometricAttackResolver` searches for an angle that *clears
+the tape*; that is what `_height_at_net` and `NET_SPEED_RELIEF_STEPS` exist for.
+`_swing_arc` throws that answer away and re-solves the driven root without the
+constraint, so a back-row swing struck at the reference angle from four metres
+back cannot physically get over, and the resolver already knew.
 
-The repair is to prefer the record's own `vertical_angle_degrees`, which is the
-cleared angle, and bound it rather than re-derive it. It is **not** attempted
-here: carrying that angle naively was tried earlier in this same pass and drew
-two-second flights nine metres up, because the angle belongs to the resolver's
-landing point and not to the legacy target. Getting both right at once needs the
-two targets reconciled first, which is a bigger change than this one.
+The repair is to prefer the record's own `vertical_angle_degrees` -- the cleared
+angle -- and bound it rather than re-derive it. Carrying that angle naively was
+tried in this same pass and drew two-second flights nine metres up, because the
+angle belongs to the resolver's landing point and the drawn event goes to the
+legacy `attack_target`. **Reconciling those two targets is the prerequisite**,
+and it is the same reconciliation the three setter-selection paths need. Until
+then this stays reported rather than half-fixed.
