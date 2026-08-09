@@ -6638,8 +6638,18 @@ func _swing_arc(
 	## hop to the net rather than the shot's own range -- a different defect with
 	## the same symptom, and the reason this takes a flag rather than always
 	## trusting the record.
+	## Downward-struck balls only, and the bound is the finding rather than a
+	## safety margin. Carrying the angle unconditionally moved the mean height of
+	## an untouched attack at the tape from 2.69 m to 5.19 m: the resolver's
+	## net-clearance search falls back to a *lofted* root when a driven one cannot
+	## get over, and a lofted angle is achieved by going a very long way up. That
+	## is the right shot for a roll played over a formed block and the wrong curve
+	## for everything else, and the flat-spike report this whole thread comes from
+	## was never about roll shots. A struck ball is the case where the cleared
+	## angle matters; a lofted one re-solves as it did before.
 	if reached_resolved_target and bool(record.get("available", false)) \
-			and record.has("vertical_angle_degrees"):
+			and record.has("vertical_angle_degrees") \
+			and float(record.vertical_angle_degrees) <= 0.0:
 		return RallyKinematics.struck_arc_from_speed(
 			distance_meters, speed,
 			float(record.vertical_angle_degrees), height,
