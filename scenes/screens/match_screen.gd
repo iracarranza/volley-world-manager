@@ -123,6 +123,9 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 
 func _run_rally(generation: int) -> void:
 	var events := active_result.events
+	## The rally's own cues, taken off the result rather than recompiled, so a
+	## replay shows the thoughts the rally was resolved with.
+	match_court_3d.set_cognition_stream(active_result.cognition_cues)
 	for event_index in range(events.size()):
 		if generation != playback_generation or skip_requested:
 			break
@@ -163,6 +166,7 @@ func _run_rally(generation: int) -> void:
 				event, _gap_to_next(events, event_index), generation
 			)
 	match_court_3d.ball_actor.hold_at_rest()
+	match_court_3d.clear_cognition()
 
 
 ## How long the ball actually spends between this event and the next.
@@ -220,6 +224,7 @@ func _play_flight(
 		match_court_3d.set_ball_trajectory_sample(display_trajectory, progress)
 		match_court_3d.apply_movement_plan(movement_plan, progress, duration)
 		_apply_contact_poses(event, next_contact, after_next, progress, duration)
+		_sample_cognition(event, next_contact, progress, duration)
 		progress_bar.value = (
 			(float(event_index) + progress) / maxf(float(event_count), 1.0)
 		) * 100.0
@@ -239,6 +244,7 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 		elapsed += get_process_delta_time() * playback_speed
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.reset_player_poses()
+		_sample_cognition(event, null, progress, duration)
 		var direction := event.end_position - event.start_position
 		## A block that stopped the ball dead has no outgoing trajectory, so it
 		## arrives here rather than in `_apply_contact_poses` -- and that is
@@ -968,3 +974,29 @@ func _close() -> void:
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	close_requested.emit()
+
+
+## Walks the rally's physical clock across one event's window and samples the
+## cues on it.
+##
+## `progress` is the animation's own 0-1 through this leg; the cues live on the
+## resolver's seconds. Mapping one onto the other here -- rather than sampling
+## on `progress` directly -- is what keeps a thought attached to the moment of
+## the rally it belongs to at every playback speed and through a pause.
+##
+## The window ends at the next contact's stamp when there is one, and at this
+## event's own stamp plus the leg's duration when there is not, so the last
+## contact of a rally still advances rather than freezing the badge.
+func _sample_cognition(
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	progress: float,
+	leg_seconds: float,
+) -> void:
+	var from_time := float(event.metadata.get("physical_time", 0.0))
+	var to_time := from_time
+	if next_contact != null:
+		to_time = float(next_contact.metadata.get("physical_time", from_time))
+	if to_time <= from_time:
+		to_time = from_time + maxf(leg_seconds, 0.01)
+	match_court_3d.sample_cognition(lerpf(from_time, to_time, progress))

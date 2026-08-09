@@ -403,6 +403,7 @@ func _setup_visualization_controls() -> void:
 		["Tactical guides", TacticalCourt.VISUAL_TACTICAL_GUIDES],
 		["Coverage zones", TacticalCourt.VISUAL_COVERAGE_ZONES],
 		["Contact overlays", TacticalCourt.VISUAL_CONTACT_OVERLAYS],
+		["Player cognition", TacticalCourt.VISUAL_COGNITION],
 	]:
 		popup.add_check_item(str(layer[0]), int(layer[1]))
 	popup.id_pressed.connect(_visualization_layer_toggled)
@@ -424,6 +425,7 @@ func _refresh_visualization_menu() -> void:
 		TacticalCourt.VISUAL_TACTICAL_GUIDES,
 		TacticalCourt.VISUAL_COVERAGE_ZONES,
 		TacticalCourt.VISUAL_CONTACT_OVERLAYS,
+		TacticalCourt.VISUAL_COGNITION,
 	]:
 		var item_index := popup.get_item_index(layer_id)
 		if item_index >= 0:
@@ -1512,6 +1514,12 @@ func _play_rally(
 	match_preview_court.begin_rally_playback(
 		initial_home_positions, initial_opponent_positions
 	)
+	## The rally's own cognition stream, handed to both courts before the first
+	## event plays. Taken off the result rather than recompiled here, so what a
+	## replay shows is what the rally was resolved with.
+	var cognition_stream: Array = result.cognition_cues if result != null else []
+	tactical_court.set_cognition_stream(cognition_stream)
+	match_preview_court.set_cognition_stream(cognition_stream)
 	_show_shadow_reception_debug(result, show_shadow_diagnostics)
 	tactical_court.set_coverage_zones_visible(false)
 	match_preview_court.set_coverage_zones_visible(false)
@@ -1529,6 +1537,8 @@ func _play_rally(
 	dashboard_playback_history_label.text = "No earlier events."
 	var playback_speed := float(_selected_metadata(playback_speed_option))
 	var last_displayed_event: Resource = null
+	## Where the rally's own clock has reached, in resolver seconds.
+	var cognition_clock := 0.0
 	## The event a spatial transition just delivered its mover to (its
 	## next-contact partner). That mover already arrived and made contact
 	## during the leg just played; replaying the same approach on this event's
@@ -1542,6 +1552,21 @@ func _play_rally(
 		if last_displayed_event != null:
 			_append_playback_history(last_displayed_event)
 		last_displayed_event = event
+		## Walk the rally's physical clock across this event's playback window
+		## before its phases run. `event_time` is the resolver's second, the
+		## durations below are wall-clock seconds already scaled by playback
+		## speed, and keeping the two apart is what makes 0.5x and 2x show the
+		## same thoughts at the same points of the rally rather than of the
+		## animation.
+		var cognition_from := cognition_clock
+		cognition_clock = float(event.metadata.get("event_time", cognition_clock))
+		var cognition_span := _event_playback_seconds(event, playback_speed)
+		tactical_court.advance_cognition_time(
+			cognition_from, cognition_clock, cognition_span
+		)
+		match_preview_court.advance_cognition_time(
+			cognition_from, cognition_clock, cognition_span
+		)
 		var playback_headline := _playback_event_headline(event)
 		var playback_detail := _playback_event_detail(event)
 		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
@@ -1775,6 +1800,10 @@ func _reset_tactical_positions(show_status: bool = true) -> void:
 		return
 	tactical_court.clear_rally_playback()
 	match_preview_court.clear_rally_playback()
+	## A badge outliving the rally it belonged to is the same defect class as a
+	## stale movement trail, which the call above already exists to prevent.
+	tactical_court.clear_cognition()
+	match_preview_court.clear_cognition()
 	if show_status:
 		_set_status("Tactical markers returned to saved rotation positions.")
 
@@ -2336,3 +2365,26 @@ func _on_rally_completed(rally_result: RallyResult) -> void:
 	if match_screen == null:
 		return
 	await match_screen.load_and_play_rally(rally_result)
+
+
+## Wall-clock seconds one event occupies during playback.
+##
+## Mirrors the two branches of `_play_rally_events` exactly -- a ball flight
+## between two contacts uses the trajectory's own clamped duration, everything
+## else uses the movement-plus-flight estimate -- because the cognition clock has
+## to finish its walk at the same instant the event's animation does. A second
+## formula here would drift, and a badge arriving a beat after the contact it
+## explains is worse than no badge.
+func _event_playback_seconds(event: Resource, playback_speed: float) -> float:
+	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+	if not outgoing.is_empty():
+		return clampf(float(outgoing.get("duration", 0.5)), 0.28, 2.60) \
+			/ maxf(playback_speed, 0.1)
+	var simulated_movement := float(event.metadata.get("movement_duration", 0.0))
+	var simulated_flight := float(event.metadata.get(
+		"flight_time", event.metadata.get("set_flight_time", 0.0)
+	))
+	return clampf(float(event.metadata.get(
+		"event_duration",
+		maxf(0.46, simulated_movement + simulated_flight * 0.55),
+	)), 0.55, 2.60) / maxf(playback_speed, 0.1)

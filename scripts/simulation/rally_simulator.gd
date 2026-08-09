@@ -13,6 +13,8 @@ const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const ShadowReceptionSystemModel := preload("res://scripts/simulation/shadow_reception_system.gd")
 const RallyShadowComparisonModel := preload("res://scripts/simulation/rally_shadow_comparison.gd")
 const RallyRolloutPolicyModel := preload("res://scripts/simulation/rally_rollout_policy.gd")
+const RallyActionVocabularyModel := preload("res://scripts/simulation/rally_action_vocabulary.gd")
+const CognitionCompilerModel := preload("res://scripts/simulation/cognition_compiler.gd")
 const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_flags.gd")
 const GeometricAttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
@@ -8146,6 +8148,17 @@ func _finish(
 			shadow_reception_trace.summary["reception_rollout"] = rollout
 		result.analysis["shadow_reception"] = shadow_reception_trace.to_dict()
 	_finalize_rally_timeline(result)
+	## Cognition is compiled last, and after the timeline, because every cue is
+	## an interval on the physical clock `_finalize_rally_timeline` stamps. Built
+	## before it, a cue would be positioned against event times that were about to
+	## move -- the same ordering mistake that put the drawn ball and the played
+	## ball in different places, one contact apart.
+	##
+	## The vocabulary runs first so a cue may read the name of the action it is
+	## reacting to rather than re-deriving it, which is the whole reason the
+	## vocabulary is a shared tag and not a caption string.
+	RallyActionVocabularyModel.annotate(result)
+	result.cognition_cues.assign(CognitionCompilerModel.compile(result))
 	return result
 
 

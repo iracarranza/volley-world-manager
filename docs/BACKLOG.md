@@ -4512,3 +4512,106 @@ Not a coefficient. Three separable things, in the order they should be taken:
 
 Recorded rather than done, because all three change the block's rates together
 and fixing one alone would be measured against the other two.
+
+---
+
+## The cognition layer, and two names that could never fire
+
+All nine steps of the cognition handoff. Four unwired foundations become a layer
+the rally carries, and the build found four defects the way this repository
+usually finds them -- by printing a distribution rather than by reasoning about
+one.
+
+### `misread` is a magnitude, not a flag
+
+`_setter_option_terms` returns `misread` as `stable_noise * (1 - judgment) *
+0.22` -- a signed size. The compiler's first version read it as a boolean, and
+`bool()` of any non-zero float is true, so **182 of 182 options across 120
+rallies came out misread** and every setter would have been drawn equally unsure
+of everything. Read as a magnitude it has a real range: judgment sits at 0.855
+for the slice's setter, so |misread| tops out at 0.032 and separates two options
+by about a tenth of certainty.
+
+### The option list lives in two different places
+
+The home side publishes `option_evaluation` on its `SET_DECISION` event; the
+opponent publishes it on the `SET` event. Read in the compiler so neither
+renderer learns the two sides disagree. The asymmetry itself is still open.
+
+### `Dime` and `Telegraphed` both asked `primary_close`
+
+The action vocabulary's two set names ask the same question -- did the wall get
+there? -- and both asked it of the field that cannot answer. Measured over 800
+rallies before the correction:
+
+    Dime           0 occurrences
+    Telegraphed  240 occurrences, 20.5% of every name in the game
+
+`Dime` is the draft's own most important entry: "the one name that credits a
+player for a point they did not score, which is the whole reason setters are
+interesting." It was unreachable, and its opposite was the most common thing
+that happened, both because the primary blocker is *selected* as the front-row
+player nearest the lane and therefore always arrives.
+
+Pointed at `assist_close_attempted` -- the travelling blocker, before the 0.34
+cut that zeroes it -- `Beaten by tempo` becomes reachable and `Telegraphed`
+falls to 19.0%. **`Dime` is still zero**, and that is now a true statement about
+the simulation rather than about the field: the assist seals 93% of walls, so a
+set almost never isolates a hitter. Same finding as the block-close probe, from
+a second instrument. Not chased with a threshold.
+
+### The budget's third target was measuring the wrong noun
+
+The draft asks for "the share of *points* whose decisive **event** carries a
+name". The probe measured whether `decisive_actor_id` was named -- but the actor
+credited with a point and the actor of its last contact are different players on
+a stuffed swing, on opposite sides of the net. Corrected to the final contact,
+the figure moves 34.6% -> 52.5% with no change to the budget at all.
+
+### Where the vocabulary sits against its own targets
+
+    rallies with at least one named action    88.6%   target 40-60%
+    named actions per rally                    1.44   target ~1
+    points whose decisive contact is named    52.5%   target high
+    names offered before the budget            1839
+    names kept                                 1155
+
+Two of three are out of band and the threshold was **not** moved to fix them.
+The draft says why: "playback thresholds cannot be finalised until the block
+rate is calibrated and the vocabulary is in." `Telegraphed`, `Got tooled`,
+`Roof` and `Swung into the block` together are 55% of all names, and every one
+of them is a block outcome. The block's rates are the input, not the labels.
+
+### What the layer is, in one paragraph
+
+A cue is semantics and never a picture. `CognitionCompiler` is the only thing
+allowed to read `option_evaluation`, `primary_close_terms` or any `shadow_*`
+dictionary; `CognitionBadge` holds every meaning; the tactical board rasterises
+it into arcs and the 3D billboard picks a glyph, and neither has a rule of its
+own. A blocker's believed lane is where they actually travelled, never the lane
+the attack used -- a blocker who read it wrong points at the wrong place, which
+is the behaviour worth showing. Cues sample the rally's physical clock rather
+than the animation's progress, so 0.5x and 2x show the same thought at the same
+point of the rally. Reactions write nothing: `match_confidence` remains the
+post-point system.
+
+### Two gates that failed usefully before they passed
+
+The determinism check failed against a re-used manager -- the same seed later in
+a match is a different rally by design -- which is the gate catching the test.
+The stagger check failed until it was scoped to home walls: every Port Azure
+player sits on the default anticipation of 50, so two opponent blockers derive
+the same reaction delay and genuinely recognise together. Including them would
+have made the gate a measurement of the fixture.
+
+Home walls stagger by **0.018 s**, which is real but invisible. Both home
+middles carry nearly the same anticipation, so the gate asserts the mechanism --
+distinct per-blocker delays reaching the cue -- rather than a visible spread.
+
+### Still open
+
+- `Dime` needs the block budget re-fitted before it can fire. Same three repairs
+  the block-close probe already named.
+- The vocabulary's naming threshold is unchanged and out of band, deliberately,
+  until the block rate is calibrated.
+- `SET_DECISION` versus `SET` for the option list is read around, not fixed.

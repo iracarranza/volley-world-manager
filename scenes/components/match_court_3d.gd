@@ -363,3 +363,73 @@ func _apply_camera_preset() -> void:
 	camera_3d.position = Vector3(preset["position"])
 	camera_3d.fov = float(preset["fov"])
 	camera_3d.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)
+
+
+## The rally's cognition stream, and the sampler both playback paths share.
+##
+## `active_by_player_for_spectators` rather than the unfiltered sampler the
+## tactical board uses: this presentation is a camera in a gym and a setter's
+## private weighing of three options is not something a camera can see. That is
+## the only difference between the two renderers, and it is a difference of
+## audience rather than of meaning -- everything about *what* a cue means is
+## decided once, in `CognitionBadge`.
+var cognition_cues: Array = []
+
+
+func set_cognition_stream(cues: Array) -> void:
+	cognition_cues = cues
+	clear_cognition()
+
+
+func sample_cognition(simulation_time: float) -> void:
+	if cognition_cues.is_empty():
+		return
+	var active: Dictionary = CognitionTimeline.active_by_player_for_spectators(
+		cognition_cues, simulation_time
+	)
+	for raw_id in player_actors:
+		var player_id := int(raw_id)
+		var actor := player_actors[player_id] as PlayerActor3D
+		if actor == null:
+			continue
+		var cue: Resource = active.get(player_id) as Resource
+		if cue == null:
+			actor.hide_cognition_cue()
+			continue
+		actor.show_cognition_cue(cue)
+		_apply_cognition_look(actor, cue)
+
+
+## A cue that names something on the court also turns the head toward it.
+##
+## Through the actor's existing `look_toward`, so the cognition layer never
+## learns how a neck works -- and only when the cue actually names a place. With
+## no attention cue the existing ball tracking is left alone, which is what the
+## handoff asks for and is also the honest default: a player with nothing
+## particular in mind is watching the ball.
+func _apply_cognition_look(actor: PlayerActor3D, cue: Resource) -> void:
+	var target := Vector2.ZERO
+	match str(cue.attention_kind):
+		"hitter", "setter", "teammate":
+			var other := int(cue.attention_player_id)
+			if not live_positions.has(other):
+				return
+			target = Vector2(live_positions[other])
+		"position":
+			target = Vector2(cue.attention_position)
+		_:
+			return
+	var from: Vector2 = live_positions.get(int(cue.player_id), Vector2(0.5, 0.5))
+	var delta := tactical_to_world(target.x, target.y) \
+		- tactical_to_world(from.x, from.y)
+	if delta.length() < 0.05:
+		return
+	actor.look_toward(atan2(delta.x, delta.z))
+
+
+func clear_cognition() -> void:
+	for raw_id in player_actors:
+		var actor := player_actors[raw_id] as PlayerActor3D
+		if actor != null:
+			actor.hide_cognition_cue()
+			actor.clear_look()

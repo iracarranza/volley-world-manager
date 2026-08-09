@@ -4,17 +4,69 @@ extends RefCounted
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 
 
+## At most this many named actions in one rally.
+##
+## From `docs/design/ACTION_VOCABULARY_DRAFT.md`, and it is the entire reason
+## the vocabulary is worth having: "if every contact carries one, the labels
+## become texture and we are back where we started." The classifier below is
+## generous on purpose -- it says what each contact *would* be called -- and the
+## budget is what turns that into a rally a viewer can read.
+const NAMED_ACTIONS_PER_RALLY: int = 2
+## Below this, a name is not worth spending budget on even if the classifier
+## offered one. The draft's two named quadrants are the highlight and the
+## blunder; everything between them is competent volleyball and reads best as
+## silence.
+const NAMING_THRESHOLD: float = 0.70
+
+
 ## Names outcomes from situation plus delivery. The result is written on the
 ## event once and then shared by captions, cognition, and later statistics.
+##
+## Two passes, because the budget is a property of the rally rather than of any
+## contact: classify everything, then decide which classifications survive.
+## `action_outcome` and `action_notability` stay on every event -- statistics
+## will want the full picture -- and `named_action` is the one field that says
+## whether a viewer should be told.
 static func annotate(result: Resource) -> void:
 	if result == null:
 		return
+	var candidates: Array[Dictionary] = []
 	for index in range(result.events.size()):
 		var event: Resource = result.events[index]
 		var classification := classify(result, index)
 		event.metadata["action_outcome"] = str(classification.name)
 		event.metadata["action_notability"] = float(classification.notability)
-		event.metadata["named_action"] = bool(classification.named)
+		event.metadata["named_action"] = false
+		if bool(classification.named) \
+				and float(classification.notability) >= NAMING_THRESHOLD:
+			candidates.append({
+				"index": index,
+				"notability": float(classification.notability),
+				## The action that decided the point is always eligible, whatever
+				## else the rally contained. A point whose decisive moment goes
+				## unnamed while two earlier ones are named reads as the labels
+				## having missed the thing everyone was watching.
+				##
+				## The last contact before the POINT event, rather than a match
+				## on `decisive_actor_id`: the actor credited with a point is not
+				## always the actor of its final contact -- a stuffed swing
+				## credits the blocker while the last contact is the attack -- and
+				## the moment a viewer watched is the contact, whoever it scored
+				## for.
+				"decisive": index == _final_contact_index(result.events),
+			})
+	candidates.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		if bool(left.decisive) != bool(right.decisive):
+			return bool(left.decisive)
+		if not is_equal_approx(float(left.notability), float(right.notability)):
+			return float(left.notability) > float(right.notability)
+		## Later contacts win ties: the rally builds, and the moment nearer the
+		## point is the one a viewer remembers.
+		return int(left.index) > int(right.index)
+	)
+	for rank in range(mini(candidates.size(), NAMED_ACTIONS_PER_RALLY)):
+		var chosen: Dictionary = candidates[rank]
+		(result.events[int(chosen.index)] as Resource).metadata["named_action"] = true
 
 
 static func classify(result: Resource, index: int) -> Dictionary:
@@ -49,14 +101,26 @@ static func classify(result: Resource, index: int) -> Dictionary:
 		RallyEventModel.EventType.SET:
 			var following_block := _next_type(result.events, index, RallyEventModel.EventType.BLOCK)
 			var prior_quality := float(previous.quality) if previous != null else 0.5
+			## Both set names ask the same question -- did the wall get
+			## there? -- and both asked it of `primary_close`, which cannot
+			## answer it. The primary blocker is *selected* as the front-row
+			## player nearest the attack lane, so their close saturates at
+			## 1.00 at every percentile: measured, `Dime` fired zero times
+			## across 800 rallies while `Telegraphed` was 20.5% of every
+			## name in the game. The most important entry in the vocabulary
+			## was unreachable and its opposite was the most common thing
+			## that happened, both from one field.
+			##
+			## The blocker who travels is the assist, at 1.8-3.4 m against
+			## the primary's 0.5-1.0 m. Isolation is the assist failing to
+			## arrive; a full wall is the assist sealing.
+			var assist_close := _assist_close(following_block)
 			if bool(event.success) and float(event.quality) >= 0.72 \
-					and following_block != null \
-					and float(following_block.metadata.get("primary_close", 1.0)) < 0.48:
+					and following_block != null and assist_close < 0.48:
 				return _result("Dime", 0.90, true)
 			if bool(event.success) and prior_quality < 0.42 and float(event.quality) >= 0.56:
 				return _result("Save set", 0.75, true)
-			if following_block != null and float(following_block.metadata.get(
-					"primary_close", 0.0)) >= 0.88:
+			if following_block != null and assist_close >= 0.88:
 				return _result("Telegraphed", 0.74, true)
 			return _result("Set delivered" if bool(event.success) else "Set missed", 0.34, false)
 		RallyEventModel.EventType.ATTACK:
@@ -97,7 +161,10 @@ static func classify(result: Resource, index: int) -> Dictionary:
 					and int(next.event_type) == RallyEventModel.EventType.DEFENSE \
 					and bool(next.success):
 				return _result("Soft block", 0.80, true)
-			if outcome == "miss" and float(event.metadata.get("primary_close", 1.0)) < 0.35:
+			## Same correction: a wall beaten by tempo is one the
+			## travelling blocker could not reach, which `primary_close`
+			## cannot express.
+			if outcome == "miss" and _assist_close(event) < 0.35:
 				return _result("Beaten by tempo", 0.70, true)
 			return _result("Block formed", 0.32, false)
 		RallyEventModel.EventType.DEFENSE:
@@ -112,6 +179,31 @@ static func classify(result: Resource, index: int) -> Dictionary:
 		RallyEventModel.EventType.POINT:
 			return _result("Point won" if bool(result.home_team_won) else "Point lost", 0.55, false)
 	return _result(event.type_name(), 0.2, false)
+
+
+## The last real contact of the rally, which is the moment the point turned on.
+static func _final_contact_index(events: Array) -> int:
+	for index in range(events.size() - 1, -1, -1):
+		var event_type := int((events[index] as Resource).event_type)
+		if event_type != RallyEventModel.EventType.POINT \
+				and event_type != RallyEventModel.EventType.SET_DECISION:
+			return index
+	return -1
+
+
+## How completely the second blocker sealed, before the 0.34 cut that zeroes it.
+##
+## `assist_close` is set to 0.0 when the best available blocker could not get
+## there, so it cannot tell "nobody travelled" from "somebody travelled and
+## failed" -- opposite readings for a set. `assist_close_attempted` keeps the
+## pre-cut figure for exactly this.
+static func _assist_close(block_event: Resource) -> float:
+	if block_event == null:
+		return 0.0
+	return float(block_event.metadata.get(
+		"assist_close_attempted",
+		block_event.metadata.get("assist_close", 0.0),
+	))
 
 
 static func _result(name: String, notability: float, named: bool) -> Dictionary:

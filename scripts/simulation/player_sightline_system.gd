@@ -41,15 +41,53 @@ static func occlusion_window(
 				hidden_start = sample_time
 			hidden_end = sample_time
 	if hidden_start < 0.0:
-		return {"occluded": false, "sample_count": SAMPLE_COUNT + 1}
+		return {
+			"occluded": false,
+			"hidden_fraction": 0.0,
+			"sample_count": SAMPLE_COUNT + 1,
+		}
+	var reacquired := minf(
+		hidden_end + duration / float(SAMPLE_COUNT), start_time + duration
+	)
 	return {
 		"occluded": true,
 		"starts_at": hidden_start,
-		"ends_at": minf(hidden_end + duration / float(SAMPLE_COUNT), start_time + duration),
-		"reacquired_at": minf(hidden_end + duration / float(SAMPLE_COUNT), start_time + duration),
+		"ends_at": reacquired,
+		"reacquired_at": reacquired,
 		"hidden_sample_count": hidden_samples,
 		"sample_count": SAMPLE_COUNT + 1,
+		## How much of the flight the wall actually took away.
+		##
+		## Published because the *degree* is the whole distinction between a
+		## defender who briefly lost the ball behind an arm and one who never saw
+		## it leave the hitter's hand, and the boolean above cannot express it.
+		## Classified in perception, by `visibility_for`, so no renderer ever has
+		## to decide what "partially" means.
+		"hidden_fraction": float(hidden_samples) / float(SAMPLE_COUNT + 1),
 	}
+
+
+## What a defender's sightline reads as, from how much of the flight was taken.
+##
+## The two thresholds are the only numbers here and they are deliberately far
+## apart: anything under a tenth of the flight is a flicker behind a hand and is
+## not worth telling a viewer about, and over half the flight hidden is a
+## defender playing the ball on sound and memory. The band between them is the
+## real one -- the ball appears late out of a seam -- and it is where most
+## occlusions land.
+const BRIEF_OCCLUSION_SHARE: float = 0.10
+const HEAVY_OCCLUSION_SHARE: float = 0.50
+
+
+static func visibility_for(window: Dictionary) -> StringName:
+	if not bool(window.get("occluded", false)):
+		return &"visible"
+	var share := float(window.get("hidden_fraction", 0.0))
+	if share < BRIEF_OCCLUSION_SHARE:
+		return &"visible"
+	if share >= HEAVY_OCCLUSION_SHARE:
+		return &"occluded"
+	return &"partially_obscured"
 
 
 static func _sample_is_hidden(
