@@ -29,6 +29,13 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var personal_schedules: Dictionary = {}
 @export_range(6, 18) var roster_limit: int = 14
 
+## What the manager drew on the clipboard. See `TacticSheet`.
+##
+## On the team rather than on the career because it is a property of *this
+## squad*: the shape they play, who closes the line, which zone is being drilled.
+## A manager who moves clubs takes their ideas and leaves the sheet.
+@export var tactic_sheet: TacticSheet = TacticSheet.new()
+
 
 func add_player(player_id: int) -> String:
 	if player_id in player_ids:

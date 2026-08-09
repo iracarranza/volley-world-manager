@@ -149,7 +149,68 @@ func calendar_state() -> Dictionary:
 
 
 func date_text() -> String:
-	return Calendar.display_date(int(career.absolute_week)) if career != null else "No career"
+	if career == null:
+		return "No career"
+	return Calendar.display_date(
+		int(career.absolute_week), int(career.day_of_week)
+	)
+
+
+## Is today the day the club holds its session, and has it been held?
+##
+## Two questions with one answer, because the only thing anybody wants to know
+## is whether there is somewhere to be. A session that has already been attended
+## this week is not somewhere to be.
+func training_day_is_today() -> bool:
+	if career == null:
+		return false
+	return int(career.day_of_week) == int(career.training_day) \
+		and int(career.last_drilled_week) != int(career.absolute_week)
+
+
+## Move the calendar on by one day, running the week when the week ends.
+##
+## The week is still the unit training is applied in -- a regimen is a week's
+## work and pretending otherwise would mean re-deriving every load in the game --
+## so this is a clock, and `advance_week` is still the thing that happens. What
+## the day buys is a *place in the week*, which is what an appointment needs: you
+## cannot turn up to a week.
+func advance_day() -> String:
+	if career == null:
+		return "No active career."
+	if training_day_is_today():
+		return "The squad is on the floor today. Take the session or skip it."
+	if int(career.day_of_week) < Calendar.DAYS_PER_WEEK:
+		career.day_of_week += 1
+		save_career()
+		career_changed.emit()
+		return ""
+	var error := advance_week()
+	if not error.is_empty():
+		return error
+	career.day_of_week = 1
+	save_career()
+	career_changed.emit()
+	return ""
+
+
+## Hold this week's session, on whatever the manager put it on.
+##
+## `focus` is a key out of the tactic sheet's own vocabulary rather than a
+## string invented here, so what a manager drills is always something they
+## actually drew. Skipping is a real choice and costs the focus rather than the
+## session: the squad still trains, they simply train nothing in particular,
+## which is what an unattended week has always silently been.
+func hold_drill_session(focus: String = "") -> String:
+	if career == null:
+		return "No active career."
+	if int(career.last_drilled_week) == int(career.absolute_week):
+		return "This week's session has already been held."
+	career.drill_focus = focus
+	career.last_drilled_week = int(career.absolute_week)
+	save_career()
+	career_changed.emit()
+	return ""
 
 
 func next_fixture() -> Resource:

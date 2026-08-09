@@ -11,6 +11,23 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 @export var region: String = "Landavol"
 @export var identity: String = "Balanced"
 @export var absolute_week: int = 1
+## Which day of that week it is, 1 for Monday.
+##
+## The week is still where training is *applied* -- a regimen is a week's work
+## and always was -- but the calendar now moves a day at a time, because the
+## manager has somewhere to be. Advancing past Sunday is what runs the week.
+@export_range(1, 7) var day_of_week: int = 1
+## The day the club holds the session the manager attends.
+##
+## One day, not seven. The squad trains all week; this is the day the manager is
+## on the floor deciding what gets drilled, and the reason a focus is worth
+## choosing at all is that it only happens once.
+@export_range(1, 7) var training_day: int = 3
+## What the manager put the session on, from the tactic sheet's own vocabulary.
+## Empty when this week's session has not been held.
+@export var drill_focus: String = ""
+## Sessions attended, so a week cannot be drilled twice.
+@export var last_drilled_week: int = 0
 @export var reputation: int = 10
 @export var finances: int = 100000
 ## The single squad-wide activity the club used to run. Kept because a career

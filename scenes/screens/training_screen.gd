@@ -60,8 +60,36 @@ var _open_activity: String = ""
 func bind(career_manager: Node, game_manager: Node) -> void:
 	_career_manager = career_manager
 	_game_manager = game_manager
+	_load_sheet()
 	_populate_rail()
 	refresh()
+
+
+## Put the club's saved sheet back on the clipboard, and keep it saved.
+##
+## Every edit writes the whole sheet rather than patching one field. A tactic
+## sheet is six numbers and two small dictionaries -- writing all of it costs
+## nothing measurable, and the alternative is eight places that each have to
+## remember which part they changed, which is how a plan ends up half-saved.
+func _load_sheet() -> void:
+	if _worksheet == null or _game_manager == null:
+		return
+	var team: Resource = _game_manager.get("team")
+	if team == null or team.tactic_sheet == null:
+		return
+	team.tactic_sheet.apply_to(_worksheet)
+	_worksheet.queue_redraw()
+
+
+func _save_sheet() -> void:
+	if _worksheet == null or _game_manager == null:
+		return
+	var team: Resource = _game_manager.get("team")
+	if team == null:
+		return
+	team.tactic_sheet = TacticSheet.from_worksheet(_worksheet)
+	if _career_manager != null and _career_manager.has_method("save_career"):
+		_career_manager.save_career()
 
 
 func _ready() -> void:
@@ -295,6 +323,16 @@ func _build_tactics_page() -> Control:
 	_drill_label.name = "DrillLabel"
 	receipts.add_child(_drill_label)
 	_worksheet.drill_changed.connect(_drill_written)
+	## Everything that changes the sheet writes it. Connected here, beside the
+	## worksheet's construction, so a new signal that changes the plan and forgets
+	## to save is visibly missing from one list rather than invisibly missing from
+	## eight call sites.
+	for changed in [
+		_worksheet.drill_changed, _worksheet.zone_priority_changed,
+		_worksheet.behaviour_changed, _worksheet.placements_changed,
+		_worksheet.phase_changed, _worksheet.view_changed,
+	]:
+		changed.connect(func(_a = null, _b = null, _c = null) -> void: _save_sheet())
 	_drill_written(_worksheet.drill_zone)
 
 	var spacer := Control.new()

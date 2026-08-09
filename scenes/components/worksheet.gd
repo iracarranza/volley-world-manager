@@ -475,6 +475,13 @@ var behaviours: Dictionary = {}
 var selected_slot: int = -1
 
 signal behaviour_changed(slot: int, for_phase: String, behaviour: String)
+## Somebody was put on the sheet, moved, or taken off it.
+##
+## Deliberately carries nothing. Every listener so far wants the whole sheet --
+## the saver writes all of it, the drill list reads all of it -- and a signal
+## that names one slot invites a listener to patch that slot and miss the two
+## the same drag also moved.
+signal placements_changed
 signal voli_grabbed(who: String)
 signal voli_released()
 
@@ -1016,6 +1023,7 @@ func place_voli_at(slot: int, on_court: Vector2, who: String = "") -> void:
 		drill_who = who
 		drill_changed.emit(drill_zone)
 	placements[slot] = {"at": on_court, "who": who}
+	placements_changed.emit()
 	queue_redraw()
 
 
@@ -1128,6 +1136,7 @@ func remove_voli(slot: int) -> void:
 	if not placements.has(slot):
 		return
 	placements.erase(slot)
+	placements_changed.emit()
 	queue_redraw()
 
 
