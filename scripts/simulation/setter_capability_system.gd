@@ -58,6 +58,25 @@ const TEMPO_PASS_SENSITIVITY: Array[float] = [0.35, 0.24, 0.14, 0.0]
 ## not merely set worse, they put up something unusable.
 const OVERREACH_SEVERITY: float = 1.60
 
+## Where a setter's hands are, as a share of their standing reach.
+##
+## A hands set is played above the forehead, and standing reach is roughly an
+## arm above that -- `VolleyballPlayer` derives it as height times 1.215 plus a
+## wingspan term, so dividing back out lands near the top of the head. Below
+## that the ball has to be taken on the forearms.
+const HAND_SET_FLOOR_OF_STANDING_REACH: float = 0.82
+## What a bump set costs. Larger than the jump-set penalty because a jump set is
+## a *choice* a good setter makes and this is not one.
+const PLATFORM_SET_PENALTY: float = 0.22
+## The fastest ball anyone puts up off a platform.
+const PLATFORM_FASTEST_TEMPO: int = 2
+
+
+static func hand_set_floor_meters(setter: VolleyballPlayer) -> float:
+	if setter == null:
+		return 0.0
+	return setter.standing_reach_cm() / 100.0 * HAND_SET_FLOOR_OF_STANDING_REACH
+
 ## Cost of having to jump to a ball rather than take it standing, and the floor
 ## cost of reaching for one above even a jump.
 const JUMP_SET_PENALTY: float = 0.08
@@ -160,6 +179,14 @@ static func evaluate(
 			"reach_state": "beyond_reach",
 		}
 	var wanted := clampi(requested_tempo, QUICK_TEMPO, SLOWEST_TEMPO)
+	## Nobody runs a first-tempo quick off their forearms. This is the one place
+	## capability *does* restrict the attempt rather than price it, and it is not
+	## an exception to the rule at the top of this file: the setter is still free
+	## to attempt whatever they like, but a ball below their hands has already
+	## decided which contact this is, and a bump cannot be a quick set the way a
+	## bad hands set can be a bad quick.
+	if contact_height_meters < hand_set_floor_meters(setter):
+		wanted = maxi(wanted, PLATFORM_FASTEST_TEMPO)
 	var setter_command := command(setter)
 	var within := tempos_within_capability(setter, pass_quality)
 
@@ -195,6 +222,22 @@ static func evaluate(
 	elif contact_height_meters > standing_reach:
 		reach_state = "jump"
 		reach_penalty = JUMP_SET_PENALTY
+	elif contact_height_meters < hand_set_floor_meters(setter):
+		## **The underhand set.** A ball that never rose to the setter's forehead
+		## cannot be hand-set at all -- there is no way to get under it -- so it
+		## goes back up off the platform. That is a real second contact and a legal
+		## one, and it is also a much worse one: a bump set has no wrist and no
+		## disguise, so it cannot run a quick and it tells the block where the ball
+		## is going before the hitter knows.
+		##
+		## Reachable because the pass now decides it. Until the pass carried a real
+		## apex, the height handed in here was drawn from a table against a random
+		## sail figure, and its floor sat above every setter's forehead -- a state
+		## that could not be entered, which is the failure mode this repository
+		## keeps producing. It is entered now because a shanked platform genuinely
+		## does not lift the ball to head height.
+		reach_state = "platform"
+		reach_penalty = PLATFORM_SET_PENALTY
 
 	return {
 		"command": setter_command,

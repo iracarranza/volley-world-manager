@@ -284,6 +284,15 @@ static func block_wall(
 	return wall
 
 
+## How high a body meets the ball, in metres, for each way of meeting it.
+##
+## Both forms of each: one taking a `VolleyballPlayer`, which is what the
+## resolver has, and one taking the two reach figures in metres, which is what a
+## physical profile carries. `BallPresentation` draws from the second pair, so
+## the height a flight is *timed* from and the height it is *drawn* from are one
+## number arrived at once. They were two, computed from the same body by two
+## expressions that agreed by inspection and by nothing else.
+
 ## How high this hitter meets the ball, in metres.
 ##
 ## The approach's jump multiplier is what a run-up is *for*: a hitter who never
@@ -296,10 +305,23 @@ static func contact_height_meters(
 ) -> float:
 	if hitter == null:
 		return 0.0
-	var standing := hitter.standing_reach_cm() / 100.0
-	var full := hitter.jumping_reach_cm() / 100.0
-	var leap := maxf(full - standing, 0.0) * clampf(jump_multiplier, 0.0, 1.5)
-	return maxf(standing + leap - CONTACT_BELOW_REACH_METERS, 0.0)
+	return hitter_contact_from_reach(
+		hitter.standing_reach_cm() / 100.0,
+		hitter.jumping_reach_cm() / 100.0,
+		jump_multiplier,
+	)
+
+
+static func hitter_contact_from_reach(
+	standing_reach_meters: float,
+	jumping_reach_meters: float,
+	jump_multiplier: float = 1.0,
+) -> float:
+	var leap := maxf(jumping_reach_meters - standing_reach_meters, 0.0) \
+		* clampf(jump_multiplier, 0.0, 1.5)
+	return maxf(
+		standing_reach_meters + leap - CONTACT_BELOW_REACH_METERS, 0.0
+	)
 
 
 ## How high a server meets the ball.
@@ -318,10 +340,88 @@ static func serve_contact_height_meters(
 ) -> float:
 	if server == null:
 		return 0.0
-	var standing := server.standing_reach_cm() / 100.0
-	var leap := maxf(server.jumping_reach_cm() / 100.0 - standing, 0.0)
-	return maxf(standing + leap * clampf(effort, 0.0, 1.0)
-		- CONTACT_BELOW_REACH_METERS, 0.0)
+	return serve_contact_from_reach(
+		server.standing_reach_cm() / 100.0,
+		server.jumping_reach_cm() / 100.0,
+		effort,
+	)
+
+
+## Named separately from the hitter's even though the arithmetic is the same
+## one, because the *effort* means something different: a hitter's comes from
+## their approach and a server's from their style, and a standing float server
+## takes none of their leap at all.
+static func serve_contact_from_reach(
+	standing_reach_meters: float,
+	jumping_reach_meters: float,
+	effort: float = SERVE_JUMP_EFFORT,
+) -> float:
+	return hitter_contact_from_reach(
+		standing_reach_meters, jumping_reach_meters, clampf(effort, 0.0, 1.0)
+	)
+
+
+## How high a setter releases the ball, standing.
+##
+## Just short of full standing reach: hands meet the ball above the forehead, not
+## at the top of an outstretched arm.
+const SET_RELEASE_OF_STANDING_REACH: float = 0.97
+
+
+static func set_contact_height_meters(
+	setter: VolleyballPlayer,
+	jumping: bool = false,
+) -> float:
+	if setter == null:
+		return 0.0
+	return set_contact_from_reach(
+		setter.standing_reach_cm() / 100.0,
+		setter.jumping_reach_cm() / 100.0,
+		jumping,
+	)
+
+
+static func set_contact_from_reach(
+	standing_reach_meters: float,
+	jumping_reach_meters: float,
+	jumping: bool = false,
+) -> float:
+	if not jumping:
+		return standing_reach_meters * SET_RELEASE_OF_STANDING_REACH
+	return lerpf(standing_reach_meters, jumping_reach_meters, JUMP_SET_EFFORT)
+
+
+## How much of their leap a setter jumping to the ball actually uses.
+const JUMP_SET_EFFORT: float = 0.58
+
+## Where a platform is when it passes a ball, as a share of the passer's own
+## height, and the band it never leaves. A pass is played off the forearms in
+## front of the body, so it scales with the body but far less than a reach does
+## -- a tall passer and a short one both bump from around waist height.
+const PASS_CONTACT_OF_HEIGHT: float = 0.52
+const PASS_CONTACT_MIN_METERS: float = 0.72
+const PASS_CONTACT_MAX_METERS: float = 1.16
+
+
+static func pass_contact_height_meters(passer: VolleyballPlayer) -> float:
+	if passer == null:
+		return PASS_CONTACT_MIN_METERS
+	return pass_contact_from_height(float(passer.height_cm) / 100.0)
+
+
+static func pass_contact_from_height(height_meters: float) -> float:
+	return clampf(
+		height_meters * PASS_CONTACT_OF_HEIGHT,
+		PASS_CONTACT_MIN_METERS, PASS_CONTACT_MAX_METERS,
+	)
+
+
+## How high a blocker's hands are over the tape, as a share of full reach.
+const BLOCK_CONTACT_OF_JUMPING_REACH: float = 0.96
+
+
+static func block_contact_from_reach(jumping_reach_meters: float) -> float:
+	return jumping_reach_meters * BLOCK_CONTACT_OF_JUMPING_REACH
 
 
 ## A serve has no block to read and no defence to pick a gap in -- it has three

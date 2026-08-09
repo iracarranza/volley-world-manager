@@ -3548,3 +3548,214 @@ for).
 **Open on this:** nothing consumes an instruction yet. A behaviour is drawn and
 stored and the drill session in #69 does not read it, which is the next join --
 per-voli asks scored against learned comfort is exactly what these are for.
+
+---
+
+## The ball flew flat and then fell out of the sky
+
+Reported from playback: "the ball takes a flat moving trajectory until it reaches
+the x/z coordinate of the floor or voli it reaches, then teleports down to
+continue the play."
+
+That is a claim about the *middle* of a flight, and every instrument this repo
+had checked the ends. `run_contact_continuity_probe` asks whether the ball
+finishes where the next contact begins; a ball that flies flat and then drops
+passes it, because both of its ends are right. So the first thing built was an
+instrument that could see the defect at all -- `tools/run_ball_flight_probe.gd`.
+
+### The measure, and why the obvious one was useless
+
+The first attempt measured "what share of the descent happens in the last quarter
+of the flight". It reported the retired curve at 86% for Attack -> Block against
+a physical 31%, which looked like the finding -- and then reported the *new*
+curve at 84%, which looked like a failure. Both readings were meaningless: the
+denominator was the flight's own minimum height, which for a rising flight is its
+start, so the metric was apportioning a descent against a point the ball never
+returned to.
+
+The retired hump is also a parabola in the flight fraction, which is what makes
+"where does it drop" a dead end:
+
+    h(t) = lerp(h0, h1, t) + 4A*t*(1-t),   A = apex - midpoint
+
+Its t-squared term is -4A and a real flight's is -g*T^2/2, so **the two differ by
+exactly one coefficient**, and the honest measure is what gravity the drawn ball
+appeared to fall under. Over 1090 drawn flights:
+
+    contact pair              n   was, x g   worst x g   off by m   worst m
+    Set -> Attack           227       3.92       43.60       0.89      1.48
+    Reception -> Set        175       2.64        4.45       2.41      3.55
+    Defense -> Set           52      47.91      438.74       2.96      3.43
+    Serve -> Reception      204       2.11        2.38       1.25      1.31
+    Attack -> Block         181       1.71       19.49       0.26      0.97
+
+A ball under forty-eight times gravity, thrown forty-eight times too hard upward,
+holds its height and then plummets. The drawn ball sat up to **3.55 m** away from
+where a real one would have been, entirely in the middle of the flight, where
+nothing was looking.
+
+### What the apex was, and why it could not draw a spike
+
+The apex was an *input*, computed in `match_screen.gd` from a table of per-action
+`rise_scale` and `minimum_lift` constants, with floors that lifted a serve to at
+least net + 0.48 and a set to net + 1.05 whatever their flight time was. Two
+consequences, both invisible:
+
+1. **Net clearance was a property of the drawing.** A serve whose flight could not
+   physically carry it over the tape was drawn over the tape anyway. With the
+   floors gone and the flight solved honestly, 17 of 204 serve receptions and 8 of
+   30 serves to the floor were drawn *through the net* -- real defects that had
+   been papered over rather than fixed.
+2. **A downward-struck ball could not be expressed at all.** The floor put the
+   apex above the contact, and a symmetric hump with an apex above both ends has
+   to rise first. A spike is struck downward -- `DRIVEN_REFERENCE_ANGLE_DEGREES`
+   has been minus fifteen since `AttackPowerModel` was written -- so the one shape
+   the curve could not draw was the commonest shot in the sport.
+
+### The fix: three knowns determine a parabola
+
+Both contact heights are facts about the rally and so is the flight time, and a
+parabola has three degrees of freedom. Nothing is left to choose.
+`BallFlightModel.height_between` solves it; `BallTrajectory.height_at_progress`
+and `MatchCourt3D.trajectory_world_position` -- which were two hand-kept copies of
+one curve -- both call it. `apex_height_meters` is now *reported* rather than
+supplied, which is what lets a probe ask whether a flight cleared the net.
+
+`BallPresentation` is new and holds the drawn flight on its own, for the reason
+`terminate_trajectory` was made static before it: a defect you can only see by
+watching a rally at playback speed is a defect nobody finds twice.
+
+### The contact heights were also two implementations of one fact
+
+Five expressions in `match_screen.gd` and five more in
+`GeometricAttackPromotion`, with five pairs of constants that agreed by
+inspection and by nothing else -- the resolver timed a serve leaving one height
+and the court drew it leaving another. The promotion module now owns all of them
+in both forms, one taking a `VolleyballPlayer` and one taking the two reach
+figures a physical profile carries, and presentation calls it.
+
+### A spike is struck, not lobbed
+
+`GeometricAttackResolver` resolves every attack in the game: it picks a course,
+chooses a power from `AttackPowerModel`, solves the driven root off the hitter's
+real contact height, and checks the ball clears the tape. It hands back
+`speed_mps`, `vertical_angle_degrees` and `contact_height_meters` -- and all
+three were dropped, with the drawn attack rebuilt from `solve_launch_arc` as a
+ball lobbed *upward* from ground level to ground level. Failure mode #1, exactly.
+
+`_swing_arc` carries the speed and **re-solves the angle**. The first version
+carried the angle too and it drew nonsense: a lofted 70-degree roll re-aimed at
+the legacy target solved to a two-second flight with the ball nine metres up.
+Speed is a property of the swing and travels; angle is a property of the swing
+*plus its target* and does not. `minimum_speed_to_reach` was added because
+`minimum_speed_for_range` returns the speed floor rather than an error when no
+speed reaches at a fixed angle -- taken literally, a sixteen-metre attack came out
+with a 124-second flight.
+
+### Bump height is now what buys the setter time
+
+The pass's flight time was `0.38 + distance / lerp(5.2, 8.4, execution)`, a
+horizontal speed dressed as a duration in which **a good pass reached the setter
+faster than a bad one**. That is backwards: height is the whole currency of a
+second contact, because it is the only thing that buys the setter time to arrive
+and square up and the hitters time to find their run-ups.
+
+The apex band was already there as `lerpf(1.1, 2.8, execution)`, passed to the
+trajectory, thrown away by the drawing and read by nothing. It is now an absolute
+apex and the hang time falls out of gravity:
+
+    reception quality     n     apex m     hang s
+    0.0-0.2              81       1.47       0.63
+    0.2-0.4              89       2.67       0.94
+    0.4-0.6              80       2.75       0.83
+    0.6-0.8              57       3.39       1.11
+    0.8-1.0              12       3.55       1.25
+
+**The underhand set is reachable now, and was not before.** The setter takes the
+ball as high as they can reach *and as high as it got*, so a pass that never rises
+to hand height has to be bumped -- a new `platform` reach state in
+`SetterCapabilitySystem`, which cannot run a quick and costs more than a jump set
+because a jump set is a choice and this is not. It could not previously happen:
+`pass_contact_height_meters` drew the height from a table against a random sail
+value whose floor sat above every setter's forehead, which is the §0 defect in its
+purest form -- a state with a threshold outside its own distribution.
+
+### The trail: one meaning per channel
+
+Colour is contact quality on the five grade tiers every rating in the game already
+uses; length and weight are how hard the ball was struck. Asked to carry both, one
+channel makes red mean "hammered" and "shanked" at once, and those are the two
+readings a viewer most needs to tell apart.
+
+**The tier bands are measured, not inherited.**
+`VolleyballAttributeProfileSystem` grades a 0-100 attribute at 96 / 89 / 66 / 50.
+Reusing those on a contact quality would have been the mistake this file keeps
+recording: over 1131 contacts, quality runs p10 0.17, p50 0.50, p90 0.72, so those
+cuts put nine contacts in ten in the bottom two tiers and gold would never once
+have appeared. The bands sit on the quartiles of the distribution they cut.
+
+Power is read off the *launch* speed rather than the ground speed, because a dig
+goes almost straight up and covers 1.6 m of floor in most of a second -- which
+would read as the softest touch in the game when it is a defender getting a hand
+on a spike.
+
+### Two changes were correct, measured, and turned off
+
+Both are the same shape and both belong with tasks #62 to #64.
+
+**The defender's flight budget.** `attack_time` is solved through a *defensive*
+classifier while the ball is drawn from the hitter's own swing -- one fact,
+computed twice, and the file already says so at length. Pointing it at the drawn
+flight is right and, now that the drawn flight is a struck ball rather than a
+0.74 s lob, produced over 700 rallies:
+
+    opponent swings   681 -> 8
+    home kill rate   0.85 -> 1.000
+
+Nothing is dug, so no rally reaches a second exchange, so the opponent stops
+attacking. The floor defence turns out to be *entirely* calibrated against attacks
+being modelled as lobs, which nothing had measured because the two numbers had
+never been made to disagree this much.
+
+**`ENABLE_SET_HEIGHT_TIMING`.** A set is described by its height, so `_set_arc`
+solves the hang time from an apex. The launch-angle table it replaces cannot
+express a set at all: at the six to ten degrees it calls a quick, the only ball
+that climbs the metre from a setter's hands to a hitter's over four metres is one
+struck at 26 m/s. The new times are right -- 0.65 s for a quick to 1.47 s for a
+high ball against 0.23 s to 0.69 s -- and that is the problem, because the run-up
+is paid for out of the set's flight time:
+
+    home attack quality >= 0.25    0.794 -> 1.000
+    opponent swings                   97 -> 8
+
+Every approach constant in the engine was fitted against set flights a third as
+long as a set really is.
+
+With both off, the drawing is still honest: the ball on screen is a real parabola
+between the two contact heights over whatever duration the resolver reports. What
+has not happened is the re-fit, and it is the same re-fit this file has been
+naming as the limiter since "What the rally simulator work is for".
+
+### One gate moved, and the move is a finding
+
+`Gate 4 exposes both player-development and formation effects` read
+`formation_reachability_spread`. Solving the serve from the server's own contact
+height makes a serve about a third longer -- which is what a real serve takes --
+and every formation now reaches everything: 1.000, 1.000, 1.000, spread exactly
+zero. A metric pinned at its ceiling separates nothing.
+
+The formations have not stopped differing; reachability has stopped being where
+they differ. Mean destination error still moves with the formation (0.892 m
+standard, 0.937 m compressed middle, 0.906 m split deep), so the calibration now
+reports both spreads and the gate reads the one still inside its own range.
+
+### Still open from this round
+
+- **The re-fit.** Both flags above, and the floor defence they depend on.
+- **Four attacks in 23 and one dig in 96 are still drawn through the net.** Real
+  errors or drawing defects, not yet separated -- an attack into the net is a
+  thing that happens, and the probe cannot currently tell one from the other.
+- **`_ball_trajectory` still publishes `height_contract: "relative_rise"`** while
+  the drawn flight publishes `gravity_true`. Two contracts, correctly, because
+  they describe different objects -- but the naming invites a reader to think one
+  supersedes the other.

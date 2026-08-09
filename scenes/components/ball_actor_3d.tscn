@@ -41,23 +41,3 @@ mesh = SubResource("StripeMesh")
 
 [node name="Trail" type="Node3D" parent="."]
 top_level = true
-
-[node name="Ghost1" type="MeshInstance3D" parent="Trail"]
-visible = false
-cast_shadow = 0
-mesh = SubResource("BallMesh")
-
-[node name="Ghost2" type="MeshInstance3D" parent="Trail"]
-visible = false
-cast_shadow = 0
-mesh = SubResource("BallMesh")
-
-[node name="Ghost3" type="MeshInstance3D" parent="Trail"]
-visible = false
-cast_shadow = 0
-mesh = SubResource("BallMesh")
-
-[node name="Ghost4" type="MeshInstance3D" parent="Trail"]
-visible = false
-cast_shadow = 0
-mesh = SubResource("BallMesh")

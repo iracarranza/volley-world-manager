@@ -4,7 +4,6 @@ extends Control
 signal close_requested
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
-const NET_HEIGHT_METERS: float = 2.43
 
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
 @onready var caption_label: Label = %CaptionLabel
@@ -209,6 +208,7 @@ func _play_flight(
 	var movement_plan := _build_movement_plan(event, next_contact, duration)
 	var elapsed := 0.0
 	match_court_3d.ball_actor.reset_flight()
+	match_court_3d.begin_ball_flight(display_trajectory, float(event.quality))
 	while elapsed < duration:
 		if generation != playback_generation or skip_requested:
 			break
@@ -758,161 +758,23 @@ func _event_elevation(event: RallyEvent, player_id: int) -> float:
 	return 0.0
 
 
+## The drawn flight, from `BallPresentation` so a probe sees the same one.
+##
+## This function used to *be* the presentation model: a table of per-action
+## `rise_scale` and `minimum_lift` constants that manufactured an apex, plus
+## floors that guaranteed a serve and a set cleared the net whether or not their
+## own flight time could carry them over it. Every one of those numbers has gone.
+## Two contact heights and the resolver's own duration determine the parabola,
+## and a flight that does not clear the tape now says so instead of being lifted
+## until it does.
 func _display_trajectory(
 	event: RallyEvent,
 	next_contact: RallyEvent,
 	trajectory: Dictionary,
 ) -> Dictionary:
-	var display := trajectory.duplicate(true)
-	_terminate_at_next_contact(display, next_contact)
-	var start_height := _event_contact_height(event)
-	var end_height := _event_contact_height(next_contact) \
-		if next_contact != null else 0.12
-	var rise := maxf(float(trajectory.get(
-		"apex_rise_meters", trajectory.get("apex_height_meters", 0.0)
-	)), 0.0)
-	var rise_scale := 1.0
-	var minimum_lift := 0.25
-	match int(event.event_type):
-		RallyEventModel.EventType.SERVE:
-			rise_scale = 1.35
-			minimum_lift = 0.42
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-			rise_scale = 1.55
-			minimum_lift = 0.62
-		RallyEventModel.EventType.SET:
-			rise_scale = 1.75
-			minimum_lift = 0.90
-		RallyEventModel.EventType.ATTACK:
-			rise_scale = 0.35
-			minimum_lift = 0.12
-		RallyEventModel.EventType.BLOCK:
-			rise_scale = 0.45
-			minimum_lift = 0.16
-	var apex_height := maxf(start_height, end_height) \
-		+ maxf(rise * rise_scale, minimum_lift)
-	if event.event_type == RallyEventModel.EventType.SERVE:
-		apex_height = maxf(apex_height, NET_HEIGHT_METERS + 0.48)
-	elif event.event_type == RallyEventModel.EventType.SET:
-		apex_height = maxf(apex_height, NET_HEIGHT_METERS + 1.05)
-	elif event.event_type == RallyEventModel.EventType.ATTACK:
-		apex_height = maxf(apex_height, start_height + 0.08)
-	display["start_height_meters"] = start_height
-	display["end_height_meters"] = end_height
-	display["apex_height_meters"] = apex_height
-	display["height_contract"] = "absolute_3d_presentation"
-	return display
-
-
-## Stop the drawn ball where it was actually next touched.
-##
-## An event's `end_position` is where its *own* contact was aimed -- for an
-## attack, the spot on the far floor the hitter went for. That is real data and
-## the simulator is right to keep it. But it is not where the ball got to when
-## somebody intercepted it on the way, and playback was drawing the whole aimed
-## flight regardless.
-##
-## Measured across 736 consecutive contact pairs, the damage is confined to
-## exactly the two pairs where an interception happens:
-##
-##     Serve -> Reception     0.00 m
-##     Reception -> Set       0.00 m
-##     Set -> Attack          0.00 m
-##     Attack -> Block        5.68 m mean, 10.76 m worst
-##     Block -> Defense       3.29 m mean, 11.16 m worst
-##     Defense -> Set         0.11 m
-##
-## So a blocked spike drew its ball past the block, on to a floor target several
-## metres away, and the block then began from the net -- which reads as the ball
-## teleporting backward, or as the next contact happening somewhere nobody is
-## standing. Twenty-seven per cent of all contact pairs were discontinuous.
-##
-## Retargeting is a *presentation* decision and belongs here rather than in the
-## resolver: the aimed landing point is a fact about the attack, and where the
-## ball actually got to is a fact about the rally. Both stay true.
-##
-## The control point moves with the end. This is a quadratic Bezier, so leaving
-## the control where it was would swing the shortened arc wide of both contacts
-## -- the ball would finish in the right place having taken a route it never
-## took. Rescaling it along the original curve keeps the shape of the flight and
-## simply cuts it short, which is what an interception does.
-func _terminate_at_next_contact(
-	display: Dictionary, next_contact: RallyEvent
-) -> void:
-	if next_contact == null:
-		## Nothing touched it next, so the aimed landing point is the truth: this
-		## is a ball hitting the floor.
-		return
-	if not next_contact.success:
-		## And a contact that *failed* is a ball nobody touched. A defender who
-		## could not reach the line attack after moving a metre did not stop it;
-		## dragging the flight to their feet drew the ball teleporting into
-		## somebody who visibly never played it, then bouncing off nothing.
-		## The aimed landing point is where it actually went.
-		return
-	terminate_trajectory(display, Vector2(next_contact.start_position))
-
-
-## The geometry, on its own so it can be checked without a screen to run it in.
-static func terminate_trajectory(display: Dictionary, touched: Vector2) -> void:
-	var start := Vector2(display.get("start_position", Vector2(0.5, 0.5)))
-	var aimed := Vector2(display.get("end_position", start))
-	if aimed.distance_to(touched) < 0.0005:
-		return
-	var control := Vector2(display.get("control_position", start.lerp(aimed, 0.5)))
-	## Where along the aimed flight the interception sits, so the arc is cut at
-	## the same fraction its control point is rescaled by.
-	var travelled := start.distance_to(aimed)
-	var share := clampf(
-		start.distance_to(touched) / maxf(travelled, 0.0001), 0.05, 1.0
+	return BallPresentation.display_trajectory(
+		event, next_contact, trajectory, player_physical_profiles
 	)
-	display["end_position"] = touched
-	display["control_position"] = start.lerp(control, share)
-	## The time has to come down with the distance.
-	##
-	## Cutting the path and keeping the duration was the whole of "the ball
-	## freezes in place": a spike intercepted 30% of the way to its floor target
-	## still spent the full flight covering that third, so it crawled from the
-	## hitter to the block over most of a second and then sat there. The ball is
-	## the same ball travelling at the same speed; it simply stops sooner.
-	if display.has("duration"):
-		display["duration"] = maxf(float(display["duration"]) * share, 0.08)
-
-
-func _event_contact_height(event: RallyEvent) -> float:
-	if event == null or event.actor_id < 0:
-		return 0.12
-	var profile: Dictionary = player_physical_profiles.get(int(event.actor_id), {})
-	var height_meters := float(profile.get("height_cm", 188.0)) / 100.0
-	var wingspan_meters := float(profile.get("wingspan_cm", 191.0)) / 100.0
-	var standing_reach := float(profile.get(
-		"standing_reach_meters",
-		height_meters * 1.215 + (wingspan_meters - height_meters) * 0.32,
-	))
-	var jumping_reach := float(profile.get(
-		"jumping_reach_meters", standing_reach + 0.52
-	))
-	match int(event.event_type):
-		RallyEventModel.EventType.SERVE:
-			var serve_style := str(event.metadata.get("serve_style", "Standing"))
-			return lerpf(standing_reach, jumping_reach, 0.68) \
-				if serve_style.contains("Jump") else standing_reach * 0.92
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
-			return clampf(height_meters * 0.52, 0.72, 1.16)
-		RallyEventModel.EventType.SET:
-			var capability: Dictionary = event.metadata.get("setter_capability", {})
-			var reach_state := str(capability.get("reach_state", "standing"))
-			if reach_state in ["jump", "beyond_reach"]:
-				return lerpf(standing_reach, jumping_reach, 0.58)
-			return standing_reach * 0.97
-		RallyEventModel.EventType.ATTACK:
-			var jump_effort := clampf(inverse_lerp(
-				0.55, 1.25, float(event.metadata.get("jump_multiplier", 1.0))
-			), 0.35, 1.0)
-			return lerpf(standing_reach, jumping_reach, jump_effort)
-		RallyEventModel.EventType.BLOCK:
-			return jumping_reach * 0.96
-	return float(event.metadata.get("contact_height_meters", 1.0))
 
 
 ## What the last rally's geometry actually looked like, as numbers.

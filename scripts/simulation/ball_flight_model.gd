@@ -129,6 +129,185 @@ static func height_at_distance(
 		- 0.5 * gravity * elapsed * elapsed
 
 
+## Speed, time and apex for a ball struck at a chosen angle between two contacts
+## at known heights.
+##
+## The general form of `minimum_speed_for_range`, and the one the rally actually
+## needs. That function solves a launch from height `h` down to the floor, which
+## is right for a serve going long and wrong for every flight that *ends in
+## somebody's hands* -- a set finishing at a hitter's contact three metres up was
+## being solved as though it had to reach the floor, and came out with a third
+## more hang time than the ball really had.
+##
+## Rearranging the trajectory equation at y = h1 rather than y = 0 leaves the
+## drop `h0 - h1` exactly where the launch height used to sit, so the whole
+## difference is one substitution:
+##
+##   v^2 = g*R^2 / (2*cos^2(theta) * (R*tan(theta) + h0 - h1))
+##
+## and the drop is signed -- negative for a ball played *upward* into a hitter's
+## reach, which is the case that motivated this.
+##
+## `feasible` is false when that denominator is not positive: at this angle the
+## ball is still climbing when it reaches the range, so no speed lands it there
+## and the caller is asking for a shot that does not exist. Reported rather than
+## clamped, for the reason `solve_angle_for_range` gives at length -- a solver
+## that answers a different question than the one posed is the failure this
+## module exists to remove.
+static func solve_between(
+	range_meters: float,
+	launch_angle_degrees: float,
+	start_height_meters: float,
+	end_height_meters: float = 0.0,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> Dictionary:
+	var distance := maxf(range_meters, 0.0)
+	var gravity := maxf(gravity_mps2, 0.1)
+	var angle := clampf(
+		launch_angle_degrees, MIN_LAUNCH_ANGLE_DEGREES, MAX_LAUNCH_ANGLE_DEGREES
+	)
+	var radians := deg_to_rad(angle)
+	var cosine := cos(radians)
+	var drop := start_height_meters - end_height_meters
+	var denominator := 2.0 * cosine * cosine * (distance * tan(radians) + drop)
+	if distance <= 0.0001 or cosine <= 0.0001 or denominator <= 0.0000001:
+		return {
+			"feasible": false,
+			"duration_seconds": MIN_FLIGHT_DURATION,
+			"apex_height_meters": maxf(start_height_meters, 0.0),
+			"apex_rise_meters": 0.0,
+			"required_speed_mps": MIN_SPEED_MPS,
+			"launch_angle_degrees": angle,
+		}
+	var speed := maxf(
+		sqrt(gravity * distance * distance / denominator), MIN_SPEED_MPS
+	)
+	## Horizontal motion is uniform without drag, so the time to cover the ground
+	## distance *is* the flight time. Taken this way rather than from
+	## `solve_flight`, whose duration runs on to the floor and would overshoot
+	## every flight that ends in a contact above it.
+	var duration := maxf(distance / maxf(speed * cosine, MIN_SPEED_MPS),
+		MIN_FLIGHT_DURATION)
+	var vertical := speed * sin(radians)
+	var apex := start_height_meters
+	if vertical > 0.0:
+		apex = start_height_meters + vertical * vertical / (2.0 * gravity)
+	return {
+		"feasible": true,
+		"duration_seconds": duration,
+		"apex_height_meters": apex,
+		"apex_rise_meters": maxf(apex - start_height_meters, 0.0),
+		"required_speed_mps": speed,
+		"launch_angle_degrees": angle,
+	}
+
+
+## How high a ball is partway between two contacts it is known to have made.
+##
+## The drawing problem, not the solving problem, and it is the one place the two
+## meet. Everything above chooses a launch and reads the landing off it. A
+## *drawn* flight is the opposite: both ends are already facts -- the hitter
+## contacted at 3.1 m, the digger contacted at 0.9 m, and the resolver has
+## already decided how long the ball took to get between them. Three knowns,
+## and a parabola has exactly three degrees of freedom, so the flight is
+## determined. Nothing is left to choose.
+##
+##   h(t) = h0 + v0*t - g*t^2/2,   with v0 fixed by h(T) = h1
+##
+## What this replaces is worth stating, because it was wrong in a way that looked
+## right. The drawn height used to be a *symmetric hump* fitted to an authored
+## apex: `lerp(h0, h1, t) + 4*(apex - midpoint)*t*(1-t)`, with the apex supplied
+## by a presentation table of per-action lift multipliers. That curve is
+## symmetric about the midpoint whatever the ball is doing, so a spike struck
+## downward from 3.1 m to the floor in 0.45 s was drawn holding 3.1 m to the
+## halfway mark and then dropping: **65% of its descent happened in the last
+## quarter of the flight**, against 31% for the real parabola. That is precisely
+## the reported symptom -- a flat ball that arrives over the target and falls out
+## of the sky -- and it was not a bug in the arithmetic. It was a curve shape
+## that cannot express a ball hit downward at all, because the presentation table
+## floored the apex *above* the contact height and a hump with an apex above both
+## ends has to rise first.
+##
+## `progress` is the fraction of the flight elapsed, so a caller sampling a
+## Bezier horizontally at the same `t` gets a height that belongs to that moment.
+static func height_between(
+	start_height_meters: float,
+	end_height_meters: float,
+	duration_seconds: float,
+	progress: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> float:
+	var duration := maxf(duration_seconds, MIN_FLIGHT_DURATION)
+	var gravity := maxf(gravity_mps2, 0.1)
+	var elapsed := clampf(progress, 0.0, 1.0) * duration
+	var rise := rise_speed_between(
+		start_height_meters, end_height_meters, duration, gravity
+	)
+	return start_height_meters + rise * elapsed - 0.5 * gravity * elapsed * elapsed
+
+
+## The vertical speed the ball left the first contact with, for a flight that is
+## known to reach `end_height_meters` after `duration_seconds`.
+##
+## Signed, and the sign is the whole point: negative is a ball struck downward,
+## which is the ordinary case for a spike and the case the old drawn curve could
+## not represent.
+static func rise_speed_between(
+	start_height_meters: float,
+	end_height_meters: float,
+	duration_seconds: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> float:
+	var duration := maxf(duration_seconds, MIN_FLIGHT_DURATION)
+	return (end_height_meters - start_height_meters) / duration \
+		+ 0.5 * maxf(gravity_mps2, 0.1) * duration
+
+
+## The highest the ball gets between two known contacts.
+##
+## Derived rather than supplied. A caller that wants to know whether a flight
+## clears the net asks this; it does not get to decide the answer.
+static func apex_between(
+	start_height_meters: float,
+	end_height_meters: float,
+	duration_seconds: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> float:
+	var gravity := maxf(gravity_mps2, 0.1)
+	var rise := rise_speed_between(
+		start_height_meters, end_height_meters, duration_seconds, gravity
+	)
+	if rise <= 0.0:
+		## Already descending at the first contact, so the contact is the apex.
+		return start_height_meters
+	return start_height_meters + rise * rise / (2.0 * gravity)
+
+
+## The flight time that puts the ball's apex at `apex_height_meters`.
+##
+## The inverse of `apex_between`, and the join that lets a *decision* about how
+## high to play a ball become a hang time rather than a drawn decoration. A
+## passer choosing to put the ball 4 m up is choosing how long the setter has,
+## and this is the conversion between those two statements of the same choice.
+##
+## Solves the rising leg to the apex and the falling leg back down to the second
+## contact separately, because they are only equal when the two contacts are at
+## the same height and they almost never are.
+static func duration_for_apex(
+	start_height_meters: float,
+	end_height_meters: float,
+	apex_height_meters: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> float:
+	var gravity := maxf(gravity_mps2, 0.1)
+	var apex := maxf(
+		apex_height_meters, maxf(start_height_meters, end_height_meters)
+	)
+	var up := sqrt(2.0 * maxf(apex - start_height_meters, 0.0) / gravity)
+	var down := sqrt(2.0 * maxf(apex - end_height_meters, 0.0) / gravity)
+	return maxf(up + down, MIN_FLIGHT_DURATION)
+
+
 ## The launch angle that lands a ball of this speed at this range.
 ##
 ## The inverse of `solve_flight`, for a decision layer that knows where it wants
@@ -189,6 +368,40 @@ static func solve_angle_for_range(
 		"driven_angle_degrees": driven,
 		"lofted_found": lofted_usable,
 		"lofted_angle_degrees": lofted,
+	}
+
+
+## The slowest a ball can be struck to carry this far *at all*, and the angle
+## that does it.
+##
+## Distinct from `minimum_speed_for_range`, which asks the same question with the
+## angle pinned, and which has a degenerate answer this one does not: at a fixed
+## shallow angle there are ranges no speed reaches, and that function returns the
+## speed floor rather than an error. A caller taking that literally draws a ball
+## at 0.1 m/s -- measured, a sixteen-metre attack came out with a hundred and
+## twenty-four second flight and a tape height in the hundreds of metres, which is
+## how this function came to exist.
+##
+## Maximum range from a launch height is R = (v/g)*sqrt(v^2 + 2gh); inverting for
+## v gives a quadratic in v^2 whose positive root is below, and the angle that
+## achieves it follows from the same optimisation.
+static func minimum_speed_to_reach(
+	range_meters: float,
+	contact_height_meters: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> Dictionary:
+	var distance := maxf(range_meters, 0.0)
+	var height := maxf(contact_height_meters, 0.0)
+	var gravity := maxf(gravity_mps2, 0.1)
+	var speed_squared := gravity * (
+		sqrt(height * height + distance * distance) - height
+	)
+	var speed := maxf(sqrt(maxf(speed_squared, 0.0)), MIN_SPEED_MPS)
+	return {
+		"speed_mps": speed,
+		"launch_angle_degrees": rad_to_deg(atan(
+			speed / maxf(sqrt(speed * speed + 2.0 * gravity * height), 0.0001)
+		)),
 	}
 
 

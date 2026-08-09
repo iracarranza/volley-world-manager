@@ -51,12 +51,18 @@ func velocity_at_time(simulation_time: float) -> Vector2:
 	return velocity_at_progress(progress_at_time(simulation_time))
 
 
+## Where the ball is vertically, from gravity and the two contacts it is between.
+##
+## `apex_height_meters` is deliberately not read here any more. It used to be the
+## input that set the shape of a symmetric hump; it is now a *reported* figure
+## that presentation and calibration can inspect, and the drawn curve is the one
+## parabola the two contact heights and the flight time already determine. The
+## reasoning, and the measurement that forced it, are in
+## `BallFlightModel.height_between`.
 func height_at_progress(progress: float) -> float:
-	var t := clampf(progress, 0.0, 1.0)
-	var base_height := lerpf(start_height_meters, end_height_meters, t)
-	var midpoint_height := lerpf(start_height_meters, end_height_meters, 0.5)
-	var arc_height := maxf(apex_height_meters - midpoint_height, 0.0)
-	return base_height + 4.0 * arc_height * t * (1.0 - t)
+	return BallFlightModel.height_between(
+		start_height_meters, end_height_meters, duration(), progress
+	)
 
 
 func height_at_time(simulation_time: float) -> float:

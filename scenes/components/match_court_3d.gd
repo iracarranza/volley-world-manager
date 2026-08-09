@@ -270,13 +270,17 @@ func trajectory_world_position(trajectory: Dictionary, progress: float) -> Vecto
 	var inverse := 1.0 - t
 	var court_position := inverse * inverse * start \
 		+ 2.0 * inverse * t * control + t * t * end
-	var start_height := float(trajectory.get("start_height_meters", 1.0))
-	var end_height := float(trajectory.get("end_height_meters", 1.0))
-	var apex_height := float(trajectory.get("apex_height_meters", 1.0))
-	var base_height := lerpf(start_height, end_height, t)
-	var midpoint_height := lerpf(start_height, end_height, 0.5)
-	var arc_height := maxf(apex_height - midpoint_height, 0.0)
-	var height := base_height + 4.0 * arc_height * t * (1.0 - t)
+	## The same parabola `BallTrajectory.height_at_progress` draws, from the same
+	## function, because it is the same ball. These were two hand-kept copies of
+	## one curve -- the court sampled a Dictionary and the resource sampled its own
+	## fields -- and a court that disagreed with the model about where the ball was
+	## would have been invisible until something checked one against the other.
+	var height := BallFlightModel.height_between(
+		float(trajectory.get("start_height_meters", 1.0)),
+		float(trajectory.get("end_height_meters", 1.0)),
+		float(trajectory.get("duration", 0.5)),
+		t,
+	)
 	return tactical_to_world(court_position.x, court_position.y, height)
 
 
@@ -287,6 +291,20 @@ func trajectory_world_velocity(trajectory: Dictionary, progress: float) -> Vecto
 		return Vector3.ZERO
 	return (trajectory_world_position(trajectory, upper) \
 		- trajectory_world_position(trajectory, lower)) / (upper - lower)
+
+
+## What this flight is going to look like, before its first frame.
+##
+## The colour and weight belong to the contact that launched the ball, so they
+## are set once here rather than recomputed every frame from a sample -- a trail
+## that changed colour halfway down a flight would be saying the contact changed
+## its mind. `light_mode_enabled` is read because the grade palette has a light
+## variant and a gold trail on a pale court has to be a darker gold to read.
+func begin_ball_flight(trajectory: Dictionary, quality: float) -> void:
+	var style := BallPresentation.trail_style(
+		quality, trajectory, light_mode_enabled
+	)
+	ball_actor.set_flight_style(Color(style.color), float(style.power))
 
 
 func set_ball_trajectory_sample(trajectory: Dictionary, progress: float) -> void:

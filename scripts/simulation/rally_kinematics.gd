@@ -94,6 +94,98 @@ static func solve_launch_arc(
 	}
 
 
+## The same solve as `solve_launch_arc`, for a ball that does not start and
+## finish on the floor.
+##
+## Kept beside the level-ground one rather than replacing it, and every rally
+## flight has moved onto this: a serve leaves a hand at 2.7 m, a set finishes in
+## a hitter's reach at 3.1 m, and a dig is scooped off the floor at 0.9 m.
+## Solving all three as though they left the ground and returned to it made the
+## required speed wrong, and therefore the flight time wrong, in a way that no
+## end-to-end check could see -- both ends of every drawn flight were right, and
+## the error was entirely in how long the ball took to get between them.
+##
+## Same keys as the level-ground solve so a call site changes only by gaining its
+## two heights. `apex_height_meters` keeps that function's *relative rise*
+## contract, because calibration reads it for the duration/rise invariant;
+## `apex_absolute_meters` is the height above the floor, which is what a net
+## clearance question wants.
+static func solve_struck_arc(
+	distance_meters: float,
+	launch_angle_degrees: float,
+	start_height_meters: float,
+	end_height_meters: float = 0.0,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> Dictionary:
+	var solved := BallFlightModel.solve_between(
+		distance_meters, launch_angle_degrees,
+		start_height_meters, end_height_meters, gravity_mps2,
+	)
+	if not bool(solved.get("feasible", false)):
+		## No shot at this angle reaches that far, so fall back to the geometry
+		## that always has an answer. A flight nobody can draw is worse than a
+		## flight drawn from the wrong height.
+		var level := solve_launch_arc(
+			distance_meters, launch_angle_degrees, gravity_mps2
+		)
+		level["apex_absolute_meters"] = start_height_meters \
+			+ float(level.apex_height_meters)
+		level["feasible"] = false
+		return level
+	return {
+		"duration_seconds": float(solved.duration_seconds),
+		"apex_height_meters": float(solved.apex_rise_meters),
+		"apex_absolute_meters": float(solved.apex_height_meters),
+		"required_speed_mps": float(solved.required_speed_mps),
+		"launch_angle_degrees": float(solved.launch_angle_degrees),
+		"feasible": true,
+	}
+
+
+## The flight of a ball whose speed and angle have already been decided.
+##
+## Nothing is solved here, which is the point. `solve_launch_arc` and
+## `solve_struck_arc` both *derive* the force from a target -- "how hard must
+## this be hit to land there" -- and that is the right question for a set or a
+## serve, where the player is placing the ball. It is the wrong question for a
+## spike: a hitter chooses how hard to swing and the ball goes where that swing
+## sends it, which is the causal direction `GeometricAttackResolver` already
+## resolves in and `BallFlightModel` was written for.
+##
+## Horizontal motion is uniform without drag, so the time is the ground distance
+## over the horizontal component and needs no solve at all.
+static func struck_arc_from_speed(
+	distance_meters: float,
+	speed_mps: float,
+	launch_angle_degrees: float,
+	start_height_meters: float,
+	gravity_mps2: float = DEFAULT_GRAVITY_MPS2,
+) -> Dictionary:
+	var speed := maxf(speed_mps, MIN_BALL_SPEED_MPS)
+	var angle := clampf(
+		launch_angle_degrees,
+		BallFlightModel.MIN_LAUNCH_ANGLE_DEGREES,
+		BallFlightModel.MAX_LAUNCH_ANGLE_DEGREES,
+	)
+	var radians := deg_to_rad(angle)
+	var horizontal := maxf(speed * cos(radians), MIN_BALL_SPEED_MPS)
+	var vertical := speed * sin(radians)
+	var gravity := maxf(gravity_mps2, 0.1)
+	var rise := 0.0
+	if vertical > 0.0:
+		rise = vertical * vertical / (2.0 * gravity)
+	return {
+		"duration_seconds": maxf(
+			maxf(distance_meters, 0.0) / horizontal, MIN_FLIGHT_DURATION
+		),
+		"apex_height_meters": rise,
+		"apex_absolute_meters": start_height_meters + rise,
+		"required_speed_mps": speed,
+		"launch_angle_degrees": angle,
+		"feasible": true,
+	}
+
+
 static func flight_duration(
 	distance_meters: float,
 	speed_mps: float,

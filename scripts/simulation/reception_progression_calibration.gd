@@ -101,15 +101,41 @@ static func run(samples_per_style: int, start_seed: int) -> Dictionary:
 		and float(average.get("recognition_delay_mean_seconds", 99.0))
 			< float(weak.get("recognition_delay_mean_seconds", 99.0))
 	)
+	## Whether the formation the club stands in changes anything, on two channels.
+	##
+	## **Reachability stopped discriminating and that is a measurement, not a
+	## regression.** It was the only channel here, and it read the share of serves
+	## somebody could physically get to. Once the serve's flight time was solved
+	## from the server's actual contact height instead of from the floor -- see
+	## `RallyKinematics.solve_struck_arc` -- a serve became about a third longer,
+	## which is what a real serve takes, and every formation now reaches
+	## everything: 1.000, 1.000, 1.000, spread exactly zero. A metric pinned at its
+	## ceiling cannot separate anything, which is this repository's own commonest
+	## defect read from the other end.
+	##
+	## The formations have not stopped differing. Measured in the same run, the
+	## mean distance between where the pass was aimed and where it went still moves
+	## with the formation -- 0.892 m standard, 0.937 m compressed middle, 0.906 m
+	## split deep -- because standing somewhere else still means passing from
+	## somewhere else. So the spread is now reported on both, and the gate reads
+	## the one that is still inside its own range.
 	var formation_reachability: Array[float] = []
+	var formation_error: Array[float] = []
 	for formation_name in formations:
 		formation_reachability.append(float(
 			formations[formation_name].get("reachable_rate", 0.0)
 		))
+		formation_error.append(float(
+			formations[formation_name].get("destination_error_mean_meters", 0.0)
+		))
 	formation_reachability.sort()
+	formation_error.sort()
 	var formation_spread := 0.0
 	if formation_reachability.size() >= 2:
 		formation_spread = formation_reachability[-1] - formation_reachability[0]
+	var formation_error_spread := 0.0
+	if formation_error.size() >= 2:
+		formation_error_spread = formation_error[-1] - formation_error[0]
 	return {
 		"gate": "reader_formation_calibration_gate_4",
 		"shadow_only": true,
@@ -132,6 +158,7 @@ static func run(samples_per_style: int, start_seed: int) -> Dictionary:
 			"recognition_delay_monotonic": recognition_monotonic,
 		},
 		"formation_reachability_spread": formation_spread,
+		"formation_destination_spread_meters": formation_error_spread,
 		"fixture_valid": fixture_errors.is_empty()
 			and int(overall.get("invalid", 0)) == 0,
 	}

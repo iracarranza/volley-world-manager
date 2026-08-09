@@ -879,9 +879,10 @@ func resolve(
 	## ball has to go where the official verdict already says it went.
 	if serve_error:
 		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
-	var serve_arc := RallyKinematics.solve_launch_arc(
+	var serve_arc := RallyKinematics.solve_struck_arc(
 		RallyKinematics.court_distance_meters(opponent_serve_origin, serve_landing),
 		_serve_launch_angle_degrees(opponent_server, serve_quality),
+		GeometricAttackPromotionModel.serve_contact_height_meters(opponent_server),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	var serve_trajectory := _ball_trajectory(
@@ -1089,6 +1090,7 @@ func resolve(
 		receiver, receiver_start, serve_landing, desired_pass_target,
 		opponent_serve_origin, serve_quality, arrival,
 		float(result.reception_quality), 0.51, 0.98, serve_trajectory,
+		_player_by_id(players, lineup.active_setter_id()),
 	)
 	if using_live_reception:
 		var selected_metadata: Dictionary = selected_live_reception.get(
@@ -1391,9 +1393,18 @@ func resolve(
 	)
 	var setter_capability := SetterCapabilityModel.evaluate(
 		setter, assignment.tempo, float(result.reception_quality),
-		SetterCapabilityModel.pass_contact_height_meters(
-			float(result.reception_quality), rng.randf()
-		),
+		## The height the pass actually delivered, not a second guess at it.
+		## `SetterCapabilitySystem.pass_contact_height_meters` drew this from a
+		## table against a random sail value -- a third model of a fact the pass
+		## itself now computes from its own apex under gravity, and one whose floor
+		## sat above every setter's forehead, so the underhand set it was meant to
+		## produce could never happen.
+		float(reception_pass.get(
+			"set_contact_height_meters",
+			SetterCapabilityModel.pass_contact_height_meters(
+				float(result.reception_quality), rng.randf()
+			),
+		)),
 		setter_approach_quality,
 	)
 	var resolved_tempo := int(setter_capability.resolved_tempo)
@@ -1448,8 +1459,11 @@ func resolve(
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
 	)
-	var set_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(set_contact, set_target), set_angle
+	var set_arc := _set_arc(
+		setter, assignment.tempo, float(result.set_quality),
+		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+		RallyKinematics.court_distance_meters(set_contact, set_target),
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
 	var release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
@@ -1839,8 +1853,12 @@ func resolve(
 	var attack_angle := _attack_launch_angle_degrees(
 		hitter, hit_type, float(result.attack_quality)
 	)
-	var attack_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(set_target, attack_target), attack_angle
+	var attack_arc := _swing_arc(
+		Dictionary(shadow_summary.get("geometric_attack", {})),
+		RallyKinematics.court_distance_meters(set_target, attack_target),
+		GeometricAttackPromotionModel.contact_height_meters(
+			hitter, float(resolved_approach.get("jump_multiplier", 1.0))
+		),
 	)
 	var attack_flight := float(attack_arc.duration_seconds)
 	var attack_trajectory := _ball_trajectory(
@@ -2095,8 +2113,12 @@ func resolve(
 		## crosses the net rather than where it was originally headed -- same
 		## launch angle, shorter distance, so duration/apex still fall out of
 		## the geometry instead of being a separate hardcoded segment.
-		var attack_to_block_arc := RallyKinematics.solve_launch_arc(
-			RallyKinematics.court_distance_meters(set_target, net_contact), attack_angle
+		var attack_to_block_arc := _swing_arc(
+			Dictionary(shadow_summary.get("geometric_attack", {})),
+			RallyKinematics.court_distance_meters(set_target, net_contact),
+			GeometricAttackPromotionModel.contact_height_meters(
+				hitter, float(resolved_approach.get("jump_multiplier", 1.0))
+			),
 		)
 		attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 			"attack_to_block", set_target, net_contact,
@@ -2470,9 +2492,10 @@ func _resolve_home_serve(
 		opponent_landing = _errant_serve_landing(
 			opponent_landing, serve_quality, false
 		)
-	var serve_arc := RallyKinematics.solve_launch_arc(
+	var serve_arc := RallyKinematics.solve_struck_arc(
 		RallyKinematics.court_distance_meters(CourtConstants.serve_origin(0.82, true), opponent_landing),
 		_serve_launch_angle_degrees(server, serve_quality),
+		GeometricAttackPromotionModel.serve_contact_height_meters(server),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	## Named so the reception can carry it as its incoming ball, exactly as the
@@ -2580,6 +2603,7 @@ func _resolve_home_serve(
 		receiver, receiver_start, opponent_landing, opponent_setter_release,
 		CourtConstants.serve_origin(0.82, true), serve_quality, opponent_arrival,
 		reception_quality, 0.02, 0.49, serve_trajectory,
+		_opponent_setter(opponent_team),
 	)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
@@ -2826,11 +2850,16 @@ func _resolve_opponent_transition(
 	## set_geometry's first pass already uses above; the real distance-based
 	## value is recomputed below once opponent_contact is final, mirroring how
 	## opponent_set_quality is already computed twice in this function.
-	var estimated_set_flight_time: float = float(RallyKinematics.solve_launch_arc(
+	var estimated_set_flight_time: float = float(_set_arc(
+		opponent_setter, opponent_tempo, opponent_set_quality,
+		GeometricAttackPromotionModel.set_contact_height_meters(opponent_setter),
+		## Against the setter's own reach rather than a hitter's, because who is
+		## going to hit it is the question this estimate exists to answer. The real
+		## flight is re-solved below against the hitter this picks.
+		GeometricAttackPromotionModel.contact_height_meters(opponent_setter, 1.0),
 		RallyKinematics.court_distance_meters(
 			opponent_setter_position, Vector2(0.50, 0.48)
 		),
-		_set_launch_angle_degrees(opponent_setter, opponent_tempo, opponent_set_quality),
 	).duration_seconds)
 	var attack_choice := _choose_opponent_attack(
 		opponent_team, opponent_setter, opponent_set_quality,
@@ -2941,9 +2970,13 @@ func _resolve_opponent_transition(
 			delivered_type = "Roll shot" if opponent_set_quality >= 0.30 \
 				else "Emergency tip"
 		attack_choice["attack_type"] = delivered_type
-	var set_arc := RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(opponent_setter_position, opponent_contact),
-		_set_launch_angle_degrees(opponent_setter, opponent_tempo, opponent_set_quality),
+	var set_arc := _set_arc(
+		opponent_setter, opponent_tempo, opponent_set_quality,
+		GeometricAttackPromotionModel.set_contact_height_meters(opponent_setter),
+		GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
+		RallyKinematics.court_distance_meters(
+			opponent_setter_position, opponent_contact
+		),
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
 	## When the setter actually touches the ball.
@@ -3350,9 +3383,14 @@ func _resolve_opponent_transition(
 	## re-slices this to the net if the block touches it; truncating here
 	## unconditionally made every opponent spike travel about three percent of
 	## the court and the rest arrive as a "deflection".
-	var opponent_attack_arc := RallyKinematics.solve_launch_arc(
+	var opponent_attack_arc := _swing_arc(
+		Dictionary(_trace_summary().get(
+			"geometric_attack_opponent", {}
+		)),
 		RallyKinematics.court_distance_meters(opponent_contact, home_target),
-		opponent_attack_angle,
+		GeometricAttackPromotionModel.contact_height_meters(
+			opponent_hitter, 1.0
+		),
 	)
 	var opponent_attack_trajectory := _ball_trajectory(
 		"attack", opponent_contact, home_target,
@@ -3502,10 +3540,16 @@ func _resolve_opponent_transition(
 		var opponent_start: Vector2 = Vector2(opponent_flight.get(
 			"start_position", opponent_net_contact
 		))
-		var to_block_arc := RallyKinematics.solve_launch_arc(
+		var to_block_arc := _swing_arc(
+			Dictionary(_trace_summary().get(
+				"geometric_attack_opponent", {}
+			)),
 			RallyKinematics.court_distance_meters(
 				opponent_start, opponent_net_contact
-			), opponent_angle,
+			),
+			GeometricAttackPromotionModel.contact_height_meters(
+				opponent_hitter, 1.0
+			),
 		)
 		opponent_attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 			"attack_to_block", opponent_start, opponent_net_contact,
@@ -3618,6 +3662,29 @@ func _resolve_opponent_transition(
 	##
 	## `attack_type` above still classifies the ball for the *defence* -- which is
 	## what it was written for -- and no longer decides how fast it flies.
+	## **Measured, reverted, and the measurement is the finding.**
+	##
+	## Reading the drawn flight here was tried unconditionally in the same pass
+	## that made the drawn flight physical, on the reasoning above -- the two
+	## expressions are one fact computed twice, and the drawn one is now correct.
+	## It is still one fact computed twice. But the drawn flight is no longer a
+	## 0.74 s lob, it is a struck ball at 12 to 20 m/s, and handing the floor
+	## defence that number produced, over 700 rallies:
+	##
+	##     opponent swings   681 -> 8
+	##     home kill rate  0.85 -> 1.000
+	##
+	## Nobody digs anything, so no rally reaches a second exchange, so the
+	## opponent never attacks. That is not the calibration moving; that is the
+	## floor defence turning out to be *entirely* calibrated against attacks being
+	## modelled as lobs, which nothing had measured before because the two numbers
+	## had never been made to disagree this much.
+	##
+	## So the lofted classifier stays for now and the ball on screen is right,
+	## which is the honest state: the drawing has been fixed and the defence has
+	## not been re-fitted. Re-fitting it is tasks #62 to #64 -- the same
+	## degeneracy `docs/BACKLOG.md` names as the limiter -- and it is a bigger
+	## change than this one, not a line in it.
 	var attack_time := float(RallyKinematics.solve_launch_arc(
 		RallyKinematics.court_distance_meters(opponent_contact, home_target),
 		_attack_launch_angle_degrees(opponent_hitter, attack_type, opponent_attack),
@@ -3626,14 +3693,17 @@ func _resolve_opponent_transition(
 		attack_time = float(opponent_attack_trajectory.get("duration", attack_time))
 		if block_outcome in ["touch", "funnel"]:
 			## Off the hands the ball is going somewhere else, so the remaining
-			## flight is genuinely a new solve -- on the hitter's shot shape, not
-			## the defence's.
-			attack_time = float(RallyKinematics.solve_launch_arc(
+			## flight is genuinely a new solve -- on the hitter's swing, not the
+			## defence's classifier.
+			attack_time = float(_swing_arc(
+				Dictionary(_trace_summary().get(
+					"geometric_attack_opponent", {}
+				)),
 				RallyKinematics.court_distance_meters(
 					opponent_contact, home_target
 				),
-				_attack_launch_angle_degrees(
-					opponent_hitter, str(attack_choice.attack_type), opponent_attack
+				GeometricAttackPromotionModel.contact_height_meters(
+					opponent_hitter, 1.0
 				),
 			).duration_seconds)
 	if block_outcome == "touch":
@@ -3915,9 +3985,11 @@ func _resolve_home_continuation(
 		),
 		HOME_SET_DELIVERY_MAX_Y,
 	)
-	var continuation_set_arc := RallyKinematics.solve_launch_arc(
+	var continuation_set_arc := _set_arc(
+		setter, assignment.tempo, set_quality,
+		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		RallyKinematics.court_distance_meters(set_contact, set_target),
-		_set_launch_angle_degrees(setter, assignment.tempo, set_quality),
 	)
 	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds)
 	var cont_release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
@@ -4155,9 +4227,12 @@ func _resolve_home_continuation(
 	var continuation_attack_angle := _attack_launch_angle_degrees(
 		hitter, continuation_hit_type, attack_quality
 	)
-	var continuation_attack_arc := RallyKinematics.solve_launch_arc(
+	var continuation_attack_arc := _swing_arc(
+		Dictionary(_trace_summary().get(
+			"geometric_attack_transition", {}
+		)),
 		RallyKinematics.court_distance_meters(set_target, attack_target),
-		continuation_attack_angle,
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 	)
 	var continuation_attack_flight: float = float(continuation_attack_arc.duration_seconds)
 	## Named rather than inlined into the event: the dig below reads this same
@@ -4296,9 +4371,12 @@ func _resolve_home_continuation(
 		else Vector2(set_target.x, 0.47)
 	if cont_block_contacts:
 		var cont_attack_event: Resource = result.events[-1]
-		var cont_to_block_arc := RallyKinematics.solve_launch_arc(
+		var cont_to_block_arc := _swing_arc(
+			Dictionary(_trace_summary().get(
+				"geometric_attack_transition", {}
+			)),
 			RallyKinematics.court_distance_meters(set_target, cont_net_contact),
-			continuation_attack_angle,
+			GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		)
 		cont_attack_event.metadata["outgoing_trajectory"] = _ball_trajectory(
 			"attack_to_block", set_target, cont_net_contact,
@@ -5998,6 +6076,23 @@ static func _block_wall_positions(
 ## the home side uses, mirrored, rather than a fixed point in the middle of the
 ## court. Shared so the reception's pass target and the setter's own position
 ## cannot drift apart and leave the ball landing somewhere the setter is not.
+## Whoever is running the opponent's offence this rotation.
+##
+## Beside `_opponent_setter_release_target`, which has always known how to find
+## them and only ever returned where they stand.
+static func _opponent_setter(opponent_team: Resource) -> VolleyballPlayer:
+	if opponent_team == null:
+		return null
+	var opponent_lineup: RotationLineup = opponent_team.current_lineup()
+	if opponent_lineup == null:
+		return null
+	for raw_player in opponent_team.on_court_players():
+		var player: VolleyballPlayer = raw_player as VolleyballPlayer
+		if player != null and player.id == opponent_lineup.active_setter_id():
+			return player
+	return null
+
+
 static func _opponent_setter_release_target(opponent_team: Resource) -> Vector2:
 	if opponent_team == null:
 		return Vector2(0.62, 0.34)
@@ -6052,9 +6147,11 @@ func _block_deflection_trajectory(
 			"block_deflection", from_point, to_point,
 			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
 		)
-	var arc := RallyKinematics.solve_launch_arc(
+	## Off a blocker's hands, which are above the tape, not off the floor.
+	var arc := RallyKinematics.solve_struck_arc(
 		RallyKinematics.court_distance_meters(from_point, to_point),
 		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES,
+		maxf(apex_hint, CourtConstants.NET_HEIGHT_METERS),
 	)
 	return _ball_trajectory(
 		"block_deflection", from_point, to_point,
@@ -6211,6 +6308,86 @@ func _swing_reaches_net(trajectory: Dictionary, fallback: float) -> float:
 	return fallback if moment < 0.0 else moment
 
 
+## The flight a swing actually produced.
+##
+## `_geometric_swing` resolves every attack in the game -- it picks a course,
+## chooses a power from `AttackPowerModel`, solves the driven root off the
+## hitter's real contact height and checks the ball clears the tape -- and then
+## hands back `speed_mps`, `vertical_angle_degrees` and `contact_height_meters`.
+## Every one of those three was dropped on the floor, and the drawn attack was
+## rebuilt from `solve_launch_arc`: a ball lobbed *upward* at eight to twelve
+## degrees from ground level to ground level.
+##
+## The consequence was not subtle once it was measured. A spike is struck
+## downward -- `DRIVEN_REFERENCE_ANGLE_DEGREES` is minus fifteen and always has
+## been -- so re-deriving it as an upward lob forced the solver to pick a speed
+## slow enough that the lob would still land in the court, around 6.6 m/s against
+## the 16-30 m/s the power model works in. This is the first failure mode in
+## `docs/BACKLOG.md`, exactly: a value computed correctly, dropped before
+## anything could use it, and re-derived worse downstream.
+##
+## The fallback is not the old lob. A swing with no geometric record still gets
+## the driven reference angle and the speed that shape needs, because a spike
+## drawn as a lob is wrong whether or not the resolver had an opinion about it.
+## The shadow trace's summary, or an empty one.
+##
+## `shadow_reception_trace` is null on the paths that never built a trace -- an
+## opponent transition inside a home serve is one -- and reading `.summary` off
+## it was a crash the moment anything outside the reception pipeline wanted a
+## geometric record. Which is now every attack.
+func _trace_summary() -> Dictionary:
+	if shadow_reception_trace == null:
+		return {}
+	return Dictionary(shadow_reception_trace.summary)
+
+
+## **The speed is carried; the angle is re-solved.** The record's
+## `vertical_angle_degrees` belongs to the landing point the *geometric* resolver
+## chose, and the drawn event goes to the legacy `attack_target`, which is not
+## always the same spot. Carrying an angle across that gap draws real nonsense --
+## a lofted 70-degree roll re-aimed at a short target solved to a two-second
+## flight and put the ball nine metres in the air, which is what the first version
+## of this function did and what the tape column in `run_ball_flight_probe`
+## caught. Speed is a property of the swing and travels; angle is a property of
+## the swing *plus its target* and does not.
+func _swing_arc(
+	record: Dictionary,
+	distance_meters: float,
+	contact_height_meters: float,
+) -> Dictionary:
+	var height := maxf(float(record.get(
+		"contact_height_meters", contact_height_meters
+	)), 0.1)
+	var power := GeometricAttackResolverModel.AttackPowerModel
+	var speed := float(record.get("speed_mps", 0.0))
+	if not bool(record.get("available", false)) or speed <= 0.0:
+		## An ordinary hitter driving the ball. Deliberately *not*
+		## `required_speed_mps`, which asks the least force that reaches the target
+		## at the reference angle -- a question with no answer beyond about twelve
+		## metres, where it returns the speed floor and a ball drawn at 0.1 m/s.
+		speed = power.available_ceiling_mps(0.5, 1.0, 1.0) * power.DRIVE_INTENT
+	var solved := BallFlightModel.solve_angle_for_range(
+		speed, distance_meters, height
+	)
+	var angle := power.DRIVEN_REFERENCE_ANGLE_DEGREES
+	if bool(solved.get("driven_found", false)):
+		angle = float(solved.driven_angle_degrees)
+	else:
+		## Struck too softly to carry that far at any angle. The swing still
+		## happened and the ball still has to be drawn arriving, so it is re-priced
+		## at the least force that reaches. Landing short is a real outcome and a
+		## real one to model, but it is the resolver's to declare -- not something
+		## the drawing gets to invent by stalling the ball in midair.
+		var reach := BallFlightModel.minimum_speed_to_reach(
+			distance_meters, height
+		)
+		speed = maxf(speed, float(reach.speed_mps))
+		angle = float(reach.launch_angle_degrees)
+	return RallyKinematics.struck_arc_from_speed(
+		distance_meters, speed, angle, height
+	)
+
+
 func _ball_trajectory(
 	kind: String,
 	start: Vector2,
@@ -6298,6 +6475,23 @@ func _set_geometry(
 	}
 
 
+## How high a pass goes above the platform that played it, from a shank to a
+## perfect one.
+##
+## The floor is a ball that barely clears the passer -- it still reaches a
+## setter's hands on nobody, which is exactly the point: a 1.05 m rise off a
+## 0.9 m platform apexes at 1.95 m, under every setter's standing reach in the
+## game, and the second contact has to be taken underhand. The ceiling is the
+## textbook high pass that hangs above the setter and lets the whole offence
+## organise underneath it.
+const PASS_APEX_RISE_MIN_METERS: float = 1.05
+const PASS_APEX_RISE_MAX_METERS: float = 2.90
+## Below this execution the platform is not controlling the ball, so it goes up
+## rather than forward, by up to this much more.
+const SHANK_EXECUTION: float = 0.18
+const SHANK_EXTRA_RISE_METERS: float = 1.60
+
+
 func _reception_pass_result(
 	receiver: VolleyballPlayer,
 	start_position: Vector2,
@@ -6314,6 +6508,10 @@ func _reception_pass_result(
 	## re-rating the platform feasibility that every reception in the game is
 	## calibrated against.
 	incoming_trajectory: Dictionary = {},
+	## Who is going to take this ball, because how high they can reach is half of
+	## what decides the pass's hang time -- and, when the pass is bad enough,
+	## whether they get hands on it at all.
+	setter: VolleyballPlayer = null,
 ) -> Dictionary:
 	var movement_vector := contact_position - start_position
 	var desired_vector := desired_target - contact_position
@@ -6376,8 +6574,43 @@ func _reception_pass_result(
 	var pass_distance := CoverageModel.court_distance_meters(
 		contact_position, destination
 	)
-	var flight_time := clampf(
-		0.38 + pass_distance / lerpf(5.2, 8.4, execution), 0.42, 1.25
+	## **How high the ball was put up, and therefore how long the setter has.**
+	##
+	## The flight time was `0.38 + distance / lerp(5.2, 8.4, execution)` clamped
+	## into 0.42..1.25 -- a horizontal speed dressed as a duration, in which a good
+	## pass got to the setter *faster* than a bad one. That is backwards. A good
+	## pass is a high one; height is the entire currency of a second contact,
+	## because it is the only thing that buys the setter time to arrive, square up
+	## and choose, and buys the hitters time to find their run-ups behind it.
+	##
+	## So the pass is now described the way a coach describes it -- how high it
+	## went -- and the hang time falls out of gravity. The apex band is the one
+	## that was already here as `lerpf(1.1, 2.8, execution)`, which was passed to
+	## the trajectory as an apex, thrown away by the drawing, and read by nothing:
+	## a value computed correctly and dropped, which is this engine's commonest
+	## defect and was hiding the fix to this one.
+	var pass_contact_height := GeometricAttackPromotionModel \
+		.pass_contact_height_meters(receiver)
+	var pass_apex := pass_contact_height + lerpf(
+		PASS_APEX_RISE_MIN_METERS, PASS_APEX_RISE_MAX_METERS, execution
+	)
+	## A shanked ball is not a low ball -- it is an uncontrolled one, and off a
+	## flailing platform it goes *up*. Drawn that way as well as timed that way,
+	## which is what "looks like an uncontrolled high contact" means.
+	if execution < SHANK_EXECUTION:
+		pass_apex += lerpf(
+			SHANK_EXTRA_RISE_METERS, 0.0, execution / SHANK_EXECUTION
+		)
+	## The setter takes the ball as high as they can reach and as high as it got.
+	## Both halves matter: a tall setter cannot play a ball above its own apex,
+	## and a pass that never rises to hand height has to be bumped.
+	var set_contact_height := minf(
+		pass_apex,
+		GeometricAttackPromotionModel.set_contact_height_meters(setter) \
+			if setter != null else pass_apex,
+	)
+	var flight_time := BallFlightModel.duration_for_apex(
+		pass_contact_height, set_contact_height, pass_apex
 	)
 	var posture := "planted"
 	if reach_margin < 0.0:
@@ -6418,8 +6651,15 @@ func _reception_pass_result(
 		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
 		"trajectory": _ball_trajectory(
 			"reception_pass", contact_position, destination,
-			flight_time, lerpf(1.1, 2.8, execution), rally_clock
+			flight_time, maxf(pass_apex - pass_contact_height, 0.0), rally_clock
 		),
+		## The three numbers the second contact needs, stated rather than
+		## re-derived. `set_contact_height_meters` is what `SetterCapabilitySystem`
+		## reads to decide whether this is a hands set, a jump set or a ball the
+		## setter has to dig up off their platform.
+		"pass_apex_meters": pass_apex,
+		"pass_contact_height_meters": pass_contact_height,
+		"set_contact_height_meters": set_contact_height,
 	}
 
 
@@ -7223,7 +7463,7 @@ func _finish(
 	result.analysis["team_principles"] = home_principles.to_dict()
 	result.analysis["identity_effects"] = identity_effects.duplicate(true)
 	if shadow_reception_trace != null:
-		var existing_rollout: Dictionary = shadow_reception_trace.summary.get(
+		var existing_rollout: Dictionary = _trace_summary().get(
 			"reception_rollout", {}
 		)
 		if str(existing_rollout.get("selected_source", "official")) == "official":
@@ -9524,6 +9764,18 @@ func _serve_style_proficiency(server: VolleyballPlayer) -> float:
 ## tactical input (chosen by the called offensive play, not hardcoded); this
 ## only changes what a tempo *means physically*, from a table lookup to a
 ## shape that a real distance is then flown at.
+##
+## **Kept, and no longer the input to the set's flight.** A launch angle is the
+## wrong free variable for a set and it took a physical solve to see why. A set
+## has to *rise* about a metre from the setter's hands into the hitter's, and at
+## the shallow angles this table calls a quick -- six to ten degrees -- the only
+## ball that climbs a metre over four metres of court is one hit at 26 m/s. The
+## solver said so, honestly, and the drawn quick came out at 0.16 s. A coach does
+## not describe a set by its launch angle in any case; they describe it by how
+## high it goes, which is what `_set_apex_meters` below now supplies.
+##
+## This still feeds `path_length_factor` and the signature the reception carries,
+## which want an angle and are unaffected by the change.
 func _set_launch_angle_degrees(
 	setter: VolleyballPlayer, tempo: int, set_quality: float
 ) -> float:
@@ -9541,6 +9793,76 @@ func _set_launch_angle_degrees(
 			angle_max = 55.0
 	var touch := (_rating(setter, "tempo_control") + _rating(setter, "hand_control")) * 0.5
 	return _jittered_launch_angle(angle_min, angle_max, touch, set_quality)
+
+
+## How high a set goes above the hands that will hit it, by tempo.
+##
+## The set's real free variable, and the one every coach and every player already
+## uses: a first-tempo quick is delivered flat to a hitter already in the air, a
+## high ball climbs two metres above them to buy the outside every fraction of a
+## second it can. Everything else about the flight -- its speed, its hang time,
+## the window the hitter runs in -- falls out of this and the two contact heights,
+## through `BallFlightModel.duration_for_apex`.
+##
+## Stated as clearance *above the hitter's contact* rather than as an absolute
+## height, because that is the quantity that stays meaningful when the hitter
+## changes. A 1.72 m setter feeding a 2.06 m opposite and the same setter feeding
+## a 1.85 m libero on an overpass are putting the ball in very different places
+## above the floor and the same place above the hands.
+const SET_CLEARANCE_BY_TEMPO: Array[float] = [0.15, 0.60, 1.30, 2.20]
+## What a setter's touch is worth: a good one delivers the tempo that was called,
+## a poor one drifts toward the safe high ball nobody asked for.
+const SET_CLEARANCE_DRIFT: float = 0.55
+
+
+func _set_apex_meters(
+	setter: VolleyballPlayer,
+	tempo: int,
+	set_quality: float,
+	hitter_contact_height_meters: float,
+) -> float:
+	var clearance := SET_CLEARANCE_BY_TEMPO[clampi(tempo, 0, 3)]
+	## A miss goes up, never down. Under-setting a quick puts the ball below the
+	## hitter's hands, which is not a lower set -- it is a ball nobody can hit,
+	## and the set quality this same contact produced is where that is already
+	## priced.
+	var touch := (_rating(setter, "tempo_control") + _rating(setter, "hand_control")) * 0.5
+	var drift := SET_CLEARANCE_DRIFT * (1.0 - clampf(touch, 0.0, 1.0)) \
+		* (1.0 - clampf(set_quality, 0.0, 1.0))
+	return hitter_contact_height_meters + clearance + drift
+
+
+## The flight of a set, timed by how high it was put up.
+##
+## Behind `ENABLE_SET_HEIGHT_TIMING`, which is off and whose comment carries the
+## measurement that closed it: real hang times are about triple the ones every
+## approach constant in this engine was fitted against, and handing them to the
+## run-up budget makes every hitter arrive perfectly.
+func _set_arc(
+	setter: VolleyballPlayer,
+	tempo: int,
+	set_quality: float,
+	release_height_meters: float,
+	hitter_contact_height_meters: float,
+	distance_meters: float,
+) -> Dictionary:
+	var angle := _set_launch_angle_degrees(setter, tempo, set_quality)
+	if not RallyFeatureFlagsModel.ENABLE_SET_HEIGHT_TIMING:
+		var level := RallyKinematics.solve_launch_arc(distance_meters, angle)
+		level["apex_absolute_meters"] = release_height_meters \
+			+ float(level.apex_height_meters)
+		return level
+	var apex := _set_apex_meters(
+		setter, tempo, set_quality, hitter_contact_height_meters
+	)
+	return {
+		"duration_seconds": BallFlightModel.duration_for_apex(
+			release_height_meters, hitter_contact_height_meters, apex
+		),
+		"apex_height_meters": maxf(apex - release_height_meters, 0.0),
+		"apex_absolute_meters": apex,
+		"launch_angle_degrees": angle,
+	}
 
 
 ## Intended shot shape for an attack, by the hitter's chosen action. Covers

@@ -3468,11 +3468,48 @@ func _test_ball_trajectory_geometry() -> void:
 			and is_equal_approx(float(trajectory.apex_height_meters), 2.4),
 		"ball trajectory preserves timing and apex height",
 	)
+	## The height query no longer returns the authored apex at the midpoint,
+	## because the authored apex is no longer an input to the curve. What it
+	## returns is the one parabola the two contact heights and the flight time
+	## determine, so the endpoints are the assertion and the middle is checked
+	## against gravity rather than against a number somebody typed.
 	_check(
 		Vector2(trajectory.position_at_time(2.0)).is_equal_approx(Vector2(0.1, 0.2))
-			and Vector2(trajectory.position_at_time(2.8)).is_equal_approx(Vector2(0.9, 0.8))
-			and is_equal_approx(float(trajectory.height_at_time(2.4)), 2.4),
-		"ball trajectory supports deterministic absolute-time position and height queries",
+			and Vector2(trajectory.position_at_time(2.8)).is_equal_approx(Vector2(0.9, 0.8)),
+		"ball trajectory supports deterministic absolute-time position queries",
+	)
+	_check(
+		is_equal_approx(
+			float(trajectory.height_at_time(2.0)),
+			float(trajectory.start_height_meters),
+		) and is_equal_approx(
+			float(trajectory.height_at_time(2.8)),
+			float(trajectory.end_height_meters),
+		) and is_equal_approx(
+			float(trajectory.height_at_time(2.4)),
+			BallFlightModel.height_between(
+				float(trajectory.start_height_meters),
+				float(trajectory.end_height_meters),
+				float(trajectory.duration()), 0.5,
+			),
+		),
+		"ball trajectory height is the parabola its two contacts determine",
+	)
+	## A ball struck downward is the case the retired symmetric hump could not
+	## draw at all, and it is the ordinary case for a spike. Contacted at 3.1 m,
+	## on the floor 0.45 s later, it must never rise.
+	var spike: Resource = BALL_TRAJECTORY_SCRIPT.create(
+		"spike", Vector2(0.5, 0.55), Vector2(0.5, 0.35), Vector2(0.5, 0.15),
+		0.0, 0.45, 0.0, 3.10, 0.12,
+	)
+	var spike_rose := false
+	for step in range(1, 21):
+		var here := float(spike.height_at_progress(float(step) / 20.0))
+		if here > float(spike.height_at_progress(float(step - 1) / 20.0)) + 0.0001:
+			spike_rose = true
+	_check(
+		not spike_rose and float(spike.height_at_progress(0.5)) < 2.0,
+		"a spike is drawn descending from the contact, never rising into it",
 	)
 
 
@@ -4074,7 +4111,13 @@ func _test_gate_four_reader_and_formation_matrix() -> void:
 		)) > float(Dictionary(tiers.get("weak", {})).get(
 			"confidence_mean", 1.0
 		))
-			and float(summary.get("formation_reachability_spread", 0.0)) > 0.0,
+			## Read off where the pass *went*, not off whether it was reachable.
+			## The reachability channel is pinned at 1.000 in every formation now
+			## that a serve is timed from the server's own contact height, and
+			## `ReceptionProgressionCalibration` carries the measurement.
+			and float(summary.get(
+				"formation_destination_spread_meters", 0.0
+			)) > 0.0,
 		"Gate 4 exposes both player-development and formation effects",
 	)
 
@@ -6560,14 +6603,41 @@ func _test_ball_kinematics_force_derived() -> void:
 			if duration <= 0.0:
 				continue
 			checked_trajectories += 1
-			var implied_duration := sqrt(8.0 * apex / RallyKinematics.DEFAULT_GRAVITY_MPS2)
-			if absf(duration - implied_duration) > 0.02 \
-					or not is_equal_approx(explicit_rise, apex) \
+			## **The level-ground identity is gone, and its going is the point.**
+			## `duration == sqrt(8*apex/g)` holds only for a ball launched from the
+			## floor and landing on it, and no flight in this engine is one: a serve
+			## leaves a hand at 2.7 m, a set finishes in a hitter's reach, and a spike
+			## is struck downward. Asserting it here was asserting that the resolver
+			## still made that mistake.
+			##
+			## What replaces it is stronger, because it checks the ball a viewer
+			## actually sees. The drawn flight has to be a real parabola through both
+			## contact heights in the resolver's own flight time -- ends where it
+			## should, and its apex is whatever gravity makes it rather than whatever
+			## presentation wanted.
+			if not is_equal_approx(explicit_rise, apex) \
 					or str(trajectory.get("height_contract", "")) != "relative_rise":
+				invariant_held = false
+			var display := BallPresentation.display_trajectory(
+				event, null, trajectory, result.player_physical_profiles
+			)
+			var start_height := float(display.start_height_meters)
+			var end_height := float(display.end_height_meters)
+			var drawn := float(display.duration)
+			if not is_equal_approx(
+					float(BallPresentation.sample(display, 0.0).height_meters),
+					start_height,
+				) or not is_equal_approx(
+					float(BallPresentation.sample(display, 1.0).height_meters),
+					end_height,
+				) or not is_equal_approx(
+					float(display.apex_height_meters),
+					BallFlightModel.apex_between(start_height, end_height, drawn),
+				) or str(display.get("height_contract", "")) != "gravity_true":
 				invariant_held = false
 	_check(
 		checked_trajectories >= 10 and invariant_held,
-		"resolved flights expose relative rise and satisfy the projectile duration-apex invariant",
+		"resolved flights expose relative rise and are drawn as real parabolas",
 	)
 
 
@@ -6657,32 +6727,50 @@ func _test_set_release_interval_consumption() -> void:
 		"release timing spreads by the setter's own tolerance band, wider for an adaptable setter",
 	)
 
-	## 3. The algebraic invariant T=sqrt(8h/g) from the ball-kinematics check
-	##    still holds for set trajectories after the clock-advance change:
-	##    the set flight arc is unaffected, only its start_time shifted.
+	## 3. A set's hang time is the time a ball takes to go up and come down
+	##    again, and the clock-advance change moves only its start_time.
+	##
+	##    The old form of this check was `T = sqrt(8h/g)` -- the flight time of a
+	##    ball lobbed off the floor and back to the floor. A set does neither: it
+	##    leaves the setter's hands around 2.2 m and finishes in the hitter's
+	##    around 3.1, and the two legs of its arc are different lengths precisely
+	##    because those heights differ. The invariant that survives is the one
+	##    `BallFlightModel.duration_for_apex` states, checked against the drawn
+	##    flight's own apex so it cannot be satisfied by a stored constant.
 	var inv_manager := GAME_MANAGER_SCRIPT.new()
 	inv_manager.seed_vertical_slice_data()
 	var inv_held := true
 	var inv_checked := 0
 	for seed_value in range(4200, 4206):
 		var result: Resource = inv_manager.resolve_active_rally(seed_value)
-		for event_resource in result.events:
-			var event: Resource = event_resource
+		for event_index in range(result.events.size()):
+			var event: Resource = result.events[event_index]
 			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
 				continue
 			var traj: Dictionary = event.metadata.get("outgoing_trajectory", {})
-			if traj.is_empty():
+			if traj.is_empty() or float(traj.get("duration", 0.0)) <= 0.0:
 				continue
-			var dur := float(traj.get("duration", 0.0))
-			var apex := float(traj.get("apex_height_meters", 0.0))
-			if dur <= 0.0:
+			var display := BallPresentation.display_trajectory(
+				event, null, traj, result.player_physical_profiles
+			)
+			## Only for a set that actually rises. `duration_for_apex` solves a rise
+			## and a fall, and a ball already descending at the setter's hands has
+			## no rise to solve -- its apex *is* the contact, and the round trip is
+			## not defined there rather than being violated there.
+			if float(display.get("rise_speed_mps", 0.0)) <= 0.0:
 				continue
 			inv_checked += 1
-			if absf(dur - sqrt(8.0 * apex / RallyKinematics.DEFAULT_GRAVITY_MPS2)) > 0.02:
+			if absf(
+				float(display.duration) - BallFlightModel.duration_for_apex(
+					float(display.start_height_meters),
+					float(display.end_height_meters),
+					float(display.apex_height_meters),
+				)
+			) > 0.02:
 				inv_held = false
 	_check(
 		inv_checked >= 4 and inv_held,
-		"set trajectory arcs still satisfy the projectile invariant after release_interval clock shift",
+		"a set's hang time is the rise and fall its own apex implies",
 	)
 
 	## 4. The defence-to-counterattack continuation owns a real timeline. It used
@@ -6947,11 +7035,28 @@ func _test_3d_playback_contract() -> void:
 		"duration": 0.75,
 	}
 	var midpoint := screen.match_court_3d.trajectory_world_position(trajectory, 0.5)
+	## The court draws the same curve the model does, from the same function.
+	## `apex_height_meters` is in the fixture above as a *report* and is
+	## deliberately not what the height is checked against -- it used to be the
+	## input that shaped the curve, and a court reading it would be free to
+	## disagree with `BallTrajectory` about where the ball was.
+	var model_height := BallFlightModel.height_between(
+		float(trajectory.start_height_meters), float(trajectory.end_height_meters),
+		float(trajectory.duration), 0.5,
+	)
 	_check(
 		is_equal_approx(midpoint.x, 0.0)
 			and is_equal_approx(midpoint.z, 0.0)
-			and is_equal_approx(midpoint.y, 3.20),
-		"3D ball sampling preserves authoritative Bezier position and apex height",
+			and is_equal_approx(midpoint.y, model_height),
+		"3D ball sampling preserves the Bezier position and the model's own height",
+	)
+	_check(
+		is_equal_approx(
+			screen.match_court_3d.trajectory_world_position(trajectory, 0.0).y, 1.10
+		) and is_equal_approx(
+			screen.match_court_3d.trajectory_world_position(trajectory, 1.0).y, 1.30
+		) and model_height > 1.30,
+		"a drawn flight leaves and arrives at its two contact heights",
 	)
 
 	var attack := RALLY_EVENT_SCRIPT.new()
@@ -12390,7 +12495,7 @@ func _test_a_drawn_ball_stops_where_it_was_touched() -> void:
 	}
 	var touched := Vector2(0.5, 0.55)
 	var display: Dictionary = aimed.duplicate(true)
-	MatchScreen.terminate_trajectory(display, touched)
+	BallPresentation.terminate_trajectory(display, touched)
 	_check(
 		Vector2(display["end_position"]).is_equal_approx(touched),
 		"the flight ends where the next contact begins",
@@ -12410,7 +12515,7 @@ func _test_a_drawn_ball_stops_where_it_was_touched() -> void:
 	## A ball nobody touched keeps its aimed landing point, because that is a
 	## ball hitting the floor and the aim is what happened.
 	var untouched: Dictionary = aimed.duplicate(true)
-	MatchScreen.terminate_trajectory(untouched, Vector2(aimed["end_position"]))
+	BallPresentation.terminate_trajectory(untouched, Vector2(aimed["end_position"]))
 	_check(
 		Vector2(untouched["end_position"]).is_equal_approx(
 			Vector2(aimed["end_position"])
@@ -12423,7 +12528,7 @@ func _test_a_drawn_ball_stops_where_it_was_touched() -> void:
 	## And the ball still travels: an interception right on top of the hitter
 	## must not collapse the flight to a zero-length curve.
 	var immediate: Dictionary = aimed.duplicate(true)
-	MatchScreen.terminate_trajectory(immediate, Vector2(0.5, 0.89))
+	BallPresentation.terminate_trajectory(immediate, Vector2(0.5, 0.89))
 	_check(
 		Vector2(immediate["control_position"]).distance_to(
 			Vector2(immediate["start_position"])
