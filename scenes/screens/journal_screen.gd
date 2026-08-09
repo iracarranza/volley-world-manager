@@ -17,6 +17,7 @@ const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const Regions := preload("res://scripts/data/regions.gd")
 const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
+const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
 const ROSTER_RAIL_COLLAPSED_WIDTH: float = 42.0
 const ROSTER_RAIL_EXPANDED_WIDTH: float = 440.0
@@ -312,6 +313,10 @@ func _ready() -> void:
 	%ReturnToPoolButton.pressed.connect(_return_to_pool)
 	position_training_option.item_selected.connect(_position_training_preview)
 	transfer_list.item_selected.connect(_transfer_selected)
+	## The transfer list is a list of names somebody wrote down, so it goes on
+	## ruled paper. `rule` pitches the rows to the rules as well as drawing them
+	## -- the two cannot drift apart because one number feeds both.
+	RuledPaperScript.rule(transfer_list)
 	sign_button.pressed.connect(_sign_transfer)
 	fixture_list.item_selected.connect(_fixture_selected)
 	play_match_button.pressed.connect(_play_fixture)
@@ -1863,9 +1868,27 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 		else "What this voli has actually shown."
 	)
 	## The rating answers whichever question the toggle is asking.
-	rating_value.text = AttributeProfiles.grade(float(
+	var rating_score := float(
 		player.potential if showing_scouted_view
 		else player.current_ability_score()
+	)
+	rating_value.text = AttributeProfiles.grade(rating_score)
+	## And it is painted the band's own colour -- gold, green, blue, white, red.
+	##
+	## The letter was set in body ink at 46pt, which made the largest thing on
+	## the page the one that told you least: an S and a D are the same mark until
+	## you have read them. Every other grade in the interface is already coloured
+	## from this table, so a plain one here was the odd one out as well as the
+	## quiet one.
+	##
+	## Painted from `grade_tier` rather than `grade`, because the table has five
+	## bands and the letter has nine -- B+ and B- are the same colour of B, which
+	## is the point of a tier. Exempt from the style pass, like every other
+	## coloured datum on this page, or the sweep strips the override.
+	rating_value.set_meta("ui_style_exempt", true)
+	rating_value.add_theme_color_override("font_color", UIPaletteScript.grade_color(
+		AttributeProfiles.grade_tier(rating_score),
+		UIPaletteScript.control_is_light(self),
 	))
 	rating_note.text = "projected" if showing_scouted_view else "current"
 	_apply_scouted_profile(player_attribute_wheel, player, known)
@@ -1947,8 +1970,21 @@ func _fill_attribute_column(
 	)
 	for row_index in range(rows.size()):
 		var row: HBoxContainer = rows[row_index]
-		row.visible = row_index < attributes.size()
-		if not row.visible:
+		## Blanked, not hidden, and that is what stops the page resizing.
+		##
+		## A hidden row contributes nothing to its column's height, and the six
+		## attribute groups are not the same length -- so a five-attribute page
+		## stood three rows shorter than an eight-attribute one, and the whole
+		## roster grew and shrank as you paged through it. The arrows are at the
+		## top of the block; everything under them moved when they were pressed,
+		## which is the page jumping under the pointer that moved it.
+		##
+		## Left in place at zero alpha instead. Every page is eight rows tall
+		## because every column always has eight rows, and the ones with nothing
+		## to say say it invisibly.
+		var used := row_index < attributes.size()
+		row.modulate.a = 1.0 if used else 0.0
+		if not used:
 			continue
 		var attribute_key := str(attributes[row_index])
 		var name_label := row.get_node("Name") as Label

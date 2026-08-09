@@ -17,6 +17,7 @@ extends Control
 ## like that state was made with a pen.
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
+const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
 
 const MARK_NONE: int = 0
 const MARK_SIGN: int = 1
@@ -50,14 +51,38 @@ func _build() -> void:
 	hint.text = "Click a name to cycle: sign · keep an eye on · seen enough."
 	column.add_child(hint)
 
+	## The names go on ruled paper, and the holder is what lets them.
+	##
+	## A `ScrollContainer` has one content child and lays it out, so the paper
+	## cannot be a sibling inside it. A plain `Control` holding both does not lay
+	## anything out -- the paper takes the whole rect, the scroll takes the whole
+	## rect, and the paper is first so it is underneath.
+	##
+	## The paper does not scroll with the names, which is right: a pad's rules do
+	## not move when you turn the page, and the rows are pitched to the same
+	## `RULE_PITCH` so a name sits in a line wherever the list has been scrolled to.
+	var holder := Control.new()
+	holder.name = "ScoutingPaper"
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(holder)
+
+	var paper := RuledPaperScript.new()
+	paper.name = "RuledPaper"
+	paper.set_anchors_preset(Control.PRESET_FULL_RECT)
+	holder.add_child(paper)
+
 	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	column.add_child(scroll)
+	holder.add_child(scroll)
 
 	_list = VBoxContainer.new()
+	_list.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_list.add_theme_constant_override("separation", 2)
+	## No gap between rows: the rule between two names *is* the gap, and a
+	## separation on top of it puts a name between two lines instead of on one.
+	_list.add_theme_constant_override("separation", 0)
 	scroll.add_child(_list)
 
 
@@ -75,7 +100,11 @@ func refresh() -> void:
 		_list.add_child(empty)
 		return
 	for prospect in prospects:
-		_list.add_child(_row_for(prospect))
+		var row := _row_for(prospect)
+		## Pitched to the paper it is written on, not to whatever the font asked
+		## for. One number feeds both, or the rules become a background image.
+		row.custom_minimum_size.y = RuledPaperScript.RULE_PITCH
+		_list.add_child(row)
 
 
 ## Whoever the career is currently looking at. Falls back to the club's own

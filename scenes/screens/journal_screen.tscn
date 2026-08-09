@@ -410,7 +410,7 @@ custom_minimum_size = Vector2(42, 38)
 layout_mode = 2
 size_flags_vertical = 4
 tooltip_text = "Open the attribute lab."
-text = "⤢"
+text = "↗↙"
 
 [node name="PlayerAttributeWheel" type="Control" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Roster/RosterPlayer/Profile/WheelPanel"]
 unique_name_in_owner = true

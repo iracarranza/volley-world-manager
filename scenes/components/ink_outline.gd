@@ -237,13 +237,18 @@ const HIGHLIGHT_DRIFT: float = 3.2
 const HIGHLIGHT_TILT: float = 3.0
 const HIGHLIGHT_SHEAR_SPREAD: float = 1.1
 
-## How often the stroke is laid down right to left instead.
+## How the mark leaves, and it is not the way it arrived.
 ##
-## A right-handed hand going back over a line does not always start at the same
-## end, and the direction of a sweep is the most legible thing about it. Under a
-## half, so left-to-right still reads as the norm and the others as the
-## exception rather than as a coin toss.
-const HIGHLIGHT_REVERSE_CHANCE: float = 0.30
+## The stroke used to retreat: the same `move_toward` ran the tip back to its
+## start, so the mark un-drew itself the way a video played backwards does. It
+## was symmetrical, which is why it looked reasonable in the code and wrong on
+## the screen -- **nobody un-highlights**. A mark is laid down once and then it
+## is either there or it is not.
+##
+## So the tip stays where it stopped and the ink goes instead. Quick, and
+## quicker than the sweep that put it there: laying a mark down is a gesture with
+## a hand's pace in it, and taking it away is not a gesture at all.
+const HIGHLIGHT_BLINK_SECONDS: float = 0.09
 
 ## How long the swipe takes, in seconds. Short: this is a pointer landing on a
 ## control, not a transition. Long enough that the direction is legible, because
@@ -341,6 +346,11 @@ const UNDERLINE_OVERSHOOT: float = 5.0
 ## How much of the sweep has been laid down, 0 to 1, and where it is heading.
 var highlight_sweep: float = 0.0
 var _sweep_target: float = 0.0
+## How much ink is still on the page, separate from how far the tip travelled.
+## One is a stroke and the other is the mark drying up; running both off a single
+## number is what made leaving look like arriving in reverse.
+var highlight_fade: float = 1.0
+var _fade_target: float = 1.0
 
 
 func _ready() -> void:
@@ -389,16 +399,25 @@ func _bind_hover() -> void:
 		parent.mouse_entered.disconnect(_on_parent_hover)
 		parent.mouse_exited.disconnect(_on_parent_unhover)
 	highlight_sweep = 0.0
+	highlight_fade = 1.0
+	_fade_target = 1.0
 	set_process(false)
 
 
 func _on_parent_hover() -> void:
+	## From the start every time. A pointer returning to a control it has just
+	## left gets the whole stroke again, not the tail of the one that was fading.
+	if _fade_target < 1.0 or highlight_fade < 1.0:
+		highlight_sweep = 0.0
+	highlight_fade = 1.0
+	_fade_target = 1.0
 	_sweep_target = 1.0
 	set_process(true)
 
 
 func _on_parent_unhover() -> void:
-	_sweep_target = 0.0
+	## The tip stays where it stopped; only the ink goes.
+	_fade_target = 0.0
 	set_process(true)
 
 
@@ -420,10 +439,24 @@ func _sweep_seconds() -> float:
 
 
 func _process(delta: float) -> void:
-	var step := delta / maxf(_sweep_seconds(), 0.001)
-	highlight_sweep = move_toward(highlight_sweep, _sweep_target, step)
+	if _fade_target >= 1.0:
+		var step := delta / maxf(_sweep_seconds(), 0.001)
+		highlight_sweep = move_toward(highlight_sweep, _sweep_target, step)
+	highlight_fade = move_toward(
+		highlight_fade, _fade_target, delta / HIGHLIGHT_BLINK_SECONDS
+	)
 	queue_redraw()
-	if is_equal_approx(highlight_sweep, _sweep_target):
+	if is_equal_approx(highlight_fade, 0.0):
+		## Wound back once the mark is gone rather than while it is going, so the
+		## next hover starts from a clean sheet without the retreat being visible.
+		highlight_sweep = 0.0
+		_sweep_target = 0.0
+		highlight_fade = 1.0
+		_fade_target = 1.0
+		set_process(false)
+		return
+	if is_equal_approx(highlight_sweep, _sweep_target) \
+			and is_equal_approx(highlight_fade, _fade_target):
 		set_process(false)
 
 
@@ -549,7 +582,7 @@ func _draw() -> void:
 			* lerpf(COVERAGE_WIDTH_FLOOR, 1.0, coverage)
 		alphas[index] = ink.a * coverage
 	## The mark goes down first, under everything else this node draws.
-	if hover_highlight and highlight_sweep > 0.001:
+	if hover_highlight and highlight_sweep > 0.001 and highlight_fade > 0.001:
 		_draw_highlight(highlight_sweep)
 	if stroke_style == Stroke.STITCH:
 		## Silhouette first, so the seam sits on top of the cloth it is holding.
@@ -608,7 +641,7 @@ func _draw_highlight(sweep: float) -> void:
 	## front of the parent, which repaints itself off the same sweep.
 	if _is_underlined():
 		return
-	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA)
+	var band := Color(_highlighter_ink(), HIGHLIGHT_ALPHA * highlight_fade)
 	## Where the band sat relative to the word this time, and whether the hand
 	## ran level across it. Both drawn from the control's own seed.
 	var drift := (_unit(53) - 0.5) * HIGHLIGHT_DRIFT
@@ -620,18 +653,18 @@ func _draw_highlight(sweep: float) -> void:
 	## one usually runs past the word and the other falls short of it.
 	var behind := -HIGHLIGHT_OVERSHOOT * (_unit(11) * 2.2 - 0.7)
 	var beyond := size.x + HIGHLIGHT_OVERSHOOT * (_unit(29) * 2.2 - 0.7)
-	## Which end the swipe began at. Reversed, the tip enters from the right and
-	## the band grows leftward -- same geometry, opposite travel.
-	var reversed := _unit(131) < HIGHLIGHT_REVERSE_CHANCE
-	var anchor := beyond if reversed else behind
-	var far := behind if reversed else beyond
+	## Always left to right. A right-to-left stroke was drawn 30% of the time on
+	## the grounds that a hand going back over a word does not always start at the
+	## same end -- which is true of a hand and false of this interface, where the
+	## mark is a pointer landing on a control and the reader's eye is already at
+	## the left of it. It read as the mark being *wrong* rather than as varied.
+	var anchor := behind
+	var far := beyond
 	## As far as the tip has travelled. The stroke is laid down, not faded in.
 	var tip := lerpf(anchor, far, clampf(sweep, 0.0, 1.0))
 	## The chisel. Both ends lean the same way, because the tip is held at one
 	## angle for the whole stroke -- but not at the same angle on every control.
 	var shear := HIGHLIGHT_SHEAR * (0.45 + _unit(157) * HIGHLIGHT_SHEAR_SPREAD)
-	if reversed:
-		shear = -shear
 	var steps := maxi(int(size.x / 9.0), 4)
 	## The band, and the denser leading edge inside it. A chisel lays down more
 	## ink where it first touches down and drags less as it goes, so a second,
@@ -647,16 +680,16 @@ func _draw_highlight(sweep: float) -> void:
 			anchor, tip, shear, top, lerpf(top, bottom, 0.34), tilt, steps,
 			601, 2803, 0.4
 		),
-		Color(band, HIGHLIGHT_ALPHA * 0.28)
+		Color(band, HIGHLIGHT_ALPHA * 0.28 * highlight_fade)
 	)
 
 
 ## A rule drawn under a whole line, for controls a highlighter would be wrong on.
 ##
-## Always left to right. The 30% chance of a reversed stroke is right for a
-## highlighter -- a hand going back over a word does not always start at the same
-## end -- and wrong here, because underlining is a reading gesture that follows
-## the text, and a long row is exactly where a backwards stroke is most visible.
+## Always left to right, which every mark in here is now: a reversed stroke was
+## drawn 30% of the time and read as the mark being wrong rather than as varied.
+## It was most obviously wrong on a rule, because underlining is a reading gesture
+## that follows the text and a long row is where a backwards one is most visible.
 ##
 ## The line lifts slightly at its far end rather than stopping square: a pen
 ## leaving the paper thins out, and the last few pixels of a flick are the part
@@ -665,7 +698,7 @@ func paint_underline(surface: CanvasItem) -> void:
 	var travelled := clampf(highlight_sweep, 0.0, 1.0)
 	if travelled <= 0.001:
 		return
-	var ink := Color(_highlighter_ink(), HIGHLIGHT_ALPHA * 2.4)
+	var ink := Color(_highlighter_ink(), HIGHLIGHT_ALPHA * 2.4 * highlight_fade)
 	var start := -UNDERLINE_OVERSHOOT
 	var finish := size.x + UNDERLINE_OVERSHOOT
 	var tip := lerpf(start, finish, travelled)

@@ -3162,3 +3162,53 @@ A defensive identity does lower the error risk, by a lot. It does not give up
 terminal pressure for it -- it *gains* kills. So the trade the design claims is
 not being paid: defensive attacking is currently strictly better at both ends,
 which is a balance finding rather than a test that needs its band widened.
+
+## Five roster and marking fixes, and what each one actually was
+
+**The page resized when you paged the attributes.** `_fill_attribute_column`
+hid the rows a group had no attribute for, and the six groups are not the same
+length -- so a five-attribute page stood three rows shorter than an
+eight-attribute one and everything under the table moved. The arrows are at the
+top of the block, so the page jumped under the pointer that had just moved it.
+Rows are blanked to zero alpha now instead of hidden: eight rows on every page,
+because every column always has eight rows.
+
+**The highlighter un-drew itself.** One `move_toward` ran the tip back to its
+start, so leaving a control played the stroke backwards. Symmetrical, which is
+why it read as reasonable in the code and wrong on the screen -- nobody
+un-highlights. The tip stays where it stopped and the ink goes instead, over
+0.09 s, which is quicker than the sweep that laid it down: putting a mark on the
+page is a gesture with a hand's pace in it and taking it away is not a gesture at
+all. The 30% chance of a right-to-left stroke went with it, for the same reason
+the underline never had one.
+
+**The expand button had a line through it**, and it is not a rendering fault:
+`⤢` is two arrowheads *joined by a diagonal*, which is what the glyph is. `↗↙`
+is the same idea without the join, and both halves are basic arrows that no font
+here has to substitute for.
+
+**The rating marker was set in body ink**, which made the largest thing on the
+page the one that told you least -- an S and a D are the same mark until you have
+read them. It takes its band's own colour now, from the table every other grade
+in the interface already uses: gold, green, blue, white, red. Painted from
+`grade_tier` rather than `grade`, because the table has five bands and the letter
+has nine: B+ and B- are both the colour of B, which is what a tier is for.
+
+**The name lists are wide-ruled paper.** New `UIRuledPaper`, applied to the
+transfer list and the scouting list. Wide ruled and not college ruled -- 34 px
+against 28 -- because the wider pitch is what reads as a pad rather than a dense
+table. The rules are printed, not drawn: they barely wander, and the wander they
+do have belongs to the sheet rather than to a hand, which is what leaves the
+writing reading as added afterwards.
+
+Two Godot details worth keeping. `ItemList.fixed_item_height` no longer exists in
+4.7; row pitch is bought with content margins on the item styleboxes. And the
+paper attaches as a *child* of the list with `show_behind_parent`, the way
+`UIInkOutline` already attaches to a control -- the first cut made it a sibling
+and put a third child inside an `HSplitContainer`, which takes exactly two.
+
+**Still open on this page:** the scouting screen's rows are pitched to the paper
+but the sheet does not scroll with them, which is right for a pad and wrong the
+moment the list is longer than the panel -- the rules stay put while the names
+move past them. Fine at the lengths it currently holds; wants the paper inside
+the scrolled content once there are more prospects than fit.
