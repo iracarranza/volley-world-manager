@@ -4412,3 +4412,103 @@ Stuff sits 0.001 over the top of its band and kill 0.017 under the bottom of
 its; both were already there before this change and neither is chased here,
 because the 85% figure above says a side-versus-side rate is not yet a
 measurement of the simulation.
+
+---
+
+## The primary blocker is chosen for being near, and the set is no longer fast
+
+Two explanations were on the table for `primary_close` sitting at 1.00 at every
+percentile including the minimum: a selection effect where unclosed blocks never
+emit an event, or a travel model that is simply too generous.
+
+**Both were wrong, and the answer was one line above where either was looking.**
+
+`tools/run_block_close_probe.gd`, 800 rallies, both serving sides, split by tempo:
+
+    term                     tempo 0   tempo 1   tempo 2   tempo 3
+    primary_close              1.000     0.999     1.000     1.000
+    assist_close               0.937     0.781     0.978     0.999
+    primary_lane_delta_m       1.036     0.625     0.852     0.497
+    assist_lane_delta_m        1.844     2.946     2.342     3.353
+    primary_required_s         0.617     0.290     0.389     0.217
+    assist_required_s          0.939     1.299     1.053     1.521
+    usable_s (both)            0.963     1.264     1.556     1.753
+    set_flight_s               0.714     0.987     1.214     1.471
+    preset_credited_s          0.717     0.655     0.704     0.730
+    assist_closed_fully        0.647     0.651     0.926     0.988
+    swings                        17       195       366       173
+
+    attacks 843, of which 751 carried a block formation (89.1%)
+
+### 1. The saturation is a tautology, not a defect
+
+`_form_home_block` selects its primary as *the front-row blocker whose slot is
+nearest the attack lane*. That blocker has a mean lane delta of 0.5-1.0 m and
+needs 0.22-0.62 s to cover it. Asking whether the nearest blocker got there is
+asking a question with one answer.
+
+The blocker who actually travels is the **assist**, at 1.8-3.4 m. So the stuff
+gate's `primary_close >= 0.78` is not a threshold outside its distribution in the
+§0 sense -- it is a threshold pointed at the wrong blocker. Neither of the two
+recorded hypotheses was right, and 89.1% of attacks do carry a formation, so
+there is no selection effect to speak of either.
+
+### 2. The dynamic exists; nothing reads it
+
+`assist_closed_fully` runs 0.647 at tempos 0 and 1 against 0.926 and 0.988 at 2
+and 3. The middle genuinely fails to seal on a fast ball -- the payoff the whole
+set-height and tempo line of work was for. It is recorded in a field the stuff
+gate does not consult.
+
+### 3. The set did get slower, and it was this work that did it
+
+Three readings of the same quantity exist in this repository:
+
+    tempo    2026-08-05    in-code note    now
+    0                --           0.204   0.714
+    1             0.376           0.392   0.987
+    2             0.554           0.426   1.214
+    3             0.806           1.006   1.471
+
+`_set_arc` used to solve a level-ground launch from an angle table. Since the
+set-height work it solves `BallFlightModel.duration_for_apex(release, contact,
+apex)` with `apex = hitter contact + SET_CLEARANCE_BY_TEMPO`, so the flight is
+now two gravity legs. Measured for Mira setting Tala -- release 2.19 m, hitter
+contact 2.86 m, a rise of 0.67 m:
+
+    tempo   clearance   rise_s   fall_s   total_s
+    0            0.15    0.408    0.175     0.583
+    1            0.60    0.508    0.350     0.859
+    2            1.30    0.633    0.515     1.149
+    3            2.20    0.765    0.670     1.435
+
+**The honest reading is not that the set was nerfed. It is that the old numbers
+were physically impossible and nobody noticed.** A ball cannot rise 0.67 m in
+0.204 s under gravity; it needs 0.37 s. The old table never had to lift the ball
+at all, so it could report any duration it liked, and the block was calibrated
+against those durations. When the set became gravity-true, nothing re-fitted the
+block.
+
+### 4. And two thirds of a second is credited before the ball exists
+
+`preset_credited_s` is 0.655-0.730 s at **every** tempo. Whatever tempo does to
+the flight, it cannot touch this half of the budget, and this half is roughly as
+large as a first-tempo set's entire flight.
+
+### What this makes the next work
+
+Not a coefficient. Three separable things, in the order they should be taken:
+
+1. **Gate the stuff on the blocker who travelled.** `primary_close` answers a
+   question about the blocker chosen for being near. Whatever the wall's timing
+   gate reads, it should be the assist's close or the pair, not the primary's.
+2. **A quick set is not struck on the way down.** `duration_for_apex` charges a
+   full fall leg -- 0.175 s at tempo 0, 0.670 s at tempo 3 -- for a ball the
+   hitter should be able to meet at or before the apex. The clearance is what a
+   *high* ball needs; a quick does not need to be cleared at all.
+3. **Re-fit the pre-set window against the gravity-true set.** It was set when a
+   first-tempo ball nominally arrived in 0.204 s and has not moved since one
+   arrives in 0.714 s.
+
+Recorded rather than done, because all three change the block's rates together
+and fixing one alone would be measured against the other two.

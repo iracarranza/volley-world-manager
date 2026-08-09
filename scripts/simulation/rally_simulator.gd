@@ -2453,6 +2453,16 @@ func resolve(
 			"primary_close_terms": Dictionary(
 				block_resolution.get("primary_close_terms", {})
 			),
+			"assist_close_terms": Dictionary(
+				block_resolution.get("assist_close_terms", {})
+			),
+			"assist_close_attempted": float(
+				block_resolution.get("assist_close_attempted", 0.0)
+			),
+			"preset_window_seconds": block_resolution.get("preset_window_seconds", 0.0),
+			"preset_share": block_resolution.get("preset_share", 0.0),
+			"set_flight_seconds": block_resolution.get("set_flight_seconds", 0.0),
+			"block_tempo": block_resolution.get("tempo", -1),
 			"assist_close": assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			## The wall that was staged, not a second one computed from the
@@ -3933,6 +3943,16 @@ func _resolve_opponent_transition(
 			"primary_close_terms": Dictionary(
 				block_result.get("primary_close_terms", {})
 			),
+			"assist_close_terms": Dictionary(
+				block_result.get("assist_close_terms", {})
+			),
+			"assist_close_attempted": float(
+				block_result.get("assist_close_attempted", 0.0)
+			),
+			"preset_window_seconds": block_result.get("preset_window_seconds", 0.0),
+			"preset_share": block_result.get("preset_share", 0.0),
+			"set_flight_seconds": block_result.get("set_flight_seconds", 0.0),
+			"block_tempo": block_result.get("tempo", -1),
 			"assist_close": block_result.assist_close,
 			"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 			"primary_position": Vector2(home_wall_positions.primary_position),
@@ -4784,6 +4804,16 @@ func _resolve_home_continuation(
 		"primary_close_terms": Dictionary(
 			block_result.get("primary_close_terms", {})
 		),
+		"assist_close_terms": Dictionary(
+			block_result.get("assist_close_terms", {})
+		),
+		"assist_close_attempted": float(
+			block_result.get("assist_close_attempted", 0.0)
+		),
+		"preset_window_seconds": block_result.get("preset_window_seconds", 0.0),
+		"preset_share": block_result.get("preset_share", 0.0),
+		"set_flight_seconds": block_result.get("set_flight_seconds", 0.0),
+		"block_tempo": block_result.get("tempo", -1),
 		"assist_id": assisting_blocker.id if assisting_blocker != null else -1,
 		"primary_position": Vector2(cont_wall.primary_position),
 		"assist_position": Vector2(cont_wall.assist_position),
@@ -5068,6 +5098,11 @@ func _form_opponent_block(
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	var assist_net_x := 0.5
+	## Kept whether or not the candidate survives the cut below. `assist_close`
+	## is zeroed when the best available blocker could not get there, so its mean
+	## silently mixes "nobody travelled" with "somebody travelled and failed" --
+	## and those are the two readings the saturation question needs told apart.
+	var assist_terms := {}
 	for candidate in front_blockers:
 		if candidate.id == primary.id:
 			continue
@@ -5075,10 +5110,13 @@ func _form_opponent_block(
 			candidate, lineup, attack_x, assist_close_time
 		)
 		var close_fraction := float(candidate_terms.fraction)
+		if close_fraction > assist_close or assist_terms.is_empty():
+			assist_terms = candidate_terms
 		if close_fraction > assist_close:
 			assist = candidate
 			assist_close = close_fraction
 			assist_net_x = float(candidate_terms.get("closed_net_x", 0.5))
+	var assist_close_attempted := assist_close
 	if assist_close < 0.34:
 		assist = null
 		assist_close = 0.0
@@ -5102,6 +5140,18 @@ func _form_opponent_block(
 		"assist_net_x": assist_net_x,
 		## Itemised, the same way the home wall reports it.
 		"primary_close_terms": primary_terms,
+		"assist_close_terms": assist_terms,
+		## The budget's two halves, kept apart. `available_time` alone cannot say
+		## whether a blocker had time because the ball was slow or because they
+		## were credited with the whole second contact before it happened, and
+		## those are different problems with different fixes.
+		"preset_window_seconds": maxf(preset_window_seconds, 0.0),
+		"preset_share": preset_share,
+		"set_flight_seconds": maxf(set_flight_time, 0.0),
+		"tempo": tempo,
+		## Before the 0.34 cut, so a wall with no second blocker is
+		## distinguishable from a second blocker who did not arrive.
+		"assist_close_attempted": assist_close_attempted,
 		"quality": block_quality,
 		"coverage_segments": _home_block_segments(
 			attack_x, primary, primary_close, assist, assist_close
@@ -9011,6 +9061,11 @@ func _form_home_block(
 	var assist: VolleyballPlayer
 	var assist_close := 0.0
 	var assist_net_x := 0.5
+	## Kept whether or not the candidate survives the cut below. `assist_close`
+	## is zeroed when the best available blocker could not get there, so its mean
+	## silently mixes "nobody travelled" with "somebody travelled and failed" --
+	## and those are the two readings the saturation question needs told apart.
+	var assist_terms := {}
 	for candidate in front_blockers:
 		if candidate.id == primary.id:
 			continue
@@ -9018,10 +9073,13 @@ func _form_home_block(
 			candidate, lineup, attack_x, assist_close_time
 		)
 		var close_fraction := float(candidate_terms.fraction)
+		if close_fraction > assist_close or assist_terms.is_empty():
+			assist_terms = candidate_terms
 		if close_fraction > assist_close:
 			assist = candidate
 			assist_close = close_fraction
 			assist_net_x = float(candidate_terms.get("closed_net_x", 0.5))
+	var assist_close_attempted := assist_close
 	if assist_close < 0.34:
 		assist = null
 		assist_close = 0.0
@@ -9046,6 +9104,18 @@ func _form_home_block(
 		## The itemised close, so a binary output can be attributed to whichever
 		## of its inputs is bimodal.
 		"primary_close_terms": primary_terms,
+		"assist_close_terms": assist_terms,
+		## The budget's two halves, kept apart. `available_time` alone cannot say
+		## whether a blocker had time because the ball was slow or because they
+		## were credited with the whole second contact before it happened, and
+		## those are different problems with different fixes.
+		"preset_window_seconds": maxf(preset_window_seconds, 0.0),
+		"preset_share": preset_share,
+		"set_flight_seconds": maxf(set_flight_time, 0.0),
+		"tempo": tempo,
+		## Before the 0.34 cut, so a wall with no second blocker is
+		## distinguishable from a second blocker who did not arrive.
+		"assist_close_attempted": assist_close_attempted,
 		"quality": block_quality,
 		"outcome": "miss",
 		"coverage_segments": _home_block_segments(

@@ -1,161 +1,146 @@
 extends SceneTree
 
-## How close each wall gets, against the gate that decides whether it exists.
+## Why does every block in the game close completely?
 ##
-## `GeometricAttackPromotion.block_wall` drops any blocker whose close fraction
-## is under `WALL_JOIN_CLOSE`, and that is the only gate that can return an empty
-## wall from a formation that already named a primary. Measured, the home wall is
-## absent on 45% of opponent swings while the opponent's wall is never absent --
-## so the two sides' close distributions sit on opposite sides of one threshold.
+##     godot --headless --path . --script res://tools/run_block_close_probe.gd
 ##
-## Both closes have been on the BLOCK event all along; nothing here needed
-## adding, only reading. Per FAILURE_MODES.md 14, that is the order to try first.
+## `primary_close` measured 1.00 at every percentile including the minimum, which
+## makes the stuff gate's `primary_close >= 0.78` a threshold that cannot fail
+## and deletes the whole point of a quick set. Two explanations were on the table
+## and both were about the *event*: a selection effect where unclosed blocks
+## never emit, or a travel model that is simply too generous.
 ##
-## Run:
-##   godot --headless --path . --script res://tools/run_block_close_probe.gd
+## This asks a third question first, because it is cheaper and it is about the
+## *blocker*: `_form_home_block` picks its primary as the front-row blocker whose
+## slot is nearest the attack lane. If that is the whole story then a saturated
+## primary close is a tautology rather than a defect, the travelling blocker is
+## the assist, and the two numbers should look nothing like each other.
+##
+## Split by tempo, because tempo is what the whole set-height line of work exists
+## to make matter, and the claim it rests on is that a quick set beats the middle
+## because the middle cannot travel in time.
 
 const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
-const ExecutionScale := preload(
-	"res://scripts/simulation/execution_scale_calibration.gd"
-)
 const RallyEventScript := preload("res://scripts/models/rally_event.gd")
-const Promotion := preload(
-	"res://scripts/simulation/geometric_attack_promotion.gd"
-)
 
-const RALLIES: int = 150
+const RALLIES: int = 400
+const FIRST_SEED: int = 30000
+
+const ROWS := [
+	"primary_close", "assist_close", "assist_close_attempted",
+	"primary_lane_delta_m", "assist_lane_delta_m",
+	"primary_required_s", "primary_usable_s", "primary_available_s",
+	"assist_required_s", "assist_usable_s", "assist_available_s",
+	"set_flight_s", "preset_window_s", "preset_share", "preset_credited_s",
+	"primary_closed_fully", "assist_closed_fully", "assist_present",
+]
 
 
 func _initialize() -> void:
-	var manager: Object = GameManagerScript.new()
-	manager.seed_vertical_slice_data()
-	ExecutionScale.apply_generated_attributes(manager.players, 900006)
-	ExecutionScale.apply_generated_attributes(
-		manager.opponent_team.players, 900006
-	)
-	var primary := {"home": [], "opponent": []}
-	var assist := {"home": [], "opponent": []}
-	var has_assist := {"home": 0, "opponent": 0}
-	## The discriminating measurement. The close formula ramps over 0.45 s and can
-	## return anything in between, so a binary output means a bimodal input.
-	var terms := {"home": [], "opponent": []}
+	var by_tempo := {}
+	## Every blocker the formation nominated, against every blocker that reached
+	## an event -- the selection question, answered by counting rather than by
+	## reasoning about which branches return early.
+	var attacks := 0
+	var attacks_with_block_event := 0
 	for serving_home in [true, false]:
+		var manager: Object = GameManagerScript.new()
+		manager.seed_vertical_slice_data()
 		manager.match_state.serving_home = serving_home
-		for seed_value in range(5000, 5000 + RALLIES):
+		for seed_value in range(FIRST_SEED, FIRST_SEED + RALLIES):
 			var result: Resource = manager.resolve_active_rally(seed_value)
 			if result == null:
 				continue
-			for raw in result.events:
-				var event := raw as RallyEvent
-				if event == null \
-						or event.event_type != RallyEventScript.EventType.BLOCK:
-					continue
-				var side := str(event.metadata.get("side", ""))
-				if not primary.has(side):
-					continue
-				var itemised := Dictionary(
-					event.metadata.get("primary_close_terms", {})
-				)
-				if not itemised.is_empty():
-					terms[side].append(itemised)
-				if event.metadata.has("primary_close"):
-					primary[side].append(float(event.metadata.primary_close))
-				if event.metadata.has("assist_close"):
-					var value := float(event.metadata.assist_close)
-					assist[side].append(value)
-					if value > 0.0:
-						has_assist[side] = int(has_assist[side]) + 1
-	manager.free()
+			for raw_event in result.events:
+				var event: Resource = raw_event
+				var metadata: Dictionary = event.metadata
+				match int(event.event_type):
+					RallyEventScript.EventType.ATTACK:
+						attacks += 1
+					RallyEventScript.EventType.BLOCK:
+						attacks_with_block_event += 1
+						_collect(
+							by_tempo, metadata,
+							int(metadata.get("block_tempo", -1)),
+							float(metadata.get("set_flight_seconds", 0.0)),
+						)
+		manager.free()
 
-	print("Block close against the join gate -- %d rallies x 2 serving sides"
-		% RALLIES)
+	var tempos: Array = by_tempo.keys()
+	tempos.sort()
+	print("=== how far each blocker actually had to travel ===")
 	print("")
-	print("WALL_JOIN_CLOSE  %.3f" % Promotion.WALL_JOIN_CLOSE)
+	var header := "%-24s" % "term"
+	for tempo in tempos:
+		header += "%12s" % ("tempo %d" % int(tempo))
+	print(header)
+	for key in ROWS:
+		var line := "%-24s" % key
+		for tempo in tempos:
+			line += "%12.3f" % _mean(by_tempo[tempo], key)
+		print(line)
+	var counts := "%-24s" % "swings"
+	for tempo in tempos:
+		counts += "%12d" % int(by_tempo[tempo].n)
 	print("")
-	print("A blocker under the gate is not in the wall at all. The share below it")
-	print("is the share of the wall that simply is not there.")
+	print(counts)
 	print("")
-	_report("primary close", primary)
-	print("")
-	_report("assist close", assist)
-	print("")
-	print("What the close is built from. `deficit` is required - usable; at or")
-	print("below zero the close is 1.0, at or beyond %.2f it is 0.0, and anything"
-		% 0.45)
-	print("between returns a fraction. A bimodal deficit is the whole story.")
-	print("")
-	for key in [
-		"available_time", "reaction_delay", "usable_time", "required_seconds",
-		"deficit_seconds", "footwork_meters",
-	]:
-		print("  %-18s home %7.3f   opponent %7.3f" % [
-			key, _mean(terms["home"], key), _mean(terms["opponent"], key),
-		])
-	print("")
-	print("deficit_seconds, bucketed. If the middle buckets are empty the close")
-	print("is binary because its input is, and no constant in the block model can")
-	print("change that.")
-	print("")
-	print("%-10s %8s %10s %12s %12s %10s" % [
-		"side", "n", "<= 0", "0 to 0.225", "0.225 to .45", "> 0.45"])
-	for side in ["home", "opponent"]:
-		var pool: Array = terms[side]
-		if pool.is_empty():
-			continue
-		var buckets := [0, 0, 0, 0]
-		for row in pool:
-			var value := float(Dictionary(row).get("deficit_seconds", 0.0))
-			if value <= 0.0:
-				buckets[0] += 1
-			elif value <= 0.225:
-				buckets[1] += 1
-			elif value <= 0.45:
-				buckets[2] += 1
-			else:
-				buckets[3] += 1
-		print("%-10s %8d %10d %12d %12d %10d" % [
-			side, pool.size(), buckets[0], buckets[1], buckets[2], buckets[3]])
-	print("")
-	for side in ["home", "opponent"]:
-		var total: int = (assist[side] as Array).size()
-		print("  %-9s assist present on %d of %d blocks (%.0f%%)" % [
-			side, int(has_assist[side]), total,
-			float(has_assist[side]) / maxf(float(total), 1.0) * 100.0,
-		])
+	print("attacks %d, of which %d carried a block formation (%.1f%%)" % [
+		attacks, attacks_with_block_event,
+		float(attacks_with_block_event) / maxf(float(attacks), 1.0) * 100.0,
+	])
 	quit()
 
 
-func _mean(pool: Array, key: String) -> float:
-	if pool.is_empty():
-		return 0.0
-	var total := 0.0
-	for row in pool:
-		total += float(Dictionary(row).get(key, 0.0))
-	return total / float(pool.size())
+func _mean(bucket: Dictionary, key: String) -> float:
+	return float(Dictionary(bucket.sums).get(key, 0.0)) \
+		/ maxf(float(bucket.n), 1.0)
 
 
-func _report(label: String, pools: Dictionary) -> void:
-	print("%-14s %6s %8s %8s %8s %8s %8s %11s" % [
-		label, "n", "p10", "p25", "p50", "p75", "p90", "below gate"])
-	for side in ["home", "opponent"]:
-		var pool: Array = pools[side]
-		if pool.is_empty():
-			print("%-14s (none)" % side)
-			continue
-		pool.sort()
-		var below := 0
-		for value in pool:
-			if float(value) < Promotion.WALL_JOIN_CLOSE:
-				below += 1
-		print("%-14s %6d %8.3f %8.3f %8.3f %8.3f %8.3f %10.0f%%" % [
-			side, pool.size(), _p(pool, 0.10), _p(pool, 0.25), _p(pool, 0.50),
-			_p(pool, 0.75), _p(pool, 0.90),
-			float(below) / float(pool.size()) * 100.0])
+func _add(bucket: Dictionary, key: String, value: float) -> void:
+	var sums: Dictionary = bucket.sums
+	sums[key] = float(sums.get(key, 0.0)) + value
 
 
-func _p(sorted_values: Array, fraction: float) -> float:
-	if sorted_values.is_empty():
-		return 0.0
-	return float(sorted_values[clampi(
-		int(round(fraction * float(sorted_values.size() - 1))),
-		0, sorted_values.size() - 1)])
+func _collect(
+	by_tempo: Dictionary,
+	metadata: Dictionary,
+	tempo: int,
+	set_flight: float,
+) -> void:
+	if not by_tempo.has(tempo):
+		by_tempo[tempo] = {"n": 0, "sums": {}}
+	var bucket: Dictionary = by_tempo[tempo]
+	bucket.n = int(bucket.n) + 1
+	var primary: Dictionary = metadata.get("primary_close_terms", {})
+	var assist: Dictionary = metadata.get("assist_close_terms", {})
+	var primary_close := float(metadata.get("primary_close", 0.0))
+	var assist_close := float(metadata.get("assist_close", 0.0))
+	_add(bucket, "primary_close", primary_close)
+	_add(bucket, "assist_close", assist_close)
+	_add(bucket, "assist_close_attempted",
+		float(metadata.get("assist_close_attempted", 0.0)))
+	## In metres of net, because a lane delta in normalised court x is not a
+	## quantity anyone can sanity-check against a volleyball court.
+	_add(bucket, "primary_lane_delta_m",
+		absf(float(primary.get("lane_delta", 0.0))) * 9.0)
+	_add(bucket, "assist_lane_delta_m",
+		absf(float(assist.get("lane_delta", 0.0))) * 9.0)
+	_add(bucket, "primary_required_s", float(primary.get("required_seconds", 0.0)))
+	_add(bucket, "primary_usable_s", float(primary.get("usable_time", 0.0)))
+	_add(bucket, "primary_available_s", float(primary.get("available_time", 0.0)))
+	_add(bucket, "assist_required_s", float(assist.get("required_seconds", 0.0)))
+	_add(bucket, "assist_usable_s", float(assist.get("usable_time", 0.0)))
+	_add(bucket, "assist_available_s", float(assist.get("available_time", 0.0)))
+	_add(bucket, "set_flight_s", set_flight)
+	var preset_window := float(metadata.get("preset_window_seconds", 0.0))
+	var preset_share := float(metadata.get("preset_share", 0.0))
+	_add(bucket, "preset_window_s", preset_window)
+	_add(bucket, "preset_share", preset_share)
+	## The part of the budget spent before the ball existed. This is the number
+	## the tempo argument turns on: whatever tempo does to the flight, it cannot
+	## touch this.
+	_add(bucket, "preset_credited_s", preset_window * preset_share)
+	_add(bucket, "primary_closed_fully", 1.0 if primary_close >= 0.999 else 0.0)
+	_add(bucket, "assist_closed_fully", 1.0 if assist_close >= 0.999 else 0.0)
+	_add(bucket, "assist_present", 1.0 if not assist.is_empty() else 0.0)
