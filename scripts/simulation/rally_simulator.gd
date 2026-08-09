@@ -1350,6 +1350,15 @@ func resolve(
 			"incoming_trajectory": serve_trajectory,
 			"outgoing_trajectory": pass_trajectory,
 			"body_alignment": reception_pass.body_alignment,
+			## What the second contact is going to be asked to reach. Published on
+			## both sides so the gate can check the height a setter was read
+			## against is the height this pass actually delivered -- the opponent
+			## path recomputed it from a retired table for a year and nothing could
+			## see the difference.
+			"pass_apex_meters": reception_pass.get("pass_apex_meters", 0.0),
+			"set_contact_height_meters": reception_pass.get(
+				"set_contact_height_meters", 0.0
+			),
 			"platform_feasibility": reception_pass.platform_feasibility,
 			"contact_posture": reception_pass.contact_posture,
 			"contact_recovery": reception_pass.contact_recovery,
@@ -2891,6 +2900,10 @@ func _resolve_home_serve(
 			"incoming_trajectory": serve_trajectory,
 			"outgoing_trajectory": opponent_pass.trajectory,
 			"body_alignment": opponent_pass.body_alignment,
+			"pass_apex_meters": opponent_pass.get("pass_apex_meters", 0.0),
+			"set_contact_height_meters": opponent_pass.get(
+				"set_contact_height_meters", 0.0
+			),
 			"platform_feasibility": opponent_pass.platform_feasibility,
 			"contact_posture": opponent_pass.contact_posture,
 			"contact_recovery": opponent_pass.contact_recovery,
@@ -2966,6 +2979,7 @@ func _resolve_home_serve(
 	return _resolve_opponent_transition(
 		result, players, lineup, server, opponent_pass_destination,
 		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
+		float(opponent_pass.get("set_contact_height_meters", NAN)),
 	)
 
 
@@ -2996,6 +3010,18 @@ func _resolve_opponent_transition(
 	## beginning through `_second_contact_setter`; this side had no concept of
 	## an emergency setter at all.
 	first_contact_player_id: int = -1,
+	## How high the ball actually arrives at the setter's hands, when the contact
+	## that fed them was modelled well enough to know. `_reception_pass_result`
+	## has computed this from the pass's own apex under gravity since the bump
+	## height work, and this path threw it away and re-drew the height from the
+	## retired table instead -- so the one number that decides whether a setter
+	## takes the ball standing, jumping, above their reach or off the platform
+	## was, on this side of the net, a dice roll.
+	##
+	## NAN when the feeding contact has no height model, which today is every
+	## dug ball on either side. The table stays as the fallback rather than
+	## being deleted, because a dig genuinely has no apex yet.
+	pass_contact_height_meters: float = NAN,
 ) -> Resource:
 	var transition_penalty := float(exchange_number - 1) * 0.035
 	## The pass destination is the setter's physical contact point. Keeping a
@@ -3067,9 +3093,10 @@ func _resolve_opponent_transition(
 	## contact at some height, off some approach, for some tempo.
 	var opponent_capability := SetterCapabilityModel.evaluate(
 		opponent_setter, opponent_tempo_call, incoming_quality,
-		SetterCapabilityModel.pass_contact_height_meters(
-			incoming_quality, rng.randf()
-		),
+		pass_contact_height_meters if is_finite(pass_contact_height_meters) \
+			else SetterCapabilityModel.pass_contact_height_meters(
+				incoming_quality, rng.randf()
+			),
 		clampf(inverse_lerp(-0.25, 0.45, setter_arrival_margin), 0.0, 1.0),
 	)
 	var opponent_pass_quality := float(
@@ -3290,11 +3317,16 @@ func _resolve_opponent_transition(
 		{"side": "opponent",
 			"set_path": "opponent_first_ball" if first_ball else "opponent_transition",
 			"set_terms": opponent_set_terms,
+			## The capability read this side has always computed and never
+			## published, so the only path whose penalty could be decomposed was
+			## the one that turned out not to have one.
+			"setter_capability": opponent_capability.duplicate(true),
 			"option_evaluation": opponent_option_evaluation,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
 			"set_distance_meters": resolved_set_geometry.distance_meters,
 			"set_angle_degrees": resolved_set_geometry.angle_degrees,
+			"release_distance_meters": resolved_set_geometry.release_distance_meters,
 			"body_orientation_fit": resolved_set_geometry.body_orientation_fit,
 			"rescue_height_meters": opponent_set_height_extra,
 			"height_difficulty": opponent_height_difficulty,
@@ -4349,6 +4381,7 @@ func _resolve_home_continuation(
 			"setter_capability": setter_capability.duplicate(true),
 			"set_distance_meters": cont_set_geometry.distance_meters,
 			"set_angle_degrees": cont_set_geometry.angle_degrees,
+			"release_distance_meters": cont_set_geometry.release_distance_meters,
 			"body_orientation_fit": cont_set_geometry.body_orientation_fit,
 			"rescue_height_meters": cont_set_height_extra,
 			"height_difficulty": cont_height_difficulty,

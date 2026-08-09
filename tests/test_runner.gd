@@ -8037,6 +8037,65 @@ func _test_setter_capability_gates() -> void:
 		"every resolved set carries the setter's capability read, and reach genuinely varies in ordinary rallies",
 	)
 
+	## 8. The height a setter is read against is the height their own pass
+	##    delivered, on both sides of the net.
+	##
+	##    This is the anti-regression gate for a defect that survived a year in
+	##    plain sight. `_reception_pass_result` computes the contact height from
+	##    the pass's apex under gravity and publishes it; the opponent's second
+	##    contact threw it away and re-drew the height from the retired table
+	##    against `rng.randf()`, eleven lines below the call that already had the
+	##    real one. The consequence was not subtle -- 37.7% of that side's first
+	##    balls were classified `beyond_reach` against 0% at home -- and no check
+	##    in the suite could see it, because every number involved was
+	##    individually plausible.
+	##
+	##    Asserted as equality rather than as a rate, so it cannot be satisfied by
+	##    a coefficient. Either the value propagates or it does not.
+	var heights_matched := 0
+	var heights_mismatched := 0
+	for seed_value in range(12100, 12160):
+		for serving_home in [true, false]:
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally == null:
+				continue
+			## Only the contact immediately after a reception: a set off a dig has
+			## no apex model yet, so the table is still its honest source.
+			var pending_height := {}
+			for event_resource in rally.events:
+				var event: Resource = event_resource
+				var side := str(event.metadata.get("side", ""))
+				match int(event.event_type):
+					RALLY_EVENT_SCRIPT.EventType.RECEPTION:
+						pending_height[side] = float(event.metadata.get(
+							"set_contact_height_meters", 0.0
+						))
+					RALLY_EVENT_SCRIPT.EventType.DEFENSE:
+						pending_height.erase(side)
+					RALLY_EVENT_SCRIPT.EventType.SET:
+						if not pending_height.has(side):
+							continue
+						var expected: float = pending_height[side]
+						pending_height.erase(side)
+						var capability: Dictionary = event.metadata.get(
+							"setter_capability", {}
+						)
+						if capability.is_empty() or expected <= 0.0:
+							continue
+						if is_equal_approx(
+							float(capability.get("contact_height_meters", -1.0)),
+							expected,
+						):
+							heights_matched += 1
+						else:
+							heights_mismatched += 1
+	_check(
+		heights_matched >= 40 and heights_mismatched == 0,
+		"the height a first-ball setter is read against is the height their own pass delivered, on both sides",
+	)
+	manager.free()
+
 
 ## Stride and cadence are now consumed by live movement. These checks pin the
 ## two properties that make that safe: the population's mean speed did not move,

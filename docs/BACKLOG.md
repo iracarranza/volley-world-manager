@@ -4273,3 +4273,120 @@ evidence about the module rather than about the block.
 The instruction path is live and correct the moment anything sets it: nothing
 carries the clipboard's per-voli block behaviour into the resolver yet, which is
 the same join `TacticSheet` has been waiting on since it was written.
+
+---
+
+## The release distance was not it, and 85% of one squad was never written down
+
+The measurement the last entry asked for, taken before anything was changed.
+`tools/run_set_split_probe.gd` decomposes `_set_terms` the way the offence probe
+decomposed the swing, split the same four ways.
+
+    term                    home/pass   home/dig   opp/pass   opp/dig
+    quality                     0.723      0.239      0.232     0.087
+    capability                  0.855      0.713      0.595     0.593
+    usable                      0.851      0.837      0.643     0.823
+    capability_penalty          0.000      0.087      0.302     0.189
+    geometry_difficulty         0.046      0.154      0.077     0.157
+    arrival                     0.014     -0.088      0.011    -0.142
+    release_distance_meters     0.501      3.593      0.853     4.339
+    sets                          290        147        265        82
+
+### The hypothesis was wrong, and wrong in an instructive way
+
+`release_distance` is real and large -- 3.5 to 4.3 m on both dig paths against
+0.5 to 0.9 m on both pass paths -- and it is **not the asymmetry**, because both
+sides pay it equally. `geometry_difficulty` comes out 0.154 against 0.157. What
+the release distance separates is a *pass from a dig*, which is a distinction the
+sport agrees with: a setter who has to run down a dug ball is setting from
+somewhere they did not choose. Left alone.
+
+Three confident readings of this gap have now been wrong. The instrument found
+it each time and the reasoning found it none of the times.
+
+### The defect the measurement did find
+
+`capability_penalty` was 0.302 on opponent/pass and 0.000 on home/pass, and the
+decomposition says why: 37.7% of opponent first-ball sets were classified
+`beyond_reach` and another 44.5% `jump`, against 100% `standing` at home.
+
+The height that classification reads is the one thing the two paths sourced
+differently. `_reception_pass_result` has computed a real contact height from the
+pass's own apex under gravity since the bump-height work; the home first ball
+reads it; the opponent path recomputed it from the retired table against
+`rng.randf()` -- **eleven lines below the call that already had the real one.**
+Failure mode #1, one-sided, and the value was not merely unused but overwritten
+with a dice roll.
+
+It is worse than an omission, because the table's shape is backwards for this
+question: a worse pass arrives *higher* in it, and higher is what triggers
+`beyond_reach`. A high pass is the forgiving one. The reach ladder only ever
+fired where the retired table still fed it.
+
+Threading `opponent_pass.set_contact_height_meters` through
+`_resolve_opponent_transition`:
+
+    opponent/pass          before    after
+    contact height (m)      2.532    2.225
+    reach: standing         0.177    1.000
+    reach: beyond_reach     0.377    0.000
+    capability_penalty      0.302    0.000
+    set quality             0.232    0.395
+
+The two dig paths keep the table, deliberately: a dug ball has no apex model yet,
+so there is no real height to read. That is the remaining half and it is
+symmetric -- 11.5% and 6.0% `beyond_reach`, both sides, both from the table.
+
+### And then the reading that makes every previous side-versus-side number suspect
+
+`command()` came out at **exactly 0.500** for the opponent on both of its paths
+across 347 sets. An exactly constant number is never a model; it is a value
+nobody set.
+
+    home:      14 of 328 ability attributes never specified   (4%)
+    opponent: 245 of 287 ability attributes never specified  (85%)
+
+Port Azure VC is a sketch. Ari has five attributes, Oren has two, Vale has three;
+everything else on that side -- `tempo_control`, `hand_control`, `composure`,
+`arm_speed`, `court_vision`, `work_rate`, all of it -- is `VolleyballPlayer`'s
+class default of 50. Every attribute this engine has learned to read since the
+fixture was written reads 50 for one of the two teams.
+
+So the residual `capability` gap, 0.855 against 0.595, is not the engine
+modelling one side better. It is one squad written down and the other not. The
+same applies to the first-contact gap feeding it (`pass` 0.773 against 0.532),
+and to every kill, dig and stuff rate this repository has ever compared by side.
+
+This is not a defect to fix quietly -- deciding how good Port Azure VC is, is a
+design act, not a repair. What is done here instead: the probe prints the
+specification count above every reading it takes, so no future measurement can be
+made without seeing which of the two arms was ever real. The §0 failure in its
+other direction -- not a threshold outside its distribution, but a comparison
+whose two sides were never comparable.
+
+### Still open
+
+- The dug ball has no apex, so the second contact off a dig is still classified
+  by the retired table on both sides. Same work as the pass apex, one contact
+  later.
+- `approach_quality` at the second contact is 0.07 and 0.03 on the dig paths
+  against 0.47 on the pass paths, so a setter taking a dug ball effectively never
+  gets to jump. That may be right and has not been measured against anything.
+- `SetterCapabilitySystem.command()` reads raw attributes rather than `_rating`,
+  so fatigue, form and match confidence move every other term at the second
+  contact and not this one.
+
+### The gate, and proof it can fail
+
+`the height a first-ball setter is read against is the height their own pass
+delivered, on both sides` compares the SET event's
+`setter_capability.contact_height_meters` against the RECEPTION event's
+published `set_contact_height_meters`, as an equality rather than a rate -- so
+it cannot be satisfied by moving a coefficient. Both reception paths now publish
+the pass apex and the contact height they produced.
+
+Checked against a reverted tree rather than assumed: with the thread removed the
+same comparison reports **52 matched, 53 mismatched**; with it in place, 105
+matched and 0 mismatched. A gate nobody has watched fail is a gate nobody knows
+works, and this file records two written in the same sitting that turned out to
+be unfailable.
