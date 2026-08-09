@@ -161,6 +161,17 @@ static func prepare_for_attack(
 
 ## Resolves the run-up that is physically possible from the actor's current
 ## state. This profile is consumed by the contact envelope and action menu.
+## The longest run-up anybody actually takes, in seconds.
+##
+## Three to four steps. Measured against the model's own numbers rather than
+## picked: `LEGACY_APPROACH_CEILING_MPS` and the acceleration band above put a
+## hitter at full approach speed inside a second, and a system-fit approach
+## distance is two to three and a half metres, so a second covers the runway with
+## something to spare. Generous on purpose -- the cap is there to stop hang time
+## being converted into speed, not to make approaches fail.
+const APPROACH_RUNUP_SECONDS: float = 1.10
+
+
 static func evaluate_takeoff(
 	actor: RallyPlayerState,
 	target: Vector2,
@@ -193,7 +204,27 @@ static func evaluate_takeoff(
 	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
 		alignment = clampf((actor.facing.normalized().dot(direction) + 1.0) * 0.5, 0.0, 1.0)
 	var turn_delay := lerpf(0.20, 0.02, alignment)
-	var run_time := maxf(available_time - turn_delay, 0.0)
+	## **A hitter does not run for the whole flight. They wait, then approach.**
+	##
+	## `run_time` was the entire available time, so every extra second of hang
+	## time bought another second of running and `runway_completion` -- capacity
+	## over distance -- saturated at 1.0 for everybody. That was harmless while a
+	## set was solved as a ground-to-ground lob and hung for 0.23 s to 0.69 s. It
+	## stopped being harmless the moment sets were timed by how high they were put
+	## up: real hang times run 0.65 s to 1.47 s, so the run-up became roughly
+	## three times easier, and three separate gates went quiet at once -- extreme
+	## hitter displacement stopped costing position *or* quality, and transition
+	## speed stopped changing when a hitter arrived, because everyone arrived.
+	##
+	## A three or four step approach is about a second, whatever the set does.
+	## Beyond that a hitter is standing at the back of their runway watching the
+	## ball, which is what waiting looks like and is not a source of speed. So the
+	## window is capped and the surplus is spent standing still -- which is also
+	## the honest reading of what a high ball buys an offence: not a faster
+	## approach, but the certainty of getting to take one.
+	var run_time := minf(
+		maxf(available_time - turn_delay, 0.0), APPROACH_RUNUP_SECONDS
+	)
 	var start_speed := maxf(actor.velocity.dot(direction), 0.0)
 	var ending_speed := minf(start_speed + acceleration * run_time, maximum_speed)
 	var capacity := (start_speed + ending_speed) * 0.5 * run_time
