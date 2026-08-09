@@ -378,6 +378,65 @@ const REACHABLE_CONTACT_BISECTIONS: int = 6
 const BLOCK_DEPTH_RELIEF_FULL_METERS: float = 3.0
 const BLOCK_DEPTH_RELIEF_WEIGHT: float = 0.10
 
+## What this blocker means to do with their hands.
+##
+## Three sources, in the order a real decision has them:
+##
+## 1. **The instruction**, when the manager wrote one. `TacticSheet` stores a
+##    per-voli block behaviour and "soft block" and "kill block" are two of its
+##    four options -- this is their first consumer. A voli told what to do does
+##    it, which is what an instruction is for.
+## 2. **The read**, when nobody said. `AttemptJudgment.backs_off` asks whether a
+##    player recognises that what they are attempting is beyond them, and a
+##    blocker who is late, low or facing a swing they cannot beat is in exactly
+##    that position. Recognising it and angling the hands back *is* the safer
+##    option, so the same function that makes a setter take the high ball makes a
+##    blocker take the soft block.
+## 3. **Pressing**, otherwise. A blocker who is on the ball, or who has not
+##    noticed they are not, goes for it.
+##
+## `deficit` is how far the swing is beyond this block, on the 0-to-0.4 scale
+## `AttemptJudgment` documents: zero when the contest is winning, growing as the
+## swing pulls ahead.
+func _block_hands_intent(
+	blocker: VolleyballPlayer,
+	contest_margin: float,
+	close_fraction: float,
+	instruction: String = "",
+) -> String:
+	match instruction:
+		"soft block":
+			return "soft"
+		"kill block":
+			return "kill"
+	if blocker == null:
+		return "neutral"
+	## **Late and low, not behind on the contest.**
+	##
+	## The first version read the deficit off `contest - attack_quality`, and every
+	## block in the game came out pressing: 224 of 224. That margin is the
+	## *outcome* of the contest, decided after the fact and including the execution
+	## roll -- a blocker in the air cannot feel it, and it sat at or above zero even
+	## on swings the wall went on to miss.
+	##
+	## What a blocker can feel is whether they got there. `primary_close` is how
+	## much of the travel to the ball they completed, and a blocker who is still
+	## closing knows it in the air -- that is the moment the choice is actually
+	## made. The contest margin still contributes, because a wall that is beaten on
+	## height as well as position is further outside its capability, but it is the
+	## smaller term rather than the only one.
+	var short_of_the_ball := (1.0 - clampf(close_fraction, 0.0, 1.0)) \
+		* BLOCK_CLOSE_DEFICIT_SHARE
+	var beaten_on_the_contest := maxf(-contest_margin, 0.0)
+	var deficit := clampf(
+		short_of_the_ball + beaten_on_the_contest,
+		0.0, AttemptJudgmentModel.OBVIOUS_DEFICIT,
+	)
+	if deficit <= 0.0:
+		return "kill"
+	return "soft" if AttemptJudgmentModel.backs_off(blocker, deficit) else "kill"
+
+
 ## How a ball off the block flies. The angle is a squirt off the hands rather
 ## than a struck ball, so it hangs: four metres takes about 0.7s, which is what
 ## makes chasing one legible rather than teleportation. A stuff is the exception
@@ -391,6 +450,37 @@ const BLOCK_DEPTH_RELIEF_WEIGHT: float = 0.10
 ## separates a blocker who kills the pace from one who merely gets a hand on it.
 const BLOCK_ABSORB_SOFT: float = 0.42
 const BLOCK_ABSORB_FIRM: float = 0.68
+
+## What the hands are *trying to do*, which is a different axis from where the
+## wall stands.
+##
+## `block_intent` -- Seal or Funnel -- is lateral: it decides which part of the
+## hitter's cone the wall takes away. This is the other axis, and the sport has
+## always had both: two blockers at the same height with the same timing produce
+## different balls depending on whether they pressed over the tape to end it or
+## angled back to keep it alive. It is not an attribute. It is a decision, and
+## `AttemptJudgment` is the module that already models exactly this decision for
+## the second and third contacts -- a setter backing off a quick, a hitter
+## rolling instead of swinging. The block is the fourth contact that needs it and
+## the only one that never asked.
+##
+## **Pressing is not simply better.** A kill block that comes off wins more
+## rallies outright; one that is beaten hands the hitter a tool at full pace,
+## because there is nothing behind hands that are already committed forward. A
+## soft block gives up stuffs and converts the swing into a ball the defence can
+## actually play. That trade is the whole reason the choice exists, and it is why
+## this changes both the stuff margin and the absorption rather than only one.
+const BLOCK_KILL_STUFF_BONUS: float = -0.045
+const BLOCK_SOFT_STUFF_PENALTY: float = 0.075
+## How much of the absorption band each intent commands. A soft block is the
+## upper end of what hands can take off a ball; a kill block is the lower, since
+## pressing forward means meeting the ball rather than giving with it.
+## How much of the "am I beyond my capability" read a blocker takes from not
+## having closed, against how much from being beaten on height. Weighted toward
+## the close because that is the half a blocker knows in the air.
+const BLOCK_CLOSE_DEFICIT_SHARE: float = 0.45
+const BLOCK_KILL_ABSORB_SHARE: float = 0.30
+const BLOCK_SOFT_ABSORB_SHARE: float = 1.25
 ## Nothing comes off the hands at nothing. Below this the ball is effectively
 ## dropping straight down, which is a stuff and has its own branch.
 const MIN_DEFLECTION_MPS: float = 2.5
@@ -2331,6 +2421,7 @@ func resolve(
 		net_contact, post_block_target, blocked, 0.35,
 		_swing_reaches_net(attack_trajectory, rally_clock + float(set_flight_time)),
 		float(attack_arc.get("required_speed_mps", 0.0)), opponent_blocker,
+		str(block_resolution.get("block_hands", "neutral")),
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -3762,6 +3853,7 @@ func _resolve_opponent_transition(
 			opponent_attack_trajectory, opponent_set_contact_time + set_flight_time
 		),
 		float(opponent_attack_arc.get("required_speed_mps", 0.0)), blocker,
+		str(block_result.get("block_hands", "neutral")),
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -3793,6 +3885,7 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
 		], {"side": "home", "outcome": block_outcome,
+			"block_hands": str(block_result.get("block_hands", "neutral")),
 			"contest_margin": float(block_result.get("contest_margin", 0.0)),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			"net_height_over_block_meters": float(
@@ -4653,6 +4746,7 @@ func _resolve_home_continuation(
 		block_event_end, blocked, block_quality,
 		"Opponent block · exchange %d" % exchange_number,
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
+			"block_hands": str(block_result.get("block_hands", "neutral")),
 		"primary_close": primary_close, "assist_close": assist_close,
 		"primary_close_terms": Dictionary(
 			block_result.get("primary_close_terms", {})
@@ -4674,6 +4768,7 @@ func _resolve_home_continuation(
 			_swing_reaches_net(continuation_attack_trajectory, rally_clock),
 			float(continuation_attack_arc.get("required_speed_mps", 0.0)),
 			opponent_blocker,
+			str(block_result.get("block_hands", "neutral")),
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
 		result.key_factors.append(_factor("attack_control"))
@@ -5047,9 +5142,24 @@ func _contest_block(
 		formation.get("primary") as VolleyballPlayer, "block_timing", 0.13
 	)
 	var intent_shift := _block_intent_margins(block_intent)
+	## What the hands mean to do, decided before the bands are read because it
+	## moves one of them. The margin is the block's own lead over the swing, which
+	## is what a blocker in the air can feel.
+	var hands := _block_hands_intent(
+		formation.get("primary") as VolleyballPlayer, contest - attack_quality,
+		primary_close, str(formation.get("hands_instruction", "")),
+	)
+	resolved["block_hands"] = hands
+	var hands_stuff_shift := 0.0
+	match hands:
+		"kill":
+			hands_stuff_shift = BLOCK_KILL_STUFF_BONUS
+		"soft":
+			hands_stuff_shift = BLOCK_SOFT_STUFF_PENALTY
+	var stuff_bar := attack_quality + BLOCK_STUFF_MARGIN \
+		+ float(intent_shift.stuff) + hands_stuff_shift
 	var outcome := "miss"
-	if contest > attack_quality + BLOCK_STUFF_MARGIN + float(intent_shift.stuff) \
-			and primary_close >= 0.78:
+	if contest > stuff_bar and primary_close >= 0.78:
 		outcome = "stuff"
 	elif contest > attack_quality + BLOCK_TOUCH_MARGIN + float(intent_shift.touch):
 		outcome = "touch"
@@ -6463,6 +6573,8 @@ func _block_deflection_trajectory(
 	start_time: float,
 	incoming_speed_mps: float = 0.0,
 	blocker: VolleyballPlayer = null,
+	## "kill", "soft" or "neutral" -- see `_block_hands_intent`.
+	hands: String = "neutral",
 ) -> Dictionary:
 	if stuffed:
 		return _ball_trajectory(
@@ -6484,10 +6596,19 @@ func _block_deflection_trajectory(
 			maxf(float(solved.apex_height_meters), apex_hint),
 			start_time,
 		)
+	## Timing decides how much of the band a blocker commands; the hands decide
+	## which end of it they are trying to reach. Both, because a well-timed kill
+	## block and a well-timed soft block are the same pair of hands making
+	## opposite choices, and the ball that comes off them is the difference.
 	var absorbed := lerpf(
 		BLOCK_ABSORB_SOFT, BLOCK_ABSORB_FIRM,
 		_rating(blocker, "block_timing") if blocker != null else 0.5
 	)
+	match hands:
+		"kill":
+			absorbed *= BLOCK_KILL_ABSORB_SHARE
+		"soft":
+			absorbed = minf(absorbed * BLOCK_SOFT_ABSORB_SHARE, 0.88)
 	var arc := RallyKinematics.struck_arc_from_speed(
 		distance, maxf(incoming_speed_mps * (1.0 - absorbed), MIN_DEFLECTION_MPS),
 		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,

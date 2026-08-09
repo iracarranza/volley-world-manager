@@ -4205,3 +4205,71 @@ on purpose: a block absorbing nothing returns the spike at the spike's own speed
 which is a mirror rather than a deflection, and one absorbing nearly all of it
 makes every touched ball a free ball and removes the reason a hitter fears the
 wall.
+
+---
+
+## The block's hands are a decision, and the two things that would let it fire
+
+Proposed by the manager, and correct: `block_intent` -- Seal or Funnel -- is a
+*lateral* choice about where the wall stands, and the sport has a second axis it
+has never had. Two blockers at the same height with the same timing produce
+different balls depending on whether they pressed over the tape to end the rally
+or angled back to keep it alive. Not an attribute; a decision.
+
+It is also the missing consumer for something already built: the clipboard
+offers **"soft block"** and **"kill block"** as two of its four per-voli block
+instructions, `TacticSheet` stores them, and nothing has ever read one.
+
+### Built, and measured inert
+
+`_block_hands_intent` returns `kill`, `soft` or `neutral` from three sources in
+the order a real decision has them -- the manager's instruction, then
+`AttemptJudgment.backs_off`, then pressing. It moves the stuff margin and the
+deflection absorption in opposite directions, because a kill block that comes off
+ends the rally and one that is beaten hands the hitter a tool at full pace, while
+a soft block gives up stuffs to convert the swing into a playable ball.
+
+`AttemptJudgment` is the right module rather than a new one: it already models
+this exact decision for the second contact (a setter backing off a quick) and the
+third (a hitter rolling instead of swinging), and its own header says so. The
+block is the fourth contact that needs it and the only one that never asked.
+
+**Every block in the sample comes out pressing: 224 of 224.** Two measurements
+say why, and both are the §0 defect.
+
+    primary_close   p10 1.00  p25 1.00  p50 1.00  p75 1.00  p90 1.00  min 1.00
+    blocker judgment    p10 0.55   p50 0.67   p90 0.73
+
+1. **`primary_close` is saturated at 1.00**, at every percentile including the
+   minimum, on every block that reaches an event. So "how much of the travel did
+   this blocker complete" carries no information, and a deficit built on it is
+   always zero. It also means the stuff gate's own `primary_close >= 0.78` is a
+   threshold that cannot fail -- a pre-existing instance of the same defect,
+   found by looking for something else.
+2. **`AttemptJudgment`'s curve is calibrated for deficits the block cannot
+   produce.** Its thresholds run from 0.85 at a vanishing deficit to 0.25 at
+   0.40, which is "hopeless". A median blocker judgment of 0.67 needs a deficit
+   of about 0.12 before backing off is even possible, and the block's natural
+   deficits are around 0.05. The shared model needs a scale adapter at this
+   contact, or the block needs a deficit that spans the range the curve expects.
+
+### Deliberately shipped inert rather than tuned into life
+
+Two attempts were made and neither is in the tree as a live effect: the contest
+margin as the deficit -- which is the *outcome* of the contest, decided after the
+fact, and which a blocker in the air cannot feel -- and the close fraction, which
+is the measurement above. Picking a third mapping without knowing the
+distribution it acts on is precisely what §0 forbids, and it has already been
+done twice in this one feature.
+
+**What unblocks it, in order:** find out why `primary_close` saturates -- if
+blockers who fail to close simply never emit a block event, then the deficit has
+to come from the swing they are facing rather than from their own travel. Then
+either scale the block's deficit onto `AttemptJudgment`'s range or give that
+module a per-contact scale, which is the cleaner of the two because three
+contacts already share it and a fourth arriving with a different natural range is
+evidence about the module rather than about the block.
+
+The instruction path is live and correct the moment anything sets it: nothing
+carries the clipboard's per-voli block behaviour into the resolver yet, which is
+the same join `TacticSheet` has been waiting on since it was written.
