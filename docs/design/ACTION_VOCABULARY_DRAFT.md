@@ -1,16 +1,20 @@
 # The action vocabulary and rally spectacle (draft)
 
 Date: 2026-08-03
-Status: the vocabulary below is **a draft, not implemented**. The spectacle
-score and the flow rebalance described in the second half **are implemented**
+Status updated 2026-08-09: the vocabulary below remains a **design draft**.
+`scripts/simulation/rally_action_vocabulary.gd` is now a first unintegrated
+classifier scaffold, but it is not called, calibrated, notability-budgeted or
+consumed by captions, cognition, statistics or spectacle. The spectacle score
+and the flow rebalance described in the second half **are implemented**
 (`scripts/models/match_state.gd`).
 
-Re-checked 2026-08-06 at `1ee4c96` and still exactly true. Not one name from the
-tables below — Ace, Platform dime, Shank, Dime, Tool off the block — appears
-anywhere in `scripts/`. The engine names actions internally (`selected_action`
-in the attack rollout path) but those are mechanism labels, not the reader-facing
-vocabulary this file is about. `rally_spectacle()` is live and consumed by
-`match_state.gd`.
+The first classifier was added as cognition groundwork after the 2026-08-06
+review at `1ee4c96`. Its presence withdraws that review's literal claim that no
+name appears in `scripts/`; its architectural finding remains true until the
+classifier is integrated. The engine also names actions internally
+(`selected_action` in the attack rollout path), but those are mechanism labels,
+not the reader-facing outcome vocabulary this file is about.
+`rally_spectacle()` is live and consumed by `match_state.gd`.
 
 ## The problem this solves
 

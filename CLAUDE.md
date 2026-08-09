@@ -10,10 +10,9 @@ rather than a dashboard.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-937 checks. **Two are expected to fail** and are long-standing and unrelated to
-current work -- `Allotted duration and the movement model agree for every phase
-type` and `defensive attack lowers both error risk and terminal pressure across
-six career seeds`. Anything beyond those two is a regression you caused.
+Current branch baseline, verified 2026-08-09: **1,014 checks pass**. Treat any
+test failure as a regression; the two failures previously documented here no
+longer reproduce on this branch.
 
 After adding or renaming a `class_name`, re-import before the suite will see it:
 
