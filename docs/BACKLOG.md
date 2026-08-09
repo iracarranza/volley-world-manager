@@ -4149,3 +4149,59 @@ the leg's duration and its launch disagree -- the duration is too long for a bal
 descending that steeply over a metre of court. That is a concrete next
 measurement rather than an open question: print the leg's horizontal speed
 against the parent swing's and see which one the duration belongs to.
+
+---
+
+## A deflection is a collision, and it now carries the pace it was struck with
+
+`BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES` is thirty degrees and the speed was
+derived from the distance to wherever the ball was going to land -- so a 25 m/s
+spike and a 12 m/s roll came off the wall at the same pace, and the blocker had
+nothing to do with it. Pace is the one thing a deflection is *made of*: it is
+not a shot anybody chose, it is a collision.
+
+The speed is now the incoming swing's, less what the hands take out of it, and
+the flight time is distance over that speed like every other struck ball here.
+
+### Two things fell out without being written
+
+- **`reception_stability` finally has something to resist.** The pace-resistance
+  half of the defence was already built -- `CoverageModel.reception_body_penalty`
+  spends it against `_incoming_ball_force`, which reads the drawn arc's real
+  speed. It was resisting a constant. It now resists the swing.
+- **A hard-driven ball reaches the defender sooner**, because the duration is
+  derived rather than floored.
+
+### The constant that made the first attempt inert
+
+Landing the drawn speed alone moved the dig rate **0.491 to 0.490** -- nothing.
+The reason is that a touched ball bought the defence a flat `+= 0.24` seconds,
+at all three defence sites, whatever hit the block and whoever blocked it. The
+ball on screen was right and the number the defence actually spends was still
+the constant: a value computed and dropped before anything could use it, one more
+time, and the fourth instance of that pattern in this file today.
+
+With the budget reading the deflection's own flight:
+
+    dig rate            0.490 -> 0.500
+    contacts per rally  5.719 -> 5.763
+    stuff rate          0.136 -> 0.134
+
+Small, and in the right direction on every axis. The point is not the size, it is
+that the blocker's hands and the hitter's power now reach the defender's decision
+at all.
+
+### `block_timing` is a stand-in and should be replaced
+
+What belongs in the absorption term is how well a blocker's hands take pace off a
+ball, and **no such attribute exists**. `ball_control` is displayed as "Touch
+Control" but it is the *receiver's* hands and is read by reception quality.
+`block_timing` is the nearest true thing -- a blocker meeting the ball at full
+extension presents a firm angled surface and one already falling gives with it --
+and that is a real part of the effect rather than the whole of it.
+
+`BLOCK_ABSORB_SOFT` and `BLOCK_ABSORB_FIRM` are bounded well short of both ends
+on purpose: a block absorbing nothing returns the spike at the spike's own speed,
+which is a mirror rather than a deflection, and one absorbing nearly all of it
+makes every touched ball a free ball and removes the reason a hitter fears the
+wall.

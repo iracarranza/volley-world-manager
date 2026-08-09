@@ -382,6 +382,19 @@ const BLOCK_DEPTH_RELIEF_WEIGHT: float = 0.10
 ## than a struck ball, so it hangs: four metres takes about 0.7s, which is what
 ## makes chasing one legible rather than teleportation. A stuff is the exception
 ## -- driven down, over in a fifth of a second, and the rally ends there.
+## How much of a struck ball's pace a pair of hands takes out of it.
+##
+## Bounded well short of both ends on purpose. A block that absorbed nothing
+## would return the spike at the spike's own speed, which is not a deflection but
+## a mirror; one that absorbed nearly all of it would make every touched ball a
+## free ball and remove the reason a hitter fears the wall. The band is what
+## separates a blocker who kills the pace from one who merely gets a hand on it.
+const BLOCK_ABSORB_SOFT: float = 0.42
+const BLOCK_ABSORB_FIRM: float = 0.68
+## Nothing comes off the hands at nothing. Below this the ball is effectively
+## dropping straight down, which is a stuff and has its own branch.
+const MIN_DEFLECTION_MPS: float = 2.5
+
 const BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES: float = 30.0
 const BLOCK_DEFLECTION_MIN_SECONDS: float = 0.22
 const BLOCK_STUFF_FLIGHT_SECONDS: float = 0.20
@@ -2317,6 +2330,7 @@ func resolve(
 	var opponent_block_trajectory := _block_deflection_trajectory(
 		net_contact, post_block_target, blocked, 0.35,
 		_swing_reaches_net(attack_trajectory, rally_clock + float(set_flight_time)),
+		float(attack_arc.get("required_speed_mps", 0.0)), opponent_blocker,
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -2449,7 +2463,18 @@ func resolve(
 	## rosters, which in turn carries the dig rate gap of 0.320 to 0.142.
 	var opponent_defense_time := attack_flight
 	if block_outcome == "touch":
-		opponent_defense_time += 0.24
+		## **The deflection's own flight, not a constant.**
+		##
+		## A touched ball bought the defender a flat 0.24 s whatever hit the block
+		## and whoever blocked it. That was defensible while every deflection was
+		## solved to the same speed; it is not now that pace comes off the swing
+		## and the blocker's hands take a share out of it. Measured: making the
+		## drawn deflection real moved the dig rate 0.491 to 0.490 -- nothing --
+		## because the number the defence actually spends was still the constant.
+		## A value computed and dropped before anything can use it, one more time.
+		opponent_defense_time += maxf(float(
+			opponent_block_trajectory.get("duration", 0.24)
+		), BLOCK_DEFLECTION_MIN_SECONDS)
 	elif block_outcome == "funnel":
 		opponent_defense_time += 0.06
 	var opponent_defense := _choose_opponent_defender(
@@ -3736,6 +3761,7 @@ func _resolve_opponent_transition(
 		_swing_reaches_net(
 			opponent_attack_trajectory, opponent_set_contact_time + set_flight_time
 		),
+		float(opponent_attack_arc.get("required_speed_mps", 0.0)), blocker,
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -3892,7 +3918,18 @@ func _resolve_opponent_transition(
 			),
 		).duration_seconds)
 	if block_outcome == "touch":
-		attack_time += 0.24
+		## **The deflection's own flight, not a constant.**
+		##
+		## A touched ball bought the defender a flat 0.24 s whatever hit the block
+		## and whoever blocked it. That was defensible while every deflection was
+		## solved to the same speed; it is not now that pace comes off the swing
+		## and the blocker's hands take a share out of it. Measured: making the
+		## drawn deflection real moved the dig rate 0.491 to 0.490 -- nothing --
+		## because the number the defence actually spends was still the constant.
+		## A value computed and dropped before anything can use it, one more time.
+		attack_time += maxf(float(
+			home_block_trajectory.get("duration", 0.24)
+		), BLOCK_DEFLECTION_MIN_SECONDS)
 	elif block_outcome == "funnel":
 		attack_time += 0.06
 	var defense_claim: Dictionary = CoverageModel.choose_claimant(
@@ -4635,6 +4672,8 @@ func _resolve_home_continuation(
 		"outgoing_trajectory": _block_deflection_trajectory(
 			cont_net_contact, block_event_end, blocked, 0.42,
 			_swing_reaches_net(continuation_attack_trajectory, rally_clock),
+			float(continuation_attack_arc.get("required_speed_mps", 0.0)),
+			opponent_blocker,
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
 		result.key_factors.append(_factor("attack_control"))
@@ -6392,29 +6431,73 @@ static func _release_interval(profile: SystemFitProfile, set_quality: float) -> 
 ## second. A stuff keeps its constant, because the rally ends on it and nobody
 ## chases; every other deflection now solves the same arc every other flight in
 ## this file solves.
+## **A ball comes off the hands at the pace it arrived, less what the hands took
+## out of it.**
+##
+## The deflection used to derive its own speed from the distance to wherever the
+## ball was going to land -- `solve_struck_arc` answers "how hard must this be hit
+## to get there" -- so a 25 m/s spike and a 12 m/s roll came off the block at the
+## same pace, and the blocker had nothing to do with it. Pace is the one thing a
+## deflection is *made of*: it is not a shot anybody chose, it is a collision.
+##
+## So the speed is the incoming swing's, scaled by how much of it the blocker
+## absorbs, and the flight time is then distance over that speed like every other
+## struck ball in this file. Two consequences fall out without being written:
+## a hard-driven ball reaches the defender sooner, and `_incoming_ball_force`
+## reads the faster arc, which is what `CoverageModel.reception_body_penalty`
+## spends `reception_stability` against. The pace-resistance half of this was
+## already built and had nothing real to resist.
+##
+## **`block_timing` is a stand-in and should be replaced.** What belongs here is
+## how well a blocker's hands absorb a ball, and no such attribute exists --
+## `ball_control` is displayed as "Touch Control" but is the *receiver's* hands
+## and is read by reception quality. `block_timing` is the nearest true thing: a
+## blocker who meets the ball at full extension presents a firm angled surface and
+## one who is already falling gives with it. That is a real part of the effect and
+## not the whole of it.
 func _block_deflection_trajectory(
 	from_point: Vector2,
 	to_point: Vector2,
 	stuffed: bool,
 	apex_hint: float,
 	start_time: float,
+	incoming_speed_mps: float = 0.0,
+	blocker: VolleyballPlayer = null,
 ) -> Dictionary:
 	if stuffed:
 		return _ball_trajectory(
 			"block_deflection", from_point, to_point,
 			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
 		)
+	var distance := RallyKinematics.court_distance_meters(from_point, to_point)
 	## Off a blocker's hands, which are above the tape, not off the floor.
-	var arc := RallyKinematics.solve_struck_arc(
-		RallyKinematics.court_distance_meters(from_point, to_point),
-		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES,
-		maxf(apex_hint, CourtConstants.NET_HEIGHT_METERS),
+	var contact_height := maxf(apex_hint, CourtConstants.NET_HEIGHT_METERS)
+	if incoming_speed_mps <= 0.0:
+		## No swing speed to read -- the legacy solve, which at least always has
+		## an answer.
+		var solved := RallyKinematics.solve_struck_arc(
+			distance, BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,
+		)
+		return _ball_trajectory(
+			"block_deflection", from_point, to_point,
+			maxf(float(solved.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
+			maxf(float(solved.apex_height_meters), apex_hint),
+			start_time,
+		)
+	var absorbed := lerpf(
+		BLOCK_ABSORB_SOFT, BLOCK_ABSORB_FIRM,
+		_rating(blocker, "block_timing") if blocker != null else 0.5
+	)
+	var arc := RallyKinematics.struck_arc_from_speed(
+		distance, maxf(incoming_speed_mps * (1.0 - absorbed), MIN_DEFLECTION_MPS),
+		BLOCK_DEFLECTION_LAUNCH_ANGLE_DEGREES, contact_height,
 	)
 	return _ball_trajectory(
 		"block_deflection", from_point, to_point,
 		maxf(float(arc.duration_seconds), BLOCK_DEFLECTION_MIN_SECONDS),
 		maxf(float(arc.apex_height_meters), apex_hint),
 		start_time,
+		float(arc.get("vertical_speed_mps", NAN)),
 	)
 
 
