@@ -2943,3 +2943,23 @@ Two things learned in the attempt, both worth keeping:
 
 Finish by rendering B with a longer budget, or by baking the two candidates as a
 strip rather than through the whole training screen, which is most of the cost.
+
+## Blockers face the wrong way, and one yaw serves every phase
+
+Reported from the sheet and not yet fixed.
+
+What is there: `_bake_angles(for_view, facing_degrees = FACING_OVER_THE_NET)`
+turns every baked body by `facing - theta`, and **every call site takes the
+default**. So the parameter that exists to vary facing per phase has never varied
+-- attack, block and floor are all baked at 180 degrees, "looking over the net".
+
+That is defensible for a passer and for a blocker, who both face the net, and it
+is the first thing to check rather than assume: if blockers read as front-on when
+they should read from behind, the error is either the sign of `facing - theta` or
+the interaction with `set_pose`'s own `_turn_toward(0.0 if position.z > 0.0 else
+PI)`, which the block branch runs and the baker then overwrites. Two candidates,
+and the render decides which.
+
+Do it as a focused strip -- one blocker, three views, facing at 180 and at 0 --
+rather than through the training screen. Same lesson as the die-cut comparison
+below: the screen is nearly all of the cost and none of the evidence.
