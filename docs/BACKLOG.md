@@ -4021,3 +4021,72 @@ resolver itself found no clearing angle and the swing is drawn honestly failing
 to get over -- which may be correct, and wants separating from the case where the
 drawing is still losing the resolver's answer. `run_ball_flight_probe` reports
 the count; nothing yet reports which of the two it is.
+
+---
+
+## The offence gap is the second contact, and only one of four paths raises the ball
+
+The last structural asymmetry. `run_rally_balance_probe` reports home swings at
+0.484 and opponent swings at 0.332 and cannot say why, because attack quality is
+a product of six terms and a product that only reports itself cannot be asked
+which factor moved. `tools/run_offence_split_probe.gd` decomposes it.
+
+### The first reading was a false lead, and the control is the point
+
+Split by side alone, the answer looked obvious: set quality 0.570 against 0.231,
+a gap of 0.338 driving an attack gap of 0.133. But the home side plays most of
+its offence off a serve-receive pass and the opponent plays most of its off a
+dig, and those are different contacts in the sport. A side-only average was
+comparing two different questions.
+
+Split by **what fed the set**:
+
+    term                  home/pass   home/dig   opp/pass   opp/dig
+    pass quality              0.630      0.720      0.396     0.700
+    set quality               0.722      0.271      0.265     0.121
+    attack quality            0.525      0.384      0.354     0.315
+    swings                      290        148        265        82
+
+### The finding
+
+**Home off a pass is the only one of the four paths where the set is better than
+the ball that fed it.** Everywhere else the second contact comes out far below
+its own first contact -- a 0.720 dig becomes a 0.271 set, a 0.396 pass becomes a
+0.265 set.
+
+That is not phase and not roster. `_set_terms` computes
+`usable = pass + (1 - pass) * capability * 0.40`, so a setter with any command at
+all should raise the ball rather than lower it, and on one path it does.
+
+### Two candidates ruled out, before either was claimed
+
+- **`effective_pass_quality` is not dropped on the opponent path.** It reads
+  `opponent_capability.get("effective_pass_quality", incoming_quality)`, the same
+  recovery term the home side gets. This was asserted as the defect and was
+  wrong.
+- **The third argument differing is not it either.** Home passes `tempo_demand`
+  and the opponent passes `transition_penalty`, which are genuinely different
+  quantities occupying one parameter -- worth fixing on its own -- but
+  `transition_penalty` is `(exchange - 1) * 0.035` and therefore *zero* on the
+  first exchange, so it cannot explain a set that comes out below its pass.
+
+### Where to look next, stated as a hypothesis
+
+`_set_geometry`'s `release_distance` term. The opponent's setter contact is
+`dig_position` -- wherever the ball was dug -- while `difficulty` charges
+`release_distance * 0.020` against the setter's *release target*. A second
+contact taken far from where the setter wanted to release is charged for the
+distance, and on three of the four paths the contact is not at the release
+target. That would explain why the one path whose setter is standing where they
+meant to be is also the one path whose set improves on its pass.
+
+Not verified. Recorded as the next measurement rather than a fix, because two
+confident readings of this same gap have already been wrong in one sitting: print
+`release_distance_meters` and `difficulty` per path before changing anything.
+
+### Also found, and it is a reporting gap rather than a defect
+
+`reached_approach_mark` reads exactly 0.000 for every opponent swing.
+`_add_event` publishes it on the home attack and the home continuation and not on
+the opponent's, so the figure is absent rather than false. Worth closing so the
+probe can tell "did not reach the mark" from "was never asked".
