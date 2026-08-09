@@ -208,12 +208,36 @@ func _draw_slot(
 	)
 	if not filled:
 		return
-	## And the name across the foot, clipped to the card.
+	## And the name across the foot, on a plate.
+	##
+	## It was grey type laid straight over the headshot -- `press` at 0.85, which
+	## is the muted ink the empty-slot outlines are drawn in, over a body that
+	## could be any colour a voli comes in. **Mid-grey on mid-tone is the one
+	## pairing that cannot be read**, and it fails differently for every voli, so
+	## it never fails consistently enough to look like a bug.
+	##
+	## The slot number two lines up already had the answer and it was not applied
+	## here: it takes a backing plate as soon as the card is filled. A caption over
+	## a photograph needs the same thing for the same reason, and a plate along the
+	## foot is what a photograph actually has. The type goes to full ink on it
+	## rather than to `press`, because the plate is now the thing providing the
+	## contrast and a muted ink on an opaque ground is just quiet for no reason.
 	var display_name := str(names.get(slot, ""))
 	if display_name.is_empty():
 		return
+	var plate_height := float(font_size) + 5.0
+	var plate := Rect2(
+		rect.position + Vector2(1.0, rect.size.y - plate_height - 1.0),
+		Vector2(rect.size.x - 2.0, plate_height)
+	)
+	draw_rect(plate, Color(0.98, 0.97, 0.94, 0.90) if light_mode \
+		else Color(0.10, 0.11, 0.13, 0.88))
+	## Centred, because the plate spans the whole card now. Right-aligned was
+	## right when the type was floating over the middle of a headshot and had to
+	## keep clear of the face; on its own ground it has no reason to hug an edge.
 	draw_string(
-		font, rect.position + Vector2(rect.size.x * 0.34, rect.size.y - 5.0),
-		display_name, HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x * 0.62,
-		maxi(font_size - 1, 9), Color(press, 0.85)
+		font, plate.position + Vector2(4.0, plate_height - 5.0),
+		display_name, HORIZONTAL_ALIGNMENT_CENTER, plate.size.x - 8.0,
+		maxi(font_size - 1, 9),
+		Color(0.14, 0.14, 0.16) if light_mode else Color(0.91, 0.93, 0.95)
 	)

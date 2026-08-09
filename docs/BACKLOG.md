@@ -3400,3 +3400,33 @@ baked per view angle. A voli that turns or moves needs either a bake per angle o
 a small set of angles it snaps between. "Does it look right" is the easy question;
 "how many bakes does a rally need" is the one that decides whether playback can
 use them at all.
+
+## Tactical training: three items, one done
+
+**Done: the tray's names could not be read.** They were drawn in `press` -- the
+muted ink the *empty*-slot outlines use -- laid straight over a headshot. Mid-grey
+on mid-tone is the one pairing that cannot be read, and because a voli's body can
+be any colour it comes in, it failed differently for every slot and so never
+failed consistently enough to look like a bug.
+
+The slot number two lines above already had the answer and it had not been applied
+here: it takes a backing plate as soon as the card is filled. The name gets the
+same, along the foot, with the type at full ink rather than `press` -- once the
+plate is providing the contrast, a muted ink on an opaque ground is just quiet
+for no reason. Centred rather than right-aligned, because right-aligned was the
+right call while the type was floating over a headshot and had to keep clear of
+the face; on its own ground it has no reason to hug an edge.
+
+**Open: sticker placement.** Dropping a voli on the sheet places them, and what
+is missing is everything around that -- what a legal position is, whether two
+volis can occupy one, whether a placement survives a phase change or a view
+change, and what the sheet does when a rotation makes a placement illegal. The
+drop currently stores metres and redraws; nothing validates it.
+
+**Open: action assignment.** A voli on the sheet is a body in a pose, not a voli
+*doing* something the drill will run. The phase says what the whole sheet is
+about (Block, Attack, Floor) and the individual has no assignment inside it --
+no "this one takes the line, that one covers the tip". `PHASE_POSE` is keyed by
+phase precisely because there was nothing per-voli to key on. That is the gap
+worth closing before the drill session in #69 can mean anything, because a
+session needs per-voli asks to score against learned comfort.
