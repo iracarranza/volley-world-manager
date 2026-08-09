@@ -4390,3 +4390,25 @@ same comparison reports **52 matched, 53 mismatched**; with it in place, 105
 matched and 0 mismatched. A gate nobody has watched fail is a gate nobody knows
 works, and this file records two written in the same sitting that turned out to
 be unfailable.
+
+### What it did to the rates
+
+`tools/run_rally_balance_probe.gd`, 700 rallies, both serving sides, after the
+thread:
+
+    contacts per rally     5.693   (target above 6.0)
+    kill rate              0.433   (0.45 - 0.50)   home 0.471  opponent 0.387
+    swing balance          0.814   (near 1.00)     429 against 349
+    dig rate               0.482   (0.35 - 0.55)
+    stuff rate             0.141   (0.08 - 0.14)
+    ace rate               0.059   (0.05 - 0.09)
+    serve error rate       0.149   (0.12 - 0.20)
+    opponent swing quality 0.371   (0.332 before)
+
+The opponent's offence moved up, which is the intended direction and the reason
+the number is recorded rather than assumed. Swing balance 0.766 -> 0.814 and
+opponent swing quality 0.332 -> 0.371; nothing left its band that was in one.
+Stuff sits 0.001 over the top of its band and kill 0.017 under the bottom of
+its; both were already there before this change and neither is chased here,
+because the 85% figure above says a side-versus-side rate is not yet a
+measurement of the simulation.
