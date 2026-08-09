@@ -42,9 +42,37 @@ static func display_trajectory(
 	var display := trajectory.duplicate(true)
 	terminate_at_next_contact(display, next_contact)
 	var start_height := contact_height(event, profiles)
+	var duration := maxf(float(display.get("duration", 0.5)), 0.08)
 	var end_height := FLOOR_CONTACT_HEIGHT_METERS if next_contact == null \
 		else contact_height(next_contact, profiles)
-	var duration := maxf(float(display.get("duration", 0.5)), 0.08)
+	## **A ball keeps the trajectory it was struck with.**
+	##
+	## The residue of the flat-spike report, and it survived the gravity-true
+	## rewrite because both ends of every drawn segment were still right. A
+	## parabola is determined by two endpoints and a duration only when both
+	## endpoints are *landings*. A spike met by a block has a far end that is an
+	## interception, and its height was taken from the **blocker's reach** --
+	## around 2.9 m, within centimetres of the hitter's own contact. A curve forced
+	## to arrive level after most of a second has to be launched upward to spend
+	## the time, so every spike that met a block was drawn lobbing over it.
+	## Measured on the drawn curve: a 6.7 m swing rose from 3.30 m to 4.07 m and
+	## came back to 2.93, while the same model sent an untouched spike from 3.28 m
+	## to the floor exactly as it should. Attack-to-block is 181 of 1090 flights
+	## and it is the one a viewer watches most closely.
+	##
+	## So the launch is carried rather than re-inferred. `struck_arc_from_speed`
+	## knows the vertical speed the swing produced and publishes it; where it is
+	## present the far end is *derived* from it. That is `docs/BACKLOG.md` §8's own
+	## requirement -- outcome, position and drawing out of one computation --
+	## reaching the case it had not reached. Where it is absent, on a set, a pass
+	## or a dig, none of which are struck, the two contact heights remain the
+	## better answer.
+	if display.has("launch_vertical_mps"):
+		end_height = maxf(
+			start_height + float(display.launch_vertical_mps) * duration
+				- 0.5 * BallFlightModel.DEFAULT_GRAVITY_MPS2 * duration * duration,
+			FLOOR_CONTACT_HEIGHT_METERS,
+		)
 	display["start_height_meters"] = start_height
 	display["end_height_meters"] = end_height
 	## Reported, not chosen.

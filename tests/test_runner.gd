@@ -832,9 +832,21 @@ func _test_playback_geometry_is_drawable() -> void:
 					## contests. Stamped at the end of that flight -- which it was --
 					## the hands move after the ball has already landed.
 					var swing := float(incoming.get("start_time", 0.0))
+					## Against the **swing**, not against the leg drawn to the tape.
+					##
+					## A blocked attack's `outgoing_trajectory` is re-sliced to end at
+					## the block, and once that leg is timed as its true share of the
+					## swing it ends exactly when the ball reaches the net -- so
+					## measuring the block's stamp against the leg answers 1.0 by
+					## construction and this gate would flag every block in the game.
+					## `swing_duration_seconds` is the parent flight's own time,
+					## carried for precisely this reader.
+					var swing_duration := float(
+						incoming.get("swing_duration_seconds", duration)
+					)
 					var fraction := (
 						float(event.metadata.get("physical_time", swing)) - swing
-					) / duration
+					) / maxf(swing_duration, 0.001)
 					if fraction > 0.90:
 						late_blocks += 1
 				var assist_id := int(event.metadata.get("assist_id", -1))
