@@ -29,6 +29,11 @@ var _has_shown: bool = false
 var _training_screen: VolleyballTrainingScreen = null
 var _scouting_screen: VolleyballScoutingScreen = null
 var _schedule_screen: VolleyballScheduleScreen = null
+## The theme currently up, kept because the style pass is a tree walk that
+## happens once. A screen built after that walk was never in the tree for it, so
+## it has to be given the same pass on the way in or it arrives unstyled -- a
+## page with no backdrop, which in the dark theme is invisible.
+var _theme_name: String = "dark"
 
 
 func _ready() -> void:
@@ -62,29 +67,82 @@ func _ready() -> void:
 	## later siblings draw over earlier ones -- and a node whose whole job is to
 	## cover everything is easier to keep last here than in a .tscn somebody will
 	## reorder.
-	_training_screen = TrainingScreenScript.new()
-	_training_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_training_screen.visible = false
-	add_child(_training_screen)
-	_training_screen.back_requested.connect(_show_journal)
-	_scouting_screen = ScoutingScreenScript.new()
-	_scouting_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_scouting_screen.visible = false
-	add_child(_scouting_screen)
-	_scouting_screen.back_requested.connect(_show_journal)
-	_schedule_screen = ScheduleScreenScript.new()
-	_schedule_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_schedule_screen.visible = false
-	add_child(_schedule_screen)
-	_schedule_screen.back_requested.connect(_show_training)
-	_training_screen.schedule_requested.connect(_show_schedule)
 	journal.training_requested.connect(_show_training)
 	journal.scouting_requested.connect(_show_scouting)
-	## Last, so the sheet covers everything including the screens added above.
+	## Last, so the sheet covers everything, including the screens built later.
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
 	_load_theme()
 	_show_title()
+
+
+## The three code-built screens, each stood up the first time it is asked for.
+##
+## **They were all built here in `_ready`, and that was the stall.** Opening the
+## game froze for tens of seconds before the title screen would take a click, and
+## every click made during the freeze arrived at once when it ended -- which is a
+## blocked main thread, not a slow renderer.
+##
+## The clipboard is what blocks. It builds a worksheet, the worksheet asks for
+## every figure it can draw -- seven volis, a headshot each plus three phases in
+## two views, forty-nine stickers -- and each one is a posed 3D render, two
+## texture readbacks and a contour trace. That is a real cost and it is the right
+## cost for a page of drawn bodies. It is simply not a cost the *title screen*
+## should be paying, and it was, because a screen nobody had asked for was in the
+## tree before the first frame.
+##
+## Measured, not guessed: `tools/preview/startup_probe.gd` traces frame times off
+## a cold boot and names anything over four frames' worth. Headless it settles in
+## under three seconds; with a renderer attached the boot path used to contain one
+## frame minutes long, and that frame is this.
+##
+## Lazily built rather than deferred by a frame or two, because the work is not
+## small and deferring only decides *which* frame is ruined. A manager who never
+## opens the clipboard should never pay for it.
+func _ensure_training_screen() -> void:
+	if _training_screen != null:
+		return
+	_training_screen = TrainingScreenScript.new()
+	_adopt_screen(_training_screen)
+	_training_screen.back_requested.connect(_show_journal)
+	_training_screen.schedule_requested.connect(_show_schedule)
+
+
+func _ensure_scouting_screen() -> void:
+	if _scouting_screen != null:
+		return
+	_scouting_screen = ScoutingScreenScript.new()
+	_adopt_screen(_scouting_screen)
+	_scouting_screen.back_requested.connect(_show_journal)
+
+
+func _ensure_schedule_screen() -> void:
+	if _schedule_screen != null:
+		return
+	_schedule_screen = ScheduleScreenScript.new()
+	_adopt_screen(_schedule_screen)
+	_schedule_screen.back_requested.connect(_show_training)
+
+
+## Add a screen, and put the wipe back on top of it.
+##
+## Later siblings draw over earlier ones, so a screen added after the wipe covers
+## the sheet that is supposed to cover it -- which is invisible until the one
+## frame it matters, on the wipe that carried you to that very screen.
+func _adopt_screen(screen: Control) -> void:
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	screen.visible = false
+	add_child(screen)
+	if _wipe != null and _wipe.is_inside_tree():
+		move_child(_wipe, -1)
+	var is_light := _theme_name == "light"
+	UIStyleSystem.apply(screen, is_light)
+	## The 3D nodes carry their palette in materials rather than in a theme, so
+	## they are painted by hand and a new screen's have never been painted.
+	for palette_node in screen.find_children("*", "", true, false):
+		if palette_node.is_in_group("ui_palette_3d") \
+				and palette_node.has_method("apply_ui_palette"):
+			palette_node.apply_ui_palette(is_light)
 
 
 func _connect_match_center_signal() -> void:
@@ -163,6 +221,7 @@ func _sync_halftone_scale() -> void:
 
 func _apply_theme(theme_name: String, persist: bool = true) -> void:
 	var resolved := "light" if theme_name == "light" else "dark"
+	_theme_name = resolved
 	theme = LightTheme if resolved == "light" else DarkTheme
 	## The sheet is paper in the light theme and ink in the dark one. A wipe that
 	## kept one colour would be the only element in the game that ignores the
@@ -192,15 +251,18 @@ func _apply_theme(theme_name: String, persist: bool = true) -> void:
 
 
 func _show_training() -> void:
+	_ensure_training_screen()
 	_training_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_show_only(_training_screen)
 
 
 func _show_scouting() -> void:
+	_ensure_scouting_screen()
 	_scouting_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_show_only(_scouting_screen)
 
 
 func _show_schedule() -> void:
+	_ensure_schedule_screen()
 	_schedule_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_show_only(_schedule_screen)

@@ -3025,3 +3025,61 @@ drawn at the cock of a swing and is still square to the net, when a hitter
 arriving on an outside approach is angled across it. That wants the facing to come
 off the drill's own geometry rather than a constant -- the parameter is already
 there and has never been passed.
+
+## The startup stall: the clipboard was built before the title screen
+
+**Fixed.** Opening the game was unresponsive for tens of seconds and then came
+right on its own, with every click made during the freeze arriving at once when
+it ended. That last detail is the diagnosis: a renderer that cannot keep up drops
+frames, it does not queue your clicks and hand them back later. The main thread
+was blocked.
+
+`application.gd` built all three code-made screens in `_ready` -- the clipboard,
+the folders and the planner -- before the title screen had drawn a frame. The
+clipboard is the expensive one: it stands up a worksheet, and the worksheet asks
+for every figure it can draw. Seven volis, a headshot each plus three phases in
+two views: forty-nine stickers, each one a posed 3D render, two texture readbacks
+and a contour trace.
+
+That is a real cost and it is the right cost for a page of drawn bodies. It is
+just not a cost the *title screen* should pay, and it was paying all of it.
+
+The three are built on first navigation now. Two things had to move with them:
+the wipe has to be pushed back to last child after each add, since later siblings
+draw over earlier ones and a screen added after the wipe would cover the sheet
+meant to cover it; and the style pass is a tree walk that happens once, so a
+screen built after it has to be given the same pass on the way in or it arrives
+with no backdrop -- invisible in the dark theme.
+
+**Measured on both sides**, with `tools/preview/startup_probe.gd`, which traces
+frame times off a cold boot and names anything over four frames' worth. It runs
+the real main scene rather than a stand-in, because the stall is in what the
+application builds.
+
+| | before | after |
+|---|---|---|
+| longest frame | 232 s | 1.8 s |
+| time to settle | 243 s | 2.9 s |
+| frames in the first 30 s | 137 | 869 |
+
+Those are llvmpipe numbers under `xvfb` and are perhaps an order of magnitude
+worse than real hardware, which is why the table is a ratio to read rather than a
+duration to quote. The shape is the finding: one frame carrying a boot's entire
+sticker bake.
+
+Worth knowing that the probe also reports headless. Headless has always settled
+in under three seconds -- the stall never appeared without a renderer attached,
+which is what pointed at the bake in the first place.
+
+**What is left on this path**, in order of what is left to gain:
+
+- Roughly a second to load `application.tscn` and 1.8 s in the first frame, which
+  is the whole scene entering the tree and drawing once. Not investigated.
+- The clipboard's own first open still pays the forty-nine bakes. Moving the
+  freeze off the title screen is worth doing on its own, but the bake wants
+  either spreading over frames with the page usable in the meantime, or caching
+  to disk.
+- The journal's roster visualizer viewport reads **2x140** for the whole trace.
+  It may simply be a container that has never been laid out, since the journal is
+  not the visible screen during the probe -- but a 3D view two pixels wide is
+  worth a look with the journal actually up.
