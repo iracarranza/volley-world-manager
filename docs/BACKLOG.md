@@ -3083,3 +3083,82 @@ which is what pointed at the bake in the first place.
   It may simply be a container that has never been laid out, since the journal is
   not the visible screen during the probe -- but a 3D view two pixels wide is
   worth a look with the journal actually up.
+
+## The clipboard ran off the bottom, and what is holding it there now
+
+**Fixed, with 10 px to spare, which is not much.**
+
+Measured with `layout_probe -- clipboard`, which now weighs the training screen
+as well as the journal's roster. The tactics page needed **610 px where 560 px
+was going** -- fifty over, and that is the clipping.
+
+Three changes, in order of what they were worth:
+
+| | saved |
+|---|---|
+| the fit strip row deleted, its one live line moved onto the tab strip | ~40 px |
+| the two receipts (what the sheet says, what was declared) put on one row | 30 px |
+| the page's one instruction moved onto the tab strip too | 30 px |
+
+The tab strip is the trick in two of those. A `TabContainer` draws its own strip
+and has no slot to put anything beside it, and a plain child of one *becomes a
+tab* -- so the strip cannot simply be given a second occupant. Hosting the tabs
+in a plain `Control` and anchoring a row to its top right puts text in the empty
+part of the strip the two titles never reach, at no height at all.
+
+Two placeholders died on the way. The rotation selector filtered a strip whose
+figures were invented, and "4 asks, 1 unfamiliar" was the figure it filtered. A
+control that cannot change anything is worse than no control, because it reads as
+working.
+
+**The floor is now the tools column and nothing else**: sticky note 203, the
+coordinate entry 42, roster tray 210, plus separations -- 471 px of the page's
+501. All three are `custom_minimum_size` floors stated inside their components,
+not heights derived from what they hold, so nothing gives when the window is
+short. At 720 px that leaves 10 px of headroom, which a different font or a
+higher DPI would eat.
+
+Worth doing properly rather than trimming again: the tray lays its slots out from
+its own width already (`MIN_SLOT`, a grid solved from `size.x`), so it is the one
+of the three that could take a height instead of demanding one. The other two
+want looking at with a manager actually using them.
+
+## Two long-standing suite failures, measured
+
+Both predate this work and neither is a regression. Recorded here because "two
+expected failures" has been carried in `CLAUDE.md` for a long time without
+saying what they *are*.
+
+**1. `Allotted duration and the movement model agree for every phase type`.**
+The simulator allots each contact a duration; the movement model derives one from
+stride and cadence. The test wants their ratio inside a band, per phase. Measured
+over the same 120-seed sweep the test runs:
+
+| phase | mean ratio | band | |
+|---|---|---|---|
+| RECEPTION | 0.9987 | 0.95 – 1.06 | ok |
+| SET | 0.9927 | 0.92 – 1.06 | ok |
+| ATTACK | **0.9129** | 0.95 – 1.12 | out |
+| DEFENSE | 0.9983 | 0.95 – 1.06 | ok |
+
+ATTACK is the only phase that enters its traversal already carrying speed, and it
+is the only one out. The interesting part is the *direction*: the band is
+asymmetric because the residual used to sit at **1.09** -- the stepped integrator
+reporting a traversal 9% longer than the closed form solved for. It now sits at
+0.91, the same 9% on the other side. Something flipped the sign of that residual
+and the band, drawn around where it used to be, no longer contains it. The
+overall `perceptible_rate` fails with it at 0.0603 against a 0.04 ceiling, which
+is the same finding counted differently.
+
+**2. `defensive attack lowers both error risk and terminal pressure across six
+career seeds`.** Two claims, and only one holds. Measured at 48 samples:
+
+| identity | attack error | kill rate |
+|---|---|---|
+| Physical | 0.1470 | 0.6251 |
+| Defensive | **0.1243** | **0.6638** |
+
+A defensive identity does lower the error risk, by a lot. It does not give up
+terminal pressure for it -- it *gains* kills. So the trade the design claims is
+not being paid: defensive attacking is currently strictly better at both ends,
+which is a balance finding rather than a test that needs its band widened.

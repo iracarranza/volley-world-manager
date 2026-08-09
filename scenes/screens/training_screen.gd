@@ -42,7 +42,6 @@ var _game_manager: Node = null
 var _modes: TabContainer = null
 var _fit_strip: HBoxContainer = null
 var _worksheet: UIWorksheet = null
-var _rotation_option: OptionButton = null
 var _selected_preset: String = "Combination Play"
 var _phase_group: ButtonGroup = null
 var _view_group: ButtonGroup = null
@@ -86,8 +85,6 @@ func _build() -> void:
 	## this object, leaving the marker and the red pen as the only human marks.
 	set_meta(UIStyleSystemScript.MEDIUM_META, UIStyleSystemScript.MEDIUM_FORM)
 
-	shell.content.add_child(_build_fit_strip())
-
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 16)
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -99,14 +96,34 @@ func _build() -> void:
 	## there are two ways to use this clipboard.
 	_modes = TabContainer.new()
 	_modes.tabs_visible = true
-	_modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_modes.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_modes.size_flags_stretch_ratio = 2.6
 	## Plastic binder dividers rather than the journal's cut index tabs. Torn
 	## paper is the journal's own material and it followed the tabs here by
 	## default; a clipboard's dividers are the thing you buy in a packet of five.
 	_modes.set_meta(&"ui_tabs", &"plastic")
-	body.add_child(_modes)
+
+	## The tabs and the line beside them share a row, and the host is what lets
+	## them.
+	##
+	## The line used to be a panel of its own above the tabs -- a full row of the
+	## page's height spent on one sentence, on a page that was already running off
+	## the bottom edge of the window. A `TabContainer` draws its own tab strip and
+	## has no slot to put anything beside it, and a plain child of one *becomes a
+	## tab*, so the strip cannot simply be given a second occupant.
+	##
+	## A plain `Control` can hold both. It is not a `Container`, so it does not
+	## recompute what is under it: the tabs take the whole rect and the line is
+	## anchored to the top right, sitting in the empty part of the strip the tab
+	## titles never reach.
+	var tabs_host := Control.new()
+	tabs_host.name = "TabsHost"
+	tabs_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	tabs_host.size_flags_stretch_ratio = 2.6
+	body.add_child(tabs_host)
+
+	_modes.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tabs_host.add_child(_modes)
+	tabs_host.add_child(_build_tab_strip_line())
 
 	_modes.add_child(_build_tactics_page())
 	_modes.add_child(_build_development_page())
@@ -114,50 +131,60 @@ func _build() -> void:
 
 
 
-## The strip the doc calls for: what a declared tactic is asking of the squad,
-## and the one gap worth training next, pointing at the session rather than at a
-## tab -- there is no drill tab left to point at. `Rotation` narrows which of the
-## six authored plans the strip is reading, per §0.7: a filter on one control, not
-## a navigation level of its own.
+## What the clipboard is pointing at, on the tab strip's own row.
 ##
-## The ask count and the named gap are placeholders. Decomposing a preset into
-## per-voli asks (§0.2) and scoring them against learned comfort (§0.4) are both
-## unbuilt; this strip is laid out at the shape the finished one should have.
-func _build_fit_strip() -> Control:
-	var panel := PanelContainer.new()
+## This was a panel across the top holding a rotation selector, an ask count and
+## a named gap. Two of those three went, and not for space alone: the rotation
+## selector filtered a strip whose numbers were placeholders, so it was a control
+## over nothing, and "4 asks, 1 unfamiliar" was the placeholder it filtered. A
+## control that cannot change anything and a figure that is not measured are
+## worse than an empty strip, because they read as working.
+##
+## What is left is the one line that says what the page is for -- the gap worth
+## training, and where it goes. Right-aligned into the part of the tab strip the
+## two titles never reach, so it costs no height at all.
+##
+## Still a placeholder itself, and labelled as one below. Decomposing a preset
+## into per-voli asks and scoring them against learned comfort are both unbuilt.
+const TAB_STRIP_LINE_HEIGHT: float = 30.0
+
+
+func _build_tab_strip_line() -> Control:
 	var row := HBoxContainer.new()
+	row.name = "TabStripLine"
 	row.add_theme_constant_override("separation", 10)
-	panel.add_child(row)
+	## Anchored along the top edge and grown leftward from the right one, so it
+	## keeps its distance from the corner however wide the page gets, and the tab
+	## titles keep the left end of the strip to themselves.
+	row.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	row.offset_right = -12.0
+	row.offset_top = 3.0
+	row.offset_bottom = TAB_STRIP_LINE_HEIGHT
+	## A row sitting over a tab strip would otherwise eat the clicks meant for
+	## the tab beside it wherever the two overlap.
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var rotation_label := Label.new()
-	rotation_label.text = "Rotation"
-	row.add_child(rotation_label)
-
-	_rotation_option = OptionButton.new()
-	for rotation_number in range(1, 7):
-		_rotation_option.add_item("R%d" % rotation_number)
-	_rotation_option.select(0)
-	row.add_child(_rotation_option)
-
-	var sep := VSeparator.new()
-	row.add_child(sep)
-
-	var summary := Label.new()
-	summary.text = "4 asks · 1 unfamiliar"
-	row.add_child(summary)
-
-	var arrow_sep := VSeparator.new()
-	row.add_child(arrow_sep)
+	## The page's one instruction, which cost a row of its own for a sentence you
+	## need once. Up here it costs nothing: the tab strip has the height already.
+	var how := Label.new()
+	how.name = "HowLabel"
+	how.text = "Drag a voli from a slot onto the court."
+	how.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(how)
 
 	var gap := Label.new()
+	gap.name = "GapLabel"
 	gap.text = "⟨ Ivo 4 · slide coordinate ⟩"
-	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(gap)
 
 	var to_session := Label.new()
+	to_session.name = "SessionLabel"
 	to_session.text = "→ tomorrow's session"
+	to_session.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(to_session)
-	return panel
+	return row
 
 
 ## Tactics: a preset rail on the left, and the board a coach explains it on.
@@ -177,12 +204,7 @@ func _build_tactics_page() -> Control:
 	page.name = "Tactics"
 	page.add_theme_constant_override("separation", 8)
 
-	var caption := Label.new()
-	caption.text = "Drag a voli from a slot onto the court."
-	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	page.add_child(caption)
-
-	## The sheet takes the page and the tools stand beside it.
+	## The sheet and the tools share the page.
 	##
 	## The presets are gone from here entirely. They are a choice about the whole
 	## tactic and this page is about placing bodies, so keeping them in view cost
@@ -193,33 +215,23 @@ func _build_tactics_page() -> Control:
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	page.add_child(body)
 
-	_worksheet = WorksheetScript.new()
-	_worksheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_worksheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_worksheet.custom_minimum_size = Vector2(0.0, 200.0)
-	body.add_child(_worksheet)
-
-	## The column the week-state sidebar used to hold. What replaces it is the
-	## thing a manager operates rather than the thing they read: seven slots to
-	## pick a voli out of, and the note that says what is being planned.
+	## The tools stand on the left and the sheet takes what is left.
+	##
+	## They were the other way round. What is on this page is a *desk*, and the
+	## two halves are not interchangeable: the note and the slots are what a hand
+	## reaches for, the sheet is what the hand reaches *toward*. Put the tools on
+	## the far side and every drag crosses the whole page.
 	var tools := VBoxContainer.new()
 	tools.add_theme_constant_override("separation", 8)
 	tools.custom_minimum_size = Vector2(196.0, 0.0)
 	body.add_child(tools)
 
-	_tray = RosterTrayScript.new()
-	_tray.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tray.voli_dropped.connect(_drop_voli)
-	tools.add_child(_tray)
-	_worksheet.sticker_baked.connect(_headshot_baked)
-	## Deferred, because the page is built before it is added to the tab container
-	## -- so the worksheet is not in the tree yet, its `_ready` has not run, and
-	## its baker does not exist. Called inline this returned silently and the tray
-	## stayed empty with nothing to say it had failed.
-	call_deferred("_request_headshots")
-
-	tools.add_child(_build_coordinate_entry())
-
+	## The note goes above the slots, for the same reason.
+	##
+	## It says what is being planned -- which phase, seen from where -- and that
+	## is the thing you settle before you start placing bodies. Under the slots it
+	## was read after the work it governs, and the slots are the taller of the two,
+	## so it also sat wherever the tray happened to end.
 	_sticky = StickyNoteScript.new()
 	_sticky.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sticky.set_group("Planning", WorksheetScript.PHASES, "Block")
@@ -227,22 +239,64 @@ func _build_tactics_page() -> Control:
 	_sticky.option_chosen.connect(_sticky_chosen)
 	tools.add_child(_sticky)
 
+	tools.add_child(_build_coordinate_entry())
+
+	_tray = RosterTrayScript.new()
+	_tray.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tray.voli_dropped.connect(_drop_voli)
+	tools.add_child(_tray)
+
+	_worksheet = WorksheetScript.new()
+	_worksheet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_worksheet.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_worksheet.custom_minimum_size = Vector2(0.0, 200.0)
+	body.add_child(_worksheet)
+
+	_worksheet.sticker_baked.connect(_headshot_baked)
+	## Deferred, because the page is built before it is added to the tab container
+	## -- so the worksheet is not in the tree yet, its `_ready` has not run, and
+	## its baker does not exist. Called inline this returned silently and the tray
+	## stayed empty with nothing to say it had failed.
+	call_deferred("_request_headshots")
+
 	## What the sheet currently says, written out.
 	##
 	## The marks are the control, so the words are not a second control -- they are
 	## the receipt. A page whose whole state lives in a drawing needs one line
 	## somewhere that a manager can read back without decoding it, which is the same
 	## argument §0.10 makes for the adjustment line.
+	## Both receipts on one line, and the line is why the page fits.
+	##
+	## Measured rather than trimmed by eye: `layout_probe -- clipboard` weighs the
+	## page against the window it has to live in, and found the tactics page
+	## needing 561 px plus a 45 px tab strip where 560 px was going -- fifty over,
+	## which is the clipping. Most of that floor is the tools column and cannot
+	## come off without losing a control. Two one-line receipts stacked cost 52 px
+	## of it for text that reads perfectly well side by side.
+	##
+	## They stay separate labels because they are separate sentences with separate
+	## sources -- one is what the sheet says, the other is what was declared -- and
+	## two nodes on one row is a layout, while one node holding both is a format
+	## string that has to be taken apart again the next time either changes.
+	var receipts := HBoxContainer.new()
+	receipts.add_theme_constant_override("separation", 12)
+	page.add_child(receipts)
+
 	_drill_label = Label.new()
 	_drill_label.name = "DrillLabel"
-	page.add_child(_drill_label)
+	receipts.add_child(_drill_label)
 	_worksheet.drill_changed.connect(_drill_written)
 	_drill_written(_worksheet.drill_zone)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	receipts.add_child(spacer)
 
 	var declared := Label.new()
 	declared.name = "DeclaredLabel"
 	declared.text = _selected_preset
-	page.add_child(declared)
+	receipts.add_child(declared)
 	_sync_view_availability()
 	return page
 
@@ -507,7 +561,7 @@ func _sync_view_availability() -> void:
 		_sticky.set_disabled("Planning", struck)
 		_sticky.set_chosen("Looking from", _worksheet.view)
 	var page: Node = _worksheet.get_parent()
-	var declared := page.get_node_or_null("DeclaredLabel") as Label
+	var declared := page.find_child("DeclaredLabel", true, false) as Label
 	if declared == null:
 		return
 	var current := WorksheetScript.adjustment_for(
@@ -550,7 +604,7 @@ func _add_preset_button(
 func _select_preset(preset_name: String) -> void:
 	_selected_preset = preset_name
 	var page: Node = _worksheet.get_parent()
-	var declared := page.get_node("DeclaredLabel") as Label
+	var declared := page.find_child("DeclaredLabel", true, false) as Label
 	if declared != null:
 		declared.text = "%s  ·  %s" % [
 		preset_name,

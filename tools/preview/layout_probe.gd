@@ -33,23 +33,44 @@ func _process(_delta: float) -> void:
 	_frame += 1
 	if _frame != 40:
 		return
-	var journal := _app.get_node("%Journal") as Control
-	journal.visible = true
-	var sections := journal.find_child("Sections", true, false) as TabContainer
-	if sections != null:
-		for index in range(sections.get_tab_count()):
-			if sections.get_tab_title(index) == "Roster":
-				sections.current_tab = index
-	await get_tree().process_frame
-	await get_tree().process_frame
+	## Which page to weigh. The journal's roster is what this was written for;
+	## `clipboard` opens the training screen instead, which is the other page
+	## that has run off the bottom edge.
+	var wants_clipboard := "clipboard" in OS.get_cmdline_user_args()
+	var subject: Control = null
+	if wants_clipboard:
+		_app.call("_show_training")
+		## Shown *and* settled, which are two different things and the difference
+		## is a wrong answer. A screen behind the wipe has never been laid out, so
+		## every autowrapping label in it reports the height it needs at zero
+		## width -- one word per line -- and the page appears to need twice the
+		## window. Measuring that would be measuring the probe.
+		var screen := _app.find_child("TabsHost", true, false)
+		while screen != null and screen is Control:
+			(screen as Control).visible = true
+			screen = screen.get_parent()
+		for _settle in range(40):
+			await get_tree().process_frame
+		subject = _app.find_child("Tactics", true, false) as Control
+	else:
+		var journal := _app.get_node("%Journal") as Control
+		journal.visible = true
+		var sections := journal.find_child("Sections", true, false) as TabContainer
+		if sections != null:
+			for index in range(sections.get_tab_count()):
+				if sections.get_tab_title(index) == "Roster":
+					sections.current_tab = index
+		await get_tree().process_frame
+		await get_tree().process_frame
+		subject = journal.find_child("Roster", true, false) as Control
 	print("window height = %.0f" % size.y)
-	var roster := journal.find_child("Roster", true, false) as Control
+	var roster := subject
 	if roster == null:
-		print("no Roster node")
+		print("no page node")
 		get_tree().quit()
 		return
 	_walk(roster, 0)
-	print("--- the chain from the window down to the roster ---")
+	print("--- the chain from the window down to the page ---")
 	var chain: Array[Control] = []
 	var node: Node = roster
 	while node != null and node != get_parent():
