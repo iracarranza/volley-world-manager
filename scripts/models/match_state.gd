@@ -19,6 +19,10 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 @export var substitution_pairs: Dictionary = {}
 @export var substitution_history: Array[Dictionary] = []
 @export var rally_history: Array[Dictionary] = []
+## The last officially-recorded serve by side and server. Rally previews never
+## write here, so resolving the same seed remains deterministic; `record_rally`
+## advances this only after the point becomes part of the match.
+@export var serve_history: Dictionary = {}
 ## Signed broadcast flow: positive favors home, negative favors the opponent.
 ## It is descriptive match state, not a hidden ability bonus by itself.
 @export_range(-1.0, 1.0) var match_flow: float = 0.0
@@ -53,6 +57,7 @@ func record_rally(result: Resource) -> Dictionary:
 	if match_complete:
 		return {"match_complete": true, "set_complete": false, "rotated": false}
 	var home_won: bool = bool(result.home_team_won)
+	_record_serve(result)
 	var rotated := false
 	var opponent_rotated := false
 	if home_won:
@@ -220,6 +225,30 @@ func score_text() -> String:
 	]
 
 
+func serve_context() -> Dictionary:
+	return serve_history.duplicate(true)
+
+
+func _record_serve(result: Resource) -> void:
+	if result == null:
+		return
+	for raw_event in result.events:
+		var event := raw_event as RallyEventModel
+		if event == null or event.event_type != RallyEventModel.EventType.SERVE:
+			continue
+		var side := str(event.metadata.get("side", ""))
+		var server_id := int(event.metadata.get("server_id", event.actor_id))
+		if side.is_empty() or server_id < 0:
+			return
+		serve_history["%s:%d" % [side, server_id]] = {
+			"target": str(event.metadata.get("target", "")),
+			"aim_point": event.metadata.get("aim_point", event.end_position),
+			"landing_point": event.end_position,
+			"mode": str(event.metadata.get("serve_mode", "targeted")),
+		}
+		return
+
+
 func to_dict() -> Dictionary:
 	return {
 		"home_score": home_score,
@@ -236,6 +265,7 @@ func to_dict() -> Dictionary:
 		"substitution_pairs": substitution_pairs.duplicate(true),
 		"substitution_history": substitution_history.duplicate(true),
 		"rally_history": rally_history.duplicate(true),
+		"serve_history": serve_history.duplicate(true),
 		"match_flow": match_flow,
 		"last_flow_shift": last_flow_shift,
 		"statistics": statistics.to_dict(),
@@ -258,6 +288,7 @@ func load_dict(data: Dictionary) -> void:
 	substitution_pairs = data.get("substitution_pairs", {}).duplicate(true)
 	substitution_history.assign(data.get("substitution_history", []))
 	rally_history.assign(data.get("rally_history", []))
+	serve_history = data.get("serve_history", {}).duplicate(true)
 	match_flow = clampf(float(data.get("match_flow", 0.0)), -1.0, 1.0)
 	last_flow_shift = clampf(float(data.get("last_flow_shift", 0.0)), -1.0, 1.0)
 	statistics = MatchStatisticsModel.new()

@@ -1985,6 +1985,7 @@ func _fill_attribute_column(
 		var used := row_index < attributes.size()
 		row.modulate.a = 1.0 if used else 0.0
 		if not used:
+			row.tooltip_text = ""
 			continue
 		var attribute_key := str(attributes[row_index])
 		var name_label := row.get_node("Name") as Label
@@ -1992,6 +1993,12 @@ func _fill_attribute_column(
 		name_label.text = str(RAW_ATTRIBUTE_LABELS.get(
 			attribute_key, attribute_key.replace("_", " ").capitalize()
 		))
+		var attribute_tooltip := str(AttributeProfiles.ATTRIBUTE_TOOLTIPS.get(
+			attribute_key, "No description has been recorded for this attribute."
+		))
+		row.tooltip_text = attribute_tooltip
+		name_label.tooltip_text = attribute_tooltip
+		value_label.tooltip_text = attribute_tooltip
 		## The attributes this player's own position is scored on are called
 		## out, so a middle blocker's block timing reads differently from a
 		## middle blocker's set disguise at a glance.

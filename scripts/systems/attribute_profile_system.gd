@@ -17,6 +17,54 @@ const PROFILE_TOOLTIPS := {
 	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline and creativity.",
 }
 
+## Player-facing descriptions for every raw ability shown in the roster profile.
+## Keeping these beside `CATEGORY_ATTRIBUTES` makes tooltip coverage part of the
+## same attribute contract as category membership instead of a screen-local list
+## that can silently miss newly-added attributes.
+const ATTRIBUTE_TOOLTIPS := {
+	"acceleration": "How quickly the player reaches useful movement speed.",
+	"lateral_speed": "Maximum side-to-side speed in blocking and floor defense.",
+	"transition_speed": "Speed changing phases and moving into an attacking approach.",
+	"jump_reach": "Leap capacity used with height and wingspan to determine contact reach.",
+	"explosiveness": "How quickly the player can access their available jump and power.",
+	"stamina": "Physical capacity to sustain repeated actions through a match.",
+	"work_rate": "Willingness to repeatedly spend effort on pursuit, coverage, and transition.",
+	"arm_speed": "How quickly the hitting arm reaches contact, especially on fast sets.",
+	"serve_power": "The maximum pace the player can put on a serve.",
+	"serve_technique": "Contact quality that converts available serve power into usable pace and spin.",
+	"serve_placement": "How tightly and specifically the player can define a serve target.",
+	"serve_consistency": "Ability to repeat one serve location and change targets without losing control.",
+	"serve_aggression": "How readily the player attempts point-ending pace or line pressure instead of a containing serve.",
+	"serve_variation": "How often and how credibly the player changes target, depth, pace, and serve shape.",
+	"reception": "Platform technique and directional control on serve reception.",
+	"reception_balance": "Maintaining reception quality while moving, reaching, or contacting off-center.",
+	"reception_stability": "Resistance to platform breakdown against high incoming pace.",
+	"set_accuracy": "Delivering the ball to the intended attacking contact window.",
+	"set_balance": "Maintaining setting quality while moving or reaching.",
+	"set_stability": "Maintaining a clean set against difficult incoming pace and spin.",
+	"tempo_control": "Controlling release timing and the hitter's contact rhythm.",
+	"set_disguise": "Hiding the intended target and release direction from the block.",
+	"hand_control": "Fine manipulation of height, spin, and touch on overhead contacts.",
+	"unpredictability": "Varying target and tempo across a match without becoming readable.",
+	"attack_power": "Force transferred through the ball at attacking contact.",
+	"attack_accuracy": "Precision hitting the intended target while keeping the ball in play.",
+	"approach_timing": "Arriving balanced in the hitter's contact window relative to the set.",
+	"tooling": "Deliberately using the blocker's hands to score or create a favorable deflection.",
+	"feinting": "Selling a full attack before changing to a soft or redirected contact.",
+	"finesse": "Technical control of attack placement, depth, angle, and touch.",
+	"shot_variety": "Breadth of technically credible attack solutions available at contact.",
+	"block_timing": "Matching jump and hand penetration to the attacker's contact.",
+	"ball_control": "Cushioning a received or defended ball so it remains playable.",
+	"dig_control": "Directing a successful floor-defense contact toward a useful target.",
+	"court_vision": "Spatial awareness of teammates, opponents, and open court.",
+	"anticipation": "Predicting a specific opponent action before contact.",
+	"decision_making": "Choosing the right option under time pressure.",
+	"composure": "Maintaining judgment and execution under pressure or after mistakes.",
+	"tactical_discipline": "Following assignments and systems instead of abandoning them prematurely.",
+	"improvisation": "Creating an effective solution when the planned action breaks down.",
+	"adaptability": "Learning unfamiliar roles and adjusting technique to changing situations.",
+}
+
 const AXIS_CONTRIBUTORS := {
 	"Attacking": "attack_power; mass_kg; explosiveness; transition_speed; arm_speed; approach_timing; attack_accuracy; tooling; feinting; finesse; shot_variety",
 	"Defensive": "reception; reception_balance; reception_stability; acceleration; lateral_speed; height_cm; wingspan_cm; stamina; work_rate; ball_control; block_timing; dig_control",

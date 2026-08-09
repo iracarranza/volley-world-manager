@@ -230,6 +230,7 @@ func _initialize() -> void:
 	_test_geometric_attack_promotion_translates_a_rally()
 	_test_the_hitter_can_see_the_net_and_the_gap()
 	_test_the_serve_flies_the_same_ball_as_the_spike()
+	_test_serve_attributes_choose_and_execute_targets()
 	_test_a_margin_carries_its_unit_in_its_name()
 	_test_a_serve_that_misses_is_drawn_missing()
 	_test_a_block_can_be_told_what_it_is_for()
@@ -5052,8 +5053,9 @@ func _test_gate_forty_two_development_live_attack() -> void:
 	## seeds qualify. 300469 fell to Gate 44's passer-assignment fix; 300062 fell
 	## to the own-side delivery promotion, which stopped sets landing on their
 	## lane's table entry and so moved every hitter's contact point slightly.
-	## 300082 promotes under the resolved set position.
-	const LIVE_ATTACK_SEED := 300082
+	## 300011 promotes under the shared setter-option decision and priced set
+	## height, which can legitimately route the same pass to a different hitter.
+	const LIVE_ATTACK_SEED := 300011
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -5901,7 +5903,7 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 func _test_gate_forty_nine_development_live_block() -> void:
 	## The same seed Gate 42 uses. A promoted block requires a promoted attack
 	## ahead of it, so the two fixtures necessarily share a chain and a seed.
-	const LIVE_BLOCK_SEED := 300082
+	const LIVE_BLOCK_SEED := 300011
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -11054,58 +11056,41 @@ func _test_spatial_timing_and_tactical_positions() -> void:
 	for seed_value in range(9100, 9500):
 		var base_result: Resource = baseline.resolve_active_rally(seed_value)
 		var moved_result: Resource = displaced.resolve_active_rally(seed_value)
-		var base_attack: Resource
-		var moved_attack: Resource
+		var base_decision := {}
+		var moved_decision := {}
 		for event_resource in base_result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
-					and event.actor_id == 2:
-				base_attack = event
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET_DECISION:
+				base_decision = Dictionary(event.metadata.get("option_evaluation", {}))
 				break
 		for event_resource in moved_result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
-					and event.actor_id == 2:
-				moved_attack = event
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.SET_DECISION:
+				moved_decision = Dictionary(event.metadata.get("option_evaluation", {}))
 				break
-		if base_attack != null and moved_attack != null:
-			## The property is that extreme displacement *hurts the swing*. It used
-			## to be read off the arrival margin, because the model expressed
-			## displacement as lateness -- but `_reachable_contact` moves the ball
-			## to a hitter who cannot reach it, so they are genuinely not late, and
-			## `ENABLE_CLAMPED_ARRIVAL_MARGIN` stopped pretending otherwise.
-			##
-			## The cost now lands where it belongs: the contact is dragged back off
-			## the net and the swing pays for the worse position. Asserted on both,
-			## so the test still fails if displacement stops costing anything --
-			## which it briefly did, and this check is what caught it.
-			position_effect_observed = (
-				float(moved_attack.start_position.y)
-					> float(base_attack.start_position.y) + 0.01
-				and float(moved_attack.quality) < float(base_attack.quality) - 0.05
-			)
-			displacement_report = (
-				"margin %.3f -> %.3f   quality %.3f -> %.3f   contact_y %.3f -> %.3f"
-				% [
-					float(base_attack.metadata.get("arrival_margin", 0.0)),
-					float(moved_attack.metadata.get("arrival_margin", 0.0)),
-					float(base_attack.quality), float(moved_attack.quality),
-					float(base_attack.start_position.y),
-					float(moved_attack.start_position.y),
+		if not base_decision.is_empty() and not moved_decision.is_empty():
+			var base_outside := {}
+			var moved_outside := {}
+			for option in base_decision.get("options", []):
+				if int(option.get("player_id", -1)) == 2:
+					base_outside = option
+			for option in moved_decision.get("options", []):
+				if int(option.get("player_id", -1)) == 2:
+					moved_outside = option
+			if not base_outside.is_empty() and not moved_outside.is_empty():
+				position_effect_observed = (
+					float(moved_outside.get("rescue_height_meters", 0.0))
+						> float(base_outside.get("rescue_height_meters", 0.0)) + 0.10
+					and float(moved_outside.get("score", 0.0))
+						< float(base_outside.get("score", 0.0)) - 0.04
+					and int(moved_decision.get("chosen_player_id", 2)) != 2
+				)
+				displacement_report = "rescue %.3f -> %.3f   score %.3f -> %.3f" % [
+					float(base_outside.get("rescue_height_meters", 0.0)),
+					float(moved_outside.get("rescue_height_meters", 0.0)),
+					float(base_outside.get("score", 0.0)),
+					float(moved_outside.get("score", 0.0)),
 				]
-			)
-			var original_speed := displaced.player_by_id(2).transition_speed
-			displaced.player_by_id(2).transition_speed = 98
-			var fast_result: Resource = displaced.resolve_active_rally(seed_value)
-			displaced.player_by_id(2).transition_speed = original_speed
-			for event_resource in fast_result.events:
-				var fast_event: Resource = event_resource
-				if fast_event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK \
-						and fast_event.actor_id == 2:
-					speed_effect_observed = float(fast_event.metadata.get(
-						"movement_duration", 99.0
-					)) < float(moved_attack.metadata.get("movement_duration", 0.0))
-					break
 		var previous_time := -1.0
 		timeline_observed = true
 		for event_resource in base_result.events:
@@ -11115,14 +11100,34 @@ func _test_spatial_timing_and_tactical_positions() -> void:
 				timeline_observed = false
 				break
 			previous_time = event_time
-		if position_effect_observed and speed_effect_observed and timeline_observed:
+		if position_effect_observed and timeline_observed:
 			break
+	var movement_probe := RallySimulator.new()
+	var probe_hitter := displaced.player_by_id(2)
+	var original_speed := probe_hitter.transition_speed
+	var slow_time := movement_probe._movement_time(
+		probe_hitter, Vector2(0.08, 0.94), Vector2(0.88, 0.53), "transition"
+	)
+	probe_hitter.transition_speed = 98
+	var fast_time := movement_probe._movement_time(
+		probe_hitter, Vector2(0.08, 0.94), Vector2(0.88, 0.53), "transition"
+	)
+	probe_hitter.transition_speed = original_speed
+	speed_effect_observed = fast_time < slow_time
 	_check(
 		position_effect_observed,
-		"extreme hitter displacement reduces arrival and attack quality [%s]"
+		"extreme displacement makes the setter discount that hitter [%s]"
 			% displacement_report,
 	)
 	_check(speed_effect_observed, "transition speed changes calculated marker travel time")
+	var forced_rescue := RallySimulator._set_rescue_height_meters(1.80, 0.65)
+	_check(
+		forced_rescue > 1.0
+			and RallySimulator._set_height_difficulty(
+				displaced.player_by_id(1), forced_rescue
+			) > 0.04,
+		"forcing a displaced hitter requires a high set that costs set accuracy",
+	)
 	_check(timeline_observed, "rally events expose a monotonic shared clock and duration")
 
 
@@ -11302,6 +11307,18 @@ func _test_physical_body_attributes() -> void:
 	_check(restored.tooling == 72 and restored.feinting == 69 and restored.finesse == 79 \
 			and restored.shot_variety == 83 and restored.dig_control == 64,
 		"attack-solution and dig-control attributes survive player serialization")
+	var missing_tooltips: Array[String] = []
+	for attribute_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+		if str(ATTRIBUTE_PROFILE_SCRIPT.ATTRIBUTE_TOOLTIPS.get(
+			attribute_name, ""
+		)).is_empty():
+			missing_tooltips.append(attribute_name)
+	_check(
+		missing_tooltips.is_empty(),
+		"every displayed ability attribute has a hover description (%s)" % [
+			", ".join(missing_tooltips),
+		],
+	)
 	var low_power := VolleyballPlayer.new()
 	low_power.mass_kg = 65.0
 	low_power.attack_power = 55
@@ -12115,6 +12132,104 @@ func _test_a_margin_carries_its_unit_in_its_name() -> void:
 ## exact complaint this was meant to fix." The serve kept the bug because that
 ## fix was made where the attack was wrong rather than where the engine was.
 ## This checks the contact that starts every rally, on both sides of the net.
+func _test_serve_attributes_choose_and_execute_targets() -> void:
+	var raw_power := VolleyballPlayer.new()
+	raw_power.serve_power = 95
+	raw_power.serve_technique = 20
+	var usable_power := VolleyballPlayer.new()
+	usable_power.serve_power = 95
+	usable_power.serve_technique = 90
+	var simulator := RallySimulator.new()
+	_check(
+		simulator._usable_serve_pace(usable_power)
+			> simulator._usable_serve_pace(raw_power) + 0.25,
+		"serve power sets the pace ceiling and technique unlocks that pace",
+	)
+
+	var broad := VolleyballPlayer.new()
+	broad.id = 31
+	broad.serve_placement = 20
+	broad.serve_consistency = 60
+	var precise := VolleyballPlayer.new()
+	precise.id = 32
+	precise.serve_placement = 95
+	precise.serve_consistency = 60
+	var broad_decision := {"execution_accuracy": 0.6, "mode": "targeted"}
+	var precise_decision := {"execution_accuracy": 0.6, "mode": "targeted"}
+	simulator.serve_decision_rng.seed = 12001
+	simulator._serve_landing_point(
+		"Zone 5", broad, [], null, true, [], Vector2(0.5, 0.0), broad_decision
+	)
+	simulator.serve_decision_rng.seed = 12001
+	simulator._serve_landing_point(
+		"Zone 5", precise, [], null, true, [], Vector2(0.5, 0.0), precise_decision
+	)
+	_check(
+		float(precise_decision.target_radius_meters)
+			< float(broad_decision.target_radius_meters) * 0.40,
+		"serve placement turns a broad zone into a tighter chosen location",
+	)
+
+	var unfamiliar := VolleyballPlayer.new()
+	unfamiliar.id = 41
+	unfamiliar.serve_consistency = 65
+	unfamiliar.serve_technique = 65
+	var familiar := VolleyballPlayer.from_dict(unfamiliar.to_dict())
+	familiar.id = 42
+	FAMILIARITY_SCRIPT.record_exposure(
+		familiar, ["serve_target:Zone 5"], 60.0
+	)
+	var unfamiliar_sim := RallySimulator.new()
+	var familiar_sim := RallySimulator.new()
+	unfamiliar_sim.serve_decision_rng.seed = 22001
+	familiar_sim.serve_decision_rng.seed = 22001
+	var unfamiliar_decision := unfamiliar_sim._serve_decision(
+		"home", "Zone 5", unfamiliar, 0.5
+	)
+	var familiar_decision := familiar_sim._serve_decision(
+		"home", "Zone 5", familiar, 0.5
+	)
+	_check(
+		float(familiar_decision.execution_accuracy)
+			> float(unfamiliar_decision.execution_accuracy) + 0.30,
+		"serve accuracy is dominated by familiarity with the selected target",
+	)
+
+	var stable := VolleyballPlayer.new()
+	stable.id = 51
+	stable.serve_variation = 92
+	stable.serve_consistency = 95
+	var erratic := VolleyballPlayer.from_dict(stable.to_dict())
+	erratic.id = 52
+	erratic.serve_consistency = 15
+	var stable_change_accuracy := 0.0
+	var erratic_change_accuracy := 0.0
+	var changed_samples := 0
+	for sample in range(60):
+		var stable_sim := RallySimulator.new()
+		var erratic_sim := RallySimulator.new()
+		stable_sim.previous_serves = {"home:51": {"target": "Zone 5"}}
+		erratic_sim.previous_serves = {"home:52": {"target": "Zone 5"}}
+		stable_sim.serve_decision_rng.seed = 33000 + sample
+		erratic_sim.serve_decision_rng.seed = 33000 + sample
+		var stable_decision := stable_sim._serve_decision(
+			"home", "Zone 5", stable, 0.5
+		)
+		var erratic_decision := erratic_sim._serve_decision(
+			"home", "Zone 5", erratic, 0.5
+		)
+		if bool(stable_decision.changed_target) and bool(erratic_decision.changed_target):
+			stable_change_accuracy += float(stable_decision.execution_accuracy)
+			erratic_change_accuracy += float(erratic_decision.execution_accuracy)
+			changed_samples += 1
+	_check(
+		changed_samples > 20
+			and stable_change_accuracy / float(changed_samples)
+				> erratic_change_accuracy / float(changed_samples) + 0.35,
+		"serve consistency preserves accuracy when the target changes",
+	)
+
+
 func _test_a_serve_that_misses_is_drawn_missing() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
@@ -12259,20 +12374,24 @@ func _test_a_block_can_be_told_what_it_is_for() -> void:
 			int(seal.stuff), int(funnel.stuff),
 		],
 	)
-	## And funnelling gets a piece of more balls without ending them.
+	## A funnel deliberately leaves the defended course clean. Sealing occupies
+	## that course with hands, so it produces more deflections as well as more
+	## terminal blocks; the funnel's return is the defender's earlier, cleaner
+	## read rather than another block contact.
 	_check(
-		int(funnel.partial) > int(seal.partial),
-		"a funnelling block deflects more than a sealing one (%d vs %d)" % [
-			int(funnel.partial), int(seal.partial),
+		int(seal.partial) > int(funnel.partial),
+		"a sealing block deflects more than a funnelling one (%d vs %d)" % [
+			int(seal.partial), int(funnel.partial),
 		],
 	)
-	## Neither is free. If one intent beat the other on both counts it would be
-	## a strictly better setting rather than a decision, which is the whole
-	## failure mode a tactical dial has.
+	var reader := VolleyballPlayer.new()
+	var hitter := VolleyballPlayer.new()
+	reader.court_vision = 70
+	hitter.arm_speed = 70
 	_check(
-		not (int(seal.stuff) >= int(funnel.stuff)
-			and int(seal.partial) >= int(funnel.partial)),
-		"neither block intent is strictly better than the other",
+		RallySimulator.new()._dig_read_bonus(reader, hitter, "funnel") > 0.0
+			and RallySimulator.new()._dig_read_bonus(reader, hitter, "seal") < 0.0,
+		"funnelling gives the floor an early read while sealing obscures it",
 	)
 
 

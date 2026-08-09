@@ -1,8 +1,7 @@
 # The setter decides
 
-Status as of 2026-08-06 (`1ee4c96`): **the hole below has been half filled, and
-the half that was filled was filled by a different mechanism than this doc
-proposes.** Read the premise as history.
+Status as of 2026-08-09: **the shared option decision is live.** Read the premise
+below as history.
 
 What is live now:
 
@@ -22,14 +21,27 @@ What is live now:
   nearest outside hitter. The front-row middle is a conditional option gated on
   `OFFENSE_QUICK_PASS_FLOOR`, because a quick is not a shot you can run off a
   bad pass.
+- **Both sides now use one option vocabulary.** `_setter_option_terms` prices
+  hitter quality, travel time, the height needed to rescue a displaced hitter,
+  a lane the block has learned, the called instruction, and stable judgment
+  error. `decision_making`, `court_vision`, and `composure` determine how much
+  of the real feasibility cost the setter perceives; `set_disguise` and
+  `unpredictability` reduce the price of a read lane without making selection a
+  deterministic argmax.
+- **Height is a resource with three prices.** A rescue set loses delivery
+  quality, gives blockers a clearer cue, and arrives as a harder high-ball
+  swing. Extra hang time still lets the hitter reach the ball; the engine no
+  longer pretends that benefit is free.
+- **Pressure can change the preferred outlet.** Team `match_flow` and the
+  setter's `match_confidence` create a bounded desperation term that can pull a
+  high-leadership hitter back into consideration. Career `satisfaction` is not
+  read by the rally decision.
 
-What is still missing is the part this document is actually about: **the choice
-is not a decision the setter makes, it is a score the simulator computes.**
-There is no setter-side read, no cost to concentration, and no way for the same
-situation to be answered differently by two different setters beyond the rating
-terms already in the score. Sections 4 ("What the setter is deciding") and 5
-("Concentration, and the price of it") remain unbuilt, and they are the reason
-to keep this file.
+What remains is concentration over a longer sample. Match observation already
+prices a lane the opponent anticipates, but the full setter-distribution history
+and concentration calibration described below still deserve their own sweep.
+Every home `SET_DECISION` now records its option decomposition in event metadata,
+which is the evidence surface for that work.
 
 ## The hole this fills
 

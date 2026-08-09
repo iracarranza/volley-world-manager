@@ -190,6 +190,14 @@ that learned pattern as a bounded block bonus. Updating after resolution avoids
 changing an outcome retroactively, and the adaptation state is serialized by
 `GameManager`.
 
+Serve intent is resolved before contact. Placement narrows the location chosen
+inside a named zone; power sets maximum pace and technique determines how much
+of it is usable. Variation decides target changes, aggression separates
+containing serves from point-ending attempts, and consistency preserves control
+on repeats and changes. Accuracy is primarily learned target familiarity stored
+in `situation_experience`; the last official serve is retained in
+`VolleyballMatchState.serve_history`, never by a preview resolution.
+
 The opponent model now tracks separate adaptation tracks for block, floor
 defense and serve receive. `RallySimulator` reads the relevant track for each
 phase so future opponent learning can remain spatially specific.

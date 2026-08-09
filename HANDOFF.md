@@ -289,7 +289,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 185 passing headless foundation checks and UI-binding validation, including a
+- 1,013 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet
@@ -312,6 +312,13 @@ event stream and player snapshots; it does not replace the tactical board or
 participate in simulation.
 
 ## Running the tests on a fresh checkout
+
+The 2026-08-09 serve, setter-choice, set-height and block-intent changes have a
+formula-level review packet at
+[`docs/calibration/SERVE_SETTER_REVIEW_HANDOFF_2026_08_09.md`](docs/calibration/SERVE_SETTER_REVIEW_HANDOFF_2026_08_09.md).
+It records assumptions, asymmetric paths, temporary measurements and likely
+failure-mode objections. Read it before changing any coefficient in those
+systems.
 
 The headless test runner needs Godot's global class cache to know about every
 `class_name` in the project. That cache lives in `.godot/` and is **not** in

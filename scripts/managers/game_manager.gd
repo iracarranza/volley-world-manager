@@ -585,6 +585,8 @@ func resolve_active_rally(
 		development_continuous_reception,
 		team.principles if team != null else null,
 		team.team_name if team != null else "",
+		match_state.serve_context() if match_state != null else {},
+		float(match_state.match_flow) if match_state != null else 0.0,
 	)
 
 
@@ -592,6 +594,7 @@ func record_rally(result: Resource) -> Dictionary:
 	if match_state == null:
 		match_state = MatchStateScript.new()
 	var update: Dictionary = match_state.record_rally(result)
+	_record_serve_familiarity(result)
 	if opponent_team != null:
 		opponent_team.observe_rally(result)
 	_apply_rally_dynamics(result, update)
@@ -600,6 +603,24 @@ func record_rally(result: Resource) -> Dictionary:
 	if bool(update.get("opponent_rotated", false)) and opponent_team != null:
 		opponent_team.select_rotation(int(match_state.opponent_rotation))
 	return update
+
+
+func _record_serve_familiarity(result: Resource) -> void:
+	if result == null:
+		return
+	for raw_event in result.events:
+		var event := raw_event as RallyEvent
+		if event == null or event.event_type != RallyEvent.EventType.SERVE:
+			continue
+		var side := str(event.metadata.get("side", ""))
+		var server_id := int(event.metadata.get("server_id", event.actor_id))
+		var server: VolleyballPlayer = player_by_id(server_id) if side == "home" \
+			else opponent_team.player_by_id(server_id) as VolleyballPlayer
+		if server != null:
+			Familiarity.record_exposure(server, [
+				"serve_target:%s" % str(event.metadata.get("target", "unknown")),
+			])
+		return
 
 
 func call_timeout() -> String:

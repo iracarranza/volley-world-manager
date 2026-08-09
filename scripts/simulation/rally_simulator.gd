@@ -190,6 +190,9 @@ const WALL_SEAM_OPEN_METERS: float = 0.50
 ## chosen point is perturbed by the server's placement afterwards.
 const SERVE_SCAN_COLUMNS: int = 11
 const SERVE_SCAN_ROWS: int = 7
+const SERVE_TARGET_NAMES: Array[String] = [
+	"Zone 5", "Zone 1", "Short Middle", "Weak Passer",
+]
 ## How many metres of drift from the requested zone one metre of daylight is
 ## worth. Below 1.0 the named zone leads and the seam only breaks ties within
 ## it, which is the intended reading: the bench picks the zone, the server picks
@@ -466,7 +469,10 @@ const DIG_VISION_READ_WEIGHT: float = 0.10
 ## already slowed and changed direction -- and the engine already pays them the
 ## extra flight time for it, so this is the read that goes with the time.
 const FUNNEL_READ_BONUS: float = 0.075
-const SEAL_READ_BONUS: float = 0.030
+## A sealed wall hides the ball and the hitter's last contact from defenders
+## directly behind it. That lost vision is the price of trying to end the rally
+## at the net, especially against tools and late soft shots.
+const SEAL_READ_BONUS: float = -0.030
 const TOUCHED_BALL_READ_BONUS: float = 0.090
 
 ## How much of a blocker's read a fast arm takes away.
@@ -727,6 +733,9 @@ var rng := RandomNumberGenerator.new()
 ## evaluated on every swing whether or not it is promoted, so it must not draw
 ## from `rng` or an unpromoted shadow would change every rally in the game.
 var geometric_rng := RandomNumberGenerator.new()
+## Target choice is match behavior but must not reroll every contact after the
+## serve. Its stream is deterministic and separate from contact execution.
+var serve_decision_rng := RandomNumberGenerator.new()
 var geometric_swing_index: int = 0
 ## Serve records are held here rather than written straight onto the result,
 ## because `_build_rally_analysis` replaces `result.analysis` wholesale and a
@@ -789,6 +798,10 @@ var swing_index: int = 0
 ## The lane the other bench has learned to expect from this offence, so the
 ## offence can answer it. Empty until they have seen enough to have an opinion.
 var opponent_anticipated_lane: String = ""
+var previous_serves: Dictionary = {}
+## Signed from the home side's perspective. Opponent decisions read the inverse.
+var current_match_flow: float = 0.0
+var last_set_decision: Dictionary = {}
 ## Names available to player-facing narration, filled in as the rally reaches
 ## each contact.
 ##
@@ -815,9 +828,14 @@ func resolve(
 	development_continuous_reception: bool = false,
 	team_principles: Resource = null,
 	home_team_name: String = "",
+	serve_context: Dictionary = {},
+	match_flow: float = 0.0,
 ) -> Resource:
 	rng.seed = seed_value
 	rally_seed = seed_value
+	serve_decision_rng.seed = hash("%d|serve-decision" % seed_value)
+	previous_serves = serve_context.duplicate(true)
+	current_match_flow = clampf(match_flow, -1.0, 1.0)
 	## Commentary names both benches, and the simulator knew neither. The
 	## opponent's name was reachable through `opponent_team` all along; the home
 	## side's had to be passed, because the resolver deliberately never sees the
@@ -853,6 +871,7 @@ func resolve(
 	rally_clock = 0.0
 	setter_can_run_quick = false
 	swing_index = 0
+	last_set_decision = {}
 	opponent_anticipated_lane = str(
 		opponent_team.anticipated_lane()
 	) if opponent_team != null else ""
@@ -908,17 +927,23 @@ func resolve(
 	## `serve_quality * 0.48`, the most dangerous serve in the game could apply
 	## only 0.35 of pressure. The home formula already spans the full range
 	## because its tactical risk term makes up the remainder.
-	var opponent_serve_weighted := _power_rating(opponent_server, "serve_power") * 0.28 \
-		+ _rating(opponent_server, "serve_technique") * 0.13 \
+	var opponent_risk := _rating(opponent_server, "serve_aggression")
+	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
+	var serve_decision := _serve_decision(
+		"opponent", intended_target, opponent_server, opponent_risk
+	)
+	opponent_risk = float(serve_decision.risk)
+	var usable_serve_pace := _usable_serve_pace(opponent_server)
+	var opponent_serve_weighted := usable_serve_pace * 0.41 \
 		+ _rating(opponent_server, "serve_placement") * 0.07 \
 		+ _rating(opponent_server, "serve_consistency") * 0.12 \
 		+ _rating(opponent_server, "serve_aggression") * 0.04 \
 		+ _serve_style_proficiency(opponent_server) * 0.08
 	var serve_quality := clampf(
 		opponent_serve_weighted / OPPONENT_SERVE_WEIGHT_TOTAL
+		+ (0.06 if str(serve_decision.mode) == "aggressive" else -0.015)
 		+ rng.randf_range(-0.18, 0.18), 0.05, 0.98
 	)
-	var opponent_risk := _rating(opponent_server, "serve_aggression")
 	var opponent_serve_base: Vector2 = opponent_team.court_position(
 		opponent_server.id, "defense"
 	)
@@ -932,10 +957,10 @@ func resolve(
 	)
 	var serve_error_chance := _serve_error_chance(opponent_server, opponent_risk)
 	var serve_error := rng.randf() < serve_error_chance
-	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_landing := _serve_landing_point(
-		intended_target, opponent_server, players, lineup, true,
+		str(serve_decision.target), opponent_server, players, lineup, true,
 		_receive_formation_positions(lineup, false), opponent_serve_origin,
+		serve_decision,
 	)
 	## Gate E: the same serve through the shared ballistics, in shadow.
 	_geometric_serve_record(
@@ -964,7 +989,14 @@ func resolve(
 		"%s serve" % opponent_server.primary_serve_style if not serve_error else "Serve misses",
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
-			"side": "opponent", "target": intended_target,
+			"side": "opponent", "target": str(serve_decision.target),
+			"called_target": intended_target,
+			"aim_point": serve_decision.aim_point,
+			"serve_mode": serve_decision.mode,
+			"changed_target": serve_decision.changed_target,
+			"target_familiarity": serve_decision.target_familiarity,
+			"target_radius_meters": serve_decision.target_radius_meters,
+			"execution_accuracy": serve_decision.execution_accuracy,
 			"server_id": opponent_server.id, "server_slot": 1,
 			"serve_style": opponent_server.primary_serve_style,
 			"flight_time": serve_time,
@@ -1384,7 +1416,8 @@ func resolve(
 		and result.reception_quality >= 0.42 \
 		and rng.randf() < follow_threshold
 	var assignment := _choose_assignment(
-		active_play, result.play_was_followed, players, lineup, setter.id
+		active_play, result.play_was_followed, players, lineup, setter.id,
+		setter, float(result.reception_quality), current_match_flow,
 	)
 	if using_live_attack:
 		assignment = _assignment_from_dict(Dictionary(selected_live_attack.get(
@@ -1402,12 +1435,14 @@ func resolve(
 			shadow_summary["attack_rollout"] = attack_rollout_evidence
 			shadow_reception_trace.summary = shadow_summary
 			assignment = _choose_assignment(
-				active_play, false, players, lineup, setter.id
+				active_play, false, players, lineup, setter.id,
+				setter, float(result.reception_quality), current_match_flow,
 			)
 	var hitter := _player_by_id(players, assignment.player_id) if assignment != null else null
 	if hitter == null or hitter.id == setter.id:
 		hitter = _fallback_hitter(
-			players, lineup, setter.id, float(result.reception_quality)
+			players, lineup, setter.id, float(result.reception_quality),
+			setter, current_match_flow,
 		)
 		assignment = _fallback_assignment(hitter, lineup)
 	if hitter != null:
@@ -1439,6 +1474,7 @@ func resolve(
 		else ("Uses the default T3 ball to the nearest outside pin." \
 		if active_play == null else "Moves to the safest available option."),
 		{"side": "home", "emergency_setter": emergency_setter,
+			"option_evaluation": last_set_decision.duplicate(true),
 			"first_contact_id": receiver.id,
 			## The decision is taken when the ball reaches the setter, and the
 			## window runs from there.
@@ -1495,6 +1531,20 @@ func resolve(
 	var set_geometry := _set_geometry(
 		setter, setter_start, set_contact, intended_set_target, preferred_release
 	)
+	var hitter_choice_start := Vector2(live_positions.get(
+		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
+	))
+	var ordinary_set_arc := _set_arc(
+		setter, assignment.tempo, float(result.reception_quality),
+		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
+	)
+	var set_height_extra := _set_rescue_height_meters(
+		_movement_time(hitter, hitter_choice_start, intended_set_target, "transition"),
+		float(ordinary_set_arc.duration_seconds),
+	)
+	var set_height_difficulty := _set_height_difficulty(setter, set_height_extra)
 	## One number carrying both the overreach and the reach cost, so the severity
 	## of attempting something beyond a setter lives with the model that decides
 	## what "beyond" means rather than being restated here.
@@ -1502,9 +1552,11 @@ func resolve(
 	var home_set_terms := _set_terms(
 		setter, float(setter_capability.effective_pass_quality),
 		tempo_demand, capability_penalty, setter_arrival_margin,
-		float(set_geometry.difficulty),
+		float(set_geometry.difficulty) + set_height_difficulty,
 		(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
 	)
+	home_set_terms["height_difficulty"] = set_height_difficulty
+	home_set_terms["rescue_height_meters"] = set_height_extra
 	result.set_quality = clampf(
 		float(home_set_terms.quality)
 			+ _execution_error(setter, "set_accuracy", 0.12),
@@ -1533,6 +1585,7 @@ func resolve(
 		GeometricAttackPromotionModel.set_contact_height_meters(setter),
 		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		RallyKinematics.court_distance_meters(set_contact, set_target),
+		set_height_extra,
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
 	var release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
@@ -1595,6 +1648,8 @@ func resolve(
 			"body_orientation_fit": set_geometry.body_orientation_fit,
 			"set_balance": set_geometry.set_balance,
 			"set_stability": set_geometry.set_stability})
+	(result.events[-1] as RallyEvent).metadata["rescue_height_meters"] = set_height_extra
+	(result.events[-1] as RallyEvent).metadata["height_difficulty"] = set_height_difficulty
 	var set_event := result.events[-1] as RallyEvent
 	if using_live_setter and set_event != null:
 		set_event.metadata["continuous_setter"] = true
@@ -1749,7 +1804,7 @@ func resolve(
 	var opponent_block_formation := _form_opponent_block(
 		opponent_team, set_target.x, assignment.tempo,
 		float(result.set_quality), set_contact.x, set_flight_time,
-		second_contact_window + release_interval, hitter,
+		second_contact_window + release_interval, hitter, set_height_extra,
 	)
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
@@ -1775,6 +1830,7 @@ func resolve(
 			tempo_demand, block_pressure,
 			Familiarity.attack_geometry(hitter, assignment.lane)
 			+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14,
+			set_height_extra,
 		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
@@ -2533,26 +2589,32 @@ func _resolve_home_serve(
 		"effective": serve_risk,
 		"serve_aggression": float(home_principles.serve_aggression),
 	}
-	var serve_quality := clampf(
-		_power_rating(server, "serve_power") * 0.25
-		+ _rating(server, "serve_technique") * 0.20
-		+ _rating(server, "serve_placement") * 0.13
-		+ _rating(server, "serve_consistency") * 0.14
-		+ _serve_style_proficiency(server) * 0.13
-		+ serve_risk * 0.15 + rng.randf_range(-0.14, 0.14), 0.05, 0.98
-	)
-	var error_chance := _serve_error_chance(server, serve_risk)
-	var serve_error := rng.randf() < error_chance
 	var target_name := str(
 		defensive_plan.serve_target if defensive_plan != null else "Zone 5"
 	)
+	var serve_decision := _serve_decision("home", target_name, server, serve_risk)
+	serve_risk = float(serve_decision.risk)
+	var usable_serve_pace := _usable_serve_pace(server)
+	var serve_quality := clampf(
+		usable_serve_pace * 0.45
+		+ _rating(server, "serve_placement") * 0.13
+		+ _rating(server, "serve_consistency") * 0.14
+		+ _serve_style_proficiency(server) * 0.13
+		+ serve_risk * 0.15
+		+ (float(home_principles.serve_aggression) - 0.5) * 0.14
+		+ (0.06 if str(serve_decision.mode) == "aggressive" else -0.015)
+		+ rng.randf_range(-0.14, 0.14), 0.05, 0.98
+	)
+	var error_chance := _serve_error_chance(server, serve_risk)
+	var serve_error := rng.randf() < error_chance
 	var opponent_landing := _serve_landing_point(
-		target_name, server, [], null, false,
+		str(serve_decision.target), server, [], null, false,
 		## The receiving side, which this call did not previously have in any
 		## form -- it passed an empty roster and a null lineup, so a home serve
 		## was aimed at one of four fixed dots with no idea who was under them.
 		_receive_formation_positions(opponent_team.current_lineup(), true),
 		CourtConstants.serve_origin(0.82, true),
+		serve_decision,
 	)
 	_geometric_serve_record(
 		"geometric_serve_home", server,
@@ -2584,7 +2646,14 @@ func _resolve_home_serve(
 		serve_quality, "%s serves" % server.display_name,
 		"%s · %d%% pressure at %d%% selected risk." % [server.primary_serve_style,
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
-		], {"side": "home", "target": target_name, "flight_time": serve_time,
+		], {"side": "home", "target": str(serve_decision.target),
+			"called_target": target_name, "aim_point": serve_decision.aim_point,
+			"serve_mode": serve_decision.mode,
+			"changed_target": serve_decision.changed_target,
+			"target_familiarity": serve_decision.target_familiarity,
+			"target_radius_meters": serve_decision.target_radius_meters,
+			"execution_accuracy": serve_decision.execution_accuracy,
+			"flight_time": serve_time,
 			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style,
 			"event_time": 0.0, "contact_time": serve_time,
@@ -2628,12 +2697,13 @@ func _resolve_home_serve(
 	)
 	var support_count := int(opponent_claim.get("support_count", 0))
 	var serve_receive_bonus := _opponent_serve_receive_adaptation_bonus(
-		opponent_team, target_name
+		opponent_team, str(serve_decision.target)
 	)
 	## Quality describes execution; selected risk describes how much pace and
 	## movement the serve attempts. Centre this at the legacy 0.50 call so the
 	## Balanced calibration does not move merely because identities exist.
-	var serve_risk_pressure := (serve_risk - 0.5) * 0.16
+	var serve_risk_pressure := (serve_risk - 0.5) * 0.18 \
+		+ (float(home_principles.serve_aggression) - 0.5) * 0.10
 	var opponent_reception_base := _reception_skill(receiver) \
 		if RallyFeatureFlagsModel.ENABLE_UNIFIED_RECEPTION_SKILL \
 		else _rating(receiver, "reception") * 0.58 \
@@ -2935,6 +3005,11 @@ func _resolve_opponent_transition(
 		opponent_team, opponent_setter, opponent_set_quality,
 		_home_target_hint(defensive_plan), estimated_set_flight_time,
 	)
+	var opponent_option_evaluation := Dictionary(attack_choice.get(
+		"option_evaluation", {}
+	)).duplicate(true)
+	for internal_key in ["player", "start", "contact", "assignment"]:
+		opponent_option_evaluation.erase(internal_key)
 	var opponent_hitter := attack_choice.player as VolleyballPlayer
 	var opponent_contact: Vector2 = attack_choice.contact
 	## `_choose_opponent_attack` returns who swings, from where, and what shot --
@@ -2994,12 +3069,20 @@ func _resolve_opponent_transition(
 		opponent_setter, setter_start, opponent_setter_position,
 		opponent_contact, _opponent_setter_release_target(opponent_team),
 	)
+	var opponent_set_height_extra := float(attack_choice.get(
+		"rescue_height_meters", 0.0
+	))
+	var opponent_height_difficulty := _set_height_difficulty(
+		opponent_setter, opponent_set_height_extra
+	)
 	var opponent_set_terms := _set_terms(
 		opponent_setter, opponent_pass_quality, transition_penalty,
 		opponent_capability_penalty, setter_arrival_margin,
-		float(resolved_set_geometry.difficulty),
+		float(resolved_set_geometry.difficulty) + opponent_height_difficulty,
 		(Familiarity.execution_modifier(opponent_setter) - 1.0) * 0.16,
 	)
+	opponent_set_terms["height_difficulty"] = opponent_height_difficulty
+	opponent_set_terms["rescue_height_meters"] = opponent_set_height_extra
 	opponent_set_quality = clampf(
 		float(opponent_set_terms.quality)
 			+ _execution_error(opponent_setter, "set_accuracy", 0.12),
@@ -3047,6 +3130,7 @@ func _resolve_opponent_transition(
 		RallyKinematics.court_distance_meters(
 			opponent_setter_position, opponent_contact
 		),
+		opponent_set_height_extra,
 	)
 	var set_flight_time: float = float(set_arc.duration_seconds)
 	## When the setter actually touches the ball.
@@ -3085,11 +3169,14 @@ func _resolve_opponent_transition(
 		{"side": "opponent",
 			"set_path": "opponent_first_ball" if first_ball else "opponent_transition",
 			"set_terms": opponent_set_terms,
+			"option_evaluation": opponent_option_evaluation,
 			"setter_position": opponent_setter_position,
 			"movement_start": setter_start, "movement_duration": setter_move_time,
 			"set_distance_meters": resolved_set_geometry.distance_meters,
 			"set_angle_degrees": resolved_set_geometry.angle_degrees,
 			"body_orientation_fit": resolved_set_geometry.body_orientation_fit,
+			"rescue_height_meters": opponent_set_height_extra,
+			"height_difficulty": opponent_height_difficulty,
 			"set_flight_time": set_flight_time,
 			"event_time": opponent_set_contact_time,
 			"outgoing_trajectory": _ball_trajectory(
@@ -3113,7 +3200,7 @@ func _resolve_opponent_transition(
 		## The opponent's own pass-to-release time. Mirrors what the home set
 		## gives the opponent block; the home block was reading this pass too.
 		DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS,
-		opponent_hitter,
+		opponent_hitter, opponent_set_height_extra,
 	)
 	## The home block reads the opponent, the way the opponent block reads them.
 	##
@@ -3224,6 +3311,7 @@ func _resolve_opponent_transition(
 		_attack_execution(
 			opponent_hitter, opponent_set_quality, 0.5, hitter_arrival_margin,
 			opponent_tempo_demand, home_block_pressure,
+			0.0, opponent_set_height_extra,
 		) + opponent_attack_noise,
 		0.0, 1.0,
 	)
@@ -3365,6 +3453,7 @@ func _resolve_opponent_transition(
 				Familiarity.attack_geometry(opponent_hitter, opponent_lane)
 				+ (Familiarity.execution_modifier(opponent_hitter) - 1.0) * 0.14
 				+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
+				opponent_set_height_extra,
 			) + opponent_attack_noise,
 			0.0, 1.0,
 		)
@@ -3974,7 +4063,9 @@ func _resolve_home_continuation(
 		defense_event_for_staging.metadata["staged_next_actor_id"] = setter.id
 		defense_event_for_staging.metadata["staged_next_position"] = setter_start
 	var emergency_setter := setter != null and setter.id != lineup.active_setter_id()
-	var hitter := _fallback_hitter(players, lineup, setter.id, incoming_quality)
+	var hitter := _fallback_hitter(
+		players, lineup, setter.id, incoming_quality, setter, current_match_flow
+	)
 	if setter != null:
 		narration["setter"] = setter.display_name
 	if hitter != null:
@@ -4046,6 +4137,24 @@ func _resolve_home_continuation(
 	var cont_set_geometry := _set_geometry(
 		setter, setter_start, set_contact, intended_set_target, cont_release_target
 	)
+	var cont_hitter_choice_start := Vector2(live_positions.get(
+		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
+	))
+	var ordinary_cont_arc := _set_arc(
+		setter, assignment.tempo, incoming_quality,
+		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
+	)
+	var cont_set_height_extra := _set_rescue_height_meters(
+		_movement_time(
+			hitter, cont_hitter_choice_start, intended_set_target, "transition"
+		),
+		float(ordinary_cont_arc.duration_seconds),
+	)
+	var cont_height_difficulty := _set_height_difficulty(
+		setter, cont_set_height_extra
+	)
 	## A transition set is harder than one off a served ball and the tempo it
 	## runs costs something: `exchange_penalty` carries the first, the tempo
 	## demand every other set pays carries the second.
@@ -4056,9 +4165,11 @@ func _resolve_home_continuation(
 		setter, float(setter_capability.effective_pass_quality),
 		exchange_penalty + cont_tempo_demand,
 		float(setter_capability.quality_penalty), setter_arrival_margin,
-		float(cont_set_geometry.difficulty),
+		float(cont_set_geometry.difficulty) + cont_height_difficulty,
 		(Familiarity.execution_modifier(setter) - 1.0) * 0.16,
 	)
+	cont_set_terms["height_difficulty"] = cont_height_difficulty
+	cont_set_terms["rescue_height_meters"] = cont_set_height_extra
 	var set_quality := clampf(
 		float(cont_set_terms.quality)
 			+ _execution_error(setter, "set_accuracy", 0.14),
@@ -4079,6 +4190,7 @@ func _resolve_home_continuation(
 		GeometricAttackPromotionModel.set_contact_height_meters(setter),
 		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		RallyKinematics.court_distance_meters(set_contact, set_target),
+		cont_set_height_extra,
 	)
 	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds)
 	var cont_release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
@@ -4100,6 +4212,8 @@ func _resolve_home_continuation(
 			"set_distance_meters": cont_set_geometry.distance_meters,
 			"set_angle_degrees": cont_set_geometry.angle_degrees,
 			"body_orientation_fit": cont_set_geometry.body_orientation_fit,
+			"rescue_height_meters": cont_set_height_extra,
+			"height_difficulty": cont_height_difficulty,
 			"emergency_setter": emergency_setter,
 			"first_contact_id": defender.id, "movement_start": setter_start,
 			"movement_duration": setter_move_time,
@@ -4187,6 +4301,7 @@ func _resolve_home_continuation(
 		opponent_team, set_target.x, assignment.tempo, set_quality,
 		set_contact.x, continuation_flight_time,
 		second_contact_window + cont_release_interval, hitter,
+		cont_set_height_extra,
 	)
 	var cont_block_pressure := float(
 		cont_formation.get("primary_close", 0.0)
@@ -4208,6 +4323,7 @@ func _resolve_home_continuation(
 			## it -- half of the scouting system was write-only against them.
 			Familiarity.attack_geometry(hitter, assignment.lane)
 			+ (Familiarity.execution_modifier(hitter) - 1.0) * 0.14,
+			cont_set_height_extra,
 		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
@@ -4655,6 +4771,7 @@ func _form_opponent_block(
 	## rather than the play. Optional so a caller that has not chosen a hitter yet
 	## gets exactly the read this had before.
 	hitter: VolleyballPlayer = null,
+	set_height_extra_meters: float = 0.0,
 ) -> Dictionary:
 	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
 	var front_blockers: Array[VolleyballPlayer] = []
@@ -4707,7 +4824,8 @@ func _form_opponent_block(
 	var read_total := 0.0
 	for reader in front_blockers:
 		read_total += _blocker_read_quality(
-			reader, tempo, set_quality, setter_x, hitter
+			reader, tempo, set_quality, setter_x, hitter,
+			set_height_extra_meters,
 		)
 	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
 	## The pre-set window is only worth what a blocker can do with it, and what
@@ -5549,20 +5667,29 @@ func _choose_opponent_attack(
 		## more than any arm is worth. Late hitters stay in the pool rather than
 		## being excluded, so a setter under pressure still has somebody to go
 		## to and the rotation still produces a variety of hitters.
-		var option_score := _power_rating(candidate, "attack_power") * 0.42 \
-			+ _rating(candidate, "attack_accuracy") * 0.24 \
-			+ _rating(candidate, "approach_timing") * 0.18 \
-			+ set_quality * 0.16 - quick_demand * (1.0 - set_quality) \
-			- clampf(
-				(lateness - OPPONENT_HITTER_LATE_GRACE) / OPPONENT_HITTER_LATE_RAMP,
-				0.0, 1.0,
-			) * OPPONENT_HITTER_LATENESS_WEIGHT \
-			+ rng.randf_range(-0.12, 0.12)
-		var option := {
+		var lane := CourtConstants.lane_at_x(candidate_contact.x)
+		var decision_available := set_flight_time \
+			+ DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS
+		var rescue_height := _set_rescue_height_meters(
+			candidate_travel, decision_available
+		)
+		var terms := _setter_option_terms(
+			setter, candidate, set_quality, candidate_travel, decision_available,
+			rescue_height, -quick_demand * (1.0 - set_quality), false,
+			-current_match_flow, lane,
+		)
+		## Preserve one draw per candidate from the old evaluator, but make its
+		## impact depend on the setter's judgment rather than giving every setter
+		## the same +/-0.12 blindness.
+		var option_noise := rng.randf_range(-0.12, 0.12) \
+			* (1.0 - float(terms.judgment))
+		var option_score := float(terms.score) + option_noise
+		var option := terms.merged({
 			"player": candidate, "start": candidate_start,
 			"contact": candidate_contact, "travel_time": candidate_travel,
 			"lateness": lateness, "score": option_score,
-		}
+			"option_noise": option_noise,
+		}, true)
 		every_option.append(option)
 		if lateness <= 0.0:
 			reachable.append(option)
@@ -5612,6 +5739,8 @@ func _choose_opponent_attack(
 		target.y = rng.randf_range(0.80, 0.93)
 	return {"player": best, "start": start, "contact": contact,
 		"target": target, "travel_time": travel_time,
+		"rescue_height_meters": float(chosen.get("rescue_height_meters", 0.0)),
+		"option_evaluation": chosen.duplicate(true),
 		"attack_type": attack_type, "intended_type": intended_type,
 		"improvise_roll": improvise_roll,
 		"direction": _attack_direction(contact_x, target)}
@@ -7937,16 +8066,124 @@ func _responsibility_phrase(
 	]
 
 
+## One option score for either setter. Execution, feasibility, the forming read,
+## the called instruction, and emotional context stay visible as separate terms
+## so a SET_DECISION event can explain why the ball went where it did.
+func _setter_option_terms(
+	setter: VolleyballPlayer,
+	hitter: VolleyballPlayer,
+	set_quality: float,
+	travel_time: float,
+	available_time: float,
+	rescue_height_meters: float,
+	instruction_bias: float,
+	lane_is_read: bool,
+	flow_for_team: float,
+	lane: String,
+) -> Dictionary:
+	var base_quality := _power_rating(hitter, "attack_power") * 0.44 \
+		+ _rating(hitter, "attack_accuracy") * 0.34 \
+		+ _rating(hitter, "approach_timing") * 0.22
+	var judgment := clampf(
+		_rating(setter, "decision_making") * 0.42
+			+ _rating(setter, "court_vision") * 0.33
+			+ _rating(setter, "composure") * 0.25,
+		0.0, 1.0,
+	)
+	var lateness := maxf(travel_time - available_time, 0.0)
+	## Good setters correctly discount a rescue ball. Poor ones can underrate the
+	## problem, represented by the smaller perceived share and larger stable
+	## misread below rather than by changing the hitter's real movement.
+	var feasibility_cost := clampf(lateness / 0.80, 0.0, 1.0) \
+		* lerpf(0.28, 0.72, judgment)
+	var height_cost := _set_height_difficulty(setter, rescue_height_meters) \
+		* lerpf(0.35, 1.0, judgment)
+	var read_penalty := 0.0
+	if lane_is_read:
+		var disguise := _rating(setter, "set_disguise")
+		var unpredictability := _rating(setter, "unpredictability")
+		read_penalty = LANE_ANTICIPATED_PENALTY * lerpf(
+			1.0, 0.32, disguise * 0.55 + unpredictability * 0.45
+		)
+	var desperation := clampf(
+		maxf(-flow_for_team, 0.0) * 0.62
+			+ maxf(-float(setter.match_confidence), 0.0) * 0.38,
+		0.0, 1.0,
+	)
+	var leadership_pull := desperation * float(hitter.leadership) / 100.0 * 0.18
+	var noise_key := "%d|%d|%d|%s" % [
+		rally_seed, setter.id, hitter.id, lane,
+	]
+	var stable_noise := float(posmod(hash(noise_key), 2001)) / 1000.0 - 1.0
+	var misread := stable_noise * (1.0 - judgment) * 0.22
+	var score := base_quality + set_quality * 0.10 + instruction_bias \
+		+ leadership_pull + misread - feasibility_cost - height_cost - read_penalty
+	return {
+		"player_id": hitter.id,
+		"lane": lane,
+		"score": score,
+		"base_quality": base_quality,
+		"judgment": judgment,
+		"travel_time": travel_time,
+		"available_time": available_time,
+		"lateness": lateness,
+		"rescue_height_meters": rescue_height_meters,
+		"feasibility_cost": feasibility_cost,
+		"height_cost": height_cost,
+		"read_penalty": read_penalty,
+		"instruction_bias": instruction_bias,
+		"leadership_pull": leadership_pull,
+		"misread": misread,
+	}
+
+
+func _natural_hitter_lane(
+	hitter: VolleyballPlayer, lineup: RotationLineup
+) -> String:
+	var slot_number := lineup.slot_for_player(hitter.id)
+	if slot_number >= 1 and not CourtConstants.is_front_row_slot(slot_number):
+		return "Pipe"
+	var position := CourtConstants.slot_position(slot_number)
+	if hitter.position_role == "Middle Blocker":
+		return "Front Quick" if position.x <= 0.5 else "Right Quick"
+	return "Left Pin" if position.x <= 0.5 else "Right Pin"
+
+
+## Extra apex needed to keep a displaced hitter's contact reachable. The ball
+## buys time rather than granting impossible movement; the costs of buying that
+## time are charged to the set, block read, and eventual swing.
+static func _set_rescue_height_meters(
+	travel_time: float, ordinary_flight_time: float
+) -> float:
+	return clampf(maxf(travel_time - ordinary_flight_time, 0.0) * 1.35, 0.0, 1.80)
+
+
+static func _set_height_difficulty(
+	setter: VolleyballPlayer, rescue_height_meters: float
+) -> float:
+	if setter == null:
+		return rescue_height_meters * 0.08
+	var height_control := (
+		float(setter.set_accuracy) * 0.45
+			+ float(setter.hand_control) * 0.35
+			+ float(setter.tempo_control) * 0.20
+	) / 100.0
+	return rescue_height_meters * lerpf(0.11, 0.045, height_control)
+
+
 func _choose_assignment(
 	play: OffensivePlay,
 	follow_play: bool,
 	players: Array[VolleyballPlayer],
 	lineup: RotationLineup,
 	excluded_player_id: int = -1,
+	setter: VolleyballPlayer = null,
+	pass_quality: float = 0.5,
+	flow_for_team: float = 0.0,
 ) -> HitterAssignment:
 	if play == null or play.assignments.is_empty():
 		return null
-	if follow_play:
+	if follow_play and setter == null:
 		var primary := play.assignment_for_player(play.primary_hitter_id)
 		if primary != null and primary.player_id != excluded_player_id:
 			return primary
@@ -7958,6 +8195,56 @@ func _choose_assignment(
 			candidates.append(assignment)
 	if candidates.is_empty():
 		return null
+	if setter != null:
+		var evaluated: Array[Dictionary] = []
+		for assignment in candidates:
+			var contender := _player_by_id(players, assignment.player_id)
+			if contender == null:
+				continue
+			var target := HitterPlacementModel.preferred_point(
+				contender, assignment.lane, rally_seed, contender.id
+			)
+			var start := Vector2(live_positions.get(
+				contender.id,
+				CourtConstants.slot_position(lineup.slot_for_player(contender.id)),
+			))
+			var provisional_arc := _set_arc(
+				setter, assignment.tempo, pass_quality,
+				GeometricAttackPromotionModel.set_contact_height_meters(setter),
+				GeometricAttackPromotionModel.contact_height_meters(contender, 1.0),
+				RallyKinematics.court_distance_meters(
+					Vector2(0.5, 0.60), target
+				),
+			)
+			var available := float(provisional_arc.duration_seconds)
+			var travel := _movement_time(contender, start, target, "transition")
+			var rescue_height := _set_rescue_height_meters(travel, available)
+			var terms := _setter_option_terms(
+				setter, contender, pass_quality, travel, available,
+				rescue_height,
+				0.20 if follow_play and assignment.player_id == play.primary_hitter_id \
+					else 0.0,
+				assignment.lane == opponent_anticipated_lane,
+				flow_for_team,
+				assignment.lane,
+			)
+			terms["assignment"] = assignment
+			evaluated.append(terms)
+		if not evaluated.is_empty():
+			evaluated.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+				return float(a.score) > float(b.score)
+			)
+			var option_summaries: Array[Dictionary] = []
+			for option in evaluated:
+				var option_summary := option.duplicate(true)
+				option_summary.erase("assignment")
+				option_summaries.append(option_summary)
+			last_set_decision = {
+				"chosen_player_id": int(evaluated[0].player_id),
+				"chosen_lane": str(evaluated[0].lane),
+				"options": option_summaries,
+			}
+			return evaluated[0].assignment as HitterAssignment
 	if not is_equal_approx(float(home_principles.pin_focus), 0.5):
 		var total_weight := 0.0
 		var weights: Array[float] = []
@@ -8079,6 +8366,8 @@ func _fallback_hitter(
 	lineup: RotationLineup,
 	excluded_player_id: int = -1,
 	pass_quality: float = -1.0,
+	setter: VolleyballPlayer = null,
+	flow_for_team: float = 0.0,
 ) -> VolleyballPlayer:
 	## The middle, on a pass that allows one.
 	##
@@ -8150,9 +8439,8 @@ func _fallback_hitter(
 						or contender.position_role == "Middle Blocker":
 					continue
 			var score := _power_rating(contender, "attack_power") * 0.46 \
-				+ _rating(contender, "attack_accuracy") * 0.28 \
-				+ _rating(contender, "approach_timing") * 0.16 \
-				+ _rating(contender, "shot_variety") * 0.10
+				+ _rating(contender, "attack_accuracy") * 0.34 \
+				+ _rating(contender, "approach_timing") * 0.20
 			## What a quick is worth when it is on: fast, in front of a wall that
 			## has not formed, and the reason to run one at all. Priced rather than
 			## privileged, so a strong pin still out-scores a weak middle.
@@ -8180,9 +8468,49 @@ func _fallback_hitter(
 			## per-rally spread standing in for that until it is wired: it consumes no
 			## random draw, so it re-sequences nothing, and it is small enough that a
 			## clearly better hitter still gets the ball.
-			scored.append({"player": contender, "score": maxf(score, 0.02)})
+			var lane := _natural_hitter_lane(contender, lineup)
+			if setter != null:
+				var target := HitterPlacementModel.preferred_point(
+					contender, lane, rally_seed, contender.id
+				)
+				var start := Vector2(live_positions.get(
+					contender.id, CourtConstants.slot_position(slot_number)
+				))
+				var tempo := QUICK_TEMPO_CALL if is_middle else (
+					PIPE_TEMPO_CALL if not front_row else 3
+				)
+				var provisional_arc := _set_arc(
+					setter, tempo, pass_quality,
+					GeometricAttackPromotionModel.set_contact_height_meters(setter),
+					GeometricAttackPromotionModel.contact_height_meters(contender, 1.0),
+					RallyKinematics.court_distance_meters(Vector2(0.5, 0.60), target),
+				)
+				var available := float(provisional_arc.duration_seconds)
+				var travel := _movement_time(contender, start, target, "transition")
+				var terms := _setter_option_terms(
+					setter, contender, pass_quality, travel, available,
+					_set_rescue_height_meters(travel, available), 0.0,
+					lane == opponent_anticipated_lane, flow_for_team, lane,
+				)
+				score += float(terms.score) - float(terms.base_quality)
+				scored.append(terms.merged({
+					"player": contender, "score": maxf(score, 0.02),
+				}, true))
+			else:
+				scored.append({"player": contender, "score": maxf(score, 0.02)})
 		if not scored.is_empty():
-			return _distributed_choice(scored)
+			var selected := _distributed_choice(scored)
+			var scored_summaries: Array[Dictionary] = []
+			for option in scored:
+				var option_summary := option.duplicate(true)
+				option_summary.erase("player")
+				scored_summaries.append(option_summary)
+			last_set_decision = {
+				"chosen_player_id": selected.id,
+				"chosen_lane": _natural_hitter_lane(selected, lineup),
+				"options": scored_summaries,
+			}
+			return selected
 	var outside_candidates: Array[VolleyballPlayer] = []
 	for slot_number in range(1, 7):
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
@@ -8241,6 +8569,7 @@ func _form_home_block(
 	set_flight_time: float,
 	preset_window_seconds: float = 0.0,
 	opponent_hitter: VolleyballPlayer = null,
+	set_height_extra_meters: float = 0.0,
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
 	var setter_pull := {}
@@ -8291,7 +8620,8 @@ func _form_home_block(
 	var read_total := 0.0
 	for reader in front_blockers:
 		read_total += _blocker_read_quality(
-			reader, tempo, set_quality, opponent_setter_x, opponent_hitter
+			reader, tempo, set_quality, opponent_setter_x, opponent_hitter,
+			set_height_extra_meters,
 		)
 	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
 	## The pre-set window is only worth what a blocker can do with it, and what
@@ -8425,10 +8755,12 @@ func _blocker_read_quality(
 	set_quality: float,
 	opponent_setter_x: float,
 	hitter: VolleyballPlayer = null,
+	set_height_extra_meters: float = 0.0,
 ) -> float:
 	var cue_clarity := (1.0 - set_quality) * 0.18 \
 		+ absf(opponent_setter_x - 0.5) * 0.16 \
-		+ float(clampi(tempo, 0, 3)) * 0.025
+		+ float(clampi(tempo, 0, 3)) * 0.025 \
+		+ clampf(set_height_extra_meters, 0.0, 1.8) * 0.075
 	if hitter != null:
 		cue_clarity -= ARM_SPEED_READ_COST \
 			* (_rating(hitter, "arm_speed") - 0.5) * 2.0
@@ -8634,6 +8966,7 @@ func _attack_execution(
 	tempo_demand: float,
 	block_pressure: float,
 	familiarity_bonus: float = 0.0,
+	set_height_extra_meters: float = 0.0,
 ) -> float:
 	if hitter == null:
 		return 0.0
@@ -8662,6 +8995,10 @@ func _attack_execution(
 		1.0 - TIMING_OPPORTUNITY_WEIGHT * (1.0 - timing)
 	) * (
 		1.0 - clampf(tempo_demand, 0.0, 0.60)
+	) * (
+		## Very high rescue balls arrive steeply and make the hitter wait under a
+		## readable contact. Height helps arrival; it is not free swing quality.
+		1.0 - clampf(set_height_extra_meters * 0.075, 0.0, 0.16)
 	)
 	return clampf(capability * opportunity - block_pressure, 0.0, 1.0)
 
@@ -9679,6 +10016,7 @@ func _serve_landing_point(
 	landing_on_home_side: bool,
 	receivers: Array[Vector2] = [],
 	serve_origin: Vector2 = Vector2(0.5, 0.5),
+	decision: Dictionary = {},
 ) -> Vector2:
 	var home_y := 0.84 if landing_on_home_side else 0.16
 	var short_y := 0.67 if landing_on_home_side else 0.33
@@ -9698,6 +10036,30 @@ func _serve_landing_point(
 			seam_weight = 0.0
 		_:
 			intended = Vector2(0.20, home_y)
+	## Placement determines how specific the chosen target is before execution
+	## error is applied. A low-placement server aims at a broad part of the zone;
+	## an elite one identifies a seam-sized point. This is intentionally separate
+	## from whether the contact actually reaches that point.
+	var placement := _rating(server, "serve_placement")
+	var target_radius_meters := lerpf(1.80, 0.22, placement)
+	var selected_point := Vector2(
+		intended.x + serve_decision_rng.randf_range(
+			-target_radius_meters / CourtConstants.COURT_WIDTH_METERS,
+			target_radius_meters / CourtConstants.COURT_WIDTH_METERS,
+		),
+		intended.y + serve_decision_rng.randf_range(
+			-target_radius_meters / CourtConstants.COURT_LENGTH_METERS,
+			target_radius_meters / CourtConstants.COURT_LENGTH_METERS,
+		),
+	)
+	var previous_aim := Vector2(decision.get("previous_aim", Vector2(-1.0, -1.0)))
+	if bool(decision.get("repeat_target", false)) and previous_aim.x >= 0.0:
+		selected_point = selected_point.lerp(
+			previous_aim, _rating(server, "serve_consistency")
+		)
+	intended = selected_point
+	if str(decision.get("mode", "targeted")) == "aggressive":
+		seam_weight = lerpf(0.35, 0.90, placement)
 	## Where the zone actually is, given who is standing in the way.
 	##
 	## The four anchors above used to *be* the answer: a serve landed on one of
@@ -9716,13 +10078,92 @@ func _serve_landing_point(
 		intended, receivers, landing_on_home_side, seam_weight,
 		server, serve_origin,
 	)
-	var accuracy := _rating(server, "serve_placement")
+	var accuracy := float(decision.get(
+		"execution_accuracy", _rating(server, "serve_placement")
+	))
 	var deviation := lerpf(0.105, 0.018, accuracy)
 	var min_y := 0.54 if landing_on_home_side else 0.04
 	var max_y := 0.96 if landing_on_home_side else 0.46
+	decision["aim_point"] = intended
+	decision["target_radius_meters"] = target_radius_meters
 	return Vector2(
 		clampf(intended.x + rng.randf_range(-deviation, deviation), 0.06, 0.94),
 		clampf(intended.y + rng.randf_range(-deviation * 0.65, deviation * 0.65), min_y, max_y),
+	)
+
+
+## Decide what kind of serve is attempted before resolving its contact.
+func _serve_decision(
+	side: String,
+	called_target: String,
+	server: VolleyballPlayer,
+	tactical_risk: float,
+) -> Dictionary:
+	var aggression_roll := serve_decision_rng.randf()
+	var change_roll := serve_decision_rng.randf()
+	var target_roll := serve_decision_rng.randf()
+	var history_key := "%s:%d" % [side, server.id]
+	var previous: Dictionary = Dictionary(previous_serves.get(history_key, {}))
+	var previous_target := str(previous.get("target", ""))
+	var selected_target := called_target \
+		if called_target in SERVE_TARGET_NAMES else "Zone 5"
+	var change_chance := _rating(server, "serve_variation") * 0.72
+	var changed_target := not previous_target.is_empty() \
+		and change_roll < change_chance
+	if changed_target:
+		var alternatives: Array[String] = []
+		for target in SERVE_TARGET_NAMES:
+			if target != previous_target:
+				alternatives.append(target)
+		selected_target = alternatives[mini(
+			int(floor(target_roll * float(alternatives.size()))),
+			alternatives.size() - 1,
+		)]
+	var aggression_chance := clampf(
+		_rating(server, "serve_aggression") * 0.68
+			+ clampf(tactical_risk, 0.0, 1.0) * 0.32,
+		0.0, 1.0,
+	)
+	var mode := "aggressive" if aggression_roll < aggression_chance else "targeted"
+	var target_familiarity := Familiarity.familiarity(
+		server, ["serve_target:%s" % selected_target]
+	)
+	var learned_control := 0.30 + target_familiarity * 0.70
+	var execution_accuracy := learned_control * 0.58 \
+		+ _rating(server, "serve_consistency") * 0.30 \
+		+ _rating(server, "serve_technique") * 0.12
+	if changed_target:
+		execution_accuracy -= (1.0 - _rating(server, "serve_consistency")) * 0.24
+	elif not previous_target.is_empty():
+		execution_accuracy += _rating(server, "serve_consistency") * 0.08
+	var effective_risk := clampf(tactical_risk, 0.0, 1.0)
+	if mode == "aggressive":
+		effective_risk = maxf(effective_risk, aggression_chance)
+	else:
+		effective_risk *= 0.72
+	return {
+		"called_target": called_target,
+		"target": selected_target,
+		"mode": mode,
+		"risk": effective_risk,
+		"changed_target": changed_target,
+		"repeat_target": not previous_target.is_empty()
+			and selected_target == previous_target,
+		"previous_aim": previous.get("aim_point", Vector2(-1.0, -1.0)),
+		"target_familiarity": target_familiarity,
+		"execution_accuracy": clampf(execution_accuracy, 0.05, 0.98),
+		"target_radius_meters": 0.0,
+		"aim_point": Vector2.ZERO,
+	}
+
+
+## Power sets the pace ceiling. Technique determines how much of that ceiling
+## survives contact; it cannot create pace a server does not physically have.
+func _usable_serve_pace(server: VolleyballPlayer) -> float:
+	if server == null:
+		return 0.0
+	return _power_rating(server, "serve_power") * lerpf(
+		0.52, 1.0, _rating(server, "serve_technique")
 	)
 
 
@@ -9998,6 +10439,7 @@ func _set_apex_meters(
 	tempo: int,
 	set_quality: float,
 	hitter_contact_height_meters: float,
+	rescue_height_meters: float = 0.0,
 ) -> float:
 	var clearance := SET_CLEARANCE_BY_TEMPO[clampi(tempo, 0, 3)]
 	## A miss goes up, never down. Under-setting a quick puts the ball below the
@@ -10007,15 +10449,16 @@ func _set_apex_meters(
 	var touch := (_rating(setter, "tempo_control") + _rating(setter, "hand_control")) * 0.5
 	var drift := SET_CLEARANCE_DRIFT * (1.0 - clampf(touch, 0.0, 1.0)) \
 		* (1.0 - clampf(set_quality, 0.0, 1.0))
-	return hitter_contact_height_meters + clearance + drift
+	return hitter_contact_height_meters + clearance + drift \
+		+ maxf(rescue_height_meters, 0.0)
 
 
 ## The flight of a set, timed by how high it was put up.
 ##
-## Behind `ENABLE_SET_HEIGHT_TIMING`, which is off and whose comment carries the
-## measurement that closed it: real hang times are about triple the ones every
-## approach constant in this engine was fitted against, and handing them to the
-## run-up budget makes every hitter arrive perfectly.
+## Behind `ENABLE_SET_HEIGHT_TIMING`, which is now on after the approach and
+## floor-defense calibration recorded beside the flag. Real hang times are about
+## triple the legacy launch-angle times, so this must not be toggled independently
+## of the timing and balance gates named there.
 func _set_arc(
 	setter: VolleyballPlayer,
 	tempo: int,
@@ -10023,6 +10466,7 @@ func _set_arc(
 	release_height_meters: float,
 	hitter_contact_height_meters: float,
 	distance_meters: float,
+	rescue_height_meters: float = 0.0,
 ) -> Dictionary:
 	var angle := _set_launch_angle_degrees(setter, tempo, set_quality)
 	if not RallyFeatureFlagsModel.ENABLE_SET_HEIGHT_TIMING:
@@ -10031,7 +10475,8 @@ func _set_arc(
 			+ float(level.apex_height_meters)
 		return level
 	var apex := _set_apex_meters(
-		setter, tempo, set_quality, hitter_contact_height_meters
+		setter, tempo, set_quality, hitter_contact_height_meters,
+		rescue_height_meters,
 	)
 	return {
 		"duration_seconds": BallFlightModel.duration_for_apex(
