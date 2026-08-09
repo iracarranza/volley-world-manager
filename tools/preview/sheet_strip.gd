@@ -68,6 +68,15 @@ const DIE_CUT_VARIANTS := [
 ]
 const CROWN_INK_RATIO: float = 0.030 / 0.018
 
+## Both grounds, because an edge treatment is a relationship with the paper under
+## it and cannot be judged on one. The white cut margin is flattered by a dark
+## court and has nothing to push against on a cream one, which is the whole
+## reason the keyline exists -- and the reason it has to be looked at in Molten.
+const THEMES := {
+	"mikasa": preload("res://scenes/themes/dark_theme.tres"),
+	"molten": preload("res://scenes/themes/light_theme.tres"),
+}
+
 
 func _ready() -> void:
 	var wanted: Array[String] = []
@@ -81,7 +90,8 @@ func _ready() -> void:
 			"turntable":
 				await _turntable()
 			"diecut":
-				await _die_cut()
+				for theme_name: String in THEMES:
+					await _die_cut(theme_name)
 			_:
 				await _views()
 	get_tree().quit()
@@ -190,11 +200,6 @@ func _place(
 			sheet.set_pixel(CELL.x * column + 6, y, Color(0.62, 0.60, 0.56, 1.0))
 
 
-## The same worksheet, drawn once per edge treatment, stacked.
-##
-## Captured off the window rather than a `SubViewport` because the worksheet
-## paints itself from the palette on its own ancestry, and a detached viewport
-## is not on anybody's ancestry.
 ## Wait for a freshly added worksheet to have every figure it asked for.
 ##
 ## The bake is queued from the worksheet's own `_ready`, so this can only start
@@ -214,7 +219,13 @@ func _settled(sheet: UIWorksheet) -> void:
 	await get_tree().process_frame
 
 
-func _die_cut() -> void:
+## The same worksheet, drawn once per edge treatment, stacked.
+##
+## Captured off the window rather than a `SubViewport` because the worksheet
+## reads its theme off its own ancestry, and a detached viewport is not on
+## anybody's ancestry. The theme is set on the sheet itself for the same reason:
+## `light_mode` is not a flag you hand it, it is something it works out.
+func _die_cut(theme_name: String) -> void:
 	var viewport := get_viewport()
 	var frame := viewport.get_visible_rect().size
 	var shots: Array[Image] = []
@@ -226,14 +237,15 @@ func _die_cut() -> void:
 
 		var sheet: UIWorksheet = WorksheetScript.new()
 		sheet.set_anchors_preset(Control.PRESET_FULL_RECT)
+		sheet.theme = THEMES[theme_name]
 		add_child(sheet)
 		await _settled(sheet)
 		await RenderingServer.frame_post_draw
 		var shot := viewport.get_texture().get_image()
 		shot.convert(Image.FORMAT_RGBA8)
 		shots.append(shot)
-		print("%-18s captured %dx%d" % [
-			variant["name"], shot.get_width(), shot.get_height()
+		print("%-8s %-18s captured %dx%d" % [
+			theme_name, variant["name"], shot.get_width(), shot.get_height()
 		])
 		sheet.queue_free()
 		await get_tree().process_frame
@@ -249,8 +261,10 @@ func _die_cut() -> void:
 			shots[index], Rect2i(Vector2i.ZERO, shots[index].get_size()),
 			Vector2i(0, int(frame.y) * index)
 		)
-	print("diecut save err=%d" % strip.save_png("user://diecut_strip.png"))
-	_zoom(shots)
+	print("diecut %s save err=%d" % [
+		theme_name, strip.save_png("user://diecut_%s_strip.png" % theme_name)
+	])
+	_zoom(shots, theme_name)
 	## Left as the sheet ships it, so a tool that only looked at something does
 	## not leave a static behind for whatever runs next in the same process.
 	WorksheetScript.draw_die_cut = true
@@ -269,7 +283,7 @@ const ZOOM_CROP := Rect2i(230, 110, 240, 220)
 const ZOOM: int = 4
 
 
-func _zoom(shots: Array[Image]) -> void:
+func _zoom(shots: Array[Image], theme_name: String) -> void:
 	var cell := ZOOM_CROP.size * ZOOM
 	var strip := Image.create(
 		cell.x * shots.size(), cell.y, false, Image.FORMAT_RGBA8
@@ -282,4 +296,6 @@ func _zoom(shots: Array[Image]) -> void:
 		strip.blit_rect(
 			crop, Rect2i(Vector2i.ZERO, cell), Vector2i(cell.x * index, 0)
 		)
-	print("diecut zoom save err=%d" % strip.save_png("user://diecut_zoom.png"))
+	print("diecut %s zoom save err=%d" % [
+		theme_name, strip.save_png("user://diecut_%s_zoom.png" % theme_name)
+	])

@@ -183,6 +183,27 @@ const STICKER_BORDER_MAX: float = 3.4
 const STICKER_SHADOW_OFFSET := Vector2(3.0, 4.0)
 const STICKER_SHADOW_ALPHA: float = 0.26
 
+## The stock the sticker was cut from, and the line that gives that stock an edge.
+##
+## The cut margin was drawn in `_ink()`, which flips with the theme -- pale on
+## Mikasa, graphite on Molten. That is why it read as a die cut on the dark sheet
+## and as a heavy outline on the light one: the same border was doing two
+## different jobs. **A sticker's margin is the vinyl it was cut from, and vinyl
+## does not change colour when you put it on a darker page.** So the stock is one
+## warm off-white in both themes, and it keeps the shape reading as an object
+## lying on the sheet rather than a shape drawn into it.
+##
+## Which leaves a white margin on a cream page invisible, hence the keyline: a
+## thin dark line around the outside of the cut, thinner than the cut it edges.
+## It is what a printed sticker actually has -- the art is trimmed a little
+## outside the printed keyline -- and it is what lets the same treatment work on
+## both grounds, where a single colour cannot.
+const STICKER_STOCK := Color(0.95, 0.94, 0.91)
+const STICKER_KEYLINE := Color(0.15, 0.14, 0.16)
+## Per side, as a share of the cut's own width. Under a half, so the line reads
+## as an edge on the margin rather than as a second border beside it.
+const STICKER_KEYLINE_SHARE: float = 0.38
+
 signal phase_changed(phase: String)
 signal view_changed(view: String)
 signal zone_priority_changed(zone_index: int, priority: int)
@@ -636,23 +657,33 @@ func _draw_sticker(key: String, ground: Vector2, scale: float) -> bool:
 		if shadowed.size() >= 3:
 			draw_colored_polygon(shadowed, Color(0.0, 0.0, 0.0, STICKER_SHADOW_ALPHA))
 
-	## 2. The body, carrying the mesh's own light and shade.
-	if built.texture != null:
-		draw_texture_rect(built.texture, Rect2(origin, box), false)
-
-	## 3. The cut edge, hugging its own outline at a weight this sticker can carry.
-	if not draw_die_cut:
-		return true
+	## 2. The cut edge: the keyline, then the stock it edges.
+	##
+	## **Both under the body rather than over it,** which is the ordering fix. A
+	## polyline is centred on its path, so a border drawn on the contour puts half
+	## its width inside the silhouette -- the cut was eating into the art, and the
+	## thicker the sticker the more of the voli it ate. Laid down first and painted
+	## over, only the outer half survives, which is where a margin belongs.
+	##
+	## The keyline is drawn wider than the stock and in the same place, so what is
+	## left of it after the stock goes on is a thin ring outside the margin. Two
+	## strokes for a border a printer would also make in two passes.
 	var cut := clampf(
 		height * STICKER_BORDER_SHARE, STICKER_BORDER_MIN, STICKER_BORDER_MAX
 	)
-	for contour in built.contours:
-		var edge := PackedVector2Array()
-		for point in (contour as PackedVector2Array):
-			edge.append(origin + point * box)
-		if edge.size() >= 3:
-			draw_polyline(edge, _ink(), cut, true)
-			draw_line(edge[edge.size() - 1], edge[0], _ink(), cut, true)
+	if draw_die_cut:
+		for contour in built.contours:
+			var edge := PackedVector2Array()
+			for point in (contour as PackedVector2Array):
+				edge.append(origin + point * box)
+			if edge.size() < 3:
+				continue
+			_stroke_closed(edge, STICKER_KEYLINE, cut * (1.0 + STICKER_KEYLINE_SHARE * 2.0))
+			_stroke_closed(edge, STICKER_STOCK, cut)
+
+	## 3. The body, carrying the mesh's own light and shade.
+	if built.texture != null:
+		draw_texture_rect(built.texture, Rect2(origin, box), false)
 
 	## 4. And the arms, cut separately over the top.
 	##
@@ -667,12 +698,21 @@ func _draw_sticker(key: String, ground: Vector2, scale: float) -> bool:
 		for point in (contour as PackedVector2Array):
 			crease.append(origin + point * box)
 		if crease.size() >= 3:
-			draw_polyline(crease, Color(_ink(), 0.80), cut * 0.62, true)
-			draw_line(
-				crease[crease.size() - 1], crease[0], Color(_ink(), 0.80),
-				cut * 0.62, true
-			)
+			_stroke_closed(crease, Color(_ink(), 0.80), cut * 0.62)
 	return true
+
+
+## A closed outline, at a width, in a colour.
+##
+## `draw_polyline` leaves the last point unjoined to the first, so every caller
+## was drawing the closing segment itself -- three times over, and one of them
+## had drifted. The width is passed rather than derived because the callers use
+## different ones for the same contour.
+func _stroke_closed(outline: PackedVector2Array, color: Color, width: float) -> void:
+	if outline.size() < 3:
+		return
+	draw_polyline(outline, color, width, true)
+	draw_line(outline[outline.size() - 1], outline[0], color, width, true)
 
 
 func set_light_mode(value: bool) -> void:

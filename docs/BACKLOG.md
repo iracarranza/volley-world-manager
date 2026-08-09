@@ -2919,17 +2919,43 @@ ink for the bake only, which is one constant. Render both before choosing --
 guessing between two plausible causes is what this session has repeatedly had to
 undo.
 
-## Die cut versus thicker ink: both rendered, the choice is open
+## Die cut versus thicker ink: settled, the cut stays and gains a keyline
+
+**Decided: the die cut, plus a thinner dark line around it.** What follows is the
+comparison it was decided from; the sheet now draws the cut as stock with a
+keyline and keeps the rig's ink at 0.018.
+
+Two things changed with the decision, and neither is the border's width:
+
+1. **The cut is the stock, not the ink.** It was drawn in `_ink()`, which flips
+   with the theme -- pale on Mikasa, graphite on Molten -- so the same border read
+   as a die cut on one sheet and as a heavy outline on the other. Vinyl does not
+   change colour when you put it on a darker page. It is one warm off-white in
+   both now, which is what leaves the shape reading as an object lying on the
+   sheet.
+2. **The cut goes under the body, not over it.** A polyline is centred on its
+   path, so a border drawn on the contour put half its width *inside* the
+   silhouette and ate the art -- worse the thicker the sticker. Laid down before
+   the texture and painted over, only the outer half survives, which is where a
+   margin belongs.
+
+The keyline is the third stroke and the one that was asked for: drawn in the same
+place as the cut but wider, so what survives after the stock goes on is a thin
+dark ring outside the margin. It is also what makes a white margin work on a cream
+page, where it has nothing to push against -- rendered in both themes before
+committing, which is the check the first pass of this comparison did not have.
+
+## The comparison it was decided from
 
 Both candidates are switchable -- `Worksheet.draw_die_cut` and
 `PlayerActor3D.ink_metres` / `crown_ink_metres` are static vars rather than
 constants -- so this is a toggle rather than an edit.
 
 Rendered as a strip: `tools/preview/sheet_strip.gd -- diecut` stands the
-worksheet up on its own, draws it three ways, and writes both the full sheets
-(`diecut_strip.png`) and the blockers cropped and four times up
-(`diecut_zoom.png`). Roughly a minute for all three, against five for one frame
-through the training screen -- which was the point.
+worksheet up on its own, draws it three ways in **both themes**, and writes the
+full sheets (`diecut_<theme>_strip.png`) and the blockers cropped and four times
+up (`diecut_<theme>_zoom.png`). Roughly a minute per theme, against five for one
+frame through the training screen -- which was the point.
 
 What the three show, on the dark theme:
 
@@ -2946,10 +2972,10 @@ What the three show, on the dark theme:
   actually draws. Every part carries its own edge, the crown reads, and no
   compensating crease is needed.
 
-Not decided here, because it is a taste call and the dark ground flatters the
-cut: the white border is a real legibility win against a dark court that a black
-ink line cannot match. Worth rendering the light theme before choosing, which is
-one more variant in the same tool.
+The dark ground flatters the cut, and that turned out to be the deciding
+observation rather than a caveat: the white margin is a legibility win against a
+dark court that no ink line can match, and it is the one treatment that survives
+the theme switch once it stops being drawn in ink.
 
 Two things learned in the earlier attempt, both still true:
 
