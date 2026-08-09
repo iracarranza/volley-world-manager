@@ -3881,3 +3881,44 @@ drawn flight became physical.
   uncontested. `block_timing` decides *when* the hands are there and
   `hand_control` is the setter's; nothing says how well a blocker's hands absorb
   a ball once it hits them.
+
+
+---
+
+## Withdrawn: the run-up window is not why displacement stopped costing
+
+Recorded because the reasoning was published before it was checked, and it was
+wrong in a way worth keeping.
+
+Three gates went red together when sets started being timed by how high they
+were put up -- extreme hitter displacement stopped costing contact position,
+stopped costing swing quality, and transition speed stopped changing when a
+hitter arrived. One cause was proposed for all three: `evaluate_takeoff` set
+`run_time` to the whole available time, so tripling a set's hang time tripled
+the run-up and `runway_completion` saturated for everybody.
+
+**The mechanism is real and the cap is right on its own merits.** A hitter given
+a 1.5 s high ball does not run for 1.5 s; they take three or four steps and wait
+out the rest, so hang time should not convert into speed. `APPROACH_RUNUP_SECONDS`
+caps it and the balance figures hold across the change:
+
+    kill 0.483   dig 0.474   stuff 0.112   swing balance 0.766
+
+**But it is not why those gates went red.** With the cap in, the displacement
+gate reports *bit-identical* numbers -- margin 0.712 -> 0.589, quality 0.449 ->
+0.423, contact_y 0.513 -> 0.510. A fix that changes nothing about the quantity
+under test did not fix it, whatever its own merits.
+
+A second attempt put the same cap on `_approach_budget`, whose `available_seconds`
+is the run-up's clock. That changed nothing at all, and the reason is written
+above the call site: *"Published, not spent."* It is a diagnostic on the event's
+metadata and no consumer reads it. The cap stays -- a published figure that
+disagrees with the model it describes is worse than one that agrees -- but it is
+bookkeeping, not behaviour.
+
+**So the three gates are still open and undiagnosed.** What is now known is what
+it is *not*: not the run-up window, on either path. The next thing to measure is
+what `_reachable_contact` does with a displaced hitter when the set hangs
+honestly -- the gate's own first clause is that the contact should be dragged
+back off the net, and it is moving 0.003 the wrong way, which is a claim about
+the clamp rather than about the runway.

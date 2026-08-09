@@ -5045,12 +5045,31 @@ func _approach_budget(
 	## What the model actually allowed for the walk. Zero when the hitter was
 	## released at or after the set, which is its own kind of squeeze.
 	var preparation_window := float(preparation.get("preparation_time_seconds", 0.0))
+	## **The run-up's clock is bounded by the run-up, not by the set.**
+	##
+	## The same cap `ApproachMechanicsSystem.evaluate_takeoff` applies, on the
+	## path that actually serves the home side -- and the first attempt put it
+	## only on the other one, which is why the displacement gates came back
+	## bit-identical and proved nothing.
+	##
+	## A hitter given a 1.5 s high ball does not run for 1.5 s. They take three or
+	## four steps and spend the rest standing at the back of their runway. Handing
+	## the whole hang time to the run-up meant every extra second of set height
+	## bought another second of running, so once sets were timed honestly no
+	## hitter could be made late by anything.
+	var run_up_window := minf(
+		set_flight_seconds, ApproachMechanicsModel.APPROACH_RUNUP_SECONDS
+	)
 	return {
 		"tempo": tempo,
 		## The run-up's clock, which is the one the tempo chain is about.
-		"available_seconds": set_flight_seconds,
+		"available_seconds": run_up_window,
+		## What the ball actually gave them, kept beside it: the difference between
+		## these two is time spent waiting, and a reader who sees only the capped
+		## figure would think a high ball and a quick arrived together.
+		"set_flight_seconds": set_flight_seconds,
 		"required_seconds": run_up,
-		"deficit_seconds": run_up - set_flight_seconds,
+		"deficit_seconds": run_up - run_up_window,
 		## The walk's clock, kept separate.
 		"preparation_window_seconds": preparation_window,
 		"to_mark_seconds": to_mark,
