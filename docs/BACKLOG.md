@@ -3212,3 +3212,61 @@ but the sheet does not scroll with them, which is right for a pad and wrong the
 moment the list is longer than the panel -- the rules stay put while the names
 move past them. Fine at the lengths it currently holds; wants the paper inside
 the scrolled content once there are more prospects than fit.
+
+## The pepper cage, the coat, and the id that made every voli the same voli
+
+**Pepper.** The lobes were built on the Stalk's rib mechanism -- thin vertical
+capsules laid on the surface of a sphere, in the *crown* colour. Five green rods
+standing off a red ball is not a pepper with ridges; it is a ball in a cage, and
+it read as one from every angle.
+
+A pepper's lobes are not ridges on a shape, they are the shape. Four fat bulges
+packed round the axis, skin-coloured, set close enough that adjacent ones overlap
+-- centres 0.219 apart with radii of 0.225 -- so the union is continuous and the
+grooves are where two bulges meet. From above that is a clover, which is what a
+pepper's cross-section is. The core sphere shrank from 0.335 to 0.275 because it
+is no longer the shape: it is what the kit, the shorts and the arms are measured
+off, and the lobes are what anybody sees.
+
+Took two passes, and the first one is worth keeping written down. At height 0.76
+with a 1.12 radial stretch the lobes were tall ellipsoids whose bottoms converged
+below the core, so the silhouette came to a point and read as a **bat**. The cage
+was gone and something else had taken its place. A pepper is widest at the
+shoulder and blunt underneath: wider across, shorter, no radial stretch at all.
+
+**Coats.** New `MARKINGS`, seeded from its own hash string like `produce_for` and
+`palette_for` have theirs -- so shape, colour and coat do not correlate. Six
+kinds: `tabby`, `spots`, `blaze`, `patch`, `speckle`, `scar`, each on a weighted
+list per body type with `none` the commonest entry everywhere. A marking every
+voli has is a species trait; the unmarked ones are what make a marked one worth
+noticing.
+
+Every mark is a flattened sphere turned to face outward and squashed along the
+radius so it hugs the body, placed by `_mark_on_torso` from the torso's own
+profile rather than at a fixed radius. That is the pepper cage's mistake and it
+was not worth making twice.
+
+**And the reason none of it would have shown.** `voli_sticker._bake` called
+`_actor.configure(1, ...)` -- the literal id 1. Everything that makes one voli
+look unlike another of the same species is seeded from the player id, so every
+sticker resolved the same produce, the same colourway and the same coat. **A
+tactic sheet of seven volis was seven copies of one voli at different heights.**
+The differentiators were already there and none of them could reach the page. The
+id comes off the profile now, and the callers put it there.
+
+## What the body sheet showed that was not asked about
+
+`sheet_strip -- bodies` bakes every produce, every animal and one voli per coat
+as the stickers the game actually draws. Two things it made obvious:
+
+- **Marks on a clothed body land on the singlet.** The animals wear a full kit
+  over the torso, so a tabby's bars and a spot pattern are drawn on the shirt.
+  Reads as printed sportswear rather than as a coat. The produce are fine --
+  their torso is skin. The fix is to put an animal's marks where its skin
+  actually is: head, arms, legs. Marks would then need an arm or leg `parent`
+  and would move with the pose, which is correct but is not a one-line change.
+- **The arms read as detached slabs.** In a neutral standing pose every animal's
+  arms hang clear of the torso with a visible gap, and flat unshaded colour gives
+  the eye nothing to bridge it with. It is worst on the wide-shouldered types.
+  Not caused by any of this work -- it is the shoulder join, already on this list
+  -- but the body sheet is the first render that shows it plainly.

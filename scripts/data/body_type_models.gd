@@ -106,26 +106,47 @@ const PRODUCE_BODIES := {
 		"crown_shape": "blades",
 	},
 	## Square-shouldered and lobed, which is a shape none of the other four
-	## reach: broad across the top and tapering to the bottom, rather than a
-	## mass with a waist or a tube. The lobes reuse the Stalk's rib mechanism
-	## turned through ninety degrees of purpose -- vertical capsules laid on the
-	## surface, which is exactly what a pepper's ridges are.
+	## reach: broad across the top and tapering to the bottom.
+	##
+	## **The lobes are the body, and getting that wrong is what made a cage.**
+	## They were built on the Stalk's rib mechanism -- thin vertical capsules laid
+	## on the surface of a sphere, in the crown colour. Five green rods standing
+	## off a red ball is not a pepper with ridges on it; it is a ball in a cage,
+	## and it read as one from every angle.
+	##
+	## A pepper's lobes are not ridges *on* a shape. They are the shape: four fat
+	## vertical bulges packed round the axis, meeting in grooves rather than
+	## sitting on a surface. So they are wide (0.215 against 0.058, near four
+	## times), skin-coloured rather than crown, and set close enough to the axis
+	## that adjacent lobes overlap -- centres 0.219 apart with radii of 0.215
+	## each, so the union is continuous and the grooves are where two bulges meet.
+	## Seen from above that is a clover, which is what a pepper's cross-section is.
+	##
+	## Each is stretched out of the sphere it starts as: narrowed across its own
+	## width so the grooves stay legible, pushed out along the radius so the bulge
+	## bulges. That needs a non-uniform scale, which no primitive here can express
+	## -- a `SphereMesh` has one radius for both horizontal axes -- so the lobes
+	## are what put a `scale` on a cosmetic part.
 	"Pepper": {
 		"skin": Color("c8332c"), "crown": Color("4f7c3a"),
-		"torso": {"shape": "sphere", "radius": 0.335, "height": 0.78},
+		## The core is smaller than the shape it sits inside now, because it is no
+		## longer the shape: it is what the kit, the shorts and the arms are
+		## measured off, and the lobes are what anybody sees. Left at a radius the
+		## lobes comfortably swallow, so it cannot poke out between two of them.
+		"torso": {"shape": "sphere", "radius": 0.275, "height": 0.72},
 		"torso_y": 1.04, "head_y": 1.56, "head_radius": 0.128,
 		"shoulder": Vector2(0.34, 1.34), "rig_height": 1.88,
-		## Laid on the sphere's surface rather than near its axis. At the Stalk's
-		## depth these sat inside a torso twice the radius and drew nothing --
-		## a rib is a ridge, and a ridge that does not break the surface is not
-		## visible at any distance.
-		"ribs": [
-			{"x": -0.215, "y": 1.05, "z": 0.215, "height": 0.60, "thickness": 0.058},
-			{"x": 0.0, "y": 1.05, "z": 0.305, "height": 0.66, "thickness": 0.062},
-			{"x": 0.215, "y": 1.05, "z": 0.215, "height": 0.60, "thickness": 0.058},
-			{"x": -0.215, "y": 1.05, "z": -0.215, "height": 0.60, "thickness": 0.058},
-			{"x": 0.215, "y": 1.05, "z": -0.215, "height": 0.60, "thickness": 0.058},
-		],
+		## Rounder and shorter than the first cut, which flared. At height 0.76
+		## with a 1.12 radial stretch the four lobes were tall ellipsoids whose
+		## bottoms converged below the core, so the silhouette came to a point and
+		## read as a bat rather than as a pepper -- the cage was gone and something
+		## else had taken its place. A pepper is widest at the shoulder and *blunt*
+		## underneath, so the lobes are wider across, shorter, and no longer pushed
+		## out along the radius at all.
+		"lobes": {
+			"count": 4, "offset": 0.145, "radius": 0.225, "height": 0.60,
+			"y": 1.075, "across": 0.94, "out": 1.0,
+		},
 		"crown_shape": "cap",
 	},
 }
@@ -422,7 +443,187 @@ static func silhouette(body_type: String, player_id: int) -> Dictionary:
 	if not palette.is_empty():
 		authored["skin"] = palette.skin
 		authored["crown"] = palette.crown
-	return _add_neck(_toward_universal(authored))
+	## After the palette and before the blend, because a mark is a colour laid on
+	## a skin and the skin is not known until the line above. Marking a body first
+	## and recolouring it after would give every voli of a produce the same stripes
+	## in the same ink whatever they were wearing.
+	return _add_neck(_toward_universal(_add_markings(authored, resolved, player_id)))
+
+
+## What a voli is marked with, and how often.
+##
+## Bodies were shape and one colour, which is two axes for a whole roster: any
+## two Tomatoes on the same colourway were the same voli. Sports games solve this
+## with faces -- hair, features, eye colour -- and these are vegetables and
+## animals, so what they have instead is **coat**: how a body is patterned, which
+## is the thing that actually distinguishes one tabby from another cat.
+##
+## Weighted by repetition rather than by a number beside each name. A list read
+## with one index is a table anybody can check by counting, and the alternative
+## -- a dictionary of floats summing to one -- is a thing to get wrong silently.
+##
+## `none` is in every list and is the most common single entry everywhere. A
+## marking that every voli has is not a marking, it is a species trait; the
+## unmarked ones are what make a marked one worth noticing.
+const MARKINGS := {
+	"Feli": ["none", "none", "tabby", "tabby", "patch", "scar"],
+	"Cani": ["none", "none", "spots", "spots", "blaze", "patch", "scar"],
+	"Avi": ["none", "none", "speckle", "speckle", "blaze", "scar"],
+	"Ursi": ["none", "none", "blaze", "patch", "scar"],
+	"Simi": ["none", "none", "patch", "speckle", "scar"],
+	## Produce are marked too, and a vegetable's marks are its own: a stripe down
+	## a squash, freckling on a pear. Rarer than an animal's, because a coat is
+	## what an animal is covered in and a vegetable's skin is mostly plain.
+	"Vegi": ["none", "none", "none", "speckle", "blaze", "scar"],
+}
+
+
+## Which marking this voli carries.
+##
+## A third hash string, like `produce_for` and `palette_for` have their own. The
+## point of separate strings is that shape, colour and coat do not correlate --
+## one hash driving two of them would tie every spotted Cani to one colourway,
+## which is exactly the sameness this is meant to break up.
+static func marking_for(body_key: String, player_id: int) -> String:
+	var options: Array = MARKINGS.get(body_key, MARKINGS["Vegi"])
+	if options.is_empty():
+		return "none"
+	return str(options[absi(hash("marks:%d" % player_id)) % options.size()])
+
+
+## Where a mark sits, in the body's own terms.
+##
+## `up` is a share of the torso's height from its centre and `angle` is round the
+## axis, so a caller says "two thirds up, a little to the left" rather than
+## solving a position -- and the mark lands *on* the surface because the radius
+## comes from the same profile the torso is built from. Marks placed at a fixed
+## radius was the pepper cage's mistake and is not worth making twice.
+static func _mark_on_torso(
+	spec: Dictionary, up: float, angle: float
+) -> Dictionary:
+	var torso: Dictionary = spec.get("torso", {})
+	var radius := _torso_radius_at(torso, up)
+	return {
+		"position": Vector3(
+			sin(angle) * radius * 0.94,
+			float(spec.get("torso_y", 1.1))
+				+ up * float(torso.get("height", 0.8)),
+			cos(angle) * radius * 0.94
+		),
+		"rotation": Vector3(0.0, rad_to_deg(angle), 0.0),
+	}
+
+
+## Lay this voli's coat on.
+##
+## Every mark is a flattened sphere turned to face outward and squashed along the
+## radius, so it hugs the body instead of floating off it -- the same lesson the
+## lobes carry, applied to something much smaller where a 2 mm float is the
+## difference between a stripe and a sticker.
+##
+## Deterministic from the id, so a voli's coat is a property of that voli and not
+## of when they happened to be drawn.
+static func _add_markings(
+	spec: Dictionary, body_key: String, player_id: int
+) -> Dictionary:
+	var marking := marking_for(body_key, player_id)
+	if marking == "none":
+		return spec
+	var skin: Color = spec.get("skin", Color("c8332c"))
+	## Marks read as the same animal in a different tone, so they come off the
+	## skin rather than out of a palette of their own. A scar is the exception --
+	## it is not coat, it is where coat stopped growing.
+	var ink := skin.darkened(0.34) if skin.get_luminance() > 0.22 		else skin.lightened(0.30)
+	var extras: Array = spec.get("extras", [])
+	var seed_offset := absi(hash("coat:%d" % player_id))
+	match marking:
+		"tabby":
+			## Bars round the flank, thin vertically and long round the body, at
+			## uneven heights -- a tabby's stripes are not a ladder.
+			for index in range(4):
+				var up := 0.28 - float(index) * 0.15
+				var lean := float((seed_offset >> index) & 3) * 0.06 - 0.09
+				var placed := _mark_on_torso(spec, up, PI + lean)
+				extras.append({
+					"name": "Tabby%d" % (index + 1), "parent": "BodyPivot",
+					"shape": "sphere", "radius": 0.19, "height": 0.19,
+					"position": placed.position,
+					"rotation": placed.rotation + Vector3(0.0, 0.0, lean * 90.0),
+					"scale": Vector3(1.0, 0.22, 0.16),
+					"color_value": ink,
+				})
+		"spots":
+			for index in range(6):
+				var turn := float((seed_offset >> (index * 2)) & 7) / 8.0
+				var angle := PI * (0.45 + turn) * (1.0 if index % 2 == 0 else -1.0)
+				var up := 0.30 - float(index) * 0.10
+				var placed := _mark_on_torso(spec, up, angle)
+				extras.append({
+					"name": "Spot%d" % (index + 1), "parent": "BodyPivot",
+					"shape": "sphere",
+					"radius": 0.085 + float((seed_offset >> index) & 3) * 0.012,
+					"height": 0.085,
+					"position": placed.position, "rotation": placed.rotation,
+					"scale": Vector3(1.0, 1.0, 0.20),
+					"color_value": ink,
+				})
+		"blaze":
+			## One stripe up the front, which is the marking that most changes a
+			## silhouette's read: it gives a round body a vertical axis.
+			var placed := _mark_on_torso(spec, 0.0, PI)
+			extras.append({
+				"name": "Blaze", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.15,
+				"height": float(spec.get("torso", {}).get("height", 0.8)) * 0.92,
+				"position": placed.position, "rotation": placed.rotation,
+				"scale": Vector3(0.42, 1.0, 0.18),
+				"color_value": skin.lightened(0.30).lerp(Color("f2e6c8"), 0.35),
+			})
+		"patch":
+			## Over one eye. Which eye is the voli's own, because a patch always
+			## on the left is a uniform rather than a marking.
+			var side := 1.0 if (seed_offset & 1) == 0 else -1.0
+			var head_radius := float(spec.get("head", {}).get("radius", 0.13))
+			extras.append({
+				"name": "Patch", "parent": "BodyPivot", "shape": "sphere",
+				"radius": head_radius * 0.72, "height": head_radius * 0.92,
+				"position": Vector3(
+					side * head_radius * 0.42,
+					float(spec.get("head_y", 1.7)) + head_radius * 0.16,
+					head_radius * 0.72
+				),
+				"scale": Vector3(1.0, 1.0, 0.42),
+				"color_value": ink,
+			})
+		"speckle":
+			for index in range(5):
+				var turn := float((seed_offset >> (index * 3)) & 7) / 9.0
+				var angle := PI * (0.72 + turn * 0.56)
+				var placed := _mark_on_torso(spec, 0.24 - float(index) * 0.09, angle)
+				extras.append({
+					"name": "Speckle%d" % (index + 1), "parent": "BodyPivot",
+					"shape": "sphere", "radius": 0.045, "height": 0.045,
+					"position": placed.position, "rotation": placed.rotation,
+					"scale": Vector3(1.0, 1.0, 0.22),
+					"color_value": ink,
+				})
+		"scar":
+			## Pale, thin and at an angle, because a scar is the one mark here
+			## that is not coat -- it is where coat stopped growing, so it reads
+			## lighter than the skin whatever the skin is.
+			var placed := _mark_on_torso(spec, 0.10, PI + 0.22)
+			extras.append({
+				"name": "Scar", "parent": "BodyPivot", "shape": "sphere",
+				"radius": 0.18, "height": 0.18,
+				"position": placed.position,
+				"rotation": placed.rotation + Vector3(
+					0.0, 0.0, 34.0 if (seed_offset & 2) == 0 else -34.0
+				),
+				"scale": Vector3(1.0, 0.10, 0.14),
+				"color_value": skin.lightened(0.55),
+			})
+	spec["extras"] = extras
+	return spec
 
 
 ## Close the gap between the torso and the head, whatever the blend left there.
@@ -568,6 +769,33 @@ static func _vegi(produce: String) -> Dictionary:
 			"radius": float(lobe.radius), "height": float(lobe.height),
 			"position": Vector3(0.0, float(lobe.y), 0.0), "color": "skin",
 		})
+	if body.has("lobes"):
+		## Round the axis at even angles, each turned to face outward so its own
+		## scale means "across the bulge" and "out along the radius" rather than
+		## world x and z. Generated rather than tabulated: five hand-written rib
+		## positions is five chances to put one at the wrong angle, and the whole
+		## claim of the shape is that they are evenly spaced.
+		var lobes: Dictionary = body.lobes
+		var lobe_count := int(lobes.get("count", 4))
+		for lobe_index in range(lobe_count):
+			var angle := TAU * float(lobe_index) / float(lobe_count)
+			extras.append({
+				"name": "Lobe%d" % (lobe_index + 1), "parent": "BodyPivot",
+				"shape": "sphere",
+				"radius": float(lobes.get("radius", 0.2)),
+				"height": float(lobes.get("height", 0.7)),
+				"position": Vector3(
+					sin(angle) * float(lobes.get("offset", 0.15)),
+					float(lobes.get("y", 1.0)),
+					cos(angle) * float(lobes.get("offset", 0.15))
+				),
+				"rotation": Vector3(0.0, rad_to_deg(angle), 0.0),
+				"scale": Vector3(
+					float(lobes.get("across", 0.86)), 1.0,
+					float(lobes.get("out", 1.1))
+				),
+				"color": "skin",
+			})
 	if body.has("ribs"):
 		## A stalk is a bundle, not a tube. Without these the narrowest torso in
 		## the set reads as a length of pipe with a face on it.

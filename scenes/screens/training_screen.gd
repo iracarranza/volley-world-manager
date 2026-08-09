@@ -415,6 +415,10 @@ func _tray_profiles() -> Array[Dictionary]:
 	for player in _lineup():
 		out.append({
 			"key": "v%d" % int(player.id),
+			## The id, because it is what every per-voli difference is seeded
+			## from -- produce, colourway, coat. Without it the bake falls back
+			## to player 1 and the whole tray comes out as one voli.
+			"player_id": int(player.id),
 			"height_cm": player.height_cm,
 			"wingspan_cm": player.wingspan_cm,
 			"stride_length_m": player.stride_length_m,

@@ -1978,6 +1978,13 @@ func _build_cosmetics() -> void:
 		instance.mesh = BodyTypeModelsScript.build_mesh(part)
 		instance.position = part.get("position", Vector3.ZERO)
 		instance.rotation_degrees = part.get("rotation", Vector3.ZERO)
+		## Non-uniform scale, which the primitives cannot express on their own: a
+		## `SphereMesh` has one radius for both horizontal axes, so anything that
+		## has to be wider one way than the other -- a pepper's lobe bulging
+		## outward, a stripe lying along a flank -- can only be got by scaling the
+		## instance. Applied after the rotation, so a part turned to face outward
+		## scales along its own axes rather than the world's.
+		instance.scale = part.get("scale", Vector3.ONE)
 		instance.set_meta("cosmetic", true)
 		if part.has("color_value"):
 			instance.set_meta("color_key", "literal")

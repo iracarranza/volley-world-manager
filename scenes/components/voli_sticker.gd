@@ -408,7 +408,23 @@ func _bake(job: Dictionary) -> void:
 	## Flat, before `configure` builds the materials. Set after, it would repaint
 	## nothing -- the meshes already have their `material_override`.
 	_actor.flat_shading = true
-	_actor.configure(1, true, "", str(profile.get("dominant_hand", "Right")), profile)
+	## **The id comes off the profile, and it used to be the literal 1.**
+	##
+	## Everything that makes one voli look unlike another of the same species is
+	## seeded from the player id -- which produce a Vegi is, which colourway they
+	## wear, and now which coat they carry. Baking every sticker as player 1 meant
+	## every one of them resolved the same produce, the same colours and the same
+	## markings, so a tactic sheet of seven volis was seven copies of one voli in
+	## different heights. The differentiators were all there and none of them could
+	## reach the page.
+	##
+	## The id is part of the cache key already, because the key is the whole
+	## profile -- so this does not need a cache version bump, it needs callers to
+	## put the id in the profile, which they now do.
+	_actor.configure(
+		int(profile.get("player_id", 1)), true, "",
+		str(profile.get("dominant_hand", "Right")), profile
+	)
 	## `configure` paints the kit from the dark palette unconditionally, which is
 	## right for the court and wrong here -- a sticker is going onto a sheet whose
 	## theme the caller already knows. Repainting after is the cheap fix and keeps

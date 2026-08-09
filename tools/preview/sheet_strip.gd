@@ -29,6 +29,7 @@ const WorksheetScript := preload("res://scenes/components/worksheet.gd")
 const StickerScript := preload("res://scenes/components/voli_sticker.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const ActorScript := preload("res://scenes/components/player_actor_3d.gd")
+const BodyModels := preload("res://scripts/data/body_type_models.gd")
 
 const CELL := Vector2i(190, 300)
 const TURNTABLE_METRES: float = 3.6
@@ -84,10 +85,10 @@ func _ready() -> void:
 	StickerScript.disk_cache = false
 	var wanted: Array[String] = []
 	for argument in OS.get_cmdline_user_args():
-		if argument in ["turntable", "diecut", "views"]:
+		if argument in ["turntable", "diecut", "views", "bodies"]:
 			wanted.append(str(argument))
 	if wanted.is_empty():
-		wanted = ["turntable", "diecut", "views"]
+		wanted = ["turntable", "diecut", "views", "bodies"]
 	for job in wanted:
 		match job:
 			"turntable":
@@ -95,6 +96,8 @@ func _ready() -> void:
 			"diecut":
 				for theme_name: String in THEMES:
 					await _die_cut(theme_name)
+			"bodies":
+				await _bodies()
 			_:
 				await _views()
 	get_tree().quit()
@@ -302,3 +305,135 @@ func _zoom(shots: Array[Image], theme_name: String) -> void:
 	print("diecut %s zoom save err=%d" % [
 		theme_name, strip.save_png("user://diecut_%s_zoom.png" % theme_name)
 	])
+
+
+## Every body, and every coat, as the stickers they are actually drawn as.
+##
+##     xvfb-run -a godot --path . res://tools/preview/sheet_strip.tscn -- bodies
+##
+## Three rows: the five produce, the five animals, then one voli per marking.
+## Baked rather than posed in a 3D draft, because the sticker is what the game
+## draws and a shape that reads in a lit perspective view and not in a flat
+## quantised bake is a shape that does not work.
+##
+## Standing, at the start of a serve, which is the closest thing the rig has to a
+## neutral pose: arms down, feet level, nothing occluding the torso. A body type
+## is a silhouette claim and a pose is an argument against reading it.
+const BODY_CELL := Vector2i(180, 330)
+const BODY_METRES: float = 2.4
+const BODY_ROWS: Array[Array] = [
+	["Tomato", "Aubergine", "Pear", "Stalk", "Pepper"],
+	["Feli", "Avi", "Cani", "Ursi", "Simi"],
+]
+## Which body each coat is shown on: the one whose own list contains it, so a
+## marking is never demonstrated on a species that cannot carry it.
+const MARKING_ROW: Array[Array] = [
+	["Feli", "tabby"], ["Cani", "spots"], ["Cani", "patch"],
+	["Avi", "speckle"], ["Ursi", "blaze"], ["Feli", "scar"],
+]
+
+const BODY_PROFILE := {
+	"height_cm": 188.0, "wingspan_cm": 193.0, "stride_length_m": 0.86,
+	"standing_reach_meters": 2.48, "jumping_reach_meters": 3.22,
+	"dominant_hand": "Right",
+}
+
+
+## An id that resolves to the produce and coat asked for.
+##
+## Searched rather than solved, because the mapping is a hash and a hash does not
+## invert. Cheap -- a few hundred tries at worst -- and it is the honest way to
+## draft something whose whole point is that it is seeded: picking the id by hand
+## would draw a body the generator cannot actually produce.
+func _id_for(body_key: String, produce: String, marking: String) -> int:
+	for candidate in range(1, 20000):
+		if not produce.is_empty() \
+				and BodyModels.produce_for(candidate) != produce:
+			continue
+		if BodyModels.marking_for(body_key, candidate) != marking:
+			continue
+		return candidate
+	print("no id found for %s / %s / %s" % [body_key, produce, marking])
+	return 1
+
+
+func _bodies() -> void:
+	var baker: UIVoliSticker = StickerScript.new()
+	add_child(baker)
+	baker.light_mode = true
+	baker._ensure_rig()
+
+	## Every cell: which body type, which produce, which coat, and its column.
+	var jobs: Array = []
+	for row in range(BODY_ROWS.size()):
+		for column in range(BODY_ROWS[row].size()):
+			var name: String = BODY_ROWS[row][column]
+			var is_produce := row == 0
+			jobs.append({
+				"row": row, "column": column,
+				"type": "Vegi" if is_produce else name,
+				"produce": name if is_produce else "",
+				"marking": "none", "label": name,
+			})
+	for index in range(MARKING_ROW.size()):
+		var pair: Array = MARKING_ROW[index]
+		jobs.append({
+			"row": 2, "column": index, "type": str(pair[0]), "produce": "",
+			"marking": str(pair[1]), "label": "%s %s" % [pair[0], pair[1]],
+		})
+
+	var columns := 6
+	var sheet := Image.create(
+		BODY_CELL.x * columns, BODY_CELL.y * 3, false, Image.FORMAT_RGBA8
+	)
+	sheet.fill(Color(0.96, 0.96, 0.94, 1.0))
+	var per_metre := float(BODY_CELL.y) * 0.90 / BODY_METRES
+
+	print("--- bodies ---")
+	for job: Dictionary in jobs:
+		var profile := BODY_PROFILE.duplicate()
+		profile["body_type"] = str(job["type"])
+		profile["player_id"] = _id_for(
+			str(job["type"]), str(job["produce"]), str(job["marking"])
+		)
+		var key := "b%d_%d" % [job["row"], job["column"]]
+		baker.request(
+			key, int(RallyEventModel.EventType.SERVE), 0.0, -1.0,
+			profile, 168.0, -8.0
+		)
+		while baker._working or not baker._queue.is_empty():
+			await get_tree().process_frame
+		var built: UIVoliSticker.Sticker = baker.sticker(key)
+		if built == null or built.texture == null:
+			print("%s MISSING" % key)
+			continue
+		_place_body(sheet, built, int(job["row"]), int(job["column"]), per_metre)
+		print("r%dc%d %-16s id %-6d %.2f m" % [
+			job["row"], job["column"], str(job["label"]),
+			int(profile["player_id"]), built.world_height,
+		])
+	print("bodies save err=%d" % sheet.save_png("user://bodies_sheet.png"))
+	baker.queue_free()
+
+
+func _place_body(
+	sheet: Image, built: UIVoliSticker.Sticker, row: int, column: int,
+	per_metre: float
+) -> void:
+	var body := built.texture.get_image()
+	body.convert(Image.FORMAT_RGBA8)
+	var tall := int(built.world_height * per_metre)
+	var wide := int(float(tall) * built.aspect)
+	if tall < 4 or wide < 4:
+		return
+	body.resize(wide, tall, Image.INTERPOLATE_LANCZOS)
+	var ground := BODY_CELL.y * row + BODY_CELL.y - 22
+	sheet.blend_rect(
+		body, Rect2i(Vector2i.ZERO, Vector2i(wide, tall)),
+		Vector2i(
+			BODY_CELL.x * column + (BODY_CELL.x - wide) / 2,
+			ground + int(built.ground_offset * per_metre) - tall
+		)
+	)
+	for x in range(BODY_CELL.x * column + 6, BODY_CELL.x * column + BODY_CELL.x - 6):
+		sheet.set_pixel(x, ground, Color(0.62, 0.60, 0.56, 1.0))
