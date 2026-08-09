@@ -1,0 +1,96 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scenes/components/signature_surge_3d.gd" id="1_surge"]
+
+[sub_resource type="StandardMaterial3D" id="SurgeMaterial"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(1, 0.84, 0.2, 0.65)
+emission_enabled = true
+emission = Color(1, 0.54, 0.08, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="TorusMesh" id="RingMesh"]
+material = SubResource("SurgeMaterial")
+inner_radius = 0.34
+outer_radius = 0.39
+rings = 24
+ring_segments = 8
+
+[sub_resource type="SphereMesh" id="CoreMesh"]
+material = SubResource("SurgeMaterial")
+radius = 0.42
+height = 0.84
+radial_segments = 16
+rings = 8
+
+[sub_resource type="CylinderMesh" id="StreamMesh"]
+material = SubResource("SurgeMaterial")
+top_radius = 0.018
+bottom_radius = 0.032
+height = 0.82
+radial_segments = 6
+
+[node name="SignatureSurge3D" type="Node3D"]
+script = ExtResource("1_surge")
+
+[node name="Core" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.12, 0)
+cast_shadow = 0
+mesh = SubResource("CoreMesh")
+
+[node name="Rings" type="Node3D" parent="."]
+
+[node name="Ring0" type="MeshInstance3D" parent="Rings"]
+cast_shadow = 0
+mesh = SubResource("RingMesh")
+[node name="Ring1" type="MeshInstance3D" parent="Rings"]
+cast_shadow = 0
+mesh = SubResource("RingMesh")
+
+[node name="Ring2" type="MeshInstance3D" parent="Rings"]
+cast_shadow = 0
+mesh = SubResource("RingMesh")
+
+[node name="Streams" type="Node3D" parent="."]
+
+[node name="Stream0" type="MeshInstance3D" parent="Streams"]
+position = Vector3(0.38, 0.94, 0)
+rotation_degrees = Vector3(0, 0, -9)
+cast_shadow = 0
+mesh = SubResource("StreamMesh")
+
+[node name="Stream1" type="MeshInstance3D" parent="Streams"]
+position = Vector3(-0.38, 1.06, 0)
+rotation_degrees = Vector3(0, 0, 11)
+cast_shadow = 0
+mesh = SubResource("StreamMesh")
+
+[node name="Stream2" type="MeshInstance3D" parent="Streams"]
+position = Vector3(0, 1.00, 0.35)
+rotation_degrees = Vector3(8, 0, 0)
+cast_shadow = 0
+mesh = SubResource("StreamMesh")
+
+[node name="Stream3" type="MeshInstance3D" parent="Streams"]
+position = Vector3(0, 1.12, -0.35)
+rotation_degrees = Vector3(-10, 0, 0)
+cast_shadow = 0
+mesh = SubResource("StreamMesh")
+
+[node name="Stream4" type="MeshInstance3D" parent="Streams"]
+position = Vector3(0.27, 1.18, 0.25)
+rotation_degrees = Vector3(7, 0, -7)
+cast_shadow = 0
+mesh = SubResource("StreamMesh")
+
+[node name="Stream5" type="MeshInstance3D" parent="Streams"]
+position = Vector3(-0.27, 0.88, -0.25)
+rotation_degrees = Vector3(-7, 0, 7)
+cast_shadow = 0
+mesh = SubResource("StreamMesh")
+
+[node name="Burst" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2.02, 0)
+cast_shadow = 0
+mesh = SubResource("RingMesh")

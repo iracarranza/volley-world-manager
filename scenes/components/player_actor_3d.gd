@@ -27,6 +27,7 @@ const SetBiomechanicsScript := preload("res://scripts/data/set_biomechanics.gd")
 @onready var shadow: MeshInstance3D = $Shadow
 @onready var identity_label: Label3D = $IdentityLabel
 @onready var focus_ring: MeshInstance3D = $FocusRing
+@onready var signature_surge: SignatureSurge3D = $SignatureSurge3D
 
 var player_id: int = -1
 var is_home_team: bool = true
@@ -55,6 +56,9 @@ var contact_posture: String = "planted"
 ## What the contact *did* to them, as opposed to how strained it was.
 ## `_reception_recovery` decides this; playback draws it and does not invent it.
 ## "platform", "knee", "fall" or "blown_away" -- see `rally_simulator.gd`.
+## The recovery and posture together choose the physical motion: an off-axis
+## fall rolls sideways, a moving/reaching fall slides forward, and a blow-away
+## rolls backward. The simulation still owns the cost and severity.
 var contact_recovery: String = "platform"
 ## Which of the five faces the actor is wearing. Purely presentational today --
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
@@ -409,7 +413,12 @@ func set_highlighted(highlighted: bool) -> void:
 ## back toward those captured values afterwards. What is being eased *from* is
 ## therefore whatever the frame already had -- the gait, mid-stride -- so a
 ## passer running to the ball keeps running and the platform arrives under them.
-func _apply_dig_posture(weight: float = 1.0, drive: float = 0.0) -> void:
+func _apply_dig_posture(
+	weight: float = 1.0,
+	drive: float = 0.0,
+	recovery_progress: float = 0.0,
+	contact_direction: Vector2 = Vector2.ZERO,
+) -> void:
 	var blend := clampf(weight, 0.0, 1.0)
 	var push := clampf(drive, 0.0, 1.0)
 	var before := _capture_joints()
@@ -659,10 +668,13 @@ func _apply_dig_posture(weight: float = 1.0, drive: float = 0.0) -> void:
 	## them different actions rather than two similar frames.
 	_set_elbow(left_arm, 0.0)
 	_set_elbow(right_arm, 0.0)
-	_apply_recovery_state()
 	if blend < 0.999:
 		_blend_joints_toward(before, 1.0 - blend)
 	_ground_the_dig(blend)
+	## Recovery starts after contact and is layered over a properly grounded dig.
+	## That ordering matters: grounding a fallen pose by its shoe afterwards lifts
+	## its hip back into the air, which is how the old static fall became a crouch.
+	_apply_recovery_state(recovery_progress, contact_direction)
 
 
 ## How far below standing the hips currently are, in metres.
@@ -892,6 +904,58 @@ func _blend_joints_toward(captured: Dictionary, amount: float) -> void:
 	)
 
 
+## Pure directional plan for a recovery. Keeping this separate from the rig
+## makes "which way did they go?" a testable fact while the joint posing below
+## remains free to change with the model.
+static func recovery_motion(
+	recovery_state: String,
+	posture: String,
+	progress: float,
+	contact_direction: Vector2 = Vector2.ZERO,
+	handedness: String = "Right",
+) -> Dictionary:
+	var recovery := clampf(progress, 0.0, 1.0)
+	var down := smoothstep(0.0, 0.34, recovery)
+	var travel := smoothstep(0.08, 0.82, recovery)
+	var roll := smoothstep(0.18, 0.88, recovery)
+	var side := signf(contact_direction.x)
+	if is_zero_approx(side):
+		side = -1.0 if handedness == "Left" else 1.0
+	var mode := recovery_state
+	var pitch := 0.0
+	var body_roll := 0.0
+	var offset := Vector3.ZERO
+	match recovery_state:
+		"knee":
+			pitch = deg_to_rad(-14.0) * down
+		"fall":
+			if posture in ["moving", "reaching"]:
+				mode = "slide_forward"
+				pitch = deg_to_rad(-56.0) * down
+				body_roll = deg_to_rad(7.0) * side * roll
+				offset.z = -0.48 * travel
+			else:
+				mode = "roll_sideways"
+				pitch = deg_to_rad(-22.0) * down
+				body_roll = deg_to_rad(112.0) * side * roll
+				offset.x = 0.36 * side * travel
+		"blown_away":
+			mode = "roll_backward"
+			pitch = deg_to_rad(106.0) * roll
+			body_roll = deg_to_rad(13.0) * side * down
+			offset.z = 0.42 * travel
+	return {
+		"mode": mode,
+		"down": down,
+		"travel": travel,
+		"roll": roll,
+		"side": side,
+		"pitch_radians": pitch,
+		"roll_radians": body_roll,
+		"offset": offset,
+	}
+
+
 ## The four things that can happen to a defender who plays a ball.
 ##
 ## Layered *over* the posture rather than replacing it, because the two are
@@ -902,8 +966,12 @@ func _blend_joints_toward(captured: Dictionary, amount: float) -> void:
 ##
 ## Each state is drawn as a *body*, not as a tint or a marker. A special move
 ## that needs an icon to be understood has not been drawn.
-func _apply_recovery_state() -> void:
-	if contact_recovery == "platform":
+func _apply_recovery_state(
+	progress: float = 1.0,
+	contact_direction: Vector2 = Vector2.ZERO,
+) -> void:
+	var recovery := clampf(progress, 0.0, 1.0)
+	if contact_recovery == "platform" or recovery <= 0.0001:
 		return
 	## Where the feet are *now*, before this state folds them. The posture already
 	## put them on the floor, crouch and all, so this is the height the body has
@@ -915,6 +983,11 @@ func _apply_recovery_state() -> void:
 	## it was standing on -- the fallen voli ended up beside its own floor marker
 	## rather than on it.
 	var contact_hips := _hip_offset_from_actor()
+	var motion := recovery_motion(
+		contact_recovery, contact_posture, recovery,
+		contact_direction, dominant_hand,
+	)
+	var down := float(motion.down)
 	match contact_recovery:
 		"knee":
 			## A half-kneel: one shin folded flat behind, the other leg braced in
@@ -926,44 +999,87 @@ func _apply_recovery_state() -> void:
 			## pose where one reaches further leaves the other hanging in the air
 			## once the body is planted, which is what "kneeling in mid-air"
 			## actually was.
-			body_pivot.rotation.x -= deg_to_rad(14.0)
-			left_leg.rotation_degrees.x = -12.0
-			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = -100.0
-			right_leg.rotation_degrees.x = 75.0
-			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = -43.0
+			body_pivot.rotation.x += float(motion.pitch_radians)
+			left_leg.rotation_degrees.x = lerpf(
+				left_leg.rotation_degrees.x, -12.0, down
+			)
+			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -100.0, down
+			)
+			right_leg.rotation_degrees.x = lerpf(
+				right_leg.rotation_degrees.x, 75.0, down
+			)
+			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -43.0, down
+			)
 		"fall":
-			## Off their feet and onto a hip, still facing the ball. Rolled rather
-			## than dropped: a defender who falls has been taken sideways, and the
-			## roll is what separates this from a deeper crouch. Both legs fold
-			## tight so nothing props the body back up.
-			body_pivot.rotation.x -= deg_to_rad(26.0)
-			body_pivot.rotation.z += deg_to_rad(42.0)
+			## One severity, three honest directions. Off-axis contacts have already
+			## said the miss was lateral, moving/reaching contacts have committed
+			## forward, and a planted fall has only the lateral escape left. Nothing
+			## here reclassifies the contact or changes its recovery cost.
+			if str(motion.mode) == "slide_forward":
+				## A forward pancake-like slide: chest and hips travel through the
+				## platform while the legs trail rather than folding under it.
+				body_pivot.rotation.x += float(motion.pitch_radians)
+				body_pivot.position += Vector3(motion.offset)
+				body_pivot.rotation.z += float(motion.roll_radians)
+			else:
+				## The platform survives as the body rolls over the outside hip. A
+				## second half-turn makes this visibly a roll, not the old held fall.
+				body_pivot.rotation.x += float(motion.pitch_radians)
+				body_pivot.rotation.z += float(motion.roll_radians)
+				body_pivot.position += Vector3(motion.offset)
 			## Thighs well past horizontal, so the folded legs finish at hip height
 			## and the *hip* becomes the lowest thing on the body. With the legs
 			## reaching lower than the hip the floor solve plants a shoe instead
 			## and leaves the body standing over it, which is a crouch.
-			left_leg.rotation_degrees.x = 128.0
-			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = -118.0
-			right_leg.rotation_degrees.x = 138.0
-			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = -126.0
+			left_leg.rotation_degrees.x = lerpf(
+				left_leg.rotation_degrees.x, 128.0, down
+			)
+			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -118.0, down
+			)
+			right_leg.rotation_degrees.x = lerpf(
+				right_leg.rotation_degrees.x, 138.0, down
+			)
+			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -126.0, down
+			)
 		"blown_away":
 			## Not a play, an impact. The body pitches *backward* -- the only pose
 			## in the game that does, since a block bends forward at -0.12 -- the
 			## arms are driven up and back off the ball rather than held on it, and
 			## the legs come up in front. The backward pitch is the entire tell:
 			## everything else a defender does goes toward the ball.
-			body_pivot.rotation.x += deg_to_rad(42.0)
-			body_pivot.rotation.z += deg_to_rad(12.0)
-			left_arm.rotation_degrees = Vector3(-138.0, 0.0, -34.0)
-			right_arm.rotation_degrees = Vector3(-146.0, 0.0, 30.0)
-			_set_elbow(left_arm, 52.0)
-			_set_elbow(right_arm, 44.0)
+			body_pivot.rotation.x += float(motion.pitch_radians)
+			body_pivot.rotation.z += float(motion.roll_radians)
+			body_pivot.position += Vector3(motion.offset)
+			left_arm.rotation_degrees = left_arm.rotation_degrees.lerp(
+				Vector3(-138.0, 0.0, -34.0), down
+			)
+			right_arm.rotation_degrees = right_arm.rotation_degrees.lerp(
+				Vector3(-146.0, 0.0, 30.0), down
+			)
+			_set_elbow(left_arm, lerpf(
+				(left_arm.get_node("Elbow") as Node3D).rotation_degrees.x, 52.0, down
+			))
+			_set_elbow(right_arm, lerpf(
+				(right_arm.get_node("Elbow") as Node3D).rotation_degrees.x, 44.0, down
+			))
 			## Past horizontal, so the feet finish *above* the hip and the body
 			## plants on its back rather than on a shoe.
-			left_leg.rotation_degrees.x = 110.0
-			right_leg.rotation_degrees.x = 95.0
-			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = -60.0
-			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = -50.0
+			left_leg.rotation_degrees.x = lerpf(
+				left_leg.rotation_degrees.x, 110.0, down
+			)
+			right_leg.rotation_degrees.x = lerpf(
+				right_leg.rotation_degrees.x, 95.0, down
+			)
+			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -60.0, down
+			)
+			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -50.0, down
+			)
 			## Eyes still up the line the ball came from, because they are being
 			## pushed away from it rather than turning from it.
 			look_pitch = deg_to_rad(-HEAD_PITCH_LIMIT_DEGREES)
@@ -1277,6 +1393,7 @@ func set_pose(
 	phase: float,
 	contact_direction: Vector2,
 	is_contact_actor: bool,
+	action_context: Dictionary = {},
 ) -> void:
 	_ensure_node_bindings()
 	_track_landing(event_type, elevation)
@@ -1330,6 +1447,18 @@ func set_pose(
 	)
 	shadow.scale = Vector3.ONE * lerpf(1.0, 1.35, elevation)
 	shadow.transparency = lerpf(0.0, 0.58, elevation)
+	var signature_move := str(action_context.get("signature_move", ""))
+	var signature_charge := float(action_context.get(
+		"signature_charge", 1.0 if not signature_move.is_empty() else 0.0
+	))
+	## Portfolio/unit callers can pose an actor before it enters the tree, while
+	## @onready bindings are still null. The body pose remains pure in that case;
+	## the attached court actor gains the effect as soon as it is ready.
+	if signature_surge != null:
+		signature_surge.set_cue(
+			signature_move, signature_charge,
+			bool(action_context.get("signature_succeeded", false)), phase,
+		)
 	if contact_direction.length_squared() > 0.0001:
 		## Godot's forward is -Z, and this rig genuinely faces that way -- both
 		## shoes sit at z = -0.06. Rotating by theta about Y puts local -Z at
@@ -1385,7 +1514,8 @@ func set_pose(
 			## outgoing flight -- no follow-through, no weight transfer, no toss
 			## arm coming down, and no legs at all.
 			var toss := ServeBiomechanicsScript.resolve(
-				phase, -1.0 if dominant_hand == "Left" else 1.0
+				phase, -1.0 if dominant_hand == "Left" else 1.0,
+				float(action_context.get("action_power", 0.0)),
 			)
 			body_pivot.rotation.x = float(toss.torso_pitch_radians)
 			## The trunk winding against the facing, applied here rather than by
@@ -1439,7 +1569,8 @@ func set_pose(
 			if phase >= PLATFORM_PHASE:
 				_apply_dig_posture(
 					smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase),
-					smoothstep(PLATFORM_DRIVE_START, PLATFORM_DRIVE_END, phase)
+					smoothstep(PLATFORM_DRIVE_START, PLATFORM_DRIVE_END, phase),
+					clampf(phase, 0.0, 1.0), contact_direction,
 				)
 
 		RallyEventModel.EventType.SET:
@@ -1484,7 +1615,8 @@ func set_pose(
 			## pose in the game complex enough that it cannot be checked by
 			## reading it, and a pure function of phase is one the suite can test.
 			var swing := SpikeBiomechanics.resolve(
-				phase, -1.0 if dominant_hand == "Left" else 1.0
+				phase, -1.0 if dominant_hand == "Left" else 1.0,
+				float(action_context.get("action_power", 0.0)),
 			)
 			body_pivot.rotation.x = float(swing.torso_pitch_radians)
 			## Hip-shoulder separation. Applied here rather than by turning the

@@ -1,10 +1,11 @@
 extends SceneTree
 
-## How often the two signature moves actually decide a point, by hitter tier.
+## How often the contact signatures actually decide a point, by hitter tier.
 ##
 ## `SignatureMoveModel` defines Block Crush (the power route) and High Hands
 ## (the accuracy route) as the two ways a swing beats a block it has physically
-## met. The design intent is that they appear occasionally for a B-tier hitter,
+## met. Monster Block is the defending route through the same contact. The
+## design intent is that hitter signatures appear occasionally for a B-tier hitter,
 ## can be depended on by an A, and are expected regularly from an S. This says
 ## what the engine currently does.
 ##
@@ -25,12 +26,13 @@ const CAREER_SEEDS := [
 	"Quiet Hands", "Golden Rotation", "Long Road Home",
 ]
 const OUTCOMES := [
-	"block_crush", "high_hands", "tool", "stuff", "touch", "in", "out",
+	"block_crush", "high_hands", "monster_block", "tool", "stuff", "touch", "in", "out",
 ]
 
 
 func _initialize() -> void:
 	var by_tier := {}
+	var monster_timings: Array = []
 	for career_name in CAREER_SEEDS:
 		var seed_value := absi(hash("%s|identity-calibration" % career_name))
 		for serving_home in [true, false]:
@@ -48,7 +50,7 @@ func _initialize() -> void:
 			for index in range(SAMPLES):
 				var result: Resource = manager.resolve_active_rally(seed_value + index)
 				if result != null:
-					_scan(result, tiers, by_tier)
+					_scan(result, tiers, by_tier, monster_timings)
 	print("%6s %7s %12s %12s %10s %10s" % [
 		"tier", "swings", "block_crush", "high_hands", "signature", "blank",
 	])
@@ -77,6 +79,18 @@ func _initialize() -> void:
 		for key in OUTCOMES:
 			cells.append("%s=%d" % [key, int(b.get(key, 0.0))])
 		print("  %s (n=%d): %s" % [tier, int(b["n"]), " ".join(cells)])
+	print("\nMonster Block attempts: %d; successes: %d" % [
+		_total(by_tier, "attempt:monster_block"),
+		_total(by_tier, "monster_block"),
+	])
+	if not monster_timings.is_empty():
+		monster_timings.sort()
+		print("Contacted charged-blocker timing: min %.3f p50 %.3f p90 %.3f max %.3f" % [
+			float(monster_timings[0]),
+			float(monster_timings[int(monster_timings.size() * 0.50)]),
+			float(monster_timings[int(monster_timings.size() * 0.90)]),
+			float(monster_timings[-1]),
+		])
 	quit(0)
 
 
@@ -87,7 +101,12 @@ func _tier(player: Resource) -> String:
 	return AttributeProfilesModel.grade_tier(float(profile.get("Attacking", 50.0)))
 
 
-func _scan(result: Resource, tiers: Dictionary, by_tier: Dictionary) -> void:
+func _scan(
+	result: Resource,
+	tiers: Dictionary,
+	by_tier: Dictionary,
+	monster_timings: Array,
+) -> void:
 	for event_resource in result.events:
 		var event: Resource = event_resource
 		if int(event.event_type) != RallyEventModel.EventType.ATTACK:
@@ -101,3 +120,18 @@ func _scan(result: Resource, tiers: Dictionary, by_tier: Dictionary) -> void:
 		bucket["n"] = float(bucket["n"]) + 1.0
 		var outcome := str(event.metadata.get("geometric_outcome", ""))
 		bucket[outcome] = float(bucket.get(outcome, 0.0)) + 1.0
+		var move := str(event.metadata.get("signature_move", ""))
+		if not move.is_empty():
+			var move_key := "attempt:%s" % move
+			bucket[move_key] = float(bucket.get(move_key, 0.0)) + 1.0
+			if move == "monster_block":
+				monster_timings.append(float(
+					event.metadata.get("signature_timing_quality", 0.0)
+				))
+
+
+func _total(by_tier: Dictionary, key: String) -> int:
+	var total := 0
+	for tier in by_tier:
+		total += int(Dictionary(by_tier[tier]).get(key, 0.0))
+	return total

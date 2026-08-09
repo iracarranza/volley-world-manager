@@ -331,29 +331,48 @@ static func resolve_swing(
 	var outcome := str(resolved.outcome)
 	if outcome == "blocked":
 		var contact_info: Dictionary = resolved.block
-		move = SignatureMoveModel.resolve_contact(
+		var contacted_blocker: Dictionary = contact_info.get("blocker", {})
+		var monster := SignatureMoveModel.resolve_monster_block(
 			str(contact_info.get("kind", "touch")),
-			float(delivered.speed_mps),
-			float(delivered.bearing_error_degrees),
-			float(contact_info.get("depth_below_reach_meters", 0.0)),
-			blockers.size(),
-			SignatureMoveModel.charge(
-				SignatureMoveModel.crush_capability(
-					_rating(hitter, "attack_power"),
-					float(hitter.ego) / 100.0,
-					_rating(hitter, "leadership"),
-				),
-				match_confidence, flow_for_team,
-			),
-			SignatureMoveModel.charge(
-				SignatureMoveModel.high_hands_capability(
-					_rating(hitter, "attack_accuracy"),
-					_rating(hitter, "composure"),
-					_rating(hitter, "decision_making"),
-				),
-				match_confidence, flow_for_team,
-			),
+			float(contacted_blocker.get("timing_quality", 0.0)),
+			str(contacted_blocker.get("arm_state", "")),
+			float(contacted_blocker.get("monster_block_charge", 0.0)),
+			int(contacted_blocker.get("player_id", -1)),
 		)
+		if bool(monster.get("move_succeeded", false)):
+			move = monster
+		else:
+			move = SignatureMoveModel.resolve_contact(
+				str(contact_info.get("kind", "touch")),
+				float(delivered.speed_mps),
+				float(delivered.bearing_error_degrees),
+				float(contact_info.get("depth_below_reach_meters", 0.0)),
+				blockers.size(),
+				SignatureMoveModel.charge(
+					SignatureMoveModel.crush_capability(
+						_rating(hitter, "attack_power"),
+						float(hitter.ego) / 100.0,
+						_rating(hitter, "leadership"),
+					),
+					match_confidence, flow_for_team,
+				),
+				SignatureMoveModel.charge(
+					SignatureMoveModel.high_hands_capability(
+						_rating(hitter, "attack_accuracy"),
+						_rating(hitter, "composure"),
+						_rating(hitter, "decision_making"),
+					),
+					match_confidence, flow_for_team,
+				),
+			)
+			## One overhead effect per actor/action. An attacker signature wins the
+			## cue if both sides charged but the block missed its apex; otherwise the
+			## failed Monster Block attempt remains visible on the blocker.
+			if str(move.get("attempted_move", "")).is_empty() \
+				and not str(monster.get("attempted_move", "")).is_empty():
+				move = monster
+		if int(move.get("signature_actor_id", -1)) < 0:
+			move["signature_actor_id"] = hitter.id
 		outcome = str(move.outcome)
 
 	return {
@@ -415,6 +434,9 @@ static func resolve_swing(
 			"attempted_move": str(move.get("attempted_move", "")),
 			"move_succeeded": bool(move.get("move_succeeded", false)),
 			"confidence_cost": float(move.get("confidence_cost", 0.0)),
+			"signature_charge": float(move.get("signature_charge", 0.0)),
+			"signature_actor_id": int(move.get("signature_actor_id", hitter.id)),
+			"signature_timing_quality": float(move.get("timing_quality", 0.0)),
 		},
 	}
 

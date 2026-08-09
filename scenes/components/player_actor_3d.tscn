@@ -1,6 +1,7 @@
-[gd_scene load_steps=12 format=3 uid="uid://7pan3nabw3c3"]
+[gd_scene load_steps=13 format=3 uid="uid://7pan3nabw3c3"]
 
 [ext_resource type="Script" path="res://scenes/components/player_actor_3d.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://scenes/components/signature_surge_3d.tscn" id="2_surge"]
 
 [sub_resource type="CapsuleMesh" id="TorsoMesh"]
 radius = 0.31
@@ -75,6 +76,8 @@ visible = false
 position = Vector3(0, 0.022, 0)
 cast_shadow = 0
 mesh = SubResource("RingMesh")
+
+[node name="SignatureSurge3D" parent="." instance=ExtResource("2_surge")]
 
 [node name="BodyPivot" type="Node3D" parent="."]
 

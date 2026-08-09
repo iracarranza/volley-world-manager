@@ -1,7 +1,7 @@
 class_name SignatureMoveModel
 extends RefCounted
 
-## The moves that let a spike beat a block it has physically met.
+## Signature moves resolved at the hitter/blocker contact.
 ##
 ## A block that engages a swing cleanly should win -- that is the premise. These
 ## are the two ways a hitter beats one anyway, and they are deliberately keyed to
@@ -11,6 +11,8 @@ extends RefCounted
 ##   absorb rips through and keeps going down, carrying most of its speed.
 ## - **High Hands** is the accuracy route. A ball placed deliberately on the
 ##   outside edge of the hands leaves high and away from the court.
+## - **Monster Block** is the blocker's route. A mentally ready blocker meeting
+##   the ball in the extreme apex band owns any physical hand contact.
 ##
 ## Tips, rolls and cut shots never physically meet the block, so they have no
 ## move here. Nothing is lost by that: they beat a block by not touching it.
@@ -61,6 +63,10 @@ const BLOCK_ABSORB_PER_EXTRA_BLOCKER: float = 4.5
 ## aimed rather than lucky. Wider than this and the ball found the edge because
 ## the swing missed, which is an ordinary tool and nobody's signature move.
 const HIGH_HANDS_AIM_TOLERANCE_DEGREES: float = 2.6
+
+## The last sliver of the normalized apex arc. This reuses the jump model's
+## measured timing evidence instead of inventing a second block clock.
+const MONSTER_BLOCK_TIMING_THRESHOLD: float = 0.968
 
 
 ## How much of the game a player has in them right now, 0-1.
@@ -116,6 +122,21 @@ static func high_hands_capability(
 	)
 
 
+## Physical timing leads; anticipation is the mental read that gets the blocker
+## to the right instant, and composure lets them press rather than flinch.
+static func monster_block_capability(
+	block_timing: float,
+	anticipation: float,
+	composure: float,
+) -> float:
+	return clampf(
+		clampf(block_timing, 0.0, 1.0) * 0.58
+		+ clampf(anticipation, 0.0, 1.0) * 0.25
+		+ clampf(composure, 0.0, 1.0) * 0.17,
+		0.0, 1.0,
+	)
+
+
 ## How much ball speed this block can take before it gives way.
 static func block_absorb_mps(
 	depth_below_reach_meters: float,
@@ -154,17 +175,55 @@ static func resolve_contact(
 	## the ball found the edge, the hitter did not put it there.
 	if block_kind == "tool" and hands_ready:
 		if absf(bearing_error_degrees) <= HIGH_HANDS_AIM_TOLERANCE_DEGREES:
-			return _result("high_hands", true, "high_hands", absorb)
-		return _result("tool", false, "high_hands", absorb)
+			return _result(
+				"high_hands", true, "high_hands", absorb, high_hands_charge
+			)
+		return _result(
+			"tool", false, "high_hands", absorb, high_hands_charge
+		)
 
 	## Solid contact with the charge up is a power attempt: through the hands if
 	## it is hit harder than they can hold, stuffed if not.
 	if block_kind == "stuff" and crush_ready:
 		if delivered_speed_mps > absorb:
-			return _result("block_crush", true, "block_crush", absorb)
-		return _result("stuff", false, "block_crush", absorb)
+			return _result(
+				"block_crush", true, "block_crush", absorb, crush_charge
+			)
+		return _result(
+			"stuff", false, "block_crush", absorb, crush_charge
+		)
 
 	return _result(block_kind, false, "", absorb)
+
+
+## A charged blocker at the apex turns any physical hand contact into a stuff.
+## It resolves before hitter signatures: auto-stuff is an explicit priority
+## rule, not a hidden nudge to the ordinary contact thresholds.
+static func resolve_monster_block(
+	block_kind: String,
+	timing_quality: float,
+	_arm_state: String,
+	monster_charge: float,
+	blocker_id: int = -1,
+) -> Dictionary:
+	var contacted := block_kind in ["touch", "tool", "stuff"]
+	var ready := contacted and is_available(monster_charge)
+	## The ordinary block-timing feature flag is allowed to hide `arm_state`
+	## from its own outcome bands, but it does not erase the canonical timing
+	## quality. At this threshold the jump model is necessarily in its apex band;
+	## requiring a flag-gated duplicate of that fact made the move impossible.
+	var perfect := clampf(timing_quality, 0.0, 1.0) \
+		>= MONSTER_BLOCK_TIMING_THRESHOLD
+	return {
+		"outcome": "monster_block" if ready and perfect else block_kind,
+		"move_succeeded": ready and perfect,
+		"attempted_move": "monster_block" if ready else "",
+		"signature_charge": monster_charge if ready else 0.0,
+		"signature_actor_id": blocker_id,
+		"timing_quality": clampf(timing_quality, 0.0, 1.0),
+		## No persistent blocker-confidence cost in this first pass.
+		"confidence_cost": 0.0,
+	}
 
 
 static func _result(
@@ -172,11 +231,14 @@ static func _result(
 	succeeded: bool,
 	attempted: String,
 	absorb: float,
+	move_charge: float = 0.0,
 ) -> Dictionary:
 	return {
 		"outcome": outcome,
 		"move_succeeded": succeeded,
 		"attempted_move": attempted,
+		"signature_charge": move_charge if not attempted.is_empty() else 0.0,
+		"signature_actor_id": -1,
 		"block_absorb_mps": absorb,
 		## Only a failed *attempt* costs anything. A contact that never had the
 		## charge up was never a move and should not be punished as one.

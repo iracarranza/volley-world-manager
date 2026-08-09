@@ -240,6 +240,7 @@ func set_player_pose(
 	highlighted: bool,
 	contact_posture: String = "planted",
 	contact_recovery: String = "platform",
+	action_context: Dictionary = {},
 ) -> void:
 	if not player_actors.has(player_id):
 		return
@@ -250,7 +251,9 @@ func set_player_pose(
 	## actor, not to form a second opinion from the positions.
 	actor.contact_posture = contact_posture
 	actor.contact_recovery = contact_recovery
-	actor.set_pose(event_type, elevation, phase, direction, highlighted)
+	actor.set_pose(
+		event_type, elevation, phase, direction, highlighted, action_context
+	)
 
 
 func reset_player_poses() -> void:
