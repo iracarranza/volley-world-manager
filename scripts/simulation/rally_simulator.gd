@@ -442,6 +442,52 @@ const OPPONENT_PASS_DELIVERY_MAX_Y: float = 0.49
 ## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
 ## so the result can be compared with an attack quality that is also a fraction
 ## of an ideal, which is the whole point of a contest between them.
+## What a defender's eyes are worth against a hitter's arm.
+##
+## A contest, not a bonus: `court_vision - arm_speed` is signed, so an elite
+## reader against a slow arm sees the shot early and a poor reader against a fast
+## one is genuinely behind it. Sized against the read terms it joins -- the
+## responsibility fit and the scouting bonus both work in hundredths -- so a full
+## 100-vs-1 mismatch is worth about as much as being in exactly the right zone,
+## and an ordinary pairing is worth nothing.
+const DIG_VISION_READ_WEIGHT: float = 0.10
+
+## What the wall in front of a defender tells them.
+##
+## **Funnelling has never bought the diggers anything, which is the whole point
+## of funnelling.** A block told to funnel gives the line and channels the ball
+## into the middle, so the defence behind it knows where to be -- and until now
+## the intent moved only the wall's own position, so choosing it was a decision
+## with no consequence for the six people it was made on behalf of.
+##
+## Sealing is worth less rather than nothing: holding the line still removes one
+## option, it simply concedes the angle rather than narrowing it. A touched ball
+## is worth the most of the three, because a defender is reading a ball that has
+## already slowed and changed direction -- and the engine already pays them the
+## extra flight time for it, so this is the read that goes with the time.
+const FUNNEL_READ_BONUS: float = 0.075
+const SEAL_READ_BONUS: float = 0.030
+const TOUCHED_BALL_READ_BONUS: float = 0.090
+
+## How much of a blocker's read a fast arm takes away.
+##
+## `arm_speed` was generated, trained, scouted, shown on the profile wheel and
+## read by no simulation code at all -- it turned up in the inert-attribute audit
+## and stayed there. This is one of its two consumers. Bounded well under the
+## play-reading terms it sits beside, because the arm is the last cue a blocker
+## gets and not the main one: they have already read the pass, the setter's body
+## and the tempo by the time it matters.
+const ARM_SPEED_READ_COST: float = 0.06
+
+## How much of the tempo demand a fast arm pays off.
+##
+## The other consumer, and the one that makes the attribute matter to a middle in
+## particular. `tempo_demand` is what a fast set costs the hitter, and it was a
+## property of the *setter* alone -- their `tempo_control` decided how hard a
+## quick was to run, and the person actually swinging at it had no say. Getting
+## the arm through in time is most of what running a quick is.
+const ARM_SPEED_TEMPO_RELIEF: float = 0.30
+
 const DIG_RECEPTION_WEIGHT: float = 0.34
 const DIG_ANTICIPATION_WEIGHT: float = 0.30
 const DIG_CONTROL_WEIGHT: float = 0.22
@@ -587,13 +633,35 @@ const SHOOT_TEMPO_CALL: int = 2
 ## floor and 82% of them came up. A clean swing beating a set defence should not
 ## be the exception, and at 0.09 an even contest was close to a coin flip on a
 ## scale where the two sides sit at parity.
-const DIG_ATTACKER_ADVANTAGE: float = 0.20
+##
+## **Re-fitted at 0.07 from 0.20, alongside `DIG_SOLO_SHARE`.** Not a softening
+## of the claim above -- the claim still holds and the attacker is still
+## favoured. What changed underneath it is that the ball is now a struck ball
+## rather than a lob and both defences are timed off the same flight, so a dig is
+## a genuinely harder thing than it was when these were set, and the two of them
+## together were pricing that difficulty twice.
+const DIG_ATTACKER_ADVANTAGE: float = 0.07
 
 ## One defender is not a whole defence. The attacker picks where the ball goes;
 ## a defender covers the zone they were assigned. Without this the dig scale
 ## centred above the swing scale -- exactly the mismatch a solo block had at
 ## 0.78 -- and 470 swings produced 42 kills against 63 errors and 44 stuffs.
-const DIG_SOLO_SHARE: float = 0.62
+##
+## **0.90 from 0.62, and this is the re-fit `docs/BACKLOG.md` has been waiting
+## on.** The whole floor defence was fitted against attacks modelled as
+## ground-to-ground lobs; a spike is struck downward at 16 to 30 m/s and arrives
+## in about half the time, which is the correction the drawing landed. Fitted
+## against the sport rather than against the previous number -- over 700 rallies,
+## both serving sides, the three rates a real match has real values for:
+##
+##                     before   after   target
+##     kill rate        0.628   0.481   0.45 - 0.50
+##     dig rate         0.232   0.478   0.35 - 0.55
+##     stuff rate       0.106   0.112   0.08 - 0.14
+##
+## `tools/run_rally_balance_probe.gd` is that reading and is the instrument to
+## re-run before touching either of these again.
+const DIG_SOLO_SHARE: float = 0.90
 const DIG_EXECUTION_NOISE: float = 0.10
 
 ## How hard a swing attempted outside the approach's capability bites. Mirrors
@@ -1412,7 +1480,8 @@ func resolve(
 		assignment = _downgraded_assignment(assignment, resolved_tempo)
 		result.key_factors.append(_factor("play_abandoned"))
 	var tempo_demand := float(3 - resolved_tempo) * 0.055 \
-		* lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
+		* lerpf(1.0, 0.65, _rating(setter, "tempo_control")) \
+		* lerpf(1.0, 1.0 - ARM_SPEED_TEMPO_RELIEF, _rating(hitter, "arm_speed"))
 	## The lane the setter is *aiming* at. `_set_geometry` reads this rather than
 	## where the ball ends up, because difficulty is a property of the attempt.
 	## The hitter says where, inside the lane the bench called; the setter tries
@@ -1680,7 +1749,7 @@ func resolve(
 	var opponent_block_formation := _form_opponent_block(
 		opponent_team, set_target.x, assignment.tempo,
 		float(result.set_quality), set_contact.x, set_flight_time,
-		second_contact_window + release_interval,
+		second_contact_window + release_interval, hitter,
 	)
 	## Scouting sharpens a block that has already formed, so it belongs to the
 	## formation. It used to be applied *after* the contest, with its own stuff
@@ -2350,7 +2419,8 @@ func resolve(
 	)
 	var opponent_dig_terms := _defense_terms(
 		opponent_defender, float(opponent_defense.reach_margin_meters),
-		read_modifier + floor_defense_bonus + opponent_posture_read,
+		read_modifier + floor_defense_bonus + opponent_posture_read
+			+ _dig_read_bonus(opponent_defender, hitter, block_outcome),
 		CoverageModel.reception_body_penalty(
 			opponent_defender, Dictionary(opponent_defense.get("arrival", {})),
 			attack_effectiveness,
@@ -3043,6 +3113,7 @@ func _resolve_opponent_transition(
 		## The opponent's own pass-to-release time. Mirrors what the home set
 		## gives the opponent block; the home block was reading this pass too.
 		DEFAULT_SET_RELEASE_SECONDS + DEFAULT_SECOND_CONTACT_SECONDS,
+		opponent_hitter,
 	)
 	## The home block reads the opponent, the way the opponent block reads them.
 	##
@@ -3138,6 +3209,10 @@ func _resolve_opponent_transition(
 	## Mirrors the home side's demand exactly: a faster tempo asks more of the
 	## hitter, and a setter who commands tempo asks less of them.
 	var opponent_tempo_demand := float(3 - clampi(opponent_tempo, 0, 3)) * 0.055 \
+		* lerpf(
+			1.0, 1.0 - ARM_SPEED_TEMPO_RELIEF,
+			_rating(opponent_hitter, "arm_speed"),
+		) \
 		* lerpf(1.0, 0.65, _rating(opponent_setter, "tempo_control"))
 	var opponent_attack_noise := _execution_error(
 		opponent_hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE
@@ -3685,27 +3760,40 @@ func _resolve_opponent_transition(
 	## not been re-fitted. Re-fitting it is tasks #62 to #64 -- the same
 	## degeneracy `docs/BACKLOG.md` names as the limiter -- and it is a bigger
 	## change than this one, not a line in it.
-	var attack_time := float(RallyKinematics.solve_launch_arc(
-		RallyKinematics.court_distance_meters(opponent_contact, home_target),
-		_attack_launch_angle_degrees(opponent_hitter, attack_type, opponent_attack),
-	).duration_seconds)
-	if RallyFeatureFlagsModel.ENABLE_UNIFIED_ATTACK_SHAPE:
-		attack_time = float(opponent_attack_trajectory.get("duration", attack_time))
-		if block_outcome in ["touch", "funnel"]:
-			## Off the hands the ball is going somewhere else, so the remaining
-			## flight is genuinely a new solve -- on the hitter's swing, not the
-			## defence's classifier.
-			attack_time = float(_swing_arc(
-				Dictionary(_trace_summary().get(
-					"geometric_attack_opponent", {}
-				)),
-				RallyKinematics.court_distance_meters(
-					opponent_contact, home_target
-				),
-				GeometricAttackPromotionModel.contact_height_meters(
-					opponent_hitter, 1.0
-				),
-			).duration_seconds)
+	## **Unconditional now, and the number that closed the dig asymmetry.**
+	##
+	## The paragraph above found the defect and the fix stayed behind
+	## `ENABLE_UNIFIED_ATTACK_SHAPE` because turning it on collapsed the rally --
+	## with the dig fitted where it was, giving the home defence the real flight
+	## time meant nothing came up at all. That was never an argument that the two
+	## solves should disagree; it was the dig being calibrated against a budget
+	## only one side of the net received.
+	##
+	## Measured over 700 rallies with the dig re-fitted alongside it, this is what
+	## the split was worth:
+	##
+	##     home dig rate       0.929 -> 0.693
+	##     opponent dig rate   0.180 -> 0.307
+	##     home kill rate      0.602 -> 0.531
+	##     opponent kill rate  0.279 -> 0.415
+	##
+	## Five to one, on identical code, entirely because the home defence was
+	## timing the ball off a lofted classifier while the opponent defence timed it
+	## off the swing. What remains of the gap is an offence difference -- home
+	## swings come out at 0.484 and opponent swings at 0.332 -- which is a
+	## different claim and is what tasks #62 to #64 are still for.
+	var attack_time := float(opponent_attack_trajectory.get("duration", 0.5))
+	if block_outcome in ["touch", "funnel"]:
+		## Off the hands the ball is going somewhere else, so the remaining
+		## flight is genuinely a new solve -- on the hitter's swing, not the
+		## defence's classifier.
+		attack_time = float(_swing_arc(
+			Dictionary(_trace_summary().get("geometric_attack_opponent", {})),
+			RallyKinematics.court_distance_meters(opponent_contact, home_target),
+			GeometricAttackPromotionModel.contact_height_meters(
+				opponent_hitter, 1.0
+			),
+		).duration_seconds)
 	if block_outcome == "touch":
 		attack_time += 0.24
 	elif block_outcome == "funnel":
@@ -3750,7 +3838,7 @@ func _resolve_opponent_transition(
 	var home_dig_terms := _defense_terms(
 		defender,
 		float(defense_arrival.get("reach_margin_meters", -1.0)),
-		posture_read,
+		posture_read + _dig_read_bonus(defender, opponent_hitter, block_outcome),
 		CoverageModel.reception_body_penalty(
 			defender, defense_arrival, opponent_attack
 		),
@@ -3962,6 +4050,7 @@ func _resolve_home_continuation(
 	## runs costs something: `exchange_penalty` carries the first, the tempo
 	## demand every other set pays carries the second.
 	var cont_tempo_demand := float(3 - int(setter_capability.resolved_tempo)) \
+		* lerpf(1.0, 1.0 - ARM_SPEED_TEMPO_RELIEF, _rating(hitter, "arm_speed")) \
 		* 0.055 * lerpf(1.0, 0.65, _rating(setter, "tempo_control"))
 	var cont_set_terms := _set_terms(
 		setter, float(setter_capability.effective_pass_quality),
@@ -4097,7 +4186,7 @@ func _resolve_home_continuation(
 	var cont_formation := _form_opponent_block(
 		opponent_team, set_target.x, assignment.tempo, set_quality,
 		set_contact.x, continuation_flight_time,
-		second_contact_window + cont_release_interval,
+		second_contact_window + cont_release_interval, hitter,
 	)
 	var cont_block_pressure := float(
 		cont_formation.get("primary_close", 0.0)
@@ -4476,7 +4565,8 @@ func _resolve_home_continuation(
 	)
 	var cont_dig_terms := _defense_terms(
 		opponent_defender, float(cont_defense.reach_margin_meters),
-		cont_read_modifier + cont_floor_bonus + cont_posture_read,
+		cont_read_modifier + cont_floor_bonus + cont_posture_read
+			+ _dig_read_bonus(opponent_defender, hitter, block_outcome),
 		CoverageModel.reception_body_penalty(
 			opponent_defender, Dictionary(cont_defense.get("arrival", {})),
 			attack_quality,
@@ -4561,6 +4651,10 @@ func _form_opponent_block(
 	## Seconds between the pass and the set leaving the setter's hands. The
 	## block is already reading and moving through this.
 	preset_window_seconds: float = 0.0,
+	## Who is going to swing, for the half of a blocker's read that is the arm
+	## rather than the play. Optional so a caller that has not chosen a hitter yet
+	## gets exactly the read this had before.
+	hitter: VolleyballPlayer = null,
 ) -> Dictionary:
 	var lineup: RotationLineup = opponent_team.current_lineup() if opponent_team != null else null
 	var front_blockers: Array[VolleyballPlayer] = []
@@ -4612,7 +4706,9 @@ func _form_opponent_block(
 	## rather than a constant.
 	var read_total := 0.0
 	for reader in front_blockers:
-		read_total += _blocker_read_quality(reader, tempo, set_quality, setter_x)
+		read_total += _blocker_read_quality(
+			reader, tempo, set_quality, setter_x, hitter
+		)
 	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
 	## The pre-set window is only worth what a blocker can do with it, and what
 	## they can do with it is decided by their read. During that time nobody
@@ -8125,6 +8221,7 @@ func _form_home_block(
 	opponent_setter_x: float,
 	set_flight_time: float,
 	preset_window_seconds: float = 0.0,
+	opponent_hitter: VolleyballPlayer = null,
 ) -> Dictionary:
 	var front_blockers: Array[VolleyballPlayer] = []
 	var setter_pull := {}
@@ -8174,7 +8271,9 @@ func _form_home_block(
 	## rather than a constant.
 	var read_total := 0.0
 	for reader in front_blockers:
-		read_total += _blocker_read_quality(reader, tempo, set_quality, opponent_setter_x)
+		read_total += _blocker_read_quality(
+			reader, tempo, set_quality, opponent_setter_x, opponent_hitter
+		)
 	var read_quality := read_total / maxf(float(front_blockers.size()), 1.0)
 	## The pre-set window is only worth what a blocker can do with it, and what
 	## they can do with it is decided by their read. During that time nobody
@@ -8288,15 +8387,32 @@ func _form_home_block(
 	}
 
 
+## **A blocker reads the arm, and a fast arm gives them less of it to read.**
+##
+## `hitter` is new and optional. Everything above it is a read of the *play* --
+## the pass, the setter's body, the tempo -- which is what a blocker has before
+## the ball leaves the setter's hands. What they have after that is the swing,
+## and the swing is over faster for some hitters than others: a middle who gets
+## the arm through in a blink shows a blocker almost nothing, while a slow big
+## windup announces the shot in time to move on it.
+##
+## Centred on the population rather than applied as a flat multiplier, so an
+## ordinary arm changes nothing and the trait cuts both ways. A slow arm is a
+## real weakness here and not merely the absence of a strength -- which is the
+## same correction `AttackPowerModel.choose_power` had to make to `aggression`.
 func _blocker_read_quality(
 	blocker: VolleyballPlayer,
 	tempo: int,
 	set_quality: float,
 	opponent_setter_x: float,
+	hitter: VolleyballPlayer = null,
 ) -> float:
 	var cue_clarity := (1.0 - set_quality) * 0.18 \
 		+ absf(opponent_setter_x - 0.5) * 0.16 \
 		+ float(clampi(tempo, 0, 3)) * 0.025
+	if hitter != null:
+		cue_clarity -= ARM_SPEED_READ_COST \
+			* (_rating(hitter, "arm_speed") - 0.5) * 2.0
 	return clampf(
 		_rating(blocker, "anticipation") * 0.34
 		+ _rating(blocker, "court_vision") * 0.25
@@ -8304,6 +8420,49 @@ func _blocker_read_quality(
 		+ _rating(blocker, "tactical_discipline") * 0.20
 		+ cue_clarity - rng.randf_range(0.0, 0.08), 0.0, 1.0
 	)
+
+
+## What a defender can tell about a swing before it happens.
+##
+## Three reads, all of them things a real defender is actually doing, and none of
+## them previously modelled:
+##
+## - **The arm, against their own eyes.** `court_vision` was read by the attack's
+##   own resolver and by the blocker above and by nothing on the floor, so a
+##   libero's vision decided nothing about digging. Here it is contested directly
+##   against the hitter's `arm_speed`: seeing the shot early is worth exactly as
+##   much as the hitter's arm is slow.
+## - **The wall in front of them.** A funnelling block is *telling* the defence
+##   where the ball is going -- that is the entire point of choosing to funnel,
+##   and until now choosing it bought the diggers behind it nothing at all. A
+##   sealing block buys less, because holding the line concedes the angle rather
+##   than narrowing it.
+## - **A hand on the ball.** A touched ball is slower and has changed direction,
+##   which is harder in one way and much easier in another; the engine already
+##   pays the defender the extra flight time and this is the read that goes with
+##   it.
+##
+## Returns a signed adjustment to `read_bonus`, so a defender facing a fast arm
+## with no wall in front of them is *worse* off than the neutral case rather than
+## merely not better off.
+func _dig_read_bonus(
+	defender: VolleyballPlayer,
+	hitter: VolleyballPlayer,
+	block_outcome: String,
+) -> float:
+	var bonus := 0.0
+	if defender != null and hitter != null:
+		bonus += DIG_VISION_READ_WEIGHT * (
+			_rating(defender, "court_vision") - _rating(hitter, "arm_speed")
+		)
+	match block_outcome:
+		"funnel":
+			bonus += FUNNEL_READ_BONUS
+		"touch":
+			bonus += TOUCHED_BALL_READ_BONUS
+		"seal":
+			bonus += SEAL_READ_BONUS
+	return bonus
 
 
 func _blocker_close_fraction(

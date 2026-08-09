@@ -3759,3 +3759,125 @@ reports both spreads and the gate reads the one still inside its own range.
   the drawn flight publishes `gravity_true`. Two contracts, correctly, because
   they describe different objects -- but the naming invites a reader to think one
   supersedes the other.
+
+---
+
+## The floor defence, re-fitted -- and the five-to-one it was hiding
+
+The re-fit the previous entry left open, and the answer turned out to be one
+number rather than a tuning pass.
+
+### The instrument first
+
+`tools/run_rally_balance_probe.gd`. Every previous attempt at this was measured
+with a different private probe, so no two attempts were comparable, and the
+figures this file quotes across ten entries are not on one scale. This is one
+reading with every number the sport has a real value for -- kill rate, dig rate,
+stuff rate, ace rate, swing balance, contacts per rally -- printed together
+because they are one fact, and run on **both serving sides**, because half this
+engine's history is one side of the net being modelled and the other not.
+
+The baseline was healthier than this file had been claiming. Not 0.85-0.91 kill:
+
+    contacts per rally   5.44   above 6.0
+    kill rate            0.542  0.45 - 0.50
+    dig rate             0.341  0.35 - 0.55
+    stuff rate           0.065  0.08 - 0.14
+    ace rate             0.083  0.05 - 0.09
+    serve error rate     0.154  0.12 - 0.20
+
+Serving is **in range on both of its own axes** and needs no buff.
+
+### The defect: one side of the net was timing a different ball
+
+Splitting the dig rate by side found it immediately:
+
+    home dig rate       0.929
+    opponent dig rate   0.180
+
+Five to one, on identical code, with identical attributes. The home defence
+timed the incoming swing through `_attack_launch_angle_degrees` -- a *defensive*
+classifier that lobs the ball at 22-32 degrees -- while the opponent defence
+timed it off the swing that was actually drawn. This file found that split once
+before and fixed it behind `ENABLE_UNIFIED_ATTACK_SHAPE`, and the flag stayed
+shut because opening it collapsed the rally.
+
+It collapsed the rally because the dig was calibrated against the lob. That was
+never an argument that the two solves should disagree.
+
+### What landed, and what each part was worth
+
+Three changes that cannot land separately, measured over 700 rallies:
+
+1. **`ENABLE_SET_HEIGHT_TIMING` on.** Real hang times, 0.65 s to 1.47 s.
+2. **The home defence times the ball off the swing**, unconditionally.
+3. **`DIG_SOLO_SHARE` 0.62 -> 0.90 and `DIG_ATTACKER_ADVANTAGE` 0.20 -> 0.07.**
+
+                        before    after   target
+    kill rate            0.542    0.481   0.45 - 0.50
+    dig rate             0.341    0.478   0.35 - 0.55
+    stuff rate           0.065    0.112   0.08 - 0.14
+    home kill rate       0.724    0.531
+    opponent kill rate   0.276    0.415
+    swing balance        0.681    0.767   near 1.00
+    contacts per rally   5.44     5.57    above 6.0
+
+The three headline rates are inside their bands for the first time. The
+side-to-side kill gap goes from 0.448 to 0.116.
+
+### Four attributes that decided nothing, and now decide something
+
+- **`arm_speed` was inert.** Generated, trained, scouted, drawn on the profile
+  wheel, read by no simulation code -- it was in the inert-attribute audit and
+  stayed there. Two consumers now. It shortens what a blocker can read off the
+  swing (`ARM_SPEED_READ_COST`), and it pays off part of the tempo demand
+  (`ARM_SPEED_TEMPO_RELIEF`), which is what makes it a middle's attribute: a
+  quick was priced entirely on the *setter's* `tempo_control` and the person
+  swinging at it had no say in whether they could get the arm through.
+- **`court_vision` decided nothing on the floor.** It was read by the attack's
+  own resolver and by the blocker's read and by nothing a defender does, so a
+  libero's vision was worth nothing to a dig. It is now contested directly
+  against the hitter's `arm_speed` in `_dig_read_bonus`: seeing the shot early
+  is worth exactly as much as the arm is slow, and the term is *signed*, so a
+  poor reader against a fast arm is behind the ball rather than merely not ahead
+  of it.
+- **A funnelling block told the diggers nothing.** Which is the entire point of
+  funnelling. Choosing the intent moved the wall's own position and bought the
+  six people behind it nothing at all. `FUNNEL_READ_BONUS`, with a smaller
+  `SEAL_READ_BONUS` -- holding the line still removes an option, it just
+  concedes the angle rather than narrowing it -- and a larger
+  `TOUCHED_BALL_READ_BONUS`, because the engine already pays a defender the
+  extra flight time off a touch and this is the read that goes with the time.
+
+### Already built, and worth recording so it is not built again
+
+**Balance and pace resistance are done.** `CoverageModel.reception_body_penalty`
+already prices exactly this: `edge_ratio` is how far out on their own reach
+envelope a defender is -- a defender who is set has a low one and a defender
+stretching has a high one -- and `reception_balance` counteracts it, while
+`reception_stability` counteracts a pace exposure taken from the ball's real
+speed. There is no separate `pace_resistance` attribute to add; it is
+`reception_stability`, and it has been consuming a real ball speed since the
+drawn flight became physical.
+
+### Still open
+
+- **The remaining asymmetry is an offence difference, not a defence one.** Home
+  swings come out at 0.484 quality and opponent swings at 0.332, and that gap is
+  now most of what is left of the kill split. Tasks #62 to #64.
+- **Contacts per rally is 5.57 against a target above 6.** One full exchange and
+  most of a second. Bounded by the same offence gap: a weaker opponent swing ends
+  more rallies than it should by being dug into a free ball.
+- **A blocker reads the arm but not the course.** `_blocker_read_quality` now
+  costs the read against `arm_speed`, which says *how much* a blocker sees. What
+  they see is still the play -- pass, setter's body, tempo -- and not the
+  shoulder. `wall_stage_x` already takes a `read_quality` and would consume a
+  course read directly, so the foundation exists and only the cue does not.
+- **Serve placement precision is not measured at all.** The two serve rates the
+  probe reports are outcome rates and both are in range; how *close to its aim
+  point* a serve lands, and whether a seam is worth attacking, are different
+  questions with no instrument.
+- **No blocker touch attribute exists.** A deflection's pace is currently
+  uncontested. `block_timing` decides *when* the hands are there and
+  `hand_control` is the setter's; nothing says how well a blocker's hands absorb
+  a ball once it hits them.

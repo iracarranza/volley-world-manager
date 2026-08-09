@@ -695,32 +695,34 @@ const ENABLE_PERPENDICULAR_APPROACH: bool = true
 
 ## Time a set by how high it was put up, instead of by a ground-to-ground lob.
 ##
-## **Off, and the reason is a measurement rather than a doubt about the model.**
+## **On, and the re-fit it was waiting for has landed.**
 ##
 ## A set is described by its height -- that is what a coach means by first tempo
 ## and what a high ball *is* -- so `_set_arc` solves the hang time from an apex
-## through `BallFlightModel.duration_for_apex`, and the launch-angle table it
+## through `BallFlightModel.duration_for_apex`. The launch-angle table it
 ## replaces could not express a set at all: at the six to ten degrees it calls a
-## quick, the only ball that climbs the metre from a setter's hands to a hitter's
-## over four metres of court is one struck at 26 m/s.
+## quick, the only ball that climbs the metre from a setter's hands to a
+## hitter's over four metres is one struck at 26 m/s.
 ##
-## The new times are right and that is the problem. They run 0.65 s for a quick to
-## 1.47 s for a high ball, against 0.23 s to 0.69 s from the old solve -- roughly
-## triple. The hitter's run-up is paid for out of the set's flight time, so with
-## real hang times every hitter reaches every mark, and over 700 rallies:
+## It was held off for one pass because the new times are right and every
+## approach constant in the engine had been fitted against set flights a third as
+## long -- 0.65 s to 1.47 s against 0.23 s to 0.69 s. With real hang times every
+## hitter reached every mark, home attack quality went to 1.000 and the opponent
+## stopped swinging. That was never an argument for the wrong times; it was the
+## floor defence being calibrated against them.
 ##
-##     home attack quality >= 0.25    0.794 -> 1.000
-##     opponent swings                   97 -> 8
+## Landed together with two things it cannot land without: the home defence now
+## times the ball off the swing rather than off a lofted classifier, and
+## `DIG_SOLO_SHARE` and `DIG_ATTACKER_ADVANTAGE` are re-fitted against the sport.
+## Measured over 700 rallies, both serving sides:
 ##
-## Nothing is dug, so no rally reaches a second exchange, so the opponent
-## effectively stops attacking. That is the degeneracy `docs/BACKLOG.md` names as
-## the limiter, arriving from a new direction: every approach constant in the
-## engine was fitted against set flights a third as long as a set really is.
+##                        before    after   target
+##     kill rate           0.542    0.481   0.45 - 0.50
+##     dig rate            0.341    0.478   0.35 - 0.55
+##     stuff rate          0.065    0.112   0.08 - 0.14
+##     home kill rate      0.724    0.531
+##     opponent kill rate  0.276    0.415
+##     swing balance       0.681    0.767   near 1.00
 ##
-## So this is the third entry on the shelf of correct, measured, disabled fixes,
-## and it is disabled for the reason that shelf exists -- the re-fit belongs with
-## tasks #62 to #64 and is bigger than the flag. What did land is the *drawing*:
-## the ball on screen is a real parabola between the two contact heights over
-## whatever duration the resolver reports, so with this off a set is still drawn
-## honestly, just as the short flat ball the resolver currently thinks it is.
-const ENABLE_SET_HEIGHT_TIMING: bool = false
+## `tools/run_rally_balance_probe.gd` is that reading.
+const ENABLE_SET_HEIGHT_TIMING: bool = true

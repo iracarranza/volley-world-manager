@@ -7201,17 +7201,31 @@ func _test_playback_elevation_and_hand_posture() -> void:
 	get_root().add_child(court)
 	court.set_lineup(manager.rotations[1], manager.players)
 
-	var result: Resource = manager.resolve_active_rally(31000)
+	## Scanned for rather than pinned to one seed.
+	##
+	## This asserted against seed 31000 alone, and the property it tests -- that a
+	## block lifts both pairs of hands -- is not a property of that rally. The
+	## fixture broke the moment the floor defence was re-fitted and the seed
+	## stopped producing a block at all, which reports as a failure of the lift
+	## and is nothing of the kind. The first rally in the window that contains
+	## both an attack and a block is as good a witness as any specific one.
+	var result: Resource = null
 	var attack_event: Resource = null
 	var block_event: Resource = null
-	for event_resource in result.events:
-		var event: Resource = event_resource
-		if attack_event == null \
-				and int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK:
-			attack_event = event
-		elif block_event == null \
-				and int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.BLOCK:
-			block_event = event
+	for seed_value in range(31000, 31060):
+		result = manager.resolve_active_rally(seed_value)
+		attack_event = null
+		block_event = null
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			if attack_event == null \
+					and int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK:
+				attack_event = event
+			elif block_event == null \
+					and int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				block_event = event
+		if attack_event != null and block_event != null:
+			break
 
 	## 1. The player making a jumping contact leaves the floor; everyone else
 	##    stays on it. Without the second half this would "pass" by lifting the
