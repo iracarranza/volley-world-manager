@@ -57,6 +57,10 @@ const SETTER_COMMIT_LEAD_SECONDS: float = 0.14
 ## A called ball is called on the approach, not at contact.
 const HITTER_CALL_LEAD_SECONDS: float = 0.45
 const HITTER_CALL_DURATION_SECONDS: float = 0.40
+## How long before contact a server has chosen their target. A serve is the one
+## contact in the sport taken entirely at the player's own pace, so the aim is
+## settled well before the toss.
+const SERVE_AIM_SECONDS: float = 0.70
 ## What misjudging an option costs the setter's confidence in it.
 ##
 ## `misread` is a **signed noise magnitude**, not a flag -- `stable_noise *
@@ -81,10 +85,94 @@ static func compile(result: Resource) -> Array:
 	var events: Array = result.events
 	for index in range(events.size()):
 		var event: Resource = events[index]
-		if int(event.event_type) != RallyEventModel.EventType.SET:
-			continue
-		_compile_second_contact(result, index, cues)
+		match int(event.event_type):
+			RallyEventModel.EventType.SERVE:
+				_compile_serve(event, cues)
+			RallyEventModel.EventType.RECEPTION:
+				_compile_reception(events, index, cues)
+			RallyEventModel.EventType.SET:
+				_compile_second_contact(result, index, cues)
 	return TimelineModel.finalize(cues)
+
+
+## The server picking a target, where one was actually picked.
+##
+## Gated on the aim evidence existing rather than emitted for every serve: a
+## serve whose target the resolver did not record is a serve whose intent this
+## layer does not know, and inventing a look at a zone would be exactly the kind
+## of decorative cue the whole design is trying not to be.
+##
+## `target_radius_m` is the server's chosen *specificity* -- how small a patch
+## they aimed at, decided before execution scatter -- so it reads directly as
+## how sure the cue should look.
+static func _compile_serve(serve_event: Resource, cues: Array) -> void:
+	var metadata: Dictionary = serve_event.metadata
+	if not metadata.has("target_radius_m") and not metadata.has("serve_target"):
+		return
+	var server_id := int(serve_event.actor_id)
+	if server_id < 0:
+		return
+	var contact_time := float(metadata.get("event_time", 0.0))
+	var starts_at := maxf(contact_time - SERVE_AIM_SECONDS, 0.0)
+	var cue := CueModel.create(
+		server_id, StringName(str(metadata.get("side", "home"))),
+		serve_event.sequence, starts_at, contact_time, &"deciding", &"before",
+	)
+	cue.attention_kind = &"position"
+	cue.attention_position = Vector2(serve_event.end_position)
+	## A tight aim is a confident one. The radius runs 1.80 m for a server
+	## picking a half of the court down to 0.22 m for one picking a seam, so it
+	## is inverted onto certainty across its own stated range rather than a
+	## guessed one.
+	var radius := float(metadata.get("target_radius_m", 1.0))
+	cue.certainty = clampf(inverse_lerp(1.80, 0.22, radius), 0.0, 1.0)
+	cue.urgency = 0.35
+	cue.audience = &"observable"
+	cue.priority = PRIORITY_DECIDING
+	cues.append(cue)
+
+
+## The passer claiming the ball, and whether they were ever going to reach it.
+##
+## `arrival_margin` is the whole cue: positive means they were waiting for it,
+## negative means the serve beat them there. That is a real read -- it is the
+## same quantity the vocabulary names a Platform dime and a Shank from -- so this
+## is a place a cue is earned rather than added for coverage.
+static func _compile_reception(
+	events: Array, reception_index: int, cues: Array
+) -> void:
+	var reception: Resource = events[reception_index]
+	var metadata: Dictionary = reception.metadata
+	if not metadata.has("arrival_margin") and not metadata.has("arrival"):
+		return
+	var receiver_id := int(reception.actor_id)
+	if receiver_id < 0:
+		return
+	var contact_time := float(metadata.get("event_time", 0.0))
+	var serve_time := 0.0
+	for index in range(reception_index - 1, -1, -1):
+		var candidate: Resource = events[index]
+		if int(candidate.event_type) == RallyEventModel.EventType.SERVE:
+			serve_time = float(candidate.metadata.get("event_time", 0.0))
+			break
+	if contact_time - serve_time < CueModel.MINIMUM_DURATION_SECONDS:
+		return
+	var margin := float(metadata.get("arrival_margin", 0.0))
+	var cue := CueModel.create(
+		receiver_id, StringName(str(metadata.get("side", "home"))),
+		reception.sequence, serve_time, contact_time,
+		&"committed" if margin >= 0.0 else &"reacting", &"before",
+	)
+	cue.attention_kind = &"ball"
+	## Comfort, on the margin's own scale: a quarter of a second early is a
+	## passer in position, and anything negative is one still travelling.
+	cue.certainty = clampf(inverse_lerp(-0.25, 0.25, margin), 0.0, 1.0)
+	cue.urgency = clampf(1.0 - cue.certainty, 0.15, 1.0)
+	if margin < -0.05:
+		cue.punctuation = "!"
+	cue.audience = &"observable"
+	cue.priority = PRIORITY_COMMITTED if margin >= 0.0 else PRIORITY_REACTING
+	cues.append(cue)
 
 
 ## The set -> attack -> block slice, compiled from one SET event outward.

@@ -13897,6 +13897,41 @@ func _test_cognition_cues() -> void:
 		"no cue knows something before its player could: recognition follows the set, weighing ends at it",
 	)
 
+	## 6b. The notability budget binds.
+	##
+	##     The classifier is generous by design -- it says what each contact
+	##     *would* be called -- and the draft is explicit that without a budget
+	##     "the labels become texture and we are back where we started". So what
+	##     is gated is that the budget actually removes names, not merely that it
+	##     exists: a cap nothing ever reaches is a cap in name only, which is the
+	##     §0 failure this repository keeps producing.
+	var over_budget := 0
+	var rallies_named := 0
+	var names_offered := 0
+	var names_kept := 0
+	for seed_value in range(41300, 41340):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		var named_here := 0
+		for event_resource in rally.events:
+			var event: Resource = event_resource
+			if float(event.metadata.get("action_notability", 0.0)) \
+					>= RallyActionVocabulary.NAMING_THRESHOLD \
+					and not str(event.metadata.get("action_outcome", "")).is_empty():
+				names_offered += 1
+			if bool(event.metadata.get("named_action", false)):
+				named_here += 1
+		names_kept += named_here
+		if named_here > 0:
+			rallies_named += 1
+		if named_here > RallyActionVocabulary.NAMED_ACTIONS_PER_RALLY:
+			over_budget += 1
+	_check(
+		over_budget == 0 and names_kept > 0 and names_offered > names_kept,
+		"the notability budget caps names per rally and actually removes some",
+	)
+
 	## 7. Each blocker recognises on their own clock rather than on a shared
 	##    beat. The gap is small with this roster -- both home middles carry
 	##    almost the same anticipation -- so this asserts the *mechanism*
