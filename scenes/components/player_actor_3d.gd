@@ -255,8 +255,8 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 			ink_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			ink_material.cull_mode = BaseMaterial3D.CULL_FRONT
 			ink_material.grow = true
-			ink_material.grow_amount = INK_METRES \
-				if str(mesh.name) in INK_BODY_PARTS else CROWN_INK_METRES
+			ink_material.grow_amount = ink_metres \
+				if str(mesh.name) in INK_BODY_PARTS else crown_ink_metres
 			ink.material_override = ink_material
 
 
@@ -992,10 +992,23 @@ func _settle_to_floor(floor_height: float, hips: Vector3) -> void:
 	body_pivot.position.y += floor_height - _lowest_body_point()
 
 
-## Where the hips sit relative to the actor. Read from the shorts, which is the
-## one mesh that is the hip rather than merely near it.
+## Where the hips sit relative to the actor.
+##
+## **Read from the leg roots, which are the hip joint.** This used to read the
+## shorts, on the reasoning that they were the one mesh that *was* the hip rather
+## than merely near it -- true while they were a box sitting on the joint, and
+## false the moment they became the bottom section of the torso. Moving a mesh
+## silently moved a measurement taken off it, and the landing poses settled to the
+## wrong height for it.
+##
+## The joint is the honest source: it is where the legs actually hang from, it is
+## not a garment, and it cannot be restyled out from under this.
 func _hip_offset_from_actor() -> Vector3:
-	return (global_transform.affine_inverse() * shorts.global_transform).origin
+	var inverse := global_transform.affine_inverse()
+	return (
+		(inverse * left_leg.global_transform).origin
+		+ (inverse * right_leg.global_transform).origin
+	) * 0.5
 
 
 ## The lowest point of the body, in the actor's own space.
@@ -1870,8 +1883,11 @@ func _paint_joint(bone: Node, color: Color) -> void:
 ## ears or a beak is the thing that says which type this is, occupies a few dozen
 ## pixels doing it, and is the one place where more line buys legibility instead
 ## of weight.
-const INK_METRES: float = 0.018
-const CROWN_INK_METRES: float = 0.030
+## `static var` so the two candidates -- drop the die cut, or thicken the line so
+## it survives the quantiser -- can be rendered against each other rather than
+## argued about.
+static var ink_metres: float = 0.018
+static var crown_ink_metres: float = 0.030
 const INK_COLOR := Color(0.06, 0.07, 0.10)
 ## Everything else is a cosmetic and takes the heavier line. Named as the body
 ## rather than as a list of cosmetics because the body is a closed set and the
@@ -1918,8 +1934,8 @@ func _ink_node(node: Node) -> void:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.cull_mode = BaseMaterial3D.CULL_FRONT
 	material.grow = true
-	material.grow_amount = INK_METRES \
-		if str(mesh_instance.name) in INK_BODY_PARTS else CROWN_INK_METRES
+	material.grow_amount = ink_metres \
+		if str(mesh_instance.name) in INK_BODY_PARTS else crown_ink_metres
 	twin.material_override = material
 
 

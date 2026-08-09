@@ -2918,3 +2918,28 @@ separates it from the torso. Cheaper alternative: keep the die cut and thicken t
 ink for the bake only, which is one constant. Render both before choosing --
 guessing between two plausible causes is what this session has repeatedly had to
 undo.
+
+## Die cut versus thicker ink: A rendered, B did not
+
+Both candidates are switchable now -- `Worksheet.draw_die_cut` and
+`PlayerActor3D.ink_metres` / `crown_ink_metres` are static vars rather than
+constants -- so this is a toggle rather than an edit.
+
+**A** (die cut off, ink 0.018) renders. **B** (die cut on, ink 0.034/0.048) did
+not finish inside a five-minute budget and wrote no image, so the comparison is
+still half done.
+
+Two things learned in the attempt, both worth keeping:
+
+- **The ink doubles the mesh count in every bake.** Each sticker's viewport now
+  draws the body twice, and the tactic sheet bakes a sticker per voli per phase
+  per view. That is the real cost of the technique and it lands on the slowest
+  path in the game.
+- **`Invalid polygon data, triangulation failed` appears in *both* candidates** --
+  six times in A. It is the sticker shadow polygon meeting a degenerate contour
+  and it predates the ink, so it is not evidence against the thicker line. Worth
+  chasing separately: a contour that cannot be triangulated is a sticker whose
+  shadow silently does not draw.
+
+Finish by rendering B with a longer budget, or by baking the two candidates as a
+strip rather than through the whole training screen, which is most of the cost.

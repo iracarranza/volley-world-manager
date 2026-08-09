@@ -170,6 +170,13 @@ const NET_ANCHOR: float = 0.46
 ## A share of the sticker's height with a floor and a ceiling. A die cut does not
 ## vary with what is printed on it, but it also does not scale with a drawing --
 ## and what is being kept here is the *look* of a cut edge, which is a proportion.
+## Whether the sheet draws its own edge round a sticker.
+##
+## A `static var` so the two candidates can be rendered against each other. The
+## die cut was invented when the rig had no line of its own; it does now, and
+## drawing both means two edges at slightly different offsets.
+static var draw_die_cut: bool = true
+
 const STICKER_BORDER_SHARE: float = 0.022
 const STICKER_BORDER_MIN: float = 0.9
 const STICKER_BORDER_MAX: float = 3.4
@@ -620,6 +627,8 @@ func _draw_sticker(key: String, ground: Vector2, scale: float) -> bool:
 		draw_texture_rect(built.texture, Rect2(origin, box), false)
 
 	## 3. The cut edge, hugging its own outline at a weight this sticker can carry.
+	if not draw_die_cut:
+		return true
 	var cut := clampf(
 		height * STICKER_BORDER_SHARE, STICKER_BORDER_MIN, STICKER_BORDER_MAX
 	)
