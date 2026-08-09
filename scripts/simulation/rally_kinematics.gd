@@ -178,6 +178,10 @@ static func struck_arc_from_speed(
 		"duration_seconds": maxf(
 			maxf(distance_meters, 0.0) / horizontal, MIN_FLIGHT_DURATION
 		),
+		## Signed, and published rather than left to be re-inferred. A drawn
+		## segment that was cut short at a block cannot recover the launch from its
+		## own two ends -- see `BallPresentation.display_trajectory`.
+		"vertical_speed_mps": vertical,
 		"apex_height_meters": rise,
 		"apex_absolute_meters": start_height_meters + rise,
 		"required_speed_mps": speed,

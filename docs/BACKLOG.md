@@ -3922,3 +3922,72 @@ what `_reachable_contact` does with a displaced hitter when the set hangs
 honestly -- the gate's own first clause is that the contact should be dragged
 back off the net, and it is moving 0.003 the wrong way, which is a claim about
 the clamp rather than about the runway.
+
+---
+
+## The spike was still lobbing over the block, and the launch was the missing fact
+
+Reported again after the gravity-true rewrite: the flat-then-drop symptom was
+still visible in 3D playback. It was, and the rewrite could not have caught it,
+because both ends of every drawn segment were still right.
+
+### What it was
+
+Dumping the drawn height of real attacks at deciles, which no probe had done --
+the earlier instruments reported aggregates:
+
+    seed 7002  T=0.88s  dist=6.7m  next=Block
+       h:  3.30 3.60 3.83 3.99 4.07 4.07 3.99 3.84 3.61 3.31 2.93
+    seed 7006  T=0.49s  dist=9.2m  next=floor
+       h:  3.28 3.07 2.84 2.58 2.30 1.99 1.66 1.31 0.94 0.54 0.12
+
+An untouched spike descends exactly as it should. **A spike met by a block is
+drawn lobbing upward over it.**
+
+A parabola is determined by two endpoints and a duration only when both
+endpoints are *landings*. A blocked spike's far end is an interception, and the
+height taken there was the **blocker's reach** -- around 2.9 m, within a few
+centimetres of the hitter's own contact. A curve forced to arrive level after
+most of a second has to be launched upward to spend the time. Attack-to-block is
+181 of 1090 flights and it is the one a viewer watches most closely.
+
+### The fix: carry the launch instead of re-inferring it
+
+`struck_arc_from_speed` knows the vertical speed the swing produced and now
+publishes it; `_ball_trajectory` carries it; `BallPresentation` derives the far
+end from it where it is present. Sets, passes and digs are not struck and keep
+the two-contact-height solve, which is the better answer for them.
+
+This is `§8`'s own requirement -- outcome, position and drawing out of one
+computation -- reaching the case it had not reached.
+
+### Two overcorrections on the way, both recorded because both looked right
+
+1. **Reading the far end off the aimed flight at the truncation fraction.**
+   Correct in principle, wrong here: `attack_to_block` trajectories are *already*
+   truncated by the resolver, so the aimed flight is the short leg and the ball
+   was drawn hitting the floor at the net.
+2. **`_swing_arc` re-solved the driven angle against the distance to the net.**
+   That asks "what shot lands at the tape", so the re-sliced leg aimed at the
+   block rather than through it and dived -- 111 of 181 crossing below the net.
+   `_truncated_arc` now keeps the parent swing's launch and takes the share of
+   its duration the shorter distance is worth, which is the same rule as before:
+   truncating a flight must not change its shape.
+
+### Open, and newly visible rather than newly caused
+
+**50 of 181 attack-to-block flights still cross the tape below net height.**
+Before any of this they crossed above it by lobbing, which is clearing the net
+by being wrong. The honest curve exposes a real defect one layer up:
+`GeometricAttackResolver` searches for an angle that clears the net -- that is
+what `_height_at_net` and `NET_SPEED_RELIEF_STEPS` are for -- and `_swing_arc`
+throws that answer away and re-solves the driven root without the constraint. A
+back-row swing struck at the reference angle from four metres back physically
+cannot clear the tape, and the resolver already knows it.
+
+The repair is to prefer the record's own `vertical_angle_degrees`, which is the
+cleared angle, and bound it rather than re-derive it. It is **not** attempted
+here: carrying that angle naively was tried earlier in this same pass and drew
+two-second flights nine metres up, because the angle belongs to the resolver's
+landing point and not to the legacy target. Getting both right at once needs the
+two targets reconciled first, which is a bigger change than this one.
