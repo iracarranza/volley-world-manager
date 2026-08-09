@@ -441,19 +441,33 @@ func stickers() -> UIVoliSticker:
 ## is not what a blocker looks like from anywhere on a volleyball court.
 ##
 ## A body has a heading in the world. Everyone on this sheet is looking over the
-## net, so their heading is -y, which is 180 degrees measured from the far court
+## net, so their heading is -y, which is 180 degrees measured from the near court
 ## round toward the right sideline. What the bake needs is the angle between that
-## heading and the direction the viewer is in, and the viewer is at azimuth
-## `theta`: **yaw = heading - theta**. At three quarter that is 142 degrees --
-## a blocker seen from behind and to one side, shoulders running along the tape --
-## and at the plan view it is 90, which is what looking down at someone's
-## shoulders means.
+## heading and the direction the camera is looking, and the camera at azimuth
+## `theta` looks along `theta + 180`: **yaw = heading - theta + 180**. At three
+## quarter that is -38 degrees -- a blocker seen from behind and to one side,
+## shoulders running along the tape -- and square on it is zero, which is what a
+## back is.
+##
+## **The half turn is the second fix and it is the one that was reported.** The
+## formula was `heading - theta`, which is the same relative angle read against
+## the wrong zero: the rig's own forward at yaw 0 is -z, and -z is *away* from the
+## bake camera, so yaw 0 is already a back and 180 is already a face. Reading it
+## the other way put every voli on the sheet chest-on to a reader standing behind
+## them -- 142 degrees at three quarter, which is a blocker facing their own
+## setter. Measured rather than argued: `tools/preview/sheet_strip.gd -- turntable`
+## bakes one blocker the whole way round in 45 degree steps, and the passing
+## platform, which can only be in front of a body, appears at 180 and is hidden at
+## 0.
 const FACING_OVER_THE_NET: float = 180.0
+
+## Which way the bake camera is looking, relative to where it stands.
+const CAMERA_LOOKS_BACK: float = 180.0
 
 
 func _bake_angles(for_view: String, facing_degrees: float = FACING_OVER_THE_NET) -> Vector2:
 	var angles: Vector2 = VIEW_ANGLES.get(for_view, Vector2(-38.0, 32.0))
-	return Vector2(facing_degrees - angles.x, -angles.y)
+	return Vector2(facing_degrees - angles.x + CAMERA_LOOKS_BACK, -angles.y)
 
 ## How high the baked blockers are jumping, shared by the bake and the placement
 ## so the two cannot drift.

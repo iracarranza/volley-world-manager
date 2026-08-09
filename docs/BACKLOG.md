@@ -2919,17 +2919,39 @@ ink for the bake only, which is one constant. Render both before choosing --
 guessing between two plausible causes is what this session has repeatedly had to
 undo.
 
-## Die cut versus thicker ink: A rendered, B did not
+## Die cut versus thicker ink: both rendered, the choice is open
 
-Both candidates are switchable now -- `Worksheet.draw_die_cut` and
+Both candidates are switchable -- `Worksheet.draw_die_cut` and
 `PlayerActor3D.ink_metres` / `crown_ink_metres` are static vars rather than
 constants -- so this is a toggle rather than an edit.
 
-**A** (die cut off, ink 0.018) renders. **B** (die cut on, ink 0.034/0.048) did
-not finish inside a five-minute budget and wrote no image, so the comparison is
-still half done.
+Rendered as a strip: `tools/preview/sheet_strip.gd -- diecut` stands the
+worksheet up on its own, draws it three ways, and writes both the full sheets
+(`diecut_strip.png`) and the blockers cropped and four times up
+(`diecut_zoom.png`). Roughly a minute for all three, against five for one frame
+through the training screen -- which was the point.
 
-Two things learned in the attempt, both worth keeping:
+What the three show, on the dark theme:
+
+- **Cut on, ink 0.018** -- the current sheet. The white cut border separates a
+  voli from the court hardest of the three, and where two volis overlap it also
+  cuts one out of the other, which is exactly what a sticker does. It is also
+  the only one where the arms merge into the silhouette: the cut traces the
+  outside of the shape, so an arm crossing a torso disappears into it and gets
+  the lighter crease line back to compensate.
+- **Cut off, ink 0.034** -- softest. The parts separate, the two blockers read as
+  two people, but at sheet size the line is thin enough that the bodies go a
+  little blobby.
+- **Cut off, ink 0.048** -- the most legible of the three at the size the sheet
+  actually draws. Every part carries its own edge, the crown reads, and no
+  compensating crease is needed.
+
+Not decided here, because it is a taste call and the dark ground flatters the
+cut: the white border is a real legibility win against a dark court that a black
+ink line cannot match. Worth rendering the light theme before choosing, which is
+one more variant in the same tool.
+
+Two things learned in the earlier attempt, both still true:
 
 - **The ink doubles the mesh count in every bake.** Each sticker's viewport now
   draws the body twice, and the tactic sheet bakes a sticker per voli per phase
@@ -2941,25 +2963,39 @@ Two things learned in the attempt, both worth keeping:
   chasing separately: a contour that cannot be triangulated is a sticker whose
   shadow silently does not draw.
 
-Finish by rendering B with a longer budget, or by baking the two candidates as a
-strip rather than through the whole training screen, which is most of the cost.
+## Blockers faced the wrong way: fixed, and one yaw still serves every phase
 
-## Blockers face the wrong way, and one yaw serves every phase
+**Fixed.** `_bake_angles` turned every baked body by `facing - theta`, which is
+the right relative angle measured against the wrong zero. The bake camera stands
+on +z and looks along -z, and the rig's own forward at yaw 0 is also -z -- so yaw
+0 is already a back and yaw 180 is already a face. Reading it the other way put
+every voli on the sheet chest-on to a reader standing behind them: 142 degrees at
+three quarter, which is a blocker facing their own setter.
 
-Reported from the sheet and not yet fixed.
+It is `facing - theta + 180` now, and the half turn has a name
+(`CAMERA_LOOKS_BACK`) rather than being folded into the arithmetic.
 
-What is there: `_bake_angles(for_view, facing_degrees = FACING_OVER_THE_NET)`
-turns every baked body by `facing - theta`, and **every call site takes the
-default**. So the parameter that exists to vary facing per phase has never varied
--- attack, block and floor are all baked at 180 degrees, "looking over the net".
+Measured, not argued, because two plausible causes were on the table -- the sign,
+or `set_pose`'s own `_turn_toward` -- and this repository's recurring defect is
+picking between them by reasoning. `tools/preview/sheet_strip.gd -- turntable`
+bakes one blocker the whole way round in 45 degree steps in two poses. The
+passing platform, which can only be in front of a body, appears at yaw 180 and is
+hidden at yaw 0. That settles which end is which in one image, and it also
+cleared `_turn_toward`: the baker overwrites the pose's own rotation afterwards,
+so it never reached the sheet.
 
-That is defensible for a passer and for a blocker, who both face the net, and it
-is the first thing to check rather than assume: if blockers read as front-on when
-they should read from behind, the error is either the sign of `facing - theta` or
-the interaction with `set_pose`'s own `_turn_toward(0.0 if position.z > 0.0 else
-PI)`, which the block branch runs and the baker then overwrites. Two candidates,
-and the render decides which.
+Held by a test rather than by the render. `_test_worksheet_facing` ties the bake
+to `_project` -- the function that draws the court -- by projecting a heading
+vector and checking the bake's yaw against where that heading points on the page,
+in both the screen-right and the toward-the-reader component, for every view and
+five headings. Set `CAMERA_LOOKS_BACK` back to zero and 26 of its 30 checks fail;
+the four that survive are the headings where one component is zero in that view,
+which is why it takes both.
 
-Do it as a focused strip -- one blocker, three views, facing at 180 and at 0 --
-rather than through the training screen. Same lesson as the die-cut comparison
-below: the screen is nearly all of the cost and none of the evidence.
+**Still open, and it is the other half of the heading:** every call site takes the
+default facing, so attack, block and floor are all baked at 180 degrees, "looking
+over the net". Correct for a blocker and a passer. An attacker on the sheet is
+drawn at the cock of a swing and is still square to the net, when a hitter
+arriving on an outside approach is angled across it. That wants the facing to come
+off the drill's own geometry rather than a constant -- the parameter is already
+there and has never been passed.

@@ -6,6 +6,7 @@ const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_leg
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
+const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
@@ -252,6 +253,7 @@ func _initialize() -> void:
 	_test_team_identity_directional_outcomes()
 	_test_team_wheel_amplification()
 	_test_ui_visual_system()
+	_test_worksheet_facing()
 	_test_fatigue_recovers_between_fixtures()
 	_test_errant_attacks_land_outside_the_court()
 	_test_world_population()
@@ -13121,3 +13123,62 @@ func _rally_containing_a_block(from_seed: int, span: int = 24) -> Resource:
 					and event.event_type == RALLY_EVENT_SCRIPT.EventType.BLOCK:
 				return result
 	return null
+
+
+## The tactic sheet's bodies are turned the same way the sheet's court is drawn.
+##
+## This is the check that was missing when every voli on the sheet came out
+## chest-on to a reader standing behind them. The facing was argued from a
+## comment -- "yaw = heading - theta", which is the right relative angle read
+## against the wrong zero -- and a comment cannot be run.
+##
+## So it is tied to `_project`, the function that draws the court itself, rather
+## than restated. Take a body's heading as a unit vector on the floor, project it
+## with the sheet's own projection, and you have where that heading *points on
+## the page*: `screen.x` is how much of it runs to the right, and `flat_y` is how
+## much of it runs toward the reader. The bake has to agree with both.
+##
+## The bake camera stands on +z and looks along -z, and the rig's own forward at
+## yaw 0 is -z -- so at yaw 0 the body faces away from the camera, its heading has
+## no screen-right component and points fully away from the reader. Turning by
+## `yaw` gives `screen_right = -sin(yaw)` and `toward_reader = -cos(yaw)`, and
+## those two equations are the test. The old formula passed neither: at three
+## quarter it put the heading's screen-right component at +0.62 where the drawing
+## has it at -0.62, which is a body turned exactly half a circle from the court
+## it is standing on.
+func _test_worksheet_facing() -> void:
+	var sheet: UIWorksheet = WORKSHEET_SCRIPT.new()
+	## Not added to the tree on purpose: `_ready` stands up a sticker baker with
+	## a 3D viewport in it, and none of that is needed to ask where a metre goes.
+	for for_view: String in WORKSHEET_SCRIPT.VIEWS:
+		sheet.view = for_view
+		var angles: Vector2 = WORKSHEET_SCRIPT.VIEW_ANGLES[for_view]
+		var phi := deg_to_rad(angles.y)
+		for heading: float in [0.0, 90.0, 180.0, 270.0, 142.0]:
+			var bake := sheet._bake_angles(for_view, heading)
+			var yaw := deg_to_rad(bake.x)
+			## The heading as a floor vector in the sheet's own axes: x along the
+			## net, y depth from it with the near court positive.
+			var facing := Vector3(
+				sin(deg_to_rad(heading)), cos(deg_to_rad(heading)), 0.0
+			)
+			var screen := sheet._project(facing, 1.0, Vector2.ZERO)
+			var toward_reader := screen.y / sin(phi)
+			_check(
+				absf(-sin(yaw) - screen.x) < 0.001,
+				"worksheet bake turns a %.0f degree heading to the same side of "
+				% heading + "the page the %s view draws it on" % for_view,
+			)
+			_check(
+				absf(-cos(yaw) - toward_reader) < 0.001,
+				"worksheet bake shows a %.0f degree heading " % heading
+				+ "front or back the way the %s view projects it" % for_view,
+			)
+	## And the camera is above the floor rather than under it, in every view.
+	for for_view: String in WORKSHEET_SCRIPT.VIEWS:
+		var angles: Vector2 = WORKSHEET_SCRIPT.VIEW_ANGLES[for_view]
+		_check(
+			is_equal_approx(sheet._bake_angles(for_view).y, -angles.y),
+			"worksheet bake pitch matches the %s view's own tilt" % for_view,
+		)
+	sheet.free()
