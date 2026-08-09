@@ -171,27 +171,29 @@ func request(
 		_pump()
 
 
+## Drain the queue, then stop.
+##
+## A loop rather than the tail call it was. That was fine while every job took
+## frames, because each one unwound the stack on its first `await` -- but a job
+## served from disk never awaits anything, so a cold cache of forty-nine stickers
+## became forty-nine frames of nested `_pump`. The loop is the same behaviour with
+## a bound that does not depend on how fast a bake happens to be.
 func _pump() -> void:
-	if _queue.is_empty():
-		_working = false
-		## **Stop rendering when there is nothing to render.**
-		##
-		## The rig is kept between bakes -- building it is the expensive part and a
-		## sheet re-bakes constantly -- but keeping it did not have to mean keeping
-		## it *drawing*. On `UPDATE_ALWAYS` this viewport renders a posed 3D voli in
-		## its own world every frame forever, long after the last sticker was cut,
-		## and every screen that owns a baker adds another one. They are invisible by
-		## construction: nothing on screen shows this viewport, so nothing about the
-		## sheet looks different whether it is running or not.
-		if _viewport != null:
-			_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		return
 	_working = true
+	while not _queue.is_empty():
+		await _bake(_queue.pop_front())
+	_working = false
+	## **Stop rendering when there is nothing to render.**
+	##
+	## The rig is kept between bakes -- building it is the expensive part and a
+	## sheet re-bakes constantly -- but keeping it did not have to mean keeping
+	## it *drawing*. On `UPDATE_ALWAYS` this viewport renders a posed 3D voli in
+	## its own world every frame forever, long after the last sticker was cut,
+	## and every screen that owns a baker adds another one. They are invisible by
+	## construction: nothing on screen shows this viewport, so nothing about the
+	## sheet looks different whether it is running or not.
 	if _viewport != null:
-		_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	var job: Dictionary = _queue.pop_front()
-	await _bake(job)
-	_pump()
+		_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 
 func _ensure_rig() -> void:
@@ -227,8 +229,181 @@ func _ensure_rig() -> void:
 	_viewport.add_child(fill_light)
 
 
+## Where cut stickers are kept between runs, and whether they are kept at all.
+##
+## A bake is a posed 3D render, two texture readbacks and two contour traces, and
+## the clipboard asks for forty-nine of them the first time it opens. None of that
+## work depends on anything that changes between runs: the same voli in the same
+## pose from the same angle in the same palette cuts the same sticker every time.
+## So it is done once and kept.
+##
+## `disk_cache` is off for the preview tools, which exist precisely to look at a
+## rig that has just changed -- a tool that draws yesterday's bake is a tool that
+## cannot show you what you did.
+const CACHE_DIR := "user://sticker_cache"
+static var disk_cache: bool = true
+## How many stickers the directory may hold before the oldest are dropped. A
+## sticker is a few kilobytes, and a long career sees a lot of volis; without a
+## bound this grows for the life of the save and nothing ever looks at it.
+const CACHE_LIMIT: int = 900
+
+## What a cached sticker was baked *by*, so a changed rig cannot serve an old one.
+##
+## The inputs to a bake are in the filename, but the *behaviour* is in the code --
+## line weight, colour steps, the shape of a shoulder -- and none of that shows up
+## in a job. A hand-bumped version constant would work exactly as often as
+## somebody remembered to bump it, which for a cache that fails silently and
+## looks fine is not often enough. So the fingerprint is the digest of the three
+## files that decide what a sticker looks like: change any of them and every
+## cached sticker stops matching, at no cost to anyone who did not.
+const FINGERPRINT_SOURCES: Array[String] = [
+	"res://scenes/components/voli_sticker.gd",
+	"res://scenes/components/player_actor_3d.gd",
+	"res://scripts/data/body_type_models.gd",
+]
+static var _fingerprint: String = ""
+static var _pruned: bool = false
+
+
+static func _bake_fingerprint() -> String:
+	if not _fingerprint.is_empty():
+		return _fingerprint
+	var parts := PackedStringArray()
+	for path in FINGERPRINT_SOURCES:
+		## Empty when a source is not readable as a file, which is what an
+		## exported build can do. An empty part is honest -- it weakens the
+		## fingerprint rather than faking one -- and the rest still change.
+		parts.append(FileAccess.get_md5(path))
+	_fingerprint = "|".join(parts).md5_text().substr(0, 12)
+	return _fingerprint
+
+
+## Everything a bake depends on, in one canonical string.
+##
+## Sorted keys, because a `Dictionary` keeps insertion order and two callers
+## building the same profile in a different order would otherwise be two
+## different stickers. The request's own `key` is deliberately *not* in here: it
+## is a caller's name for a slot, not a description of a pose, and two screens
+## naming the same pose differently should share one bake.
+func _job_signature(job: Dictionary) -> String:
+	var profile: Dictionary = job.get("profile", {})
+	var names := profile.keys()
+	names.sort()
+	var parts := PackedStringArray()
+	for name in names:
+		parts.append("%s=%s" % [name, profile[name]])
+	parts.append("event=%d" % int(job.get("event_type", 0)))
+	## Rounded to a thousandth. These arrive from tweens and view tables as
+	## floats, and a pose 0.0000001 off the last one is the same drawing --
+	## caching at full float precision would miss every time and never say so.
+	for number in ["elevation", "phase", "yaw", "pitch"]:
+		parts.append("%s=%.3f" % [number, float(job.get(number, 0.0))])
+	parts.append("head=%s" % str(bool(job.get("headshot", false))))
+	parts.append("light=%s" % str(light_mode))
+	parts.append("rig=%s" % _bake_fingerprint())
+	return "|".join(parts)
+
+
+func _cache_path(job: Dictionary) -> String:
+	return "%s/%s.sticker" % [CACHE_DIR, _job_signature(job).md5_text()]
+
+
+func _read_cache(job: Dictionary) -> Sticker:
+	if not disk_cache:
+		return null
+	var path := _cache_path(job)
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return null
+	var raw: Variant = file.get_var()
+	file.close()
+	if not (raw is Dictionary):
+		return null
+	var stored: Dictionary = raw
+	var image := Image.new()
+	## PNG rather than the raw buffer: a sticker is mostly transparent, so the
+	## compression is most of the file, and `Image` is an Object that `store_var`
+	## will not serialise anyway.
+	if image.load_png_from_buffer(stored.get("png", PackedByteArray())) != OK:
+		return null
+	image.generate_mipmaps()
+	var built := Sticker.new()
+	built.texture = ImageTexture.create_from_image(image)
+	built.contours = stored.get("contours", [])
+	built.arm_contours = stored.get("arm_contours", [])
+	built.aspect = float(stored.get("aspect", 1.0))
+	built.world_height = float(stored.get("world_height", 2.0))
+	built.ground_offset = float(stored.get("ground_offset", 0.0))
+	return built
+
+
+## `shaded` is passed in rather than read back off the texture, because a texture
+## that has had mipmaps generated hands back the chain and not the image.
+func _write_cache(job: Dictionary, built: Sticker, shaded: Image) -> void:
+	if not disk_cache or shaded == null:
+		return
+	if not DirAccess.dir_exists_absolute(CACHE_DIR):
+		DirAccess.make_dir_recursive_absolute(CACHE_DIR)
+	_prune_cache()
+	var file := FileAccess.open(_cache_path(job), FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_var({
+		"png": shaded.save_png_to_buffer(),
+		"contours": built.contours,
+		"arm_contours": built.arm_contours,
+		"aspect": built.aspect,
+		"world_height": built.world_height,
+		"ground_offset": built.ground_offset,
+	})
+	file.close()
+
+
+## Drop the oldest stickers once past the limit, once per run.
+##
+## Once per run and not per write, because the check is a directory listing plus
+## a stat per file and the thing it guards against takes seasons to happen. A
+## dropped sticker is not lost, only uncut -- the next request bakes it again.
+func _prune_cache() -> void:
+	if _pruned:
+		return
+	_pruned = true
+	var names := DirAccess.get_files_at(CACHE_DIR)
+	if names.size() <= CACHE_LIMIT:
+		return
+	var aged: Array = []
+	for name in names:
+		var path := "%s/%s" % [CACHE_DIR, name]
+		aged.append({"path": path, "at": FileAccess.get_modified_time(path)})
+	aged.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["at"]) < int(b["at"])
+	)
+	for index in range(aged.size() - CACHE_LIMIT):
+		DirAccess.remove_absolute(str(aged[index]["path"]))
+
+
+## Cut stickers, and the disk they are kept on, forgotten.
+##
+## Separate from `clear()`, which drops what is in memory because the palette or
+## the squad changed -- both of those are reasons to re-read the disk, not to
+## throw it away.
+static func forget_disk_cache() -> void:
+	for name in DirAccess.get_files_at(CACHE_DIR):
+		DirAccess.remove_absolute("%s/%s" % [CACHE_DIR, name])
+
+
 func _bake(job: Dictionary) -> void:
+	## Disk first. A hit costs a file read and no frames at all, which is the
+	## point: the whole reason a sheet is expensive is that it renders.
+	var cached := _read_cache(job)
+	if cached != null:
+		_baked[str(job["key"])] = cached
+		sticker_ready.emit(str(job["key"]))
+		return
 	_ensure_rig()
+	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var profile: Dictionary = job["profile"]
 	## Flat, before `configure` builds the materials. Set after, it would repaint
 	## nothing -- the meshes already have their `material_override`.
@@ -356,6 +531,7 @@ func _bake(job: Dictionary) -> void:
 	built.ground_offset = (bounds.end.y / float(BAKE_SIZE.y) - 0.5) * _camera.size \
 		- focus.y * cos(pitch)
 	_baked[str(job["key"])] = built
+	_write_cache(job, built, shaded)
 	sticker_ready.emit(str(job["key"]))
 
 

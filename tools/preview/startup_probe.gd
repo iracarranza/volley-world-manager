@@ -40,7 +40,8 @@ var _last_slow_at: float = 0.0
 func _initialize() -> void:
 	_started = Time.get_ticks_usec()
 	_last = _started
-	print("--- startup probe ---")
+	_clipboard = "clipboard" in OS.get_cmdline_user_args()
+	print("--- startup probe%s ---" % (" (clipboard)" if _clipboard else ""))
 	_mark("autoloads ready")
 	var packed: PackedScene = load(MAIN_SCENE)
 	_mark("main scene loaded")
@@ -108,10 +109,36 @@ func _process(_delta: float) -> bool:
 		_total_stall_ms += frame_ms
 		_last_slow_at = at
 		print("%8.1f ms  frame %-4d took %.0f ms" % [at, _frames, frame_ms])
+	if _clipboard and not _clipboard_open and _elapsed() > 3000.0:
+		_open_the_clipboard()
 	if _elapsed() > WATCH_SECONDS * 1000.0:
 		_report()
 		return true
 	return false
+
+
+## Open the clipboard on a settled game and time its figures.
+##
+##     godot --headless --path . --script res://tools/preview/startup_probe.gd -- clipboard
+##
+## The clipboard is where the sticker bake lives -- forty-nine posed renders, two
+## readbacks and two contour traces each -- and it is the one page whose first
+## open is worth a number of its own. Run it twice: the first pass cuts every
+## sticker, the second reads them off disk.
+var _clipboard: bool = false
+var _clipboard_open: bool = false
+
+
+func _open_the_clipboard() -> void:
+	_clipboard_open = true
+	var began := Time.get_ticks_usec()
+	var clipboard_script: GDScript = load("res://scenes/screens/training_screen.gd")
+	var screen: Control = clipboard_script.new()
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.get_child(root.get_child_count() - 1).add_child(screen)
+	print("%8.1f ms  clipboard built in %.0f ms" % [
+		_elapsed(), float(Time.get_ticks_usec() - began) / 1000.0,
+	])
 
 
 func _report() -> void:

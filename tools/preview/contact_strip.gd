@@ -106,6 +106,9 @@ const ACTIONS := {
 
 
 func _ready() -> void:
+	## Off: a strip of a pose that has just been edited must show the edit, and a
+	## cached sticker is one cut before it.
+	StickerScript.disk_cache = false
 	var wanted: Array = []
 	for argument in OS.get_cmdline_user_args():
 		if ACTIONS.has(argument):

@@ -79,6 +79,9 @@ const THEMES := {
 
 
 func _ready() -> void:
+	## Off, because this tool exists to look at a rig that has just changed and a
+	## cached sticker is by definition one cut before the change.
+	StickerScript.disk_cache = false
 	var wanted: Array[String] = []
 	for argument in OS.get_cmdline_user_args():
 		if argument in ["turntable", "diecut", "views"]:

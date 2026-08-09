@@ -7,6 +7,7 @@ const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
+const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
@@ -254,6 +255,7 @@ func _initialize() -> void:
 	_test_team_wheel_amplification()
 	_test_ui_visual_system()
 	_test_worksheet_facing()
+	_test_sticker_disk_cache()
 	_test_fatigue_recovers_between_fixtures()
 	_test_errant_attacks_land_outside_the_court()
 	_test_world_population()
@@ -13182,3 +13184,99 @@ func _test_worksheet_facing() -> void:
 			"worksheet bake pitch matches the %s view's own tilt" % for_view,
 		)
 	sheet.free()
+
+
+## A sticker survives the trip to disk and back.
+##
+## The cache exists because a bake is a posed 3D render, two readbacks and two
+## contour traces, and none of that depends on anything that changes between
+## runs. But a cache that returns something *slightly* different is worse than no
+## cache: it fails silently, looks fine, and the difference only shows up as a
+## drawing that used to be right. So the round trip is asserted field by field
+## rather than by "a sticker came back".
+##
+## Runs headless, with no rig and no viewport, by writing a fabricated sticker
+## straight into the cache. That is deliberate -- the thing under test is the
+## serialisation and the key, not the renderer, and tying it to a GPU would mean
+## it never ran in the suite at all.
+func _test_sticker_disk_cache() -> void:
+	var baker: UIVoliSticker = VOLI_STICKER_SCRIPT.new()
+	VOLI_STICKER_SCRIPT.disk_cache = true
+	baker.light_mode = false
+	var job := {
+		"key": "cache_probe", "event_type": 3, "elevation": 0.85, "phase": 0.0,
+		"profile": {"height_cm": 201.0, "body_type": "Vegi"},
+		"yaw": -38.0, "pitch": -26.0, "headshot": false,
+	}
+	var image := Image.create(6, 8, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0.4, 0.6, 0.8, 1.0))
+	var built := UIVoliSticker.Sticker.new()
+	built.contours = [PackedVector2Array([
+		Vector2(0.1, 0.2), Vector2(0.9, 0.25), Vector2(0.5, 0.95),
+	])]
+	built.arm_contours = [PackedVector2Array([
+		Vector2(0.3, 0.4), Vector2(0.6, 0.4), Vector2(0.45, 0.7),
+	])]
+	built.aspect = 0.625
+	built.world_height = 2.71
+	built.ground_offset = -0.42
+	baker._write_cache(job, built, image)
+
+	var read := baker._read_cache(job)
+	_check(read != null, "a cut sticker is found on disk again")
+	if read != null:
+		_check(
+			is_equal_approx(read.aspect, built.aspect)
+				and is_equal_approx(read.world_height, built.world_height)
+				and is_equal_approx(read.ground_offset, built.ground_offset),
+			"a cached sticker keeps the measurements that place it on the page",
+		)
+		_check(
+			read.contours.size() == 1 and read.arm_contours.size() == 1
+				and (read.contours[0] as PackedVector2Array).size() == 3
+				and (read.contours[0] as PackedVector2Array)[2].is_equal_approx(
+					Vector2(0.5, 0.95)
+				),
+			"a cached sticker keeps its own outline and its arms separately",
+		)
+		_check(
+			read.texture != null and read.texture.get_width() == 6
+				and read.texture.get_height() == 8,
+			"a cached sticker keeps the body that was baked into it",
+		)
+
+	## Every input to a bake is part of the key, so a pose that differs by any of
+	## them misses. Checked one at a time: a key that happened to ignore, say,
+	## pitch would serve a plan view's headshot to a three-quarter body, and the
+	## only symptom is a figure facing oddly -- which this repository has already
+	## spent a session chasing once.
+	for changed in ["phase", "yaw", "pitch", "elevation", "event_type"]:
+		var other := job.duplicate(true)
+		other[changed] = float(other[changed]) + 1.0
+		_check(
+			baker._read_cache(other) == null,
+			"a sticker cached at one %s is not served for another" % changed,
+		)
+	var other_profile := job.duplicate(true)
+	(other_profile["profile"] as Dictionary)["height_cm"] = 186.0
+	_check(
+		baker._read_cache(other_profile) == null,
+		"a sticker cached for one voli is not served for a different body",
+	)
+	## The palette is burnt into the pixels, so the two themes cannot share one.
+	baker.light_mode = true
+	_check(
+		baker._read_cache(job) == null,
+		"a sticker cached in one theme is not served in the other",
+	)
+	baker.light_mode = false
+	## And the whole thing can be switched off, which is what the preview tools
+	## do -- a tool for looking at a rig that just changed must not draw a
+	## sticker cut before the change.
+	VOLI_STICKER_SCRIPT.disk_cache = false
+	_check(
+		baker._read_cache(job) == null,
+		"the disk cache can be switched off for a tool that must see a rebake",
+	)
+	VOLI_STICKER_SCRIPT.disk_cache = true
+	baker.free()
