@@ -3310,3 +3310,53 @@ actually drawn rather than at the size they are modelled.
   they hang clear of the torso and flat colour gives the eye nothing to bridge
   the gap with. The shoulder join is already on this list; the body sheet is just
   the first render that shows it plainly.
+
+## The clipboard lag: not a leak, and the work was never bounded
+
+Reported as the game staying slow after the clipboard was opened, all the way
+back to the title screen. Measured with `startup_probe -- clipboard`, which now
+opens the page, navigates away from it, and keeps watching -- three phases, with
+frame times **averaged per phase** rather than reported per frame. That second
+instrument was necessary: a background tax is a small cost on every frame, and
+the slow-frame threshold that found the boot stall is blind to it by design.
+
+**There is no leak, and that is a measured result rather than a hope.**
+
+| | frames | ms each |
+|---|---|---|
+| before opening | 32 | 89.2 |
+| clipboard open | 125 | 209.3 |
+| after navigating away | 559 | 80.3 |
+
+After the page closes the game is *faster* than before it opened, and a census of
+the whole tree reports **0 nodes processing** and no `SubViewport` left on
+`UPDATE_ALWAYS`. Nothing the clipboard builds keeps running.
+
+**What was actually happening** is that the bake had not finished. It carries on
+draining its queue while you navigate, and it blocks the main thread while it
+does -- so the lag genuinely followed you to the title screen, without anything
+being left behind to cause it. Two fixes, both about the work rather than about
+cleanup:
+
+1. **The sheet asked for every pose up front.** Seven volis by three phases by
+   two views plus a headshot each is **49 bakes**, each two posed 3D renders, two
+   full-image readbacks and two contour traces. The comment defending it argued
+   from a per-sticker figure -- "a bake is roughly ten milliseconds, so the whole
+   set is a blink" -- which is the wrong cost to reason about a set with, and the
+   ten was optimistic besides. It asks for the headshots plus the current phase in
+   the current view now: **14**. A phase or view switch costs 7, and with the disk
+   cache each is paid once ever rather than once per open.
+2. **Several bakes could share one main-loop iteration.** `_bake` awaits frames
+   internally, but those awaits are for the renderer and nothing stopped the pump
+   starting the next job in the same iteration. One render per frame is guaranteed
+   now, which turns a freeze into a stutter. Cache hits do not spend a frame --
+   spending one on a file read would make a warm open slower than a cold one by
+   exactly the mechanism meant to speed it up.
+
+**Still true, and not fixed:** a single bake can still take a very long time in
+this environment -- the worst frame in the cold trace is 27 s of one sticker under
+software rasterisation, which no amount of queue discipline touches. Some of that
+is llvmpipe and some is likely first-use pipeline compilation for the coats' new
+meshes, and this environment cannot separate the two. The right next measurement
+is on real hardware, where the question is simply whether a cold clipboard still
+hitches now that it does a third of the work one frame at a time.

@@ -566,33 +566,61 @@ func _sticker_key(who: String, for_view: String, for_phase: String = "") -> Stri
 	return "%s_%s_%s" % [who, stem, for_view.replace(" ", "_")]
 
 
-## Every pose the sheet can show, from every angle it can be looked at.
+## The poses the sheet is showing *now*, and only those.
 ##
-## Baked up front rather than on the view change: a bake is roughly ten
-## milliseconds, so the whole set is a blink at startup, and doing it lazily would
-## put that blink in the middle of a view toggle -- which is where it would be
-## felt. The plan view is one headshot per voli rather than one per phase, because
-## a face does not change when the page does.
+## **This used to ask for all of them, and that is the clipboard freeze.** The
+## comment here read "a bake is roughly ten milliseconds, so the whole set is a
+## blink at startup" -- which is a per-sticker figure used to justify a decision
+## about the whole set, and the whole set is seven volis by three phases by two
+## views plus a headshot each: **forty-nine bakes**, every one of them two posed
+## 3D renders, two full-image readbacks and two contour traces. Ten milliseconds
+## times forty-nine is not a blink, and the measured figure is far worse than ten.
+##
+## The old reasoning was not silly, it was just arguing about the wrong cost.
+## Baking lazily "would put that blink in the middle of a view toggle" -- true,
+## and a toggle costs **seven** stickers where opening the page cost forty-nine.
+## Paying seven when you switch beats paying forty-nine before you have looked at
+## anything, and with the disk cache you pay each of them once ever rather than
+## once per open.
+##
+## So: the headshots, which the tray needs whatever is on the sheet, and the
+## current phase in the current view. `_request_visible` is called again whenever
+## either changes, and `request` already ignores anything it has baked or queued,
+## so switching back to a phase you have seen costs nothing.
 func _request_stickers() -> void:
 	for profile: Dictionary in _squad():
 		var who := str(profile.get("key", ""))
 		if who.is_empty():
 			continue
+		## The tray draws all seven faces at once, so these are genuinely all
+		## needed up front -- and a headshot does not change with the phase or the
+		## view, so it is baked once and never again.
 		_stickers.request(
 			"%s_head" % who, RallyEventModel.EventType.SERVE, 0.0, -1.0,
 			profile, -8.0, -4.0, true
 		)
-		for for_view in VIEWS:
-			if for_view == VIEW_TOP_DOWN:
-				continue
-			var angles := _bake_angles(for_view)
-			for for_phase in PHASES:
-				var pose: Dictionary = PHASE_POSE.get(for_phase, PHASE_POSE["Block"])
-				_stickers.request(
-					_sticker_key(who, for_view, for_phase),
-					int(pose["event"]), float(pose["elevation"]),
-					float(pose.get("phase", 0.0)), profile, angles.x, angles.y
-				)
+	_request_visible()
+
+
+## Whatever the sheet is about to draw, asked for now.
+##
+## Cheap to call repeatedly: `UIVoliSticker.request` returns immediately for a key
+## it already holds or already has queued, so this is a no-op on every phase you
+## have already looked at.
+func _request_visible() -> void:
+	if _stickers == null or view == VIEW_TOP_DOWN:
+		return
+	var angles := _bake_angles(view)
+	var pose: Dictionary = PHASE_POSE.get(phase, PHASE_POSE["Block"])
+	for profile: Dictionary in _squad():
+		var who := str(profile.get("key", ""))
+		if who.is_empty():
+			continue
+		_stickers.request(
+			_sticker_key(who, view, phase),
+			int(pose["event"]), float(pose["elevation"]),
+			float(pose.get("phase", 0.0)), profile, angles.x, angles.y
+		)
 
 
 ## Who the sheet has bodies for.
@@ -736,6 +764,10 @@ func set_phase(value: String) -> void:
 		return
 	_ghost_phase = phase
 	phase = value
+	## Before the wipe rather than after it: the sheet is about to be squeegeed
+	## and redrawn, and the bake wants to be running during the half second the
+	## wipe is across rather than starting when it lands.
+	_request_visible()
 	phase_changed.emit(phase)
 	_start_wipe()
 
@@ -758,6 +790,9 @@ func set_view(value: String) -> void:
 		return
 	_ghost_phase = phase
 	view = value
+	## Same as the phase: a view change is a different camera angle, so every
+	## body on the sheet needs re-baking from where the reader now stands.
+	_request_visible()
 	view_changed.emit(view)
 	_start_wipe()
 

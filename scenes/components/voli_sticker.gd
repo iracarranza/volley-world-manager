@@ -181,7 +181,22 @@ func request(
 func _pump() -> void:
 	_working = true
 	while not _queue.is_empty():
-		await _bake(_queue.pop_front())
+		var rendered := await _bake(_queue.pop_front())
+		## **One render per frame, guaranteed, and the guarantee is the point.**
+		##
+		## `_bake` already awaits frames inside itself, so this looked redundant
+		## and is not: those awaits are for the *renderer* -- pose the rig, let it
+		## draw, read it back -- and nothing stopped several jobs sharing one
+		## main-loop iteration between them. Measured, single frames were carrying
+		## several bakes and running for seconds, which is a freeze rather than a
+		## stutter: the whole game stops, including whatever screen you navigated
+		## to while it was still going.
+		##
+		## Yielded only after a job that actually rendered. A cache hit costs a
+		## file read, and spending a frame on each of those would make a warm open
+		## slower than a cold one by exactly the thing meant to speed it up.
+		if rendered:
+			await get_tree().process_frame
 	_working = false
 	## **Stop rendering when there is nothing to render.**
 	##
@@ -394,14 +409,16 @@ static func forget_disk_cache() -> void:
 		DirAccess.remove_absolute("%s/%s" % [CACHE_DIR, name])
 
 
-func _bake(job: Dictionary) -> void:
+## Returns whether this job actually rendered, so the pump knows whether it owes
+## the main loop a frame.
+func _bake(job: Dictionary) -> bool:
 	## Disk first. A hit costs a file read and no frames at all, which is the
 	## point: the whole reason a sheet is expensive is that it renders.
 	var cached := _read_cache(job)
 	if cached != null:
 		_baked[str(job["key"])] = cached
 		sticker_ready.emit(str(job["key"]))
-		return
+		return false
 	_ensure_rig()
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var profile: Dictionary = job["profile"]
@@ -502,7 +519,7 @@ func _bake(job: Dictionary) -> void:
 	## whatever the pose, and the aspect carries the difference instead.
 	var bounds := _body_bounds(image)
 	if bounds.size.x < 4.0 or bounds.size.y < 4.0:
-		return
+		return true
 	var cropped := image.get_region(Rect2i(bounds))
 
 	## A second pass, for the arms alone.
@@ -549,6 +566,7 @@ func _bake(job: Dictionary) -> void:
 	_baked[str(job["key"])] = built
 	_write_cache(job, built, shaded)
 	sticker_ready.emit(str(job["key"]))
+	return true
 
 
 ## The box the body actually occupies, with a couple of pixels of air so the

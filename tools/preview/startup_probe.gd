@@ -24,7 +24,7 @@ const MAIN_SCENE := "res://scenes/application.tscn"
 ## is four frames' worth: long enough not to print noise, short enough that a
 ## stall cannot hide inside it.
 const SLOW_FRAME_MS: float = 64.0
-const WATCH_SECONDS: float = 30.0
+const WATCH_SECONDS: float = 75.0
 
 var _started: int = 0
 var _last: int = 0
@@ -109,12 +109,103 @@ func _process(_delta: float) -> bool:
 		_total_stall_ms += frame_ms
 		_last_slow_at = at
 		print("%8.1f ms  frame %-4d took %.0f ms" % [at, _frames, frame_ms])
-	if _clipboard and not _clipboard_open and _elapsed() > 3000.0:
-		_open_the_clipboard()
+	if _clipboard:
+		_drive_the_clipboard(frame_ms)
 	if _elapsed() > WATCH_SECONDS * 1000.0:
 		_report()
 		return true
 	return false
+
+
+## Open the clipboard, leave it, and keep watching.
+##
+## The reported symptom is not the opening -- that stall was found and moved off
+## the boot path. It is that the game **stays** slow after you navigate away,
+## which is a different bug: something the page leaves behind is still costing
+## frames on a screen that is no longer visible. So the trace is in three phases
+## and the one that matters is the third.
+##
+## Frame times are averaged per phase rather than reported per frame, because a
+## background cost is a small tax on every frame and not a stall on one -- which
+## is exactly why the slow-frame threshold that found the first bug is blind to
+## this one. Two instruments for two shapes of the same complaint.
+## Late enough that the bake is over before either boundary. The first attempt
+## closed at 16 s and caught a single 11.8 s frame of bake inside the "after"
+## column -- thirteen frames, twelve of which were one bake. A background tax
+## cannot be read off a window that a stall is sitting in.
+const CLIPBOARD_OPEN_AT: float = 4000.0
+const CLIPBOARD_CLOSE_AT: float = 40000.0
+
+var _phase_frames := {"before": 0, "open": 0, "after": 0}
+var _phase_ms := {"before": 0.0, "open": 0.0, "after": 0.0}
+var _clipboard_screen: Control = null
+
+
+func _phase_now() -> String:
+	if _elapsed() < CLIPBOARD_OPEN_AT:
+		return "before"
+	return "open" if _elapsed() < CLIPBOARD_CLOSE_AT else "after"
+
+
+func _drive_the_clipboard(frame_ms: float) -> void:
+	var phase := _phase_now()
+	_phase_frames[phase] = int(_phase_frames[phase]) + 1
+	_phase_ms[phase] = float(_phase_ms[phase]) + frame_ms
+	if phase != "before" and not _clipboard_open:
+		_open_the_clipboard()
+	## Hidden rather than freed, because hiding is what the game does. Navigating
+	## away from a screen leaves it in the tree -- that is the whole design -- so
+	## freeing it here would measure a thing the game never does.
+	if phase == "after" and _clipboard_screen != null \
+			and _clipboard_screen.visible:
+		_clipboard_screen.visible = false
+		print("%8.1f ms  clipboard navigated away from" % _elapsed())
+		_census("after close")
+
+
+## Who is still running, by script.
+##
+## The direct question, asked directly. A background cost on a hidden screen is
+## something still being *processed* or still being *drawn*, and both are
+## countable -- so rather than reason about which node it might be, count them
+## and print the classes. A leak that survives navigation shows up as a count
+## that does not drop when the screen goes.
+func _census(when: String) -> void:
+	var processing := {}
+	var total := 0
+	for child in root.get_children():
+		total += _count_processing(child, processing)
+	var names := processing.keys()
+	names.sort()
+	print("--- %s: %d nodes processing ---" % [when, total])
+	for name in names:
+		print("    %-34s %d" % [name, processing[name]])
+	## Absolute, not the change feed. `_survey_viewports` prints only what moved,
+	## which is right for a running trace and useless at a checkpoint -- a viewport
+	## still on UPDATE_ALWAYS after the screen closed has not *changed*, and it is
+	## exactly what this census exists to catch.
+	var found := {}
+	for child in root.get_children():
+		_walk_viewports(child, found)
+	var paths := found.keys()
+	paths.sort()
+	for path: String in paths:
+		print("    viewport %-64s %s" % [str(path).get_file(), found[path]])
+
+
+func _count_processing(node: Node, into: Dictionary) -> int:
+	var found := 0
+	if node.is_processing() or node.is_physics_processing():
+		var script_path := "(none)"
+		var attached: Variant = node.get_script()
+		if attached != null:
+			script_path = str((attached as Script).resource_path).get_file()
+		var label := "%s / %s" % [node.get_class(), script_path]
+		into[label] = int(into.get(label, 0)) + 1
+		found += 1
+	for child in node.get_children():
+		found += _count_processing(child, into)
+	return found
 
 
 ## Open the clipboard on a settled game and time its figures.
@@ -136,12 +227,22 @@ func _open_the_clipboard() -> void:
 	var screen: Control = clipboard_script.new()
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.get_child(root.get_child_count() - 1).add_child(screen)
+	_clipboard_screen = screen
 	print("%8.1f ms  clipboard built in %.0f ms" % [
 		_elapsed(), float(Time.get_ticks_usec() - began) / 1000.0,
 	])
 
 
 func _report() -> void:
+	if _clipboard:
+		_census("at the end")
+		print("--- frame cost by phase ---")
+		for phase in ["before", "open", "after"]:
+			var count := int(_phase_frames[phase])
+			print("    %-6s %4d frames, %6.1f ms each" % [
+				phase, count,
+				float(_phase_ms[phase]) / maxf(float(count), 1.0),
+			])
 	print("--- %d frames in %.1f s ---" % [_frames, _elapsed() / 1000.0])
 	print("slow frames: %d, worst %.0f ms, %.0f ms of stall in total" % [
 		_slow.size(), _worst, _total_stall_ms,
