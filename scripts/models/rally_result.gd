@@ -46,6 +46,16 @@ extends Resource
 ## immediately. Fatigue accrual belongs to the match layer, which already has a
 ## post-rally step for exactly this.
 @export var recovery_fatigue: Dictionary = {}
+## What each player was attending to, deciding and feeling, as semantic cues on
+## the same physical clock the events carry.
+##
+## Stored complete on the resolved result, for the same reason the position
+## snapshots above are: a replay must not consult the current roster, match
+## confidence, tactics or scouting state. A cue compiled at resolution time
+## describes what that player knew *then*; recomputing it at display time would
+## quietly give a blocker the benefit of a scouting report the team only earned
+## three rallies later.
+@export var cognition_cues: Array[Resource] = []
 @export var explanation: String = ""
 ## The resolved headline, filled in by `RallySimulator._finish`.
 ##

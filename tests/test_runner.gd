@@ -189,6 +189,7 @@ func _initialize() -> void:
 	_test_movement_timing_and_locomotion_diagnostics()
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
+	_test_cognition_cues()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
@@ -13721,3 +13722,222 @@ func _test_worksheet_behaviour() -> void:
 			"the %s page has a vocabulary to instruct from" % for_phase,
 		)
 	sheet.free()
+
+
+## The cognition stream: a semantic layer whose whole value is that it is
+## trustworthy, so what is gated here is trust rather than appearance.
+##
+## Every check below exists because the alternative failure is invisible. A cue
+## that leaks the resolver's knowledge looks *better* than one that does not --
+## the blocker seems sharper, the setter seems surer -- and nobody watching
+## would ever report it as a bug.
+func _test_cognition_cues() -> void:
+	## 1. Round trip. A rally crosses a JSON save, and a cue that survived
+	##    Godot's own resource format but not that one would produce two
+	##    different replays of the same seed.
+	var original := PlayerCognitionCue.create(
+		7, &"home", 3, 1.25, 1.80, &"deciding", &"before"
+	)
+	original.attention_kind = &"hitter"
+	original.attention_player_id = 4
+	original.attention_position = Vector2(0.34, 0.5)
+	original.punctuation = "!!"
+	original.affect = &"confident"
+	original.trend = -0.4
+	original.audience = &"private"
+	original.certainty = 0.63
+	var restored := PlayerCognitionCue.from_dict(original.to_dict())
+	var round_trip_holds := true
+	for key in original.to_dict():
+		if str(original.to_dict()[key]) != str(restored.to_dict()[key]):
+			round_trip_holds = false
+	_check(
+		round_trip_holds and restored.is_well_formed(),
+		"a cognition cue survives a dictionary round trip field for field",
+	)
+
+	## 2. One winner per player per instant. Two badges above one head is the
+	##    single rendering rule both courts must obey, and it is enforced in the
+	##    sampler rather than in either renderer so they cannot diverge.
+	var overlapping: Array = []
+	var quiet := PlayerCognitionCue.create(9, &"home", 0, 0.0, 2.0, &"searching")
+	quiet.priority = 0
+	var loud := PlayerCognitionCue.create(9, &"home", 0, 0.5, 1.5, &"calling")
+	loud.priority = 60
+	overlapping.append(quiet)
+	overlapping.append(loud)
+	overlapping = CognitionTimeline.finalize(overlapping)
+	var winner_at_one: Resource = CognitionTimeline.active_for_player(
+		overlapping, 1.0, 9
+	)
+	var winner_at_zero: Resource = CognitionTimeline.active_for_player(
+		overlapping, 0.1, 9
+	)
+	_check(
+		winner_at_one != null and str(winner_at_one.state) == "calling"
+			and winner_at_zero != null and str(winner_at_zero.state) == "searching",
+		"overlapping cues resolve to exactly one winner, and priority decides which",
+	)
+
+	## 3. The spectator filter drops private thought without leaving the player
+	##    blank when something public was available.
+	var private_cue := PlayerCognitionCue.create(11, &"home", 0, 0.0, 2.0, &"deciding")
+	private_cue.audience = &"private"
+	private_cue.priority = 30
+	var public_cue := PlayerCognitionCue.create(11, &"home", 0, 0.0, 2.0, &"searching")
+	public_cue.audience = &"observable"
+	public_cue.priority = 10
+	var mixed := CognitionTimeline.finalize([private_cue, public_cue])
+	var spectator: Dictionary = CognitionTimeline.active_by_player_for_spectators(
+		mixed, 1.0
+	)
+	var coach: Dictionary = CognitionTimeline.active_by_player(mixed, 1.0)
+	_check(
+		str((spectator.get(11) as Resource).state) == "searching"
+			and str((coach.get(11) as Resource).state) == "deciding",
+		"a private thought reaches the tactical board and not the gym camera",
+	)
+
+	## 4. Real rallies: well-formed, ordered, and actually produced.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var streams := {}
+	var total_cues := 0
+	var ordered := true
+	var well_formed := true
+	var states_seen := {}
+	for seed_value in range(41000, 41030):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		var serialized: Array[Dictionary] = []
+		var previous_start := -1.0
+		var previous_sequence := -1
+		for raw_cue in rally.cognition_cues:
+			var cue: Resource = raw_cue
+			total_cues += 1
+			states_seen[str(cue.state)] = true
+			if not cue.is_well_formed():
+				well_formed = false
+			if float(cue.starts_at) < previous_start - 0.0001 \
+					or int(cue.sequence) <= previous_sequence:
+				ordered = false
+			previous_start = float(cue.starts_at)
+			previous_sequence = int(cue.sequence)
+			serialized.append(cue.to_dict())
+		streams[seed_value] = serialized
+	_check(
+		total_cues >= 200 and well_formed and ordered,
+		"every compiled cue is well-formed and the stream is ordered by physical time",
+	)
+	## The acceptance sequence's first four beats, each from a different system.
+	_check(
+		states_seen.has("searching") and states_seen.has("deciding")
+			and states_seen.has("calling") and states_seen.has("recognizing")
+			and states_seen.has("committed"),
+		"ordinary rallies produce setter search, decision, hitter call and blocker commitment",
+	)
+
+	## 5. Determinism. A replay is only a replay if resolving the same seed
+	##    yields the identical stream, field for field.
+	##
+	##    Against a **fresh manager**, not the one above. `resolve_active_rally`
+	##    advances rotation, confidence and match flow, so the same seed resolved
+	##    later in a match is a different rally by design -- the first version of
+	##    this check re-resolved on the used manager and failed, which is the
+	##    check catching the test rather than the code.
+	var replay_manager := GAME_MANAGER_SCRIPT.new()
+	replay_manager.seed_vertical_slice_data()
+	var deterministic := true
+	for seed_value in range(41000, 41030):
+		var rally: Resource = replay_manager.resolve_active_rally(seed_value)
+		if rally == null:
+			deterministic = false
+			continue
+		var again: Array[Dictionary] = []
+		for raw_cue in rally.cognition_cues:
+			again.append((raw_cue as Resource).to_dict())
+		if str(again) != str(streams.get(seed_value, [])):
+			deterministic = false
+	replay_manager.free()
+	_check(deterministic, "resolving a seed twice produces a byte-identical cue stream")
+
+	## 6. **No truth leakage**, which is the check the whole layer stands on.
+	##
+	##    A blocker cannot recognise a set before it is struck, and a setter's
+	##    private weighing cannot continue past the moment they release the ball.
+	##    Both are stated as strict inequalities against the SET event's own
+	##    physical time, so a compiler that started reading the attack's lane
+	##    would have to violate causality to pass.
+	var leaked := 0
+	var checked_boundaries := 0
+	for seed_value in range(41100, 41130):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		for event_resource in rally.events:
+			var event: Resource = event_resource
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.SET:
+				continue
+			var set_time := float(event.metadata.get("event_time", 0.0))
+			var setter_id := int(event.actor_id)
+			for raw_cue in rally.cognition_cues:
+				var cue: Resource = raw_cue
+				if int(cue.action_sequence) != int(event.sequence):
+					continue
+				checked_boundaries += 1
+				if str(cue.state) == "recognizing" \
+						and float(cue.starts_at) < set_time - 0.0001:
+					leaked += 1
+				if int(cue.player_id) == setter_id and str(cue.audience) == "private" \
+						and float(cue.ends_at) > set_time + 0.0001:
+					leaked += 1
+	_check(
+		checked_boundaries > 0 and leaked == 0,
+		"no cue knows something before its player could: recognition follows the set, weighing ends at it",
+	)
+
+	## 7. Each blocker recognises on their own clock rather than on a shared
+	##    beat. The gap is small with this roster -- both home middles carry
+	##    almost the same anticipation -- so this asserts the *mechanism*
+	##    (distinct per-blocker reaction delays reaching the cue) rather than a
+	##    visible spread, which would be asserting over the fixture.
+	var staggered_walls := 0
+	var shared_beat_walls := 0
+	for seed_value in range(41200, 41240):
+		var rally: Resource = manager.resolve_active_rally(seed_value)
+		if rally == null:
+			continue
+		for event_resource in rally.events:
+			var event: Resource = event_resource
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				continue
+			if int(event.metadata.get("assist_id", -1)) < 0:
+				continue
+			## Home walls only, and the reason is the roster rather than the
+			## model. Every Port Azure player sits on `VolleyballPlayer`'s default
+			## anticipation of 50 -- 245 of their 287 ability attributes are
+			## unspecified -- so two opponent blockers derive the *same*
+			## reaction delay and genuinely recognise together. Including them
+			## would make this gate a measurement of the fixture.
+			if str(event.metadata.get("side", "")) != "home":
+				continue
+			var recognition_times := {}
+			for raw_cue in rally.cognition_cues:
+				var cue: Resource = raw_cue
+				if int(cue.action_sequence) == int(event.sequence) \
+						and str(cue.state) == "recognizing":
+					recognition_times[int(cue.player_id)] = float(cue.starts_at)
+			if recognition_times.size() < 2:
+				continue
+			var times: Array = recognition_times.values()
+			if is_equal_approx(float(times[0]), float(times[1])):
+				shared_beat_walls += 1
+			else:
+				staggered_walls += 1
+	_check(
+		staggered_walls + shared_beat_walls > 0
+			and staggered_walls > shared_beat_walls,
+		"two blockers on one wall recognise at their own moments rather than together",
+	)
+	manager.free()

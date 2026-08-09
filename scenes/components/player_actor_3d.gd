@@ -2099,3 +2099,33 @@ func set_expression(new_expression: String, light_mode: bool = false) -> void:
 	expression = new_expression
 	_build_face()
 	apply_ui_palette(light_mode)
+
+
+## The cognition badge above this voli's head, created on first use.
+##
+## A child node and one call, deliberately: `player_actor_3d.gd` is the file the
+## new 3D models and VFX are about to rewrite, and the cognition layer is meant
+## to survive that. Everything it needs lives in `CognitionBillboard3D`; the
+## actor only owns *where* the badge hangs, which is the one fact the component
+## cannot know for itself.
+var cognition_billboard: CognitionBillboard3D
+
+
+func show_cognition_cue(cue: Resource) -> void:
+	if cognition_billboard == null:
+		if cue == null:
+			return
+		cognition_billboard = CognitionBillboard3D.new()
+		add_child(cognition_billboard)
+	cognition_billboard.show_cue(cue, _cognition_head_height())
+
+
+func hide_cognition_cue() -> void:
+	if cognition_billboard != null:
+		cognition_billboard.hide_cue()
+
+
+## Head height for this body, from the rig reference and the per-voli scale, so
+## a tall middle's badge sits above their head and not through it.
+func _cognition_head_height() -> float:
+	return REFERENCE_RIG_HEIGHT_M * maxf(body_height_scale, 0.5)

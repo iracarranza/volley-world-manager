@@ -86,9 +86,13 @@ const VISUAL_PLAYER_PATHS: int = 2
 const VISUAL_TACTICAL_GUIDES: int = 4
 const VISUAL_COVERAGE_ZONES: int = 8
 const VISUAL_CONTACT_OVERLAYS: int = 16
+## What each voli is attending to, deciding and feeling. On by default: the
+## board is a coaching instrument and this is the layer that says *why* a player
+## went where they went, which no other overlay carries.
+const VISUAL_COGNITION: int = 32
 const VISUAL_ALL: int = VISUAL_BALL_PATH | VISUAL_PLAYER_PATHS \
 	| VISUAL_TACTICAL_GUIDES | VISUAL_COVERAGE_ZONES \
-	| VISUAL_CONTACT_OVERLAYS
+	| VISUAL_CONTACT_OVERLAYS | VISUAL_COGNITION
 ## Generous window for integrating a traversal. The result is renormalised to
 ## the phase, so this only has to be long enough for a player to finish; it
 ## never sets how fast the drawing runs.
@@ -160,6 +164,18 @@ var movement_paths: Dictionary = {}
 var shadow_reception_trace: Dictionary = {}
 var shadow_overlay_layers: int = SHADOW_LAYER_DEFAULT
 var visualization_layers: int = VISUAL_ALL
+
+## The cognition stream carried by the rally being replayed, and where playback
+## currently sits on the rally's own physical clock.
+##
+## The clock is separate from `playback_progress` on purpose. That value is a
+## 0-1 ratio through whichever movement phase is running -- a UI beat -- and the
+## handoff is explicit that cues sample physical time instead, because a cue's
+## interval was computed against the resolver's seconds and a phase-relative
+## sampler would stretch a thought to fit an animation.
+var cognition_cues: Array = []
+var cognition_time: float = 0.0
+var cognition_tween: Tween
 
 
 func _ready() -> void:
@@ -1079,6 +1095,8 @@ func _draw() -> void:
 	_draw_opponents()
 	_draw_players()
 	_draw_rally_playback()
+	if bool(visualization_layers & VISUAL_COGNITION):
+		_draw_cognition_badges()
 
 
 ## Lanes as the stretches of net they are, rather than five dots.
@@ -2253,3 +2271,206 @@ func _perspective_adjusted_progress(nominal_progress: float, current_height: flo
 	var speed_multiplier: float = lerpf(1.15, 0.75, height_ratio)
 	var adjusted_progress: float = nominal_progress * speed_multiplier
 	return clampf(adjusted_progress, 0.0, 1.0)
+
+
+## The cognition stream for the rally about to be replayed.
+##
+## Taken from the resolved result rather than recomputed, so a replay shows the
+## thoughts the rally was resolved with and not the ones the current roster,
+## confidence or scouting state would produce now.
+func set_cognition_stream(cues: Array) -> void:
+	cognition_cues = cues
+	cognition_time = 0.0
+	queue_redraw()
+
+
+## Moves the rally's own clock across one event's playback window.
+##
+## `duration` is wall-clock seconds -- already divided by the playback speed --
+## while `from_time` and `to_time` are the resolver's seconds. Separating them
+## is what lets 0.5x and 2x show the same thoughts at the same points of the
+## rally instead of at the same points of the animation.
+func advance_cognition_time(
+	from_time: float, to_time: float, duration: float
+) -> void:
+	if cognition_tween != null and cognition_tween.is_valid():
+		cognition_tween.kill()
+	cognition_time = from_time
+	if duration <= 0.0 or to_time <= from_time:
+		cognition_time = maxf(to_time, from_time)
+		queue_redraw()
+		return
+	cognition_tween = create_tween()
+	cognition_tween.tween_method(
+		_set_cognition_time, from_time, to_time, duration
+	)
+
+
+func _set_cognition_time(value: float) -> void:
+	cognition_time = value
+	queue_redraw()
+
+
+## Playback ended, or a lineup changed under it. Leaving a badge on screen after
+## the rally it belonged to is the same class of defect as a stale movement
+## trail, which this file already clears for the same reason.
+func clear_cognition() -> void:
+	if cognition_tween != null and cognition_tween.is_valid():
+		cognition_tween.kill()
+	cognition_cues = []
+	cognition_time = 0.0
+	queue_redraw()
+
+
+## One badge above one head, for whichever players have a cue running now.
+##
+## The board is a coaching instrument, so it uses the unfiltered sampler and
+## shows private thought -- a setter weighing options nobody in the gym could
+## see. The 3D presentation is a camera in a room and uses the spectator
+## sampler instead. That difference is the only one between the two renderers,
+## and it is a difference of audience rather than of meaning.
+func _draw_cognition_badges() -> void:
+	if cognition_cues.is_empty():
+		return
+	var active: Dictionary = CognitionTimeline.active_by_player(
+		cognition_cues, cognition_time
+	)
+	for raw_player_id in active:
+		var player_id := int(raw_player_id)
+		var cue: Resource = active[player_id]
+		if not CognitionBadge.is_worth_drawing(cue):
+			continue
+		var anchor: Variant = _cognition_anchor(player_id)
+		if anchor == null:
+			continue
+		var center := Vector2(anchor)
+		var toward := _cognition_attention_offset(cue, center)
+		_draw_cognition_badge(center + Vector2(0.0, -34.0), cue, toward)
+
+
+## Where a badge hangs, in local coordinates, or null when the player is not on
+## this court -- an opponent on a home-only view, or a substituted voli.
+func _cognition_anchor(player_id: int) -> Variant:
+	if lineup != null and lineup.slot_for_player(player_id) >= 0:
+		return _court_to_local(
+			_player_court_position(player_id, lineup.slot_for_player(player_id))
+		)
+	if opponent_team != null and show_opponents \
+			and opponent_players_by_id.has(player_id):
+		return _court_to_local(opponent_live_player_positions.get(
+			player_id, opponent_team.court_position(player_id, "defense")
+		))
+	return null
+
+
+## Screen-space direction from the badge to whatever the cue is attending to.
+##
+## A cue naming a player is resolved against that player's live position, so a
+## setter's eyes follow a hitter who is still moving. Attention to the ball is
+## left flat rather than pointed at a guess: the ball's drawn position during a
+## movement phase is not the position the cue was computed against, and a pupil
+## that lies is worse than a pupil that rests.
+func _cognition_attention_offset(cue: Resource, from: Vector2) -> Vector2:
+	match str(cue.attention_kind):
+		"hitter", "setter", "teammate":
+			var target: Variant = _cognition_anchor(int(cue.attention_player_id))
+			if target == null:
+				return Vector2.ZERO
+			return (Vector2(target) - from)
+		"position":
+			return _court_to_local(Vector2(cue.attention_position)) - from
+	return Vector2.ZERO
+
+
+func _draw_cognition_badge(
+	center: Vector2, cue: Resource, toward: Vector2
+) -> void:
+	var reading: Dictionary = CognitionBadge.describe(cue, toward)
+	if reading.is_empty():
+		return
+	var radius := 11.0
+	var color: Color = Color(reading.color)
+	_draw_cognition_outline(center, radius, str(reading.shape), color)
+	## The eye: a lens whose height is the openness, so a narrow scan and a wide
+	## recognition are different shapes rather than different colours.
+	var openness := float(reading.eye_openness)
+	var lens_height := maxf(radius * openness, 1.2)
+	draw_rect(
+		Rect2(center - Vector2(radius * 0.62, lens_height * 0.5),
+			Vector2(radius * 1.24, lens_height)),
+		Color(color, 0.22),
+	)
+	if openness > 0.2:
+		var pupil := Vector2(reading.pupil) * radius
+		draw_circle(
+			center + Vector2(pupil.x, clampf(pupil.y, -lens_height * 0.3, lens_height * 0.3)),
+			maxf(lens_height * 0.34, 1.6), color,
+		)
+	else:
+		## Closed: a line, which reads as "cannot see" even in a screenshot with
+		## no colour at all.
+		draw_line(
+			center - Vector2(radius * 0.6, 0.0),
+			center + Vector2(radius * 0.6, 0.0), color, 2.0,
+		)
+	var punctuation := str(reading.punctuation)
+	if not punctuation.is_empty():
+		draw_string(
+			ThemeDB.fallback_font, center + Vector2(radius * 0.9, -radius * 0.4),
+			punctuation, HORIZONTAL_ALIGNMENT_LEFT, 26, 15, color,
+		)
+	var trend := int(reading.trend_direction)
+	if trend != 0:
+		var tip := center + Vector2(-radius * 1.25, -radius * 0.55 * float(trend))
+		draw_line(
+			center + Vector2(-radius * 1.25, radius * 0.45 * float(trend)),
+			tip, color, 2.0,
+		)
+
+
+## The outline, which carries the state independently of the colour.
+func _draw_cognition_outline(
+	center: Vector2, radius: float, shape: String, color: Color
+) -> void:
+	match shape:
+		"wedge":
+			## A call: a speech-bubble tail, because it is the one cue another
+			## player is meant to hear.
+			draw_circle(center, radius, Color(color, 0.16))
+			draw_arc(center, radius, 0.0, TAU, 28, color, 2.0)
+			draw_colored_polygon(
+				PackedVector2Array([
+					center + Vector2(-radius * 0.45, radius * 0.85),
+					center + Vector2(radius * 0.10, radius * 0.85),
+					center + Vector2(-radius * 0.15, radius * 1.55),
+				]), color,
+			)
+		"diamond":
+			var points := PackedVector2Array([
+				center + Vector2(0.0, -radius),
+				center + Vector2(radius, 0.0),
+				center + Vector2(0.0, radius),
+				center + Vector2(-radius, 0.0),
+			])
+			draw_colored_polygon(points, Color(color, 0.16))
+			draw_polyline(
+				PackedVector2Array(Array(points) + [points[0]]), color, 2.0
+			)
+		"dashed_ring":
+			for segment in range(8):
+				var from_angle := TAU * float(segment) / 8.0
+				draw_arc(
+					center, radius, from_angle, from_angle + TAU / 16.0, 4, color, 2.0
+				)
+		"burst":
+			draw_circle(center, radius, Color(color, 0.16))
+			for spike in range(8):
+				var angle := TAU * float(spike) / 8.0
+				draw_line(
+					center + Vector2(cos(angle), sin(angle)) * radius,
+					center + Vector2(cos(angle), sin(angle)) * radius * 1.42,
+					color, 2.0,
+				)
+		_:
+			draw_circle(center, radius, Color(color, 0.16))
+			draw_arc(center, radius, 0.0, TAU, 28, color, 2.0)
