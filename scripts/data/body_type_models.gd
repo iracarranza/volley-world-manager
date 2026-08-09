@@ -491,35 +491,73 @@ static func marking_for(body_key: String, player_id: int) -> String:
 	return str(options[absi(hash("marks:%d" % player_id)) % options.size()])
 
 
-## Where a mark sits, in the body's own terms.
+## Where a mark sits: on the face, or along an arm.
 ##
-## `up` is a share of the torso's height from its centre and `angle` is round the
-## axis, so a caller says "two thirds up, a little to the left" rather than
-## solving a position -- and the mark lands *on* the surface because the radius
-## comes from the same profile the torso is built from. Marks placed at a fixed
-## radius was the pepper cage's mistake and is not worth making twice.
-static func _mark_on_torso(
-	spec: Dictionary, up: float, angle: float
+## **Not on the torso, which is where these started and where they were wrong.**
+## An animal wears a full singlet, so every stripe and spot was being drawn on
+## the shirt -- a tabby's bars came out as printed sportswear. A coat is on skin,
+## and the skin a dressed voli actually shows is the head and the limbs.
+##
+## That also makes the marks move with the body, because an arm is a bone rather
+## than a fixed place: a mark parented to `LeftArm` swings with the swing. Which
+## is correct, and is the reason this could not be done by nudging the old
+## positions -- it needed a different parent.
+const ARM_PARENTS: Array[String] = ["BodyPivot/LeftArm", "BodyPivot/RightArm"]
+
+
+## A mark on the head, placed in the head's own radius.
+##
+## `side` is -1 to 1 across the face, `up` is a share of the radius above centre,
+## and the mark is pushed to the front of the skull and squashed flat against it.
+static func _mark_on_face(
+	spec: Dictionary, side: float, up: float, size: float
 ) -> Dictionary:
-	var torso: Dictionary = spec.get("torso", {})
-	var radius := _torso_radius_at(torso, up)
+	var head_radius := float(spec.get("head", {}).get("radius", 0.13))
 	return {
+		"parent": "BodyPivot",
 		"position": Vector3(
-			sin(angle) * radius * 0.94,
-			float(spec.get("torso_y", 1.1))
-				+ up * float(torso.get("height", 0.8)),
-			cos(angle) * radius * 0.94
+			side * head_radius * 0.46,
+			float(spec.get("head_y", 1.7)) + up * head_radius,
+			head_radius * 0.74
 		),
-		"rotation": Vector3(0.0, rad_to_deg(angle), 0.0),
+		"radius": head_radius * size, "height": head_radius * size,
+		"scale": Vector3(1.0, 1.0, 0.34),
+	}
+
+
+## And one along an arm, `down` being a share of the arm's length from the
+## shoulder. The arm hangs down its own -y, so this is a negative offset.
+static func _mark_on_arm(
+	spec: Dictionary, which: int, down: float, size: float
+) -> Dictionary:
+	var arm: Dictionary = spec.get("arm", {})
+	var arm_length := float(arm.get("height", 0.72))
+	var arm_radius := float(arm.get("top_radius", 0.06))
+	return {
+		"parent": ARM_PARENTS[absi(which) % ARM_PARENTS.size()],
+		"position": Vector3(0.0, -down * arm_length, arm_radius * 0.62),
+		"radius": arm_radius * size, "height": arm_radius * size,
+		"scale": Vector3(1.0, 1.0, 0.42),
+	}
+
+
+## One mark, as a cosmetic part. `roll` turns it in its own plane, which is what
+## makes a stripe lean and a scar cut across rather than sit square.
+static func _mark(
+	mark_name: String, placed: Dictionary, ink: Color, roll: float,
+	shape: Vector3 = Vector3.ZERO
+) -> Dictionary:
+	return {
+		"name": mark_name, "parent": str(placed.parent), "shape": "sphere",
+		"radius": float(placed.radius), "height": float(placed.height),
+		"position": placed.position,
+		"rotation": Vector3(0.0, 0.0, roll),
+		"scale": placed.scale if shape == Vector3.ZERO else shape,
+		"color_value": ink,
 	}
 
 
 ## Lay this voli's coat on.
-##
-## Every mark is a flattened sphere turned to face outward and squashed along the
-## radius, so it hugs the body instead of floating off it -- the same lesson the
-## lobes carry, applied to something much smaller where a 2 mm float is the
-## difference between a stripe and a sticker.
 ##
 ## Deterministic from the id, so a voli's coat is a property of that voli and not
 ## of when they happened to be drawn.
@@ -533,95 +571,75 @@ static func _add_markings(
 	## Marks read as the same animal in a different tone, so they come off the
 	## skin rather than out of a palette of their own. A scar is the exception --
 	## it is not coat, it is where coat stopped growing.
-	var ink := skin.darkened(0.34) if skin.get_luminance() > 0.22 		else skin.lightened(0.30)
+	var ink := skin.darkened(0.34) if skin.get_luminance() > 0.22 \
+		else skin.lightened(0.30)
+	var pale := skin.lightened(0.55)
 	var extras: Array = spec.get("extras", [])
 	var seed_offset := absi(hash("coat:%d" % player_id))
+	var side := 1.0 if (seed_offset & 1) == 0 else -1.0
 	match marking:
 		"tabby":
-			## Bars round the flank, thin vertically and long round the body, at
-			## uneven heights -- a tabby's stripes are not a ladder.
+			## Bars across the brow and rings down the arms, which is where a
+			## tabby's stripes are on an animal wearing a shirt.
+			for index in range(3):
+				extras.append(_mark(
+					"Tabby%d" % (index + 1),
+					_mark_on_face(spec, 0.0, 0.44 - float(index) * 0.26, 0.78),
+					ink, float((seed_offset >> index) & 3) * 4.0 - 6.0,
+					Vector3(1.0, 0.20, 0.30)
+				))
 			for index in range(4):
-				var up := 0.28 - float(index) * 0.15
-				var lean := float((seed_offset >> index) & 3) * 0.06 - 0.09
-				var placed := _mark_on_torso(spec, up, PI + lean)
-				extras.append({
-					"name": "Tabby%d" % (index + 1), "parent": "BodyPivot",
-					"shape": "sphere", "radius": 0.19, "height": 0.19,
-					"position": placed.position,
-					"rotation": placed.rotation + Vector3(0.0, 0.0, lean * 90.0),
-					"scale": Vector3(1.0, 0.22, 0.16),
-					"color_value": ink,
-				})
+				extras.append(_mark(
+					"TabbyArm%d" % (index + 1),
+					_mark_on_arm(spec, index, 0.34 + float(index / 2) * 0.22, 1.5),
+					ink, 0.0, Vector3(1.25, 0.26, 0.50)
+				))
 		"spots":
 			for index in range(6):
-				var turn := float((seed_offset >> (index * 2)) & 7) / 8.0
-				var angle := PI * (0.45 + turn) * (1.0 if index % 2 == 0 else -1.0)
-				var up := 0.30 - float(index) * 0.10
-				var placed := _mark_on_torso(spec, up, angle)
-				extras.append({
-					"name": "Spot%d" % (index + 1), "parent": "BodyPivot",
-					"shape": "sphere",
-					"radius": 0.085 + float((seed_offset >> index) & 3) * 0.012,
-					"height": 0.085,
-					"position": placed.position, "rotation": placed.rotation,
-					"scale": Vector3(1.0, 1.0, 0.20),
-					"color_value": ink,
-				})
+				extras.append(_mark(
+					"Spot%d" % (index + 1),
+					_mark_on_arm(
+						spec, index, 0.20 + float(index / 2) * 0.24,
+						1.05 + float((seed_offset >> index) & 3) * 0.14
+					), ink, 0.0
+				))
+			extras.append(_mark(
+				"SpotFace", _mark_on_face(spec, side * 0.7, -0.20, 0.48), ink, 0.0
+			))
 		"blaze":
-			## One stripe up the front, which is the marking that most changes a
-			## silhouette's read: it gives a round body a vertical axis.
-			var placed := _mark_on_torso(spec, 0.0, PI)
-			extras.append({
-				"name": "Blaze", "parent": "BodyPivot", "shape": "sphere",
-				"radius": 0.15,
-				"height": float(spec.get("torso", {}).get("height", 0.8)) * 0.92,
-				"position": placed.position, "rotation": placed.rotation,
-				"scale": Vector3(0.42, 1.0, 0.18),
-				"color_value": skin.lightened(0.30).lerp(Color("f2e6c8"), 0.35),
-			})
+			## A stripe up the muzzle, which is where a blaze is on an animal.
+			extras.append(_mark(
+				"Blaze", _mark_on_face(spec, 0.0, 0.06, 0.46),
+				skin.lightened(0.30).lerp(Color("f2e6c8"), 0.35), 0.0,
+				Vector3(1.0, 3.2, 0.30)
+			))
 		"patch":
 			## Over one eye. Which eye is the voli's own, because a patch always
 			## on the left is a uniform rather than a marking.
-			var side := 1.0 if (seed_offset & 1) == 0 else -1.0
-			var head_radius := float(spec.get("head", {}).get("radius", 0.13))
-			extras.append({
-				"name": "Patch", "parent": "BodyPivot", "shape": "sphere",
-				"radius": head_radius * 0.72, "height": head_radius * 0.92,
-				"position": Vector3(
-					side * head_radius * 0.42,
-					float(spec.get("head_y", 1.7)) + head_radius * 0.16,
-					head_radius * 0.72
-				),
-				"scale": Vector3(1.0, 1.0, 0.42),
-				"color_value": ink,
-			})
+			extras.append(_mark(
+				"Patch", _mark_on_face(spec, side * 0.62, 0.20, 0.95), ink, 0.0
+			))
 		"speckle":
 			for index in range(5):
-				var turn := float((seed_offset >> (index * 3)) & 7) / 9.0
-				var angle := PI * (0.72 + turn * 0.56)
-				var placed := _mark_on_torso(spec, 0.24 - float(index) * 0.09, angle)
-				extras.append({
-					"name": "Speckle%d" % (index + 1), "parent": "BodyPivot",
-					"shape": "sphere", "radius": 0.045, "height": 0.045,
-					"position": placed.position, "rotation": placed.rotation,
-					"scale": Vector3(1.0, 1.0, 0.22),
-					"color_value": ink,
-				})
+				var turn := float((seed_offset >> (index * 3)) & 7) / 8.0
+				extras.append(_mark(
+					"Speckle%d" % (index + 1),
+					_mark_on_face(
+						spec, (turn - 0.5) * 1.5, 0.36 - float(index) * 0.17, 0.28
+					), ink, 0.0
+				))
 		"scar":
 			## Pale, thin and at an angle, because a scar is the one mark here
-			## that is not coat -- it is where coat stopped growing, so it reads
-			## lighter than the skin whatever the skin is.
-			var placed := _mark_on_torso(spec, 0.10, PI + 0.22)
-			extras.append({
-				"name": "Scar", "parent": "BodyPivot", "shape": "sphere",
-				"radius": 0.18, "height": 0.18,
-				"position": placed.position,
-				"rotation": placed.rotation + Vector3(
-					0.0, 0.0, 34.0 if (seed_offset & 2) == 0 else -34.0
-				),
-				"scale": Vector3(1.0, 0.10, 0.14),
-				"color_value": skin.lightened(0.55),
-			})
+			## that is not coat -- it is where coat stopped growing. Across the
+			## face and along the forearm, the two places a scar is ever seen.
+			extras.append(_mark(
+				"Scar", _mark_on_face(spec, side * 0.28, 0.16, 1.10), pale,
+				38.0 if side > 0.0 else -38.0, Vector3(1.0, 0.13, 0.26)
+			))
+			extras.append(_mark(
+				"ScarArm", _mark_on_arm(spec, int(seed_offset), 0.52, 1.25),
+				pale, 22.0, Vector3(0.34, 1.5, 0.42)
+			))
 	spec["extras"] = extras
 	return spec
 
@@ -739,36 +757,17 @@ static func _vegi(produce: String) -> Dictionary:
 	var torso: Dictionary = body.torso
 	var shoulder: Vector2 = body.shoulder
 	var extras: Array = _produce_crown(body)
-	## The singlet, as a **collar** rather than a belt.
+	## **No band at all on a produce, and that is the third answer to this.**
 	##
-	## It used to be a cylinder 6% wider than the widest point of the torso, sat
-	## at the torso's centre. That was the fix for an earlier bug -- a band the
-	## same size as the body fought it for pixels -- but the cure was worse: a
-	## ring wider than the body is a ring *sticking out of* the body, and on a
-	## round produce it read as a hoop somebody had been posted through. It also
-	## sat exactly where the arms swing, so every pose collided with it.
+	## It was a belt, then a collar, and both were the same mistake at different
+	## heights: a produce's torso is its *skin*, and skin is the whole of what
+	## says which produce this is. Any ring drawn across it cuts the one shape
+	## carrying the identity in two, and at a glance it reads as neither clothing
+	## nor body -- a green band somebody could not name.
 	##
-	## A collar avoids both. It sits high, where every produce narrows toward the
-	## head, so it is small; it is sized from the torso's own profile at that
-	## height rather than from its widest point, so it hugs rather than floats;
-	## and it is nowhere near the arms. A neckline is also simply what a singlet
-	## looks like from across a court -- the band was never reading as clothing.
-	var collar_y := float(body.torso_y) + float(torso.get("height", 0.7)) * 0.42
-	extras.append({
-		"name": "Kit", "parent": "BodyPivot",
-		"shape": "cylinder",
-		"top_radius": _torso_radius_at(torso, 0.34) * 1.08,
-		"bottom_radius": _torso_radius_at(torso, 0.30) * 1.12,
-		"height": 0.075, "position": Vector3(0.0, collar_y, 0.0),
-		"color": "kit",
-	})
-	if body.has("extra_lobe"):
-		var lobe: Dictionary = body.extra_lobe
-		extras.append({
-			"name": "UpperLobe", "parent": "BodyPivot", "shape": "sphere",
-			"radius": float(lobe.radius), "height": float(lobe.height),
-			"position": Vector3(0.0, float(lobe.y), 0.0), "color": "skin",
-		})
+	## The animals keep their singlet, because an animal's torso is clothed and
+	## the kit is what covers it. A produce wears the shorts and nothing else,
+	## which is also the honest reading of a tomato in a volleyball match.
 	if body.has("lobes"):
 		## Round the axis at even angles, each turned to face outward so its own
 		## scale means "across the bulge" and "out along the radius" rather than

@@ -3270,3 +3270,43 @@ as the stickers the game actually draws. Two things it made obvious:
   the eye nothing to bridge it with. It is worst on the wide-shouldered types.
   Not caused by any of this work -- it is the shoulder join, already on this list
   -- but the body sheet is the first render that shows it plainly.
+
+## The band nobody could name, and coats that moved to skin
+
+**The produce wear no band.** It was a belt, then a collar, and both were the
+same mistake at different heights: a produce's torso is its *skin*, and skin is
+the whole of what says which produce this is. Any ring across it cuts the one
+shape carrying the identity in two, and at a glance it read as neither clothing
+nor body -- a green band somebody could not name, which is what it was called
+when it was finally looked at. The animals keep their singlet, because an
+animal's torso is genuinely clothed.
+
+**Coats moved off the torso onto the face and the arms.** They started on the
+torso, which put every stripe and spot on the *shirt* -- a tabby's bars came out
+as printed sportswear. A coat is on skin, and the skin a dressed voli shows is
+the head and the limbs. Marks parented to `BodyPivot/LeftArm` also now swing with
+the arm, which is correct and is why this could not be done by nudging positions:
+it needed a different parent.
+
+**And they are now much harder to see, which is the honest result.** A face mark
+is sized in head radii and an arm mark in arm radii, both an order of magnitude
+smaller than the torso they left. At sticker size -- sixty to a hundred pixels
+for a whole body -- a brow bar is about one pixel. Correct and nearly invisible
+is a real trade, not a win, and the next pass has to buy the legibility back
+somewhere: fewer and bigger marks, or marks that read at the size they are
+actually drawn rather than at the size they are modelled.
+
+## Still open from this round
+
+- **The clipboard leaves the game lagging even after you navigate away.**
+  Reported and not yet investigated. Building it lazily moved the stall off the
+  title screen but something it leaves behind is still costing frames, which is a
+  different bug from the one that was fixed and wants its own measurement --
+  `startup_probe -- clipboard` already opens the page, so it needs a mode that
+  closes it again and keeps watching.
+- **The sticker bake in the roster's 3D view**, as the test of whether a baked
+  sticker still reads when it moves. Not started.
+- **The arms read as detached slabs** in a neutral standing pose on every animal:
+  they hang clear of the torso and flat colour gives the eye nothing to bridge
+  the gap with. The shoulder join is already on this list; the body sheet is just
+  the first render that shows it plainly.
