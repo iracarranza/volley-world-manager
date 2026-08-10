@@ -44,6 +44,7 @@ Then, by subject:
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
 | The title screen | `docs/design/TITLE_SCREEN.md` |
 | The match centre, the whiteboard | `docs/design/THE_TACTICAL_WHITEBOARD.md` |
+| Cogniticons, what a voli is showing | `docs/design/COGNITICONS.md` |
 | Anything visual | `docs/design/UI_VISUAL_SYSTEM.md` and `UI_VISUAL_SYSTEM_CONSTRAINTS.md` |
 | Setter choice, who swings | `docs/design/SETTER_DECISION.md` |
 | Tempo, set height, approach | `docs/design/TEMPO_AND_APPROACH.md` |

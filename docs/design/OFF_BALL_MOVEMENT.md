@@ -178,6 +178,20 @@ reachability models are already equipped to answer for one player at a time.
 That is the change: not new physics, but the existing physics applied to five
 more people per side.
 
+## What this unlocks next
+
+Each phase map decides *why* it sends a voli where it sends them and then
+publishes only the where. `_cover_phase_map` branches on
+`attack_coverage_responsibility`; `_transition_phase_map` branches on front row
+versus back; `_receive_formation_map` branches on passer versus staging versus
+short coverage. Those branches are an intention layer, computed for every voli
+on every flight and discarded at the moment it becomes a coordinate.
+
+Returning the reason alongside the position is what gives the cognition layer a
+continuous read on all twelve -- measured today at 0.75 volis of six carrying a
+live cue at any instant, against an ask of six. See
+`docs/design/COGNITICONS.md`.
+
 ## Not in scope here
 
 - Collisions between defenders. Two players converging on one ball is a real
