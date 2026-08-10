@@ -4897,3 +4897,62 @@ dive roll. They are rendered separately now, and every strip starts at phase
   The simulator's two dead branches are still dead where they are scored, and
   the reach-margin finding -- receivers arriving with 3.1 m to 4.8 m of spare
   reach -- remains untouched.
+
+---
+
+## Receivers arrive exactly on the ball, and that is why nobody ever reaches
+
+Three candidate causes were on the table for `reaching` firing on 0.0% of
+receptions -- a global range nerf, a platform-specific nerf, or receivers
+micro-positioning too well. It is the third, and it is a single line.
+
+    func _reached_point(mover, start, target, available_time, mode) -> Vector2:
+        ...
+        if _movement_time(mover, start, target, mode) <= available_time:
+            return target
+
+**A receiver with any spare time at all arrives dead on the landing point.** Not
+near it -- on it. And the measured reach margin says 90% of receptions have at
+least 1.7 m of spare travel, so this branch is what almost every reception takes.
+
+The consequences follow from that one return:
+
+- The platform is never off-centre, so there is nothing to reach for.
+- `reach_margin` measures spare *travel capacity* and never spare *accuracy*,
+  which is why closing the acceleration defect moved it 3.72 m to 2.59 m and
+  still left `reaching` at zero.
+- `PlatformAim`'s residual -- the part of the platform a body cannot square up
+  to -- is structurally near zero on a reception, because the body is standing
+  exactly where the ball is going.
+
+### The case for the change, in the sport's terms
+
+A passer entering a seam or stepping into the ball's path is reacting to where
+the ball is *heading*, not to where it will land, and they commit before they
+know. Add the ball's own variance, and add that a server can partly see the
+receiving formation and aim between people. The ball is not going to be exactly
+where the passer wanted it.
+
+So the honest model is that a receiver arrives at a point *near* the landing
+point, with the error growing from time pressure -- and the residual offset is
+what forces a reach. That is also the term the drawing already wants: an arrival
+error feeds `PlatformAim` directly and would make the off-axis and reaching
+postures geometric facts rather than dead thresholds.
+
+### Why this is recorded and not built
+
+The branch is already red on one gate from the acceleration fix, and this change
+would move every reception rate in the game on top of that. Two large
+simulation changes stacked before either is measured is the specific mistake
+this file logs most.
+
+The order it wants: close the red gate, take a fresh balance baseline, then add
+the arrival error as its own change with its own measurement.
+
+### What to measure first, before choosing any coefficient
+
+The distribution of *spare time* at the reception -- `available_time` minus
+`_movement_time` to the landing point. The arrival error should scale with how
+little of that there is, and that distribution decides the scale. Picking a
+constant offset first would be a threshold chosen before its distribution, which
+is §0 and is what produced the two dead posture branches in the first place.
