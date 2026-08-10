@@ -28,8 +28,8 @@ const SHAPE_GLYPHS := {
 	"burst": "✳",
 }
 const FACE_GLYPHS := {
-	"upset": "😠",
-	"sad": "😞",
+	"upset": "✖",
+	"sad": "▾",
 	"confident": "▴",
 	"pleased": "▴",
 	"urgent": "!",
