@@ -1445,6 +1445,19 @@ func resolve(
 	## below reads a receiver who is still getting up rather than one who is not.
 	_note_recovery(receiver, str(reception_pass.contact_recovery), rally_clock)
 	var home_receive_intents := {}
+	## The side that just served, taking base while their serve is in the air.
+	var opponent_serve_intents := {}
+	var opponent_by_id := {}
+	if opponent_team != null:
+		for entry in opponent_team.on_court_players():
+			var opponent_player := entry as VolleyballPlayer
+			if opponent_player != null:
+				opponent_by_id[opponent_player.id] = opponent_player
+	var opponent_serve_transition := _serve_transition_map(
+		opponent_team.current_lineup() if opponent_team != null else null,
+		_opponent_defensive_plan(opponent_team) if opponent_team != null else null,
+		true, serve_time, opponent_by_id, opponent_serve_intents,
+	)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		serve_landing, Vector2(reception_pass.destination), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
@@ -1467,6 +1480,8 @@ func resolve(
 				lineup, false, home_receive_intents
 			),
 			"home_phase_intents": home_receive_intents,
+			"opponent_phase_targets": opponent_serve_transition,
+			"opponent_phase_intents": opponent_serve_intents,
 			"planner_zone_center": Vector2(receiver_zone.center) \
 				if receiver_zone != null else receiver_start,
 			"planner_zone_radius_meters": float(receiver_zone.radius_meters) \
@@ -3148,6 +3163,15 @@ func _resolve_home_serve(
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
 	var opponent_receive_intents := {}
+	var home_serve_intents := {}
+	var home_by_id := {}
+	for entry in players:
+		var home_player := entry as VolleyballPlayer
+		if home_player != null:
+			home_by_id[home_player.id] = home_player
+	var home_serve_transition := _serve_transition_map(
+		lineup, defensive_plan, false, serve_time, home_by_id, home_serve_intents
+	)
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		opponent_landing, opponent_pass_destination,
 		reception_success,
@@ -3164,6 +3188,8 @@ func _resolve_home_serve(
 				true, opponent_receive_intents,
 			),
 			"opponent_phase_intents": opponent_receive_intents,
+			"home_phase_targets": home_serve_transition,
+			"home_phase_intents": home_serve_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
 			"serve_risk_pressure": serve_risk_pressure,
@@ -4538,6 +4564,12 @@ func _resolve_opponent_transition(
 		"end_time", rally_clock + attack_time
 	))
 	rally_clock = maxf(rally_clock, home_dig_time)
+	var home_defense_intents := {}
+	var home_by_id_for_defense := {}
+	for entry in players:
+		var defence_player := entry as VolleyballPlayer
+		if defence_player != null:
+			home_by_id_for_defense[defence_player.id] = defence_player
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
 		home_dig_control, "%s defends" % defender.display_name,
@@ -4550,10 +4582,18 @@ func _resolve_opponent_transition(
 			"planner_floor_center": Vector2(floor_phase_positions.get(
 				defender.id, defender_start
 			)),
-			"home_phase_targets": floor_phase_positions.duplicate(true),
-			"home_phase_intents": _uniform_intents(
-				floor_phase_positions, &"defending"
+			"home_phase_targets": _deflection_adjust_map(
+				floor_phase_positions, home_target, defender.id,
+				## The deflection's own flight, not what is left of the clock.
+				## `rally_clock` has already been advanced to the dig by the time
+				## this dictionary is built, so subtracting it gave zero and every
+				## defender was handed a window of the 0.12 s floor -- a lean of
+				## five centimetres, which is a map that publishes and does not
+				## move anybody. Measured that way: 0.05 m across 319 legs.
+				float(home_block_trajectory.get("duration", 0.24)),
+				false, home_by_id_for_defense, home_defense_intents,
 			),
+			"home_phase_intents": home_defense_intents,
 			"responsibility_fit": responsibility_fit,
 			"flight_time": attack_time, "arrival": defense_arrival,
 			"claimed": home_claimed,
@@ -12264,6 +12304,109 @@ static func _uniform_intents(targets: Dictionary, intent: StringName) -> Diction
 	for player_id in targets:
 		intents[int(player_id)] = {"intent": intent, "progress": 0.0}
 	return intents
+
+
+## Where the side that just served goes while their own serve is in the air.
+##
+## **They were going nowhere, because nothing published them.** The receive
+## formation covers the six receiving; the other six -- the team that struck the
+## ball -- had no phase map on this leg at all, so the half of the court that
+## just served stood still through the phase a viewer watches most closely.
+## Measured before this existed, a serve's flight moved 2.50 volis of twelve and
+## most of that was the passer adjusting.
+##
+## What they do is not invented either: after a serve you take base defence, and
+## `_floor_phase_positions` is the side's own defensive shape. The attack
+## coordinate is centre because nobody has set yet -- the shape a team takes
+## before they know where the ball is going is exactly the neutral one -- and no
+## blocker is named for the same reason.
+##
+## The server is included deliberately. They strike from behind the baseline and
+## have to walk in, and that walk is the single most visible piece of movement on
+## the leg.
+## The floor closing toward where the ball actually went.
+##
+## **The one leg that published targets and moved nobody.** The defensive shape
+## is computed once, applied on the opponent's attack event, and then republished
+## verbatim on the block and on the dig -- so by the time the ball comes off the
+## block every defender is already standing on their target and the flight from
+## the block to the dig moved 0.00 metres across 329 legs. A phase map whose
+## positions are already occupied is a knob that cannot reach its own range.
+##
+## A block touch changes where the ball is going, and the floor answers it. Not
+## by converging on the ball -- five defenders piling onto one dig is not
+## volleyball -- but by leaning toward the new line, which is what closing a seam
+## looks like. The lean is capped so the shape stays a shape.
+##
+## The defender playing it is excluded; they already carry their own
+## `movement_target`, and moving them twice is the defect the hitter taught.
+const DEFLECTION_LEAN: float = 0.28
+
+func _deflection_adjust_map(
+	floor_positions: Dictionary,
+	dig_position: Vector2,
+	defender_id: int,
+	window_seconds: float,
+	opponent_side: bool,
+	players_by_id: Dictionary,
+	out_intents: Dictionary = {},
+) -> Dictionary:
+	var targets := {}
+	if window_seconds <= 0.0:
+		return targets
+	var live: Dictionary = opponent_live_positions if opponent_side else live_positions
+	for raw_player_id in floor_positions:
+		var player_id := int(raw_player_id)
+		if player_id == defender_id:
+			continue
+		var player := players_by_id.get(player_id, null) as VolleyballPlayer
+		if player == null:
+			continue
+		var here: Vector2 = live.get(player_id, Vector2(floor_positions[raw_player_id]))
+		var intended := here.lerp(dig_position, DEFLECTION_LEAN)
+		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
+		targets[player_id] = reached
+		out_intents[player_id] = {
+			"intent": &"defending",
+			"progress": _travel_fraction(here, intended, reached),
+		}
+		live[player_id] = reached
+	return targets
+
+
+func _serve_transition_map(
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	opponent_side: bool,
+	window_seconds: float,
+	players_by_id: Dictionary,
+	out_intents: Dictionary = {},
+) -> Dictionary:
+	var targets := {}
+	if lineup == null or window_seconds <= 0.0:
+		return targets
+	var shape := _floor_phase_positions(
+		lineup, defensive_plan, 0.5, -1, -1, opponent_side
+	)
+	var live: Dictionary = opponent_live_positions if opponent_side else live_positions
+	for raw_player_id in shape:
+		var player_id := int(raw_player_id)
+		var player := players_by_id.get(player_id, null) as VolleyballPlayer
+		if player == null:
+			continue
+		var intended := Vector2(shape[raw_player_id])
+		var here: Vector2 = live.get(player_id, intended)
+		## Lateral, not a sprint. Taking base after your own serve is a jog at
+		## most, and charging it as a sprint would bill six volis a sprint every
+		## single rally -- which the fatigue model would then faithfully believe.
+		var reached := _reached_point(player, here, intended, window_seconds, "lateral")
+		targets[player_id] = reached
+		out_intents[player_id] = {
+			"intent": &"defending",
+			"progress": _travel_fraction(here, intended, reached),
+		}
+		live[player_id] = reached
+	return targets
 
 
 func _travel_fraction(from: Vector2, intended: Vector2, reached: Vector2) -> float:

@@ -451,6 +451,29 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 
 ## Turns the actor toward a heading at `FACING_TURN_RATE`, or adopts it outright
 ## if this is the first heading it has ever had.
+## Turn the body toward the ball, which is what a voli does when nothing else is
+## asking anything of them.
+##
+## **The default facing has to come from somewhere.** `_turn_toward` is called
+## from exactly two other places -- the open-up rule, which only fires when a
+## voli is genuinely sprinting, and a contact pose. A voli who neither sprints
+## nor touches the ball therefore never acquired a heading at all: `has_facing`
+## stayed false and the body held the rig's default orientation, so a whole side
+## faced the same arbitrary direction regardless of where the play was.
+##
+## That was the vacuum left by deleting the court's unconditional `face_travel`.
+## Deleting it was right -- facing is not travel -- but the answer to "then what
+## is it" is not "nothing". It is the ball, which is the thing a volleyball
+## player looks at whenever they are not doing something more specific.
+##
+## Rate-limited like every other turn, and applied *before* the movement plan
+## each frame, so the open-up rule still wins for a defender who has to turn and
+## run. That ordering is the whole model: face the ball, shuffle and backpedal
+## while you can, open up only when the distance forces it.
+func face_ball(world_yaw: float) -> void:
+	_turn_toward(world_yaw)
+
+
 func _turn_toward(target_yaw: float) -> void:
 	if not has_facing:
 		facing_yaw = target_yaw

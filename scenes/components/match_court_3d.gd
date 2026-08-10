@@ -382,6 +382,15 @@ func _watch_the_ball(ball_position: Vector3) -> void:
 		## floor -- a tall voli looks *down* at a ball a short one looks up at.
 		var eye_height := actor.global_position.y + actor.shoulder_offset.y + 0.18
 		var rise := ball_position.y - eye_height
+		## The body first, then the head relative to it.
+		##
+		## `look_toward` clamps head yaw to HEAD_YAW_LIMIT_DEGREES off the torso,
+		## so turning the head at a body pointed the wrong way buys nothing -- the
+		## neck runs out of range and the voli stares past the play. Facing the
+		## body at the ball is what gives the neck somewhere to work, and it is
+		## also simply what a volleyball player does when nothing else is asking
+		## anything of them.
+		actor.face_ball(heading)
 		actor.look_toward(heading, rad_to_deg(atan2(rise, flat.length())))
 
 
