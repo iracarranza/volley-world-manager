@@ -505,6 +505,43 @@ static func _leg_seconds(
 ## Time to cover `distance` accelerating from `entry_speed` toward
 ## `maximum_speed`. Exactly the traversal `project_toward()` integrates, solved
 ## for time instead of distance.
+## How far a body actually covers in a window, accelerating from a standstill.
+##
+## The exact inverse of `_accelerated_seconds`, and it exists because the
+## coverage calculator was answering this question with `maximum_speed * time *
+## factor` -- a player already at top speed the instant the ball is struck, never
+## decelerating, credited with sprinting until contact.
+##
+## That is the same defect, in the same words, that `_blocker_close_terms`
+## records having fixed for the block: *"This used to be `maximum_speed *
+## movement_time`: the blocker left the ready stance already at top speed, never
+## decelerated, and was credited with shuffling until the instant of contact.
+## Every close in the game resolved at exactly 1.0 as a result."* The block was
+## repaired and the reception was not, so receivers were still being handed 3.6 m
+## of travel in a 0.97 s window and arriving with metres to spare on every ball.
+##
+## Two segments, and no third: a body accelerates to its top speed and then holds
+## it. Deceleration is deliberately not modelled here -- a defender arrives *at*
+## the ball rather than stopping on it, and charging them a braking phase would
+## be inventing a cost the sport does not have.
+static func reachable_distance(
+	seconds: float,
+	maximum_speed: float,
+	acceleration: float,
+	entry_speed: float = 0.0,
+) -> float:
+	var window := maxf(seconds, 0.0)
+	var top := maxf(maximum_speed, 0.01)
+	var rate := maxf(acceleration, 0.01)
+	var entry := clampf(entry_speed, 0.0, top)
+	var to_top_speed := (top - entry) / rate
+	if window <= to_top_speed:
+		return entry * window + 0.5 * rate * window * window
+	var distance_while_accelerating := entry * to_top_speed \
+		+ 0.5 * rate * to_top_speed * to_top_speed
+	return distance_while_accelerating + top * (window - to_top_speed)
+
+
 static func _accelerated_seconds(
 	distance: float,
 	entry_speed: float,

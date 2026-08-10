@@ -128,6 +128,15 @@ func _collect(bucket: Dictionary, metadata: Dictionary) -> void:
 	_note(bucket, "edge_ratio", float(arrival.get("edge_ratio", 0.0)))
 	_note(bucket, "reach_margin_meters",
 		float(arrival.get("reach_margin_meters", 0.0)))
+	## **The five terms the margin is made of**, which `CoverageCalculator`
+	## publishes precisely so a total can be attributed. A margin of 3.7 m is a
+	## fact about one of these and there is no way to tell which from the sum.
+	for term in [
+		"ball_time_seconds", "base_reach_meters", "movement_speed_mps",
+		"acceleration_factor", "travel_distance_meters",
+		"physical_reach_meters", "distance_meters", "reaction_delay",
+	]:
+		_note(bucket, term, float(arrival.get(term, 0.0)))
 	_note(bucket, "incoming_force", float(metadata.get("incoming_force", 0.0)))
 	_note(bucket, "incoming_speed_mps",
 		float(metadata.get("incoming_speed_mps", 0.0)))

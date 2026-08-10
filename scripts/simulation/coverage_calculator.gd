@@ -3,6 +3,7 @@ extends RefCounted
 
 const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
 const RallyPlayerState := preload("res://scripts/models/rally_player_state.gd")
+const MovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
 
 ## Court geometry and normalised-to-metres conversion both live elsewhere:
 ## `CourtConstants` owns the dimensions and `RallyKinematics` owns the
@@ -42,7 +43,40 @@ static func evaluate_arrival(
 			player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
 		)
 	var acceleration_factor := lerpf(0.62, 1.0, acceleration_rating)
-	var travel_distance := movement_speed * available_time * acceleration_factor
+	## **How far a body actually covers in the window, accelerating from a stance.**
+	##
+	## This was `movement_speed * available_time * acceleration_factor` -- top
+	## speed from the instant the ball is struck, held to contact, discounted by a
+	## factor measured at 0.94. Decomposed over 722 receptions:
+	##
+	##     ball_time        1.245 s      reaction_delay   0.271 s
+	##     movement_speed   3.943 m/s    acceleration_factor 0.939
+	##     travel_distance  3.576 m      base_reach       1.245 m
+	##     physical_reach   4.814 m      distance to ball 1.239 m
+	##     reach margin     3.719 m
+	##
+	## A receiver was credited with covering **3.6 metres in 0.97 seconds** from a
+	## standing start, so every ball was reachable with three metres to spare and
+	## the `reaching` posture -- which needs the margin below zero -- could never
+	## fire. That is not a threshold that wants moving; it is a distance that was
+	## never real.
+	##
+	## `_blocker_close_terms` records this exact defect being fixed for the block:
+	## *"This used to be `maximum_speed * movement_time`: the blocker left the
+	## ready stance already at top speed, never decelerated, and was credited with
+	## shuffling until the instant of contact. Every close in the game resolved at
+	## exactly 1.0 as a result."* The block was repaired; the reception kept the
+	## formula. Same words, same consequence, one file over.
+	##
+	## `acceleration_factor` stays and is no longer load-bearing -- the ramp is
+	## modelled now rather than approximated by a multiplier -- but it is still
+	## published, because the balance work reads it and a term vanishing from a
+	## report is worse than a term that has become small.
+	var travel_distance: float = MovementModel.reachable_distance(
+		available_time,
+		movement_speed,
+		lerpf(2.2, 6.8, acceleration_rating),
+	)
 	var base_reach := _base_reach_meters(player, contact_skill)
 	var physical_reach := base_reach + travel_distance
 	var assigned_reach := float(zone.radius_meters)

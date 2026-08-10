@@ -36,7 +36,7 @@ const FACE_GLYPHS := {
 }
 const TREND_GLYPHS := {1: "↑", -1: "↓"}
 
-const HEIGHT_ABOVE_HEAD_METERS: float = 0.42
+const HEIGHT_ABOVE_HEAD_METERS: float = 0.30
 
 
 func _init() -> void:
@@ -44,10 +44,21 @@ func _init() -> void:
 	## A thought that disappears behind a shoulder reads as a flicker.
 	billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	no_depth_test = true
+	## **Screen-relative, and therefore easy to get catastrophically wrong.**
+	##
+	## `fixed_size` keeps the label the same size however far the camera is, so
+	## `pixel_size` is not a world measurement -- it is a share of the viewport.
+	## At 0.0016 with a 96 pt face the glyphs came out several hundred pixels
+	## tall: a single voli's badge covered most of the court, and six of them
+	## covered the match. The 2D badge was sized against a 20 px marker and this
+	## one was never sized against anything.
+	##
+	## A badge is a note about a body, so it wants to be a fraction of that body
+	## on screen -- roughly a head. That is about a tenth of what was here.
 	fixed_size = true
-	pixel_size = 0.0016
+	pixel_size = 0.00017
 	font_size = 96
-	outline_size = 24
+	outline_size = 10
 	outline_modulate = Color(0.02, 0.02, 0.04, 0.85)
 	horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -75,8 +86,9 @@ func show_cue(cue: Resource, head_height_meters: float) -> void:
 	## badge never loses its state to its mood.
 	text = "%s%s%s%s" % [face, glyph, punctuation, trend]
 	modulate = Color(reading.color)
-	## Emphasis reads as size, which survives at any distance and in any colour.
-	pixel_size = lerpf(0.0013, 0.0021, float(reading.emphasis))
+	## Emphasis still reads as size, across a range that stays a badge at both
+	## ends rather than becoming scenery at one of them.
+	pixel_size = lerpf(0.00014, 0.00022, float(reading.emphasis))
 	position = Vector3(0.0, head_height_meters + HEIGHT_ABOVE_HEAD_METERS, 0.0)
 	visible = true
 
