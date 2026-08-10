@@ -983,6 +983,30 @@ static func recovery_motion(
 	## the outside hip, and gathers the legs over the top as it comes round. So
 	## the gather trails the roll instead of leading it.
 	var gather := smoothstep(0.46, 0.96, recovery)
+	## **The roll, as the sequence it actually is.**
+	##
+	## A rolling receive is not a fall with a rotation on it. In order: the arms
+	## lead to the ball; the platform breaks; the body is guided onto its lateral
+	## line -- hip, glute, back, shoulder -- keeping the elbows and knees *off*
+	## the floor, with a hand down only if it is needed; the core stays stable
+	## until after impact and only then lets the limbs tuck; the trailing leg and
+	## the near shoulder turn the body together; and the legs and core bring it
+	## back upright.
+	##
+	## The previous version was two curves -- a pitch and a 112-degree tip -- and
+	## it ended lying on the floor. Nothing in it broke the platform, nothing
+	## chose which surfaces took the load, and there was no way back to the feet,
+	## which is why the last three frames of every strip were a body lying still.
+	##
+	## The bands overlap on purpose. A roll is continuous, and a stage that waits
+	## for the previous one to finish is a sequence of poses rather than a
+	## movement.
+	var platform_hold := 1.0 - smoothstep(0.05, 0.21, recovery)
+	var lateral_line := smoothstep(0.09, 0.44, recovery)
+	var core_release := smoothstep(0.15, 0.36, recovery)
+	var tuck := smoothstep(0.26, 0.63, recovery)
+	var turn := smoothstep(0.14, 0.88, recovery)
+	var rise := smoothstep(0.66, 1.0, recovery)
 	var side := signf(contact_direction.x)
 	if is_zero_approx(side):
 		side = -1.0 if handedness == "Left" else 1.0
@@ -1001,9 +1025,15 @@ static func recovery_motion(
 				offset.z = -0.48 * travel
 			else:
 				mode = "roll_sideways"
-				pitch = deg_to_rad(-22.0) * down
-				body_roll = deg_to_rad(112.0) * side * roll
-				offset.x = 0.36 * side * travel
+				## A full turn, because the roll ends on the feet. The old
+				## 112 degrees was a body tipping over and staying there.
+				body_roll = deg_to_rad(360.0) * side * turn
+				## Forward at the contact, unwinding as the core brings the body
+				## back up. Pitch that only ever increases is a player who folded.
+				pitch = deg_to_rad(-26.0) * lateral_line * (1.0 - rise)
+				## The lateral travel is bought during the contact and stops once
+				## the turn is carrying the body instead of the floor.
+				offset.x = 0.42 * side * lateral_line
 		"blown_away":
 			mode = "roll_backward"
 			pitch = deg_to_rad(106.0) * roll
@@ -1015,6 +1045,12 @@ static func recovery_motion(
 		"travel": travel,
 		"roll": roll,
 		"gather": gather,
+		"platform_hold": platform_hold,
+		"lateral_line": lateral_line,
+		"core_release": core_release,
+		"tuck": tuck,
+		"turn": turn,
+		"rise": rise,
 		"side": side,
 		"pitch_radians": pitch,
 		"roll_radians": body_roll,
@@ -1090,11 +1126,53 @@ func _apply_recovery_state(
 				body_pivot.position += Vector3(motion.offset)
 				body_pivot.rotation.z += float(motion.roll_radians)
 			else:
-				## The platform survives as the body rolls over the outside hip. A
-				## second half-turn makes this visibly a roll, not the old held fall.
+				## **The rolling receive, stage by stage.**
+				var lateral := float(motion.lateral_line)
+				var roll_rise := float(motion.rise)
+				var hold := float(motion.platform_hold)
+				var roll_side := float(motion.side)
 				body_pivot.rotation.x += float(motion.pitch_radians)
 				body_pivot.rotation.z += float(motion.roll_radians)
 				body_pivot.position += Vector3(motion.offset)
+				## **The core is stable until after impact.** Until it releases,
+				## the trunk resists the tip instead of collapsing into it, which
+				## is the difference between a controlled roll and being knocked
+				## over. Counter-rotating a share of the roll is how a held core
+				## reads from outside.
+				body_pivot.rotation.z -= float(motion.roll_radians) \
+					* (1.0 - float(motion.core_release)) * 0.55
+				## **The hips take the floor first, and only as low as the lateral
+				## line needs.** Dropping to the floor and staying there is what
+				## made this a fall; the body comes back up on the legs below.
+				body_pivot.position.y -= lerpf(0.0, 0.46, lateral) * (1.0 - roll_rise)
+
+				## **The platform breaks after the ball has gone.** Holding two
+				## arms locked together through a roll is the pose that reads as a
+				## mannequin tipping over -- and it is also how an elbow ends up
+				## taking the load.
+				var break_weight := 1.0 - hold
+				left_arm.rotation_degrees = left_arm.rotation_degrees.lerp(
+					## Near arm sweeps across the chest as the body turns; the
+					## hand is available to the floor without the elbow going
+					## anywhere near it.
+					Vector3(-24.0, 42.0 * roll_side, -46.0 * roll_side), break_weight
+				)
+				right_arm.rotation_degrees = right_arm.rotation_degrees.lerp(
+					## Trailing arm opens away and *up*, which is what keeps the
+					## shoulder rather than the elbow presenting to the floor.
+					Vector3(-96.0, -30.0 * roll_side, 38.0 * roll_side), break_weight
+				)
+				## Elbows deliberately close to straight. A bent elbow under a
+				## rolling body is the injury this technique exists to avoid, and
+				## a drawing that shows it teaches the wrong thing.
+				_set_elbow(left_arm, lerpf(
+					(left_arm.get_node("Elbow") as Node3D).rotation_degrees.x,
+					-14.0, break_weight
+				))
+				_set_elbow(right_arm, lerpf(
+					(right_arm.get_node("Elbow") as Node3D).rotation_degrees.x,
+					-8.0, break_weight
+				))
 				## **Step 5: the chin tucks.**
 				##
 				## The head keeps tracking the ball through every other pose, which
@@ -1114,21 +1192,51 @@ func _apply_recovery_state(
 			## and the *hip* becomes the lowest thing on the body. With the legs
 			## reaching lower than the hip the floor solve plants a shoe instead
 			## and leaves the body standing over it, which is a crouch.
-			## On `gather`, not on `down`. See `recovery_motion`: folding these
-			## in the first third is what turned the roll into a tumble.
-			var fold := float(motion.gather)
-			left_leg.rotation_degrees.x = lerpf(
-				left_leg.rotation_degrees.x, 128.0, fold
-			)
-			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -118.0, fold
-			)
-			right_leg.rotation_degrees.x = lerpf(
-				right_leg.rotation_degrees.x, 138.0, fold
-			)
-			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -126.0, fold
-			)
+			## **The legs.** Two different jobs, and the old single fold did
+			## neither: it drove both knees to 118 and 126 degrees in the first
+			## third, putting the knees on the floor during the load and leaving
+			## the body folded for the rest.
+			##
+			## The trailing leg turns the body with the shoulder -- that pair is
+			## what makes the rotation smooth rather than a topple -- and the near
+			## leg gathers under the hips so there is something to stand up on.
+			## Both stay well clear of a knee-first landing.
+			if str(motion.mode) == "roll_sideways":
+				var turn_drive := float(motion.turn)
+				var gather_in := float(motion.tuck)
+				var stand := float(motion.rise)
+				## Trailing leg: extended through the load, swinging across to
+				## carry the turn, then coming under for the rise.
+				right_leg.rotation_degrees.x = lerpf(
+					lerpf(-16.0, 62.0, turn_drive), 8.0, stand
+				)
+				right_leg.rotation_degrees.z = lerpf(
+					0.0, -28.0 * float(motion.side), turn_drive
+				)
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+					lerpf(-6.0, -54.0, turn_drive), -18.0, stand
+				)
+				## Near leg: tucks in, then plants.
+				left_leg.rotation_degrees.x = lerpf(
+					lerpf(-8.0, 96.0, gather_in), 14.0, stand
+				)
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+					lerpf(-4.0, -104.0, gather_in), -26.0, stand
+				)
+			else:
+				var fold := float(motion.gather)
+				left_leg.rotation_degrees.x = lerpf(
+					left_leg.rotation_degrees.x, 128.0, fold
+				)
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+					(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -118.0, fold
+				)
+				right_leg.rotation_degrees.x = lerpf(
+					right_leg.rotation_degrees.x, 138.0, fold
+				)
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
+					(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -126.0, fold
+				)
 		"blown_away":
 			## Not a play, an impact. The body pitches *backward* -- the only pose
 			## in the game that does, since a block bends forward at -0.12 -- the
