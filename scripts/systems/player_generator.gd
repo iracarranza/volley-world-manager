@@ -753,6 +753,40 @@ const RATING_BANDS := {
 }
 
 
+## What a region's specialty attributes gain back to pay for its weakness.
+##
+## **A tradition shapes a voli; it does not make them worse.** Adding
+## `REGION_CEILING_PENALTY` without this drained the world's talent budget, and
+## the suite caught it in one check: `potential` is derived from the ceilings
+## themselves, weighted by the *position's* primary attributes, so a penalty
+## landing on an attribute that is primary for a role -- Taktikã's
+## `explosiveness` and `jump_reach` on a hitter, say -- cost that voli real
+## potential, and after twenty seasons the top tiers had fewer players in them
+## than the world is supposed to hold. That is not what a weakness means. It
+## means Taktikã produces a different *kind* of elite hitter, not fewer of them.
+##
+## So every region's ceiling adjustment is net zero: whatever the weakness takes
+## is handed back across the attributes the region actually teaches. The
+## precedent is `BODY_TYPE_ATTRIBUTES`, which has summed to zero per body type
+## since it was written, and for the same reason -- a body is a shape, not a
+## grade, and so is a tradition.
+##
+## Derived rather than tabulated so the two tables cannot drift apart: edit a
+## penalty and the compensation follows it.
+static func _penalty_compensation(
+	region_name: String, specialty_list: Array
+) -> float:
+	if specialty_list.is_empty():
+		return 0.0
+	var penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
+	if penalty.is_empty():
+		return 0.0
+	var total := 0.0
+	for attribute in penalty:
+		total += float(penalty[attribute])
+	return -total / float(specialty_list.size())
+
+
 ## Which of the three ratings governs this attribute, or an empty string.
 ##
 ## Built once on first use rather than declared, so the mapping cannot drift out
@@ -901,6 +935,7 @@ static func _apply_attributes(
 	var talent := talent_override if talent_override >= 0.0 else float(_talent_level(rng, academy))
 
 	var ceiling_penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
+	var specialty_compensation := _penalty_compensation(region_name, specialty_list)
 	var ceilings := {}
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
 		ceilings[property_name] = clampf(
@@ -909,6 +944,7 @@ static func _apply_attributes(
 				property_name, primary_list, secondary_list, specialty_list, specialty_bonus
 			))
 			+ float(ceiling_penalty.get(property_name, 0))
+			+ (specialty_compensation if property_name in specialty_list else 0.0)
 			+ region_rating_bonus(region_name, property_name)
 			+ _innate_deviation(rng),
 			1.0, 99.0,
