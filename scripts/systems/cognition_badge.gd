@@ -21,6 +21,7 @@ const CALM_COLOR := Color(0.42, 0.62, 0.92)
 const ALERT_COLOR := Color(0.95, 0.78, 0.24)
 const URGENT_COLOR := Color(0.88, 0.30, 0.26)
 const LOST_COLOR := Color(0.55, 0.55, 0.60)
+const GOOD_COLOR := Color(0.28, 0.78, 0.42)
 
 ## Eye openness, as a share of the badge radius. Searching is narrow and
 ## scanning; recognition snaps wide; a lost sightline closes.
@@ -59,20 +60,7 @@ static func describe(cue: Resource, toward: Vector2 = Vector2.ZERO) -> Dictionar
 	elif visibility == "partially_obscured":
 		eye = minf(eye, EYE_SEARCHING)
 
-	var color := CALM_COLOR
-	if visibility != "visible":
-		color = LOST_COLOR
-	elif urgency >= 0.78:
-		color = URGENT_COLOR
-	elif urgency >= 0.45:
-		color = ALERT_COLOR
-	match str(cue.affect):
-		"upset":
-			color = URGENT_COLOR
-		"sad":
-			color = CALM_COLOR
-		"confident", "pleased":
-			color = ALERT_COLOR if urgency >= 0.5 else CALM_COLOR
+	var color := _color_for(cue)
 
 	var direction := toward
 	if direction.length() > 0.0001:
@@ -85,8 +73,9 @@ static func describe(cue: Resource, toward: Vector2 = Vector2.ZERO) -> Dictionar
 		"eye_openness": clampf(eye, 0.0, 1.0),
 		"pupil": direction,
 		"color": color,
-		## Shape carries what colour carries, so neither is load-bearing alone.
-		"shape": _shape_for(state, visibility),
+		## The icon names the volleyball job, while state controls whether that job
+		## is still intent or has become execution.
+		"icon": _icon_for(state, str(cue.action_kind), visibility),
 		"punctuation": str(cue.punctuation),
 		"is_call": state == "calling",
 		"face": _face_for(cue),
@@ -101,19 +90,42 @@ static func describe(cue: Resource, toward: Vector2 = Vector2.ZERO) -> Dictionar
 	}
 
 
-## The badge outline. A circle is thinking, a wedge is a call heard by others,
-## a diamond is commitment, and a dashed ring is a player who has lost the ball.
-static func _shape_for(state: String, visibility: String) -> String:
-	if visibility == "occluded" or state == "lost_sight":
-		return "dashed_ring"
-	match state:
-		"calling":
-			return "wedge"
-		"committed":
-			return "diamond"
-		"reacting":
-			return "burst"
-	return "circle"
+## Action decides the icon; state only decides which phase of that action is
+## visible. Receive and floor-defence intent are shields and become eyes once
+## the player moves. Blocking is the inverse: an eye reads the setter until the
+## blocker commits, then the shield grades the wall. A call has no sound icon --
+## the hitter's underlying attack remains a sword and punctuation carries voice.
+static func _icon_for(state: String, action: String, visibility: String) -> String:
+	if visibility != "visible" or state == "lost_sight":
+		return "eye"
+	match action:
+		"receive", "defend":
+			return "shield" if state == "committed" else "eye"
+		"block":
+			return "eye" if state == "searching" else "shield"
+		"attack":
+			return "sword"
+	## Emotional aftermath deliberately has no generic reaction/burst icon. The
+	## face and trend arrow already say what happened.
+	if state == "reacting":
+		return "none"
+	return "eye"
+
+
+## Graded execution owns colour. An eye that cannot see is always red; otherwise
+## the common 0..1 execution scale reads red, amber, green. Ungraded cognition
+## remains blue so confidence or urgency is never mistaken for performance.
+static func _color_for(cue: Resource) -> Color:
+	if str(cue.visibility) != "visible" or str(cue.state) == "lost_sight":
+		return URGENT_COLOR
+	var quality := float(cue.execution_quality)
+	if quality >= 0.0:
+		if quality >= 0.68:
+			return GOOD_COLOR
+		if quality >= 0.35:
+			return ALERT_COLOR
+		return URGENT_COLOR
+	return CALM_COLOR
 
 
 static func _face_for(cue: Resource) -> String:

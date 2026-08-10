@@ -254,9 +254,19 @@ func set_player_pose(
 	actor.set_pose(
 		event_type, elevation, phase, direction, highlighted, action_context
 	)
+	var signature_move := str(action_context.get("signature_move", ""))
+	if not signature_move.is_empty():
+		ball_actor.set_signature_impact(
+			signature_move,
+			float(action_context.get("signature_charge", 0.0)),
+			bool(action_context.get("signature_succeeded", false)),
+			phase,
+			Vector3(direction.x, 0.0, direction.y),
+		)
 
 
 func reset_player_poses() -> void:
+	ball_actor.clear_signature_impact()
 	for actor_resource in player_actors.values():
 		var actor := actor_resource as PlayerActor3D
 		actor.set_highlighted(false)
@@ -396,8 +406,31 @@ func sample_cognition(simulation_time: float) -> void:
 		if cue == null:
 			actor.hide_cognition_cue()
 			continue
-		actor.show_cognition_cue(cue)
+		actor.show_cognition_cue(cue, _cognition_attention_direction(actor, cue))
 		_apply_cognition_look(actor, cue)
+
+
+## Court-space direction for the procedural pupil. Unlike the old text glyph,
+## this can follow the live ball as well as a named player or position.
+func _cognition_attention_direction(
+	actor: PlayerActor3D, cue: Resource
+) -> Vector2:
+	var offset := Vector3.ZERO
+	match str(cue.attention_kind):
+		"ball":
+			if ball_actor.visible:
+				offset = ball_actor.global_position - actor.global_position
+		"hitter", "setter", "teammate":
+			var other := int(cue.attention_player_id)
+			if live_positions.has(other):
+				var target := Vector2(live_positions[other])
+				offset = tactical_to_world(target.x, target.y) - actor.global_position
+		"position":
+			var target := Vector2(cue.attention_position)
+			offset = tactical_to_world(target.x, target.y) - actor.global_position
+	if offset.length_squared() < 0.0001:
+		return Vector2.ZERO
+	return Vector2(offset.x, offset.z).normalized()
 
 
 ## A cue that names something on the court also turns the head toward it.

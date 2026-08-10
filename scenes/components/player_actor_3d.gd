@@ -2243,13 +2243,17 @@ func set_expression(new_expression: String, light_mode: bool = false) -> void:
 var cognition_billboard: CognitionBillboard3D
 
 
-func show_cognition_cue(cue: Resource) -> void:
+func show_cognition_cue(
+	cue: Resource, attention_direction: Vector2 = Vector2.ZERO
+) -> void:
 	if cognition_billboard == null:
 		if cue == null:
 			return
 		cognition_billboard = CognitionBillboard3D.new()
 		add_child(cognition_billboard)
-	cognition_billboard.show_cue(cue, _cognition_head_height())
+	cognition_billboard.show_cue(
+		cue, _cognition_head_height(), attention_direction
+	)
 
 
 func hide_cognition_cue() -> void:

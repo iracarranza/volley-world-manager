@@ -155,24 +155,50 @@ static func _compile_reception(
 		if int(candidate.event_type) == RallyEventModel.EventType.SERVE:
 			serve_time = float(candidate.metadata.get("event_time", 0.0))
 			break
-	if contact_time - serve_time < CueModel.MINIMUM_DURATION_SECONDS:
+	if contact_time - serve_time < CueModel.MINIMUM_DURATION_SECONDS * 2.0:
 		return
 	var margin := float(metadata.get("arrival_margin", 0.0))
-	var cue := CueModel.create(
-		receiver_id, StringName(str(metadata.get("side", "home"))),
-		reception.sequence, serve_time, contact_time,
-		&"committed" if margin >= 0.0 else &"reacting", &"before",
+	var quality := clampf(inverse_lerp(-0.25, 0.25, margin), 0.0, 1.0)
+	## Intent is visible as the serve leaves the opponent. Even when the receiver
+	## must move immediately, preserve one readable shield beat before the eye
+	## takes over for active tracking and travel.
+	var movement_duration := maxf(float(metadata.get(
+		"movement_duration", contact_time - serve_time
+	)), 0.0)
+	var movement_at := clampf(
+		contact_time - movement_duration,
+		serve_time + CueModel.MINIMUM_DURATION_SECONDS,
+		contact_time - CueModel.MINIMUM_DURATION_SECONDS,
 	)
-	cue.attention_kind = &"ball"
+	var intent := CueModel.create(
+		receiver_id, StringName(str(metadata.get("side", "home"))),
+		reception.sequence, serve_time, movement_at, &"committed", &"before",
+	)
+	intent.attention_kind = &"ball"
+	intent.action_kind = &"receive"
 	## Comfort, on the margin's own scale: a quarter of a second early is a
 	## passer in position, and anything negative is one still travelling.
-	cue.certainty = clampf(inverse_lerp(-0.25, 0.25, margin), 0.0, 1.0)
-	cue.urgency = clampf(1.0 - cue.certainty, 0.15, 1.0)
+	intent.certainty = quality
+	intent.execution_quality = quality
+	intent.urgency = clampf(1.0 - quality, 0.15, 1.0)
+	intent.audience = &"observable"
+	intent.priority = PRIORITY_COMMITTED
+	cues.append(intent)
+
+	var moving := CueModel.create(
+		receiver_id, StringName(str(metadata.get("side", "home"))),
+		reception.sequence, movement_at, contact_time, &"reacting", &"during",
+	)
+	moving.attention_kind = &"ball"
+	moving.action_kind = &"receive"
+	moving.certainty = quality
+	moving.execution_quality = quality
+	moving.urgency = clampf(1.0 - quality, 0.15, 1.0)
 	if margin < -0.05:
-		cue.punctuation = "!"
-	cue.audience = &"observable"
-	cue.priority = PRIORITY_COMMITTED if margin >= 0.0 else PRIORITY_REACTING
-	cues.append(cue)
+		moving.punctuation = "!"
+	moving.audience = &"observable"
+	moving.priority = PRIORITY_REACTING
+	cues.append(moving)
 
 
 ## The set -> attack -> block slice, compiled from one SET event outward.
@@ -200,12 +226,14 @@ static func _compile_second_contact(
 		_compile_hitter_call(
 			set_event, attack_event, evaluation, side, set_time, cues
 		)
+		_compile_attack_execution(attack_event, side, set_time, cues)
 	var block_event := _next_of_type(
 		events, set_index, RallyEventModel.EventType.BLOCK
 	)
 	if block_event != null:
 		_compile_block_read(set_event, block_event, set_time, cues)
 	if attack_event != null:
+		_compile_floor_defence(events, set_index, attack_event, cues)
 		_compile_sightlines(events, set_index, attack_event, block_event, cues)
 		_compile_reactions(result, events, set_index, attack_event, cues)
 
@@ -371,13 +399,39 @@ static func _compile_hitter_call(
 	)
 	cue.attention_kind = &"setter"
 	cue.attention_player_id = int(set_event.actor_id)
+	cue.action_kind = &"attack"
 	cue.certainty = clampf(float(chosen_option.get("judgment", 0.6)), 0.0, 1.0)
+	cue.execution_quality = cue.certainty
 	cue.urgency = 0.9
 	cue.punctuation = "!!"
 	cue.affect = &"confident"
 	cue.affect_intensity = 0.6
 	cue.audience = &"public"
 	cue.priority = PRIORITY_CALLING
+	cues.append(cue)
+
+
+## Once the set leaves the hands, the chosen hitter is executing rather than
+## merely calling. The sword persists to contact and is graded by the attack's
+## resolved quality, while the earlier call remains punctuation on that sword.
+static func _compile_attack_execution(
+	attack_event: Resource, side: StringName, set_time: float, cues: Array
+) -> void:
+	var hitter_id := int(attack_event.actor_id)
+	var contact_time := float(attack_event.metadata.get("event_time", set_time + 0.4))
+	if hitter_id < 0 or contact_time - set_time < CueModel.MINIMUM_DURATION_SECONDS:
+		return
+	var cue := CueModel.create(
+		hitter_id, side, attack_event.sequence, set_time, contact_time,
+		&"committed", &"during",
+	)
+	cue.attention_kind = &"ball"
+	cue.action_kind = &"attack"
+	cue.certainty = clampf(float(attack_event.quality), 0.0, 1.0)
+	cue.execution_quality = cue.certainty
+	cue.urgency = 0.9
+	cue.priority = PRIORITY_COMMITTED
+	cue.audience = &"observable"
 	cues.append(cue)
 
 
@@ -439,6 +493,7 @@ static func _compile_block_read(
 		)
 		reading.attention_kind = &"setter"
 		reading.attention_player_id = int(set_event.actor_id)
+		reading.action_kind = &"block"
 		reading.certainty = 0.35
 		reading.urgency = 0.55
 		reading.priority = PRIORITY_SEARCHING
@@ -453,7 +508,9 @@ static func _compile_block_read(
 		)
 		recognising.attention_kind = &"position"
 		recognising.attention_position = Vector2(entry.at)
+		recognising.action_kind = &"block"
 		recognising.certainty = closed
+		recognising.execution_quality = closed
 		recognising.urgency = 0.8
 		recognising.punctuation = "!" if closed >= 0.7 else "?"
 		recognising.priority = PRIORITY_RECOGNIZING
@@ -467,7 +524,9 @@ static func _compile_block_read(
 		)
 		committed.attention_kind = &"position"
 		committed.attention_position = Vector2(entry.at)
+		committed.action_kind = &"block"
 		committed.certainty = closed
+		committed.execution_quality = closed
 		committed.urgency = 0.95
 		committed.priority = PRIORITY_COMMITTED
 		committed.audience = &"observable"
@@ -503,6 +562,66 @@ static func _next_of_type(events: Array, index: int, event_type: int) -> Resourc
 				or int(candidate.event_type) == RallyEventModel.EventType.POINT:
 			break
 	return null
+
+
+## The floor defender declares responsibility as the opposing set begins, then
+## switches from a shield to an eye when their actual movement starts. The
+## movement boundary comes from playback evidence, not from renderer timing.
+static func _compile_floor_defence(
+	events: Array, set_index: int, attack_event: Resource, cues: Array
+) -> void:
+	var defence := _next_of_type(
+		events, set_index, RallyEventModel.EventType.DEFENSE
+	)
+	if defence == null:
+		return
+	var defender_id := int(defence.actor_id)
+	if defender_id < 0:
+		return
+	var set_event: Resource = events[set_index]
+	var set_time := float(set_event.metadata.get("event_time", 0.0))
+	var contact_time := float(defence.metadata.get(
+		"event_time", attack_event.metadata.get("event_time", set_time + 0.5)
+	))
+	if contact_time - set_time < CueModel.MINIMUM_DURATION_SECONDS * 2.0:
+		return
+	var movement_duration := maxf(float(defence.metadata.get(
+		"movement_duration", contact_time - set_time
+	)), 0.0)
+	var movement_at := clampf(
+		contact_time - movement_duration,
+		set_time + CueModel.MINIMUM_DURATION_SECONDS,
+		contact_time - CueModel.MINIMUM_DURATION_SECONDS,
+	)
+	var quality := clampf(float(defence.quality), 0.0, 1.0)
+	var side := StringName(str(defence.metadata.get("side", "home")))
+
+	var intent := CueModel.create(
+		defender_id, side, defence.sequence, set_time, movement_at,
+		&"committed", &"before",
+	)
+	intent.attention_kind = &"hitter"
+	intent.attention_player_id = int(attack_event.actor_id)
+	intent.action_kind = &"defend"
+	intent.certainty = quality
+	intent.execution_quality = quality
+	intent.urgency = 0.75
+	intent.priority = PRIORITY_COMMITTED
+	intent.audience = &"observable"
+	cues.append(intent)
+
+	var moving := CueModel.create(
+		defender_id, side, defence.sequence, movement_at, contact_time,
+		&"recognizing", &"during",
+	)
+	moving.attention_kind = &"ball"
+	moving.action_kind = &"defend"
+	moving.certainty = quality
+	moving.execution_quality = quality
+	moving.urgency = 0.9
+	moving.priority = PRIORITY_RECOGNIZING
+	moving.audience = &"observable"
+	cues.append(moving)
 
 
 ## What the defenders behind the wall could actually see of the swing.
@@ -555,6 +674,7 @@ static func _compile_sightlines(
 		hidden_from, reacquired, &"lost_sight", &"during",
 	)
 	lost.attention_kind = &"ball"
+	lost.action_kind = &"defend"
 	lost.visibility = visibility
 	## Certainty falls with how much of the flight went missing, which is the
 	## quantity the geometry actually measured rather than a second guess at it.
@@ -562,6 +682,7 @@ static func _compile_sightlines(
 		1.0 - float(window.get("hidden_fraction", 0.0)) * 1.4, 0.0, 1.0
 	)
 	lost.urgency = 0.85
+	lost.execution_quality = 0.0
 	lost.punctuation = "...?"
 	lost.priority = PRIORITY_LOST_SIGHT
 	lost.audience = &"observable"
@@ -576,8 +697,10 @@ static func _compile_sightlines(
 		reacquired, contact_time, &"reacting", &"during",
 	)
 	found.attention_kind = &"ball"
+	found.action_kind = &"defend"
 	found.visibility = &"visible"
 	found.certainty = 0.6
+	found.execution_quality = clampf(float(defence.quality), 0.0, 1.0)
 	found.urgency = 1.0
 	found.punctuation = "!"
 	found.priority = PRIORITY_REACTING

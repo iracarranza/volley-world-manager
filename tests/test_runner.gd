@@ -103,6 +103,7 @@ const SIGNATURE_MOVE_SCRIPT := preload(
 const SIGNATURE_SURGE_SCRIPT := preload(
 	"res://scenes/components/signature_surge_3d.gd"
 )
+const BALL_ACTOR_SCRIPT := preload("res://scenes/components/ball_actor_3d.gd")
 const GEOMETRIC_ATTACK_SCRIPT := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
@@ -9811,6 +9812,17 @@ func _test_signature_moves_beat_a_block() -> void:
 		surge_colours.size() == surge_moves.size(),
 		"each signature family has a distinct surge treatment",
 	)
+	var crush_normal: Vector3 = BALL_ACTOR_SCRIPT.impact_normal_for(
+		"block_crush", Vector3.FORWARD
+	)
+	var hands_normal: Vector3 = BALL_ACTOR_SCRIPT.impact_normal_for(
+		"high_hands", Vector3.FORWARD
+	)
+	_check(
+		crush_normal.y < -0.55 and hands_normal.y > 0.90
+			and absf(hands_normal.z) > 0.05,
+		"signature impact rings point Block Crush down and High Hands mostly upward",
+	)
 
 
 ## Gate C. In, out, netted and blocked are read off one flight instead of rolled
@@ -13845,6 +13857,8 @@ func _test_cognition_cues() -> void:
 	original.trend = -0.4
 	original.audience = &"private"
 	original.certainty = 0.63
+	original.action_kind = &"attack"
+	original.execution_quality = 0.72
 	var restored := PlayerCognitionCue.from_dict(original.to_dict())
 	var round_trip_holds := true
 	for key in original.to_dict():
@@ -13854,6 +13868,71 @@ func _test_cognition_cues() -> void:
 		round_trip_holds and restored.is_well_formed(),
 		"a cognition cue survives a dictionary round trip field for field",
 	)
+
+	## 1b. Icon semantics describe volleyball intent/execution, not generic mood
+	## or audible state. These are shared by both the 2D and 3D renderers.
+	var receive_intent := PlayerCognitionCue.create(
+		1, &"home", 0, 0.0, 0.2, &"committed"
+	)
+	receive_intent.action_kind = &"receive"
+	receive_intent.execution_quality = 0.8
+	var receive_moving := PlayerCognitionCue.create(
+		1, &"home", 0, 0.2, 0.4, &"reacting"
+	)
+	receive_moving.action_kind = &"receive"
+	var block_watching := PlayerCognitionCue.create(
+		2, &"home", 0, 0.0, 0.2, &"searching"
+	)
+	block_watching.action_kind = &"block"
+	var block_committed := PlayerCognitionCue.create(
+		2, &"home", 0, 0.2, 0.4, &"committed"
+	)
+	block_committed.action_kind = &"block"
+	block_committed.execution_quality = 0.9
+	var attack_call := PlayerCognitionCue.create(
+		3, &"home", 0, 0.0, 0.2, &"calling"
+	)
+	attack_call.action_kind = &"attack"
+	var blind_defender := PlayerCognitionCue.create(
+		4, &"home", 0, 0.0, 0.2, &"lost_sight"
+	)
+	blind_defender.action_kind = &"defend"
+	blind_defender.visibility = &"occluded"
+	var emotion_only := PlayerCognitionCue.create(
+		5, &"home", 0, 0.0, 0.2, &"reacting"
+	)
+	emotion_only.affect = &"upset"
+	var receive_intent_read := CognitionBadge.describe(receive_intent)
+	var receive_moving_read := CognitionBadge.describe(receive_moving)
+	var block_watching_read := CognitionBadge.describe(block_watching)
+	var block_committed_read := CognitionBadge.describe(block_committed)
+	var attack_call_read := CognitionBadge.describe(attack_call)
+	var blind_read := CognitionBadge.describe(blind_defender)
+	var emotion_read := CognitionBadge.describe(emotion_only)
+	_check(
+		str(receive_intent_read.icon) == "shield"
+			and str(receive_moving_read.icon) == "eye"
+			and str(block_watching_read.icon) == "eye"
+			and str(block_committed_read.icon) == "shield"
+			and str(attack_call_read.icon) == "sword"
+			and str(blind_read.icon) == "eye"
+			and float(blind_read.eye_openness) <= 0.2
+			and str(emotion_read.icon) == "none"
+			and Color(block_committed_read.color).g > Color(block_committed_read.color).r
+			and Color(blind_read.color).r > Color(blind_read.color).g,
+		"cognition icons distinguish intent from execution and grade action by colour",
+	)
+	var eye_billboard := CognitionBillboard3D.new()
+	eye_billboard.show_cue(receive_moving, 2.0, Vector2.RIGHT)
+	var eye_oval := eye_billboard.get_node("EyeOval") as Sprite3D
+	var eye_pupil := eye_billboard.get_node("EyePupil") as Sprite3D
+	_check(
+		eye_oval != null and eye_oval.visible and eye_oval.texture != null
+			and eye_pupil != null and eye_pupil.visible
+			and eye_pupil.offset.x > 0.0,
+		"the 3D cognition eye is a procedural oval whose pupil follows attention",
+	)
+	eye_billboard.free()
 
 	## 2. One winner per player per instant. Two badges above one head is the
 	##    single rendering rule both courts must obey, and it is enforced in the
@@ -13905,6 +13984,7 @@ func _test_cognition_cues() -> void:
 	var ordered := true
 	var well_formed := true
 	var states_seen := {}
+	var actions_seen := {}
 	for seed_value in range(41000, 41030):
 		var rally: Resource = manager.resolve_active_rally(seed_value)
 		if rally == null:
@@ -13916,6 +13996,7 @@ func _test_cognition_cues() -> void:
 			var cue: Resource = raw_cue
 			total_cues += 1
 			states_seen[str(cue.state)] = true
+			actions_seen[str(cue.action_kind)] = true
 			if not cue.is_well_formed():
 				well_formed = false
 			if float(cue.starts_at) < previous_start - 0.0001 \
@@ -13935,6 +14016,11 @@ func _test_cognition_cues() -> void:
 			and states_seen.has("calling") and states_seen.has("recognizing")
 			and states_seen.has("committed"),
 		"ordinary rallies produce setter search, decision, hitter call and blocker commitment",
+	)
+	_check(
+		actions_seen.has("receive") and actions_seen.has("defend")
+			and actions_seen.has("block") and actions_seen.has("attack"),
+		"ordinary rallies compile receive, floor-defence, block and attack action semantics",
 	)
 
 	## 5. Determinism. A replay is only a replay if resolving the same seed

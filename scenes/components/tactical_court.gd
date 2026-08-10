@@ -2390,29 +2390,14 @@ func _draw_cognition_badge(
 		return
 	var radius := 11.0
 	var color: Color = Color(reading.color)
-	_draw_cognition_outline(center, radius, str(reading.shape), color)
-	## The eye: a lens whose height is the openness, so a narrow scan and a wide
-	## recognition are different shapes rather than different colours.
-	var openness := float(reading.eye_openness)
-	var lens_height := maxf(radius * openness, 1.2)
-	draw_rect(
-		Rect2(center - Vector2(radius * 0.62, lens_height * 0.5),
-			Vector2(radius * 1.24, lens_height)),
-		Color(color, 0.22),
-	)
-	if openness > 0.2:
-		var pupil := Vector2(reading.pupil) * radius
-		draw_circle(
-			center + Vector2(pupil.x, clampf(pupil.y, -lens_height * 0.3, lens_height * 0.3)),
-			maxf(lens_height * 0.34, 1.6), color,
+	var icon := str(reading.icon)
+	if icon == "eye":
+		_draw_cognition_eye(
+			center, radius, color, float(reading.eye_openness),
+			Vector2(reading.pupil),
 		)
 	else:
-		## Closed: a line, which reads as "cannot see" even in a screenshot with
-		## no colour at all.
-		draw_line(
-			center - Vector2(radius * 0.6, 0.0),
-			center + Vector2(radius * 0.6, 0.0), color, 2.0,
-		)
+		_draw_cognition_icon(center, radius, icon, color)
 	var punctuation := str(reading.punctuation)
 	if not punctuation.is_empty():
 		draw_string(
@@ -2428,49 +2413,58 @@ func _draw_cognition_badge(
 		)
 
 
-## The outline, which carries the state independently of the colour.
-func _draw_cognition_outline(
-	center: Vector2, radius: float, shape: String, color: Color
+## The eye is execution for receivers/defenders and observation for blockers.
+## Openness carries sightline quality independently of colour.
+func _draw_cognition_eye(
+	center: Vector2, radius: float, color: Color,
+	openness: float, pupil_offset: Vector2
 ) -> void:
-	match shape:
-		"wedge":
-			## A call: a speech-bubble tail, because it is the one cue another
-			## player is meant to hear.
-			draw_circle(center, radius, Color(color, 0.16))
-			draw_arc(center, radius, 0.0, TAU, 28, color, 2.0)
-			draw_colored_polygon(
-				PackedVector2Array([
-					center + Vector2(-radius * 0.45, radius * 0.85),
-					center + Vector2(radius * 0.10, radius * 0.85),
-					center + Vector2(-radius * 0.15, radius * 1.55),
-				]), color,
-			)
-		"diamond":
-			var points := PackedVector2Array([
-				center + Vector2(0.0, -radius),
-				center + Vector2(radius, 0.0),
+	var lens_height := maxf(radius * openness, 1.2)
+	var oval := PackedVector2Array()
+	for point_index in range(33):
+		var angle := TAU * float(point_index) / 32.0
+		oval.append(center + Vector2(
+			cos(angle) * radius * 0.82,
+			sin(angle) * lens_height * 0.52,
+		))
+	## A contour rather than the old filled rectangle: thinner, unmistakably an
+	## eye, and open inside so the moving pupil is the thing the viewer follows.
+	draw_polyline(oval, color, 1.45, true)
+	if openness > 0.2:
+		var pupil := pupil_offset * radius
+		draw_circle(
+			center + Vector2(pupil.x, clampf(
+				pupil.y, -lens_height * 0.3, lens_height * 0.3
+			)),
+			maxf(lens_height * 0.24, 1.35), color,
+		)
+
+
+func _draw_cognition_icon(
+	center: Vector2, radius: float, icon: String, color: Color
+) -> void:
+	match icon:
+		"shield":
+			var shield := PackedVector2Array([
+				center + Vector2(-radius * 0.78, -radius * 0.72),
+				center + Vector2(radius * 0.78, -radius * 0.72),
+				center + Vector2(radius * 0.62, radius * 0.35),
 				center + Vector2(0.0, radius),
-				center + Vector2(-radius, 0.0),
+				center + Vector2(-radius * 0.62, radius * 0.35),
 			])
-			draw_colored_polygon(points, Color(color, 0.16))
+			draw_colored_polygon(shield, Color(color, 0.18))
 			draw_polyline(
-				PackedVector2Array(Array(points) + [points[0]]), color, 2.0
+				PackedVector2Array(Array(shield) + [shield[0]]), color, 2.0
 			)
-		"dashed_ring":
-			for segment in range(8):
-				var from_angle := TAU * float(segment) / 8.0
-				draw_arc(
-					center, radius, from_angle, from_angle + TAU / 16.0, 4, color, 2.0
-				)
-		"burst":
-			draw_circle(center, radius, Color(color, 0.16))
-			for spike in range(8):
-				var angle := TAU * float(spike) / 8.0
-				draw_line(
-					center + Vector2(cos(angle), sin(angle)) * radius,
-					center + Vector2(cos(angle), sin(angle)) * radius * 1.42,
-					color, 2.0,
-				)
-		_:
-			draw_circle(center, radius, Color(color, 0.16))
-			draw_arc(center, radius, 0.0, TAU, 28, color, 2.0)
+		"sword":
+			var blade_from := center + Vector2(-radius * 0.48, radius * 0.48)
+			var blade_tip := center + Vector2(radius * 0.72, -radius * 0.72)
+			draw_line(blade_from, blade_tip, color, 3.0)
+			draw_line(
+				center + Vector2(-radius * 0.60, -radius * 0.05),
+				center + Vector2(radius * 0.05, radius * 0.60), color, 2.5,
+			)
+			draw_circle(
+				center + Vector2(-radius * 0.64, radius * 0.64),
+				radius * 0.16, color,
+			)

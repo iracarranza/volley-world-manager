@@ -35,6 +35,14 @@ const AUDIENCES: Array[StringName] = [&"private", &"public", &"observable"]
 const AFFECTS: Array[StringName] = [
 	&"neutral", &"confident", &"urgent", &"upset", &"sad", &"pleased",
 ]
+## The volleyball job this cognition belongs to. State says *when* the player is
+## in the read/decision/execution cycle; action says *what they are trying to
+## do*. Keeping those separate prevents an emotional reaction from turning into
+## a generic starburst and lets receive, floor defence, block and attack keep
+## their own visual language through the whole rally.
+const ACTION_KINDS: Array[StringName] = [
+	&"none", &"receive", &"defend", &"block", &"attack",
+]
 
 ## The shortest interval anyone can read. A cue thinner than this flickers past
 ## at 2x playback and reads as a rendering fault rather than a thought.
@@ -53,6 +61,10 @@ const MINIMUM_DURATION_SECONDS: float = 0.08
 @export var attention_position: Vector2 = Vector2.ZERO
 @export var visibility: StringName = &"visible"
 @export_range(0.0, 1.0) var certainty: float = 0.5
+@export var action_kind: StringName = &"none"
+## -1 means the action has not been graded yet. Once execution evidence exists,
+## 0 is failing and 1 is excellent; renderers map that common scale to colour.
+@export_range(-1.0, 1.0) var execution_quality: float = -1.0
 @export_range(0.0, 1.0) var urgency: float = 0.5
 @export var punctuation: String = ""
 @export var affect: StringName = &"neutral"
@@ -120,6 +132,8 @@ func to_dict() -> Dictionary:
 		"attention_position": attention_position,
 		"visibility": str(visibility),
 		"certainty": certainty,
+		"action_kind": str(action_kind),
+		"execution_quality": execution_quality,
 		"urgency": urgency,
 		"punctuation": punctuation,
 		"affect": str(affect),
@@ -149,6 +163,10 @@ static func from_dict(data: Dictionary) -> PlayerCognitionCue:
 	cue.attention_position = _to_vector2(data.get("attention_position", Vector2.ZERO))
 	cue.visibility = StringName(str(data.get("visibility", "visible")))
 	cue.certainty = clampf(float(data.get("certainty", 0.5)), 0.0, 1.0)
+	cue.action_kind = StringName(str(data.get("action_kind", "none")))
+	cue.execution_quality = clampf(
+		float(data.get("execution_quality", -1.0)), -1.0, 1.0
+	)
 	cue.urgency = clampf(float(data.get("urgency", 0.5)), 0.0, 1.0)
 	cue.punctuation = str(data.get("punctuation", ""))
 	cue.affect = StringName(str(data.get("affect", "neutral")))
@@ -182,6 +200,8 @@ func is_well_formed() -> bool:
 		and VISIBILITIES.has(visibility)
 		and AUDIENCES.has(audience)
 		and AFFECTS.has(affect)
+		and ACTION_KINDS.has(action_kind)
+		and execution_quality >= -1.0 and execution_quality <= 1.0
 		and starts_at >= 0.0
 		and ends_at >= starts_at
 		and duration() >= MINIMUM_DURATION_SECONDS - 0.0001

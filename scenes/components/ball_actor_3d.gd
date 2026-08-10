@@ -1,6 +1,10 @@
 class_name BallActor3D
 extends Node3D
 
+const SignatureSurgeScript := preload(
+	"res://scenes/components/signature_surge_3d.gd"
+)
+
 ## The ball, and the streak behind it.
 ##
 ## The trail is not decoration. Playback shows a rally at speed with no numbers
@@ -45,10 +49,14 @@ var _ghost_material: StandardMaterial3D = null
 var _trail_color: Color = Color(0.95, 0.95, 0.95)
 var _trail_power: float = 0.5
 var _live_ghosts: int = MIN_GHOSTS
+var _impact_root: Node3D
+var _impact_ring: MeshInstance3D
+var _impact_sparks: Array[MeshInstance3D] = []
 
 
 func _ready() -> void:
 	_build_trail()
+	_build_signature_impact()
 
 
 ## Built here rather than authored in the scene, because how many ghosts a
@@ -83,9 +91,136 @@ func _build_trail() -> void:
 		_ghosts.append(ghost)
 
 
+## Successful signature contact belongs to the ball. A thin expanding ring and
+## radial fragments are generated once and animated around this actor, so the
+## flare follows the sampled ball position rather than hanging over the voli.
+func _build_signature_impact() -> void:
+	if _impact_root != null:
+		return
+	_impact_root = Node3D.new()
+	_impact_root.name = "SignatureImpact"
+	add_child(_impact_root)
+
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.20
+	ring_mesh.outer_radius = 0.215
+	ring_mesh.rings = 32
+	ring_mesh.ring_segments = 5
+	_impact_ring = MeshInstance3D.new()
+	_impact_ring.name = "Shockwave"
+	_impact_ring.mesh = ring_mesh
+	_impact_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_impact_ring.material_override = _new_impact_material()
+	_impact_root.add_child(_impact_ring)
+
+	var spark_mesh := CylinderMesh.new()
+	spark_mesh.top_radius = 0.003
+	spark_mesh.bottom_radius = 0.008
+	spark_mesh.height = 1.0
+	spark_mesh.radial_segments = 4
+	for index in range(12):
+		var spark := MeshInstance3D.new()
+		spark.name = "ImpactSpark%02d" % index
+		spark.mesh = spark_mesh
+		spark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		spark.material_override = _new_impact_material()
+		_impact_root.add_child(spark)
+		_impact_sparks.append(spark)
+	_impact_root.visible = false
+
+
+func _new_impact_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.disable_receive_shadows = true
+	material.emission_enabled = true
+	return material
+
+
+## `phase == 0` is contact. The ring's normal is the resolved contact direction:
+## Block Crush punches diagonally down; High Hands rises almost vertically with
+## a small component along the ball's path.
+func set_signature_impact(
+	move: String, charge: float, succeeded: bool, phase: float,
+	travel_direction: Vector3
+) -> void:
+	if _impact_root == null:
+		return
+	if move.is_empty() or not succeeded or phase < -0.08 or phase > 0.48:
+		_impact_root.visible = false
+		return
+	var profile: Dictionary = SignatureSurgeScript.profile_for(move)
+	var colour := Color(profile.colour)
+	var normal := impact_normal_for(str(profile.move), travel_direction)
+	_impact_root.quaternion = Quaternion(Vector3.UP, normal)
+	_impact_root.visible = true
+
+	var release := smoothstep(-0.08, 0.04, phase)
+	var fade := 1.0 - smoothstep(0.18, 0.48, phase)
+	var weight := release * fade * lerpf(0.48, 1.0, clampf(charge, 0.0, 1.0))
+	var expansion := smoothstep(-0.06, 0.38, phase)
+	_impact_ring.scale = Vector3.ONE * lerpf(0.42, 3.25, expansion)
+	_set_impact_alpha(_impact_ring, colour, weight * 0.92)
+
+	for index in range(_impact_sparks.size()):
+		var spark := _impact_sparks[index]
+		var angle := float(index) / float(_impact_sparks.size()) * TAU \
+			+ phase * (0.8 if index % 2 == 0 else -0.55)
+		## The impact root's local XZ plane is the shockwave plane.
+		var radial := Vector3(cos(angle), 0.0, sin(angle))
+		var radius := lerpf(0.10, 0.92, expansion) \
+			* (0.78 + 0.22 * sin(float(index) * 2.4))
+		var length := lerpf(0.05, 0.22, weight) \
+			* (0.70 + 0.30 * absf(sin(phase * 31.0 + float(index))))
+		spark.position = radial * radius
+		spark.quaternion = Quaternion(Vector3.UP, radial)
+		spark.scale = Vector3(1.0, maxf(length, 0.02), 1.0)
+		_set_impact_alpha(
+			spark, colour, weight * (0.42 + 0.38 * absf(sin(
+				phase * 27.0 + float(index) * 1.7
+			))),
+		)
+
+
+static func impact_normal_for(move: String, travel_direction: Vector3) -> Vector3:
+	var flat := Vector3(travel_direction.x, 0.0, travel_direction.z)
+	if flat.length_squared() < 0.0001:
+		flat = Vector3.FORWARD
+	else:
+		flat = flat.normalized()
+	var normal := (flat + Vector3.UP * 0.14).normalized()
+	if move.to_lower().replace(" ", "_") == "block_crush":
+		normal = (flat * 0.72 + Vector3.DOWN * 0.82).normalized()
+	elif move.to_lower().replace(" ", "_") == "high_hands":
+		normal = (flat * 0.20 + Vector3.UP).normalized()
+	return normal
+
+
+func clear_signature_impact() -> void:
+	if _impact_root != null:
+		_impact_root.visible = false
+
+
+func _set_impact_alpha(
+	visual: MeshInstance3D, colour: Color, alpha: float
+) -> void:
+	var material := visual.material_override as StandardMaterial3D
+	if material == null:
+		return
+	var shown := colour
+	shown.a = clampf(alpha, 0.0, 1.0)
+	material.albedo_color = shown
+	material.emission = Color(colour.r, colour.g, colour.b, 1.0) * lerpf(
+		1.0, 3.2, clampf(alpha, 0.0, 1.0)
+	)
+
+
 func reset_flight() -> void:
 	visible = false
 	sample_history.clear()
+	clear_signature_impact()
 	for ghost in _ghosts:
 		ghost.visible = false
 
