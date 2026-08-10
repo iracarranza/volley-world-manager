@@ -9030,42 +9030,11 @@ func _mean_stuff_block_rate(pairings: int, rallies_per_pairing: int) -> float:
 	return total / maxf(float(pairings), 1.0)
 
 
-func _test_seeded_floor_defense_geometry() -> void:
-	var manager := GAME_MANAGER_SCRIPT.new()
-	manager.seed_vertical_slice_data()
-	var baseline_result: Resource = null
-	var baseline_defense: Resource = null
-	var selected_seed := -1
-	for seed_value in range(8400, 8660):
-		manager.match_state.serving_home = false
-		var candidate_result: Resource = manager.resolve_active_rally(seed_value)
-		for event_resource in candidate_result.events:
-			var event: Resource = event_resource
-			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
-					and str(event.metadata.get("side", "")) == "home" \
-					and Vector2(event.metadata.get(
-						"planner_floor_center", Vector2.ZERO
-					)).y > 0.56:
-				baseline_result = candidate_result
-				baseline_defense = event
-				selected_seed = seed_value
-				break
-		if baseline_defense != null:
-			break
-	_check(
-		baseline_defense != null,
-		"a deterministic fixture reaches non-blocker home floor defense",
-	)
-	if baseline_defense == null:
-		return
-	var baseline_attack: Resource = null
-	for event_resource in baseline_result.events:
-		var event: Resource = event_resource
-		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
-				and str(event.metadata.get("side", "")) == "opponent" \
-				and event.metadata.has("home_phase_targets"):
-			baseline_attack = event
-	var plan: Resource = manager.current_defensive_plan()
+## The plan edit the floor-defence fixture applies: every floor defender pushed
+## to the endline, and the two plan dials swung. Extracted so the scan can apply
+## it to a candidate and the assertions can apply it to the seed that survived,
+## rather than the two drifting apart.
+func _move_floor_defence_to_endline(plan: Resource) -> void:
 	var moved_index := 0
 	for raw_player_id in plan.floor_defense_zones:
 		plan.set_zone_center(
@@ -9075,16 +9044,95 @@ func _test_seeded_floor_defense_geometry() -> void:
 		moved_index += 1
 	plan.block_defense_relationship = "Defend Cross"
 	plan.defensive_depth = "Shallow"
-	manager.match_state.serving_home = false
-	var moved_result: Resource = manager.resolve_active_rally(selected_seed)
-	var moved_defense: Resource = null
-	var moved_attack: Resource = null
-	for event_resource in moved_result.events:
+
+
+func _home_defense_event(result: Resource) -> Resource:
+	if result == null:
+		return null
+	for event_resource in result.events:
 		var event: Resource = event_resource
 		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
 				and str(event.metadata.get("side", "")) == "home":
-			moved_defense = event
-		elif int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+			return event
+	return null
+
+
+func _test_seeded_floor_defense_geometry() -> void:
+	## **A fixture selected on one condition and judged on two.**
+	##
+	## The scan stopped at the first seed whose *baseline* reached a home floor
+	## dig, then moved every floor defender to the endline and asserted the dig
+	## was still there. That second claim is an assumption about the simulation
+	## rather than a property of it: relocating the whole floor defence is a large
+	## edit, and a ball dug by twenty centimetres before is entitled to be a kill
+	## afterwards. It held until attacks got quicker, then stopped -- which is
+	## what a fixture chosen on one condition and used for two eventually does.
+	##
+	## The edit is now applied inside the scan and a seed is kept only if both
+	## runs reach a home dig, so the fixture is selected on the same terms it is
+	## judged by. A fresh manager per candidate, because the edit mutates the plan
+	## in place and there is no undo.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var baseline_result: Resource = null
+	var baseline_defense: Resource = null
+	var moved_result: Resource = null
+	var selected_seed := -1
+	for seed_value in range(8400, 8660):
+		manager.match_state.serving_home = false
+		var candidate_result: Resource = manager.resolve_active_rally(seed_value)
+		var candidate_defense: Resource = null
+		for event_resource in candidate_result.events:
+			var event: Resource = event_resource
+			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+					and str(event.metadata.get("side", "")) == "home" \
+					and Vector2(event.metadata.get(
+						"planner_floor_center", Vector2.ZERO
+					)).y > 0.56:
+				candidate_defense = event
+				break
+		if candidate_defense == null:
+			continue
+		## This seed clears the first bar. Re-run it on its own manager, once
+		## with the plan as generated and once with it moved, so both halves of
+		## the comparison come from the same starting state.
+		var probe := GAME_MANAGER_SCRIPT.new()
+		probe.seed_vertical_slice_data()
+		probe.match_state.serving_home = false
+		var probe_baseline: Resource = probe.resolve_active_rally(seed_value)
+		_move_floor_defence_to_endline(probe.current_defensive_plan())
+		probe.match_state.serving_home = false
+		var probe_moved: Resource = probe.resolve_active_rally(seed_value)
+		if _home_defense_event(probe_baseline) == null \
+				or _home_defense_event(probe_moved) == null:
+			probe.free()
+			continue
+		manager.free()
+		manager = probe
+		baseline_result = probe_baseline
+		baseline_defense = _home_defense_event(probe_baseline)
+		moved_result = probe_moved
+		selected_seed = seed_value
+		break
+	_check(
+		baseline_defense != null,
+		"a deterministic fixture reaches non-blocker home floor defense",
+	)
+	if baseline_defense == null:
+		manager.free()
+		return
+	var baseline_attack: Resource = null
+	for event_resource in baseline_result.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
+				and str(event.metadata.get("side", "")) == "opponent" \
+				and event.metadata.has("home_phase_targets"):
+			baseline_attack = event
+	var moved_defense: Resource = _home_defense_event(moved_result)
+	var moved_attack: Resource = null
+	for event_resource in moved_result.events:
+		var event: Resource = event_resource
+		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.ATTACK \
 				and str(event.metadata.get("side", "")) == "opponent" \
 				and event.metadata.has("home_phase_targets"):
 			moved_attack = event
