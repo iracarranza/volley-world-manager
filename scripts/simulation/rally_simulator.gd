@@ -1088,6 +1088,7 @@ func resolve(
 		_ground_to_net_meters(
 			opponent_serve_origin, serve_landing, opponent_serve_distance
 		),
+		_serve_spin(opponent_server),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	var serve_trajectory := _ball_trajectory(
@@ -2101,6 +2102,9 @@ func resolve(
 	var attack_angle := _attack_launch_angle_degrees(
 		hitter, hit_type, float(result.attack_quality)
 	)
+	var attack_spin := _swing_spin(
+		hitter, Dictionary(shadow_summary.get("geometric_attack", {}))
+	)
 	var attack_arc := _swing_arc(
 		Dictionary(shadow_summary.get("geometric_attack", {})),
 		RallyKinematics.court_distance_meters(set_target, attack_target),
@@ -2109,6 +2113,7 @@ func resolve(
 		),
 		not geometric.is_empty()
 			and attack_target.is_equal_approx(Vector2(geometric.target)),
+		attack_spin,
 	)
 	var attack_flight := float(attack_arc.duration_seconds)
 	var attack_trajectory := _ball_trajectory(
@@ -2455,6 +2460,11 @@ func resolve(
 		_swing_reaches_net(attack_trajectory, rally_clock + float(set_flight_time)),
 		float(attack_arc.get("required_speed_mps", 0.0)), opponent_blocker,
 		str(block_resolution.get("block_hands", "neutral")),
+		attack_spin,
+		Familiarity.read_modifier(
+			opponent_blocker, [BallSpin.familiarity_tag(attack_spin)],
+			float(opponent_team.scouting_confidence),
+		),
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -2829,6 +2839,7 @@ func _resolve_home_serve(
 		_ground_to_net_meters(
 			home_serve_origin, opponent_landing, home_serve_distance
 		),
+		_serve_spin(server),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	## Named so the reception can carry it as its incoming ball, exactly as the
@@ -3786,6 +3797,7 @@ func _resolve_opponent_transition(
 	## attacks drawn going *down* at a mean of -9 degrees, and 14 of them straight
 	## into the net. `docs/BACKLOG.md`'s first failure mode, once more: a value
 	## computed correctly and dropped before anything could use it.
+	var opponent_attack_spin := _swing_spin(opponent_hitter, opponent_record)
 	var opponent_attack_arc := _swing_arc(
 		opponent_record,
 		RallyKinematics.court_distance_meters(opponent_contact, home_target),
@@ -3794,6 +3806,7 @@ func _resolve_opponent_transition(
 		),
 		not geometric.is_empty()
 			and home_target.is_equal_approx(Vector2(geometric.target)),
+		opponent_attack_spin,
 	)
 	var opponent_attack_trajectory := _ball_trajectory(
 		"attack", opponent_contact, home_target,
@@ -3979,6 +3992,15 @@ func _resolve_opponent_transition(
 		),
 		float(opponent_attack_arc.get("required_speed_mps", 0.0)), blocker,
 		str(block_result.get("block_hands", "neutral")),
+		opponent_attack_spin,
+		## No confidence argument, matching the home side's other read at
+		## `home_block_read_tags`: `scouting_confidence` is a field the opponent
+		## team resource carries and the home one does not. That asymmetry is
+		## real and predates this -- noted rather than papered over with a zero,
+		## which would have read as "the home side has scouted nothing".
+		Familiarity.read_modifier(
+			blocker, [BallSpin.familiarity_tag(opponent_attack_spin)]
+		),
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -4728,12 +4750,14 @@ func _resolve_home_continuation(
 	)
 	## In hand, not looked up -- the same conditional store as the opponent
 	## swing's, with the same consequence when no trace was built.
+	var continuation_attack_spin := _swing_spin(hitter, transition_record)
 	var continuation_attack_arc := _swing_arc(
 		transition_record,
 		RallyKinematics.court_distance_meters(set_target, attack_target),
 		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		not geometric.is_empty()
 			and attack_target.is_equal_approx(Vector2(geometric.target)),
+		continuation_attack_spin,
 	)
 	var continuation_attack_flight: float = float(continuation_attack_arc.duration_seconds)
 	## Named rather than inlined into the event: the dig below reads this same
@@ -6787,7 +6811,28 @@ func _block_deflection_trajectory(
 	blocker: VolleyballPlayer = null,
 	## "kill", "soft" or "neutral" -- see `_block_hands_intent`.
 	hands: String = "neutral",
+	## **Where sidespin is spent.** A spinning ball does not come off a pair of
+	## hands the way it went in -- it grabs and kicks, which is the whole reason a
+	## hitter cuts across the ball and the reason a tool off the block is a shot
+	## rather than an accident. `BallSpin` explains why the kick lives at contacts
+	## and not in the flight: the drawn arc is already a curve, and a second
+	## curving term would be two descriptions of one bend.
+	spin_state: Dictionary = {},
+	## How well this blocker knows this hitter's spin. The design's own
+	## mitigation, and the reason scouting a hitter is worth the week.
+	spin_familiarity: float = 0.0,
 ) -> Dictionary:
+	var kick := BallSpin.contact_kick_meters(spin_state, spin_familiarity)
+	if absf(kick) > 0.0001:
+		## Court x is normalised on a nine-metre width, so a kick in metres has
+		## to be divided back into the coordinate the target is expressed in.
+		## Kept off the *net* coordinate deliberately: spin moves the ball across
+		## the court, not up and down it.
+		to_point = Vector2(
+			clampf(to_point.x + kick / CourtConstants.COURT_WIDTH_METERS,
+				-0.08, 1.08),
+			to_point.y,
+		)
 	if stuffed:
 		return _ball_trajectory(
 			"block_deflection", from_point, to_point,
@@ -7030,6 +7075,10 @@ func _swing_arc(
 	## Whether the ball is being drawn to the landing point this record chose. Only
 	## then is the record's launch angle the angle for this distance.
 	reached_resolved_target: bool = false,
+	## What the hitter put on the ball. Topspin is a downward force for the whole
+	## flight, which is a change of gravity and nothing else -- see `BallSpin`.
+	## Absent, the ball flies under plain gravity as it always did.
+	spin_state: Dictionary = {},
 ) -> Dictionary:
 	var height := maxf(float(record.get(
 		"contact_height_meters", contact_height_meters
@@ -7083,14 +7132,15 @@ func _swing_arc(
 	## If that number is wrong the fix belongs in the clearance search, where the
 	## shot is chosen; drawing a flat spike on top of a lofted solve does not make
 	## the swing flatter, it makes the picture disagree with the rally.
+	var gravity := BallSpin.gravity_for(spin_state)
 	if reached_resolved_target and bool(record.get("available", false)) \
 			and record.has("vertical_angle_degrees"):
 		return RallyKinematics.struck_arc_from_speed(
 			distance_meters, speed,
-			float(record.vertical_angle_degrees), height,
+			float(record.vertical_angle_degrees), height, gravity,
 		)
 	var solved := BallFlightModel.solve_angle_for_range(
-		speed, distance_meters, height
+		speed, distance_meters, height, gravity
 	)
 	var angle := power.DRIVEN_REFERENCE_ANGLE_DEGREES
 	if bool(solved.get("driven_found", false)):
@@ -7102,12 +7152,12 @@ func _swing_arc(
 		## real one to model, but it is the resolver's to declare -- not something
 		## the drawing gets to invent by stalling the ball in midair.
 		var reach := BallFlightModel.minimum_speed_to_reach(
-			distance_meters, height
+			distance_meters, height, gravity
 		)
 		speed = maxf(speed, float(reach.speed_mps))
 		angle = float(reach.launch_angle_degrees)
 	return RallyKinematics.struck_arc_from_speed(
-		distance_meters, speed, angle, height
+		distance_meters, speed, angle, height, gravity
 	)
 
 
@@ -11005,6 +11055,40 @@ func _serve_confidence(
 ## states for the same reason: a serve's speed belongs to the server and travels,
 ## while its angle belongs to the server *and their target*, and the official
 ## landing point is not always the geometric one.
+## What this hitter puts on this ball.
+##
+## `hand_control` rather than `attack_accuracy` is the technique term, because
+## the attribute glossary already defines it as "fine manipulation of height,
+## spin, and touch" -- the rating that exists for exactly this and was read by
+## nothing that struck a ball.
+##
+## The across-body strain comes from the swing record's own `offset_degrees`,
+## which is how far the hitter had to turn off their approach. That is not a
+## proxy for cutting across the ball, it *is* cutting across the ball, and it is
+## already computed for every swing to price the shot's accuracy.
+func _swing_spin(hitter: VolleyballPlayer, record: Dictionary) -> Dictionary:
+	if hitter == null:
+		return {}
+	return BallSpin.from_swing(
+		_rating(hitter, "attack_power"),
+		_rating(hitter, "hand_control"),
+		clampf(absf(float(record.get("offset_degrees", 0.0))) / 35.0, 0.0, 1.0),
+		str(hitter.dominant_hand) != "Left",
+	)
+
+
+## And what this server does, which is a choice of shot rather than a by-product.
+func _serve_spin(server: VolleyballPlayer) -> Dictionary:
+	if server == null:
+		return {}
+	return BallSpin.from_serve(
+		str(server.primary_serve_style),
+		_rating(server, "serve_power"),
+		_rating(server, "serve_technique"),
+		str(server.dominant_hand) != "Left",
+	)
+
+
 ## How much ground a flight covers before it reaches the tape.
 ##
 ## Read off the line the ball was struck on rather than as the straight
@@ -11033,6 +11117,10 @@ const SERVE_PACE_RELIEF_FLOOR: float = 0.55
 ## to cover before it gets there; this is the same clearance the swing's own
 ## search insists on.
 const SERVE_NET_CLEARANCE_METERS: float = 0.12
+## How many spin settings a server is allowed to consider between none and all
+## of theirs. Three is enough to find the trade -- flat, half-brushed, fully
+## brushed -- and a finer sweep buys resolution the shot does not have.
+const SERVE_SPIN_LEVELS: int = 3
 
 
 func _serve_arc(
@@ -11043,6 +11131,15 @@ func _serve_arc(
 	## Ground covered before the ball reaches the tape, along the line it was
 	## struck on.
 	net_distance_meters: float,
+	## **The reason a real serve can be hit hard at all.** A flat ball struck at
+	## 25 m/s from nine metres back is either under the tape when it gets there or
+	## past the endline when it comes down; there is no angle that does both. A
+	## topspin serve solves it by falling harder than gravity, so it can be
+	## launched *upward* -- well clear of the net -- and still drop inside the
+	## court. Without this the relief loop below had to keep taking pace off until
+	## the ball was slow enough to be a lob, which is what it did: measured, every
+	## serve came back at the minimum-force solve it was supposed to replace.
+	spin_state: Dictionary = {},
 ) -> Dictionary:
 	var speed := float(Dictionary(geometric_serves.get(key, {})).get(
 		"speed_mps", 0.0
@@ -11062,25 +11159,69 @@ func _serve_arc(
 	var fallback := RallyKinematics.solve_struck_arc(
 		distance_meters, fallback_angle_degrees, contact_height_meters
 	)
+	## **The quickest ball that clears, not the first one found.** Trying the
+	## flatter root first and taking whatever cleared put every serve on the
+	## lofted root at full pace: measured, they crossed the tape at a mean of
+	## 31 metres and hung for 5.1 seconds. That is the identical mistake
+	## `_quickest_clearing_loft` was written to fix on the attack side, made
+	## again three hundred lines away, and the lesson is the same both times --
+	## what the receiver gets is *time*, so the thing to minimise is the flight.
+	##
+	## Horizontal speed is that directly, and comparing candidates on it prices
+	## the arc and the pace together instead of trading one against the other
+	## blind.
+	var best := {}
+	var best_ground_speed := 0.0
 	for step in range(SERVE_PACE_RELIEF_STEPS):
 		var trial := speed * lerpf(
 			1.0, SERVE_PACE_RELIEF_FLOOR,
 			float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
 		)
-		var solved := BallFlightModel.solve_angle_for_range(
-			trial, distance_meters, contact_height_meters
-		)
-		if not bool(solved.get("driven_found", false)):
-			continue
-		var angle := float(solved.driven_angle_degrees)
-		if net_distance_meters > 0.0 and BallFlightModel.height_at_distance(
-			BallFlightModel.solve_flight(trial, angle, contact_height_meters),
-			net_distance_meters,
-		) < needed:
-			continue
-		return RallyKinematics.struck_arc_from_speed(
-			distance_meters, trial, angle, contact_height_meters
-		)
+		## **Spin is a dial, not a constant, and it trades range for clearance.**
+		##
+		## Topspin buys the dive that lets a hard serve drop inside the endline,
+		## and it buys it by shortening the flight. Applying a server's full spin
+		## to every serve therefore does the opposite of what it looks like: at 19
+		## m/s under a full topspin dive the ball cannot reach the far court *at
+		## all*, so no root solves, and every serve fell through to the
+		## minimum-force fallback. Measured, that pinned the whole population at
+		## 15.6 m/s no matter what was done to the spin model.
+		##
+		## A server does not have one setting. They choose how hard and how much
+		## to brush the ball, together, and the pair that works is the pair that
+		## gets over the tape and still lands in. Both are swept here for the same
+		## reason `_quickest_clearing_loft` sweeps pace: the answer is a
+		## combination, and picking either half first throws the other away.
+		for spin_step in range(SERVE_SPIN_LEVELS):
+			var used := BallSpin.spin(
+				float(spin_state.get("axis", 0.0)),
+				float(spin_state.get("rate_rps", 0.0))
+					* float(spin_step) / float(SERVE_SPIN_LEVELS - 1),
+			)
+			var gravity := BallSpin.gravity_for(used)
+			var solved := BallFlightModel.solve_angle_for_range(
+				trial, distance_meters, contact_height_meters, gravity
+			)
+			for branch in [&"driven", &"lofted"]:
+				if not bool(solved.get("%s_found" % branch, false)):
+					continue
+				var angle := float(solved.get("%s_angle_degrees" % branch, 0.0))
+				var ground_speed := trial * cos(deg_to_rad(angle))
+				if ground_speed <= best_ground_speed:
+					continue
+				if net_distance_meters > 0.0 and BallFlightModel.height_at_distance(
+					BallFlightModel.solve_flight(
+						trial, angle, contact_height_meters, gravity
+					),
+					net_distance_meters,
+				) < needed:
+					continue
+				best_ground_speed = ground_speed
+				best = RallyKinematics.struck_arc_from_speed(
+					distance_meters, trial, angle, contact_height_meters, gravity
+				)
+	if not best.is_empty():
+		return best
 	## Nothing this server has gets over from here. The old minimum-force solve
 	## is the least-bad ball, and the serve-error verdict was already taken
 	## upstream -- this only decides what the ball looks like on its way.
