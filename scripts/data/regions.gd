@@ -60,6 +60,53 @@ const DEFINITIONS := {
 		"physical": 1, "technical": 1, "mental": 2, "names": ["Anselm", "Reike", "Vasholt", "Merrin", "Ottlin", "Sabet", "Frauke", "Delvin"]},
 }
 
+## The clubs each region sends out, so an opponent is somewhere rather than a
+## placeholder.
+##
+## **Built on the same device as the region names** (see
+## `docs/world/STYLE_AND_SETTING.md`): a volleyball phrase reworded oddly and
+## dressed in that region's spelling, so a club reads as belonging to the place
+## it comes from before anybody is told where that is. Kīru Shotto is "kill
+## shot", Mur Complet is a sealed wall, Ásu Sérva is "ace serve", Nõ Errõ is a
+## side that does not miss, Sidaut is "side out". A club therefore says what its
+## region believes in twice — once in the principles it plays by and once in its
+## own name.
+##
+## Deliberately two apiece rather than a generator. These are read out loud in
+## fixtures and results, and a name that is assembled from syllables reads like
+## one; when academies exist and each region needs a dozen, a generator is the
+## right answer and these become its seed vocabulary rather than its output.
+const CLUB_NAMES := {
+	"Landavol": ["Sidaut VK", "Doblok Volei"],
+	"Spëddigh": ["Kwikkset IF", "Rüsh Lïn"],
+	"Pāwa Hitō": ["Kīru Shotto", "Hādo Supaiku"],
+	"Bloc du Larg": ["Mur Complet", "Touche du Filet"],
+	"Xérvu": ["Ásu Sérva", "Flöté Wän"],
+	"Taktikã": ["Leturã Alta", "Nõ Errõ"],
+	"Ispayk": ["Los Bomba", "Sét i Spayk"],
+	"A'ace": ["Al-Kil'a", "Sirv'aan"],
+	"Tu'ul ys Feynt": ["Gwrist ys Bryn"],
+	"Lo-onğ Ralī": ["Ralī Chöd"],
+	"Bompaşao": ["Primeira Bola"],
+	"Rhen Tempaol": ["Tempaol Han"],
+	"Kutré Lyn": ["Kutré Kórner"],
+	"Zaitgaist": ["Zaitgaist VK"],
+}
+
+
+## A club from this region, chosen by a number the caller already has.
+##
+## Index rather than a random draw so the same fixture always names the same
+## club: a rally is resolved from a seed and re-resolving it must produce the
+## same match, opponent included.
+static func club_name(region_name: String, index: int = 0) -> String:
+	var resolved := canonical_name(region_name)
+	var clubs: Array = CLUB_NAMES.get(resolved, [])
+	if clubs.is_empty():
+		return "%s VC" % resolved
+	return str(clubs[posmod(index, clubs.size())])
+
+
 ## What you call a person or a thing *from* a region.
 ##
 ## The rule is civic, not ethnic: a demonym is built from the place name and

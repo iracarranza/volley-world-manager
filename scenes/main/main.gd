@@ -88,6 +88,7 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var defense_summary_label: Label = %DefenseSummaryLabel
 @onready var opponent_scouting_label: Label = %OpponentScoutingLabel
 @onready var opponent_adaptation_rate_slider: HSlider = %OpponentAdaptationRateSlider
+@onready var opponent_region_option: OptionButton = %OpponentRegionOption
 @onready var save_defense_button: Button = %SaveDefenseButton
 @onready var timeout_button: Button = %TimeoutButton
 @onready var substitute_out_option: OptionButton = %SubstituteOutOption
@@ -199,6 +200,7 @@ func _ready() -> void:
 	zone_radius_slider.value_changed.connect(_zone_radius_changed)
 	apply_zone_button.pressed.connect(_apply_selected_zone)
 	opponent_adaptation_rate_slider.value_changed.connect(_opponent_adaptation_rate_changed)
+	opponent_region_option.item_selected.connect(_opponent_region_selected)
 	timeout_button.pressed.connect(_call_timeout)
 	apply_substitution_button.pressed.connect(_apply_substitution)
 	undo_substitution_button.pressed.connect(_undo_substitution)
@@ -1191,11 +1193,27 @@ func _refresh_defensive_plan() -> void:
 				assignment.short_ball_responsibility,
 			])
 	defense_summary_label.text += "\n" + "\n".join(responsibility_lines)
-	opponent_scouting_label.text = "%s\n%s\n%s" % [
+	## **Who are these people.** The club's name alone answers nothing -- a player
+	## who reads "Port Azure VC" learns that they are playing somebody, and every
+	## opponent in the game was equally anonymous. The region, its demonym and its
+	## own one-line description are the three things that make a fixture a place
+	## rather than a label, and all three already existed in `VolleyballRegions`
+	## with nothing on screen reading them.
+	var opponent_region := str(GameManager.opponent_team.region)
+	var region_line := ""
+	if not opponent_region.is_empty():
+		region_line = "%s · %s\n%s\n" % [
+			opponent_region,
+			VolleyballRegions.demonym(opponent_region),
+			str(VolleyballRegions.definition(opponent_region).get("tagline", "")),
+		]
+	opponent_scouting_label.text = "%s\n%s%s\n%s" % [
 		GameManager.opponent_team.team_name,
+		region_line,
 		GameManager.opponent_team.scouting_summary(),
 		GameManager.opponent_team.adaptation_summary(),
 	]
+	_refresh_opponent_region_option()
 	opponent_adaptation_rate_slider.set_value_no_signal(
 		float(GameManager.opponent_team.adaptation_rate) * 100.0
 	)
@@ -1434,6 +1452,34 @@ func _opponent_adaptation_rate_changed(value: float) -> void:
 	GameManager.opponent_team.adaptation_rate = clampf(value / 100.0, 0.0, 0.40)
 	_refresh_defensive_plan()
 	_set_status("Opponent adaptation rate set to %d%%." % roundi(value))
+
+
+## Play somebody else, now, without a schedule to wait for.
+##
+## The eight Sixnet regions are the ones that field a club a player could be
+## drawn against; minor regions raise volis but run no programme at this level,
+## which is `playable_names`' existing distinction and is reused rather than
+## re-derived here.
+func _refresh_opponent_region_option() -> void:
+	var names := VolleyballRegions.playable_names()
+	if opponent_region_option.item_count != names.size():
+		_populate_text_options(opponent_region_option, names)
+	var current := str(GameManager.opponent_team.region)
+	var index := names.find(current)
+	if index >= 0:
+		opponent_region_option.select(index)
+
+
+func _opponent_region_selected(index: int) -> void:
+	var names := VolleyballRegions.playable_names()
+	if index < 0 or index >= names.size():
+		return
+	GameManager.set_opponent_region(str(names[index]))
+	_refresh_defensive_plan()
+	_set_status("Now facing %s of %s." % [
+		GameManager.opponent_team.team_name,
+		VolleyballRegions.demonym(str(names[index])),
+	])
 
 
 func _populate_text_options(option: OptionButton, values: Array[String]) -> void:

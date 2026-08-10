@@ -216,6 +216,7 @@ func _initialize() -> void:
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
 	_test_block_shadow_falls_behind_the_block()
+	_test_an_opponent_has_a_region()
 	_test_spike_biomechanics_sequence()
 	_test_every_rally_publishes_a_resting_posture()
 	_test_recovery_bands_are_ordered()
@@ -10704,6 +10705,48 @@ func _test_attack_courses_are_relative_to_the_hitter() -> void:
 ## a spike -- a ball struck downward from about 3.2 m. Every expected value here
 ## is computed from the closed form independently rather than read back off the
 ## implementation.
+## An opponent is from somewhere, and saying so changes nothing it should not.
+##
+## The vertical slice's opponent is a position-for-position mirror of the home
+## squad, and that mirror is this repository's only control for engine asymmetry
+## -- every side-versus-side reading taken here for a year depends on it. Giving
+## that opponent a region is therefore only safe if it is *provably* free, and
+## the proof is arithmetic rather than argument: Landavol and Balanced are the
+## same seven numbers. This test is that proof, so the day somebody edits one of
+## the two tables the control fails loudly instead of quietly.
+func _test_an_opponent_has_a_region() -> void:
+	var regional: Dictionary = VolleyballRegions.REGIONAL_PRINCIPLES["Landavol"]
+	var preset: Dictionary = TeamPrinciples.PRESETS["Balanced"]
+	var identical := regional.size() == preset.size()
+	for axis in preset:
+		if not regional.has(axis) \
+				or not is_equal_approx(float(regional[axis]), float(preset[axis])):
+			identical = false
+	_check(
+		identical,
+		"Landavol and Balanced are the same seven axes, so the mirrored opponent stays a mirror",
+	)
+
+	## And the substitution itself: a region, when set, is what the side plays by.
+	var club := OpponentTeam.new()
+	club.identity = "Physical"
+	_check(
+		is_equal_approx(
+			float(club.principles().serve_aggression),
+			float(TeamPrinciples.PRESETS["Physical"]["serve_aggression"]),
+		) and club.identity_label() == "Physical",
+		"an opponent with no region still plays its preset",
+	)
+	club.region = "Xérvu"
+	_check(
+		is_equal_approx(
+			float(club.principles().serve_aggression),
+			float(VolleyballRegions.REGIONAL_PRINCIPLES["Xérvu"]["serve_aggression"]),
+		) and club.identity_label() == "Xérvu",
+		"a region outranks the preset, and is what a player is told they are facing",
+	)
+
+
 ## Who a block actually hides the ball from.
 ##
 ## `PlayerSightlineSystem` had no test of any kind, and shipped three separate

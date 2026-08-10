@@ -799,6 +799,16 @@ custom_minimum_size = Vector2(330, 48)
 layout_mode = 2
 autowrap_mode = 2
 
+[node name="OpponentRegionLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=998741492]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Opponent region"
+
+[node name="OpponentRegionOption" type="OptionButton" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=1534420021]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Who you are playing. A region decides the principles this side plays by; the roster stays a mirror of your own, so any difference across the net is the identity."
+
 [node name="OpponentAdaptationRateLabel" type="Label" parent="Margin/Content/Workspace/EditorPanel/EditorScroll/Editor/DefenseControls" unique_id=998741491]
 unique_name_in_owner = true
 layout_mode = 2

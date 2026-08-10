@@ -35,13 +35,15 @@ func _initialize() -> void:
 		RALLIES * 2
 	))
 	print("")
-	print("%-13s %6s %6s %6s %6s %6s %6s %7s %6s" % [
-		"region", "kill", "dig", "ace", "svErr", "stuff", "cont/r", "tempo", "quick",
+	print("%-13s %6s %6s %6s %6s %6s %6s %7s %6s %6s" % [
+		"region", "kill", "dig", "ace", "svErr", "stuff", "cont/r", "tempo",
+		"tmpSD", "quick",
 	])
 	for row in rows:
-		print("%-13s %6.3f %6.3f %6.3f %6.3f %6.3f %6.2f %7.2f %6.3f" % [
+		print("%-13s %6.3f %6.3f %6.3f %6.3f %6.3f %6.2f %7.2f %6.3f %6.3f" % [
 			row.region, row.kill, row.dig, row.ace, row.serve_error,
-			row.stuff, row.contacts, row.mean_tempo, row.quick_share,
+			row.stuff, row.contacts, row.mean_tempo, row.tempo_sd,
+			row.quick_share,
 		])
 	print("")
 
@@ -55,7 +57,7 @@ func _initialize() -> void:
 	## units rather than about identity.
 	var keys: Array[String] = [
 		"kill", "dig", "ace", "serve_error", "stuff", "contacts", "mean_tempo",
-		"quick_share",
+		"tempo_sd", "quick_share",
 	]
 	var spreads := {}
 	for key in keys:
@@ -109,6 +111,14 @@ func _fingerprint(region: String) -> Dictionary:
 	var tempo_total := 0.0
 	var tempo_count := 0
 	var quicks := 0
+	## **Spëddigh's identity is a spread, not a mean.** The first version of this
+	## probe reported only `mean_tempo`, which is the average of the distribution
+	## whose *width* is the whole of what "pushes every play to be faster and
+	## tighter, unpredictably" claims -- a side that alternates tempo 0 and tempo 3
+	## has the same mean as one that runs tempo 2 every time. Measuring the mean of
+	## a distribution defined by its variance is the §0 mistake made with the
+	## instrument instead of the model.
+	var tempo_values: Array[float] = []
 	for serving_home in [true, false]:
 		var manager: Object = GameManagerScript.new()
 		manager.seed_vertical_slice_data()
@@ -150,6 +160,7 @@ func _fingerprint(region: String) -> Dictionary:
 						if event.metadata.has("tempo"):
 							tempo_total += float(event.metadata.tempo)
 							tempo_count += 1
+							tempo_values.append(float(event.metadata.tempo))
 							if int(event.metadata.tempo) <= 1:
 								quicks += 1
 					RallyEventScript.EventType.DEFENSE:
@@ -168,8 +179,13 @@ func _fingerprint(region: String) -> Dictionary:
 					RallyEventScript.EventType.SET:
 						contacts += 1
 		manager.free()
+	var mean_tempo := tempo_total / float(maxi(tempo_count, 1))
+	var variance := 0.0
+	for value in tempo_values:
+		variance += (value - mean_tempo) * (value - mean_tempo)
 	return {
 		"region": region,
+		"tempo_sd": sqrt(variance / float(maxi(tempo_values.size(), 1))),
 		"kill": float(kills) / float(maxi(swings, 1)),
 		"dig": float(digs) / float(maxi(dig_chances, 1)),
 		"ace": float(aces) / float(maxi(serves, 1)),

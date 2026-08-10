@@ -229,6 +229,14 @@ func seed_vertical_slice_data() -> void:
 func _seed_opponent() -> void:
 	opponent_team = OpponentTeamScript.new()
 	opponent_team.team_name = "Port Azure VC"
+	## Port Azure is Landavolan, which is exactly as neutral as it was before.
+	##
+	## `REGIONAL_PRINCIPLES.Landavol` and `PRESETS.Balanced` are the same seven
+	## 0.50s -- asserted in the suite, not assumed here -- so the mirrored roster
+	## remains a mirrored *side*, and every symmetry reading this slice exists to
+	## take is untouched. What it buys is that the opponent now has a region to
+	## be changed, which is the whole of playing somebody else.
+	opponent_team.region = "Landavol"
 	opponent_team.setter_id = 101
 	opponent_team.scouting_confidence = 0.56
 	opponent_team.tendencies = {
@@ -1108,6 +1116,47 @@ func _defensive_plans_to_data() -> Array[Dictionary]:
 ## Handedness is deliberately included. It is the one presentation field that
 ## also changes geometry, and leaving it at a default would have quietly made
 ## every Port Azure attacker right-handed against a home squad that may not be.
+## Play somebody else: re-region the opponent in place.
+##
+## **Everything physical stays mirrored and only the identity moves.** That is
+## the whole design of this function and it is worth being explicit about,
+## because the obvious implementation — generate a fresh regional roster — would
+## destroy the one control this project has. Port Azure is a position-for-
+## position copy of the home squad, which is what makes any residual gap between
+## the two sides engine asymmetry by definition; a Xérvyan roster with Xérvyan
+## attributes would confound identity with talent on the first rally, and no
+## measurement taken afterward could separate them.
+##
+## So a Xérvu opponent is the same seven bodies with the same seven-hundred
+## attributes, wearing Xérvu's name, called by Xérvyan names, playing by Xérvu's
+## principles. Any difference a player sees across the net *is* the region. When
+## academies exist and each region raises its own volis, that is a deliberate
+## second act — regional talent layered on top of regional identity — and it
+## should be added knowing it spends this control.
+##
+## Names are indexed rather than drawn at random so the same fixture always
+## fields the same eleven people.
+func set_opponent_region(region_name: String, club_index: int = 0) -> void:
+	if opponent_team == null:
+		return
+	var resolved := VolleyballRegions.canonical_name(region_name)
+	opponent_team.region = resolved
+	opponent_team.team_name = VolleyballRegions.club_name(resolved, club_index)
+	var definition := VolleyballRegions.definition(resolved)
+	var given_names: Array = definition.get("names", [])
+	for index in range(opponent_team.players.size()):
+		var player := opponent_team.players[index] as VolleyballPlayer
+		if player == null:
+			continue
+		## `home_region` is where a voli was raised and `club_region` where they
+		## play now. A club's own squad is overwhelmingly local, and both being
+		## the region is the honest default until transfers move people.
+		player.home_region = resolved
+		player.club_region = resolved
+		if not given_names.is_empty():
+			player.display_name = str(given_names[index % given_names.size()])
+
+
 func _mirror_player(
 	player_id: int,
 	player_name: String,

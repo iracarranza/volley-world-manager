@@ -665,6 +665,37 @@ const LIVE_TEMPO_VARIATION_FLOOR: float = 0.48
 const LIVE_COMMITMENT_HIGH: float = 0.56
 const LIVE_COMMITMENT_LOW: float = 0.44
 
+## How far from neutral a blended commitment has to sit to pull the tempo every
+## time it can.
+##
+## **The gates above were the right fix to the wrong shape.** Re-siting them
+## inside their own distribution stopped them missing the default identity, and
+## left them as *gates* -- so Pāwa Hitō at 0.841 and Xérvu at 0.644 both cleared
+## `LIVE_COMMITMENT_HIGH` and received exactly the same instruction, and the
+## region whose entire identity is relentless transition was indistinguishable
+## from one whose identity is serving. Measured across 640 rallies each, their
+## mean tempo came out 1.86 against 1.91 and their nearest-neighbour separation
+## was the second-tightest in the league.
+##
+## Tempo is an integer 0-3, so a continuous input cannot become a fractional
+## shift; it becomes a *probability* of the shift. The number is the largest
+## deviation from neutral the regional table actually contains -- blended
+## commitment runs 0.30 (Bloc du Larg) to 0.84 (Pāwa Hitō) around a neutral
+## 0.50 -- so the two extremes act on every eligible set, Landavol at 0.50 acts
+## on none, and everyone in between is graded rather than sorted.
+const COMMITMENT_FULL_PULL: float = 0.34
+
+## The most steps one variation call may rotate a tempo.
+##
+## Variation is a *rate* rather than a two-sided lean: 0 means a side runs the
+## same tempo every time and 1 means it rotates whenever the pass allows, so it
+## reads directly as the chance of rotating and needs no neutral point and no
+## constant to scale it. What it does need is a reach, because a side that
+## rotates constantly but only ever by one step is still predictable -- and
+## being unpredictable is the whole of Spëddigh. The second step is available
+## only in proportion to how far past neutral the axis sits.
+const VARIATION_MAX_STEPS: int = 2
+
 ## How much of the pre-set window the hitter is credited with.
 ##
 ## The blocker already gets `preset_window * preset_share`, 0.26 to 0.72 of it
@@ -1065,7 +1096,16 @@ func resolve(
 	## `serve_quality * 0.48`, the most dangerous serve in the game could apply
 	## only 0.35 of pressure. The home formula already spans the full range
 	## because its tactical risk term makes up the remainder.
-	var opponent_risk := _rating(opponent_server, "serve_aggression")
+	## The server's own appetite, then the bench's, on the same 0.70 scale the
+	## home side uses. This read the player attribute alone, so an opponent whose
+	## whole identity is the serve -- Xérvu at 0.92 -- served exactly like one who
+	## never risks it, and `serve_aggression` was the single best-wired principle
+	## in the resolver while being visible from only one side of the net.
+	var opponent_risk := clampf(
+		_rating(opponent_server, "serve_aggression")
+			+ (float(opponent_principles.serve_aggression) - 0.5) * 0.70,
+		0.0, 1.0,
+	)
 	var intended_target := str(opponent_team.tendencies.get("serve_target", "Zone 5"))
 	var serve_decision := _serve_decision(
 		"opponent", intended_target, opponent_server, opponent_risk
@@ -3228,10 +3268,17 @@ func _resolve_opponent_transition(
 	## tempo out of defence as it does off a clean pass -- while the home side
 	## has always set its own transition high. The tendency is what the bench
 	## prefers *when there is a choice*, and out of defence there is not one.
+	## Their bench's call, then their bench's identity on top of it -- the same
+	## two steps the home side takes, in the same order. Without the second one
+	## `tempo_variation` and `transition_commitment` were home-side attributes,
+	## so a Spëddigh opponent ran Landavol's tempo.
 	var opponent_tempo_call := _tempo_call(
 		opponent_setter,
-		int(opponent_team.tendencies.get("tempo", 2)) if first_ball \
-			else TRANSITION_TEMPO_BASE,
+		clampi(
+			int(opponent_team.tendencies.get("tempo", 2)) + _identity_tempo_shift(
+				opponent_principles, incoming_quality, "opponent"
+			), 0, 3,
+		) if first_ball else TRANSITION_TEMPO_BASE,
 		incoming_quality,
 	)
 	## Capability, on every ball rather than only the first one.
@@ -8988,40 +9035,81 @@ func _apply_identity_tempo(
 	var adjusted := assignment.duplicate(true) as HitterAssignment
 	if reception_quality < 0.36:
 		return adjusted
+	adjusted.tempo = clampi(
+		adjusted.tempo
+			+ _identity_tempo_shift(home_principles, reception_quality, "home"),
+		0, 3,
+	)
+	return adjusted
+
+
+## How far a side's identity moves the tempo it called, in steps.
+##
+## **One function, both sides**, for the reason `_tempo_call` gives above: this
+## was home-only, so an opponent ran the same tempo the whole match whatever
+## their bench believed. Of the twenty-four principle reads in this resolver,
+## twenty-two were `home_principles` -- an opponent Spëddigh played exactly like
+## an opponent Bloc du Larg, which makes a regional identity a decoration on the
+## team you happen to manage.
+##
+## Lower tempo is quicker: 0 is the first-tempo ball, 3 the high one.
+func _identity_tempo_shift(
+	side_principles: Resource,
+	reception_quality: float,
+	side: String,
+) -> int:
+	if side_principles == null:
+		return 0
 	var tempo_shift := 0
 	var commitment := lerpf(
-		float(home_principles.decisiveness),
-		float(home_principles.transition_commitment),
+		float(side_principles.decisiveness),
+		float(side_principles.transition_commitment),
 		0.45,
 	)
-	var high_gate := 0.66
-	var low_gate := 0.34
 	if RallyFeatureFlagsModel.ENABLE_LIVE_TEMPO_CALL:
-		## Same defect, same table. `commitment` is a blend of two principles and
-		## across the six presets it reads 0.225, 0.425, 0.500, 0.510, 0.815,
-		## 0.843 -- so gates at 0.66/0.34 sorted three identities and left the
-		## middle three, Balanced included, with no commitment effect at all.
-		## Narrowed to sit inside the cluster rather than outside it.
-		high_gate = LIVE_COMMITMENT_HIGH
-		low_gate = LIVE_COMMITMENT_LOW
-	if commitment >= high_gate:
-		tempo_shift -= 1
-	elif commitment <= low_gate:
-		tempo_shift += 1
-	var variation_floor := 0.66
-	if RallyFeatureFlagsModel.ENABLE_LIVE_TEMPO_CALL:
-		## The presets run 0.24 to 0.88 with four of six between 0.38 and 0.72,
-		## and Balanced -- the default, and the calibration fixture's identity --
-		## sits exactly on 0.50. A gate at 0.66 therefore excluded the default and
-		## three others, so `tempo_variation` was an attribute that did nothing for
-		## two thirds of the identities that carry it. Moved below the median of
-		## its own preset table.
-		variation_floor = LIVE_TEMPO_VARIATION_FLOOR
-	if float(home_principles.tempo_variation) >= variation_floor \
-			and reception_quality >= 0.48:
-		tempo_shift += [-1, 0, 1][posmod(rally_seed, 3)]
-	adjusted.tempo = clampi(adjusted.tempo + tempo_shift, 0, 3)
-	return adjusted
+		## **How hard, not whether.** See `COMMITMENT_FULL_PULL`: the pull is how
+		## far this side sits from neutral, as a share of the furthest any
+		## identity sits, and it is spent as the chance of taking the step rather
+		## than as the step itself.
+		var pull := clampf(
+			(commitment - 0.5) / COMMITMENT_FULL_PULL, -1.0, 1.0
+		)
+		if _identity_roll("%s|commit" % side) < absf(pull):
+			tempo_shift += -1 if pull > 0.0 else 1
+	else:
+		if commitment >= 0.66:
+			tempo_shift -= 1
+		elif commitment <= 0.34:
+			tempo_shift += 1
+	var variation := clampf(float(side_principles.tempo_variation), 0.0, 1.0)
+	if reception_quality >= 0.48:
+		if RallyFeatureFlagsModel.ENABLE_LIVE_TEMPO_CALL:
+			## The axis *is* the rate, so it is read as one. A side rotates this
+			## often, in a direction the pass does not predict, and reaches a
+			## second step only in proportion to how far past neutral it sits --
+			## which is the difference between varying and being unreadable.
+			if _identity_roll("%s|vary" % side) < variation:
+				var steps := 1
+				if _identity_roll("%s|vary2" % side) < (variation - 0.5) * 2.0:
+					steps = VARIATION_MAX_STEPS
+				tempo_shift += steps \
+					if _identity_roll("%s|varydir" % side) < 0.5 else -steps
+		elif variation >= 0.66:
+			tempo_shift += [-1, 0, 1][posmod(rally_seed, 3)]
+	return tempo_shift
+
+
+## A repeatable 0-1 draw for an identity call, keyed to this rally and swing.
+##
+## Deliberately hashed rather than taken from `rng`. Every seeded fixture in the
+## suite depends on the resolver's random stream being consumed in the same
+## order, so adding draws to it would move outcomes that have nothing to do with
+## identity and the diff would be unreadable. This is the pattern
+## `_read_error_meters` already uses for the same reason.
+func _identity_roll(channel: String) -> float:
+	return float(posmod(
+		hash("%d|%s|%d" % [rally_seed, channel, swing_index]), 100003
+	)) / 100003.0
 
 
 func _identity_hit_type(

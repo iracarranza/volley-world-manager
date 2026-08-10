@@ -163,3 +163,66 @@ A curve nobody can see is a curve that does not exist. The two candidates:
 Each step is measured with the same probe, before and after. Three of these are
 exactly the failure `docs/FAILURE_MODES.md` §0 describes — a threshold placed
 outside the distribution it acts on — and two of them are already that today.
+
+## Implementation status
+
+Landed (this pass), in the sequence argued above:
+
+**R1 — magnitude for the two dead axes.** Tempo is an integer 0–3, so a
+continuous input cannot become a fractional shift; it becomes the *probability*
+of the shift. `COMMITMENT_FULL_PULL` is the largest deviation from neutral the
+regional table actually contains (blended commitment runs 0.30 to 0.84 around
+0.50), so the extremes act on every eligible set and Landavol on none.
+`tempo_variation` is read as what it is — a rate — so it needs no constant at
+all, and reaches a second step only in proportion to how far past neutral it
+sits. Draws are hashed rather than taken from `rng`, because adding to the
+random stream would move every seeded fixture for reasons unrelated to identity.
+
+Measured, nearest-neighbour separation before → after: minimum across the league
+0.431 → **0.567**, Spëddigh 0.716 → **0.897**, Ispayk 0.431 → 0.834. The probe
+also gained a `tempo_sd` column, because the first version reported only the
+mean — and the mean of a distribution whose *width* is the whole identity is the
+§0 error committed with the instrument instead of the model. Spëddigh now holds
+the widest spread (0.993) and Pāwa Hitō the fastest mean with a narrow one
+(1.86 / 0.901): unpredictable against relentless, which is the distinction the
+table always claimed and never produced.
+
+**R2 — the opponent reads its own principles.** `_identity_tempo_shift` is now
+one function for both sides, and the opponent's serve risk takes the same
+`(serve_aggression − 0.5) × 0.70` the home side has always taken. It previously
+read only `_rating(opponent_server, "serve_aggression")` — a roster attribute,
+and the vertical slice's roster is mirrored, so **the opponent's serve-error rate
+was provably identical for every region**. It now runs 0.093 (Bloc du Larg, 0.30)
+to 0.133 (Xérvu, 0.92).
+
+Still home-only: `pin_focus` on lane choice and `emotional_expression` on
+confidence volatility. Neither has an opponent-side counterpart to mirror into —
+the opponent picks its lane from `tendencies.preferred_lane` rather than from a
+weighted candidate list — so those are new mechanism rather than a wiring fix.
+
+**R3 — an opponent is from somewhere.** `OpponentTeam.region`, with
+`principles()` preferring it over the preset. Safe because
+`REGIONAL_PRINCIPLES.Landavol` and `PRESETS.Balanced` are the same seven 0.50s —
+asserted in the suite, so the day either table is edited the mirror control fails
+loudly rather than silently.
+
+**R4 — clubs.** `CLUB_NAMES`, two per major region, built on the same device as
+the region names. `set_opponent_region` swaps region, club and given names **but
+keeps every mirrored attribute**, which is deliberate: a Xérvyan roster with
+Xérvyan talent would confound identity with ability on the first rally and no
+later measurement could separate them. Any difference across the net is
+currently the region and nothing else.
+
+**R5 — the player can see it and change it.** A region picker beside the
+opponent panel, and the scouting label now carries region, demonym and tagline.
+
+### Remaining, in order
+
+1. `pin_focus` and `emotional_expression` for the opponent — needs the opponent a
+   weighted lane choice and a confidence track of its own.
+2. The curves layer: `fatigue_resistance` first, for the reason given above.
+3. Taktikã's missing axes (`read_discipline`, `risk_aversion`).
+4. A'ace's tradeoff.
+5. Regional academies with their own rosters — and note that this is the act that
+   *spends* the mirror control, so the symmetry instruments need their own
+   fixture pinned to a mirrored opponent before it lands.
