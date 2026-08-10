@@ -2188,6 +2188,12 @@ func resolve(
 			"geometric_out_reason": str(geometric.get("out_reason", "")),
 			"attack_missed": attack_missed,
 			"attack_effectiveness": attack_effectiveness,
+			## What share of their ceiling the hitter swung at. The single channel
+			## the bench's decisiveness reaches the ball through, on the event so a
+			## probe can read its distribution from a live rally.
+			"chosen_power_fraction": float(
+				geometric.get("chosen_power_fraction", 0.0)
+			),
 			"movement_start": hitter_start,
 			"approach_start_position": approach_start,
 			"approach_target_position": Vector2(approach_preparation.get(
@@ -9637,6 +9643,13 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"offset_degrees": float(course.get("offset_degrees", 0.0)),
 		"speed_mps": float(delivered.get("speed_mps", 0.0)),
 		"bearing_error_degrees": float(delivered.get("bearing_error_degrees", 0.0)),
+		## How much of their own ceiling the hitter decided to use. The number the
+		## bench's decisiveness instruction actually moves -- published so the
+		## distribution it occupies can be read off a live rally rather than
+		## guessed at from the constants that build it.
+		"chosen_power_fraction": float(
+			Dictionary(swing.get("power", {})).get("chosen_fraction", 0.0)
+		),
 		"contact_height_meters": float(swing.get("contact_height_meters", 0.0)),
 		"jump_multiplier": float(swing.get("jump_multiplier", 1.0)),
 		## Whether the resolver found an angle that gets over the tape, and which
@@ -9729,6 +9742,7 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		"quality": clampf(float(record.get("quality", 0.0)), 0.0, 1.0),
 		"speed_mps": float(record.get("speed_mps", 0.0)),
 		"launch_angle_degrees": float(record.get("vertical_angle_degrees", 0.0)),
+		"chosen_power_fraction": float(record.get("chosen_power_fraction", 0.0)),
 		"out_reason": str(record.get("out_reason", "")),
 		## The resolver's own verdict on whether this swing could clear the tape,
 		## and which branch of its search answered. Carried the whole way to the

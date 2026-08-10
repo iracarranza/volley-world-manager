@@ -5206,3 +5206,78 @@ nearly straight up -- and the serve's in/out is resolved on that flight. It
 predates all of this and the drawn serve is unaffected (`Serve -> Reception`
 sits at 3.33 m at the tape, byte-identical before and after), so the two
 descriptions of a serve disagree somewhere. Worth a probe of its own.
+
+---
+
+## The red identity gate: commitment bought speed and never paid for it
+
+`_test_team_identity_directional_outcomes` asserts that a Defensive attack makes
+fewer errors *and* fewer kills than a Physical one. The kill half held; the error
+half was inverted -- 0.0642 for Physical against 0.0868 for Defensive, so the
+game said swinging harder was **safer**. Fixed.
+
+### Why the two earlier attempts did nothing
+
+`ATTACK_COMMITMENT_ERROR_SHIFT` moved a threshold inside `_attack_missed`, three
+lines before `attack_missed = bool(geometric.attack_missed)` overwrote it. The
+calibration came back byte-identical, which is how it was caught.
+
+The reason no threshold there can work: a geometric swing lands in or out from
+its own course and speed. Decisiveness reaches that swing through exactly one
+channel -- `aggression_from` biases `chosen_fraction`, which becomes the ball's
+speed -- and speed only ever *helps* a ball stay in. A faster swing is flatter,
+clears the tape more easily, and reaches its target without needing to be
+lofted. Nothing anywhere charged a hitter for swinging near their own limit, so
+the design's central claim about commitment had no mechanism behind it at all.
+
+### The distribution first
+
+`chosen_fraction` was published by `choose_power` and read only for a label, so
+`tools/run_commitment_probe.gd` had to put it on the event before it could be
+measured. Over 657 live home swings:
+
+    identity      p10     p50     p90     mean
+    Physical    0.466   0.860   1.000    0.800
+    Balanced    0.365   0.764   0.929    0.715
+    Defensive   0.299   0.676   0.843    0.637
+
+A gap of 0.164 in the mean, across a range that genuinely spans 0.30 to 1.00 --
+so a cost anchored inside it can reach, which is the question §0 says to ask
+before writing the bound rather than after.
+
+### The bound, and the version of it that was wrong
+
+`AttackPowerModel.commitment_spread_multiplier` widens the swing's execution
+spread from 1.0 at the median swing (0.72) to 1.60 at a swing with nothing left
+over. It multiplies `AttackCourseModel`'s across-body strain rather than
+replacing it: being turned back across yourself and swinging at your ceiling are
+two independent ways to lose a ball.
+
+The first version also gave a *held-back* swing an accuracy bonus, sliding to
+0.78 at the tenth percentile. It looks symmetric and is not -- it handed the
+Defensive identity both halves of the claim at once and overshot into the mirror
+failure, Defensive kill 0.5383 against Physical 0.5321. Dropping the bonus is
+also the better model: swinging softer does not make a hitter a better aimer
+than their own attack accuracy, it only stops spending accuracy they have.
+
+    identity     attack error    kill
+    Physical           0.0979  0.5305
+    Defensive          0.0931  0.5266
+
+Both halves directional. **The margins are thin** -- 0.0048 and 0.0039, and the
+kill one is 0.7% relative where the test's own note says 1.4% was the smallest
+effect it could resolve at 48 samples. It passes, and it is not a comfortable
+pass. If it goes red again from an unrelated RNG shift, the answer is more
+samples or a stronger channel, not a nudged ceiling.
+
+### Balance, for the record
+
+    contacts per rally    6.657 -> 6.553
+    kill rate             0.374 -> 0.352
+    dig rate              0.593 -> 0.608
+    stuff rate            0.121 -> 0.125
+
+Wider swings are dug more, so this deepens the same gap the launch fix opened.
+Kill 0.352 against a 0.45-0.50 band is now the largest single thing out of
+place, and it wants the band re-derived and the dig contest looked at together
+rather than either one tuned alone.

@@ -285,6 +285,23 @@ static func resolve_swing(
 		float(draws.get("judgment", 0.0)),
 	)
 
+	## **How much air this swing has, once commitment is paid for.**
+	##
+	## `cost.spread_multiplier` is the across-body strain of the *course* -- how
+	## turned the hitter had to be. It says nothing about how hard they then
+	## decided to swing, so a full-commitment hammer and a controlled roll off the
+	## same approach were judged by identical accuracy, and the bench's
+	## decisiveness instruction reached the ball as speed and nothing else.
+	##
+	## Combined rather than replaced: they are two independent ways to lose a
+	## swing, and a hitter turned back across themselves *and* swinging at their
+	## ceiling should pay for both. Placed here, above every consumer, because the
+	## last three of these went in below one of theirs.
+	var swing_spread := float(cost.spread_multiplier) \
+		* AttackPowerModel.commitment_spread_multiplier(
+			float(chosen.chosen_fraction)
+		)
+
 	## --- the angle that puts that speed where it was aimed -------------------
 	##
 	## Constrained by the tape. Nothing above this point knows the net exists:
@@ -299,10 +316,10 @@ static func resolve_swing(
 		contact_height_meters, aim_distance, float(best.far_meters),
 		attacking_negative_y,
 		AttackSwingModel.vertical_spread_degrees(
-			_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier)
+			_rating(hitter, "attack_accuracy"), swing_spread
 		),
 		AttackSwingModel.bearing_spread_degrees(
-			_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier)
+			_rating(hitter, "attack_accuracy"), swing_spread
 		),
 	)
 	var intended_angle := float(launch.angle_degrees)
@@ -315,7 +332,7 @@ static func resolve_swing(
 	## --- what they actually did ----------------------------------------------
 	var delivered := AttackSwingModel.deliver(
 		float(best.bearing_degrees), intended_angle, launch_speed,
-		_rating(hitter, "attack_accuracy"), float(cost.spread_multiplier),
+		_rating(hitter, "attack_accuracy"), swing_spread,
 		float(draws.get("bearing", 0.0)),
 		float(draws.get("vertical", 0.0)),
 		float(draws.get("power", 0.0)),

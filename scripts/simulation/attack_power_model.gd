@@ -180,6 +180,54 @@ static func choose_power(
 	}
 
 
+## What a swing at the top of your range costs you in accuracy.
+##
+## **The channel the bench's instruction was missing.** Decisiveness reaches the
+## ball through `aggression_from` -> `choose_power` -> speed, and speed only ever
+## helps a ball stay in: a faster swing is flatter, clears the tape more easily
+## and reaches its target without having to be lofted. So the game said a
+## Physical identity made *fewer* attack errors than a Defensive one -- measured,
+## 0.0642 against 0.0868, the wrong way round -- and the design claim that
+## committing to a swing is a risk had nothing anywhere to make it true.
+## `chosen_fraction` was published by `choose_power` and read only for a label.
+##
+## The anchor and both bounds sit inside the distribution they act on, measured
+## over 657 live home swings across three identities:
+##
+##     identity      p10     p50     p90     mean
+##     Physical    0.466   0.860   1.000    0.800
+##     Balanced    0.365   0.764   0.929    0.715
+##     Defensive   0.299   0.676   0.843    0.637
+##
+## So `CONTROLLED` is the median swing in the game -- an ordinary attack pays
+## nothing -- `HELD_BACK` is the tenth percentile of the softest identity, and
+## the ceiling applies at a swing with nothing left over. A bound outside that
+## range would do nothing, and would do nothing silently.
+const COMMITMENT_CONTROLLED_FRACTION: float = 0.72
+## Smaller than `ACROSS_BODY_SPREAD_CEILING` (2.10) on purpose: swinging at your
+## own limit is a smaller disruption than swinging across your own body.
+const COMMITMENT_SPREAD_CEILING: float = 1.60
+
+
+## **A cost above the controlled swing, and no bonus below it.**
+##
+## The first version also gave a held-back swing an accuracy *bonus*, sliding to
+## 0.78 at the tenth percentile. It reads as symmetric and it is not: it handed
+## the Defensive identity both halves of the claim at once, and measured, that
+## overshot into the opposite failure -- Defensive came out with a *higher* kill
+## rate than Physical, 0.5383 against 0.5321, which is the same gate broken from
+## the other side.
+##
+## Dropping it is also the more honest model. Swinging softer does not make a
+## hitter a better aimer than their own attack accuracy; it just stops spending
+## accuracy they have. So the ordinary swing pays nothing and the committed one
+## pays, which is the whole of what the design claims.
+static func commitment_spread_multiplier(chosen_fraction: float) -> float:
+	return lerpf(1.0, COMMITMENT_SPREAD_CEILING, clampf(inverse_lerp(
+		COMMITMENT_CONTROLLED_FRACTION, 1.0, clampf(chosen_fraction, 0.0, 1.0)
+	), 0.0, 1.0))
+
+
 ## The dial `choose_power` reads, from the player's own temperament and the
 ## instruction they were given.
 ##
