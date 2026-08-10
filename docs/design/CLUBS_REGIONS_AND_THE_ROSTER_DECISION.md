@@ -59,73 +59,133 @@ The design risk to avoid: this must not become a checklist that always says the
 same thing. A flag that appears every match is wallpaper. It should be quiet
 most weeks and loud when something is genuinely wrong.
 
-## 3. The inversion: volis play for a region, clubs select them
+## 3. Settled: clubs employ, the academy selects, the region is measured
 
-This is the ask that changes the game, and it needs one question answered before
-anything is built on it.
+The question this section used to hold open — *what do clubs compete in, and
+does a voli play for both?* — has been answered, and the answer is none of the
+three options that were offered. It is closest to (b), but the shape is
+specific enough that writing it down properly is most of the work.
 
-### What is being proposed
+### The structure
 
-Rather than the real-world arrangement — a voli plays for a club, and the best
-are selected for their nation — the proposal inverts it. Every voli belongs to
-their region. Regional strength is therefore the primary measure, which is
-consistent with the Sixnet already being the competition the world revolves
-around. Clubs then **select from the regional pool**, each with a budget and a
-loose identity, and transfers are driven as much by what a voli *wants* —
-accommodations, care, the life around the sport — as by money or tactical fit.
+**A voli is always from a region.** They are a prospective representative of it.
+That never changes and it is not a contract.
 
-### Why it is a good inversion
+**A club employs and houses them.** The club controls training, food, lodging,
+care — the whole life around the sport, not just the sessions. Clubs compete in
+a club competition, week to week, and that is the match loop the player already
+has.
 
-It makes the Sixnet mean something structurally rather than by assertion. It
-gives `home_region` primacy over `club_region`, which matches every regional
-system now built: specialty attributes, physique, ego, `fatigue_resistance` and
-`read_rate` are all read from where a voli was *raised*. And it makes
-accommodations load-bearing rather than flavour, which is the strongest argument
-for it — a 495-line design document currently attached to nothing becomes the
-reason volis choose you.
+**The academy selects.** It is government-funded, one per region, and it is
+*not* a youth setup. It collects the region's premier players and prepares them
+— teaches them to represent the region in its strongest form — in time for the
+Sixnet. Its output is a squad, and the squad is what plays the Sixnet.
 
-### The question that has to be answered first
+**Regional strength is a measure, not a team's rating.** It is assembled from
+three things, in descending weight:
 
-**What do clubs compete in, and does a voli play for both?**
+| contributes | what it actually measures | already computable? |
+|---|---|---|
+| the clubs in the region | how the region's *tactic* performs against other regions' | yes — clubs carry a region and `principles()` is regional |
+| the academy squad | how good the twelve who will actually be sent are | no — no academy entity, no selection |
+| the whole regional pool | breadth: many strong-ish volis beat one standout | yes — `world_population` holds every voli and their `home_region` |
 
-Three coherent answers, and they are different games:
+### The two consequences worth stating as design, not flavour
 
-**(a) Clubs are employers, not competitors.** The only competition is regional.
-A club signs, houses, trains and cares for volis, and is measured by how many of
-them make their region's Sixnet squad and how those squads do. The manager's
-seat is a club; success is other people's trophies. This is unusual, it makes
-accommodations and development the entire loop, and it is the reading most
-consistent with "regional strength is the primary measure". It also has an
-obvious failure mode: the player never plays a match they own.
+**Breadth beats a standout, and that has to be a real curve.** "A region with
+numerous strong-ish volis rates higher than a region with just one standout" is
+a specific mathematical claim, and the obvious implementation — mean ability, or
+top-N mean — gets it backwards or flat. What produces the stated behaviour is a
+*saturating* per-voli contribution: each voli adds something that rises with
+ability and flattens near the top, summed over the pool. One 95 then contributes
+less than four 70s, which is the sentence. This is exactly the kind of number
+that must be measured against the distribution it acts on before the curve
+constant is chosen — see `docs/FAILURE_MODES.md` §0.
 
-**(b) Clubs compete, regions compete, volis do both.** The real-world split with
-the allegiances swapped. Rich, and it doubles the calendar, the fatigue
-bookkeeping and the roster-lock ritual — a voli tired from a club match arrives
-at the Sixnet spent, which is a genuinely good tension and a lot of machinery.
+**A club match is evidence about a tactic, not just a result.** "Does that
+region's tactic outperform other regions" means a club fixture is a sample in a
+league table of *principles*, and every club match already carries both sides'
+regional principles into the resolver. So this measure is available the moment
+clubs exist as entities and results are recorded against their regions. Nothing
+new has to be simulated for it.
 
-**(c) Clubs compete; regional strength is an emergent measure rather than a
-competition.** Volis are *from* regions and their regional traditions decide
-what they are, but the matches are club matches. "Regional strength" is then a
-league table of where the good volis come from, not a tournament. Cheapest by
-far, keeps the match loop the player already has, and loses the Sixnet as an
-event.
+### Accommodation is the retention loop, and its risk is churn
 
-I would not guess between these. (a) is the most distinctive and the most
-faithful to what has already been built; (c) is the least disruptive to
-everything that currently works; (b) is the most expensive and the most
-conventional.
+The premise is that volleyball is the world's dominant activity, every club
+competes to be the most accommodating, and therefore *a voli in poor conditions
+will nearly always have somewhere better to go*. That makes accommodations
+load-bearing — it is the reason
+`docs/design/ACCOMMODATIONS_AND_CARE.md` stops being a 495-line document
+attached to nothing.
 
-### What is already in place either way
+It also names the failure mode precisely. If every voli always has a better
+option, and nothing resists, every roster empties every season and the market is
+noise. The mobility premise needs friction that is *also* modelled, not asserted:
+tenure, relationships with team-mates, `position_familiarity` and cohesion that a
+move throws away, the pull of a voli's own home region, and how much of a squad
+a club can absorb at once. The interesting design question is not "will a voli
+leave for better conditions" — the premise says yes — it is **what a club can
+offer that a richer club cannot**, and the honest answers are fit, role, and
+having been good to them for a long time. All three are things this codebase can
+already compute or nearly can.
+
+### The club/academy dichotomy at the start of a save is wrong, and it is cheap
+### to fix
+
+`new_career_screen` currently offers exactly this choice:
+
+> **CLUB** — Compete now — 10 senior players · larger budget
+> **ACADEMY** — Build for later — 12 young players · higher potential
+
+That is the youth-development reading the structure above rejects. What it
+actually describes is two *clubs* — an established one and a young one — and
+`career_manager.create_career` treats it that way: the only differences are
+roster generation, `reputation` (10 vs 6) and `finances` (120,000 vs 65,000).
+Nothing about it selects for a region or prepares anyone for the Sixnet.
+
+Two fixes, and they are different sizes:
+
+1. **Now, and small: stop calling it an academy.** The second option is a young
+   club with a smaller budget and higher-potential volis. Naming it that costs a
+   string and a generation branch, and it stops the save's first screen teaching
+   the player a word that means something else.
+2. **Later, and real: make the academy the other seat.** Managing a regional
+   academy is a genuinely different game — no employment, no housing, no
+   transfers; you *select* from what the region's clubs developed and prepare
+   them for one tournament. It needs club entities and a Sixnet calendar, both
+   of which are unbuilt. It should not be offered as a starting choice until it
+   is that.
+
+### What is already in place
 
 - `home_region` and `club_region` exist on every voli and are already
-  distinguished correctly.
+  distinguished correctly. Every regional system built so far — specialty
+  attributes, physique, ego, `fatigue_resistance`, `read_rate` — reads
+  `home_region`, which is the field the structure above makes primary.
 - `world_population.assign_club_region` already moves volis between regions by
   pull, capacity and age, and `_recruitment_appetite` already lets a region shop
-  for a particular kind of voli — A'ace does. That machinery becomes club
-  recruitment almost unchanged if clubs become entities.
-- `REGION_PULL` and `REGION_BIRTH_WEIGHTS` are the beginnings of an economy.
-- What does not exist at all: a club **entity**. `CLUB_NAMES` are strings. There
-  is no budget, no identity, no roster, no fixtures.
+  for a particular kind of voli — A'ace does. That is club recruitment almost
+  unchanged, once clubs are entities.
+- `OpponentTeam.region` and `VolleyballRegions.club_name` already give every
+  opponent a region and a club name, so a fixture already knows whose tactic it
+  is testing.
+- What does not exist at all: a club **entity** (budget, identity, roster,
+  fixtures — `CLUB_NAMES` are strings), an **academy** entity, a **selection**
+  step, and any **regional strength** figure.
+
+### Build order this implies
+
+1. Rename the save's second option away from "Academy". Small, and it is
+   currently teaching the wrong word.
+2. Club entities: budget, identity, roster, region. The recruitment machinery
+   already exists to fill them.
+3. Regional strength as a measured figure — tactic performance from club
+   results, plus the saturating pool term. Buildable as soon as (2) records
+   results.
+4. Accommodations as the retention loop, with the friction terms named above
+   built at the same time as the pull terms. Not after.
+5. The academy: selection from the regional pool, preparation, the Sixnet squad.
+   Last, because it consumes all of the above.
 
 ## 4. Accommodations, care, and two different things called "fit"
 
@@ -166,9 +226,10 @@ opaque compatibility number.
    built on top of it, and the ask is explicit that it is the most pressing.
 2. **Roster lock-in.** Cheapest thing here with the largest effect on whether
    the roster feels like a decision, and it invents nothing.
-3. **Settle the clubs-versus-regions question** above. Everything in §3 and §4
-   depends on which of (a), (b) or (c) is the game.
-4. **Club entities**, then **accommodations as recruitment**, then **club fit**
-   on top of mechanical fit.
+3. **Rename the save's "Academy" option.** One string and one branch, and it is
+   currently the first thing a new save teaches.
+4. **Club entities**, then **regional strength as a measured figure**, then
+   **accommodations as the retention loop**, then **club fit** on top of
+   mechanical fit, then **the academy**. §3 has the reasoning for that order.
 
-Steps 1 and 2 are independent of step 3 and can proceed while it is undecided.
+Steps 1--3 are independent of everything after them.

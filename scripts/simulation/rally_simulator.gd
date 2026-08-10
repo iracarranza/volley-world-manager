@@ -696,6 +696,12 @@ const COMMITMENT_FULL_PULL: float = 0.34
 ## only in proportion to how far past neutral the axis sits.
 const VARIATION_MAX_STEPS: int = 2
 
+## How little time the second contact can have to spare before somebody else
+## breaks for the ball as well. A margin this small means the setter is arriving
+## on the ball rather than waiting for it, which on a real court is when a second
+## voli starts running without being told to.
+const CHASE_MARGIN_SECONDS: float = 0.18
+
 ## How much of the pre-set window the hitter is credited with.
 ##
 ## The blocker already gets `preset_window * preset_share`, 0.26 to 0.72 of it
@@ -1686,6 +1692,16 @@ func resolve(
 		"decisiveness": float(home_principles.decisiveness),
 		"tempo_variation": float(home_principles.tempo_variation),
 	}
+	## The other four, while the pass is in the air. Written onto the reception
+	## event because playback reads a leg's movement off the contact it is flying
+	## toward, and this is the leg the report was about.
+	if reception_event_for_staging != null:
+		reception_event_for_staging.metadata["home_phase_targets"] = \
+			_transition_phase_map(
+				players, lineup, receiver.id, setter.id,
+				hitter.id if hitter != null else -1,
+				set_contact, second_contact_window, setter_arrival_margin,
+			)
 	if active_play == null:
 		result.key_factors.append(_factor("default_offense"))
 	else:
@@ -3280,6 +3296,21 @@ func _resolve_opponent_transition(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
 	)
+	## The other side's off-ball five, while their pass is in the air.
+	##
+	## The first contact is still the last event on the tape here -- the set is
+	## added below -- so this is the leg it governs.
+	var opponent_first_contact := result.events[-1] as RallyEvent
+	if opponent_first_contact != null:
+		var existing_targets: Dictionary = opponent_first_contact.metadata.get(
+			"opponent_phase_targets", {}
+		)
+		existing_targets.merge(_opponent_transition_phase_map(
+			opponent_team, first_contact_player_id, opponent_setter.id,
+			opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
+			setter_arrival_margin,
+		), true)
+		opponent_first_contact.metadata["opponent_phase_targets"] = existing_targets
 	## Same model as the home transition set, and now the same attributes. The
 	## two sides read different ones -- this side set_accuracy, court_vision and
 	## decision_making, the home side set_accuracy, ball_control and composure --
@@ -11826,6 +11857,159 @@ func _receive_formation_map(
 		var player_id := int(lineup.player_at_slot(int(slot_number)))
 		if player_id >= 0:
 			targets[player_id] = Vector2(formation[slot_number])
+	return targets
+
+
+## Where the four volis who are neither passing nor setting go while the pass is
+## in the air.
+##
+## This is the leg the report was about: a shanked serve receive, and a court of
+## twelve standing still watching it. They stood still because playback refuses
+## to invent movement and the resolver had published an opinion about exactly two
+## people -- the passer, and whoever was taking the second ball.
+##
+## Nothing here is new physics, and deliberately so. Each voli is given the
+## target their phase already implies: a front-row voli releases to the approach
+## mark `_approach_start_position` would put them on for the lane
+## `_fallback_assignment` says is theirs, a back-row voli goes to base. Then
+## `_reached_point` -- the same function that times every other journey in the
+## game, and the same one that charges for it -- decides how much of that they
+## actually cover in the time the pass is in the air. Most honest answers are
+## "not all of it", which is the information a viewer needs.
+##
+## **The three people this must not touch are the three it already has an
+## authority for**, and forgetting one of them is measurable. The receiver and
+## the second contact are obvious. The hitter is not: their release to the
+## approach mark is already staged on the SET event, and moving them here as well
+## meant `ApproachMechanicsModel.prepare_for_attack` ran from a position the
+## approach had already been walked to. It halved the leg without halving the
+## time allotted for it, and the ATTACK phase's timing ratio went 1.0912 ->
+## 1.2111 -- a phase the movement-timing gate asserts to two decimal places.
+##
+## The chase is the one judgement call, and it is derived rather than authored.
+## `setter_arrival_margin` is the time the second contact has to spare; when that
+## is gone, the pass is one nobody planned for, and the nearest other voli breaks
+## for the ball. Whether they are *allowed* to play it is a separate question and
+## is not answered here -- see `docs/design/OFF_BALL_MOVEMENT.md`, "Not in scope".
+## What is answered is whether a shanked pass looks contested or conceded.
+func _transition_phase_map(
+	players: Array,
+	lineup: RotationLineup,
+	receiver_id: int,
+	setter_id: int,
+	hitter_id: int,
+	set_contact: Vector2,
+	window_seconds: float,
+	setter_margin: float,
+) -> Dictionary:
+	var targets := {}
+	if lineup == null or window_seconds <= 0.0:
+		return targets
+	var off_ball: Array[VolleyballPlayer] = []
+	for entry in players:
+		var player := entry as VolleyballPlayer
+		if player == null or player.id == receiver_id or player.id == setter_id \
+				or player.id == hitter_id:
+			continue
+		if lineup.slot_for_player(player.id) >= 1:
+			off_ball.append(player)
+	var chase_id := -1
+	if setter_margin < CHASE_MARGIN_SECONDS:
+		var closest := 1.0e9
+		for player in off_ball:
+			var from: Vector2 = live_positions.get(
+				player.id,
+				CourtConstants.slot_position(lineup.slot_for_player(player.id)),
+			)
+			var gap := RallyKinematics.court_distance_meters(from, set_contact)
+			if gap < closest:
+				closest = gap
+				chase_id = player.id
+	for player in off_ball:
+		var slot := lineup.slot_for_player(player.id)
+		var here: Vector2 = live_positions.get(
+			player.id, CourtConstants.slot_position(slot)
+		)
+		var intent := set_contact
+		var mode := "transition"
+		if player.id != chase_id:
+			if CourtConstants.is_front_row_slot(slot):
+				intent = _approach_start_position(
+					CourtConstants.lane_target(
+						str(_fallback_assignment(player, lineup).lane)
+					),
+					here, false,
+				)
+			else:
+				## Base, not the ball. A back-row voli who is not chasing is
+				## shuffling into defensive position, which is a short move at
+				## ordinary effort -- charging it as a sprint would bill four
+				## volis a sprint every rally for standing about.
+				intent = CourtConstants.slot_position(slot)
+				mode = "lateral"
+		var reached := _reached_point(player, here, intent, window_seconds, mode)
+		targets[player.id] = reached
+		## The resolver has to believe what playback draws. Leaving these out of
+		## `live_positions` would put the drawn court and the simulated court in
+		## different places from the second contact onward, which is the defect
+		## every staging comment in this file exists because of.
+		live_positions[player.id] = reached
+	return targets
+
+
+## The same idea for the other side of the net, at the fidelity that side has.
+##
+## **This is deliberately coarser than `_transition_phase_map` and the difference
+## is worth stating rather than hiding.** The home five are sent to approach
+## marks because the home offence has already named a lane and a tempo by the
+## time that map is written. Here the hitter is not chosen until eighty lines
+## below, so each opponent is sent to their own model's transition base --
+## `court_position(id, "transition")`, which is that team's own opinion about
+## where the player stands in transition and not a number invented here. It is a
+## smaller movement than the home side's and it is honest about being one.
+##
+## The chase is the same, and is the half that matters: when the second contact
+## has no time to spare, the nearest other voli goes too.
+func _opponent_transition_phase_map(
+	opponent_team: Resource,
+	first_contact_id: int,
+	setter_id: int,
+	set_contact: Vector2,
+	window_seconds: float,
+	setter_margin: float,
+) -> Dictionary:
+	var targets := {}
+	if opponent_team == null or window_seconds <= 0.0:
+		return targets
+	var off_ball: Array[VolleyballPlayer] = []
+	for entry in opponent_team.on_court_players():
+		var player := entry as VolleyballPlayer
+		if player == null or player.id == first_contact_id or player.id == setter_id:
+			continue
+		off_ball.append(player)
+	var chase_id := -1
+	if setter_margin < CHASE_MARGIN_SECONDS:
+		var closest := 1.0e9
+		for player in off_ball:
+			var from: Vector2 = opponent_live_positions.get(
+				player.id, opponent_team.court_position(player.id, "transition")
+			)
+			var gap := RallyKinematics.court_distance_meters(from, set_contact)
+			if gap < closest:
+				closest = gap
+				chase_id = player.id
+	for player in off_ball:
+		var here: Vector2 = opponent_live_positions.get(
+			player.id, opponent_team.court_position(player.id, "transition")
+		)
+		var intent := set_contact if player.id == chase_id \
+			else Vector2(opponent_team.court_position(player.id, "transition"))
+		var reached := _reached_point(
+			player, here, intent, window_seconds,
+			"transition" if player.id == chase_id else "lateral",
+		)
+		targets[player.id] = reached
+		opponent_live_positions[player.id] = reached
 	return targets
 
 
