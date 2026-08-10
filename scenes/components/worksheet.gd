@@ -138,6 +138,9 @@ const COURT_HALF_M: float = 9.0
 const COURT_WIDTH_M: float = 9.0
 const HALF_WIDTH_M: float = 4.5
 const ATTACK_LINE_M: float = 3.0
+## Where a blocker's feet are when the wall is up: just off the tape, on the home
+## side. The depth the fixed pair this replaced was drawn at.
+const BLOCK_DEPTH_M: float = 0.35
 ## Headroom above the tape for a blocker's hands, and a margin so nothing touches
 ## the edge of the sheet.
 const HEADROOM_M: float = 1.25
@@ -417,6 +420,10 @@ var _shadow_handles: Array[Dictionary] = []
 var _drag_slot: int = -1
 var _drag_offset: Vector2 = Vector2.ZERO
 var _drag_live: Vector2 = Vector2.ZERO
+## Whether the held voli is currently past the bound a drop removes on, so the
+## edge can burn and the notice can fire once on the crossing rather than
+## continuously.
+var _drag_armed: bool = false
 
 ## What the sheet has just refused to do, and why.
 ##
@@ -1001,6 +1008,28 @@ func place_voli_at(slot: int, on_court: Vector2, who: String = "") -> void:
 	## missed, which is what happened.
 	if absf(on_court.x) > HALF_WIDTH_M + 1.0 or absf(on_court.y) > COURT_HALF_M + 1.0:
 		return
+	## **A blocker stands at the net. That is what makes them a blocker.**
+	##
+	## The one exception to the refuse-rather-than-clamp rule above, and it earns
+	## it: depth is not a decision this phase asks about. A block is a lateral
+	## choice -- which lane, sealed or funnelled -- and there is nothing a manager
+	## means by dragging a blocker two metres back off the tape.
+	##
+	## Leaving depth free had a worse consequence than an odd drawing. In the
+	## three-quarter view "up" the screen is *toward the net and past it*, so
+	## dragging a blocker the way a reader naturally reads as higher carried them
+	## through y = 0 onto the opponent's side -- the axis runs negative across the
+	## net, which is why `PHASE_DEPTH["Block"]` starts at -1.4 to show hands over
+	## the tape. The behaviour arrow then drew from a body standing on the far
+	## court back toward home, so soft-block and kill-block pointed the wrong way.
+	## That read as a defect in the trajectory and was a defect in the coordinate.
+	##
+	## Pinned rather than bounded, so every blocker on the sheet stands on one
+	## line and a wall reads as a wall.
+	if phase == "Block":
+		on_court = Vector2(
+			clampf(on_court.x, -HALF_WIDTH_M, HALF_WIDTH_M), BLOCK_DEPTH_M
+		)
 	## **Who**, not just where. The sheet used to alternate two placeholder bodies
 	## by slot parity, so dropping the libero drew whichever of the two stand-ins
 	## the arithmetic landed on -- a picture of a formation made of the wrong
@@ -1154,6 +1183,15 @@ func _gui_input(event: InputEvent) -> void:
 		if _drag_slot >= 0:
 			_drag_live = _unproject_floor(motion.position, scale, origin) \
 				+ _drag_offset
+			## Said once, on the crossing, rather than from `_draw_removal_edge`.
+			## `_say` queues a redraw, so saying it while drawing would redraw
+			## every frame for as long as a voli was in hand.
+			var armed := absf(_drag_live.x) > HALF_WIDTH_M + 1.0 \
+				or absf(_drag_live.y) > COURT_HALF_M + 1.0
+			if armed != _drag_armed:
+				_drag_armed = armed
+				if armed:
+					_say("Let go to take them off the sheet.")
 			queue_redraw()
 			accept_event()
 			return
@@ -1182,6 +1220,7 @@ func _gui_input(event: InputEvent) -> void:
 			var slot := _drag_slot
 			var landed := _drag_live
 			_drag_slot = -1
+			_drag_armed = false
 			voli_released.emit()
 			## The same bound `place_voli_at` refuses on, deliberately. Two
 			## different margins leaves a band where a drop is neither placed nor
@@ -1331,6 +1370,52 @@ func _draw() -> void:
 	_draw_phase(phase, 1.0, _wipe)
 	if _wipe < 1.0:
 		_draw_eraser(_wipe)
+	_draw_removal_edge()
+
+
+## The edge of the sheet, lit while a voli is in hand.
+##
+## Taking a voli off is done by dragging them off, and until now nothing said so.
+## A gesture whose only documentation is that somebody tried it is not a gesture,
+## it is a secret -- and the cost of not knowing it is high, because the
+## alternative reading of a voli that will not go where you want is that the
+## sheet is broken.
+##
+## Two states rather than one, because "you *can* let go here" and "letting go
+## here removes them" are different sentences. The band is faint while the voli
+## is still over the court and burns while they are past the same bound the drop
+## checks, so the page answers before the hand commits instead of after.
+##
+## Drawn last, over everything, as an edge rather than a control: this is the
+## sheet reacting to being handled, and a button would be a second way to say
+## what the drag already says.
+const REMOVAL_EDGE_WIDTH: float = 7.0
+const REMOVAL_EDGE_ARMED := Color(0.78, 0.24, 0.20)
+const REMOVAL_EDGE_RESTING := Color(0.70, 0.28, 0.24)
+## How many passes the glow is built from, each wider and fainter. A blur would
+## want a shader for one hairline of feedback; concentric strokes are what the
+## rest of this file already draws with.
+const REMOVAL_EDGE_LAYERS: int = 4
+
+
+func _draw_removal_edge() -> void:
+	if _drag_slot < 0:
+		return
+	var armed := absf(_drag_live.x) > HALF_WIDTH_M + 1.0 \
+		or absf(_drag_live.y) > COURT_HALF_M + 1.0
+	var tint := REMOVAL_EDGE_ARMED if armed else REMOVAL_EDGE_RESTING
+	var peak := 0.85 if armed else 0.30
+	for layer in range(REMOVAL_EDGE_LAYERS):
+		var spread := float(layer)
+		var width := REMOVAL_EDGE_WIDTH + spread * 5.0
+		var alpha := peak * (1.0 - spread / float(REMOVAL_EDGE_LAYERS)) * 0.55
+		draw_rect(
+			Rect2(
+				Vector2(width * 0.5, width * 0.5),
+				size - Vector2(width, width)
+			),
+			Color(tint, alpha), false, width
+		)
 
 
 ## The printed squares.
@@ -1446,7 +1531,16 @@ func _draw_view(which: String, alpha: float, reveal: float) -> void:
 	## that; nothing removed was part of it.
 	match which:
 		"Block":
-			_draw_blockers(scale, origin, ink, alpha, reveal)
+			## Nothing. The wall used to be two fixed bodies drawn from the
+			## squad's first two entries, so the Block phase opened with a pair of
+			## volis nobody had placed and nobody could pick up -- they were phase
+			## decoration rather than placements, so the shadow handle never found
+			## them and no gesture could remove them.
+			##
+			## A worksheet is populated by the person using it. The net, its zones
+			## and the drill marks are the printed part; every body on the sheet
+			## is now one somebody put there.
+			pass
 		"Attack":
 			_draw_attacker(scale, origin, ink, alpha, reveal)
 		"Floor":
@@ -1985,68 +2079,6 @@ func _draw_attacker(
 		ink, alpha, reveal, 671
 	)
 
-
-## The wall at the net, from whichever side the view is standing on.
-##
-## Two blockers, 0.35 m off the tape, 0.9 m apart -- the distances they actually
-## take up, so the seam between them is the seam a real pair leaves rather than a
-## gap somebody drew. They fall back to a drawn arch while the bake is still
-## running, because a body that pops in is better than a hole.
-func _draw_blockers(
-	scale: float, origin: Vector2, ink: Color, alpha: float, reveal: float
-) -> void:
-	var roster := _squad()
-	var wall: Array = [
-		[-1.15, str((roster[0] as Dictionary).get("key", "tall"))],
-		[-0.25, str((roster[mini(1, roster.size() - 1)] as Dictionary).get("key", "wing"))],
-	]
-	for index in range(wall.size()):
-		var along: float = wall[index][0]
-		var key := _sticker_key(str(wall[index][1]), view, "Block")
-		var salt := 90 + index * 29
-		## Numbered, over their own head. Which blocker is which is the one thing a
-		## picture of a wall cannot say by itself -- two bodies at a net are a wall,
-		## and "the one on the left takes the seam" needs a name for the one on the
-		## left.
-		_marker_text(
-			"%d" % (index + 1),
-			_project(Vector3(along, 0.35, 3.55), scale, origin) + Vector2(-5.0, 0.0),
-			16, MARKER_RED, alpha, reveal
-		)
-		if _draw_voli(key, along, 0.35, scale, origin, ink, alpha, reveal, salt):
-			continue
-		## The fallback figure, at the reach the pose would have had.
-		var head := _project(Vector3(along, 0.35, 2.80), scale, origin)
-		_marker_circle(head, 13.0, ink, alpha, reveal, salt)
-		_marker_line(
-			head + Vector2(0.0, 12.0),
-			_project(Vector3(along, 0.35, 1.40), scale, origin),
-			ink, alpha, reveal, salt + 3, MARKER_WIDTH * 1.3
-		)
-
-
-
-## What an instruction looks like on the floor.
-##
-## Every behaviour is a **dashed arrow**, because a dashed line is what somebody
-## draws for a thing that has not happened yet -- the solid marks on this sheet
-## are where bodies are, and an intention is not a body. What differs between
-## them is the *shape*, and the shape is the meaning rather than a decoration:
-##
-## - **line** runs straight over the net on the voli's own axis. "Straight
-##   forward" from wherever they are standing, so a voli in zone 4 and a voli in
-##   zone 2 get different lines on the page and the same instruction.
-## - **cross** cuts to the opposite far corner, so its direction comes off the
-##   hitter's own x. The one shot whose drawing genuinely depends on where they
-##   stand, which is why it cannot be a fixed angle.
-## - **tool** is short, flat and level -- no rise at all. It is a ball struck
-##   *off the block* rather than over it, and a flat mark is the only one of these
-##   that says the ball never went up.
-## - **feint** is a low, short arc that lands just past the net.
-## - **roll** is the same arc drawn longer and higher, landing deep.
-##
-## Block's four are marks at the net rather than flights: where the hands close
-## and what the wall is trying to do.
 const ARROW_STEPS: int = 14
 
 

@@ -4660,3 +4660,73 @@ now advances inside each branch with that branch's own window.
 Worth stating as a general shape: the layer sampled physical time correctly and
 mapped it onto the wrong window. Both halves have to be right, and only one of
 them was checked.
+
+---
+
+## The blocker sticker could walk onto the other court, and two of them could not be picked up
+
+Three defects on the training clipboard, reported from using it.
+
+### A blocker's depth was a free coordinate, and the axis runs through the net
+
+The worksheet's y axis is metres from the net, **negative across it** --
+`PHASE_DEPTH["Block"]` starts at -1.4 precisely so a blocker's hands over the
+tape are visible. In the three-quarter view "up" the screen is toward the net
+and past it, so dragging a blocker the way any reader would read as *higher*
+carried them through y = 0 and onto the opponent's side.
+
+The visible symptom was the second-order one: the behaviour arrow draws from the
+body, so a blocker standing on the far court drew their soft-block or kill-block
+instruction back toward home. That reads as a defect in the trajectory and was a
+defect in the coordinate.
+
+Depth is not a decision the Block phase asks about -- a block is a lateral
+choice, which lane and sealed or funnelled -- so a blocker's y is now **pinned**
+to 0.35 m rather than bounded. Every blocker on the sheet stands on one line and
+a wall reads as a wall. This is the only place on the worksheet that clamps
+instead of refusing, and it earns it: refusing a depth nobody meant to choose
+would just make the drag feel broken.
+
+### Two volis nobody placed and nobody could remove
+
+`_draw_blockers` drew a fixed pair from the squad's first two entries as part of
+the Block phase's *printed* diagram, not as placements. The shadow handle only
+finds entries in `placements`, so those two were unreachable by every gesture
+the sheet has -- there was no way to move them, no way to take them off, and no
+indication they were different in kind from a voli you had dropped yourself.
+
+Gone. The net, its zones and the drill marks are the printed part; every body on
+the sheet is now one somebody put there.
+
+### The remove gesture was a secret
+
+Taking a voli off is done by dragging them off the sheet, and nothing said so. A
+gesture whose only documentation is that somebody tried it is not a gesture. The
+worse reading is the likely one: a voli that will not go where you want reads as
+the sheet being broken.
+
+The edge now lights while a voli is in hand -- faint over the court, burning
+past the same bound the drop checks, so the page answers before the hand
+commits. Two states rather than one, because "you can let go here" and "letting
+go here removes them" are different sentences. Said once on the crossing rather
+than from the draw pass, since `_say` queues a redraw and saying it while
+drawing would redraw every frame for as long as a voli was held.
+
+### Still open: the sticker gestures need a pass of their own
+
+Reported as "sticker behaviour in general seems buggy", and not chased here
+because the three above were specific and this is not yet. What is known:
+
+- `_crowded` refuses a drop within `PLACEMENT_CLEARANCE_M` of another voli and
+  says so, but the held voli springs back to where it started, which reads the
+  same as a drag that failed.
+- A drop is refused rather than clamped when it lands off the court by less than
+  the removal bound, so there is a band where a drag neither places nor removes.
+  The comment on `place_voli_at` argues for this deliberately; the edge glow now
+  covers half of it, and the other half -- a near-miss inside the court -- still
+  has no feedback.
+- Grabbing selects, which is right, but there is no way to *deselect* without
+  placing something, so the behaviour rail keeps acting on the last voli touched.
+- Nothing is measured. There is no probe over placement, so every statement here
+  is from use rather than from a distribution -- which is exactly the shape this
+  file warns about, and the first thing the pass should fix.
