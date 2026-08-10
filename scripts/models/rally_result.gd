@@ -46,6 +46,11 @@ extends Resource
 ## immediately. Fatigue accrual belongs to the match layer, which already has a
 ## post-rally step for exactly this.
 @export var recovery_fatigue: Dictionary = {}
+## And what the *work* cost them: jumps, sprints and metres of court, booked per
+## player by the resolver and charged by the match layer for the same
+## determinism reason as `recovery_fatigue` above. This is what makes condition a
+## consequence of playing rather than of being selected.
+@export var exertion_fatigue: Dictionary = {}
 ## What each player was attending to, deciding and feeling, as semantic cues on
 ## the same physical clock the events carry.
 ##

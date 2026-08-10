@@ -475,6 +475,39 @@ static func birth_region(rng: RandomNumberGenerator, tier_key: String = "") -> S
 	return str(Regions.INHABITED_REGIONS[Regions.INHABITED_REGIONS.size() - 1])
 
 
+## How much *this* region wants *this* particular voli, over and above how
+## attractive the region is in general.
+##
+## **Pull says how loud a region's offer is; this says who it is aimed at.**
+## Every other region takes whoever will come, which is why they return 1.0 and
+## the ordinary migration model is untouched.
+##
+## A'ace is the exception and it is the whole of what the region is. It has no
+## tradition to develop and it knows it, so it shops -- and what it shops for is
+## specific and stated in the fiction: somebody who ends points, who wants the
+## ball, and who a dressing room of strangers will follow. Terminal ability,
+## ego and leadership, weighted so a voli who has all three is several times
+## more likely to end up there than one who is merely good.
+##
+## The cost of shopping that way is not priced here. It is `REGION_CEILING_PENALTY`
+## on the volis A'ace raises itself, and the cohesion it never builds -- a squad
+## assembled from eight traditions has no shared idea of how to play, and a
+## strong team that is not coached into strong decisions does not find the
+## situations its terminal players were bought for.
+static func _recruitment_appetite(
+	region_name: String, player: VolleyballPlayer
+) -> float:
+	if region_name != "A'ace" or player == null:
+		return 1.0
+	var terminal := (float(player.attack_power) + float(player.block_timing)) \
+		/ 200.0
+	var presence := (float(player.ego) + float(player.leadership)) / 200.0
+	## 0.45 at the bottom of both scales and 2.35 at the top, so this genuinely
+	## sorts rather than nudging -- a region that assembles has to visibly
+	## assemble somebody in particular.
+	return clampf(0.45 + terminal * 1.15 + presence * 0.75, 0.30, 2.60)
+
+
 ## Decides where a player actually plays. Better players move more often,
 ## careers accumulate moves with age, and the destination is drawn against
 ## regional pull raised to an age-dependent exponent -- so prospects flow
@@ -501,7 +534,8 @@ static func assign_club_region(player: VolleyballPlayer, rng: RandomNumberGenera
 		## migration and ended every career a net importer -- backwards for a
 		## tier defined by losing its best players.
 		var weight := pow(float(REGION_PULL.get(region_name, 1.0)), exponent) \
-			* region_capacity(str(region_name))
+			* region_capacity(str(region_name)) \
+			* _recruitment_appetite(str(region_name), player)
 		weights[region_name] = weight
 		total += weight
 	var roll := rng.randf() * total

@@ -66,8 +66,20 @@ static func familiarity_label(value: float) -> String:
 static func execution_modifier(player: VolleyballPlayer) -> float:
 	return 0.82 + float(player.position_familiarity.get(player.position_role, 0.0)) / 100.0 * 0.18
 
+## How much this voli takes from having seen a ball once.
+##
+## `adaptability` is the individual half and has always been here. The regional
+## half is the tradition that taught them to watch: a Taktikãn is not a better
+## athlete for having seen the same set three times, they are a better *reader*,
+## and that is the only mechanism in the game that makes a side genuinely harder
+## to play against in the fourth set than in the first.
+##
+## Read from `home_region` for the same reason `stamina_fatigue_scale` is -- this
+## is a habit of attention formed growing up, and it travels with the voli rather
+## than with the badge on their shirt.
 static func record_exposure(player: VolleyballPlayer, tags: Array[String], amount: float = 1.0) -> void:
-	var modifier := 0.65 + player.adaptability / 100.0 * 0.90
+	var modifier := (0.65 + player.adaptability / 100.0 * 0.90) \
+		* VolleyballRegions.read_rate(player.home_region)
 	for tag in tags: player.situation_experience[tag] = float(player.situation_experience.get(tag, 0.0)) + amount * modifier
 
 static func familiarity(player: VolleyballPlayer, tags: Array[String]) -> float:

@@ -865,7 +865,17 @@ func unregister_player(player_id: int) -> String:
 ## exhaustion. The former 0.008 base alone charged 0.56 before decisive work,
 ## pushing low-stamina lineups toward 1.0 and recreating the attack-error cliff
 ## inside a single fixture even after between-match recovery was repaired.
-const RALLY_FATIGUE_BASE: float = 0.0035
+## What being on court costs before anybody does anything.
+##
+## **Cut from 0.0035 because it is no longer carrying the whole model.** It used
+## to be the entire cost of a rally, identical for a middle who jumped six times
+## and a libero who did not leave their feet, which made conditioning a function
+## of the lineup sheet. The jumps, sprints and metres are now itemised by the
+## resolver and charged separately, so this is only the residue: standing,
+## watching, shuffling a step. Re-anchored so a full five-set match still lands a
+## worked starter in the `spent` stage and a median one in `laboured`, which is
+## the distribution `tools/run_fatigue_stage_probe.gd` measures.
+const RALLY_FATIGUE_BASE: float = 0.0012
 const RALLY_FATIGUE_DECISIVE: float = 0.006
 
 ## How far stamina moves that cost. `stamina` is trained by the Strength & Jump
@@ -879,10 +889,24 @@ const STAMINA_FATIGUE_SCALE_MIN: float = 0.6
 const STAMINA_FATIGUE_SCALE_MAX: float = 1.4
 
 
+## And how far the tradition that raised them moves it, on top of their own
+## conditioning.
+##
+## **Read from `home_region`, not `club_region`, and that is the design.** This is
+## what a voli's body learned growing up in the halls they grew up in, and it
+## does not stop being true when they transfer -- so signing a Pāwan buys their
+## curve, and a club's endurance becomes the aggregate of who it raised and who
+## it bought. That is exactly the shape regional academies will need, and it means
+## the mechanic is already correct on the day they arrive rather than needing to
+## be re-pointed.
+##
+## Empty resolves to Landavol at 1.0, so every hand-authored fixture player is
+## untouched and the baseline every calibration was measured against holds.
 static func stamina_fatigue_scale(player: VolleyballPlayer) -> float:
 	if player == null:
 		return 1.0
-	return lerpf(STAMINA_FATIGUE_SCALE_MAX, STAMINA_FATIGUE_SCALE_MIN,
+	return VolleyballRegions.fatigue_resistance(player.home_region) * lerpf(
+		STAMINA_FATIGUE_SCALE_MAX, STAMINA_FATIGUE_SCALE_MIN,
 		clampf(float(player.stamina) / 100.0, 0.0, 1.0))
 
 
@@ -901,9 +925,19 @@ func _apply_rally_dynamics(result: Resource, update: Dictionary) -> void:
 				opponent_on_court.append(opponent_player)
 
 	for player in home_on_court + opponent_on_court:
+		## **The rally's base cost, now much smaller, plus what they actually
+		## did.** The base is no longer the model -- it is the standing, watching,
+		## shuffling into position that every player on court does and that the
+		## resolver does not itemise. The work itself arrives below, per player,
+		## from the jumps and the metres the rally actually contains.
 		player.fatigue = minf(
 			player.fatigue + rally_fatigue_cost(player, RALLY_FATIGUE_BASE), 1.0
 		)
+		var exertion := float(result.exertion_fatigue.get(player.id, 0.0))
+		if exertion > 0.0:
+			player.fatigue = minf(
+				player.fatigue + rally_fatigue_cost(player, exertion), 1.0
+			)
 		## And what the floor cost them on top of the rally itself. A libero who
 		## hits the deck three times in a rally has worked harder than one who
 		## stayed on their feet, and the base cost cannot tell them apart.

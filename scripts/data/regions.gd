@@ -240,6 +240,74 @@ const REGIONAL_PRINCIPLES := {
 	},
 }
 
+## How a region *changes* across a match, as opposed to what it does on a ball.
+##
+## **The second layer, and the one the taglines were always written for.** The
+## seven principles above are dispositions: read fresh every rally from a table
+## that never moves, so a side plays the same way at 25-23 in the fifth as it did
+## at 0-0 in the first. That cannot express "their quality never declines" or
+## "they find your pattern and then defend it", which are claims about a
+## trajectory, and both are claims a region in this world is supposed to make.
+##
+## Each entry is a *rate* applied to state that already accumulates during a
+## match. 1.0 is the reference and means "changes at the ordinary speed", which
+## is why Landavol is 1.0 on both: a side whose fourth set looks like its first
+## is a real identity in a league where everyone else bends, and it is the same
+## position the region holds on every other regional system.
+##
+##   `fatigue_resistance`  multiplies how fast this region's volis tire. Below 1
+##                         is a flatter curve. Pāwa Hitō's whole brief -- ordinary
+##                         at 8-8 and unchanged when everyone else's legs have
+##                         gone -- and it rides on `FatigueModel`'s three stages,
+##                         so a resistant side does not merely lose less, it
+##                         reaches the *laboured* and *spent* stages later or not
+##                         at all. That is the difference between a small bonus
+##                         and an identity.
+##   `read_rate`           multiplies how fast this region's volis learn a
+##                         hitter's spin, tendencies and read tags within a
+##                         match. Taktikã's brief, and the only thing that would
+##                         make a Taktikãn side genuinely worse to play against in
+##                         set four than in set one.
+##
+## Deliberately two rather than four. `adaptation_rate` and `composure_decay` are
+## designed (see `REGIONAL_DIFFERENTIATION_SPEC.md`) and unbuilt, and adding a
+## column nothing reads is the exact defect the `physical`/`technical`/`mental`
+## ratings spent a year being.
+const REGIONAL_CURVES := {
+	"Landavol": {"fatigue_resistance": 1.00, "read_rate": 1.00},
+	"Spëddigh": {"fatigue_resistance": 1.18, "read_rate": 1.05},
+	## The flattest curve in the world, and the reason to fear a long match.
+	"Pāwa Hitō": {"fatigue_resistance": 0.55, "read_rate": 0.90},
+	"Bloc du Larg": {"fatigue_resistance": 0.88, "read_rate": 1.15},
+	"Xérvu": {"fatigue_resistance": 1.10, "read_rate": 0.95},
+	## Reads the game faster than anybody, and pays for it in the legs.
+	"Taktikã": {"fatigue_resistance": 1.12, "read_rate": 1.55},
+	"Ispayk": {"fatigue_resistance": 1.05, "read_rate": 0.80},
+	## Assembled squads that never learned to read together.
+	"A'ace": {"fatigue_resistance": 0.95, "read_rate": 0.72},
+	"Tu'ul ys Feynt": {"fatigue_resistance": 1.05, "read_rate": 1.20},
+	"Lo-onğ Ralī": {"fatigue_resistance": 0.50, "read_rate": 1.00},
+	"Bompaşao": {"fatigue_resistance": 0.90, "read_rate": 1.10},
+	"Rhen Tempaol": {"fatigue_resistance": 1.10, "read_rate": 1.05},
+	"Kutré Lyn": {"fatigue_resistance": 1.00, "read_rate": 1.10},
+	"Zaitgaist": {"fatigue_resistance": 1.00, "read_rate": 1.00},
+}
+
+
+## How fast this region's volis tire, as a multiplier. Below 1 is slower.
+static func fatigue_resistance(region_name: String) -> float:
+	return float(Dictionary(REGIONAL_CURVES.get(
+		canonical_name(region_name), {}
+	)).get("fatigue_resistance", 1.0))
+
+
+## How fast this region's volis learn a ball within a match.
+static func read_rate(region_name: String) -> float:
+	return float(Dictionary(REGIONAL_CURVES.get(
+		canonical_name(region_name), {}
+	)).get("read_rate", 1.0))
+
+
 ## Invented flavor geography for the influence-drift mechanic -- which core
 ## regions are close enough to plausibly absorb (or resist) each other's
 ## development traditions. Not tied to each region's real-world naming

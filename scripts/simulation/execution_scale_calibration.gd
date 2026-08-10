@@ -87,10 +87,26 @@ const CLOSE_FRACTIONS: Array[float] = [1.0, 0.6, 0.2]
 ## bonus at all by design. Sweeping one region measures how much a *seed* moves
 ## an outcome; sweeping regions measures how much a known attribute delta moves
 ## it, which is the question worth asking.
+## **Landavol, because a fixture must not carry an identity.**
+##
+## This defaulted to `Pāwa Hitō`, which is the most extreme rating profile in the
+## game -- physical 4, technical 1, mental 1 -- and every calibration and gate
+## that reaches for generated attributes was therefore measuring a physical
+## region's squad and calling it "a generated roster". That was invisible while
+## the three region ratings did nothing; the moment they were wired to attribute
+## ceilings it showed up as a legality gate losing half its back-row sample,
+## because back-row attacking is a `court_vision` and `decision_making` choice
+## and the donor region is 2.6 short on both.
+##
+## Landavol is zero on every regional system there is -- no specialty, no physique
+## bias, no ego bias, no ceiling penalty, 0.50 on all seven principles, 1.00 on
+## both curves and 2/2/2 on the ratings. It is the only region that adds nothing
+## to what it is asked to measure, which is precisely what a fixture needs and is
+## the standing decision for what the symmetry fixtures should be.
 static func apply_generated_attributes(
 	players: Array,
 	base_seed: int,
-	region_name: String = "Pāwa Hitō",
+	region_name: String = "Landavol",
 ) -> void:
 	var donors_by_role := {}
 	var donors: Array[VolleyballPlayer] = PlayerGeneratorModel.generate_roster(

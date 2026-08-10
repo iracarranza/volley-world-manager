@@ -947,6 +947,20 @@ var last_dig_speed: float = 0.0
 var last_dig_posture: String = "planted"
 ## What the rally's recoveries cost in condition, to be charged by the caller.
 var recovery_fatigue_cost: Dictionary = {}
+## What each player *did*, in condition, this rally.
+##
+## **Fatigue used to be charged by the rally rather than by the work.** Everyone
+## on court paid `RALLY_FATIGUE_BASE` whether they had jumped six times or stood
+## in position and watched, which makes conditioning a property of being selected
+## rather than of playing. A middle who blocks every ball and a libero who never
+## leaves the floor tired at exactly the same rate, and the one attribute meant
+## to separate them -- `stamina` -- could only scale a number that was already
+## the same for both.
+##
+## Booked here and charged by the match layer, exactly as `recovery_fatigue_cost`
+## already is, and for the same reason: a resolver that writes to the roster it
+## is resolving breaks replay determinism, and the gate catches it immediately.
+var exertion_cost: Dictionary = {}
 var shadow_reception_trace: RallyTrace
 var home_principles: Resource
 var opponent_principles: Resource
@@ -1048,6 +1062,7 @@ func resolve(
 	## Nobody starts a rally on the floor.
 	player_recovery = {}
 	recovery_fatigue_cost = {}
+	exertion_cost = {}
 	live_positions = _initial_home_positions(lineup, defensive_plan, not home_serving)
 	## Everyone starts the rally genuinely at rest -- this is the one moment the
 	## old assumption was true.
@@ -2155,7 +2170,7 @@ func resolve(
 	var attack_target: Vector2 = attack_choice.target
 	var intended_attack_target := attack_target
 	var attack_missed := _attack_missed(
-		float(result.attack_quality), float(home_principles.decisiveness)
+		float(result.attack_quality), float(home_principles.decisiveness), hitter
 	)
 	if not geometric.is_empty():
 		## A geometric swing is not aimed at a point and then scattered off it.
@@ -4876,7 +4891,7 @@ func _resolve_home_continuation(
 	var geometric := _geometric_promotion(transition_record)
 	var intended_attack_target := attack_target
 	var attack_missed := _attack_missed(
-		attack_quality, float(home_principles.decisiveness)
+		attack_quality, float(home_principles.decisiveness), hitter
 	)
 	if not geometric.is_empty():
 		attack_missed = bool(geometric.attack_missed)
@@ -6181,6 +6196,18 @@ func _reached_point(
 	## arrival they have always had.
 	shortfall_meters: float = 0.0,
 ) -> Vector2:
+	## **Every journey in the game passes through here**, which is what makes this
+	## the honest place to charge for one. Charged on the distance *asked for*
+	## rather than the distance reached, because a defender who sprints and comes
+	## up half a metre short has done the running either way -- and charging the
+	## arrival would refund the hardest efforts in the sport.
+	if mover != null:
+		_charge_exertion(
+			mover,
+			RallyKinematics.court_distance_meters(start, target)
+				* TRAVEL_COST_PER_METER
+				* (SPRINT_COST_MULTIPLIER if mode != "lateral" else 1.0),
+		)
 	if mover == null or available_time <= 0.0:
 		return start
 	if _movement_time(mover, start, target, mode) <= available_time:
@@ -7873,6 +7900,39 @@ const RECOVERY_DELAY_SECONDS := {
 ## they hit the floor. Scales to nothing as their debt runs out.
 const RECOVERY_DIG_PENALTY: float = 0.55
 
+## What a jump costs in condition, and what a metre of court costs.
+##
+## **Jumping is the expensive thing a volleyball player does**, and by some
+## distance: it is a maximal effort of the whole leg, repeated, and it is what
+## empties a middle blocker across five sets while a libero who covers more
+## ground is still fresh. So a jump is worth roughly forty metres of walking, and
+## the two are separated rather than blended into one per-rally figure.
+##
+## The pair is anchored on the match rather than picked: a starter plays on the
+## order of two hundred rallies in a five-setter, jumps on perhaps half of the
+## ones they are involved in, and covers a few metres on most. `RECOVERY_FATIGUE_COST`
+## below is the third channel and was already priced this way -- a trip to the
+## floor is more than a jump, because getting up is work the jump does not have.
+##
+## `JUMP_EFFORT_COST` is the full-effort figure. A jump set or a soft block reads
+## as a fraction of it via the effort each contact actually used, so a side that
+## runs everything at full stretch pays for that and a side that plays within
+## itself does not.
+## Both anchored on the measured match rather than guessed. At the first values
+## tried (0.0022 and 0.00005) a five-set match left the most-worked starter at
+## 0.531 -- inside `laboured` and short of `spent`, so the error channel the
+## design exists to deliver could never fire. Scaled by the ratio that measurement
+## demanded, which puts a worked starter into `spent` late in a fifth set and
+## leaves the median one labouring. The ratio between them is unchanged, because
+## the ratio is the design and only the scale was wrong.
+const JUMP_EFFORT_COST: float = 0.0048
+const TRAVEL_COST_PER_METER: float = 0.00011
+## And what a *sprint* costs over a walk, per metre. An approach or a scramble is
+## an acceleration, not a stroll, and the design asks explicitly for that
+## separation: "explosive actions like sprinting or diving should also consume
+## stamina, and moving around in general should sap stamina gradually".
+const SPRINT_COST_MULTIPLIER: float = 3.4
+
 ## What one trip to the floor costs in condition. Small per event and deliberately
 ## ordered like the delays -- a libero who hits the floor every rally should feel
 ## it by the fifth set, not by the second point.
@@ -8438,6 +8498,7 @@ func _finish(
 	result.terminal_outcome = outcome
 	result.decisive_actor_id = decisive_actor_id
 	result.recovery_fatigue = recovery_fatigue_cost.duplicate()
+	result.exertion_fatigue = exertion_cost.duplicate()
 	var chosen_key := explanation_key if not explanation_key.is_empty() else outcome
 	## The caller's names win over the accumulated ones: an opponent's hitter is
 	## passed explicitly precisely because `narration["hitter"]` holds ours.
@@ -8707,6 +8768,76 @@ func _ensure_event_trajectories(result: Resource) -> void:
 		)
 
 
+## Book condition spent by one player, from any channel.
+##
+## Every charge in the rally funnels through one adder so the total is one number
+## and the match layer has one thing to charge. Costs are recorded against the
+## player id rather than the player, because the two sides' rosters are different
+## objects and the id is what `RallyResult` can carry.
+func _charge_exertion(player: VolleyballPlayer, amount: float) -> void:
+	if player == null or amount <= 0.0:
+		return
+	## Surcharged by how blown they already are, which is what makes windedness a
+	## feedback term rather than a within-rally cosmetic: the twenty-contact
+	## exchange that empties a defender is also the exchange that ages them.
+	## Applied before the charge is added so a player is never surcharged by work
+	## they have not done yet.
+	exertion_cost[player.id] = float(exertion_cost.get(player.id, 0.0)) \
+		+ amount * FatigueModel.winded_surcharge(_winded_fraction(player))
+
+
+## How blown this player is *right now*, inside this rally.
+##
+## Read straight off the exertion already booked this rally, which is the same
+## number the match layer will charge as fatigue -- so windedness needs no state
+## of its own and cannot drift out of step with the work that caused it. It
+## resets when `exertion_cost` does, at the serve, which is exactly the clock a
+## rally-scale quantity should keep.
+func _winded_fraction(player: VolleyballPlayer) -> float:
+	if player == null:
+		return 0.0
+	return FatigueModel.winded_fraction(
+		float(exertion_cost.get(player.id, 0.0)),
+		float(player.stamina) / 100.0,
+	)
+
+
+## What this contact cost the legs, if it left the floor at all.
+##
+## An attack and a block are always jumps. A set is one only when the setter
+## actually left the floor -- `setter_capability.reach_state` already says, and a
+## bump set from the deck should cost nothing extra. A serve is one only for the
+## jump styles, which `GeometricAttackPromotion.serve_effort_for_style` already
+## prices and which is reused here rather than re-deciding with a `contains`
+## test, since that disagreement has been made before.
+func _charge_jump(actor_id: int, event_type: int, metadata: Dictionary) -> void:
+	if actor_id < 0:
+		return
+	var effort := 0.0
+	match event_type:
+		RallyEventModel.EventType.ATTACK:
+			effort = float(metadata.get("jump_multiplier", 1.0))
+		RallyEventModel.EventType.BLOCK:
+			effort = 1.0
+		RallyEventModel.EventType.SET:
+			var capability: Dictionary = metadata.get("setter_capability", {})
+			effort = 1.0 if str(capability.get("reach_state", "standing")) \
+				in ["jump", "beyond_reach"] else 0.0
+		RallyEventModel.EventType.SERVE:
+			effort = GeometricAttackPromotionModel.serve_effort_for_style(
+				str(metadata.get("serve_style", "Standing"))
+			)
+	if effort <= 0.0:
+		return
+	exertion_cost[actor_id] = float(exertion_cost.get(actor_id, 0.0)) \
+		+ JUMP_EFFORT_COST * clampf(effort, 0.0, 1.4)
+	## The assisting blocker jumped too, and was charged for nothing until now.
+	var assist_id := int(metadata.get("assist_id", -1))
+	if assist_id >= 0 and event_type == RallyEventModel.EventType.BLOCK:
+		exertion_cost[assist_id] = float(exertion_cost.get(assist_id, 0.0)) \
+			+ JUMP_EFFORT_COST
+
+
 func _add_event(
 	result: Resource,
 	event_type: int,
@@ -8720,6 +8851,13 @@ func _add_event(
 	detail: String,
 	metadata: Dictionary = {},
 ) -> void:
+	## **Every jump in the game passes through here too.** Charging at the sites
+	## that jump would mean finding all of them -- the attack, the block, the
+	## assisting block, the jump set, the jump serve, on both sides, in first-ball
+	## and transition variants -- and missing one silently. One place that sees
+	## every contact is one place that can price them, and the effort each contact
+	## used is already on the event's own metadata.
+	_charge_jump(actor_id, event_type, metadata)
 	var event: Resource = RallyEventModel.new()
 	event.sequence = result.events.size()
 	event.event_type = event_type
@@ -10214,7 +10352,9 @@ const ATTACK_COMMITMENT_ERROR_SHIFT: float = 0.06
 
 
 func _attack_missed(
-	attack_quality: float, decisiveness: float = 0.5
+	attack_quality: float,
+	decisiveness: float = 0.5,
+	hitter: VolleyballPlayer = null,
 ) -> bool:
 	var threshold := ATTACK_ERROR_THRESHOLD \
 		+ (clampf(decisiveness, 0.0, 1.0) - 0.5) * 2.0 \
@@ -10224,7 +10364,17 @@ func _attack_missed(
 			/ ATTACK_ERROR_RESPONSE_WIDTH
 	))
 	var miss_chance := lerpf(ATTACK_ERROR_FLOOR, ATTACK_ERROR_CEILING, response)
-	return rng.randf() < miss_chance
+	## **Both error channels, because a swing can go wrong either way.** A spent
+	## hitter is beaten to the ball's own timing -- late off the floor, reaching
+	## at a set that has already dropped -- which is forced; and separately swings
+	## long at nothing, which is not. `attack_quality` already carries the
+	## attribute loss, so adding these is not double-charging the same tiredness:
+	## it is the mistake the degraded attributes do not produce on their own,
+	## which is the whole reason the spent stage exists as a channel.
+	if hitter != null:
+		miss_chance += FatigueModel.forced_error_bias(hitter.fatigue) \
+			+ FatigueModel.unforced_error_bias(hitter.fatigue)
+	return rng.randf() < clampf(miss_chance, 0.0, 0.85)
 
 
 ## How often this serve misses, given how much the server is asking of it.
@@ -10256,7 +10406,16 @@ func _serve_error_chance(server: VolleyballPlayer, tactical_risk: float) -> floa
 		+ _rating(server, "serve_aggression") * SERVE_RISK_DEMAND * 0.4,
 		0.0, 1.0,
 	)
-	return clampf(SERVE_ERROR_CEILING * demand * (1.0 - control), 0.005, 0.45)
+	## And the spent stage on top, as its own term rather than through the
+	## attributes. A serve is the one contact in the game with no opponent on it,
+	## so a serve missed by an exhausted server is the purest unforced error there
+	## is -- which is exactly why it is the *unforced* channel that is added here
+	## and not the forced one.
+	return clampf(
+		SERVE_ERROR_CEILING * demand * (1.0 - control)
+			+ FatigueModel.unforced_error_bias(server.fatigue),
+		0.005, 0.45,
+	)
 
 
 ## One set, wherever in the rally and whichever side of the net.
@@ -11956,17 +12115,38 @@ func _rating(player: VolleyballPlayer, property_name: String) -> float:
 	if player == null:
 		return 0.5
 	var raw_rating := float(player.get(property_name)) / 100.0
+	## **Two clocks, and work rate fights both.** `effective_fatigue` is the match
+	## clock read through this player's willingness to keep working; the winded
+	## term is the rally clock, and it only touches the same range attributes the
+	## `laboured` stage does, because a blown player reads the play exactly as
+	## well as they did thirty seconds ago and simply cannot get there.
+	var work_rate := float(player.work_rate) / 100.0
+	var scale := FatigueModel.attribute_scale(
+		FatigueModel.effective_fatigue(player.fatigue, work_rate), property_name
+	)
+	if FatigueModel.is_range_attribute(property_name):
+		scale *= FatigueModel.winded_scale(_winded_fraction(player), work_rate)
 	return clampf(
-		raw_rating * (1.0 - player.fatigue * 0.18) \
-			* player.confidence_execution_scale() + player.current_form * 0.06,
+		raw_rating * scale * player.confidence_execution_scale() \
+			+ player.current_form * 0.06,
 		0.05, 1.0,
 	)
 
 
 func _power_rating(player: VolleyballPlayer, property_name: String) -> float:
 	if property_name == "attack_power":
+		## Power is a range quality even though its name is not on the list: it is
+		## bought with the approach and the jump, both of which the laboured stage
+		## takes. A tired hitter who still picks the right shot and cannot hit it
+		## hard is the same player as the one who still reads the ball and cannot
+		## reach it.
+		var work_rate := float(player.work_rate) / 100.0
+		var effective := FatigueModel.effective_fatigue(player.fatigue, work_rate)
 		return clampf(float(player.usable_attack_power()) / 100.0 \
-			* (1.0 - player.fatigue * 0.18) * player.confidence_execution_scale() \
+			* FatigueModel.broad_scale(effective) \
+			* FatigueModel.range_scale(effective) \
+			* FatigueModel.winded_scale(_winded_fraction(player), work_rate) \
+			* player.confidence_execution_scale() \
 			+ player.current_form * 0.06, 0.05, 1.0)
 	var base := _rating(player, property_name)
 	var mass_bonus := clampf((player.mass_kg - 82.0) / 48.0, -0.50, 1.0) * 0.07

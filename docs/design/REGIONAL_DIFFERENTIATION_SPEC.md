@@ -96,10 +96,28 @@ mirrors whoever last won. Does not act inside a match.
 
 ### C8. Region ratings · `DEFINITIONS` `physical` / `technical` / `mental`
 
-**INERT.** Eight regions carry three numbers each, and **nothing in the codebase
-reads any of them** — not the simulator, not generation, not the UI. Twenty-four
-values, zero consumers. They are the most visible statement of what a region is
-and they are pure fiction.
+**LIVE as of Part 5** — was INERT. Eight regions carried three numbers each and
+nothing in the codebase read any of them: twenty-four values, zero consumers,
+and the most visible statement of what a region is. They now set a broad,
+small ceiling bias per attribute band (2 is neutral, each point is worth 2.6),
+sitting underneath `REGION_SPECIALTY` rather than competing with it.
+
+### C9. Regional curves · `regions.gd REGIONAL_CURVES`
+
+**LIVE as of Part 5.** `fatigue_resistance` and `read_rate`, both read from
+`home_region`. The first channel in the game that makes a region play
+differently in the fourth set than in the first.
+
+### C10. Ceiling penalties · `player_generator.gd REGION_CEILING_PENALTY`
+
+**LIVE as of Part 5.** The first table that takes something away, so a tradition
+can have a hole in it rather than only a peak. A'ace only.
+
+### C11. Selective recruitment · `world_population._recruitment_appetite`
+
+**LIVE as of Part 5.** What a region *shops for*, distinct from how attractive it
+is. A'ace only; every other region returns 1.0 and the ordinary migration model
+is untouched.
 
 ---
 
@@ -109,8 +127,8 @@ Each is named in a tagline and has no implementation.
 
 | channel | would carry | substrate today | status |
 |---|---|---|---|
-| `fatigue_resistance` | Pāwa Hitō's flat curve | fatigue accumulates and reaches `_rating` at `1 − fatigue × 0.18`; `stamina_fatigue_scale` maps stamina onto 1.4–0.6 | **UNBUILT** — substrate live and unattached |
-| `read_rate` | Taktikã finding your pattern | `Familiarity.record_exposure` at four sites, live in-match | **UNBUILT** — substrate live |
+| `fatigue_resistance` | Pāwa Hitō's flat curve | — | **BUILT**, see Part 5 |
+| `read_rate` | Taktikã finding your pattern | — | **BUILT**, see Part 5 |
 | `home_adaptation` | Bloc du Larg re-aiming the block | opponent-only equivalents exist | **UNBUILT** — substrate half |
 | `composure_decay` | who cracks in set five | `match_confidence`, `flow` | **UNBUILT** |
 | regional body-type bias | who a region *looks* like | `assign_body_type` is `rng.randi_range` over all types, region-blind | **UNBUILT** |
@@ -146,7 +164,7 @@ is *conservatism*, not *reading*. **Lock the disposition; the identity needs
 Highest tempo spread in the league (0.993) and a fast mean. Before
 `tempo_variation` became a rate, it was Landavol with a coin flip. **Lock as is.**
 
-### ⚠️ Pāwa Hitō — INEFFECTIVE in its current state
+### ✅ Pāwa Hitō — resolved in Part 5 (was INEFFECTIVE)
 
 `transition_commitment` 0.94 now produces the fastest mean tempo (1.86), which
 is real but is *the same currency Ispayk and Spëddigh trade in*. Its actual
@@ -173,7 +191,7 @@ than an identity.
 principle axes of its own (`read_discipline`, `risk_aversion`) since it owns
 none of the existing seven.
 
-### ⚠️ A'ace — INEFFECTIVE as designed, for a different reason
+### ✅ A'ace — resolved in Part 5 (was INEFFECTIVE)
 
 All seven axes above neutral, no axis below. Physique positive on all three.
 Three specialty attributes, all glamour. Nothing is *traded*. Its nearest
@@ -185,7 +203,7 @@ easily — bought squads with no shared tradition — and the natural home is
 `starting_identity_state` already computes `familiarity` and `cohesion` from
 alignment distance. **Lock only once A'ace pays for its breadth somewhere.**
 
-### ⚠️ Ispayk — sound mechanically, but it is eating Pāwa and A'ace
+### ✅ Ispayk — re-cut in Part 5; the overlap it caused is resolved
 
 `decisiveness` 0.90 and `pin_focus` 0.88 are the two best-wired axes after
 serve, `+14` ego, and the largest frame in the league. It is the strongest
@@ -231,3 +249,119 @@ rather than an extreme.**
 Only after 1–4 can Pāwa Hitō, Taktikã and A'ace be locked. Xérvu, Spëddigh,
 Ispayk and Landavol can be locked now. Bloc du Larg can be locked in
 disposition, with its adaptation identity pending 5.
+
+---
+
+## Part 5 — Built since this spec was written
+
+### Fatigue is now three stages, and it is earned by work
+
+`scripts/simulation/fatigue_model.gd`. The model it replaces was one line —
+`raw * (1.0 - fatigue * 0.18)` — which is linear, so the first percent of
+tiredness cost what the last percent cost, and single-channel, so a tired setter
+and a tired middle degraded identically.
+
+| stage | onset | what it takes |
+|---|---|---|
+| **working** | 0.00 | every attribute, a little (max 7%), saturating by 0.55 |
+| **laboured** | 0.34 | work rate, explosiveness, jump, speed, arm speed (a further 22%) |
+| **spent** | 0.68 | forced errors (+0.14), then unforced (+0.09, squared into the tail) |
+
+Each channel is logarithmic — most of what a stage takes, it takes early — and
+the escalation a player feels comes from the *stages arriving in sequence*, not
+from any one accelerating. Reads as tiredness, then forced errors, then unforced
+ones, which is the brief.
+
+Mental and physical now diverge, which the single multiplier could not express:
+at full fatigue a mental attribute is at ×0.930 and a physical one at ×0.725,
+where the old model put both at ×0.820. At zero fatigue the new model is exactly
+1.0, so every calibration fixture is untouched.
+
+**And fatigue is now charged for what a voli did**, not for being on the court.
+Two chokepoints catch everything: `_reached_point` for every metre travelled
+(with a sprint multiplier for anything that is not a lateral shuffle) and
+`_add_event` for every jump in the game — attack, block, assisting block, jump
+set, jump serve, both sides, all variants. Charging at the jump *sites* would
+have meant finding all of them and missing one silently.
+
+Measured over a five-set match (`tools/run_fatigue_stage_probe.gd`):
+
+```
+after         p10      p50      p90   stage at the median
+set 1       0.000    0.103    0.147   working
+set 3       0.000    0.271    0.470   working
+set 4       0.000    0.389    0.600   laboured
+set 5       0.000    0.522    0.743   laboured   (p90 is spent, +0.058 error)
+
+who actually tired, by role
+  Opposite         0.650      Outside Hitter  0.572
+  Setter           0.522      Middle Blocker  0.372
+  Libero           0.274
+```
+
+A 2.4× spread between the libero and the opposite, which the flat per-rally
+figure could not produce at all. The middle sits lower than the pins because the
+libero replaces them in the back row — emergent, and correct.
+
+Both cost constants were re-anchored *against that measurement*: at the first
+values tried, the most-worked starter finished a five-setter at 0.531 and the
+`spent` stage — and therefore the whole error channel — was unreachable. The
+ratio between jump and travel cost is the design and was not touched; only the
+scale was wrong.
+
+### `fatigue_resistance` and `read_rate`
+
+`REGIONAL_CURVES` in `regions.gd`, the second layer this document argued for.
+Both read from `home_region` rather than `club_region`: these are habits formed
+growing up, so signing a Pāwan buys their curve and a club's endurance becomes
+the aggregate of who it raised and who it bought — which is the shape regional
+academies will need on the day they arrive.
+
+Worth, on the match measured above: a Pāwa Hitō median voli sits at **0.287 and
+is still `working`** where a Landavol one is at 0.522 and `laboured`. That is
+the identity, and it is the first thing in the game that makes a long match
+different from a short one.
+
+### The three re-cuts
+
+**Bloc du Larg** — from analysis to reach. `court_vision` and
+`tactical_discipline` out, `lateral_speed`, `explosiveness` and
+`reception_stability` in. The wall is not a side that out-thinks you; it is long
+enough and quick enough off the floor to touch the shot it guessed *wrong*
+about. Whatever adaptation the region shows is then a consequence of touching
+more balls rather than a separate talent for reading them.
+
+**Ispayk** — from a broad attacking region to one polished terminal swing.
+`shot_variety` removed *as the point of the change*: a side that can hit six
+different shots is not predictable, and predictability is what Ispayk is
+supposed to cost. `approach_timing` and `attack_accuracy` are the polish;
+`block_timing` dropped because it sat in three regions at once.
+
+**A'ace** — the first region in the game with a real cost.
+`REGION_CEILING_PENALTY` takes 12, 12 and 9 off `tactical_discipline`,
+`decision_making` and `court_vision` for anybody A'ace *raises*; a voli it signs
+from Taktikã keeps Taktikã's ceilings, which is the mechanism of the region
+rather than a debuff on the individual. `_recruitment_appetite` makes its
+migration pull selective — terminal ability, ego and leadership, ranging 0.45 to
+2.35 so it genuinely sorts. Its low birth weight (0.35) and high pull (3.40)
+already existed and needed nothing.
+
+### `physical` / `technical` / `mental` now do something
+
+Twenty-four values that nothing in the codebase read. They are a region's
+*breadth of emphasis*, so they act broad and small, underneath
+`REGION_SPECIALTY`'s sharp +16 rather than competing with it: 2 is the world
+average and does nothing, and each point away is worth 2.6 on every attribute in
+that band. Landavol is 0.0 on all three bands, as the symmetry fixture requires.
+
+A'ace's mental rating of 1 costs it 2.6 on decision-making on top of the 12 from
+its academy gap — **−14.6 total** — so "poor tactical decision making" is stated
+twice by two systems that agree.
+
+### Still unbuilt
+
+`home_adaptation`, `composure_decay`, opponent-side `pin_focus` and
+`emotional_expression`, regional body-type and serve-style bias, and Taktikã's
+own axes (`read_discipline`, `risk_aversion`). Taktikã now has `read_rate` at
+1.55 — the largest curve in the league — which is its first real mechanism, but
+it still owns none of the seven dispositions.

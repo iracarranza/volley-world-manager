@@ -89,21 +89,70 @@ const REGION_WINGSPAN_BIAS := {
 const REGION_SPECIALTY := {
 	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness", "approach_timing", "attack_accuracy"],
 	"Spëddigh": ["work_rate", "acceleration", "lateral_speed", "tempo_control", "reception_balance"],
-	## Blocking, and only blocking. This carried `anticipation`, which is the
-	## most cross-cutting attribute in the engine -- 0.30 of dig capability, 0.34
-	## of a blocker's read and 0.10 of their contact -- so the blocking tradition
-	## quietly became the best digging tradition too, gaining 10.0 points of dig
-	## rate where the region actually named for digging gained 3.8. It trades
-	## that for reach and discipline, which reach the block and nothing else.
-	"Bloc du Larg": ["block_timing", "jump_reach", "court_vision",
-		"tactical_discipline"],
+	## **Big blockers who can touch anything, not a side that out-thinks you.**
+	##
+	## This used to be blocking plus `court_vision` and `tactical_discipline`,
+	## which spelled the region as *analysis*: a side that studies you and adjusts.
+	## That was never what the wall is for. A Largen block does not need to guess
+	## right, because it is long enough and quick enough off the floor to get a
+	## hand on the shot it guessed wrong about -- the threat is coverage, not
+	## prediction, and a hitter facing it finds every lane already occupied rather
+	## than finding the one lane that was scouted.
+	##
+	## So the analysis attributes go and the reach and the reaction come in.
+	## `lateral_speed` is a blocker closing to a pin they did not start at;
+	## `explosiveness` is getting up a second time on a broken play. Whatever
+	## adaptation the region shows is then a *consequence* of touching more balls
+	## rather than a separate talent for reading them, which is the design the
+	## fiction actually asks for.
+	##
+	## `anticipation` was removed earlier and stays removed: it is 0.30 of dig
+	## capability and 0.34 of a blocker's read, so the blocking tradition quietly
+	## became the best digging tradition too -- 10.0 points of dig rate against
+	## 3.8 for the region actually named for digging.
+	"Bloc du Larg": ["block_timing", "jump_reach", "lateral_speed",
+		"explosiveness", "reception_stability"],
 	"Landavol": [],
 	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
 		"serve_aggression", "serve_variation"],
 	"Taktikã": ["decision_making", "composure", "tactical_discipline",
 		"adaptability", "unpredictability"],
-	"Ispayk": ["attack_power", "arm_speed", "jump_reach", "block_timing", "shot_variety"],
-	"A'ace": ["attack_power", "serve_power", "block_timing"],
+	## **One polished swing, fed as often as possible.** Ispayk is not Pāwa Hitō
+	## with a bigger frame: Pāwa's claim is *repetition* -- the sixth attack of a
+	## rally as good as the first -- and Ispayk's is a single terminal contact so
+	## well drilled that it goes through a block rather than around one. The
+	## bomba is a technique, not an engine.
+	##
+	## So `shot_variety` goes, and it is the point of the change rather than a
+	## trim: a side that can hit six different shots is not predictable, and being
+	## predictable is what Ispayk is supposed to *cost*. What replaces it is more
+	## of the same swing -- `approach_timing` and `attack_accuracy` are the
+	## polish, `attack_power` and `arm_speed` the terminal contact. A defence that
+	## has seen it enough times knows exactly where it is going, which is what
+	## makes the region beatable by the traditions built on reading.
+	##
+	## `block_timing` is dropped for a different reason: it sat in three regions
+	## at once, so the blocking tradition, the bomba tradition and the bought
+	## squad all claimed it and none of them owned it.
+	"Ispayk": ["attack_power", "arm_speed", "jump_reach", "approach_timing",
+		"attack_accuracy"],
+	## **Bought terminal ability, and nothing that makes a team of it.**
+	##
+	## A'ace does not develop volis, it assembles them, and what it shops for is
+	## exactly what shows on a highlight: somebody who ends points, wants the
+	## ball, and is already good now. `attack_power` and `block_timing` are the
+	## two point-ending contacts in the sport and both stay. `leadership` joins
+	## them because A'ace recruits for it as openly as for the swing -- a squad of
+	## strangers is bought a captain rather than growing one.
+	##
+	## What it cannot buy is a shared idea of how to play, and that is priced as a
+	## real cost rather than a smaller bonus: see `REGION_TACTICAL_PENALTY`, which
+	## takes `tactical_discipline`, `decision_making` and `court_vision` off
+	## anybody A'ace raised. The fiction is a region with no historical volleyball
+	## presence, so its own academies teach the swing and not the game -- and a
+	## strong team that is not coached into strong decisions does not find the
+	## situations its terminal players are bought for.
+	"A'ace": ["attack_power", "block_timing", "leadership"],
 
 	## Minor regions: two or three attributes, not four to six. The tier's
 	## whole proposition is a narrow, deep tradition rather than a broad one,
@@ -657,6 +706,87 @@ const SECONDARY_TIER_BONUS: int = 5
 const TERTIARY_TIER_PENALTY: int = -8
 const SPECIALTY_BONUS: int = 16
 
+## What a region's `physical` / `technical` / `mental` ratings actually do.
+##
+## **They did nothing at all.** Eight regions carry three of them each and, before
+## this, not one of the twenty-four values was read anywhere in the codebase --
+## not by the simulator, not by generation, not by the interface. They are the
+## most visible statement of what a region is (`docs/world/` describes regions
+## by them) and they were fiction attached to nothing, which is `FAILURE_MODES.md`
+## §0's own shape: a value nobody set, or in this case a value nobody read.
+##
+## What they mean is a region's *breadth of emphasis*, so what they should do is
+## broad and small, sitting underneath `REGION_SPECIALTY`'s sharp +16 rather than
+## competing with it. A rating of 2 is the world average and does nothing; each
+## point away from it is worth `RATING_CEILING_STEP` on every attribute in that
+## band. Pāwa Hitō at physical 4 raises every physical attribute a little, which
+## is not the same claim as its five named specialties and is exactly the claim
+## the number makes.
+##
+## Bands rather than the six display categories, because the ratings are three:
+## `technical` covers the craft categories and `mental` the reading ones, which
+## is how the taglines already use the words.
+const RATING_CEILING_STEP: float = 2.6
+const RATING_NEUTRAL: float = 2.0
+const RATING_BANDS := {
+	"physical": ["Physical"],
+	"technical": ["Attacking", "Setting & Ball Control", "Serving"],
+	"mental": ["Mental & Tactical", "Defensive"],
+}
+
+
+## Which of the three ratings governs this attribute, or an empty string.
+##
+## Built once on first use rather than declared, so the mapping cannot drift out
+## of step with `AttributeProfiles.CATEGORY_ATTRIBUTES` -- the failure this file
+## has already had with `BODY_TYPES` against `PRODUCE_BODIES`.
+static var _rating_for_attribute: Dictionary = {}
+
+
+static func rating_band_for(property_name: String) -> String:
+	if _rating_for_attribute.is_empty():
+		for rating_name in RATING_BANDS:
+			for category in RATING_BANDS[rating_name]:
+				for attribute in AttributeProfiles.CATEGORY_ATTRIBUTES.get(
+					category, []
+				):
+					_rating_for_attribute[str(attribute)] = str(rating_name)
+	return str(_rating_for_attribute.get(property_name, ""))
+
+
+## What this region's ratings are worth to this attribute's ceiling.
+static func region_rating_bonus(
+	region_name: String, property_name: String
+) -> float:
+	var band := rating_band_for(property_name)
+	if band.is_empty():
+		return 0.0
+	var definition := VolleyballRegions.definition(region_name)
+	return (float(definition.get(band, RATING_NEUTRAL)) - RATING_NEUTRAL) \
+		* RATING_CEILING_STEP
+
+
+## Attributes a region's own upbringing leaves *short*, and by how much.
+##
+## **The first table in this file that takes something away**, and it exists
+## because an identity built only from bonuses cannot describe a tradition with a
+## hole in it. A'ace is the case that forced it: a region with no historical
+## volleyball presence, buying terminal ability from everywhere and teaching the
+## swing without the game. Expressed as three fewer bonuses that would read as a
+## slightly duller version of everybody else; expressed as a penalty it reads as
+## what it is -- volis who can end a point and cannot find the situation that
+## needs ending.
+##
+## Applied to the *ceiling*, not the current value, so it is a limit on what
+## A'ace's own academies can produce rather than a debuff on the individual. A
+## voli A'ace signs from Taktikã keeps Taktikã's ceilings, which is the whole
+## mechanism of the region: it is only its home-grown players who are short.
+const REGION_CEILING_PENALTY := {
+	"A'ace": {
+		"tactical_discipline": -12, "decision_making": -12, "court_vision": -9,
+	},
+}
+
 
 static func _tier_bonus(
 	property_name: String,
@@ -714,6 +844,7 @@ static func _apply_attributes(
 	var specialty_bonus := SPECIALTY_BONUS + int(overlay.get("specialty_bonus_delta", 0.0))
 	var talent := talent_override if talent_override >= 0.0 else float(_talent_level(rng, academy))
 
+	var ceiling_penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
 	var ceilings := {}
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
 		ceilings[property_name] = clampf(
@@ -721,6 +852,8 @@ static func _apply_attributes(
 			+ float(_tier_bonus(
 				property_name, primary_list, secondary_list, specialty_list, specialty_bonus
 			))
+			+ float(ceiling_penalty.get(property_name, 0))
+			+ region_rating_bonus(region_name, property_name)
 			+ _innate_deviation(rng),
 			1.0, 99.0,
 		)
