@@ -112,26 +112,92 @@ const RUN_TORSO_RADIANS: float = -0.16
 const WALK_BOB_METERS: float = 0.028
 const RUN_BOB_METERS: float = 0.082
 
+## ## The ready stance
+##
+## **What a stationary voli should be doing, which is not standing.** `gait_blend`
+## scales every joint toward zero as speed falls, and zero on this rig is a
+## person standing straight up with their arms at their sides. That is the pose
+## six of the twelve players on court hold for most of a rally, and it is the
+## single least volleyball thing in the game -- nobody on a court ever stands
+## like that, because the whole point of the sport between contacts is being
+## ready to move.
+##
+## So the floor is a stance rather than a rest position: knees bent, hips back,
+## weight forward, hands up. The gait interpolates *out of* it as speed rises
+## rather than out of nothing, which also means a player decelerating settles
+## into a stance instead of straightening up.
+const READY_HIP_DEGREES: float = 14.0
+const READY_KNEE_DEGREES: float = -42.0
+const READY_ARM_DEGREES: float = -30.0
+const READY_ELBOW_DEGREES: float = 54.0
+const READY_TORSO_RADIANS: float = -0.30
+
+## ## Travelling somewhere other than forwards
+##
+## A gait driven by distance alone can only describe running *at* something. Half
+## of what a volleyball player does on the floor is neither: a defender opens and
+## backpedals to cover deep, a passer shuffles along the line without ever
+## crossing their feet, and both look nothing like a jog.
+##
+## Both are expressed as scalings of the same stride rather than as separate
+## animations, because they are: a backpedal is a short-stepped run with the
+## trunk upright, and a shuffle is a run whose hips barely swing because the feet
+## are forbidden to pass each other. Blending keeps a player who turns while
+## moving continuous through the change, which two clips could not.
+const BACKPEDAL_HIP_SCALE: float = 0.62
+const BACKPEDAL_KNEE_SCALE: float = 1.15
+## Backpedalling puts the chest *up*, not down: the trunk counterweights behind
+## the hips and the eyes stay on the ball. Positive is backward on this rig.
+const BACKPEDAL_TORSO_RADIANS: float = 0.12
+## A shuffle's feet never cross, so the thighs barely swing -- almost all of the
+## motion is the pelvis sliding sideways over bent knees.
+const SHUFFLE_HIP_SCALE: float = 0.28
+const SHUFFLE_KNEE_SCALE: float = 1.30
+const SHUFFLE_BOB_SCALE: float = 0.35
+const SHUFFLE_ARM_SCALE: float = 0.40
+
 
 ## Every joint locomotion needs, for one instant of one stride.
 ##
 ## `speed_mps` decides the gait; `cycle` decides where in it. Handedness does not
 ## enter -- people do not run left- or right-handed.
-static func resolve(cycle: float, speed_mps: float) -> Dictionary:
+static func resolve(
+	cycle: float,
+	speed_mps: float,
+	## Which way the voli is travelling *relative to the way they are facing*, in
+	## radians. Zero is straight ahead, PI is a backpedal, and plus or minus a
+	## right angle is a lateral shuffle. Defaulted so every existing caller keeps
+	## the forward gait it already had.
+	travel_heading_radians: float = 0.0,
+) -> Dictionary:
 	var speed := maxf(speed_mps, 0.0)
+	## Decomposed rather than branched on, so a defender opening from a shuffle
+	## into a backpedal passes through the blend instead of snapping between two
+	## clips.
+	var backward := clampf(-cos(travel_heading_radians), 0.0, 1.0)
+	var sideways := clampf(absf(sin(travel_heading_radians)), 0.0, 1.0)
 	var run_blend := smoothstep(WALK_SPEED_MPS, RUN_SPEED_MPS, speed)
 	## Separate from `run_blend`: this is how much gait there is at all, and it
 	## goes to zero when standing so a stationary player's legs are straight
 	## rather than frozen mid-stride.
 	var gait_blend := smoothstep(IDLE_SPEED_MPS, WALK_SPEED_MPS, speed)
 	var stance_share := lerpf(WALK_STANCE_SHARE, RUN_STANCE_SHARE, run_blend)
-	var hip_amplitude := lerpf(WALK_HIP_DEGREES, RUN_HIP_DEGREES, run_blend)
+	## Shorter steps going backwards, and barely any thigh swing going sideways.
+	var stride_scale := lerpf(1.0, BACKPEDAL_HIP_SCALE, backward) \
+		* lerpf(1.0, SHUFFLE_HIP_SCALE, sideways)
+	## And deeper knees in both, which is the same fact from the other side: a
+	## body that cannot lengthen its stride stays low instead.
+	var knee_scale := lerpf(1.0, BACKPEDAL_KNEE_SCALE, backward) \
+		* lerpf(1.0, SHUFFLE_KNEE_SCALE, sideways)
+	var hip_amplitude := lerpf(
+		WALK_HIP_DEGREES, RUN_HIP_DEGREES, run_blend
+	) * stride_scale
 	var stance_knee := lerpf(
 		WALK_STANCE_KNEE_DEGREES, RUN_STANCE_KNEE_DEGREES, run_blend
-	)
+	) * knee_scale
 	var swing_knee := lerpf(
 		WALK_SWING_KNEE_DEGREES, RUN_SWING_KNEE_DEGREES, run_blend
-	)
+	) * knee_scale
 
 	var right := _leg(
 		fposmod(cycle, 1.0), stance_share, hip_amplitude, stance_knee, swing_knee
@@ -158,24 +224,50 @@ static func resolve(cycle: float, speed_mps: float) -> Dictionary:
 	var bob := cos(TAU * 2.0 * (cycle - midstance) + PI * run_blend) \
 		* lerpf(WALK_BOB_METERS, RUN_BOB_METERS, run_blend)
 
+	## Arms quieten in a shuffle: they are held out for balance rather than
+	## driving, which is most of what tells a shuffle from a run at a glance.
+	var arm_swing := arm_scale * lerpf(1.0, SHUFFLE_ARM_SCALE, sideways)
+	## The trunk. Forward in a run, *back* in a backpedal, and near square in a
+	## shuffle -- a player sliding along the line is not leaning anywhere.
+	var torso := lerpf(
+		lerpf(WALK_TORSO_RADIANS, RUN_TORSO_RADIANS, run_blend),
+		BACKPEDAL_TORSO_RADIANS, backward,
+	) * lerpf(1.0, 0.5, sideways)
+
+	## **Interpolated out of the ready stance, not out of zero.**
+	##
+	## Every joint used to be scaled by `gait_blend`, so a stationary voli got
+	## zeros -- straight legs, level shoulders, arms hanging. Six players hold
+	## that for most of a rally. Blending from the stance instead means standing
+	## still *is* a pose, and a player decelerating settles into it rather than
+	## straightening up as they arrive.
 	return {
 		"gait_name": gait_name(speed),
 		"run_blend": run_blend,
 		"gait_blend": gait_blend,
-		"right_hip_degrees": right.x * gait_blend,
-		"right_knee_degrees": right.y * gait_blend,
-		"left_hip_degrees": left.x * gait_blend,
-		"left_knee_degrees": left.y * gait_blend,
-		## Negated against the same side's hip: that is the counter-swing.
-		"right_arm_degrees": -right.x * arm_scale * gait_blend,
-		"left_arm_degrees": -left.x * arm_scale * gait_blend,
+		"backpedal_blend": backward,
+		"shuffle_blend": sideways,
+		"right_hip_degrees": lerpf(READY_HIP_DEGREES, right.x, gait_blend),
+		"right_knee_degrees": lerpf(READY_KNEE_DEGREES, right.y, gait_blend),
+		"left_hip_degrees": lerpf(READY_HIP_DEGREES, left.x, gait_blend),
+		"left_knee_degrees": lerpf(READY_KNEE_DEGREES, left.y, gait_blend),
+		## Negated against the same side's hip: that is the counter-swing. Both
+		## arms rest at the same carriage, which is what makes the stance a stance
+		## rather than a stride caught mid-swing.
+		"right_arm_degrees": lerpf(
+			READY_ARM_DEGREES, -right.x * arm_swing, gait_blend
+		),
+		"left_arm_degrees": lerpf(
+			READY_ARM_DEGREES, -left.x * arm_swing, gait_blend
+		),
 		"elbow_degrees": lerpf(
-			WALK_ELBOW_DEGREES, RUN_ELBOW_DEGREES, run_blend
-		) * gait_blend,
-		"torso_pitch_radians": lerpf(
-			WALK_TORSO_RADIANS, RUN_TORSO_RADIANS, run_blend
-		) * gait_blend,
-		"bob_meters": bob * gait_blend,
+			READY_ELBOW_DEGREES,
+			lerpf(WALK_ELBOW_DEGREES, RUN_ELBOW_DEGREES, run_blend),
+			gait_blend,
+		),
+		"torso_pitch_radians": lerpf(READY_TORSO_RADIANS, torso, gait_blend),
+		## Nothing bobs standing still, so this one really does go to zero.
+		"bob_meters": bob * gait_blend * lerpf(1.0, SHUFFLE_BOB_SCALE, sideways),
 	}
 
 

@@ -82,6 +82,28 @@ const STRIPS: Array[Dictionary] = [
 		"posture": "planted",
 	},
 	{
+		## The stance and the three floor gaits, as one row each. Driven by
+		## `ground_speed_mps` and `travel_heading_offset` rather than by a phase,
+		## because that is what the gait is a function of -- a strip that swept
+		## time would show one gait eight times.
+		"name": "gait_ready_to_run",
+		"caption": "IDLE -> RUN: the ready stance opening into a stride",
+		"gait_sweep": [0.0, 4.6],
+		"gait_heading": 0.0,
+	},
+	{
+		"name": "gait_backpedal",
+		"caption": "BACKPEDAL: short steps, chest up, eyes still front",
+		"gait_sweep": [0.0, 3.4],
+		"gait_heading": PI,
+	},
+	{
+		"name": "gait_shuffle",
+		"caption": "SHUFFLE: feet never cross, hips low and flat",
+		"gait_sweep": [0.0, 3.4],
+		"gait_heading": PI * 0.5,
+	},
+	{
 		## Not a phase sweep: eight *different balls*, each at the same instant of
 		## the same pass. The whole claim of `PlatformAim` is that the forearms
 		## follow the ball, and a strip that varied time instead of geometry could
@@ -200,6 +222,18 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 				lerpf(RECOVERY_STRIP_FROM_PHASE, 1.0, progress),
 				Vector2.RIGHT, true,
 			)
+		elif strip.has("gait_sweep"):
+			## Speed rises across the row and the stride advances with it, so the
+			## row reads as one continuous acceleration rather than eight
+			## snapshots of unrelated velocities.
+			var sweep: Array = strip.gait_sweep
+			var speed := lerpf(float(sweep[0]), float(sweep[1]), progress)
+			actor.ground_speed_mps = speed
+			actor.travel_heading_offset = float(strip.get("gait_heading", 0.0))
+			actor.stride_cycle = progress * 2.0
+			actor.set_pose(-1, 0.0, 0.0, Vector2.RIGHT, false)
+			actor.identity_label.text = "%.1f m/s" % speed
+			actor.has_facing = true
 		elif bool(strip.get("platform_sweep", false)):
 			## The ball arrives from a different bearing in every frame and leaves
 			## toward the same setter, so the bisector -- and therefore the
@@ -273,6 +307,8 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			actor.identity_label.text = "%+.2f" % lerpf(
 				RECOVERY_STRIP_FROM_PHASE, 1.0, progress
 			)
+		elif strip.has("gait_sweep"):
+			pass
 		else:
 			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
 		actor.set_highlighted(index == FRAME_COUNT - 1)

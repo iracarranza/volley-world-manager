@@ -86,6 +86,17 @@ var look_yaw: float = 0.0
 var look_pitch: float = 0.0
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
+## Which way this voli is travelling relative to the way they are facing, in
+## radians: 0 straight ahead, PI a backpedal, plus or minus a right angle a
+## lateral shuffle.
+##
+## **Travel direction and facing are two different things**, and the rig only had
+## one of them. `set_tactical_position` turns a voli toward wherever they moved,
+## so every journey was drawn as a forward run -- a defender opening to cover
+## deep ran away from the ball with their back to it, and a passer sliding along
+## the line rotated to face the sideline. Smoothed for the same reason the speed
+## is: one frame of displacement is too noisy to pick a gait from.
+var travel_heading_offset: float = 0.0
 var locomotion_bob: float = 0.0
 var has_world_position: bool = false
 ## How fast this voli is currently travelling, in metres per second, smoothed.
@@ -170,6 +181,20 @@ const FACING_TURN_RATE: float = 12.0
 ## rounding and its *direction* is noise -- which is what had players spinning on
 ## the spot while nominally standing still.
 const TRAVEL_HEADING_FLOOR_METERS: float = 0.01
+## How far off their facing a voli will travel before they give up and turn to
+## run. A right angle: inside it they are shuffling or backpedalling with their
+## eyes where they were, outside it the movement has become a sprint to
+## somewhere and the head follows the feet.
+const OPEN_UP_CONE_RADIANS: float = PI * 0.5
+## And the speed past which nobody shuffles, whatever the angle. `GaitBiomechanics`
+## puts a run at 4.4 m/s; this sits below it, because the last stride before a
+## genuine run is already too quick to keep square.
+const OPEN_UP_SPEED_MPS: float = 3.6
+## How quickly the drawn travel heading catches up to the real one. Smoothed for
+## the same reason ground speed is: a single frame's displacement direction is
+## mostly rounding, and a gait that switched between shuffle and run on it would
+## strobe.
+const TRAVEL_HEADING_SMOOTHING: float = 0.28
 
 const REFERENCE_HEIGHT_CM: float = 188.0
 const REFERENCE_WINGSPAN_CM: float = 191.0
@@ -350,6 +375,7 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
 		if travelled > 0.0001:
 			stride_cycle += travelled / maxf(stride_length_m, 0.30)
+
 		## Face where you are going -- but only when you are going somewhere.
 		##
 		## The threshold used to be the same 0.1 mm that advances the stride, and
@@ -373,10 +399,34 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			## contact actor's own facing is applied afterwards in `set_pose` and
 			## still wins, which is correct: someone playing the ball faces the
 			## ball, not their footwork.
-			_turn_toward(atan2(
+			var travel_yaw := atan2(
 				-(world_position.x - self.position.x),
 				-(world_position.z - self.position.z),
-			))
+			)
+			## Measured before the turn below, because afterwards the two agree
+			## by construction and the answer is always "forwards".
+			travel_heading_offset = lerp_angle(
+				travel_heading_offset,
+				angle_difference(facing_yaw, travel_yaw),
+				TRAVEL_HEADING_SMOOTHING,
+			)
+			## **Opening up is a decision, and it was being made for everybody.**
+			##
+			## Turning to face wherever you moved is right for a setter jogging
+			## back to their seat and wrong for almost everything else a defender
+			## does. A player watching the ball who has to cover two metres of
+			## deep court does not turn their back on it -- they open their hips
+			## and backpedal, or they shuffle along the line. Facing followed
+			## travel unconditionally, so the game had no such thing as moving
+			## without turning, and every journey was a forward run.
+			##
+			## The bound is speed rather than distance because it is speed that
+			## forces the issue: you can shuffle, and you cannot shuffle quickly.
+			## Past a run a player has to open up and go, which is exactly what a
+			## defender chasing a ball into the corner actually does.
+			if absf(angle_difference(facing_yaw, travel_yaw)) <= OPEN_UP_CONE_RADIANS \
+					or ground_speed_mps >= OPEN_UP_SPEED_MPS:
+				_turn_toward(travel_yaw)
 	has_world_position = true
 	tactical_position = position
 	self.position = world_position
@@ -1627,7 +1677,9 @@ func set_pose(
 	## line, so every voli on the court walked at exactly one speed with legs
 	## that never bent, whether they were strolling to a seat or sprinting for a
 	## dig.
-	var gait := GaitBiomechanicsScript.resolve(stride_cycle, ground_speed_mps)
+	var gait := GaitBiomechanicsScript.resolve(
+		stride_cycle, ground_speed_mps, travel_heading_offset
+	)
 	gait_blend = float(gait.gait_blend)
 	locomotion_bob = float(gait.bob_meters)
 	body_pivot.position = Vector3(0.0, lift + locomotion_bob, 0.0)

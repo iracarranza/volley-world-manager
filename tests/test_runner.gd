@@ -13061,14 +13061,54 @@ func _test_gait_separates_walking_from_running() -> void:
 			% float(running.bob_meters),
 	)
 
-	## Standing is not a gait. Every joint has to be at rest, or a player waiting
-	## for a serve is frozen mid-stride rather than standing there.
+	## Standing is not a gait -- but the claim is *symmetry*, not zero.
+	##
+	## This asserted every joint was at rest, and read "at rest" as zero. That
+	## catches the defect it was written for, a player frozen mid-stride, and it
+	## also forbade the only pose a stationary volleyball player ever actually
+	## holds. The two are told apart by whether the legs match each other, not by
+	## whether they are straight: a stride caught mid-cycle is asymmetric by
+	## construction, and a ready stance is symmetric by construction.
+	##
+	## So the claim is kept and sharpened. The stance is additionally required to
+	## be a stance -- knees bent, weight forward -- because a voli standing to
+	## attention between contacts was the thing being fixed.
 	var standing: Dictionary = GaitBiomechanics.resolve(0.37, 0.0)
 	_check(
-		absf(float(standing.right_hip_degrees)) < 0.01
-			and absf(float(standing.right_knee_degrees)) < 0.01
-			and absf(float(standing.bob_meters)) < 0.0001,
-		"a stationary voli stands rather than freezing mid-stride",
+		is_equal_approx(
+			float(standing.right_hip_degrees), float(standing.left_hip_degrees)
+		) and is_equal_approx(
+			float(standing.right_knee_degrees), float(standing.left_knee_degrees)
+		) and absf(float(standing.bob_meters)) < 0.0001,
+		"a stationary voli is symmetric rather than frozen mid-stride",
+	)
+	_check(
+		float(standing.right_knee_degrees) < -20.0
+			and float(standing.torso_pitch_radians) < -0.15,
+		"and stands in a ready stance rather than to attention (knee %.0f deg)"
+			% float(standing.right_knee_degrees),
+	)
+
+	## The two floor gaits that are not a forward run, each against the same
+	## stride at the same pace. Both are claims about *shape*: a backpedal is
+	## short-stepped with the chest up, and a shuffle barely swings a thigh
+	## because the feet are not allowed to cross.
+	var forward: Dictionary = GaitBiomechanics.resolve(0.2, 3.0)
+	var backpedal: Dictionary = GaitBiomechanics.resolve(0.2, 3.0, PI)
+	var shuffle: Dictionary = GaitBiomechanics.resolve(0.2, 3.0, PI * 0.5)
+	_check(
+		absf(float(backpedal.right_hip_degrees))
+			< absf(float(forward.right_hip_degrees))
+			and float(backpedal.torso_pitch_radians)
+				> float(forward.torso_pitch_radians),
+		"a backpedal takes shorter steps with the chest up",
+	)
+	_check(
+		absf(float(shuffle.right_hip_degrees))
+			< absf(float(backpedal.right_hip_degrees))
+			and absf(float(shuffle.bob_meters))
+				< absf(float(forward.bob_meters)),
+		"a shuffle barely swings a thigh and rides flat",
 	)
 
 	## Deepest knee fold over a whole stride, which is the most legible single
