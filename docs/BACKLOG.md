@@ -5281,3 +5281,152 @@ Wider swings are dug more, so this deepens the same gap the launch fix opened.
 Kill 0.352 against a 0.45-0.50 band is now the largest single thing out of
 place, and it wants the band re-derived and the dig contest looked at together
 rather than either one tuned alone.
+
+---
+
+## Attack quality is compressed and defence quality is not
+
+Asked: is the important mechanism not *who wins a contest* but **how easily each
+side can raise its quality at all?** Measured, and the answer is yes, with a
+clear asymmetry.
+
+`tools/run_attack_scaling_probe.gd`, re-run after the pace and dig work:
+
+    quality      n   error   stuff  tch>dug tch>kill  cln>dug cln>kill anytouch
+    0.20-0.30    24   0.083   0.208   0.000    0.167    0.333    0.208    0.375
+    0.30-0.40    92   0.130   0.098   0.065    0.098    0.250    0.359    0.261
+    0.40-0.50   174   0.057   0.052   0.109    0.115    0.270    0.397    0.276
+    0.50-0.60   155   0.084   0.052   0.103    0.090    0.135    0.535    0.245
+    0.60-0.70    20   0.100   0.050   0.050    0.100    0.200    0.500    0.200
+
+Kill rate climbs 0.375 -> 0.625 across the range, so good attacks *are* rewarded
+and the cliff the old table showed is gone. But look at the `n` column rather
+than the rates: **465 swings, and 20 of them clear 0.60.** The distribution is
+a hump centred on 0.45-0.55 with almost nothing above it.
+
+Against that, from `tools/run_dig_contest_probe.gd`:
+
+    attack effectiveness   p10 0.369  p50 0.490  p90 0.774
+    defence quality        p10 0.127  p50 0.691  p90 0.952
+
+The defender's own range is **0.83 wide** between the tenth and ninetieth
+percentile; the attacker's is **0.41**. Twice as wide, and the defence reaches
+both ends -- a defender genuinely can be nearly helpless or nearly certain,
+while an attacker is almost always somewhere in the middle.
+
+### Why, and it is not a tuning constant
+
+An attack's quality is the product of a chain the hitter mostly does not own:
+the pass, then the set, then the tempo the setter could actually run, then the
+approach that pass left time for, then the wall in front of them. Each is a
+fraction under 1, and a product of five fractions cannot reach its own ceiling
+-- the same compounding that made a 30 m/s ceiling produce a 12.6 m/s spike.
+A defender's quality is capability times *one* opportunity term.
+
+So the ceiling an A-tier attacker can reach is not set by how good they are. It
+is set by how rarely all five gates open together, which is what "the A tier
+attacker might never have that clear shot" describes exactly.
+
+### What to do about it
+
+Not to widen the attack's range by scaling it up -- that rewards every swing
+equally and is the flat buff this branch has been avoiding. The claim to
+implement is **conditional**: when the chain *does* align, the hitter's own
+rating should carry further than it currently can. Concretely, the term to look
+at is how `attack_quality` composes its factors: a product punishes a single
+weak link multiplicatively, so an outstanding hitter off a merely-decent set is
+capped by the set. A hitter's own excellence should be able to partially
+*rescue* a link, which is what "he made something out of nothing" means and is
+the single most recognisable thing a great attacker does.
+
+Measure first: the distribution of each factor in the chain, and which one is
+the binding constraint on the swings that land in 0.50-0.60. Widening the wrong
+link does nothing, and does nothing silently.
+
+---
+
+## The ball has no life after the last contact
+
+Reported: defenders play their dig *after* the ball has already hit the floor;
+the ball changes direction as though it were touched when nobody touched it;
+and a ball wiped out of bounds hovers instead of leaving the court. Three
+symptoms, and the hypothesis is that they are one absence.
+
+**Every drawn leg is contact-to-contact.** `BallPresentation.display_trajectory`
+takes an event and the *next contact*, and the last leg of a rally ends at the
+aimed landing point and stops. There is no leg after the final contact, so:
+
+  * a wiped ball stops at the landing point the resolver computed, which is
+    where the ball *lands*, not where it ends up -- so it hangs in the air at
+    the edge of the court instead of carrying on into the seats;
+  * a ball reaching the floor does not bounce, because nothing draws anything
+    after the floor;
+  * and the "bounce off nobody" is most likely the **DEFENSE-to-SET seam**
+    already on this list. The home dig publishes no `outgoing_trajectory` at
+    all, so there is no leg from the defender to the setter -- the ball
+    finishes the attack's arc at the floor and the next drawn leg starts
+    wherever the set begins. A teleport between two legs reads exactly like a
+    bounce.
+
+The timing half is separate and also real: `terminate_at_next_contact` returns
+early for a contact whose `success` is false, so the *ball* correctly ignores a
+defender who never reached it -- while the *actor* is still walked to that
+event's `start_position` and posed at its `event_time`. The ball and the body
+are then on different clocks, and the body plays a dig at a ball that is
+already down. If that is meant to read as "could not react in time" it needs to
+look like a failed reach rather than a completed dig.
+
+The fix is one concept, not three: **a ball needs a life after the last
+contact** -- a final leg that continues past the landing point, bounces off the
+floor with a fraction of its speed, and carries out of the court when it was
+going out. Everything above falls out of that.
+
+---
+
+## Jump sets, and sets that visibly go somewhere
+
+Missing, and both are visible rather than mechanical.
+
+A **jump set** is a setter leaving the floor to deliver, which buys tempo -- the
+ball is set from higher and travels less far down, so a quick is quicker and the
+block has less time to read it. `setter_capability.reach_state` already carries
+`jump` and `beyond_reach` as states and `BallPresentation.contact_height`
+already reads them for the contact height, so the *decision* exists and the
+*height* exists. What does not exist is the pose: a setter never leaves the
+floor on screen.
+
+A **directional set** is the other half. A set is currently drawn as a flight
+from the setter to the hitter with the setter facing wherever `_turn_toward`
+put them, so a back set and a front set look identical apart from where the ball
+goes. Real setters are read by opponents precisely on this -- shoulders, hips,
+and whether the ball comes off the front or the back of the hands -- and a
+blocker's whole job is to see it. The game has a block that reads the set
+(`read_quality`) and no visual for the thing being read.
+
+Both belong with `SETTER_DECISION.md`, and both are pose work rather than
+simulation work: the numbers are already there.
+
+---
+
+## The world tab: an encyclopedia for things the game never explains
+
+A voli has a body type, a home region, a club region and traits, and the game
+explains none of them anywhere. Body types are five produce shapes and six
+species; regions carry generation biases; traits are unsurfaced entirely. A
+player is expected to read a roster and make decisions from vocabulary the
+game has never defined.
+
+Wanted: a **world** tab, sitting beside the journal on the desk, holding an
+encyclopedia -- body types and what they are, the regions and what they are
+known for, traits, positions, and the terms the rest of the interface uses. It
+is a reference object rather than a screen with state, which makes it the
+cheapest possible way to make the setting legible.
+
+Worth stating one finding while writing it: **body type is currently cosmetic.**
+`assign_body_type` picks one at random and the only consumer outside the
+generator is `player_physical_profiles`, which playback reads to draw the mesh.
+An encyclopedia entry describing a body type would therefore be describing a
+silhouette, and if body types are meant to mean anything -- reach, mass,
+leverage -- that is a separate piece of work and should be decided before the
+entry is written rather than after.
+

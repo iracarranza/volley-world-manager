@@ -74,7 +74,16 @@ const FLOAT_RATE_RPS: float = 0.75
 ## controls and what the design asks to be modelled. A float serve, having no
 ## rotation, correctly gets none of this and is correspondingly hard to keep in
 ## -- which is true of real float serves and is why they are hit softer.
-const TOPSPIN_GRAVITY_PER_RPS: float = 0.78
+##
+## **Raised from 0.78, and deliberately raised here rather than by adding drag.**
+## A drag term would be a global invisible force slowing every ball by an amount
+## nobody can see, attributable to no player and moved by no decision -- the
+## precise shape of system this project does not want. This coefficient does the
+## same physical job through a channel a player owns: spin is chosen, `serve
+## technique` converts it, and the ball visibly dives. Pace on a serve is
+## therefore *earned* rather than granted, and a server who cannot spin the ball
+## cannot hit one hard and keep it in.
+const TOPSPIN_GRAVITY_PER_RPS: float = 1.02
 ## And the bound. Past this the ball is diving in a way no viewer reads as a
 ## volleyball, whatever the arithmetic says.
 const MAX_SPIN_GRAVITY_MPS2: float = 26.0
