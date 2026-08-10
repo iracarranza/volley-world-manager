@@ -44,6 +44,15 @@ var playback_active: bool = false
 var player_names: Dictionary = {}
 var player_handedness: Dictionary = {}
 var player_physical_profiles: Dictionary = {}
+## The solved platform surface per contact, keyed by the event itself.
+##
+## Cached because the surface is a property of two flights and nothing else, so
+## it is the same on every frame of a contact, while `PlatformAim.relative` --
+## which needs the body's facing and therefore changes as the passer turns -- is
+## not and is recomputed. Building the two drawn flights costs a deep copy each,
+## and doing that per posed player per frame to get an answer that cannot have
+## changed is the kind of work a replay cannot afford.
+var platform_surfaces: Dictionary = {}
 
 
 func _ready() -> void:
@@ -91,6 +100,10 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	_build_player_names(rally_result.events)
 	player_handedness = rally_result.player_handedness.duplicate(true)
 	player_physical_profiles = rally_result.player_physical_profiles.duplicate(true)
+	## Keyed by event, and these are a new rally's events, so the old entries
+	## could never be hit -- but they would hold every event of every rally played
+	## this session alive for as long as the screen is open.
+	platform_surfaces.clear()
 	var home_positions: Dictionary = rally_result.initial_home_positions
 	var opponent_positions: Dictionary = rally_result.initial_opponent_positions
 	if home_positions.is_empty() and opponent_positions.is_empty():
@@ -898,6 +911,40 @@ func _next_contact_index(events: Array[Resource], start_index: int) -> int:
 	return -1
 
 
+## Who struck the ball that arrived here, identified by the flight itself.
+##
+## A trajectory's `start_time` is the instant its contact happened, so the event
+## that owns an outgoing flight starting at that instant is the one that sent
+## this ball. That is an identity rather than a heuristic, which is what makes it
+## safe where "the previous contact" is not -- a blocker who jumped and missed is
+## a contact by every structural rule and did not touch the ball.
+##
+## Falls back to the nearest preceding contact when nothing matches, because a
+## slightly wrong launch height is a better answer than no platform at all. The
+## fallback did not fire once in 373 contacts and the two rules never disagreed,
+## which is the evidence that the identity holds rather than a reason to drop it.
+func _sender_of(
+	events: Array[Resource], contact_index: int, incoming: Dictionary
+) -> RallyEvent:
+	var launched_at := float(incoming.get("start_time", NAN))
+	var nearest: RallyEvent = null
+	for index in range(contact_index - 1, -1, -1):
+		var candidate := events[index] as RallyEvent
+		if candidate == null or candidate.event_type in [
+			RallyEventModel.EventType.SET_DECISION,
+			RallyEventModel.EventType.POINT,
+		]:
+			continue
+		if nearest == null:
+			nearest = candidate
+		var sent: Dictionary = candidate.metadata.get("outgoing_trajectory", {})
+		if sent.is_empty() or is_nan(launched_at):
+			continue
+		if absf(float(sent.get("start_time", -1.0)) - launched_at) < 0.0005:
+			return candidate
+	return nearest
+
+
 func _next_contact_event(events: Array[Resource], start_index: int) -> RallyEvent:
 	for index in range(start_index, events.size()):
 		var candidate := events[index] as RallyEvent
@@ -1045,12 +1092,69 @@ func _platform_aim(event: RallyEvent) -> Dictionary:
 	if event.event_type != RallyEventModel.EventType.RECEPTION \
 			and event.event_type != RallyEventModel.EventType.DEFENSE:
 		return {}
-	var solved := PlatformAim.solve(
-		event.metadata.get("incoming_trajectory", {}),
-		event.metadata.get("outgoing_trajectory", {}),
-	)
+	var solved := _platform_surface(event)
 	if not bool(solved.get("valid", false)):
 		return {}
 	var actor := match_court_3d.actor_for(int(event.actor_id))
 	var body_yaw := rad_to_deg(actor.facing_yaw) if actor != null else 0.0
 	return PlatformAim.relative(solved, body_yaw)
+
+
+## The surface the two flights require, from the flights as they are **drawn**.
+##
+## `PlatformAim` is explicit about which of its inputs carries the answer: *"the
+## vertical component from the flight's own gravity solve rather than from the
+## two endpoint heights"*. Those endpoint heights were being read off the raw
+## trajectories on the event, where `start_height_meters` and `end_height_meters`
+## are the 1.0 placeholder every trajectory in the game carries -- so its own
+## 2.0 / 0.9 defaults never fired and every platform was angled against a ball
+## that flew from a metre to a metre.
+##
+## The cost of that is not subtle and it is not a rate. Measured on 373
+## receptions and digs (`tools/run_platform_aim_probe.gd`), the pitch it produced
+## ran p10 -0.95, p50 -0.72, p90 -0.59 -- a spread of a third of a degree across
+## the whole sample, which is a constant with rounding on it. This file's own
+## opening paragraph complains that the arms used to be drawn at an invented
+## constant; the constant had come back through a different door. Against the
+## drawn ball the same contacts run 1.80 / 3.33 / 8.59 and the sign flips: arms
+## angled *up* toward the target, as a platform is. Median error 6.8 degrees of
+## pitch and up to 14.2 of yaw.
+##
+## `posture_for` is unaffected -- 0 of 373 classifications change -- so this is
+## a drawing correction and nothing downstream of it moves.
+func _platform_surface(event: RallyEvent) -> Dictionary:
+	if platform_surfaces.has(event):
+		return platform_surfaces[event]
+	var surface := {"valid": false}
+	var incoming: Dictionary = event.metadata.get("incoming_trajectory", {})
+	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+	var events: Array[Resource] = active_result.events if active_result != null \
+		else [] as Array[Resource]
+	var index := events.find(event)
+	if index >= 0 and not incoming.is_empty() and not outgoing.is_empty():
+		## The contact that sent this ball and the one that takes it away. Both
+		## are needed because a drawn flight's two ends are the two bodies that
+		## touched it -- the arriving ball's far end is *this* passer's own reach,
+		## and the leaving ball's is whoever plays it next.
+		##
+		## The sender is found by matching the flight rather than by stepping back
+		## one contact. **The two agree on all 373 sampled contacts**, so this is
+		## a guard and not a fix, and it is written down that way rather than
+		## claimed as a saving. It is kept because the failure it forecloses is
+		## real and silent: a blocker who jumped and missed is a contact by every
+		## structural rule and did not touch the ball, so stepping back would
+		## launch the arriving flight from hands it never left, and nothing
+		## downstream would notice.
+		var sender := _sender_of(events, index, incoming)
+		var receiver := _next_contact_event(events, index + 1)
+		if sender != null:
+			surface = PlatformAim.solve(
+				BallPresentation.display_trajectory(
+					sender, event, incoming, player_physical_profiles
+				),
+				BallPresentation.display_trajectory(
+					event, receiver, outgoing, player_physical_profiles
+				),
+			)
+	platform_surfaces[event] = surface
+	return surface
