@@ -365,3 +365,69 @@ twice by two systems that agree.
 own axes (`read_discipline`, `risk_aversion`). Taktikã now has `read_rate` at
 1.55 — the largest curve in the league — which is its first real mechanism, but
 it still owns none of the seven dispositions.
+
+
+---
+
+## Part 6 — The locked table
+
+Overlap policy, decided: **exclusive systems, exclusive peaks, shared
+foundations.** Zero attribute overlap is arithmetically forced into absurdity —
+seven non-Landavol regions times five specialties is thirty-five of about forty
+attributes, so you end up assigning attributes to regions to satisfy a
+constraint rather than because the region is about them. Shared foundations are
+also what make matchups instead of rock-paper-scissors: two regions strong at
+the net means that match is decided by what *else* they bring, rather than by
+whose axis came up. What must never be shared is the peak, and what must never
+be shared at all is a system.
+
+Attribute overlap went 7 → 2 in this pass. Both survivors are A'ace holding
+another region's peak, which is the one overlap the fiction actively requires:
+A'ace does not develop, it buys, and what it buys is whatever ends points.
+
+| region | peak attribute | system it owns alone | weakness | frame |
+|---|---|---|---|---|
+| **Landavol** | *none* | *none — 1.00/1.00* | *none* | 0/0/0 |
+| **Spëddigh** | `work_rate` | `tempo_variation` 0.90 | `attack_power` −10, `block_timing` −8 | −2/−3/−2 |
+| **Pāwa Hitō** | `stamina` | **`fatigue_resistance` 0.55** | `feinting` −11, `set_disguise` −9 | +3/+4/+2 |
+| **Bloc du Larg** | `block_timing` | `block_commitment` 0.72 | `improvisation` −11, `serve_power` −9 | +3/+2/+4 |
+| **Xérvu** | `serve_technique` | `serve_aggression` 0.92 | `reception` −11, `dig_control` −9 | +1/0/+2 |
+| **Taktikã** | `decision_making` | **`read_rate` 1.55** | `explosiveness` −12, `jump_reach` −10 | −1/−1/0 |
+| **Ispayk** | `attack_power` | `decisiveness` 0.90 | `shot_variety` −12, `adaptability` −10 | +4/+5/+3 |
+| **A'ace** | `leadership` | recruitment (pull 3.40, selective) | `tactical_discipline`/`decision_making` −12, `court_vision` −9 | +1/+1/+1 |
+
+### The three clarifications this pass implemented
+
+**Pāwa Hitō is a battery, not a swing.** Its specialty list now carries *no
+attacking attribute at all* — the damage is a consequence of a large frame
+(raised from 0/−1/0, which contradicted the fiction) arriving at a defence that
+`fatigue_resistance` 0.55 has outlasted. They beat down tired defenders; they do
+not out-hit fresh ones.
+
+**Ispayk is one perfected swing.** `attack_power`, `arm_speed`, `jump_reach`,
+`approach_timing`, `attack_accuracy` — going toe-to-toe in the air, and owning
+air presence outright now that Bloc's size moved to the frame instead.
+`shot_variety` is not merely absent but *penalised*, because predictability is
+the price of the perfect swing.
+
+**The three-way tie at the net is resolved by channel, not by deletion.** Bloc
+and Ispayk are both tall, and they say so differently: Ispayk through
+`jump_reach` (an attribute, contested in the air), Bloc through wingspan +4 (a
+frame, occupying space). A'ace holds both peaks and pays for them in decisions.
+
+### The web of counters
+
+Weaknesses were chosen so no two regions share one, and so each is the inverse
+of that region's own strength:
+
+- **Ispayk cannot adapt; Taktikã is built on adapting.** The clearest matchup in
+  the league, and it is the one the fiction names.
+- **Xérvu cannot pass; Bloc du Larg exists to make you pass.**
+- **Bloc cannot improvise; Spëddigh is nothing but improvisation of tempo.**
+- **Taktikã cannot win a physical contest; Pāwa Hitō and Ispayk are the
+  physical contest.**
+- **Spëddigh cannot hurt you at the net; A'ace is bought terminal ability.**
+- **A'ace cannot make decisions; Taktikã sells nothing else.**
+
+Landavol has neither a peak nor a weakness, which is the same statement twice
+and is what qualifies it as the symmetry fixture.

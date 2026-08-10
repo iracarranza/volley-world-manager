@@ -29,12 +29,22 @@ const POSITIONS: Array[Dictionary] = [
 ## with no physical lean at all, matching it now having no attribute
 ## specialty either (see REGION_SPECIALTY below). Ispayk now carries the
 ## largest frame bias: its bomba tradition is built around terminal power.
-## Pāwa Hitō is closer to average size because its physical distinction is
-## repeated effort and transition quality rather than mass. A'ace leans slightly positive across all
-## three: assembled, well-resourced athletes rather than a developed body
-## type of its own.
+##
+## **Pāwa Hitō is large, and was not.** It sat at 0/-1/0 on the reasoning that
+## its distinction was repeated effort rather than mass -- but the design is
+## explicit that these are big volis with big batteries, and that the damage
+## they do is a *consequence* of size arriving at a defence that has nothing
+## left. Their attribute list carries no attacking attribute at all now, so the
+## frame is where the threat has to live, alongside `fatigue_resistance`.
+##
+## Bloc du Larg rises for the same kind of reason and by a different route: its
+## specialty list gave up `jump_reach` so that Ispayk could own air presence
+## outright, which means Largen size must be stated here or nowhere.
+##
+## A'ace leans slightly positive across all three: assembled, well-resourced
+## athletes rather than a developed body type of its own.
 const REGION_HEIGHT_BIAS := {
-	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
+	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Bloc du Larg": 3.0, "Landavol": 0.0,
 	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 4.0, "A'ace": 1.0,
 	"Tu'ul ys Feynt": -3.0,
 	"Lo-onğ Ralī": -5.0,
@@ -44,7 +54,7 @@ const REGION_HEIGHT_BIAS := {
 	"Zaitgaist": 0.0,
 }
 const REGION_MASS_BIAS := {
-	"Pāwa Hitō": -1.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
+	"Pāwa Hitō": 4.0, "Spëddigh": -3.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
 	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": 5.0, "A'ace": 1.0,
 	"Tu'ul ys Feynt": -4.0,
 	"Lo-onğ Ralī": -5.0,
@@ -54,7 +64,7 @@ const REGION_MASS_BIAS := {
 	"Zaitgaist": 0.0,
 }
 const REGION_WINGSPAN_BIAS := {
-	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
+	"Pāwa Hitō": 2.0, "Spëddigh": -2.0, "Bloc du Larg": 4.0, "Landavol": 0.0,
 	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 3.0, "A'ace": 1.0,
 	"Tu'ul ys Feynt": -2.0,
 	"Lo-onğ Ralī": -3.0,
@@ -87,31 +97,39 @@ const REGION_WINGSPAN_BIAS := {
 ## not a systemic developmental identity the way every other region's
 ## specialty represents an actual local training tradition.
 const REGION_SPECIALTY := {
-	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness", "approach_timing", "attack_accuracy"],
+	## **A battery, not a swing.** Pāwa Hitō's power is a *consequence* and the
+	## list is deliberately short to say so: they are large volis who are still
+	## going in the fifth set, and the damage they do is done to defenders who are
+	## not. Nothing here is an attacking attribute, because the attacking comes
+	## from `fatigue_resistance` 0.55 holding them at full output while everybody
+	## else labours, and from a frame that was raised to match the fiction.
+	##
+	## `approach_timing` and `attack_accuracy` were dropped from here rather than
+	## from Ispayk: those are a spike being *perfected*, which is Ispayk's whole
+	## claim, and having them in both was the single worst overlap in the table --
+	## the two regions the design most needed to separate shared two attributes.
+	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness"],
 	"Spëddigh": ["work_rate", "acceleration", "lateral_speed", "tempo_control", "reception_balance"],
-	## **Big blockers who can touch anything, not a side that out-thinks you.**
+	## **A wall and the floor behind it, not a side that out-thinks you.**
 	##
-	## This used to be blocking plus `court_vision` and `tactical_discipline`,
-	## which spelled the region as *analysis*: a side that studies you and adjusts.
-	## That was never what the wall is for. A Largen block does not need to guess
-	## right, because it is long enough and quick enough off the floor to get a
-	## hand on the shot it guessed wrong about -- the threat is coverage, not
-	## prediction, and a hitter facing it finds every lane already occupied rather
-	## than finding the one lane that was scouted.
+	## `court_vision` and `tactical_discipline` spelled this region as *analysis*
+	## -- a side that studies you and adjusts -- and that was never what the wall
+	## is for. A Largen block does not need to guess right, because it is long
+	## enough and quick enough to get a hand on the shot it guessed wrong about.
+	## `anticipation` stays removed for a separate reason: it is 0.30 of dig
+	## capability and 0.34 of a blocker's read, so holding it made the blocking
+	## tradition the best digging tradition too.
 	##
-	## So the analysis attributes go and the reach and the reaction come in.
-	## `lateral_speed` is a blocker closing to a pin they did not start at;
-	## `explosiveness` is getting up a second time on a broken play. Whatever
-	## adaptation the region shows is then a *consequence* of touching more balls
-	## rather than a separate talent for reading them, which is the design the
-	## fiction actually asks for.
-	##
-	## `anticipation` was removed earlier and stays removed: it is 0.30 of dig
-	## capability and 0.34 of a blocker's read, so the blocking tradition quietly
-	## became the best digging tradition too -- 10.0 points of dig rate against
-	## 3.8 for the region actually named for digging.
-	"Bloc du Larg": ["block_timing", "jump_reach", "lateral_speed",
-		"explosiveness", "reception_stability"],
+	## The cut before this one reached for
+	## `lateral_speed` and `explosiveness`, which are Spëddigh's and Pāwa Hitō's,
+	## so the region built on coverage was expressed in two other regions'
+	## vocabulary. Size is now carried by the physique bias instead of by
+	## `jump_reach` -- a different channel from Ispayk's air presence, which is
+	## what lets both regions be tall without being the same claim -- and the
+	## attributes say the thing the fiction actually says: they touch what you
+	## hit, and what gets past the wall is still dug.
+	"Bloc du Larg": ["block_timing", "reception_stability", "dig_control",
+		"ball_control"],
 	"Landavol": [],
 	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
 		"serve_aggression", "serve_variation"],
@@ -781,7 +799,45 @@ static func region_rating_bonus(
 ## A'ace's own academies can produce rather than a debuff on the individual. A
 ## voli A'ace signs from Taktikã keeps Taktikã's ceilings, which is the whole
 ## mechanism of the region: it is only its home-grown players who are short.
+## **Every region gives something up, and no two give up the same thing.**
+##
+## Seven of the eight had no weakness at all: their only cost was not having a
+## bonus somewhere, which makes "specialty" a synonym for "better" and turns the
+## league into a power ranking instead of a set of matchups. A tradition is
+## defined as much by what it never taught as by what it drills.
+##
+## Two rules held while choosing these. Each weakness is the *inverse of the
+## region's own strength*, so it reads as a consequence of the training rather
+## than as a handicap bolted on. And no two regions share a weakness, for the
+## same reason no two should share a peak -- if Spëddigh and Taktikã were both
+## short on power, "small" would stop being either region's problem and start
+## being the league's baseline.
+##
+## The result is a web of counters rather than a ladder. Ispayk cannot adapt and
+## Taktikã is built on adapting. Xérvu cannot pass and Bloc du Larg exists to
+## make you pass. Bloc cannot improvise and Spëddigh is nothing but improvisation
+## of tempo. Landavol is the only region with no weakness, which is the same
+## statement as having no specialty and is what makes it the reference.
 const REGION_CEILING_PENALTY := {
+	## Quick and light, and it costs them at the net in both directions.
+	"Spëddigh": {"attack_power": -10, "block_timing": -8},
+	## They go through you. They have never needed to go around you, so the
+	## deception attributes were never taught.
+	"Pāwa Hitō": {"feinting": -11, "set_disguise": -9},
+	## A structured side is a side that struggles when the structure breaks, and
+	## a wall built on staying home does not learn to serve people off it.
+	"Bloc du Larg": {"improvisation": -11, "serve_power": -9},
+	## Six specialty attributes on serving, and a tradition that treats the first
+	## contact as somebody else's problem.
+	"Xérvu": {"reception": -11, "dig_control": -9},
+	## The one region that will not win a physical contest, which is the point of
+	## it -- and the reason its reading has to be worth something.
+	"Taktikã": {"explosiveness": -12, "jump_reach": -10},
+	## **The cost of the perfect swing is that it is the only swing.** Predictable
+	## by construction and unable to change once read, which is exactly the
+	## matchup Taktikã is built to win.
+	"Ispayk": {"shot_variety": -12, "adaptability": -10},
+	## Bought terminal ability with no shared idea of how to play.
 	"A'ace": {
 		"tactical_discipline": -12, "decision_making": -12, "court_vision": -9,
 	},
