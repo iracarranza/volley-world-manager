@@ -215,6 +215,7 @@ func _initialize() -> void:
 	_test_rally_spectacle_and_flow_separation()
 	_test_own_side_deliveries_land_where_the_player_put_them()
 	_test_ball_flight_from_contact_height()
+	_test_block_shadow_falls_behind_the_block()
 	_test_spike_biomechanics_sequence()
 	_test_every_rally_publishes_a_resting_posture()
 	_test_recovery_bands_are_ordered()
@@ -10703,6 +10704,129 @@ func _test_attack_courses_are_relative_to_the_hitter() -> void:
 ## a spike -- a ball struck downward from about 3.2 m. Every expected value here
 ## is computed from the closed form independently rather than read back off the
 ## implementation.
+## Who a block actually hides the ball from.
+##
+## `PlayerSightlineSystem` had no test of any kind, and shipped three separate
+## versions of §0's own failure at once: a wall with no depth, so a ball level
+## with the hands counted as behind them; a height gate fed contact heights that
+## were the 1.0 placeholder every raw trajectory carries; and a blocker top read
+## from a metadata key published on none of the 207 blocks sampled, so every wall
+## in the game was 2.72 m -- the tape plus a fist. Measured together, the wall hid
+## a band 8.7 m wide on a 9 m court, and a defender standing in the cross lane
+## drew the same BLIND marker as one directly behind the block.
+##
+## Every claim below is one of those, stated so it can fail.
+func _test_block_shadow_falls_behind_the_block() -> void:
+	## A tall middle's hands, and a short opposite's, so "the wall" is a body
+	## rather than a constant.
+	const TALL_BLOCK_TOP := 3.15
+	const SHORT_BLOCK_TOP := 2.50
+	var eyes := {"eye_height_meters": 1.78}
+	var block := _sightline_block(Vector2(0.5, 0.5))
+
+	## A cross swing from the right pin, struck 4 m off the net at 3.0 m and
+	## falling to the far corner -- the ball a middle blocker is in a position to
+	## hide from somebody.
+	var swing := _sightline_flight(
+		Vector2(0.72, 0.72), Vector2(0.397, 0.18), 3.0, 0.2, 0.6
+	)
+
+	## **The shadow is a line from the ball through the wall, and it moves.** It
+	## is not the strip of floor directly behind the blocker, which is the shape
+	## the old geometry effectively drew and the reason a defender in the cross
+	## lane wore the same marker as one in the shut line. For this ball the shadow
+	## lands near the left sideline, so that is where the blind defender has to
+	## be -- and the answer has to fall off with distance from it rather than
+	## being the same everywhere.
+	var hidden: Array[float] = []
+	for observer_x in [0.09, 0.30, 0.50, 0.75]:
+		hidden.append(float(PlayerSightlineSystem.occlusion_window(
+			Vector2(observer_x, 0.22), swing, block, eyes, TALL_BLOCK_TOP
+		).get("hidden_fraction", 0.0)))
+	## Non-increasing rather than strictly decreasing, because the sequence
+	## reaches zero and then stays there -- which is the point, not a weakness:
+	## most of the court sees the whole swing. The two ends carry the claim.
+	var falls_off := true
+	for step in range(1, hidden.size()):
+		if hidden[step] > hidden[step - 1]:
+			falls_off = false
+	_check(
+		falls_off and hidden[0] > 0.0 and hidden[hidden.size() - 1] == 0.0,
+		"the block hides the ball from the lane it shadows and not from the rest of the court",
+	)
+
+	## The same ball and the same defender, blocked by somebody who cannot get as
+	## high. This is the wiring that was dead: the reach came from a metadata key
+	## nothing published, so no two blockers in the game could ever differ.
+	_check(
+		float(PlayerSightlineSystem.occlusion_window(
+			Vector2(0.09, 0.22), swing, block, eyes, SHORT_BLOCK_TOP
+		).get("hidden_fraction", 0.0)) < float(
+			PlayerSightlineSystem.occlusion_window(
+				Vector2(0.09, 0.22), swing, block, eyes, TALL_BLOCK_TOP
+			).get("hidden_fraction", 0.0)
+		),
+		"a blocker who cannot get as high takes less of the ball away",
+	)
+
+	## A ball still inside the blocker's own reach is beside the hands, not behind
+	## them. Without depth this was the majority of every occlusion measured.
+	var level := _sightline_flight(
+		Vector2(0.5, 0.51), Vector2(0.5, 0.505), 2.9, 2.9, 0.2
+	)
+	_check(
+		not bool(PlayerSightlineSystem.occlusion_window(
+			Vector2(0.09, 0.22), level, block, eyes, TALL_BLOCK_TOP
+		).get("occluded", false)),
+		"a ball level with the hands is not hidden by them",
+	)
+
+	## And the verdict reads time remaining rather than share of flight. Two
+	## windows that lost the identical share of the ball, one with a slow
+	## defender's whole reaction still to come and one with nothing left.
+	_check(
+		PlayerSightlineSystem.visibility_for({
+			"occluded": true, "hidden_fraction": 0.45, "seen_for_seconds": 0.50,
+		}) == &"visible"
+			and PlayerSightlineSystem.visibility_for({
+				"occluded": true, "hidden_fraction": 0.45, "seen_for_seconds": 0.05,
+			}) == &"occluded",
+		"losing the same share of the flight reads as blind only when no time is left",
+	)
+
+
+## A blocker who closed, as the sightline system wants to read one.
+func _sightline_block(at: Vector2) -> RallyEvent:
+	var block := RallyEvent.new()
+	block.event_type = RallyEvent.EventType.BLOCK
+	block.start_position = at
+	## Untouched: a wall that gets a hand on the ball ends the flight rather than
+	## hiding it, and the compiler drops those before asking.
+	block.success = false
+	block.metadata = {"primary_position": at, "primary_close": 1.0}
+	return block
+
+
+## A drawn flight with its heights actually filled in, which is the thing a raw
+## `outgoing_trajectory` is not.
+func _sightline_flight(
+	from: Vector2,
+	to: Vector2,
+	start_height: float,
+	end_height: float,
+	duration: float,
+) -> Dictionary:
+	return {
+		"start_position": from,
+		"end_position": to,
+		"control_position": from.lerp(to, 0.5),
+		"start_time": 0.0,
+		"duration": duration,
+		"start_height_meters": start_height,
+		"end_height_meters": end_height,
+	}
+
+
 func _test_ball_flight_from_contact_height() -> void:
 	const CONTACT_HEIGHT := 3.2
 	## Read from the model, not redeclared. The independence this test is built

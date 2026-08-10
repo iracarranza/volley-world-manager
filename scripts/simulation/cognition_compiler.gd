@@ -25,6 +25,7 @@ const CueModel := preload("res://scripts/models/player_cognition_cue.gd")
 const TimelineModel := preload("res://scripts/simulation/cognition_timeline.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const SightlineModel := preload("res://scripts/simulation/player_sightline_system.gd")
+const BallPresentationModel := preload("res://scripts/simulation/ball_presentation.gd")
 
 ## Priorities. A rally puts several true statements above one head at once and
 ## exactly one may be drawn, so the ladder is declared in one place rather than
@@ -206,7 +207,9 @@ static func _compile_second_contact(
 	if block_event != null:
 		_compile_block_read(set_event, block_event, set_time, cues)
 	if attack_event != null:
-		_compile_sightlines(events, set_index, attack_event, block_event, cues)
+		_compile_sightlines(
+			result, events, set_index, attack_event, block_event, cues
+		)
 		_compile_reactions(result, events, set_index, attack_event, cues)
 
 
@@ -505,6 +508,24 @@ static func _next_of_type(events: Array, index: int, event_type: int) -> Resourc
 	return null
 
 
+## The event that touched the ball next, which is where a drawn flight stops.
+##
+## Kept next to its one caller rather than shared: `match_screen` walks the same
+## events with an index it already has, and a second copy of that walk in a
+## general helper would be a second thing to keep in step.
+static func _next_contact(events: Array, after: Resource) -> Resource:
+	var seen := false
+	for candidate in events:
+		if candidate == after:
+			seen = true
+			continue
+		if not seen:
+			continue
+		if int(candidate.actor_id) >= 0:
+			return candidate
+	return null
+
+
 ## What the defenders behind the wall could actually see of the swing.
 ##
 ## Geometry, not a block bonus: `PlayerSightlineSystem` casts each defender's own
@@ -516,6 +537,7 @@ static func _next_of_type(events: Array, index: int, event_type: int) -> Resourc
 ## on the cue; the badge decides that an occluded eye is closed and a partially
 ## obscured one is narrowed, and neither renderer ever sees a ray.
 static func _compile_sightlines(
+	result: Resource,
 	events: Array,
 	set_index: int,
 	attack_event: Resource,
@@ -524,9 +546,44 @@ static func _compile_sightlines(
 ) -> void:
 	if block_event == null:
 		return
-	var trajectory: Dictionary = attack_event.metadata.get("outgoing_trajectory", {})
-	if trajectory.is_empty():
+	## **A block that touched the ball is not a block that hid it.** When the wall
+	## makes contact the swing's flight *ends* at the hands, so its last samples
+	## are behind them by construction and every blocked swing would be scored as
+	## a defender losing sight -- measured, 87.5% through the flight was the
+	## median moment the wall was credited with taking the ball, which is another
+	## way of saying "at the block". What the defender then plays is the
+	## deflection, a different flight, one the wall is behind rather than in front
+	## of. There is a BLOCK event to narrate that, and nothing for this cue to
+	## say.
+	if bool(block_event.success):
 		return
+	var raw: Dictionary = attack_event.metadata.get("outgoing_trajectory", {})
+	if raw.is_empty():
+		return
+	## **The drawn flight, not the resolver's stub.** A raw `outgoing_trajectory`
+	## carries `start_height_meters` and `end_height_meters` at 1.0 -- not because
+	## the ball is a metre off the floor at both ends but because
+	## `_ball_trajectory` never passes either one to `BallTrajectory.create` and
+	## 1.0 is that argument's default. Every trajectory in the game is like this;
+	## the heights only become real in `BallPresentation.display_trajectory`,
+	## which reads them off the two bodies that touched the ball.
+	##
+	## Which matters here more than anywhere, because the whole occlusion test is
+	## a question about height: does the ray to the ball pass over the blocker's
+	## hands or under them. Asked of a flat one-metre ball it was being asked
+	## about a ball that does not exist, and a spike passing *above* the wall --
+	## the one case where a defender plainly can see it -- could not answer
+	## differently from one passing through it.
+	##
+	## Terminating at the next contact comes free with the same call and is also
+	## correct: a swing that gets dug ends at the digger, not at the floor it was
+	## aimed at, and the time a defender had is measured against the flight they
+	## actually played. Blocks are already excluded above, so the contact this
+	## finds is the dig itself.
+	var trajectory := BallPresentationModel.display_trajectory(
+		attack_event, _next_contact(events, attack_event), raw,
+		result.player_physical_profiles,
+	)
 	var defence := _next_of_type(
 		events, set_index, RallyEventModel.EventType.DEFENSE
 	)
@@ -541,8 +598,25 @@ static func _compile_sightlines(
 	var observer := Vector2(defence.metadata.get(
 		"movement_start", defence.start_position
 	))
+	## Both heights from the two bodies involved, because both were placeholders.
+	## The eye height parameter has existed since the system was written and no
+	## caller ever filled it, so every defender in the game watched from 1.72 m;
+	## the blocker's reach was worse, since the event it was read from never
+	## carried it. A tall middle now genuinely hides more of the court from a
+	## short libero than from another middle, which is the difference the geometry
+	## was supposed to be making all along.
+	var profiles: Dictionary = result.player_physical_profiles
+	var observer_profile: Dictionary = profiles.get(defender_id, {})
 	var window := SightlineModel.occlusion_window(
-		observer, trajectory, block_event
+		observer, trajectory, block_event,
+		{
+			## Eyes sit a hand's width below the crown, and the profile carries the
+			## crown. Any player-independent number here would have been the 1.72 m
+			## this replaces.
+			"eye_height_meters": float(observer_profile.get("height_cm", 188.0))
+				/ 100.0 - 0.10,
+		},
+		BallPresentationModel.contact_height(block_event, profiles),
 	)
 	var visibility := SightlineModel.visibility_for(window)
 	if visibility == &"visible":
@@ -556,11 +630,16 @@ static func _compile_sightlines(
 	)
 	lost.attention_kind = &"ball"
 	lost.visibility = visibility
-	## Certainty falls with how much of the flight went missing, which is the
-	## quantity the geometry actually measured rather than a second guess at it.
-	lost.certainty = clampf(
-		1.0 - float(window.get("hidden_fraction", 0.0)) * 1.4, 0.0, 1.0
-	)
+	## Certainty falls with how little time the wall left them, on the same scale
+	## `visibility_for` classifies with. It used to fall with the share of the
+	## flight that went missing, which is a different quantity and disagreed with
+	## the verdict drawn beside it: a swing could be marked occluded and confident
+	## at once. One number, read once.
+	lost.certainty = clampf(inverse_lerp(
+		SightlineModel.QUICK_REACTION_SECONDS,
+		SightlineModel.SLOW_REACTION_SECONDS,
+		float(window.get("seen_for_seconds", 0.0)),
+	), 0.0, 1.0)
 	lost.urgency = 0.85
 	lost.punctuation = "...?"
 	lost.priority = PRIORITY_LOST_SIGHT

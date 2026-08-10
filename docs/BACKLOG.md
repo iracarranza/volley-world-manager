@@ -5742,3 +5742,101 @@ approach quality on the attack event, the way `chosen_power_fraction` now is,
 answers it in one run -- and the reason to publish rather than infer is the one
 this branch keeps rediscovering.
 
+
+## The block hid the ball from the whole court, for three reasons at once
+
+A screenshot: an opponent's roll shot toward short court, and a home defender
+standing **in the cross lane** -- not behind the block, not in the line the wall
+was shutting -- wearing the BLIND marker. `PlayerSightlineSystem`'s own docstring
+claims the opposite is possible: *"it is geometry, not a block-strategy bonus,
+and can therefore differ for two defenders behind one wall."* It could not.
+Measured on 283 real swings, the wall hid a band of standing positions **8.7
+metres wide on a 9-metre court**, from a silhouette 0.96 m across, and 47.6% of
+defenders standing more than 1.5 m off the blocker's line lost the ball anyway.
+
+Three defects, each independently sufficient, and each the same §0 failure --
+*a value measured with the wrong instrument*.
+
+**The wall had no depth.** `_sample_is_hidden` crossed each ray with the net
+plane, which asserts that a blocker is an infinitely thin curtain -- and for a
+curtain with no thickness, "level with" and "behind" are the same thing. The
+median sample the wall was credited with hiding had the ball **0.39 m past the
+tape**: beside the hands, inside the block's own reach. At that depth the ray's
+crossing point sits 80% of the way to the ball, so the observer contributed a
+fifth of the verdict and everyone got the same answer. The fix is
+`BLOCK_REACH_DEPTH_METERS`: the occluding plane is the far face of the hands, not
+the tape, so a ball has to be *past* the block before the block can hide it.
+
+**The ball's height was a placeholder.** The whole test is a question about
+height -- does the ray pass over the hands or under them -- and it was reading
+`start_height_meters` / `end_height_meters` off the raw `outgoing_trajectory`,
+where both are **1.0 on every trajectory in the game**. Not because balls are a
+metre off the floor at both ends but because `_ball_trajectory` never passes
+either argument to `BallTrajectory.create` and 1.0 is that argument's default.
+The heights only become real in `BallPresentation.display_trajectory`, which
+reads them off the two bodies that touched the ball. The compiler now asks for
+that flight instead, which also terminates it at the next contact -- correct on
+its own terms, since what a defender saw of a swing ends when something touches
+it.
+
+**Every wall in the game was the same height, and it was too short.**
+`blocker_top` came from `block_event.metadata["contact_height_meters"]`, published
+on **0 of 207** blocks sampled, so the `maxf` always collapsed to the 2.72 m
+fallback -- the tape plus a fist, where a real blocker's hands are at their
+jumping reach, most of half a metre higher. A wall that short cannot hide a
+spike, and once the first two defects were fixed the feature went silent
+entirely: 1 occlusion in 243 swings, the mirror failure. Passing
+`BallPresentation.contact_height(block_event, profiles)` -- the number the
+renderer already uses -- brought it back. The observer's eye height was the same
+story in miniature: `observer_profile` has been a parameter since the system was
+written and no caller ever filled it, so every defender watched from 1.72 m.
+
+**And the verdict was a share of the wrong thing.** `visibility_for` classified
+on `hidden_fraction`, the share of the *flight* that went missing. That cannot
+tell apart a ball lost for its first fifth and picked up with four fifths left to
+run -- an ordinary blocked-view swing -- from the same fifth lost immediately
+before it lands. Because a slow roll shot spends a large share of a short flight
+near the net, the harmless case read as the severe one, which is exactly the ball
+in the screenshot. It now reads `seen_for_seconds`, the time left after the wall
+gives the ball back, against the reaction band the floor defence already uses:
+`lerpf(0.34, 0.12, anticipation)`. Borrowed, not invented -- reacquire with more
+than a slow defender needs and nothing was taken from you; with less than a quick
+one needs and nothing was given back.
+
+**A touched block is dropped outright.** When the wall makes contact the swing's
+flight *ends* at the hands, so its last samples are behind them by construction:
+the median moment the wall was credited with taking the ball was 87.5% through
+the flight, which is another way of saying "at the block". What the defender then
+plays is the deflection, a flight the wall is behind rather than in front of.
+There is a BLOCK event to narrate that.
+
+After all five, on the same 243 swings (`tools/run_sightline_probe.gd`):
+
+    offset from blocker      n   visible   partial  occluded
+    0.0 to 1.5 m            53     0.491     0.415     0.094
+    1.5 to 3.0 m            71     0.746     0.239     0.014
+    3.0 to 9.0 m           119     0.908     0.067     0.025
+
+Monotone in `visible`, and being fully blind is 9.4% behind the wall against 2.5%
+in the cross lane. Every hidden sample now has the ball past the blocker's reach
+(p10 0.38 m against a 0.35 m reach), and the ball crosses the tape at 2.25--2.91 m
+instead of the 1.0 m placeholder.
+
+**Still open.** The 3.0--9.0 m band's occluded rate (0.025) is nominally above the
+1.5--3.0 m band's (0.014), which is 3 events against 1 and almost certainly noise
+-- but it has not been shown to be. And the wider finding is worth its own entry:
+**`_ball_trajectory` publishes placeholder contact heights on every trajectory in
+the game.** The renderer resolves them and the sightline model now asks the
+renderer, but any other consumer that reads `start_height_meters` off a raw
+`outgoing_trajectory` is reading 1.0. Traced, and there is exactly one other
+live one: `match_screen._platform_aim` hands `PlatformAim.solve` the raw
+`incoming_trajectory` and `outgoing_trajectory` straight off the event, so its
+own 2.0 / 0.9 defaults never fire and **every passing platform in the game is
+angled against a flat one-metre ball** -- which is the one input that function
+exists to read, since its comment is specifically about a ball that rose and fell
+between its endpoints. Not fixed here; it is a playback-posture change and wants
+its own measurement.
+
+`live_attack_integrator.gd`'s 2.55 default was checked and is *not* an instance:
+`shadow_attack_system` builds those trajectories with `flight.contact_height_meters`,
+so the value arriving is real.
