@@ -451,16 +451,6 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 
 ## Turns the actor toward a heading at `FACING_TURN_RATE`, or adopts it outright
 ## if this is the first heading it has ever had.
-## Turn toward a heading taken from travel rather than from a contact.
-##
-## Separate from `_turn_toward` only so the intent is legible at the call site:
-## a contact turns a voli *to the ball*, and this turns them *the way they are
-## running*. Both go through the same rate limit and the same first-heading
-## adoption, because a body has one facing however it was decided.
-func face_travel(target_yaw: float) -> void:
-	_turn_toward(target_yaw)
-
-
 func _turn_toward(target_yaw: float) -> void:
 	if not has_facing:
 		facing_yaw = target_yaw

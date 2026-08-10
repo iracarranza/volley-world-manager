@@ -140,39 +140,34 @@ func _apply_mesh_color(
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mesh_instance.material_override = material
 
-
-## Court-space movement below this is a rounding artefact, not a direction.
-const TRAVEL_HEADING_FLOOR: float = 0.0025
-
-
 func set_player_position(player_id: int, position: Vector2) -> void:
 	if not player_actors.has(player_id):
 		return
-	## **Step 9: a travelling voli faces where they are going.**
+	## **Facing is the actor's decision, and this used to overrule it.**
 	##
-	## `has_facing` and `facing_yaw` were set in exactly three places -- inside
-	## the actor's own `_turn_toward`, and the two offline tools. Neither this
-	## file nor `match_screen.gd` touched them, so during a rally an actor only
-	## ever turned at the instant of a contact pose and then held that heading
-	## for the rest of the point. A voli who had not touched the ball had no
-	## heading at all.
+	## `set_tactical_position` already derives the travel heading and then decides
+	## whether to turn onto it -- a cone, a speed bound that is higher sideways
+	## than backwards, and the rule that a blocker never turns their back on the
+	## net. All of that exists so that a voli can move without turning: shuffle
+	## along the line, open the hips and backpedal, keep their eyes on the ball.
 	##
-	## The machinery was complete the whole time -- a turn rate, a neck limit, an
-	## independent head look. Nothing drove it. A moving body's heading is its
-	## velocity, which is a fact this method already holds every frame and was
-	## discarding.
+	## This method called `face_travel` unconditionally on the line above, before
+	## any of it ran. So facing always equalled travel, `travel_heading_offset`
+	## measured about zero because the two agreed by construction, and no voli
+	## ever shuffled or backpedalled anywhere.
 	##
-	## Below the floor the step is noise rather than a direction: a body that has
-	## effectively stopped keeps the heading it had rather than spinning to chase
-	## a rounding error.
-	var previous: Vector2 = live_positions.get(player_id, position)
+	## Two symptoms, both reported from the same frame. Volis are not watching
+	## the ball -- `look_toward` clamps the head to `HEAD_YAW_LIMIT_DEGREES` off
+	## the *body*, so a voli force-turned away from the ball physically cannot
+	## look at it. And a receiver ran to the ball facing their own footwork and
+	## then span into their platform as the contact pose landed, because the
+	## contact facing in `set_pose` is applied last and wins.
+	##
+	## It became much more visible with off-ball movement, for the obvious
+	## reason: far more volis travel now, so far more of them were being spun.
+	## One fact with two sources, and the cruder source ran first.
 	live_positions[player_id] = position
 	var actor := player_actors[player_id] as PlayerActor3D
-	var step := position - previous
-	if step.length() >= TRAVEL_HEADING_FLOOR:
-		var world_step := tactical_to_world(position.x, position.y) \
-			- tactical_to_world(previous.x, previous.y)
-		actor.face_travel(atan2(-world_step.x, -world_step.z))
 	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
 
 
