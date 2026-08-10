@@ -37,8 +37,21 @@ const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd"
 ## Ball speed a hitter can generate, from no attacking power to elite. The top
 ## of this is a hard-driven international spike; the bottom is a player who
 ## cannot put anything on it.
-const CEILING_MIN_MPS: float = 16.0
-const CEILING_MAX_MPS: float = 30.0
+##
+## **Raised from 16-30 because the ceiling is not what the ball gets.** Measured
+## over 340 uncontested spikes, the median left the hand at 12.6 m/s -- against
+## 25-37 for a real one, and against 7.7 for a set and 8.1 for a bump. A spike
+## was 1.6 times the pace of a set, which is the mechanical reason it read as
+## slow, and a deep one took 0.800 s to reach the floor.
+##
+## The ceiling was never the problem on its own: `available_ceiling_mps` spends
+## it through an approach factor and an across-body factor, and `choose_power`
+## then takes a fraction of what is left, so four multipliers around 0.8 each
+## compounded 30 m/s down to 12.6. Both of those floors were lifted with this,
+## because raising only the top of the range would have been a knob that cannot
+## reach its own stated value.
+const CEILING_MIN_MPS: float = 24.0
+const CEILING_MAX_MPS: float = 42.0
 
 ## The reference angle a driven attack is struck at. Used to price "how much
 ## power does it take to reach that far" -- a flatter ball needs more.
@@ -79,7 +92,12 @@ static func available_ceiling_mps(
 	)
 	## An approach only ever takes power away; arriving perfectly is what the
 	## ceiling already assumes.
-	var approach_scale := lerpf(0.70, 1.0, clampf(approach_quality, 0.0, 1.0))
+	##
+	## The floor was 0.70, which cost a badly-arriving hitter nearly a third of
+	## their pace before anything else had spent any. Stacked with the across-body
+	## floor and the chosen fraction it was one of four compounding discounts, and
+	## the product not any one of them was what made a spike slow.
+	var approach_scale := lerpf(0.84, 1.0, clampf(approach_quality, 0.0, 1.0))
 	return ceiling * approach_scale * clampf(swing_power_fraction, 0.1, 1.0)
 
 

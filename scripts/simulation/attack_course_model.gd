@@ -166,7 +166,12 @@ static func _slab(
 ## is that the cost is a function of the *offset from the approach*, not of the
 ## absolute bearing, so the same shot is cheap for a hitter who ran at it and
 ## expensive for one who has to turn back across themselves.
-const ACROSS_BODY_POWER_FLOOR: float = 0.72
+## Lifted from 0.72 with the two floors in `AttackPowerModel`: see
+## `CEILING_MIN_MPS`. Turning the ball across the body still costs pace and
+## still costs far more accuracy, which is the part that makes the shot a
+## choice; it was the compounding of four separate discounts that left a spike
+## travelling at 12.6 m/s.
+const ACROSS_BODY_POWER_FLOOR: float = 0.82
 const ACROSS_BODY_SPREAD_CEILING: float = 2.10
 
 

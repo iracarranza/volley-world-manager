@@ -595,7 +595,7 @@ static func _feasible_launch(
 	vertical_spread_degrees: float,
 	bearing_spread_degrees: float,
 	## Whether pace may be spent to flatten a roll shot. True for a swing, false
-	## for a serve -- see `_flattest_clearing_loft`, and the serve's own call.
+	## for a serve -- see `_quickest_clearing_loft`, and the serve's own call.
 	may_soften_the_loft: bool = true,
 ) -> Dictionary:
 	## The path the hitter aimed on, and the longer one a bearing error puts them
@@ -712,7 +712,7 @@ static func _feasible_launch(
 		## screen as a flat spike. §0 exactly: the branch went unmeasured because
 		## the only instrument pointed at it was reporting a different curve.
 		##
-		## `_flattest_clearing_loft` takes pace off *within* this decision instead,
+		## `_quickest_clearing_loft` takes pace off *within* this decision instead,
 		## which walks the lofted root down toward 45 degrees where the arc is
 		## shallowest. The order of preference is untouched: a driven ball first, a
 		## roll shot before another notch of relief. Deferring the whole loft to
@@ -733,8 +733,21 @@ static func _feasible_launch(
 						"angle_degrees": lofted, "aim_distance": aim_distance,
 						"speed_mps": speed, "mode": "lofted", "cleared": true,
 					}
-				return _flattest_clearing_loft(
-					speed, full_speed * NET_SPEED_RELIEF_FLOOR, aim_distance,
+				## **Down to the least force that reaches, not to a fraction of
+				## full pace.** `NET_SPEED_RELIEF_FLOOR` is 0.45, and from a tight
+				## set that still leaves 11 m/s trying to land 7 m away -- which
+				## only a near-vertical arc does, so the search kept returning one:
+				## the median roll shot came out at 76 degrees and 2.5 s of hang
+				## time. The floor is a derived quantity, not a dial. Below the
+				## minimum speed for the range nothing reaches at any angle, and at
+				## it the two roots merge, which is the shallowest and quickest arc
+				## the shot has.
+				return _quickest_clearing_loft(
+					speed,
+					float(BallFlightModel.minimum_speed_to_reach(
+						aim_distance, contact_height_meters
+					).speed_mps),
+					aim_distance,
 					contact_height_meters, ground_to_net, needed, lofted,
 				)
 			if lofted_height > fallback_height:
@@ -812,22 +825,32 @@ static func _feasible_launch(
 	}
 
 
-## The shallowest roll shot that still gets over, at or below this pace.
+## The quickest roll shot that still gets over, at or below this pace.
 ##
 ## A hitter who has decided to lift the ball has one dial left: how hard. For a
-## fixed range the lofted root falls toward 45 degrees as the swing softens, so
-## taking pace off *flattens* the arc -- and the flattest arc that clears the
-## tape is the one an actual player hits, because every degree above it is
-## hang-time handed to the defence for nothing.
+## fixed range there are only two angles that carry the ball, the lofted root is
+## the high one, and softening the swing walks it down toward 45 degrees.
 ##
-## Searched rather than solved because the constraint is not monotone. Softening
-## lowers the launch angle and also lowers the whole flight, so past some point
-## the ball stops clearing; the answer is the last one that does, and there is no
-## closed form for it that is shorter than trying them.
+## **The objective is hang time, not steepness, and getting that wrong is
+## instructive.** The first version searched for the flattest clearing loft, on
+## the reasoning that a flatter arc is a better shot. It is not, on its own: a
+## flat lob is slow, and flight time is `range / (speed * cos(angle))`, so giving
+## up pace to flatten can easily *lengthen* the flight. Measured at each attempt
+## on the same population:
+##
+##     full pace, steepest root      apex 9.34 m
+##     flattest clearing loft        median flight 2.367 s, p90 3.018
+##     bounded to 80% of pace        median flight 3.165 s, p90 3.797
+##
+## All three are the same mistake -- optimising a proxy. What the defence
+## actually gets from a roll shot is *time*, and what a hitter is trying to deny
+## them is time, so the thing to minimise is the flight itself. Horizontal speed
+## is that, exactly and directly, and it prices the arc and the pace together
+## instead of trading one for the other blind.
 ##
 ## `steepest_angle` is the loft already known to clear at `from_speed`, returned
-## unchanged when nothing softer works. This function can only improve on it.
-static func _flattest_clearing_loft(
+## unchanged when nothing softer beats it. This can only improve on it.
+static func _quickest_clearing_loft(
 	from_speed: float,
 	to_speed: float,
 	aim_distance: float,
@@ -838,6 +861,7 @@ static func _flattest_clearing_loft(
 ) -> Dictionary:
 	var best_angle := steepest_angle
 	var best_speed := from_speed
+	var best_ground_speed := from_speed * cos(deg_to_rad(steepest_angle))
 	for step in range(1, LOFT_FLATTENING_STEPS + 1):
 		var speed := lerpf(
 			from_speed, minf(to_speed, from_speed),
@@ -849,7 +873,8 @@ static func _flattest_clearing_loft(
 		if not bool(solved.get("lofted_found", false)):
 			continue
 		var angle := float(solved.lofted_angle_degrees)
-		if angle >= best_angle:
+		var ground_speed := speed * cos(deg_to_rad(angle))
+		if ground_speed <= best_ground_speed:
 			continue
 		if _height_at_net(
 			speed, angle, contact_height_meters, ground_to_net
@@ -857,6 +882,7 @@ static func _flattest_clearing_loft(
 			continue
 		best_angle = angle
 		best_speed = speed
+		best_ground_speed = ground_speed
 	return {
 		"angle_degrees": best_angle, "aim_distance": aim_distance,
 		"speed_mps": best_speed, "mode": "lofted", "cleared": true,

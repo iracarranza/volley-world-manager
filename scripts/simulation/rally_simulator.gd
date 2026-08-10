@@ -1077,10 +1077,17 @@ func resolve(
 	## ball has to go where the official verdict already says it went.
 	if serve_error:
 		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
-	var serve_arc := RallyKinematics.solve_struck_arc(
-		RallyKinematics.court_distance_meters(opponent_serve_origin, serve_landing),
+	var opponent_serve_distance := RallyKinematics.court_distance_meters(
+		opponent_serve_origin, serve_landing
+	)
+	var serve_arc := _serve_arc(
+		"geometric_serve_opponent",
+		opponent_serve_distance,
 		_serve_launch_angle_degrees(opponent_server, serve_quality),
 		GeometricAttackPromotionModel.serve_contact_height_meters(opponent_server),
+		_ground_to_net_meters(
+			opponent_serve_origin, serve_landing, opponent_serve_distance
+		),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	var serve_trajectory := _ball_trajectory(
@@ -2810,10 +2817,18 @@ func _resolve_home_serve(
 		opponent_landing = _errant_serve_landing(
 			opponent_landing, serve_quality, false
 		)
-	var serve_arc := RallyKinematics.solve_struck_arc(
-		RallyKinematics.court_distance_meters(CourtConstants.serve_origin(0.82, true), opponent_landing),
+	var home_serve_origin := CourtConstants.serve_origin(0.82, true)
+	var home_serve_distance := RallyKinematics.court_distance_meters(
+		home_serve_origin, opponent_landing
+	)
+	var serve_arc := _serve_arc(
+		"geometric_serve_home",
+		home_serve_distance,
 		_serve_launch_angle_degrees(server, serve_quality),
 		GeometricAttackPromotionModel.serve_contact_height_meters(server),
+		_ground_to_net_meters(
+			home_serve_origin, opponent_landing, home_serve_distance
+		),
 	)
 	var serve_time := float(serve_arc.duration_seconds)
 	## Named so the reception can carry it as its incoming ball, exactly as the
@@ -10969,6 +10984,107 @@ func _serve_confidence(
 	return inside * clampf(
 		(reach_meters - carry) / SERVE_CARRY_SLACK_METERS + 1.0, 0.0, 1.0
 	)
+
+
+## The serve arc, at the pace the server can actually generate.
+##
+## **`solve_struck_arc` asks the least force that reaches, so every serve in the
+## game was hit at exactly the speed needed to land where it landed.** Measured
+## over 400 serves, launch speed ran 14.2 to 15.4 m/s between the tenth and
+## ninetieth percentile -- a band 1.2 m/s wide across every server on both
+## rosters, because the number was a property of the *distance* and nothing
+## else. `serve_power` and `serve_technique` did not reach the ball at all, and
+## raising the whole pace ceiling moved this table by zero.
+##
+## The speed the server has was already being computed: `_geometric_serve_record`
+## resolves the same serve through the shared ballistics and stores it, and it
+## was read for nothing but a shadow comparison. Failure mode #1 -- the third
+## instance of it found on this branch.
+##
+## Speed is carried and the angle is re-solved, which is the doctrine `_swing_arc`
+## states for the same reason: a serve's speed belongs to the server and travels,
+## while its angle belongs to the server *and their target*, and the official
+## landing point is not always the geometric one.
+## How much ground a flight covers before it reaches the tape.
+##
+## Read off the line the ball was struck on rather than as the straight
+## perpendicular distance to the net, because a serve angled across the court
+## crosses more ground getting there and it is that longer path the ball has to
+## stay above the tape over.
+func _ground_to_net_meters(
+	from_position: Vector2, to_position: Vector2, distance_meters: float
+) -> float:
+	var span := to_position.y - from_position.y
+	if absf(span) < 0.0001:
+		return 0.0
+	return distance_meters * clampf(
+		(CourtConstants.NET_Y - from_position.y) / span, 0.0, 1.0
+	)
+
+
+## How far a server may come off full pace to get the ball over the tape, and in
+## how many steps. The same shape as `GeometricAttackResolver`'s relief sweep and
+## for the same reason: a server who cannot clear the net at full pace does not
+## serve through it, they take something off.
+const SERVE_PACE_RELIEF_STEPS: int = 8
+const SERVE_PACE_RELIEF_FLOOR: float = 0.55
+## The margin a serve is aimed to clear the tape by. A serve is struck nine
+## metres back, so a small bearing error is a large change in the ground it has
+## to cover before it gets there; this is the same clearance the swing's own
+## search insists on.
+const SERVE_NET_CLEARANCE_METERS: float = 0.12
+
+
+func _serve_arc(
+	key: String,
+	distance_meters: float,
+	fallback_angle_degrees: float,
+	contact_height_meters: float,
+	## Ground covered before the ball reaches the tape, along the line it was
+	## struck on.
+	net_distance_meters: float,
+) -> Dictionary:
+	var speed := float(Dictionary(geometric_serves.get(key, {})).get(
+		"speed_mps", 0.0
+	))
+	if speed <= 0.0:
+		return RallyKinematics.solve_struck_arc(
+			distance_meters, fallback_angle_degrees, contact_height_meters
+		)
+	## **The tape, which the first version of this forgot.** Handing the serve
+	## the server's real pace and then re-solving the angle for the official
+	## landing put 215 of 218 serves *through the net*: at 25 m/s a ball aimed
+	## 17 m away has to be struck slightly downward to land there at all, and
+	## from a 2.9 m contact that is under the tape by the time it arrives. The
+	## flight was right and the shot was impossible, which is the same class of
+	## mistake as solving a spike without knowing the net exists.
+	var needed := CourtConstants.NET_HEIGHT_METERS + SERVE_NET_CLEARANCE_METERS
+	var fallback := RallyKinematics.solve_struck_arc(
+		distance_meters, fallback_angle_degrees, contact_height_meters
+	)
+	for step in range(SERVE_PACE_RELIEF_STEPS):
+		var trial := speed * lerpf(
+			1.0, SERVE_PACE_RELIEF_FLOOR,
+			float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
+		)
+		var solved := BallFlightModel.solve_angle_for_range(
+			trial, distance_meters, contact_height_meters
+		)
+		if not bool(solved.get("driven_found", false)):
+			continue
+		var angle := float(solved.driven_angle_degrees)
+		if net_distance_meters > 0.0 and BallFlightModel.height_at_distance(
+			BallFlightModel.solve_flight(trial, angle, contact_height_meters),
+			net_distance_meters,
+		) < needed:
+			continue
+		return RallyKinematics.struck_arc_from_speed(
+			distance_meters, trial, angle, contact_height_meters
+		)
+	## Nothing this server has gets over from here. The old minimum-force solve
+	## is the least-bad ball, and the serve-error verdict was already taken
+	## upstream -- this only decides what the ball looks like on its way.
+	return fallback
 
 
 ## How far this server's ball travels before it lands, at the flat end of their
