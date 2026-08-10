@@ -1202,10 +1202,6 @@ func resolve(
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
 			"side": "opponent", "target": str(serve_decision.target),
-			## Where the home six stand to receive this. Published on the *serve*
-			## because that is the flight during which they take up the shape --
-			## by the reception event they are already in it.
-			"home_phase_targets": _receive_formation_map(lineup, false),
 			"called_target": intended_target,
 			"aim_point": serve_decision.aim_point,
 			"serve_mode": serve_decision.mode,
@@ -1457,6 +1453,16 @@ func resolve(
 			_arrival_phrase(arrival, receiver_arrived, support_count) \
 			+ (" Equal-priority passers hesitated at the seam." if seam_conflict else ""),
 		], {"side": "home", "landing": serve_landing,
+			## Where the home six stand to receive this serve.
+			##
+			## On the *reception* event rather than the serve, because playback
+			## draws a leg as `event -> next_contact` and reads its targets off
+			## `next_contact`. So these move people during the serve's flight,
+			## which is when a side takes up its receive shape. Published on the
+			## serve event they were never drawn at all -- nothing precedes the
+			## first contact of a rally, so that leg does not exist. Measured
+			## after the fact: 400 serves of 400 had no preceding flight.
+			"home_phase_targets": _receive_formation_map(lineup, false),
 			"planner_zone_center": Vector2(receiver_zone.center) \
 				if receiver_zone != null else receiver_start,
 			"planner_zone_radius_meters": float(receiver_zone.radius_meters) \
@@ -1692,16 +1698,18 @@ func resolve(
 		"decisiveness": float(home_principles.decisiveness),
 		"tempo_variation": float(home_principles.tempo_variation),
 	}
-	## The other four, while the pass is in the air. Written onto the reception
-	## event because playback reads a leg's movement off the contact it is flying
-	## toward, and this is the leg the report was about.
-	if reception_event_for_staging != null:
-		reception_event_for_staging.metadata["home_phase_targets"] = \
-			_transition_phase_map(
-				players, lineup, receiver.id, setter.id,
-				hitter.id if hitter != null else -1,
-				set_contact, second_contact_window, setter_arrival_margin,
-			)
+	## The other four, while the pass is in the air.
+	##
+	## Computed here, where the hitter is finally known, and attached to the SET
+	## event below -- because playback reads a leg's targets off the contact it
+	## is flying *toward*, so the pass's flight is described by the set. Attached
+	## to the reception event these moved people during the *serve*, which is the
+	## one phase that already had a shape of its own.
+	var home_transition_targets := _transition_phase_map(
+		players, lineup, receiver.id, setter.id,
+		hitter.id if hitter != null else -1,
+		set_contact, second_contact_window, setter_arrival_margin,
+	)
 	if active_play == null:
 		result.key_factors.append(_factor("default_offense"))
 	else:
@@ -1896,6 +1904,8 @@ func resolve(
 	(result.events[-1] as RallyEvent).metadata["rescue_height_meters"] = set_height_extra
 	(result.events[-1] as RallyEvent).metadata["height_difficulty"] = set_height_difficulty
 	var set_event := result.events[-1] as RallyEvent
+	if set_event != null and not home_transition_targets.is_empty():
+		set_event.metadata["home_phase_targets"] = home_transition_targets
 	if using_live_setter and set_event != null:
 		set_event.metadata["continuous_setter"] = true
 		set_event.metadata["setter_action"] = str(selected_live_setter.get(
@@ -2602,6 +2612,13 @@ func resolve(
 			roundi(block_strength * 100.0),
 			" Scouting anticipated this pattern." if adaptation_bonus >= 0.035 else "",
 		], {"side": "opponent", "lane": assignment.lane,
+			## The home side collapsing into cover behind their own hitter while
+			## the spike is in the air. On the block event because that is the
+			## contact this flight ends at.
+			"home_phase_targets": _cover_phase_map(
+				players, lineup, defensive_plan, hitter.id,
+				set_target, attack_flight, false,
+			),
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
@@ -2998,11 +3015,6 @@ func _resolve_home_serve(
 		"%s · %d%% pressure at %d%% selected risk." % [server.primary_serve_style,
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
 		], {"side": "home", "target": str(serve_decision.target),
-			## And the opposite side's shape, on the same principle.
-			"opponent_phase_targets": _receive_formation_map(
-				opponent_team.current_lineup() if opponent_team != null else null,
-				true,
-			),
 			"called_target": target_name, "aim_point": serve_decision.aim_point,
 			"serve_mode": serve_decision.mode,
 			"changed_target": serve_decision.changed_target,
@@ -3118,6 +3130,12 @@ func _resolve_home_serve(
 			_arrival_phrase(opponent_arrival, receiver_arrived, support_count),
 			" Scouting anticipated this target." if serve_receive_bonus >= 0.035 else "",
 		], {"side": "opponent", "landing": opponent_landing,
+			## The other side's receive shape, on the same event and for the same
+			## reason as the home one above.
+			"opponent_phase_targets": _receive_formation_map(
+				opponent_team.current_lineup() if opponent_team != null else null,
+				true,
+			),
 			"flight_time": serve_time, "arrival": opponent_arrival,
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
 			"serve_risk_pressure": serve_risk_pressure,
@@ -3296,21 +3314,14 @@ func _resolve_opponent_transition(
 		opponent_setter, setter_start, opponent_setter_position,
 		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
 	)
-	## The other side's off-ball five, while their pass is in the air.
-	##
-	## The first contact is still the last event on the tape here -- the set is
-	## added below -- so this is the leg it governs.
-	var opponent_first_contact := result.events[-1] as RallyEvent
-	if opponent_first_contact != null:
-		var existing_targets: Dictionary = opponent_first_contact.metadata.get(
-			"opponent_phase_targets", {}
-		)
-		existing_targets.merge(_opponent_transition_phase_map(
-			opponent_team, first_contact_player_id, opponent_setter.id,
-			opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
-			setter_arrival_margin,
-		), true)
-		opponent_first_contact.metadata["opponent_phase_targets"] = existing_targets
+	## The other side's off-ball five, while their pass is in the air. Attached to
+	## the SET event below for the same reason the home map is -- a leg's targets
+	## live on the contact it flies toward.
+	var opponent_transition_targets := _opponent_transition_phase_map(
+		opponent_team, first_contact_player_id, opponent_setter.id,
+		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
+		setter_arrival_margin,
+	)
 	## Same model as the home transition set, and now the same attributes. The
 	## two sides read different ones -- this side set_accuracy, court_vision and
 	## decision_making, the home side set_accuracy, ball_control and composure --
@@ -3570,6 +3581,7 @@ func _resolve_opponent_transition(
 		"Contact 2 of 3 · %d%% set quality." % roundi(opponent_set_quality * 100.0),
 		{"side": "opponent",
 			"set_path": "opponent_first_ball" if first_ball else "opponent_transition",
+			"opponent_phase_targets": opponent_transition_targets,
 			"set_terms": opponent_set_terms,
 			## The capability read this side has always computed and never
 			## published, so the only path whose penalty could be decomposed was
@@ -4204,6 +4216,17 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
 		], {"side": "home", "outcome": block_outcome,
+			## And the opposite side's cover, mirrored -- the opponent collapsing
+			## behind their own hitter while their spike is in the air.
+			"opponent_phase_targets": _cover_phase_map(
+				opponent_team.on_court_players(),
+				opponent_team.current_lineup(),
+				_opponent_defensive_plan(opponent_team),
+				opponent_hitter.id if opponent_hitter != null else -1,
+				opponent_contact,
+				float(opponent_attack_trajectory.get("duration", 0.30)),
+				true,
+			),
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
 			"signature_charge": float(geometric.get("signature_charge", 0.0)),
@@ -4715,6 +4738,16 @@ func _resolve_home_continuation(
 		"Contact 2 of 3 after %s's dig · %d%% set quality." % [
 			defender.display_name, roundi(set_quality * 100.0),
 		], {"side": "home", "set_path": "home_transition",
+			## The home off-ball four out of defence, on the same principle as the
+			## first-ball path. Without this the transition set was the one home
+			## flight nobody moved through -- the opponent's continuation had it
+			## and ours did not, which is the asymmetry this file keeps having to
+			## close one path at a time.
+			"home_phase_targets": _transition_phase_map(
+				players, lineup, defender.id, setter.id,
+				hitter.id if hitter != null else -1,
+				set_contact, continuation_flight_time, setter_arrival_margin,
+			),
 			"set_terms": cont_set_terms,
 			"setter_capability": setter_capability.duplicate(true),
 			"set_distance_meters": cont_set_geometry.distance_meters,
@@ -12010,6 +12043,96 @@ func _opponent_transition_phase_map(
 		)
 		targets[player.id] = reached
 		opponent_live_positions[player.id] = reached
+	return targets
+
+
+## Where the attacking side goes while their own spike is in the air.
+##
+## **The intentions were already written down and never read.** Every
+## `DefensiveAssignment` carries an `attack_coverage_responsibility` -- one of
+## *cover nearest attacker*, *cover assigned hitter*, *take second contact* or
+## *release for transition* -- and until now the only thing that read it was
+## `_resolve_attack_coverage`, to pick the single voli who plays a recycled ball.
+## The other four had a stated intention and nowhere to stand.
+##
+## So nothing is invented here either. Each voli goes where their own
+## responsibility means, and `_reached_point` decides how much of it they cover.
+## An attack flight is short -- often under a quarter of a second -- so most of
+## these answers are "barely moved", which is the correct picture: cover is a
+## collapse you commit to before the ball is struck, and a viewer should see who
+## committed and who released.
+##
+## `release_for_transition` is the interesting one, and it is why this reads as
+## volleyball rather than as everyone converging: the voli the tactic told to
+## leave goes the *other* way, off the net, to be available to swing next.
+func _cover_phase_map(
+	players: Array,
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	hitter_id: int,
+	contact: Vector2,
+	window_seconds: float,
+	opponent_side: bool,
+) -> Dictionary:
+	var targets := {}
+	if lineup == null or window_seconds <= 0.0:
+		return targets
+	## Two rings behind the hitter, on their own side of the net. Tight cover
+	## takes the ball that drops straight off the block; the deeper ring takes
+	## the one that comes back with pace.
+	var tight_depth := 0.60 if not opponent_side else 0.40
+	var deep_depth := 0.72 if not opponent_side else 0.28
+	var base_depth := 0.84 if not opponent_side else 0.16
+	## Looked up here rather than through `_player_by_id`, which is typed
+	## `Array[VolleyballPlayer]` -- the opponent's roster arrives as
+	## `Array[Resource]` from `on_court_players()`, and one shared function
+	## serving both sides is the point of this map existing once.
+	var by_id := {}
+	for entry in players:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var tight_taken := false
+	for slot_number in range(1, 7):
+		var player := by_id.get(
+			int(lineup.player_at_slot(slot_number)), null
+		) as VolleyballPlayer
+		if player == null or player.id == hitter_id:
+			continue
+		var here: Vector2 = (
+			opponent_live_positions if opponent_side else live_positions
+		).get(player.id, CourtConstants.slot_position(slot_number))
+		var assignment: Resource = defensive_plan.assignment_for(player.id) \
+			if defensive_plan != null else null
+		var responsibility := str(assignment.attack_coverage_responsibility) \
+			if assignment != null else "Cover nearest attacker"
+		var intent := here
+		var mode := "lateral"
+		match responsibility:
+			"Release for transition":
+				## Off the net, not toward it. This voli is preparing to hit.
+				intent = Vector2(
+					CourtConstants.slot_position(slot_number).x, base_depth
+				)
+				mode = "transition"
+			"Take second contact":
+				intent = Vector2(0.50, tight_depth)
+			_:
+				## The first voli to claim it takes the tight ring, everyone else
+				## fills the deeper one -- so two people do not stand on the same
+				## square metre behind the hitter.
+				intent = Vector2(
+					clampf(contact.x + (0.0 if not tight_taken else 0.16), 0.06, 0.94),
+					tight_depth if not tight_taken else deep_depth,
+				)
+				tight_taken = true
+				mode = "transition"
+		var reached := _reached_point(player, here, intent, window_seconds, mode)
+		targets[player.id] = reached
+		if opponent_side:
+			opponent_live_positions[player.id] = reached
+		else:
+			live_positions[player.id] = reached
 	return targets
 
 

@@ -35,22 +35,68 @@ comment is explicit that the replacement for invented movement is *nothing*, and
 that "if serve-receive movement turns out to matter, the fix is for the resolver
 to publish it, not for playback to make it up."
 
-It turns out to matter. Measured over 400 rallies:
+It turns out to matter.
 
-| event | n | carries phase targets | share |
-|---|---|---|---|
-| SERVE | 400 | 0 | 0.000 |
-| RECEPTION | 384 | 0 | 0.000 |
-| SET | 517 | 241 | 0.466 |
-| ATTACK | 517 | 434 | 0.839 |
-| BLOCK | 434 | 198 | 0.456 |
-| DEFENSE | 308 | 218 | 0.708 |
+#### Measure the flight, not the event
 
-**Mean players given a position per event: 1.77, of twelve on court.**
+The first instrument for this counted phase targets **per event**, and it was
+the wrong instrument in a way worth recording, because it is the failure mode
+this repository keeps rediscovering: *a probe that measures the wrong channel
+reports a clean result for a dirty system.*
 
-Serve receive — the phase in the screenshot, and the phase a viewer watches most
-closely because it is where every rally starts — has a publication rate of
-exactly zero on both sides. There is no underlying opinion for playback to draw.
+`_build_movement_plan(event, next_contact)` draws the leg from `event` to
+`next_contact`, and reads its targets off **`next_contact`**. So a target on the
+RECEPTION event moves people during the *serve's* flight, and a target on the
+SET event moves them during the *pass's*. Counting publication per event cannot
+see that, and it reported a fixed serve receive while the formation was being
+drawn at the wrong moment — or, on the serve event itself, never drawn at all:
+nothing precedes the first contact of a rally, so that leg does not exist.
+**Measured, 400 serves of 400 had no preceding flight.**
+
+The honest instrument walks consecutive contacts and asks how many volis the
+leg between them actually moves. Measured over 400 rallies:
+
+| flight drawn | before | after |
+|---|---|---|
+| SERVE → RECEPTION | 3.42 | **6.00** |
+| RECEPTION → SET | 1.00 | **4.52** |
+| SET → ATTACK | 5.00 | 5.00 |
+| ATTACK → BLOCK | 2.75 | **6.88** |
+| BLOCK → DEFENSE | 4.42 | 4.23 |
+| DEFENSE → SET | 0.67 | **4.15** |
+| **mean, of twelve** | **3.20** | **5.29** |
+
+#### What each leg needed, and where it came from
+
+Nothing below is new geometry. Every one of them was already being computed and
+then either discarded or attached to the wrong contact.
+
+- **The serve's flight** wanted the receive formation.
+  `_receive_formation_positions` already asked `CourtConstants` for the whole
+  six-slot shape and kept only the passers, because all it needed was somewhere
+  to aim the serve. `_receive_formation_map` makes the same call and keeps it
+  whole.
+- **The pass's flight** wanted the transition. Front-row volis release to the
+  approach mark `_approach_start_position` would put them on for the lane
+  `_fallback_assignment` says is theirs; back-row volis take base. The hitter is
+  excluded because their release is already staged on the SET event, and moving
+  them twice cost the ATTACK phase's timing ratio 1.0912 → 1.2111 before the
+  gate caught it.
+- **The spike's flight** wanted cover — and the intentions were already written
+  down. Every `DefensiveAssignment` carries an
+  `attack_coverage_responsibility`: *cover nearest attacker*, *cover assigned
+  hitter*, *take second contact*, *release for transition*. Until now the only
+  reader was `_resolve_attack_coverage`, choosing the one voli who plays a
+  recycled ball; the other four had a stated intention and nowhere to stand.
+  `_cover_phase_map` reads the responsibility each voli already has. *Release
+  for transition* is the one that makes it read as volleyball rather than as
+  everyone converging — the voli the tactic told to leave goes the other way.
+
+In every case `_reached_point` decides how much of the target a voli actually
+covers in the time available, on the same movement model that times and charges
+every other journey in the engine. An attack flight is often under a quarter of
+a second, so most cover answers are "barely moved" — which is the correct
+picture, and is the information a viewer needs to see who committed.
 
 ### 2. Correction: the ready stance is fine
 
