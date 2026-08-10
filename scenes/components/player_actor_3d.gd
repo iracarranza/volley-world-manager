@@ -53,6 +53,15 @@ var arm_bone_lengths: Vector2 = Vector2(0.40, 0.48)
 ## the edge of their range the ball was, and how well their body could face it.
 ## Playback reads that verdict rather than inventing a pose.
 var contact_posture: String = "planted"
+## Where the forearms must point for the ball to leave the way it did, relative
+## to this voli's own facing, from `PlatformAim`. Empty until playback supplies
+## one, so a portfolio plate or a pose set by hand keeps the posture's own angle.
+##
+## The whole reason this is state rather than an argument: `set_pose` already
+## carries seven parameters and the platform is not a property of the *pose*, it
+## is a property of the *ball*. `contact_posture` and `contact_recovery` are
+## carried the same way for the same reason.
+var contact_platform_aim: Dictionary = {}
 ## What the contact *did* to them, as opposed to how strained it was.
 ## `_reception_recovery` decides this; playback draws it and does not invent it.
 ## "platform", "knee", "fall" or "blown_away" -- see `rally_simulator.gd`.
@@ -463,6 +472,8 @@ func _apply_dig_posture(
 	var stance_metres := 0.76
 	var platform_yaw := 0.0
 	var platform_roll := 0.0
+	## Whatever the platform could not be turned to, which the trunk leans into.
+	var platform_residual := 0.0
 	## How far the whole body twists toward the ball, and how far the *far* leg
 	## steps across to let it. Zero for the two square postures.
 	var torso_yaw := 0.0
@@ -553,6 +564,34 @@ func _apply_dig_posture(
 	## The stance does *not* extend with it. Feet do not move during a pass; the
 	## legs straighten between them, so the base stays as wide as it was set and
 	## only the angles unwind.
+	## **The ball decides the platform, when the ball is known.**
+	##
+	## The posture's own constant -- 0 square, 30 off-axis -- is kept as the
+	## fallback and nothing more. It was the only source before, which meant every
+	## square pass in the game had identical forearms whether the ball came from
+	## the service line or off a blocker's hands two metres away, and an off-axis
+	## one was 30 degrees to the same side regardless of which side the ball was
+	## actually on.
+	##
+	## `PlatformAim` bisects the incoming and outgoing flights, which is where the
+	## normal of a rebounding surface is. Both flights are already on the event.
+	##
+	## Resolved **here**, above the drive, because `body_tilt` and `torso_yaw` are
+	## both consumed a dozen lines below and the first version of this wrote to
+	## them after the fact -- a value computed and dropped, the failure this
+	## repository logs more than any other, reproduced while fixing something else.
+	if bool(contact_platform_aim.get("valid", false)):
+		platform_yaw = float(contact_platform_aim.get("yaw_degrees", platform_yaw))
+		platform_residual = float(
+			contact_platform_aim.get("residual_degrees", 0.0)
+		)
+		## The trunk goes where the arms could not. A residual is by definition
+		## the part of the reach the shoulders refused, so it is paid for by
+		## turning the body -- which is what a passer actually does, and what
+		## makes an off-axis contact read as a person rather than as a shrug.
+		torso_yaw += clampf(platform_residual * 0.55, -34.0, 34.0)
+		body_tilt += clampf(absf(platform_residual) * -0.16, -9.0, 0.0)
+
 	crouch_metres = lerpf(crouch_metres, crouch_metres * 0.28, push)
 	hip_pitch = lerpf(hip_pitch, hip_pitch * 0.35, push)
 	body_tilt = lerpf(body_tilt, body_tilt * 0.30, push)
@@ -633,6 +672,13 @@ func _apply_dig_posture(
 	## the target rather than being left behind by a body that stood up out of it.
 	## Small: the arms are the one thing in a pass that is *not* supposed to travel.
 	var lead := 52.0 - hip_pitch * 0.30 + 13.0 * push
+	## And the platform's *tilt* comes off the same solve. A ball driven flat and
+	## dug up needs a surface angled back; one dropping vertically and pushed
+	## forward needs it angled down. That is the pitch of the same normal, and
+	## reading only its yaw would leave the arms at one fixed rake for every ball
+	## in the game -- the identical defect one axis over.
+	if bool(contact_platform_aim.get("valid", false)):
+		lead -= clampf(float(contact_platform_aim.get("pitch_degrees", 0.0)), -34.0, 38.0) * 0.5
 	## Converging, not splayed -- and this sign was inverted too. Rotating an arm
 	## about +Z by theta moves its hand to x = sin theta, so the *left* arm needs a
 	## positive roll to bring its hand toward the centreline and the right arm a

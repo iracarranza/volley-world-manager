@@ -64,6 +64,21 @@ const STRIPS: Array[Dictionary] = [
 		"posture": "planted",
 	},
 	{
+		## Not a phase sweep: eight *different balls*, each at the same instant of
+		## the same pass. The whole claim of `PlatformAim` is that the forearms
+		## follow the ball, and a strip that varied time instead of geometry could
+		## not show that either way.
+		"name": "platform_aim",
+		"caption": "RECEPTION: one instant, eight incoming lines",
+		## At contact, not after it. `PLATFORM_DRIVE_END` is 0.34, so a phase of
+		## 0.5 draws the follow-through -- the legs have already extended and the
+		## voli is standing up out of the pass, which is the one instant the
+		## platform is *not* the thing to look at.
+		"pose": [RallyEventModel.EventType.RECEPTION, 0.0, -0.02],
+		"posture": "planted",
+		"platform_sweep": true,
+	},
+	{
 		"name": "signature_crush",
 		"caption": "ATTACK signature: crush, full charge",
 		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
@@ -158,6 +173,50 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 				RallyEventModel.EventType.DEFENSE, 0.0, progress,
 				Vector2.RIGHT, true,
 			)
+		elif bool(strip.get("platform_sweep", false)):
+			## The ball arrives from a different bearing in every frame and leaves
+			## toward the same setter, so the bisector -- and therefore the
+			## platform -- swings across the row while nothing else changes.
+			var bearing := lerpf(-80.0, 80.0, progress)
+			var incoming := {
+				"start_position": Vector2(0.5, 0.5) + Vector2(
+					sin(deg_to_rad(bearing)), cos(deg_to_rad(bearing))
+				) * 0.42,
+				"end_position": Vector2(0.5, 0.5),
+				"start_height_meters": 2.4,
+				"end_height_meters": 0.9,
+				"duration": 0.8,
+			}
+			var outgoing := {
+				"start_position": Vector2(0.5, 0.5),
+				"end_position": Vector2(0.5, 0.34),
+				"start_height_meters": 0.9,
+				"end_height_meters": 2.3,
+				"duration": 0.9,
+			}
+			actor.contact_posture = str(strip.get("posture", "planted"))
+			## **Facing the ball, the way playback faces them.**
+			##
+			## `set_pose` turns a passer toward the incoming contact direction, so
+			## measuring the residual against a body facing down-court is measuring
+			## against a voli who is not there. Done that way the residual came out
+			## at 46 degrees for a ball arriving 11 degrees off centre, which is
+			## the test being wrong rather than the solve.
+			var body_yaw := bearing + 180.0
+			actor.facing_yaw = deg_to_rad(body_yaw)
+			actor.rotation.y = actor.facing_yaw
+			actor.contact_platform_aim = PlatformAim.relative(
+				PlatformAim.solve(incoming, outgoing), body_yaw
+			)
+			var sweep_pose: Array = strip.pose
+			actor.set_pose(
+				int(sweep_pose[0]), float(sweep_pose[1]), float(sweep_pose[2]),
+				Vector2.RIGHT, true,
+			)
+			actor.identity_label.text = "%+.0f" % bearing
+			## `set_pose` would otherwise turn them again from the pose's own
+			## direction and undo the facing set above.
+			actor.has_facing = true
 		else:
 			var pose: Array = strip.pose
 			var context := {}

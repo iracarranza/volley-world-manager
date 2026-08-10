@@ -378,6 +378,7 @@ func _apply_contact_poses(
 			event_peak * outgoing_lift, outgoing_phase, event_direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
+			_platform_aim(event),
 			_action_context(event, event_actor),
 		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
@@ -1010,3 +1011,28 @@ func _sample_cognition(
 	if to_time <= from_time:
 		to_time = from_time + maxf(leg_seconds, 0.01)
 	match_court_3d.sample_cognition(lerpf(from_time, to_time, progress))
+
+
+## Where this contact's forearms have to point, or nothing.
+##
+## Solved once per pose from the two flights the event already carries, and only
+## for the two contacts that are actually played off a platform. A serve, a set,
+## a swing and a block are struck with hands and have no platform to aim; handing
+## them a bisector would be pointing arms at a surface that does not exist.
+##
+## The body yaw is read from the actor rather than from the event, because the
+## residual -- the part of the reach the shoulders cannot absorb -- is only
+## meaningful against where the voli is actually facing.
+func _platform_aim(event: RallyEvent) -> Dictionary:
+	if event.event_type != RallyEventModel.EventType.RECEPTION \
+			and event.event_type != RallyEventModel.EventType.DEFENSE:
+		return {}
+	var solved := PlatformAim.solve(
+		event.metadata.get("incoming_trajectory", {}),
+		event.metadata.get("outgoing_trajectory", {}),
+	)
+	if not bool(solved.get("valid", false)):
+		return {}
+	var actor := match_court_3d.actor_for(int(event.actor_id))
+	var body_yaw := rad_to_deg(actor.facing_yaw) if actor != null else 0.0
+	return PlatformAim.relative(solved, body_yaw)

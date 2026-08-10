@@ -231,6 +231,13 @@ func finish_movement_plan(plan: Dictionary, window_seconds: float = 0.0) -> void
 		))
 
 
+## The actor for a voli, or null. Public because a caller that needs to know
+## where a body is *facing* -- to measure a platform against it, say -- cannot
+## get that from a position.
+func actor_for(player_id: int) -> PlayerActor3D:
+	return player_actors.get(player_id) as PlayerActor3D
+
+
 func set_player_pose(
 	player_id: int,
 	event_type: int,
@@ -240,6 +247,11 @@ func set_player_pose(
 	highlighted: bool,
 	contact_posture: String = "planted",
 	contact_recovery: String = "platform",
+	## Where the forearms have to point, solved by `PlatformAim` from the two
+	## flights on the event. Empty for every contact that is not a pass, and for
+	## a pass whose trajectories were not published -- the posture's own constant
+	## is then still the fallback.
+	platform_aim: Dictionary = {},
 	action_context: Dictionary = {},
 ) -> void:
 	if not player_actors.has(player_id):
@@ -251,6 +263,7 @@ func set_player_pose(
 	## actor, not to form a second opinion from the positions.
 	actor.contact_posture = contact_posture
 	actor.contact_recovery = contact_recovery
+	actor.contact_platform_aim = platform_aim
 	actor.set_pose(
 		event_type, elevation, phase, direction, highlighted, action_context
 	)
