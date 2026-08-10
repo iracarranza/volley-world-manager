@@ -5101,47 +5101,108 @@ discouraging term in the selection score.
 
 ---
 
-## The spike goes through the net and through the blocker, and it is one cause
+## The spike goes through the net -- and the block leg was innocent
 
-Reported from playback. `tools/run_ball_flight_probe.gd` finds it and names it.
+Reported from playback: "spike goes through the net and blocker".
+`tools/run_ball_flight_probe.gd` found it, and `tools/run_block_leg_probe.gd`
+was written to say which of three candidate mechanisms it was. Fixed; kept
+because the wrong diagnosis is more instructive than the right one.
 
     height at the tape, metres (net is 2.43)
     leg                 n     mean     min    below tape
-    Attack -> Block   205     2.59    0.74        43
-    Attack -> floor    24     2.73    2.20         2
+    Attack -> Block   205     2.59    0.74        43        <- before
+    Attack -> Block   250     3.14    2.36         6        <- after
 
-**43 of 205 blocked attacks -- 21% -- are drawn crossing the tape below the net**,
-the worst at 0.74 m. And the worst five say why:
+### The diagnosis that was wrong
 
-    Attack -> Block   0.74 m at the tape, 0.29 s, 2.87 m -> 0.12 m
-    Attack -> Block   0.86 m at the tape, 0.39 s, 2.91 m -> 0.12 m
-    Attack -> Block   0.98 m at the tape, 0.29 s, 2.88 m -> 0.12 m
+The first reading, from the summary alone, was that the to-block leg was drawn
+from the hitter's contact down to the floor instead of ending in the blocker's
+hands -- every one of the worst five ended at 0.12 m, which is the floor
+constant. Plausible, and wrong. Splitting the same 205 legs by whether the block
+actually touched the ball settles it in one table:
 
-Every one of them ends at **0.12 m**. That is the floor. The attack-to-block leg
-is being drawn from the hitter's contact at ~2.9 m down to the ground, when it
-should end in the blocker's hands at roughly 2.7 to 3.0 m.
+    re-sliced at the block (it touched)    91 legs,  2 under the tape
+    left whole (the block missed)         114 legs, 41 under the tape
 
-So the leg is aimed *past* the blocker at the floor behind them. A parabola from
-2.9 m to 0.12 m is below 2.43 m long before it reaches the net, which is why the
-ball is drawn through the tape -- and it passes through the body for the same
-reason, because the endpoint it is heading for is not the block contact at all.
+`_truncated_arc` was doing its job. The legs that end in a blocker's hands were
+already fine; the ones going under the tape are the swing's *own* flight, drawn
+whole because a block that misses does not shorten anything. The 0.12 m endings
+were the floor target those swings were correctly aimed at.
 
-**Both reported symptoms are the one fact.** The ball does not clip the net and
-separately clip the blocker; it is travelling to the wrong place, and the net and
-the blocker are simply both in the way of the wrong place.
+A total cannot tell two populations apart. This one hid a 2-in-91 defect inside
+a 41-in-114 one and pointed the fix at the wrong file.
 
-### Where it is
+### The three defects that were actually there
 
-`_truncated_arc` builds the to-block leg by keeping the parent swing's launch and
-a proportional duration -- which is right for the shape -- but the endpoint it is
-truncated *to* is carrying the parent's floor landing rather than the block
-contact height. `GeometricAttackPromotionModel.block_contact_from_reach` already
-answers what that height should be and is used elsewhere; this leg does not ask
-it.
+**1. The drawing threw away the resolver's certified launch angle whenever it
+pointed up.** `_swing_arc` carried `vertical_angle_degrees` only when it was
+`<= 0.0`. `_feasible_launch` reaches for a lofted root *only* when no driven one
+clears the tape, so the guard excluded exactly the branch that needed it: all 26
+lofted swings were certified over the net, all 26 were drawn at a mean of -18.4
+degrees, and 23 of the 26 were drawn through it. The bound had been added to hold
+down an unrelated number (untouched attacks at the tape, 2.69 m -> 5.19 m), which
+is §0 twice -- a limit placed on the drawing to correct something the resolver
+had decided.
 
-Not fixed here. It is a small change and it wants the tape-crossing histogram
-re-run against it, which is one command -- but the branch is already red on the
-identity gate and this session has one inert change in it from moving faster than
-the measurement. Next session: set the leg's end height from the blocker's
-contact, re-run the probe, and expect the below-tape count on `Attack -> Block`
-to go to zero rather than merely down.
+**2. The loft itself was a punt.** With the drawing no longer flattening them,
+the lofted swings could be measured for the first time: **mean apex 9.34 m**,
+mean height at the tape 7.82 m, on 15% of all attacks. For a fixed range there
+are only two angles that carry the ball, and the lofted root is the high one --
+the faster the swing, the closer to vertical. The search took the first loft it
+met and the sweep starts at full pace, so it always took the steepest one
+available. `_flattest_clearing_loft` now takes pace off within that decision
+until the arc stops clearing: apex 9.34 m -> 3.96 m.
+
+Deferring the whole loft to the end of the relief sweep was tried first and is
+worse -- a slower driven root is a *higher* one, so it swallowed every roll shot
+in the game and the lofted branch went to 0 of 232. One dead branch for another.
+
+And a serve must not be softened at all: pace is the tactical instruction there,
+and flattening made risk 0.0 / 0.5 / 1.0 come back at 11.68 / 11.18 / 11.39 m/s
+-- not compressed, non-monotone. `may_soften_the_loft` is false for serves.
+
+**3. The opponent lost its record entirely.** `_swing_arc` was handed
+`_trace_summary()["geometric_attack_opponent"]` -- the same dictionary stored
+four lines earlier, except the store is conditional on `shadow_reception_trace`
+and that is null on any path with no trace. Split by side, the tell is
+unmistakable:
+
+    home/lofted        16 swings, angle carried on 15,  0 under the tape
+    opponent/lofted    19 swings, angle carried on  1, 14 under the tape
+
+Both records were in hand as locals at the call sites. Failure mode #1 again:
+computed correctly, dropped before anything could use it, re-derived worse.
+
+### What it moved
+
+    Attack -> Block below the tape   43 of 205  ->   6 of 250
+    worst crossing                      0.74 m  ->  2.36 m  (tape is 2.43)
+    Attack -> floor below the tape    2 of  24  ->   0 of  22
+
+The six that remain are all within 7 cm of the tape, which is a different order
+of problem from a ball 1.7 m under it.
+
+### The balance cost, which is real and not yet paid
+
+    contacts per rally    5.874 -> 6.657   (into band, was failing)
+    kill rate             0.486 -> 0.374   (out of band, was passing)
+    dig rate              0.400 -> 0.593   (out of band, was passing)
+    home / opponent kill  0.433 / 0.542 -> 0.368 / 0.381
+
+The asymmetry closing from 0.109 to 0.013 is defect 3 being fixed, and is the
+result worth having. The rest follows from 15% of attacks now flying as the
+resolver always said they did: a roll shot is slow and high, so it is dug, and
+rallies are longer.
+
+**The bands were calibrated against a game that mis-flew those swings**, so they
+are the next thing to check rather than the evidence that this is wrong. Do not
+tune the kill rate back up by changing the launch model -- re-measure what the
+band should be, then look at whether 15% of attacks *should* be roll shots.
+
+### Left over, unrelated, noticed in passing
+
+`resolve_serve`'s certified launch comes back at 74-81 degrees -- a ball hit
+nearly straight up -- and the serve's in/out is resolved on that flight. It
+predates all of this and the drawn serve is unaffected (`Serve -> Reception`
+sits at 3.33 m at the tape, byte-identical before and after), so the two
+descriptions of a serve disagree somewhere. Worth a probe of its own.

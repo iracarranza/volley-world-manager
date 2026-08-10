@@ -3730,10 +3730,23 @@ func _resolve_opponent_transition(
 	## re-slices this to the net if the block touches it; truncating here
 	## unconditionally made every opponent spike travel about three percent of
 	## the court and the rest arrive as a "deflection".
+	## **The record itself, not a copy fetched back out of the trace.**
+	##
+	## This read `_trace_summary()["geometric_attack_opponent"]` -- the same
+	## dictionary, stored four lines above and retrieved here. Except the store is
+	## conditional on `shadow_reception_trace`, and that is null on every path
+	## that never built a trace, an opponent transition inside a home serve
+	## foremost among them. On those rallies the retrieval came back empty, so the
+	## swing lost its speed *and* its certified launch angle and was redrawn as a
+	## generic driven spike.
+	##
+	## Measured by side, which is the split that found it: home swings carried the
+	## angle on 15 of 16 lofts, opponent swings on 1 of 19 -- 18 lofted opponent
+	## attacks drawn going *down* at a mean of -9 degrees, and 14 of them straight
+	## into the net. `docs/BACKLOG.md`'s first failure mode, once more: a value
+	## computed correctly and dropped before anything could use it.
 	var opponent_attack_arc := _swing_arc(
-		Dictionary(_trace_summary().get(
-			"geometric_attack_opponent", {}
-		)),
+		opponent_record,
 		RallyKinematics.court_distance_meters(opponent_contact, home_target),
 		GeometricAttackPromotionModel.contact_height_meters(
 			opponent_hitter, 1.0
@@ -4091,8 +4104,9 @@ func _resolve_opponent_transition(
 		## Off the hands the ball is going somewhere else, so the remaining
 		## flight is genuinely a new solve -- on the hitter's swing, not the
 		## defence's classifier.
+		## Same record, same reason as the arc above: in hand, not looked up.
 		attack_time = float(_swing_arc(
-			Dictionary(_trace_summary().get("geometric_attack_opponent", {})),
+			opponent_record,
 			RallyKinematics.court_distance_meters(opponent_contact, home_target),
 			GeometricAttackPromotionModel.contact_height_meters(
 				opponent_hitter, 1.0
@@ -4661,10 +4675,10 @@ func _resolve_home_continuation(
 	var continuation_attack_angle := _attack_launch_angle_degrees(
 		hitter, continuation_hit_type, attack_quality
 	)
+	## In hand, not looked up -- the same conditional store as the opponent
+	## swing's, with the same consequence when no trace was built.
 	var continuation_attack_arc := _swing_arc(
-		Dictionary(_trace_summary().get(
-			"geometric_attack_transition", {}
-		)),
+		transition_record,
 		RallyKinematics.court_distance_meters(set_target, attack_target),
 		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		not geometric.is_empty()
@@ -6986,18 +7000,31 @@ func _swing_arc(
 	## hop to the net rather than the shot's own range -- a different defect with
 	## the same symptom, and the reason this takes a flag rather than always
 	## trusting the record.
-	## Downward-struck balls only, and the bound is the finding rather than a
-	## safety margin. Carrying the angle unconditionally moved the mean height of
-	## an untouched attack at the tape from 2.69 m to 5.19 m: the resolver's
-	## net-clearance search falls back to a *lofted* root when a driven one cannot
-	## get over, and a lofted angle is achieved by going a very long way up. That
-	## is the right shot for a roll played over a formed block and the wrong curve
-	## for everything else, and the flat-spike report this whole thread comes from
-	## was never about roll shots. A struck ball is the case where the cleared
-	## angle matters; a lofted one re-solves as it did before.
+	## **And upward-struck balls too.** This condition used to read
+	## `vertical_angle_degrees <= 0.0`, on the grounds that carrying the angle
+	## unconditionally moved the mean height of an untouched attack at the tape
+	## from 2.69 m to 5.19 m -- a lofted angle gets over the tape by going a long
+	## way up, and the flat-spike report this thread came from was never about
+	## roll shots.
+	##
+	## That is §0 twice over. A bound was placed on the drawing to hold down a
+	## number the *resolver* had chosen, and it was placed exactly across the
+	## branch it was needed for. `_feasible_launch` reaches for a lofted root only
+	## when no driven one clears -- lofting *is* the clearance -- so excluding
+	## lofted deliveries threw the angle away on precisely the swings that had no
+	## other way over. Measured on 205 attacks met by a block: all 26 lofted
+	## swings were certified over the tape by the resolver, all 26 were drawn at
+	## a mean of -18.4 degrees, and 23 of the 26 were drawn *through the net*.
+	## Against 16 of 171 on the driven branch, which is a different defect.
+	##
+	## The 5.19 m is not evidence against carrying it. It is the resolver saying
+	## these hitters are rolling the ball over a formed block from the back row,
+	## which is a claim about the swing that the drawing does not get a vote on.
+	## If that number is wrong the fix belongs in the clearance search, where the
+	## shot is chosen; drawing a flat spike on top of a lofted solve does not make
+	## the swing flatter, it makes the picture disagree with the rally.
 	if reached_resolved_target and bool(record.get("available", false)) \
-			and record.has("vertical_angle_degrees") \
-			and float(record.vertical_angle_degrees) <= 0.0:
+			and record.has("vertical_angle_degrees"):
 		return RallyKinematics.struck_arc_from_speed(
 			distance_meters, speed,
 			float(record.vertical_angle_degrees), height,

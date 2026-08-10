@@ -93,6 +93,10 @@ const NET_FEASIBILITY_STEPS: int = 9
 ## a different shot -- a roll or a tip -- and that decision belongs to the power
 ## model's intent, not to a feasibility search quietly turning a spike into one.
 const NET_SPEED_RELIEF_STEPS: int = 6
+## How finely a roll shot is softened looking for the flattest arc that still
+## clears. Eight resolves the pace range to about 7% of full swing, which is
+## finer than the angle it is chasing responds to.
+const LOFT_FLATTENING_STEPS: int = 8
 const NET_SPEED_RELIEF_FLOOR: float = 0.45
 ## The furthest a bearing error is allowed to stretch the path to the tape when
 ## a hitter is budgeting for it, as a multiple of the path they aimed on.
@@ -501,6 +505,21 @@ static func resolve_serve(
 		attacking_negative_y,
 		AttackSwingModel.vertical_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
 		AttackSwingModel.bearing_spread_degrees(control, SERVE_SPREAD_MULTIPLIER),
+		## **A serve does not give up pace to flatten its arc.**
+		##
+		## For a swing that is the whole trade -- a roll shot is pace surrendered
+		## to get over a wall, and surrendering the least of it is the shot a
+		## player picks. A serve has no wall, and pace is not the hitter's
+		## incidental choice there but the tactical instruction itself:
+		## `tactical_risk` reaches the ball as speed and as nothing else, which is
+		## the contract `_test_the_serve_flies_the_same_ball_as_the_spike` holds.
+		##
+		## Measured: every serve takes the lofted branch, from nine metres back
+		## with the tape in the way, so softening applied to all of them. At risk
+		## 0.0 / 0.5 / 1.0 the softened serve came back at 11.68 / 11.18 / 11.39
+		## m/s -- not merely compressed but non-monotone, the instruction replaced
+		## by whatever pace the flattening search happened to stop at.
+		false,
 	)
 	speed = float(launch.speed_mps)
 	var delivered := AttackSwingModel.deliver(
@@ -558,6 +577,9 @@ static func _feasible_launch(
 	attacking_negative_y: bool,
 	vertical_spread_degrees: float,
 	bearing_spread_degrees: float,
+	## Whether pace may be spent to flatten a roll shot. True for a swing, false
+	## for a serve -- see `_flattest_clearing_loft`, and the serve's own call.
+	may_soften_the_loft: bool = true,
 ) -> Dictionary:
 	## The path the hitter aimed on, and the longer one a bearing error puts them
 	## on -- and it is the longer one every check below is made against.
@@ -659,6 +681,27 @@ static func _feasible_launch(
 				fallback_speed = speed
 		## Nothing driven gets over at this pace. Try lifting it instead, before
 		## giving up any more speed -- arc is cheaper than pace.
+		##
+		## **But the flattest arc that clears, not the first one found.** There are
+		## only two angles that carry a ball a given range at a given speed, and
+		## the lofted root is the high one -- the faster the swing, the closer that
+		## root sits to vertical. Taking the first loft the sweep meets therefore
+		## took the *steepest* one available, because the sweep starts at full pace.
+		##
+		## Measured over 240 attacks: 36 came back lofted, mean apex **9.34 m**,
+		## mean height at the tape 7.82 m. That is not a roll shot, it is a punt,
+		## and the game had been playing them all along -- the drawing re-solved a
+		## driven angle over the top of the record, so a nine-metre lob appeared on
+		## screen as a flat spike. §0 exactly: the branch went unmeasured because
+		## the only instrument pointed at it was reporting a different curve.
+		##
+		## `_flattest_clearing_loft` takes pace off *within* this decision instead,
+		## which walks the lofted root down toward 45 degrees where the arc is
+		## shallowest. The order of preference is untouched: a driven ball first, a
+		## roll shot before another notch of relief. Deferring the whole loft to
+		## the end of the sweep was tried and is worse -- a slower driven root is
+		## a higher one, so it swallowed every roll shot in the game and the lofted
+		## branch went to zero of 232. One dead branch traded for another.
 		var lofted_solve := BallFlightModel.solve_angle_for_range(
 			speed, aim_distance, contact_height_meters
 		)
@@ -668,10 +711,15 @@ static func _feasible_launch(
 				speed, lofted, contact_height_meters, ground_to_net
 			)
 			if lofted_height >= needed:
-				return {
-					"angle_degrees": lofted, "aim_distance": aim_distance,
-					"speed_mps": speed, "mode": "lofted", "cleared": true,
-				}
+				if not may_soften_the_loft:
+					return {
+						"angle_degrees": lofted, "aim_distance": aim_distance,
+						"speed_mps": speed, "mode": "lofted", "cleared": true,
+					}
+				return _flattest_clearing_loft(
+					speed, full_speed * NET_SPEED_RELIEF_FLOOR, aim_distance,
+					contact_height_meters, ground_to_net, needed, lofted,
+				)
 			if lofted_height > fallback_height:
 				fallback_height = lofted_height
 				fallback_angle = lofted
@@ -744,6 +792,57 @@ static func _feasible_launch(
 		"mode": ("scraped" if fallback_height >= over
 			else ("unsolved" if fallback_height == -INF else "forced")),
 		"cleared": fallback_height >= over,
+	}
+
+
+## The shallowest roll shot that still gets over, at or below this pace.
+##
+## A hitter who has decided to lift the ball has one dial left: how hard. For a
+## fixed range the lofted root falls toward 45 degrees as the swing softens, so
+## taking pace off *flattens* the arc -- and the flattest arc that clears the
+## tape is the one an actual player hits, because every degree above it is
+## hang-time handed to the defence for nothing.
+##
+## Searched rather than solved because the constraint is not monotone. Softening
+## lowers the launch angle and also lowers the whole flight, so past some point
+## the ball stops clearing; the answer is the last one that does, and there is no
+## closed form for it that is shorter than trying them.
+##
+## `steepest_angle` is the loft already known to clear at `from_speed`, returned
+## unchanged when nothing softer works. This function can only improve on it.
+static func _flattest_clearing_loft(
+	from_speed: float,
+	to_speed: float,
+	aim_distance: float,
+	contact_height_meters: float,
+	ground_to_net: float,
+	needed: float,
+	steepest_angle: float,
+) -> Dictionary:
+	var best_angle := steepest_angle
+	var best_speed := from_speed
+	for step in range(1, LOFT_FLATTENING_STEPS + 1):
+		var speed := lerpf(
+			from_speed, minf(to_speed, from_speed),
+			float(step) / float(LOFT_FLATTENING_STEPS),
+		)
+		var solved := BallFlightModel.solve_angle_for_range(
+			speed, aim_distance, contact_height_meters
+		)
+		if not bool(solved.get("lofted_found", false)):
+			continue
+		var angle := float(solved.lofted_angle_degrees)
+		if angle >= best_angle:
+			continue
+		if _height_at_net(
+			speed, angle, contact_height_meters, ground_to_net
+		) < needed:
+			continue
+		best_angle = angle
+		best_speed = speed
+	return {
+		"angle_degrees": best_angle, "aim_distance": aim_distance,
+		"speed_mps": best_speed, "mode": "lofted", "cleared": true,
 	}
 
 
