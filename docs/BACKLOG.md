@@ -5627,3 +5627,67 @@ from an RNG, so every downstream stream shifts and every balance number moves at
 once; this wants its own before-and-after rather than being folded into another
 change.
 
+---
+
+## The read model is live, and it put kill and dig in band together
+
+`BallReadSystem` is promoted into the rally at all four defensive call sites --
+both serve receptions, the home floor defence, and the opponent's floor defence
+on the swing and the transition. Defenders now go to where they *think* the ball
+is going and play whatever actually arrives.
+
+    metric              before   after    band
+    kill rate            0.394   0.452    0.45 - 0.50
+    dig rate             0.611   0.508    0.35 - 0.55
+    stuff rate           0.113   0.114    0.08 - 0.14
+    contacts per rally   6.274   5.806    above 6.0
+    ace rate             0.026   0.043    0.05 - 0.09
+
+**Kill and dig are in band at the same time for the first time on this branch**,
+and neither was moved by a constant -- the number that was missing was a whole
+system, sitting unplugged beside the rally. That is the fourth time on this
+branch a balance figure has been fixed by connecting something rather than by
+tuning something.
+
+`reaching` now fires on receptions at all (0.4%, from 0.0%) and on 54.9% of digs.
+Reception reach margin fell from p10 1.338 to p10 0.704 -- a passer is now
+genuinely closer to the edge of their range.
+
+### The shape of the design, applied
+
+The claim stays on the true landing point: somebody shouts "mine" and that is a
+team decision made on where the ball is going. What is individual is *where that
+defender then goes*, so the read error is added to their distance at the end of
+the journey where there is no time left to fix it. A defender with reach to spare
+absorbs it and stays planted; one already at full stretch does not.
+
+### Three things went wrong on the way, and only the third was real
+
+Two "asymmetry fixes" shipped **inert**, both caught by byte-identical output:
+removing a double-charge on the opponent's `distance_meters`, and applying the
+error to the home fallback claimant. Both were genuine inconsistencies and
+neither was the cause of anything.
+
+The cause was **observation time**. `observation_progress` is how much of the
+ball a defender has watched, and passing `rally_clock` made it depend on where in
+the code the question was asked -- the home floor defence arrives with the clock
+already advanced into the swing while the opponent's is still at the set's
+contact. Same model, same ball, two different amounts of information. Anchored on
+the flight's own clock at `READ_COMMIT_SHARE`, every defender gets the same share
+of the same ball.
+
+The two sides' dig rates still differ, 0.609 against 0.383. That gap predates
+this (0.657 against 0.557) and widened under it, and none of the three fixes
+above closed it -- so it is a real asymmetry with a cause not yet found, and it
+is the next thing to measure rather than something to tune out.
+
+### And the body had to agree with the verdict
+
+Promoting the read made a defender's *arrival* worse without making their
+*journey* shorter, so the simulator scored digs unreachable while playback still
+walked the defender onto the ball. `every defender beaten to the ball stops short
+of it` caught it at 39 of 40 -- the check was written for exactly this class of
+defect and it earned its place. `_reached_point` now takes a shortfall at the
+defensive sites only, so a defender who went to the wrong place is drawn at the
+wrong place.
+

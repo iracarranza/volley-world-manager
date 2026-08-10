@@ -1253,7 +1253,16 @@ func resolve(
 		if live_receiver != null:
 			receiver = live_receiver
 			receiver_arrived = true
-	var arrival: Dictionary = reception_claim.get("arrival", {})
+	## **A serve is the hardest ball in the game to read**, which is the whole
+	## point of a float: eighteen metres of flight from a contact the passer
+	## cannot see the hand on, and nothing in front of it to funnel the answer.
+	var arrival: Dictionary = _read_adjusted_arrival(
+		Dictionary(reception_claim.get("arrival", {})),
+		_read_error_meters(
+			receiver, serve_trajectory, _serve_spin(opponent_server),
+			float(serve_trajectory.get("start_time", rally_clock)),
+		),
+	)
 	if using_live_reception:
 		## The promoted contact measures its margin in seconds, so it is
 		## converted here rather than silently reinterpreted. This is the only
@@ -1327,7 +1336,8 @@ func resolve(
 			"simulation_time", rally_clock
 		))
 	var receiver_reach := _reached_point(
-		receiver, receiver_start, serve_landing, serve_time, "lateral"
+		receiver, receiver_start, serve_landing, serve_time, "lateral",
+		float(arrival.get("read_error_meters", 0.0)),
 	)
 	if not using_live_reception:
 		## Short of the ball is where a beaten passer actually is, and it is what
@@ -2669,7 +2679,10 @@ func resolve(
 	elif block_outcome == "funnel":
 		opponent_defense_time += 0.06
 	var opponent_defense := _choose_opponent_defender(
-		opponent_team, attack_target, opponent_defense_time
+		opponent_team, attack_target, opponent_defense_time,
+		opponent_block_trajectory if not opponent_block_trajectory.is_empty()
+			else attack_trajectory,
+		attack_spin,
 	)
 	var opponent_defender := opponent_defense.player as VolleyballPlayer
 	var read_tags: Array[String] = ["hand:%s" % hitter.dominant_hand.to_lower(),
@@ -2746,6 +2759,7 @@ func resolve(
 	var opponent_defender_reach := _reached_point(
 		opponent_defender, Vector2(opponent_defense.start), attack_target,
 		attack_flight, "lateral",
+		float(opponent_defense.get("read_error_meters", 0.0)),
 	)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
@@ -2940,7 +2954,13 @@ func _resolve_home_serve(
 	var receiver_arrived := receiver != null
 	if receiver == null:
 		receiver = opponent_team.best_defender() as VolleyballPlayer
-	var opponent_arrival: Dictionary = opponent_claim.get("arrival", {})
+	var opponent_arrival: Dictionary = _read_adjusted_arrival(
+		Dictionary(opponent_claim.get("arrival", {})),
+		_read_error_meters(
+			receiver, serve_trajectory, _serve_spin(server),
+			float(serve_trajectory.get("start_time", rally_clock)),
+		),
+	)
 	var receiver_zone: Resource = opponent_coverage.zones.get(receiver.id) as Resource
 	var receiver_start: Vector2 = opponent_live_positions.get(
 		receiver.id,
@@ -4253,7 +4273,22 @@ func _resolve_opponent_transition(
 		return _finish(result, "long_rally_loss", false, -1, {
 			"hitter": original_hitter.display_name,
 		})
-	var defense_arrival: Dictionary = defense_claim.get("arrival", {})
+	## **After the fallback, not before it.** The claim answers on the true
+	## landing point and this defender then pays for their own read of it -- and
+	## a defender who nobody claimed the ball for is still a defender reading a
+	## ball. Applied only to the claimed one, the two sides of the net were being
+	## charged through different populations: `_choose_opponent_defender` adjusts
+	## its fallback claimant and this did not.
+	var defense_arrival: Dictionary = _read_adjusted_arrival(
+		Dictionary(defense_claim.get("arrival", {})),
+		_read_error_meters(
+			defender,
+			home_block_trajectory if not home_block_trajectory.is_empty()
+				else opponent_attack_trajectory,
+			opponent_attack_spin, rally_clock,
+		),
+	)
+	defense_claim["arrival"] = defense_arrival
 	var support_count := int(defense_claim.get("support_count", 0))
 	var responsibility_fit := _defensive_responsibility_fit(
 		defensive_plan, defender.id, home_target, attack_type
@@ -4315,7 +4350,8 @@ func _resolve_opponent_transition(
 		defender, defender_start, home_target, "lateral"
 	)
 	var defender_reach := _reached_point(
-		defender, defender_start, home_target, attack_time, "lateral"
+		defender, defender_start, home_target, attack_time, "lateral",
+		float(defense_arrival.get("read_error_meters", 0.0)),
 	)
 	live_positions[defender.id] = defender_reach
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
@@ -5049,7 +5085,8 @@ func _resolve_home_continuation(
 	elif block_outcome == "funnel":
 		cont_defense_time += 0.06
 	var cont_defense := _choose_opponent_defender(
-		opponent_team, attack_target, cont_defense_time
+		opponent_team, attack_target, cont_defense_time,
+		continuation_attack_trajectory, continuation_attack_spin,
 	)
 	var opponent_defender := cont_defense.player as VolleyballPlayer
 	## What this defender knows, and what their body costs them.
@@ -5118,6 +5155,7 @@ func _resolve_home_continuation(
 	var transition_defender_reach := _reached_point(
 		opponent_defender, transition_defender_start, attack_target,
 		continuation_attack_flight, "lateral",
+		float(cont_defense.get("read_error_meters", 0.0)),
 	)
 	if opponent_defender != null:
 		opponent_live_positions[opponent_defender.id] = transition_defender_reach
@@ -5872,6 +5910,11 @@ func _choose_opponent_defender(
 	opponent_team: Resource,
 	target: Vector2,
 	flight_time: float,
+	## The ball being read, and what was put on it. Optional so the callers that
+	## have no flight in hand keep the perfect knowledge they always had rather
+	## than silently getting a zero-error one; see `_read_error_meters`.
+	incoming_trajectory: Dictionary = {},
+	incoming_spin: Dictionary = {},
 ) -> Dictionary:
 	var defenders: Array[VolleyballPlayer] = []
 	for defender_resource in opponent_team.on_court_players():
@@ -5919,10 +5962,21 @@ func _choose_opponent_defender(
 	## sides being comparable is that they are on the *same* scale, so the
 	## fallback reports metres too rather than the seconds it used to.
 	var fallback_margin := CoverageModel.court_distance_meters(start, target)
+	## The claim was made on where the ball is going; what it cost this defender
+	## to be wrong about that is paid here, at the end of the journey.
+	var read_error := _read_error_meters(
+		claimant, incoming_trajectory, incoming_spin, rally_clock
+	)
+	arrival = _read_adjusted_arrival(arrival, read_error)
 	return {
 		"player": claimant,
 		"claimed": claimed,
 		"start": start,
+		## The true journey, not the mistaken one. The read error is carried by
+		## the adjusted `arrival` alone -- exactly as the home floor defence
+		## carries it -- because adding it here as well charged this side twice
+		## and opened a dig-rate gap of 0.231 against the home side's 0.100.
+		## Two sides of one net have to be penalised through one mechanism.
 		"distance_meters": fallback_margin,
 		"travel_time": travel_time,
 		"reach_margin_meters": float(
@@ -5930,6 +5984,7 @@ func _choose_opponent_defender(
 		),
 		"edge_ratio": float(arrival.get("edge_ratio", 1.2)),
 		"support_count": int(claim.get("support_count", 0)),
+		"read_error_meters": read_error,
 		"arrival": arrival,
 	}
 
@@ -6052,11 +6107,32 @@ func _reached_point(
 	target: Vector2,
 	available_time: float,
 	mode: String,
+	## How far short of the target this mover stops because they read the ball
+	## somewhere else. Defensive call sites only -- see `_read_error_meters` --
+	## and defaulted to nothing so the approach and coverage sites keep the exact
+	## arrival they have always had.
+	shortfall_meters: float = 0.0,
 ) -> Vector2:
 	if mover == null or available_time <= 0.0:
 		return start
 	if _movement_time(mover, start, target, mode) <= available_time:
-		return target
+		## **The body has to agree with the verdict.**
+		##
+		## Promoting the read model made a defender's *arrival* worse without
+		## making their *journey* shorter, so the simulator could score a dig
+		## unreachable while playback still walked the defender onto the ball --
+		## which is the exact defect `every defender beaten to the ball stops
+		## short of it` was written to catch, and it caught it. A defender who
+		## went to the wrong place is drawn at the wrong place.
+		if shortfall_meters <= 0.0:
+			return target
+		var lane := target - start
+		if lane.length_squared() < 0.000001:
+			return target
+		var lane_metres := CoverageModel.court_distance_meters(start, target)
+		return start.lerp(target, clampf(
+			1.0 - shortfall_meters / maxf(lane_metres, 0.01), 0.0, 1.0
+		))
 	var low := 0.0
 	var high := 1.0
 	for _iteration in range(REACHABLE_CONTACT_BISECTIONS):
@@ -10322,6 +10398,119 @@ func _defense_execution(
 ## composite that only ever reports its product cannot be asked which factor
 ## moved, so it now reports the factors too and the question can be measured
 ## instead of argued.
+## How badly this defender misreads where the ball is going, in metres.
+##
+## **`BallReadSystem` was built for exactly this and wired to nothing live.**
+## Four shadow systems call it; the rally called it nowhere, so
+## `choose_claimant` was handed the ball's *true* landing point and every
+## defender in the game went to precisely the right spot. `anticipation` bought a
+## shorter reaction delay and a better claim score -- getting there sooner, and
+## being more likely to be the one who goes -- but never a *worse place to go*,
+## because there was no such thing.
+##
+## The estimate's own terms are the ones the report asked for: reading ability,
+## familiarity with this ball, how much of the flight has been watched, and the
+## flight's novelty -- and novelty is `BallContactSignature.baseline_novelty()`,
+## which weights topspin at 0.17, sidespin at 0.18 and instability at 0.16. So a
+## float serve and a heavily spun ball are harder to track by construction rather
+## than by a special case, and a ball watched all the way from the far endline is
+## easier than a spike from four metres.
+##
+## Returned as a *distance* rather than as a point, because that is what the
+## arrival terms need and because the direction of a read error is not something
+## any consumer downstream can act on: a defender who is 40 cm out is 40 cm out
+## whichever way. The point itself stays available on the estimate for playback
+## if it is ever wanted.
+## How far into a flight a defender commits to where they think it is going.
+##
+## Not the whole of it: a defender who watched the ball all the way to the floor
+## would know exactly where it landed and have no time left to use the knowledge.
+## Rather more than half, because the last of the information arrives late and a
+## defender is still adjusting into the final step.
+const READ_COMMIT_SHARE: float = 0.62
+
+
+func _read_error_meters(
+	defender: VolleyballPlayer,
+	trajectory: Dictionary,
+	spin_state: Dictionary,
+	_observation_time: float,
+) -> float:
+	if defender == null or trajectory.is_empty():
+		return 0.0
+	var signature := BallContactSignature.create(
+		&"flight",
+		BallPresentation.launch_speed_mps(trajectory),
+		0.0,
+		0.0,
+		float(spin_state.get("topspin_rps", 0.0)),
+		float(spin_state.get("sidespin_rps", 0.0)),
+		float(spin_state.get("flight_stability", 1.0)),
+	)
+	var start_time := float(trajectory.get("start_time", 0.0))
+	var flight := BallFlight.create(
+		Vector2(trajectory.get("start_position", Vector2.ZERO)),
+		Vector2(trajectory.get("end_position", Vector2.ZERO)),
+		start_time,
+		float(trajectory.get("duration", 0.5)),
+		signature,
+		float(trajectory.get("end_height_meters", 1.0)),
+	)
+	## **Measured from the flight's own clock, not the rally's.**
+	##
+	## `observation_progress` is how much of the ball a defender has watched, and
+	## passing `rally_clock` made that depend on where in the code the question
+	## was asked: the home floor defence reaches its claim with the clock already
+	## advanced into the swing, while the opponent's is still sitting at the set's
+	## contact. Same model, same ball, two different amounts of information --
+	## measured, the two sides' dig rates opened from a gap of 0.100 to 0.231 and
+	## neither of the two wiring asymmetries I fixed first was the cause.
+	##
+	## Anchored on the flight instead, every defender gets the same share of the
+	## same ball, and the term means what it says.
+	var estimate: Resource = BallReadSystem.estimate(
+		flight, defender,
+		Familiarity.read_modifier(defender, ["flight"]),
+		start_time + float(trajectory.get("duration", 0.5)) * READ_COMMIT_SHARE,
+		hash("%d|read|%d" % [rally_seed, defender.id]),
+	)
+	return CoverageModel.court_distance_meters(
+		estimate.true_destination, estimate.perceived_destination
+	)
+
+
+## The arrival a defender actually has, once they have gone to the wrong place.
+##
+## `choose_claimant` answers against the true landing point, and that stays: the
+## call is a team decision -- somebody shouts "mine" -- and it is made on where
+## the ball is going, not on one player's private guess. What is individual is
+## *where that player then goes*, and the cost of being wrong is paid at the end
+## of the journey with no time left to fix it.
+##
+## So the error is added to the distance rather than moving the target: the
+## defender covers what they meant to cover and is then short by their own read
+## error, which is exactly the quantity `reach_margin` measures and exactly what
+## the `reaching` posture is classified from. A defender with reach to spare
+## absorbs it and stays planted; one who was already at full stretch does not.
+func _read_adjusted_arrival(
+	arrival: Dictionary, read_error_meters: float
+) -> Dictionary:
+	if arrival.is_empty() or read_error_meters <= 0.0:
+		return arrival
+	var adjusted := arrival.duplicate(true)
+	adjusted["distance_meters"] = float(
+		arrival.get("distance_meters", 0.0)
+	) + read_error_meters
+	adjusted["reach_margin_meters"] = float(
+		arrival.get("reach_margin_meters", 0.0)
+	) - read_error_meters
+	adjusted["edge_ratio"] = float(adjusted.distance_meters) / maxf(
+		float(arrival.get("assigned_reach_meters", 0.1)), 0.1
+	)
+	adjusted["read_error_meters"] = read_error_meters
+	return adjusted
+
+
 func _defense_terms(
 	defender: VolleyballPlayer,
 	reach_margin_meters: float,
