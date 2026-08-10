@@ -34,7 +34,7 @@ What already exists and is not surfaced at that moment:
 |---|---|---|
 | per-voli fatigue and stage | `player.fatigue`, `FatigueModel.stage_name` | the whole reason to rotate |
 | match confidence and form | `match_confidence`, `current_form` | who is playing above or below themselves |
-| the six category scores | `AttributeProfiles.summary_profile` — the Team wheel's own call | what this six is and is not |
+| the functional wheel, talent and current | `AttributeProfiles`, plus the functional axes in `TEAM_ATTRIBUTE_WHEEL.md` | what this six is, and whether it is playing to it |
 | familiarity and cohesion | `starting_identity_state` | which combinations have played together |
 | position familiarity | `position_familiarity` | who is out of position and how badly |
 | what the opponent did last time | `MatchStatistics` computes it and `VolleyballFixture` throws it away | the only honest thing to say about them |
@@ -57,10 +57,11 @@ would have taught it.
 
 So the board is statistical:
 
-- **Your six** is the six category means with a letter grade each, marked only
-  at the extremes — `! DEF 48.9 D`, `✓ PHY 62.4 A`, nothing at B or C. A
+- **Your six** is the functional wheel's axes with a letter grade each, marked
+  only at the extremes — `! DEF 48.9 D`, `✓ BLK 62.4 A`, nothing at B or C. A
   balanced side draws no marks at all, which is how the panel stays quiet most
-  weeks by construction rather than by tuning.
+  weeks by construction rather than by tuning. Which axes, and how each one is
+  computed, is `docs/design/TEAM_ATTRIBUTE_WHEEL.md`.
 - **Them** is a short table of what they did — aces, blocks, kills, errors, per
   meeting — with your own row underneath it. Nine aces against your three does
   the work the sentence was doing, and it stays true when they are having a bad
@@ -69,11 +70,19 @@ So the board is statistical:
   grades. No line of prose anywhere. If a card wants to say something, it is a
   figure that has not been found yet.
 
-### The grades have to be measured twice, and the measurement is a design change
+### The grades: superseded in part, and the measurement still stands
 
-A letter grade is a threshold and a threshold outside its own distribution does
-nothing, silently. Measured over a generated world of 4,000 volis and 800 random
-sixes:
+**The wheel this section originally described — six category means across the
+starters — is superseded by `docs/design/TEAM_ATTRIBUTE_WHEEL.md`.** A plain
+average puts the libero in Team Attack, which is exactly what that spec forbids.
+The lock-in board shows the *functional* wheel: axes with named primary
+contributors, an asymmetric bonus for exceptional secondary ability, and two
+figures rather than one — squad talent beside current performance.
+
+Two things from the measurement survive that change and are worth keeping here,
+because they are constraints on any grade scale this board prints:
+
+Measured over 4,000 generated volis and 800 random sixes:
 
 | category | solo p10 / p50 / p90 | six-mean p10 / p50 / p90 |
 |---|---|---|
@@ -84,22 +93,24 @@ sixes:
 | Serving | 34 / 50 / 64 | 43.2 / 49.3 / 55.5 |
 | Mental / Tactical | 27 / 45 / 62 | 37.2 / 44.2 / 51.2 |
 
-Two decisions fall out of it.
+1. **A team scale is not a player scale.** Averaging collapses the spread to
+   about 40% of the individual one. Grade a team on player bands and every team
+   is a C forever — the knob cannot reach its own range.
+2. **One scale across categories mislabels most of them.** Median Attacking 57
+   against Mental / Tactical 45 reports a property of the generator as a
+   property of the squad. Bands are per category.
 
-1. **A team scale is not a player scale.** Averaging six people collapses the
-   spread to about 40% of the individual one. Grade a team on player bands and
-   every team is a C forever — the knob cannot reach its own range. Team grades
-   read off the six-mean column and voli grades off the solo column.
-2. **One scale across six categories mislabels four of them.** Median Attacking
-   is 57 and median Mental / Tactical is 45, so a shared absolute scale makes
-   every squad look tactically weak and physically fine — a property of the
-   generator, not of the squad. Bands are per-category, so a grade means
-   *relative to everyone else's Defence*.
+**What does not survive: the six-mean column itself.** It was measured for a
+mean over six, and a functional axis is a mean over three or four with a bonus
+term — a different and wider distribution. Those numbers must be re-measured
+once functional axes exist, and they are not usable as bands in the meantime.
 
-**Debt in those numbers, recorded so it is not forgotten:** the six-mean column
-is *random* sixes. A managed lineup is a chosen six and will sit higher, so
-these bands will grade real teams generously. They must be re-measured against
-actual managed lineups once the screen exists and can produce them.
+**And a correction.** An earlier draft of this section said no grade function
+existed in the codebase. `AttributeProfiles.grade()` exists, with eight bands
+from S at 96 to C− at 50. Measured over 28,000 voli-by-category readings, S, A
+and B+ together account for 0.43% and 43.23% of readings fall below the lowest
+named band. The scale is not missing; it is entirely above the distribution it
+grades.
 
 ### One field is missing before any of it can be printed
 

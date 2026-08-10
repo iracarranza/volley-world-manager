@@ -50,6 +50,9 @@ Then, by subject:
 | Movement, gait, traversal time | `docs/design/LOCOMOTION_AND_GENERATION.md`, `MOVEMENT_FLUIDITY_DRAFT.md` |
 | What the other ten players are doing | `docs/design/OFF_BALL_MOVEMENT.md` |
 | Clubs, transfers, why the roster matters | `docs/design/CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` |
+| Traits and what they may touch | `docs/design/TRAITS.md` |
+| Scouts, uncertainty, what a report means | `docs/design/SCOUTING.md` |
+| The team wheel, functional contribution | `docs/design/TEAM_ATTRIBUTE_WHEEL.md` |
 | Accommodations, food, lodging | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
 | Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`, `REGIONAL_DIFFERENTIATION_SPEC.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
