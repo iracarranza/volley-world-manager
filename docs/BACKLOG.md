@@ -5897,3 +5897,62 @@ Sequence, measured with the same probe at each step: magnitude for
 `tempo_variation` and `transition_commitment` first (nothing can be built on an
 axis that does nothing), then opponent principle reads, then
 `fatigue_resistance`, then the two that need their substrate extended.
+
+## Status sweep — what this run actually closed
+
+The backlog above accumulates faster than it is pruned, so this is a single
+honest pass over the entries that are no longer open. Nothing is deleted:
+knowing an entry was closed, and by what, is worth more than a shorter file.
+
+**Closed and verified.**
+
+- *The spike goes through the net* — the swing's own flight, not the block leg.
+  43/205 → 6/250.
+- *The red identity gate* — both halves directional. Margins were thin (0.0048,
+  0.0039) and part of that thinness turned out to be the fixture, not the model;
+  see the Landavol entry below.
+- Ball pace, spin, the ready stance, backpedal and shuffle, the three-step
+  approach.
+- *The dig-rate asymmetry* — attributed to home attacks arriving 2.5 m/s faster
+  on equal swing quality.
+- *The block hid the ball from the whole court* — four defects at once, and the
+  BLIND marker now falls on the shadow lane rather than the court.
+- *`PlatformAim` against a placeholder ball* — pitch was a constant −0.72°.
+- Regional differentiation R1–R5, the three-stage fatigue model, action-based
+  fatigue accrual, `fatigue_resistance` and `read_rate`, the three identity
+  re-cuts, and `physical`/`technical`/`mental` finally reading somewhere.
+
+**Closed by being disproved.**
+
+- *Body types are cosmetic* — they are not; `BODY_TYPE_METRICS` and
+  `BODY_TYPE_ATTRIBUTES` both exist and the latter sums to zero per type, which
+  became the precedent for three separate regional fixes.
+- *`reaching` never fires* — it fires on 0.0% of receptions and **38.8% of
+  digs**. The unqualified version sent one fix into the wrong file.
+
+**Still open, and now better specified.**
+
+- **Off-ball movement** is the largest gap in the game and is not a rendering
+  problem: phase targets are published for 0 of 400 serves and 0 of 384
+  receptions, a mean of 1.77 players of twelve per event, so a poor first
+  contact is structurally unplayable rather than contested. See
+  `docs/design/OFF_BALL_MOVEMENT.md`.
+- The ball's post-contact life. Never started.
+- Serve pace beyond ~16 m/s needs a velocity-dependent aerodynamic term.
+- Attack quality compression — `attack_quality` is still the legacy execution
+  chain, so `form_spread_multiplier` moves placement and not the contested
+  number.
+- The opponent-attacks-slower root, still unconfirmed.
+- `match_screen._platform_aim`'s sibling defect: every passing platform was
+  angled against a flat one-metre ball, and the raw-trajectory placeholder
+  heights are a class rather than an instance.
+
+**A note for `FAILURE_MODES.md` §0.** This run added a companion failure worth
+naming: *a probe that omits a channel reports a clean result for a dirty
+system.* The talent-budget gate survived three fixes, each of which corrected a
+real imbalance, because the `net.gd` probe measured three of four channels and
+reported "net zero everywhere" while specialty count was still moving 32 ceiling
+points. Two confidently wrong diagnoses came from that, with apparent evidence
+behind them. The thing that actually worked was checking the last verified-green
+commit — which proved the gate was regressed rather than brittle, and stopped a
+threshold being relaxed that had no business being touched.

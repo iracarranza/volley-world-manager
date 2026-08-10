@@ -10,9 +10,14 @@ rather than a dashboard.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-09: **1,014 checks pass**. Treat any
-test failure as a regression; the two failures previously documented here no
-longer reproduce on this branch.
+Current branch baseline, verified 2026-08-10: **1,048 checks pass**. Treat any
+test failure as a regression.
+
+The slowest gate in the suite is `_test_world_aging`, which runs twenty seasons
+of the world and counts what survives. It is the only check that will notice a
+generation change leaking talent, and it is worth knowing it exists before
+changing anything in `player_generator.gd` -- it has caught a one-line ceiling
+bug that 1,047 other checks did not.
 
 After adding or renaming a `class_name`, re-import before the suite will see it:
 
@@ -43,6 +48,8 @@ Then, by subject:
 | Tempo, set height, approach | `docs/design/TEMPO_AND_APPROACH.md` |
 | Movement, gait, traversal time | `docs/design/LOCOMOTION_AND_GENERATION.md`, `MOVEMENT_FLUIDITY_DRAFT.md` |
 | What the other ten players are doing | `docs/design/OFF_BALL_MOVEMENT.md` |
+| Clubs, transfers, why the roster matters | `docs/design/CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` |
+| Accommodations, food, lodging | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
 | Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`, `REGIONAL_DIFFERENTIATION_SPEC.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
 | Player generation, bodies | `docs/design/ATTRIBUTE_FIRST_GENERATION.md`, `BODY_TYPES.md` |
