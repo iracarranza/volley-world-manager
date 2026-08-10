@@ -744,7 +744,23 @@ const SPECIALTY_BONUS: int = 16
 ## Bands rather than the six display categories, because the ratings are three:
 ## `technical` covers the craft categories and `mental` the reading ones, which
 ## is how the taglines already use the words.
-const RATING_CEILING_STEP: float = 2.6
+## **Per rating point across the whole band, not per attribute.**
+##
+## This was 2.6 *per attribute*, and that is the §0 failure again: the three
+## bands are wildly different sizes -- `physical` is 7 attributes, `mental` 13
+## and `technical` 21 -- so one rating point of technique did three times the
+## work of one rating point of physique. Summed over every ability attribute the
+## net ceiling change per region ran from **-52 for Pāwa Hitō to +75 for Xérvu**,
+## which is not an emphasis, it is a talent handicap dressed as one. The world's
+## twenty-season talent budget noticed before I did.
+##
+## Normalising by band size makes a rating point mean the same thing wherever it
+## is spent: a region that emphasises technique spreads that emphasis over
+## twenty-one attributes and each one moves less, which is the honest reading of
+## what "emphasis" is. What survives is only the residual from each region's
+## ratings summing to 7 rather than the neutral 6 -- about half a point per
+## attribute, and a deliberate statement rather than an accident.
+const RATING_BAND_STEP: float = 18.0
 const RATING_NEUTRAL: float = 2.0
 const RATING_BANDS := {
 	"physical": ["Physical"],
@@ -815,7 +831,28 @@ static func region_rating_bonus(
 		return 0.0
 	var definition := VolleyballRegions.definition(region_name)
 	return (float(definition.get(band, RATING_NEUTRAL)) - RATING_NEUTRAL) \
-		* RATING_CEILING_STEP
+		* RATING_BAND_STEP / maxf(float(_band_size(band)), 1.0)
+
+
+## How many ability attributes a rating band covers.
+##
+## Counted from `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than written down,
+## because a hand-kept size is a number that goes stale the first time an
+## attribute is added to a category -- and the whole reason this function exists
+## is that band sizes were not being accounted for at all.
+static var _band_sizes: Dictionary = {}
+
+
+static func _band_size(band: String) -> int:
+	if _band_sizes.is_empty():
+		for rating_name in RATING_BANDS:
+			var total := 0
+			for category in RATING_BANDS[rating_name]:
+				total += Array(AttributeProfiles.CATEGORY_ATTRIBUTES.get(
+					category, []
+				)).size()
+			_band_sizes[str(rating_name)] = total
+	return int(_band_sizes.get(band, 1))
 
 
 ## Attributes a region's own upbringing leaves *short*, and by how much.
