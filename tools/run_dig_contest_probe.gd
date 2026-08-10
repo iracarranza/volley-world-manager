@@ -80,6 +80,45 @@ func _initialize() -> void:
 	_by_band("dig rate by margin", rows, "margin")
 	_by_band("dig rate by incoming ball speed", rows, "speed")
 
+	## **Both sides of the net, term by term.** A gap observed in the product says
+	## nothing about which factor made it: `_defense_terms` multiplies capability
+	## by an opportunity built from timing, posture, support and recovery, so the
+	## difference has to live in one of them.
+	print("the two sides, term by term")
+	print("")
+	print("%-9s %5s %6s %6s %6s %6s %6s %6s %6s %7s %6s" % [
+		"side", "n", "dug", "cap", "timing", "postur", "suppt", "recov",
+		"oppty", "margin", "rdErr",
+	])
+	for side in ["home", "opponent"]:
+		var group: Array = []
+		for row in rows:
+			if str(row.side) == side:
+				group.append(row)
+		if group.is_empty():
+			continue
+		var totals := {}
+		var dug := 0
+		for key in ["capability", "timing", "posture", "support", "recovery",
+				"opportunity", "reach_margin", "read_error", "attack", "speed"]:
+			totals[key] = 0.0
+		for row in group:
+			if bool(row.dug):
+				dug += 1
+			for key in totals:
+				totals[key] = float(totals[key]) + float(row[key])
+		var n := float(group.size())
+		print("%-9s %5d %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f %7.2f %6.3f" % [
+			side, group.size(), float(dug) / n,
+			float(totals.capability) / n, float(totals.timing) / n,
+			float(totals.posture) / n, float(totals.support) / n,
+			float(totals.recovery) / n, float(totals.opportunity) / n,
+			float(totals.reach_margin) / n, float(totals.read_error) / n,
+		])
+		print("%-9s %5s faced pressure %.3f at %.1f m/s" % [
+			"", "", float(totals.attack) / n, float(totals.speed) / n,
+		])
+	print("")
 	print("If the speed table is flat, the contest cannot see pace, and a faster")
 	print("spike would arrive with the defence exactly as likely to dig it.")
 	quit()
@@ -150,6 +189,7 @@ func _collect(result: Resource, rows: Array[Dictionary]) -> void:
 		if speed <= 0.0:
 			continue
 		var capability := float(terms.get("capability", 0.0))
+		var side := str(event.metadata.get("side", "?"))
 		var defense := float(terms.get("quality", 0.0))
 		var attack := float(terms.get("contested_against", 0.0))
 		rows.append({
@@ -166,4 +206,15 @@ func _collect(result: Resource, rows: Array[Dictionary]) -> void:
 			## rating points a given margin is, which is the only unit a person
 			## picking a libero can actually act on.
 			"quality_per_capability": defense / maxf(capability, 0.0001),
+			"side": side,
+			## Every term `_defense_terms` multiplies together, so a gap between the
+			## two sides can be attributed to one of them rather than merely observed
+			## in the product.
+			"timing": float(terms.get("timing", 0.0)),
+			"posture": float(terms.get("posture", 0.0)),
+			"support": float(terms.get("support", 0.0)),
+			"opportunity": float(terms.get("opportunity", 0.0)),
+			"recovery": float(terms.get("recovery", 1.0)),
+			"reach_margin": float(terms.get("reach_margin_meters", 0.0)),
+			"read_error": float(terms.get("read_error_meters", 0.0)),
 		})

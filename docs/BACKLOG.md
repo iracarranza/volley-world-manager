@@ -5691,3 +5691,54 @@ defect and it earned its place. `_reached_point` now takes a shortfall at the
 defensive sites only, so a defender who went to the wrong place is drawn at the
 wrong place.
 
+---
+
+## The dig-rate asymmetry is one root wearing two faces
+
+Home digs 0.609, the opponent 0.383. Split `_defense_terms` into its factors and
+the gap attributes cleanly:
+
+    side       n    dug    cap timing postur  suppt  oppty  margin  rdErr
+    home     149  0.523  0.786  0.521  0.013  0.028  0.661    0.40  0.298
+             faced pressure 0.482 at 13.8 m/s
+    opponent  92  0.359  0.755  0.433  0.045  0.019  0.580    0.03  0.548
+             faced pressure 0.596 at 16.3 m/s
+
+Capability is near-identical -- 0.786 against 0.755 -- so this is not a roster
+difference, which the mirrored slice would not permit anyway. Everything that
+differs follows from the last two columns:
+
+**The home side's attacks arrive 2.5 m/s faster.** 16.3 against 13.8, an 18%
+gap on the same swing quality (0.470 home, 0.476 opponent). A faster ball raises
+the pressure the defence is contested against directly -- 0.596 against 0.482 --
+*and* arrives sooner, which cuts the defender's timing factor (0.433 against
+0.521) and their reach margin (0.03 m against 0.40 m). One root, three columns.
+The read error follows too: less flight time means less of the ball watched, so
+`observation_progress` falls and the error nearly doubles, 0.548 m against 0.298.
+
+So the question is not why the opponent defends worse. It is **why the opponent
+attacks slower**, on equal rosters and equal swing quality.
+
+### The leading candidate, with the code in hand
+
+`_geometric_swing` is handed `approach_quality`, which scales
+`available_ceiling_mps` and therefore the ball's speed. The three call sites:
+
+    home swing         `_approach_execution_fit(hitter, resolved_approach)`
+    transition swing   `_approach_execution_fit(hitter, continuation_approach)`
+    opponent swing     `_approach_execution_fit(opponent_hitter, opponent_approach)`
+                          if not opponent_approach.is_empty() else 0.5
+
+The opponent has a literal fallback the home side does not. Whenever
+`opponent_approach` is empty their hitter is pinned at a mediocre 0.5 approach,
+and the file already knows this shape is suspect -- the comment nine lines below
+that very fallback says of a different one: *"the fix for that was a literal 0.5,
+which is the same defect wearing a neutral face."*
+
+**Not yet confirmed**, and the confirmation is one measurement: how often is
+`opponent_approach` empty? If it is rare the candidate is wrong and the speed gap
+is elsewhere; if it is common this is the whole of it. Publishing the chosen
+approach quality on the attack event, the way `chosen_power_fraction` now is,
+answers it in one run -- and the reason to publish rather than infer is the one
+this branch keeps rediscovering.
+

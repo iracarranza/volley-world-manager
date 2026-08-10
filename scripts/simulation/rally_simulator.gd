@@ -2721,6 +2721,13 @@ func resolve(
 	## defender is playing the deflection, which is slower -- the same distinction
 	## `opponent_defense_time` above already makes for the clock, made here for
 	## the weight.
+	## Published beside the pressure it is contested against, because a term
+	## that decides a dig and cannot be read off the event is a term nobody can
+	## attribute a dig to -- which is how three separate values on this branch
+	## came to be spent invisibly.
+	opponent_dig_terms["read_error_meters"] = float(
+		Dictionary(opponent_defense.get("arrival", {})).get("read_error_meters", 0.0)
+	)
 	opponent_dig_terms["contested_against"] = _attack_pressure(
 		attack_effectiveness,
 		opponent_block_trajectory if not opponent_block_trajectory.is_empty()
@@ -4314,6 +4321,13 @@ func _resolve_opponent_transition(
 		),
 		support_count,
 	)
+	## Published beside the pressure it is contested against, because a term
+	## that decides a dig and cannot be read off the event is a term nobody can
+	## attribute a dig to -- which is how three separate values on this branch
+	## came to be spent invisibly.
+	home_dig_terms["read_error_meters"] = float(
+		Dictionary(defense_arrival).get("read_error_meters", 0.0)
+	)
 	home_dig_terms["contested_against"] = _attack_pressure(
 		opponent_attack,
 		home_block_trajectory if not home_block_trajectory.is_empty()
@@ -5122,6 +5136,13 @@ func _resolve_home_continuation(
 			attack_quality,
 		),
 		int(cont_defense.get("support_count", 0)),
+	)
+	## Published beside the pressure it is contested against, because a term
+	## that decides a dig and cannot be read off the event is a term nobody can
+	## attribute a dig to -- which is how three separate values on this branch
+	## came to be spent invisibly.
+	cont_dig_terms["read_error_meters"] = float(
+		Dictionary(cont_defense.get("arrival", {})).get("read_error_meters", 0.0)
 	)
 	cont_dig_terms["contested_against"] = _attack_pressure(
 		attack_quality, continuation_attack_trajectory
