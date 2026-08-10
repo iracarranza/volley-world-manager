@@ -43,6 +43,7 @@ Then, by subject:
 |---|---|
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
 | The title screen | `docs/design/TITLE_SCREEN.md` |
+| The match centre, the whiteboard | `docs/design/THE_TACTICAL_WHITEBOARD.md` |
 | Anything visual | `docs/design/UI_VISUAL_SYSTEM.md` and `UI_VISUAL_SYSTEM_CONSTRAINTS.md` |
 | Setter choice, who swings | `docs/design/SETTER_DECISION.md` |
 | Tempo, set height, approach | `docs/design/TEMPO_AND_APPROACH.md` |
@@ -91,6 +92,12 @@ away.
   | `sewn` -- the journal | halftone, warm cream, per-patch tint | running stitch | everything, by hand |
   | `form` -- the clipboard | flat stock, cooler, unscreened | printed hairlines, square corners, faint grid | only the annotation: marker, red pen, highlighter |
   | `drawn` -- default | halftone, pen edge | broad-nib pen | by hand |
+  | `board` -- the match centre | melamine, cool, a wiped smear, no screen | marker rules edge to edge; magnets, not borders | all of it, in four markers, minutes ago |
+
+  `board` is drafted but unbuilt; see `docs/design/THE_TACTICAL_WHITEBOARD.md`.
+  Its display face is **Yatra One**, not Cherry Bomb One, and it shares exactly
+  one property with `form` -- no halftone -- so building it off `MEDIUM_FORM`
+  will reproduce the defect in the row above it.
 
   The title screen is exempt from all of it because it is not an object on the
   desk but the **room the desk is in**. See `docs/design/TITLE_SCREEN.md`.
