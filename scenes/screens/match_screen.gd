@@ -306,10 +306,28 @@ func _contact_recovery(event: RallyEvent) -> String:
 	return str(event.metadata.get("contact_recovery", "platform"))
 
 
+## Step 2: the geometry gets a vote on what the contact looked like.
+##
+## The resolver classifies a contact from alignment and edge-ratio thresholds and
+## owns what it *cost*. Two of its four branches cannot fire: measured over 1447
+## contacts, `reaching` is 0.0% of receptions -- the reach margin runs from 3.1 m
+## to 4.8 m and the branch needs it below zero -- and `off-axis` is 2.5% of digs,
+## against a body-penalty bound of 0.045 on a term the constant's own comment
+## records as running 0.01 to 0.04. Both are thresholds outside the distribution
+## they cut, and the consequence on screen is that a passer is drawn square to a
+## ball arriving over their shoulder.
+##
+## This does not touch the classification the simulator scores against. It is a
+## second, purely geometric opinion about what the contact *looked like*, taken
+## only when it is more specific than the one recorded -- a body that had to give
+## up more than a degree of platform was not square, whatever the alignment term
+## said. The resolver stays the authority on the outcome; the drawing stops
+## claiming a squared-up pass that never happened.
 func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
-	return str(event.metadata.get("contact_posture", "planted"))
+	var recorded := str(event.metadata.get("contact_posture", "planted"))
+	return PlatformAim.posture_for(_platform_aim(event), recorded)
 
 
 ## Presentation inputs carried by the resolved event. The actor never looks up

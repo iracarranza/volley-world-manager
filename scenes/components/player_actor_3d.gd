@@ -422,6 +422,13 @@ func set_highlighted(highlighted: bool) -> void:
 ## back toward those captured values afterwards. What is being eased *from* is
 ## therefore whatever the frame already had -- the gait, mid-stride -- so a
 ## passer running to the ball keeps running and the platform arrives under them.
+## The recovery's own progress, from a pose phase that also carries the approach.
+func _recovery_clock(phase: float) -> float:
+	return clampf(
+		inverse_lerp(RECOVERY_START_PHASE, RECOVERY_END_PHASE, phase), 0.0, 1.0
+	)
+
+
 func _apply_dig_posture(
 	weight: float = 1.0,
 	drive: float = 0.0,
@@ -964,6 +971,18 @@ static func recovery_motion(
 	var down := smoothstep(0.0, 0.34, recovery)
 	var travel := smoothstep(0.08, 0.82, recovery)
 	var roll := smoothstep(0.18, 0.88, recovery)
+	## **When the legs come in.** Late, and deliberately after the roll has
+	## started.
+	##
+	## The legs used to fold on `down` -- 0 to 0.34 -- so the body balled up in
+	## the first third and the 112-degree roll then turned a ball. Photographed as
+	## a strip that reads as a forward tumble, which is what it was: the rotation
+	## was there all along and had nothing extended to rotate.
+	##
+	## A dive roll extends into the contact, takes the floor on the platform and
+	## the outside hip, and gathers the legs over the top as it comes round. So
+	## the gather trails the roll instead of leading it.
+	var gather := smoothstep(0.46, 0.96, recovery)
 	var side := signf(contact_direction.x)
 	if is_zero_approx(side):
 		side = -1.0 if handedness == "Left" else 1.0
@@ -995,6 +1014,7 @@ static func recovery_motion(
 		"down": down,
 		"travel": travel,
 		"roll": roll,
+		"gather": gather,
 		"side": side,
 		"pitch_radians": pitch,
 		"roll_radians": body_roll,
@@ -1075,21 +1095,39 @@ func _apply_recovery_state(
 				body_pivot.rotation.x += float(motion.pitch_radians)
 				body_pivot.rotation.z += float(motion.roll_radians)
 				body_pivot.position += Vector3(motion.offset)
+				## **Step 5: the chin tucks.**
+				##
+				## The head keeps tracking the ball through every other pose, which
+				## is right -- and wrong here. With the trunk pitched and rolled
+				## past ninety degrees, a head still aimed at the ball is a head
+				## driven back through the shoulders, which is the geometry behind
+				## the frames where it disappears into the torso.
+				##
+				## Nobody rolls looking at the ball anyway. The tuck is the first
+				## thing taught about going to the floor, so damping the look by
+				## the roll is both the fix and the correct behaviour.
+				var tuck := 1.0 - float(motion.roll)
+				look_yaw *= tuck
+				look_pitch = lerpf(look_pitch, 0.42, float(motion.roll))
+				_apply_head_look()
 			## Thighs well past horizontal, so the folded legs finish at hip height
 			## and the *hip* becomes the lowest thing on the body. With the legs
 			## reaching lower than the hip the floor solve plants a shoe instead
 			## and leaves the body standing over it, which is a crouch.
+			## On `gather`, not on `down`. See `recovery_motion`: folding these
+			## in the first third is what turned the roll into a tumble.
+			var fold := float(motion.gather)
 			left_leg.rotation_degrees.x = lerpf(
-				left_leg.rotation_degrees.x, 128.0, down
+				left_leg.rotation_degrees.x, 128.0, fold
 			)
 			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -118.0, down
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -118.0, fold
 			)
 			right_leg.rotation_degrees.x = lerpf(
-				right_leg.rotation_degrees.x, 138.0, down
+				right_leg.rotation_degrees.x, 138.0, fold
 			)
 			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -126.0, down
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -126.0, fold
 			)
 		"blown_away":
 			## Not a play, an impact. The body pitches *backward* -- the only pose
@@ -1321,6 +1359,13 @@ const PLATFORM_SET_PHASE: float = -0.08
 ## ball they had already played.
 const PLATFORM_DRIVE_START: float = -0.14
 const PLATFORM_DRIVE_END: float = 0.34
+## Where the recovery's own 0-to-1 lives inside the pose phase.
+##
+## It starts at contact rather than before it, and finishes before the pose does
+## so a voli is back on their feet with a moment to spare rather than arriving
+## upright exactly as the next contact begins.
+const RECOVERY_START_PHASE: float = 0.0
+const RECOVERY_END_PHASE: float = 0.86
 
 
 func _square_up_phase(event_type: int) -> float:
@@ -1616,7 +1661,24 @@ func set_pose(
 				_apply_dig_posture(
 					smoothstep(PLATFORM_PHASE, PLATFORM_SET_PHASE, phase),
 					smoothstep(PLATFORM_DRIVE_START, PLATFORM_DRIVE_END, phase),
-					clampf(phase, 0.0, 1.0), contact_direction,
+					## Step 3: **the recovery has its own clock, and it starts at
+					## contact.**
+					##
+					## This was `clampf(phase, 0, 1)` -- the same number the
+					## approach runs on -- so a voli began going to the floor
+					## while they were still travelling to the ball. Photographed
+					## as a frame strip the shape is unmistakable: nothing visible
+					## for the first 15% of the phase, then the entire collapse
+					## between 15% and 40%, then five frames of a body already
+					## down. A fall that has finished before the ball is played is
+					## not a consequence of playing it.
+					##
+					## Renormalised so 0 is the contact and 1 is back on the feet.
+					## The recovery curves inside `recovery_motion` -- down at
+					## 0-0.34, travel at 0.08-0.82, roll at 0.18-0.88 -- were
+					## written against a span that means this, and were being fed
+					## one that did not.
+					_recovery_clock(phase), contact_direction,
 				)
 
 		RallyEventModel.EventType.SET:

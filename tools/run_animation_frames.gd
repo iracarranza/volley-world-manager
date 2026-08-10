@@ -30,6 +30,9 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 ## each frame is still large enough to read at a glance.
 const FRAME_COUNT: int = 8
 const FRAME_SPACING: float = 1.55
+## Where a recovery strip starts, in pose phase. Before the platform forms, so
+## the row reads approach -> contact -> recovery rather than beginning mid-fall.
+const RECOVERY_STRIP_FROM_PHASE: float = -0.34
 
 ## The two angles every motion is shot from.
 const CAMERAS := {
@@ -46,10 +49,24 @@ const CAMERAS := {
 ##   signature-- a named rule-of-cool move at full charge
 const STRIPS: Array[Dictionary] = [
 	{
-		"name": "recovery_fall",
-		"caption": "DEFENSE recovery: fall (the sideways dive roll)",
+		## `posture` has to be one of the four the pose actually knows -- the
+		## first version of this strip passed "diving", which matches no branch,
+		## so the body never entered a dig at all and eight frames of a standing
+		## figure collapsing were read as the animation being wrong.
+		##
+		## And `fall` is two motions, not one: a planted or off-axis voli rolls
+		## sideways, a moving or reaching one slides forward. Only the first is
+		## the dive roll, so it needs a planted contact to appear.
+		"name": "recovery_fall_roll",
+		"caption": "DEFENSE fall from planted -- the sideways roll",
 		"recovery": "fall",
-		"posture": "diving",
+		"posture": "planted",
+	},
+	{
+		"name": "recovery_fall_slide",
+		"caption": "DEFENSE fall from reaching -- the forward slide",
+		"recovery": "fall",
+		"posture": "reaching",
 	},
 	{
 		"name": "recovery_blown_away",
@@ -169,8 +186,17 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			## straight into `_apply_dig_posture` as `recovery_progress` -- so the
 			## strip walks the same number the rally walks rather than a second
 			## one invented here.
+			## **From before the contact, not from it.**
+			##
+			## The pose's platform forms across phase -0.34 to -0.08 and the
+			## recovery runs from 0 to 0.86, so a strip that started at 0 could
+			## only ever show the second half -- which is why the first read of
+			## this animation was "nothing happens and then everything does". The
+			## sweep now covers the whole action: arms to the ball, body follows,
+			## then the roll resolves.
 			actor.set_pose(
-				RallyEventModel.EventType.DEFENSE, 0.0, progress,
+				RallyEventModel.EventType.DEFENSE, 0.0,
+				lerpf(RECOVERY_STRIP_FROM_PHASE, 1.0, progress),
 				Vector2.RIGHT, true,
 			)
 		elif bool(strip.get("platform_sweep", false)):
@@ -230,7 +256,12 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			actor.set_pose(
 				int(pose[0]), float(pose[1]), progress, Vector2.RIGHT, true, context
 			)
-		actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
+		if strip.has("recovery"):
+			actor.identity_label.text = "%+.2f" % lerpf(
+				RECOVERY_STRIP_FROM_PHASE, 1.0, progress
+			)
+		else:
+			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
 		actor.set_highlighted(index == FRAME_COUNT - 1)
 
 	for _frame in range(8):
