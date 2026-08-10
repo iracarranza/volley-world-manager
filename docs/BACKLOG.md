@@ -4819,3 +4819,81 @@ turns the head toward a cue's attention target through `look_toward`. The body
 wants the same treatment from the movement it is already doing -- a voli
 travelling has a heading, which is their velocity, and that is a fact playback
 holds every frame and currently discards.
+
+---
+
+## The VFX pass, nine steps
+
+Every item came from a frame strip or from a measured distribution rather than
+from reading the code, which is why several of them were not what they looked
+like.
+
+**1. The ball decides the platform.** `platform_yaw` was a constant per posture
+and `contact_direction` reached only the recovery, so every square pass had
+identical forearms. `PlatformAim` bisects the incoming and outgoing flights --
+where the normal of a rebounding surface is -- and both are already on the event.
+Pitch off the same normal. Derived in playback rather than in the resolver: the
+resolver owns where the ball goes, it simply never said where the arms were.
+
+**2. The geometry votes on posture.** `reaching` fires on 0.0% of receptions and
+`off-axis` on 2.5% of digs, both thresholds outside their distribution. A body
+that gave up more than a degree of platform was not square whatever the
+alignment term said, so the residual is a second opinion taken when it is more
+specific.
+
+**3. The recovery has its own clock.** It ran on the approach's phase, so a voli
+started going to the floor while still travelling to the ball.
+
+**4. The roll was there all along.** Correcting my own earlier claim: the
+112-degree roll always reached `body_pivot.rotation.z`. What made it read as a
+tumble is that the legs folded in the first third, so the body balled up before
+it rotated.
+
+**5. The chin tucks**, which is both the fix for the head passing through the
+torso and the correct technique.
+
+**Then the roll was rebuilt from the technique** rather than patched: arms lead,
+platform breaks, load on the lateral line -- hip, glute, back, shoulder -- with
+elbows and knees kept clear, core stable until after impact, trailing leg and
+shoulder turning together, legs and core returning upright. Seven overlapping
+bands and a full 360, because the roll ends on the feet.
+
+**6-7. The surge was anchored at the pelvis and cut rather than faded.** A crush
+and a monster block are defined by the hands; both were drawn as a sphere at the
+hips with a ring at the shoes. The burst now sits at the contact -- derived from
+the rig's reach and the jump the body is already carrying -- rings and streams
+travel to it, and the fade runs to the end of the pose instead of reaching zero
+at 0.78 while two frames of swing remained.
+
+**8. The block does jump**, and always did. The strip was posing every frame at
+elevation 1.0, so eight identical heights read as a blocker who never left the
+floor. Elevation now comes from `BlockBiomechanics.elevation_at` the way
+playback drives it.
+
+**9. Facing was never driven during playback.** `has_facing` and `facing_yaw`
+were set in three places: the actor's own `_turn_toward`, and the two offline
+tools. A voli turned only at a contact and then held that heading for the rest
+of the rally. A moving body's heading is its velocity, which
+`set_player_position` already held every frame and discarded.
+
+### Two defects in the instrument, both found because the strips stopped making sense
+
+The recovery strips passed `posture = "diving"`, which matches no branch, so the
+body never entered a dig -- eight frames of a standing figure collapsing were
+read as the animation being wrong. And `fall` is two motions: planted and
+off-axis roll sideways, moving and reaching slide forward. Only the first is the
+dive roll. They are rendered separately now, and every strip starts at phase
+-0.34 so a row reads approach -> contact -> recovery.
+
+### Honest residuals
+
+- At the top of the turn the body reads as briefly airborne: the 360 rotates
+  about a pivot the floor solve does not track through a full turn. A stylised
+  roll rather than a solved one.
+- The platform aim is drawn, not simulated. A pass still lands where the
+  resolver said; the arms merely stop contradicting it. If the two ever need to
+  agree the other way, that is a resolver change and a much larger one.
+- `PlatformAim.posture_for` overrides the recorded posture for *drawing* only.
+  The simulator's two dead branches are still dead where they are scored, and
+  the reach-margin finding -- receivers arriving with 3.1 m to 4.8 m of spare
+  reach -- remains untouched.

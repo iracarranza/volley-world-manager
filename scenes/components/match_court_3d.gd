@@ -141,11 +141,38 @@ func _apply_mesh_color(
 	mesh_instance.material_override = material
 
 
+## Court-space movement below this is a rounding artefact, not a direction.
+const TRAVEL_HEADING_FLOOR: float = 0.0025
+
+
 func set_player_position(player_id: int, position: Vector2) -> void:
 	if not player_actors.has(player_id):
 		return
+	## **Step 9: a travelling voli faces where they are going.**
+	##
+	## `has_facing` and `facing_yaw` were set in exactly three places -- inside
+	## the actor's own `_turn_toward`, and the two offline tools. Neither this
+	## file nor `match_screen.gd` touched them, so during a rally an actor only
+	## ever turned at the instant of a contact pose and then held that heading
+	## for the rest of the point. A voli who had not touched the ball had no
+	## heading at all.
+	##
+	## The machinery was complete the whole time -- a turn rate, a neck limit, an
+	## independent head look. Nothing drove it. A moving body's heading is its
+	## velocity, which is a fact this method already holds every frame and was
+	## discarding.
+	##
+	## Below the floor the step is noise rather than a direction: a body that has
+	## effectively stopped keeps the heading it had rather than spinning to chase
+	## a rounding error.
+	var previous: Vector2 = live_positions.get(player_id, position)
 	live_positions[player_id] = position
 	var actor := player_actors[player_id] as PlayerActor3D
+	var step := position - previous
+	if step.length() >= TRAVEL_HEADING_FLOOR:
+		var world_step := tactical_to_world(position.x, position.y) \
+			- tactical_to_world(previous.x, previous.y)
+		actor.face_travel(atan2(-world_step.x, -world_step.z))
 	actor.set_tactical_position(position, tactical_to_world(position.x, position.y))
 
 

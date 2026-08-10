@@ -25,6 +25,7 @@ extends Node
 
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const BlockBiomechanics := preload("res://scripts/data/block_biomechanics.gd")
 
 ## Frames per strip. Eight is enough to see an ease curve and few enough that
 ## each frame is still large enough to read at a glance.
@@ -253,8 +254,20 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 					"signature_succeeded": true,
 					"action_power": 1.0,
 				}
+			## **Elevation from the phase, not held at 1.0.**
+			##
+			## Every signature frame was posed at full elevation, so the strip
+			## showed a blocker who never left the floor -- eight identical
+			## heights with no arc. Playback drives a block's lift from
+			## `BlockBiomechanics.elevation_at(phase)`; the strip now does the
+			## same, so the row shows the jump the action actually has.
+			var elevation := float(pose[1])
+			if int(pose[0]) == RallyEventModel.EventType.BLOCK:
+				elevation *= BlockBiomechanics.elevation_at(progress)
+			elif int(pose[0]) == RallyEventModel.EventType.ATTACK:
+				elevation *= sin(clampf(progress, 0.0, 1.0) * PI)
 			actor.set_pose(
-				int(pose[0]), float(pose[1]), progress, Vector2.RIGHT, true, context
+				int(pose[0]), elevation, progress, Vector2.RIGHT, true, context
 			)
 		if strip.has("recovery"):
 			actor.identity_label.text = "%+.2f" % lerpf(

@@ -384,6 +384,16 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 
 ## Turns the actor toward a heading at `FACING_TURN_RATE`, or adopts it outright
 ## if this is the first heading it has ever had.
+## Turn toward a heading taken from travel rather than from a contact.
+##
+## Separate from `_turn_toward` only so the intent is legible at the call site:
+## a contact turns a voli *to the ball*, and this turns them *the way they are
+## running*. Both go through the same rate limit and the same first-heading
+## adoption, because a body has one facing however it was decided.
+func face_travel(target_yaw: float) -> void:
+	_turn_toward(target_yaw)
+
+
 func _turn_toward(target_yaw: float) -> void:
 	if not has_facing:
 		facing_yaw = target_yaw
@@ -1400,6 +1410,20 @@ func _apply_head_look() -> void:
 ## The leg that matters is the *straighter* one, because that is the one holding
 ## the voli up. During a stride the deeply folded leg is the swing leg with
 ## nothing under it.
+## Where a signature effect sits for this action, in metres above the feet.
+func _signature_anchor_height(event_type: int) -> float:
+	var reach := REFERENCE_RIG_HEIGHT_M * maxf(body_height_scale, 0.5)
+	match event_type:
+		RallyEventModel.EventType.ATTACK, RallyEventModel.EventType.BLOCK, \
+		RallyEventModel.EventType.SERVE:
+			## At the hand, and above the jump the body is already carrying.
+			return reach * 1.06 + body_pivot.position.y
+		RallyEventModel.EventType.SET:
+			return reach * 0.92 + body_pivot.position.y
+	## A floor contact happens off the platform, out in front and low.
+	return reach * 0.36 + body_pivot.position.y
+
+
 func _ground_the_feet(elevation: float, baseline_knee: float) -> void:
 	## **Unless the pose already did it exactly.** The dig computes its own hip
 	## height from where its feet finished, and this approximation -- which knows
@@ -1654,6 +1678,11 @@ func set_pose(
 	## @onready bindings are still null. The body pose remains pure in that case;
 	## the attached court actor gains the effect as soon as it is ready.
 	if signature_surge != null:
+		## The effect belongs where the action does. A swing and a block are
+		## struck at the top of the reach; a dig is played off the platform in
+		## front of the hips. `body_pivot.position.y` already carries the jump, so
+		## the anchor rises with it rather than being a constant.
+		signature_surge.contact_anchor_meters = _signature_anchor_height(event_type)
 		signature_surge.set_cue(
 			signature_move, signature_charge,
 			bool(action_context.get("signature_succeeded", false)), phase,

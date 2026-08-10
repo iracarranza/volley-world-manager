@@ -53,6 +53,19 @@ static func profile_for(move: String) -> Dictionary:
 	}
 
 
+## **Where the effect happens, in metres above the voli's feet.**
+##
+## Every piece of this used to be centred on the actor's origin, so a crush and
+## a monster block were both drawn as a sphere around the pelvis with a ring at
+## the shoes -- a player standing inside a bubble rather than doing something.
+## Both of those actions are defined by the hands: a crush at the striking hand,
+## a monster block above the tape.
+##
+## The rings and streams still travel the body, because the charge gathering is
+## a whole-body thing. What moves is the **burst**, which is the contact itself.
+var contact_anchor_meters: float = 1.2
+
+
 func set_cue(move: String, charge: float, succeeded: bool, phase: float) -> void:
 	_move = move.to_lower().replace(" ", "_")
 	_charge = clampf(charge, 0.0, 1.0)
@@ -60,27 +73,43 @@ func set_cue(move: String, charge: float, succeeded: bool, phase: float) -> void
 	if _move.is_empty() or _charge <= 0.001:
 		visible = false
 		return
-	visible = phase >= -0.92 and phase <= 0.78
+	## Extended past 0.78, which cut the effect off while the pose was still
+	## mid-action -- measured on a frame strip, the surge was gone by 86% of the
+	## phase with two frames of swing left to run. An effect that stops before
+	## its action does reads as a dropped frame.
+	visible = phase >= -0.92 and phase <= 1.0
 	if not visible:
 		return
 	var profile := profile_for(_move)
 	var colour := Color(profile.colour)
 	var gather := smoothstep(-0.88, -0.08, phase)
 	var release := smoothstep(-0.04, 0.18, phase)
-	var fade := 1.0 - smoothstep(0.34, 0.78, phase)
+	## Fading across the whole tail rather than ending inside it. The old window
+	## reached zero at 0.78 and the node was hidden at the same instant, so
+	## whatever alpha remained was cut rather than faded.
+	var fade := 1.0 - smoothstep(0.30, 1.0, phase)
 	var strength := lerpf(0.38, 1.0, _charge)
 
 	for index in rings.size():
 		var ring := rings[index]
 		var travel := fposmod((phase + 0.90) * 1.42 + float(index) / 3.0, 1.0)
-		ring.position.y = lerpf(0.12, 2.08, travel)
-		var ring_scale := lerpf(1.12, 0.72, travel) * lerpf(0.82, 1.05, strength)
+		## Rings travel the body and end at the contact rather than at a fixed
+		## 2.08 m, so a tall middle's charge reaches their hands and a libero's
+		## reaches theirs.
+		ring.position.y = lerpf(0.12, contact_anchor_meters, travel)
+		var ring_scale := lerpf(0.74, 0.42, travel) * lerpf(0.82, 1.05, strength)
 		ring.scale = Vector3.ONE * ring_scale
 		_set_alpha(ring, colour, gather * fade * (1.0 - travel * 0.54) * 0.72)
 
 	var core_pulse := (0.72 + 0.28 * sin((phase + 1.0) * TAU * 3.0)) * gather
-	core.scale = Vector3.ONE * lerpf(0.68, 1.08, core_pulse * strength)
-	_set_alpha(core, colour, core_pulse * fade * 0.28)
+	## The core is the charge gathering *in* the voli, so it sits at the trunk and
+	## stays inside the body's own silhouette. At its old scale it enclosed the
+	## whole figure and read as a player standing in a bubble rather than as
+	## something happening to them -- the same mistake as the burst, one element
+	## over.
+	core.position.y = contact_anchor_meters * 0.46
+	core.scale = Vector3.ONE * lerpf(0.30, 0.52, core_pulse * strength)
+	_set_alpha(core, colour, core_pulse * fade * 0.34)
 
 	for index in streams.size():
 		var stream := streams[index]
@@ -91,7 +120,7 @@ func set_cue(move: String, charge: float, succeeded: bool, phase: float) -> void
 		var stream_travel := fposmod(
 			(phase + 0.90) * 1.72 + float(index) / float(streams.size()), 1.0
 		)
-		stream.position.y = lerpf(0.18, 2.04, stream_travel)
+		stream.position.y = lerpf(0.18, contact_anchor_meters * 0.98, stream_travel)
 		stream.scale.y = lerpf(0.22, 0.52, strength) * flicker
 		stream.rotation.y = float(index) / float(streams.size()) * TAU \
 			+ phase * 0.28
@@ -103,7 +132,12 @@ func set_cue(move: String, charge: float, succeeded: bool, phase: float) -> void
 	var burst_weight := release * (1.0 - smoothstep(0.18, 0.66, phase))
 	if _succeeded:
 		burst_weight = maxf(burst_weight, release * fade)
-	burst.scale = Vector3.ONE * lerpf(0.45, 2.35, release)
+	## At the contact, and no longer several metres across. 2.35 on a rig two
+	## metres tall put the burst wider than the court lane the voli was standing
+	## in -- in a frame strip it overlapped four neighbours and read as one
+	## continuous streak rather than as eight separate effects.
+	burst.position.y = contact_anchor_meters
+	burst.scale = Vector3.ONE * lerpf(0.30, 1.15, release)
 	_set_alpha(burst, colour, burst_weight * strength * 0.92)
 
 
