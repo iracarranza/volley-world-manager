@@ -5560,3 +5560,70 @@ it is still *spin*, still chosen by the server, still visible as a dive, and
 still attributable to serve technique. What it is not is a hidden global drag
 constant, which remains the thing to avoid.
 
+---
+
+## Nothing determines where a defender goes: they are handed the true landing point
+
+Asked what governs the accuracy of a receiver's or digger's movement, and the
+answer is that nothing does. The live path hands
+`CoverageCalculator.choose_claimant` the ball's **actual** landing point and every
+term downstream is computed against it. `_reached_point` then walks the claimant
+to that exact spot whenever there is time.
+
+`anticipation` does two things and neither is this. It buys a shorter
+`reaction_delay` -- 0.56 s down to 0.18 -- which changes how much of the flight a
+defender has left to travel in; and it feeds `claim_score`, which decides *who*
+takes the ball. So a great reader gets to the right place sooner and is more
+likely to be the one who goes. They do not go to a *better* place, because
+everybody already goes to the perfect one.
+
+That is why the tightest tenth of receptions still carries 1.3 m of spare reach:
+the passer is not solving a tracking problem, they are solving a travel problem,
+and a serve gives them enough time to solve it every time.
+
+### The system for this is already built, and it is unplugged
+
+`BallReadSystem.estimate` produces a player-specific *estimate* of a flight
+rather than the flight itself, on exactly the axes the report names:
+
+    spatial_error_meters = lerp(1.75, 0.08, information_quality)
+                         * lerp(0.75, 1.35, novelty)
+
+    information_quality  = reading * 0.56
+                         + familiarity * 0.24
+                         + observation_progress * 0.20
+                         - novelty * 0.24
+
+and `novelty` is `BallContactSignature.baseline_novelty()`, which weights
+**topspin at 0.17, sidespin at 0.18 and flight instability at 0.16** -- so a
+floater and a heavily spun ball are already, by construction, harder to read.
+There are timing and height errors alongside the spatial one.
+
+`observation_progress` is the other half of the report: a ball has to be watched,
+and a long flight from the far endline gives more of it than a spike from four
+metres. A funnel block is the same idea from the other side -- it removes the
+question rather than answering it.
+
+**Every consumer is a shadow system.** `shadow_reception_system`,
+`shadow_block_system`, `shadow_setter_response_system` and `shadow_attack_system`
+all call it. The live rally calls it nowhere. So the game has a complete model of
+misreading a ball, calibrated on the right terms, running beside the rally and
+touching nothing in it -- the same shape as the spin vocabulary before it was
+connected, and as `chosen_fraction` before that.
+
+### What promoting it means
+
+The work is promotion, not design. `choose_claimant` and `_reached_point` take
+the estimate's landing point instead of the true one, and the true one stays
+where it is for the *contact* -- a defender moves to where they think the ball is
+going and then plays whatever actually arrives. The gap between the two is the
+reach the posture classifier already reads, which is what would finally let
+`reaching` fire on a reception rather than only on a dig.
+
+Two cautions from this session's own record. `_reached_point` also places
+hitters' approach contacts, so an error there moves where swings start -- the
+estimate belongs to the *defensive* call sites specifically. And the error draws
+from an RNG, so every downstream stream shifts and every balance number moves at
+once; this wants its own before-and-after rather than being folded into another
+change.
+
