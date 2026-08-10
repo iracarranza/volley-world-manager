@@ -5023,3 +5023,78 @@ a bad constant.
 
 Recorded rather than chosen. Option 2 is the better design and the larger
 change; option 1 is honest only after the measurement it needs.
+
+---
+
+## Option 2, attempted and inert: the geometric resolver owns the error
+
+Commitment now shifts the attack's error threshold continuously -- a side that
+swings at everything asks more of each swing than one that picks its moments --
+which is the design that stops the property depending on how often a bad ball
+happens.
+
+**It does not fix the gate, and the measurement says so plainly.** The identity
+calibration came back byte identical: 0.0843 against 0.0806, the same four
+decimals as before the change.
+
+The reason is three lines below the call site:
+
+    var attack_missed := _attack_missed(quality, decisiveness)
+    if not geometric.is_empty():
+        attack_missed = bool(geometric.attack_missed)
+
+A geometric swing is struck along a course at a speed and lands where it lands,
+so the resolver decides the error and the threshold applied afterwards is
+discarded. That is the ordinary path for almost every attack in the game.
+
+**Failure mode #1 -- a value computed and dropped -- walked into while fixing a
+dead branch, in the same session that found four others.** The parameter is kept
+because it is correct on the fallback path, and it is commented with what
+overrides it rather than left to look effective.
+
+### Where the repair actually goes
+
+A geometric swing lands in or out from its own course and speed. Commitment has
+to move something `GeometricAttackResolver` reads -- the aim tolerance it is
+allowed, or the speed it is struck at -- so that a committed side genuinely hits
+harder at tighter targets and misses more. That is a change inside the resolver
+rather than a wrapper around it, and it wants the distribution of the resolver's
+own margin printed first.
+
+Until then the gate stays red and should stay red: it is asserting a real design
+property that the engine cannot currently produce, and silencing it would hide
+exactly the thing worth knowing.
+
+---
+
+## Two design asks, recorded
+
+### Collisions, and being in the way
+
+Floor defence currently resolves each defender against the ball independently:
+`choose_claimant` scores every candidate and the best one plays it. Nobody is
+ever obstructed by a team-mate, nobody has to avoid one, and two volis can
+occupy the same ground without consequence.
+
+Wanted: bodies that get in each other's way. A defender's path crossing another's
+should cost time or the ball; a passer standing between the server and the
+intended receiver should matter. The seam-conflict penalty that exists today is
+the nearest thing and it is a scoring adjustment rather than a physical fact --
+two players *claiming* the same ball, not two players *colliding*.
+
+This interacts with the arrival-error work above: once a receiver arrives near
+rather than exactly on the ball, two of them arriving near the same ball is the
+case where collision starts to mean something.
+
+### The libero may not attack over the net
+
+Real rule, and currently unenforced: a libero cannot complete an attack hit if
+the ball is entirely above the height of the net. `_fallback_hitter`,
+`_choose_assignment` and the opponent's hitter selection all pick from the
+front-row and eligible lists without checking the role, and `RotationLineup`
+already prevents a front-row libero -- but a back-row libero can still be
+selected for a Pipe swing.
+
+Worth doing as a rule rather than as a weighting: it is a legality constraint,
+so it belongs beside the existing rotation validation rather than as a
+discouraging term in the selection score.

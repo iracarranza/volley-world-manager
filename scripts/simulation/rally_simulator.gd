@@ -2058,7 +2058,9 @@ func resolve(
 	identity_effects["attack_selection"]["effectiveness"] = attack_effectiveness
 	var attack_target: Vector2 = attack_choice.target
 	var intended_attack_target := attack_target
-	var attack_missed := _attack_missed(float(result.attack_quality))
+	var attack_missed := _attack_missed(
+		float(result.attack_quality), float(home_principles.decisiveness)
+	)
 	if not geometric.is_empty():
 		## A geometric swing is not aimed at a point and then scattered off it.
 		## It is struck along a course at a speed and it lands where the ball
@@ -4646,7 +4648,9 @@ func _resolve_home_continuation(
 		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
 	var geometric := _geometric_promotion(transition_record)
 	var intended_attack_target := attack_target
-	var attack_missed := _attack_missed(attack_quality)
+	var attack_missed := _attack_missed(
+		attack_quality, float(home_principles.decisiveness)
+	)
 	if not geometric.is_empty():
 		attack_missed = bool(geometric.attack_missed)
 		attack_target = Vector2(geometric.target)
@@ -9747,9 +9751,56 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 	}
 
 
-func _attack_missed(attack_quality: float) -> bool:
+## **How much a team's commitment moves the bar a swing has to clear.**
+##
+## `decisiveness` reached the attack twice and neither touched error.
+## `_attack_effectiveness` scales quality by 0.85-1.15 but `attack_missed` reads
+## the *unmultiplied* figure, deliberately -- commitment prices what a ball does
+## after it lands in. That left `_identity_hit_type`, which substitutes a roll or
+## a tip on a ball a cautious side does not like, as the only path to error.
+##
+## Measured over 200 rallies per identity with the resolver confirmed reading
+## `decisiveness = 0.18`, that substitution fired **0.0% of the time** while the
+## same function's committed branch converted 43 tempo swings into power swings.
+## Its trigger needs set quality under 0.48 and home first-ball set quality now
+## sits at 0.708, so the branch went out of reach by the offence improving rather
+## than by a bad constant.
+##
+## A property that depends on how often a bad ball happens is a property that
+## disappears when a team gets good at not producing bad balls. So commitment
+## moves the bar continuously instead: a side that swings at everything asks more
+## of each swing than a side that picks its moments, whatever the ball was.
+##
+## Sized against the curve it shifts rather than guessed. The response width is
+## 0.12, so a full swing of the axis moves the threshold by half a width -- large
+## enough to separate two identities in a 48-sample directional check, small
+## enough that it cannot swamp execution, which is still what decides the shot.
+##
+## **This is live only on the non-geometric fallback, and that is not enough.**
+## Three lines after the home call site, `attack_missed = bool(geometric
+## .attack_missed)` overwrites it whenever a geometric swing resolved -- which is
+## the ordinary path. So the shift below is computed and discarded on almost
+## every attack in the game, and the identity calibration came back **byte
+## identical** after it was added: 0.0843 against 0.0806, the same four decimals
+## as before.
+##
+## Failure mode #1, walked into while fixing a dead branch. Recorded here rather
+## than quietly left, because the parameter is correct where it is reached and
+## the real repair is one level down: a geometric swing lands in or out from its
+## own course and speed, so commitment has to move something the resolver reads
+## -- the swing's aim tolerance or its speed -- rather than a threshold applied
+## afterwards. See `docs/BACKLOG.md`.
+const ATTACK_COMMITMENT_ERROR_SHIFT: float = 0.06
+
+
+func _attack_missed(
+	attack_quality: float, decisiveness: float = 0.5
+) -> bool:
+	var threshold := ATTACK_ERROR_THRESHOLD \
+		+ (clampf(decisiveness, 0.0, 1.0) - 0.5) * 2.0 \
+		* ATTACK_COMMITMENT_ERROR_SHIFT
 	var response := 1.0 / (1.0 + exp(
-		(clampf(attack_quality, 0.0, 1.0) - ATTACK_ERROR_THRESHOLD)
+		(clampf(attack_quality, 0.0, 1.0) - threshold)
 			/ ATTACK_ERROR_RESPONSE_WIDTH
 	))
 	var miss_chance := lerpf(ATTACK_ERROR_FLOOR, ATTACK_ERROR_CEILING, response)
