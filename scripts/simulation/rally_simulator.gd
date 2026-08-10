@@ -1117,7 +1117,12 @@ func resolve(
 		"geometric_serve_opponent",
 		opponent_serve_distance,
 		_serve_launch_angle_degrees(opponent_server, serve_quality),
-		GeometricAttackPromotionModel.serve_contact_height_meters(opponent_server),
+		GeometricAttackPromotionModel.serve_contact_height_meters(
+			opponent_server,
+			GeometricAttackPromotionModel.serve_effort_for_style(
+				str(opponent_server.primary_serve_style)
+			),
+		),
 		_ground_to_net_meters(
 			opponent_serve_origin, serve_landing, opponent_serve_distance
 		),
@@ -2868,7 +2873,12 @@ func _resolve_home_serve(
 		"geometric_serve_home",
 		home_serve_distance,
 		_serve_launch_angle_degrees(server, serve_quality),
-		GeometricAttackPromotionModel.serve_contact_height_meters(server),
+		GeometricAttackPromotionModel.serve_contact_height_meters(
+			server,
+			GeometricAttackPromotionModel.serve_effort_for_style(
+				str(server.primary_serve_style)
+			),
+		),
 		_ground_to_net_meters(
 			home_serve_origin, opponent_landing, home_serve_distance
 		),
@@ -9749,7 +9759,12 @@ func _geometric_serve_record(
 	geometric_rng.seed = hash("%d|serve|%s|%d" % [rally_seed, key, server.id])
 	var serve: Dictionary = GeometricAttackResolverModel.resolve_serve(
 		server, contact,
-		GeometricAttackPromotionModel.serve_contact_height_meters(server),
+		GeometricAttackPromotionModel.serve_contact_height_meters(
+			server,
+			GeometricAttackPromotionModel.serve_effort_for_style(
+				str(server.primary_serve_style)
+			),
+		),
 		target, attacking_negative_y, tactical_risk,
 		GeometricAttackPromotionModel.serve_draws(geometric_rng),
 		_serve_spin(server),
@@ -11272,7 +11287,12 @@ func _serve_carry_meters(server: VolleyballPlayer) -> float:
 		* lerpf(0.82, 1.0, _rating(server, "serve_technique"))
 	var flight: Dictionary = RallyKinematicsModel.BallFlightModel.solve_flight(
 		speed, _serve_launch_angle_degrees(server, 0.6),
-		GeometricAttackPromotionModel.serve_contact_height_meters(server),
+		GeometricAttackPromotionModel.serve_contact_height_meters(
+			server,
+			GeometricAttackPromotionModel.serve_effort_for_style(
+				str(server.primary_serve_style)
+			),
+		),
 	)
 	return float(flight.range_meters)
 

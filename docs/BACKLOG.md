@@ -5480,3 +5480,51 @@ Worth checking the same question for the block, the serve and the set, all of
 which contact well off the centre line -- a set is played above the forehead and
 a block above and in front of the shoulders.
 
+---
+
+## `reaching` cannot be fixed from `_reached_point`, and the serve has a ceiling
+
+Two attempts recorded, one reverted, because both found the same shape of thing
+and the shape is worth more than either fix.
+
+### The receiver's arrival error went in the wrong file
+
+`_reached_point` returns `target` exactly whenever the mover has time, so every
+defender who can reach a ball reaches its precise centre -- which is why the
+`reaching` posture fires on **0.0%** of receptions. Giving it a spare-time-scaled
+lateral error is the obvious fix and it does not work, measured: `reaching`
+stayed at 0.0%.
+
+The reason is that **`reaching` is classified off `CoverageCalculator`'s
+`edge_ratio`, not off where `_reached_point` put the body.** Two descriptions of
+the same arrival, and the classifier reads the one the fix did not touch. The
+error belongs in the coverage arrival, where the ratio is computed.
+
+It also broke `successful attacks land in while declared misses visibly leave
+the intended court`, because `_reached_point` places hitters' approach contacts
+too -- moving a hitter sideways moves where their swing starts, and the RNG draw
+shifts every downstream stream as well. Reverted rather than shipped: a change
+that breaks a gate to achieve nothing is worse than no change.
+
+### The serve's remaining gap is a shape problem, not a constant
+
+Serve pace went 14.7 -> 16.1 m/s across three fixes -- the launch now solves
+under the spin gravity it will be flown at, and jump servers now contact at the
+height their style implies rather than everyone taking half a leap. Both were
+real disconnects. Neither got serves near the 25 m/s a real jump serve reaches.
+
+The physics says why, and it is not a number to raise. Topspin here is a
+*constant* addition to gravity, so it pulls the ball down as hard at the start of
+its flight as at the end. A serve is struck from about 3 m and has to still be
+above 2.43 m eleven metres later; a constant extra 16 m/s squared has taken it
+under the tape long before then. Real aerodynamics do the opposite -- drag and
+Magnus both scale with velocity, so the ball is barely bent early and dives late,
+which is exactly the shape that lets a hard serve clear the net and still land in.
+
+So the honest options are: accept ~16 m/s as this model's serve ceiling and say
+so, or make the aerodynamic term velocity-dependent rather than constant. The
+second is a real physics addition, but it stays inside the stated philosophy --
+it is still *spin*, still chosen by the server, still visible as a dive, and
+still attributable to serve technique. What it is not is a hidden global drag
+constant, which remains the thing to avoid.
+

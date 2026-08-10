@@ -344,6 +344,34 @@ static func hitter_contact_from_reach(
 ## caller supplies, which is the same shape as the blocker's reach effort and
 ## keeps one expression for "how much of your jump did you actually use".
 const SERVE_JUMP_EFFORT: float = 0.55
+## What share of their leap each serve style actually uses.
+##
+## **A flat 0.55 for everybody was two errors at once.** A standing float server
+## does not jump at all and was being given half a leap; a jump topspin server
+## commits to a full approach and was being given the same half. `BallPresentation`
+## already varied this by style when it drew the ball -- `SERVE_JUMP_EFFORT if
+## style.contains("Jump") else 0.0` -- so the drawing and the resolver disagreed
+## about how high the same serve left the hand.
+##
+## It is also the lever the serve's pace was waiting on. A serve is capped by the
+## tape: from nine metres back, a flat fast ball is under the net by the time it
+## arrives, and every metre of contact height is drop the flight no longer has to
+## budget for. A jump server contacting at 3.3 m rather than 2.9 can hit the ball
+## appreciably harder and still clear -- which is exactly why the shot exists and
+## why nobody serves a topspin ball with their feet on the floor.
+const SERVE_STYLE_EFFORT := {
+	"Jump Topspin": 0.92,
+	"Jump Float": 0.74,
+	"Standing Float": 0.0,
+	"Standing": 0.0,
+}
+
+
+## The leap this style takes, defaulting to the old flat value for a style
+## nothing recognises -- a serve nobody named should not silently become a
+## standing one.
+static func serve_effort_for_style(style: String) -> float:
+	return float(SERVE_STYLE_EFFORT.get(style, SERVE_JUMP_EFFORT))
 
 
 static func serve_contact_height_meters(

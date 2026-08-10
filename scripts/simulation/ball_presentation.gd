@@ -118,11 +118,15 @@ static func contact_height(event: RallyEvent, profiles: Dictionary) -> float:
 	## and nothing in the game could have noticed.
 	match int(event.event_type):
 		RallyEventModel.EventType.SERVE:
-			var serve_style := str(event.metadata.get("serve_style", "Standing"))
+			## The style's own effort, from the one table that owns it. This used
+			## to be a local `contains("Jump")` test against a flat constant, which
+			## is a second opinion about how high a serve leaves the hand -- and it
+			## disagreed with the resolver, which gave every server half a leap.
 			return GeometricAttackPromotion.serve_contact_from_reach(
 				standing_reach, jumping_reach,
-				GeometricAttackPromotion.SERVE_JUMP_EFFORT \
-					if serve_style.contains("Jump") else 0.0,
+				GeometricAttackPromotion.serve_effort_for_style(
+					str(event.metadata.get("serve_style", "Standing"))
+				),
 			)
 		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
 			return GeometricAttackPromotion.pass_contact_from_height(height_meters)
