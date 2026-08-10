@@ -4575,8 +4575,18 @@ func _test_gate_thirteen_shadow_playback_adapter() -> void:
 		official_unchanged and not bool(playback.get("official_events_mutated", true)),
 		"Gate 13 keeps adapted events outside the official rally result",
 	)
+	## Sixteen samples, not three. After the roster mirror a three-sample batch
+	## produced **zero** shadow-playback candidates, so the assertion below was
+	## simultaneously failing on `candidate_rate > 0` and vacuous on the contract
+	## it exists to check -- a gate asserting a rate over an empty set.
+	##
+	## Measured across batch sizes rather than guessed: the candidate rate is
+	## 0.000 at three, then 0.233 / 0.246 / 0.257 at eight, sixteen and
+	## twenty-four, with `contract_valid_rate` at exactly 1.000 every time. So the
+	## contract was never in question and three was simply below the knee. Sixteen
+	## sits well past it and keeps the batch cheap.
 	var batch: Dictionary = SERVE_STYLE_CALIBRATION_SCRIPT.run(
-		3, 130000, "playback_adapter_calibration_gate_13"
+		16, 130000, "playback_adapter_calibration_gate_13"
 	)
 	_check(
 		int(batch.get("invalid_samples", 1)) == 0
@@ -5068,7 +5078,15 @@ func _test_gate_forty_two_development_live_attack() -> void:
 	## lane's table entry and so moved every hitter's contact point slightly.
 	## 300011 promotes under the shared setter-option decision and priced set
 	## height, which can legitimately route the same pass to a different hitter.
-	const LIVE_ATTACK_SEED := 300011
+	## 300041 promotes against the mirrored Port Azure roster, which changed every
+	## opponent attribute at once and so moved the qualifying set wholesale.
+	##
+	## Four re-selections is enough to say the shape out loud: **this fixture
+	## pins a property of one rally, and the rally is downstream of everything.**
+	## `tools/run_live_promotion_scan.gd` finds the next one in a single command
+	## instead of by bisection, and prints several so the choice is not a
+	## coincidence of one.
+	const LIVE_ATTACK_SEED := 300041
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -5916,7 +5934,7 @@ func _test_gate_forty_eight_block_rollout_boundary() -> void:
 func _test_gate_forty_nine_development_live_block() -> void:
 	## The same seed Gate 42 uses. A promoted block requires a promoted attack
 	## ahead of it, so the two fixtures necessarily share a chain and a seed.
-	const LIVE_BLOCK_SEED := 300011
+	const LIVE_BLOCK_SEED := 300041
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
@@ -6663,7 +6681,13 @@ func _test_set_release_interval_consumption() -> void:
 	manager.seed_vertical_slice_data()
 	var set_events_found := 0
 	var all_in_range := true
-	for seed_value in range(4200, 4210):
+	## Widened from ten seeds after the roster mirror: a home side now facing its
+	## own equal wins fewer of the first ten rallies outright, so the sample fell
+	## to seven home sets against a floor of eight. The **contract** was never in
+	## question -- every interval measured 0.258 to 0.315, dead centre of the
+	## band -- so what is fixed here is the sample, not the assertion. Weakening
+	## the floor instead would have hidden the next real break.
+	for seed_value in range(4200, 4240):
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource

@@ -1758,7 +1758,28 @@ func _append_playback_history(event: Resource) -> void:
 	dashboard_playback_history_label.scroll_to_line(0)
 
 
+## The name the vocabulary gave this contact, when it gave it one.
+##
+## Prefixed onto the headline rather than replacing it, because the two answer
+## different questions: the name is *what a viewer saw* ("Tool off the block")
+## and the headline is *who did what to whom*. A viewer wants both and the name
+## first, which is the order a commentator says them in.
+##
+## Only for contacts that survived the notability budget. `action_outcome` is on
+## every event and most of them read "Swing continued", which is the silence the
+## budget exists to protect.
+func _named_action_prefix(event: Resource) -> String:
+	if event == null or not bool(event.metadata.get("named_action", false)):
+		return ""
+	var outcome := str(event.metadata.get("action_outcome", ""))
+	return "" if outcome.is_empty() else "%s — " % outcome
+
+
 func _playback_event_headline(event: Resource) -> String:
+	return _named_action_prefix(event) + _plain_event_headline(event)
+
+
+func _plain_event_headline(event: Resource) -> String:
 	if event == null:
 		return ""
 	if int(event.event_type) != RallyEvent.EventType.BLOCK:
@@ -2065,6 +2086,24 @@ func _show_rally_result(result: Resource) -> void:
 	dashboard_event_label.text = rally_result_title.text
 	dashboard_explanation_label.text = result.explanation
 	var factor_lines: Array[String] = []
+	## The rally's named moments, first, because they are the part a viewer
+	## actually watched. Everything below them is measurement.
+	##
+	## The vocabulary has been computing these since it was integrated and no
+	## screen showed one -- the failure this repository records most often, a
+	## value derived and then dropped before anything could use it. At most two
+	## per rally, so this is a line, never a list.
+	var named_moments: Array[String] = []
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		if not bool(event.metadata.get("named_action", false)):
+			continue
+		var outcome := str(event.metadata.get("action_outcome", ""))
+		if outcome.is_empty():
+			continue
+		named_moments.append("%s (%s)" % [outcome, str(event.actor_name)])
+	if not named_moments.is_empty():
+		factor_lines.append("★ %s" % " · ".join(named_moments))
 	for factor in result.key_factors:
 		factor_lines.append("• %s" % factor)
 	factor_lines.append("Reception %d%% · Set %d%% · Attack %d%%" % [

@@ -234,29 +234,48 @@ func _seed_opponent() -> void:
 	opponent_team.tendencies = {
 		"preferred_lane": "Left Pin", "tempo": 1, "serve_target": "Zone 5",
 	}
+	## **Port Azure is the home squad, position for position.**
+	##
+	## It used to be a sketch: five attributes on its setter, two on a middle,
+	## three on an outside, and everything else left on `VolleyballPlayer`'s class
+	## default of 50. Counted, **245 of its 287 ability attributes had never been
+	## specified** against 14 of the home squad's 328 -- so every attribute this
+	## engine has learned to read since that fixture was written read 50 for one
+	## of the two teams. `SetterCapabilitySystem.command()` came out at exactly
+	## 0.500 for that side across 347 sets, which is how it was found: an exactly
+	## constant number is never a model, it is a value nobody set.
+	##
+	## That made every side-versus-side reading in this repository a measurement
+	## of the roster before it was a measurement of the simulation. Kill, dig,
+	## stuff and swing-balance have all been compared across the net for a year
+	## against an opponent that was mostly blank.
+	##
+	## Mirroring the home squad fixes that completely: the two teams are now
+	## identical, so **any residual gap between the sides is engine asymmetry by
+	## definition**. That is the control this vertical slice never had, and it is
+	## worth more than the flavour the sketch was carrying -- Port Azure's
+	## signature numbers (Oren's 86 block timing, Pax's 88 power) were expressive
+	## but they were noise sitting on top of 85% silence.
+	##
+	## Derived rather than transcribed. A hand-written mirror would drift the
+	## first time a home attribute changed and nothing would say so; copying at
+	## construction cannot. When Port Azure becomes a club with a character of its
+	## own, that is a design act layered on top of this, not a return to blanks.
+	var opponent_blueprints := [
+		[101, "Ari", "Setter", "S", 1],
+		[102, "Vale", "Outside Hitter", "OH1", 2],
+		[103, "Oren", "Middle Blocker", "M1", 3],
+		[104, "Pax", "Opposite", "OP", 4],
+		[105, "Lio", "Outside Hitter", "OH2", 5],
+		[106, "Emi", "Libero", "L", 6],
+		[107, "Noa", "Middle Blocker", "M2", 7],
+	]
 	var opponent_players: Array[Resource] = []
-	opponent_players.append(_make_player(101, "Ari", "Setter", "S", {
-			"set_accuracy": 78, "set_balance": 75, "set_stability": 77,
-			"court_vision": 82, "decision_making": 76,
-		}))
-	opponent_players.append(_make_player(102, "Vale", "Outside Hitter", "OH1", {
-			"attack_power": 84, "attack_accuracy": 76, "serve_power": 81,
-		}))
-	opponent_players.append(_make_player(103, "Oren", "Middle Blocker", "M1", {
-			"block_timing": 86, "jump_reach": 89,
-		}))
-	opponent_players.append(_make_player(104, "Pax", "Opposite", "OP", {
-			"attack_power": 88, "attack_accuracy": 71,
-		}))
-	opponent_players.append(_make_player(105, "Lio", "Outside Hitter", "OH2", {
-			"reception": 75, "anticipation": 74,
-		}))
-	opponent_players.append(_make_player(106, "Emi", "Libero", "L", {
-			"reception": 88, "anticipation": 85, "ball_control": 87,
-	}))
-	opponent_players.append(_make_player(107, "Noa", "Middle Blocker", "M2", {
-		"block_timing": 80, "jump_reach": 84, "approach_timing": 77,
-	}))
+	for blueprint in opponent_blueprints:
+		opponent_players.append(_mirror_player(
+			int(blueprint[0]), str(blueprint[1]), str(blueprint[2]),
+			str(blueprint[3]), _player_by_id(int(blueprint[4])),
+		))
 	opponent_team.players = opponent_players
 	var opponent_base_ids: Array[int] = [101, 102, 103, 104, 105, 107]
 	for rotation_number in range(1, 7):
@@ -1076,3 +1095,42 @@ func _defensive_plans_to_data() -> Array[Dictionary]:
 		if rotation_number in defensive_plans:
 			result.append(defensive_plans[rotation_number].to_dict())
 	return result
+
+
+## One opponent voli built as a copy of the home voli in the same position.
+##
+## Every ability attribute plus the body, because reach decides blocking and
+## height decides reach -- a mirror that copied technique and not measurements
+## would be a control in name only. Identity stays theirs: id, name and position
+## code are the club's, everything that decides a rally is the same on both
+## sides of the net.
+##
+## Handedness is deliberately included. It is the one presentation field that
+## also changes geometry, and leaving it at a default would have quietly made
+## every Port Azure attacker right-handed against a home squad that may not be.
+func _mirror_player(
+	player_id: int,
+	player_name: String,
+	role_name: String,
+	position_code: String,
+	source: VolleyballPlayer,
+) -> VolleyballPlayer:
+	var overrides := {}
+	if source != null:
+		for attribute_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+			overrides[attribute_name] = source.get(attribute_name)
+		for measurement in [
+			"height_cm", "mass_kg", "wingspan_cm",
+			"age", "professional_experience", "potential", "dominant_hand",
+		]:
+			overrides[measurement] = source.get(measurement)
+	return _make_player(player_id, player_name, role_name, position_code, overrides)
+
+
+## The home voli with this id, during seeding, before any lineup exists.
+func _player_by_id(player_id: int) -> VolleyballPlayer:
+	for candidate in players:
+		var player: VolleyballPlayer = candidate as VolleyballPlayer
+		if player != null and player.id == player_id:
+			return player
+	return null

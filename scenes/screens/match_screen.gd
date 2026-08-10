@@ -862,7 +862,17 @@ func _show_event_text(event: RallyEvent, event_index: int, event_count: int) -> 
 		event_index + 1, event_count, event.type_name().to_upper(),
 		float(event.metadata.get("event_time", 0.0)),
 	]
-	caption_label.text = event.headline if not event.headline.is_empty() else event.type_name()
+	## The vocabulary's name leads the caption when this contact earned one, the
+	## same way it does on the tactical board. Both playback paths name the same
+	## moments because both read the same budgeted tag.
+	var named := ""
+	if bool(event.metadata.get("named_action", false)):
+		var outcome := str(event.metadata.get("action_outcome", ""))
+		if not outcome.is_empty():
+			named = "%s — " % outcome
+	caption_label.text = named + (
+		event.headline if not event.headline.is_empty() else event.type_name()
+	)
 	detail_label.text = event.detail
 
 
