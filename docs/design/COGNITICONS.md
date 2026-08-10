@@ -8,15 +8,24 @@
 Sampled at 30 Hz across 200 rallies, counting how many volis have a live
 `PlayerCognitionCue` at each instant:
 
-| | mean, of six |
-|---|---|
-| home volis with a live cue | **0.75** |
-| opponent volis with a live cue | **0.82** |
-| distinct home volis ever given a cue | 6 of 6 |
+| | before | after the ambient layer |
+|---|---|---|
+| home volis with a live cue, ball live | **0.75** | **5.99** |
+| opponent volis with a live cue, ball live | 0.82 | 5.99 |
+| home volis, after the point | — | 4.65 |
+
+**The split at the last contact is deliberate and the pooled figure is the
+misleading one.** While the ball is up, every voli has an intention and the
+layer owes one. After it lands, the reaction *is* the content, and an ambient
+intent over a celebration would be a fiction — so the post-point window is a
+different phase with different rules, and pooling the two reports 5.82 and hides
+which half is which.
+
+The original diagnosis, for the record:
 
 Two readings, and the second is the surprising one.
 
-**The ask is 6.00 and the game is at 0.75** — one voli in eight, at any given
+**The ask was 6.00 and the game was at 0.75** — one voli in eight, at any given
 moment. It is not that some volis are never instrumented; all six appear
 eventually. It is that cues are attached to *interesting moments* and there is
 nothing in between, so eleven of twelve people on court are blank most of the
@@ -146,6 +155,14 @@ other is how a glance ends up burning for two seconds.
 ### 4. `dwell_seconds` — the cue and its ink are different things
 
 *Built.* `dwell_seconds` plus `glyph_strength(t)`, with `FADE_SECONDS` at 0.22.
+
+Holding the eyes and holding the ink turned out to be genuinely separate claims,
+and the first version of the gate assumed they were the same. It asserted that
+*only glances fade*, which was true right up until the ambient layer existed: an
+ambient cue is `track`, because an off-ball voli does follow the ball while they
+run, and it fades anyway, because its message is the intention formed at the
+start of the leg. That is why `dwell_seconds` is a field rather than something
+derived from `attention_hold`.
 
 This is what makes a continuous stream survivable, and it is the answer to the
 ink risk at the bottom of this document. Coverage wants exactly one live cue per
@@ -303,14 +320,21 @@ of fixed 1129, track 1011, glance 334.
    `PlayerCognitionCue`**~~ — done, with every compiled cue carrying a real
    intent and hold rather than a default, so the axes cannot go inert the way
    the serve cue did.
-2. **Return the reason from the phase maps.** Each one already branches on it;
-   this is a second value, not a second pass. *This is the next step, and it is
-   what takes coverage from 0.75 to 6.00.*
-3. **Compile the ambient stream from those reasons**, one tiling cue per voli
-   per flight.
+2. ~~**Return the reason from the phase maps.**~~ Done. Each already branched on
+   it, so this was a second value rather than a second pass: an `out_intents`
+   dictionary beside the coordinates for the three travel maps, and
+   `_uniform_intents` for the placements, which are one idea each and needed
+   saying rather than splitting.
+3. ~~**Compile the ambient stream from those reasons.**~~ Done, in
+   `_compile_ambient`, one tiling cue per voli per flight at `PRIORITY_AMBIENT`
+   -- below `PRIORITY_TRACKING`, so an ambient cue loses every overlap it is
+   ever in, which is the point of it. Gaps fill with `watching`, which is why
+   the vocabulary has a term for nothing in particular: the alternatives are a
+   blank voli or an invented intention, and only this one is both continuous and
+   true. 0.75 -> 5.99.
 4. **The continuity gate** — every home voli, exactly one active cue, at every
-   sampled instant. Add it with step 3 rather than after, so the number it
-   protects is never allowed to regress from 6.00.
+   sampled instant while the ball is live. Not yet written; the vocabulary gate
+   guards the mix but not the coverage, and 5.99 has nothing protecting it.
 5. **The opponent restriction**, at `observable`, intent and facing only.
 6. **Renderer: the two tiers**, with the ambient tier's contrast set against the
    existing punctuating markers rather than in isolation.

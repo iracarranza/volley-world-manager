@@ -93,7 +93,141 @@ static func compile(result: Resource) -> Array:
 				_compile_reception(events, index, cues)
 			RallyEventModel.EventType.SET:
 				_compile_second_contact(result, index, cues)
+	_compile_ambient(result, events, cues)
 	return TimelineModel.finalize(cues)
+
+
+## Priority for the ambient layer. Below `PRIORITY_TRACKING`, so an ambient cue
+## loses every overlap it is ever in -- which is the whole point of it. It is
+## what a voli is doing when nothing more interesting is true of them, and the
+## moment something is, that should win.
+const PRIORITY_AMBIENT: int = -10
+
+## How long an ambient glyph holds full strength before fading.
+##
+## An intention is formed at the start of a flight and is then simply being
+## carried out, so the ink belongs at the front of the leg. Without this the
+## court carries twelve glyphs at full strength for the whole rally and the
+## markers that currently mean something -- `lost_sight` at 24 appearances in
+## 47,000 cue-samples -- stop reading at all. See `docs/design/COGNITICONS.md`,
+## "the risk this ask creates".
+const AMBIENT_DWELL_SECONDS: float = 0.26
+
+
+## One cue per off-ball voli per flight, from the reason their phase map already
+## recorded.
+##
+## **This exists because the resolver decides *why* and then publishes only
+## *where*.** Each phase map in `rally_simulator` branches on a real thing -- the
+## serve-receive formation sorts passers from stagers from short cover,
+## `_cover_phase_map` reads `attack_coverage_responsibility` -- and until those
+## maps carried an `out_intents` dictionary alongside their coordinates, this
+## layer would have had to infer an intention back out of a position, which is
+## guessing about something already known.
+##
+## The cue spans the flight the targets describe: from the contact before it to
+## the contact carrying them, because that is exactly the leg playback draws with
+## those positions. Anything else would put the icon and the legs on different
+## clocks.
+## What the actor of a contact is doing, for the flight that ends at it.
+##
+## The one voli a phase map never mentions is the one playing the ball -- they
+## are moved by their own `movement_target`, not by a shape -- so without this
+## the busiest person on court is the only one with nothing above their head.
+static func _actor_intent(event_type: int) -> StringName:
+	match event_type:
+		RallyEventModel.EventType.SERVE:
+			return &"serving"
+		RallyEventModel.EventType.RECEPTION:
+			return &"receiving"
+		RallyEventModel.EventType.SET:
+			return &"setting"
+		RallyEventModel.EventType.ATTACK:
+			return &"approaching"
+		RallyEventModel.EventType.BLOCK:
+			return &"blocking"
+		RallyEventModel.EventType.DEFENSE:
+			return &"defending"
+	return &"watching"
+
+
+static func _compile_ambient(result: Resource, events: Array, cues: Array) -> void:
+	## Who is on court, which the events alone cannot say. The resolver records
+	## both sixes at the top of every rally for its own reasons; this is the
+	## cheapest true answer available and it needs no new publication.
+	var rosters := {
+		&"home": result.initial_home_positions,
+		&"opponent": result.initial_opponent_positions,
+	}
+	for index in range(events.size()):
+		var event: Resource = events[index]
+		var previous := _previous_contact(events, index)
+		var to_time := float(event.metadata.get("event_time", 0.0))
+		var from_time := to_time
+		if previous != null:
+			from_time = float(previous.metadata.get("event_time", 0.0))
+		elif int(event.event_type) == RallyEventModel.EventType.SERVE:
+			## The one contact with nothing in front of it. The rest of the cue
+			## stream already starts before the serve -- `_compile_serve` opens
+			## `SERVE_AIM_SECONDS` early -- so without this the pre-serve window
+			## is the one moment eleven volis are blank, which is exactly the
+			## kind of edge a continuity figure hides in: it measured 5.82 of six
+			## rather than six, and the missing 3% was all in one place.
+			from_time = maxf(to_time - SERVE_AIM_SECONDS, 0.0)
+		else:
+			continue
+		if to_time - from_time < CueModel.MINIMUM_DURATION_SECONDS:
+			continue
+		var actor_id := int(event.actor_id)
+		for side in [&"home", &"opponent"]:
+			var published: Dictionary = event.metadata.get(
+				"%s_phase_intents" % side, {}
+			)
+			## Every voli on this side, not only the ones a shape placed.
+			##
+			## **`watching` is why the vocabulary has a term for nothing in
+			## particular.** The alternative to filling the gap is either a blank
+			## voli -- which is the 0.75-of-six the layer started at -- or an
+			## invented intention, which is the drifting-volis defect moved onto
+			## the icons. Saying "watching" is the only one of the three that is
+			## both continuous and true.
+			var intents := {}
+			for raw_player_id in rosters.get(side, {}):
+				intents[int(raw_player_id)] = {
+					"intent": &"watching", "progress": 0.0,
+				}
+			if actor_id >= 0 and intents.has(actor_id):
+				intents[actor_id] = {
+					"intent": _actor_intent(int(event.event_type)),
+					"progress": 0.0,
+				}
+			for raw_player_id in published:
+				intents[int(raw_player_id)] = published[raw_player_id]
+			for raw_player_id in intents:
+				var entry: Dictionary = intents[raw_player_id]
+				var cue := CueModel.create(
+					int(raw_player_id), side, event.sequence,
+					from_time, to_time, &"committed", &"during",
+				)
+				cue.intent = StringName(str(entry.get("intent", "watching")))
+				cue.progress = clampf(float(entry.get("progress", 0.0)), 0.0, 1.0)
+				cue.attention_kind = &"ball"
+				## Tracking, not staring: an off-ball voli follows the ball while
+				## they run. The glyph fades on its own, so the hold describes the
+				## eyes and the dwell describes the ink.
+				cue.attention_hold = &"track"
+				cue.dwell_seconds = minf(
+					AMBIENT_DWELL_SECONDS, maxf(to_time - from_time, 0.0)
+				)
+				## An intention is not a belief about an outcome, so it carries no
+				## confidence. Certainty on an ambient cue would be the renderer's
+				## invitation to draw a voli looking sure about a rally they have
+				## not seen yet.
+				cue.certainty = 0.0
+				cue.urgency = 0.0
+				cue.audience = &"observable"
+				cue.priority = PRIORITY_AMBIENT
+				cues.append(cue)
 
 
 ## The server picking a target, where one was actually picked.

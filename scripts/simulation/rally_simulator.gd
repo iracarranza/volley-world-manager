@@ -1444,6 +1444,7 @@ func resolve(
 	## Book the cost of the contact before the rally moves on, so the transition
 	## below reads a receiver who is still getting up rather than one who is not.
 	_note_recovery(receiver, str(reception_pass.contact_recovery), rally_clock)
+	var home_receive_intents := {}
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		serve_landing, Vector2(reception_pass.destination), reception_success,
 		result.reception_quality, "%s receives" % receiver.display_name,
@@ -1462,7 +1463,10 @@ func resolve(
 			## serve event they were never drawn at all -- nothing precedes the
 			## first contact of a rally, so that leg does not exist. Measured
 			## after the fact: 400 serves of 400 had no preceding flight.
-			"home_phase_targets": _receive_formation_map(lineup, false),
+			"home_phase_targets": _receive_formation_map(
+				lineup, false, home_receive_intents
+			),
+			"home_phase_intents": home_receive_intents,
 			"planner_zone_center": Vector2(receiver_zone.center) \
 				if receiver_zone != null else receiver_start,
 			"planner_zone_radius_meters": float(receiver_zone.radius_meters) \
@@ -1705,10 +1709,12 @@ func resolve(
 	## is flying *toward*, so the pass's flight is described by the set. Attached
 	## to the reception event these moved people during the *serve*, which is the
 	## one phase that already had a shape of its own.
+	var home_transition_intents := {}
 	var home_transition_targets := _transition_phase_map(
 		players, lineup, receiver.id, setter.id,
 		hitter.id if hitter != null else -1,
 		set_contact, second_contact_window, setter_arrival_margin,
+		home_transition_intents,
 	)
 	if active_play == null:
 		result.key_factors.append(_factor("default_offense"))
@@ -1906,6 +1912,7 @@ func resolve(
 	var set_event := result.events[-1] as RallyEvent
 	if set_event != null and not home_transition_targets.is_empty():
 		set_event.metadata["home_phase_targets"] = home_transition_targets
+		set_event.metadata["home_phase_intents"] = home_transition_intents
 	if using_live_setter and set_event != null:
 		set_event.metadata["continuous_setter"] = true
 		set_event.metadata["setter_action"] = str(selected_live_setter.get(
@@ -2574,6 +2581,20 @@ func resolve(
 		)
 	if not opponent_block_stage.is_empty():
 		attack_event.metadata["opponent_phase_targets"] = opponent_block_stage
+		## Two ideas in one map, so it is split rather than stamped: the two at
+		## the net are blocking and everybody behind them is defending.
+		var opponent_stage_intents := _uniform_intents(
+			opponent_block_stage, &"defending"
+		)
+		if opponent_blocker != null:
+			opponent_stage_intents[opponent_blocker.id] = {
+				"intent": &"blocking", "progress": 0.0,
+			}
+		if assisting_blocker != null:
+			opponent_stage_intents[assisting_blocker.id] = {
+				"intent": &"blocking", "progress": 0.0,
+			}
+		attack_event.metadata["opponent_phase_intents"] = opponent_stage_intents
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
@@ -2604,6 +2625,7 @@ func resolve(
 	var opponent_blocker_name := opponent_blocker.display_name \
 		if opponent_blocker != null else "Open block"
 	narration["opponent_blocker"] = opponent_blocker_name
+	var home_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker_id,
 		opponent_blocker_name,
 		Vector2(set_target.x, 0.47), post_block_target, block_outcome != "miss",
@@ -2617,8 +2639,9 @@ func resolve(
 			## contact this flight ends at.
 			"home_phase_targets": _cover_phase_map(
 				players, lineup, defensive_plan, hitter.id,
-				set_target, attack_flight, false,
+				set_target, attack_flight, false, home_cover_intents,
 			),
+			"home_phase_intents": home_cover_intents,
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
@@ -2886,6 +2909,9 @@ func resolve(
 			## rather than the reason. Without it the opponent's best-available
 			## defender is unmeasurable and "their shape is worse" stays a guess.
 			"opponent_phase_targets": opponent_live_positions.duplicate(true),
+			"opponent_phase_intents": _uniform_intents(
+				opponent_live_positions, &"defending"
+			),
 			"movement_target": opponent_defender_reach,
 			## The dig happens when the swing reaches the floor, which the
 			## swing's own trajectory already states. Deriving it from
@@ -3121,6 +3147,7 @@ func _resolve_home_serve(
 	)
 	var opponent_pass_destination := Vector2(opponent_pass.destination)
 	_note_recovery(receiver, str(opponent_pass.contact_recovery), rally_clock)
+	var opponent_receive_intents := {}
 	_add_event(result, RallyEventModel.EventType.RECEPTION, receiver.id, receiver.display_name,
 		opponent_landing, opponent_pass_destination,
 		reception_success,
@@ -3134,8 +3161,9 @@ func _resolve_home_serve(
 			## reason as the home one above.
 			"opponent_phase_targets": _receive_formation_map(
 				opponent_team.current_lineup() if opponent_team != null else null,
-				true,
+				true, opponent_receive_intents,
 			),
+			"opponent_phase_intents": opponent_receive_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
 			"serve_risk_pressure": serve_risk_pressure,
@@ -3317,10 +3345,11 @@ func _resolve_opponent_transition(
 	## The other side's off-ball five, while their pass is in the air. Attached to
 	## the SET event below for the same reason the home map is -- a leg's targets
 	## live on the contact it flies toward.
+	var opponent_transition_intents := {}
 	var opponent_transition_targets := _opponent_transition_phase_map(
 		opponent_team, first_contact_player_id, opponent_setter.id,
 		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
-		setter_arrival_margin,
+		setter_arrival_margin, opponent_transition_intents,
 	)
 	## Same model as the home transition set, and now the same attributes. The
 	## two sides read different ones -- this side set_accuracy, court_vision and
@@ -3582,6 +3611,7 @@ func _resolve_opponent_transition(
 		{"side": "opponent",
 			"set_path": "opponent_first_ball" if first_ball else "opponent_transition",
 			"opponent_phase_targets": opponent_transition_targets,
+			"opponent_phase_intents": opponent_transition_intents,
 			"set_terms": opponent_set_terms,
 			## The capability read this side has always computed and never
 			## published, so the only path whose penalty could be decomposed was
@@ -4204,10 +4234,14 @@ func _resolve_opponent_transition(
 			floor_phase_positions[raw_player_id]
 		)
 	if opponent_attack_event != null:
+		opponent_attack_event.metadata["home_phase_intents"] = _uniform_intents(
+			floor_phase_positions, &"defending"
+		)
 		opponent_attack_event.metadata["home_phase_targets"] = \
 			floor_phase_positions.duplicate(true)
 	var blocker_name := blocker.display_name if blocker != null else "No assigned blocker"
 	narration["blocker"] = blocker_name
+	var opponent_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
 		Vector2(opponent_contact.x, 0.53), Vector2(opponent_contact.x, 0.50),
 		block_outcome != "miss", home_block,
@@ -4225,8 +4259,9 @@ func _resolve_opponent_transition(
 				opponent_hitter.id if opponent_hitter != null else -1,
 				opponent_contact,
 				float(opponent_attack_trajectory.get("duration", 0.30)),
-				true,
+				true, opponent_cover_intents,
 			),
+			"opponent_phase_intents": opponent_cover_intents,
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
 			"signature_charge": float(geometric.get("signature_charge", 0.0)),
@@ -4246,6 +4281,9 @@ func _resolve_opponent_transition(
 			"net_crossing_x": float(geometric.get("net_crossing_x", 0.5)),
 			"adaptation_bonus": home_block_adaptation,
 			"home_phase_targets": floor_phase_positions.duplicate(true),
+			"home_phase_intents": _uniform_intents(
+				floor_phase_positions, &"defending"
+			),
 			"primary_close": block_result.primary_close,
 			"primary_close_terms": Dictionary(
 				block_result.get("primary_close_terms", {})
@@ -4513,6 +4551,9 @@ func _resolve_opponent_transition(
 				defender.id, defender_start
 			)),
 			"home_phase_targets": floor_phase_positions.duplicate(true),
+			"home_phase_intents": _uniform_intents(
+				floor_phase_positions, &"defending"
+			),
 			"responsibility_fit": responsibility_fit,
 			"flight_time": attack_time, "arrival": defense_arrival,
 			"claimed": home_claimed,
@@ -4731,6 +4772,7 @@ func _resolve_home_continuation(
 	## continuation is timed from that instant, mirroring the main set path --
 	## without it the set flight would start after the attack flight it feeds.
 	var cont_set_contact_time := rally_clock + second_contact_window + cont_release_interval
+	var continuation_intents := {}
 	_add_event(result, RallyEventModel.EventType.SET, setter.id, setter.display_name,
 		set_contact, set_target, set_quality >= 0.20, set_quality,
 		("Emergency second-contact set" if emergency_setter else "Transition set") \
@@ -4747,7 +4789,9 @@ func _resolve_home_continuation(
 				players, lineup, defender.id, setter.id,
 				hitter.id if hitter != null else -1,
 				set_contact, continuation_flight_time, setter_arrival_margin,
+				continuation_intents,
 			),
+			"home_phase_intents": continuation_intents,
 			"set_terms": cont_set_terms,
 			"setter_capability": setter_capability.duplicate(true),
 			"set_distance_meters": cont_set_geometry.distance_meters,
@@ -11874,7 +11918,19 @@ func _receive_formation_positions(
 ##
 ## Nothing here is invented. It is the same call, kept whole.
 func _receive_formation_map(
-	lineup: RotationLineup, opponent_side: bool
+	lineup: RotationLineup,
+	opponent_side: bool,
+	## Filled with `{player_id: {intent, progress}}` when supplied.
+	##
+	## **Why a phase map has to say why.** `CourtConstants.serve_receive_formation`
+	## already sorts the six into three kinds -- the passers it assigns to seams,
+	## the front-row volis it stages off the passing lanes, and everybody else it
+	## drops on the short-coverage mark -- and this function then flattens all
+	## three into coordinates and forgets which was which. That distinction is
+	## precisely `receiving` against `preparing_attack` against `covering`, so the
+	## cognition layer would otherwise have to re-derive, from a position, a fact
+	## the formation builder had already established.
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
 	if lineup == null:
@@ -11886,10 +11942,27 @@ func _receive_formation_map(
 		setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1,
 		opponent_side,
 	)
+	var passer_slots := CourtConstants.serve_receive_passer_slots(
+		setter_slot,
+		int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+		]["passer_count"]),
+		-1,
+	)
 	for slot_number in formation:
-		var player_id := int(lineup.player_at_slot(int(slot_number)))
-		if player_id >= 0:
-			targets[player_id] = Vector2(formation[slot_number])
+		var slot := int(slot_number)
+		var player_id := int(lineup.player_at_slot(slot))
+		if player_id < 0:
+			continue
+		targets[player_id] = Vector2(formation[slot_number])
+		var intent := &"covering"
+		if slot == setter_slot:
+			intent = &"setting"
+		elif passer_slots.has(slot):
+			intent = &"receiving"
+		elif CourtConstants.is_front_row_slot(slot):
+			intent = &"preparing_attack"
+		out_intents[player_id] = {"intent": intent, "progress": 0.0}
 	return targets
 
 
@@ -11934,6 +12007,10 @@ func _transition_phase_map(
 	set_contact: Vector2,
 	window_seconds: float,
 	setter_margin: float,
+	## `{player_id: {intent, progress}}`, filled alongside the coordinates. The
+	## three branches below are already the three intents; this stops the
+	## cognition layer having to guess a reason back out of a position.
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
 	if lineup == null or window_seconds <= 0.0:
@@ -11982,6 +12059,11 @@ func _transition_phase_map(
 				mode = "lateral"
 		var reached := _reached_point(player, here, intent, window_seconds, mode)
 		targets[player.id] = reached
+		out_intents[player.id] = {
+			"intent": &"receiving" if player.id == chase_id \
+				else (&"preparing_attack" if mode == "transition" else &"defending"),
+			"progress": _travel_fraction(here, intent, reached),
+		}
 		## The resolver has to believe what playback draws. Leaving these out of
 		## `live_positions` would put the drawn court and the simulated court in
 		## different places from the second contact onward, which is the defect
@@ -12010,6 +12092,7 @@ func _opponent_transition_phase_map(
 	set_contact: Vector2,
 	window_seconds: float,
 	setter_margin: float,
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
 	if opponent_team == null or window_seconds <= 0.0:
@@ -12042,6 +12125,10 @@ func _opponent_transition_phase_map(
 			"transition" if player.id == chase_id else "lateral",
 		)
 		targets[player.id] = reached
+		out_intents[player.id] = {
+			"intent": &"receiving" if player.id == chase_id else &"defending",
+			"progress": _travel_fraction(here, intent, reached),
+		}
 		opponent_live_positions[player.id] = reached
 	return targets
 
@@ -12073,6 +12160,11 @@ func _cover_phase_map(
 	contact: Vector2,
 	window_seconds: float,
 	opponent_side: bool,
+	## The reason each voli went where they went. `attack_coverage_responsibility`
+	## is *already* a stated intention -- it is the one place in the tactic sheet
+	## where a voli is told what to do when a ball is struck -- and until this
+	## parameter existed it was read, turned into a coordinate, and dropped.
+	out_intents: Dictionary = {},
 ) -> Dictionary:
 	var targets := {}
 	if lineup == null or window_seconds <= 0.0:
@@ -12129,11 +12221,58 @@ func _cover_phase_map(
 				mode = "transition"
 		var reached := _reached_point(player, here, intent, window_seconds, mode)
 		targets[player.id] = reached
+		var cue_intent := &"covering"
+		match responsibility:
+			"Release for transition":
+				cue_intent = &"preparing_attack"
+			"Take second contact":
+				cue_intent = &"setting"
+		out_intents[player.id] = {
+			"intent": cue_intent,
+			"progress": _travel_fraction(here, intent, reached),
+		}
 		if opponent_side:
 			opponent_live_positions[player.id] = reached
 		else:
 			live_positions[player.id] = reached
 	return targets
+
+
+## How much of an intended journey a voli actually covered, 0 to 1.
+##
+## The progress a cogniticon fills with, and it is deliberately *distance
+## covered* rather than any judgement about whether covering it was enough. A
+## voli who commits to a cover mark and gets a third of the way there fills a
+## third of their glyph; whether a third was sufficient is the rally's business
+## and not the icon's. See `PlayerCognitionCue.progress`.
+##
+## A journey of no length is complete by definition -- a voli already standing on
+## their mark has nothing left to do, and reporting that as zero progress would
+## draw an empty glyph on the one voli who is entirely ready.
+## One intent for a whole published map, where the map is already one idea.
+##
+## `_floor_phase_positions` places a defensive shape and the wall staging places
+## a wall -- neither has a per-voli branch to preserve, so they do not need the
+## `out_intents` treatment the travel maps got. They need saying out loud, which
+## is different and cheaper.
+##
+## Progress is deliberately absent: these are placements rather than journeys,
+## and a progress bar on a voli who was simply put somewhere would be a number
+## with nothing behind it.
+static func _uniform_intents(targets: Dictionary, intent: StringName) -> Dictionary:
+	var intents := {}
+	for player_id in targets:
+		intents[int(player_id)] = {"intent": intent, "progress": 0.0}
+	return intents
+
+
+func _travel_fraction(from: Vector2, intended: Vector2, reached: Vector2) -> float:
+	var asked := RallyKinematics.court_distance_meters(from, intended)
+	if asked <= 0.01:
+		return 1.0
+	return clampf(
+		RallyKinematics.court_distance_meters(from, reached) / asked, 0.0, 1.0
+	)
 
 
 func _weak_passer_target(

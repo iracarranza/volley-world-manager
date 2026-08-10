@@ -14263,9 +14263,17 @@ func _test_cognition_cues() -> void:
 			if not sampled.is_well_formed():
 				every_cue_well_formed = false
 			## The fade is what lets a continuous stream stay legible, so it has
-			## to be true of the data and not only of the renderer: a glance goes
-			## quiet before its cue ends, and a held look never does.
-			if str(sampled.attention_hold) == "glance":
+			## to be true of the data and not only of the renderer.
+			##
+			## The condition is the *dwell*, not the hold, and the first version
+			## of this check got that wrong: it asserted that only glances fade,
+			## which was true until the ambient layer landed. An ambient cue is
+			## `track` -- an off-ball voli does follow the ball while they run --
+			## and it fades anyway, because its message is the intention formed at
+			## the start of the leg. Holding the eyes and holding the ink are
+			## separate claims, which is the whole reason `dwell_seconds` is a
+			## field rather than a consequence of `attention_hold`.
+			if sampled.dwell_seconds >= 0.0:
 				if sampled.glyph_strength(sampled.ends_at) <= 0.0001:
 					glance_fades = true
 			elif sampled.glyph_strength(sampled.ends_at) < 0.9999:
@@ -14281,7 +14289,7 @@ func _test_cognition_cues() -> void:
 			and seen_holds.size() == 3
 			and glance_fades
 			and held_never_fades,
-		"compiled cues populate the intent and attention-hold vocabularies, and only glances fade",
+		"compiled cues populate the intent and attention-hold vocabularies, and a dwell is what fades",
 	)
 
 	## 3. The spectator filter drops private thought without leaving the player
