@@ -90,6 +90,11 @@ const VISUAL_CONTACT_OVERLAYS: int = 16
 ## board is a coaching instrument and this is the layer that says *why* a player
 ## went where they went, which no other overlay carries.
 const VISUAL_COGNITION: int = 32
+## A badge is a note in the margin, so it is smaller than the marker it annotates
+## -- a home marker is drawn at radius 20 -- and it hangs clear of the slot label
+## already printed under every voli.
+const COGNITION_BADGE_RADIUS: float = 6.5
+const COGNITION_BADGE_LIFT: float = 26.0
 const VISUAL_ALL: int = VISUAL_BALL_PATH | VISUAL_PLAYER_PATHS \
 	| VISUAL_TACTICAL_GUIDES | VISUAL_COVERAGE_ZONES \
 	| VISUAL_CONTACT_OVERLAYS | VISUAL_COGNITION
@@ -2345,7 +2350,9 @@ func _draw_cognition_badges() -> void:
 			continue
 		var center := Vector2(anchor)
 		var toward := _cognition_attention_offset(cue, center)
-		_draw_cognition_badge(center + Vector2(0.0, -34.0), cue, toward)
+		_draw_cognition_badge(
+			center + Vector2(0.0, -COGNITION_BADGE_LIFT), cue, toward
+		)
 
 
 ## Where a badge hangs, in local coordinates, or null when the player is not on
@@ -2388,7 +2395,10 @@ func _draw_cognition_badge(
 	var reading: Dictionary = CognitionBadge.describe(cue, toward)
 	if reading.is_empty():
 		return
-	var radius := 11.0
+	## Was 11.0, which is over half a 20 px player marker -- the badge read as
+	## the voli rather than as a note about them. A marginal mark should be
+	## smaller than the thing it annotates.
+	var radius := COGNITION_BADGE_RADIUS
 	var color: Color = Color(reading.color)
 	_draw_cognition_outline(center, radius, str(reading.shape), color)
 	## The eye: a lens whose height is the openness, so a narrow scan and a wide
@@ -2417,7 +2427,7 @@ func _draw_cognition_badge(
 	if not punctuation.is_empty():
 		draw_string(
 			ThemeDB.fallback_font, center + Vector2(radius * 0.9, -radius * 0.4),
-			punctuation, HORIZONTAL_ALIGNMENT_LEFT, 26, 15, color,
+			punctuation, HORIZONTAL_ALIGNMENT_LEFT, 26, 11, color,
 		)
 	var trend := int(reading.trend_direction)
 	if trend != 0:
@@ -2425,6 +2435,23 @@ func _draw_cognition_badge(
 		draw_line(
 			center + Vector2(-radius * 1.25, radius * 0.45 * float(trend)),
 			tip, color, 2.0,
+		)
+	## The state, named.
+	##
+	## The eye, the outline and the colour together say *how* a voli is thinking
+	## and never say *what about*, and reported plainly: "it is unclear what each
+	## one means". A shape vocabulary a reader has to be taught is a legend, and a
+	## board that needs a legend has failed. This is a coaching instrument, so the
+	## word goes on the mark.
+	##
+	## At most a few badges are live at once -- ball-tracking is filtered out
+	## before anything is drawn -- so this stays a label rather than becoming
+	## clutter.
+	var label := str(CognitionBadge.STATE_LABELS.get(str(cue.state), ""))
+	if not label.is_empty():
+		draw_string(
+			ThemeDB.fallback_font, center + Vector2(-24.0, radius + 10.0),
+			label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, color,
 		)
 
 

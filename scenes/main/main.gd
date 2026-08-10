@@ -1552,21 +1552,6 @@ func _play_rally(
 		if last_displayed_event != null:
 			_append_playback_history(last_displayed_event)
 		last_displayed_event = event
-		## Walk the rally's physical clock across this event's playback window
-		## before its phases run. `event_time` is the resolver's second, the
-		## durations below are wall-clock seconds already scaled by playback
-		## speed, and keeping the two apart is what makes 0.5x and 2x show the
-		## same thoughts at the same points of the rally rather than of the
-		## animation.
-		var cognition_from := cognition_clock
-		cognition_clock = float(event.metadata.get("event_time", cognition_clock))
-		var cognition_span := _event_playback_seconds(event, playback_speed)
-		tactical_court.advance_cognition_time(
-			cognition_from, cognition_clock, cognition_span
-		)
-		match_preview_court.advance_cognition_time(
-			cognition_from, cognition_clock, cognition_span
-		)
 		var playback_headline := _playback_event_headline(event)
 		var playback_detail := _playback_event_detail(event)
 		_set_playback_caption("t=%.2fs · %s · %s\n%s" % [
@@ -1583,6 +1568,25 @@ func _play_rally(
 			var trajectory_duration := clampf(
 				float(outgoing_trajectory.get("duration", 0.5)), 0.28, 2.60
 			) / maxf(playback_speed, 0.1)
+			## A transition leg draws the ball travelling from *this* contact to
+			## the next one, so the physical window it depicts is [this event, next
+			## contact] -- not the window ending here.
+			##
+			## The first version advanced one clock per event, at the top of the
+			## loop, from the previous event's stamp to this one's. That is right for
+			## a contact drawn in place and **one leg behind** for every ball flight,
+			## which is most of them: blockers were animated closing during the set's
+			## flight while the badges still showed the reception. It read exactly as
+			## reported -- players moving before the cue that explains the movement
+			## appears.
+			var leg_end := float(
+				next_contact.metadata.get("event_time", cognition_clock)
+			)
+			_advance_cognition(
+				float(event.metadata.get("event_time", cognition_clock)),
+				leg_end, trajectory_duration,
+			)
+			cognition_clock = leg_end
 			tactical_court.animate_spatial_transition(
 				event, next_contact, trajectory_duration
 			)
@@ -1610,6 +1614,13 @@ func _play_rally(
 		))
 		var event_duration := clampf(simulated_duration, 0.55, 2.60) \
 			/ maxf(playback_speed, 0.1)
+		## A contact drawn in place resolves *at* its own stamp, so its window
+		## is the one ending here.
+		var contact_moment := float(
+			event.metadata.get("event_time", cognition_clock)
+		)
+		_advance_cognition(cognition_clock, contact_moment, event_duration)
+		cognition_clock = contact_moment
 		var pre_targets: Array[Vector2] = []
 		if not already_arrived:
 			pre_targets = tactical_court.movement_phase_targets(event)
@@ -2404,6 +2415,17 @@ func _on_rally_completed(rally_result: RallyResult) -> void:
 	if match_screen == null:
 		return
 	await match_screen.load_and_play_rally(rally_result)
+
+
+## Walks both courts' copy of the rally's physical clock across one leg.
+##
+## `from_time` and `to_time` are the resolver's seconds; `seconds` is wall-clock
+## and already scaled by playback speed. Keeping the two apart is what makes
+## 0.5x and 2x show the same thought at the same point of the rally rather than
+## at the same point of the animation.
+func _advance_cognition(from_time: float, to_time: float, seconds: float) -> void:
+	tactical_court.advance_cognition_time(from_time, to_time, seconds)
+	match_preview_court.advance_cognition_time(from_time, to_time, seconds)
 
 
 ## Wall-clock seconds one event occupies during playback.

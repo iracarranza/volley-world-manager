@@ -4615,3 +4615,48 @@ distinct per-blocker delays reaching the cue -- rather than a visible spread.
 - The vocabulary's naming threshold is unchanged and out of band, deliberately,
   until the block rate is calibrated.
 - `SET_DECISION` versus `SET` for the option list is read around, not fixed.
+
+---
+
+## The cognition clock was one leg behind, and the badge needed a legend
+
+Three defects in the 2D cognition layer, all reported from watching it rather
+than from measuring it, and the third is the one that mattered.
+
+### The badge was drawn at the size of a voli
+
+Radius 11 px against a player marker drawn at radius 20 -- over half the thing
+it annotates. A note in the margin has to be smaller than what it is a note
+about. Now 6.5, hanging 26 px up rather than 34, with punctuation at 11 pt
+rather than 15.
+
+### A shape vocabulary is a legend, and a board that needs one has failed
+
+Reported plainly: "it is unclear what each one means". The eye, the outline and
+the colour together say *how* a voli is thinking and never say *what about* --
+a yellow diamond is a committed passer, and there was no way to know that from
+the mark. Every state now carries its own word: `READ`, `SEES`, `CHOOSING`,
+`CALL`, `COMMITTED`, `BLIND`, `REACTS`. Volleyball words where the sport has
+one. Ball-tracking is filtered before anything is drawn, so only a few badges
+are ever live at once and this stays a label rather than clutter.
+
+### The clock was one leg behind on every ball flight
+
+**"Sometimes the blockers start moving BEFORE the red icon appears."** They did,
+and it is a real bug rather than a reading difficulty.
+
+Playback has two kinds of leg. A contact drawn in place resolves *at* its own
+stamp. A ball flight draws the ball travelling from this contact to the **next**
+one, so the physical window it depicts is `[this event, next contact]`. The
+first version advanced one clock per event, at the top of the loop, from the
+previous event's stamp to this one's -- correct for the first kind and one whole
+leg behind for the second.
+
+Most legs are the second kind. So the blockers were animated closing during the
+set's flight while the badges were still showing the reception, and the
+recognition cue arrived a leg late, after the movement it explains. The clock
+now advances inside each branch with that branch's own window.
+
+Worth stating as a general shape: the layer sampled physical time correctly and
+mapped it onto the wrong window. Both halves have to be right, and only one of
+them was checked.

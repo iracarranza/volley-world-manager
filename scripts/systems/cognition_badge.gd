@@ -15,6 +15,23 @@ extends RefCounted
 
 const CueModel := preload("res://scripts/models/player_cognition_cue.gd")
 
+## What each state is called, on a board that has to be read rather than
+## decoded.
+##
+## Volleyball words where the sport has one and plain ones where it does not.
+## `READ` is a voli watching the play develop, `SEES` is the instant they pick
+## it up, `CALL` is the only one another player can hear, and `BLIND` is a
+## defender who has lost the ball behind the wall.
+const STATE_LABELS := {
+	"searching": "READ",
+	"recognizing": "SEES",
+	"deciding": "CHOOSING",
+	"calling": "CALL",
+	"committed": "COMMITTED",
+	"lost_sight": "BLIND",
+	"reacting": "REACTS",
+}
+
 ## Deliberately three hues, not a gradient. A badge is glanced at over a moving
 ## player, and a continuous colour ramp reads as one colour in motion.
 const CALM_COLOR := Color(0.42, 0.62, 0.92)
