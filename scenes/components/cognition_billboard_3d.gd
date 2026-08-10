@@ -23,13 +23,13 @@ const BadgeModel := preload("res://scripts/systems/cognition_badge.gd")
 const SHAPE_GLYPHS := {
 	"circle": "◦",
 	"wedge": "◗",
-	"diamond": "◆",
+	"diamond": "⛨",
 	"dashed_ring": "◌",
 	"burst": "✳",
 }
 const FACE_GLYPHS := {
-	"upset": "✖",
-	"sad": "▾",
+	"upset": "😠",
+	"sad": "😞",
 	"confident": "▴",
 	"pleased": "▴",
 	"urgent": "!",
@@ -46,8 +46,8 @@ func _init() -> void:
 	no_depth_test = true
 	fixed_size = true
 	pixel_size = 0.0016
-	font_size = 96
-	outline_size = 24
+	font_size = 24
+	outline_size = 8
 	outline_modulate = Color(0.02, 0.02, 0.04, 0.85)
 	horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vertical_alignment = VERTICAL_ALIGNMENT_CENTER
