@@ -9752,6 +9752,7 @@ func _geometric_serve_record(
 		GeometricAttackPromotionModel.serve_contact_height_meters(server),
 		target, attacking_negative_y, tactical_risk,
 		GeometricAttackPromotionModel.serve_draws(geometric_rng),
+		_serve_spin(server),
 	)
 	if not bool(serve.get("available", false)):
 		return

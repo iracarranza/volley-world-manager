@@ -300,6 +300,14 @@ static func resolve_swing(
 	var swing_spread := float(cost.spread_multiplier) \
 		* AttackPowerModel.commitment_spread_multiplier(
 			float(chosen.chosen_fraction)
+		) \
+		## And the hitter's own state, which until now reached nothing but whether
+		## a signature move fired. See `AttackSwingModel.form_spread_multiplier`:
+		## this is the one term in a swing's quality that the five-link chain
+		## above does not gate, and it is therefore the only way an outstanding
+		## hitter can carry further than a merely-decent set allows.
+		* AttackSwingModel.form_spread_multiplier(
+			match_confidence, flow_for_team
 		)
 
 	## --- the angle that puts that speed where it was aimed -------------------
@@ -484,6 +492,10 @@ static func resolve_serve(
 	attacking_negative_y: bool,
 	tactical_risk: float,
 	draws: Dictionary,
+	## What this server puts on the ball. Supplied by the caller rather than
+	## derived here, because `BallSpin.from_serve` reads a serve *style* and the
+	## resolver has no business knowing about roster fields.
+	spin_state: Dictionary = {},
 ) -> Dictionary:
 	if server == null:
 		return {"available": false, "reason": "no server"}
@@ -517,6 +529,7 @@ static func resolve_serve(
 	## geometry that puts spikes into the net from four.
 	var control := _rating(server, "serve_consistency") * 0.6 \
 		+ _rating(server, "serve_technique") * 0.4
+	var serve_gravity := BallSpin.gravity_for(spin_state)
 	var launch := _feasible_launch(
 		contact, bearing, speed, contact_height_meters, distance, distance,
 		attacking_negative_y,
@@ -537,6 +550,12 @@ static func resolve_serve(
 		## m/s -- not merely compressed but non-monotone, the instruction replaced
 		## by whatever pace the flattening search happened to stop at.
 		false,
+		## **And the ball's own gravity.** Solved flat, the search could only ever
+		## find the serve a spinless ball can hit -- so a topspin server's launch
+		## was certified for one flight and then drawn flying another, and the pace
+		## the spin was supposed to buy went nowhere. This is the whole of the
+		## remaining serve gap.
+		serve_gravity,
 	)
 	speed = float(launch.speed_mps)
 	var delivered := AttackSwingModel.deliver(
@@ -551,7 +570,7 @@ static func resolve_serve(
 		float(delivered.bearing_degrees),
 		float(delivered.vertical_angle_degrees),
 		float(delivered.speed_mps),
-		[], attacking_negative_y,
+		[], attacking_negative_y, serve_gravity,
 	)
 	return {
 		"available": true,
@@ -597,6 +616,16 @@ static func _feasible_launch(
 	## Whether pace may be spent to flatten a roll shot. True for a swing, false
 	## for a serve -- see `_quickest_clearing_loft`, and the serve's own call.
 	may_soften_the_loft: bool = true,
+	## **The gravity this ball actually flies under.**
+	##
+	## The search solved every candidate at 9.8 while the drawing flew the chosen
+	## one at up to 26, so the launch certified over the tape and the launch drawn
+	## were different balls. On a spike that is a small inconsistency; on a serve
+	## it is the whole feature, because a topspin serve exists precisely to be
+	## launched steeper than a flat ball could afford and still land inside the
+	## endline. Solving it flat means the search never sees the shot the spin
+	## makes possible, and settles for a lob instead.
+	gravity_mps2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2,
 ) -> Dictionary:
 	## The path the hitter aimed on, and the longer one a bearing error puts them
 	## on -- and it is the longer one every check below is made against.
@@ -678,13 +707,13 @@ static func _feasible_launch(
 				aim_distance, reach, float(step) / float(NET_FEASIBILITY_STEPS - 1)
 			)
 			var solved := BallFlightModel.solve_angle_for_range(
-				speed, probe, contact_height_meters
+				speed, probe, contact_height_meters, gravity_mps2
 			)
 			if not bool(solved.get("driven_found", false)):
 				continue
 			var angle := float(solved.driven_angle_degrees)
 			var height := _height_at_net(
-				speed, angle, contact_height_meters, ground_to_net
+				speed, angle, contact_height_meters, ground_to_net, gravity_mps2
 			)
 			if height >= needed:
 				return {
@@ -720,12 +749,12 @@ static func _feasible_launch(
 		## a higher one, so it swallowed every roll shot in the game and the lofted
 		## branch went to zero of 232. One dead branch traded for another.
 		var lofted_solve := BallFlightModel.solve_angle_for_range(
-			speed, aim_distance, contact_height_meters
+			speed, aim_distance, contact_height_meters, gravity_mps2
 		)
 		if bool(lofted_solve.get("lofted_found", false)):
 			var lofted := float(lofted_solve.lofted_angle_degrees)
 			var lofted_height := _height_at_net(
-				speed, lofted, contact_height_meters, ground_to_net
+				speed, lofted, contact_height_meters, ground_to_net, gravity_mps2
 			)
 			if lofted_height >= needed:
 				if not may_soften_the_loft:
@@ -745,10 +774,11 @@ static func _feasible_launch(
 				return _quickest_clearing_loft(
 					speed,
 					float(BallFlightModel.minimum_speed_to_reach(
-						aim_distance, contact_height_meters
+						aim_distance, contact_height_meters, gravity_mps2
 					).speed_mps),
 					aim_distance,
 					contact_height_meters, ground_to_net, needed, lofted,
+					gravity_mps2,
 				)
 			if lofted_height > fallback_height:
 				fallback_height = lofted_height
@@ -787,7 +817,7 @@ static func _feasible_launch(
 				float(step + 1) / float(NET_FEASIBILITY_STEPS)
 			)
 			var short_solve := BallFlightModel.solve_angle_for_range(
-				full_speed, shortened, contact_height_meters
+				full_speed, shortened, contact_height_meters, gravity_mps2
 			)
 			for branch in [&"lofted", &"driven"]:
 				if not bool(short_solve.get("%s_found" % branch, false)):
@@ -796,7 +826,8 @@ static func _feasible_launch(
 					short_solve.get("%s_angle_degrees" % branch, 0.0)
 				)
 				var short_height := _height_at_net(
-					full_speed, short_angle, contact_height_meters, ground_to_net
+					full_speed, short_angle, contact_height_meters, ground_to_net,
+					gravity_mps2,
 				)
 				if short_height >= needed:
 					return {
@@ -858,6 +889,7 @@ static func _quickest_clearing_loft(
 	ground_to_net: float,
 	needed: float,
 	steepest_angle: float,
+	gravity_mps2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2,
 ) -> Dictionary:
 	var best_angle := steepest_angle
 	var best_speed := from_speed
@@ -868,7 +900,7 @@ static func _quickest_clearing_loft(
 			float(step) / float(LOFT_FLATTENING_STEPS),
 		)
 		var solved := BallFlightModel.solve_angle_for_range(
-			speed, aim_distance, contact_height_meters
+			speed, aim_distance, contact_height_meters, gravity_mps2
 		)
 		if not bool(solved.get("lofted_found", false)):
 			continue
@@ -877,7 +909,7 @@ static func _quickest_clearing_loft(
 		if ground_speed <= best_ground_speed:
 			continue
 		if _height_at_net(
-			speed, angle, contact_height_meters, ground_to_net
+			speed, angle, contact_height_meters, ground_to_net, gravity_mps2
 		) < needed:
 			continue
 		best_angle = angle
@@ -894,10 +926,11 @@ static func _height_at_net(
 	angle_degrees: float,
 	contact_height_meters: float,
 	ground_to_net: float,
+	gravity_mps2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2,
 ) -> float:
 	return BallFlightModel.height_at_distance(
 		BallFlightModel.solve_flight(
-			speed_mps, angle_degrees, contact_height_meters
+			speed_mps, angle_degrees, contact_height_meters, gravity_mps2
 		),
 		ground_to_net,
 	)

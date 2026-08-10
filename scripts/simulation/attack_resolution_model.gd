@@ -89,9 +89,15 @@ static func resolve(
 	speed_mps: float,
 	blockers: Array,
 	attacking_negative_y: bool,
+	## What this ball falls under. A topspin serve or spike dives harder than
+	## gravity, and the whole point of that is it changes where the ball lands --
+	## so the resolution that decides in, out or net has to fly the same ball the
+	## launch search chose. Defaulted, so every caller that has no spin to declare
+	## keeps the flight it always had.
+	gravity_mps2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2,
 ) -> Dictionary:
 	var flight := BallFlightModel.solve_flight(
-		speed_mps, vertical_angle_degrees, contact_height_meters
+		speed_mps, vertical_angle_degrees, contact_height_meters, gravity_mps2
 	)
 	var direction := AttackCourseModel.direction_meters(
 		bearing_degrees, attacking_negative_y

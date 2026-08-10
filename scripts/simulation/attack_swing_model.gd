@@ -77,6 +77,49 @@ static func bearing_spread_degrees(
 	) * maxf(spread_multiplier, 0.0)
 
 
+## How much of their own execution a hitter has today.
+##
+## **The hitter's only channel that the chain does not gate.** An attack's
+## quality is a product of the pass, the set, the tempo the setter could run, the
+## approach that pass left time for, and the wall in front of them -- five
+## fractions under one, four of which belong to somebody else. Measured, that
+## compresses attack effectiveness into 0.41 between the tenth and ninetieth
+## percentile against 0.83 for the defender it is contested with, and it caps
+## what an outstanding hitter can reach: 465 swings and 20 clear 0.60.
+##
+## Confidence and flow are the two terms that are genuinely *theirs*. Both were
+## already computed, already passed into `resolve_swing`, and both were read for
+## nothing but whether a signature move fired -- so the game had a model of a
+## hitter's state and spent it only on the rule-of-cool layer.
+##
+## Applied to the spread rather than to the power, because that is what "a great
+## hitter makes something out of nothing" actually means. They do not hit a bad
+## set harder; they hit it *more precisely*, finding a line off a ball that
+## should not have one. Precision is the thing a product of five links cannot
+## give them and their own state can.
+##
+## Both inputs are signed, -1 to +1, zero being neutral -- so an ordinary hitter
+## in an ordinary match pays and gains nothing, and the term cuts both ways. A
+## rattled hitter against the run of play is genuinely worse than their rating,
+## which is the other half of the claim and the half that makes momentum matter.
+const FORM_SPREAD_BEST: float = 0.68
+const FORM_SPREAD_WORST: float = 1.42
+## Confidence outweighs flow because one is the player and the other is the
+## room. A hitter who backs themselves scores through a bad night for the team;
+## the reverse is rarer.
+const FORM_CONFIDENCE_SHARE: float = 0.62
+
+
+static func form_spread_multiplier(
+	match_confidence: float, flow_for_team: float
+) -> float:
+	var form := clampf(match_confidence, -1.0, 1.0) * FORM_CONFIDENCE_SHARE \
+		+ clampf(flow_for_team, -1.0, 1.0) * (1.0 - FORM_CONFIDENCE_SHARE)
+	## Mapped from -1..+1 onto worst..best through the midpoint, so zero is
+	## exactly 1.0 and neither end is reachable by one term alone.
+	return lerpf(FORM_SPREAD_WORST, FORM_SPREAD_BEST, (form + 1.0) * 0.5)
+
+
 static func deliver(
 	intended_bearing_degrees: float,
 	intended_vertical_angle_degrees: float,

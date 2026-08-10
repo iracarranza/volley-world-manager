@@ -5422,11 +5422,61 @@ known for, traits, positions, and the terms the rest of the interface uses. It
 is a reference object rather than a screen with state, which makes it the
 cheapest possible way to make the setting legible.
 
-Worth stating one finding while writing it: **body type is currently cosmetic.**
-`assign_body_type` picks one at random and the only consumer outside the
-generator is `player_physical_profiles`, which playback reads to draw the mesh.
-An encyclopedia entry describing a body type would therefore be describing a
-silhouette, and if body types are meant to mean anything -- reach, mass,
-leverage -- that is a separate piece of work and should be decided before the
-entry is written rather than after.
+**Correction, recorded because the wrong version was stated first.** Body type
+is *not* cosmetic. `PlayerGenerator.BODY_TYPE_METRICS` shifts height, mass and
+wingspan, and `BODY_TYPE_ATTRIBUTES` shifts attribute **ceilings** -- not
+starting values, deliberately, so training cannot converge everyone and quietly
+evaporate the morphology over a few seasons. Every type sums to zero, which the
+comment there says was load-bearing: an earlier pass had every type net positive
+and it inflated the generated population against the hand-authored roster.
+
+The confusion was mine and it is worth naming, because the encyclopedia has to
+get it right: there are **two** body vocabularies. `PRODUCE_BODIES` in
+`body_type_models.gd` -- Tomato, Aubergine, Pear, Stalk, Pepper -- is pure
+geometry, a silhouette with a colourway. `BODY_TYPES` in `player_generator.gd`
+-- Vegi, Avi, Cani, Feli, Ursi, Simi -- is the mechanical one. Reading the first
+and reporting on the second is exactly the mistake an encyclopedia exists to
+stop a player making.
+
+    type   height  mass  wingspan   attribute trades
+    Vegi      0     0       0       none -- the no-lean body
+    Avi      -4    -7      +6       jump_reach, block_timing / reception_stability
+    Cani      0    +2       0       stamina, transition_speed, attack_power /
+                                    jump_reach, hand_control
+    Feli     -3    -4       0       explosiveness, lateral_speed, dig_control,
+                                    set_disguise / stamina, tactical_discipline
+    Ursi     +1   +11      +1       reception_stability, attack_power, composure /
+                                    acceleration, lateral_speed, jump_reach
+    Simi     -6    -5      +2       hand_control, ball_control, finesse, tooling /
+                                    attack_power, jump_reach
+
+---
+
+## A spike is placed by the body's centre, not by the hand
+
+Reported: the ball should meet the *hand at the apex of the swing*, and
+positioning appears to be driven by the model's centre instead.
+
+Consistent with how the rig works. `set_tactical_position` places the actor's
+root, `GeometricAttackPromotion.contact_height_meters` answers how high the
+contact is, and the two are combined as "this voli, at this spot, contacting at
+this height" -- a point on the vertical axis through the body's centre. The
+striking hand at contact is nowhere near that axis: `SpikeBiomechanics` carries
+the shoulder to -204 degrees with an abduction that takes the elbow *out* as
+well as back, so at the contact instant the hand is up, forward, and off to the
+striking side by most of an arm's length.
+
+So the ball is drawn arriving at a column above the hitter's navel while the
+hand swings through a point half a metre away, and the contact reads as a miss
+even when the resolver is entirely right about the outcome.
+
+The fix is a hand *anchor* rather than a height: the actor already computes
+every joint of the swing, so it can report where the striking hand is at a given
+phase, and playback should place the ball there at the contact instant instead
+of at the body's centre at a contact height. `_signature_anchor_height` is the
+existing precedent for asking the rig where something is rather than telling it.
+
+Worth checking the same question for the block, the serve and the set, all of
+which contact well off the centre line -- a set is played above the forehead and
+a block above and in front of the shoulders.
 
