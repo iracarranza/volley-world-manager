@@ -4956,3 +4956,70 @@ The distribution of *spare time* at the reception -- `available_time` minus
 little of that there is, and that distribution decides the scale. Picking a
 constant offset first would be a threshold chosen before its distribution, which
 is §0 and is what produced the two dead posture branches in the first place.
+
+---
+
+## The red gate: a defensive identity has no way to lower its attack error
+
+`defensive attack lowers both error risk and terminal pressure across six career
+seeds` went red after the reach-acceleration fix. Diagnosed rather than adjusted.
+
+### It is a real inversion, not noise
+
+    48 samples   attack error   defensive 0.0843  physical 0.0806   INVERTED
+                 kill rate      defensive 0.5796  physical 0.6086   ok
+    96 samples   attack error   defensive 0.0828  physical 0.0791   INVERTED
+                 kill rate      defensive 0.5808  physical 0.5948   ok
+
+The gap is -0.0037 and -0.0036 across a doubled sample. The kill-rate half still
+holds; the error half is stably wrong.
+
+### The mechanism that should produce it never fires
+
+`decisiveness` reaches the attack twice and only one of them touches error:
+
+- `_attack_effectiveness` scales quality by 0.85-1.15, but `attack_missed` reads
+  `result.attack_quality`, the *unmultiplied* figure. That is deliberate and its
+  comment says so -- decisiveness prices what a ball does after it lands in, not
+  whether it lands in.
+- `_identity_hit_type` substitutes a controlled roll or a tip when
+  `decisiveness <= 0.30 and (set_quality < 0.48 or arrival_margin < 0.05)`. A
+  safe shot misses less, so **this is the only path to error.**
+
+Measured with `tools/run_identity_shot_probe.gd`, 200 rallies per identity, with
+the resolver confirmed to be reading `decisiveness = 0.18`:
+
+    Defensive   _identity_hit_type returned:
+                High-ball swing 129, Pipe attack 27, Quick attack 29
+    Physical    Power swing 43, Tempo swing 48, Pipe 27, Quick 29, High-ball 38
+
+    safe shots (roll/tip):  Defensive 0.0%   Physical 0.0%
+
+**Zero.** The identity is applied, the upper branch fires -- Physical converts 43
+tempo swings into power swings -- and the lower branch never does. So a Defensive
+side hits exactly the same shots as anyone else and there is no mechanism by
+which its error rate could be lower. The gate asserts a property the engine
+cannot produce.
+
+### Why now
+
+The trigger needs a bad ball: set quality under 0.48 or a hitter arriving inside
+0.05 s. Home first-ball set quality now sits at 0.708 after the roster mirror and
+the pass-height work. The condition was not written for a side that passes and
+sets this well, and it has quietly gone out of reach -- the same shape as the
+other five dead branches in this file, arrived at by improvement rather than by
+a bad constant.
+
+### The choice, which is a design call rather than a repair
+
+1. **Widen the trigger** so a cautious side plays safe more often. Cheap, but it
+   is choosing a threshold, and the distribution of `result.set_quality` and
+   `hitter_arrival_margin` *at that call site* has to be printed first or it is
+   §0 again.
+2. **Give decisiveness a continuous effect on error** rather than a discrete
+   substitution -- let it move the error threshold directly, the way it already
+   moves effectiveness. More robust, and it stops the property depending on how
+   often a bad ball happens.
+
+Recorded rather than chosen. Option 2 is the better design and the larger
+change; option 1 is honest only after the measurement it needs.
