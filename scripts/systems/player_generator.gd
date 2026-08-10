@@ -722,6 +722,32 @@ static func _apply_body_variation(
 const PRIMARY_TIER_BONUS: int = 15
 const SECONDARY_TIER_BONUS: int = 5
 const TERTIARY_TIER_PENALTY: int = -8
+## What a region's whole specialty is worth, spread across however many
+## attributes it names.
+##
+## **The same mistake, a third time, and this is where it gets stated as a rule:
+## a per-item constant makes unequal totals whenever the count varies.** It was
+## 16 *per attribute*, so a region with six specialties carried 96 ceiling points
+## and one with three carried 48 -- and re-cutting Pāwa Hitō from five attributes
+## to three quietly removed 32 points from every Pāwan ever generated. Twenty
+## seasons later the world held eight elite players against a budget of seven,
+## because one voli somewhere else had moved up to fill the gap.
+##
+## The same error had already been found twice in the same afternoon, in
+## `REGION_CEILING_PENALTY` (weaknesses subtracting rather than reshaping) and in
+## the rating bands (7, 13 and 21 attributes taking the same per-attribute step).
+## Three tables, one bug: **a tradition distributes a fixed budget; only the
+## shape of the distribution varies.**
+##
+## 80 is five times the old 16, which is the count most regions already had, so
+## the regions that were not re-cut are untouched. The ones that were get sharper
+## rather than smaller -- A'ace's three bought attributes are now worth 26.7 each,
+## which is exactly right for a club that buys three stars instead of teaching
+## six things, and Xérvu's six are worth 13.3 each, which is what a broad
+## tradition should feel like.
+const SPECIALTY_BUDGET: float = 80.0
+## Retained for `region_overlay`'s `specialty_bonus_delta`, which adjusts the
+## per-attribute figure a drifting region receives.
 const SPECIALTY_BONUS: int = 16
 
 ## What a region's `physical` / `technical` / `mental` ratings actually do.
@@ -830,7 +856,27 @@ static func region_rating_bonus(
 	if band.is_empty():
 		return 0.0
 	var definition := VolleyballRegions.definition(region_name)
-	return (float(definition.get(band, RATING_NEUTRAL)) - RATING_NEUTRAL) \
+	## **Measured against the region's own mean, not a global neutral.**
+	##
+	## The ratings do not sum to the same total everywhere -- some regions come to
+	## 6 and some to 7 -- so subtracting a fixed 2.0 left the sum-7 regions a flat
+	## +18 ceiling points ahead of the sum-6 ones. That residual was small, and
+	## small was still enough: it moved exactly one voli across the generational
+	## boundary and the world finished twenty seasons with eight elite players
+	## against a budget of seven.
+	##
+	## These numbers describe *relative emphasis within a tradition* -- 4/1/1 says
+	## Pāwa Hitō cares about physique more than technique -- and a statement about
+	## proportion should not also be a statement about quality. Anchoring on the
+	## region's own mean makes every region net exactly zero, whatever its ratings
+	## sum to, so emphasis reshapes a voli and never grades them. The same
+	## principle as `_penalty_compensation`, applied to the other table.
+	var mean := (
+		float(definition.get("physical", RATING_NEUTRAL))
+		+ float(definition.get("technical", RATING_NEUTRAL))
+		+ float(definition.get("mental", RATING_NEUTRAL))
+	) / 3.0
+	return (float(definition.get(band, mean)) - mean) \
 		* RATING_BAND_STEP / maxf(float(_band_size(band)), 1.0)
 
 
@@ -968,7 +1014,12 @@ static func _apply_attributes(
 	## never takes away what it already had.
 	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, [])) \
 		+ Array(overlay.get("specialty_add", []))
-	var specialty_bonus := SPECIALTY_BONUS + int(overlay.get("specialty_bonus_delta", 0.0))
+	## The budget divided by however many attributes are sharing it, so a region's
+	## total never changes when its list is re-cut -- only the sharpness does.
+	var specialty_bonus := int(round(
+		SPECIALTY_BUDGET / maxf(float(specialty_list.size()), 1.0)
+	)) + int(overlay.get("specialty_bonus_delta", 0.0)) if not specialty_list.is_empty() \
+		else 0
 	var talent := talent_override if talent_override >= 0.0 else float(_talent_level(rng, academy))
 
 	var ceiling_penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
@@ -990,6 +1041,38 @@ static func _apply_attributes(
 	## Potential is what those ceilings are worth, scored exactly as current
 	## ability will be scored.
 	player.potential = _weighted_score(ceilings, primary_list)
+
+	## **A region decides a voli's shape; it must not decide their grade.**
+	##
+	## When a caller asks for a specific potential -- and the world's yearly
+	## intake always does, drawing one from the tier it is short of -- that number
+	## is a *budget decision* about how much talent the world contains, not a
+	## suggestion. It was being treated as a suggestion: `talent_override` set the
+	## baseline and then every regional table moved the ceilings on top of it, so
+	## the achieved potential drifted off the requested one by however much that
+	## region's specialty, penalty and rating tables happened to sum to. A
+	## prospect requested as elite could arrive generational.
+	##
+	## Over twenty seasons that is a leak with a direction, and the world-aging
+	## gate caught it: eight elite players against a budget of seven. It survived
+	## three separate fixes that each corrected a real imbalance in those tables
+	## -- weaknesses that subtracted rather than reshaped, rating bands of
+	## unequal size, a specialty bonus that was per-attribute rather than a
+	## budget -- because none of them addressed the actual defect, which is that
+	## *any* regional shaping at all was allowed to move the total.
+	##
+	## Scaling the ceilings so the derived potential lands on the requested one
+	## fixes the class rather than the three instances: whatever a region's tables
+	## sum to now, and whatever they are edited to later, a voli asked for a given
+	## potential arrives with it. The shape survives the scaling because every
+	## ceiling moves by the same ratio.
+	if talent_override >= 0.0 and player.potential > 0:
+		var correction := talent_override / float(player.potential)
+		for property_name in ceilings:
+			ceilings[property_name] = clampf(
+				float(ceilings[property_name]) * correction, 1.0, 99.0
+			)
+		player.potential = _weighted_score(ceilings, primary_list)
 
 	## Kept individually, not only as the aggregate above -- a potential
 	## attribute wheel reads this rather than approximating a shape from one
