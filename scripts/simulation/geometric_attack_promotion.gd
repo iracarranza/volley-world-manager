@@ -22,6 +22,9 @@ const AttackPowerModel := preload("res://scripts/simulation/attack_power_model.g
 const CourtConstants := preload("res://scripts/data/court_constants.gd")
 const AttackCourseModel := preload("res://scripts/simulation/attack_course_model.gd")
 const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
+const SignatureMoveModelRef := preload(
+	"res://scripts/simulation/signature_move_model.gd"
+)
 
 ## Where a hitter's contact sits relative to the top of their reach, and how
 ## much of their leap a blocker gets. These two numbers decide the entire block
@@ -216,6 +219,7 @@ static func block_wall(
 	fallback_positions: Dictionary,
 	live_positions: Dictionary = {},
 	block_intent: String = "Balanced",
+	flow_for_team: float = 0.0,
 ) -> Array:
 	var wall: Array = []
 	var read_quality := clampf(float(formation.get("read_quality", 0.5)), 0.0, 1.0)
@@ -276,6 +280,14 @@ static func block_wall(
 			"block_effectiveness": float(jump.effectiveness) \
 				if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING else null,
 			"timing_quality": float(jump.timing_quality),
+			"monster_block_charge": SignatureMoveModelRef.charge(
+				SignatureMoveModelRef.monster_block_capability(
+					clampf(float(blocker.block_timing) / 100.0, 0.0, 1.0),
+					clampf(float(blocker.anticipation) / 100.0, 0.0, 1.0),
+					clampf(float(blocker.composure) / 100.0, 0.0, 1.0),
+				),
+				float(blocker.match_confidence), flow_for_team,
+			),
 			"half_width_m": BLOCKER_HALF_WIDTH_METERS * width_scale
 				* clampf(close, 0.0, 1.0),
 			"player_id": blocker.id,
@@ -501,6 +513,7 @@ static func _intent(roll: float) -> float:
 ##   net, out    the hitter missed -- a swing that never had to be judged an
 ##               error, because it simply did not land in
 ##   stuff       the block put it down
+##   monster_block a charged, near-perfect block put it down
 ##   touch       hands slowed it; it stays alive and the rally continues
 ##   tool        off the outside hand and out: the hitter's point
 ##   block_crush through the hands: the hitter's point
@@ -519,7 +532,7 @@ static func continuation(swing: Dictionary) -> Dictionary:
 		"net", "out":
 			terminal = "attack_error"
 			attack_missed = true
-		"stuff":
+		"stuff", "monster_block":
 			terminal = "blocked"
 		"touch":
 			pass
@@ -535,7 +548,7 @@ static func continuation(swing: Dictionary) -> Dictionary:
 		"is_terminal": terminal != "",
 		"hitter_point": hitter_point,
 		"attack_missed": attack_missed,
-		"blocked": outcome in ["stuff", "touch", "tool"],
+		"blocked": outcome in ["stuff", "monster_block", "touch", "tool"],
 		"landing": Vector2(swing.get("landing", Vector2(0.5, 0.25))),
 		"out_reason": str(resolution.get("out_reason", "")),
 		"quality": quality_for(outcome, swing),

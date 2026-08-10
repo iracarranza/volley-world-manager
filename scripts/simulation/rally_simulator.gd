@@ -2150,6 +2150,13 @@ func resolve(
 			"target_reason": attack_choice.reason,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			"signature_move": str(geometric.get("signature_move", "")),
+			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
+			"signature_charge": float(geometric.get("signature_charge", 0.0)),
+			"signature_timing_quality": float(geometric.get(
+				"signature_timing_quality", 0.0
+			)),
+			"signature_actor_id": int(geometric.get("signature_actor_id", hitter.id)),
 			"launch_cleared": bool(geometric.get("launch_cleared", true)),
 			"launch_mode": str(geometric.get("launch_mode", "")),
 			## The two quantities the block's outcome bands cut, on the event
@@ -2448,6 +2455,15 @@ func resolve(
 			" Scouting anticipated this pattern." if adaptation_bonus >= 0.035 else "",
 		], {"side": "opponent", "lane": assignment.lane,
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
+			"signature_move": str(geometric.get("signature_move", "")),
+			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
+			"signature_charge": float(geometric.get("signature_charge", 0.0)),
+			"signature_timing_quality": float(geometric.get(
+				"signature_timing_quality", 0.0
+			)),
+			"signature_actor_id": int(geometric.get(
+				"signature_actor_id", opponent_blocker_id
+			)),
 			"continuous_block": using_live_block,
 			"deflection_target": post_block_target,
 			"coverage_segments": opponent_block_segments,
@@ -3781,6 +3797,15 @@ func _resolve_opponent_transition(
 			## error rate of 0.411 against the home side's 0.184 could be seen
 			## and not explained.
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			"signature_move": str(geometric.get("signature_move", "")),
+			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
+			"signature_charge": float(geometric.get("signature_charge", 0.0)),
+			"signature_timing_quality": float(geometric.get(
+				"signature_timing_quality", 0.0
+			)),
+			"signature_actor_id": int(geometric.get(
+				"signature_actor_id", opponent_hitter.id
+			)),
 			"launch_cleared": bool(geometric.get("launch_cleared", true)),
 			"launch_mode": str(geometric.get("launch_mode", "")),
 			## The two quantities the block's outcome bands cut, on the event
@@ -3929,6 +3954,13 @@ func _resolve_opponent_transition(
 			roundi(float(block_result.primary_close) * 100.0),
 			roundi(home_block * 100.0), assist_text,
 		], {"side": "home", "outcome": block_outcome,
+			"signature_move": str(geometric.get("signature_move", "")),
+			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
+			"signature_charge": float(geometric.get("signature_charge", 0.0)),
+			"signature_timing_quality": float(geometric.get(
+				"signature_timing_quality", 0.0
+			)),
+			"signature_actor_id": int(geometric.get("signature_actor_id", blocker_id)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
 			"contest_margin": float(block_result.get("contest_margin", 0.0)),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
@@ -4653,6 +4685,13 @@ func _resolve_home_continuation(
 			"swing_downgraded": continuation_downgraded,
 			"intended_target": intended_attack_target,
 			"geometric_outcome": str(geometric.get("outcome", "")),
+			"signature_move": str(geometric.get("signature_move", "")),
+			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
+			"signature_charge": float(geometric.get("signature_charge", 0.0)),
+			"signature_timing_quality": float(geometric.get(
+				"signature_timing_quality", 0.0
+			)),
+			"signature_actor_id": int(geometric.get("signature_actor_id", hitter.id)),
 			"launch_cleared": bool(geometric.get("launch_cleared", true)),
 			"launch_mode": str(geometric.get("launch_mode", "")),
 			## The two quantities the block's outcome bands cut, on the event
@@ -4801,6 +4840,16 @@ func _resolve_home_continuation(
 		block_event_end, blocked, block_quality,
 		"Opponent block · exchange %d" % exchange_number,
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
+			"signature_move": str(geometric.get("signature_move", "")),
+			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
+			"signature_charge": float(geometric.get("signature_charge", 0.0)),
+			"signature_timing_quality": float(geometric.get(
+				"signature_timing_quality", 0.0
+			)),
+			"signature_actor_id": int(geometric.get(
+				"signature_actor_id", opponent_blocker.id \
+					if opponent_blocker != null else -1
+			)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
 		"primary_close": primary_close, "assist_close": assist_close,
 		"primary_close_terms": Dictionary(
@@ -9444,7 +9493,7 @@ func _geometric_swing(
 	])
 	geometric_swing_index += 1
 	var wall := GeometricAttackPromotionModel.block_wall(
-		formation, blocking_fallbacks, blocking_live, block_intent
+		formation, blocking_fallbacks, blocking_live, block_intent, -flow_for_team
 	)
 	var height := GeometricAttackPromotionModel.contact_height_meters(
 		hitter, jump_multiplier
@@ -9610,6 +9659,7 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 ##   in                        the ball is down and the defence has to play it
 ##   net, out                  the swing missed; no block was involved
 ##   stuff                     the wall put it down
+##   monster_block             a charged apex contact put it down
 ##   touch                     hands slowed it and the rally continues
 ##   tool, block_crush,
 ##   high_hands                the hitter's point, decided at the net
@@ -9635,7 +9685,7 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 	## ball out. They read as a touch so the block still deflects on screen; the
 	## hitter's point is claimed before the recycle branch can see them.
 	var block_outcome := "miss"
-	if outcome in ["stuff"]:
+	if outcome in ["stuff", "monster_block"]:
 		block_outcome = "stuff"
 	elif outcome in ["touch", "tool", "high_hands"]:
 		block_outcome = "touch"
@@ -9679,6 +9729,21 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		),
 		"block_edge_miss_meters": float(record.get("block_edge_miss_meters", 0.0)),
 		"net_crossing_x": float(record.get("net_crossing_x", 0.5)),
+		"signature_move": str(
+			Dictionary(record.get("narrative", {})).get("attempted_move", "")
+		),
+		"signature_succeeded": bool(
+			Dictionary(record.get("narrative", {})).get("move_succeeded", false)
+		),
+		"signature_charge": float(
+			Dictionary(record.get("narrative", {})).get("signature_charge", 0.0)
+		),
+		"signature_actor_id": int(
+			Dictionary(record.get("narrative", {})).get("signature_actor_id", -1)
+		),
+		"signature_timing_quality": float(
+			Dictionary(record.get("narrative", {})).get("signature_timing_quality", 0.0)
+		),
 	}
 
 

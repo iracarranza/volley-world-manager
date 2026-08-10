@@ -154,8 +154,13 @@ static func window(phase: float, from_phase: float, to_phase: float) -> float:
 ## the quantities that genuinely mirror: the roll of the hitting arm and the
 ## twist of the trunk. The shoulder sweep and the elbow do not mirror -- both
 ## arms of both handednesses swing through the same plane.
-static func resolve(phase: float, hand: float = 1.0) -> Dictionary:
+static func resolve(
+	phase: float,
+	hand: float = 1.0,
+	action_power: float = 0.0,
+) -> Dictionary:
 	var p := clampf(phase, -1.0, 1.0)
+	var power_boost := smoothstep(0.62, 0.96, clampf(action_power, 0.0, 1.0))
 	var toss := window(p, TOSS_START, TOSS_END)
 	var cock := window(p, TOSS_END - 0.06, COCK_END)
 	## Saturating a little before the ball, so the arm is at full extension
@@ -216,6 +221,21 @@ static func resolve(phase: float, hand: float = 1.0) -> Dictionary:
 	knee = lerpf(knee, KNEE_STEP_DEGREES, follow)
 	knee = lerpf(knee, KNEE_READY_DEGREES, recover)
 
+	## A high-power serve loads as a deeper bow and pays that load off with a
+	## longer extension. The authored stage timing remains identical, so scaling
+	## the silhouette cannot make the hand arrive late to the ball.
+	var curl_weight := arch * (1.0 - uncoil)
+	var extension_weight := maxf(swing, follow)
+	shoulder -= 22.0 * power_boost * extension_weight
+	elbow = lerpf(elbow, 0.0, power_boost * swing)
+	torso += 0.18 * power_boost * curl_weight
+	torso -= 0.14 * power_boost * maxf(uncoil, follow)
+	twist += 15.0 * power_boost * curl_weight
+	twist -= 11.0 * power_boost * follow
+	knee = lerpf(knee, KNEE_LOAD_DEGREES - 8.0, power_boost * curl_weight)
+	lead_hip += 10.0 * power_boost * extension_weight
+	trail_hip -= 8.0 * power_boost * extension_weight
+
 	return {
 		"striking_shoulder_degrees": shoulder,
 		"striking_abduction_degrees": abduct * hand,
@@ -227,4 +247,5 @@ static func resolve(phase: float, hand: float = 1.0) -> Dictionary:
 		"lead_hip_degrees": lead_hip,
 		"trail_hip_degrees": trail_hip,
 		"knee_degrees": knee,
+		"power_boost": power_boost,
 	}

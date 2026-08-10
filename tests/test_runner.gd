@@ -100,6 +100,9 @@ const ATTACK_RESOLUTION_SCRIPT := preload(
 const SIGNATURE_MOVE_SCRIPT := preload(
 	"res://scripts/simulation/signature_move_model.gd"
 )
+const SIGNATURE_SURGE_SCRIPT := preload(
+	"res://scenes/components/signature_surge_3d.gd"
+)
 const GEOMETRIC_ATTACK_SCRIPT := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
@@ -7064,6 +7067,35 @@ func _test_3d_playback_contract() -> void:
 		"3D serve and attack poses select each player's actual dominant arm",
 	)
 
+	## One severity, three directions. The recovery verdict still comes from the
+	## simulation; posture chooses the physical route that verdict takes.
+	var sideways := PlayerActor3D.recovery_motion(
+		"fall", "off-axis", 0.82, Vector2.RIGHT
+	)
+	var forward := PlayerActor3D.recovery_motion(
+		"fall", "moving", 0.82, Vector2.UP
+	)
+	var backward := PlayerActor3D.recovery_motion(
+		"blown_away", "planted", 0.82, Vector2.UP
+	)
+	_check(
+		str(sideways.mode) == "roll_sideways"
+			and absf(float(sideways.roll_radians)) > 1.0
+			and absf(Vector3(sideways.offset).x) > 0.20,
+		"an off-axis fall travels into a visible sideways roll",
+	)
+	_check(
+		str(forward.mode) == "slide_forward"
+			and -Vector3(forward.offset).z > 0.30,
+		"a moving or reaching fall slides forward through the platform",
+	)
+	_check(
+		str(backward.mode) == "roll_backward"
+			and float(backward.pitch_radians) > 1.0
+			and Vector3(backward.offset).z > 0.25,
+		"a defender blown off the ball rolls backward rather than holding a fall",
+	)
+
 	var trajectory := {
 		"start_position": Vector2(0.20, 0.80),
 		"control_position": Vector2(0.50, 0.50),
@@ -9759,6 +9791,49 @@ func _test_signature_moves_beat_a_block() -> void:
 	_check(
 		SIGNATURE_MOVE_SCRIPT.FAILURE_CONFIDENCE_COST > 0.10,
 		"going for the big one and missing is felt more than losing a rally",
+	)
+
+	## Monster Block reads the canonical jump timing and a mental capability.
+	## The last sliver of the apex converts any real hand contact into a stuff;
+	## being merely very good does not.
+	var monster_capable: float = SIGNATURE_MOVE_SCRIPT.monster_block_capability(
+		0.94, 0.90, 0.86
+	)
+	var monster_unready: float = SIGNATURE_MOVE_SCRIPT.monster_block_capability(
+		0.94, 0.15, 0.15
+	)
+	_check(
+		monster_capable > monster_unready + 0.15,
+		"Monster Block requires a mental read as well as physical timing",
+	)
+	var monster: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_monster_block(
+		"tool", 0.995, "extended", 0.90, 77
+	)
+	var almost: Dictionary = SIGNATURE_MOVE_SCRIPT.resolve_monster_block(
+		"tool", SIGNATURE_MOVE_SCRIPT.MONSTER_BLOCK_TIMING_THRESHOLD - 0.001,
+		"extended", 0.90, 77
+	)
+	_check(
+		str(monster.outcome) == "monster_block"
+			and bool(monster.move_succeeded)
+			and int(monster.signature_actor_id) == 77,
+		"a charged near-perfect blocker auto-stuffs physical contact",
+	)
+	_check(
+		str(almost.outcome) == "tool" and not bool(almost.move_succeeded),
+		"Monster Block does not round merely excellent timing up to perfect",
+	)
+
+	var surge_moves := [
+		"block_crush", "high_hands", "foresight", "heroics", "monster_block",
+	]
+	var surge_colours := {}
+	for surge_move in surge_moves:
+		var profile: Dictionary = SIGNATURE_SURGE_SCRIPT.profile_for(surge_move)
+		surge_colours[Color(profile.colour).to_html()] = true
+	_check(
+		surge_colours.size() == surge_moves.size(),
+		"each signature family has a distinct surge treatment",
 	)
 
 
@@ -12579,6 +12654,10 @@ func _test_spike_biomechanics_sequence() -> void:
 	var loaded: Dictionary = SpikeBiomechanics.resolve(
 		SpikeBiomechanics.PLANT_END, RIGHT
 	)
+	var power_cock: Dictionary = SpikeBiomechanics.resolve(
+		SpikeBiomechanics.COCK_END, RIGHT, 1.0
+	)
+	var power_contact: Dictionary = SpikeBiomechanics.resolve(0.0, RIGHT, 1.0)
 
 	## The defect this whole change exists to fix: at contact the arm is over the
 	## ball, not behind the head. -180 is straight overhead, so anything shallower
@@ -12641,6 +12720,26 @@ func _test_spike_biomechanics_sequence() -> void:
 	_check(
 		float(cock.torso_pitch_radians) > 0.0,
 		"the trunk arches at the cock (%.3f)" % float(cock.torso_pitch_radians),
+	)
+	_check(
+		float(power_cock.torso_pitch_radians)
+			> float(cock.torso_pitch_radians) + 0.05
+			and float(power_contact.striking_shoulder_degrees)
+				< float(contact.striking_shoulder_degrees) - 8.0,
+		"a power spike visibly curls further and extends further through contact",
+	)
+	var serve_cock := ServeBiomechanics.resolve(ServeBiomechanics.COCK_END, RIGHT)
+	var power_serve_cock := ServeBiomechanics.resolve(
+		ServeBiomechanics.COCK_END, RIGHT, 1.0
+	)
+	var serve_contact := ServeBiomechanics.resolve(0.0, RIGHT)
+	var power_serve_contact := ServeBiomechanics.resolve(0.0, RIGHT, 1.0)
+	_check(
+		float(power_serve_cock.torso_pitch_radians)
+			> float(serve_cock.torso_pitch_radians) + 0.05
+			and float(power_serve_contact.striking_shoulder_degrees)
+				< float(serve_contact.striking_shoulder_degrees) - 8.0,
+		"a power serve visibly loads more curl and releases into more extension",
 	)
 	_check(
 		float(SpikeBiomechanics.resolve(0.30, RIGHT).torso_pitch_radians) < -0.2,

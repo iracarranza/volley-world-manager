@@ -181,9 +181,17 @@ static func window(phase: float, from_phase: float, to_phase: float) -> float:
 ## `handedness_sign` is +1 for a right-handed hitter and -1 for a left-handed
 ## one, and only the twist and the follow-through's cross-body roll read it --
 ## the sagittal angles are the same swing either way.
-static func resolve(phase: float, handedness_sign: float) -> Dictionary:
+static func resolve(
+	phase: float,
+	handedness_sign: float,
+	action_power: float = 0.0,
+) -> Dictionary:
 	var p := clampf(phase, -1.0, 1.0)
 	var hand := 1.0 if handedness_sign >= 0.0 else -1.0
+	## This is presentation intensity, not a second power model. Playback passes
+	## the resolved action's 0-1 evidence; ordinary contacts remain byte-for-byte
+	## on the authored pose and only the top band gains the exaggerated bow/snap.
+	var power_boost := smoothstep(0.62, 0.96, clampf(action_power, 0.0, 1.0))
 
 	## Proximal first. The legs are already extending while the arms are still
 	## behind the body, which is what actually lifts the hitter.
@@ -326,6 +334,22 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 	trail_hip = lerpf(trail_hip, 14.0, follow)
 	trail_hip = lerpf(trail_hip, 6.0, land)
 
+	## Rule-of-cool power silhouette. More curl has to be followed by more travel
+	## or it only makes the hitter look cramped: the trunk and shoulders draw
+	## further back during the cock, then extend further through the ball and into
+	## the follow-through. Proximal-to-distal timing above is untouched.
+	var curl_weight := arch * (1.0 - snap)
+	var extension_weight := maxf(strike, follow)
+	shoulder -= 23.0 * power_boost * extension_weight
+	elbow = lerpf(elbow, 0.0, power_boost * strike)
+	torso += 0.19 * power_boost * curl_weight
+	torso -= 0.15 * power_boost * maxf(snap, follow)
+	twist += 16.0 * hand * power_boost * curl_weight
+	twist -= 12.0 * hand * power_boost * maxf(snap, follow)
+	knee = lerpf(knee, KNEE_EXTENDED_DEGREES * 0.35, power_boost * extend)
+	lead_hip += 10.0 * power_boost * extension_weight
+	trail_hip += 8.0 * power_boost * extension_weight
+
 	return {
 		"phase_name": phase_name(p),
 		"striking_shoulder_degrees": shoulder,
@@ -338,6 +362,7 @@ static func resolve(phase: float, handedness_sign: float) -> Dictionary:
 		"knee_degrees": knee,
 		"lead_hip_degrees": lead_hip,
 		"trail_hip_degrees": trail_hip,
+		"power_boost": power_boost,
 	}
 
 

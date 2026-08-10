@@ -272,6 +272,7 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 					phase, direction, true,
 					_contact_posture(event),
 					_contact_recovery(event),
+					_action_context(event, blocker_id),
 				)
 			await get_tree().process_frame
 			continue
@@ -281,6 +282,7 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 			peak * sin(progress * PI), progress, direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
+			_action_context(event, int(event.actor_id)),
 		)
 		await get_tree().process_frame
 
@@ -308,6 +310,34 @@ func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
 	return str(event.metadata.get("contact_posture", "planted"))
+
+
+## Presentation inputs carried by the resolved event. The actor never looks up
+## a live roster and never infers a signature from a caption, so replay remains
+## a drawing of what happened even after a lineup or confidence state changes.
+func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
+	if event == null:
+		return {}
+	var context := {}
+	if event.event_type in [
+		RallyEventModel.EventType.SERVE, RallyEventModel.EventType.ATTACK,
+	]:
+		context["action_power"] = clampf(float(event.metadata.get(
+			"action_power",
+			event.metadata.get("attack_effectiveness", event.quality),
+		)), 0.0, 1.0)
+	var signature_actor := int(event.metadata.get("signature_actor_id", event.actor_id))
+	if signature_actor == actor_id:
+		var move := str(event.metadata.get("signature_move", ""))
+		if not move.is_empty():
+			context["signature_move"] = move
+			context["signature_charge"] = clampf(float(
+				event.metadata.get("signature_charge", 1.0)
+			), 0.0, 1.0)
+			context["signature_succeeded"] = bool(
+				event.metadata.get("signature_succeeded", false)
+			)
+	return context
 
 
 func _apply_contact_poses(
@@ -348,6 +378,7 @@ func _apply_contact_poses(
 			event_peak * outgoing_lift, outgoing_phase, event_direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
+			_action_context(event, event_actor),
 		)
 	var event_assist := int(event.metadata.get("assist_id", -1))
 	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
@@ -357,6 +388,7 @@ func _apply_contact_poses(
 			_event_elevation(event, event_assist)
 				* BlockBiomechanics.elevation_at(assist_phase),
 			assist_phase, event_direction, true,
+			"planted", "platform", _action_context(event, event_assist),
 		)
 	if next_contact == null:
 		return
@@ -413,6 +445,8 @@ func _apply_contact_poses(
 		match_court_3d.set_player_pose(
 			next_actor, int(next_contact.event_type),
 			next_peak * next_lift, next_phase, next_direction, true,
+			_contact_posture(next_contact), _contact_recovery(next_contact),
+			_action_context(next_contact, next_actor),
 		)
 	var next_assist := int(next_contact.metadata.get("assist_id", -1))
 	if next_assist >= 0 and next_is_block:
@@ -428,6 +462,7 @@ func _apply_contact_poses(
 			_event_elevation(next_contact, next_assist)
 				* BlockBiomechanics.elevation_at(assist_hold),
 			assist_hold, next_direction, true,
+			"planted", "platform", _action_context(next_contact, next_assist),
 		)
 	_apply_early_block(after_next, next_contact, progress)
 
@@ -493,6 +528,7 @@ func _apply_early_block(
 			blocker_id, RallyEventModel.EventType.BLOCK,
 			_event_elevation(after_next, blocker_id) * lift,
 			phase, direction, true,
+			"planted", "platform", _action_context(after_next, blocker_id),
 		)
 
 

@@ -105,6 +105,21 @@ const PLATES: Array[Dictionary] = [
 		"spacing": 2.05,
 	},
 	{
+		"name": "05b_power_serve",
+		"caption": "power",
+		"subjects": ["Feli", "Feli", "Pepper", "Pepper"],
+		"phases": [-0.22, -0.22, 0.0, 0.0],
+		"pose": [0, 0.45, 0.0],
+		"action_contexts": [
+			{"action_power": 0.0}, {"action_power": 1.0},
+			{"action_power": 0.0}, {"action_power": 1.0},
+		],
+		"faces": ["neutral", "cross"],
+		"yaws": [-28.0, -28.0, 30.0, 30.0],
+		"camera": [Vector3(0.0, 2.20, -9.2), Vector3(-5.0, 180.0, 0.0), 31.0],
+		"spacing": 2.08,
+	},
+	{
 		"name": "06_set",
 		"caption": "set",
 		"subjects": ["Pear", "Pepper", "Stalk"],
@@ -125,6 +140,21 @@ const PLATES: Array[Dictionary] = [
 		"yaws": [-68.0, 16.0, 76.0],
 		"camera": [Vector3(0.0, 2.62, -7.6), Vector3(-6.0, 180.0, 0.0), 31.0],
 		"spacing": 2.15,
+	},
+	{
+		"name": "07b_power_attack",
+		"caption": "power",
+		"subjects": ["Aubergine", "Aubergine", "Avi", "Avi"],
+		"phases": [-0.14, -0.14, 0.0, 0.0],
+		"pose": [4, 0.62, 0.0],
+		"action_contexts": [
+			{"action_power": 0.0}, {"action_power": 1.0},
+			{"action_power": 0.0}, {"action_power": 1.0},
+		],
+		"faces": ["cross"],
+		"yaws": [-34.0, -34.0, 38.0, 38.0],
+		"camera": [Vector3(0.0, 2.60, -9.6), Vector3(-6.0, 180.0, 0.0), 31.0],
+		"spacing": 2.12,
 	},
 	{
 		"name": "08_block",
@@ -165,17 +195,31 @@ const PLATES: Array[Dictionary] = [
 	{
 		"name": "09b_dig_recovery",
 		"caption": "recovery",
-		"subjects": ["Pear", "Cani", "Pepper", "Ursi"],
-		"pose": [1, 0.0, 0.0],
-		"postures": ["planted", "moving", "off-axis", "planted"],
-		"recoveries": ["platform", "knee", "fall", "blown_away"],
+		"subjects": ["Pear", "Cani", "Pepper", "Feli", "Ursi"],
+		"pose": [1, 0.0, 0.82],
+		"postures": ["planted", "moving", "off-axis", "moving", "planted"],
+		"recoveries": ["platform", "knee", "fall", "fall", "blown_away"],
+		"labels": ["platform", "knee", "side roll", "forward slide", "back roll"],
 		"faces": ["deadpan", "tired", "worried", "cross"],
-		"yaws": [-34.0, 56.0, 40.0, 70.0],
+		"yaws": [-34.0, 56.0, 40.0, -24.0, 70.0],
 		## Wider than any other plate: a fall and a blown-away sprawl across far
 		## more floor than a standing figure, and at the row default they overlapped
 		## into each other.
-		"camera": [Vector3(0.0, 1.55, -15.4), Vector3(-5.0, 180.0, 0.0), 34.0],
+		"camera": [Vector3(0.0, 1.55, -18.0), Vector3(-5.0, 180.0, 0.0), 34.0],
 		"spacing": 3.50,
+	},
+	{
+		"name": "09c_signature_surges",
+		"caption": "signature",
+		"subjects": ["Pepper", "Aubergine", "Pear", "Feli", "Ursi"],
+		"pose": [4, 0.58, -0.05],
+		"signature_moves": [
+			"block_crush", "high_hands", "foresight", "heroics", "monster_block",
+		],
+		"faces": ["cross", "devious", "suspicious", "happy", "cross"],
+		"yaws": [-38.0, -18.0, 0.0, 20.0, 40.0],
+		"camera": [Vector3(0.0, 2.30, -13.6), Vector3(-4.0, 180.0, 0.0), 32.0],
+		"spacing": 2.55,
 	},
 	{
 		"name": "09_dig_postures",
@@ -275,10 +319,14 @@ func _shoot(plate: Dictionary) -> void:
 			"posture":
 				label = str(postures[index % postures.size()])
 			"recovery":
-				label = str(
-					plate.get("recoveries", ["platform"])[
-						index % Array(plate.get("recoveries", ["platform"])).size()
-					]
+				var recovery_labels: Array = plate.get("labels", [])
+				label = str(recovery_labels[index]) if index < recovery_labels.size() \
+					else str(plate.get("recoveries", ["platform"])[index])
+			"power":
+				label = "POWER" if index % 2 == 1 else "ordinary"
+			"signature":
+				label = str(Array(plate.get("signature_moves", []))[index]).replace(
+					"_", " "
 				)
 			"body":
 				label = wanted if body_type == "Vegi" else body_type
@@ -308,8 +356,20 @@ func _shoot(plate: Dictionary) -> void:
 		var phases: Array = plate.get("phases", [])
 		var phase := float(phases[index]) if index < phases.size() \
 			else float(pose[2])
+		var action_contexts: Array = plate.get("action_contexts", [])
+		var action_context: Dictionary = action_contexts[index] \
+			if index < action_contexts.size() else {}
+		var signature_moves: Array = plate.get("signature_moves", [])
+		if index < signature_moves.size():
+			action_context = {
+				"signature_move": str(signature_moves[index]),
+				"signature_charge": 0.92,
+				"signature_succeeded": true,
+				"action_power": 1.0,
+			}
 		actor.set_pose(
-			int(pose[0]), float(pose[1]), phase, Vector2.ZERO, int(pose[0]) >= 0
+			int(pose[0]), float(pose[1]), phase, Vector2.RIGHT,
+			int(pose[0]) >= 0, action_context,
 		)
 		actor.set_expression(str(faces[index % faces.size()]))
 		## Applied *after* the pose, because `set_pose` clears the body pivot and

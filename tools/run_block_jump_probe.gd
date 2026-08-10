@@ -18,6 +18,9 @@ extends SceneTree
 
 const PlayerGeneratorModel := preload("res://scripts/systems/player_generator.gd")
 const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
+const SignatureMoveModelRef := preload(
+	"res://scripts/simulation/signature_move_model.gd"
+)
 const PromotionScript := preload(
 	"res://scripts/simulation/geometric_attack_promotion.gd"
 )
@@ -45,6 +48,9 @@ func _initialize() -> void:
 	var hangs: Array = []
 	var states := {}
 	var effects: Array = []
+	var timings: Array = []
+	var monster_ready := 0
+	var monster_candidates := 0
 	for index in range(SAMPLES):
 		var blocker: VolleyballPlayer = squad[rng.randi_range(0, squad.size() - 1)]
 		var leap := maxf(
@@ -64,11 +70,27 @@ func _initialize() -> void:
 		phases.append(float(jump.phase))
 		hangs.append(float(jump.hang_seconds))
 		effects.append(float(jump.effectiveness))
+		timings.append(float(jump.timing_quality))
 		var state := str(jump.arm_state)
 		states[state] = int(states.get(state, 0)) + 1
+		var monster_charge := SignatureMoveModelRef.charge(
+			SignatureMoveModelRef.monster_block_capability(
+				float(blocker.block_timing) / 100.0,
+				float(blocker.anticipation) / 100.0,
+				float(blocker.composure) / 100.0,
+			),
+			float(blocker.match_confidence), 0.0,
+		)
+		if SignatureMoveModelRef.is_available(monster_charge):
+			monster_ready += 1
+			if float(jump.timing_quality) \
+				>= SignatureMoveModelRef.MONSTER_BLOCK_TIMING_THRESHOLD \
+				and state == "extended":
+				monster_candidates += 1
 
 	phases.sort()
 	hangs.sort()
+	timings.sort()
 	var total := 0.0
 	for value in phases:
 		total += float(value)
@@ -97,6 +119,14 @@ func _initialize() -> void:
 	for state in ["extended", "descending", "rising"]:
 		print("   %-12s %5.1f%%" % [
 			state, float(int(states.get(state, 0))) / float(SAMPLES) * 100.0])
+	print("timing quality   p90 %.3f  p95 %.3f  p99 %.3f" % [
+		_percentile(timings, 0.90), _percentile(timings, 0.95),
+		_percentile(timings, 0.99),
+	])
+	print("Monster Block availability %5.2f%%; apex candidates %5.2f%% of walls" % [
+		float(monster_ready) / float(SAMPLES) * 100.0,
+		float(monster_candidates) / float(SAMPLES) * 100.0,
+	])
 	print("")
 	print("A mean at 0.62 with real spread either side is the whole objective.")
 	print("A mean anywhere else means the wall got stronger or weaker, and any")
