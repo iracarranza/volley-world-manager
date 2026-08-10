@@ -5840,3 +5840,60 @@ its own measurement.
 `live_attack_integrator.gd`'s 2.55 default was checked and is *not* an instance:
 `shadow_attack_system` builds those trajectories with `flight.contact_height_meters`,
 so the value arriving is real.
+
+## The other ten players, and the identities that never form
+
+Two design documents, both written from measurements taken this session rather
+than from reading the code and forming an opinion about it.
+
+**`docs/design/OFF_BALL_MOVEMENT.md`.** A shanked pass currently produces an
+unplayable situation as a matter of structure. Two separable causes:
+
+    event        n   withTargets  share
+    SERVE      400            0   0.000
+    RECEPTION  384            0   0.000
+    SET        517          241   0.466
+    ATTACK     517          434   0.839
+    BLOCK      434          198   0.456
+    DEFENSE    308          218   0.708
+
+    mean players given a position per event: 1.77, of twelve on court
+
+Serve receive publishes positions for nobody on either side, so playback has no
+opinion to draw and correctly draws nothing. And separately: the ready stance is
+built, tested and correct, but `set_pose` is only called for off-ball players by
+`reset_player_poses()`, which runs *after* the flight loop — so during every
+flight, which is nearly all the visible time, ten players' joints are written
+zero times. `apply_movement_plan` already re-places stationary players so their
+speed decays to zero, which is the right instinct and does nothing, because
+nothing re-reads the speed into the pose. Posing every player every frame is
+nearly free and lands first; publishing a phase intention per player is the real
+work and needs the resolver, not playback.
+
+**`docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`.** `tools/run_regional_identity_probe.gd`
+runs 640 rallies per region on identical seeds, rosters and opponent. Xérvu is
+four times more separated from its nearest neighbour (1.632) than the tightest
+pair (Ispayk/A'ace, 0.431), and the cause is that three of the seven axes reach
+the resolver as threshold crossings with no magnitude — Spëddigh's 0.90 tempo
+variation and Landavol's 0.50 both clear the 0.48 floor and get the identical
+coin flip. `regions.gd`'s claim that "the sim already renders that difference" is
+falsified by its own game. Two further findings: **22 of 24 principle reads are
+`home_principles`**, so opponent regions are cosmetic in rally resolution; and
+the ace rate is 0.072 for six of eight regions to three decimals.
+
+The document's larger argument is that identity has no time axis at all — every
+principle is a constant read per rally, so no region can play differently in set
+four than in set one. Three accumulating quantities are already live and none is
+connected to a region: fatigue (`RALLY_FATIGUE_BASE` 0.0035/rally, scaled by
+`stamina_fatigue_scale`'s 1.4–0.6, reaching the rally through `_rating`'s
+`1 − fatigue × 0.18` — worth 8–18% of rating across a long match, which is the
+Pāwa Hitō story already half-built and unattached), live familiarity via four
+`record_exposure` sites, and opponent-only adaptation strengths with no home
+counterpart. The proposal is a second layer of per-region *rates* on that
+existing state, and it puts Landavol at 1.0 on every curve — a team whose fourth
+set looks like its first, which is a real identity rather than an absence.
+
+Sequence, measured with the same probe at each step: magnitude for
+`tempo_variation` and `transition_commitment` first (nothing can be built on an
+axis that does nothing), then opponent principle reads, then
+`fatigue_resistance`, then the two that need their substrate extended.

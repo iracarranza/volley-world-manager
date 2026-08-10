@@ -42,6 +42,8 @@ Then, by subject:
 | Setter choice, who swings | `docs/design/SETTER_DECISION.md` |
 | Tempo, set height, approach | `docs/design/TEMPO_AND_APPROACH.md` |
 | Movement, gait, traversal time | `docs/design/LOCOMOTION_AND_GENERATION.md`, `MOVEMENT_FLUIDITY_DRAFT.md` |
+| What the other ten players are doing | `docs/design/OFF_BALL_MOVEMENT.md` |
+| Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
 | Player generation, bodies | `docs/design/ATTRIBUTE_FIRST_GENERATION.md`, `BODY_TYPES.md` |
 | Setting, regions, naming | `docs/world/` |
