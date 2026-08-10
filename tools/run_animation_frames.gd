@@ -1,0 +1,185 @@
+extends Node
+
+## Every animation as a strip of frames, so a motion can be judged as a motion.
+##
+##     xvfb-run -a godot --path . res://tools/animation_frames.tscn
+##
+## `run_voli_portfolio.gd` photographs *poses* -- one instant per subject -- and
+## that is the right instrument for asking whether a body reads. It is the wrong
+## one for asking whether a **movement** reads, because the failure mode of an
+## animation is almost never a bad frame. It is a good frame in the wrong place:
+## a roll that starts before the body has fallen, a recovery that returns to
+## standing halfway through, a phase whose middle is a straight line between two
+## poses nobody would pass through.
+##
+## So this walks one body through a single motion and photographs it at even
+## intervals along the phase, laid out left to right. The subject, camera and
+## lighting are held identical across the row -- the only thing that changes
+## between frames is the number the animation is driven by, which is what makes
+## the row readable as a sequence rather than as five separate photographs.
+##
+## Two cameras per motion, because a fall is a movement in depth as much as in
+## height and a strip shot only from the side cannot show a body rolling toward
+## or away from the viewer. The side view answers "does the arc look right"; the
+## three-quarter answers "does it look like a person".
+
+const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
+const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+
+## Frames per strip. Eight is enough to see an ease curve and few enough that
+## each frame is still large enough to read at a glance.
+const FRAME_COUNT: int = 8
+const FRAME_SPACING: float = 1.55
+
+## The two angles every motion is shot from.
+const CAMERAS := {
+	"side": [Vector3(0.0, 1.15, 9.4), Vector3(-4.0, 0.0, 0.0), 46.0],
+	"three_quarter": [
+		Vector3(5.6, 3.05, 8.2), Vector3(-15.0, 34.0, 0.0), 44.0,
+	],
+}
+
+## Each strip states the whole of what it is showing.
+##
+##   recovery -- the floor motion driven across `recovery` 0 to 1
+##   pose     -- [event type, elevation, phase] driven across `phase` instead
+##   signature-- a named rule-of-cool move at full charge
+const STRIPS: Array[Dictionary] = [
+	{
+		"name": "recovery_fall",
+		"caption": "DEFENSE recovery: fall (the sideways dive roll)",
+		"recovery": "fall",
+		"posture": "diving",
+	},
+	{
+		"name": "recovery_blown_away",
+		"caption": "DEFENSE recovery: blown_away (backward)",
+		"recovery": "blown_away",
+		"posture": "reaching",
+	},
+	{
+		"name": "recovery_knee",
+		"caption": "DEFENSE recovery: knee",
+		"recovery": "knee",
+		"posture": "planted",
+	},
+	{
+		"name": "signature_crush",
+		"caption": "ATTACK signature: crush, full charge",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"signature_move": "crush",
+	},
+	{
+		"name": "signature_high_hands",
+		"caption": "ATTACK signature: high hands, full charge",
+		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
+		"signature_move": "high_hands",
+	},
+	{
+		"name": "signature_monster_block",
+		"caption": "BLOCK signature: monster block, full charge",
+		"pose": [RallyEventModel.EventType.BLOCK, 1.0, 0.0],
+		"signature_move": "monster_block",
+	},
+]
+
+
+func _ready() -> void:
+	await get_tree().process_frame
+	for strip in STRIPS:
+		for camera_name in CAMERAS:
+			await _shoot(strip, str(camera_name))
+	get_tree().quit()
+
+
+func _shoot(strip: Dictionary, camera_name: String) -> void:
+	var root := get_tree().root
+	var stage := Node3D.new()
+	root.add_child(stage)
+
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-38.0, 154.0, 0.0)
+	light.light_energy = 1.38
+	stage.add_child(light)
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-16.0, 216.0, 0.0)
+	fill.light_energy = 0.45
+	stage.add_child(fill)
+
+	var world_environment := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color("0d1420")
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("46566e")
+	env.ambient_light_energy = 1.0
+	world_environment.environment = env
+	stage.add_child(world_environment)
+
+	var view: Array = CAMERAS[camera_name]
+	var camera := Camera3D.new()
+	camera.position = view[0]
+	camera.rotation_degrees = view[1]
+	camera.fov = float(view[2])
+	stage.add_child(camera)
+
+	## **A floor.** A recovery is a body arriving at the ground, and judging one
+	## against empty space is judging half of it -- the first read of the fall was
+	## "awkward" and the ground it is falling to was not in the picture.
+	var floor_mesh := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(26.0, 14.0)
+	floor_mesh.mesh = plane
+	var floor_material := StandardMaterial3D.new()
+	floor_material.albedo_color = Color("16202e")
+	floor_mesh.material_override = floor_material
+	stage.add_child(floor_mesh)
+
+	var start := FRAME_SPACING * float(FRAME_COUNT - 1) * 0.5
+	for index in range(FRAME_COUNT):
+		var progress := float(index) / float(FRAME_COUNT - 1)
+		var actor := ACTOR.instantiate()
+		stage.add_child(actor)
+		actor.configure(900 + index, true, "%d%%" % roundi(progress * 100.0),
+			"Right", {"height_cm": 191.0, "wingspan_cm": 197.0, "mass_kg": 84.0})
+		actor.set_tactical_position(
+			Vector2.ZERO, Vector3(start - FRAME_SPACING * float(index), 0.0, 0.0)
+		)
+		actor.has_facing = true
+		actor.facing_yaw = 0.0
+		if strip.has("recovery"):
+			actor.contact_recovery = str(strip.recovery)
+			actor.contact_posture = str(strip.get("posture", "planted"))
+			## Recovery is the DEFENSE pose's own phase -- `set_pose` passes it
+			## straight into `_apply_dig_posture` as `recovery_progress` -- so the
+			## strip walks the same number the rally walks rather than a second
+			## one invented here.
+			actor.set_pose(
+				RallyEventModel.EventType.DEFENSE, 0.0, progress,
+				Vector2.RIGHT, true,
+			)
+		else:
+			var pose: Array = strip.pose
+			var context := {}
+			if strip.has("signature_move"):
+				context = {
+					"signature_move": str(strip.signature_move),
+					"signature_charge": 0.95,
+					"signature_succeeded": true,
+					"action_power": 1.0,
+				}
+			actor.set_pose(
+				int(pose[0]), float(pose[1]), progress, Vector2.RIGHT, true, context
+			)
+		actor.identity_label.text = "%d%%" % roundi(progress * 100.0)
+		actor.set_highlighted(index == FRAME_COUNT - 1)
+
+	for _frame in range(8):
+		await get_tree().process_frame
+	var path := "user://frames_%s_%s.png" % [str(strip.name), camera_name]
+	root.get_texture().get_image().save_png(path)
+	print("saved %s  (%s)" % [
+		ProjectSettings.globalize_path(path), str(strip.caption)
+	])
+	stage.queue_free()
+	await get_tree().process_frame
