@@ -5487,18 +5487,50 @@ a block above and in front of the shoulders.
 Two attempts recorded, one reverted, because both found the same shape of thing
 and the shape is worth more than either fix.
 
-### The receiver's arrival error went in the wrong file
+### The receiver's arrival error went in the wrong file, and then the whole
+### premise turned out to be wrong
+
+Two corrections, and the second retracts the first.
 
 `_reached_point` returns `target` exactly whenever the mover has time, so every
-defender who can reach a ball reaches its precise centre -- which is why the
-`reaching` posture fires on **0.0%** of receptions. Giving it a spare-time-scaled
-lateral error is the obvious fix and it does not work, measured: `reaching`
-stayed at 0.0%.
+defender who can reach a ball reaches its precise centre. Giving it a
+spare-time-scaled lateral error is the obvious fix and it does not work,
+measured: the `reaching` posture stayed at 0.0% of receptions. The classifier
+reads a different description of the same arrival, so the error went somewhere
+nothing consumes.
 
-The reason is that **`reaching` is classified off `CoverageCalculator`'s
-`edge_ratio`, not off where `_reached_point` put the body.** Two descriptions of
-the same arrival, and the classifier reads the one the fix did not touch. The
-error belongs in the coverage arrival, where the ratio is computed.
+**Then measuring the classifier itself showed there was nothing to fix.**
+
+    posture        reception          defense
+    planted        322  44.6%         174  28.6%
+    reaching         0   0.0%         236  38.8%
+    off-axis       214  29.6%          41   6.7%
+    moving         186  25.8%         103  16.9%
+
+`reaching` is alive and carrying 38.8% of digs. It is absent from *receptions*
+specifically, and the reason is not arrival accuracy:
+
+    reach_margin_meters   reception   p10  1.338   p50  2.225   p90  2.967
+                          defense     p10 -0.361   p50  0.000   p90  2.726
+
+**The tightest tenth of receptions still has 1.3 m of spare reach.** Nobody
+passing a serve in this game is anywhere near stretched, so no amount of wobble
+in where they plant their feet will produce a lunge -- the margin would have to
+close by more than a metre first. A dig, by contrast, routinely runs negative,
+which is exactly why the posture fires there.
+
+So this is a **serve placement** finding, not a movement one. A serve gives the
+passer over a second, and `reachable_distance` turns a second into about four
+metres of travel; against that, a serve has to be genuinely well placed -- at a
+seam, or at the passer who cannot cover -- before reception becomes a stretch.
+`_serve_landing_point` already chooses a target from where the passers are and
+what the server can hit, so the mechanism exists; what the margins say is that
+it is not currently stressing anybody.
+
+And the earlier claim in this file that `reaching` "fires on 0.0%" without
+qualification was wrong: it is 0.0% of receptions and 38.8% of digs, and the
+unqualified version sent one fix into the wrong file and would have sent a
+second after it.
 
 It also broke `successful attacks land in while declared misses visibly leave
 the intended court`, because `_reached_point` places hitters' approach contacts
