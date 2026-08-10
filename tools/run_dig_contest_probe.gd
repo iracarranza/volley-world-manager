@@ -1,0 +1,147 @@
+extends SceneTree
+
+## What does the dig contest actually cut, and does it know how fast the ball is?
+##
+##     godot --headless --path . --script res://tools/run_dig_contest_probe.gd
+##
+## Asked directly, and it is the right question to ask before changing spike
+## pace: *"a hit scores when its relative quality versus the defense surpasses a
+## threshold and multiplies its effectiveness (review that!)"*.
+##
+## `_dig_contest` is one line:
+##
+##     defense_quality + noise > attack_quality + DIG_ATTACKER_ADVANTAGE
+##
+## Two things about that shape are worth measuring rather than asserting. The
+## first is that the margin is spent entirely on a boolean -- a ball that beats
+## the defence by 0.01 and one that beats it by 0.5 produce the same outcome, so
+## nothing "multiplies its effectiveness". The second is what `attack_quality`
+## is: `_attack_effectiveness` returns the swing's *execution* quality times an
+## identity multiplier. Not its speed. So the table below asks whether a faster
+## ball is any harder to dig, and if the answer is no, then making spikes faster
+## cannot move the dig rate by itself and would ship inert.
+##
+## Bands are quantiles of the sample rather than round numbers, because a band
+## outside the distribution reports zero and says nothing -- which is the whole
+## of §0 and has cost this branch three separate afternoons.
+
+const GameManagerScript := preload("res://scripts/managers/game_manager.gd")
+const RallyEventScript := preload("res://scripts/models/rally_event.gd")
+
+const RALLIES: int = 260
+const FIRST_SEED: int = 7000
+const BANDS: int = 5
+
+
+func _initialize() -> void:
+	var rows: Array[Dictionary] = []
+	for serving_home in [true, false]:
+		var manager: Object = GameManagerScript.new()
+		manager.seed_vertical_slice_data()
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(FIRST_SEED, FIRST_SEED + RALLIES):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			_collect(result, rows)
+		manager.free()
+
+	if rows.is_empty():
+		print("no digs sampled")
+		quit()
+		return
+
+	print("=== %d digs of a swing ===" % rows.size())
+	print("")
+	_spread("defence quality", rows, "defense")
+	_spread("attack effectiveness", rows, "attack")
+	_spread("margin (defence - attack)", rows, "margin")
+	_spread("incoming ball speed, m/s", rows, "speed")
+	print("")
+	print("`DIG_ATTACKER_ADVANTAGE` is %.2f and the execution noise is %.2f, so" % [
+		0.07, 0.10,
+	])
+	print("the contest is decided inside a margin band of about +/-0.17.")
+	print("")
+
+	_by_band("dig rate by margin", rows, "margin")
+	_by_band("dig rate by incoming ball speed", rows, "speed")
+
+	print("If the speed table is flat, the contest cannot see pace, and a faster")
+	print("spike would arrive with the defence exactly as likely to dig it.")
+	quit()
+
+
+func _spread(title: String, rows: Array, key: String) -> void:
+	var values: Array = []
+	for row in rows:
+		values.append(float(row[key]))
+	values.sort()
+	print("%-28s p10 %7.3f  p50 %7.3f  p90 %7.3f" % [
+		title, _at(values, 0.10), _at(values, 0.50), _at(values, 0.90),
+	])
+
+
+func _by_band(title: String, rows: Array, key: String) -> void:
+	var sorted_rows: Array = rows.duplicate()
+	sorted_rows.sort_custom(func(a, b): return float(a[key]) < float(b[key]))
+	print("%s" % title)
+	print("  %-18s %6s %8s" % ["band", "n", "dug"])
+	var per_band := int(ceil(float(sorted_rows.size()) / float(BANDS)))
+	for band in range(BANDS):
+		var from := band * per_band
+		var to := mini(from + per_band, sorted_rows.size())
+		if from >= to:
+			continue
+		var dug := 0
+		for index in range(from, to):
+			if bool(sorted_rows[index].dug):
+				dug += 1
+		print("  %6.3f to %6.3f %6d %8.3f" % [
+			float(sorted_rows[from][key]), float(sorted_rows[to - 1][key]),
+			to - from, float(dug) / float(to - from),
+		])
+	print("")
+
+
+func _at(sorted_values: Array, quantile: float) -> float:
+	return float(sorted_values[clampi(
+		int(floor(quantile * float(sorted_values.size() - 1))),
+		0, sorted_values.size() - 1,
+	)])
+
+
+func _collect(result: Resource, rows: Array[Dictionary]) -> void:
+	var events: Array = result.events
+	for index in range(events.size()):
+		var event: Resource = events[index]
+		if int(event.event_type) != RallyEventScript.EventType.DEFENSE:
+			continue
+		var terms: Dictionary = event.metadata.get("dig_terms", {})
+		if terms.is_empty() or not terms.has("contested_against"):
+			continue
+		## The ball this defender was actually facing. Walked backwards to the
+		## nearest struck contact rather than assumed to be the previous event,
+		## because a block touch sits between the swing and the dig on about a
+		## fifth of them and its deflection is the flight that arrived.
+		var speed := 0.0
+		for back in range(index - 1, maxi(index - 3, -1), -1):
+			var previous: Resource = events[back]
+			var trajectory: Dictionary = previous.metadata.get(
+				"outgoing_trajectory", {}
+			)
+			if trajectory.is_empty():
+				continue
+			speed = BallPresentation.launch_speed_mps(trajectory)
+			break
+		if speed <= 0.0:
+			continue
+		var defense := float(terms.get("quality", 0.0))
+		var attack := float(terms.get("contested_against", 0.0))
+		rows.append({
+			"defense": defense,
+			"attack": attack,
+			"margin": defense - attack,
+			"speed": speed,
+			"dug": bool(event.success),
+		})
