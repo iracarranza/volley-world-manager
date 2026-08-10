@@ -242,6 +242,34 @@ static func launch_speed_mps(display: Dictionary) -> float:
 	return sqrt(horizontal * horizontal + vertical * vertical)
 
 
+## How much harder this ball is to handle for being struck at this pace.
+##
+## Lives beside `launch_speed_mps` because it reads that number and nothing else,
+## and because both of them are statements about a flight rather than about
+## either team. The simulator applies it; what a speed *means* is decided here.
+##
+## The anchors are ball speeds rather than percentiles on purpose. A quantile
+## bound would move every time the pace of the game moved, so raising the speed
+## of a spike would silently re-centre the difficulty of digging one and the two
+## changes could never be told apart. `CONTROLLED_MPS` is a set or a bump -- both
+## sit at 7.7 to 8.1 m/s measured -- and `HAMMER_MPS` is a driven international
+## spike. Between them the multiplier runs from a slight discount to a little
+## over half again, which is what puts the attack's contribution on the same
+## scale as the defender's rather than a quarter of it.
+const PACE_CONTROLLED_MPS: float = 8.0
+const PACE_HAMMER_MPS: float = 30.0
+const PACE_CONTROLLED_MULTIPLIER: float = 0.82
+const PACE_HAMMER_MULTIPLIER: float = 1.70
+
+
+static func pace_pressure_multiplier(speed_mps: float) -> float:
+	return lerpf(
+		PACE_CONTROLLED_MULTIPLIER, PACE_HAMMER_MULTIPLIER,
+		clampf(inverse_lerp(PACE_CONTROLLED_MPS, PACE_HAMMER_MPS, speed_mps),
+			0.0, 1.0),
+	)
+
+
 ## What colour the ball's trail is, and how much of one it has.
 ##
 ## **One meaning per channel.** Colour is how well the contact was made, on the

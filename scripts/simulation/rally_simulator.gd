@@ -2649,10 +2649,30 @@ func resolve(
 		),
 		int(opponent_defense.get("support_count", 0)),
 	)
-	opponent_dig_terms["contested_against"] = attack_effectiveness
+	## **The ball that actually arrives.** When the block got hands on it the
+	## defender is playing the deflection, which is slower -- the same distinction
+	## `opponent_defense_time` above already makes for the clock, made here for
+	## the weight.
+	opponent_dig_terms["contested_against"] = _attack_pressure(
+		attack_effectiveness,
+		opponent_block_trajectory if not opponent_block_trajectory.is_empty()
+			else attack_trajectory,
+	)
 	var defense_strength := float(opponent_dig_terms.quality)
 	Familiarity.record_exposure(opponent_defender, read_tags)
-	var dug: bool = _dig_contest(opponent_defender, defense_strength, attack_effectiveness)
+	## Contested against the pressure the terms recorded, not the raw
+	## effectiveness -- the two differ by the ball's pace, and handing the
+	## contest one number while the record keeps another is how a term
+	## comes to be published and never spent.
+	var opponent_dig := _dig_outcome(
+		opponent_defender, defense_strength,
+		float(opponent_dig_terms.contested_against),
+	)
+	opponent_dig_terms["control"] = float(opponent_dig.control)
+	opponent_dig_terms["edge"] = float(opponent_dig.edge)
+	var dug: bool = bool(opponent_dig.dug)
+	## What the setter behind this defender actually receives.
+	var opponent_dig_control := float(opponent_dig.control)
 	## A dig has a body cost too, and until now only a serve reception did -- so a
 	## libero dug a swing off the floor and stood up unaffected, while the same
 	## libero receiving a serve paid for it.
@@ -2675,7 +2695,7 @@ func resolve(
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
-		defense_strength, "Defensive contact",
+		opponent_dig_control, "Defensive contact",
 		"%s %s the %s attack after moving %.1fm.%s" % [
 			opponent_defender.display_name, "controls" if dug else "cannot reach",
 			str(attack_choice.direction), float(opponent_defense.distance_meters),
@@ -2721,7 +2741,7 @@ func resolve(
 		result.key_factors.append(_factor("strong_defense"))
 		return _resolve_opponent_transition(
 			result, players, lineup, hitter, opponent_pass_target,
-			opponent_team, defensive_plan, 1, defense_strength, false,
+			opponent_team, defensive_plan, 1, opponent_dig_control, false,
 			opponent_defender.id,
 		)
 	result.key_factors.append(_factor("attack_control"))
@@ -4179,15 +4199,25 @@ func _resolve_opponent_transition(
 		),
 		support_count,
 	)
-	home_dig_terms["contested_against"] = opponent_attack
+	home_dig_terms["contested_against"] = _attack_pressure(
+		opponent_attack,
+		home_block_trajectory if not home_block_trajectory.is_empty()
+			else opponent_attack_trajectory,
+	)
 	var defense_quality := float(home_dig_terms.quality)
 	## Never reaching the ball is already most of what the timing term says; this
 	## keeps the hard floor the arrival model asserts separately.
 	if not defender_arrived:
 		defense_quality = minf(defense_quality, 0.10)
 		home_dig_terms["unarrived_floor"] = true
-	var defense_success: bool = defender_arrived \
-		and _dig_contest(defender, defense_quality, opponent_attack)
+	var home_dig := _dig_outcome(
+		defender, defense_quality, float(home_dig_terms.contested_against)
+	)
+	home_dig_terms["control"] = float(home_dig.control)
+	home_dig_terms["edge"] = float(home_dig.edge)
+	var defense_success: bool = defender_arrived and bool(home_dig.dug)
+	## A defender who never arrived did not scramble it either.
+	var home_dig_control := float(home_dig.control) if defender_arrived else 0.0
 	var home_dig_recovery := _dig_recovery(
 		defender, home_dig_terms, opponent_attack, opponent_attack_trajectory,
 		CoverageModel.court_distance_meters(
@@ -4217,9 +4247,9 @@ func _resolve_opponent_transition(
 	rally_clock = maxf(rally_clock, home_dig_time)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
-		defense_quality, "%s defends" % defender.display_name,
+		home_dig_control, "%s defends" % defender.display_name,
 		"%d%% defensive contact against a %d%% attack. %s %s" % [
-			roundi(defense_quality * 100.0), roundi(opponent_attack * 100.0),
+			roundi(home_dig_control * 100.0), roundi(opponent_attack * 100.0),
 			_responsibility_phrase(defensive_plan, defender.id, attack_type),
 			_arrival_phrase(defense_arrival, defender_arrived, support_count),
 		], {"side": "home", "dig_terms": home_dig_terms,
@@ -4264,7 +4294,7 @@ func _resolve_opponent_transition(
 		)
 	return _resolve_home_continuation(
 		result, players, lineup, defender, defense_pass_target,
-		opponent_team, defensive_plan, exchange_number, defense_quality,
+		opponent_team, defensive_plan, exchange_number, home_dig_control,
 	)
 
 
@@ -4974,14 +5004,23 @@ func _resolve_home_continuation(
 		),
 		int(cont_defense.get("support_count", 0)),
 	)
-	cont_dig_terms["contested_against"] = attack_quality
+	cont_dig_terms["contested_against"] = _attack_pressure(
+		attack_quality, continuation_attack_trajectory
+	)
 	## A read is only worth having if something was recorded to read. The
 	## first-ball dig logs its exposure here; this one never did, so the
 	## familiarity term above would have stayed at its neutral value for the
 	## whole match no matter how often the same hitter took the same lane.
 	Familiarity.record_exposure(opponent_defender, cont_read_tags)
 	var defense_quality := float(cont_dig_terms.quality)
-	var dug: bool = _dig_contest(opponent_defender, defense_quality, attack_quality)
+	var cont_dig := _dig_outcome(
+		opponent_defender, defense_quality,
+		float(cont_dig_terms.contested_against),
+	)
+	cont_dig_terms["control"] = float(cont_dig.control)
+	cont_dig_terms["edge"] = float(cont_dig.edge)
+	var dug: bool = bool(cont_dig.dug)
+	var cont_dig_control := float(cont_dig.control)
 	var cont_dig_recovery := _dig_recovery(
 		opponent_defender, cont_dig_terms, attack_quality,
 		continuation_attack_trajectory, float(cont_defense.distance_meters),
@@ -5006,9 +5045,9 @@ func _resolve_home_continuation(
 	rally_clock = maxf(rally_clock, cont_dig_time)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
-		attack_target + Vector2(0.04, -0.03), dug, defense_quality,
+		attack_target + Vector2(0.04, -0.03), dug, cont_dig_control,
 		"Opponent dig · exchange %d" % exchange_number,
-		"Contact 1 of 3 · %d%% control." % roundi(defense_quality * 100.0),
+		"Contact 1 of 3 · %d%% control." % roundi(cont_dig_control * 100.0),
 		{"side": "opponent",
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
@@ -5030,7 +5069,7 @@ func _resolve_home_continuation(
 		}, "kill_default")
 	return _resolve_opponent_transition(
 		result, players, lineup, hitter, attack_target,
-		opponent_team, defensive_plan, exchange_number + 1, defense_quality,
+		opponent_team, defensive_plan, exchange_number + 1, cont_dig_control,
 		false, opponent_defender.id,
 	)
 
@@ -8811,6 +8850,47 @@ func _attack_effectiveness(
 	)
 
 
+## How hard the ball itself is to handle, on top of how well it was struck.
+##
+## **The swing barely participated in its own contest.** Measured over 299 digs,
+## attack effectiveness spans 0.356 to 0.557 between the tenth and ninetieth
+## percentile -- a range of 0.20 -- while the defender's quality spans 0.125 to
+## 0.923, a range of 0.80. So the outcome was four times more a fact about where
+## the defender was standing than about the attack, and a hammer and a roll shot
+## with the same execution score were the same problem to dig. That is the
+## mechanical reason a powerful hit does not feel powerful.
+##
+## **Pace, and only as a contact difficulty.** A faster ball is already harder to
+## dig through a channel that exists and works: it arrives sooner, the reach
+## margin shrinks, and `_defense_terms`' timing factor falls with it -- measured,
+## the dig rate runs 0.70 in the slowest speed band against 0.34 in the fastest.
+## Adding pace to *arrival* again would price the same difficulty twice, which is
+## the mistake `DIG_ATTACKER_ADVANTAGE` was re-fitted to undo.
+##
+## What is genuinely unpriced is the other half: a ball struck at thirty metres a
+## second is harder to keep on the court *once you are there*, off a platform
+## that has to absorb it. That is about the contact, not the journey, and nothing
+## in the dig contest knew it. `_contact_recovery_state` reads `incoming_force`
+## to decide whether a defender is knocked over, and that was the only place in
+## the game where the weight of the ball meant anything at all.
+##
+## Applied at the dig rather than folded into `_attack_effectiveness`, because
+## the block's contest is a timing and geometry problem where pace is not the
+## question, and the two consumers should not be handed one number that means
+## two things.
+func _attack_pressure(
+	effectiveness: float, incoming_trajectory: Dictionary
+) -> float:
+	if incoming_trajectory.is_empty():
+		return clampf(effectiveness, 0.0, 1.0)
+	return clampf(
+		effectiveness * BallPresentation.pace_pressure_multiplier(
+			BallPresentation.launch_speed_mps(incoming_trajectory)
+		),
+		0.0, 1.0,
+	)
+
+
 ## A copy of the called assignment at a tempo the setter can actually run. The
 ## original play resource is left untouched: the offence still called what it
 ## called, and the record should show the call and the downgrade separately.
@@ -10183,14 +10263,56 @@ func _defense_terms(
 ## One contest, all three places a ball is dug. The attacker's advantage is
 ## explicit rather than hidden in three different random offsets, so it can be
 ## calibrated in one place and read in one place.
-func _dig_contest(
+## Whether the ball was dug, **and how well**, from the same number.
+##
+## `_dig_contest` returned a bool and threw the margin away. Measured over 299
+## digs that made the contest a step function: the execution noise is +/-0.10
+## against a margin spanning 0.79, so two of every five digs were certain
+## failures, two were certain successes, and one band in the middle sat at 0.80.
+## Worse, the DEFENSE event recorded `defense_strength` -- the defender's own
+## terms -- as its quality, so a dig that survived by a hundredth and one that
+## was never in doubt were written down identically, and the setter behind them
+## received the same ball.
+##
+## Which is the half the design was missing. A hit that clears the defence
+## outright is a kill and always was; a hit that *nearly* clears it should still
+## hurt -- the defender gets a platform on it and the ball goes somewhere,
+## rather than to their setter. That is what makes a powerful attack worth
+## making against a defence good enough to keep it up, and it is the whole of
+## "the margin multiplies its effectiveness".
+##
+## `control` is graded from the threshold rather than from zero, so the span and
+## the bar cannot drift apart: whatever `DIG_ATTACKER_ADVANTAGE` becomes, a dig
+## sitting exactly on it is still a scramble and one `DIG_COMFORT_SPAN` above it
+## is still clean. The span is 0.40 because the measured margin runs -0.397 to
+## +0.476 between the tenth and ninetieth percentile, so it covers the half of
+## that range a surviving defender actually occupies.
+const DIG_COMFORT_SPAN: float = 0.40
+## What is left of a dig that only just happened. Not zero: the defender did
+## touch it and the ball is still up, which is the difference between a scramble
+## and a kill.
+const DIG_SCRAMBLE_CONTROL: float = 0.35
+
+
+func _dig_outcome(
 	defender: VolleyballPlayer,
 	defense_quality: float,
-	attack_quality: float,
-) -> bool:
-	return defense_quality + _execution_error(
+	attack_pressure: float,
+) -> Dictionary:
+	var edge := defense_quality - attack_pressure + _execution_error(
 		defender, "dig_control", DIG_EXECUTION_NOISE
-	) > attack_quality + DIG_ATTACKER_ADVANTAGE
+	)
+	var comfort := clampf(inverse_lerp(
+		DIG_ATTACKER_ADVANTAGE, DIG_ATTACKER_ADVANTAGE + DIG_COMFORT_SPAN, edge
+	), 0.0, 1.0)
+	return {
+		## Identical to the boolean this replaced: `defense + noise > attack +
+		## advantage` is `edge > advantage` rearranged, so the outcome does not
+		## move until `DIG_ATTACKER_ADVANTAGE` is deliberately changed.
+		"dug": edge > DIG_ATTACKER_ADVANTAGE,
+		"edge": edge,
+		"control": defense_quality * lerpf(DIG_SCRAMBLE_CONTROL, 1.0, comfort),
+	}
 
 
 ## The wall two blockers make, from what each of them brings.
