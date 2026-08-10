@@ -5098,3 +5098,50 @@ selected for a Pipe swing.
 Worth doing as a rule rather than as a weighting: it is a legality constraint,
 so it belongs beside the existing rotation validation rather than as a
 discouraging term in the selection score.
+
+---
+
+## The spike goes through the net and through the blocker, and it is one cause
+
+Reported from playback. `tools/run_ball_flight_probe.gd` finds it and names it.
+
+    height at the tape, metres (net is 2.43)
+    leg                 n     mean     min    below tape
+    Attack -> Block   205     2.59    0.74        43
+    Attack -> floor    24     2.73    2.20         2
+
+**43 of 205 blocked attacks -- 21% -- are drawn crossing the tape below the net**,
+the worst at 0.74 m. And the worst five say why:
+
+    Attack -> Block   0.74 m at the tape, 0.29 s, 2.87 m -> 0.12 m
+    Attack -> Block   0.86 m at the tape, 0.39 s, 2.91 m -> 0.12 m
+    Attack -> Block   0.98 m at the tape, 0.29 s, 2.88 m -> 0.12 m
+
+Every one of them ends at **0.12 m**. That is the floor. The attack-to-block leg
+is being drawn from the hitter's contact at ~2.9 m down to the ground, when it
+should end in the blocker's hands at roughly 2.7 to 3.0 m.
+
+So the leg is aimed *past* the blocker at the floor behind them. A parabola from
+2.9 m to 0.12 m is below 2.43 m long before it reaches the net, which is why the
+ball is drawn through the tape -- and it passes through the body for the same
+reason, because the endpoint it is heading for is not the block contact at all.
+
+**Both reported symptoms are the one fact.** The ball does not clip the net and
+separately clip the blocker; it is travelling to the wrong place, and the net and
+the blocker are simply both in the way of the wrong place.
+
+### Where it is
+
+`_truncated_arc` builds the to-block leg by keeping the parent swing's launch and
+a proportional duration -- which is right for the shape -- but the endpoint it is
+truncated *to* is carrying the parent's floor landing rather than the block
+contact height. `GeometricAttackPromotionModel.block_contact_from_reach` already
+answers what that height should be and is used elsewhere; this leg does not ask
+it.
+
+Not fixed here. It is a small change and it wants the tape-crossing histogram
+re-run against it, which is one command -- but the branch is already red on the
+identity gate and this session has one inert change in it from moving faster than
+the measurement. Next session: set the leg's end height from the blocker's
+contact, re-run the probe, and expect the below-tape count on `Attack -> Block`
+to go to zero rather than merely down.
