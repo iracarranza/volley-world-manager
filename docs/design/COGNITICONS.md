@@ -79,7 +79,10 @@ state, same attention, opposite pictures.
 
 ### 1. `intent` — a closed vocabulary, one per cue
 
+*Built.* `PlayerCognitionCue.INTENTS`.
+
 ```
+serving         striking the first ball
 receiving       taking the first ball
 defending       in a dig posture, ball on the other side
 covering        collapsed behind our own hitter
@@ -96,6 +99,8 @@ invented intent is worse than a blank one — it is the drifting-volis defect
 moved from the legs to the icons.
 
 ### 2. `progress` — a float, 0 to 1
+
+*Built as a field; the four sources below are not yet wired.*
 
 The sword filling vertically as approach distance is gained is a *progress*
 quantity, and nothing in the cue carries one. One float, meaningful only for
@@ -115,6 +120,45 @@ far along the attempt is*, never *how likely it is to succeed*. A hitter who
 will arrive late still fills their sword — they are running — and the lateness
 shows up as the sword not being full when the ball arrives. That reads correctly
 without the icon knowing the outcome.
+
+### 3. `attention_hold` — a glance is not a vigil
+
+*Built.* `PlayerCognitionCue.ATTENTION_HOLDS`, with `as_glance()` and
+`as_held()`.
+
+Where the eyes point and how they are being spent are two different questions,
+and `ATTENTION_KINDS` only answers the first. A receiver who checks their
+partner and looks away has *finished* — they got what they needed in a fifth of
+a second and moved on. A blocker holding the setter has not finished and will
+not until the ball leaves. Both are `attention_kind: setter` or `teammate` for
+their whole duration.
+
+```
+glance   brief, answered, over -- the look resolves and the voli moves on
+track    following something that is moving, for as long as it moves
+fixed    locked on, not released until the phase does it for them
+```
+
+`as_glance()` and `as_held()` set the hold and the dwell together, on purpose:
+they are two statements about one act, and letting a caller set one without the
+other is how a glance ends up burning for two seconds.
+
+### 4. `dwell_seconds` — the cue and its ink are different things
+
+*Built.* `dwell_seconds` plus `glyph_strength(t)`, with `FADE_SECONDS` at 0.22.
+
+This is what makes a continuous stream survivable, and it is the answer to the
+ink risk at the bottom of this document. Coverage wants exactly one live cue per
+voli at every instant so that what they are doing is always defined. Twelve
+glyphs burning at full strength for a whole rally is the opposite of legible.
+
+So **a cue stays active and its glyph goes quiet once its message has been
+sent.** The fade rule lives on the model rather than in two renderers, for the
+same reason `state` and `affect` do: the 3D billboard and the 2D badge must not
+disagree about when a thought is spent.
+
+Measured over 200 rallies with the compiler wired: a glance cue lasts 0.51 s on
+average and its glyph holds full strength for 0.18 s of that.
 
 ## The tie-in: the intents are already computed, then thrown away
 
@@ -232,12 +276,36 @@ wrong — too saturated, too large, or animating when it should be still. The
 existing markers are the calibration target: whatever is done to the twelve
 must leave `lost_sight` as startling as it is now.
 
+## What the vocabulary found on its first measurement
+
+Wiring the axes through the compiler and measuring the mix over 200 rallies
+immediately surfaced a bug that had been invisible since the file was written.
+
+`_compile_serve` guards on the serve carrying an aim radius, and read
+`target_radius_m`. The resolver has always written `target_radius_meters`. **No
+serve cue had ever been emitted, on any serve, on either side.** The guard did
+exactly its job — refuse to invent a look at a zone the resolver did not record
+— and the key it guarded on did not exist, which is a reader with no writer and
+is silent by construction. Every existing check asked whether cues were well
+formed, and cues that are never created are trivially well formed.
+
+A measured vocabulary cannot hide that: the missing term reads as a zero.
+`serving` came back at 0 while all six others were populated, and the mismatch
+was two lines away. The gate now asserts the mix rather than the shape.
+
+Measured after the fix, per 200 rallies: serving 200, receiving 192, setting
+509, blocking 1272, watching 172, defending 48, preparing_attack 81 — and holds
+of fixed 1129, track 1011, glance 334.
+
 ## Order
 
-1. **`intent` and `progress` on `PlayerCognitionCue`**, with `intent` a closed
-   vocabulary beside the existing ones and `watching` in it from the start.
+1. ~~**`intent`, `progress`, `attention_hold` and `dwell_seconds` on
+   `PlayerCognitionCue`**~~ — done, with every compiled cue carrying a real
+   intent and hold rather than a default, so the axes cannot go inert the way
+   the serve cue did.
 2. **Return the reason from the phase maps.** Each one already branches on it;
-   this is a second value, not a second pass.
+   this is a second value, not a second pass. *This is the next step, and it is
+   what takes coverage from 0.75 to 6.00.*
 3. **Compile the ambient stream from those reasons**, one tiling cue per voli
    per flight.
 4. **The continuity gate** — every home voli, exactly one active cue, at every

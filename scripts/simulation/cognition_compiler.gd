@@ -103,12 +103,21 @@ static func compile(result: Resource) -> Array:
 ## layer does not know, and inventing a look at a zone would be exactly the kind
 ## of decorative cue the whole design is trying not to be.
 ##
-## `target_radius_m` is the server's chosen *specificity* -- how small a patch
-## they aimed at, decided before execution scatter -- so it reads directly as
-## how sure the cue should look.
+## `target_radius_meters` is the server's chosen *specificity* -- how small a
+## patch they aimed at, decided before execution scatter -- so it reads directly
+## as how sure the cue should look.
+##
+## **This gate read `target_radius_m` and the resolver has always written
+## `target_radius_meters`, so no serve cue has ever been emitted -- on any
+## serve, on either side, since this was written.** The guard did its job
+## perfectly and the key it guarded on did not exist, which is a reader with no
+## writer and is silent by construction. It surfaced only when the new `intent`
+## vocabulary was measured over 200 rallies and `serving` came back at zero
+## against every other intent being populated, which is the argument for closed
+## vocabularies whose mix gets measured.
 static func _compile_serve(serve_event: Resource, cues: Array) -> void:
 	var metadata: Dictionary = serve_event.metadata
-	if not metadata.has("target_radius_m") and not metadata.has("serve_target"):
+	if not metadata.has("target_radius_meters"):
 		return
 	var server_id := int(serve_event.actor_id)
 	if server_id < 0:
@@ -120,12 +129,14 @@ static func _compile_serve(serve_event: Resource, cues: Array) -> void:
 		serve_event.sequence, starts_at, contact_time, &"deciding", &"before",
 	)
 	cue.attention_kind = &"position"
+	cue.intent = &"serving"
+	cue.as_held(true)
 	cue.attention_position = Vector2(serve_event.end_position)
 	## A tight aim is a confident one. The radius runs 1.80 m for a server
 	## picking a half of the court down to 0.22 m for one picking a seam, so it
 	## is inverted onto certainty across its own stated range rather than a
 	## guessed one.
-	var radius := float(metadata.get("target_radius_m", 1.0))
+	var radius := float(metadata.get("target_radius_meters", 1.0))
 	cue.certainty = clampf(inverse_lerp(1.80, 0.22, radius), 0.0, 1.0)
 	cue.urgency = 0.35
 	cue.audience = &"observable"
@@ -165,6 +176,8 @@ static func _compile_reception(
 		&"committed" if margin >= 0.0 else &"reacting", &"before",
 	)
 	cue.attention_kind = &"ball"
+	cue.intent = &"receiving"
+	cue.as_held()
 	## Comfort, on the margin's own scale: a quarter of a second early is a
 	## passer in position, and anything negative is one still travelling.
 	cue.certainty = clampf(inverse_lerp(-0.25, 0.25, margin), 0.0, 1.0)
@@ -268,6 +281,8 @@ static func _compile_setter_scan(
 			&"searching", &"before",
 		)
 		watching.attention_kind = &"ball"
+		watching.intent = &"setting"
+		watching.as_held()
 		watching.certainty = 0.4
 		watching.urgency = 0.6
 		watching.priority = PRIORITY_TRACKING
@@ -297,6 +312,11 @@ static func _compile_setter_scan(
 			starts_at, starts_at + glance_length, &"searching", &"before",
 		)
 		cue.attention_kind = &"hitter"
+		cue.intent = &"setting"
+		## A setter reading four hitters does not stare at each of them. Each
+		## option is a look that is answered and released, which is exactly
+		## what a glance is for.
+		cue.as_glance()
 		cue.attention_player_id = int(option.get("player_id", -1))
 		## The setter's own read of this option, not the option's real value.
 		cue.certainty = clampf(
@@ -317,6 +337,8 @@ static func _compile_setter_scan(
 		&"deciding", &"before",
 	)
 	decision.attention_kind = &"hitter" if chosen >= 0 else &"ball"
+	decision.intent = &"setting"
+	decision.as_held()
 	decision.attention_player_id = chosen
 	decision.certainty = _decision_confidence(options)
 	decision.urgency = 0.75
@@ -373,6 +395,10 @@ static func _compile_hitter_call(
 		&"calling", &"before",
 	)
 	cue.attention_kind = &"setter"
+	cue.intent = &"preparing_attack"
+	## A hitter calling looks at the setter and keeps looking: the call is not
+	## answered until the ball leaves the hands.
+	cue.as_held(true)
 	cue.attention_player_id = int(set_event.actor_id)
 	cue.certainty = clampf(float(chosen_option.get("judgment", 0.6)), 0.0, 1.0)
 	cue.urgency = 0.9
@@ -441,6 +467,10 @@ static func _compile_block_read(
 			maxf(set_time - 0.30, 0.0), recognises_at, &"searching", &"before",
 		)
 		reading.attention_kind = &"setter"
+		reading.intent = &"blocking"
+		## Trained on the setter and not released -- the vigil the glance is
+		## defined against.
+		reading.as_held(true)
 		reading.attention_player_id = int(set_event.actor_id)
 		reading.certainty = 0.35
 		reading.urgency = 0.55
@@ -455,6 +485,8 @@ static func _compile_block_read(
 			&"recognizing", &"before",
 		)
 		recognising.attention_kind = &"position"
+		recognising.intent = &"blocking"
+		recognising.as_held()
 		recognising.attention_position = Vector2(entry.at)
 		recognising.certainty = closed
 		recognising.urgency = 0.8
@@ -469,6 +501,8 @@ static func _compile_block_read(
 			&"committed", &"during",
 		)
 		committed.attention_kind = &"position"
+		committed.intent = &"blocking"
+		committed.as_held(true)
 		committed.attention_position = Vector2(entry.at)
 		committed.certainty = closed
 		committed.urgency = 0.95
@@ -629,6 +663,8 @@ static func _compile_sightlines(
 		hidden_from, reacquired, &"lost_sight", &"during",
 	)
 	lost.attention_kind = &"ball"
+	lost.intent = &"defending"
+	lost.as_held()
 	lost.visibility = visibility
 	## Certainty falls with how little time the wall left them, on the same scale
 	## `visibility_for` classifies with. It used to fall with the share of the
@@ -655,6 +691,8 @@ static func _compile_sightlines(
 		reacquired, contact_time, &"reacting", &"during",
 	)
 	found.attention_kind = &"ball"
+	found.intent = &"defending"
+	found.as_held()
 	found.visibility = &"visible"
 	found.certainty = 0.6
 	found.urgency = 1.0
@@ -700,6 +738,8 @@ static func _compile_reactions(
 		starts_at, starts_at + 0.9, &"reacting", &"after",
 	)
 	actor.attention_kind = &"none"
+	actor.intent = &"watching"
+	actor.as_held()
 	actor.affect = &"pleased" if went_well else &"upset"
 	actor.affect_intensity = clampf(notability, 0.0, 1.0)
 	actor.trend = 0.6 if went_well else -0.6
@@ -724,6 +764,9 @@ static func _compile_reactions(
 		starts_at + 0.10, starts_at + 0.80, &"reacting", &"after",
 	)
 	teammate.attention_kind = &"teammate"
+	teammate.intent = &"watching"
+	## Checking on somebody after a point is a look, not a vigil.
+	teammate.as_glance(0.30)
 	teammate.attention_player_id = actor_id
 	teammate.affect = &"pleased" if went_well else &"sad"
 	teammate.affect_intensity = clampf(notability * 0.6, 0.0, 1.0)

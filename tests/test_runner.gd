@@ -14198,6 +14198,9 @@ func _test_cognition_cues() -> void:
 	original.trend = -0.4
 	original.audience = &"private"
 	original.certainty = 0.63
+	original.intent = &"approaching"
+	original.progress = 0.42
+	original.as_glance()
 	var restored := PlayerCognitionCue.from_dict(original.to_dict())
 	var round_trip_holds := true
 	for key in original.to_dict():
@@ -14229,6 +14232,56 @@ func _test_cognition_cues() -> void:
 		winner_at_one != null and str(winner_at_one.state) == "calling"
 			and winner_at_zero != null and str(winner_at_zero.state) == "searching",
 		"overlapping cues resolve to exactly one winner, and priority decides which",
+	)
+
+	## 2b. Every intent and every attention hold is reachable from a real rally.
+	##
+	##     This is the gate the serve cue needed and did not have. `_compile_serve`
+	##     guarded on `target_radius_m` while the resolver wrote
+	##     `target_radius_meters`, so not one serve cue was emitted in the history
+	##     of the file -- a reader with no writer, silent by construction, and
+	##     invisible to every check that only asked whether cues were well formed.
+	##     A vocabulary whose mix is measured cannot hide that: the missing term
+	##     reads as a zero.
+	var vocabulary_manager: Object = GAME_MANAGER_SCRIPT.new()
+	vocabulary_manager.seed_vertical_slice_data()
+	var seen_intents := {}
+	var seen_holds := {}
+	var every_cue_well_formed := true
+	var glance_fades := false
+	var held_never_fades := true
+	for vocabulary_seed in range(4100, 4160):
+		var vocabulary_rally: Resource = vocabulary_manager.resolve_active_rally(
+			vocabulary_seed
+		)
+		if vocabulary_rally == null:
+			continue
+		for raw_cue in vocabulary_rally.cognition_cues:
+			var sampled: Resource = raw_cue
+			seen_intents[str(sampled.intent)] = true
+			seen_holds[str(sampled.attention_hold)] = true
+			if not sampled.is_well_formed():
+				every_cue_well_formed = false
+			## The fade is what lets a continuous stream stay legible, so it has
+			## to be true of the data and not only of the renderer: a glance goes
+			## quiet before its cue ends, and a held look never does.
+			if str(sampled.attention_hold) == "glance":
+				if sampled.glyph_strength(sampled.ends_at) <= 0.0001:
+					glance_fades = true
+			elif sampled.glyph_strength(sampled.ends_at) < 0.9999:
+				held_never_fades = false
+	vocabulary_manager.free()
+	_check(
+		every_cue_well_formed
+			and seen_intents.size() >= 7
+			and seen_intents.has("serving")
+			and seen_intents.has("blocking")
+			and seen_intents.has("setting")
+			and seen_intents.has("receiving")
+			and seen_holds.size() == 3
+			and glance_fades
+			and held_never_fades,
+		"compiled cues populate the intent and attention-hold vocabularies, and only glances fade",
 	)
 
 	## 3. The spectator filter drops private thought without leaving the player
