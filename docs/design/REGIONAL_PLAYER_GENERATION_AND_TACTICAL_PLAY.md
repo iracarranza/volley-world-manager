@@ -205,7 +205,212 @@ club play cannot be represented by one regional bonus package:
 
 ---
 
-## 5. Required regional tests
+## 5. Draft regional expression matrix
+
+Every major region should be describable with four different sentences:
+
+1. **Education:** what an equal-talent player is more likely to do well because
+   they developed there.
+2. **Supply:** which positional archetypes the development system produces in
+   unusual depth, without excluding any role.
+3. **System:** what a locally traditional club repeatedly asks its six on court
+   to do.
+4. **Evidence:** what the opposing manager can actually observe in decisions,
+   movement and rally results.
+
+If education and system are the same sentence, the design is unfinished. “They
+produce good servers and therefore serve well” only describes capability. A
+complete identity says what kind of servers they produce, how the team deploys
+them, what the choice risks, and how the opponent can respond.
+
+### Landavol — breadth without a prescribed answer
+
+- **Education:** low regional distortion. Landavolan players should be the
+  clearest expression of position, body type, individual talent and coaching,
+  rather than receiving an “all-rounder” bonus that makes them universally
+  better.
+- **Supply:** a stable, ordinary positional distribution with credible depth
+  everywhere and fewer extreme regional archetypes.
+- **System:** diagnose the roster and opponent, then use the least costly
+  answer. Neutral principles are permission to adapt, not permission to have no
+  behavior.
+- **Evidence:** fewer repeated extremes across a match; changes in serve target,
+  tempo or block plan should follow evidence from earlier rallies.
+- **Failure mode:** statistically average play with no adaptation. That is an
+  absence of identity, not balance.
+
+### Spëddigh — make the next action arrive early
+
+- **Education:** work rate, acceleration, lateral movement, tempo control and
+  balance while moving. Its players should regain availability quickly rather
+  than simply hit harder.
+- **Supply:** setters, mobile pins and liberos are natural expressions, but the
+  tradition must also produce strong transition opposites: rapid-release
+  attackers who remain usable as rally geometry changes.
+- **System:** change tempo frequently, release early and keep all phases moving.
+  The opponent should have less time to settle into a read even when the ball
+  is not perfectly controlled.
+- **Evidence:** varied set tempos, earlier approach starts, more attackers
+  becoming available in transition and shorter pauses between defended ball and
+  organized counterattack.
+- **Failure mode:** “Pāwa, only faster.” Spëddigh owns variation and early
+  availability; it does not need to own the greatest repeated-effort endurance.
+
+### Pāwa Hitō — make one more complete attack
+
+- **Education:** stamina, explosiveness, approach timing, attack accuracy and
+  transition recovery. The specialty is repeatable quality, not merely energy.
+- **Supply:** transition pins and mobile middles remain common, while Pāwan
+  liberos should be especially credible continuation defenders: recover after
+  the first dig, cover the next contact and preserve quality late in a rally.
+- **System:** use relatively legible attacking patterns but recommit harder and
+  more reliably than the opponent after every defensive contact.
+- **Evidence:** attackers repeatedly return to approach lanes, coverage survives
+  second and third transitions, and attack quality degrades more slowly across
+  long rallies and late sets.
+- **Failure mode:** generic high stamina. The match must show what the extra
+  stamina buys: another organized swing rather than another desperate contact.
+
+### Bloc du Larg — make the hitter declare first
+
+- **Education:** block timing, reach, court vision and tactical discipline.
+  Individually, Largen blockers should arrive with control and retain useful
+  hands rather than jumping at every possible cue.
+- **Supply:** strong middle depth is expected, but disciplined blocking outsides
+  and setters should also carry the tradition into non-middle rotations.
+- **System:** show patience before committing, close the most consequential
+  lane, and trade speculative pressure for a better formed block.
+- **Evidence:** later commitment, fewer obviously false jumps, more completed
+  block shapes, controlled touches and funnels into positioned defenders.
+- **Failure mode:** the highest block-attempt count. Bloc du Larg should be
+  distinguished by the quality and timing of commitment, not constant jumping.
+
+### Xérvu — make first contact begin under a false assumption
+
+- **Education:** serve power, technique, placement, consistency, aggression and
+  variation. Xérvyan players should possess more usable serve options, not one
+  mandatory maximum-power serve.
+- **Supply:** serving value can emerge at every position. Pins may be common,
+  but a Xérvyan setter or libero rotation should still visibly change the
+  pressure applied from the line.
+- **System:** attack receivers' expectations across rotations: establish a toss
+  or target pattern, depart from it deliberately, and accept calculated errors
+  for damaged first contacts.
+- **Evidence:** broader serve selection, purposeful target sequences, more
+  receiver displacement, aces and errors, and more opponent offense beginning
+  away from its preferred setting point.
+- **Failure mode:** permanent full aggression. Without sequencing and variation,
+  Xérvu is only a serve-power bonus rather than a serving culture.
+
+### Taktikã — preserve the decision while the situation changes
+
+- **Education:** decision making, composure, discipline, adaptability and
+  controlled unpredictability. Equal-built Taktikãn players should lose less
+  execution quality when reads, score pressure or emotional state change.
+- **Supply:** setters and reading defenders are obvious products, but stable
+  decision-making must also produce excellent pins: hitters who revise shot and
+  pace against a late-changing block.
+- **System:** gather information, keep emotional variance low and change the
+  chosen solution without changing the team's execution standard.
+- **Evidence:** fewer repeated errors after disruption, late shot changes that
+  remain controlled, sensible distribution under poor reception and smaller
+  performance swings after emotional events.
+- **Failure mode:** a passive low-risk team. Composure should protect difficult
+  choices, not prevent them.
+
+### Ispayk — end the rally through an acknowledged advantage
+
+- **Education:** large-frame terminal attacking, arm speed, jump reach, block
+  timing and shot variety. Ispaykano development creates players who can win a
+  known confrontation, not only surprise an opponent.
+- **Supply:** terminal pins and physical net players, complicated by the fallen
+  flagship's tendency to retain or recruit veterans. Body type remains uniform;
+  the physique bias and volleyball education create the frame distribution.
+- **System:** concentrate responsibility in the strongest pin matchup, commit
+  forcefully at the net and dare the opponent to stop a visible plan.
+- **Evidence:** high pin share, repeat sets to a winning hitter, high terminal
+  contact and block pressure, with greater exposure when that first plan stalls.
+- **Failure mode:** “everyone is stronger.” Its leverage should be concentrated,
+  scouted and counterable through matchup denial and rally extension.
+
+### A'ace — purchase several answers and demand immediate return
+
+- **Education:** A'ace should have little or no singular native training
+  specialty. Excellent facilities may raise floors or accelerate development,
+  but they must not manufacture three unrelated glamour skills in every local
+  player for free.
+- **Supply:** the club roster, not the birth population, is the signature:
+  expensive stars imported from several traditions, strong positional coverage
+  and less shared developmental history.
+- **System:** select ambitious solutions based on the stars currently on court,
+  applying pressure across serve, pin attack and block without waiting years to
+  build a single inherited style.
+- **Evidence:** several individually elite weapons, substitutions or rotations
+  that change the mode of attack, high immediate ceiling, and occasional
+  coordination costs when those weapons must improvise together.
+- **Failure mode:** a tactic with every aggressive axis simply above average.
+  That has no decision or counter. A'ace should gain optionality from roster
+  construction and pay for it in integration, not receive a universal tactical
+  multiplier.
+
+### What the matrix implies for the current data
+
+This is a draft target, not a claim that the implementation already expresses
+every row. It identifies four immediate data questions for calibration:
+
+1. Raise Pāwa Hitō libero and Spëddigh opposite positional affinities toward at
+   least neutral, then test the resulting archetypes rather than assuming that
+   increased headcount proves quality.
+2. Decide whether Landavol's lack of specialty produces observable adaptability
+   or merely absence. Adaptation belongs in team decisions, not in free player
+   attribute points.
+3. Remove or reinterpret A'ace's native `attack_power`, `serve_power` and
+   `block_timing` package. Those attributes currently encode purchased roster
+   strength as a birthplace trait.
+4. Give A'ace tactical tradeoffs. Its current regional principles sit above
+   neutral on almost every aggressive axis, so it risks becoming “good at all
+   choices” rather than a high-capability roster whose integration can be
+   attacked.
+
+---
+
+## 6. Observation contract
+
+Regional identity should be visible without exposing raw bonuses. Scouting and
+playback can express it at three levels:
+
+- **Before the match:** describe roster evidence separately from club habits.
+  “Three Xérvyan servers” is capability; “targets seams after establishing line”
+  is observed tactical behavior.
+- **During the rally:** cognition, movement and choices should expose intent.
+  The opponent sees Bloc wait before committing, Spëddigh release early, Pāwa
+  reorganize again and Xérvu alter a previously established serve pattern.
+- **After a sample:** aggregate reports should name evidence, not stereotypes:
+  tempo distribution, repeated-transition availability, serve sequence entropy,
+  block commitment timing and execution variance under pressure.
+
+A useful scouting sentence follows this grammar:
+
+> **They can** [roster capability], **they prefer** [team decision], **so we
+> observe** [measured rally signature], **and we can answer by** [counter].
+
+Examples:
+
+- “They can serve six credible variations, they prefer changing the receiver's
+  starting assumption, so we observe late movement and more out-of-system sets;
+  we can answer by simplifying seam ownership.”
+- “They can rebuild approaches repeatedly, they prefer recommitting after every
+  dig, so we observe third-transition swings that remain organized; we can
+  answer by ending continuation with disciplined tooling coverage rather than
+  trying to outlast them.”
+
+This phrasing stops regional identity from becoming immutable flavor text. It
+always points to something the simulation must produce and something the player
+can contest.
+
+---
+
+## 7. Required regional tests
 
 Regional balance cannot be signed off from one scalar power score. Generation
 and play need separate tests before being tested together.
@@ -259,7 +464,7 @@ than balance weight.
 
 ---
 
-## 6. Implementation order
+## 8. Implementation order
 
 1. Wire career fixtures to a real opponent definition containing club region,
    roster source and principles.
