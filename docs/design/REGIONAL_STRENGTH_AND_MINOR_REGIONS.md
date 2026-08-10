@@ -1,5 +1,10 @@
 # Regional strength, minor regions, and the Sixnet standing model
 
+Player-development identity and regional tactical identity are separate inputs
+to strength and match outcomes. Their ownership, current implementation gaps,
+and calibration requirements are specified in
+[REGIONAL_PLAYER_GENERATION_AND_TACTICAL_PLAY.md](REGIONAL_PLAYER_GENERATION_AND_TACTICAL_PLAY.md).
+
 Partially implemented. The field split, legacy-save migration, real-population
 `home_region` measurement, positional prime/depth aggregation, annual refresh,
 and strength-based drift thresholds are live. Prestige, prime history, tier
