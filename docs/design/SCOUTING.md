@@ -82,9 +82,15 @@ of code in the whole spec.
 
 The one entry that is not a multiplier is **rare traits, discovered only when
 demonstrated**. That is not reduced uncertainty; it is a different epistemology —
-you either saw them do it or you did not. It should be a separate mechanism, and
-it pairs exactly with the `TRAITS.md` note about capabilities being a different
-kind of thing from traits.
+you either saw them do it or you did not, and no amount of watching a voli who
+has never had the chance will tell you.
+
+That pairs exactly with what rare traits are for. `TRAITS.md` puts them at
+roughly 2-4 per 260-voli cohort, assigned independently of quality, so most of
+them sit on volis who may never demonstrate them. A rare capability that can only
+be found by having been there when it happened is the strongest version of the
+scouting fantasy this game can offer: not a number that narrows, but a thing you
+saw.
 
 ### Scouting has no geography
 
