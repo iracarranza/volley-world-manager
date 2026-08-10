@@ -4730,3 +4730,92 @@ because the three above were specific and this is not yet. What is known:
 - Nothing is measured. There is no probe over placement, so every statement here
   is from use rather than from a distribution -- which is exactly the shape this
   file warns about, and the first thing the pass should fix.
+
+---
+
+## Three asks, and what the code already says about each
+
+Recorded for later rather than built. Each one was checked against the tree, so
+the entry states what exists rather than assuming nothing does.
+
+### Fatigue is one linear multiplier, three times over
+
+**Asked:** fatigue should not be a linear loss of attributes that leads straight
+to big mistakes. At least three stages -- *tiredness*, then *forced errors*,
+then *unforced errors* -- reading as (1) a small reduction across broad
+attributes, (2) a loss in work rate and effective range (explosiveness, jump
+capacity), and only then (3) major mistakes. The attribute loss should be
+slightly logarithmic, mental as well as physical. And it should be visible for
+home volis somewhere.
+
+**What exists.** Three separate linear applications and nothing else:
+
+    rally_simulator.gd:11137   raw_rating * (1.0 - fatigue * 0.18)
+    volleyball_player.gd:388   lerpf(1.0, 0.78, fatigue)      -- in-system band
+    volleyball_player.gd:586   leap * (1.0 - fatigue * 0.35)  -- jump reach
+
+So the shape asked for is genuinely absent. There is no staging, no curve, and
+no separation of the physical from the mental -- `_rating` applies the same flat
+0.18 to `composure` as to `explosiveness`. The two extra terms happen to sit in
+roughly the right *place* for stage two (reach and the in-system band), but they
+fire at the same time as everything else rather than after it, so a tired voli
+loses a bit of everything at once, which is exactly the reading the ask is
+trying to get away from.
+
+Worth stating before anyone builds it: at maximum fatigue the total attribute
+cost is 18%, and a stage that arrives at 70% fatigue therefore has about five
+points of rating left to spend. **The stages need the ceiling raised or they
+will be three thresholds cutting a range too narrow to hold them** -- the §0
+failure, in advance for once. Measure the live fatigue distribution first: if a
+match never drives a voli past 0.4, stage three is unreachable whatever it is
+set to.
+
+Visibility: fatigue is on the journal's voli page and the clipboard's squad
+sidebar, both as a percentage. It is nowhere in Match Centre and nowhere on the
+court, which is where it would actually be read.
+
+### A tired animation, and actions that fail because of it
+
+**Asked:** a tired animation or a set of them; volis track how far and how fast
+they must move for an action, and at some fatigue level the action -- closing a
+block, running an approach, chasing a feint -- fails outright.
+
+**What exists.** The travel half is already there and is not being used for
+this: `RallyMovementSystem.traversal_seconds` answers "how long does this voli
+need" for every phase, and the block close, the approach and the floor defence
+all already compare it against a budget. What is missing is that fatigue does
+not enter that comparison at all -- it moves ratings and reach, never the
+traversal. So a tired voli currently covers ground exactly as fast as a fresh
+one and simply plays the ball slightly worse when they get there.
+
+Wiring fatigue into the traversal is the whole of the ask's second half, and it
+would make actions fail on their own -- a close that no longer fits its window
+is already handled everywhere as a close that did not happen. No new failure
+path is needed.
+
+No tired animation exists. `player_actor_3d.gd` has no idle variation of any
+kind, which is the same gap `Sleeping poses` names from the other end.
+
+### Body facing is not driven during playback at all
+
+**Asked:** it is hard to tell whether head and body facing is even happening.
+
+**It is not, and this is a straightforward finding rather than a design
+question.** `has_facing` and `facing_yaw` are set in exactly three places:
+`_turn_toward` inside the actor, and the two offline tools
+(`run_voli_portfolio.gd`, `run_animation_frames.gd`). Neither
+`match_court_3d.gd` nor `match_screen.gd` sets them, so during a rally an actor
+only ever turns when something calls `_turn_toward` -- which the contact poses
+do, at the moment of contact, and nothing does between contacts.
+
+So a voli holds whatever heading their last contact left them with for the whole
+rally, and a voli who has not touched the ball yet has no heading at all. The
+machinery is complete and correct -- `FACING_TURN_RATE`, the 62-degree neck
+limit, `look_toward` for the head independently of the body -- and nothing is
+driving it.
+
+The cheapest honest fix is the one the cognition layer already half did: it
+turns the head toward a cue's attention target through `look_toward`. The body
+wants the same treatment from the movement it is already doing -- a voli
+travelling has a heading, which is their velocity, and that is a fact playback
+holds every frame and currently discards.
