@@ -52,30 +52,29 @@ Serve receive — the phase in the screenshot, and the phase a viewer watches mo
 closely because it is where every rally starts — has a publication rate of
 exactly zero on both sides. There is no underlying opinion for playback to draw.
 
-### 2. The ready stance is computed and then sampled once
+### 2. Correction: the ready stance is fine
 
-`GaitBiomechanics` blends every joint from a ready stance at zero speed into a
-walk and then a run (`gait_blend = smoothstep(IDLE, WALK, speed)`), so a
-stationary voli is crouched — hips 16°, knees −54°, feet apart 15°, arms
-forward. That is right, and it is tested.
+**An earlier version of this document claimed the ready stance was sampled once
+per flight and that off-ball joints went unwritten for the whole of it. That was
+wrong, and it is left here rather than deleted because the reasoning that
+produced it is a trap worth seeing.**
 
-But the joints are only written by `set_pose`, and during a flight `set_pose` is
-called only for the contact actors. Everyone else is posed by
-`reset_player_poses()`, which runs **once, after the flight loop has already
-finished**. So for the whole duration of every flight — which is nearly all of
-the visible time — an off-ball player's joints are not written at all. They hold
-whatever pose the last reset left them in.
+The reasoning was: joints are only written by `set_pose`; during a flight
+`set_pose` is called for the contact actors; `reset_player_poses()` — which
+poses everybody — appears *after* the loop. Each of those statements is true.
+The conclusion does not follow, because `_apply_contact_poses` runs every frame
+inside the loop and its own first line is `reset_player_poses()`. Every actor is
+posed every frame, and has been all along.
 
-Worse, that reset samples `ground_speed_mps` at the moment it runs.
-`apply_movement_plan` does re-place stationary players every frame so their
-speed estimate decays toward zero, which is the right instinct and is
-documented as such — but decaying the speed does nothing if nothing re-reads it.
-A player who was running when the last reset fired is frozen at that blend for
-the entire next flight.
+Checked rather than reasoned about, `GaitBiomechanics.resolve(0, 0.0, 0.0)`
+returns hip 16°, knee −54°, abduction 15°, torso −0.30 rad — the full ready
+stance, at a `gait_blend` of exactly 0.00. It reaches the court.
 
-So the ready stance is not missing. It is applied at the wrong *rate*, and the
-symptom — a court of people standing straight up while a ball is in the air — is
-indistinguishable from it never having been built.
+So the observation that prompted this — "the ready stance is not observed at
+all" — is not about the pose. It is about the **stillness**: twelve players
+correctly crouched in a defensive posture and none of them going anywhere reads
+as a frozen court, and the missing thing is the movement, not the stance. Which
+is §1, and is the whole of the real work.
 
 ## What the model needs
 

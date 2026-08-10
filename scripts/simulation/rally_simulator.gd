@@ -1196,6 +1196,10 @@ func resolve(
 		"%d%% pressure toward the receiver." % roundi(serve_quality * 100.0) \
 		if not serve_error else "The serve does not enter the court.", {
 			"side": "opponent", "target": str(serve_decision.target),
+			## Where the home six stand to receive this. Published on the *serve*
+			## because that is the flight during which they take up the shape --
+			## by the reception event they are already in it.
+			"home_phase_targets": _receive_formation_map(lineup, false),
 			"called_target": intended_target,
 			"aim_point": serve_decision.aim_point,
 			"serve_mode": serve_decision.mode,
@@ -2978,6 +2982,11 @@ func _resolve_home_serve(
 		"%s · %d%% pressure at %d%% selected risk." % [server.primary_serve_style,
 			roundi(serve_quality * 100.0), roundi(serve_risk * 100.0),
 		], {"side": "home", "target": str(serve_decision.target),
+			## And the opposite side's shape, on the same principle.
+			"opponent_phase_targets": _receive_formation_map(
+				opponent_team.current_lineup() if opponent_team != null else null,
+				true,
+			),
 			"called_target": target_name, "aim_point": serve_decision.aim_point,
 			"serve_mode": serve_decision.mode,
 			"changed_target": serve_decision.changed_target,
@@ -11787,6 +11796,37 @@ func _receive_formation_positions(
 		if formation.has(slot_number):
 			positions.append(Vector2(formation[slot_number]))
 	return positions
+
+
+## Where every voli on the receiving side stands to take a serve, by player id.
+##
+## **The formation was already being built and five sixths of it thrown away.**
+## `_receive_formation_positions` above asks `CourtConstants` for the whole
+## six-slot shape and then keeps only the passers, because all it needed was
+## somewhere to aim the serve. Everyone else's position was computed, discarded,
+## and then not drawn -- which is why serve receive publishes phase targets for
+## 0 of 400 serves and a court of twelve stands still through the phase a viewer
+## watches most closely.
+##
+## Nothing here is invented. It is the same call, kept whole.
+func _receive_formation_map(
+	lineup: RotationLineup, opponent_side: bool
+) -> Dictionary:
+	var targets := {}
+	if lineup == null:
+		return targets
+	var setter_slot := lineup.slot_for_player(lineup.active_setter_id())
+	if setter_slot < 1:
+		return targets
+	var formation := CourtConstants.serve_receive_formation(
+		setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1,
+		opponent_side,
+	)
+	for slot_number in formation:
+		var player_id := int(lineup.player_at_slot(int(slot_number)))
+		if player_id >= 0:
+			targets[player_id] = Vector2(formation[slot_number])
+	return targets
 
 
 func _weak_passer_target(
