@@ -745,13 +745,36 @@ const SHOOT_TEMPO_CALL: int = 2
 ## be the exception, and at 0.09 an even contest was close to a coin flip on a
 ## scale where the two sides sit at parity.
 ##
-## **Re-fitted at 0.07 from 0.20, alongside `DIG_SOLO_SHARE`.** Not a softening
-## of the claim above -- the claim still holds and the attacker is still
-## favoured. What changed underneath it is that the ball is now a struck ball
-## rather than a lob and both defences are timed off the same flight, so a dig is
-## a genuinely harder thing than it was when these were set, and the two of them
-## together were pricing that difficulty twice.
-const DIG_ATTACKER_ADVANTAGE: float = 0.07
+## **How much better than the defence an attack has to be to beat it.**
+##
+## Named for what it is now rather than for what it was. As
+## `DIG_ATTACKER_ADVANTAGE` it sat at +0.07, and read against `edge = defence -
+## attack` that means the defence had to be *seven points better* just to draw
+## level: at equal quality the attacker won. The design says the opposite --
+## "a good defence beats a good offence, but a good defence loses to a much
+## better offence" -- so the sign was wrong for the claim it was implementing,
+## and the previous re-fit from 0.20 had moved its size without questioning its
+## direction.
+##
+## Negative, so the defence holds when the two are level and keeps holding while
+## it is up to this far behind. Above that the attack is through, and
+## `_dig_outcome`'s grading then makes the rest of the margin count: a ball that
+## clears the bar by a little is dug badly, one that clears it by a lot is a
+## kill. That is the "much better" half, and it is a slope rather than a second
+## threshold.
+##
+## Measured against the distribution it cuts: over 247 digs the margin runs
+## -0.517 at the tenth percentile to +0.468 at the ninetieth, so a bar anywhere
+## in that range moves a real share of contests rather than sitting off the end
+## of it doing nothing.
+##
+## **Sized by what the statement actually claims, which is parity.** "A good
+## defence beats a good offence" is a claim about *level* quality, not about the
+## defence being handed a cushion. At -0.14 with the solo share raised alongside
+## it, the dig rate came out at 0.630 against a 0.35-0.55 band and the kill rate
+## fell to 0.382 -- a defence that wins comfortably, which is a different and
+## worse claim. Just past zero is the whole of what was asked for.
+const DIG_ATTACKER_ADVANTAGE: float = -0.04
 
 ## One defender is not a whole defence. The attacker picks where the ball goes;
 ## a defender covers the zone they were assigned. Without this the dig scale
@@ -772,7 +795,17 @@ const DIG_ATTACKER_ADVANTAGE: float = 0.07
 ##
 ## `tools/run_rally_balance_probe.gd` is that reading and is the instrument to
 ## re-run before touching either of these again.
-const DIG_SOLO_SHARE: float = 0.90
+## **Raised from 0.90 with the ball's new pace.** One defender is still not a
+## whole defence and this still says so; what changed underneath is that a spike
+## now arrives at up to 28 m/s where it used to arrive at 18, and the floor
+## defence was priced against the slower ball. Measured after the pace work, the
+## two fastest speed bands were dug 12% and 11% of the time -- a hard swing had
+## become close to undiggable, which is the opposite of a defence a viewer can
+## be proud of. This is the flat buff that pays for the faster ball, sized at
+## 0.93 rather than the 0.96 first tried: with the breakthrough bar moved as
+## well, 0.96 double-counted the same correction and pushed the dig rate out of
+## band on the other side.
+const DIG_SOLO_SHARE: float = 0.93
 const DIG_EXECUTION_NOISE: float = 0.10
 
 ## How hard a swing attempted outside the approach's capability bites. Mirrors

@@ -9046,15 +9046,33 @@ func _move_floor_defence_to_endline(plan: Resource) -> void:
 	plan.defensive_depth = "Shallow"
 
 
-func _home_defense_event(result: Resource) -> Resource:
+## The home floor dig in a rally, or null.
+##
+## `deep_only` picks the *first* contact the planner placed behind 0.56, which is
+## what makes a fixture a floor-defence fixture rather than a blocker's dig;
+## without it the **last** home dig is returned, which is the contact the moved
+## plan is compared on. Both readings were in the original and collapsing them
+## into one is what broke the claimant check: every candidate then compared a
+## dig against itself.
+func _home_defense_event(
+	result: Resource, deep_only: bool = false
+) -> Resource:
 	if result == null:
 		return null
+	var found: Resource = null
 	for event_resource in result.events:
 		var event: Resource = event_resource
-		if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
-				and str(event.metadata.get("side", "")) == "home":
-			return event
-	return null
+		if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+				or str(event.metadata.get("side", "")) != "home":
+			continue
+		if deep_only:
+			if Vector2(event.metadata.get(
+				"planner_floor_center", Vector2.ZERO
+			)).y > 0.56:
+				return event
+			continue
+		found = event
+	return found
 
 
 func _test_seeded_floor_defense_geometry() -> void:
@@ -9103,14 +9121,14 @@ func _test_seeded_floor_defense_geometry() -> void:
 		_move_floor_defence_to_endline(probe.current_defensive_plan())
 		probe.match_state.serving_home = false
 		var probe_moved: Resource = probe.resolve_active_rally(seed_value)
-		if _home_defense_event(probe_baseline) == null \
-				or _home_defense_event(probe_moved) == null:
+		var probe_defense: Resource = _home_defense_event(probe_baseline, true)
+		if probe_defense == null or _home_defense_event(probe_moved) == null:
 			probe.free()
 			continue
 		manager.free()
 		manager = probe
 		baseline_result = probe_baseline
-		baseline_defense = _home_defense_event(probe_baseline)
+		baseline_defense = probe_defense
 		moved_result = probe_moved
 		selected_seed = seed_value
 		break
