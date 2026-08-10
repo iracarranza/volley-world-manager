@@ -126,8 +126,18 @@ const RUN_BOB_METERS: float = 0.082
 ## weight forward, hands up. The gait interpolates *out of* it as speed rises
 ## rather than out of nothing, which also means a player decelerating settles
 ## into a stance instead of straightening up.
-const READY_HIP_DEGREES: float = 14.0
-const READY_KNEE_DEGREES: float = -42.0
+## **A stance is wide and low, not a lean.** The first version bent the knees and
+## pitched the trunk forward and left the feet where standing had put them, which
+## reads as someone peering at something rather than someone about to move. What
+## makes a ready position a ready position is the base: feet outside the
+## shoulders, weight between them, hips dropped so the legs are already loaded.
+## Without the width the crouch has nowhere to go and the voli looks folded.
+const READY_HIP_DEGREES: float = 16.0
+const READY_KNEE_DEGREES: float = -54.0
+## How far each leg is carried out from under the hip. Bounded well inside
+## `PlayerActor3D.HIP_ABDUCTION_LIMIT_DEGREES` (42), because this is a stance a
+## voli holds for a whole rally rather than the extreme of a dig.
+const READY_ABDUCTION_DEGREES: float = 15.0
 const READY_ARM_DEGREES: float = -30.0
 const READY_ELBOW_DEGREES: float = 54.0
 const READY_TORSO_RADIANS: float = -0.30
@@ -155,6 +165,10 @@ const SHUFFLE_HIP_SCALE: float = 0.28
 const SHUFFLE_KNEE_SCALE: float = 1.30
 const SHUFFLE_BOB_SCALE: float = 0.35
 const SHUFFLE_ARM_SCALE: float = 0.40
+## How much of the ready stance's width survives into a shuffle. Most of it: a
+## player sliding along the net never lets their feet come together, which is
+## the difference between a shuffle and a skip.
+const SHUFFLE_STANCE_SHARE: float = 0.75
 
 
 ## Every joint locomotion needs, for one instant of one stride.
@@ -266,6 +280,14 @@ static func resolve(
 			gait_blend,
 		),
 		"torso_pitch_radians": lerpf(READY_TORSO_RADIANS, torso, gait_blend),
+		## Feet outside the shoulders when set, closing as the stride takes over --
+		## you cannot run with your legs abducted, and a shuffle keeps some of it
+		## because a shuffle never brings the feet together either.
+		"abduction_degrees": lerpf(
+			READY_ABDUCTION_DEGREES,
+			READY_ABDUCTION_DEGREES * SHUFFLE_STANCE_SHARE * sideways,
+			gait_blend,
+		),
 		## Nothing bobs standing still, so this one really does go to zero.
 		"bob_meters": bob * gait_blend * lerpf(1.0, SHUFFLE_BOB_SCALE, sideways),
 	}

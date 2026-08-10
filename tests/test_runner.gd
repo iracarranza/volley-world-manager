@@ -13110,6 +13110,62 @@ func _test_gait_separates_walking_from_running() -> void:
 				< absf(float(forward.bob_meters)),
 		"a shuffle barely swings a thigh and rides flat",
 	)
+	## A stance is a base, not a lean. Both were asked for and the first pass
+	## delivered only the second.
+	_check(
+		float(standing.abduction_degrees) > 8.0
+			and float(shuffle.abduction_degrees)
+				> float(forward.abduction_degrees),
+		"the ready stance is wide, and a shuffle keeps some of that width",
+	)
+
+	## The approach, which is three steps and not a jog.
+	var directional: Dictionary = ApproachBiomechanics.resolve(0.15, true)
+	var penultimate: Dictionary = ApproachBiomechanics.resolve(0.60, true)
+	var closing: Dictionary = ApproachBiomechanics.resolve(1.0, true)
+	_check(
+		str(directional.step_name) == "directional"
+			and str(penultimate.step_name) == "penultimate"
+			and str(closing.step_name) == "close",
+		"the approach names its three steps in order",
+	)
+	## The penultimate is the whole point of an approach: the long braking step
+	## that converts run-up into lift. If it is not the biggest step there is, the
+	## approach is a jog with a jump on the end.
+	_check(
+		absf(float(penultimate.right_hip_degrees))
+			> absf(float(directional.left_hip_degrees)),
+		"the penultimate step reaches further than the directional one",
+	)
+	## And a plant is both feet arriving together, which is what makes it a plant
+	## rather than a fourth step.
+	_check(
+		is_equal_approx(
+			float(closing.left_hip_degrees), float(closing.right_hip_degrees)
+		) and float(closing.knee_degrees)
+			<= ApproachBiomechanics.KNEE_LOAD_DEGREES + 0.01,
+		"the close squares the feet and sits at the swing's own load depth",
+	)
+	## The arms leave the run together and finish behind the hips, which is the
+	## one thing about an approach a viewer can read from the back row.
+	_check(
+		float(closing.left_arm_degrees) < -40.0
+			and is_equal_approx(
+				float(closing.left_arm_degrees),
+				float(closing.right_arm_degrees),
+			),
+		"both arms finish the approach behind the hips, together",
+	)
+	## Handedness mirrors the job, not the joint: a right-hander takes the long
+	## step on the right foot and a left-hander on the left.
+	var left_handed: Dictionary = ApproachBiomechanics.resolve(0.60, false)
+	_check(
+		is_equal_approx(
+			float(left_handed.left_hip_degrees),
+			float(penultimate.right_hip_degrees),
+		),
+		"a left-hander's approach is the right-hander's, mirrored",
+	)
 
 	## Deepest knee fold over a whole stride, which is the most legible single
 	## difference between the two gaits at a glance.

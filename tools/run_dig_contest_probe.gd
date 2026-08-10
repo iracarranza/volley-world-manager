@@ -58,12 +58,25 @@ func _initialize() -> void:
 	_spread("margin (defence - attack)", rows, "margin")
 	_spread("incoming ball speed, m/s", rows, "speed")
 	print("")
-	print("`DIG_ATTACKER_ADVANTAGE` is %.2f and the execution noise is %.2f, so" % [
-		0.07, 0.10,
+	var conversion := 0.0
+	for row in rows:
+		conversion += float(row.quality_per_capability)
+	conversion /= float(rows.size())
+	## **The margin in the only unit a person picking a libero can act on.**
+	##
+	## The four dig attributes are weighted to sum to exactly 1.0, so a point on
+	## all four moves capability by 0.010, and quality is that capability times
+	## whatever opportunity the situation left them. Inverting the second factor
+	## turns a margin into rating points.
+	var per_point := 0.01 * conversion
+	print("one rating point across the four dig attributes = %.4f of margin" % per_point)
+	print("  the breakthrough bar    %.2f = %4.1f rating points" % [
+		0.04, 0.04 / per_point,
 	])
-	print("the contest is decided inside a margin band of about +/-0.17.")
+	print("  never dug at all        %.2f = %4.1f rating points" % [
+		0.13, 0.13 / per_point,
+	])
 	print("")
-
 	_by_band("dig rate by margin", rows, "margin")
 	_by_band("dig rate by incoming ball speed", rows, "speed")
 
@@ -136,6 +149,7 @@ func _collect(result: Resource, rows: Array[Dictionary]) -> void:
 			break
 		if speed <= 0.0:
 			continue
+		var capability := float(terms.get("capability", 0.0))
 		var defense := float(terms.get("quality", 0.0))
 		var attack := float(terms.get("contested_against", 0.0))
 		rows.append({
@@ -144,4 +158,12 @@ func _collect(result: Resource, rows: Array[Dictionary]) -> void:
 			"margin": defense - attack,
 			"speed": speed,
 			"dug": bool(event.success),
+			"capability": capability,
+			## What one point of rating is worth here. The four dig attributes are
+			## weighted to sum to exactly 1.0, so a point on all four moves
+			## capability by 0.01 -- and quality is capability times the
+			## opportunity the situation left them. Inverting that says how many
+			## rating points a given margin is, which is the only unit a person
+			## picking a libero can actually act on.
+			"quality_per_capability": defense / maxf(capability, 0.0001),
 		})

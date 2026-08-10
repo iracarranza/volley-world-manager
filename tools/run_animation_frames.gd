@@ -119,6 +119,15 @@ const STRIPS: Array[Dictionary] = [
 		"platform_sweep": true,
 	},
 	{
+		## The run-up, which until now was drawn as a jog. Swept across the pose
+		## phase *before* `SpikeBiomechanics.PLANT_END`, because that is the window
+		## the approach owns and the window nothing was drawing.
+		"name": "approach_three_step",
+		"caption": "ATTACK approach: directional, penultimate, close",
+		"pose": [RallyEventModel.EventType.ATTACK, 0.0, 0.0],
+		"approach_sweep": true,
+	},
+	{
 		"name": "signature_crush",
 		"caption": "ATTACK signature: crush, full charge",
 		"pose": [RallyEventModel.EventType.ATTACK, 1.0, 0.0],
@@ -222,6 +231,24 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 				lerpf(RECOVERY_STRIP_FROM_PHASE, 1.0, progress),
 				Vector2.RIGHT, true,
 			)
+		elif bool(strip.get("approach_sweep", false)):
+			## Phase from -1.0 to the plant, so the row is the whole approach and
+			## its last frame is the pose the swing starts from.
+			## A hitter approaching is *moving*, and the stance width the gait
+			## hands out at zero speed is the ready stance's. Left at rest the row
+			## drew the approach with the feet planted wide apart, which is a
+			## posture and not a run-up -- the strip has to supply the speed the
+			## action implies or it is photographing a different pose.
+			actor.ground_speed_mps = 3.6
+			actor.set_pose(
+				RallyEventModel.EventType.ATTACK, 0.0,
+				lerpf(-1.0, SpikeBiomechanics.PLANT_END, progress),
+				Vector2.RIGHT, true,
+			)
+			actor.identity_label.text = ApproachBiomechanics.resolve(
+				progress, true
+			).step_name
+			actor.has_facing = true
 		elif strip.has("gait_sweep"):
 			## Speed rises across the row and the stride advances with it, so the
 			## row reads as one continuous acceleration rather than eight
@@ -307,7 +334,7 @@ func _shoot(strip: Dictionary, camera_name: String) -> void:
 			actor.identity_label.text = "%+.2f" % lerpf(
 				RECOVERY_STRIP_FROM_PHASE, 1.0, progress
 			)
-		elif strip.has("gait_sweep"):
+		elif strip.has("gait_sweep") or bool(strip.get("approach_sweep", false)):
 			pass
 		else:
 			actor.identity_label.text = "%d%%" % roundi(progress * 100.0)

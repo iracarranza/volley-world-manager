@@ -190,6 +190,11 @@ const OPEN_UP_CONE_RADIANS: float = PI * 0.5
 ## puts a run at 4.4 m/s; this sits below it, because the last stride before a
 ## genuine run is already too quick to keep square.
 const OPEN_UP_SPEED_MPS: float = 3.6
+## And the same bound for movement that is purely sideways. Above
+## `GaitBiomechanics.RUN_SPEED_MPS`, so a blocker shuffling the width of the net
+## stays square through the whole journey and only a genuine sprint opens them
+## up. This is the number that makes a middle look like a middle.
+const LATERAL_OPEN_UP_SPEED_MPS: float = 5.4
 ## How quickly the drawn travel heading catches up to the real one. Smoothed for
 ## the same reason ground speed is: a single frame's displacement direction is
 ## mostly rounding, and a gait that switched between shuffle and run on it would
@@ -424,8 +429,20 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			## forces the issue: you can shuffle, and you cannot shuffle quickly.
 			## Past a run a player has to open up and go, which is exactly what a
 			## defender chasing a ball into the corner actually does.
+			## **A blocker never turns their back on the net.** The speed bound
+			## was a single number, and at 3.6 m/s it made a middle closing to the
+			## pin spin and sprint -- which is not what blockers do at any level.
+			## They shuffle, fast, because the ball is on the other side of the net
+			## and they have to be able to see it and to jump square when they
+			## arrive. Travelling sideways therefore buys a much higher bound than
+			## travelling backwards does, and above `RUN_SPEED_MPS` even that gives
+			## way: a defender chasing a ball into the corner does open up and run.
+			var lateral_share := absf(sin(travel_heading_offset))
+			var open_up_speed := lerpf(
+				OPEN_UP_SPEED_MPS, LATERAL_OPEN_UP_SPEED_MPS, lateral_share
+			)
 			if absf(angle_difference(facing_yaw, travel_yaw)) <= OPEN_UP_CONE_RADIANS \
-					or ground_speed_mps >= OPEN_UP_SPEED_MPS:
+					or ground_speed_mps >= open_up_speed:
 				_turn_toward(travel_yaw)
 	has_world_position = true
 	tactical_position = position
@@ -1689,8 +1706,17 @@ func set_pose(
 	right_arm.rotation_degrees = Vector3(float(gait.right_arm_degrees), 0.0, 12.0)
 	left_arm.position = Vector3(-shoulder_offset.x, shoulder_offset.y, 0.0)
 	right_arm.position = Vector3(shoulder_offset.x, shoulder_offset.y, 0.0)
-	left_leg.rotation_degrees = Vector3(float(gait.left_hip_degrees), 0.0, 0.0)
-	right_leg.rotation_degrees = Vector3(float(gait.right_hip_degrees), 0.0, 0.0)
+	## The z component is the stance's *width*, and it used to be a hard zero --
+	## which is why a ready stance could only ever be a lean. Mirrored the way
+	## `_stance_roll` mirrors, so both legs carry out from under the hips rather
+	## than both leaning the same way.
+	var abduction := float(gait.get("abduction_degrees", 0.0))
+	left_leg.rotation_degrees = Vector3(
+		float(gait.left_hip_degrees), 0.0, -abduction
+	)
+	right_leg.rotation_degrees = Vector3(
+		float(gait.right_hip_degrees), 0.0, abduction
+	)
 	## The knees now carry the gait rather than being flattened. They are still
 	## rewritten from scratch every frame, which is what stops a dig leaving the
 	## defender bent for the rest of the rally.
@@ -1900,44 +1926,36 @@ func set_pose(
 			_set_elbow(left_arm, float(push.elbow_degrees))
 			_set_elbow(right_arm, float(push.elbow_degrees))
 		RallyEventModel.EventType.ATTACK:
-			## Every joint comes from `SpikeBiomechanics`, which staggers them so
-			## the legs extend before the trunk arches, the trunk before the
-			## shoulder, and the elbow opens last. This branch used to interpolate
-			## one `swing` value into all of them at once, which moved the whole
-			## body as a single rigid unit -- and held the legs at a fixed stride
-			## and the torso at a fixed lean for the entire action, so a spike had
-			## no jump in it at all.
+			## **The approach, which used to be a jog.**
 			##
-			## Kept in its own module rather than inline because it is the only
-			## pose in the game complex enough that it cannot be checked by
-			## reading it, and a pure function of phase is one the suite can test.
-			var swing := SpikeBiomechanics.resolve(
-				phase, -1.0 if dominant_hand == "Left" else 1.0,
-				float(action_context.get("action_power", 0.0)),
-			)
-			body_pivot.rotation.x = float(swing.torso_pitch_radians)
-			## Hip-shoulder separation. Applied here rather than by turning the
-			## actor, because `_turn_toward` is where the voli is *looking* and
-			## this is the trunk winding against it.
-			body_pivot.rotation.y += deg_to_rad(float(swing.torso_twist_degrees))
-			var lead_leg := left_leg if dominant_hand == "Left" else right_leg
-			var trail_leg := right_leg if dominant_hand == "Left" else left_leg
-			lead_leg.rotation_degrees.x = float(swing.lead_hip_degrees)
-			trail_leg.rotation_degrees.x = float(swing.trail_hip_degrees)
-			for leg in [left_leg, right_leg]:
-				(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
-					swing.knee_degrees
+			## `SpikeBiomechanics` begins at its `PLANT_END`, phase -0.62, with both
+			## feet already down and the arms already back. Everything before that
+			## fell through to the running gait -- so every attacker in the game ran
+			## to the net and then teleported into a plant, and the part of the
+			## action a viewer actually reads to judge a swing was not drawn at all.
+			##
+			## Handed off rather than blended: at -0.62 the approach's close has the
+			## feet square and the knees at `KNEE_LOAD_DEGREES`, which is the pose
+			## the spike's plant starts from, so the two meet without a step in the
+			## curve and neither model has to know about the other's timing.
+			if phase < SpikeBiomechanics.PLANT_END:
+				var run_up := ApproachBiomechanics.resolve(
+					inverse_lerp(-1.0, SpikeBiomechanics.PLANT_END, phase),
+					dominant_hand != "Left",
 				)
-			## Two axes, not one. The roll is the abduction that carries the elbow out
-			## as well as back and stands the forearm up *out* of it -- without it the
-			## whole swing happens in one plane and reads as a hinge.
-			striking_arm.rotation_degrees = Vector3(
-				float(swing.striking_shoulder_degrees), 0.0,
-				float(swing.striking_abduction_degrees)
-			)
-			_set_elbow(striking_arm, float(swing.striking_elbow_degrees))
-			guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
-			_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
+				body_pivot.rotation.x = float(run_up.torso_pitch_radians)
+				left_leg.rotation_degrees.x = float(run_up.left_hip_degrees)
+				right_leg.rotation_degrees.x = float(run_up.right_hip_degrees)
+				for leg in [left_leg, right_leg]:
+					(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
+						run_up.knee_degrees
+					)
+				left_arm.rotation_degrees.x = float(run_up.left_arm_degrees)
+				right_arm.rotation_degrees.x = float(run_up.right_arm_degrees)
+				_set_elbow(left_arm, float(run_up.elbow_degrees))
+				_set_elbow(right_arm, float(run_up.elbow_degrees))
+			else:
+				_apply_spike_pose(phase, action_context)
 		RallyEventModel.EventType.BLOCK:
 			## Every joint comes from `BlockBiomechanics`, which sequences them
 			## the way `SpikeBiomechanics` sequences a swing.
@@ -2558,3 +2576,54 @@ func hide_cognition_cue() -> void:
 ## a tall middle's badge sits above their head and not through it.
 func _cognition_head_height() -> float:
 	return REFERENCE_RIG_HEIGHT_M * maxf(body_height_scale, 0.5)
+
+
+## The swing itself, from the plant onward.
+##
+## Split out of the ATTACK branch when the approach arrived in front of it:
+## the branch now chooses between two models, and a reader should be able to
+## see that choice without scrolling past forty lines of shoulder angles.
+func _apply_spike_pose(phase: float, action_context: Dictionary) -> void:
+	## Recomputed rather than passed: they are one-line reads off `dominant_hand`,
+	## and threading two node references through a signature to save two lines
+	## would make the caller know about the callee's internals.
+	var striking_arm := left_arm if dominant_hand == "Left" else right_arm
+	var guide_arm := right_arm if dominant_hand == "Left" else left_arm
+	## Every joint comes from `SpikeBiomechanics`, which staggers them so
+	## the legs extend before the trunk arches, the trunk before the
+	## shoulder, and the elbow opens last. This branch used to interpolate
+	## one `swing` value into all of them at once, which moved the whole
+	## body as a single rigid unit -- and held the legs at a fixed stride
+	## and the torso at a fixed lean for the entire action, so a spike had
+	## no jump in it at all.
+	##
+	## Kept in its own module rather than inline because it is the only
+	## pose in the game complex enough that it cannot be checked by
+	## reading it, and a pure function of phase is one the suite can test.
+	var swing := SpikeBiomechanics.resolve(
+		phase, -1.0 if dominant_hand == "Left" else 1.0,
+		float(action_context.get("action_power", 0.0)),
+	)
+	body_pivot.rotation.x = float(swing.torso_pitch_radians)
+	## Hip-shoulder separation. Applied here rather than by turning the
+	## actor, because `_turn_toward` is where the voli is *looking* and
+	## this is the trunk winding against it.
+	body_pivot.rotation.y += deg_to_rad(float(swing.torso_twist_degrees))
+	var lead_leg := left_leg if dominant_hand == "Left" else right_leg
+	var trail_leg := right_leg if dominant_hand == "Left" else left_leg
+	lead_leg.rotation_degrees.x = float(swing.lead_hip_degrees)
+	trail_leg.rotation_degrees.x = float(swing.trail_hip_degrees)
+	for leg in [left_leg, right_leg]:
+		(leg.get_node("Knee") as Node3D).rotation_degrees.x = float(
+			swing.knee_degrees
+		)
+	## Two axes, not one. The roll is the abduction that carries the elbow out
+	## as well as back and stands the forearm up *out* of it -- without it the
+	## whole swing happens in one plane and reads as a hinge.
+	striking_arm.rotation_degrees = Vector3(
+		float(swing.striking_shoulder_degrees), 0.0,
+		float(swing.striking_abduction_degrees)
+	)
+	_set_elbow(striking_arm, float(swing.striking_elbow_degrees))
+	guide_arm.rotation_degrees.x = float(swing.guide_shoulder_degrees)
+	_set_elbow(guide_arm, float(swing.guide_elbow_degrees))
