@@ -210,6 +210,30 @@ Ordered roughly by how much each one changes what a viewer believes.
     the falling reach -- which the rig has parts of, and which is the same
     missing selector as 13a rather than missing art.
 
+13f. **The ball decides when playback ends.** Reported as tools ending the point
+    before the ball is drawn hitting the floor. Half of that was mine and is
+    fixed -- the flight/aftermath split applied a between-events rule to the
+    final window, which has no "between", so the outro was charged to zero. The
+    other half is the principle behind the report and it is a better rule than
+    the one playback has: **the rally is over when the ball is down, not when
+    the event list runs out.** Today the last leg is a fixed 0.38 s outro; it
+    should be the ball's own remaining flight, and if nobody is moving that is
+    fine, because the ball is the thing being watched.
+
+    What it needs that does not exist: the ball's *live* height at the end of a
+    leg. Every drawn flight knows its endpoints, but nothing asks whether the
+    last one finished on the floor or in somebody's hands, so there is no way
+    today to tell a rally that has landed from one that is still falling.
+    Measure that before building the outro, because a 0.38 s outro that is
+    already long enough on most rallies would make this a fix for a case that
+    does not occur -- and this session has produced three of those.
+
+13g. **Chase the ball off the court.** A deflection coming high off the block is
+    playable, and a real player leaves the court to go after it. Nothing in the
+    movement model allows a target outside the court bounds, so those balls are
+    watched rather than chased. Pairs with 13f: a chase-down only reads if
+    playback is still running while the ball is in the air.
+
 13d. **A net touch by a player.** Not the ball clipping the tape -- a body or a
     hand touching the net, which is a fault and one of the few in the sport a
     viewer can see happen. Nothing in the engine models where a player's hands

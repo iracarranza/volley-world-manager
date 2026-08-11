@@ -220,7 +220,19 @@ func _run_rally(generation: int) -> void:
 			## costs nothing, which is the same rule the paragraph above already
 			## applies to simultaneous contacts.
 			var window := _gap_to_next(events, event_index)
-			if event.metadata.has("physical_time"):
+			## **The last contact of a rally is not an aftermath window.**
+			##
+			## Aftermath is the leftover *between two events*. There is no next
+			## event here, so there is nothing the flight can have drawn ahead of
+			## -- and subtracting it anyway charged the outro to zero and ended
+			## playback the instant the final contact resolved. That is the point
+			## ending before the ball is drawn hitting the floor, and it is mine:
+			## the flight/aftermath split introduced it by applying a
+			## between-events rule to the one window that has no "between".
+			##
+			## Not the whole of what the ball-decides-the-end principle asks for
+			## -- see `BACKLOG.md` -- but the outro exists again.
+			if event.metadata.has("physical_time") and next_contact != null:
 				window = aftermath_seconds(
 					float(event.metadata["physical_time"]), window, drawn_until
 				)
