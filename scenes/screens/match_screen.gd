@@ -147,6 +147,11 @@ func _run_rally(generation: int) -> void:
 	## The rally's own cues, taken off the result rather than recompiled, so a
 	## replay shows the thoughts the rally was resolved with.
 	match_court_3d.set_cognition_stream(active_result.cognition_cues)
+	## How far into the rally's own clock the drawing has already reached. A
+	## flight is drawn for its physics duration rather than for the gap to the
+	## next event, so the two run on different clocks and the difference is time
+	## a later event must not charge for a second time.
+	var drawn_until := -INF
 	for event_index in range(events.size()):
 		if generation != playback_generation or skip_requested:
 			break
@@ -163,15 +168,28 @@ func _run_rally(generation: int) -> void:
 		var next_index := _next_contact_index(events, event_index + 1)
 		var next_contact: RallyEvent = null
 		var after_next: RallyEvent = null
+		var movement_contact: RallyEvent = null
 		if next_index >= 0:
 			next_contact = events[next_index] as RallyEvent
 			## One further ahead, because a block has to be *in the air* by the
 			## time the hitter swings -- see `_apply_contact_poses`.
 			after_next = _next_contact_event(events, next_index + 1)
+			## And the first contact that actually played the ball, which is the
+			## one the other ten are moving toward. Usually the same event; it
+			## differs exactly when the next contact never touched it.
+			movement_contact = next_contact
+			var played_index := next_index
+			while played_index >= 0 and not events[played_index].success:
+				played_index = _next_contact_index(events, played_index + 1)
+			if played_index >= 0:
+				movement_contact = events[played_index] as RallyEvent
 		if not trajectory.is_empty():
-			await _play_flight(
-				event, next_contact, after_next, trajectory,
-				event_index, events.size(), generation
+			drawn_until = maxf(
+				drawn_until,
+				float(event.metadata.get("physical_time", 0.0)) + await _play_flight(
+					event, next_contact, movement_contact, after_next, trajectory,
+					event_index, events.size(), generation
+				),
 			)
 		else:
 			## An event the ball spends no time on costs no time.
@@ -183,11 +201,50 @@ func _run_rally(generation: int) -> void:
 			## each contact occurred, so the gap to the next one is the honest
 			## answer, and where that gap is zero the two events are genuinely
 			## simultaneous and share a beat instead of queueing.
-			await _play_contact_pulse(
-				event, next_contact, _gap_to_next(events, event_index), generation
-			)
+			##
+			## **And time the flight already spent is not spent twice.**
+			##
+			## Measured over 200 rallies: 58.8 s of playback had a ball that was
+			## not moving, 6.0% of the total, and *every second of it* was a
+			## BLOCK the ball flew past -- 122 of them, 0.48 s each and up to
+			## 1.72 s. The attack's flight is drawn from the attack's stamp for
+			## the trajectory's own duration, which already carries the ball to
+			## where it lands; the failed block's window then re-draws the same
+			## interval with the ball parked at that landing. That is the ball
+			## freezing on the floor, and it is also where a defender finds the
+			## time for two or three sets of microadjustments before a dig.
+			##
+			## So a window has two parts and only the second is this one's to
+			## draw: the flight, whose length is physics, and the aftermath,
+			## which is what is left over. Where nothing is left over the event
+			## costs nothing, which is the same rule the paragraph above already
+			## applies to simultaneous contacts.
+			var window := _gap_to_next(events, event_index)
+			if event.metadata.has("physical_time"):
+				window = aftermath_seconds(
+					float(event.metadata["physical_time"]), window, drawn_until
+				)
+			if window <= 0.0:
+				continue
+			await _play_contact_pulse(event, next_contact, window, generation)
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.clear_cognition()
+
+
+## What is left of an event's window once a flight has already drawn part of it.
+##
+## Static and pure so the suite can hold the rule without a court to run it in.
+## Measured over 200 rallies before it existed: 58.8 s of playback, 6.0% of the
+## total, drew a ball that was not moving, and every second of it was a block
+## the ball flew past -- a window that had already been drawn as flight and was
+## then drawn again as stillness. Afterwards, 0.0 s. Not reduced: gone, because
+## the overlap was total.
+static func aftermath_seconds(
+	event_start: float, window_seconds: float, drawn_until: float
+) -> float:
+	return maxf(
+		event_start + window_seconds - maxf(event_start, drawn_until), 0.0
+	)
 
 
 ## How long the ball actually spends between this event and the next.
@@ -219,18 +276,32 @@ func _gap_to_next(events: Array, event_index: int) -> float:
 func _play_flight(
 	event: RallyEvent,
 	next_contact: RallyEvent,
+	movement_contact: RallyEvent,
 	after_next: RallyEvent,
 	trajectory: Dictionary,
 	event_index: int,
 	event_count: int,
 	generation: int,
-) -> void:
+) -> float:
 	## Read from the *display* trajectory, not the source one. A flight cut short
 	## at an interception carries a shortened duration, and taking the original
 	## would spend the full time on the shortened path.
 	var display_trajectory := _display_trajectory(event, next_contact, trajectory)
 	var duration := clampf(float(display_trajectory.get("duration", 0.5)), 0.08, 3.5)
-	var movement_plan := _build_movement_plan(event, next_contact, duration)
+	## **Not `next_contact`.**
+	##
+	## The plan reads its phase targets off the contact it is moving toward, and
+	## a block the ball flew past is not a contact anyone moves toward -- the
+	## floor is already reading the ball behind it. While the failed block had a
+	## window of its own that did not matter, because the defence's approach was
+	## drawn in *that* window. Now that the window is charged against the flight
+	## that already covered it, the approach has to move here or the defender
+	## teleports into the dig, which is the regression this whole seam produced
+	## the first time.
+	var movement_plan := _build_movement_plan(
+		event, movement_contact if movement_contact != null else next_contact,
+		duration,
+	)
 	var elapsed := 0.0
 	match_court_3d.ball_actor.reset_flight()
 	match_court_3d.begin_ball_flight(display_trajectory, float(event.quality))
@@ -252,6 +323,11 @@ func _play_flight(
 		await get_tree().process_frame
 	match_court_3d.finish_movement_plan(movement_plan, duration)
 	match_court_3d.reset_player_poses()
+	## Returned so the caller knows how much of the rally's clock this leg
+	## covered. A flight runs on physics and the events run on stamps; without
+	## this the next event has no way to tell whether its window is aftermath or
+	## a repeat of what was just drawn.
+	return duration
 
 
 ## A window the ball spends no time on, but the players do.

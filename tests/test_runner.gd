@@ -195,6 +195,7 @@ func _initialize() -> void:
 	_test_cognition_cues()
 	_test_body_facing_rule()
 	_test_continue_opens_the_last_played_save()
+	_test_a_window_is_flight_then_aftermath()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
@@ -14775,6 +14776,36 @@ func _test_cognition_cues() -> void:
 ## directly. What cannot be tested here is *call order* -- that the ball pass
 ## runs before the movement plan -- because that needs frames and this runner has
 ## none. `tools/measure_body_facing.gd` covers it and has to be run by hand.
+## A drawn leg has two parts and only one of them is stillness.
+##
+## A flight is drawn for its physics duration; an event's window is the gap
+## between two stamps. The two run on different clocks, and where a flight has
+## already covered an interval, the event that follows must not draw it again.
+func _test_a_window_is_flight_then_aftermath() -> void:
+	## The measured case: an attack lands at t=1.60, the block it flew past is
+	## stamped at t=0.90 and the defence at t=1.40. Every second of that block's
+	## window is inside the flight, so the block costs nothing.
+	_check(
+		is_equal_approx(MatchScreen.aftermath_seconds(0.9, 0.5, 1.6), 0.0),
+		"a window wholly inside the flight before it costs no time",
+	)
+
+	## Genuine aftermath survives: the same block, but the defence does not
+	## arrive until t=2.10, so half a second of the window is real still time.
+	_check(
+		is_equal_approx(MatchScreen.aftermath_seconds(0.9, 1.2, 1.6), 0.5),
+		"the part of a window past the flight is drawn",
+	)
+
+	## And a window that starts after the flight ended keeps all of itself. The
+	## clamp is against `drawn_until`, not against zero, so an event later than
+	## the flight must not have its start silently pulled back to it.
+	_check(
+		is_equal_approx(MatchScreen.aftermath_seconds(2.0, 0.4, 1.6), 0.4),
+		"a window that begins after the flight ended is untouched",
+	)
+
+
 ## The title screen's continue card has no "last played" field of its own. It
 ## opens `list_save_metadata()[0]`, which is only the right career because that
 ## list is sorted newest first -- so the ordering is what has to be asserted,
