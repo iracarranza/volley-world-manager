@@ -420,20 +420,65 @@ Ordered roughly by how much each one changes what a viewer believes.
     to publish it, not for playback to make it up" -- and this is that turning
     out to matter.
 
-21. **Cogniticons are still the old glyphs.** The eye / sword / shield vocabulary
-    in `COGNITICONS.md` is not what is drawn. Entry 7's size fix landed
-    (`COGNITICON_SCALE`) and was mistaken for this one; they are different
-    problems and only the size was addressed.
+21. **Diagnosed, and this entry was wrong twice.** ~~Cogniticons are still the
+    old glyphs; the eye / sword / shield vocabulary is not what is drawn.~~
+    Both halves of that are false, and I wrote both -- first conflating this
+    with entry 7's size fix, then recording the vocabulary as never built.
+
+    The vocabulary **is** built. `cognition_billboard_3d.gd` carries nine
+    `INTENT_GLYPHS`: shields for the four ways of dealing with their ball,
+    blades for the three ways of doing something to it, a hand for the pivot,
+    and a dot for a voli with nothing to add. The eye shapes are not missing
+    either -- they were tried and dropped, and the code says why: they read at
+    20 px on the board and turn to mush at the distance a stationary camera
+    actually puts a player at.
+
+    **What is actually missing is that nothing ever changes.** `progress`
+    is a field on `PlayerCognitionCue`, six phase maps in `rally_simulator.gd`
+    fill it from `_travel_fraction`, and the renderer never mentions it -- it
+    composes a glyph string from intent, shape, face and trend and stops. The
+    marks are therefore static whatever the voli is doing, which is exactly why
+    a live read looks like a set of placeholder glyphs. That is the same
+    dropped-key shape as `reach_margin_meters` and `wall_reach_heights`: a
+    quantity computed, published, carried most of the way, and let go at the
+    last step. Third occurrence.
+
+    **And the field is worth reading**, which is the part that had to be
+    measured rather than assumed -- a fill built on a flat distribution is a
+    knob that cannot reach its own range. `run_intent_progress_probe.gd`, 1,819
+    intent samples:
+
+    | intent | samples | progress > 0 | mean | at 1.0 |
+    |---|---|---|---|---|
+    | `defending` | 1095 | 54.9% | 0.45 | 42.6% |
+    | `covering` | 245 | 85.7% | 0.33 | 20.0% |
+    | `receiving` | 232 | 27.6% | 0.22 | 14.2% |
+    | `preparing_attack` | 151 | 25.8% | 0.24 | 19.2% |
+    | `setting` | 56 | 0.0% | 0.00 | 0.0% |
+    | `blocking` | 40 | 0.0% | 0.00 | 0.0% |
+
+    Four intents carry a real spread; a fill on them would read. `setting` and
+    `blocking` are flat zero -- which confirms the doc's own table, where those
+    two are the ones whose sources (`_spatial_setter_choice`, the block's close
+    terms) are listed as not yet wired. Note also that `approaching` never
+    appears: the resolver publishes `preparing_attack` instead, so the doc's
+    row for it names an intent the simulation does not emit.
+
+    Not built here because the fill itself is not a text change -- a vertical
+    fill on a font glyph needs two clipped layers or a shader, and that wants
+    eyes rather than a static gate.
 
 ### Still open from earlier passes, audited
 
 Reported before and **not** fixed, in case any were assumed closed:
 
 - **3.** Blockers swap positions at the net. Never diagnosed.
-- **4.** Volis hold a receive posture through a serve they have no
-  responsibility for. Never addressed.
-- **5.** Blockers have no idle hands-up pose. Logged repeatedly, never built;
-  it is also half of 13c and of entry 6.
+- ~~**4.** Volis hold a receive posture through a serve they have no
+  responsibility for.~~ **Done** -- see entry 4 above. It was not a release
+  rule; the gait had one floor stance and everybody wore it.
+- ~~**5.** Blockers have no idle hands-up pose.~~ **Done** -- see entry 5
+  above. It was one already-judged pose to route, not four constants to
+  author, which is why it survived four loggings as "not started".
 - **8.** A pipe attack sent the ball straight up. Seen once, never reproduced --
   now reproducible with `run_seed_search.gd`.
 - **9.** The 2D tactical court shows erratic hitter movement 3D does not.
