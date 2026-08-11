@@ -48,8 +48,20 @@ const TREND_GLYPHS := {1: "↑", -1: "↓"}
 const INTENT_GLYPHS := {
 	"defending": "⛊", "covering": "⛉", "receiving": "⛨", "blocking": "⛰",
 	"serving": "⇧", "preparing_attack": "⇡", "approaching": "⬆",
-	"setting": "⌒", "watching": "·",
+	"setting": "⌒", "watching": "•",
 }
+## `watching` was `·`, a middle dot, and it is **half of every mark drawn**.
+##
+## `run_cogniticon_screen_probe.gd`, eight rallies off the billboard nodes
+## themselves: of the marks visible on screen, 49.2% are this one. It was also
+## the least ink of any glyph in the set by a wide margin -- at the em size the
+## ambient tier runs at, a middle dot is a few pixels.
+##
+## The comment above argues the dot has to exist, because without a mark "no
+## opinion" is indistinguishable from "not implemented". An *invisible* dot
+## fails that test by exactly the same argument, so it is a bullet: still the
+## quietest thing in the vocabulary, still deliberately nothing in particular,
+## but actually present.
 ## How far the ambient tier is held below the punctuating one.
 ##
 ## The whole two-tier rule in one number. An ambient mark is present on twelve
@@ -58,8 +70,28 @@ const INTENT_GLYPHS := {
 ## badge so that going from 0.75 marks to twelve does not drown `lost_sight`,
 ## which fires 24 times in 47,000 cue-samples and lands because almost nothing
 ## else is lit.
-const AMBIENT_PIXEL_SIZE: float = 0.00010
-const AMBIENT_ALPHA: float = 0.55
+## **The ambient tier was paying for quiet twice, and one of the two payments
+## bought nothing.**
+##
+## It was 0.00010 against a badge running 0.00014 to 0.00022 -- 71% of the
+## quietest badge and 45% of the loudest -- *and* held at 0.55 alpha. Reported
+## from two frames of real playback: the marks cannot be made out at all, and
+## the only ones legible on screen are the badge tier's solid diamonds.
+##
+## Size and contrast are not two ways of saying the same thing. **Size carries
+## identity** -- which glyph is this, a shield or a blade -- and **contrast
+## carries priority** -- should this pull my eye. Buying quiet with size spends
+## the one thing the ambient layer exists for; `COGNITICONS.md` asks that "a
+## glance anywhere on court tells you what that voli is doing", and a mark too
+## small to identify answers that with nothing. Buying it with contrast costs
+## only the pull, which is exactly what was meant to be given up.
+##
+## So the size goes up to where a shape is readable and the alpha comes down to
+## pay for it. The two-tier rule is unchanged in its intent and now lives where
+## it belongs: an ambient mark is *dimmer* than a state badge rather than
+## smaller than one.
+const AMBIENT_PIXEL_SIZE: float = 0.00020
+const AMBIENT_ALPHA: float = 0.40
 
 ## One number for how large a cogniticon is, so "too small" is one edit rather
 ## than four.

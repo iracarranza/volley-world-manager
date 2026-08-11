@@ -193,6 +193,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
+	_test_ambient_cogniticons_are_dimmer_not_smaller()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
 	_test_a_blocker_has_five_states()
@@ -14580,6 +14581,52 @@ func _test_worksheet_behaviour() -> void:
 			"the %s page has a vocabulary to instruct from" % for_phase,
 		)
 	sheet.free()
+
+
+## The two-tier cogniticon rule, stated so it cannot drift back.
+##
+## `COGNITICONS.md` asks two things of the ambient layer that pull against each
+## other: it must never draw the eye, and a glance anywhere on court must say
+## what a voli is doing. Those were both being paid for out of *size* -- the
+## ambient mark was 71% of the quietest badge and 45% of the loudest, and dimmed
+## on top -- and the second requirement is the one that lost. Reported from real
+## playback as marks that cannot be made out at all.
+##
+## Size carries identity and contrast carries priority. The rule is therefore
+## that an ambient mark is **dimmer than a state badge, not smaller than one**,
+## and that is what is gated here rather than any particular pair of numbers.
+func _test_ambient_cogniticons_are_dimmer_not_smaller() -> void:
+	var Billboard := load("res://scenes/components/cognition_billboard_3d.gd")
+	_check(
+		Billboard.AMBIENT_PIXEL_SIZE >= Billboard.BADGE_PIXEL_SIZE_QUIET,
+		"an ambient mark is at least as large as the quietest badge (%.5f vs %.5f)"
+			% [Billboard.AMBIENT_PIXEL_SIZE, Billboard.BADGE_PIXEL_SIZE_QUIET],
+	)
+	## Still a tier below, so the layer that fires rarely is still the one that
+	## moves. `lost_sight` lands 24 times in 47,000 cue-samples and lands because
+	## almost nothing else is lit; that is what must not be spent.
+	_check(
+		Billboard.AMBIENT_PIXEL_SIZE < Billboard.BADGE_PIXEL_SIZE_LOUD
+			and Billboard.AMBIENT_ALPHA < 0.5,
+		"and is quieter rather than smaller (alpha %.2f)" % Billboard.AMBIENT_ALPHA,
+	)
+	## Every intent has a mark, including the one that means nothing in
+	## particular -- and it has to be a mark, not an absence. A glyph with no ink
+	## fails the same argument that requires the glyph to exist at all, and this
+	## one is 49.2% of everything drawn.
+	for intent in [
+		"defending", "covering", "receiving", "blocking", "serving",
+		"preparing_attack", "approaching", "setting", "watching",
+	]:
+		_check(
+			Billboard.INTENT_GLYPHS.has(intent)
+				and not str(Billboard.INTENT_GLYPHS[intent]).strip_edges().is_empty(),
+			"the %s intent has a mark to draw" % intent,
+		)
+	_check(
+		str(Billboard.INTENT_GLYPHS["watching"]) != "·",
+		"and the commonest mark on court is not a middle dot",
+	)
 
 
 ## The cognition stream: a semantic layer whose whole value is that it is
