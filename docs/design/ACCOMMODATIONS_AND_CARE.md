@@ -493,3 +493,99 @@ sketched alongside it:
   from behaviour. Reading it from behaviour is better for the fiction and worse
   for usability; a confidence-graded hint, like the roster thought-bubble idea,
   may be the middle.
+
+---
+
+## 6. Proposal: what a manager actually does with this, weekly
+
+Everything above settles the *world* — the blocks, the pastes, the two
+geographies, who cooks. What it does not yet say is what a manager sees, what
+they choose, and what changes as a result. This section proposes that, at the
+smallest size that is still a system rather than a menu.
+
+**The blocker named in §5 is gone.** That section says the open question is
+"whether nutrition feeds the fatigue model directly or sits beside it — the
+staged fatigue design is not built yet, and this should hook into it rather than
+duplicate it." It is built. `FatigueModel` carries `LABOURED_ONSET`,
+`SPENT_ONSET`, and separate forced and unforced error additions, which is
+exactly the staged design that was waiting for. So the proposal below hooks
+into it and duplicates nothing.
+
+### The weekly object: a board with four rows
+
+Accommodation is not a shop. It is four standing arrangements that persist until
+changed, shown together because their cost is shared and their effects trade
+against each other.
+
+| row | what you set | what it moves |
+|---|---|---|
+| **Table** | the week's food block, plus up to two pastes | recovery rate between sessions; palate over time |
+| **Dorms** | room size and who shares | recovery *ceiling*; the pairings mentoring reads |
+| **Hours** | how much of the day is unstructured | the friction term against a voli leaving |
+| **Care** | physio and rest-day policy | how much of a match's fatigue carries into next week |
+
+Four rows, set once, changed when something is wrong. A manager who never opens
+this screen has a default arrangement that is adequate and dull, which is the
+correct floor: accommodation should be a thing you *improve*, not a tax you must
+pay attention to in order to not be punished.
+
+### What each row does, in terms that already exist
+
+**Table → recovery rate.** `FatigueModel` already knows how fatigue is spent.
+What food buys is the rate it comes back at between sessions, as a multiplier on
+weekly recovery. A good block moves it perhaps ±15%; the pastes are smaller and
+are where the *regional* character lives, because a paste is grown somewhere.
+
+**Dorms → recovery ceiling.** Distinct from rate on purpose. Somewhere to sleep
+properly sets how far down fatigue can go at all; cramped lodging means a voli
+starts the week already carrying something. Rate and ceiling being two numbers
+is what stops food and lodging collapsing into one "comfort" slider.
+
+**Hours → the friction term.** §3 of
+`CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` calls accommodation the retention
+loop. This is where that lands: unstructured time is what a voli weighs against
+another club's offer. A club that does not prioritise social time trains more and
+holds people less well, and that is a real choice rather than a worse one.
+
+**Care → carryover.** Match fatigue that survives the week. The one row whose
+value is invisible until a congested run of fixtures, which is exactly when a
+manager who ignored it finds out.
+
+### Palate: the one mechanic that has to be new
+
+Everything above is a multiplier on a number that exists. Palate is not: it is
+the rule that **the same food stops working**. A block held too long drifts its
+own recovery multiplier toward zero effect, and a paste held too long goes
+slightly negative — the same plate, resented.
+
+That single rule is what makes the table a decision every few weeks rather than
+a solved one. Without it a manager finds the best block in season one and never
+opens the screen again, and the entire authored world of blocks and pastes is
+spent in a single click.
+
+Two things it must not become. It is not a timer to be optimised against, so the
+drift is slow and the recovery from rotating is fast. And it should be **read
+from behaviour before it is read from a number** — §5's own preference — which
+the cogniticon vocabulary can already carry: a voli with a tired palate is a
+voli whose morale line moves without their form moving.
+
+### What this needs that does not exist
+
+1. A **club entity** to own the arrangement. Today the career holds finances and
+   nothing holds lodging. This is the same blocker `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md`
+   §3 names, and accommodation is the second consumer of it.
+2. **Weekly recovery** as a named function rather than a step inside
+   `advance_week`, so a multiplier has somewhere to attach.
+3. A **palate clock** per voli per block and per paste. Two small dictionaries.
+4. The **screen**, which is four rows and a cost line.
+
+Order: (2) first because it is refactoring something that already runs, then (3)
+because it is the only genuinely new state, then (1) and (4) together.
+
+### Deliberately still open
+
+- How many blocks and pastes are authored. The slot limit bounds the decision;
+  the authoring burden does not, and the number is still unchosen.
+- Whether differentiating one voli's table from the squad's is paid in money, in
+  the chef's attention, or both. §2c settles that it *compounds*; it does not
+  settle in what currency.
