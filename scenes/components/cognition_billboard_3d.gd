@@ -201,21 +201,78 @@ func show_cue(
 		position = head_anchor + _screen_up() * MARK_LIFT_METERS
 		visible = true
 		return
-	var glyph := str(SHAPE_GLYPHS.get(str(reading.shape), "◦"))
+	## **The two tiers differ in loudness, not in language.**
+	##
+	## The badge tier used to draw its own alphabet: a diamond for `committed`,
+	## a wedge for `calling`, a burst for `reacting`, a dashed ring for a voli
+	## who cannot see. Five abstract shapes that have to be learned, sitting
+	## beside a drawn vocabulary where a shield looks like a shield -- and
+	## reported exactly as you would expect, as a mark on the court that the
+	## viewer could not read at all.
+	##
+	## Worse, the two overlapped. `lost_sight` and `reacting` are what the eye's
+	## own shock already says; `occluded` is the pupil already drifting off its
+	## target; and `committed` is true of every ambient cue by construction, so
+	## the commonest badge on court asserted almost nothing.
+	##
+	## So a punctuating cue is now the **same mark made loud** -- the voli's own
+	## shield or blade or eye, at badge size and full strength, coloured by the
+	## grade its state earns. Nothing new to learn, and the tier separation
+	## survives as what it was always described as: an ambient mark is quiet and
+	## a state badge is not.
+	var grade := CogniticonMotion.affect_grade(
+		str(cue.state), str(cue.affect), false
+	)
+	var loud := Color(1.0, 1.0, 1.0)
+	if grade != "C":
+		loud = loud.lerp(UIPalette.grade_color(grade, light_mode), 0.85)
+	if _draw_eye(cue, reading, 1.0, simulation_time):
+		text = ""
+		visible = true
+		_amplify(loud)
+		position = head_anchor + _screen_up() * HEIGHT_ABOVE_HEAD_METERS
+		return
+	if _draw_mark(
+		str(reading.get("intent", "watching")),
+		float(reading.get("progress", 0.0)), 1.0,
+	):
+		text = ""
+		visible = true
+		_amplify(loud)
+		position = head_anchor + _screen_up() * HEIGHT_ABOVE_HEAD_METERS
+		return
+	## Nothing drawn for this intent yet, so the character stands in -- but with
+	## the punctuation and trend it always carried, because those say things the
+	## mark does not: a call, a question, a rising or falling read.
 	var face := str(FACE_GLYPHS.get(str(reading.face), ""))
 	var punctuation := str(reading.punctuation)
 	var trend := str(TREND_GLYPHS.get(int(reading.trend_direction), ""))
-	## Punctuation and face sit beside the shape rather than replacing it, so a
-	## badge never loses its state to its mood.
-	text = "%s%s%s%s" % [face, glyph, punctuation, trend]
-	modulate = Color(reading.color)
-	## Emphasis still reads as size, across a range that stays a badge at both
-	## ends rather than becoming scenery at one of them.
+	text = "%s%s%s%s" % [
+		face, str(INTENT_GLYPHS.get(str(reading.get("intent", "watching")), "•")),
+		punctuation, trend,
+	]
+	modulate = loud
 	pixel_size = lerpf(
 		BADGE_PIXEL_SIZE_QUIET, BADGE_PIXEL_SIZE_LOUD, float(reading.emphasis)
 	) * COGNITICON_SCALE
 	position = head_anchor + _screen_up() * HEIGHT_ABOVE_HEAD_METERS
 	visible = true
+
+
+## Push a drawn mark up to badge prominence: larger, at full strength, and
+## wearing the grade its state earned.
+##
+## The one place the two tiers are allowed to differ, and it is a volume knob
+## rather than a second vocabulary.
+func _amplify(ink: Color) -> void:
+	var boost := BADGE_PIXEL_SIZE_LOUD / AMBIENT_PIXEL_SIZE
+	for part in [_mark, _mark_fill, _eye_outline, _eye_pupil, _eye_lead]:
+		if part == null or not part.visible:
+			continue
+		part.pixel_size *= boost
+		part.position *= boost
+		var tint: Color = part.modulate
+		part.modulate = Color(ink.r, ink.g, ink.b, minf(tint.a / MARK_ALPHA, 1.0))
 
 
 ## Which way is up **on screen**, in this billboard's own parent space.
@@ -237,9 +294,6 @@ func show_cue(
 ## moves would otherwise slide every mark around its voli as it swung -- and a
 ## bug that only appears while the camera is in motion is the kind that gets
 ## blamed on the camera.
-##
-## Falls back to world up with no camera, which is the portfolio and headless
-## case.
 func _screen_up() -> Vector3:
 	if not is_inside_tree():
 		return Vector3.UP
