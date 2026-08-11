@@ -7742,15 +7742,23 @@ func _test_attack_targets_are_continuous() -> void:
 				"continuation": "exchange" in str(event.headline).to_lower(),
 				## Any ball the wall touched last, not just the two named ones.
 				##
-				## `tool` and `high_hands` were exempted when they started firing;
-				## a plain `touch` that deflects out is the same fact -- the block
-				## contacted it last, so it is the attacker's point and it landed
-				## outside the court legally. It shows up now for the same reason
-				## the other two did: once the contact went to the hand the ball
-				## actually meets rather than the first in the array, the wall
-				## started meeting far more balls. One swing in 604.
-				"off_the_block": str(event.metadata.get("geometric_outcome", "")) \
-					in ["tool", "high_hands", "touch"],
+				## **Asked as a fact rather than enumerated as a list.**
+				##
+				## This was `geometric_outcome in ["tool", "high_hands", "touch"]`,
+				## and that list had already been extended twice -- once when tool
+				## and high_hands began firing, once when a plain touch deflected
+				## out. It was missing `stuff` and `block_crush`, so the third
+				## extension arrived the moment attacks got faster and a stuffed
+				## ball deflected wide: one swing in 522, and a check that fails
+				## for a legal ball is worse than one that never fires.
+				##
+				## `block_contact_kind` is the question the list was approximating.
+				## It is non-empty for exactly the five outcomes where the wall
+				## touched the ball and empty for `in`, `net` and `out`, so a ball
+				## that legally leaves the court off the hands is identified by
+				## the hands having been on it rather than by anyone remembering
+				## to add a name.
+				"off_the_block": str(event.metadata.get("block_contact_kind", "")) != "",
 			})
 	var distinct := {}
 	var occupied_cells := {}
