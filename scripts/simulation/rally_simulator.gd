@@ -2337,6 +2337,9 @@ func resolve(
 			## not be checked against its own distribution from a live rally --
 			## which is how both of them came to be set without one.
 			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_deflection_landing": geometric.get("block_deflection_landing", null),
+			"block_deflection_speed_mps": float(geometric.get("block_deflection_speed_mps", 0.0)),
+			"block_deflection_playable": bool(geometric.get("block_deflection_playable", false)),
 			## How much of a wall this swing actually faced. `block_wall` drops any
 			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
 			## of the wall is decided there and nowhere else -- and the resolver
@@ -2638,6 +2641,8 @@ func resolve(
 			opponent_blocker, [BallSpin.familiarity_tag(attack_spin)],
 			float(opponent_team.scouting_confidence),
 		),
+		geometric.get("block_deflection_landing", null),
+		float(geometric.get("block_deflection_speed_mps", 0.0)),
 	) if block_contacts_ball else {}
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
@@ -4153,6 +4158,9 @@ func _resolve_opponent_transition(
 			## not be checked against its own distribution from a live rally --
 			## which is how both of them came to be set without one.
 			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_deflection_landing": geometric.get("block_deflection_landing", null),
+			"block_deflection_speed_mps": float(geometric.get("block_deflection_speed_mps", 0.0)),
+			"block_deflection_playable": bool(geometric.get("block_deflection_playable", false)),
 			## How much of a wall this swing actually faced. `block_wall` drops any
 			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
 			## of the wall is decided there and nowhere else -- and the resolver
@@ -4272,6 +4280,8 @@ func _resolve_opponent_transition(
 		Familiarity.read_modifier(
 			blocker, [BallSpin.familiarity_tag(opponent_attack_spin)]
 		),
+		geometric.get("block_deflection_landing", null),
+		float(geometric.get("block_deflection_speed_mps", 0.0)),
 	) if home_block_contacts else {}
 	var assist_text := ""
 	if assisting_blocker != null:
@@ -5154,6 +5164,9 @@ func _resolve_home_continuation(
 			## not be checked against its own distribution from a live rally --
 			## which is how both of them came to be set without one.
 			"block_contact_kind": str(geometric.get("block_contact_kind", "")),
+			"block_deflection_landing": geometric.get("block_deflection_landing", null),
+			"block_deflection_speed_mps": float(geometric.get("block_deflection_speed_mps", 0.0)),
+			"block_deflection_playable": bool(geometric.get("block_deflection_playable", false)),
 			## How much of a wall this swing actually faced. `block_wall` drops any
 			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
 			## of the wall is decided there and nowhere else -- and the resolver
@@ -5338,6 +5351,12 @@ func _resolve_home_continuation(
 			float(continuation_attack_arc.get("required_speed_mps", 0.0)),
 			opponent_blocker,
 			str(block_result.get("block_hands", "neutral")),
+			## The continuation carries no spin state or familiarity of its own,
+			## so both defaults stand and the deflection is passed positionally
+			## past them.
+			{}, 0.0,
+			geometric.get("block_deflection_landing", null),
+			float(geometric.get("block_deflection_speed_mps", 0.0)),
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
 		## And on the continuation, where the same three outcomes end the same way.
@@ -7272,7 +7291,26 @@ func _block_deflection_trajectory(
 	## How well this blocker knows this hitter's spin. The design's own
 	## mitigation, and the reason scouting a hitter is worth the week.
 	spin_familiarity: float = 0.0,
+	## **What `BlockDeflectionModel` said this ball did.**
+	##
+	## The soft branch below has always solved its own flight properly -- pace
+	## absorbed against block timing and the hands' intent, then
+	## `struck_arc_from_speed`. The *stuff* branch did neither. It flew to
+	## `post_block_target`, which is the attack's own target rather than
+	## anywhere the ball was deflected to, and it took
+	## `BLOCK_STUFF_FLIGHT_SECONDS` to get there -- a constant. That is the
+	## reported suspicion in as many words: a preset amount of time for a block
+	## touch rather than a time that falls out of the trajectory.
+	##
+	## Optional, so a caller with no deflection in hand keeps the flight it
+	## always had rather than being handed a zero.
+	deflection_landing: Variant = null,
+	deflection_speed_mps: float = 0.0,
 ) -> Dictionary:
+	var deflected := deflection_landing != null and (deflection_landing is Vector2) \
+		and deflection_speed_mps > 0.01
+	if deflected:
+		to_point = Vector2(deflection_landing)
 	var kick := BallSpin.contact_kick_meters(spin_state, spin_familiarity)
 	if absf(kick) > 0.0001:
 		## Court x is normalised on a nine-metre width, so a kick in metres has
@@ -7285,6 +7323,19 @@ func _block_deflection_trajectory(
 			to_point.y,
 		)
 	if stuffed:
+		if deflected:
+			## Distance over pace. The model already forced the ball downward and
+			## kept most of its speed -- which is what makes a stuff a stuff --
+			## so the time it takes is not a separate decision to be made here.
+			return _ball_trajectory(
+				"block_deflection", from_point, to_point,
+				maxf(
+					RallyKinematics.court_distance_meters(from_point, to_point)
+						/ deflection_speed_mps,
+					BLOCK_DEFLECTION_MIN_SECONDS,
+				),
+				apex_hint, start_time,
+			)
 		return _ball_trajectory(
 			"block_deflection", from_point, to_point,
 			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
@@ -7634,6 +7685,8 @@ func _truncated_arc(
 	truncated["duration_seconds"] = maxf(full_duration * share, 0.02)
 	truncated["swing_duration_seconds"] = full_duration
 	return truncated
+
+
 
 
 func _ball_trajectory(
@@ -10457,6 +10510,9 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		),
 		"block_edge_gap_meters": swing.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(swing.get("block_contact_kind", "")),
+		"block_deflection_landing": swing.get("block_deflection_landing", null),
+		"block_deflection_speed_mps": float(swing.get("block_deflection_speed_mps", 0.0)),
+		"block_deflection_playable": bool(swing.get("block_deflection_playable", false)),
 		"net_height_over_block_meters": float(
 			swing.get("net_height_over_block_meters", 0.0)
 		),
@@ -10543,6 +10599,9 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		),
 		"block_edge_gap_meters": record.get("block_edge_gap_meters", null),
 		"block_contact_kind": str(record.get("block_contact_kind", "")),
+		"block_deflection_landing": record.get("block_deflection_landing", null),
+		"block_deflection_speed_mps": float(record.get("block_deflection_speed_mps", 0.0)),
+		"block_deflection_playable": bool(record.get("block_deflection_playable", false)),
 		## How many blockers were in the wall this swing met.
 		##
 		## `block_wall` drops any blocker whose close fraction is below

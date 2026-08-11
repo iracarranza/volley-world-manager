@@ -461,6 +461,18 @@ static func resolve_swing(
 		"block_contact_kind": str(
 			Dictionary(resolved.get("block", {})).get("kind", "")
 		),
+		## Where the ball went after the hands, flat rather than as a nested
+		## dictionary because two curators between here and the event copy named
+		## keys and a nested one has been dropped at that seam three times.
+		"block_deflection_landing": Dictionary(
+			resolved.get("deflection", {})
+		).get("landing", null),
+		"block_deflection_speed_mps": float(Dictionary(
+			resolved.get("deflection", {})
+		).get("speed_mps", 0.0)),
+		"block_deflection_playable": bool(Dictionary(
+			resolved.get("deflection", {})
+		).get("playable", false)),
 		"net_height_over_block_meters": float(
 			resolved.get("net_height_over_block_meters", 0.0)
 		),
