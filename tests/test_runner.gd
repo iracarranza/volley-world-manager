@@ -195,6 +195,7 @@ func _initialize() -> void:
 	_test_cognition_cues()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
+	_test_a_blocker_has_five_states()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -15003,6 +15004,59 @@ func _test_continue_opens_the_last_played_save() -> void:
 	_check(
 		str(rows[0].save_id) == "newest" and str(rows[3].save_id) == "no_timestamp",
 		"a save with no timestamp sorts last rather than first",
+	)
+
+
+## A blocker at the net is doing one of five things, not one of two.
+##
+## Four separate reports come out of the same gap -- no idle pose, blockers that
+## look like they never jumped, blockers that hang after they did, and blockers
+## that shuffle sideways in mid-air into a dig. The resolver is not at fault:
+## `run_wall_reach_probe` found hands above the tape on 709 of 710 swings.
+func _test_a_blocker_has_five_states() -> void:
+	_check(
+		BlockPhaseModel.state(-0.5) == "waiting"
+			and BlockPhaseModel.state(-0.1) == "loading"
+			and BlockPhaseModel.state(0.1) == "up",
+		"a blocker waits, then loads, then goes up",
+	)
+
+	## **The hang, as arithmetic.** Past the jump's own length the blocker is on
+	## the floor whatever the ball is doing. The hold used to run for as long as
+	## the attack's flight happened to take, which is right for a fast swing and
+	## a second and a half of hovering on a slow roll shot.
+	_check(
+		BlockPhaseModel.state(BlockPhaseModel.JUMP_SECONDS + 0.01) == "waiting",
+		"a blocker is down once their jump is over, however slow the ball is",
+	)
+	_check(
+		is_equal_approx(
+			BlockPhaseModel.jump_seconds_elapsed(3.0),
+			BlockPhaseModel.JUMP_SECONDS,
+		),
+		"a long window cannot stretch a jump past its own length",
+	)
+
+	## **The mid-air shuffle.** A body off the floor travels on the momentum it
+	## left with; it does not pick a new direction. Stated on the state rather
+	## than at the call site that showed the bug.
+	_check(
+		not BlockPhaseModel.may_translate("up")
+			and not BlockPhaseModel.may_translate("committed"),
+		"a blocker off the floor cannot be moved sideways",
+	)
+	_check(
+		BlockPhaseModel.may_translate("waiting")
+			and BlockPhaseModel.may_translate("loading")
+			and BlockPhaseModel.may_translate("landing"),
+		"a blocker with a foot down can move along the net",
+	)
+
+	## The way down is longer than the way up, because landing is absorbed
+	## rather than fallen.
+	_check(
+		BlockPhaseModel.RISE_SHARE < 0.5,
+		"a blocker reaches the top faster than they come back from it",
 	)
 
 

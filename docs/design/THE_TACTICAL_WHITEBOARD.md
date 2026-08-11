@@ -130,3 +130,22 @@ faint smear under the new one, and a phase change squeegees rather than cuts.
 That is the property `CLAUDE.md` lists as "a wiped smear", it is the one that
 makes the medium feel like a board rather than a dark page, and nothing in
 `MEDIUM_BOARD` implements it.
+
+### The roster cards, and the rest of the furniture
+
+Also wanted back, and also in that history rather than in this document.
+`7a31566` ("Roster tray, sticky note, and serve folded into the phases that own
+it") is the commit that built the tray of roster cards and the sticky note; they
+were not carried into the current lock-in screen, which grew its own list.
+
+So the recovery list for the board is four things and only one of them is a
+colour:
+
+1. the chisel **angle** and `MARKER_ALPHA` -- `4ddb38e^:whiteboard.gd`
+2. the **wipe**: a board remembers, a phase change squeegees
+3. the **roster cards** and the sticky note -- `7a31566`
+4. the four-marker palette, `MARKER_RED` among them
+
+Read all four before restyling anything. The lock-in screen currently has a
+list where it wants a tray, and a tray of cards is a different object -- you
+pick one up, you do not scroll it.
