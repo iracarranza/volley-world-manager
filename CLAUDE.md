@@ -55,6 +55,7 @@ Then, by subject:
 | Scouts, uncertainty, what a report means | `docs/design/SCOUTING.md` |
 | The team wheel, functional contribution | `docs/design/TEAM_ATTRIBUTE_WHEEL.md` |
 | Accommodations, food, lodging | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
+| Who the manager is | `docs/design/CHARACTER_CREATION.md` |
 | Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`, `REGIONAL_DIFFERENTIATION_SPEC.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
 | Player generation, bodies | `docs/design/ATTRIBUTE_FIRST_GENERATION.md`, `BODY_TYPES.md` |
