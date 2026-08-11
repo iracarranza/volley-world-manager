@@ -404,6 +404,15 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	var printed := control.get_node_or_null("PrintedRule")
 	if printed != null:
 		printed.queue_free()
+	## **A board takes no highlighter.**
+	##
+	## `hover_highlight` sweeps a translucent highlighter band -- see
+	## `UIInkOutline._highlighter_ink` -- which is a piece of paper stationery,
+	## and the whiteboard's whole vocabulary is four markers and magnets. Cloth
+	## already declines it because you do not highlight a sewn patch; melamine
+	## declines it for a different reason and both are stated rather than one
+	## being folded into the other.
+	var highlighted := medium != MEDIUM_SEWN and medium != MEDIUM_BOARD
 	var sewn := medium == MEDIUM_SEWN \
 		and control.theme_type_variation in STITCHED_TIERS
 	## A board's divisions are drawn in marker, edge to edge. Not a border it was
@@ -420,7 +429,7 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 		## across theme switches and resizes, so a tier that changed treatment
 		## would otherwise keep whichever one it was born with.
 		existing.stroke_style = wanted_style
-		existing.hover_highlight = not sewn
+		existing.hover_highlight = highlighted
 		existing.queue_redraw()
 		return
 	var outline := UIInkOutline.new()
@@ -429,7 +438,7 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	## Controls are written at rest and marked when pointed at: the nib draws the
 	## word, and hovering is the act of going over it. Surfaces are sewn and get
 	## neither.
-	outline.hover_highlight = not sewn
+	outline.hover_highlight = highlighted
 	## Seeded from the panel's own name, so a card's edge is stable across runs
 	## and two cards side by side never draw the same imperfection.
 	outline.ink_seed = int(String(control.name).hash() & 0x7FFFFFFF)

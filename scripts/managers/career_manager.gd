@@ -718,11 +718,29 @@ func _starting_fixtures(region: String) -> Array[Resource]:
 	var neighbours: Array = VolleyballRegions.REGION_ADJACENCY.get(home_region, [])
 	var away_region: String = str(neighbours[0]) if not neighbours.is_empty() \
 		else home_region
-	var opponents := [
-		{"region": home_region, "club": 0},
-		{"region": home_region, "club": 1},
-		{"region": away_region, "club": 0},
-	]
+	## **A region with one club cannot supply two fixtures.**
+	##
+	## This took club 0 and club 1 of the home region, and `club_name` wraps its
+	## index -- so for any of the six minor regions, which field exactly one club,
+	## weeks 2 and 4 were the *same* opponent, and that opponent was also the club
+	## you had just taken over. Invisible while only the eight majors were
+	## manageable, and produced the moment minors became a starting position: two
+	## changes each correct on their own.
+	##
+	## Built by asking the region what it actually has rather than assuming two.
+	## A second home club if there is one, and the neighbour otherwise -- which
+	## is also the better fixture, because a minor region's difficulty is that
+	## the interesting volleyball is somewhere else.
+	var home_clubs := VolleyballRegions.clubs_in(home_region).size()
+	var opponents := [{"region": home_region, "club": 0}]
+	if home_clubs > 1:
+		opponents.append({"region": home_region, "club": 1})
+	else:
+		opponents.append({"region": away_region, "club": 0})
+	opponents.append({
+		"region": away_region,
+		"club": mini(1, VolleyballRegions.clubs_in(away_region).size() - 1),
+	})
 	var result: Array[Resource] = []
 	for index in range(opponents.size()):
 		var opponent: Dictionary = opponents[index]

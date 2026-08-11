@@ -13083,6 +13083,21 @@ func _test_short_legs_are_walked_in_whole_steps() -> void:
 		previous = here
 	_check(monotone, "a quantised leg never walks backwards")
 	_check(held >= 20, "a walked leg stands still between steps (%d of 100)" % held)
+	## And a window too short to pay for a step does not get one. Packing a whole
+	## step into a window of hundredths puts the entire displacement on one frame,
+	## which is the pop quantising exists to remove -- measured at 13-25 m/s
+	## across seven of twelve volis before this guard existed.
+	var cramped := 0
+	for step in range(1, 101):
+		var t := float(step) / 100.0
+		if not is_equal_approx(
+			MatchCourt3D.step_quantised_fraction(t, 1.7, STRIDE, 0.09), t
+		):
+			cramped += 1
+	_check(
+		cramped == 0,
+		"a window too short for a step is drawn continuously instead",
+	)
 	## And it still arrives. A duty cycle that stopped short would leave every
 	## walking voli a step behind wherever they were sent.
 	_check(

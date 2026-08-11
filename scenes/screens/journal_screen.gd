@@ -1602,7 +1602,10 @@ func _refresh_roster_profile_layout() -> void:
 		## than blank, so the remaining ones keep the whole width between them.
 		column.visible = group_index < groups.size()
 		if column.visible:
-			_fill_attribute_column(player, column_index, str(groups[group_index]))
+			_fill_attribute_column(
+				player, column_index, str(groups[group_index]),
+				scouting_confidence(player), scouting_scout_id()
+			)
 
 
 func _individual_training_selected(index: int) -> void:
@@ -1927,6 +1930,15 @@ func scouting_confidence(player: VolleyballPlayer) -> float:
 	)
 
 
+## Whose reading this is. Zero is the club's own view -- see
+## `ScoutingSystem.scout_id_for`, which exists because the per-scout belief had
+## no caller able to name a scout.
+func scouting_scout_id() -> int:
+	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
+		else []
+	return Scouting.scout_id_for(staff)
+
+
 ## Paint one wheel with whichever view is selected.
 ##
 ## The scouted view draws the projection as the outer line *and* the observed
@@ -1940,13 +1952,15 @@ func _apply_scouted_profile(
 	player: VolleyballPlayer,
 	known: float,
 ) -> void:
+	var scout := scouting_scout_id()
 	var observed := Scouting.fogged_profile(
-		AttributeProfiles.summary_profile(player), known, player.id
+		AttributeProfiles.summary_profile(player), known, player.id, false, scout
 	)
 	var projected := {}
 	if showing_scouted_view:
 		projected = Scouting.fogged_profile(
-			AttributeProfiles.summary_profile(player, true), known, player.id, true
+			AttributeProfiles.summary_profile(player, true), known, player.id,
+			true, scout
 		)
 	wheel.set_profile(
 		observed, AttributeProfiles.PROFILE_TOOLTIPS, true, projected
@@ -1962,7 +1976,11 @@ func _apply_scouted_profile(
 ## all. One definition means an attribute added to the player model only needs
 ## placing once to appear correctly everywhere.
 func _fill_attribute_column(
-	player: VolleyballPlayer, column_index: int, group_name: String
+	player: VolleyballPlayer,
+	column_index: int,
+	group_name: String,
+	known: float,
+	scout: int,
 ) -> void:
 	var column := _attribute_column_boxes[column_index]
 	var rows: Array = _attribute_column_rows[column_index]
@@ -1975,8 +1993,7 @@ func _fill_attribute_column(
 		player.position_role, []
 	))
 	var title := column.get_node("GroupTitle") as Label
-	title.text = "Setting / Control" \
-		if group_name == "Setting & Ball Control" else group_name
+	title.text = AttributeProfiles.display_category(group_name)
 	var attributes: Array = Array(
 		AttributeProfiles.CATEGORY_ATTRIBUTES.get(group_name, [])
 	)
@@ -2035,7 +2052,24 @@ func _fill_attribute_column(
 		name_label.add_theme_color_override(
 			"font_color", UIPaletteScript.color(&"ink", light_mode)
 		)
-		var score := int(player.get(attribute_key))
+		## **Fogged, like the wheel above it.**
+		##
+		## This read `int(player.get(attribute_key))` -- the true number, exact,
+		## printed underneath a wheel drawn at whatever confidence the club has.
+		## So the wheel said "Hazy" and the table beside it gave the answer away,
+		## which is a scouting leak in the one place nobody would check, and it
+		## is the same defect `_apply_scouted_profile`'s own comment says it
+		## exists to avoid on the potential ring.
+		##
+		## It is also what made `ScoutingSystem.KNOWABILITY`'s per-attribute
+		## entries unreachable: nothing in the game fogged a raw attribute, so
+		## every line of that table below the six category rows was a knob
+		## connected to nothing. Height being easier to judge than composure is
+		## visible here or it is visible nowhere.
+		var score := roundi(Scouting.reported_value(
+			float(player.get(attribute_key)), known, player.id, attribute_key,
+			false, scout
+		))
 		value_label.text = str(score)
 		value_label.add_theme_color_override("font_color",
 			Color(AttributeProfiles.grade_color_hex(float(score), light_mode)))
@@ -2236,10 +2270,27 @@ func _retarget_fixture(region_name: String, club_index: int) -> void:
 		str(fixture.opponent_region), club_index
 	)
 	CareerManager.save_career()
+	## `refresh` repopulates the fixture list and selects the first row, so
+	## without this the selection jumped off whatever you were editing every time
+	## you changed it -- pick a region, and the next pick retargets a different
+	## fixture. The id is remembered across the rebuild rather than the index,
+	## because the rebuild is what invalidates indices.
+	var edited_id := selected_fixture_id
 	refresh()
+	_select_fixture_by_id(edited_id)
 	_set_status("Week %d is now against %s." % [
 		int(fixture.week), str(fixture.opponent_name),
 	])
+
+
+## Put the cursor back on a fixture after the list has been rebuilt.
+func _select_fixture_by_id(fixture_id: int) -> void:
+	for index in range(fixture_list.item_count):
+		if int(fixture_list.get_item_metadata(index)) != fixture_id:
+			continue
+		fixture_list.select(index)
+		_fixture_selected(index)
+		return
 
 
 func _opponent_region_chosen(index: int) -> void:

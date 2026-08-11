@@ -405,6 +405,42 @@ static func summary_profile(player: VolleyballPlayer, use_ceilings: bool = false
 	return categories
 
 
+## The same six categories are spelled two ways, and this is the bridge.
+##
+## `CATEGORY_ATTRIBUTES` keys them `"Setting & Ball Control"` and
+## `"Mental & Tactical"`; `summary_profile`, the tooltips and the column titles
+## use `"Setting / Control"` and `"Mental / Tactical"`. Both spellings are load
+## bearing -- the first names a group of attributes, the second is what a reader
+## sees -- and nothing had ever needed to cross between them, so nothing did.
+##
+## `ScoutingSystem.KNOWABILITY` was the first thing that needed to. It keyed its
+## category entries off `CATEGORY_ATTRIBUTES` while its only caller passes
+## `summary_profile` keys, so "Mental / Tactical" -- the one category
+## deliberately made harder to observe -- silently fell through to the default
+## and the whole entry did nothing. A gate asserted the *function* ordered its
+## channels correctly and passed, because it passed the keys the table used
+## rather than the keys the game does.
+##
+## One function, both directions, so a third spelling cannot appear without
+## somebody having to add it here.
+const CATEGORY_ALIASES := {
+	"Setting / Control": "Setting & Ball Control",
+	"Mental / Tactical": "Mental & Tactical",
+}
+
+
+static func canonical_category(name: String) -> String:
+	return str(CATEGORY_ALIASES.get(name, name))
+
+
+## And the display spelling, for anything writing a heading.
+static func display_category(name: String) -> String:
+	for shown in CATEGORY_ALIASES:
+		if str(CATEGORY_ALIASES[shown]) == name:
+			return str(shown)
+	return name
+
+
 static func category_score(profile: Dictionary) -> int:
 	if profile.is_empty():
 		return 0

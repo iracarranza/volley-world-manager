@@ -88,11 +88,22 @@ func _build_step_rail() -> void:
 
 func _build_region_choices() -> void:
 	var group := ButtonGroup.new()
+	## **Fourteen tiles where there were eight.** The scene sets four columns and
+	## a 190x68 tile, which laid the eight majors out in two rows; the six minors
+	## took it to four rows and roughly doubled the block's height inside a panel
+	## sized for the old one. Five columns and a shorter tile puts fourteen in
+	## three rows, which is a hair taller than the original two and not a page
+	## that has to grow.
+	##
+	## Set here rather than in the `.tscn` because the count is decided here --
+	## a scene that hardcodes the column count is a scene that silently disagrees
+	## with `manageable_names()` the next time that list changes.
+	region_grid.columns = 5
 	for region_name in VolleyballRegions.manageable_names():
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = group
-		button.custom_minimum_size = Vector2(190, 68)
+		button.custom_minimum_size = Vector2(150, 58)
 		## The tier is stated rather than left to be inferred from the name. A
 		## minor region is playable and harder, and a manager choosing one should
 		## be choosing that knowingly.

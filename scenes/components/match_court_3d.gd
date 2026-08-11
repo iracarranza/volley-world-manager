@@ -216,9 +216,32 @@ const STEP_QUANTISE_MAX_METERS: float = 2.6
 const STEP_DUTY: float = 0.55
 const MAX_QUANTISED_STEPS: int = 4
 
+## The least time a single step may be drawn in, in seconds.
+##
+## **Measured, after shipping this without measuring it.** Quantising packs each
+## step's travel into `STEP_DUTY` of its slot, so a leg cut into three steps
+## inside a short window gives each step a slot of a few hundredths and its
+## moving part a fraction of that. Below one frame, the entire step lands on one
+## frame: over eight rallies the worst single-frame displacement went from about
+## 5 m/s before quantising to **13-25 m/s for seven of twelve volis**, all of
+## them in the brief windows around a block. That is a pop, and it is the same
+## thing quantising was meant to remove.
+##
+## So a step has to be affordable before it is drawn. At 60 fps this is about
+## seven frames of movement per step, which is a step rather than a jump; a
+## window too short to pay for that keeps the continuous lerp, which is honest
+## -- a body crossing half a metre in a twelfth of a second is not taking a
+## visible step either.
+const MIN_STEP_SECONDS: float = 0.20
+
 
 static func step_quantised_fraction(
-	fraction: float, leg_metres: float, stride_metres: float
+	fraction: float,
+	leg_metres: float,
+	stride_metres: float,
+	## How long the leg is being drawn over. Defaulted to something generous so
+	## the pure-function gate can ask about shape without describing a window.
+	window_seconds: float = 1.0,
 ) -> float:
 	var t := clampf(fraction, 0.0, 1.0)
 	if leg_metres <= 0.0001 or leg_metres > STEP_QUANTISE_MAX_METERS:
@@ -226,6 +249,8 @@ static func step_quantised_fraction(
 	var steps := clampi(
 		roundi(leg_metres / maxf(stride_metres, 0.35)), 1, MAX_QUANTISED_STEPS
 	)
+	if window_seconds / float(steps) < MIN_STEP_SECONDS:
+		return t
 	var scaled := t * float(steps)
 	var index := floorf(scaled)
 	## The final step must land exactly on the target rather than a duty-cycle
@@ -281,7 +306,7 @@ func apply_movement_plan(
 			movement,
 			_stepped(player_id, movement, _plan_fraction(
 				movement, progress, window_seconds
-			)),
+			), window_seconds),
 			fallback,
 		))
 
@@ -290,7 +315,9 @@ func apply_movement_plan(
 ## be walked rather than run. Stride length comes off the body, which already
 ## carries it -- a 1.72 m libero takes a shorter step than a 2.06 m middle and
 ## the difference is already modelled.
-func _stepped(player_id: int, movement: Dictionary, fraction: float) -> float:
+func _stepped(
+	player_id: int, movement: Dictionary, fraction: float, window_seconds: float
+) -> float:
 	var actor := player_actors.get(player_id) as PlayerActor3D
 	if actor == null:
 		return fraction
@@ -298,7 +325,13 @@ func _stepped(player_id: int, movement: Dictionary, fraction: float) -> float:
 	var target := Vector2(movement.get("target", start))
 	var delta := target - start
 	var metres := Vector2(delta.x * court_width, delta.y * court_length).length()
-	return step_quantised_fraction(fraction, metres, actor.stride_length_m)
+	## The leg's own clock where it has one, not the flight's. A paced leg runs
+	## longer than the window and therefore has more time per step, which is
+	## exactly the case that can afford them.
+	var seconds := maxf(float(movement.get("seconds", window_seconds)), window_seconds)
+	return step_quantised_fraction(
+		fraction, metres, actor.stride_length_m, seconds
+	)
 
 
 ## Settle every leg where the window actually left it.
@@ -312,8 +345,22 @@ func finish_movement_plan(plan: Dictionary, window_seconds: float = 0.0) -> void
 		var player_id := int(raw_player_id)
 		var movement: Dictionary = plan[raw_player_id]
 		var fallback: Vector2 = live_positions.get(player_id, Vector2.ZERO)
+		## **Stepped, exactly as the window was drawn.**
+		##
+		## This settled the leg from the *unquantised* fraction while every frame
+		## before it used the quantised one, so the final frame of every window
+		## jumped from wherever the step was holding to wherever the smooth curve
+		## had got to -- up to a whole step, landing on one frame. Measured over
+		## eight rallies: 0.41 m in a single frame, 24.7 m/s, on the short windows
+		## around a block. Quantising was removing a glide and adding a pop at the
+		## seam, and the seam is the frame the next window starts from.
 		set_player_position(player_id, _plan_sample(
-			movement, _plan_fraction(movement, 1.0, window_seconds), fallback
+			movement,
+			_stepped(
+				player_id, movement,
+				_plan_fraction(movement, 1.0, window_seconds), window_seconds
+			),
+			fallback,
 		))
 
 

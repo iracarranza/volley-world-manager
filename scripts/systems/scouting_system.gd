@@ -255,6 +255,12 @@ static func knowability(key: String) -> float:
 		return DEFAULT_KNOWABILITY
 	if KNOWABILITY.has(key):
 		return float(KNOWABILITY[key])
+	## The same six categories are spelled two ways across the codebase and this
+	## table keys off one of them while its caller passes the other. See
+	## `AttributeProfiles.canonical_category`, which exists because of this.
+	var canonical := AttributeProfiles.canonical_category(key)
+	if KNOWABILITY.has(canonical):
+		return float(KNOWABILITY[canonical])
 	for category in AttributeProfiles.CATEGORY_ATTRIBUTES:
 		if key in AttributeProfiles.CATEGORY_ATTRIBUTES[category]:
 			return float(KNOWABILITY.get(category, DEFAULT_KNOWABILITY))
@@ -314,13 +320,38 @@ static func fogged_profile(
 	confidence_level: float,
 	player_id: int,
 	is_potential: bool = false,
+	scout_id: int = 0,
 ) -> Dictionary:
 	var fogged := {}
 	for key in profile:
 		fogged[key] = reported_value(
-			float(profile[key]), confidence_level, player_id, str(key), is_potential
+			float(profile[key]), confidence_level, player_id, str(key),
+			is_potential, scout_id
 		)
 	return fogged
+
+
+## Which of your staff formed the club's view.
+##
+## `scout_rating` returns the best scout's rating and throws away *who* that was,
+## so the estimate had nobody's name on it and `reported_value`'s `scout_id`
+## defaulted to zero at every call site in the game -- a per-scout belief that no
+## caller could ever ask for. This returns the same scout the rating comes from,
+## so hiring a better one visibly changes the numbers rather than only narrowing
+## the band around them.
+##
+## Zero when you employ nobody, which is the club's own view and the value every
+## caller was already getting.
+static func scout_id_for(staff: Array) -> int:
+	var best_rating := -1
+	var best_id := 0
+	for member in staff:
+		if member == null or str(member.role) != StaffMember.ROLE_SCOUT:
+			continue
+		if int(member.rating) > best_rating:
+			best_rating = int(member.rating)
+			best_id = int(member.id)
+	return best_id
 
 
 ## Reflect back inside 1-100 instead of clamping to it.
