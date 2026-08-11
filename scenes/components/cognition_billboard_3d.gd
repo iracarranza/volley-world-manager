@@ -177,7 +177,7 @@ func show_cue(
 		if _draw_mark(intent, float(reading.get("progress", 0.0)), strength):
 			text = ""
 			visible = true
-			position = Vector3(0.0, head_height_meters, 0.0)
+			position = Vector3(0.0, head_height_meters + MARK_LIFT_METERS, 0.0)
 			return
 		text = str(INTENT_GLYPHS.get(intent, "•"))
 		var ambient_color := Color(reading.color)
@@ -260,7 +260,21 @@ func _draw_mark(intent: String, progress: float, strength: float) -> bool:
 ## fills its own canvas edge to edge. Matched by eye against the plate so the
 ## two tiers keep the relationship the gate asserts -- the mark reads at the
 ## size the character was *supposed* to, rather than at the size it managed.
-const MARK_PIXEL_RATIO: float = 1.35
+const MARK_PIXEL_RATIO: float = 0.82
+
+## How far above the crown the mark sits, in metres.
+##
+## **The reason a mark felt detached from its voli.** It was centred *on*
+## `_cognition_head_height`, which is the scalp -- so half the mark overlapped
+## the head and half towered above it, and at `fixed_size` that half does not
+## shrink with distance. A big shape straddling the top of a head reads as
+## something hovering near the voli rather than as something belonging to them.
+##
+## Sitting it just clear of the crown instead, with the size down, puts the ink
+## in the space directly above the head where a thought bubble goes. Small and
+## in metres: the mark is screen-relative and this is not, so a large gap would
+## open up as the camera pulled back.
+const MARK_LIFT_METERS: float = 0.13
 
 ## **A drawn mark is opaque; the character it replaced was not.**
 ##
@@ -273,7 +287,7 @@ const MARK_PIXEL_RATIO: float = 1.35
 ##
 ## The fill sits under the outline at a lower share, so a full blade still reads
 ## as an edge with an interior rather than as a solid slab.
-const MARK_ALPHA: float = 0.95
+const MARK_ALPHA: float = 0.76
 
 
 func _hide_mark() -> void:

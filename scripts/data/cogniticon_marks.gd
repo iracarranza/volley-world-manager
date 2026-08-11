@@ -150,6 +150,22 @@ static func attention_textures(dark_theme: bool) -> Dictionary:
 	return out
 
 
+## Where the eye's ink has to move to sit in the middle of its own canvas.
+##
+## **A mark is placed by its texture's centre, so ink that is not centred in the
+## texture is a mark that is not where it looks like it should be.** The review's
+## eye is drawn against the left of its box -- the ellipse starts at x = 18 and
+## the arrowhead runs to 69, so the ink's midpoint is 43.5 in a canvas whose
+## middle is 35. Rasterised as authored and hung above a head, every eye would
+## float eight units to the right of the voli it belongs to.
+##
+## The blades do not have this problem -- their ink is symmetric about 27 in a
+## 54-wide box -- which is why it went unnoticed until the eye arrived. Applied
+## at rasterise time rather than by editing the coordinates, so the paths stay
+## the ones that were approved.
+const EYE_INK_SHIFT := Vector2(-8.5, 0.0)
+
+
 static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	var width := int(EYE_CANVAS.x) * SCALE
 	var height := int(EYE_CANVAS.y) * SCALE
@@ -182,6 +198,13 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 				Vector2(64.0, 23.0), Vector2(69.0, 28.0), Vector2(64.0, 33.0),
 			]), "closed": false, "width": stroke, "dash": 0.0})
 	var discs: Array = [{"centre": PUPIL_CENTRE, "radius": PUPIL_RADIUS}]
+	for path in paths:
+		var moved := PackedVector2Array()
+		for point in PackedVector2Array(path["points"]):
+			moved.append(point + EYE_INK_SHIFT)
+		path["points"] = moved
+	for disc in discs:
+		disc["centre"] = Vector2(disc["centre"]) + EYE_INK_SHIFT
 	return _composite(width, height, paths, discs, [], dark_theme)
 
 
