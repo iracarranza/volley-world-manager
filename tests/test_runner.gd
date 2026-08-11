@@ -218,6 +218,7 @@ func _initialize() -> void:
 	_test_ball_flight_from_contact_height()
 	_test_block_shadow_falls_behind_the_block()
 	_test_an_opponent_has_a_region()
+	_test_scouting_channels_and_owners()
 	_test_short_legs_are_walked_in_whole_steps()
 	_test_spike_biomechanics_sequence()
 	_test_every_rally_publishes_a_resting_posture()
@@ -12907,6 +12908,80 @@ func _test_scouting_crosses_the_net_in_both_directions() -> void:
 ## half a metre to cover was translated smoothly at a speed no gait animates.
 ## Reported as volis gliding. The quantiser is pure, so the shape it produces can
 ## be checked here rather than by watching.
+## Not everything takes the same amount of watching, and two scouts can disagree.
+##
+## `SCOUTING.md` calls per-channel knowability the largest change in the
+## player's experience per line of code in the whole spec, and per-scout beliefs
+## the thing everything else in it depends on. Both are cheap to state and both
+## were silently absent: every observable attribute shared one error band, and
+## the estimate was salted with the voli and the attribute alone, so the club
+## held exactly one opinion and hiring a second scout could not produce a second
+## reading.
+func _test_scouting_channels_and_owners() -> void:
+	const HALF_SURE := 0.5
+	## How tall somebody can jump is not as hard to see as how they behave at
+	## 22-24, and the table has to actually order them that way.
+	var reach := ScoutingSystem.error_width(HALF_SURE, false, "jump_reach")
+	var technique := ScoutingSystem.error_width(HALF_SURE, false, "set_accuracy")
+	var composure := ScoutingSystem.error_width(HALF_SURE, false, "composure")
+	_check(
+		reach < technique and technique < composure,
+		"observation difficulty is ordered: reach %.1f < technique %.1f < composure %.1f"
+			% [reach, technique, composure],
+	)
+	## An attribute with no entry of its own still lands somewhere, through its
+	## category rather than at whatever the default happens to be.
+	_check(
+		ScoutingSystem.knowability("anticipation")
+			== ScoutingSystem.knowability("decision_making"),
+		"an attribute with no entry of its own inherits its category",
+	)
+	## The flat band is still what a caller that does not say gets, so nothing
+	## that has not been told about channels changes behaviour.
+	_check(
+		is_equal_approx(
+			ScoutingSystem.error_width(HALF_SURE, false),
+			ScoutingSystem.MAX_ERROR_POINTS * 0.5,
+		),
+		"a caller that names no attribute keeps the flat band",
+	)
+	## Two scouts, same voli, same attribute, same confidence: two readings. This
+	## is the property the spec asks for and the one the old salt made impossible.
+	var first := ScoutingSystem.reported_value(60.0, HALF_SURE, 7, "set_accuracy", false, 1)
+	var second := ScoutingSystem.reported_value(60.0, HALF_SURE, 7, "set_accuracy", false, 2)
+	_check(
+		not is_equal_approx(first, second),
+		"two scouts reach different conclusions about the same voli (%.1f, %.1f)"
+			% [first, second],
+	)
+	## And one scout is consistent with themselves, or a report would change every
+	## time it was drawn.
+	_check(
+		is_equal_approx(
+			first,
+			ScoutingSystem.reported_value(60.0, HALF_SURE, 7, "set_accuracy", false, 1),
+		),
+		"a scout does not change their mind between two readings of one report",
+	)
+	## The club's own view is what every existing caller was already getting.
+	_check(
+		is_equal_approx(
+			ScoutingSystem.reported_value(60.0, HALF_SURE, 7, "set_accuracy"),
+			ScoutingSystem.reported_value(60.0, HALF_SURE, 7, "set_accuracy", false, 0),
+		),
+		"scout zero is the club's own view",
+	)
+	## A band is still drawn around the reporting scout's estimate rather than
+	## around the truth, which is what stops a range leaking the answer.
+	var band: Vector2 = ScoutingSystem.reported_band(
+		60.0, HALF_SURE, 7, "set_accuracy", false, 1
+	)
+	_check(
+		band.x <= first and first <= band.y,
+		"a scout's band is centred on that scout's own estimate",
+	)
+
+
 func _test_short_legs_are_walked_in_whole_steps() -> void:
 	const STRIDE := 0.85
 	## A long leg is a run and is left continuous -- stuttering a sprint is worse

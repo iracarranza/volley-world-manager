@@ -33,6 +33,10 @@ extends RefCounted
 ## belongs. The suite measures this rather than trusting it.
 
 const StaffMember := preload("res://scripts/models/staff_member.gd")
+## Read for category membership only. The knowability table keys on an attribute
+## where one is its own thing to observe and on a category otherwise, and the
+## categories are already defined once, there.
+const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 
 ## How wide the scout's error is at zero confidence, in attribute points.
 ##
@@ -41,6 +45,60 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 ## is the reading a scouting system wants: usually directionally right, sometimes
 ## badly wrong, never useless.
 const MAX_ERROR_POINTS: float = 22.0
+
+## How hard each thing is to see, as a multiplier on the error band.
+##
+## `SCOUTING.md`'s first build item, and the one it calls the largest change in
+## the player's experience per line of code in the whole spec: *height immediate,
+## athleticism quick, technique several viewings, behaviour longer, adaptability
+## and composure much longer.* Every observable attribute used to share one
+## `MAX_ERROR_POINTS`, so a scout who could not tell you how tall somebody was
+## was exactly as unsure about that as about their composure -- which says the
+## only thing that varies is how long you watched, and not *what you watched
+## for*.
+##
+## Keyed by attribute where an attribute is its own thing to observe, and by
+## category otherwise, so adding an attribute inherits a sensible band rather
+## than silently getting the baseline. `knowability` resolves in that order.
+##
+## Multipliers, not widths: the scale stays in `MAX_ERROR_POINTS` and this table
+## only says how much harder or easier one channel is than the average one, so a
+## rebalance of overall scouting difficulty is still one number.
+const KNOWABILITY := {
+	## Measurable off a tape and a standing reach. You do not need to watch a
+	## match to know how tall somebody is, and pretending otherwise is the single
+	## most obviously wrong thing the flat band did.
+	"jump_reach": 0.30,
+	## Visible in one warm-up. Nobody watches a session and comes away unsure
+	## whether a voli is fast.
+	"acceleration": 0.45,
+	"lateral_speed": 0.45,
+	"transition_speed": 0.45,
+	"explosiveness": 0.50,
+	"attack_power": 0.55,
+	"serve_power": 0.55,
+	"arm_speed": 0.60,
+	## Stamina and work rate take a match rather than a rally, because both are
+	## about the fourth set.
+	"stamina": 1.25,
+	"work_rate": 1.35,
+	## Technique: the baseline. Several viewings, which is what the rest of the
+	## model was already tuned around.
+	"Attacking": 1.0,
+	"Serving": 1.0,
+	"Setting & Ball Control": 1.0,
+	"Defensive": 1.0,
+	"Physical": 0.75,
+	## Behaviour is slower than technique, and the two attributes that only show
+	## under pressure are slower still. You can watch somebody hit for a season
+	## and not know what they do when it is 22-24.
+	"Mental & Tactical": 1.6,
+	"composure": 2.1,
+	"adaptability": 2.1,
+	"consistency": 1.9,
+}
+## What an attribute with no entry of its own and no category is worth.
+const DEFAULT_KNOWABILITY: float = 1.0
 
 ## Confidence for a voli in your own building, before tenure and before a scout.
 ##
@@ -140,16 +198,27 @@ static func reported_value(
 	player_id: int,
 	key: String,
 	is_potential: bool = false,
+	## **Which scout is being asked.** `SCOUTING.md`: the club used to hold
+	## exactly one belief about each voli, because the estimate was salted with
+	## `(player_id, key)` and nothing else, so two scouts could not disagree about
+	## anything. Salting with the scout's id is the whole of the change, and
+	## everything else in the spec -- specialisation, regional knowledge, a scout
+	## earning trust -- becomes a function over a belief that has an owner.
+	##
+	## Zero means "the club's own view", which is what every existing caller gets
+	## and what the roster half of the record should keep: you do not need a scout
+	## to tell you about a voli who trains with you every day.
+	scout_id: int = 0,
 ) -> float:
-	var width := error_width(confidence_level, is_potential)
+	var width := error_width(confidence_level, is_potential, key)
 	if width <= 0.0001:
 		return true_value
 	## Triangular rather than uniform: two independent draws summed. A scout is
 	## usually close and occasionally badly wrong, which a flat distribution does
 	## not say -- under a uniform error, a miss by one point and a miss by twenty
 	## are equally likely and the estimate reads as noise rather than a judgement.
-	var first := _unit(player_id, key, 0x9E37)
-	var second := _unit(player_id, key, 0x85EB)
+	var first := _unit(player_id, key, 0x9E37 + scout_id * 0x27D4)
+	var second := _unit(player_id, key, 0x85EB + scout_id * 0x1B873)
 	return _fold(true_value + (first + second - 1.0) * width)
 
 
@@ -159,14 +228,37 @@ static func reported_value(
 ## if you have complete information you are shown the number, with no residual
 ## fuzz to explain. Potential keeps a floor because no amount of watching tells
 ## you what somebody will become.
-static func error_width(confidence_level: float, is_potential: bool = false) -> float:
+static func error_width(
+	confidence_level: float,
+	is_potential: bool = false,
+	## Which attribute is being reported. Defaulted, so every existing caller
+	## keeps the flat band it already had and the ones that know what they are
+	## asking about get the honest one.
+	key: String = "",
+) -> float:
 	var known := clampf(confidence_level, 0.0, 1.0)
 	var uncertainty := 1.0 - known
 	if is_potential:
 		uncertainty = maxf(
 			uncertainty * POTENTIAL_UNCERTAINTY_SCALE, POTENTIAL_UNCERTAINTY_FLOOR
 		)
-	return MAX_ERROR_POINTS * uncertainty
+	return MAX_ERROR_POINTS * uncertainty * knowability(key)
+
+
+## How hard this attribute is to see, relative to an average one.
+##
+## Attribute first, then its category, then the default -- so a table entry
+## always beats a category and a new attribute lands somewhere sensible instead
+## of at whatever the table's first matching key happened to be.
+static func knowability(key: String) -> float:
+	if key.is_empty():
+		return DEFAULT_KNOWABILITY
+	if KNOWABILITY.has(key):
+		return float(KNOWABILITY[key])
+	for category in AttributeProfiles.CATEGORY_ATTRIBUTES:
+		if key in AttributeProfiles.CATEGORY_ATTRIBUTES[category]:
+			return float(KNOWABILITY.get(category, DEFAULT_KNOWABILITY))
+	return DEFAULT_KNOWABILITY
 
 
 ## The range the club would quote, low to high, around its own estimate.
@@ -180,11 +272,12 @@ static func reported_band(
 	player_id: int,
 	key: String,
 	is_potential: bool = false,
+	scout_id: int = 0,
 ) -> Vector2:
 	var reported := reported_value(
-		true_value, confidence_level, player_id, key, is_potential
+		true_value, confidence_level, player_id, key, is_potential, scout_id
 	)
-	var width := error_width(confidence_level, is_potential)
+	var width := error_width(confidence_level, is_potential, key)
 	return Vector2(_fold(reported - width), _fold(reported + width))
 
 
