@@ -197,6 +197,7 @@ func _initialize() -> void:
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
+	_test_the_ball_decides_when_the_rally_ends()
 	_test_a_ball_taken_at_full_stretch_is_drawn_reaching()
 	_test_a_blocked_ball_has_somewhere_to_go()
 	_test_attack_targets_are_continuous()
@@ -14883,6 +14884,49 @@ func _test_a_ball_taken_at_full_stretch_is_drawn_reaching() -> void:
 	_check(
 		not MatchScreen.is_full_stretch("planted", false, 0.0),
 		"a contact with no published margin is left alone, not read as zero",
+	)
+
+
+## A point is not over until the ball is down.
+##
+## The final window was a flat 0.38 s whatever the ball was doing, so playback
+## could stop with it still in the air. It now lasts at least the ball's own
+## fall from wherever the last drawn flight left it -- read off the display
+## trajectory playback draws from, not reconstructed beside it, which is the
+## mistake that produced balls eight metres up.
+func _test_the_ball_decides_when_the_rally_ends() -> void:
+	## A ball already resting owes nothing. Most rallies end this way and must
+	## not gain a pause.
+	_check(
+		is_zero_approx(MatchScreen.settle_seconds(
+			MatchScreen.BALL_REST_HEIGHT_METERS)),
+		"a ball already on the floor adds no outro",
+	)
+	## Nor does one a few centimetres up, because a ball's own width is not a
+	## fall worth drawing.
+	_check(
+		is_zero_approx(MatchScreen.settle_seconds(
+			MatchScreen.BALL_REST_HEIGHT_METERS + 0.04)),
+		"a ball within its own width of resting adds no outro",
+	)
+
+	## And a ball genuinely up there falls for as long as gravity says. From
+	## 2.05 m above rest that is about 0.65 s -- half a second of point that used
+	## to be cut off.
+	var from_two_metres := MatchScreen.settle_seconds(
+		MatchScreen.BALL_REST_HEIGHT_METERS + 2.05
+	)
+	_check(
+		from_two_metres > 0.6 and from_two_metres < 0.7,
+		"a ball two metres up buys the time to come down",
+	)
+
+	## Monotone, which is the property that stops a tuned constant sneaking back
+	## in: higher is always longer, never a band.
+	_check(
+		MatchScreen.settle_seconds(3.0) > MatchScreen.settle_seconds(2.0)
+			and MatchScreen.settle_seconds(2.0) > MatchScreen.settle_seconds(1.0),
+		"a higher ball always takes longer to come down",
 	)
 
 

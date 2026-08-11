@@ -152,6 +152,9 @@ func _run_rally(generation: int) -> void:
 	## next event, so the two run on different clocks and the difference is time
 	## a later event must not charge for a second time.
 	var drawn_until := -INF
+	## The ball starts the rally in a server's hand, not on the floor, but no
+	## outro is owed before the first flight has been drawn.
+	_ball_end_height_meters = BALL_REST_HEIGHT_METERS
 	for event_index in range(events.size()):
 		if generation != playback_generation or skip_requested:
 			break
@@ -236,11 +239,47 @@ func _run_rally(generation: int) -> void:
 				window = aftermath_seconds(
 					float(event.metadata["physical_time"]), window, drawn_until
 				)
+			elif next_contact == null:
+				## **The rally is over when the ball is down.**
+				##
+				## The last window was a flat 0.38 s whatever the ball was doing,
+				## so a point could be called while the ball was still in the
+				## air -- reported as tools ending before the ball is drawn
+				## hitting the floor. It now lasts at least as long as the ball
+				## needs to fall from wherever the final flight left it. Where
+				## that is already the floor the outro is unchanged, which is
+				## most rallies and is why this had to be measured off the real
+				## drawn flight rather than guessed at.
+				window = maxf(window, settle_seconds(_ball_end_height_meters))
 			if window <= 0.0:
 				continue
 			await _play_contact_pulse(event, next_contact, window, generation)
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.clear_cognition()
+
+
+## Where the ball rests, and what it falls under. Named here rather than reached
+## for through `BallPresentation` so the settle rule reads as one thing.
+const BALL_REST_HEIGHT_METERS: float = 0.12
+const BALL_GRAVITY_MPS2: float = 9.81
+
+## Where the last drawn flight left the ball, in metres.
+var _ball_end_height_meters: float = BALL_REST_HEIGHT_METERS
+
+
+## How long a ball left at this height takes to reach the floor.
+##
+## Free fall, because a ball nobody is going to touch again is not doing
+## anything else. Zero once it is within a ball's width of resting, so a rally
+## that ends on the floor -- which is most of them -- keeps the outro it had and
+## does not gain a pause.
+##
+## Static and pure so the suite can hold it without a court to run it in.
+static func settle_seconds(end_height_meters: float) -> float:
+	var drop := end_height_meters - BALL_REST_HEIGHT_METERS
+	if drop <= 0.05:
+		return 0.0
+	return sqrt(2.0 * drop / BALL_GRAVITY_MPS2)
 
 
 ## What is left of an event's window once a flight has already drawn part of it.
@@ -300,6 +339,18 @@ func _play_flight(
 	## would spend the full time on the shortened path.
 	var display_trajectory := _display_trajectory(event, next_contact, trajectory)
 	var duration := clampf(float(display_trajectory.get("duration", 0.5)), 0.08, 3.5)
+	## **Where this flight leaves the ball.**
+	##
+	## The hook, and it is one line because the number was already here.
+	## `BallPresentation` writes `end_height_meters` onto every display
+	## trajectory; it is computed at playback time rather than stamped on the
+	## event, which is why looking for it in event metadata found nothing and why
+	## a probe that reconstructed it beside playback -- with empty profiles and
+	## the wrong next contact -- produced balls eight metres in the air. This is
+	## the real one: the same dictionary the ball is actually drawn from.
+	_ball_end_height_meters = float(
+		display_trajectory.get("end_height_meters", BALL_REST_HEIGHT_METERS)
+	)
 	## **Not `next_contact`.**
 	##
 	## The plan reads its phase targets off the contact it is moving toward, and
