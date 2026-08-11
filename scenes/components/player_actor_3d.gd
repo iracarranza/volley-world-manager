@@ -69,6 +69,18 @@ var contact_platform_aim: Dictionary = {}
 ## fall rolls sideways, a moving/reaching fall slides forward, and a blow-away
 ## rolls backward. The simulation still owns the cost and severity.
 var contact_recovery: String = "platform"
+## What this voli stands like when they are not playing the ball -- "defending",
+## "blocking" or "watching". See `ReadyStance`, which owns both the joints and
+## the choice between them.
+##
+## Carried as state for the same reason `contact_posture` is: it is a property
+## of the voli's *job on this rally*, not of the pose being drawn, and it has to
+## survive `reset_player_poses()` -- which is exactly the call that leaves a body
+## with nothing but a gait, and therefore the one this exists to answer.
+##
+## Defaulted to the crouch every body used to wear, so a portfolio plate or a
+## unit test that names nothing is unchanged.
+var ready_stance: String = "defending"
 ## Which of the five faces the actor is wearing. Purely presentational today --
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
 ## than being derived from state that does not exist.
@@ -1850,7 +1862,8 @@ func set_pose(
 	## that never bent, whether they were strolling to a seat or sprinting for a
 	## dig.
 	var gait := GaitBiomechanicsScript.resolve(
-		stride_cycle, ground_speed_mps, travel_heading_offset
+		stride_cycle, ground_speed_mps, travel_heading_offset,
+		ReadyStance.joints(ready_stance),
 	)
 	gait_blend = float(gait.gait_blend)
 	locomotion_bob = float(gait.bob_meters)

@@ -234,6 +234,7 @@ func _initialize() -> void:
 	_test_recovery_bands_are_ordered()
 	_test_a_drawn_ball_stops_where_it_was_touched()
 	_test_gait_separates_walking_from_running()
+	_test_ready_stances_differ_by_job()
 	_test_landing_absorbs_and_returns_to_neutral()
 	_test_block_is_a_jump_not_a_shape()
 	_test_surface_screen_and_card_variation()
@@ -13496,6 +13497,116 @@ func _test_recovery_bands_are_ordered() -> void:
 		knee - swing > 0.0,
 		"no amount of clumsiness puts a voli down on a contact that beat its norm"
 			+ " (%.3f - %.3f)" % [knee, swing],
+	)
+
+
+## A body standing still is doing a job, and there is more than one job.
+##
+## The gait had a single floor stance and every stationary voli wore it: a
+## defender's crouch, knees at -60 with the arms carried back. Two reports are
+## that one fact from opposite sides -- a front-row voli at the net standing
+## like a passer instead of with their hands at the tape, and a voli holding a
+## passing posture through a serve they have no part in.
+##
+## Measured before it was built rather than after, because three cases this
+## session turned out not to occur: `run_idle_stance_probe.gd` finds the crouch
+## fully drawn on 66.5% of the frames within 1.6 m of the net.
+func _test_ready_stances_differ_by_job() -> void:
+	var defending := ReadyStance.defending()
+	var blocking := ReadyStance.blocking()
+	var watching := ReadyStance.watching()
+
+	## **The gate that keeps the idle honest.** A blocker waiting at the net and
+	## the first frame of that blocker's jump have to be the same body, or the
+	## wall snaps into existence when the block begins -- which is the defect
+	## `BlockBiomechanics` was written to remove, reappearing one pose earlier.
+	##
+	## Asserted against `resolve(-1.0)` rather than against the constants it is
+	## built from, so a retune of the read stage that forgets this file fails
+	## here instead of drifting apart silently.
+	var read: Dictionary = BlockBiomechanics.resolve(-1.0)
+	_check(
+		is_equal_approx(
+			float(blocking.arm_degrees), float(read.shoulder_degrees)
+		) and is_equal_approx(
+			float(blocking.elbow_degrees), float(read.elbow_degrees)
+		) and is_equal_approx(
+			float(blocking.knee_degrees), float(read.knee_degrees)
+		) and is_equal_approx(
+			float(blocking.torso_radians), float(read.torso_pitch_radians)
+		),
+		"the net idle is the block's own read stage, so nothing snaps at takeoff",
+	)
+
+	## Three stances, and the two that matter are opposites at the shoulder: a
+	## defender's hands are down and behind ready to platform, a blocker's are
+	## up. A sign, which is checkable without eyes on a screen.
+	_check(
+		float(defending.arm_degrees) < 0.0 and float(blocking.arm_degrees) > 45.0,
+		"a defender's hands are down and a blocker's are up (%.0f vs %.0f deg)"
+			% [float(defending.arm_degrees), float(blocking.arm_degrees)],
+	)
+	## And height is the other half of it. Standing at the net costs nothing to
+	## be tall and everything to be low, so the blocker's knee is the shallowest
+	## of the three and the defender's the deepest.
+	_check(
+		float(blocking.knee_degrees) > float(watching.knee_degrees)
+			and float(watching.knee_degrees) > float(defending.knee_degrees),
+		"blocking is tallest, defending lowest, watching between them",
+	)
+	## A voli watching a ball that is not theirs is neither loaded nor armed.
+	_check(
+		absf(float(watching.arm_degrees)) < absf(float(defending.arm_degrees))
+			and float(watching.abduction_degrees)
+				< float(defending.abduction_degrees),
+		"watching is a narrower base with quieter arms than waiting to pass",
+	)
+
+	## The precedence, which is the whole of the routing. Being at the net with
+	## the ball on the far side is a job and it outranks the general-purpose
+	## crouch that used to be the only answer.
+	_check(
+		ReadyStance.choose(true, false) == "blocking"
+			and ReadyStance.choose(false, true) == "defending"
+			and ReadyStance.choose(false, false) == "watching",
+		"at the net with the ball away blocks; the playing side waits; nobody else stands",
+	)
+	## The case the precedence deliberately does *not* claim: a voli at the net
+	## whose own side is about to play the ball is a setter or a hitter, not a
+	## blocker, and puts their hands up for nobody.
+	_check(
+		ReadyStance.choose(true, true) == "defending",
+		"a voli at the net on the side that plays next is not blocking",
+	)
+
+	## And the stance reaches the joints. Standing still it is the pose outright;
+	## at a run it is gone, because a stance is what standing still *means* and
+	## a runner is not standing.
+	var still: Dictionary = GaitBiomechanics.resolve(
+		0.37, 0.0, 0.0, ReadyStance.blocking()
+	)
+	var running: Dictionary = GaitBiomechanics.resolve(
+		0.37, 5.5, 0.0, ReadyStance.blocking()
+	)
+	_check(
+		is_equal_approx(
+			float(still.left_arm_degrees), float(blocking.arm_degrees)
+		) and float(running.left_arm_degrees) < 45.0,
+		"the named stance is what a stationary body wears, and a run leaves it",
+	)
+	## Naming nothing is the crouch, so every caller written before stances
+	## existed keeps exactly the body it had.
+	var unnamed: Dictionary = GaitBiomechanics.resolve(0.37, 0.0)
+	var named: Dictionary = GaitBiomechanics.resolve(
+		0.37, 0.0, 0.0, ReadyStance.defending()
+	)
+	_check(
+		is_equal_approx(
+			float(unnamed.left_knee_degrees), float(named.left_knee_degrees)
+		) and is_equal_approx(
+			float(unnamed.left_arm_degrees), float(named.left_arm_degrees)
+		),
+		"a caller that names no stance gets the crouch it always got",
 	)
 
 

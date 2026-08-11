@@ -402,6 +402,32 @@ func set_player_pose(
 	)
 
 
+## What this voli stands like between contacts. See `ReadyStance`.
+##
+## Separate from `set_player_pose` on purpose: a stance outlives the pose. It is
+## set once per window for every body on the court, including the ten that
+## `set_player_pose` is never called for, and those ten are the whole reason the
+## stance exists.
+func set_player_stance(player_id: int, stance_name: String) -> void:
+	if not player_actors.has(player_id):
+		return
+	(player_actors[player_id] as PlayerActor3D).ready_stance = stance_name
+
+
+## Whether this voli is standing at the net, in the normalised court space
+## `live_positions` uses.
+##
+## The net is y = 0.5 and the court is `court_length` metres long, so the band
+## has to be converted rather than written as a normalised constant -- a figure
+## in normalised units is a distance whose meaning changes if the court does,
+## which is the measured-with-the-wrong-instrument failure in miniature.
+func at_the_net(player_id: int) -> bool:
+	if not live_positions.has(player_id):
+		return false
+	var here: Vector2 = live_positions[player_id]
+	return absf(here.y - 0.5) * court_length <= ReadyStance.NET_BAND_METERS
+
+
 func reset_player_poses() -> void:
 	for actor_resource in player_actors.values():
 		var actor := actor_resource as PlayerActor3D
@@ -501,7 +527,20 @@ func _watch_the_ball(ball_position: Vector3) -> void:
 		## body at the ball is what gives the neck somewhere to work, and it is
 		## also simply what a volleyball player does when nothing else is asking
 		## anything of them.
-		actor.face_ball(heading)
+		## Unless the body has a job that says otherwise. A voli at the net is
+		## there to block, and a blocker never turns their back on it -- the same
+		## rule `set_pose` applies to a blocker mid-jump, which until now reached
+		## only the one voli playback had chosen to draw as the contact.
+		##
+		## The net is z = 0, so which side of it the body stands on is the whole
+		## of the heading.
+		if ReadyStance.faces_the_net(actor.ready_stance):
+			actor.face_ball(0.0 if actor.global_position.z > 0.0 else PI)
+		else:
+			actor.face_ball(heading)
+		## The head tracks the ball either way, and that is the point: a middle
+		## facing the net still watches the play over their shoulder, out to the
+		## neck's own limit, and loses sight of a ball that goes behind them.
 		actor.look_toward(heading, rad_to_deg(atan2(rise, flat.length())))
 
 

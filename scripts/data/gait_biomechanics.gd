@@ -196,7 +196,27 @@ static func resolve(
 	## right angle is a lateral shuffle. Defaulted so every existing caller keeps
 	## the forward gait it already had.
 	travel_heading_radians: float = 0.0,
+	## The floor pose this gait interpolates *out of*, as the six joints below.
+	##
+	## Taken as an argument rather than being the `READY_*` constants outright,
+	## because a body standing still is doing a job and there is more than one:
+	## a defender crouches, a blocker stands tall with their hands at the tape,
+	## and a voli watching a ball that is not theirs does neither. Which one is
+	## `ReadyStance`'s decision -- a locomotion model has no business knowing
+	## what a block is, so it is handed the answer instead of computing it.
+	##
+	## Empty means the crouch, so every caller that names nothing keeps exactly
+	## the stance it had.
+	stance: Dictionary = {},
 ) -> Dictionary:
+	var floor_hip := float(stance.get("hip_degrees", READY_HIP_DEGREES))
+	var floor_knee := float(stance.get("knee_degrees", READY_KNEE_DEGREES))
+	var floor_abduction := float(
+		stance.get("abduction_degrees", READY_ABDUCTION_DEGREES)
+	)
+	var floor_arm := float(stance.get("arm_degrees", READY_ARM_DEGREES))
+	var floor_elbow := float(stance.get("elbow_degrees", READY_ELBOW_DEGREES))
+	var floor_torso := float(stance.get("torso_radians", READY_TORSO_RADIANS))
 	var speed := maxf(speed_mps, 0.0)
 	## Decomposed rather than branched on, so a defender opening from a shuffle
 	## into a backpedal passes through the blend instead of snapping between two
@@ -274,31 +294,31 @@ static func resolve(
 		"gait_blend": gait_blend,
 		"backpedal_blend": backward,
 		"shuffle_blend": sideways,
-		"right_hip_degrees": lerpf(READY_HIP_DEGREES, right.x, gait_blend),
-		"right_knee_degrees": lerpf(READY_KNEE_DEGREES, right.y, gait_blend),
-		"left_hip_degrees": lerpf(READY_HIP_DEGREES, left.x, gait_blend),
-		"left_knee_degrees": lerpf(READY_KNEE_DEGREES, left.y, gait_blend),
+		"right_hip_degrees": lerpf(floor_hip, right.x, gait_blend),
+		"right_knee_degrees": lerpf(floor_knee, right.y, gait_blend),
+		"left_hip_degrees": lerpf(floor_hip, left.x, gait_blend),
+		"left_knee_degrees": lerpf(floor_knee, left.y, gait_blend),
 		## Negated against the same side's hip: that is the counter-swing. Both
 		## arms rest at the same carriage, which is what makes the stance a stance
 		## rather than a stride caught mid-swing.
 		"right_arm_degrees": lerpf(
-			READY_ARM_DEGREES, -right.x * arm_swing, gait_blend
+			floor_arm, -right.x * arm_swing, gait_blend
 		),
 		"left_arm_degrees": lerpf(
-			READY_ARM_DEGREES, -left.x * arm_swing, gait_blend
+			floor_arm, -left.x * arm_swing, gait_blend
 		),
 		"elbow_degrees": lerpf(
-			READY_ELBOW_DEGREES,
+			floor_elbow,
 			lerpf(WALK_ELBOW_DEGREES, RUN_ELBOW_DEGREES, run_blend),
 			gait_blend,
 		),
-		"torso_pitch_radians": lerpf(READY_TORSO_RADIANS, torso, gait_blend),
+		"torso_pitch_radians": lerpf(floor_torso, torso, gait_blend),
 		## Feet outside the shoulders when set, closing as the stride takes over --
 		## you cannot run with your legs abducted, and a shuffle keeps some of it
 		## because a shuffle never brings the feet together either.
 		"abduction_degrees": lerpf(
-			READY_ABDUCTION_DEGREES,
-			READY_ABDUCTION_DEGREES * SHUFFLE_STANCE_SHARE * sideways,
+			floor_abduction,
+			floor_abduction * SHUFFLE_STANCE_SHARE * sideways,
 			gait_blend,
 		),
 		## Nothing bobs standing still, so this one really does go to zero.

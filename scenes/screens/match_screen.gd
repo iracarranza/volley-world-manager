@@ -682,6 +682,38 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 	return context
 
 
+## Give every body on the court a stance, including the ten nothing else poses.
+##
+## `_apply_contact_poses` reaches at most five actors -- the contact, its assist,
+## the next contact, its assist, and an early block. The other seven get
+## `reset_player_poses()` and a gait, and the gait had exactly one floor pose: a
+## defender's crouch. Measured over eight rallies, that crouch was fully on
+## screen for 66.5% of the frames within a metre and a half of the net, which is
+## a front-row voli waiting to block in a passer's posture.
+##
+## The side that plays the ball next is the side that might have to play it, so
+## that is what "defending" is keyed on rather than possession or rotation. It
+## also answers the other half of the report from the opposite direction: the
+## *serving* team is not that side, so their back row stands and watches the
+## serve go over instead of crouching for a ball they have no part in.
+func _apply_ready_stances(event: RallyEvent, next_contact: RallyEvent) -> void:
+	## The contact that decides who is about to touch the ball. `next_contact` is
+	## null on the rally's last event, and then the current one is the truthful
+	## answer -- the ball is still on the side that just played it.
+	var deciding := next_contact if next_contact != null else event
+	if deciding == null:
+		return
+	var playing_side_is_home := match_court_3d.home_player_ids.has(
+		int(deciding.actor_id)
+	)
+	for raw_id in match_court_3d.player_actors:
+		var player_id := int(raw_id)
+		match_court_3d.set_player_stance(player_id, ReadyStance.choose(
+			match_court_3d.at_the_net(player_id),
+			match_court_3d.home_player_ids.has(player_id) == playing_side_is_home,
+		))
+
+
 func _apply_contact_poses(
 	event: RallyEvent,
 	next_contact: RallyEvent,
@@ -690,6 +722,7 @@ func _apply_contact_poses(
 	window_seconds: float = 1.0,
 ) -> void:
 	match_court_3d.reset_player_poses()
+	_apply_ready_stances(event, next_contact)
 	var event_actor := int(event.actor_id)
 	var event_peak := _event_elevation(event, event_actor)
 	var event_direction := event.end_position - event.start_position
