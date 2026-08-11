@@ -79,8 +79,18 @@ static func classify(result: Resource, index: int) -> Dictionary:
 	var event_type := int(event.event_type)
 	match event_type:
 		RallyEventModel.EventType.SERVE:
-			if str(result.terminal_outcome) == "ace":
-				return _result("Ace", 1.0, true)
+			## **A serve is not named for how the rally ended.**
+			##
+			## This branch used to read `result.terminal_outcome` and call the
+			## serve an Ace, which is information that does not exist until the
+			## reception fails. The caption is shown when the serve is struck, so
+			## 2D playback announced the ace while the ball was still in the air
+			## and the receiver had not touched it. A caption that knows the
+			## future is the same defect as a blocker who does.
+			##
+			## The name moves to the reception below, which is where the moment
+			## actually resolves and the contact a viewer is watching when it
+			## does.
 			if not bool(event.success):
 				return _result("Missed serve", 0.82, true)
 			if next != null and int(next.event_type) == RallyEventModel.EventType.RECEPTION \
@@ -88,6 +98,12 @@ static func classify(result: Resource, index: int) -> Dictionary:
 				return _result("Service pressure", 0.68, true)
 			return _result("Serve in", 0.25, false)
 		RallyEventModel.EventType.RECEPTION:
+			## Where the ace is named. By the time this caption is on screen the
+			## ball has already beaten the receiver, so nothing is given away --
+			## and a reception that ended the rally is exactly the contact the
+			## name belongs to.
+			if str(result.terminal_outcome) == "ace" and not bool(event.success):
+				return _result("Ace", 1.0, true)
 			var reception_margin := float(event.metadata.get("arrival_margin", 0.2))
 			if float(event.quality) >= 0.74 and reception_margin <= 0.12:
 				return _result("Platform dime", 0.88, true)
