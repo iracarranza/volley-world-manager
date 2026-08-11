@@ -300,6 +300,74 @@ Ordered roughly by how much each one changes what a viewer believes.
     entry 11: both are cases where the rig glides through something a body does
     in discrete moves.
 
+14. **A hitter who ran their approach and got no set stays on the runway.** They
+    should return to a logical position -- a front-row hitter who was not chosen
+    is a blocker-in-waiting or a coverage player, not a statue at the ten-foot
+    line. This is the first entry that needs a *post-decision* target: today the
+    phase map is published for the contact, and a hitter the setter passed over
+    has no next assignment at all.
+
+15. **Reception geometry is centred on the body, not on the platform.** The serve
+    is drawn entering the receiver's head and the dig then resolves as an
+    off-axis contact to the left -- so the ball's arrival point and the
+    receiver's own contact point are two different places, and a viewer sees the
+    ball go through a torso. Positioning and reach should be measured from where
+    the platform is, not from where the sternum is. `PlatformAim` already knows
+    the platform's yaw and residual, so the offset is derivable and simply is
+    not applied to placement.
+
+16. **Blockers are treated as able to cover a short attack while airborne.**
+    Observed: the right-side attack goes high, and the blocker shuffles sideways
+    *in mid-air* and then executes a rolling receive. Two faults stacked -- a
+    blocker in the air is committed and cannot translate, and a blocker is not
+    the defender of a ball that beat them.
+
+17. **Rolling receives need a trait, and a fallback.** A roll is a specific skill
+    and should belong to volis who have the trait. Everyone else needs a
+    *falling* sideways and backwards receive -- which is missing art, not a
+    missing selector, unlike 13a.
+
+18. **The middle turns around entirely and watches the play.** They should be
+    facing forward, ready to jump for a quick or run a decoy. The turn is being
+    driven by "face the ball" with nothing outranking it, and a middle in
+    transition has a job that outranks looking.
+
+19. **The right attacker shuffles sideways instead of running their approach.**
+    Lateral movement should be available but is not always correct: an approach
+    is a run at the net, and picking the shuffle for it is the gait selector
+    reading distance where it should be reading *what the movement is for*. The
+    same root as "gait by involvement" below.
+
+20. **Two back-row volis never move at all.** The opposite failure to 19 and the
+    same cause: a voli with no published target holds position exactly. They
+    should cheat a step or two toward where the play is going without abandoning
+    their zone. `_build_movement_plan`'s comment already anticipates this --
+    "if serve-receive movement turns out to matter, the fix is for the resolver
+    to publish it, not for playback to make it up" -- and this is that turning
+    out to matter.
+
+21. **Cogniticons are still the old glyphs.** The eye / sword / shield vocabulary
+    in `COGNITICONS.md` is not what is drawn. Entry 7's size fix landed
+    (`COGNITICON_SCALE`) and was mistaken for this one; they are different
+    problems and only the size was addressed.
+
+### Still open from earlier passes, audited
+
+Reported before and **not** fixed, in case any were assumed closed:
+
+- **3.** Blockers swap positions at the net. Never diagnosed.
+- **4.** Volis hold a receive posture through a serve they have no
+  responsibility for. Never addressed.
+- **5.** Blockers have no idle hands-up pose. Logged repeatedly, never built;
+  it is also half of 13c and of entry 6.
+- **8.** A pipe attack sent the ball straight up. Seen once, never reproduced --
+  now reproducible with `run_seed_search.gd`.
+- **9.** The 2D tactical court shows erratic hitter movement 3D does not.
+- **10.** The tactical-planner freeze. Two defects hardened, neither confirmed.
+- **13a**, partially: a failed contact is no longer posed square, but a reach
+  that misses and a reach that digs still share a pose.
+- **13b, 13c, 13d, 13g**: not started.
+
 ### Discussed, with the shape agreed
 
 **Gait by involvement.** A voli should walk when uninvolved and jog when reaching
