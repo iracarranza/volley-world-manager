@@ -781,7 +781,7 @@ func _apply_contact_poses(
 		## up, came down, and went up again. That is the block replaying itself.
 		##
 		## This window is the hold, so it ends where the hold ends.
-		var next_phase := _block_hold_phase(progress) \
+		var next_phase := _block_hold_phase(progress, window_seconds) \
 			if next_is_block else progress - 1.0
 		var next_lift := BlockBiomechanics.elevation_at(next_phase) \
 			if next_is_block else incoming_weight
@@ -799,7 +799,7 @@ func _apply_contact_poses(
 		## running the whole hold-and-withdraw during the attack's flight and
 		## then started again for the deflection, replaying the wall while the
 		## caption still read "block forms".
-		var assist_hold := _block_hold_phase(progress)
+		var assist_hold := _block_hold_phase(progress, window_seconds)
 		match_court_3d.set_player_pose(
 			next_assist, int(next_contact.event_type),
 			_event_elevation(next_contact, next_assist)
@@ -826,8 +826,27 @@ const BLOCK_DESCENT_SECONDS: float = 0.42
 ## One helper for both blockers. These were two call sites doing the same
 ## arithmetic separately, and correcting one and not the other is exactly how
 ## the second blocker ended up replaying the wall.
-func _block_hold_phase(progress: float) -> float:
-	return progress * BlockBiomechanics.HOLD_END
+## **Paced by the body, not by the ball.**
+##
+## This was `progress * HOLD_END`: the rise stretched across whatever the
+## attack's flight happened to last. On a fast swing that is about right; on a
+## slow roll shot it is a blocker taking a second and a half to leave the floor
+## and then standing up there. A jump is not a duration the ball gets to choose,
+## which is `BlockPhaseModel`'s whole argument, and the withdraw below has been
+## paced in real seconds all along -- only the rise was still on the ball's
+## clock.
+##
+## Clamped, so past the rise the blocker is at the top rather than still going
+## up. Coming *down* before the ball arrives is the rest of the fix and it needs
+## the hold window to be able to enter the withdraw, which is a restructure this
+## is not; the hover is shortened here rather than removed.
+func _block_hold_phase(progress: float, window_seconds: float) -> float:
+	var elapsed := progress * maxf(window_seconds, 0.0001)
+	var rise := clampf(
+		elapsed / (BlockPhaseModel.JUMP_SECONDS * BlockPhaseModel.RISE_SHARE),
+		0.0, 1.0,
+	)
+	return rise * BlockBiomechanics.HOLD_END
 
 
 ## And where it sits during the block's own flight -- the withdraw and landing,
