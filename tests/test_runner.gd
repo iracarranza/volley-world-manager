@@ -194,6 +194,7 @@ func _initialize() -> void:
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_body_facing_rule()
+	_test_continue_opens_the_last_played_save()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
@@ -14774,6 +14775,33 @@ func _test_cognition_cues() -> void:
 ## directly. What cannot be tested here is *call order* -- that the ball pass
 ## runs before the movement plan -- because that needs frames and this runner has
 ## none. `tools/measure_body_facing.gd` covers it and has to be run by hand.
+## The title screen's continue card has no "last played" field of its own. It
+## opens `list_save_metadata()[0]`, which is only the right career because that
+## list is sorted newest first -- so the ordering is what has to be asserted,
+## not the button.
+func _test_continue_opens_the_last_played_save() -> void:
+	var rows: Array[Dictionary] = [
+		{"save_id": "older", "last_saved_unix": 100},
+		{"save_id": "newest", "last_saved_unix": 900},
+		{"save_id": "middle", "last_saved_unix": 400},
+	]
+	rows.sort_custom(CAREER_MANAGER_SCRIPT.newest_first)
+	_check(
+		str(rows[0].save_id) == "newest",
+		"the save list leads with the most recently saved career",
+	)
+
+	## A save written before the field existed reads as 0. It has to sort to the
+	## back: an absent timestamp presenting itself as the newest one would make
+	## the continue card open a career the player may never have opened.
+	rows.append({"save_id": "no_timestamp"})
+	rows.sort_custom(CAREER_MANAGER_SCRIPT.newest_first)
+	_check(
+		str(rows[0].save_id) == "newest" and str(rows[3].save_id) == "no_timestamp",
+		"a save with no timestamp sorts last rather than first",
+	)
+
+
 func _test_body_facing_rule() -> void:
 	var square := 0.0
 	var backward := PI

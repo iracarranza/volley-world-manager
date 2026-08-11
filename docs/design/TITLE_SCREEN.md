@@ -4,6 +4,22 @@ The screen every session opens on, and the only one that is a **place** rather
 than an object. Held ahead of the training work deliberately (`BACKLOG.md` §6a):
 it sets the reading for everything after it.
 
+> **The structure is kept.** A pass in August 2026 mocked §1's room up as the
+> whole screen -- top-down, bed on the left, desk on the right, menu written on
+> the desk -- and it was turned down for replacing the screen's layout rather
+> than improving it. The direction is: keep the masthead down the left and the
+> menu off to the right, keep the asymmetry, keep the file count at the foot of
+> the brand column, and make *that* screen intentional in the journal's
+> materials.
+>
+> §§1 and 4-7 below describe the room, the save's voli and the sleeping poses.
+> None of it is cancelled -- it is a later idea for the same page, and §5's
+> sleeping pose is still the honest estimate of what it costs. What is settled
+> now is §8's first open question, and the answer is that the menu does not have
+> to find a place in a picture, because the screen is not becoming one yet.
+>
+> The current mockup is `docs/design/mockups/title_screen.html`.
+
 > The earlier "ui write up" that started this is not recoverable verbatim -- it
 > was a chat message and the conversation was compacted. What is written here is
 > the concept as most recently stated, plus what is verifiable in the code today.
@@ -144,11 +160,53 @@ where their own voli is visible on the floor, and that is the observable
 consequence the character-creator review asked for in place of a hidden coaching
 bonus.
 
+## 7a. What the kept structure asks for
+
+The mockup is `docs/design/mockups/title_screen.html`, and its one real finding
+is that the two cards this screen needs are already drawn.
+`ui_backdrop.gd` anchors its torn scraps at `0.74, 0.10` and `0.06, 0.68` of the
+sheet -- the top right and the bottom left -- which is where the menu panel and
+the foot of the brand column already are. So the redesign is subtractive: delete
+the `MenuPanel` `StyleBoxFlat` that floats over the first scrap, and let the
+scrap be the panel. Same anchors, same torn silhouette, same tape patches.
+
+Three consequences follow, and one of them is a bug that was already there.
+
+1. **The menu entries stop being buttons.** They are written in the display
+   face at the masthead's weight, and the one under the cursor is *ringed* in
+   accent rather than filled -- the mark a person makes on a list they are
+   choosing from.
+2. **`01`--`04` go.** They number a list that is not a sequence: nobody does
+   them in order and there is no third step. Numbering that encodes nothing is
+   decoration wearing the costume of structure.
+3. **The screen did not follow the light.** Every colour on the menu is a
+   hand-rolled `StyleBoxFlat` or a `theme_override_colors` entry, and a
+   `theme_override_` beats the theme -- so in Molten the page turned cream and
+   the menu stayed the near-black `Color(0.025, 0.065, 0.11)` it is authored as.
+   The backdrop was the only part of the screen that knew which theme it was in.
+   This is fixed now, in `_tint_menu`, ahead of the rest: it is worth having
+   even if none of the drawing above ever lands.
+
+### Continue
+
+**A card at the foot of the brand column, not a fifth menu entry.** The menu
+asks where you will go next; this is where you already were, and it belongs with
+the file count rather than with the choices. It reads
+`list_save_metadata()[0]` -- that list is already sorted by `last_saved_unix`
+descending -- so it needs no new field on the save and no second pass over the
+directory. It hides itself when there are no saves.
+
+That ordering is now load-bearing, so it is asserted in the suite rather than
+left as a comment, including the case that matters: a save written before the
+timestamp existed reads as 0 and must sort to the *back*.
+
 ## 8. Open
 
 - The original writeup's other title-screen requirements, lost to compaction.
-- Where the menu itself sits in a room that is now a picture. The existing screen
-  is a brand column and a menu panel; neither is furniture.
+- Whether `04 EXIT` becomes **Leave the desk**. Every other label in this game
+  names an object or an act and that one names a system call, but it is a change
+  to the words on the screen and wants saying out loud rather than slipping in
+  with a repaint.
 - Whether the bed's occupant is the manager or a squad voli. "Player voli"
   reads as the manager's own avatar, which is what the character-creator concept
   implies, but the two readings put very different figures in the bed.

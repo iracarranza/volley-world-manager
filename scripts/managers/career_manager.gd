@@ -684,9 +684,21 @@ func list_save_metadata() -> Array[Dictionary]:
 				result.append(metadata)
 		file_name = directory.get_next()
 	directory.list_dir_end()
-	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return int(a.get("last_saved_unix", 0)) > int(b.get("last_saved_unix", 0)))
+	result.sort_custom(newest_first)
 	return result
+
+
+## Most recently saved first.
+##
+## Lifted out of the `sort_custom` lambda it used to be because the title
+## screen's continue card now depends on it: that card opens
+## `list_save_metadata()[0]` rather than carrying a "last played" field of its
+## own, so this ordering is load-bearing and belongs somewhere the suite can
+## assert it. A save written before `last_saved_unix` existed reads as 0 and
+## sorts to the back, which is the direction that matters -- an absent
+## timestamp must never present itself as the newest one.
+static func newest_first(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("last_saved_unix", 0)) > int(b.get("last_saved_unix", 0))
 
 
 func _metadata() -> Dictionary:

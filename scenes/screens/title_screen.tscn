@@ -37,6 +37,30 @@ border_color = Color(0.98, 0.79, 0.22, 1)
 corner_radius_top_right = 7
 corner_radius_bottom_right = 7
 
+[sub_resource type="StyleBoxFlat" id="ContinueCard"]
+bg_color = Color(0.06, 0.157, 0.227, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.333, 0.788, 0.757, 0.5)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="ContinueCardHover"]
+bg_color = Color(0.129, 0.302, 0.365, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.333, 0.788, 0.757, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
 [sub_resource type="StyleBoxFlat" id="DialogPanel"]
 bg_color = Color(0.025, 0.055, 0.095, 1)
 border_width_left = 1
@@ -146,6 +170,7 @@ WORLD
 MANAGER"
 
 [node name="Subtitle" type="Label" parent="Content/Columns/Brand" unique_id=920369090]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.66, 0.75, 0.84, 1)
 theme_override_font_sizes/font_size = 17
@@ -155,6 +180,58 @@ manager style...."
 [node name="BrandSpacer" type="Control" parent="Content/Columns/Brand" unique_id=741330892]
 layout_mode = 2
 size_flags_vertical = 3
+
+[node name="ContinueButton" type="Button" parent="Content/Columns/Brand" unique_id=1108422731]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(430, 104)
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_styles/normal = SubResource("ContinueCard")
+theme_override_styles/pressed = SubResource("ContinueCardHover")
+theme_override_styles/hover = SubResource("ContinueCardHover")
+theme_override_styles/focus = SubResource("ContinueCardHover")
+
+[node name="ContinueLayout" type="MarginContainer" parent="Content/Columns/Brand/ContinueButton" unique_id=1108422732]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 14
+
+[node name="ContinueLines" type="VBoxContainer" parent="Content/Columns/Brand/ContinueButton/ContinueLayout" unique_id=1108422733]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+alignment = 1
+
+[node name="ContinueKicker" type="Label" parent="Content/Columns/Brand/ContinueButton/ContinueLayout/ContinueLines" unique_id=1108422734]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.78, 0.26, 1)
+theme_override_font_sizes/font_size = 12
+text = "CONTINUE  ·  LAST PLAYED"
+
+[node name="ContinueTitle" type="Label" parent="Content/Columns/Brand/ContinueButton/ContinueLayout/ContinueLines" unique_id=1108422735]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 23
+text = "Career"
+
+[node name="ContinueDetail" type="Label" parent="Content/Columns/Brand/ContinueButton/ContinueLayout/ContinueLines" unique_id=1108422736]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.66, 0.75, 0.84, 1)
+theme_override_font_sizes/font_size = 14
+text = "Week 1"
 
 [node name="SaveCount" type="Label" parent="Content/Columns/Brand" unique_id=2075630121]
 unique_name_in_owner = true
@@ -181,11 +258,13 @@ theme_override_constants/separation = 14
 alignment = 1
 
 [node name="MenuKicker" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=1688684666]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.78, 0.26, 1)
 text = "FRONT OFFICE"
 
 [node name="MenuTitle" type="Label" parent="Content/Columns/MenuPanel/MenuMargin/Menu" unique_id=682887669]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
 text = "Where will you go next?"
