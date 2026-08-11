@@ -400,9 +400,20 @@ static func tradition_resistance(region_name: String) -> float:
 ## players *from*, not places you manage.
 ## Regions a manager can take a job in.
 ##
-## The eight Sixnet participants, because a minor region runs no programme at
-## this level -- they are places you sign volis *from* rather than places you
-## manage.
+## **All fourteen, and the eight is now a tier rather than a gate.** This read
+## "the eight Sixnet participants, because a minor region runs no programme at
+## this level -- places you sign volis from rather than places you manage", and
+## `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §3 says in as many words that the
+## comment is now half true and asks for it to be rewritten here: a minor region
+## still runs no academy, which is the *point* of it, but that absence is the
+## difficulty of managing there rather than the disqualification from it.
+##
+## Your region not being in the Sixnet means your best volis are watched by
+## academies that are not yours, and the thing pulling them away is the one
+## thing you cannot outbid. That is a harder save, not an impossible one.
+##
+## Majors first, then minors, each sorted -- so the opening screen reads as two
+## tiers without the screen having to know which is which.
 ##
 ## **Renamed from `playable_names`, which was answering two different questions
 ## with one list.** "Where can I manage" and "who can I play" are not the same
@@ -411,9 +422,24 @@ static func tradition_resistance(region_name: String) -> float:
 ## `CLUB_NAMES` and a full identity in `DEFINITIONS`. A list used as the answer
 ## to two questions is right for at most one of them.
 static func manageable_names() -> Array[String]:
-	var result: Array[String] = SIXNET_PARTICIPANTS.duplicate()
-	result.sort()
+	var majors: Array[String] = SIXNET_PARTICIPANTS.duplicate()
+	majors.sort()
+	var minors: Array[String] = MINOR_REGIONS.duplicate()
+	minors.sort()
+	var result: Array[String] = []
+	result.append_array(majors)
+	result.append_array(minors)
 	return result
+
+
+## Whether this region runs a programme at the level the game is about.
+##
+## The Sixnet participants are the majors. Everything the save's opening choice
+## needs hangs off this one question -- how many clubs there are to choose
+## between, whether founding your own is on the table, and whether your volis
+## are candidates for an academy that is yours.
+static func is_major(region_name: String) -> bool:
+	return canonical_name(region_name) in SIXNET_PARTICIPANTS
 
 
 ## Regions that field a club you could be drawn against.

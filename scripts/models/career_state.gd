@@ -7,7 +7,10 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 @export var save_id: String = "career_1"
 @export var career_name: String = "New Career"
 @export var organization_name: String = "Harbor City VC"
-@export_enum("Club", "Academy") var organization_type: String = "Club"
+## The seat, not the institution. "Academy" was a value here and the academy is
+## now the region's selection body -- a thing you are chosen *by*, never a thing
+## you manage. Both old values described a club, so both load as `Established`.
+@export_enum("Established", "Founded") var organization_type: String = "Established"
 @export var region: String = "Landavol"
 @export var identity: String = "Balanced"
 @export var absolute_week: int = 1
@@ -141,7 +144,10 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.save_id = str(data.get("save_id", "career_1"))
 	state.career_name = str(data.get("career_name", "New Career"))
 	state.organization_name = str(data.get("organization_name", "Harbor City VC"))
-	state.organization_type = str(data.get("organization_type", "Club"))
+	## Migrated rather than read through. A save written before the recut says
+	## `Club` or `Academy`, and both of them were clubs.
+	var stored_type := str(data.get("organization_type", "Established"))
+	state.organization_type = "Founded" if stored_type == "Founded" else "Established"
 	state.region = Regions.canonical_name(str(data.get("region", "Landavol")))
 	state.identity = str(data.get("identity", "Balanced"))
 	state.absolute_week = maxi(int(data.get("absolute_week", 1)), 1)

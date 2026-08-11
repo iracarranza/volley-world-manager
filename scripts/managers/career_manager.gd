@@ -68,6 +68,14 @@ func has_career() -> bool:
 	return career != null
 
 
+## What seat the manager took. `Academy` is a dead value: the academy is the
+## region's selection body and is not a thing anybody manages. A save written
+## before this migrates to `Established`, which is what both old options
+## actually were.
+const ESTABLISHED_CLUB: String = "Established"
+const FOUNDED_CLUB: String = "Founded"
+
+
 func create_career(
 	career_name: String,
 	organization_name: String,
@@ -85,8 +93,24 @@ func create_career(
 	state.region = region
 	state.organization_type = organization_type
 	state.identity = identity
-	state.reputation = 6 if organization_type == "Academy" else 10
-	state.finances = 65000 if organization_type == "Academy" else 120000
+	## **The save's opening position is where you are, not what you are called.**
+	##
+	## This was `6/65,000` for an academy and `10/120,000` for a club -- two
+	## clubs, an established one and a young one, under a word that now means the
+	## regional selection body. `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §3
+	## recuts it as major region versus minor, and the seat you take inside it.
+	##
+	## A major region is where the resources are: established clubs with squads
+	## and accommodation somebody already built. A minor one hands you the small
+	## club and the difficulty that your best volis are watched by academies that
+	## are not yours. Founding is the hard route and belongs where the resources
+	## are -- from nothing, against clubs that have everything -- so it costs
+	## standing and money rather than being what happens when you pick the
+	## smaller region.
+	var major := VolleyballRegions.is_major(region)
+	var founded := organization_type == FOUNDED_CLUB
+	state.reputation = (10 if major else 6) - (4 if founded else 0)
+	state.finances = (120000 if major else 65000) - (45000 if founded else 0)
 	state.match_format = MatchFormatModel.new()
 	state.match_format.format_name = "Career Best of 3"
 	state.match_format.best_of_sets = 3

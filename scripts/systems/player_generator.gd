@@ -247,8 +247,20 @@ static func generate_roster(
 	var canonical_region := VolleyballRegions.canonical_name(region_name)
 	var region := VolleyballRegions.definition(region_name)
 	var names: Array = region.names
-	var roster_size := 12 if organization_type == "Academy" else 10
-	var academy := organization_type == "Academy"
+	## **A founded club is small and young; an established one is neither.**
+	##
+	## This branched on `"Academy"`, which is a dead value -- the academy is the
+	## region's selection body and nobody manages one. What the branch was
+	## actually describing survives the rename intact: the option that gave you
+	## twelve younger volis with more headroom is the club you started yourself,
+	## which is who signs for a side with no history. An established club hands
+	## you a squad somebody else picked.
+	##
+	## The old value is still read so a save written before the recut regenerates
+	## the roster it had rather than a different one.
+	var founded := organization_type == "Founded" or organization_type == "Academy"
+	var roster_size := 12 if founded else 10
+	var academy := founded
 	var result: Array[VolleyballPlayer] = []
 	for index in range(roster_size):
 		var position: Dictionary = POSITIONS[index % POSITIONS.size()]

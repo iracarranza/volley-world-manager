@@ -667,27 +667,44 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 
 
 func _test_career_calendar_generation_training_and_saves() -> void:
-	## `manageable_names()`, not `names()` and not `opponent_names()`. Minor
-	## regions exist in the world and raise volis, but run no academy the manager
-	## could take over, so they are places you sign volis *from* rather than
-	## places you manage -- while being perfectly good places to play against,
-	## which is the distinction `opponent_names` now carries and this list used
-	## to be silently doing both jobs for.
+	## **Every inhabited region is a place you can manage, and the eight is now a
+	## tier rather than a gate.** This asserted that career creation exposed only
+	## the eight, which was true and is now superseded:
+	## `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §3 recuts the save's opening
+	## choice as major region versus minor, so a minor region stops being
+	## unplayable and becomes the other starting position. It still runs no
+	## academy -- that is the point of it -- and the absence is the difficulty of
+	## managing there rather than the disqualification from it.
 	var fictional_regions := REGIONS_SCRIPT.manageable_names()
-	_check(fictional_regions.size() == 8 and "Landavol" in fictional_regions \
-			and "Spëddigh" in fictional_regions and "Pāwa Hitō" in fictional_regions \
-			and "Bloc du Larg" in fictional_regions and "Xérvu" in fictional_regions \
-			and "Taktikã" in fictional_regions and "Ispayk" in fictional_regions \
-			and "A'ace" in fictional_regions,
-		"career creation exposes only the eight confirmed fictional regions")
+	var majors_offered := true
+	for major_name in REGIONS_SCRIPT.SIXNET_PARTICIPANTS:
+		if not (major_name in fictional_regions):
+			majors_offered = false
+	_check(
+		fictional_regions.size() == 14 and majors_offered,
+		"career creation offers every inhabited region (%d)" % fictional_regions.size(),
+	)
+	## Majors come first, so the opening screen reads as two tiers without the
+	## screen having to sort them itself.
+	var first_minor := fictional_regions.size()
+	var last_major := -1
+	for index in range(fictional_regions.size()):
+		if REGIONS_SCRIPT.is_major(str(fictional_regions[index])):
+			last_major = index
+		elif index < first_minor:
+			first_minor = index
+	_check(
+		last_major < first_minor,
+		"the eight majors are offered before the six minors",
+	)
 	var every_region := REGIONS_SCRIPT.names()
 	var minor_present := true
 	for minor_name in REGIONS_SCRIPT.MINOR_REGIONS:
-		if not (minor_name in every_region) or minor_name in fictional_regions:
+		if not (minor_name in every_region) or REGIONS_SCRIPT.is_major(minor_name):
 			minor_present = false
 	_check(
 		every_region.size() == 14 and minor_present,
-		"minor regions exist in the world but are never offered as a starting region",
+		"the six minor regions exist and none of them counts as a major",
 	)
 	var unresisted := 0
 	for minor_name in REGIONS_SCRIPT.MINOR_REGIONS:
@@ -12930,13 +12947,16 @@ func _test_scouting_crosses_the_net_in_both_directions() -> void:
 func _test_manageable_and_playable_regions_are_different_questions() -> void:
 	var manageable := REGIONS_SCRIPT.manageable_names()
 	var opponents := REGIONS_SCRIPT.opponent_names()
+	## The two lists now cover the same fourteen places and are still two
+	## different questions: one is ordered majors-first because the opening screen
+	## reads as tiers, the other is sorted because a picker is a picker. What
+	## separates a major from a minor is `is_major`, not membership of a list --
+	## which is the point of having the predicate at all.
 	_check(
-		manageable.size() == 8 and opponents.size() == 14,
-		"eight regions to manage in, fourteen to play against (%d, %d)"
+		manageable.size() == 14 and opponents.size() == 14,
+		"every inhabited region can be managed and played (%d, %d)"
 			% [manageable.size(), opponents.size()],
 	)
-	## Every region you can manage in is also one you can play, or the schedule
-	## could name a club its own manager could not face.
 	var manageable_are_playable := true
 	for region_name in manageable:
 		if not region_name in opponents:
@@ -12945,6 +12965,11 @@ func _test_manageable_and_playable_regions_are_different_questions() -> void:
 		manageable_are_playable,
 		"every region you can manage in is a region you can play",
 	)
+	var majors := 0
+	for region_name in opponents:
+		if REGIONS_SCRIPT.is_major(region_name):
+			majors += 1
+	_check(majors == 8, "eight of the fourteen are majors (%d)" % majors)
 	## And every opponent fields at least one club with a real name, so choosing
 	## one can never produce a fixture against nobody.
 	var every_region_fields_somebody := true

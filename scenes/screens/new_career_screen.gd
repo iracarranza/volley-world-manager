@@ -38,7 +38,7 @@ const AXIS_QUESTIONS := [
 
 var current_step := 0
 var selected_region := "Landavol"
-var selected_type := "Club"
+var selected_type := "Established"
 var selected_values: Dictionary = {}
 var identity_tracks_region := true
 var light_mode_enabled := false
@@ -63,7 +63,7 @@ func reset_form() -> void:
 	current_step = 0
 	error_label.text = ""
 	selected_region = "Landavol"
-	selected_type = "Club"
+	selected_type = "Established"
 	identity_tracks_region = true
 	_set_principles(VolleyballRegions.preferred_principles(selected_region), true)
 	_select_button_with_metadata(region_grid, selected_region)
@@ -93,7 +93,14 @@ func _build_region_choices() -> void:
 		button.toggle_mode = true
 		button.button_group = group
 		button.custom_minimum_size = Vector2(190, 68)
-		button.text = "%s\n%s" % [region_name, _region_signature(region_name)]
+		## The tier is stated rather than left to be inferred from the name. A
+		## minor region is playable and harder, and a manager choosing one should
+		## be choosing that knowingly.
+		button.text = "%s%s\n%s" % [
+			region_name,
+			"" if VolleyballRegions.is_major(region_name) else "  ·  minor",
+			_region_signature(region_name),
+		]
 		button.set_meta("value", region_name)
 		button.pressed.connect(_select_region.bind(region_name))
 		region_grid.add_child(button)
@@ -101,15 +108,30 @@ func _build_region_choices() -> void:
 
 func _build_type_choices() -> void:
 	var group := ButtonGroup.new()
-	for type_name in ["Club", "Academy"]:
+	## **Not club versus academy.** That pair described two clubs -- an
+	## established one and a young one -- under a word that now means the region's
+	## selection body, which is a thing you are chosen *by* and never a thing you
+	## manage. `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §3 recuts it as the seat
+	## you take, and the region you took it in supplies the rest of the
+	## difficulty.
+	##
+	## Founding is the hard route and it belongs where the resources are: in a
+	## major region you can take a berth at a club that has a squad, dorms and a
+	## history, or start from nothing against clubs that have all three. In a
+	## minor region you inherit the small club, and the difficulty there is a
+	## different one -- your best volis are watched by academies that are not
+	## yours.
+	for type_name in ["Established", "Founded"]:
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = group
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.custom_minimum_size = Vector2(280, 150)
-		button.text = ("CLUB\nCompete now\n10 senior players · larger budget" \
-			if type_name == "Club" else \
-			"ACADEMY\nBuild for later\n12 young players · higher potential")
+		button.text = (
+			"TAKE OVER A CLUB\nInherit a squad you did not pick\n10 volis · a going concern"
+			if type_name == "Established" else
+			"FOUND YOUR OWN\nFrom nothing, against clubs that have everything\n12 volis · younger, less standing, less money"
+		)
 		button.set_meta("value", type_name)
 		button.pressed.connect(_select_type.bind(type_name))
 		type_row.add_child(button)
