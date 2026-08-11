@@ -22,8 +22,25 @@ const DARK := {
 	"danger": Color("ff6b5f"),
 	"positive": Color("75d99b"),
 	"scrim": Color(0.01, 0.025, 0.04, 0.88),
-	"court_floor": Color("101b27"),
-	"court_surface": Color("d97a45"),
+	## The court, softened.
+	##
+	## `d97a45` is a saturated terracotta, and a volleyball court is the single
+	## largest field of colour on the screen -- roughly a third of the frame. A
+	## hue that reads as warm on a swatch reads as loud across that much area,
+	## which is the ordinary trap of picking a colour in isolation and then
+	## applying it to a wall.
+	##
+	## So the same hue, taken down in saturation and up a little in value: it is
+	## still unmistakably a warm indoor court and it no longer competes with the
+	## bodies standing on it, which are the thing a viewer is supposed to be
+	## reading. The lines stay near-white and gain contrast for free.
+	##
+	## `court_floor` comes up off near-black for the matching reason. At `101b27`
+	## the surround was a void the court floated in; a room has a floor, and it
+	## being visible is most of what stops a lit court reading as a product on a
+	## turntable.
+	"court_floor": Color("1d2a36"),
+	"court_surface": Color("cf8659"),
 	"court_line": Color("fff2c7"),
 	"court_net": Color(0.90, 0.96, 0.95, 0.64),
 	"court_post": Color("267b84"),
@@ -47,8 +64,10 @@ const LIGHT := {
 	"danger": Color("bd302d"),
 	"positive": Color("247a50"),
 	"scrim": Color(0.08, 0.11, 0.10, 0.72),
-	"court_floor": Color("d8d1c0"),
-	"court_surface": Color("df8151"),
+	## Molten gets the same treatment, from a lighter start -- see the note on
+	## the Mikasa pair above. The floor stays the warm stock it already was.
+	"court_floor": Color("ded7c8"),
+	"court_surface": Color("d9906a"),
 	"court_line": Color("fff8df"),
 	"court_net": Color(0.13, 0.29, 0.28, 0.58),
 	"court_post": Color("176f72"),

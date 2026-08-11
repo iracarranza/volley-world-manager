@@ -118,12 +118,84 @@ func apply_ui_palette(light_mode: bool) -> void:
 	_apply_mesh_color($Net, UIPalette.color(&"court_net", light_mode), true)
 	_apply_mesh_color($LeftPost, UIPalette.color(&"court_post", light_mode), false, 0.18)
 	_apply_mesh_color($RightPost, UIPalette.color(&"court_post", light_mode), false, 0.18)
-	var environment := $WorldEnvironment.environment.duplicate() as Environment
-	environment.background_color = UIPalette.color(&"canvas", light_mode).darkened(0.18)
-	environment.ambient_light_color = UIPalette.color(&"ink_muted", light_mode)
-	$WorldEnvironment.environment = environment
+	_apply_lighting(light_mode)
 	for actor in player_actors.values():
 		(actor as PlayerActor3D).apply_ui_palette(light_mode)
+
+
+## The room the court is in, rather than a studio the court is photographed in.
+##
+## **The palette was never the problem.** `court_surface` is `d97a45`, a warm
+## terracotta, and it was reaching the screen as a hard lemon yellow. Reported as
+## reading like a template for realistic lighting rather than something cozy,
+## which is exactly what was on top of it:
+##
+## - `tonemap_mode = 2` is Filmic, a curve whose whole purpose is to imitate the
+##   response of photographic film -- it lifts highlights toward white and
+##   crushes shadows, because that is what film does
+## - the fill was an `OmniLight3D` at **energy 5.0** sitting six metres above a
+##   nine-by-eighteen metre court, which saturates the surface long before the
+##   tonemapper sees it
+## - and the key was *cool* (0.92, 0.95, 1.0) against a *warm* fill, which is a
+##   three-point product-render rig. Two opposed colour temperatures is the
+##   single most recognisable signature of a photographed object, and this
+##   interface is drawn rather than photographed
+##
+## So the rig is rebuilt around what makes a room feel warm rather than what
+## makes a product look expensive: **one temperature, high ambient, low
+## contrast**. A cozy room is not a dark room with a bright lamp -- it is a room
+## where light arrives from everywhere and nothing is harshly lit, which in a
+## renderer means most of the illumination coming from ambient and the
+## directional lights only shaping.
+##
+## Linear tonemapping for the same reason the medium is halftone and pen: the
+## rest of this interface is ink on stock, and a film curve is a claim about a
+## camera that is not in the room.
+const KEY_ENERGY: float = 0.62
+const FILL_ENERGY: float = 0.95
+## Ambient does most of the work. At the old 0.72 against a key of 1.15 and a
+## fill of 5.0, ambient was a rounding error and every surface was either lit or
+## in shadow; there was no third state, which is what "harsh" means.
+const AMBIENT_ENERGY: float = 1.35
+## Both lights on the warm side of neutral, and near enough to each other that
+## the court does not read as two-toned. The fill is the warmer of the two
+## because it stands in for bounce off a wooden floor.
+const KEY_COLOR := Color(1.0, 0.96, 0.90)
+const FILL_COLOR := Color(1.0, 0.90, 0.78)
+## And the air, which is the third light and the largest of the three.
+const AMBIENT_COLOR := Color(0.92, 0.87, 0.80)
+
+
+func _apply_lighting(light_mode: bool) -> void:
+	var environment := $WorldEnvironment.environment.duplicate() as Environment
+	## Linear, not Filmic. See above.
+	environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	environment.background_color = UIPalette.color(&"canvas", light_mode).darkened(0.18)
+	## **Warm, and it has to be warm.**
+	##
+	## `ink_muted` is a *text* colour and was being used as the light in the
+	## arena -- a cool blue-grey, which is how a warm court came to sit in cold
+	## shadow and why every voli's skin read as muddy olive. Ambient is most of
+	## the illumination here, so its temperature is the room's temperature, and
+	## a cool ambient makes warm pigment dirty rather than warm.
+	##
+	## Tinted toward the canvas rather than taken from it, so the two themes are
+	## not the same room, but never far enough to go cool again.
+	environment.ambient_light_color = AMBIENT_COLOR.lerp(
+		UIPalette.color(&"canvas", light_mode), 0.22
+	)
+	environment.ambient_light_energy = AMBIENT_ENERGY
+	$WorldEnvironment.environment = environment
+	var key := $KeyLight as DirectionalLight3D
+	key.light_color = KEY_COLOR
+	key.light_energy = KEY_ENERGY
+	var fill := $FillLight as OmniLight3D
+	fill.light_color = FILL_COLOR
+	fill.light_energy = FILL_ENERGY
+	## Reaching well past the court rather than falling off inside it. A short
+	## range is what made the fill a hotspot on one half and nothing on the
+	## other; a fill that is visibly a lamp is not a fill.
+	fill.omni_range = 34.0
 
 
 func _apply_mesh_color(
