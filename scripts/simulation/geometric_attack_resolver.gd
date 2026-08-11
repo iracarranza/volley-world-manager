@@ -308,6 +308,24 @@ static func resolve_swing(
 		## hitter can carry further than a merely-decent set allows.
 		* AttackSwingModel.form_spread_multiplier(
 			match_confidence, flow_for_team
+		) \
+		## **And the wall, which until now reached the swing through nothing.**
+		##
+		## The reported defect: hitters swinging out at an open net while the
+		## blockers stand there not jumping, because they already know it is
+		## going out. A miss with nobody in front of you is an unforced error and
+		## should be rare; a miss is what pressure produces. Measured over 600
+		## rallies, the rate was no lower against nothing than against two, which
+		## is what a cone with no block term in it has to produce.
+		##
+		## Read off the **actual** wall rather than `perceived_blockers`. What a
+		## hitter believes decides which course they pick -- that is the read
+		## model's job, above -- but what they have to hit over is whatever is
+		## really there. A hitter who misread the block does not get an easier
+		## swing for having been wrong; they get a worse outcome, which is the
+		## point.
+		* AttackSwingModel.block_spread_multiplier(
+			blockers.size(), _wall_seal(blockers)
 		)
 
 	## --- the angle that puts that speed where it was aimed -------------------
@@ -950,6 +968,36 @@ static func _ground_distance_to_net(
 	if absf(direction.y) < 0.000001:
 		return 0.0
 	return maxf(to_net / direction.y, 0.0)
+
+
+## A body's width, and therefore the gap at which a wall has stopped being one.
+const SEAM_SPLIT_METERS: float = 0.9
+
+
+## How closed the wall is, 0 to 1.
+##
+## Measured where a seam exists: the widest gap between neighbouring blockers'
+## spans, against a body's width. Spans that touch or overlap read as sealed; a
+## gap you could stand in reads as split.
+##
+## A wall of one has no seam, so it is sealed by definition. That is not a
+## generosity -- what a single blocker lacks is *size*, and the size term
+## already charges for it. Folding "there is only one of them" into the seal as
+## well would be the same fact billed twice.
+static func _wall_seal(blockers: Array) -> float:
+	if blockers.size() < 2:
+		return 1.0
+	var spans: Array[Vector2] = []
+	for blocker in blockers:
+		var centre := float(blocker.get("net_x", 0.5)) \
+			* CourtConstants.COURT_WIDTH_METERS
+		var half := float(blocker.get("half_width_m", 0.45))
+		spans.append(Vector2(centre - half, centre + half))
+	spans.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+	var widest_gap := 0.0
+	for index in range(1, spans.size()):
+		widest_gap = maxf(widest_gap, spans[index].x - spans[index - 1].y)
+	return clampf(1.0 - widest_gap / SEAM_SPLIT_METERS, 0.0, 1.0)
 
 
 ## How formed the wall in front of the hitter is, 0-1. Two blockers is a full

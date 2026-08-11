@@ -2340,6 +2340,7 @@ func resolve(
 			## reports "no wall" without saying who was dropped or how close they
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -4154,6 +4155,7 @@ func _resolve_opponent_transition(
 			## reports "no wall" without saying who was dropped or how close they
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -5153,6 +5155,7 @@ func _resolve_home_continuation(
 			## reports "no wall" without saying who was dropped or how close they
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
+			"wall_reach_heights": geometric.get("wall_reach_heights", []),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -10289,6 +10292,19 @@ func _geometric_swing(
 	swing["contact_height_meters"] = height
 	swing["jump_multiplier"] = jump_multiplier
 	swing["wall_size"] = wall.size()
+	## **What each blocker actually reached, not how many closed.**
+	##
+	## `block_wall` admits a blocker on their close fraction alone and then
+	## scales `reach_height_m` by the jump they got, so a blocker who read late
+	## and never left the floor sits in the array at standing reach and counts
+	## toward `wall_size` exactly as much as a middle with their hands over the
+	## tape. Every consumer of `wall_size` has been reading "bodies near the
+	## lane" while believing it read "wall in the way". Published so the two can
+	## be told apart.
+	var reaches: Array[float] = []
+	for blocker in wall:
+		reaches.append(float(blocker.get("reach_height_m", 0.0)))
+	swing["wall_reach_heights"] = reaches
 	return swing
 
 
@@ -10405,6 +10421,11 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"launch_cleared": bool(swing.get("launch_cleared", true)),
 		"launch_mode": str(swing.get("launch_mode", "")),
 		"wall_size": int(swing.get("wall_size", 0)),
+		## And what each of them reached, which is the difference between a wall
+		## and two people standing near one. Forwarded here rather than left in
+		## the record because this projection is all promotion sees -- the third
+		## time a key has been dropped at exactly this line.
+		"wall_reach_heights": swing.get("wall_reach_heights", []),
 		"vertical_angle_degrees": float(delivered.get("vertical_angle_degrees", 0.0)),
 		"block_kind": str(
 			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
@@ -10514,6 +10535,7 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		## it, which is the same dropped-key shape that hid `block_miss_reason`
 		## for as long.
 		"wall_size": int(record.get("wall_size", 0)),
+		"wall_reach_heights": record.get("wall_reach_heights", []),
 		"net_height_over_block_meters": float(
 			record.get("net_height_over_block_meters", 0.0)
 		),
