@@ -369,6 +369,22 @@ func _carry_trajectory(
 ) -> Dictionary:
 	if next_contact == null or duration <= 0.0:
 		return {}
+	## **Only a contact that actually touched the ball moves it.**
+	##
+	## Without this the carry fired on every block, including the ones the ball
+	## went past untouched -- and a block that never touched it has an
+	## `end_position` back where the attack was aimed, so the window redrew the
+	## whole spike. Reported from a rally as "the spike trajectory resolves almost
+	## fully with no floor defense movement, then the block event resolves which
+	## repeats the trajectory": one flight, drawn twice, because playback assumed
+	## a deflection that had not happened.
+	##
+	## The resolver already says. `block_contact_kind` is empty for a block the
+	## ball passed, and the attack's own flight carries on to the defender exactly
+	## as it did before this window learned to draw anything.
+	if int(event.event_type) == RallyEventModel.EventType.BLOCK \
+			and str(event.metadata.get("block_contact_kind", "")).is_empty():
+		return {}
 	var from := Vector2(event.end_position)
 	var to := Vector2(next_contact.start_position)
 	if from.distance_to(to) < 0.002:
@@ -764,6 +780,7 @@ func _build_movement_plan(
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["approach_start_position"]
 			)
+	_pacing_event_type = int(next_contact.event_type)
 	_pace_plan(plan, window_seconds, next_actor_id)
 	## After pacing, not before: `_set_plan_target` writes a fresh entry with no
 	## `seconds` key, so a proof leg is deliberately unpaced. See below.
@@ -827,6 +844,13 @@ func _apply_movement_proof(plan: Dictionary, contact_actor_id: int) -> void:
 const PLAUSIBLE_TOP_SPEED_MPS: float = 7.0
 
 
+## Which contact the plan currently being paced is aimed at, so an overspeed
+## entry can name it. Set immediately before `_pace_plan` rather than threaded
+## through its signature, which three other callers would have to carry for a
+## field only the diagnostic reads.
+var _pacing_event_type: int = -1
+
+
 func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) -> void:
 	if window_seconds <= 0.0:
 		return
@@ -845,6 +869,12 @@ func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) 
 					"metres": metres,
 					"window_seconds": window_seconds,
 					"speed": needed,
+					## Which contact this leg was rushing toward. Without it the
+					## record says a voli was drawn too fast and cannot say what
+					## they were drawn too fast *at*, which is the only thing that
+					## distinguishes a hitter over-running their approach mark from
+					## a blocker following a ball off their own hands.
+					"event_type": _pacing_event_type,
 				})
 			continue
 		movement["seconds"] = maxf(window_seconds, metres / maxf(speed, 0.01))

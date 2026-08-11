@@ -12905,7 +12905,6 @@ func _test_spike_biomechanics_sequence() -> void:
 	var cock: Dictionary = SpikeBiomechanics.resolve(
 		SpikeBiomechanics.COCK_END, RIGHT
 	)
-	var plant: Dictionary = SpikeBiomechanics.resolve(-1.0, RIGHT)
 	## The *deepest* part of the plant, which is its end rather than its start --
 	## at -1.0 the load has not begun yet, which is what this test asserted the
 	## first time it was written.
@@ -12930,12 +12929,37 @@ func _test_spike_biomechanics_sequence() -> void:
 		"spike contact extends the elbow (%.1f)"
 			% float(contact.striking_elbow_degrees),
 	)
-	## And the plant is on the floor with the arms behind, which is the half of
-	## the action the old single-sweep pose did not draw at all.
+	## And the plant picks the arms up where the approach put them down.
+	##
+	## **This check used to assert the wrong number at a phase nobody sees.** It
+	## read `plant.striking_shoulder_degrees > 20`, sampled at -1.0 -- and
+	## `PlayerActor3D` hands off from `ApproachBiomechanics` to this model at
+	## `PLANT_END`, so nothing below -0.62 is ever drawn. The assertion passed on
+	## a value playback cannot reach, while the value playback *does* reach
+	## disagreed with the approach's closing arm by 101 degrees and threw the
+	## whole backswing away on one frame.
+	##
+	## So it now asserts the seam, which is the thing that can actually be wrong:
+	## the two models must describe the same arm at the instant they trade.
+	var approach_close: Dictionary = ApproachBiomechanics.resolve(1.0, true)
+	var handoff: Dictionary = SpikeBiomechanics.resolve(
+		SpikeBiomechanics.PLANT_END, RIGHT
+	)
 	_check(
-		float(plant.striking_shoulder_degrees) > 20.0,
-		"spike plants with the arm behind the hips (%.1f)"
-			% float(plant.striking_shoulder_degrees),
+		absf(
+			float(handoff.striking_shoulder_degrees)
+				- float(approach_close.right_arm_degrees)
+		) < 8.0,
+		"the spike picks the arm up where the approach left it (%.1f vs %.1f)"
+			% [
+				float(handoff.striking_shoulder_degrees),
+				float(approach_close.right_arm_degrees),
+			],
+	)
+	_check(
+		float(handoff.striking_shoulder_degrees) < -40.0,
+		"the spike plants with the arm swung back (%.1f)"
+			% float(handoff.striking_shoulder_degrees),
 	)
 	_check(
 		float(loaded.knee_degrees) < -50.0,

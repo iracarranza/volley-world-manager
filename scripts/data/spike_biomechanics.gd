@@ -1,6 +1,8 @@
 class_name SpikeBiomechanics
 extends RefCounted
 
+const ApproachBiomechanics := preload("res://scripts/data/approach_biomechanics.gd")
+
 ## A spike as a sequence of segments, not a single sweep.
 ##
 ## The attack pose used to interpolate one `swing` value: the shoulder rotated
@@ -50,6 +52,37 @@ const FOLLOW_END: float = 0.45
 ## Narrow on purpose: it is a label for the instant, not a phase with a duration.
 const CONTACT_BAND: float = 0.04
 
+## When the shoulder starts driving at the ball, and when the elbow follows.
+##
+## Both later than the cock ends, which is the "storing tension" half of the
+## action: the arm holds its load while the trunk unwinds under it and only then
+## goes. Pulled in from `COCK_END` and -0.115 because the burst was spread thinly
+## over most of the cock -- the hand crept up to the ball instead of being thrown
+## at it -- and a shorter window at the same travel is a faster hand by exactly
+## the ratio of the two.
+##
+## They cannot be pulled in much further. The continuity gate in
+## `_test_spike_biomechanics_sequence` allows nine degrees between adjacent
+## samples 0.005 of phase apart, and an accelerating window ends at twice its
+## average rate: the shoulder's 82 degrees over 0.105 is 7.8 of them and the
+## elbow's 71 over 0.09 is 7.9. Anything tighter draws a limb teleporting, which
+## is the thing this file was written to stop.
+const STRIKE_START: float = -0.105
+const ELBOW_RELEASE_START: float = -0.09
+
+## How high the guide arm reaches at the cock.
+##
+## 84 degrees is very nearly horizontal on this rig, and measured on the body it
+## put the guide hand **0.10 m above the shoulder** -- out in front at chest
+## height, where a hitter's non-hitting arm is doing nothing anybody can see.
+## Reported as exactly that: the guide arm does not really do anything.
+##
+## The ball is above and in front. A guide arm that points at it has to be up
+## there too, and the pull down from up there is what rotates the trunk. The
+## value is chosen by where the hand lands rather than by what the angle sounds
+## like; `tools/measure_spike_swing.gd` prints it.
+const GUIDE_REACH_DEGREES: float = 132.0
+
 ## When the swing arm starts returning to a neutral hang.
 ##
 ## Well after `FOLLOW_END`, because the follow-through does not stop when the
@@ -57,13 +90,28 @@ const CONTACT_BAND: float = 0.04
 ## apart -- they are different events happening to different limbs.
 const ARM_RECOVER_START: float = 0.72
 
-## How far the arm swings behind the hips on the double-arm backswing.
+## Where the approach leaves both arms, which is where this model has to pick
+## them up.
 ##
-## Positive rotates the arm backward on this rig. Both arms do this together --
-## it is the counterweight that the takeoff converts into height, and drawing a
-## hitter planting with their arms already up is the single most common way a
-## spike animation reads as floaty.
-const BACKSWING_DEGREES: float = 42.0
+## **Taken from `ApproachBiomechanics` rather than restated.** It was restated,
+## as +42, and the approach ends at -74: opposite signs for the same instant.
+## `PlayerActor3D` hands off from the approach to this model at `PLANT_END`, so
+## every spike in the game swung both arms back through the run-up and then
+## snapped them 101 degrees forward to a neutral hang on the first frame of the
+## plant, and lifted from there. Measured on the rig, the striking hand jumps
+## 1.15 m across that one seam -- 18.7 m/s, the fastest the hand moves in the
+## entire action, in the wrong direction, before the swing has started.
+##
+## That is the reported "the arm load just looks like the arm raising up rather
+## than swinging up and forward": the load *was* being drawn, by the approach,
+## and then discarded.
+##
+## Two numbers that must agree, so there is now one number. See
+## `_test_spike_biomechanics_sequence`, which asserts the seam rather than
+## asserting a value at phase -1 that playback never reaches.
+const BACKSWING_DEGREES: float = ApproachBiomechanics.ARM_BACK_DEGREES
+## And the elbow at the same instant, for the same reason.
+const BACKSWING_ELBOW_DEGREES: float = ApproachBiomechanics.ARM_ELBOW_BACK_DEGREES
 
 ## The striking shoulder through the action. Negative carries the arm up and
 ## over: -180 is straight overhead, so -204 at contact is just forward of
@@ -176,6 +224,44 @@ static func window(phase: float, from_phase: float, to_phase: float) -> float:
 	return smoothstep(from_phase, to_phase, phase)
 
 
+## A window that **arrives at speed**: fastest at its end.
+##
+## `window` eases out, which is right for a segment settling into a position and
+## exactly wrong for the one that hits the ball. Measured on the rig, the
+## striking hand moved 5.0 m/s a tenth of a phase before contact, **1.0 m/s at
+## contact** and 0.5 m/s just after -- the slowest part of the whole action was
+## the instant the ball was struck, and the fastest was the backswing. That is
+## the reported "the contact is still not snappy/explosive enough", and it was
+## not a matter of magnitude: every angle was already correct at contact, and the
+## arm had simply stopped by the time it got there.
+##
+## The cause was a correction that was right about pose and wrong about velocity.
+## The shoulder's drive was deliberately ended at -0.03 and the elbow's at -0.02
+## so that "a hitter is at full extension when the hand meets the ball" -- true,
+## but a smoothstep reaches its end with zero slope, so full extension arrived
+## *and stopped* three hundredths early. A hitter reaches full extension **at**
+## the ball, travelling fastest, and decelerates afterwards.
+static func accelerate(phase: float, from_phase: float, to_phase: float) -> float:
+	if to_phase - from_phase <= 0.00001:
+		return 1.0 if phase >= to_phase else 0.0
+	var t := clampf(inverse_lerp(from_phase, to_phase, phase), 0.0, 1.0)
+	return t * t
+
+
+## And a window that **leaves at speed**: fastest at its start.
+##
+## The other half of the same problem. With the follow-through easing *in* from
+## contact, the frames after the ball were as still as the frames before it, so
+## even a correctly accelerating swing would have arrived and frozen. An arm
+## carries through the ball and slows down over the follow-through, which is this
+## curve and not the other one.
+static func decelerate(phase: float, from_phase: float, to_phase: float) -> float:
+	if to_phase - from_phase <= 0.00001:
+		return 1.0 if phase >= to_phase else 0.0
+	var t := clampf(inverse_lerp(from_phase, to_phase, phase), 0.0, 1.0)
+	return 1.0 - (1.0 - t) * (1.0 - t)
+
+
 ## Every joint the attack pose needs, for one instant of the swing.
 ##
 ## `handedness_sign` is +1 for a right-handed hitter and -1 for a left-handed
@@ -221,7 +307,7 @@ static func resolve(
 	## strike were drawn mid-swing with a bent elbow. A hitter is at full extension
 	## when the hand meets the ball; the last three hundredths are the arm arriving
 	## and waiting, not still arriving.
-	var strike := window(p, COCK_END, -0.03)
+	var strike := accelerate(p, STRIKE_START, 0.0)
 	## **The elbow holds its fold while the shoulder travels, then extends.**
 	##
 	## It opened over (-0.11, 0.02) against a shoulder driving over (-0.14, 0.00) --
@@ -239,8 +325,8 @@ static func resolve(
 	## looked least like a spike. The lag over the shoulder is what makes it a whip
 	## and it survives: the shoulder's travel centres on -0.085 and the elbow's on
 	## -0.068, so the elbow is still the last joint to go.
-	var elbow_release := window(p, -0.115, -0.02)
-	var follow := window(p, 0.0, FOLLOW_END)
+	var elbow_release := accelerate(p, ELBOW_RELEASE_START, 0.0)
+	var follow := decelerate(p, 0.0, FOLLOW_END)
 	var land := window(p, FOLLOW_END, 1.0)
 	## The arm finishes after the feet do.
 	##
@@ -257,17 +343,31 @@ static func resolve(
 
 	## The shoulder walks back through the plant, up through the takeoff, into
 	## the cock, through the ball, and across the body.
-	var shoulder := lerpf(BACKSWING_DEGREES, 0.0, load * 0.35)
+	## Held where the approach left it rather than un-swung toward neutral. The
+	## old `lerpf(BACKSWING, 0, load * 0.35)` carried the arm a third of the way
+	## forward during a window playback never draws, which only mattered because
+	## its start was the wrong sign; with the seam agreed, the arm is simply back
+	## and stays back until the lift takes it up and over.
+	var shoulder := BACKSWING_DEGREES
 	shoulder = lerpf(shoulder, SHOULDER_LIFT_DEGREES, lift)
 	shoulder = lerpf(shoulder, SHOULDER_COCK_DEGREES, tuck)
 	shoulder = lerpf(shoulder, SHOULDER_CONTACT_DEGREES, strike)
 	shoulder = lerpf(shoulder, SHOULDER_FOLLOW_DEGREES, follow)
-	shoulder = lerpf(shoulder, -16.0, arm_recover)
+	## **Forward, not back.** This returned to -16, and the arm was at -252: a
+	## 236-degree reversal, which is the swing running backwards. Measured, the
+	## hand covered it at up to 17 m/s -- three times its speed through the ball,
+	## so the fastest thing in a spike was the arm un-spiking afterwards.
+	##
+	## -376 is the same hanging arm (it differs by a full turn) reached by
+	## *continuing*: down across the body, through the bottom of the arc, and back
+	## up to the side. 124 degrees in the direction the arm was already
+	## travelling, which is what an arm does after it hits something.
+	shoulder = lerpf(shoulder, -376.0, arm_recover)
 
 	## And the elbow lags it. Folding early and opening late is the entire
 	## difference between a whip and a windmill, so these windows deliberately
 	## start after the shoulder's and end after it too.
-	var elbow := lerpf(28.0, ELBOW_COCK_DEGREES, maxf(lift, tuck))
+	var elbow := lerpf(BACKSWING_ELBOW_DEGREES, ELBOW_COCK_DEGREES, maxf(lift, tuck))
 	elbow = lerpf(elbow, ELBOW_CONTACT_DEGREES, elbow_release)
 	elbow = lerpf(elbow, ELBOW_FOLLOW_DEGREES, follow)
 	elbow = lerpf(elbow, 22.0, arm_recover)
@@ -296,7 +396,7 @@ static func resolve(
 	## shoulder does, because the sequence is *reach, then pull*: pulling with the
 	## shoulder would make the two arms one gesture again.
 	var guide_pull := window(p, COCK_END + 0.08, 0.06)
-	var guide := lerpf(BACKSWING_DEGREES, 84.0, maxf(lift, tuck))
+	var guide := lerpf(BACKSWING_DEGREES, GUIDE_REACH_DEGREES, maxf(lift, tuck))
 	guide = lerpf(guide, 18.0, guide_pull)
 	guide = lerpf(guide, 6.0, follow)
 	guide = lerpf(guide, 0.0, land)

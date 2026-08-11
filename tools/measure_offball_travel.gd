@@ -29,6 +29,8 @@ func _initialize() -> void:
 	## walking step into 75 m/s and the teleport count becomes a measure of
 	## scheduler jitter. At 60 the delta is the delta a player actually sees.
 	Engine.max_fps = 60
+	var Events := load("res://scripts/models/rally_event.gd")
+	var overspeed := {}
 	var GameManagerScript := load("res://scripts/managers/game_manager.gd")
 	var manager: Object = GameManagerScript.new()
 	manager.seed_vertical_slice_data()
@@ -42,6 +44,7 @@ func _initialize() -> void:
 	var rally_seeds := [12007, 12011, 12019, 12023, 12029, 12031, 12037, 12041]
 	var totals := {}
 	var worst_step := {}
+	var worst_when := {}
 	var actors := {}
 	var rallies := 0
 	for rally_seed in rally_seeds:
@@ -60,7 +63,13 @@ func _initialize() -> void:
 		var guard := 0
 		while screen.playback_active and guard < 200000:
 			guard += 1
+			## The first frames of a rally report a delta of almost nothing, and
+			## a real 2 cm step divided by it reads as 163 m/s. Every "teleport"
+			## this probe found before this guard was one of those: a centimetre
+			## of movement and a broken denominator. Frames with an implausible
+			## delta are counted for distance and skipped for speed.
 			var delta := screen.get_process_delta_time()
+			var delta_is_usable := delta > 0.004
 			await process_frame
 			for raw_id in court.player_actors:
 				var player_id := int(raw_id)
@@ -69,9 +78,27 @@ func _initialize() -> void:
 				var metres := before.distance_to(here)
 				totals[player_id] = float(totals.get(player_id, 0.0)) + metres
 				var speed := metres / maxf(delta, 0.0001)
-				if speed > float(worst_step.get(player_id, 0.0)):
+				if delta_is_usable and speed > float(worst_step.get(player_id, 0.0)):
 					worst_step[player_id] = speed
+					## What was on screen when it happened. A jump is only
+					## diagnosable if you know which contact it belongs to, and
+					## the event label is what playback itself says it is drawing.
+					worst_when[player_id] = "%.2f m during %s" % [
+						metres, str(screen.event_label.text),
+					]
 				previous[player_id] = here
+		## The legs playback had to draw faster than a body moves, attributed to
+		## the contact they belong to. `MatchScreen` has recorded these since the
+		## pacing pass landed and nothing has ever read them, which is why "one
+		## voli teleports" has been a story rather than a diagnosis.
+		for entry in screen.playback_leg_overspeed:
+			var key := "%s" % Events.EventType.keys()[int(entry.get("event_type", -1))] \
+				if entry.has("event_type") else "unknown"
+			var row: Dictionary = overspeed.get(key, {"count": 0, "worst": 0.0, "metres": 0.0})
+			row["count"] = int(row["count"]) + 1
+			row["worst"] = maxf(float(row["worst"]), float(entry.get("speed", 0.0)))
+			row["metres"] = maxf(float(row["metres"]), float(entry.get("metres", 0.0)))
+			overspeed[key] = row
 
 	var ids := totals.keys()
 	ids.sort()
@@ -86,9 +113,18 @@ func _initialize() -> void:
 		])
 		if fastest > 12.0:
 			teleporting += 1
+			print("        ^ %s" % str(worst_when.get(player_id, "?")))
 	print("%d of %d volis had at least one frame above 12 m/s" % [
 		teleporting, ids.size(),
 	])
+	print("")
+	print("legs playback could not pace, by the contact they belong to")
+	print("%-16s %7s %10s %10s" % ["contact", "legs", "worst m/s", "worst m"])
+	for key in overspeed:
+		var row: Dictionary = overspeed[key]
+		print("%-16s %7d %10.1f %10.2f" % [
+			key, int(row["count"]), float(row["worst"]), float(row["metres"]),
+		])
 	manager.free()
 	quit()
 
