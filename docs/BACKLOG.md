@@ -98,6 +98,20 @@ Ordered roughly by how much each one changes what a viewer believes.
 6. **Blockers already know the outcome.** They do not jump at a ball going out,
    and they sometimes move to the attack's location *before the set*. Information
    is reaching the block decision that a blocker could not have.
+
+   **Promoted, and it now carries a second report.** "Volis swing out while the
+   blockers stand there not jumping" was read as the hitter's aim being blind to
+   the wall. The block is now an input to the aim cone -- it genuinely was not,
+   and that hole is closed -- but the measurement says that was not the defect.
+   `run_wall_reach_probe.gd`, over 600 rallies: **every blocker in every wall
+   has their hands above the tape**, on 709 of 710 swings, and the whole
+   distribution of blocker reach against the hitter's contact height fits in two
+   20 cm buckets. An open net is one swing in 710.
+
+   So the resolver says the wall was up and playback draws blockers standing.
+   The gap is entirely on the drawing side, which makes this entry and entry 5's
+   idle hands-up pose the same piece of work: a blocker at the net has states --
+   waiting, loading, up, coming down -- and playback currently has two of them.
 7. **Cogniticons are too small** at the default camera distance.
 8. **A pipe attack sent the ball straight up.** Seen once; the back-row launch arc
    is the suspect.
@@ -114,11 +128,17 @@ Ordered roughly by how much each one changes what a viewer believes.
     into the platform pose, and then plants. Two things are wrong with that and
     one of them is upstream of the other.
 
-    The near cause is the step quantiser. `step_quantised_fraction` breaks any
-    leg under `STEP_QUANTISE_MAX_METERS` (2.6 m) into up to `MAX_QUANTISED_STEPS`
-    (4) discrete steps, which is right for crossing the court and wrong for the
-    last metre before a contact. **A short final approach is not locomotion, it
-    is a reach** -- one plant and an extension -- and the rig already draws it:
+    **Not the quantiser, on a second reading.** `step_quantised_fraction` takes
+    `round(leg / stride)` clamped to four, so with a stride near 0.9 m a one
+    metre adjustment already draws as a *single* step. Two or three *sets* of
+    small steps is two or three **legs** -- the defender is re-targeted on each
+    of several consecutive playback windows before the dig, and each window
+    quantises into a step or two of its own. The count is a symptom of how many
+    windows they get, which is entry 12.
+
+    What is still true is the pose. **A short final approach is not locomotion,
+    it is a reach** -- one plant and an extension -- and the rig already draws
+    it:
     `posture` has a `reaching` branch with its own platform yaw, roll and stance
     width. It is simply never selected. The simulator's own comment records the
     measurement: `reaching` fires on **0.0% of receptions** and `off-axis` on
