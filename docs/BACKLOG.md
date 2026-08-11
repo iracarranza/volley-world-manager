@@ -195,6 +195,26 @@ Ordered roughly by how much each one changes what a viewer believes.
     window. Everything that looks like "the voli had suspiciously long to do
     that" is downstream of this.
 
+13a. **A failed dig is drawn as a contact that failed.** The caption reads
+    *"Wonsik cannot reach the short court attack after moving 1.2m"* -- a ball
+    nobody touched -- while playback draws the platform pose. A viewer cannot
+    tell whether the defender missed the ball or shanked it, and those are
+    different events. The pose selector reads `contact_posture`, which every
+    contact carries whether or not it was made; nothing asks `event.success`
+    first. Related to entry 11's finding that `reaching` is reserved for
+    negative margins, which are exactly these unreachable balls.
+
+13b. **A defender contacts a short-court ball without moving, and the ball
+    leaves from somewhere they are not.** Seen with the dig popping up
+    disconnected from the body. If that contact was a maximal extension it wants
+    the falling reach -- which the rig has parts of, and which is the same
+    missing selector as 13a rather than missing art.
+
+13c. **A blocker hangs in the air.** The block's descent is drawn over a window
+    that outlasts the jump. Distinct from the block-timing work already landed:
+    that fixed *when* the block happens, this is how long the body stays up
+    afterwards.
+
 13. **A turn is made of steps.** Pivoting to look somewhere is currently a smooth
     interpolation of the whole body. It should be head first, then torso, and for
     anything steeper than a glance a *step* in the new direction -- the feet

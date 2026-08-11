@@ -133,14 +133,27 @@ const RUN_BOB_METERS: float = 0.082
 ## shoulders, weight between them, hips dropped so the legs are already loaded.
 ## Without the width the crouch has nowhere to go and the voli looks folded.
 const READY_HIP_DEGREES: float = 16.0
-const READY_KNEE_DEGREES: float = -54.0
+const READY_KNEE_DEGREES: float = -60.0
 ## How far each leg is carried out from under the hip. Bounded well inside
 ## `PlayerActor3D.HIP_ABDUCTION_LIMIT_DEGREES` (42), because this is a stance a
 ## voli holds for a whole rally rather than the extreme of a dig.
 const READY_ABDUCTION_DEGREES: float = 15.0
 const READY_ARM_DEGREES: float = -30.0
 const READY_ELBOW_DEGREES: float = 54.0
-const READY_TORSO_RADIANS: float = -0.30
+## And the lean itself, which was the largest in this file.
+##
+## -0.30 rad is 17 degrees of forward pitch -- more than a *run* carries at
+## -0.16, on a body that is standing still. Reported as reading unbalanced
+## rather than low and compact, and the paragraph directly above it had already
+## argued the case: a stance is wide and low, not a lean. The constant
+## contradicted its own comment, which is the failure mode this repository keeps
+## catching in the other direction.
+##
+## The height it was buying comes from the knee instead, which is where a ready
+## position actually gets low: -54 to -60 degrees drops the hips without
+## pitching the chest over the toes. Net effect is a body loaded between its
+## feet rather than tipped past them.
+const READY_TORSO_RADIANS: float = -0.17
 
 ## ## Travelling somewhere other than forwards
 ##
