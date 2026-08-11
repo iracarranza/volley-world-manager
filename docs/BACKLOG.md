@@ -252,10 +252,24 @@ Ordered roughly by how much each one changes what a viewer believes.
     and been read as answering it; this is not becoming the sixth.
 
 13g. **Chase the ball off the court.** A deflection coming high off the block is
-    playable, and a real player leaves the court to go after it. Nothing in the
-    movement model allows a target outside the court bounds, so those balls are
-    watched rather than chased. Pairs with 13f: a chase-down only reads if
-    playback is still running while the ball is in the air.
+    playable, and a real player leaves the court to go after it.
+
+    **Checked, and playback is not what is stopping it.** `_set_plan_target` and
+    `_apply_explicit_targets` apply no court bounds at all -- the only `clampf`
+    calls on that path are on playback progress and speed. A target outside the
+    court is already expressible and would already be drawn. Nothing produces
+    one.
+
+    So this is a simulation feature, not a drawing one, and it is bigger than it
+    looks from the outside. It needs three decisions that do not exist: whether a
+    landing outside the court is reachable *at all* by the defender nearest it,
+    who goes (the chase is one player's, and the cover behind them changes), and
+    what a ball played from off-court does next -- it has to come back over the
+    net from a position no lane or set target is defined for. Each of those moves
+    rally outcomes, so each wants measuring rather than asserting.
+
+    Its dependency on 13f is now satisfied: the outro lasts as long as the ball
+    is up, so a chase would have time to be drawn in.
 
 13d. **A net touch by a player.** Not the ball clipping the tape -- a body or a
     hand touching the net, which is a fault and one of the few in the sport a
