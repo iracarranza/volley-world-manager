@@ -124,6 +124,7 @@ func load_and_play_rally(rally_result: RallyResult, requested_speed: float = 1.0
 	match_court_3d.ball_actor.reset_flight()
 	playback_start_mismatches.clear()
 	playback_leg_overspeed.clear()
+	_previously_placed.clear()
 	progress_bar.value = 0.0
 	await _run_rally(generation)
 	if generation != playback_generation:
@@ -780,7 +781,13 @@ func _build_movement_plan(
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["approach_start_position"]
 			)
+	## Who the resolver named this window, remembered for the next one.
+	_previously_placed = {}
+	for key in ["home_phase_targets", "opponent_phase_targets"]:
+		for raw_player_id in Dictionary(next_contact.metadata.get(key, {})):
+			_previously_placed[int(raw_player_id)] = true
 	_pacing_event_type = int(next_contact.event_type)
+	_separate_plan(plan, next_actor_id)
 	_pace_plan(plan, window_seconds, next_actor_id)
 	## After pacing, not before: `_set_plan_target` writes a fresh entry with no
 	## `seconds` key, so a proof leg is deliberately unpaced. See below.
@@ -820,6 +827,110 @@ func _apply_movement_proof(plan: Dictionary, contact_actor_id: int) -> void:
 		_set_plan_target(plan, player_id, Vector2(here.x, 0.06 if here.y < 0.5 else 0.94))
 
 
+## Two volis cannot stand in the same place.
+##
+## Nothing anywhere enforced this. A plan is assembled from three independent
+## sources -- the resolver's phase maps, playback's return-to-base, and the
+## contact's own target -- and not one of them can see the others, so the same
+## point can be handed to two people and routinely was. Measured over eight
+## rallies: **1487 frames** with two volis on a side inside half a metre, and
+## many of them at a gap of exactly 0.00 m, which is not a near miss but the
+## identical coordinate. Reported as the whole opposition standing inside each
+## other during block follow; it also happens on the home side during every
+## other set.
+##
+## Only 22 of those came from a single map handing one point to two volis. The
+## rest are two sources agreeing by accident, which is why this belongs here,
+## after everything has had its say, rather than inside any one of them.
+##
+## A shove rather than a solve. Each overlapping pair is pushed apart along the
+## line between them until they clear a shoulder width, twice, which is enough
+## to open a stack of two or three and cheap enough to run per leg. It does not
+## claim to be collision: bodies can still pass through each other *during* a
+## leg, and a real obstruction model -- one where a voli is blocked by a
+## teammate rather than merely not ending up inside them -- is a bigger piece of
+## work and is in the backlog.
+##
+## The player about to touch the ball is never moved. They have somewhere they
+## must be, and being politely nudged off the ball is worse than standing close
+## to a teammate.
+const MIN_BODY_SEPARATION_METERS: float = 0.62
+const SEPARATION_PASSES: int = 2
+
+
+func _separate_plan(plan: Dictionary, contact_actor_id: int) -> void:
+	## **Worked in metres, and the first version was not.** Court coordinates are
+	## normalised and the court is 9 m across by 18 m long, so a push computed as
+	## a fraction of the width is only half the push it should be along the
+	## length. It cut the overlap and left a residue at a tenth of a metre --
+	## which reads on screen exactly like the defect it was supposed to fix.
+	##
+	## Volis nobody planned a leg for are obstacles too: they are standing
+	## somewhere, and a voli sent to that spot arrives inside them. They are in
+	## the working set and are never moved.
+	var here := {}
+	for raw_player_id in match_court_3d.live_positions:
+		here[int(raw_player_id)] = _to_metres(
+			Vector2(match_court_3d.live_positions[raw_player_id])
+		)
+	for raw_player_id in plan:
+		here[int(raw_player_id)] = _to_metres(
+			Vector2(plan[raw_player_id].get("target", Vector2.ZERO))
+		)
+	var ids: Array = here.keys()
+	if ids.size() < 2:
+		return
+	for _pass_index in range(SEPARATION_PASSES):
+		for a_index in range(ids.size()):
+			for b_index in range(a_index + 1, ids.size()):
+				var a := int(ids[a_index])
+				var b := int(ids[b_index])
+				## Only teammates crowd each other; the two sides are kept apart
+				## by the net and a voli on the far side is not in the way.
+				if (a < 100) != (b < 100):
+					continue
+				var a_movable := plan.has(a) and a != contact_actor_id
+				var b_movable := plan.has(b) and b != contact_actor_id
+				if not a_movable and not b_movable:
+					continue
+				var offset: Vector2 = here[b] - here[a]
+				var gap := offset.length()
+				if gap >= MIN_BODY_SEPARATION_METERS:
+					continue
+				## Two targets at the identical point have no line to push along,
+				## so the pair is opened sideways instead. Derived from the ids so
+				## the same stack always opens the same way -- a rally re-resolved
+				## from its seed must draw the same court.
+				var axis := offset / gap if gap > 0.001 \
+					else Vector2(1.0, 0.0).rotated(float((a + b) % 8) * PI * 0.25)
+				var overlap := MIN_BODY_SEPARATION_METERS - gap
+				## The whole correction goes to whichever of the two can take it.
+				var share := 0.5 if a_movable and b_movable else 1.0
+				if a_movable:
+					here[a] = here[a] - axis * overlap * share
+				if b_movable:
+					here[b] = here[b] + axis * overlap * share
+	for raw_player_id in plan:
+		var player_id := int(raw_player_id)
+		if player_id == contact_actor_id:
+			continue
+		plan[raw_player_id]["target"] = _from_metres(here[player_id])
+
+
+func _to_metres(court_position: Vector2) -> Vector2:
+	return Vector2(
+		court_position.x * match_court_3d.court_width,
+		court_position.y * match_court_3d.court_length,
+	)
+
+
+func _from_metres(metres: Vector2) -> Vector2:
+	return Vector2(
+		metres.x / maxf(match_court_3d.court_width, 0.001),
+		metres.y / maxf(match_court_3d.court_length, 0.001),
+	)
+
+
 ## What is drawn as sprinting must be something a body can do.
 ##
 ## Playback lerped every planned leg across the ball's flight, whatever the
@@ -849,6 +960,14 @@ const PLAUSIBLE_TOP_SPEED_MPS: float = 7.0
 ## through its signature, which three other callers would have to carry for a
 ## field only the diagnostic reads.
 var _pacing_event_type: int = -1
+
+## Volis the resolver placed by name on the previous leg. See
+## `_apply_base_positions`, which will not overrule them for one window.
+var _previously_placed: Dictionary = {}
+
+## How far from their posture a voli has to be before a base return is worth
+## drawing, in metres. Under this they are already standing in it.
+const BASE_RETURN_DEADBAND_METERS: float = 0.75
 
 
 func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) -> void:
@@ -942,6 +1061,31 @@ func _apply_base_positions(
 		if not match_court_3d.live_positions.has(player_id):
 			continue
 		if player_id == int(next_contact.actor_id):
+			continue
+		## **Not one flight after the resolver put them somewhere.**
+		##
+		## Measured over eight rallies: 131 legs sent a voli back the way they
+		## had just come, and 78 of them were this function and a phase map
+		## taking turns -- 49 base-returns immediately after a phase target and
+		## 29 phase targets immediately after a base return. Base against base
+		## was 3, so the postures themselves are stable; what oscillated was
+		## which of the two sources got the last word. About 20 m per rally of
+		## drawn travel went into it, against roughly 50 m of travel in total.
+		##
+		## The comment above this function says a base position is where you go
+		## when nothing more specific is being asked of you, and that was true
+		## per-leg and false across legs: a voli placed for a phase and then not
+		## named in the *next* window was being yanked home from a position the
+		## resolver had deliberately chosen, and named again the window after.
+		## One window of memory is the whole fix. You reset once the resolver has
+		## stopped asking for you, not the instant it goes quiet.
+		if _previously_placed.has(player_id):
+			continue
+		## And nobody jogs home from half a metre away. Small corrections are
+		## most of what a base return actually asked for and none of what it is
+		## for; below this the voli is already standing in their posture.
+		var here := Vector2(match_court_3d.live_positions[player_id])
+		if _court_metres(here, Vector2(resting[raw_player_id])) < BASE_RETURN_DEADBAND_METERS:
 			continue
 		_set_plan_target(plan, player_id, Vector2(resting[raw_player_id]))
 

@@ -31,6 +31,7 @@ func _initialize() -> void:
 	Engine.max_fps = 60
 	var Events := load("res://scripts/models/rally_event.gd")
 	var overspeed := {}
+	var overlaps: Array = []
 	var GameManagerScript := load("res://scripts/managers/game_manager.gd")
 	var manager: Object = GameManagerScript.new()
 	manager.seed_vertical_slice_data()
@@ -87,6 +88,32 @@ func _initialize() -> void:
 						metres, str(screen.event_label.text),
 					]
 				previous[player_id] = here
+			## **How close do two volis get to standing in the same place?**
+			##
+			## Reported as the whole opposition standing inside each other during
+			## block follow. Nothing in playback keeps two bodies apart -- each is
+			## placed from its own leg and the legs are independent -- so the only
+			## way to see it is to measure the closest pair on each side, every
+			## frame. A shoulder is about 0.45 m wide, so anything under half a
+			## metre is two bodies overlapping on screen.
+			for side in [[1, 6], [101, 106]]:
+				var closest := 99.0
+				var pair_key := ""
+				for a in range(int(side[0]), int(side[1]) + 1):
+					for b in range(a + 1, int(side[1]) + 1):
+						if not court.player_actors.has(a) or not court.player_actors.has(b):
+							continue
+						var gap: float = _ground(court.player_actors[a]).distance_to(
+							_ground(court.player_actors[b])
+						)
+						if gap < closest:
+							closest = gap
+							pair_key = "%d+%d" % [a, b]
+				if closest < 0.5 and closest < 99.0:
+					overlaps.append({
+						"pair": pair_key, "gap": closest,
+						"when": str(screen.event_label.text),
+					})
 		## The legs playback had to draw faster than a body moves, attributed to
 		## the contact they belong to. `MatchScreen` has recorded these since the
 		## pacing pass landed and nothing has ever read them, which is why "one
@@ -125,6 +152,20 @@ func _initialize() -> void:
 		print("%-16s %7d %10.1f %10.2f" % [
 			key, int(row["count"]), float(row["worst"]), float(row["metres"]),
 		])
+	print("")
+	print("frames where two volis on a side were inside half a metre of each other")
+	var by_moment := {}
+	for entry in overlaps:
+		var key := "%s  %s" % [str(entry["pair"]), str(entry["when"])]
+		var row: Dictionary = by_moment.get(key, {"frames": 0, "closest": 99.0})
+		row["frames"] = int(row["frames"]) + 1
+		row["closest"] = minf(float(row["closest"]), float(entry["gap"]))
+		by_moment[key] = row
+	print("%-46s %8s %9s" % ["pair and moment", "frames", "closest m"])
+	for key in by_moment:
+		var row: Dictionary = by_moment[key]
+		print("%-46s %8d %9.2f" % [key, int(row["frames"]), float(row["closest"])])
+	print("%d overlapping frames in total" % overlaps.size())
 	manager.free()
 	quit()
 

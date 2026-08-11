@@ -27,6 +27,11 @@ func _initialize() -> void:
 	var court = screen.match_court_3d
 
 	var per_leg := {}
+	var reversals := {}
+	var wasted := {}
+	var last_leg := {}
+	var last_source := {}
+	var pairs := {}
 	for rally_seed in [12007, 12011, 12019, 12023, 12029, 12031, 12037, 12041]:
 		var result: Resource = manager.resolve_active_rally(rally_seed)
 		if result == null:
@@ -81,6 +86,39 @@ func _initialize() -> void:
 				row["metres"] = float(row["metres"]) + metres
 				row["drawn"] = float(row["drawn"]) + drawn
 			per_leg[key] = row
+			## **Does anybody get sent back where they just came from?**
+			##
+			## Reported from playback as an opposite outside hitter pacing back and
+			## forth during defence and reception. A voli walking two metres one way
+			## and two metres back has covered four metres of perfectly plausible
+			## travel and gone nowhere, so no distance figure can see it -- only the
+			## *direction* of successive legs can. A reversal is a leg whose heading
+			## opposes the previous one for the same voli.
+			for raw_player_id in plan:
+				var player_id := int(raw_player_id)
+				var movement: Dictionary = plan[raw_player_id]
+				var leg: Vector2 = Vector2(movement.get("target", Vector2.ZERO)) \
+					- Vector2(movement.get("start", Vector2.ZERO))
+				if leg.length() < 0.01:
+					continue
+				var last: Variant = last_leg.get(player_id, null)
+				if last is Vector2 and (last as Vector2).normalized().dot(
+					leg.normalized()
+				) < -0.35:
+					reversals[player_id] = int(reversals.get(player_id, 0)) + 1
+					wasted[player_id] = float(wasted.get(player_id, 0.0)) \
+						+ minf(screen._leg_metres(movement), _metres(court, last as Vector2))
+					## Which pair of legs turned them round, and what issued each
+					## target. A reversal between two phase maps is a resolver
+					## disagreeing with itself; a reversal between a phase map and a
+					## base return is playback's two sources fighting.
+					var pair := "%s after %s" % [
+						_source(screen, next_contact, player_id),
+						str(last_source.get(player_id, "?")),
+					]
+					pairs[pair] = int(pairs.get(pair, 0)) + 1
+				last_leg[player_id] = leg
+				last_source[player_id] = _source(screen, next_contact, player_id)
 			## Advance the court the way playback would, so the next leg is
 			## planned from where bodies got to rather than from the first frame.
 			court.finish_movement_plan(plan, duration)
@@ -99,5 +137,36 @@ func _initialize() -> void:
 			100.0 * float(row["drawn"]) / maxf(asked, 0.0001),
 			float(row["actor_drawn"]) / legs,
 		])
+	print("")
+	print("volis sent back the way they came, over %d rallies" % 8)
+	print("%-6s %10s %12s" % ["voli", "reversals", "wasted m"])
+	var ids := reversals.keys()
+	ids.sort()
+	for player_id in ids:
+		print("%-6d %10d %12.2f" % [
+			int(player_id), int(reversals[player_id]),
+			float(wasted.get(player_id, 0.0)),
+		])
+	print("")
+	print("what turned them round")
+	for key in pairs:
+		print("%-40s %d" % [key, int(pairs[key])])
 	manager.free()
 	quit()
+
+
+## Who issued this voli's target for this leg: the resolver's phase map, or
+## playback's own return-to-base.
+func _source(screen, next_contact, player_id: int) -> String:
+	for key in ["home_phase_targets", "opponent_phase_targets"]:
+		if Dictionary(next_contact.metadata.get(key, {})).has(player_id):
+			return "phase map"
+	if int(next_contact.actor_id) == player_id:
+		return "the contact"
+	return "base return"
+
+
+func _metres(court, delta: Vector2) -> float:
+	return Vector2(
+		delta.x * court.court_width, delta.y * court.court_length
+	).length()
