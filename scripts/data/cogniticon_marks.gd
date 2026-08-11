@@ -140,14 +140,17 @@ const EYE_STROKE: float = 2.0
 const EYE_FIXED_STROKE: float = 2.4
 
 const ATTENTION_MARKS: Array[String] = ["glance", "track", "fixed"]
-
-
-## Every attention texture, by the hold it draws.
-static func attention_textures(dark_theme: bool) -> Dictionary:
-	var out := {}
-	for mark in ATTENTION_MARKS:
-		out[mark] = _eye(mark, dark_theme)
-	return out
+## And the fourth, which the review does not draw because the review had colour
+## to spend on doubt and this vocabulary does not.
+##
+## **Certainty is one lead; doubt is a lead that forks.** Two prongs aimed at
+## the two things a voli cannot choose between -- which is better than a hue on
+## every count that matters here: it survives any court colour, it says *what*
+## is doubted rather than merely that something is, it scales by widening, and
+## it composes with a lead vocabulary that already exists.
+const DOUBT_LEAD: String = "doubt"
+const DOUBT_FORK_DEGREES: float = 26.0
+const LEAD_MARKS: Array[String] = ["glance", "track", "fixed", "doubt"]
 
 
 ## Where the eye's ink has to move to sit in the middle of its own canvas.
@@ -181,6 +184,21 @@ static func pupil_centre() -> Vector2:
 	return PUPIL_CENTRE + EYE_INK_SHIFT
 
 
+## Every attention texture, by the hold it draws.
+##
+## The **composed** eye: outline, pupil and lead flattened into one image. Kept
+## alongside `eye_part_textures` below rather than replaced by it, because the
+## two answer different questions. This one is the drawing as approved -- what a
+## static plate shows and what the pupil-legibility gate measures. The parts are
+## what a live voli is assembled from, and a gate run against those would be
+## checking three sprites' transforms rather than whether the mark reads.
+static func attention_textures(dark_theme: bool) -> Dictionary:
+	var out := {}
+	for mark in ATTENTION_MARKS:
+		out[mark] = _eye(mark, dark_theme)
+	return out
+
+
 static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	var width := int(EYE_CANVAS.x) * SCALE
 	var height := int(EYE_CANVAS.y) * SCALE
@@ -191,10 +209,6 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	]
 	match mark:
 		"glance":
-			## Three flicks, the middle one longest -- a look that arrived,
-			## answered itself and left. Drawn at full strength rather than at
-			## the review's staggered opacities, because opacity is what the
-			## halo is spending and a mark cannot afford to pay twice.
 			paths.append({"points": _line(56.0, 20.0, 64.0, 20.0),
 				"closed": false, "width": stroke, "dash": 0.0})
 			paths.append({"points": _line(56.0, 28.0, 67.0, 28.0),
@@ -207,8 +221,6 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 		_:
 			paths.append({"points": _line(54.0, 28.0, 68.0, 28.0),
 				"closed": false, "width": stroke, "dash": 0.0})
-			## The arrowhead, as one open polyline so its corner mitres rather
-			## than being two segments that cross.
 			paths.append({"points": PackedVector2Array([
 				Vector2(64.0, 23.0), Vector2(69.0, 28.0), Vector2(64.0, 33.0),
 			]), "closed": false, "width": stroke, "dash": 0.0})
@@ -221,6 +233,91 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	for disc in discs:
 		disc["centre"] = Vector2(disc["centre"]) + EYE_INK_SHIFT
 	return _composite(width, height, paths, discs, [], dark_theme)
+
+
+## The eye in separable parts, because its parts move independently.
+##
+## A single baked eye cannot narrow, cannot look anywhere, and cannot fork --
+## and all three are per-voli per-frame, so none of them can live in a texture
+## shared by twelve bodies. Three pieces instead:
+##
+## | part | moves how |
+## |---|---|
+## | `outline` | scaled vertically -- the aperture *is* a squash |
+## | `pupil` | translated within the eye toward what is being watched |
+## | one of the leads | swapped, and rotated to point at the target |
+##
+## Which is also cheaper than it sounds: six shared textures for the whole
+## court, and three sprites per voli that only ever change their transforms.
+static func eye_part_textures(dark_theme: bool) -> Dictionary:
+	var parts := {
+		"outline": _eye_outline(dark_theme),
+		"pupil": _eye_pupil(dark_theme),
+	}
+	for lead in LEAD_MARKS:
+		parts[lead] = _eye_lead(lead, dark_theme)
+	return parts
+
+
+## The eye's outline alone, centred in its own canvas so scaling it vertically
+## squashes it about its own middle rather than sliding it.
+static func _eye_outline(dark_theme: bool) -> ImageTexture:
+	var size := int(EYE_RADII.x * 2.0 + 8.0) * SCALE
+	var centre := Vector2(float(size) / float(SCALE) * 0.5, float(size) / float(SCALE) * 0.5)
+	return _composite(size, size, [
+		{"points": _ellipse(centre, EYE_RADII), "closed": true,
+			"width": EYE_STROKE, "dash": 0.0},
+	], [], [], dark_theme)
+
+
+static func _eye_pupil(dark_theme: bool) -> ImageTexture:
+	var size := int(PUPIL_RADIUS * 2.0 + 8.0) * SCALE
+	var centre := Vector2(float(size) / float(SCALE) * 0.5, float(size) / float(SCALE) * 0.5)
+	return _composite(
+		size, size, [], [{"centre": centre, "radius": PUPIL_RADIUS}], [], dark_theme
+	)
+
+
+## A lead, drawn from the origin rightward so the sprite can simply be rotated
+## to aim it. Every lead shares that convention, which is what lets the renderer
+## swap one for another without moving anything.
+static func _eye_lead(mark: String, dark_theme: bool) -> ImageTexture:
+	var width := 34 * SCALE
+	var height := 34 * SCALE
+	var origin := Vector2(4.0, 17.0)
+	var stroke := EYE_FIXED_STROKE if mark == "fixed" else EYE_STROKE
+	var paths: Array = []
+	match mark:
+		"glance":
+			paths.append({"points": _line(origin.x, origin.y - 8.0, origin.x + 8.0, origin.y - 8.0),
+				"closed": false, "width": stroke, "dash": 0.0})
+			paths.append({"points": _line(origin.x, origin.y, origin.x + 11.0, origin.y),
+				"closed": false, "width": stroke, "dash": 0.0})
+			paths.append({"points": _line(origin.x, origin.y + 8.0, origin.x + 8.0, origin.y + 8.0),
+				"closed": false, "width": stroke, "dash": 0.0})
+		"track":
+			paths.append({"points": _line(origin.x, origin.y, origin.x + 13.0, origin.y),
+				"closed": false, "width": stroke, "dash": 3.0})
+		"doubt":
+			## The fork. Two prongs from one root, so it reads as one look that
+			## cannot decide rather than as two separate looks.
+			var spread := deg_to_rad(DOUBT_FORK_DEGREES)
+			for sign in [-1.0, 1.0]:
+				var tip := origin + Vector2(cos(spread * sign), sin(spread * sign)) * 15.0
+				paths.append({"points": PackedVector2Array([
+					origin + Vector2(4.0, 0.0), tip,
+				]), "closed": false, "width": stroke, "dash": 3.0})
+			paths.append({"points": _line(origin.x, origin.y, origin.x + 4.0, origin.y),
+				"closed": false, "width": stroke, "dash": 0.0})
+		_:
+			paths.append({"points": _line(origin.x, origin.y, origin.x + 14.0, origin.y),
+				"closed": false, "width": stroke, "dash": 0.0})
+			paths.append({"points": PackedVector2Array([
+				Vector2(origin.x + 10.0, origin.y - 5.0),
+				Vector2(origin.x + 15.0, origin.y),
+				Vector2(origin.x + 10.0, origin.y + 5.0),
+			]), "closed": false, "width": stroke, "dash": 0.0})
+	return _composite(width, height, paths, [], [], dark_theme)
 
 
 static func _line(x1: float, y1: float, x2: float, y2: float) -> PackedVector2Array:
@@ -468,7 +565,16 @@ static func _dash(segments: Array, on: float, off: float) -> Array:
 		while cursor < length:
 			var cycle := fmod(travelled + cursor, on + off)
 			var remaining := (on - cycle) if cycle < on else (on + off - cycle)
-			var span := minf(remaining, length - cursor)
+			## **Floored, or this loop does not terminate.** When the cursor
+			## lands a hair before a dash boundary `remaining` is on the order of
+			## 1e-7, the cursor advances by that much, and the walk takes
+			## millions of iterations to cross one segment -- which presents as
+			## a hang during rasterisation rather than as a wrong drawing, and
+			## cost a render to find. A dash cannot usefully be shorter than one
+			## rasterised pixel anyway.
+			var span := maxf(
+				minf(remaining, length - cursor), 1.0 / float(SCALE)
+			)
 			if cycle < on:
 				out.append([
 					from + direction * cursor, from + direction * (cursor + span),

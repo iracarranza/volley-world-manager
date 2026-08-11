@@ -195,6 +195,8 @@ func _initialize() -> void:
 	_test_cognition_cues()
 	_test_ambient_cogniticons_are_dimmer_not_smaller()
 	_test_blade_cogniticons_fill_from_the_bottom()
+	_test_cogniticon_motion_envelopes()
+	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
 	_test_a_blocker_has_five_states()
@@ -14582,6 +14584,187 @@ func _test_worksheet_behaviour() -> void:
 			"the %s page has a vocabulary to instruct from" % for_phase,
 		)
 	sheet.free()
+
+
+## Cogniticon motion: envelopes in real seconds, and the honesty gate.
+##
+## Every claim here is checkable without eyes because the module is pure, which
+## is the whole reason it is pure.
+func _test_cogniticon_motion_envelopes() -> void:
+	## **The gate that matters most, and it is one line of meaning.** A mark may
+	## be *wrong* -- a blocker's eye may be aimed at a decoy, which is the layer
+	## working -- but it may never be *early*. Negative time is a reaction that
+	## has not been caused yet.
+	_check(
+		float(CogniticonMotion.shock_envelope(-0.01)["weight"]) == 0.0
+			and float(CogniticonMotion.slash(-0.01)["rotation_degrees"]) == 0.0,
+		"no reaction begins before the moment that caused it",
+	)
+
+	## Fast in, slow out. A symmetric startle reads as a pulse and a slow one as
+	## dawning realisation, which is a different and much less useful emotion.
+	var snap: float = float(CogniticonMotion.shock_envelope(
+		CogniticonMotion.SHOCK_SNAP_SECONDS
+	)["weight"])
+	var late: float = float(CogniticonMotion.shock_envelope(
+		CogniticonMotion.SHOCK_SNAP_SECONDS + CogniticonMotion.SHOCK_HOLD_SECONDS
+			+ CogniticonMotion.SHOCK_SETTLE_SECONDS * 0.5
+	)["weight"])
+	_check(
+		snap > 0.99 and late > 0.05 and late < 0.95,
+		"the startle snaps to full and settles slowly (%.2f then %.2f)" % [snap, late],
+	)
+	## And the colour outlives the shape, which is the scene's "fading from
+	## orange into red" the right way round: an eye returns to its size before
+	## it returns to its temper.
+	var settling: Dictionary = CogniticonMotion.shock_envelope(
+		CogniticonMotion.SHOCK_SNAP_SECONDS + CogniticonMotion.SHOCK_HOLD_SECONDS
+			+ CogniticonMotion.SHOCK_SETTLE_SECONDS * 0.6
+	)
+	_check(
+		float(settling["colour_mix"]) >= float(settling["weight"]),
+		"and the colour outlasts the widening",
+	)
+
+	## Envelopes are in seconds and finish. `run_window_budget_probe.gd` found a
+	## tenth of windows shorter than 0.22 s and attack windows as short as 0.02,
+	## so a window-relative envelope would be played out in two frames on a fast
+	## swing. Every envelope below must therefore complete on its own clock.
+	_check(
+		bool(CogniticonMotion.arrival(CogniticonMotion.ARRIVE_SECONDS)["done"])
+			and bool(CogniticonMotion.sheathe(
+				CogniticonMotion.SHEATHE_SECONDS
+			)["done"]),
+		"arrival and sheathe complete on their own clocks",
+	)
+
+	## Twelve volis must not blink together. Checked as *disagreement* rather
+	## than as a value, since any particular value is a tuning detail and the
+	## disagreement is the requirement.
+	##
+	## **Measured as *when* each blinks, not as what each is doing right now.**
+	## The first version of this gate sampled all twelve at one instant and
+	## found them identical -- which was true and meant nothing, because a blink
+	## lasts a quarter of a second in a period of three to six, so at almost
+	## every instant every voli is equally not blinking. It was asking whether
+	## they *are* blinking together when the question is whether they *would*.
+	var first_blink: Array[float] = []
+	for player_id in range(1, 13):
+		var found := -1.0
+		var step := 0.0
+		while step < 9.0:
+			if CogniticonMotion.blink_closure(step, player_id, "track") > 0.5:
+				found = step
+				break
+			step += 0.02
+		first_blink.append(found)
+	var distinct := {}
+	for moment in first_blink:
+		distinct["%.1f" % moment] = true
+	_check(
+		distinct.size() >= 6,
+		"twelve volis blink at %d distinct moments, not in unison" % distinct.size(),
+	)
+	## And a fixed hold does not blink at all, because not blinking is what
+	## staring is.
+	_check(
+		CogniticonMotion.blink_closure(1.7, 4, "fixed") == 0.0,
+		"a fixed hold does not blink",
+	)
+
+	## Aperture: a hard read narrows, doubt widens, shock widens further.
+	var focused := CogniticonMotion.aperture(1.0, "fixed", false, -1.0, 0.0)
+	var doubting := CogniticonMotion.aperture(1.0, "track", true, -1.0, 0.0)
+	var shocked := CogniticonMotion.aperture(
+		1.0, "track", false, CogniticonMotion.SHOCK_SNAP_SECONDS, 0.0
+	)
+	_check(
+		focused < doubting and doubting < shocked,
+		"focus narrows, doubt widens, shock widens further (%.2f < %.2f < %.2f)"
+			% [focused, doubting, shocked],
+	)
+	## A blink closes whatever the expression was.
+	_check(
+		CogniticonMotion.aperture(1.0, "track", false, -1.0, 1.0) <= 0.001,
+		"and a blink closes the eye whatever it was doing",
+	)
+
+	## Colour is the rating scale, so a voli watching a decoy grades as poorly
+	## as anything else that went badly. This is the tie that makes the palette
+	## one system rather than two.
+	_check(
+		CogniticonMotion.affect_grade("lost_sight", "neutral", false) == "D"
+			and CogniticonMotion.affect_grade("searching", "neutral", true) == "B"
+			and CogniticonMotion.affect_grade("searching", "neutral", false) == "C",
+		"affect grades on the same scale the rest of the interface rates with",
+	)
+
+	## The course tilt is what lets one mark carry both what a voli is doing and
+	## which way, and is therefore the reason a second concurrent mark is not
+	## needed. Line and cross must be visibly different marks.
+	var line: float = float(CogniticonMotion.charge(0.5, -1.0)["rotation_degrees"])
+	var cross: float = float(CogniticonMotion.charge(0.5, 1.0)["rotation_degrees"])
+	_check(
+		absf(cross - line) > 20.0,
+		"a blade swinging line and one swinging cross are different marks (%.0f vs %.0f)"
+			% [line, cross],
+	)
+
+
+## The eye in parts, because a baked eye cannot narrow, look, or doubt.
+func _test_eye_parts_and_the_forked_lead() -> void:
+	var parts: Dictionary = CogniticonMarks.eye_part_textures(true)
+	for key in ["outline", "pupil"] + CogniticonMarks.LEAD_MARKS:
+		_check(
+			parts.get(key, null) is Texture2D,
+			"the eye's %s is drawn" % key,
+		)
+	## The outline has to be centred in its own canvas, or scaling it vertically
+	## to narrow the eye would slide it instead of squashing it -- the same
+	## defect the composed eye had before `EYE_INK_SHIFT`, one axis over.
+	var outline: Image = (parts["outline"] as Texture2D).get_image()
+	var top := -1
+	var bottom := -1
+	var middle := outline.get_width() / 2
+	for y in range(outline.get_height()):
+		if outline.get_pixel(middle, y).a > 0.5:
+			if top < 0:
+				top = y
+			bottom = y
+	_check(
+		top >= 0 and absf(
+			float(top + bottom) * 0.5 - float(outline.get_height()) * 0.5
+		) <= 2.0,
+		"the eye outline is centred, so narrowing squashes rather than slides",
+	)
+	## Doubt is a *fork*: more ink further from the lead's own axis than a
+	## single-line lead has. Measured rather than asserted by eye, because "it
+	## looks forked" is exactly the kind of claim this session keeps having to
+	## withdraw.
+	_check(
+		_lead_spread(parts["doubt"]) > _lead_spread(parts["track"]),
+		"the doubtful lead is wider than the certain one (%d vs %d)"
+			% [_lead_spread(parts["doubt"]), _lead_spread(parts["track"])],
+	)
+
+
+## How far a lead's ink spreads across the axis it points along.
+##
+## **Taken as the widest column anywhere in the lead, not a column chosen by
+## fraction.** The first version sampled at 62% of the canvas, which is past the
+## end of every lead in the set -- both marks measured zero, the gate reported
+## them equal, and it was measuring empty space rather than either drawing.
+## Ninth and tenth wrong instruments of the session, in one commit.
+func _lead_spread(texture: Texture2D) -> int:
+	var image: Image = texture.get_image()
+	var widest := 0
+	for x in range(image.get_width()):
+		var lit := 0
+		for y in range(image.get_height()):
+			if image.get_pixel(x, y).a > 0.5:
+				lit += 1
+		widest = maxi(widest, lit)
+	return widest
 
 
 ## The blade family, drawn rather than typed.
