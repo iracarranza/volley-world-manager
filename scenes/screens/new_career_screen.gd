@@ -88,7 +88,7 @@ func _build_step_rail() -> void:
 
 func _build_region_choices() -> void:
 	var group := ButtonGroup.new()
-	for region_name in VolleyballRegions.playable_names():
+	for region_name in VolleyballRegions.manageable_names():
 		var button := Button.new()
 		button.toggle_mode = true
 		button.button_group = group

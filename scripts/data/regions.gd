@@ -398,9 +398,50 @@ static func tradition_resistance(region_name: String) -> float:
 ## level this game is about -- founding a Zaitgaist academy and competing
 ## toward the Sixnet is not a story the tier supports. They are places you sign
 ## players *from*, not places you manage.
-static func playable_names() -> Array[String]:
+## Regions a manager can take a job in.
+##
+## The eight Sixnet participants, because a minor region runs no programme at
+## this level -- they are places you sign volis *from* rather than places you
+## manage.
+##
+## **Renamed from `playable_names`, which was answering two different questions
+## with one list.** "Where can I manage" and "who can I play" are not the same
+## set and were being served by the same eight names, so the six minor regions
+## were unreachable as opponents despite every one of them having a club in
+## `CLUB_NAMES` and a full identity in `DEFINITIONS`. A list used as the answer
+## to two questions is right for at most one of them.
+static func manageable_names() -> Array[String]:
 	var result: Array[String] = SIXNET_PARTICIPANTS.duplicate()
 	result.sort()
+	return result
+
+
+## Regions that field a club you could be drawn against.
+##
+## All fourteen inhabited regions. A minor region has fewer clubs and weaker
+## ones, which is a difference in what the fixture *is* rather than a reason it
+## cannot happen -- and playing one is the cheapest way a manager learns that
+## the world is bigger than the bracket.
+static func opponent_names() -> Array[String]:
+	var result: Array[String] = INHABITED_REGIONS.duplicate()
+	result.sort()
+	return result
+
+
+## Every club this region fields, in the order `club_name` indexes them.
+##
+## Majors carry two and minors one, which is the tier difference made concrete
+## rather than asserted. A region with no entry is given the fallback name
+## `club_name` would produce, so the list is never empty and a caller never has
+## to handle a region that exists but cannot be played.
+static func clubs_in(region_name: String) -> Array[String]:
+	var resolved := canonical_name(region_name)
+	var clubs: Array = CLUB_NAMES.get(resolved, [])
+	var result: Array[String] = []
+	for club in clubs:
+		result.append(str(club))
+	if result.is_empty():
+		result.append(club_name(resolved, 0))
 	return result
 
 

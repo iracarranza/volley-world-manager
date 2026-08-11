@@ -1475,12 +1475,14 @@ func _opponent_adaptation_rate_changed(value: float) -> void:
 
 ## Play somebody else, now, without a schedule to wait for.
 ##
-## The eight Sixnet regions are the ones that field a club a player could be
-## drawn against; minor regions raise volis but run no programme at this level,
-## which is `playable_names`' existing distinction and is reused rather than
-## re-derived here.
+## **All fourteen inhabited regions, not the eight in the bracket.** The minor
+## regions each field a club and carry a full identity, and the only thing that
+## had ever kept them out of this list was that it reused the region list for
+## *career creation* -- where the eight is right, because a minor runs no
+## programme to manage. Two questions, one list, and it was right for one of
+## them. `opponent_names` is the other question.
 func _refresh_opponent_region_option() -> void:
-	var names := VolleyballRegions.playable_names()
+	var names := VolleyballRegions.opponent_names()
 	if opponent_region_option.item_count != names.size():
 		_populate_text_options(opponent_region_option, names)
 	var current := str(GameManager.opponent_team.region)
@@ -1490,7 +1492,7 @@ func _refresh_opponent_region_option() -> void:
 
 
 func _opponent_region_selected(index: int) -> void:
-	var names := VolleyballRegions.playable_names()
+	var names := VolleyballRegions.opponent_names()
 	if index < 0 or index >= names.size():
 		return
 	GameManager.set_opponent_region(str(names[index]))

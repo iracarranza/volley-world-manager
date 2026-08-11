@@ -218,6 +218,7 @@ func _initialize() -> void:
 	_test_ball_flight_from_contact_height()
 	_test_block_shadow_falls_behind_the_block()
 	_test_an_opponent_has_a_region()
+	_test_manageable_and_playable_regions_are_different_questions()
 	_test_scouting_channels_and_owners()
 	_test_short_legs_are_walked_in_whole_steps()
 	_test_spike_biomechanics_sequence()
@@ -666,10 +667,13 @@ func _test_team_roster_statistics_and_opponent_rotation() -> void:
 
 
 func _test_career_calendar_generation_training_and_saves() -> void:
-	## `playable_names()`, not `names()`. Minor regions exist in the world and
-	## raise players, but run no academy the manager could take over, so they
-	## are places you sign players *from* rather than places you manage.
-	var fictional_regions := REGIONS_SCRIPT.playable_names()
+	## `manageable_names()`, not `names()` and not `opponent_names()`. Minor
+	## regions exist in the world and raise volis, but run no academy the manager
+	## could take over, so they are places you sign volis *from* rather than
+	## places you manage -- while being perfectly good places to play against,
+	## which is the distinction `opponent_names` now carries and this list used
+	## to be silently doing both jobs for.
+	var fictional_regions := REGIONS_SCRIPT.manageable_names()
 	_check(fictional_regions.size() == 8 and "Landavol" in fictional_regions \
 			and "Spëddigh" in fictional_regions and "Pāwa Hitō" in fictional_regions \
 			and "Bloc du Larg" in fictional_regions and "Xérvu" in fictional_regions \
@@ -12917,6 +12921,50 @@ func _test_scouting_crosses_the_net_in_both_directions() -> void:
 ## the estimate was salted with the voli and the attribute alone, so the club
 ## held exactly one opinion and hiring a second scout could not produce a second
 ## reading.
+## Where you can manage and who you can play are two questions.
+##
+## They were served by one list of eight, so the six minor regions were
+## unreachable as opponents despite each having a club in `CLUB_NAMES` and a
+## full identity in `DEFINITIONS`. The gate is that the two lists differ and
+## that every name on the opponent list can actually field somebody.
+func _test_manageable_and_playable_regions_are_different_questions() -> void:
+	var manageable := REGIONS_SCRIPT.manageable_names()
+	var opponents := REGIONS_SCRIPT.opponent_names()
+	_check(
+		manageable.size() == 8 and opponents.size() == 14,
+		"eight regions to manage in, fourteen to play against (%d, %d)"
+			% [manageable.size(), opponents.size()],
+	)
+	## Every region you can manage in is also one you can play, or the schedule
+	## could name a club its own manager could not face.
+	var manageable_are_playable := true
+	for region_name in manageable:
+		if not region_name in opponents:
+			manageable_are_playable = false
+	_check(
+		manageable_are_playable,
+		"every region you can manage in is a region you can play",
+	)
+	## And every opponent fields at least one club with a real name, so choosing
+	## one can never produce a fixture against nobody.
+	var every_region_fields_somebody := true
+	for region_name in opponents:
+		var clubs: Array = REGIONS_SCRIPT.clubs_in(region_name)
+		if clubs.is_empty() or str(clubs[0]).strip_edges().is_empty():
+			every_region_fields_somebody = false
+	_check(
+		every_region_fields_somebody,
+		"every playable region fields at least one named club",
+	)
+	## Majors field more clubs than minors, which is the tier difference made
+	## concrete rather than asserted in a comment.
+	_check(
+		REGIONS_SCRIPT.clubs_in("Landavol").size()
+			> REGIONS_SCRIPT.clubs_in("Zaitgaist").size(),
+		"a major region fields more clubs than a minor one",
+	)
+
+
 func _test_scouting_channels_and_owners() -> void:
 	const HALF_SURE := 0.5
 	## How tall somebody can jump is not as hard to see as how they behave at

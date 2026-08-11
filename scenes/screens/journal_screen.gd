@@ -187,6 +187,9 @@ var roster_environment: Environment = null
 @onready var transfer_detail: RichTextLabel = %TransferDetail
 @onready var sign_button: Button = %SignButton
 @onready var fixture_list: ItemList = %FixtureList
+## Built in `_build_opponent_picker` rather than in the scene; see there.
+var opponent_region_option: OptionButton
+var opponent_club_option: OptionButton
 @onready var fixture_detail: RichTextLabel = %FixtureDetail
 @onready var play_match_button: Button = %PlayMatchButton
 @onready var simulate_match_button: Button = %SimulateMatchButton
@@ -318,6 +321,7 @@ func _ready() -> void:
 	## -- the two cannot drift apart because one number feeds both.
 	RuledPaperScript.rule(transfer_list)
 	sign_button.pressed.connect(_sign_transfer)
+	_build_opponent_picker()
 	fixture_list.item_selected.connect(_fixture_selected)
 	play_match_button.pressed.connect(_play_fixture)
 	simulate_match_button.pressed.connect(_simulate_fixture)
@@ -2168,6 +2172,114 @@ func _refresh_competition() -> void:
 		_fixture_selected(0)
 
 
+## Choose who the next match is against.
+##
+## The calendar used to be the only answer to "who do I play", and it named
+## three clubs picked at career creation. Every region in the world fields a
+## club, carries its own principles and raises its own volis, and the fastest
+## way a manager learns any of that is by playing them -- so a fixture that has
+## not happened yet is a fixture whose opponent is still a choice.
+##
+## Built in code rather than added to the scene, because it is two controls that
+## belong beside an existing row and a `.tscn` edit for that is more likely to
+## break the row than the row is to change.
+func _build_opponent_picker() -> void:
+	var actions := play_match_button.get_parent() as Control
+	var side := actions.get_parent() as Control
+	if side == null:
+		return
+	var row := HBoxContainer.new()
+	row.name = "OpponentPicker"
+	row.add_theme_constant_override("separation", 8)
+	var label := Label.new()
+	label.text = "Opponent"
+	row.add_child(label)
+	opponent_region_option = OptionButton.new()
+	opponent_region_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opponent_region_option.tooltip_text = (
+		"Every inhabited region fields a club. The eight in the Sixnet are the "
+		+ "ones you could manage in; the other six you can only play."
+	)
+	row.add_child(opponent_region_option)
+	opponent_club_option = OptionButton.new()
+	opponent_club_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(opponent_club_option)
+	side.add_child(row)
+	side.move_child(row, actions.get_index())
+	for region_name in VolleyballRegions.opponent_names():
+		opponent_region_option.add_item(str(region_name))
+	opponent_region_option.item_selected.connect(_opponent_region_chosen)
+	opponent_club_option.item_selected.connect(_opponent_club_chosen)
+
+
+## Point the selected fixture at a club, and say so on the calendar.
+##
+## Writes the region, the club index *and* the name together. They are three
+## facts about one decision and letting any of them drift apart is exactly the
+## defect that had a fixture printing one club while the match was played
+## against another.
+func _retarget_fixture(region_name: String, club_index: int) -> void:
+	var fixture := CareerManager.fixture_by_id(selected_fixture_id)
+	if fixture == null or bool(fixture.completed):
+		return
+	fixture.opponent_region = VolleyballRegions.canonical_name(region_name)
+	fixture.opponent_club_index = club_index
+	fixture.opponent_name = VolleyballRegions.club_name(
+		str(fixture.opponent_region), club_index
+	)
+	CareerManager.save_career()
+	refresh()
+	_set_status("Week %d is now against %s." % [
+		int(fixture.week), str(fixture.opponent_name),
+	])
+
+
+func _opponent_region_chosen(index: int) -> void:
+	var names := VolleyballRegions.opponent_names()
+	if index < 0 or index >= names.size():
+		return
+	_retarget_fixture(str(names[index]), 0)
+
+
+func _opponent_club_chosen(index: int) -> void:
+	var fixture := CareerManager.fixture_by_id(selected_fixture_id)
+	if fixture == null:
+		return
+	_retarget_fixture(str(fixture.opponent_region), index)
+
+
+## Show the picker where the fixture actually stands, without firing it.
+##
+## `select` rather than any signalling setter, because syncing a control to the
+## thing it edits must not look like somebody editing it -- that loop is how a
+## refresh ends up rewriting the value it was drawn to display.
+func _sync_opponent_picker(fixture: Resource) -> void:
+	if opponent_region_option == null:
+		return
+	var editable := fixture != null and not bool(fixture.completed)
+	opponent_region_option.disabled = not editable
+	opponent_club_option.disabled = not editable
+	if fixture == null:
+		return
+	var region_name := str(fixture.opponent_region)
+	var names := VolleyballRegions.opponent_names()
+	var region_index := names.find(region_name)
+	if region_index >= 0:
+		opponent_region_option.select(region_index)
+	opponent_club_option.clear()
+	if region_name.is_empty():
+		## A fixture written before fixtures carried a region. It still has a
+		## name, and the picker simply has nothing to offer until one is chosen.
+		opponent_club_option.add_item(str(fixture.opponent_name))
+		return
+	for club in VolleyballRegions.clubs_in(region_name):
+		opponent_club_option.add_item(str(club))
+	opponent_club_option.select(clampi(
+		int(fixture.opponent_club_index), 0,
+		maxi(opponent_club_option.item_count - 1, 0)
+	))
+
+
 func _fixture_selected(index: int) -> void:
 	selected_fixture_id = int(fixture_list.get_item_metadata(index))
 	var fixture := CareerManager.fixture_by_id(selected_fixture_id)
@@ -2180,6 +2292,7 @@ func _fixture_selected(index: int) -> void:
 		CareerManager.career.match_format.regular_set_target,
 		CareerManager.career.match_format.win_by,
 		"Ready" if GameManager.match_roster_errors().is_empty() else GameManager.match_roster_errors()[0]]
+	_sync_opponent_picker(fixture)
 	var fixture_ready: bool = not bool(fixture.completed) and due \
 		and GameManager.match_roster_errors().is_empty()
 	play_match_button.disabled = not fixture_ready
