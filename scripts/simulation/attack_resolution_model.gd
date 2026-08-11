@@ -160,6 +160,21 @@ static func resolve(
 	if not contacted.is_empty():
 		result["block"] = contacted
 		result["outcome"] = "blocked"
+		## **And where it went after the hands.**
+		##
+		## This used to return with `result["landing"]` still holding the
+		## unimpeded arc's landing -- the point the swing would have reached had
+		## the block not been there. Every consumer downstream then rebuilt the
+		## deflection out of two endpoints and a duration, which is why a
+		## blocked ball was drawn flying past the block to a place it never
+		## reached and then jumping back. The deflection is geometry and it
+		## belongs here, once, with the contact that caused it.
+		var deflection := BlockDeflectionModel.deflect(
+			str(contacted.get("kind", "touch")), crossing_x, speed_mps,
+			attacking_negative_y,
+		)
+		result["landing"] = deflection["landing"]
+		result["deflection"] = deflection
 		return result
 	result["block_miss_reason"] = str(block_miss.get("reason", ""))
 	result["net_height_over_block_meters"] = height_at_net - _tallest_reach(blockers)

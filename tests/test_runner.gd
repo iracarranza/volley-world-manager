@@ -197,6 +197,7 @@ func _initialize() -> void:
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
 	_test_a_ball_taken_at_full_stretch_is_drawn_reaching()
+	_test_a_blocked_ball_has_somewhere_to_go()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
@@ -14777,6 +14778,80 @@ func _test_cognition_cues() -> void:
 ## directly. What cannot be tested here is *call order* -- that the ball pass
 ## runs before the movement plan -- because that needs frames and this runner has
 ## none. `tools/measure_body_facing.gd` covers it and has to be run by hand.
+## A ball that hits the wall goes somewhere, and where depends on what the hands
+## did.
+##
+## `resolve` used to return on block contact with `landing` still holding the
+## unimpeded arc's landing -- where the swing would have gone had the block not
+## existed. There was no deflection geometry in the engine at all, so every
+## consumer rebuilt one from endpoints and a duration, and a blocked ball was
+## drawn flying past the block to a place it never reached.
+func _test_a_blocked_ball_has_somewhere_to_go() -> void:
+	## Attacking toward y = 0, so the hitter's own half is the far side of the
+	## net from their direction of travel.
+	var stuff := BlockDeflectionModel.deflect("stuff", 0.5, 22.0, true)
+	var touch := BlockDeflectionModel.deflect("touch", 0.5, 22.0, true)
+	var tool := BlockDeflectionModel.deflect("tool", 0.8, 22.0, true)
+
+	## **A stuff comes back at the hitter.** Down into the court they swung
+	## from, which no other outcome in this table does.
+	_check(
+		float(Vector2(stuff["landing"]).y) > CourtConstants.NET_Y,
+		"a stuffed ball lands in the hitter's own half",
+	)
+	_check(
+		float(touch["landing"].y) < CourtConstants.NET_Y,
+		"a touched ball carries on into the blockers' court",
+	)
+
+	## **And it comes back hard.** This is the requirement the design was given
+	## in as many words: a stuff is forced downward and is *not* reduced in pace
+	## the way a block touch is. Asserted as an ordering rather than as two
+	## numbers, so the constants can be tuned without the rule moving.
+	_check(
+		float(stuff["speed_mps"]) > float(touch["speed_mps"]) * 2.0,
+		"a stuff keeps far more of its pace than a touch does",
+	)
+	_check(
+		float(stuff["vertical_angle_degrees"]) < -45.0,
+		"a stuff leaves the hands steeply downward",
+	)
+	_check(
+		float(touch["vertical_angle_degrees"]) > 0.0,
+		"a touch goes up off the hands, which is what makes it playable",
+	)
+	_check(
+		bool(touch["playable"]) and not bool(stuff["playable"]),
+		"a touch keeps the rally alive and a stuff ends it",
+	)
+
+	## A tool goes out past the sideline it glanced off, on the side the ball
+	## was already nearer -- 0.8 is outside hand, so it leaves to the right.
+	_check(
+		float(tool["landing"].x) > 1.0,
+		"a tooled ball crosses the sideline it came off",
+	)
+
+	## Pace scales the stuff's depth rather than its direction: a stuff off a
+	## slow swing drops nearer the net than one off the hitter's best ball, and
+	## neither of them lands in the blockers' court.
+	var slow := BlockDeflectionModel.deflect("stuff", 0.5, 8.0, true)
+	_check(
+		float(slow["landing"].y) < float(stuff["landing"].y)
+			and float(slow["landing"].y) > CourtConstants.NET_Y,
+		"a stuff off a slower swing drops nearer the net, still on the hitter's side",
+	)
+
+	## And the whole thing mirrors. Attacking toward y = 1 puts the hitter's own
+	## half on the other side, and a stuff has to follow it there -- this is the
+	## symmetry half of the engine has had to be fixed for one side at a time.
+	var mirrored := BlockDeflectionModel.deflect("stuff", 0.5, 22.0, false)
+	_check(
+		float(mirrored["landing"].y) < CourtConstants.NET_Y,
+		"a stuff against the other direction of attack lands in that hitter's half",
+	)
+
+
 ## The reach pose belongs to contacts that were made, not to ones that were not.
 ##
 ## The resolver calls a contact `reaching` when its reach margin is negative --
