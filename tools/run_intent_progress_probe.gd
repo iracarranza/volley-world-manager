@@ -21,6 +21,14 @@ extends SceneTree
 ## range. So this measures the distribution before anything is drawn from it:
 ## how often is `progress` non-zero, and per intent, because the doc only claims
 ## four of the nine intents accumulate at all.
+##
+## **What this does not measure, having once been read as though it did.** It
+## walks `home_phase_intents` / `opponent_phase_intents` on events, which is
+## *one source* of cues and not the stream. An intent absent from this table is
+## absent from the phase maps and may still be drawn -- `approaching` is, on 260
+## frames, and was briefly recorded here as never occurring on the strength of
+## this table alone. `run_cogniticon_screen_probe.gd` is the instrument for what
+## reaches a viewer; this one is for whether the field is worth reading.
 func _initialize() -> void:
 	var Events := load("res://scripts/models/rally_event.gd")
 	var manager: Object = load("res://scripts/managers/game_manager.gd").new()

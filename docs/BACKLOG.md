@@ -460,9 +460,50 @@ Ordered roughly by how much each one changes what a viewer believes.
     Four intents carry a real spread; a fill on them would read. `setting` and
     `blocking` are flat zero -- which confirms the doc's own table, where those
     two are the ones whose sources (`_spatial_setter_choice`, the block's close
-    terms) are listed as not yet wired. Note also that `approaching` never
-    appears: the resolver publishes `preparing_attack` instead, so the doc's
-    row for it names an intent the simulation does not emit.
+    terms) are listed as not yet wired.
+
+    ~~Note also that `approaching` never appears.~~ **Withdrawn, and it is the
+    session's seventh wrong instrument.** That probe reads
+    `home_phase_intents` / `opponent_phase_intents` off events -- one source of
+    cues, not the stream. Asked at the screen instead, `approaching` is drawn
+    on 260 frames. The probe measured publication *by the phase maps* and was
+    read as publication *at all*.
+
+    **And the vocabulary is on screen, which settles the entry's own premise.**
+    `run_cogniticon_screen_probe.gd` reads `text` and `visible` off each voli's
+    billboard node every frame -- the node, not the intent, for the reason
+    `measure_offball_travel.gd` gives. Eight rallies, 30,708 voli-frames, 46.8%
+    of them carrying a mark:
+
+    | drawn | share of visible marks |
+    |---|---|
+    | `watching` -- a bare dot | **49.2%** |
+    | `defending` shield | 13.7% |
+    | badge tier `◆` | 11.7% |
+    | `covering` shield | 8.9% |
+    | `receiving` | 3.5% |
+    | `preparing_attack` | 3.0% |
+    | badge tier `◦` | 2.5% |
+    | `setting` | 2.1% |
+    | `approaching` | 1.8% |
+    | remaining badge glyphs | 3.6% |
+
+    **82.3% of what is drawn is the shield-and-blade vocabulary.** So it is
+    built *and* reaching the screen, and both of this entry's earlier
+    diagnoses were wrong.
+
+    The defect it was pointing at is real and is this: **half of every mark on
+    court is the dot**, and the next most common thing is the badge tier's
+    diamond. The distinctive shields and blades are about a third of what a
+    viewer sees, and none of them ever change, because `progress` is still not
+    read. A court of dots and diamonds that hold still is indistinguishable
+    from a placeholder whatever the vocabulary behind it.
+
+    The dot is defensible and the doc argues for it -- without a mark, "no
+    opinion" reads as "not implemented". At 49.2% it is nonetheless the
+    dominant visual and the least informative one, so the question is whether
+    `watching` should be drawn at all when twelve volis carry it at once, or
+    drawn quieter than it is.
 
     Not built here because the fill itself is not a text change -- a vertical
     fill on a font glyph needs two clipped layers or a shader, and that wants
