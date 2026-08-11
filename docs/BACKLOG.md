@@ -232,12 +232,24 @@ Ordered roughly by how much each one changes what a viewer believes.
     the trailing failed dig is a correct beat over a dead ball. The probe cannot
     separate those.
 
-    **The next step is therefore not the outro.** It is publishing a drawn
-    flight's end height, which nothing does, and which cannot be inferred from
-    `end_position` on precisely the case that matters -- a flight terminated at
-    an interception ends at a pair of hands whose height is not written down.
-    Publish that, re-run the probe with the question it was meant to ask, and
-    only then build the outro.
+    The end height turned out to be published already --
+    `BallPresentation.display_trajectory` writes `end_height_meters` at playback
+    time, which is why grepping event metadata for it found nothing. Asking it
+    from a probe still failed: handed `{}` for profiles and the trailing *failed*
+    contact as its next contact, it reports a modal end height of 5.2 m and a
+    maximum of 8.2 m, which a volleyball does not do.
+
+    Reasoned through instead, and it points the other way: a trailing failed
+    contact means nobody touched the ball, so it flew on to its aimed landing,
+    and that landing is the floor. Which suggests the ball is usually down and
+    the 0.38 s outro is usually adequate.
+
+    **So this stays open and unbuilt.** What settles it is the height at the end
+    of the flight playback actually drew -- the number
+    `set_ball_trajectory_sample` holds at progress 1.0 -- which wants a hook in
+    the match screen rather than a fifth reconstruction beside it. Five
+    instruments this session have measured something adjacent to the question
+    and been read as answering it; this is not becoming the sixth.
 
 13g. **Chase the ball off the court.** A deflection coming high off the block is
     playable, and a real player leaves the court to go after it. Nothing in the

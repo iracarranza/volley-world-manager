@@ -36,8 +36,41 @@ extends SceneTree
 ## `end_position` fails on exactly the case that matters: a flight terminated at
 ## an interception ends at a pair of hands whose height is not written down.
 ##
-## So the next step is not the outro. It is publishing a drawn flight's end
-## height, and then re-running this with the question it was meant to ask.
+## **And the end height was already published.** `BallPresentation` writes
+## `end_height_meters` onto every display trajectory -- it is computed at
+## playback time rather than stamped on the event, which is why grepping the
+## event metadata for it found nothing. So the probe asks the presentation layer
+## directly, exactly as playback does, and the question it could not answer
+## becomes one line.
+##
+## **Second run, and the instrument is wrong again -- the fifth time in this
+## session, which is the finding.** It reports 63.2% of 400 rallies stopping
+## with the ball above 0.35 m, and a modal end height of 5.2 m rising to 8.2 m.
+## A volleyball does not go eight metres up. The number is an artefact of how
+## this probe asks:
+##
+## - `display_trajectory` is handed `{}` for `profiles`, so
+##   `contact_height(next_contact, {})` falls back to a default rather than to
+##   the height that contact actually happened at.
+## - and the `next_contact` passed for the final flight is the trailing contact
+##   that *failed*, which `terminate_at_next_contact` deliberately declines to
+##   terminate at -- so the flight keeps its aimed landing while the end height
+##   is taken from the contact it did not reach.
+##
+## Reasoned through instead: a trailing failed contact means nobody touched the
+## ball, so it flew on to the aimed landing, and the aimed landing is the floor.
+## Which says the ball is probably down on most rallies and the outro is
+## probably adequate -- the opposite of what the table above claims.
+##
+## **So this is not settled and the outro is not built.** What would settle it is
+## the height at the *end of the drawn flight the last leg actually ran*, taken
+## from playback rather than reconstructed beside it: the same number
+## `set_ball_trajectory_sample` uses at progress 1.0. That wants a hook in the
+## match screen, not another guess out here.
+##
+## Left in the tree with its own wrongness written down, because the pattern is
+## worth more than the probe: five instruments this session have measured
+## something adjacent to the question and been read as answering it.
 func _initialize() -> void:
 	var Events := load("res://scripts/models/rally_event.gd")
 	var names := {
@@ -45,9 +78,12 @@ func _initialize() -> void:
 		Events.EventType.SET: "SET", Events.EventType.ATTACK: "ATTACK",
 		Events.EventType.BLOCK: "BLOCK", Events.EventType.DEFENSE: "DEFENSE",
 	}
+	var Presentation := load("res://scripts/simulation/ball_presentation.gd")
 	var manager: Object = load("res://scripts/managers/game_manager.gd").new()
 	manager.seed_vertical_slice_data()
 	var by_outcome := {}
+	var heights := {}
+	var airborne := 0
 	var rallies := 0
 	for rally_seed in range(20000, 20400):
 		manager.match_state.serving_home = (rally_seed % 2) == 0
@@ -66,6 +102,32 @@ func _initialize() -> void:
 				last_flight = event
 		if last_contact == null:
 			continue
+		## Where the last drawn flight actually left the ball. The presentation
+		## layer is asked rather than reimplemented, so this is the same number
+		## playback draws to.
+		if last_flight != null:
+			var after = null
+			var seen := false
+			for event in result.events:
+				if int(event.event_type) == Events.EventType.SET_DECISION:
+					continue
+				if seen:
+					after = event
+					break
+				if event == last_flight:
+					seen = true
+			var display: Dictionary = Presentation.display_trajectory(
+				last_flight, after,
+				Dictionary(last_flight.metadata.get("outgoing_trajectory", {})),
+				{},
+			)
+			var end_height := float(display.get("end_height_meters", 0.0))
+			var bucket := "%.1f" % (floorf(end_height / 0.25) * 0.25)
+			heights[bucket] = int(heights.get(bucket, 0)) + 1
+			## A ball more than a hand's width off the floor when the last flight
+			## finishes is a ball still in the air when playback stops.
+			if end_height > 0.35:
+				airborne += 1
 		var outcome := str(result.terminal_outcome)
 		var row: Dictionary = by_outcome.get(outcome, {
 			"rallies": 0, "final_carries_flight": 0, "trailing": {},
@@ -105,6 +167,14 @@ func _initialize() -> void:
 	print("%-18s %8d %14d %9.1f%%" % [
 		"all", total, total_with,
 		100.0 * float(total_with) / maxf(float(total), 1.0)])
+
+	print("\nheight of the ball where the last drawn flight ends, 25 cm buckets")
+	var height_keys := heights.keys()
+	height_keys.sort()
+	for key in height_keys:
+		print("  %6s m  %5d" % [key, int(heights[key])])
+	print("\n%d of %d rallies (%.1f%%) stop drawing with the ball above 0.35 m" % [
+		airborne, rallies, 100.0 * float(airborne) / maxf(float(rallies), 1.0)])
 
 	print("\nwhen the final contact has no flight, what trails what")
 	var trailing_all := {}
