@@ -33,6 +33,9 @@ extends Control
 ## thing.
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
+const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
+const BoardFace := preload("res://Yatra_One/YatraOne-Regular.ttf")
+const BoardHand := preload("res://Short_Stack/ShortStack-Regular.ttf")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
 
@@ -70,6 +73,19 @@ func _ready() -> void:
 func _build() -> void:
 	if _body != null:
 		return
+	## **This is the board, not a page in the journal.**
+	##
+	## It was built on the shell and left at the default medium, so it arrived as
+	## halftone-screened warm cream with a pen edge -- the journal, with a
+	## different heading. The object is wrong for what the screen is: the journal
+	## is a record you keep, and this is the thing somebody scrawls on the wall in
+	## the last minute before you go out.
+	##
+	## The medium carries substrate, divisions and hand together, so declaring it
+	## once here is the whole change; see `UIStyleSystem.MEDIUM_BOARD`, and
+	## `docs/design/THE_TACTICAL_WHITEBOARD.md` for why it is a fourth medium
+	## rather than the printed form with a different edge.
+	set_meta(UIStyleSystem.MEDIUM_META, UIStyleSystem.MEDIUM_BOARD)
 	var change_button := ScreenShell.action(
 		"Change the lineup", "Go back to the roster without starting the match."
 	)
@@ -82,6 +98,12 @@ func _build() -> void:
 		self, "Before you confirm",
 		[change_button, confirm_button] as Array[Button],
 	)
+	## Yatra One, and deliberately not Cherry Bomb One. The board's display face
+	## is its own; `docs/design/THE_TACTICAL_WHITEBOARD.md` names it, and the two
+	## are easy to confuse because both are heavy display faces the rest of the
+	## interface does not use.
+	shell.title.add_theme_font_override("font", BoardFace)
+	shell.title.add_theme_font_size_override("font_size", 30)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -324,10 +346,12 @@ func _error_total(side: Dictionary) -> int:
 	return total
 
 
+## A heading on a board is written, not typeset.
 func _heading(text: String) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_font_override("font", BoardFace)
+	label.add_theme_font_size_override("font_size", 20)
 	_body.add_child(label)
 
 
@@ -335,13 +359,17 @@ func _note(text: String) -> void:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_override("font", BoardHand)
 	label.modulate = Color(1.0, 1.0, 1.0, 0.62)
 	_body.add_child(label)
 
 
+## Every figure on the board is in the same hand as every other figure, because
+## one person wrote all of it in one go. Short Stack is that hand; the emphasis
+## is size, not a second typeface, for the same reason.
 func _cell(text: String, emphasised: bool = false) -> Label:
 	var label := Label.new()
 	label.text = text
-	if emphasised:
-		label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_font_override("font", BoardHand)
+	label.add_theme_font_size_override("font_size", 16 if emphasised else 14)
 	return label

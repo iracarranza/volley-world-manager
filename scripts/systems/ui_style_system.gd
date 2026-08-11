@@ -105,6 +105,13 @@ const MEDIUM_DRAWN := &"drawn"
 ## another border -- "drawn" turned out to be the journal with a different edge,
 ## which is why the clipboard read as the journal.
 const MEDIUM_FORM := &"form"
+## Melamine: a wall-mounted board that was written on minutes ago. It shares
+## exactly one property with a printed form -- no halftone screen -- and every
+## other property is its own, which is why it is a fourth medium rather than a
+## fourth branch inside `MEDIUM_FORM`. `docs/design/THE_TACTICAL_WHITEBOARD.md`
+## says so explicitly, and building it off the form is the named way to
+## reproduce the defect that made the clipboard read as the journal.
+const MEDIUM_BOARD := &"board"
 
 
 static func apply(
@@ -278,7 +285,12 @@ static func _screen_surface(
 	## substrate -- a scrapbook of screened reproductions -- and carrying it onto
 	## the clipboard was most of why the two objects looked identical. Office
 	## paper is flat; what varies across it is the print, not the stock.
-	control.material = null if medium == MEDIUM_FORM \
+	## Neither a form nor a board is screened, and they get there for different
+	## reasons: office stock is flat because it is bleached pulp, and melamine is
+	## flat because it is plastic. Written as two names rather than one condition
+	## so that a change to one does not silently move the other.
+	var unscreened := medium == MEDIUM_FORM or medium == MEDIUM_BOARD
+	control.material = null if unscreened \
 		else UIHalftone.material_for(control.theme_type_variation, light_mode)
 	_ink_surface(control, medium)
 	_vary_patch_colour(control, medium)
@@ -310,21 +322,37 @@ static func _screen_surface(
 const FORM_STOCK_LIGHT := Color(1.045, 1.045, 1.055)
 const FORM_STOCK_DARK := Color(0.93, 0.96, 1.02)
 
+## Melamine, which is neither paper nor cloth.
+##
+## Cooler than office stock and very slightly green, because a whiteboard is a
+## plastic surface under room light rather than a bleached one -- the green is
+## small enough that nobody names it and large enough that the board does not
+## read as a sheet of paper. Slightly darker than the form in the light theme
+## too: paper is the brightest thing on a desk and a board on a wall is not.
+const BOARD_STOCK_LIGHT := Color(0.985, 1.005, 1.0)
+const BOARD_STOCK_DARK := Color(0.90, 0.95, 0.965)
+
 
 static func _stock_colour(control: Control, medium: StringName) -> void:
-	if medium != MEDIUM_FORM:
+	if medium != MEDIUM_FORM and medium != MEDIUM_BOARD:
 		return
 	if not control.theme_type_variation in STITCHED_TIERS:
 		return
-	control.self_modulate = FORM_STOCK_LIGHT \
-		if UIPalette.control_is_light(control) else FORM_STOCK_DARK
+	var light := UIPalette.control_is_light(control)
+	if medium == MEDIUM_BOARD:
+		control.self_modulate = BOARD_STOCK_LIGHT if light else BOARD_STOCK_DARK
+		return
+	control.self_modulate = FORM_STOCK_LIGHT if light else FORM_STOCK_DARK
 
 
 static func _vary_patch_colour(control: Control, medium: StringName) -> void:
 	## Every sheet in the pad came off the same press. The per-patch tint is the
 	## journal's rule -- "no two patches from the same scrap" -- and it is exactly
 	## backwards for a form, where identical is the point.
-	if medium == MEDIUM_FORM:
+	## A board is one wiped surface. Tinting each panel differently would say the
+	## page was assembled from scraps, which is the journal's fact and not this
+	## object's.
+	if medium == MEDIUM_FORM or medium == MEDIUM_BOARD:
 		return
 	if not control.theme_type_variation in STITCHED_TIERS \
 			or control.theme_type_variation in UNTINTED_TIERS:
@@ -378,8 +406,15 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 		printed.queue_free()
 	var sewn := medium == MEDIUM_SEWN \
 		and control.theme_type_variation in STITCHED_TIERS
+	## A board's divisions are drawn in marker, edge to edge. Not a border it was
+	## manufactured with -- everything on a whiteboard was put there by hand,
+	## minutes ago, which is the whole of what separates it from the printed form
+	## it otherwise resembles in being unscreened.
 	var wanted_style := UIInkOutline.Stroke.STITCH if sewn \
-		else UIInkOutline.Stroke.INK
+		else (
+			UIInkOutline.Stroke.MARKER if medium == MEDIUM_BOARD
+			else UIInkOutline.Stroke.INK
+		)
 	if existing != null:
 		## Reassigned on every pass, not only at creation. The outline is reused
 		## across theme switches and resizes, so a tier that changed treatment

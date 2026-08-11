@@ -105,7 +105,7 @@ const COVERAGE_WIDTH_FLOOR: float = 0.72
 ## fourteen-pixel beat. One is a pen, the other is thread, and the halftone
 ## underneath reads differently against each -- ink on printed stock, or a
 ## sampler worked on it.
-enum Stroke { INK, STITCH }
+enum Stroke { INK, STITCH, MARKER }
 
 ## What the interface uses. One line to switch the whole page.
 const DEFAULT_STROKE: Stroke = Stroke.STITCH
@@ -134,6 +134,31 @@ const STITCH_END_RATIO: float = 0.22
 ## How far alternate stitches sit off the true line, in pixels. Hand sewing
 ## does not track a ruled edge; consecutive marks sit a hair either side of it.
 const STITCH_ALTERNATE_OFFSET: float = 0.55
+
+## The whiteboard's hand.
+##
+## A marker is not a pen with the numbers turned up. Three things separate them
+## and all three are the difference between "somebody wrote this on a board" and
+## "somebody wrote this with a fountain pen":
+##
+## A felt tip has no nib angle, so its width barely changes with the direction of
+## travel -- `MARKER_NIB_MIN_RATIO` is near one where the pen's is 0.38, which is
+## what stops a board rule tapering off as it turns a corner.
+##
+## It is wider, because a whiteboard is read from further away than a page.
+##
+## And it wanders less. A hand drawing on paper rests on the paper; a hand
+## drawing on a wall-mounted board does not, so the *long* drift is bigger and
+## the short jitter is smaller -- a marker line bows where a pen line trembles.
+## The dry-out is kept and deepened, because a marker that has been left with its
+## cap off is the most recognisable thing about one.
+const MARKER_STROKE_WIDTH: float = 7.4
+const MARKER_CORNER_WIDTH: float = 8.0
+const MARKER_NIB_MIN_RATIO: float = 0.88
+const MARKER_WANDER_PIXELS: float = 0.62
+const MARKER_SLOW_SHARE: float = 1.85
+const MARKER_FAST_SHARE: float = 0.22
+const MARKER_COVERAGE_DEPTH: float = 0.74
 
 ## The gauge of the thread.
 ##
@@ -1131,6 +1156,9 @@ func _wander(step: int) -> float:
 		return _cut_offset(step)
 	var slow := _unit(step / 3 + 1) - 0.5
 	var fast := _unit(step + 977) - 0.5
+	if stroke_style == Stroke.MARKER:
+		return (slow * MARKER_SLOW_SHARE + fast * MARKER_FAST_SHARE) \
+			* MARKER_WANDER_PIXELS
 	return (slow * 1.4 + fast * 0.6) * WANDER_PIXELS
 
 
@@ -1160,7 +1188,9 @@ func _coverage(index: int) -> float:
 	var starve := _unit(index / COVERAGE_RUN + 313)
 	var grain := _unit(index + 4409)
 	var dry := pow(starve, 3.0) * 0.82 + pow(grain, 5.0) * 0.18
-	return clampf(1.0 - COVERAGE_DEPTH * dry, 0.0, 1.0)
+	var depth := MARKER_COVERAGE_DEPTH if stroke_style == Stroke.MARKER \
+		else COVERAGE_DEPTH
+	return clampf(1.0 - depth * dry, 0.0, 1.0)
 
 
 ## Thicker where the hand slows: at the corners, and never in the middle of a
@@ -1173,8 +1203,12 @@ func _stroke_width(point: Vector2, shortest: float, tangent: Vector2) -> float:
 	## way along its edge you go.
 	var nib := deg_to_rad(NIB_ANGLE_DEGREES)
 	var presented := absf(sin(tangent.angle() - nib))
-	var base := STROKE_WIDTH * lerpf(NIB_MIN_RATIO, 1.0, presented)
-	var corner_base := CORNER_WIDTH * lerpf(NIB_MIN_RATIO, 1.0, presented)
+	var is_marker := stroke_style == Stroke.MARKER
+	var min_ratio := MARKER_NIB_MIN_RATIO if is_marker else NIB_MIN_RATIO
+	var width := MARKER_STROKE_WIDTH if is_marker else STROKE_WIDTH
+	var corner_width := MARKER_CORNER_WIDTH if is_marker else CORNER_WIDTH
+	var base := width * lerpf(min_ratio, 1.0, presented)
+	var corner_base := corner_width * lerpf(min_ratio, 1.0, presented)
 	var band := maxf(shortest * CORNER_SHARE, 6.0)
 	var to_edge := minf(
 		minf(point.x, size.x - point.x),
