@@ -257,3 +257,155 @@ almost certainly right and costs one more node.
 5. **What is the actual per-contact time budget?** A swoop plus a charge plus a
    slash is ~0.7 s of motion inside windows that are often shorter than that.
    Worth measuring before tuning any envelope, rather than after.
+
+---
+
+# The scenario, read back
+
+The design was answered with a scene rather than with settings, which turned out
+to be the right instrument: several things in it change the design rather than
+decorating it. This section is the scene read back in the system's own terms,
+so that where it disagrees with what is above, the disagreement is on the page.
+
+## 6. The rule that changes: **a mark shows what the voli believes**
+
+The setter telegraphs left; the blockers' eyes follow left; the set is a slide
+right; the eyes swing and widen. **The blockers' eyes were pointing at the wrong
+place, and that is exactly correct.**
+
+This inverts §1.3 in a way that makes it sharper rather than weaker. The old
+statement was defensive — do not leak the resolver's knowledge. The real rule is
+positive:
+
+> A cogniticon draws the voli's **model of the world**, not the world.
+
+Everything follows from that. A pupil aimed at a decoy is honest. A shield that
+never fills is honest. A blocker who is doubtful about a read the resolver has
+already settled is honest. And the thing that remains forbidden is unchanged and
+now easier to state: a mark may not show what the voli **could not know yet** —
+which is a claim about *time*, not about correctness.
+
+So the gate is temporal, and only temporal: no envelope may begin before its
+cue's `starts_at`. Being wrong is allowed. Being early is not.
+
+This is also where the drama comes from. A layer that only ever showed true
+things could not contain a decoy.
+
+## 7. Hand-off, not two slots
+
+"Onlookers take their glance and immediately begin a new action, the eye
+minimising away for a new icon."
+
+That answers the deferred question, and answers it better than either option I
+had: the eye and the intent mark **share one slot and trade it**. The eye
+minimises away as the intent arrives. The transition is itself expressive —
+a voli finishing looking and starting doing is one continuous gesture rather
+than two marks appearing.
+
+The remaining case for concurrency was hitter and blocker *course* — line or
+cross, which way the wall is going. **That does not need a second mark either.**
+Direction belongs on the intent mark:
+
+- the blade **tilts** toward the course it is swinging — line, cross, or the
+  angle between
+- the shield **leans** toward the lane it is closing
+
+which is one parameter on a mark already being drawn, reads at a glance, and
+keeps one mark per voli. If that turns out to be too subtle at playback
+distance, concurrency is still available as a fallback — but it should be the
+fallback, not the plan.
+
+## 8. Colour is an affect ramp — and the court I just softened is in the way
+
+The scene needs three colour states beyond the ink: **orange for doubt**, **red
+for shock**, **grey for a mark that has been defeated**. That is more than the
+single-red exception in §2.4, and it is justified — doubt and shock are a
+continuum and drawing them as one hue with two values is what makes the swing
+from one to the other read as escalation.
+
+**But orange is now close to the worst available choice.** The court was
+softened to an apricot `cf8659` in the same session, and the ambient marks float
+above heads against exactly that ground. An orange mark on an apricot floor is
+the same mistake as the original coral-on-terracotta, which is why the ink went
+white in the first place.
+
+Three ways out, and this needs a decision rather than a guess:
+
+1. **Keep the ink neutral and carry affect in the halo.** A white mark ringed in
+   orange, then red. Contrast stays the ink's job; hue becomes the halo's. This
+   is the most conservative and probably the right one.
+2. **Push the hues away from the court** — doubt as a cool amber or a sickly
+   yellow-green, shock as a magenta-red rather than an orange-red. Keeps colour
+   on the mark, costs the obvious reading of "orange means doubt".
+3. **Draw doubt as behaviour rather than hue** — a flicker, an unsteady pupil,
+   a mark that cannot hold still — and reserve colour for shock alone. The most
+   expressive and the most work.
+
+## 9. Synchrony is the combination, and it is free
+
+"All of the attacking volis' swords swing in at once and begin charging — this
+is a combination play, and as this registers in your mind the volis begin
+moving."
+
+Nothing has to detect a combination or label one. Three blades arriving on the
+same frame *is* the signal, and it emerges from each voli independently entering
+at their own moment. That only works if entry timing is derived from each voli's
+own cue rather than staggered for looks — so **no entry may be offset for visual
+variety.** A stagger added to stop marks looking mechanical would destroy the
+one moment the layer most needs to land.
+
+The same fact in reverse: when the marks *do not* arrive together, that is a
+broken play, and it will read as one without anyone drawing it.
+
+## 10. The motion primitives the scene actually names
+
+The scene is precise about verbs, and they resolve to a small set — small enough
+that the eye and the blade share most of it:
+
+| primitive | in the scene | driven by |
+|---|---|---|
+| **arrive** | swords swing in; eyes appear | cue `starts_at` |
+| **surge** | charging serve; middle's sword since takeoff | `progress`, `SignatureMoveModel.charge` |
+| **minimise away** | the eye going as a new icon comes | cue end, handing to the next |
+| **form and shatter** | the hesitant passer's commitment diamond | a state that was entered and lost |
+| **swing** | blockers' eyes following the telegraph, then snapping | pupil aim, from the believed target |
+| **widen** | shock at the slide | state → `reacting` / `lost_sight` |
+| **slash** | the spike | the attack's contact |
+| **cleave and grey** | defenders' shields cut and falling | the attack's *outcome*, after it lands |
+
+"Bursting with power" has a home already: `SignatureMoveModel.charge` is a 0–1
+quantity with an availability threshold at 0.62, so a serve's blade can visibly
+cross from *strong* into *signature* without a new number being invented.
+
+**Two of these are new architecture, not new drawings.** *Form and shatter*
+needs a state's *transition* rather than its value — the renderer currently sees
+only what a cue is, never what it stopped being. And *cleave* is one voli's mark
+acting on another's, which nothing in the layer can express: marks are strictly
+per-voli today. Both are worth building; neither is a tuning pass.
+
+## 11. The camera is part of this feature
+
+The scene opens zoomed on the server, pans to the receiving team as the toss
+goes up, and follows. **The scenario is a camera script**, and the marks are
+timed against it — eyes "appear" as the camera arrives on them, which is a
+statement about framing as much as about cues.
+
+So the dynamic camera is not the next feature after this one. It is the other
+half of this one, and the framing decisions I listed as prerequisites are
+answered by the scene: it follows the ball, it moves rather than cutting, and it
+anticipates the *contact* rather than trailing the ball.
+
+## 12. What is still open
+
+1. **Which of the three colour routes in §8**, given the apricot court.
+2. **Is opponent cognition always visible?** The scene depends on reading the
+   blockers' doubt and their bite on the decoy — that is the payoff. It is also
+   information a manager has arguably not earned, and `SCOUTING.md` gates
+   everything else about the other side. If it is always visible, that is a
+   deliberate choice worth writing into the scouting doc rather than an
+   inconsistency.
+3. **Does direction-on-the-mark (§7) carry course well enough**, or is
+   concurrency needed after all?
+4. **The time budget** from §5 is now sharper, not looser: the scene has a
+   charge, a hand-off, a swing, a shock and a slash inside one rally. Worth
+   measuring the real windows before any envelope is tuned.
