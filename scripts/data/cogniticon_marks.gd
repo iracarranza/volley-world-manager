@@ -571,6 +571,314 @@ static func hand_textures(dark_theme: bool) -> Dictionary:
 	}
 
 
+## ## Variants: how a mark says the thing went well, or did not
+##
+## A family says what a voli is doing. A **variant** says how it is going, and
+## the rally's own events choose it -- no mark reads another mark, so a cleaved
+## shield is cleaved because the resolver says the ball went through it, not
+## because some other voli's blade was drawn nearby.
+##
+## | family | ascendant | broken |
+## |---|---|---|
+## | blade | **flaming** -- tongues off the edge | **shattered** -- snapped, the tip adrift |
+## | shield | **shining** -- rays off the rim | **cleaved** -- split, the halves parted |
+##
+## Both directions matter and the pair has to be drawn together: an interface
+## that can only show triumph is a scoreboard, and one that can only show
+## failure is a list of complaints.
+const VARIANTS: Array[String] = ["plain", "ascendant", "broken"]
+
+
+## Flame tongues rising off a blade's edge, as three licks of differing height.
+static func _flame_paths() -> Array:
+	var out: Array = []
+	var licks := [
+		{"x": 21.0, "height": 9.0, "sway": -2.6},
+		{"x": 27.0, "height": 13.5, "sway": 1.8},
+		{"x": 33.0, "height": 8.0, "sway": 3.0},
+	]
+	for lick in licks:
+		var base := Vector2(float(lick["x"]), 8.0)
+		var tip := Vector2(
+			float(lick["x"]) + float(lick["sway"]), 8.0 - float(lick["height"])
+		)
+		## An S-curve rather than a spike: a flame leans and recovers, and a
+		## straight triangle reads as an arrow.
+		out.append({"points": _cubic(
+			base,
+			base + Vector2(-3.4, -float(lick["height"]) * 0.42),
+			tip + Vector2(3.0, float(lick["height"]) * 0.30),
+			tip
+		), "closed": false, "width": 1.9, "dash": 0.0})
+	return out
+
+
+## The break: a blade snapped across its middle, the tip carried away and
+## turned. Drawn as the two halves rather than as a crack, because a crack on a
+## stroke outline is a gap and reads as a dash.
+static func _shattered_paths() -> Array:
+	var lower := Rect2(21.0, 20.0, 12.0, 16.0)
+	var out: Array = [
+		{"points": _rounded_rect(lower, BLADE_RADIUS), "closed": true,
+			"width": BLADE_STROKE, "dash": 0.0},
+	]
+	## The tip, rotated and lifted clear of the stump.
+	var tip_points := PackedVector2Array()
+	for point in _rounded_rect(Rect2(21.0, 4.0, 12.0, 13.0), BLADE_RADIUS):
+		var centred := point - Vector2(27.0, 10.5)
+		var angle := deg_to_rad(26.0)
+		tip_points.append(Vector2(
+			centred.x * cos(angle) - centred.y * sin(angle),
+			centred.x * sin(angle) + centred.y * cos(angle)
+		) + Vector2(31.0, 9.0))
+	out.append({"points": tip_points, "closed": true,
+		"width": BLADE_STROKE, "dash": 0.0})
+	## Two shards leaving the break, which is what makes it a snap rather than
+	## a blade drawn in two pieces.
+	out.append({"points": _line(18.5, 18.0, 15.0, 14.5),
+		"closed": false, "width": 1.7, "dash": 0.0})
+	out.append({"points": _line(35.0, 19.5, 39.0, 16.5),
+		"closed": false, "width": 1.7, "dash": 0.0})
+	return out
+
+
+## Rays off a shield's rim. Short, unequal, and not touching the rim -- a gleam
+## sits off a surface rather than on it.
+static func _shine_paths() -> Array:
+	var out: Array = []
+	var rays := [
+		[Vector2(27.0, 2.0), Vector2(27.0, -3.5)],
+		[Vector2(44.0, 9.0), Vector2(48.5, 5.0)],
+		[Vector2(10.0, 9.0), Vector2(5.5, 5.0)],
+		[Vector2(48.0, 24.0), Vector2(52.5, 23.0)],
+		[Vector2(6.0, 24.0), Vector2(1.5, 23.0)],
+	]
+	for ray in rays:
+		out.append({"points": PackedVector2Array([ray[0], ray[1]]),
+			"closed": false, "width": 2.0, "dash": 0.0})
+	return out
+
+
+## The cleave: the shield split on a diagonal, its halves parted along the cut.
+##
+## Cut by **walking** the outline and splitting it at the two places the cut line
+## actually crosses it, rather than by filtering vertices onto one side or the
+## other. Filtering was the first version and it looked right in the code: the
+## outline is a closed loop, so a side's vertices are contiguous only if the
+## loop's start vertex happens to sit on the other side of the cut. It did not,
+## the run wrapped, and the open polyline joined its two ends with a chord
+## straight across the shield -- a stray diagonal that read plausibly as the cut
+## itself. Caught by an ink count, not by looking: a *cleaved* shield came out
+## carrying more ink than a whole one.
+static func _cleaved_paths() -> Array:
+	var out: Array = []
+	var outline := _shield_outline(false)
+	var cut_normal := Vector2(0.82, 0.57)
+	var centre := Vector2(27.0, 27.0)
+
+	## Walk the closed loop once, cutting a new arc every time the sign flips and
+	## planting the crossing point on both arcs so neither end is ragged.
+	var arcs: Array = []
+	var current := PackedVector2Array()
+	var current_side := signf((outline[0] - centre).dot(cut_normal))
+	for index in range(outline.size() + 1):
+		var point: Vector2 = outline[index % outline.size()]
+		var offset := (point - centre).dot(cut_normal)
+		var side := signf(offset)
+		if side != 0.0 and current_side != 0.0 and side != current_side \
+				and current.size() > 0:
+			var previous: Vector2 = current[current.size() - 1]
+			var previous_offset := (previous - centre).dot(cut_normal)
+			var span := previous_offset - offset
+			var crossing := previous if absf(span) < 0.0001 \
+				else previous.lerp(point, previous_offset / span)
+			current.append(crossing)
+			arcs.append({"side": current_side, "points": current})
+			current = PackedVector2Array([crossing])
+			current_side = side
+		current.append(point)
+	if current.size() > 1:
+		arcs.append({"side": current_side, "points": current})
+
+	## The loop's start sits mid-arc, so the first and last arcs are one arc that
+	## the walk happened to begin inside.
+	if arcs.size() > 2 and float(arcs[0]["side"]) == float(arcs[-1]["side"]):
+		var joined: PackedVector2Array = arcs[-1]["points"]
+		joined.append_array(arcs[0]["points"])
+		arcs[0] = {"side": arcs[0]["side"], "points": joined}
+		arcs.remove_at(arcs.size() - 1)
+
+	## Parted *and* slid. Once the chord was gone the halves sat 2.4 units apart
+	## and the shield read as intact with a nick in the rim -- the old drawing had
+	## only looked cleaved because of the bug. A gap alone is a gap; two pieces
+	## that no longer line up along the cut are a break.
+	var cut_tangent := Vector2(-cut_normal.y, cut_normal.x)
+	for arc in arcs:
+		var points: PackedVector2Array = arc["points"]
+		if points.size() < 3:
+			continue
+		var side := float(arc["side"])
+		var shift := cut_normal * side * CLEAVE_PART + cut_tangent * side * CLEAVE_SLIDE
+		var parted := PackedVector2Array()
+		for point in points:
+			parted.append(point + shift)
+		out.append({"points": parted, "closed": false,
+			"width": SHIELD_STROKE, "dash": 0.0})
+	## Shards leaving the cut, the same tick the blade and the commitment use.
+	## Three families breaking three different ways still break in one hand.
+	out.append({"points": _line(20.0, 20.0, 15.5, 23.0), "closed": false,
+		"width": 1.7, "dash": 0.0})
+	out.append({"points": _line(35.0, 33.0, 39.5, 36.0), "closed": false,
+		"width": 1.7, "dash": 0.0})
+	return out
+
+
+## Every blade, in every variant it can be in.
+static func blade_variant_textures(dark_theme: bool) -> Dictionary:
+	var out := {}
+	for intent in BLADE_INTENTS:
+		out["%s|plain" % intent] = _blade(
+			intent == "preparing_attack", SERVE_RECT if intent == "serving" \
+				else BLADE_RECT, intent == "serving", dark_theme
+		)
+	out["approaching|ascendant"] = _blade_with(_flame_paths(), dark_theme)
+	out["approaching|broken"] = _composite(
+		PIXELS, PIXELS, _shattered_paths(), [], [], dark_theme
+	)
+	return out
+
+
+static func _blade_with(extra: Array, dark_theme: bool) -> ImageTexture:
+	var paths: Array = [
+		{"points": _rounded_rect(BLADE_RECT, BLADE_RADIUS), "closed": true,
+			"width": BLADE_STROKE, "dash": 0.0},
+		{"points": _line(13.0, 40.0, 41.0, 40.0), "closed": false,
+			"width": GUARD_STROKE, "dash": 0.0},
+		{"points": _line(27.0, 40.0, 27.0, 48.0), "closed": false,
+			"width": GUARD_STROKE, "dash": 0.0},
+	]
+	return _composite(PIXELS, PIXELS, paths + extra, [], [], dark_theme)
+
+
+static func shield_variant_textures(dark_theme: bool) -> Dictionary:
+	var plain: Array = [
+		{"points": _shield_outline(false), "closed": true,
+			"width": SHIELD_STROKE, "dash": 0.0},
+	]
+	return {
+		"defending|plain": _composite(PIXELS, PIXELS, plain, [], [], dark_theme),
+		"defending|ascendant": _composite(
+			PIXELS, PIXELS, plain + _shine_paths(), [], [], dark_theme
+		),
+		"defending|broken": _composite(
+			PIXELS, PIXELS, _cleaved_paths(), [], [], dark_theme
+		),
+	}
+
+
+## ## Commitment as a process, not a symbol
+##
+## The diamond used to be a *state* -- an abstract shape meaning `committed`
+## that a viewer had to be taught, and which was reported, fairly, as
+## unreadable. It comes back as something else entirely: a mark that **forms**.
+##
+## Committing to a ball takes a moment, and a mark whose outline draws itself
+## around a perimeter says that without any vocabulary at all -- it is a loading
+## bar bent into a shape. Half-drawn is a decision half-made. And a commitment
+## that fails does not fade; it **breaks**, which is the hesitating passer of
+## the scene.
+const COMMIT_RADII := Vector2(13.0, 16.0)
+const COMMIT_STROKE: float = 2.6
+const COMMIT_TRACK_STROKE: float = 1.3
+const COMMIT_TRACK_DASH: float = 2.6
+const COMMIT_BREAK_PART: float = 3.4
+const COMMIT_BREAK_SLUMP: float = 2.6
+const COMMIT_BREAK_DEGREES: float = 13.0
+const CLEAVE_PART: float = 4.4
+const CLEAVE_SLIDE: float = 2.6
+
+
+static func commitment(progress: float, broken: bool, dark_theme: bool) -> ImageTexture:
+	var centre := Vector2(27.0, 27.0)
+	var corners := PackedVector2Array([
+		centre + Vector2(0.0, -COMMIT_RADII.y),
+		centre + Vector2(COMMIT_RADII.x, 0.0),
+		centre + Vector2(0.0, COMMIT_RADII.y),
+		centre + Vector2(-COMMIT_RADII.x, 0.0),
+		centre + Vector2(0.0, -COMMIT_RADII.y),
+	])
+	if broken:
+		## Split down the middle and parted, with the halves left where they
+		## fell. A broken commitment is not an empty one.
+		##
+		## Parted by `COMMIT_BREAK_PART` and the right half dropped and turned,
+		## because the first version parted the halves by 1.6px and read on the
+		## plate as an intact diamond with two specks in it. Symmetry is what made
+		## it read as whole: one half has to have *fallen*, not merely moved.
+		var left := PackedVector2Array()
+		for point in [corners[0], corners[3], corners[2]]:
+			left.append(point + Vector2(-COMMIT_BREAK_PART, 0.0))
+		var right := PackedVector2Array()
+		for point in [corners[0], corners[1], corners[2]]:
+			var centred: Vector2 = point - centre
+			var angle := deg_to_rad(COMMIT_BREAK_DEGREES)
+			right.append(Vector2(
+				centred.x * cos(angle) - centred.y * sin(angle),
+				centred.x * sin(angle) + centred.y * cos(angle)
+			) + centre + Vector2(COMMIT_BREAK_PART, COMMIT_BREAK_SLUMP))
+		return _composite(PIXELS, PIXELS, [
+			{"points": left, "closed": false, "width": COMMIT_STROKE, "dash": 0.0},
+			{"points": right, "closed": false, "width": COMMIT_STROKE, "dash": 0.0},
+			## Shards leaving the break, which is what says it snapped rather than
+			## that it was drawn in two pieces.
+			{"points": _line(23.0, 20.0, 18.5, 24.0), "closed": false,
+				"width": 1.7, "dash": 0.0},
+			{"points": _line(32.0, 31.0, 37.0, 34.5), "closed": false,
+				"width": 1.7, "dash": 0.0},
+		], [], [], dark_theme)
+	## Drawn around its own perimeter to `progress`, which is the loading bar.
+	##
+	## A bar needs its *track* as much as its fill. Drawn without one, a
+	## half-formed commitment is just a short line: legible as motion, useless as
+	## a fraction, and at zero it was measured as literally nothing on the plate.
+	## The track is the same diamond dashed and thin, which is the vocabulary's
+	## existing word for provisional -- so the empty part of the bar is already
+	## saying "not yet" without a second colour or an alpha channel.
+	var paths: Array = [
+		{"points": corners, "closed": false,
+			"width": COMMIT_TRACK_STROKE, "dash": COMMIT_TRACK_DASH},
+	]
+	var drawn := _truncate(corners, clampf(progress, 0.0, 1.0))
+	if drawn.size() >= 2:
+		paths.append({
+			"points": drawn, "closed": false,
+			"width": COMMIT_STROKE, "dash": 0.0,
+		})
+	return _composite(PIXELS, PIXELS, paths, [], [], dark_theme)
+
+
+## The first `fraction` of a polyline, by arc length.
+static func _truncate(points: PackedVector2Array, fraction: float) -> PackedVector2Array:
+	var total := 0.0
+	for index in range(points.size() - 1):
+		total += points[index].distance_to(points[index + 1])
+	var budget := total * clampf(fraction, 0.0, 1.0)
+	var out := PackedVector2Array()
+	if points.size() > 0:
+		out.append(points[0])
+	for index in range(points.size() - 1):
+		var span := points[index].distance_to(points[index + 1])
+		if span <= 0.0001:
+			continue
+		if budget >= span:
+			out.append(points[index + 1])
+			budget -= span
+			continue
+		out.append(points[index].lerp(points[index + 1], budget / span))
+		break
+	return out
+
+
 ## Draw a mark as halo then ink, and flatten the two.
 ##
 ## Two passes rather than one, because a halo is a second colour and the stroker

@@ -319,3 +319,26 @@ static func affect_grade(state: String, affect: String, doubtful: bool) -> Strin
 	if affect == "confident":
 		return "S"
 	return "C"
+
+
+## Which variant of a family's mark the rally has earned.
+##
+## **The rally events decide, and nothing else does.** The marks do not interact
+## and never negotiate: a blade does not flame because the shield beside it
+## broke. It flames because the cue compiled off this voli's own contact says
+## the read went well, and it shatters because the same cue says it did not.
+##
+## Read off the two axes that already exist rather than a new one, which is what
+## keeps this honest. `affect` is where the compiler puts how a contact went, and
+## `lost_sight` is the one state that is a failure on its face -- a voli who
+## cannot see the ball has already lost whatever they were doing.
+##
+## The middle is deliberately wide. `plain` is the answer for every ordinary
+## contact, and it has to be, or the loud variants stop meaning anything: a
+## vocabulary where every mark is flaming is a vocabulary with one word in it.
+static func variant_for(state: String, affect: String) -> String:
+	if state == "lost_sight" or affect == "upset" or affect == "sad":
+		return "broken"
+	if affect == "confident" or affect == "pleased":
+		return "ascendant"
+	return "plain"

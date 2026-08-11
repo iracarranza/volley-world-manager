@@ -499,3 +499,132 @@ anticipates the *contact* rather than trailing the ball.
 4. **The time budget** from §5 is now sharper, not looser: the scene has a
    charge, a hand-off, a swing, a shock and a slash inside one rally. Worth
    measuring the real windows before any envelope is tuned.
+
+## 13. Variants: three states per family, and how a rating reaches a mark
+
+A family now has three variants, drawn together on purpose. An interface that
+can only show triumph is a scoreboard; one that can only show failure is a list
+of complaints.
+
+| family | `plain` | `ascendant` | `broken` |
+|---|---|---|---|
+| blade | the mark | **flaming** — three licks off the edge, unequal, leaning | **shattered** — a stump, the tip adrift and turned |
+| shield | the mark | **shining** — five rays off the rim, off the surface, not on it | **cleaved** — split on a diagonal, the halves parted *and slid* |
+| commitment | the diamond, drawn round | (none) | **broken** — parted, one half slumped and turned |
+
+The variants do not interact. **The rally events decide which variant is
+showing** — nothing in the layer negotiates, and a mark never reacts to the mark
+beside it.
+
+### Commitment stopped being a symbol
+
+The diamond was a *state*: an abstract shape meaning `committed` that a viewer
+had to be taught, and which was reported, fairly, as unreadable — "still not
+sure what it means as well lol."
+
+It comes back as a **duration**. Committing to a ball takes a moment, and a mark
+that draws itself around its own perimeter says that with no vocabulary at all:
+a loading bar bent into a shape. Half-drawn is a decision half-made.
+
+A bar also needs its **track**, which the first version did not have. Without
+one a half-formed commitment is just a short line — legible as motion, useless
+as a fraction, and at nought it rendered as literally nothing. The track is the
+same diamond, thinner and dashed, which is this vocabulary's existing word for
+*provisional*. So the empty part of the bar is already saying "not yet" without
+a second colour or an alpha channel.
+
+And a commitment that fails does not fade. It **breaks**, which is the
+hesitating passer of the scene in §6.
+
+### Colour: the ink, not a backdrop — measured
+
+Two routes were drawn on one sheet: recolour the mark's ink to the rating
+grade, or leave the ink neutral and seat the mark on a coloured disc.
+
+The disc makes a claim it never states — that one disc radius works for every
+family. `tools/run_mark_extent_probe.gd` measures the ink bounding box of every
+mark in the vocabulary and the radius a circle needs to contain it:
+
+| mark | radius | vs canvas |
+|---|---|---|
+| eye, nominal | 91 | 84% |
+| blade, shattered | 96 | 89% |
+| commitment, full | 99 | 91% |
+| blade, plain | 111 | 102% |
+| blade, flaming | 122 | 113% |
+| shield, plain | 131 | 121% |
+| shield, cleaved | 139 | 129% |
+| shield, shining | 149 | 138% |
+
+**A disc sized for the largest is 64% wider than the smallest mark needs.** One
+disc therefore reads as two different weights depending on which family is
+inside it, and the same grade would look louder on a shield than on an eye — the
+opposite of what a rating scale is for. Sizing the disc per family fixes that
+and replaces one decision with one-per-family, plus a radius owed by every
+family added later.
+
+Recolouring the ink has none of that: it costs nothing per family, it survives
+any ground because the halo is doing that job already, and grade C is very
+nearly the ink already in use, so the neutral case is the drawing unchanged.
+
+**The ink carries the grade.** The disc is recorded here as measured and
+declined, not as untried.
+
+### What the plate found that looking did not
+
+The variant sheet was built to answer the colour question and answered two
+others on the way, both by disagreeing with a gate:
+
+- **The cleaved shield carried *more* ink than a whole one.** `_cleaved_paths`
+  filtered the outline's vertices onto one side of the cut or the other. A
+  side's vertices are contiguous only if the closed loop's start vertex sits on
+  the far side — it did not, the run wrapped, and the open polyline joined its
+  two ends with a chord straight across the shield. The stray diagonal read
+  plausibly as the cut itself. It is now split by *walking* the outline and
+  cutting where the line actually crosses it.
+- **And then the fixed cleave read as intact with a nick in the rim**, because
+  the old drawing had only looked cleaved because of the bug. A gap alone is a
+  gap; two pieces that no longer line up along the cut are a break. The halves
+  are parted *and* slid.
+
+The gate for the shield's break is width at the waist, not ink count — a cleave
+is a parting, not a loss, and the first version of that gate asked the wrong
+question of the right drawing.
+
+### The variants are wired, and the compiler barely reaches them
+
+`CogniticonMotion.variant_for` reads the two axes a cue already carries —
+`state` and `affect` — so the rally events decide the variant and nothing else
+does. `tools/run_variant_mix_probe.gd` then measures what that actually yields
+over 19,559 compiled cues from 240 rallies:
+
+| variant | count | share |
+|---|---|---|
+| plain | 19,218 | 98.3% |
+| ascendant | 310 | 1.6% |
+| broken | 31 | 0.2% |
+
+| affect | share | | state | share |
+|---|---|---|---|---|
+| neutral | 98.4% | | committed | 88.7% |
+| pleased | 1.1% | | searching | 5.1% |
+| confident | 0.5% | | recognizing | 2.5% |
+| — | — | | lost_sight | 0.2% |
+
+**`upset` and `sad` are emitted zero times.** Both branches exist in
+`_compile_reactions`, and both sit behind `named_action` — a signature move —
+which is only recorded when it comes off. So the only route to a `broken` mark
+today is `lost_sight`, at 0.2%: the shattered blade and the cleaved shield are
+drawn, gated and wired, and a viewer would see one about once every eight
+rallies.
+
+That is a **compiler gap, not a drawing gap**, and it is exactly the half of
+the §6 scenario that has no source: "the blockers' shields grey out and cleave"
+needs a blocker who has been beaten to read as `upset`, and nothing tells a
+blocker they were beaten. `_compile_block_read` has `closed` — how far the wall
+actually shut — but the outcome lives on the *attack* event, one contact later.
+
+Deliberately not built in this pass. `affect` feeds `affect_grade`, so making
+beaten blockers `upset` recolours the badge tier across every rally at once, and
+that wants its own measurement rather than being smuggled in behind a set of
+drawings. Logged rather than done.

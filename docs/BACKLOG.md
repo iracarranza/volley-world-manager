@@ -6536,3 +6536,42 @@ points. Two confidently wrong diagnoses came from that, with apparent evidence
 behind them. The thing that actually worked was checking the last verified-green
 commit — which proved the gate was regressed rather than brittle, and stopped a
 threshold being relaxed that had no business being touched.
+
+## A beaten blocker has no way to say so, so `broken` marks almost never draw
+
+The cogniticon families each have three variants now — plain, ascendant, broken
+— drawn, gated and wired to the cue's own `state` and `affect`, so the rally
+events pick the variant and nothing else does.
+
+Measured over 19,559 compiled cues from 240 rallies
+(`tools/run_variant_mix_probe.gd`):
+
+| variant | share | | affect | share |
+|---|---|---|---|---|
+| plain | 98.3% | | neutral | 98.4% |
+| ascendant | 1.6% | | pleased | 1.1% |
+| broken | **0.2%** | | confident | 0.5% |
+
+**`upset` and `sad` are emitted zero times.** Both branches exist in
+`_compile_reactions` and both sit behind `named_action` — a signature move,
+recorded only when it comes off. The only surviving route to a `broken` mark is
+`lost_sight`, 31 cues in 19,559.
+
+So the shattered blade and the cleaved shield exist and are almost never seen,
+and the half of the motion scenario that depends on them —
+*"the blockers' shields grey out and cleave"* — has no source at all. Nothing
+tells a blocker they were beaten: `_compile_block_read` knows `closed`, how far
+the wall actually shut, but the outcome lives on the attack event one contact
+later.
+
+**Why it was left.** `affect` feeds `CogniticonMotion.affect_grade`, which is
+now the single source of colour for the whole layer. Making beaten blockers
+`upset` recolours the badge tier across every rally at once. That is a change
+worth making and worth measuring on its own, rather than one smuggled in behind
+a set of drawings.
+
+**The shape of it**: carry the attack's outcome back to the blockers named on
+the block event, and give the blocker who was beaten an `upset` reaction cue the
+way the hitter already gets a `pleased` one. Re-run the mix probe afterwards —
+the number to watch is `plain`, which must stay far above the loud variants or
+the two-tier separation collapses.

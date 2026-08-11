@@ -187,7 +187,8 @@ func show_cue(
 			return
 		if _draw_mark(
 			intent, float(reading.get("progress", 0.0)), strength,
-			simulation_time - float(cue.starts_at),
+			simulation_time - float(cue.starts_at), 0.0,
+			CogniticonMotion.variant_for(str(cue.state), str(cue.affect)),
 		):
 			text = ""
 			visible = true
@@ -234,7 +235,8 @@ func show_cue(
 		return
 	if _draw_mark(
 		str(reading.get("intent", "watching")),
-		float(reading.get("progress", 0.0)), 1.0,
+		float(reading.get("progress", 0.0)), 1.0, -1.0, 0.0,
+		CogniticonMotion.variant_for(str(cue.state), str(cue.affect)),
 	):
 		text = ""
 		visible = true
@@ -456,10 +458,17 @@ func _ensure_eye() -> void:
 ## Draw this intent as a mark, or report that nothing is drawn for it yet.
 func _draw_mark(
 	intent: String, progress: float, strength: float,
-	seconds_since_start: float = -1.0, course: float = 0.0
+	seconds_since_start: float = -1.0, course: float = 0.0,
+	variant: String = "plain"
 ) -> bool:
 	_ensure_marks()
-	var texture: Texture2D = _drawn.get(intent, null)
+	## **The variant is looked up, not required.** Only two intents have an
+	## ascendant and a broken drawing today; every other family falls back to its
+	## plain mark rather than vanishing. Asking for a variant that does not exist
+	## has to be free, or adding the third family means touching the compiler.
+	var texture: Texture2D = _drawn.get("%s|%s" % [intent, variant], null)
+	if texture == null:
+		texture = _drawn.get(intent, null)
 	if texture == null:
 		return false
 	## **Arrival, so a mark swoops in rather than appearing.** Every mark used
@@ -490,7 +499,12 @@ func _draw_mark(
 	## Only the intents that accumulate carry a fill, and the review is explicit
 	## that the fill is *distance covered* and never *likelihood of arriving* --
 	## a hitter who will be late still fills, because they are running.
-	var fills := FILLING_INTENTS.has(intent) and progress > 0.001
+	## A broken mark does not fill. The fill is a region cut from the plain
+	## drawing's own rectangle, so laying it over a shattered blade would put an
+	## interior where the blade no longer is -- and a shattered blade reporting
+	## run-up progress is a claim about an approach that has already failed.
+	var fills := FILLING_INTENTS.has(intent) and progress > 0.001 \
+		and variant != "broken"
 	_mark_fill.visible = fills
 	if fills:
 		var region := CogniticonMarks.fill_region(progress)
@@ -581,6 +595,12 @@ func _ensure_marks() -> void:
 			_drawn[intent] = shields[intent]
 		for intent in CogniticonMarks.HAND_INTENTS:
 			_drawn[intent] = CogniticonMarks.hand_textures(_blades_are_dark)[intent]
+		## And the variants, keyed `intent|variant`. Merged into the same table
+		## rather than kept beside it so the lookup in `_draw_mark` stays one
+		## dictionary read with one fallback, and so a family that gains a variant
+		## later needs no new branch anywhere.
+		_drawn.merge(CogniticonMarks.blade_variant_textures(_blades_are_dark))
+		_drawn.merge(CogniticonMarks.shield_variant_textures(_blades_are_dark))
 	if _mark == null:
 		_mark_fill = _new_mark_sprite()
 		_mark = _new_mark_sprite()

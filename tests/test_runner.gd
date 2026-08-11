@@ -196,6 +196,7 @@ func _initialize() -> void:
 	_test_ambient_cogniticons_are_dimmer_not_smaller()
 	_test_blade_cogniticons_fill_from_the_bottom()
 	_test_cogniticon_motion_envelopes()
+	_test_cogniticon_variants_and_commitment()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14938,6 +14939,190 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## Variants, and commitment as a process.
+##
+## A family has three states and the pair has to be drawn together: an interface
+## that can only show triumph is a scoreboard, and one that can only show failure
+## is a list of complaints. `ascendant` adds to the mark -- flame off a blade's
+## edge, rays off a shield's rim -- and `broken` takes the mark apart.
+##
+## Commitment is the odd one, because it is not a symbol but a **duration**. The
+## diamond used to be a state, was reported as unreadable, and comes back as a
+## mark that draws itself around its own perimeter: a loading bar bent into a
+## shape. That is gated as monotonicity, which is the only property that makes it
+## legible as a fraction rather than as a shape.
+func _test_cogniticon_variants_and_commitment() -> void:
+	for dark_theme in [true, false]:
+		var blades: Dictionary = CogniticonMarks.blade_variant_textures(dark_theme)
+		var shields: Dictionary = CogniticonMarks.shield_variant_textures(dark_theme)
+		for variant in CogniticonMarks.VARIANTS:
+			_check(
+				blades.get("approaching|%s" % variant, null) is Texture2D,
+				"the %s blade is drawn in the %s theme"
+					% [variant, "Mikasa" if dark_theme else "Molten"],
+			)
+			_check(
+				shields.get("defending|%s" % variant, null) is Texture2D,
+				"the %s shield is drawn in the %s theme"
+					% [variant, "Mikasa" if dark_theme else "Molten"],
+			)
+		if not dark_theme:
+			continue
+
+		## **Ascendant adds, broken subtracts.** Stated as ink rather than as a
+		## description, because "flaming" and "shining" are additions to a mark
+		## that already exists and a variant that failed to draw its addition
+		## would otherwise pass every existence check above.
+		var plain_blade := _inked_samples(blades["approaching|plain"])
+		var flaming := _inked_samples(blades["approaching|ascendant"])
+		var shattered := _inked_samples(blades["approaching|broken"])
+		_check(
+			flaming > plain_blade,
+			"a flaming blade carries more ink than a plain one (%d vs %d)"
+				% [flaming, plain_blade],
+		)
+		_check(
+			shattered < plain_blade,
+			"and a shattered one carries less (%d)" % shattered,
+		)
+		var plain_shield := _inked_samples(shields["defending|plain"])
+		_check(
+			_inked_samples(shields["defending|ascendant"]) > plain_shield,
+			"a shining shield carries more ink than a plain one (%d vs %d)" % [
+				_inked_samples(shields["defending|ascendant"]), plain_shield,
+			],
+		)
+		## The shield's break is a *parting*, not a loss -- a cleaved shield keeps
+		## its whole outline and moves the halves apart, so ink count is the wrong
+		## instrument for it and width is the right one. Measured at the waist,
+		## where the cut runs.
+		##
+		## The first version of this gate asked a cleaved shield to carry *less*
+		## ink and it failed, which is how the stray chord in `_cleaved_paths` was
+		## found: the drawing was wrong and so was the question.
+		_check(
+			_ink_width(shields["defending|broken"], 0.5)
+				> _ink_width(shields["defending|plain"], 0.5),
+			"and a cleaved one is wider at the waist, because its halves parted"
+				+ " (%d vs %d)" % [
+					_ink_width(shields["defending|broken"], 0.5),
+					_ink_width(shields["defending|plain"], 0.5),
+				],
+		)
+
+	## **The loading bar.** More of the perimeter is drawn at every step, and the
+	## step below is never longer than the step above it.
+	var previous := -1
+	for progress in [0.0, 0.3, 0.6, 1.0]:
+		var drawn := _inked_samples(CogniticonMarks.commitment(progress, false, true))
+		_check(
+			drawn > previous,
+			"commitment at %.0f%% is drawn further round than the step below it (%d)"
+				% [progress * 100.0, drawn],
+		)
+		previous = drawn
+
+	## And the track. A bar without one is a short line: legible as motion,
+	## useless as a fraction, and at zero it rendered as literally nothing on the
+	## first plate -- which is how this const came to exist.
+	_check(
+		_inked_samples(CogniticonMarks.commitment(0.0, false, true)) > 0,
+		"an unstarted commitment still draws its track, so nought reads as nought",
+	)
+	_check(
+		CogniticonMarks.COMMIT_TRACK_STROKE < CogniticonMarks.COMMIT_STROKE
+			and CogniticonMarks.COMMIT_TRACK_DASH > 0.0,
+		"and the track is the thinner, dashed one, which is this vocabulary's"
+			+ " existing word for provisional",
+	)
+
+	## **Broken parts.** The first version separated the halves by 1.6 units and
+	## read on the plate as an intact diamond with two specks in it -- symmetry is
+	## what made it read as whole. Gated on width, because parting is the one
+	## thing that cannot be faked by drawing the same shape differently.
+	var whole := _ink_width(CogniticonMarks.commitment(1.0, false, true), 0.5)
+	var broken := _ink_width(CogniticonMarks.commitment(1.0, true, true), 0.5)
+	_check(
+		broken > whole,
+		"a broken commitment is wider than a whole one, because its halves"
+			+ " parted (%d vs %d)" % [broken, whole],
+	)
+
+	## **Every variant the rally can ask for is a variant that exists.** Total,
+	## across the whole state space, because this half of the claim is about
+	## coverage and a combination the compiler emits once a season still has to
+	## have something to draw.
+	for state_name in PlayerCognitionCue.STATES:
+		for affect_name in PlayerCognitionCue.AFFECTS:
+			_check(
+				CogniticonMarks.VARIANTS.has(CogniticonMotion.variant_for(
+					str(state_name), str(affect_name)
+				)),
+				"%s/%s asks for a variant that is drawn" % [state_name, affect_name],
+			)
+
+	## **And the middle stays wide** -- a vocabulary where every mark is flaming
+	## is a vocabulary with one word in it.
+	##
+	## Measured on the *affects the compiler emits*, not on the state space.
+	## The first version of this gate crossed all seven states with all six
+	## affects, found 12 of 42 plain, and failed -- §0 exactly, a threshold set
+	## against a uniform distribution nobody ever sees. `run_variant_mix_probe`
+	## puts the real figure at **98.3% plain, 1.6% ascendant, 0.2% broken** over
+	## 19,559 compiled cues, because `neutral` is 98.4% of all affect.
+	##
+	## So the threshold is a weighted one, and the weights are the measured
+	## shares rather than one-per-combination.
+	var shares := {"neutral": 0.984, "pleased": 0.011, "confident": 0.005}
+	var loud := 0.0
+	for affect in shares:
+		if CogniticonMotion.variant_for("committed", affect) != "plain":
+			loud += float(shares[affect])
+	_check(
+		loud < 0.10,
+		"a loud variant is rare in the cues actually compiled (%.1f%%)"
+			% (loud * 100.0),
+	)
+	_check(
+		CogniticonMotion.variant_for("lost_sight", "neutral") == "broken"
+			and CogniticonMotion.variant_for("committed", "upset") == "broken"
+			and CogniticonMotion.variant_for("committed", "confident") == "ascendant",
+		"while both loud variants are reachable at all",
+	)
+
+	## **Colour is the rating scale and nothing else.** The families dropped their
+	## own hues so that hue could mean one thing everywhere; that only holds if
+	## every affect a mark can be in resolves to a grade the palette knows.
+	## Taken from the cue model rather than retyped, because a hand-copied list
+	## goes stale silently and this gate's whole job is to notice a state nobody
+	## gave a colour to.
+	for state_name in PlayerCognitionCue.STATES:
+		var state := str(state_name)
+		for affect_name in PlayerCognitionCue.AFFECTS:
+			var affect := str(affect_name)
+			for doubtful in [true, false]:
+				var grade: String = CogniticonMotion.affect_grade(state, affect, doubtful)
+				_check(
+					UIPalette.GRADE_COLORS.has(grade)
+						and UIPalette.GRADE_COLORS_LIGHT.has(grade),
+					"%s/%s resolves to a grade both themes know (%s)"
+						% [state, affect, grade],
+				)
+
+
+## How much ink a mark carries, sampled on a grid. Ink rather than alpha: the
+## halo under every mark is opaque too, so an alpha count measures the halo's
+## outer edge and reports two very different drawings as the same size.
+func _inked_samples(texture: Texture2D) -> int:
+	var image: Image = texture.get_image()
+	var count := 0
+	for y in range(0, image.get_height(), 2):
+		for x in range(0, image.get_width(), 2):
+			if image.get_pixel(x, y).a > 0.85:
+				count += 1
+	return count
 
 
 ## The two-tier cogniticon rule, stated so it cannot drift back.
