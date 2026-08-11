@@ -89,12 +89,35 @@ Ordered roughly by how much each one changes what a viewer believes.
 3. **Blockers swap positions at the net**, and not because one of them is the
    middle -- observed with an outside hitter and a setter. An ordering bug in
    whoever assigns the two wall slots.
-4. **Volis do not always need to be ready.** A voli with no reception
-   responsibility should release on recognising the *serve*, not hold a receive
-   posture through it. Playback draws a readiness the simulation never asked for,
-   which is the same shape as the frozen window above.
-5. **Blockers need an idle hands-up pose at the net**, distinct from the block
-   itself.
+4. **Done, with 5 and 18 -- they were one defect seen from three sides.**
+   ~~A voli with no reception responsibility should release on recognising the
+   serve~~. It was not a release rule that was missing. The gait had exactly
+   **one** floor stance and every stationary body wore it: a defender's crouch,
+   knees at -60 with the arms carried back. `player_actor_3d.gd` returns after
+   the gait for anybody who is not the drawn contact actor, and playback poses
+   at most five of the twelve.
+
+   Measured before building, because three cases this session turned out not to
+   occur. `run_idle_stance_probe.gd`, eight rallies at a pinned 60 fps: within
+   1.6 m of the net, **66.5% of frames are fully in that crouch** and another
+   23% partly. Not a corner case -- most of what is on screen.
+
+   `ReadyStance` now owns three stances and the choice between them, keyed on
+   whether a voli is at the net and whether their side plays the ball next. The
+   serving team's back row stands and watches, which is this entry; its front
+   row puts their hands up, which is entry 5.
+5. **Done.** ~~Blockers need an idle hands-up pose at the net~~, and it is not
+   a fourth set of angles: it is `BlockBiomechanics.resolve(-1.0)`, the read
+   stage the block already interpolates out of. Taking it from there is what
+   makes the idle *continuous* with the jump -- a voli waiting at the tape and
+   the first frame of that voli's block are the same body, so nothing snaps
+   when the wall goes up. A gate asserts it against `resolve(-1.0)` rather than
+   against the constants behind it, so a retune that forgets `ReadyStance`
+   fails instead of drifting apart silently.
+
+   Logged four separate times before it was built, and the reason it kept
+   getting deferred is worth keeping: it looked like four constants to write
+   blind. It was one already-judged pose to route.
 6. **Blockers already know the outcome.** They do not jump at a ball going out,
    and they sometimes move to the attack's location *before the set*. Information
    is reaching the block decision that a blocker could not have.
@@ -316,6 +339,24 @@ Ordered roughly by how much each one changes what a viewer believes.
     the platform's yaw and residual, so the offset is derivable and simply is
     not applied to placement.
 
+    **Measured, not yet built, and the measurement is the reason to be careful.**
+    `run_platform_offset_probe.gd` poses a real actor in a real planted dig and
+    reads where the forearms land, rather than recomputing the pose's three
+    nested bases out of band. Across the six modelled silhouettes at 1.72, 1.88
+    and 2.06 m the platform sits **0.82 to 1.03 m ahead of the body origin, mean
+    0.88, spread 20 cm**.
+
+    Two things follow. The spread is 23% of the mean, so this has to be derived
+    per voli rather than shipped as one constant -- a single number would be
+    wrong by a fifth of itself at both ends. And the correction is most of a
+    metre, which is large enough that it moves the drawn court noticeably and
+    wants eyes on it before it lands; a placement change that size, written at
+    the end of a context and validated only by a static gate, is how a body ends
+    up standing behind the ball instead of in front of it. The mechanism is a
+    one-liner once the direction is settled: the body goes beyond the contact
+    point along the incoming ball's own heading, which is the one direction
+    already published on the event.
+
 16. **Blockers are treated as able to cover a short attack while airborne.**
     Observed: the right-side attack goes high, and the blocker shuffles sideways
     *in mid-air* and then executes a rolling receive. Two faults stacked -- a
@@ -327,10 +368,21 @@ Ordered roughly by how much each one changes what a viewer believes.
     *falling* sideways and backwards receive -- which is missing art, not a
     missing selector, unlike 13a.
 
-18. **The middle turns around entirely and watches the play.** They should be
-    facing forward, ready to jump for a quick or run a decoy. The turn is being
-    driven by "face the ball" with nothing outranking it, and a middle in
-    transition has a job that outranks looking.
+18. **Done, with 4 and 5.** ~~The middle turns around entirely and watches the
+    play.~~ The diagnosis in this entry was right: `_watch_the_ball` aimed every
+    body on the court at the ball's sampled position, every frame, with nothing
+    above it. The rule that a blocker never turns their back on the net already
+    existed in `set_pose` -- but only for the one voli playback had chosen to
+    draw as the contact, and a middle waiting at the tape is by definition not
+    that voli.
+
+    The job that outranks looking turned out to be the stance from entry 5, so
+    the precedence lives in `ReadyStance.faces_the_net` next to the stance that
+    implies it rather than as a second rule somewhere else. The head is
+    deliberately excluded: `look_toward` clamps to the neck's own limit, so a
+    middle facing the net still tracks the ball over their shoulder and loses
+    sight of it when it goes behind them -- which is what a middle actually
+    does, and is what makes the rule affordable.
 
 19. **The right attacker shuffles sideways instead of running their approach.**
     Lateral movement should be available but is not always correct: an approach

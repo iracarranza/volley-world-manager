@@ -34,7 +34,7 @@ func _initialize() -> void:
 	var stranded := 0
 	var sets_seen := 0
 	var by_next := {}
-	for rally_seed in range(31000, 31300):
+	for rally_seed in range(31000, 31120):
 		manager.match_state.serving_home = (rally_seed % 2) == 0
 		var result: Resource = manager.resolve_active_rally(rally_seed)
 		if result == null:
