@@ -14714,7 +14714,7 @@ func _test_cogniticon_motion_envelopes() -> void:
 ## The eye in parts, because a baked eye cannot narrow, look, or doubt.
 func _test_eye_parts_and_the_forked_lead() -> void:
 	var parts: Dictionary = CogniticonMarks.eye_part_textures(true)
-	for key in ["outline", "pupil"] + CogniticonMarks.LEAD_MARKS:
+	for key in ["socket", "lid", "pupil"] + CogniticonMarks.LEAD_MARKS:
 		_check(
 			parts.get(key, null) is Texture2D,
 			"the eye's %s is drawn" % key,
@@ -14722,7 +14722,7 @@ func _test_eye_parts_and_the_forked_lead() -> void:
 	## The outline has to be centred in its own canvas, or scaling it vertically
 	## to narrow the eye would slide it instead of squashing it -- the same
 	## defect the composed eye had before `EYE_INK_SHIFT`, one axis over.
-	var outline: Image = (parts["outline"] as Texture2D).get_image()
+	var outline: Image = (parts["socket"] as Texture2D).get_image()
 	var top := -1
 	var bottom := -1
 	var middle := outline.get_width() / 2
@@ -14735,7 +14735,7 @@ func _test_eye_parts_and_the_forked_lead() -> void:
 		top >= 0 and absf(
 			float(top + bottom) * 0.5 - float(outline.get_height()) * 0.5
 		) <= 2.0,
-		"the eye outline is centred, so narrowing squashes rather than slides",
+		"the eye socket is centred, so a lid crossing it is symmetric about it",
 	)
 	## Doubt is a *fork*: more ink further from the lead's own axis than a
 	## single-line lead has. Measured rather than asserted by eye, because "it
@@ -14746,6 +14746,20 @@ func _test_eye_parts_and_the_forked_lead() -> void:
 		"the doubtful lead is wider than the certain one (%d vs %d)"
 			% [_lead_spread(parts["doubt"]), _lead_spread(parts["track"])],
 	)
+
+
+## How wide a mark's ink is at a given height down its canvas.
+func _ink_width(texture: Texture2D, height_fraction: float) -> int:
+	var image: Image = texture.get_image()
+	var row := int(float(image.get_height()) * height_fraction)
+	var first := -1
+	var last := -1
+	for x in range(image.get_width()):
+		if image.get_pixel(x, row).a > 0.5:
+			if first < 0:
+				first = x
+			last = x
+	return 0 if first < 0 else last - first
 
 
 ## How far a lead's ink spreads across the axis it points along.
@@ -14786,6 +14800,31 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			"the %s blade is drawn" % intent,
 		)
 	_check(textures.get("fill", null) is Texture2D, "and the fill is drawn")
+
+	## The rest of the vocabulary, now that the shields and hands are drafted
+	## from the review's own cubics. The claim being gated is not that each is
+	## pretty -- it is that the families are *distinguishable*, which is the
+	## entire premise of having dropped the family hues.
+	var shields: Dictionary = CogniticonMarks.shield_textures(true)
+	for intent in CogniticonMarks.SHIELD_INTENTS:
+		_check(shields.get(intent, null) is Texture2D, "the %s shield is drawn" % intent)
+	_check(
+		shields.get("fill", null) is Texture2D,
+		"and a shield fills, so a wall that never closed reads as one that never filled",
+	)
+	var hands: Dictionary = CogniticonMarks.hand_textures(true)
+	for intent in CogniticonMarks.HAND_INTENTS:
+		_check(hands.get(intent, null) is Texture2D, "the %s hand is drawn" % intent)
+	## A shield and a blade must not be the same silhouette. Compared by how
+	## wide each is at its own waist: a shield is broad there and a blade is a
+	## narrow bar, so if these ever converge the vocabulary has collapsed.
+	_check(
+		_ink_width(shields["defending"], 0.42) > _ink_width(textures["approaching"], 0.42) * 2,
+		"a shield and a blade are different silhouettes (%d vs %d)" % [
+			_ink_width(shields["defending"], 0.42),
+			_ink_width(textures["approaching"], 0.42),
+		],
+	)
 
 	## **Bottom-anchored, which is the whole mechanic.** A fill that grows from
 	## the middle is a progress bar; one that grows from the guard upward is a

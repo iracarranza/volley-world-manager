@@ -235,6 +235,38 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	return _composite(width, height, paths, discs, [], dark_theme)
 
 
+## ## Eyelids, not a squashed eye
+##
+## The first attempt narrowed the eye by scaling its whole outline vertically,
+## which distorts the eyeball. **An eye does not change shape; its lids move
+## over it.** So the eye is drawn as three things rather than one squashed
+## ellipse:
+##
+## | part | what it does |
+## |---|---|
+## | `socket` | the eye itself, a fixed almond, never scaled |
+## | `lid_upper` | comes down over the socket to narrow |
+## | `lid_lower` | rises a little to meet it |
+##
+## Which buys the whole expression range from two translations:
+##
+## - **watching** -- lids at rest, the almond fully open
+## - **narrowed** -- the upper lid down over the top third: focus, suspicion
+## - **shocked** -- both lids retracted clear of the socket, so the eye reads
+##   round and wide with nothing cutting it. "Completely gone" is a lid
+##   position rather than a different drawing.
+##
+## The lids are arcs matching the socket's own curvature, so a lowered lid sits
+## *on* the eye rather than across it, and a retracted one leaves no trace.
+const LID_STROKE: float = 2.3
+## How far, in design units, each lid travels between fully retracted and fully
+## closed. The socket's half-height is `EYE_RADII.y`, so a lid that travels its
+## full span crosses the entire eye.
+const LID_TRAVEL: float = 11.0
+
+
+## The eye in separable parts, because its parts move independently.
+
 ## The eye in separable parts, because its parts move independently.
 ##
 ## A single baked eye cannot narrow, cannot look anywhere, and cannot fork --
@@ -251,7 +283,8 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 ## court, and three sprites per voli that only ever change their transforms.
 static func eye_part_textures(dark_theme: bool) -> Dictionary:
 	var parts := {
-		"outline": _eye_outline(dark_theme),
+		"socket": _eye_socket(dark_theme),
+		"lid": _eye_lid(dark_theme),
 		"pupil": _eye_pupil(dark_theme),
 	}
 	for lead in LEAD_MARKS:
@@ -259,14 +292,35 @@ static func eye_part_textures(dark_theme: bool) -> Dictionary:
 	return parts
 
 
-## The eye's outline alone, centred in its own canvas so scaling it vertically
-## squashes it about its own middle rather than sliding it.
-static func _eye_outline(dark_theme: bool) -> ImageTexture:
+## The eye itself: a fixed almond, centred, never scaled.
+static func _eye_socket(dark_theme: bool) -> ImageTexture:
 	var size := int(EYE_RADII.x * 2.0 + 8.0) * SCALE
-	var centre := Vector2(float(size) / float(SCALE) * 0.5, float(size) / float(SCALE) * 0.5)
+	var centre := Vector2(
+		float(size) / float(SCALE) * 0.5, float(size) / float(SCALE) * 0.5
+	)
 	return _composite(size, size, [
 		{"points": _ellipse(centre, EYE_RADII), "closed": true,
 			"width": EYE_STROKE, "dash": 0.0},
+	], [], [], dark_theme)
+
+
+## A lid: an arc the width of the socket, curving the way the socket's own edge
+## curves, so that lowering it reads as a lid closing rather than as a line
+## drawn across an eye.
+##
+## Drawn once and used for both lids -- the lower one is the same arc flipped,
+## which is what a `Sprite3D` with a negative y scale is for.
+static func _eye_lid(dark_theme: bool) -> ImageTexture:
+	var size := int(EYE_RADII.x * 2.0 + 8.0) * SCALE
+	var half := float(size) / float(SCALE) * 0.5
+	var span := EYE_RADII.x
+	return _composite(size, size, [
+		{"points": _cubic(
+			Vector2(half - span, half + 1.5),
+			Vector2(half - span * 0.45, half - EYE_RADII.y * 1.15),
+			Vector2(half + span * 0.45, half - EYE_RADII.y * 1.15),
+			Vector2(half + span, half + 1.5)
+		), "closed": false, "width": LID_STROKE, "dash": 0.0},
 	], [], [], dark_theme)
 
 
@@ -334,6 +388,180 @@ static func _ellipse(centre: Vector2, radii: Vector2) -> PackedVector2Array:
 		var angle := TAU * float(step) / 48.0
 		points.append(centre + Vector2(cos(angle) * radii.x, sin(angle) * radii.y))
 	return points
+
+
+## A cubic Bezier as a polyline, so the shields and hands can be authored as the
+## review authored them.
+##
+## The blade family is straight lines and a rounded rect; every other family in
+## the vocabulary has curves, and the review writes them as SVG cubics. Rather
+## than redraw them as arcs -- which is how a copied path quietly stops matching
+## the thing that was approved -- they are flattened here and stroked by the same
+## code as everything else.
+##
+## Sixteen segments per curve. The largest curve in the set spans about 34 design
+## units, so that is a chord of roughly two units before scaling, which
+## disappears under a stroke twice that wide.
+static func _cubic(
+	from: Vector2, control_a: Vector2, control_b: Vector2, to: Vector2
+) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for step in range(17):
+		var t := float(step) / 16.0
+		var inverse := 1.0 - t
+		points.append(
+			from * inverse * inverse * inverse
+			+ control_a * 3.0 * inverse * inverse * t
+			+ control_b * 3.0 * inverse * t * t
+			+ to * t * t * t
+		)
+	return points
+
+
+## Join several point runs into one open polyline.
+static func _join(runs: Array) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for run in runs:
+		for point in PackedVector2Array(run):
+			if points.size() > 0 and points[points.size() - 1].distance_to(point) < 0.001:
+				continue
+			points.append(point)
+	return points
+
+
+## ## The shield family -- the four ways of dealing with their ball
+##
+## One shield outline, differentiated by what is inside it. Exactly as authored:
+## `M27 6 L46 13 V29 C46 40 36 46 27 49 C18 46 8 40 8 29 V13 Z`, with the
+## blocking variant sitting lower so its prongs can rise over the top edge.
+const SHIELD_INTENTS: Array[String] = [
+	"defending", "covering", "receiving", "blocking",
+]
+const SHIELD_STROKE: float = 2.4
+const SHIELD_MARK_STROKE: float = 2.2
+
+
+static func shield_textures(dark_theme: bool) -> Dictionary:
+	var out := {}
+	for intent in SHIELD_INTENTS:
+		out[intent] = _shield(intent, dark_theme)
+	out["fill"] = _shield_fill(dark_theme)
+	return out
+
+
+static func _shield_outline(lowered: bool) -> PackedVector2Array:
+	var top := 10.0 if lowered else 6.0
+	var shoulder := 17.0 if lowered else 13.0
+	var waist := 31.0 if lowered else 29.0
+	var curve_in := 41.0 if lowered else 40.0
+	return _join([
+		PackedVector2Array([
+			Vector2(27.0, top), Vector2(46.0, shoulder), Vector2(46.0, waist),
+		]),
+		_cubic(
+			Vector2(46.0, waist), Vector2(46.0, curve_in),
+			Vector2(36.0, 46.0), Vector2(27.0, 49.0)
+		),
+		_cubic(
+			Vector2(27.0, 49.0), Vector2(18.0, 46.0),
+			Vector2(8.0, curve_in), Vector2(8.0, waist)
+		),
+		PackedVector2Array([Vector2(8.0, shoulder), Vector2(27.0, top)]),
+	])
+
+
+static func _shield(intent: String, dark_theme: bool) -> ImageTexture:
+	var lowered := intent == "blocking"
+	var paths: Array = [
+		{"points": _shield_outline(lowered), "closed": true,
+			"width": SHIELD_STROKE, "dash": 0.0},
+	]
+	match intent:
+		"covering":
+			## A chevron collapsing inward -- the shape of a side folding in
+			## behind their own hitter.
+			paths.append({"points": PackedVector2Array([
+				Vector2(16.0, 24.0), Vector2(27.0, 34.0), Vector2(38.0, 24.0),
+			]), "closed": false, "width": SHIELD_MARK_STROKE, "dash": 0.0})
+		"receiving":
+			## The platform, angled across the shield. The one mark in the
+			## family that is a *surface* rather than a direction.
+			paths.append({"points": _line(14.0, 30.0, 40.0, 22.0),
+				"closed": false, "width": 2.9, "dash": 0.0})
+		"blocking":
+			## Three prongs over the top edge: hands above the tape, which is
+			## the only thing a blocker is for.
+			paths.append({"points": _line(18.0, 8.0, 18.0, 19.0),
+				"closed": false, "width": SHIELD_MARK_STROKE, "dash": 0.0})
+			paths.append({"points": _line(27.0, 5.0, 27.0, 17.0),
+				"closed": false, "width": SHIELD_MARK_STROKE, "dash": 0.0})
+			paths.append({"points": _line(36.0, 8.0, 36.0, 19.0),
+				"closed": false, "width": SHIELD_MARK_STROKE, "dash": 0.0})
+	return _composite(PIXELS, PIXELS, paths, [], [], dark_theme)
+
+
+## The shield's interior, for the fill. "The shield family fills the same way,
+## from the bottom" -- so a wall that never closed is a shield that never
+## filled, which is the same honest lateness the blade already tells.
+static func _shield_fill(dark_theme: bool) -> ImageTexture:
+	var ink := INK_DARK if dark_theme else INK_LIGHT
+	var image := _layer(PIXELS, PIXELS, ink)
+	var outline := _shield_outline(false)
+	## Scanline fill of the flattened outline. Cheap, exact enough at four times
+	## design size, and it cannot spill past the shape the way an inset
+	## rectangle would.
+	for y in range(image.get_height()):
+		var row := float(y) / float(SCALE)
+		var crossings: Array[float] = []
+		for index in range(outline.size()):
+			var a := outline[index]
+			var b := outline[(index + 1) % outline.size()]
+			if (a.y <= row and b.y > row) or (b.y <= row and a.y > row):
+				crossings.append(a.x + (row - a.y) / (b.y - a.y) * (b.x - a.x))
+		crossings.sort()
+		var pair := 0
+		while pair + 1 < crossings.size():
+			var from := int(crossings[pair] * float(SCALE))
+			var to := int(crossings[pair + 1] * float(SCALE))
+			for x in range(maxi(from, 0), mini(to, image.get_width() - 1) + 1):
+				image.set_pixel(x, y, ink)
+			pair += 2
+	return ImageTexture.create_from_image(image)
+
+
+## ## The hands -- the pivot, and the honest blank
+##
+## `setting` is two nested arcs, hands under the ball. `watching` is a small
+## soft disc: deliberately nothing in particular, and deliberately present,
+## because without a mark "no opinion" reads as "not implemented".
+const HAND_INTENTS: Array[String] = ["setting", "watching"]
+const WATCHING_RADIUS: float = 5.5
+
+
+static func hand_textures(dark_theme: bool) -> Dictionary:
+	return {
+		"setting": _composite(PIXELS, PIXELS, [
+			{"points": _cubic(
+				Vector2(12.0, 34.0), Vector2(12.0, 20.0),
+				Vector2(20.0, 12.0), Vector2(27.0, 12.0)
+			), "closed": false, "width": 2.5, "dash": 0.0},
+			{"points": _cubic(
+				Vector2(27.0, 12.0), Vector2(34.0, 12.0),
+				Vector2(42.0, 20.0), Vector2(42.0, 34.0)
+			), "closed": false, "width": 2.5, "dash": 0.0},
+			{"points": _join([
+				_cubic(Vector2(20.0, 40.0), Vector2(20.0, 32.0),
+					Vector2(23.0, 27.0), Vector2(27.0, 27.0)),
+				_cubic(Vector2(27.0, 27.0), Vector2(31.0, 27.0),
+					Vector2(34.0, 32.0), Vector2(34.0, 40.0)),
+			]), "closed": false, "width": 2.2, "dash": 0.0},
+		], [], [], dark_theme),
+		"watching": _composite(
+			PIXELS, PIXELS, [],
+			[{"centre": Vector2(27.0, 27.0), "radius": WATCHING_RADIUS}],
+			[], dark_theme
+		),
+	}
 
 
 ## Draw a mark as halo then ink, and flatten the two.

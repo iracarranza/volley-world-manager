@@ -174,6 +174,17 @@ func show_cue(
 		## than on the intent means each family switches over as it lands,
 		## instead of the whole layer waiting for the last one.
 		var intent := str(reading.get("intent", "watching"))
+		## **The hand-off.** The eye and the intent mark share one slot and
+		## trade it, rather than being drawn together -- a voli finishing
+		## looking and starting doing is one continuous gesture, and `state`
+		## already says which half they are in. Reading states get the eye;
+		## once a voli has called or committed, the eye minimises away and the
+		## intent takes the slot.
+		if _draw_eye(cue, reading, strength, simulation_time):
+			text = ""
+			visible = true
+			position = head_anchor + _screen_up() * MARK_LIFT_METERS
+			return
 		if _draw_mark(intent, float(reading.get("progress", 0.0)), strength):
 			text = ""
 			visible = true
@@ -261,6 +272,148 @@ var _mark: Sprite3D
 var _mark_fill: Sprite3D
 
 
+## The eye's three sprites, and the shared textures they wear.
+static var _eye_parts: Dictionary = {}
+var _eye_outline: Sprite3D
+var _eye_pupil: Sprite3D
+var _eye_lead: Sprite3D
+var _eye_lid: Sprite3D
+
+## Which states are a voli *reading* rather than acting. Everything else has
+## already chosen, and a chosen voli's mark is their intent.
+const READING_STATES: Array[String] = [
+	"searching", "recognizing", "deciding", "lost_sight", "reacting",
+]
+
+## Where the voli is looking, relative to their own facing, in radians -- told
+## by the actor, which already computes and clamps it for the head. Carried as
+## state for the same reason `ready_stance` is: it is a property of the voli,
+## not of the cue being drawn.
+var look_offset_radians: float = 0.0
+var look_pitch_degrees: float = 0.0
+
+
+## Draw the eye, or report that this cue is not a reading one.
+func _draw_eye(
+	cue: Resource, reading: Dictionary, strength: float, simulation_time: float
+) -> bool:
+	var state := str(cue.state)
+	if not READING_STATES.has(state):
+		return false
+	_ensure_eye()
+	## **Doubt is `deciding`.** A voli between options is exactly what the
+	## forked lead is for, and it is a state the model already publishes rather
+	## than a confidence number invented for the drawing.
+	var doubtful := state == "deciding"
+	## A reaction's clock starts when its cue does. Negative before that, which
+	## is the honesty gate: a mark may be wrong but never early.
+	var shock_seconds := -1.0
+	if state == "lost_sight" or state == "reacting":
+		shock_seconds = simulation_time - float(cue.starts_at)
+	var blink := CogniticonMotion.blink_closure(
+		simulation_time, int(cue.player_id), str(cue.attention_hold)
+	)
+	var aperture := CogniticonMotion.aperture(
+		float(reading.get("eye_openness", 1.0)), str(cue.attention_hold),
+		doubtful, shock_seconds, blink,
+	)
+	if doubtful:
+		aperture *= CogniticonMotion.doubt_waver(
+			simulation_time, int(cue.player_id)
+		)
+	var shock: Dictionary = CogniticonMotion.shock_envelope(shock_seconds)
+	## Colour is the rating scale: neutral is grade C, and a voli who has just
+	## been beaten grades where anything else that went badly grades.
+	var grade := CogniticonMotion.affect_grade(state, str(cue.affect), doubtful)
+	var ink := Color(1.0, 1.0, 1.0)
+	if grade != "C":
+		ink = ink.lerp(
+			UIPalette.grade_color(grade, light_mode),
+			maxf(float(shock["colour_mix"]), 0.55 if doubtful else 0.0),
+		)
+	var alpha := MARK_ALPHA * strength
+	var size := AMBIENT_PIXEL_SIZE * COGNITICON_SCALE * MARK_PIXEL_RATIO
+
+	## **A lid, not a squashed eye.** The socket never changes size -- an eye
+	## does not change shape, its lids move over it. The aperture is therefore
+	## a lid *position*, and the widest expression is the lid not drawn at all.
+	_eye_outline.texture = _eye_parts["socket"]
+	_eye_outline.pixel_size = size
+	_eye_outline.modulate = Color(ink.r, ink.g, ink.b, alpha)
+	_eye_outline.scale = Vector3.ONE
+	_eye_outline.visible = true
+
+	var reach := EYE_SPAN_METERS * 0.5
+	## How far the lid has come down, from just inside the socket's upper edge
+	## toward its centre. Derived from the aperture so one number still drives
+	## the expression, inverted because a *wider* eye is a *higher* lid.
+	var closure := clampf(
+		1.0 - (aperture - CogniticonMotion.APERTURE_NARROW)
+			/ maxf(CogniticonMotion.APERTURE_SHOCK
+				- CogniticonMotion.APERTURE_NARROW, 0.001),
+		0.0, 1.0,
+	)
+	closure = maxf(closure, blink)
+	_eye_lid.texture = _eye_parts["lid"]
+	_eye_lid.pixel_size = size
+	_eye_lid.modulate = Color(ink.r, ink.g, ink.b, alpha)
+	_eye_lid.position = Vector3(0.0, reach * (1.0 - closure), 0.02)
+	## Gone when the eye is at its widest: shock is a lid absent, not a lid
+	## moved, which is what makes a startled eye read as bare.
+	_eye_lid.visible = closure > 0.08
+
+	## The pupil follows what the voli is watching. Twelve eyes turning to the
+	## ball together is the largest "alive" gain in the layer and costs one
+	## offset, because the actor already knows the heading.
+	var offset := CogniticonMotion.pupil_offset(
+		look_offset_radians, look_pitch_degrees,
+		str(cue.visibility) == "occluded",
+	)
+	_eye_pupil.texture = _eye_parts["pupil"]
+	_eye_pupil.pixel_size = size
+	_eye_pupil.modulate = Color(ink.r, ink.g, ink.b, alpha)
+	## Scaled by the aperture too, so a squinting eye does not have a pupil
+	## standing proud of its own lids.
+	_eye_pupil.position = Vector3(
+		offset.x * EYE_SPAN_METERS, offset.y * EYE_SPAN_METERS * 0.4, 0.01
+	)
+	_eye_pupil.visible = blink < 0.6
+	_eye_pupil.scale = Vector3.ONE * clampf(1.0 - blink, 0.05, 1.0)
+
+	var lead := CogniticonMarks.DOUBT_LEAD if doubtful \
+		else str(cue.attention_hold)
+	_eye_lead.texture = _eye_parts.get(lead, _eye_parts["track"])
+	_eye_lead.pixel_size = size
+	_eye_lead.modulate = Color(ink.r, ink.g, ink.b, alpha * 0.92)
+	_eye_lead.position = Vector3(EYE_SPAN_METERS * 1.15, 0.0, 0.0)
+	_eye_lead.visible = true
+	if _mark != null:
+		_mark.visible = false
+	if _mark_fill != null:
+		_mark_fill.visible = false
+	return true
+
+
+## How wide the eye is on screen, in the units the sprites are placed in. Not a
+## world measurement -- these are `fixed_size` sprites -- so it is tuned against
+## the plate rather than derived.
+const EYE_SPAN_METERS: float = 0.16
+
+
+func _ensure_eye() -> void:
+	if _eye_parts.is_empty() or _blades_are_dark != _mark_theme_is_dark():
+		_eye_parts = CogniticonMarks.eye_part_textures(_mark_theme_is_dark())
+	if _eye_outline == null:
+		_eye_outline = _new_mark_sprite()
+		_eye_pupil = _new_mark_sprite()
+		_eye_lead = _new_mark_sprite()
+		_eye_lid = _new_mark_sprite()
+		add_child(_eye_outline)
+		add_child(_eye_lead)
+		add_child(_eye_pupil)
+		add_child(_eye_lid)
+
+
 ## Draw this intent as a mark, or report that nothing is drawn for it yet.
 func _draw_mark(intent: String, progress: float, strength: float) -> bool:
 	if not CogniticonMarks.BLADE_INTENTS.has(intent):
@@ -333,6 +486,9 @@ func _hide_mark() -> void:
 		_mark.visible = false
 	if _mark_fill != null:
 		_mark_fill.visible = false
+	for part in [_eye_outline, _eye_pupil, _eye_lead, _eye_lid]:
+		if part != null:
+			part.visible = false
 
 
 func _ensure_marks() -> void:
