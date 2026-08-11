@@ -341,6 +341,61 @@ Three ways out, and this needs a decision rather than a guess:
    a mark that cannot hold still — and reserve colour for shock alone. The most
    expressive and the most work.
 
+## 8b. Doubt without colour: the lead forks
+
+Colour's role in this vocabulary is still an open question, and doubt should not
+be the thing that forces it. It does not have to be — **doubt has a better home
+in shape than in hue**, and the eye already has the vocabulary for it.
+
+The lead line is the eye's certainty axis, and it is already three-valued:
+flicks for a glance, dashed for tracking, solid with an arrowhead for locked on.
+Doubt is the fourth value and it is the obvious one:
+
+> **A certain eye has one lead. A doubtful eye's lead forks.**
+
+Two prongs, aimed at the two things the voli cannot choose between. That is
+strictly better than a hue for four reasons:
+
+1. It survives any court colour, which is the problem §8 ran into.
+2. It is **specific**. A colour says *this voli is unsure*; a fork says *this
+   voli is unsure between the middle and the pin*, which is the actual state and
+   the actual drama.
+3. It scales without a new mechanism — the fork angle widens with uncertainty,
+   and a third candidate is a third prong.
+4. It composes with a vocabulary that already exists rather than adding an axis
+   to the layer.
+
+It is also the same move that let the family hues go earlier in this session:
+shape carries the meaning, so colour does not have to.
+
+### 8b.1 The supporting beats
+
+The fork is the statement; three smaller things make it read as *doubt* rather
+than as *two leads*:
+
+- **The pupil cannot settle.** It drifts between the candidates rather than
+  resting on one — slow, a few percent of the eye's width, well inside the
+  ambient motion budget in §1.1. This is the single most legible cue and it is
+  nearly free once the pupil aims at all (§2.2).
+- **The aperture is wide and unsteady**, not narrow. Narrow is *focus*; doubt is
+  the opposite of a hard read, and an eye that cannot hold its own shape says so.
+- **The upper lid goes asymmetric** — a half-squint on one side, which is the
+  face of suspicion in every drawing tradition that has one.
+
+### 8b.2 What the fork needs from the resolver
+
+The candidates. The block read already has them: the wall chooses between
+eligible hitters, and `wrong_read` and the block's own close terms mean the
+resolver knows both which one was picked and which one it was picked *over*.
+
+The cue does not carry a second attention target today. That is one field --
+something like an `alternate_attention_player_id` -- and it is the only new
+data this whole section needs. Everything else is drawing.
+
+Resolving the scene's "orange in doubt" this way leaves colour entirely
+unspent, which is the point: the role of colour can then be decided on its own
+terms rather than being settled by the first thing that needed it.
+
 ## 9. Synchrony is the combination, and it is free
 
 "All of the attacking volis' swords swing in at once and begin charging — this
@@ -349,13 +404,48 @@ moving."
 
 Nothing has to detect a combination or label one. Three blades arriving on the
 same frame *is* the signal, and it emerges from each voli independently entering
-at their own moment. That only works if entry timing is derived from each voli's
-own cue rather than staggered for looks — so **no entry may be offset for visual
-variety.** A stagger added to stop marks looking mechanical would destroy the
-one moment the layer most needs to land.
+at their own moment.
 
-The same fact in reverse: when the marks *do not* arrive together, that is a
-broken play, and it will read as one without anyone drawing it.
+### 9.1 The rule, restated — the first version said too much
+
+An earlier draft of this section said "no entry may be offset for visual
+variety", which reads as *no variation at all*, and that is wrong. Volis do have
+genuinely different approach timings, and they should.
+
+The rule is narrower, and it is about the **source** of the offset rather than
+its size:
+
+> The only thing allowed to stagger the marks is the simulation.
+
+Two offsets that look identical on screen and are not the same thing at all:
+
+- **Simulated.** The middle commits 80 ms before the pin because the resolver
+  gave them different distances, tempos and reaction times. That difference is
+  *information*. A combination where the middle goes first and the pin follows
+  is a different play from one where they leave together, and the marks should
+  say which. Drawing it is the whole point.
+- **Cosmetic.** A renderer adding a random 0–150 ms jitter so twelve marks do
+  not look mechanical. This is the one to refuse, because it destroys the
+  signal: once everything is staggered, a real combination and a broken play
+  look the same. The scene's "as this registers in your mind" moment lands
+  *because* the timing is true. Invented, it would be a lie that occasionally
+  coincided with the truth.
+
+### 9.2 The consequence worth more than the rule
+
+If the stagger is always simulated, then **how tightly the marks arrive is
+itself a readable quality of the play** — not just that a combination is
+happening, but how good this team is at it. A well-drilled side's blades land
+within a few frames of each other; a poorly-drilled one's straggle.
+
+`Familiarity` already models exactly that and already modifies reads and
+timings. So team chemistry becomes visible in the cogniticon layer without a
+single number being added to it, which is the same shape as the fill: a quantity
+the simulation already owns, drawn instead of dropped.
+
+The same fact in reverse: when the marks *do not* arrive together on a play that
+was supposed to be a combination, that is a broken play, and it will read as one
+without anyone drawing it.
 
 ## 10. The motion primitives the scene actually names
 
