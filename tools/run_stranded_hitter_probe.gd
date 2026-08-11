@@ -25,6 +25,27 @@ extends SceneTree
 ## the question is what the resolver publishes, and drawing it would put the
 ## movement plan, the pacing and the base-return rule between the question and
 ## the answer. `measure_offball_travel.gd` is the instrument for the other half.
+##
+## **Measured: 133 sets, 331 passed-over volis.**
+##
+##     windows unnamed   volis
+##     0                    94   28.4%
+##     1                   126   38.1%
+##     2                    66   19.9%
+##     3                    14    4.2%
+##     4                    27    8.2%
+##     6                     4    1.2%
+##
+## 111 of 331 (33.5%) go two or more windows with nobody naming them, and **100
+## of those 111 are never named again before the rally ends**. The resolver
+## stops having an opinion about a hitter it passed over, and does not resume.
+##
+## **What this does not say**, because the distinction is the one this file
+## exists to respect: it measures publication, not pixels. A voli nobody names
+## may still be moved by `_apply_base_positions` or by a cheat step. So this is
+## the necessary condition for the reported behaviour rather than a sighting of
+## it -- but "nobody ever names them again" is a defect on its own terms
+## whatever the drawing then does with it.
 func _initialize() -> void:
 	var Events := load("res://scripts/models/rally_event.gd")
 	var manager: Object = load("res://scripts/managers/game_manager.gd").new()
@@ -72,7 +93,6 @@ func _initialize() -> void:
 						break
 					quiet += 1
 					next_label = "rally ended"
-				var row: Dictionary = streaks.get(quiet, 0)
 				streaks[quiet] = int(streaks.get(quiet, 0)) + 1
 				if quiet >= 2:
 					stranded += 1

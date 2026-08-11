@@ -330,6 +330,28 @@ Ordered roughly by how much each one changes what a viewer believes.
     phase map is published for the contact, and a hitter the setter passed over
     has no next assignment at all.
 
+    **Confirmed, and it is a third of them.** `run_stranded_hitter_probe.gd`
+    over 133 sets carrying a transition map: of the 331 volis that map sends
+    somewhere and does not set to, **111 (33.5%) go two or more windows with
+    nobody naming them** -- not a phase map, not a staging target, not a
+    movement target. And of those 111, **100 are never named again before the
+    rally ends**. The resolver simply stops having an opinion about a hitter it
+    passed over.
+
+    The staging itself is correct and should stay: `_transition_phase_map` puts
+    all three front-row volis on their marks during the set's flight, which is
+    what a real offence does. What is missing is the window after.
+
+    **Not fixable from playback, and the near miss is worth writing down.** The
+    tempting one-liner is to drop `_apply_base_positions`' rule that the side
+    about to play the ball is busy, so these volis reset like everybody else.
+    That rule is load-bearing: it and the one-window memory beside it are what
+    closed the 131-reversal thrash measured earlier in this same document, and
+    relaxing either would reintroduce a regression that has already been paid
+    for once. The fix belongs where the gap is -- the resolver publishing a
+    post-decision target, which is coverage behind the hitter for a front-row
+    voli and a blocker-in-waiting position for the rest.
+
 15. **Reception geometry is centred on the body, not on the platform.** The serve
     is drawn entering the receiver's head and the dig then resolves as an
     off-axis contact to the left -- so the ball's arrival point and the
