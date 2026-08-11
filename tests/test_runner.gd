@@ -14644,6 +14644,39 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 		"and a completed one covers the blade end to end",
 	)
 
+	## **The eye family, and the pupil that is the test of the whole treatment.**
+	##
+	## A pupil inside an outline is the smallest enclosed shape in the
+	## vocabulary, so if it survives the stroke width everything else does. That
+	## is why the strokes came down from the review's 3.0 when the ink went to
+	## full-strength white and black -- a 3-unit outline on a 9-unit radius
+	## leaves almost nothing for a 3.6-unit pupil to sit in.
+	##
+	## **Measured as ink, not as coverage.** The first version of this check
+	## counted alpha bands and reported the column solid, because the halo is
+	## opaque too -- it was measuring "is there something here" when the question
+	## is "are these three separate marks". Eighth wrong instrument this session,
+	## caught by the render disagreeing with it.
+	var eyes: Dictionary = CogniticonMarks.attention_textures(true)
+	for mark in CogniticonMarks.ATTENTION_MARKS:
+		_check(
+			eyes.get(mark, null) is Texture2D, "the %s eye is drawn" % mark
+		)
+	var eye: Image = (eyes["track"] as Texture2D).get_image()
+	var column := int(CogniticonMarks.PUPIL_CENTRE.x * float(CogniticonMarks.SCALE))
+	var bands := 0
+	var lit := false
+	for y in range(eye.get_height()):
+		var pixel := eye.get_pixel(column, y)
+		var on := pixel.a > 0.5 and pixel.get_luminance() > 0.55
+		if on != lit:
+			bands += 1
+			lit = on
+	_check(
+		bands >= 6,
+		"the pupil reads as its own mark inside the eye (%d ink bands)" % bands,
+	)
+
 	## The marks carry ink. A texture generated from a path list that silently
 	## produced nothing would pass every check above.
 	var image: Image = (textures["approaching"] as Texture2D).get_image()

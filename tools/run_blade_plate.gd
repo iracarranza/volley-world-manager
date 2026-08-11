@@ -26,7 +26,7 @@ func _shoot(dark: bool) -> void:
 	var stage := Node3D.new()
 	add_child(stage)
 	var camera := Camera3D.new()
-	camera.position = Vector3(0.0, 0.0, 11.0)
+	camera.position = Vector3(0.0, -1.4, 13.0)
 	camera.fov = 42.0
 	stage.add_child(camera)
 	var ground := MeshInstance3D.new()
@@ -91,6 +91,28 @@ func _shoot(dark: bool) -> void:
 		caption.position = Vector3(column, -2.9, 0.0)
 		stage.add_child(caption)
 		column += 2.2
+
+	## The eye family, on the row below. Added because the pupil is the test of
+	## whether the ink and the stroke width are right: it is the smallest
+	## enclosed shape in the whole vocabulary, so if it reads, everything does.
+	var eyes: Dictionary = Marks.attention_textures(dark)
+	column = -3.4
+	for mark in Marks.ATTENTION_MARKS:
+		var eye := Sprite3D.new()
+		eye.texture = eyes[mark]
+		eye.pixel_size = 0.012
+		eye.shaded = false
+		eye.transparent = true
+		eye.position = Vector3(column, -4.4, 0.0)
+		stage.add_child(eye)
+		var caption := Label3D.new()
+		caption.text = str(mark)
+		caption.font_size = 40
+		caption.pixel_size = 0.0035
+		caption.modulate = Color("dfe7e4") if dark else Color("242a2c")
+		caption.position = Vector3(column, -5.4, 0.0)
+		stage.add_child(caption)
+		column += 3.4
 
 	for _frame in range(8):
 		await get_tree().process_frame

@@ -235,7 +235,7 @@ func _draw_mark(intent: String, progress: float, strength: float) -> bool:
 	if texture == null:
 		return false
 	_mark.texture = texture
-	_mark.modulate = Color(1.0, 1.0, 1.0, AMBIENT_ALPHA * strength)
+	_mark.modulate = Color(1.0, 1.0, 1.0, MARK_ALPHA * strength)
 	_mark.pixel_size = AMBIENT_PIXEL_SIZE * COGNITICON_SCALE * MARK_PIXEL_RATIO
 	_mark.visible = true
 	## Only the intents that accumulate carry a fill, and the review is explicit
@@ -249,7 +249,7 @@ func _draw_mark(intent: String, progress: float, strength: float) -> bool:
 		_mark_fill.region_enabled = true
 		_mark_fill.region_rect = region
 		_mark_fill.offset = CogniticonMarks.fill_offset(region)
-		_mark_fill.modulate = Color(1.0, 1.0, 1.0, AMBIENT_ALPHA * strength * 0.85)
+		_mark_fill.modulate = Color(1.0, 1.0, 1.0, MARK_ALPHA * strength * 0.72)
 		_mark_fill.pixel_size = _mark.pixel_size
 	return true
 
@@ -261,6 +261,19 @@ func _draw_mark(intent: String, progress: float, strength: float) -> bool:
 ## two tiers keep the relationship the gate asserts -- the mark reads at the
 ## size the character was *supposed* to, rather than at the size it managed.
 const MARK_PIXEL_RATIO: float = 1.35
+
+## **A drawn mark is opaque; the character it replaced was not.**
+##
+## `AMBIENT_ALPHA` is 0.40, and applying it here would have thrown away the
+## whole reason the marks are drawn in ink and halo: the contrast *is* the
+## legibility, and fading it to 40% puts back the problem the ink was chosen to
+## solve. The two-tier rule survives elsewhere -- an ambient mark is a thin
+## outline where a state badge is a solid glyph, so the badge still carries more
+## weight at the same opacity.
+##
+## The fill sits under the outline at a lower share, so a full blade still reads
+## as an edge with an interior rather than as a solid slab.
+const MARK_ALPHA: float = 0.95
 
 
 func _hide_mark() -> void:
