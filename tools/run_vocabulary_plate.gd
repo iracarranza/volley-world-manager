@@ -13,14 +13,16 @@ const Marks := preload("res://scripts/data/cogniticon_marks.gd")
 ## Lid positions, as the fraction of its travel each lid has closed. These are
 ## the four expressions the design names, and the point of the plate is whether
 ## they are four *different faces* rather than four numbers.
-const LIDS := [
-	{"name": "watching", "upper": 0.16, "lower": 0.0, "shown": true},
-	{"name": "narrowed", "upper": 0.74, "lower": 0.34, "shown": true},
-	{"name": "doubtful", "upper": 0.36, "lower": 0.0, "shown": true},
-	## Shock is the lid **gone**, not the lid moved. A wide eye is one with
-	## nothing cutting across it, which is why "completely gone" is a lid state
-	## rather than a different drawing.
-	{"name": "shocked", "upper": 0.0, "lower": 0.0, "shown": false},
+## Six apertures across the range, so the *progression* can be judged rather
+## than three chosen poses. The lid is the eye's top border, so each of these
+## is a different eye rather than the same eye with something laid over it.
+const APERTURES := [
+	{"name": "closing", "openness": 0.34},
+	{"name": "narrowed", "openness": 0.58},
+	{"name": "wary", "openness": 0.82},
+	{"name": "watching", "openness": 1.0},
+	{"name": "widening", "openness": 1.3},
+	{"name": "shocked", "openness": 1.62},
 ]
 
 
@@ -72,11 +74,11 @@ func _shoot(dark: bool) -> void:
 
 	var parts: Dictionary = Marks.eye_part_textures(dark)
 	row = -3.2
-	column = -5.0
-	for lid in LIDS:
+	column = -6.4
+	for lid in APERTURES:
 		_eye(stage, parts, lid, Vector3(column, row, 0.0))
 		_caption(stage, str(lid["name"]), Vector3(column, row - 1.6, 0.0), ink)
-		column += 3.4
+		column += 2.6
 
 	for _frame in range(8):
 		await get_tree().process_frame
@@ -107,34 +109,8 @@ func _caption(stage: Node3D, text: String, at: Vector3, ink: Color) -> void:
 	stage.add_child(label)
 
 
-## The eye, assembled from a fixed socket and a lid that cuts across it.
-##
-## The socket never changes -- an eye does not change shape. The lid travels
-## from just inside the socket's upper edge down toward its centre, and at the
-## widest expression is simply not drawn.
+## One eye at one openness. Its whole shape comes from where the lids are.
 func _eye(stage: Node3D, parts: Dictionary, lid: Dictionary, at: Vector3) -> void:
-	_mark(stage, parts["socket"], at, 0.011)
-	_mark(stage, parts["pupil"], at + Vector3(0.14, 0.0, 0.01), 0.011)
-	if not bool(lid["shown"]):
-		return
-	## The socket's own half-height, in the units these sprites are placed in.
-	## The lid rides inside that, never outside it -- a lid drawn past the eye
-	## reads as an eyebrow, which is what the first attempt drew.
-	var reach: float = Marks.EYE_RADII.y * float(Marks.SCALE) * 0.011
-	var upper := Sprite3D.new()
-	upper.texture = parts["lid"]
-	upper.pixel_size = 0.011
-	upper.shaded = false
-	upper.transparent = true
-	upper.position = at + Vector3(0.0, reach * (1.0 - float(lid["upper"])), 0.02)
-	stage.add_child(upper)
-	if float(lid["lower"]) <= 0.001:
-		return
-	var lower := Sprite3D.new()
-	lower.texture = parts["lid"]
-	lower.pixel_size = 0.011
-	lower.shaded = false
-	lower.transparent = true
-	lower.scale = Vector3(1.0, -1.0, 1.0)
-	lower.position = at - Vector3(0.0, reach * (1.0 - float(lid["lower"])), 0.02)
-	stage.add_child(lower)
+	var step: int = Marks.aperture_step(float(lid["openness"]))
+	_mark(stage, parts["eye_%d" % step], at, 0.011)
+	_mark(stage, parts["pupil"], at + Vector3(0.13, 0.0, 0.01), 0.011)

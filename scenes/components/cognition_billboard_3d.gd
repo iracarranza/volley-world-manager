@@ -280,7 +280,6 @@ static var _eye_parts: Dictionary = {}
 var _eye_outline: Sprite3D
 var _eye_pupil: Sprite3D
 var _eye_lead: Sprite3D
-var _eye_lid: Sprite3D
 
 ## Which states are a voli *reading* rather than acting. Everything else has
 ## already chosen, and a chosen voli's mark is their intent.
@@ -337,33 +336,18 @@ func _draw_eye(
 	var alpha := MARK_ALPHA * strength
 	var size := AMBIENT_PIXEL_SIZE * COGNITICON_SCALE * MARK_PIXEL_RATIO
 
-	## **A lid, not a squashed eye.** The socket never changes size -- an eye
-	## does not change shape, its lids move over it. The aperture is therefore
-	## a lid *position*, and the widest expression is the lid not drawn at all.
-	_eye_outline.texture = _eye_parts["socket"]
+	## **The lid is the eye's top border, so openness is a different drawing
+	## rather than a transform.** A stroke cannot occlude, so a lid laid over a
+	## socket reads as an eyebrow; the eye is bounded by its two lids instead,
+	## and a closing lid both lowers and flattens because it is rotating toward
+	## the viewer. Cached per aperture step, since eight of them serve the whole
+	## court.
+	var step := CogniticonMarks.aperture_step(aperture * (1.0 - blink))
+	_eye_outline.texture = _eye_parts["eye_%d" % step]
 	_eye_outline.pixel_size = size
 	_eye_outline.modulate = Color(ink.r, ink.g, ink.b, alpha)
 	_eye_outline.scale = Vector3.ONE
 	_eye_outline.visible = true
-
-	var reach := EYE_SPAN_METERS * 0.5
-	## How far the lid has come down, from just inside the socket's upper edge
-	## toward its centre. Derived from the aperture so one number still drives
-	## the expression, inverted because a *wider* eye is a *higher* lid.
-	var closure := clampf(
-		1.0 - (aperture - CogniticonMotion.APERTURE_NARROW)
-			/ maxf(CogniticonMotion.APERTURE_SHOCK
-				- CogniticonMotion.APERTURE_NARROW, 0.001),
-		0.0, 1.0,
-	)
-	closure = maxf(closure, blink)
-	_eye_lid.texture = _eye_parts["lid"]
-	_eye_lid.pixel_size = size
-	_eye_lid.modulate = Color(ink.r, ink.g, ink.b, alpha)
-	_eye_lid.position = Vector3(0.0, reach * (1.0 - closure), 0.02)
-	## Gone when the eye is at its widest: shock is a lid absent, not a lid
-	## moved, which is what makes a startled eye read as bare.
-	_eye_lid.visible = closure > 0.08
 
 	## The pupil follows what the voli is watching. Twelve eyes turning to the
 	## ball together is the largest "alive" gain in the layer and costs one
@@ -410,11 +394,9 @@ func _ensure_eye() -> void:
 		_eye_outline = _new_mark_sprite()
 		_eye_pupil = _new_mark_sprite()
 		_eye_lead = _new_mark_sprite()
-		_eye_lid = _new_mark_sprite()
 		add_child(_eye_outline)
 		add_child(_eye_lead)
 		add_child(_eye_pupil)
-		add_child(_eye_lid)
 
 
 ## Draw this intent as a mark, or report that nothing is drawn for it yet.
@@ -469,7 +451,7 @@ func _draw_mark(
 		_mark_fill.pixel_size = size
 		_mark_fill.rotation_degrees = _mark.rotation_degrees
 		_mark_fill.position = _mark.position
-	for part in [_eye_outline, _eye_pupil, _eye_lead, _eye_lid]:
+	for part in [_eye_outline, _eye_pupil, _eye_lead]:
 		if part != null:
 			part.visible = false
 	return true
@@ -527,7 +509,7 @@ func _hide_mark() -> void:
 		_mark.visible = false
 	if _mark_fill != null:
 		_mark_fill.visible = false
-	for part in [_eye_outline, _eye_pupil, _eye_lead, _eye_lid]:
+	for part in [_eye_outline, _eye_pupil, _eye_lead]:
 		if part != null:
 			part.visible = false
 

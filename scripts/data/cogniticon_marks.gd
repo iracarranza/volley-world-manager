@@ -235,93 +235,100 @@ static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	return _composite(width, height, paths, discs, [], dark_theme)
 
 
-## ## Eyelids, not a squashed eye
+## ## The eyelid *is* the eye's top border
 ##
-## The first attempt narrowed the eye by scaling its whole outline vertically,
-## which distorts the eyeball. **An eye does not change shape; its lids move
-## over it.** So the eye is drawn as three things rather than one squashed
-## ellipse:
+## Two earlier attempts got this wrong in instructive ways. The first scaled
+## the whole outline vertically, which squashes an eyeball. The second drew a
+## fixed socket with a lid sprite moving over it, and the lid read as an
+## eyebrow -- because a stroke cannot occlude, so a lid laid on top of an
+## outline is just a second line near it.
 ##
-## | part | what it does |
-## |---|---|
-## | `socket` | the eye itself, a fixed almond, never scaled |
-## | `lid_upper` | comes down over the socket to narrow |
-## | `lid_lower` | rises a little to meet it |
+## **The eye has no outline of its own.** Its shape is bounded by two lids
+## meeting at the corners, and where those lids sit *is* how open it is:
 ##
-## Which buys the whole expression range from two translations:
+## | expression | upper lid | reads as |
+## |---|---|---|
+## | shocked | bowed high, rounding the eye out | wide, startled |
+## | watching | roughly flush with the socket's natural top | open, neutral |
+## | narrowed | lower, and **flatter** | focus, suspicion |
 ##
-## - **watching** -- lids at rest, the almond fully open
-## - **narrowed** -- the upper lid down over the top third: focus, suspicion
-## - **shocked** -- both lids retracted clear of the socket, so the eye reads
-##   round and wide with nothing cutting it. "Completely gone" is a lid
-##   position rather than a different drawing.
+## The flattening is the part that makes it read in implied three dimensions.
+## A closing lid rotates toward the viewer, so you see more of its face and
+## less of its edge, and its curve goes slack. Falling out of a single bow
+## height per lid rather than being a second parameter is what keeps it one
+## number: a low bow is automatically a flat one.
 ##
-## The lids are arcs matching the socket's own curvature, so a lowered lid sits
-## *on* the eye rather than across it, and a retracted one leaves no trace.
-const LID_STROKE: float = 2.3
-## How far, in design units, each lid travels between fully retracted and fully
-## closed. The socket's half-height is `EYE_RADII.y`, so a lid that travels its
-## full span crosses the entire eye.
-const LID_TRAVEL: float = 11.0
+## Generated per aperture step and cached rather than built per frame -- eight
+## steps is finer than the eye can show at playback size, and eight textures is
+## nothing against twelve volis asking for them.
+const EYE_APERTURE_STEPS: int = 8
+const EYE_APERTURE_MIN: float = 0.34
+const EYE_APERTURE_MAX: float = 1.62
+## How far the lower lid moves relative to the upper. Much less: a squint is
+## mostly the top coming down, and a lower lid that travelled as far would read
+## as a mouth closing rather than an eye.
+const LOWER_LID_SHARE: float = 0.45
 
 
-## The eye in separable parts, because its parts move independently.
-
-## The eye in separable parts, because its parts move independently.
+## One eye, bounded by two lids at the given openness.
 ##
-## A single baked eye cannot narrow, cannot look anywhere, and cannot fork --
-## and all three are per-voli per-frame, so none of them can live in a texture
-## shared by twelve bodies. Three pieces instead:
-##
-## | part | moves how |
-## |---|---|
-## | `outline` | scaled vertically -- the aperture *is* a squash |
-## | `pupil` | translated within the eye toward what is being watched |
-## | one of the leads | swapped, and rotated to point at the target |
-##
-## Which is also cheaper than it sounds: six shared textures for the whole
-## court, and three sprites per voli that only ever change their transforms.
-static func eye_part_textures(dark_theme: bool) -> Dictionary:
-	var parts := {
-		"socket": _eye_socket(dark_theme),
-		"lid": _eye_lid(dark_theme),
-		"pupil": _eye_pupil(dark_theme),
-	}
-	for lead in LEAD_MARKS:
-		parts[lead] = _eye_lead(lead, dark_theme)
-	return parts
-
-
-## The eye itself: a fixed almond, centred, never scaled.
-static func _eye_socket(dark_theme: bool) -> ImageTexture:
+## `openness` is the aperture: 1.0 is the almond at rest, below that is a
+## narrowing lid, above it a retracting one.
+static func eye_at(openness: float, dark_theme: bool) -> ImageTexture:
 	var size := int(EYE_RADII.x * 2.0 + 8.0) * SCALE
-	var centre := Vector2(
-		float(size) / float(SCALE) * 0.5, float(size) / float(SCALE) * 0.5
+	var half := float(size) / float(SCALE) * 0.5
+	var span := EYE_RADII.x
+	var upper_bow := EYE_RADII.y * clampf(openness, 0.05, 2.0)
+	var lower_bow := EYE_RADII.y * lerpf(
+		1.0 - LOWER_LID_SHARE, 1.0, clampf(openness, 0.0, 2.0) * 0.5 + 0.5
+	)
+	var left := Vector2(half - span, half)
+	var right := Vector2(half + span, half)
+	## A cubic whose control points ride the bow, so a low bow is a flat curve
+	## and a high one is a round arc -- one number for both.
+	var lid_upper := _cubic(
+		left,
+		Vector2(half - span * 0.52, half - upper_bow * 1.34),
+		Vector2(half + span * 0.52, half - upper_bow * 1.34),
+		right
+	)
+	var lid_lower := _cubic(
+		right,
+		Vector2(half + span * 0.52, half + lower_bow * 1.28),
+		Vector2(half - span * 0.52, half + lower_bow * 1.28),
+		left
 	)
 	return _composite(size, size, [
-		{"points": _ellipse(centre, EYE_RADII), "closed": true,
+		{"points": _join([lid_upper, lid_lower]), "closed": true,
 			"width": EYE_STROKE, "dash": 0.0},
 	], [], [], dark_theme)
 
 
-## A lid: an arc the width of the socket, curving the way the socket's own edge
-## curves, so that lowering it reads as a lid closing rather than as a line
-## drawn across an eye.
+## Which cached step an openness lands in. Exposed so the renderer and any gate
+## agree about the bucketing rather than each rounding it their own way.
+static func aperture_step(openness: float) -> int:
+	var span := EYE_APERTURE_MAX - EYE_APERTURE_MIN
+	var t := clampf((openness - EYE_APERTURE_MIN) / maxf(span, 0.001), 0.0, 1.0)
+	return int(round(t * float(EYE_APERTURE_STEPS - 1)))
+
+
+static func aperture_for_step(step: int) -> float:
+	var t := float(clampi(step, 0, EYE_APERTURE_STEPS - 1)) \
+		/ float(EYE_APERTURE_STEPS - 1)
+	return lerpf(EYE_APERTURE_MIN, EYE_APERTURE_MAX, t)
+
+
+## The eye in separable parts, because its parts move independently.
 ##
-## Drawn once and used for both lids -- the lower one is the same arc flipped,
-## which is what a `Sprite3D` with a negative y scale is for.
-static func _eye_lid(dark_theme: bool) -> ImageTexture:
-	var size := int(EYE_RADII.x * 2.0 + 8.0) * SCALE
-	var half := float(size) / float(SCALE) * 0.5
-	var span := EYE_RADII.x
-	return _composite(size, size, [
-		{"points": _cubic(
-			Vector2(half - span, half + 1.5),
-			Vector2(half - span * 0.45, half - EYE_RADII.y * 1.15),
-			Vector2(half + span * 0.45, half - EYE_RADII.y * 1.15),
-			Vector2(half + span, half + 1.5)
-		), "closed": false, "width": LID_STROKE, "dash": 0.0},
-	], [], [], dark_theme)
+## The eye bodies are one per aperture step -- the lids are the shape, so they
+## cannot be a transform on a shared texture. The pupil and the leads still can.
+static func eye_part_textures(dark_theme: bool) -> Dictionary:
+	var parts := {"pupil": _eye_pupil(dark_theme)}
+	for step in range(EYE_APERTURE_STEPS):
+		parts["eye_%d" % step] = eye_at(aperture_for_step(step), dark_theme)
+	for lead in LEAD_MARKS:
+		parts[lead] = _eye_lead(lead, dark_theme)
+	return parts
 
 
 static func _eye_pupil(dark_theme: bool) -> ImageTexture:

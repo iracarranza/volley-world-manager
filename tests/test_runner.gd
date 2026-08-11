@@ -14714,29 +14714,38 @@ func _test_cogniticon_motion_envelopes() -> void:
 ## The eye in parts, because a baked eye cannot narrow, look, or doubt.
 func _test_eye_parts_and_the_forked_lead() -> void:
 	var parts: Dictionary = CogniticonMarks.eye_part_textures(true)
-	for key in ["socket", "lid", "pupil"] + CogniticonMarks.LEAD_MARKS:
+	_check(parts.get("pupil", null) is Texture2D, "the pupil is drawn")
+	for lead in CogniticonMarks.LEAD_MARKS:
+		_check(parts.get(lead, null) is Texture2D, "the %s lead is drawn" % lead)
+
+	## **The lid is the eye's top border, so a narrower eye is a shorter one.**
+	## Two earlier models failed here and both failed silently: scaling the
+	## outline squashed the eyeball, and a separate lid sprite read as an
+	## eyebrow because a stroke cannot occlude. Gated as the progression rather
+	## than as any one drawing -- every step up in openness must be taller than
+	## the step below it, which is the claim the whole expression rests on.
+	var heights: Array[int] = []
+	for step in range(CogniticonMarks.EYE_APERTURE_STEPS):
+		var eye: Image = (parts["eye_%d" % step] as Texture2D).get_image()
+		heights.append(_ink_height(eye))
 		_check(
-			parts.get(key, null) is Texture2D,
-			"the eye's %s is drawn" % key,
+			parts.get("eye_%d" % step, null) is Texture2D,
+			"the eye at step %d is drawn" % step,
 		)
-	## The outline has to be centred in its own canvas, or scaling it vertically
-	## to narrow the eye would slide it instead of squashing it -- the same
-	## defect the composed eye had before `EYE_INK_SHIFT`, one axis over.
-	var outline: Image = (parts["socket"] as Texture2D).get_image()
-	var top := -1
-	var bottom := -1
-	var middle := outline.get_width() / 2
-	for y in range(outline.get_height()):
-		if outline.get_pixel(middle, y).a > 0.5:
-			if top < 0:
-				top = y
-			bottom = y
+	var rising := true
+	for index in range(1, heights.size()):
+		if heights[index] < heights[index - 1]:
+			rising = false
 	_check(
-		top >= 0 and absf(
-			float(top + bottom) * 0.5 - float(outline.get_height()) * 0.5
-		) <= 2.0,
-		"the eye socket is centred, so a lid crossing it is symmetric about it",
+		rising and heights[heights.size() - 1] > heights[0] + 8,
+		"a wider eye is a taller one at every step (%d to %d)"
+			% [heights[0], heights[heights.size() - 1]],
 	)
+	## And the pupil does not change with it. An eye that scales whole reads as
+	## zooming rather than as opening.
+	var pupil: Image = (parts["pupil"] as Texture2D).get_image()
+	_check(_ink_height(pupil) > 4, "the pupil is a constant mark, not a scaled one")
+
 	## Doubt is a *fork*: more ink further from the lead's own axis than a
 	## single-line lead has. Measured rather than asserted by eye, because "it
 	## looks forked" is exactly the kind of claim this session keeps having to
@@ -14746,6 +14755,20 @@ func _test_eye_parts_and_the_forked_lead() -> void:
 		"the doubtful lead is wider than the certain one (%d vs %d)"
 			% [_lead_spread(parts["doubt"]), _lead_spread(parts["track"])],
 	)
+
+
+## How tall a mark's ink is, anywhere in its canvas.
+func _ink_height(image: Image) -> int:
+	var top := -1
+	var bottom := -1
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			if image.get_pixel(x, y).a > 0.5:
+				if top < 0:
+					top = y
+				bottom = y
+				break
+	return 0 if top < 0 else bottom - top
 
 
 ## How wide a mark's ink is at a given height down its canvas.
