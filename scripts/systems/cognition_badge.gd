@@ -99,6 +99,21 @@ static func describe(cue: Resource, toward: Vector2 = Vector2.ZERO) -> Dictionar
 	else:
 		direction = Vector2.ZERO
 	return {
+		## The ambient axes, alongside the punctuating ones.
+		##
+		## **The badge decides meaning for both renderers, so these belong here
+		## and not in either of them.** Until this existed the renderers read
+		## `state` and nothing else, so every ambient cue -- one per voli per
+		## flight, `state: committed` by construction -- came back a diamond
+		## labelled COMMITTED. Twelve of them, permanently lit, which is the exact
+		## failure the two-tier rule in `docs/design/COGNITICONS.md` was written to
+		## prevent.
+		"intent": str(cue.intent),
+		"family": _family_for(str(cue.intent)),
+		"progress": clampf(float(cue.progress), 0.0, 1.0),
+		## Ambient marks lose every overlap they are in, so a renderer can tell
+		## the two tiers apart without knowing what a priority number means.
+		"is_ambient": int(cue.priority) < 0,
 		"eye_openness": clampf(eye, 0.0, 1.0),
 		"pupil": direction,
 		"color": color,
@@ -116,6 +131,23 @@ static func describe(cue: Resource, toward: Vector2 = Vector2.ZERO) -> Dictionar
 		),
 		"emphasis": clampf(maxf(urgency, float(cue.affect_intensity)), 0.0, 1.0),
 	}
+
+
+## Which side of the ball this voli is on, which is the question a glance has to
+## answer before any of the detail matters.
+##
+## Nine intents is more shapes than anyone can separate at twenty pixels over a
+## moving body, so the reading is two-stage: the family says *dealing with their
+## ball* or *about to do something to it*, and the intent inside it says exactly
+## what. `setting` and `watching` are neither, and pretending otherwise would put
+## a sword on a setter and a shield on somebody standing still.
+static func _family_for(intent: String) -> String:
+	match intent:
+		"defending", "covering", "receiving", "blocking":
+			return "shield"
+		"serving", "preparing_attack", "approaching":
+			return "sword"
+	return "hands"
 
 
 ## The badge outline. A circle is thinking, a wedge is a call heard by others,

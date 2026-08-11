@@ -509,9 +509,7 @@ static func resolve_serve(
 	## How hard, from the serve's own attributes rather than the attack's. Risk
 	## is the tactical instruction: a team told to serve aggressively asks more
 	## of the ball, and asking more of it is exactly what puts it out.
-	var ceiling := AttackPowerModel.available_ceiling_mps(
-		_rating(server, "serve_power"), 1.0, 1.0
-	)
+	var ceiling := AttackPowerModel.serve_ceiling_mps(_rating(server, "serve_power"))
 	var intent := lerpf(
 		AttackPowerModel.CONTROL_INTENT, AttackPowerModel.DRIVE_INTENT,
 		clampf(tactical_risk, 0.0, 1.0),

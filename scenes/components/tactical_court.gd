@@ -2389,11 +2389,45 @@ func _cognition_attention_offset(cue: Resource, from: Vector2) -> Vector2:
 	return Vector2.ZERO
 
 
+## How far under the state badge the ambient ring sits. Same rule as the
+## billboard's: present on twelve volis at once, and never the thing that draws
+## the eye.
+const COGNITION_AMBIENT_ALPHA: float = 0.5
+const COGNITION_AMBIENT_SCALE: float = 0.72
+
+
 func _draw_cognition_badge(
 	center: Vector2, cue: Resource, toward: Vector2
 ) -> void:
 	var reading: Dictionary = CognitionBadge.describe(cue, toward)
 	if reading.is_empty():
+		return
+	## The ambient tier is a ring, not a badge.
+	##
+	## The coach's board draws the same meanings as the gym camera and is free to
+	## choose different geometry for them, so where the billboard sets an intent
+	## glyph this draws a thin arc: a shield family opens downward, a blade family
+	## upward, the pivot closes. It carries `progress` as the arc's sweep, which
+	## is the filling blade in a form a 2D board can draw without a second font.
+	##
+	## Without this branch every ambient cue -- one per voli per flight -- came
+	## back through the state vocabulary as a full COMMITTED diamond with an eye,
+	## on twelve volis at once.
+	if bool(reading.get("is_ambient", false)):
+		var strength: float = cue.glyph_strength(cognition_time)
+		if strength <= 0.01:
+			return
+		var family := str(reading.get("family", "hands"))
+		var ambient: Color = Color(reading.color)
+		ambient.a *= COGNITION_AMBIENT_ALPHA * strength
+		var sweep := lerpf(PI * 0.35, TAU * 0.92, float(reading.get("progress", 0.0)))
+		var from := -PI * 0.5 - sweep * 0.5
+		if family == "shield":
+			from = PI * 0.5 - sweep * 0.5
+		draw_arc(
+			center, COGNITION_BADGE_RADIUS * COGNITION_AMBIENT_SCALE,
+			from, from + sweep, 14, ambient, 1.6, true
+		)
 		return
 	## Was 11.0, which is over half a 20 px player marker -- the badge read as
 	## the voli rather than as a note about them. A marginal mark should be

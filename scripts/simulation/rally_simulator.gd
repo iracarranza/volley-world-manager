@@ -11968,7 +11968,7 @@ func _serve_arc(
 ## there.
 func _serve_carry_meters(server: VolleyballPlayer) -> float:
 	var speed := GeometricAttackResolverModel.AttackPowerModel \
-		.available_ceiling_mps(_rating(server, "serve_power"), 1.0, 1.0) \
+		.serve_ceiling_mps(_rating(server, "serve_power")) \
 		* lerpf(0.82, 1.0, _rating(server, "serve_technique"))
 	var flight: Dictionary = RallyKinematicsModel.BallFlightModel.solve_flight(
 		speed, _serve_launch_angle_degrees(server, 0.6),

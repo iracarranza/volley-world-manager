@@ -36,6 +36,31 @@ const FACE_GLYPHS := {
 }
 const TREND_GLYPHS := {1: "↑", -1: "↓"}
 
+## The ambient tier: what a voli is doing when nothing more interesting is true
+## of them.
+##
+## One mark per intent, grouped so a glance answers *which side of the ball* and
+## a look answers the rest -- shields for the four ways of dealing with their
+## ball, blades for the three ways of doing something to it, hands for the pivot,
+## and a dot for a voli with nothing to add. The dot matters: without a mark,
+## "no opinion" is indistinguishable from "not implemented", which is the state
+## this layer started in at 0.75 volis of six.
+const INTENT_GLYPHS := {
+	"defending": "⛊", "covering": "⛉", "receiving": "⛨", "blocking": "⛰",
+	"serving": "⇧", "preparing_attack": "⇡", "approaching": "⬆",
+	"setting": "⌒", "watching": "·",
+}
+## How far the ambient tier is held below the punctuating one.
+##
+## The whole two-tier rule in one number. An ambient mark is present on twelve
+## volis at once and must never draw the eye; a state badge appears rarely and
+## must be the only thing moving when it does. Sized and faded well under the
+## badge so that going from 0.75 marks to twelve does not drown `lost_sight`,
+## which fires 24 times in 47,000 cue-samples and lands because almost nothing
+## else is lit.
+const AMBIENT_PIXEL_SIZE: float = 0.00010
+const AMBIENT_ALPHA: float = 0.55
+
 const HEIGHT_ABOVE_HEAD_METERS: float = 0.30
 
 
@@ -70,13 +95,35 @@ func _init() -> void:
 ## Returns the cue's attention target kind so the caller can decide whether to
 ## drive the head as well -- the actor's `look_toward` belongs to the actor, and
 ## this component should not reach into it.
-func show_cue(cue: Resource, head_height_meters: float) -> void:
+func show_cue(
+	cue: Resource, head_height_meters: float, simulation_time: float = -1.0
+) -> void:
 	if cue == null or not BadgeModel.is_worth_drawing(cue):
 		visible = false
 		return
 	var reading: Dictionary = BadgeModel.describe(cue)
 	if reading.is_empty():
 		visible = false
+		return
+	## The ambient tier draws its intent and stops there.
+	##
+	## An ambient cue is `committed` by construction, so running it through the
+	## state vocabulary returns a diamond labelled COMMITTED for every voli on
+	## court, permanently -- which is what shipped before this branch existed.
+	## What it actually has to say is what this voli is doing, and the fade says
+	## when it has finished saying it.
+	if bool(reading.get("is_ambient", false)):
+		var strength: float = cue.glyph_strength(simulation_time)
+		if strength <= 0.01:
+			visible = false
+			return
+		text = str(INTENT_GLYPHS.get(str(reading.get("intent", "watching")), "·"))
+		var ambient_color := Color(reading.color)
+		ambient_color.a = AMBIENT_ALPHA * strength
+		modulate = ambient_color
+		pixel_size = AMBIENT_PIXEL_SIZE
+		position = Vector3(0.0, head_height_meters, 0.0)
+		visible = true
 		return
 	var glyph := str(SHAPE_GLYPHS.get(str(reading.shape), "◦"))
 	var face := str(FACE_GLYPHS.get(str(reading.face), ""))

@@ -440,7 +440,7 @@ func sample_cognition(simulation_time: float) -> void:
 		if cue == null:
 			actor.hide_cognition_cue()
 			continue
-		actor.show_cognition_cue(cue)
+		actor.show_cognition_cue(cue, simulation_time)
 		_apply_cognition_look(actor, cue)
 
 

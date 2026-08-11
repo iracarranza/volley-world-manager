@@ -14509,15 +14509,8 @@ func _test_cognition_cues() -> void:
 func _test_body_facing_rule() -> void:
 	var square := 0.0
 	var backward := PI
-	## 114 degrees, not 90. Ninety is exactly `OPEN_UP_CONE_RADIANS`, so a voli
-	## travelling perpendicular to their facing counts as *inside* the cone and
-	## opens up whatever their speed -- which means the lateral bound below can
-	## only ever govern travel that is already partly backward. That is a real
-	## finding rather than a test artefact: the comment on the constant describes
-	## a blocker shuffling along the net, and a blocker shuffling along the net is
-	## exactly the perpendicular case the cone swallows. Recorded here; narrowing
-	## the cone is a behaviour change and wants its own measurement.
 	var back_diagonal := 2.0
+	var sideways := PI * 0.5
 
 	## Inside the cone the travel is the facing, so turning onto it is free and
 	## happens at any speed at all.
@@ -14555,6 +14548,19 @@ func _test_body_facing_rule() -> void:
 	_check(
 		PlayerActor3D.LATERAL_OPEN_UP_SPEED_MPS > PlayerActor3D.OPEN_UP_SPEED_MPS,
 		"the lateral open-up bound sits above the backward one",
+	)
+
+	## The case the lateral bound was written for, and could not reach.
+	##
+	## A middle shuffling the width of the net travels perpendicular to their
+	## facing. While the cone was a right angle that was *inside* it, so they
+	## turned and sprinted at any speed and the bound beneath never applied to
+	## the one player it names. This is the assertion that failed when it was
+	## first written and is the reason the cone is now sixty degrees.
+	_check(
+		not PlayerActor3D.should_open_up(square, sideways, 3.9, sideways)
+			and PlayerActor3D.should_open_up(square, sideways, 5.9, sideways),
+		"a blocker shuffling sideways stays square until a genuine sprint",
 	)
 
 	## The neck is measured off the torso, which is why the body has to point

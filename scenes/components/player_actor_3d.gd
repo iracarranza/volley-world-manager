@@ -182,10 +182,29 @@ const FACING_TURN_RATE: float = 12.0
 ## the spot while nominally standing still.
 const TRAVEL_HEADING_FLOOR_METERS: float = 0.01
 ## How far off their facing a voli will travel before they give up and turn to
-## run. A right angle: inside it they are shuffling or backpedalling with their
-## eyes where they were, outside it the movement has become a sprint to
-## somewhere and the head follows the feet.
-const OPEN_UP_CONE_RADIANS: float = PI * 0.5
+## run. Inside it they are shuffling or backpedalling with their eyes where they
+## were; outside it the speed bounds below decide.
+##
+## **Sixty degrees, not ninety, and the difference is that the bounds below only
+## exist at all at sixty.** A right angle put *perpendicular* travel exactly on
+## the boundary, and the test is `<=`, so a voli moving straight sideways counted
+## as inside the cone and turned onto their travel at any speed whatsoever. The
+## lateral bound directly beneath this describes a middle shuffling the width of
+## the net -- which is the perpendicular case -- so the number written to make a
+## middle look like a middle could never fire for a middle. It governed only
+## backward-diagonal travel, weighted by how sideways that diagonal was.
+##
+## The gate in `tests/test_runner.gd` found this the first time it was asked, by
+## asserting the thing the constants claimed and getting back the opposite.
+##
+## Sixty is where a running gait stops being a run: past it the feet are crossing
+## or shuffling whatever the facing says, so it is the honest place to hand the
+## decision to speed. Measured over 4,727 off-ball legs, median travel is 1.5-2.4
+## m/s in every angular band -- comfortably under both bounds -- so the change
+## lands as "most volis now keep their eyes on the ball" rather than as a new
+## speed regime. The bounds themselves are deliberately untouched in the same
+## pass: one constant moved, one thing measured.
+const OPEN_UP_CONE_RADIANS: float = PI / 3.0
 ## And the speed past which nobody shuffles, whatever the angle. `GaitBiomechanics`
 ## puts a run at 4.4 m/s; this sits below it, because the last stride before a
 ## genuine run is already too quick to keep square.
@@ -2597,13 +2616,13 @@ func set_expression(new_expression: String, light_mode: bool = false) -> void:
 var cognition_billboard: CognitionBillboard3D
 
 
-func show_cognition_cue(cue: Resource) -> void:
+func show_cognition_cue(cue: Resource, simulation_time: float = -1.0) -> void:
 	if cognition_billboard == null:
 		if cue == null:
 			return
 		cognition_billboard = CognitionBillboard3D.new()
 		add_child(cognition_billboard)
-	cognition_billboard.show_cue(cue, _cognition_head_height())
+	cognition_billboard.show_cue(cue, _cognition_head_height(), simulation_time)
 
 
 func hide_cognition_cue() -> void:

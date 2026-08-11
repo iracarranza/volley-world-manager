@@ -50,8 +50,54 @@ const BallFlightModel := preload("res://scripts/simulation/ball_flight_model.gd"
 ## compounded 30 m/s down to 12.6. Both of those floors were lifted with this,
 ## because raising only the top of the range would have been a knob that cannot
 ## reach its own stated value.
-const CEILING_MIN_MPS: float = 24.0
-const CEILING_MAX_MPS: float = 42.0
+##
+## **Raised a second time, by a fifth, and the reason is the same one.** After the
+## first raise the drawn median was 14.4 m/s over 525 attacks and 15.6 over 400
+## serves -- still against the 25-37 this comment cites for a real spike, because
+## the compounding discounts below eat most of what the ceiling grants. Both ends
+## move together again, and both attacks and serves move with them: the serve's
+## pace comes through `available_ceiling_mps` too, with `serve_power` in place of
+## `attack_power`, so this is one constant for the pair.
+##
+## Stated as an outcome rather than an input, because the input has been raised
+## before and the outcome barely followed: the contract is that the *drawn*
+## medians rise about a fifth, and `tools/` measures them.
+const CEILING_MIN_MPS: float = 28.8
+const CEILING_MAX_MPS: float = 50.4
+
+## And the serve's own, which is deliberately *not* the attack's.
+##
+## **A serve cannot be made faster by raising this, and pushing it tries to make
+## the serve worse.** Both used to share the constants above. Raising those by a
+## fifth moved the drawn attack median 14.4 -> 16.7 m/s and left the drawn serve
+## median exactly where it was, because `_serve_arc`'s relief loop takes pace off
+## until the ball both clears the tape and lands in -- so the extra was granted
+## and immediately spent. Worse, at the higher figure *both* a timid and an
+## aggressive serve exceeded what the geometry could deliver and were relieved to
+## the same feasible ball, which collapsed the distinction
+## `_test_the_serve_flies_the_same_ball_as_the_spike` exists to hold: risk has to
+## arrive at the ball as speed, and it stopped doing so.
+##
+## The two shots have genuinely different envelopes. A spike is struck downward
+## from above the tape over about seven metres; a serve is struck from nine
+## metres behind the baseline over seventeen, and has to clear a net in between.
+## Sharing one ceiling only ever worked while neither was near its limit.
+##
+## Held at the pre-raise values, which the relief loop can still deliver. Making
+## serves genuinely faster is a spin problem rather than a power one -- a
+## topspin ball falls harder than gravity and can therefore be launched faster
+## and still drop in, which is what `_serve_arc` already documents.
+const SERVE_CEILING_MIN_MPS: float = 24.0
+const SERVE_CEILING_MAX_MPS: float = 42.0
+
+
+## The ceiling for a serve, which shares this function's shape and not its
+## constants.
+static func serve_ceiling_mps(serve_power_rating: float) -> float:
+	return lerpf(
+		SERVE_CEILING_MIN_MPS, SERVE_CEILING_MAX_MPS,
+		clampf(serve_power_rating, 0.0, 1.0),
+	)
 
 ## The reference angle a driven attack is struck at. Used to price "how much
 ## power does it take to reach that far" -- a flatter ball needs more.
