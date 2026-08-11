@@ -361,6 +361,11 @@ func paint_flat(meshes: Array[MeshInstance3D], color: Color) -> void:
 
 func apply_ui_palette(light_mode: bool) -> void:
 	_ensure_node_bindings()
+	## The cogniticon's drawn marks are rasterised in one of two inks and have to
+	## be told which. Passed on here rather than looked up there, because
+	## `UIPalette` is a table and not a state -- see the note on the billboard.
+	if cognition_billboard != null:
+		cognition_billboard.light_mode = light_mode
 	var team_color := UIPalette.color(
 		&"accent_alt" if is_home_team else &"danger", light_mode
 	)

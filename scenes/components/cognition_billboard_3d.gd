@@ -165,8 +165,21 @@ func show_cue(
 		var strength: float = cue.glyph_strength(simulation_time)
 		if strength <= 0.01:
 			visible = false
+			_hide_mark()
 			return
-		text = str(INTENT_GLYPHS.get(str(reading.get("intent", "watching")), "·"))
+		## **A drawn mark where one exists, the character otherwise.**
+		##
+		## The blade family is drawn; the shields and hands are still standing in
+		## as Unicode until they are. Branching on what has been drawn rather
+		## than on the intent means each family switches over as it lands,
+		## instead of the whole layer waiting for the last one.
+		var intent := str(reading.get("intent", "watching"))
+		if _draw_mark(intent, float(reading.get("progress", 0.0)), strength):
+			text = ""
+			visible = true
+			position = Vector3(0.0, head_height_meters, 0.0)
+			return
+		text = str(INTENT_GLYPHS.get(intent, "•"))
 		var ambient_color := Color(reading.color)
 		ambient_color.a = AMBIENT_ALPHA * strength
 		modulate = ambient_color
@@ -193,3 +206,104 @@ func show_cue(
 
 func hide_cue() -> void:
 	visible = false
+	_hide_mark()
+
+
+## The drawn marks, built once and shared by every voli on the court.
+##
+## Static because they are the same three textures twelve times over, and
+## rasterising them per actor would be twelve times the work for one result.
+static var _blades: Dictionary = {}
+static var _blades_are_dark: bool = false
+
+## This billboard's own two sprites: the mark, and the fill behind it.
+##
+## Two nodes rather than one, because the fill is a *region* of a second texture
+## clipped from the bottom -- which is how the visual review draws it, and is
+## what lets the outline stay whole while the interior rises. One node would
+## need the fill baked into the mark, which is a texture per progress value.
+var _mark: Sprite3D
+var _mark_fill: Sprite3D
+
+
+## Draw this intent as a mark, or report that nothing is drawn for it yet.
+func _draw_mark(intent: String, progress: float, strength: float) -> bool:
+	if not CogniticonMarks.BLADE_INTENTS.has(intent):
+		return false
+	_ensure_marks()
+	var texture: Texture2D = _blades.get(intent, null)
+	if texture == null:
+		return false
+	_mark.texture = texture
+	_mark.modulate = Color(1.0, 1.0, 1.0, AMBIENT_ALPHA * strength)
+	_mark.pixel_size = AMBIENT_PIXEL_SIZE * COGNITICON_SCALE * MARK_PIXEL_RATIO
+	_mark.visible = true
+	## Only the intents that accumulate carry a fill, and the review is explicit
+	## that the fill is *distance covered* and never *likelihood of arriving* --
+	## a hitter who will be late still fills, because they are running.
+	var fills := intent == "approaching" and progress > 0.001
+	_mark_fill.visible = fills
+	if fills:
+		var region := CogniticonMarks.fill_region(progress)
+		_mark_fill.texture = _blades["fill"]
+		_mark_fill.region_enabled = true
+		_mark_fill.region_rect = region
+		_mark_fill.offset = CogniticonMarks.fill_offset(region)
+		_mark_fill.modulate = Color(1.0, 1.0, 1.0, AMBIENT_ALPHA * strength * 0.85)
+		_mark_fill.pixel_size = _mark.pixel_size
+	return true
+
+
+## How much larger a drawn mark is than the character it replaces.
+##
+## A glyph is drawn at a font size and fills a fraction of its em box; a mark
+## fills its own canvas edge to edge. Matched by eye against the plate so the
+## two tiers keep the relationship the gate asserts -- the mark reads at the
+## size the character was *supposed* to, rather than at the size it managed.
+const MARK_PIXEL_RATIO: float = 1.35
+
+
+func _hide_mark() -> void:
+	if _mark != null:
+		_mark.visible = false
+	if _mark_fill != null:
+		_mark_fill.visible = false
+
+
+func _ensure_marks() -> void:
+	if _blades.is_empty() or _blades_are_dark != _mark_theme_is_dark():
+		_blades_are_dark = _mark_theme_is_dark()
+		_blades = CogniticonMarks.blade_textures(_blades_are_dark)
+	if _mark == null:
+		_mark_fill = _new_mark_sprite()
+		_mark = _new_mark_sprite()
+		## The fill is added first so the outline draws over it, which is what
+		## keeps the blade's edge crisp as the interior rises past it.
+		add_child(_mark_fill)
+		add_child(_mark)
+
+
+func _new_mark_sprite() -> Sprite3D:
+	var sprite := Sprite3D.new()
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.no_depth_test = true
+	sprite.fixed_size = true
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	sprite.transparent = true
+	sprite.shaded = false
+	sprite.visible = false
+	return sprite
+
+
+## Which ink the marks are drawn in.
+##
+## Told, not derived. `UIPalette` is a table rather than a state -- every call
+## site passes the mode in -- so a billboard asking it "which theme is on" would
+## be inventing a second answer to a question the actor is already handed by
+## `apply_ui_palette`. Defaulted to Mikasa because that is what the match centre
+## opens in.
+var light_mode: bool = false
+
+
+func _mark_theme_is_dark() -> bool:
+	return not light_mode

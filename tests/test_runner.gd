@@ -194,6 +194,7 @@ func _initialize() -> void:
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_ambient_cogniticons_are_dimmer_not_smaller()
+	_test_blade_cogniticons_fill_from_the_bottom()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
 	_test_a_blocker_has_five_states()
@@ -14581,6 +14582,77 @@ func _test_worksheet_behaviour() -> void:
 			"the %s page has a vocabulary to instruct from" % for_phase,
 		)
 	sheet.free()
+
+
+## The blade family, drawn rather than typed.
+##
+## `COGNITICONS.md` and its visual review specify drawn marks; what shipped was
+## nine Unicode characters standing in for them. The stand-ins map one-to-one
+## onto the designs, which is why three separate probes reported the vocabulary
+## as built -- it was built as a placeholder, and a glyph is a glyph to anything
+## that only reads `text`.
+##
+## The blade is the family that cannot be said with a character at all, because
+## it **fills**. That is what is gated here.
+func _test_blade_cogniticons_fill_from_the_bottom() -> void:
+	## Every blade the renderer will ask for, plus the interior it fills with.
+	var textures: Dictionary = CogniticonMarks.blade_textures(true)
+	for intent in CogniticonMarks.BLADE_INTENTS:
+		_check(
+			textures.get(intent, null) is Texture2D,
+			"the %s blade is drawn" % intent,
+		)
+	_check(textures.get("fill", null) is Texture2D, "and the fill is drawn")
+
+	## **Bottom-anchored, which is the whole mechanic.** A fill that grows from
+	## the middle is a progress bar; one that grows from the guard upward is a
+	## blade being drawn. Stated as the invariant rather than as a coordinate:
+	## wherever the region's top goes, its bottom edge lands in the same place.
+	##
+	## This gate exists because the first offset was written by intuition with
+	## the sign inverted -- the fill descended as progress rose, which looked
+	## entirely plausible in code and obviously wrong in a render.
+	var bottoms: Array[float] = []
+	var previous_height := -1.0
+	for progress in [0.0, 0.25, 0.5, 0.75, 1.0]:
+		var region: Rect2 = CogniticonMarks.fill_region(progress)
+		var offset: Vector2 = CogniticonMarks.fill_offset(region)
+		## Where the drawn region's lower edge sits, in the sprite's own space.
+		bottoms.append(offset.y - region.size.y * 0.5)
+		_check(
+			region.size.y >= previous_height,
+			"the fill at %.2f is no shorter than the step below it" % progress,
+		)
+		previous_height = region.size.y
+	var anchored := true
+	for bottom in bottoms:
+		if absf(bottom - bottoms[0]) > 0.001:
+			anchored = false
+	_check(anchored, "and every fill level shares one bottom edge")
+
+	## Both ends, because a fill tuned only in the middle gets the two states a
+	## viewer sees most often wrong.
+	_check(
+		CogniticonMarks.fill_region(0.0).size.y <= 0.001,
+		"an unstarted approach draws no fill at all",
+	)
+	var full: Rect2 = CogniticonMarks.fill_region(1.0)
+	var blade := CogniticonMarks.BLADE_RECT
+	_check(
+		full.position.y <= blade.position.y * float(CogniticonMarks.SCALE)
+			and full.end.y >= blade.end.y * float(CogniticonMarks.SCALE),
+		"and a completed one covers the blade end to end",
+	)
+
+	## The marks carry ink. A texture generated from a path list that silently
+	## produced nothing would pass every check above.
+	var image: Image = (textures["approaching"] as Texture2D).get_image()
+	var inked := 0
+	for y in range(0, image.get_height(), 4):
+		for x in range(0, image.get_width(), 4):
+			if image.get_pixel(x, y).a > 0.5:
+				inked += 1
+	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
 
 
 ## The two-tier cogniticon rule, stated so it cannot drift back.

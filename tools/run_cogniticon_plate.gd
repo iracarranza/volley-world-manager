@@ -45,7 +45,7 @@ const SUBJECTS: Array[Dictionary] = [
 	{"intent": &"watching", "at": Vector2(0.78, 0.20), "home": false,
 		"name": "off the play"},
 	{"intent": &"approaching", "at": Vector2(0.24, 0.62), "home": true,
-		"name": "hitter"},
+		"name": "hitter", "progress": 0.62},
 	{"intent": &"preparing_attack", "at": Vector2(0.74, 0.60), "home": true,
 		"name": "opposite"},
 	{"intent": &"setting", "at": Vector2(0.52, 0.58), "home": true,
@@ -105,6 +105,10 @@ func _shoot(as_old: bool, plate_name: String) -> void:
 		## rather than state badges.
 		var cue = _cue(next_id, -1)
 		cue.intent = subject["intent"]
+		## The blade only says what it is for when it is partly full, so the
+		## approaching hitter carries a real progress rather than zero. Taken
+		## from `run_intent_progress_probe.gd`'s measured mean for the family.
+		cue.progress = float(subject.get("progress", 0.0))
 		actor.show_cognition_cue(cue, 0.5)
 		if as_old:
 			_wind_back(actor.cognition_billboard, str(subject["intent"]))
