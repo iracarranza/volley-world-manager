@@ -8,6 +8,41 @@ Order within each section is rough implementation order, not priority.
 
 ---
 
+## 0. Defensive attacking is dominant, and the check that guarded it was noise
+
+**Measured, and the measurement is the entry.** `RallyReadinessReport
+.identity_calibration` over 144 career seeds, on a tree with no speed changes in
+it:
+
+| identity | attack error rate | kill rate |
+|---|---|---|
+| Physical | 0.1755 | 0.5269 |
+| Defensive | **0.1356** | **0.5347** |
+
+A defensive attack takes fewer errors *and* produces more kills. There is no
+trade, so there is no reason to attack physically -- which is a dominant
+strategy sitting in the middle of the offence.
+
+`_test_team_identity_directional_outcomes` asserted the trade and passed anyway,
+because it samples 48 career seeds and the property is smaller than the noise at
+that size. It flipped once before at 12 samples; the fix then was to raise the
+sample to 48, which restored the pass without restoring the property. Raising it
+further does not help -- at 144 it fails honestly, which is how this was found.
+The check now asserts only the error half, which is real and widens with
+sampling.
+
+What it needs is a reason for a hard swing to be worth its error rate. The
+likeliest shape: a defensive attack should concede more *transition* -- a
+controlled ball that is dug cleanly hands the rally back in good order, where a
+driven ball that is dug is dug badly. Today the dig quality a swing concedes
+does not depend on the swing's intent, so safety costs nothing at all.
+
+**Do not fix this by retuning `CONTROL_INTENT`.** The intents were already
+rebalanced once, when a flat ceiling raise turned out to hand its whole benefit
+to the safe swing; the constants are now cut so that only a drive gained pace.
+The missing term is a consequence of intent on what the defence gets back, not
+another speed number.
+
 ## 1. Body types — secondary layer done, primary layer missing
 
 Branch: `claude/body-types-wip`, rebased onto `main`, **645 checks green**.

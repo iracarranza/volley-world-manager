@@ -117,9 +117,28 @@ const MIN_POWER_FRACTION: float = 0.25
 ## What each kind of shot is meant to be, as a share of the hitter's ceiling.
 ## These are the intent anchors -- a drive is a drive whether it is aimed four
 ## metres in or nine, which is what keeps power independent of the course.
+## **Rebalanced against the ceiling raise so only the hard swing got harder.**
+##
+## The raise above multiplies every intent, and that is not identity-neutral. A
+## drive that goes 20% faster also goes out more often, so a physical attack
+## trades kills for errors; a control ball 20% faster simply moves into the band
+## that is too quick to dig and still lands in. Measured over 144 career seeds
+## after the flat raise, a defensive attack came out with *both* a lower error
+## rate (0.1401 against 0.1734) and a higher kill rate (0.5640 against 0.5548) --
+## strictly dominant, and the loss of the trade
+## `_test_team_identity_directional_outcomes` exists to hold.
+##
+## Tripling the sample from 48 confirmed it rather than settling it: the gap grew
+## from 0.0056 to 0.0092, which is a property that has gone rather than a
+## measurement that was too coarse.
+##
+## So control and off-speed are divided by the same 1.2 the ceiling gained, which
+## leaves their struck speed where it was and gives the whole raise to the drive.
+## That is also what was actually asked for -- a spike reading as a joust rather
+## than a strike is a complaint about the hard swing, not about a roll shot.
 const DRIVE_INTENT: float = 0.90
-const CONTROL_INTENT: float = 0.66
-const OFF_SPEED_INTENT: float = 0.36
+const CONTROL_INTENT: float = 0.55
+const OFF_SPEED_INTENT: float = 0.30
 
 
 ## What this hitter can produce on this swing.
