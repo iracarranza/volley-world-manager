@@ -691,9 +691,16 @@ func _load_defender_assignment(player_id: int) -> void:
 		return
 	selected_defender_label.visible = false
 	selected_zone_label.visible = false
-	defender_popup_title.text = [
+	## An `OptionButton` with nothing selected reports -1, and indexing a four
+	## element array with -1 is an out-of-bounds read rather than a wrap. Nothing
+	## guarantees a selection here: the popup opens from a click on the court,
+	## which does not go through the section control at all.
+	const SECTION_TITLES := [
 		"Serve Receive", "Blocking", "Floor Defense", "Attack Coverage & Transition",
-	][defense_section_option.selected]
+	]
+	defender_popup_title.text = SECTION_TITLES[
+		clampi(defense_section_option.selected, 0, SECTION_TITLES.size() - 1)
+	]
 	var slot_number := GameManager.current_lineup().slot_for_player(player_id)
 	var front_row := CourtConstants.is_front_row_slot(slot_number)
 	var blocking_phase := defense_section_option.selected == 1
@@ -1072,11 +1079,23 @@ func _open_player_instructions(player_id: int, marker_screen_position: Vector2) 
 	var popup_position := marker_local + Vector2(28.0, -popup_size.y * 0.52)
 	if popup_position.x + popup_size.x > tactical_court.size.x - 8.0:
 		popup_position.x = marker_local.x - popup_size.x - 28.0
+	## `clampf` with its bounds the wrong way round returns the maximum, and the
+	## bounds go the wrong way round whenever the panel is wider or taller than
+	## the court view it is being placed inside -- which is a small window, a
+	## long assignment name, or a court that has not been laid out yet and still
+	## reports a size of zero. The panel then lands at a negative coordinate,
+	## off the top-left of its own parent.
+	##
+	## Not confirmed as the cause of the reported planner freeze, and said here
+	## rather than implied: this is a defect on the same code path that is
+	## provable from the code, which is not the same as being the one somebody
+	## saw. Clamping the *limit* first means the panel is merely flush against
+	## an edge it cannot fit inside.
 	popup_position.x = clampf(
-		popup_position.x, 8.0, tactical_court.size.x - popup_size.x - 8.0
+		popup_position.x, 8.0, maxf(tactical_court.size.x - popup_size.x - 8.0, 8.0)
 	)
 	popup_position.y = clampf(
-		popup_position.y, 8.0, tactical_court.size.y - popup_size.y - 8.0
+		popup_position.y, 8.0, maxf(tactical_court.size.y - popup_size.y - 8.0, 8.0)
 	)
 	defender_popup.position = Vector2i(popup_position)
 	defender_popup.size = Vector2i(popup_size)

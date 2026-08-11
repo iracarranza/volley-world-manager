@@ -218,6 +218,7 @@ func _initialize() -> void:
 	_test_ball_flight_from_contact_height()
 	_test_block_shadow_falls_behind_the_block()
 	_test_an_opponent_has_a_region()
+	_test_short_legs_are_walked_in_whole_steps()
 	_test_spike_biomechanics_sequence()
 	_test_every_rally_publishes_a_resting_posture()
 	_test_recovery_bands_are_ordered()
@@ -12899,6 +12900,62 @@ func _test_scouting_crosses_the_net_in_both_directions() -> void:
 ## which is exactly why the attack pose could sit for months drawing a hitter
 ## cocked behind their own head at the frame of contact. `SpikeBiomechanics` is a
 ## pure function of phase precisely so that this test can exist.
+## A short walk is drawn as steps, not as a slide.
+##
+## `GaitBiomechanics` fades its leg motion out below a quarter of a metre per
+## second, and playback paces every leg to fill its whole flight, so a voli with
+## half a metre to cover was translated smoothly at a speed no gait animates.
+## Reported as volis gliding. The quantiser is pure, so the shape it produces can
+## be checked here rather than by watching.
+func _test_short_legs_are_walked_in_whole_steps() -> void:
+	const STRIDE := 0.85
+	## A long leg is a run and is left continuous -- stuttering a sprint is worse
+	## than sliding a step.
+	var long_metres := MatchCourt3D.STEP_QUANTISE_MAX_METERS + 1.0
+	_check(
+		is_equal_approx(
+			MatchCourt3D.step_quantised_fraction(0.5, long_metres, STRIDE), 0.5
+		),
+		"a leg too long to walk is not quantised",
+	)
+	## A short one holds still for part of every step. Sampled across the leg,
+	## some interval must show no progress at all -- that pause is the whole
+	## point, and a linear ramp would have none.
+	var held := 0
+	var monotone := true
+	var previous := MatchCourt3D.step_quantised_fraction(0.0, 1.7, STRIDE)
+	for step in range(1, 101):
+		var here := MatchCourt3D.step_quantised_fraction(
+			float(step) / 100.0, 1.7, STRIDE
+		)
+		if absf(here - previous) < 0.0005:
+			held += 1
+		if here < previous - 0.0001:
+			monotone = false
+		previous = here
+	_check(monotone, "a quantised leg never walks backwards")
+	_check(held >= 20, "a walked leg stands still between steps (%d of 100)" % held)
+	## And it still arrives. A duty cycle that stopped short would leave every
+	## walking voli a step behind wherever they were sent.
+	_check(
+		is_equal_approx(MatchCourt3D.step_quantised_fraction(1.0, 1.7, STRIDE), 1.0),
+		"a walked leg finishes where it was sent",
+	)
+	## And it is a property of the body, not a constant: the same 2.4 m covered
+	## by a long stride and a short one is not the same number of steps, so the
+	## two do not sit at the same place halfway through.
+	## Sampled at 0.3 rather than 0.5 on purpose: a half is a step boundary for
+	## both two steps and four, so the one fraction where every stride length
+	## agrees is exactly the one this check must not use.
+	_check(
+		not is_equal_approx(
+			MatchCourt3D.step_quantised_fraction(0.3, 2.4, 1.15),
+			MatchCourt3D.step_quantised_fraction(0.3, 2.4, 0.62),
+		),
+		"stride length changes how a walk is stepped",
+	)
+
+
 func _test_spike_biomechanics_sequence() -> void:
 	const RIGHT := 1.0
 	var contact: Dictionary = SpikeBiomechanics.resolve(0.0, RIGHT)

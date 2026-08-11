@@ -191,6 +191,51 @@ func _plan_fraction(
 	return clampf(progress * window_seconds / leg_seconds, 0.0, 1.0)
 
 
+## A body does not travel at a third of a metre per second. It steps.
+##
+## `GaitBiomechanics` fades its whole leg motion out below `IDLE_SPEED_MPS`, and
+## playback paces every leg to fill at least its entire flight -- so a voli with
+## half a metre to cover in a one-second window is drawn translating at 0.4 m/s
+## with almost no legs under them. That is the reported gliding, and it is not a
+## gait problem: no gait can help a body that is being moved smoothly at a speed
+## no gait runs at.
+##
+## The fix is to stop asking for that speed. A short leg is quantised into whole
+## steps: the body moves over the first part of each step and holds for the rest,
+## so half a metre becomes one visible step and a pause rather than a continuous
+## creep. `stride_cycle` advances with distance travelled, so the legs pulse with
+## it for free.
+##
+## Long legs are left alone. Above `STEP_QUANTISE_MAX_METERS` a body really is in
+## continuous motion and quantising a run would draw it stuttering.
+##
+## Static and pure so the suite can check the shape without a court to run it in.
+const STEP_QUANTISE_MAX_METERS: float = 2.6
+## What share of each step is spent moving. The remainder is the body arriving
+## and standing on it, which is the half that makes a step read as a step.
+const STEP_DUTY: float = 0.55
+const MAX_QUANTISED_STEPS: int = 4
+
+
+static func step_quantised_fraction(
+	fraction: float, leg_metres: float, stride_metres: float
+) -> float:
+	var t := clampf(fraction, 0.0, 1.0)
+	if leg_metres <= 0.0001 or leg_metres > STEP_QUANTISE_MAX_METERS:
+		return t
+	var steps := clampi(
+		roundi(leg_metres / maxf(stride_metres, 0.35)), 1, MAX_QUANTISED_STEPS
+	)
+	var scaled := t * float(steps)
+	var index := floorf(scaled)
+	## The final step must land exactly on the target rather than a duty-cycle
+	## short of it, or every quantised leg stops before it arrives.
+	if index >= float(steps):
+		return 1.0
+	var within := scaled - index
+	return (index + smoothstep(0.0, STEP_DUTY, within)) / float(steps)
+
+
 ## Where a leg is at a given fraction of itself, corner included.
 func _plan_sample(movement: Dictionary, fraction: float, fallback: Vector2) -> Vector2:
 	var start := Vector2(movement.get("start", fallback))
@@ -233,8 +278,27 @@ func apply_movement_plan(
 		var movement: Dictionary = plan[raw_player_id]
 		var fallback: Vector2 = live_positions.get(player_id, Vector2.ZERO)
 		set_player_position(player_id, _plan_sample(
-			movement, _plan_fraction(movement, progress, window_seconds), fallback
+			movement,
+			_stepped(player_id, movement, _plan_fraction(
+				movement, progress, window_seconds
+			)),
+			fallback,
 		))
+
+
+## The leg's own fraction, quantised into whole steps when it is short enough to
+## be walked rather than run. Stride length comes off the body, which already
+## carries it -- a 1.72 m libero takes a shorter step than a 2.06 m middle and
+## the difference is already modelled.
+func _stepped(player_id: int, movement: Dictionary, fraction: float) -> float:
+	var actor := player_actors.get(player_id) as PlayerActor3D
+	if actor == null:
+		return fraction
+	var start := Vector2(movement.get("start", Vector2.ZERO))
+	var target := Vector2(movement.get("target", start))
+	var delta := target - start
+	var metres := Vector2(delta.x * court_width, delta.y * court_length).length()
+	return step_quantised_fraction(fraction, metres, actor.stride_length_m)
 
 
 ## Settle every leg where the window actually left it.
