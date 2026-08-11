@@ -196,6 +196,7 @@ func _initialize() -> void:
 	_test_body_facing_rule()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
+	_test_a_ball_taken_at_full_stretch_is_drawn_reaching()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
@@ -14776,6 +14777,39 @@ func _test_cognition_cues() -> void:
 ## directly. What cannot be tested here is *call order* -- that the ball pass
 ## runs before the movement plan -- because that needs frames and this runner has
 ## none. `tools/measure_body_facing.gd` covers it and has to be run by hand.
+## The reach pose belongs to contacts that were made, not to ones that were not.
+##
+## The resolver calls a contact `reaching` when its reach margin is negative --
+## a ball outside the range, which is a ball nobody got. Measured over 447 floor
+## contacts that is exactly 26.0% of them, matching the share of margins below
+## zero to a tenth. Full stretch is the other side of that line, and playback
+## draws it without moving the band the resolver scores against.
+func _test_a_ball_taken_at_full_stretch_is_drawn_reaching() -> void:
+	_check(
+		MatchScreen.is_full_stretch("moving", true, 0.2),
+		"a contact taken with 20 cm of margin left is drawn reaching",
+	)
+	_check(
+		not MatchScreen.is_full_stretch("moving", true, 1.4),
+		"a contact with a metre and a half to spare is not a reach",
+	)
+
+	## Only ever an upgrade: what the resolver already called a reach stays one,
+	## whatever the margin says.
+	_check(
+		MatchScreen.is_full_stretch("reaching", true, -0.9),
+		"a contact the resolver called reaching keeps it",
+	)
+
+	## And absence is not a small number. 17 of 464 contacts publish no margin,
+	## and `float({}.get(k, 0.0))` would read every one of them as a perfect
+	## 0.0 -- inventing the most extreme reach in the band out of nothing.
+	_check(
+		not MatchScreen.is_full_stretch("planted", false, 0.0),
+		"a contact with no published margin is left alone, not read as zero",
+	)
+
+
 ## A drawn leg has two parts and only one of them is stillness.
 ##
 ## A flight is drawn for its physics duration; an event's window is the gap

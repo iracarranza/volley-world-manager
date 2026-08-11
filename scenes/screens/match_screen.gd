@@ -518,7 +518,57 @@ func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
 	var recorded := str(event.metadata.get("contact_posture", "planted"))
+	## **A ball taken at the edge of the range is a reach.**
+	##
+	## The resolver reaches for `reaching` when `reach_margin_meters` is
+	## *negative* -- a ball outside the defender's range, which is a ball they
+	## did not get. Measured over 300 rallies and 447 floor contacts, that fires
+	## on exactly the 26.0% of contacts whose margin is below zero, and the two
+	## figures matching to a tenth is the tell: the pose is reserved for
+	## contacts that by definition failed.
+	##
+	## A contact made at *full stretch* is the pose's real subject and it lives
+	## just the other side of that line: 33 of 447 contacts, 7.4%, land between
+	## 0 and 0.5 m of margin. Those are the ones drawn shuffling into a square
+	## platform when a body would have gone and got it -- which is the reported
+	## defect, a defender adjusting with small steps where a reach belongs.
+	##
+	## Widened here rather than in the classifier on purpose. `posture` is an
+	## input to `_contact_recovery_state`, so moving the resolver's band would
+	## move rally outcomes to fix a drawing. This is the same second-opinion
+	## seam `posture_for` already occupies, and it changes nothing but the pose.
+	if _within_stretch(event, recorded):
+		return "reaching"
 	return PlatformAim.posture_for(_platform_aim(event), recorded)
+
+
+## How much margin still counts as being at full stretch, in metres.
+const REACH_STRETCH_METERS: float = 0.5
+
+
+## Whether this contact was taken at the edge of the range.
+##
+## Only upgrades. A contact the resolver already called `reaching` keeps it, and
+## one with no published margin is left to the geometric opinion -- 17 of 464
+## contacts carry no margin and guessing on them would be inventing a pose from
+## an absence.
+func _within_stretch(event: RallyEvent, recorded: String) -> bool:
+	return is_full_stretch(
+		recorded,
+		event.metadata.has("reach_margin_meters"),
+		float(event.metadata.get("reach_margin_meters", 0.0)),
+	)
+
+
+## Static and pure so the suite can hold the band without a court to run it in.
+static func is_full_stretch(
+	recorded: String, has_margin: bool, margin_meters: float
+) -> bool:
+	if recorded == "reaching":
+		return true
+	if not has_margin:
+		return false
+	return margin_meters >= 0.0 and margin_meters < REACH_STRETCH_METERS
 
 
 ## Presentation inputs carried by the resolved event. The actor never looks up

@@ -951,6 +951,8 @@ var last_dig_speed: float = 0.0
 ## reported the default and the census read digs as 100% planted -- a measurement
 ## of the stamp, not of the engine.
 var last_dig_posture: String = "planted"
+## And what that posture was read off, for the same reason.
+var last_dig_reach_margin: float = 0.0
 ## What the rally's recoveries cost in condition, to be charged by the caller.
 var recovery_fatigue_cost: Dictionary = {}
 ## What each player *did*, in condition, this rally.
@@ -1509,6 +1511,7 @@ func resolve(
 			),
 			"platform_feasibility": reception_pass.platform_feasibility,
 			"contact_posture": reception_pass.contact_posture,
+			"reach_margin_meters": reception_pass.get("reach_margin_meters", 0.0),
 			"contact_recovery": reception_pass.contact_recovery,
 			"contact_control": reception_pass.get("contact_control", 0.5),
 			"movement_alignment": reception_pass.get("movement_alignment", 0.5),
@@ -3236,6 +3239,7 @@ func _resolve_home_serve(
 			),
 			"platform_feasibility": opponent_pass.platform_feasibility,
 			"contact_posture": opponent_pass.contact_posture,
+			"reach_margin_meters": opponent_pass.get("reach_margin_meters", 0.0),
 			"contact_recovery": opponent_pass.contact_recovery,
 			"contact_control": opponent_pass.get("contact_control", 0.5),
 			"movement_alignment": opponent_pass.get("movement_alignment", 0.5),
@@ -4652,6 +4656,7 @@ func _resolve_opponent_transition(
 			"incoming_force": last_dig_force,
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
+			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": home_dig_time})
 	_note_recovery(defender, home_dig_recovery, home_dig_time)
@@ -5492,6 +5497,7 @@ func _resolve_home_continuation(
 			"incoming_force": last_dig_force,
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
+			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": cont_dig_time})
 	_note_recovery(opponent_defender, cont_dig_recovery, cont_dig_time)
@@ -7881,6 +7887,16 @@ func _reception_pass_result(
 		"body_alignment": body_alignment,
 		"platform_feasibility": platform_feasibility,
 		"contact_posture": posture,
+		## **The term the posture was decided by, carried out with it.**
+		##
+		## Measured over 300 rallies: 50 of 464 floor contacts published a reach
+		## margin and 414 did not, and the 50 were all one path -- the opponent's
+		## defence. So the rig's `reaching` pose looked unreachable when the
+		## classifier was fine; what was missing was the input, on nine contacts
+		## in ten. Where the margin *is* present, `reaching` fires on 62% of
+		## contacts. A pose is not dead because its threshold is wrong when the
+		## number it reads never arrives.
+		"reach_margin_meters": reach_margin,
 		## Control, not execution. A reception's `execution` averages around two
 		## thirds and a dig's quality around a third, so handing the shared bands
 		## each side's raw figure made the states unreachable on one path and
@@ -8266,6 +8282,7 @@ func _dig_recovery(
 	last_dig_force = _incoming_ball_force(trajectory, attack_quality)
 	last_dig_speed = _incoming_ball_speed(trajectory)
 	last_dig_posture = posture
+	last_dig_reach_margin = float(dig_terms.get("reach_margin_meters", 0.0))
 	return _contact_recovery_state(
 		defender, posture, execution, last_dig_force, "dig"
 	)
