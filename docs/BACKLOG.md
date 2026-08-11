@@ -124,7 +124,24 @@ Ordered roughly by how much each one changes what a viewer believes.
     the court view, and a section title indexed by an `OptionButton` selection of
     -1 -- and neither is confirmed as the cause.
 
-11. **A defender takes two or three sets of small steps into a dig**, adjusting
+11. **Done, and it was two faults.** ~~A defender takes two or three sets of
+    small steps into a dig~~ -- the count was windows, not steps, and entry 12
+    removed the windows. The pose half is landed too: `reach_margin_meters`
+    reached event metadata on one path only, 50 of 464 floor contacts, so the
+    `reaching` pose looked unreachable when its *input* was missing on nine
+    contacts in ten. Coverage is 447 of 464 now. With the number visible the
+    real fault showed: `reaching` fires on a **negative** margin, a ball outside
+    the range, which is a ball nobody got -- 26.0% of contacts, matching the
+    share of margins below zero to a tenth. Full stretch, 0 to 0.5 m and 7.4% of
+    contacts, is drawn reaching now, widened in playback rather than in the
+    classifier because `posture` feeds `_contact_recovery_state` and moving the
+    resolver's band would move outcomes to fix a drawing.
+
+    **Still open from this:** the turn, entry 13, which was never about steps.
+
+    The original entry, for the record:
+
+    A defender takes two or three sets of small steps into a dig, adjusting
     into the platform pose, and then plants. Two things are wrong with that and
     one of them is upstream of the other.
 
@@ -150,7 +167,20 @@ Ordered roughly by how much each one changes what a viewer believes.
     The far cause is why there is *time* for two or three adjustments at all. See
     the next entry: the defender is not moving quickly, the window is too long.
 
-12. **The ball freezes on the floor**, and it is the same defect as the frozen
+12. **Done.** ~~The ball freezes on the floor~~ -- measured at 58.8 s over 200
+    rallies, 6.0% of playback, and *every second of it* was a BLOCK the ball
+    flew past. One culprit, not a distribution. It was a double-count: the
+    attack's flight is drawn for its physics duration and already carries the
+    ball to its landing, and the failed block's window then redrew the same
+    interval with the ball parked there. A window is flight then aftermath and
+    only the second part is the event's to draw. After: 0.0 s -- not reduced,
+    gone, because the overlap was total. The trap was the defence's approach,
+    which was being drawn in the very window now charged to zero; the flight
+    aims its movement plan at the first contact that actually played the ball.
+
+    The original entry:
+
+    The ball freezes on the floor, and it is the same defect as the frozen
     window from the top of this list wearing different clothes. A drawn leg's
     duration is the interval between two events, but the ball's flight to its
     landing takes whatever physics says it takes. When the flight is the shorter
