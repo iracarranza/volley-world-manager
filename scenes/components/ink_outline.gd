@@ -154,8 +154,26 @@ const STITCH_ALTERNATE_OFFSET: float = 0.55
 ## cap off is the most recognisable thing about one.
 const MARKER_STROKE_WIDTH: float = 7.4
 const MARKER_CORNER_WIDTH: float = 8.0
-const MARKER_NIB_MIN_RATIO: float = 0.88
-const MARKER_WANDER_PIXELS: float = 0.62
+## **Recovered from the whiteboard that already existed.**
+##
+## `scenes/components/whiteboard.gd` was a real `UIWhiteboard` until commit
+## 4ddb38e renamed it to `worksheet.gd` and turned the medium into graph paper.
+## `MEDIUM_BOARD` was then rebuilt from the design doc without anybody looking
+## at what had been written before -- and the numbers disagree in the one place
+## that decides whether a marker reads as a marker.
+##
+## The original held a chisel: `MARKER_MIN_RATIO` 0.34 at a tip angle of 31
+## degrees, so a stroke travelling along the nib was a third the width of one
+## crossing it. This was authored at 0.88 with a comment claiming a chisel --
+## near-uniform width, which is a ballpoint. The comment described the intent
+## and the constant delivered the opposite, which is the §0 failure in my own
+## work from the same session that wrote it.
+##
+## Back to the recovered figure. The wander follows for the same reason: 1.15 px
+## against the 0.62 authored here, because a marker on melamine skates and a pen
+## on paper does not.
+const MARKER_NIB_MIN_RATIO: float = 0.34
+const MARKER_WANDER_PIXELS: float = 1.15
 const MARKER_SLOW_SHARE: float = 1.85
 const MARKER_FAST_SHARE: float = 0.22
 const MARKER_COVERAGE_DEPTH: float = 0.74

@@ -96,3 +96,37 @@ decided by the above and should not be re-litigated when they are:
   caption characterising a team is not.
 - The post-match report is the same surface after the match rather than a new
   object. It is the one place a whiteboard is allowed to be full.
+
+## The whiteboard already existed, and it is recoverable
+
+`scenes/components/whiteboard.gd` was a real class -- `UIWhiteboard` -- until
+commit `4ddb38e` ("The workspace is graph paper worked in pencil, not a
+whiteboard") renamed it to `worksheet.gd` and converted the training medium to
+squared paper. That conversion was right for the *clipboard*: a whiteboard does
+not get clipped to one, so the two are alternatives rather than a stack.
+
+But it took the whiteboard's drawing with it, and when `MEDIUM_BOARD` was built
+later it was rebuilt from this document rather than recovered from the code that
+had already solved it. The two disagreed:
+
+| | recovered original | rebuilt | which is right |
+|---|---|---|---|
+| nib min ratio | 0.34 | 0.88 | the original -- 0.88 is a ballpoint |
+| tip angle | 31 deg | *absent* | the original |
+| wander | 1.15 px | 0.62 px | the original; marker skates on melamine |
+| stroke width | 7.0 | 7.4 | either |
+| alpha | 0.72 | -- | the original, and unrecovered |
+
+Ratio and wander are restored. **Still unrecovered:** the chisel *angle* -- how
+the tip is held, which is what makes a stroke's width depend on its direction
+rather than merely vary -- and `MARKER_ALPHA`, a marker laid over melamine being
+translucent in a way a pen on paper is not. Both are in
+`git show 4ddb38e^:scenes/components/whiteboard.gd`.
+
+Also in there and worth reading before the lock-in screen and the match centre
+are restyled: the **wipe**. The original's third principle was that a board
+remembers -- a wipe never takes everything, so the previous layout stays as a
+faint smear under the new one, and a phase change squeegees rather than cuts.
+That is the property `CLAUDE.md` lists as "a wiped smear", it is the one that
+makes the medium feel like a board rather than a dark page, and nothing in
+`MEDIUM_BOARD` implements it.
