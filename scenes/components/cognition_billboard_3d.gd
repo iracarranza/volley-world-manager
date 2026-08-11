@@ -61,6 +61,23 @@ const INTENT_GLYPHS := {
 const AMBIENT_PIXEL_SIZE: float = 0.00010
 const AMBIENT_ALPHA: float = 0.55
 
+## One number for how large a cogniticon is, so "too small" is one edit rather
+## than four.
+##
+## The badge was sized against a body -- roughly a head on screen -- which is the
+## right *relationship* and turned out to be the wrong *number* at the camera
+## distances the match centre actually uses. A head is a fine size for a mark you
+## are looking for and too small for one you are supposed to read at a glance
+## across twelve volis, which is what these are for.
+##
+## Every size below is a multiple of this, and the two-tier rule survives the
+## scaling: ambient stays well under the state badge, because both move together.
+const COGNITICON_SCALE: float = 1.45
+
+const BADGE_PIXEL_SIZE: float = 0.00017
+const BADGE_PIXEL_SIZE_QUIET: float = 0.00014
+const BADGE_PIXEL_SIZE_LOUD: float = 0.00022
+
 const HEIGHT_ABOVE_HEAD_METERS: float = 0.30
 
 
@@ -81,7 +98,7 @@ func _init() -> void:
 	## A badge is a note about a body, so it wants to be a fraction of that body
 	## on screen -- roughly a head. That is about a tenth of what was here.
 	fixed_size = true
-	pixel_size = 0.00017
+	pixel_size = BADGE_PIXEL_SIZE * COGNITICON_SCALE
 	font_size = 96
 	outline_size = 10
 	outline_modulate = Color(0.02, 0.02, 0.04, 0.85)
@@ -121,7 +138,7 @@ func show_cue(
 		var ambient_color := Color(reading.color)
 		ambient_color.a = AMBIENT_ALPHA * strength
 		modulate = ambient_color
-		pixel_size = AMBIENT_PIXEL_SIZE
+		pixel_size = AMBIENT_PIXEL_SIZE * COGNITICON_SCALE
 		position = Vector3(0.0, head_height_meters, 0.0)
 		visible = true
 		return
@@ -135,7 +152,9 @@ func show_cue(
 	modulate = Color(reading.color)
 	## Emphasis still reads as size, across a range that stays a badge at both
 	## ends rather than becoming scenery at one of them.
-	pixel_size = lerpf(0.00014, 0.00022, float(reading.emphasis))
+	pixel_size = lerpf(
+		BADGE_PIXEL_SIZE_QUIET, BADGE_PIXEL_SIZE_LOUD, float(reading.emphasis)
+	) * COGNITICON_SCALE
 	position = Vector3(0.0, head_height_meters + HEIGHT_ABOVE_HEAD_METERS, 0.0)
 	visible = true
 
