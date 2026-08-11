@@ -913,6 +913,7 @@ func _build_movement_plan(
 	## If serve-receive movement turns out to matter, the fix is for the resolver
 	## to publish it, not for playback to make it up.
 	_apply_base_positions(plan, event, next_contact)
+	_apply_cheat_steps(plan, action_target)
 	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
 	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
 	## The player who just made this contact goes where their own event said they
@@ -1297,6 +1298,51 @@ func _apply_base_positions(
 		if _court_metres(here, Vector2(resting[raw_player_id])) < BASE_RETURN_DEADBAND_METERS:
 			continue
 		_set_plan_target(plan, player_id, Vector2(resting[raw_player_id]))
+
+
+## How far a voli with no assignment will drift toward the play, in metres.
+##
+## One step. The bound is the whole point of the entry.
+const CHEAT_STEP_METERS: float = 0.55
+
+
+## A voli with no published target cheats a step; they do not hold rigid.
+##
+## Reported as two back-row volis never moving at all. The comment above
+## `_apply_base_positions` explains why they were frozen -- playback used to
+## lerp every player toward the action by an invented fraction, twelve volis
+## edged toward every contact for a whole rally, and deleting that was right.
+##
+## **This is not that coming back, and the difference is the cap.** That drift
+## was unbounded, unnamed and applied to everyone including players the resolver
+## had explicitly placed. This moves only players the resolver said nothing
+## about, never past `CHEAT_STEP_METERS`, and never at all once they are already
+## closer than that. A voli reading the play leans a step toward it; they do not
+## leave their zone, which is exactly the distinction the report drew.
+func _apply_cheat_steps(plan: Dictionary, action_target: Vector2) -> void:
+	for player_id in match_court_3d.live_positions:
+		if plan.has(player_id):
+			continue
+		var start := Vector2(match_court_3d.live_positions[player_id])
+		var step := cheat_step(start, action_target)
+		if step == start:
+			continue
+		_set_plan_target(plan, int(player_id), step)
+
+
+## One step toward the action, in normalised court coordinates.
+##
+## Static and pure so the suite can hold the cap without a court to run it in.
+static func cheat_step(start: Vector2, action_target: Vector2) -> Vector2:
+	var across := (action_target.x - start.x) * CourtConstants.COURT_WIDTH_METERS
+	var along := (action_target.y - start.y) * CourtConstants.COURT_LENGTH_METERS
+	var distance := sqrt(across * across + along * along)
+	## Already there. Nothing to lean toward, and a voli standing on the play
+	## does not shuffle on the spot.
+	if distance <= CHEAT_STEP_METERS:
+		return start
+	var share := CHEAT_STEP_METERS / distance
+	return start + (action_target - start) * share
 
 
 func _apply_explicit_targets(plan: Dictionary, targets: Dictionary) -> void:

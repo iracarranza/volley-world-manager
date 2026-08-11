@@ -512,7 +512,23 @@ static func should_open_up(
 	travel_yaw: float,
 	speed_mps: float,
 	heading_offset: float,
+	## **Whether this leg is an approach.**
+	##
+	## An approach is a run at the net and a person faces where they are running.
+	## Without this the hitter kept facing the ball while travelling sideways
+	## into their own approach, `GaitBiomechanics.resolve` decomposed that
+	## heading as lateral, and the run came out as a shuffle -- reported as the
+	## right attacker sliding sideways instead of running forward.
+	##
+	## Exempt from the cone and the speed bound rather than given a wider one.
+	## Those two exist to stop a defender being spun away from a ball they are
+	## watching, which is a real concern for a defender and not a concern at all
+	## for a hitter who has already committed to a run. Lateral movement stays
+	## available everywhere else; it is simply never what an approach is.
+	is_approach: bool = false,
 ) -> bool:
+	if is_approach:
+		return true
 	var lateral_share := absf(sin(heading_offset))
 	var open_up_speed := lerpf(
 		OPEN_UP_SPEED_MPS, LATERAL_OPEN_UP_SPEED_MPS, lateral_share

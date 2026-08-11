@@ -194,6 +194,7 @@ func _initialize() -> void:
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_body_facing_rule()
+	_test_movement_knows_what_it_is_for()
 	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
@@ -7234,22 +7235,40 @@ func _test_3d_playback_contract() -> void:
 			and movement_plan.has(102),
 		"3D transitions move the next contact actor and the reacting unit together",
 	)
-	## And the other half of the same rule: a player the resolver said nothing
-	## about, who is not playing the ball, stays where they are. Twelve volis
-	## used to edge toward every contact for the whole rally -- including through
-	## serve receive, where the resolver publishes no positions at all and so had
-	## no opinion being followed.
-	var bystander := 0
+	## And the other half of the same rule, which has moved once and is stated
+	## here in its current form rather than deleted.
+	##
+	## It used to be that a player the resolver said nothing about stayed exactly
+	## where they were. That replaced an invented drift -- twelve volis edging
+	## toward every contact for a whole rally, including through serve receive
+	## where the resolver publishes no positions at all -- and the deletion was
+	## right.
+	##
+	## Frozen turned out to be the other extreme: two back-row volis were
+	## observed never moving at all across a rally. So the rule is now a **bound**
+	## rather than a prohibition. A voli with no assignment leans one step toward
+	## the play and no further, which is the difference between reading a rally
+	## and abandoning a zone. What the gate holds is the cap, because the cap is
+	## the entire reason this is not the invented drift returning.
+	var bystanders := 0
+	var over_a_step := 0
 	for raw_player_id in screen.match_court_3d.live_positions:
 		var player_id := int(raw_player_id)
 		if player_id in [101, 102, int(attack.actor_id)]:
 			continue
-		if movement_plan.has(player_id):
-			bystander += 1
+		if not movement_plan.has(player_id):
+			continue
+		bystanders += 1
+		var start := Vector2(screen.match_court_3d.live_positions[player_id])
+		var target := Vector2(movement_plan[player_id]["target"])
+		var across := (target.x - start.x) * CourtConstants.COURT_WIDTH_METERS
+		var along := (target.y - start.y) * CourtConstants.COURT_LENGTH_METERS
+		if sqrt(across * across + along * along) > MatchScreen.CHEAT_STEP_METERS + 0.001:
+			over_a_step += 1
 	_check(
-		bystander == 0,
-		"players with no published target and no ball to play stay put (%d moved)"
-			% bystander,
+		over_a_step == 0,
+		"a voli with no assignment never moves further than one step (%d did)"
+			% over_a_step,
 	)
 	_check(
 		screen._event_elevation(attack, 1) > 0.8
@@ -14984,6 +15003,54 @@ func _test_continue_opens_the_last_played_save() -> void:
 	_check(
 		str(rows[0].save_id) == "newest" and str(rows[3].save_id) == "no_timestamp",
 		"a save with no timestamp sorts last rather than first",
+	)
+
+
+## The same root, twice: movement that does not know what it is for.
+##
+## A hitter kept facing the ball while travelling into their own approach, so
+## the gait decomposed that heading as lateral and drew a shuffle. A voli with
+## no published target held position to the centimetre. One system reading
+## distance where it should read purpose.
+func _test_movement_knows_what_it_is_for() -> void:
+	## An approach opens the body onto its travel whatever the angle or the
+	## speed -- a person faces where they are running.
+	_check(
+		PlayerActor3D.should_open_up(0.0, PI * 0.5, 0.2, PI * 0.5, true),
+		"an approach turns onto its run however sideways it starts",
+	)
+	## And the defender's protections are untouched: the same leg without the
+	## approach flag still keeps its facing, which is what stops a passer being
+	## spun away from a ball they are watching.
+	_check(
+		not PlayerActor3D.should_open_up(0.0, PI, 1.4, PI, false),
+		"a slow backpedal still keeps its facing",
+	)
+
+	## A voli already on top of the play does not shuffle on the spot.
+	var here := Vector2(0.5, 0.5)
+	_check(
+		MatchScreen.cheat_step(here, Vector2(0.52, 0.51)) == here,
+		"a voli already at the action does not cheat",
+	)
+
+	## And one further off leans exactly one step, never more. This cap is the
+	## entry: the invented drift this replaces was unbounded, and the difference
+	## between leaning toward a play and abandoning a zone is the metre.
+	var far := Vector2(0.1, 0.1)
+	var stepped := MatchScreen.cheat_step(far, Vector2(0.9, 0.9))
+	var across := (stepped.x - far.x) * CourtConstants.COURT_WIDTH_METERS
+	var along := (stepped.y - far.y) * CourtConstants.COURT_LENGTH_METERS
+	var travelled := sqrt(across * across + along * along)
+	_check(
+		is_equal_approx(travelled, MatchScreen.CHEAT_STEP_METERS),
+		"a voli with no assignment leans exactly one step toward the play",
+	)
+	## Toward it, not past it -- a share of the vector, so the direction is the
+	## action's and only the length is capped.
+	_check(
+		stepped.x > far.x and stepped.y > far.y,
+		"the step goes toward the action rather than anywhere else",
 	)
 
 
