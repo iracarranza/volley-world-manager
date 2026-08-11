@@ -4366,6 +4366,23 @@ func _resolve_opponent_transition(
 	## funnel branches, which would otherwise hand the ball back to a home
 	## defender who is not going to get it.
 	if not geometric.is_empty() and bool(geometric.hitter_point):
+		## Mirrored from the home first-ball path. Our hands sent it out, so it is
+		## our touch and our chase.
+		if home_block_contacts:
+			var home_tool_intents := {}
+			var home_tool_targets := _tool_pursuit_map(
+				players, lineup, Vector2(geometric.target),
+				float(home_block_trajectory.get("duration", 0.30)),
+				[blocker_id, int(block_result.get("assist_id", -1))],
+				false, home_tool_intents,
+			)
+			var home_tool_event := result.events[-1] as RallyEvent
+			if home_tool_event != null and not home_tool_targets.is_empty():
+				home_tool_event.metadata["home_phase_targets"] = home_tool_targets
+				home_tool_event.metadata["home_phase_intents"] = home_tool_intents
+				home_tool_event.metadata["tool_pursuit_reached"] = float(
+					home_tool_intents.values()[0]["progress"]
+				)
 		return _finish(result, "opponent_kill", false, -1, {
 			"hitter": original_hitter.display_name,
 		})
@@ -5315,6 +5332,35 @@ func _resolve_home_continuation(
 			str(block_result.get("block_hands", "neutral")),
 		) if cont_block_contacts else {}})
 	if not geometric.is_empty() and bool(geometric.hitter_point):
+		## And on the continuation, where the same three outcomes end the same way.
+		## Three paths reach a hitter's point at the net and leaving one of them
+		## without a chase is how the dig asymmetry survived three passes.
+		var cont_tool_event := result.events[-1] as RallyEvent
+		if cont_block_contacts and opponent_team != null and cont_tool_event != null:
+			var cont_tool_intents := {}
+			var cont_tool_targets := _tool_pursuit_map(
+				opponent_team.on_court_players(),
+				opponent_team.current_lineup(),
+				Vector2(geometric.target),
+				## Read back off the block event this path just wrote rather than
+				## from a local: the continuation builds its deflection inline in
+				## the metadata and never names it, and re-deriving it here would
+				## be a second copy of one arc.
+				float(Dictionary(cont_tool_event.metadata.get(
+					"outgoing_trajectory", {}
+				)).get("duration", 0.30)),
+				[
+					opponent_blocker.id if opponent_blocker != null else -1,
+					assisting_blocker.id if assisting_blocker != null else -1,
+				],
+				true, cont_tool_intents,
+			)
+			if not cont_tool_targets.is_empty():
+				cont_tool_event.metadata["opponent_phase_targets"] = cont_tool_targets
+				cont_tool_event.metadata["opponent_phase_intents"] = cont_tool_intents
+				cont_tool_event.metadata["tool_pursuit_reached"] = float(
+					cont_tool_intents.values()[0]["progress"]
+				)
 		result.key_factors.append(_factor("attack_control"))
 		## The continuation always runs the fallback assignment, so this is a
 		## default-offense kill regardless of what play was called first ball --
