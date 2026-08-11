@@ -174,6 +174,31 @@ const HEAD_PITCH_LIMIT_DEGREES: float = 24.0
 ## About two turns a second at full rate. Fast enough that a defender squaring
 ## up to a ball never looks sluggish, slow enough that the turn is visible.
 const FACING_TURN_RATE: float = 12.0
+## How far the head will lead before the body comes round with it.
+##
+## Not `HEAD_YAW_LIMIT_DEGREES`. That is where the neck *runs out*, and a body
+## that only turns at the limit would hold every glance at a hard 62 degrees
+## before snapping round. This is where a look stops being comfortable, which is
+## where a person actually starts to turn.
+const NECK_LEAD_DEGREES: float = 38.0
+## Past this, a turn is made of steps rather than of rotation.
+##
+## A body pivots a little way on the balls of its feet and no further; anything
+## steeper reorders the feet, and drawing it as a continuous sweep is the same
+## defect as gliding across the floor without stepping. Reported as pivoting
+## smoothly to look around where a head turn, a torso rotation and a step
+## belong.
+const STEP_TURN_DEGREES: float = 55.0
+## How long one turning step takes, and what share of it is spent rotating. The
+## remainder is the foot arriving and the body standing on it, which is the half
+## that makes a step read as a step -- the same shape the locomotion quantiser
+## uses for travel.
+const TURN_STEP_SECONDS: float = 0.26
+const TURN_STEP_DUTY: float = 0.6
+
+## Where in the current turning step this body is, 0 to 1. Held across frames
+## because a step is a thing that takes time, not a thing a frame can decide.
+var _turn_step_phase: float = 0.0
 
 ## How far a player has to actually move before their travel sets their heading.
 ##
@@ -519,16 +544,72 @@ func face_ball(world_yaw: float) -> void:
 	_turn_toward(world_yaw)
 
 
+## **A turn is a head, then a torso, then a step.**
+##
+## This used to rotate the whole body toward the target at one constant rate,
+## which is why looking around read as a glide: a 30-degree glance swung the
+## shoulders 30 degrees, and a 120-degree turn swung them 120 without the feet
+## ever moving. Three things were missing and they arrive in order.
+##
+## The head goes first and often goes alone. `look_toward` already aims it and
+## already clamps it, so the body's job is not to point where the head is
+## looking -- it is to bring the head back inside a comfortable range when the
+## neck has run out of lead. A glance costs the shoulders nothing.
+##
+## Then the torso, at the rate it always turned at.
+##
+## Then the feet. Past `STEP_TURN_DEGREES` a body cannot pivot in place, so the
+## rotation is spent in steps: it turns through `TURN_STEP_DUTY` of each step
+## and stands still for the rest. The rate is divided by the duty so the average
+## speed of a steep turn is unchanged -- this makes a turn *look* like steps
+## without making it slower, which is the difference between a fix and a nerf.
 func _turn_toward(target_yaw: float) -> void:
 	if not has_facing:
 		facing_yaw = target_yaw
 		has_facing = true
+		rotation.y = facing_yaw
+		return
+	var difference := angle_difference(facing_yaw, target_yaw)
+	var body_target := body_turn_target(facing_yaw, target_yaw)
+	if is_equal_approx(body_target, facing_yaw):
+		## The neck covers it. Nothing else moves, and the step this body may
+		## have been part way through is over.
+		_turn_step_phase = 0.0
+		rotation.y = facing_yaw
+		return
+	var delta := get_process_delta_time()
+	if absf(difference) > deg_to_rad(STEP_TURN_DEGREES):
+		_turn_step_phase = fposmod(
+			_turn_step_phase + delta / TURN_STEP_SECONDS, 1.0
+		)
 	else:
-		var step := FACING_TURN_RATE * get_process_delta_time()
-		var difference := angle_difference(facing_yaw, target_yaw)
-		facing_yaw = target_yaw if absf(difference) <= step \
-			else facing_yaw + signf(difference) * step
+		_turn_step_phase = 0.0
+	var step := turn_rate_for(difference, _turn_step_phase) * delta
+	var remaining := angle_difference(facing_yaw, body_target)
+	facing_yaw = body_target if absf(remaining) <= step \
+		else facing_yaw + signf(remaining) * step
 	rotation.y = facing_yaw
+
+
+## Where the body has to come round to, to bring the head back inside its
+## comfortable range. The current facing while the neck can cover the look on
+## its own, which is what makes a glance free.
+##
+## Static and pure so the suite can hold the rule without a rig to run it in.
+static func body_turn_target(facing: float, target: float) -> float:
+	var difference := angle_difference(facing, target)
+	if absf(difference) <= deg_to_rad(NECK_LEAD_DEGREES):
+		return facing
+	return facing + difference - signf(difference) * deg_to_rad(NECK_LEAD_DEGREES)
+
+
+## How fast the body may turn this frame. Constant for anything a body can
+## pivot through, and gated to the moving half of a step for anything steeper.
+static func turn_rate_for(difference: float, step_phase: float) -> float:
+	if absf(difference) <= deg_to_rad(STEP_TURN_DEGREES):
+		return FACING_TURN_RATE
+	return FACING_TURN_RATE / TURN_STEP_DUTY if step_phase < TURN_STEP_DUTY \
+		else 0.0
 
 
 func set_highlighted(highlighted: bool) -> void:

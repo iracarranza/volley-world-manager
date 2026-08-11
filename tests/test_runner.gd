@@ -194,6 +194,7 @@ func _initialize() -> void:
 	_test_setter_capability_gates()
 	_test_cognition_cues()
 	_test_body_facing_rule()
+	_test_a_turn_is_head_then_torso_then_step()
 	_test_continue_opens_the_last_played_save()
 	_test_a_window_is_flight_then_aftermath()
 	_test_a_ball_taken_at_full_stretch_is_drawn_reaching()
@@ -14939,6 +14940,72 @@ func _test_continue_opens_the_last_played_save() -> void:
 	_check(
 		str(rows[0].save_id) == "newest" and str(rows[3].save_id) == "no_timestamp",
 		"a save with no timestamp sorts last rather than first",
+	)
+
+
+## Looking around is three systems, and they go in order.
+##
+## The body used to rotate toward whatever the head was looking at, at one
+## constant rate, so a glance swung the shoulders as far as a turn did and
+## nothing ever stepped.
+func _test_a_turn_is_head_then_torso_then_step() -> void:
+	## **A glance is free.** Inside the neck's lead the body does not move at
+	## all -- the head is already aimed and clamped by `look_toward`.
+	_check(
+		is_equal_approx(
+			PlayerActor3D.body_turn_target(0.0, deg_to_rad(20.0)), 0.0
+		),
+		"a look inside the neck's range turns the body not at all",
+	)
+
+	## Past it the body comes round only far enough to make the head
+	## comfortable again, not far enough to point at what it is looking at. A
+	## 60-degree look leaves the neck holding its 38 and moves the body 22.
+	_check(
+		is_equal_approx(
+			PlayerActor3D.body_turn_target(0.0, deg_to_rad(60.0)),
+			deg_to_rad(22.0),
+		),
+		"the body turns only as far as the head needs, not as far as it looks",
+	)
+
+	## And it mirrors, which a signed rule written once always has to be asked.
+	_check(
+		is_equal_approx(
+			PlayerActor3D.body_turn_target(0.0, deg_to_rad(-60.0)),
+			deg_to_rad(-22.0),
+		),
+		"the same turn to the other side moves the body the same distance",
+	)
+
+	## **A steep turn is made of steps.** Inside the pivot range the rate is
+	## constant whatever the phase; past it the body turns through the moving
+	## part of a step and stands still through the rest.
+	_check(
+		is_equal_approx(
+			PlayerActor3D.turn_rate_for(deg_to_rad(40.0), 0.9),
+			PlayerActor3D.FACING_TURN_RATE,
+		),
+		"a turn a body can pivot through ignores the step phase entirely",
+	)
+	_check(
+		PlayerActor3D.turn_rate_for(deg_to_rad(120.0), 0.2) \
+			> PlayerActor3D.FACING_TURN_RATE,
+		"the moving half of a turning step goes faster than the flat rate",
+	)
+	_check(
+		is_zero_approx(PlayerActor3D.turn_rate_for(deg_to_rad(120.0), 0.8)),
+		"the standing half of a turning step does not rotate at all",
+	)
+
+	## The rate is divided by the duty precisely so a steep turn is not also a
+	## slower turn. Averaged over a whole step it comes back to the flat rate,
+	## which is the difference between drawing steps and nerfing the turn.
+	var averaged := PlayerActor3D.turn_rate_for(deg_to_rad(120.0), 0.0) \
+		* PlayerActor3D.TURN_STEP_DUTY
+	_check(
+		is_equal_approx(averaged, PlayerActor3D.FACING_TURN_RATE),
+		"a stepped turn averages the same speed it always turned at",
 	)
 
 
