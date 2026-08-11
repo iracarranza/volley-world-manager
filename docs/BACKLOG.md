@@ -8,6 +8,133 @@ Order within each section is rough implementation order, not priority.
 
 ---
 
+## Session log: playback movement, the swing, the board, scouting
+
+Kept at the top because most of it is *closed*, and a backlog that only grows
+stops being read. Each closed item names the measurement that closed it, so a
+regression is recognisable rather than merely suspected.
+
+### Closed
+
+**Off-ball movement was planned and thrown away on a whole class of window.**
+`_build_movement_plan` was only ever called from `_play_flight`, the branch for a
+contact carrying an outgoing trajectory. A contact without one goes to
+`_play_contact_pulse`, which drew a pose and nothing else -- no plan, no ball
+sample. 79.3% of blocks stop the ball dead and carry no outgoing flight, so the
+window between an attack being walled and the dig that answers it was drawn
+frozen, and the next flight opened with the digger already at the ball. Measured
+at a pinned 60 fps off the rendered actor nodes: 50.4 m of drawn travel per rally
+across twelve volis before, 54.1 m after. The aggregate moves 7% because these
+windows are a small share of a rally's clock; the block-to-dig moment goes from
+nothing to a walk. The window now carries the ball too, built from the two
+endpoints the events already hold.
+
+**Volis paced back and forth.** 131 legs over eight rallies sent a voli back the
+way they had just come -- about 20 m per rally against roughly 50 m of travel in
+total, so two fifths of all visible movement was somebody going nowhere.
+Attributed by source, 78 of the 131 were `_apply_base_positions` and a phase map
+taking turns; base against base was 3, so the postures were never the problem.
+One window of memory before a base return, plus a deadband. The opponent named in
+the report went from 22 reversals to 6.
+
+**Two volis stood in the same place.** 1487 frames with a pair on one side inside
+half a metre, many at exactly 0.00 m. Only 22 came from a single map handing one
+point to two volis; the rest are three independent sources agreeing by accident,
+none able to see the others. A separation pass after all of them: 1487 -> 183,
+nothing left at 0.00. The remainder are bodies crossing paths mid-leg, which is
+real collision and is listed as open below.
+
+**The spike threw away its own backswing and stopped before the ball.** The
+approach hands off with both arms at -74 and the spike opened its shoulder at
++42 -- opposite signs for the same instant, so the hand covered 1.15 m across
+that seam at 18.7 m/s in the wrong direction before the swing started. And the
+drive was ended just before contact so full extension would be reached by it,
+which with a smoothstep means it arrived and stopped: 1.0 m/s at the ball against
+5.0 a tenth of a phase out. Now 6.4 m/s, peaking on the ball. Recovery reversed
+236 degrees at up to 17 m/s and now continues through the arc instead. Guide arm
+reached to 0.10 m above the shoulder and now reaches 0.63, which is where the
+ball is.
+
+**Volis glided.** `GaitBiomechanics` fades its leg motion out below 0.25 m/s and
+`_pace_plan` stretches every leg to fill its flight, so half a metre in a
+one-second window was drawn as a smooth 0.4 m/s slide. No gait model can answer
+that; it is being asked for a speed no gait animates. Short legs are quantised
+into whole steps off the body's own stride length.
+
+**A fixture's opponent was decoration.** The three names a new career was given
+belonged to no region and matched no club, and `prepare_fixture` never told the
+game manager about them, so every match of every season was played against the
+same default squad under whatever name the calendar printed.
+
+**The lock-in screen was the journal with a different heading.**
+`UIStyleSystem` gained `MEDIUM_BOARD` -- melamine, unscreened, marker divisions
+edge to edge, no per-patch tint, Yatra One and Short Stack -- built from its own
+properties rather than off `MEDIUM_FORM`, which CLAUDE.md names as the way to
+reproduce the clipboard defect.
+
+**Scouting, items 1 and 3 of the spec's own order.** Per-channel knowability, and
+beliefs that have an owner. See `SCOUTING.md`; items 2 and 4-10 remain.
+
+### Open, from watching rallies
+
+Ordered roughly by how much each one changes what a viewer believes.
+
+1. **Collision, not just separation.** Bodies still pass through each other
+   *during* a leg. 183 frames per eight rallies. A real obstruction model -- a
+   voli blocked by a teammate rather than merely not ending up inside them -- is
+   the ask, and it pairs with the next entry.
+2. **An obstructing voli should block sight, not just space.** An outside hitter
+   crossing in front of a receiver should cost that receiver information. There
+   is nowhere in the model today where one voli occludes another's read.
+3. **Blockers swap positions at the net**, and not because one of them is the
+   middle -- observed with an outside hitter and a setter. An ordering bug in
+   whoever assigns the two wall slots.
+4. **Volis do not always need to be ready.** A voli with no reception
+   responsibility should release on recognising the *serve*, not hold a receive
+   posture through it. Playback draws a readiness the simulation never asked for,
+   which is the same shape as the frozen window above.
+5. **Blockers need an idle hands-up pose at the net**, distinct from the block
+   itself.
+6. **Blockers already know the outcome.** They do not jump at a ball going out,
+   and they sometimes move to the attack's location *before the set*. Information
+   is reaching the block decision that a blocker could not have.
+7. **Cogniticons are too small** at the default camera distance.
+8. **A pipe attack sent the ball straight up.** Seen once; the back-row launch arc
+   is the suspect.
+9. **The 2D tactical court shows erratic hitter movement** that 3D playback does
+   not. Different renderer, different path; 3D measures clean at one 0.22 m step
+   in eight rallies.
+10. **A tactical-planner freeze** when setting a defensive radius for the libero.
+    Not reproduced headlessly. Two provable defects on that path were hardened --
+    a popup placement whose `clampf` bounds invert when the panel is wider than
+    the court view, and a section title indexed by an `OptionButton` selection of
+    -1 -- and neither is confirmed as the cause.
+
+### Discussed, with the shape agreed
+
+**Gait by involvement.** A voli should walk when uninvolved and jog when reaching
+their situation does not demand a run, rather than every leg being paced at their
+top speed. The stepping work is the floor of this; choosing a gait from urgency
+rather than from distance-over-time is the rest.
+
+**Head, body and feet as one decision.** Turning, looking and stepping are three
+systems that currently do not consult each other. `should_open_up` already
+decides whether a body turns onto its travel heading; the missing piece is that a
+*step* is what a turn is made of.
+
+**Food.** `ACCOMMODATIONS_AND_CARE.md` is 495 lines and settles the world -- the
+blocks, the pastes, the two geographies, the naming. It names three unresolved
+questions, and the load-bearing one is *"whether nutrition feeds the fatigue
+model directly or sits beside it -- the staged fatigue design is not built yet,
+and this should hook into it rather than duplicate it."* **That blocker no longer
+exists.** `FatigueModel` now has exactly that staged design: `LABOURED_ONSET`,
+`SPENT_ONSET`, and separate forced and unforced error additions. So food has a
+place to hook into and can be built. The two questions still genuinely open are
+authoring calls rather than blockers: how many pastes exist, and whether
+differentiation is paid in the chef's attention, in money, or both.
+
+---
+
 ## 0. Defensive attacking is dominant, and the check that guarded it was noise
 
 **Measured, and the measurement is the entry.** `RallyReadinessReport
