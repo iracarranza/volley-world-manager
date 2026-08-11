@@ -110,6 +110,59 @@ const FORM_SPREAD_WORST: float = 1.42
 const FORM_CONFIDENCE_SHARE: float = 0.62
 
 
+## How much wider a swing's cone gets because there is a wall in front of it.
+##
+## **The block was not an input to a hitter's aim, and it should be the main
+## one.** Reported from playback: volis swing out while the blockers stand there
+## not jumping, because they can already see it is going out. A misswing at an
+## open net is an unforced error and should be rare even from a poor hitter;
+## missing is mostly what pressure produces.
+##
+## Measured over 600 rallies, 705 swings: 15.6% of all attacks went out, and the
+## rate was no lower against nothing than against two -- 38.5% against a single
+## blocker on 39 swings, 14.3% against two on 666. The only reason those buckets
+## differ is that they contain different swings, because `deliver` builds its
+## cone from the hitter's accuracy and a form multiplier and nothing else. The
+## receive channel is present -- reception quality reaches the swing through the
+## set -- and the block channel simply was not there.
+##
+## Centred on a **double block**, deliberately. 94% of swings in the game face
+## two, so anchoring the neutral point there means the overall error rate barely
+## moves while the case that reads wrong on screen -- an open net -- gets the
+## tight cone it should always have had. This narrows more balls than it widens.
+##
+## `seal` is how well the wall actually closed, 0 to 1. A wall that is up but
+## split is not the same pressure as one with no gap in it, and a hitter reads
+## the difference; passing it as a separate term is what stops "a block exists"
+## and "a block is a problem" collapsing into one number.
+const OPEN_NET_SPREAD: float = 0.55
+const SINGLE_BLOCK_SPREAD: float = 0.78
+const DOUBLE_BLOCK_SPREAD: float = 1.0
+const TRIPLE_BLOCK_SPREAD: float = 1.22
+## What a perfectly sealed wall adds over a badly split one of the same size.
+const SEAL_SPREAD_RANGE: float = 0.18
+
+
+static func block_spread_multiplier(wall_size: int, seal: float) -> float:
+	var size_term := OPEN_NET_SPREAD
+	match maxi(wall_size, 0):
+		1:
+			size_term = SINGLE_BLOCK_SPREAD
+		2:
+			size_term = DOUBLE_BLOCK_SPREAD
+		_:
+			if wall_size >= 3:
+				size_term = TRIPLE_BLOCK_SPREAD
+	if wall_size <= 0:
+		## Nothing to seal, so the seal term has nothing to say and must not be
+		## allowed to widen an open net by being passed a stale value.
+		return size_term
+	return size_term * lerpf(
+		1.0 - SEAL_SPREAD_RANGE * 0.5, 1.0 + SEAL_SPREAD_RANGE * 0.5,
+		clampf(seal, 0.0, 1.0),
+	)
+
+
 static func form_spread_multiplier(
 	match_confidence: float, flow_for_team: float
 ) -> float:
