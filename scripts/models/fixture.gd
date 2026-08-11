@@ -8,6 +8,40 @@ extends Resource
 @export var completed: bool = false
 @export var home_sets: int = 0
 @export var opponent_sets: int = 0
+## What each side actually did, kept rather than discarded.
+##
+## `MatchStatistics` counts kills, blocks, aces and digs for both sides on every
+## rally, and until this existed the whole of it was thrown away the moment the
+## fixture was written -- the result kept two integers and nothing else. So a
+## completed season held no record of *how* any match was won, and the lock-in
+## screen's opponent panel had nothing to print: the figures a manager would
+## actually want before facing someone again were computed, used once, and lost.
+##
+## Stored as the two side dictionaries rather than the whole model, because the
+## per-player breakdown is large, changes shape as attributes move, and is
+## already spent on the volis themselves through `_apply_player_match_outcomes`.
+@export var home_statistics: Dictionary = {}
+@export var opponent_statistics: Dictionary = {}
+
+## Which club this fixture is actually against.
+##
+## `opponent_name` on its own was decoration. The three names a new career was
+## given -- Port Azure VC, "<Region> Select", Northbridge Volley -- belonged to
+## no region and matched no club in `VolleyballRegions.CLUB_NAMES`, and
+## `prepare_fixture` never told the game manager about them, so every fixture in
+## a season was played against the same default squad under whatever name the
+## calendar happened to print. The lock-in board is what exposed it: it names the
+## fixture at the top and the opponent's record underneath, and the two lines
+## disagreed.
+##
+## An empty region means "an old save, or a fixture nobody targeted" and the
+## opponent is left exactly as it was, so loading a career written before this
+## existed behaves the way it did.
+@export var opponent_region: String = ""
+## Which club of that region, by index into `VolleyballRegions.CLUB_NAMES`.
+## Indexed rather than drawn, because a fixture must field the same eleven
+## people every time it is loaded.
+@export var opponent_club_index: int = 0
 
 
 func result_text() -> String:
@@ -17,7 +51,11 @@ func result_text() -> String:
 func to_dict() -> Dictionary:
 	return {"id": id, "week": week, "opponent_name": opponent_name,
 		"competition_name": competition_name, "completed": completed,
-		"home_sets": home_sets, "opponent_sets": opponent_sets}
+		"home_sets": home_sets, "opponent_sets": opponent_sets,
+		"home_statistics": home_statistics.duplicate(true),
+		"opponent_statistics": opponent_statistics.duplicate(true),
+		"opponent_region": opponent_region,
+		"opponent_club_index": opponent_club_index}
 
 
 static func from_dict(data: Dictionary) -> VolleyballFixture:
@@ -29,4 +67,14 @@ static func from_dict(data: Dictionary) -> VolleyballFixture:
 	fixture.completed = bool(data.get("completed", false))
 	fixture.home_sets = int(data.get("home_sets", 0))
 	fixture.opponent_sets = int(data.get("opponent_sets", 0))
+	## Absent in every save written before the figures were kept, which loads as
+	## a completed fixture whose detail is simply unknown rather than as a zeroed
+	## one -- an empty dictionary and a dictionary of noughts read very
+	## differently on a panel that prints them.
+	fixture.home_statistics = Dictionary(data.get("home_statistics", {})).duplicate(true)
+	fixture.opponent_statistics = Dictionary(
+		data.get("opponent_statistics", {})
+	).duplicate(true)
+	fixture.opponent_region = str(data.get("opponent_region", ""))
+	fixture.opponent_club_index = int(data.get("opponent_club_index", 0))
 	return fixture

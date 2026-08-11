@@ -373,6 +373,19 @@ func prepare_fixture(fixture_id: int) -> String:
 	if not errors.is_empty():
 		return errors[0]
 	career.active_fixture_id = fixture_id
+	## Point the match at the club on the calendar. Without this the fixture's
+	## name was decoration: every match of every season was played against the
+	## default squad, whatever the schedule said. Guarded on a named region so a
+	## save written before fixtures carried one keeps the opponent it had.
+	if not str(fixture.opponent_region).is_empty():
+		_game_manager().set_opponent_region(
+			str(fixture.opponent_region), int(fixture.opponent_club_index)
+		)
+		## Read back rather than assumed. `club_name` falls back to "<Region> VC"
+		## for a region with no clubs listed, and a fixture whose printed name
+		## disagreed with the squad across the net is the exact defect this is
+		## fixing.
+		fixture.opponent_name = str(_game_manager().opponent_team.team_name)
 	_game_manager().start_new_match(career.match_format)
 	career_changed.emit()
 	return ""
@@ -420,6 +433,12 @@ func complete_active_match() -> void:
 		fixture.completed = true
 		fixture.home_sets = int(_game_manager().match_state.home_sets)
 		fixture.opponent_sets = int(_game_manager().match_state.opponent_sets)
+		## The figures, kept. Every one of these was already counted rally by
+		## rally and then dropped here; see `VolleyballFixture.home_statistics`.
+		var match_statistics: Resource = _game_manager().match_state.statistics
+		if match_statistics != null:
+			fixture.home_statistics = match_statistics.home.duplicate(true)
+			fixture.opponent_statistics = match_statistics.opponent.duplicate(true)
 		career.reputation = clampi(int(career.reputation) + (
 			2 if fixture.home_sets > fixture.opponent_sets else -1
 		), 0, 100)
@@ -658,14 +677,39 @@ func _metadata() -> Dictionary:
 		"last_saved_unix": int(Time.get_unix_time_from_system())}
 
 
+## The first three matches, against clubs that exist.
+##
+## They used to be Port Azure VC, "<Region> Select" and Northbridge Volley --
+## three names belonging to no region, matching no entry in
+## `VolleyballRegions.CLUB_NAMES`, and, because `prepare_fixture` never passed
+## them on, all three were played against the same default squad. A calendar of
+## opponents you cannot look up and do not actually face is not a calendar.
+##
+## Two derbies then a trip out of the region: a new club's first season should
+## start against the people it shares a region with, since that is who it is
+## competing with for the Academy's attention, and the away fixture is what tells
+## a manager that other regions play differently at all.
 func _starting_fixtures(region: String) -> Array[Resource]:
-	var opponents := ["Port Azure VC", "%s Select" % region, "Northbridge Volley"]
+	var home_region := VolleyballRegions.canonical_name(region)
+	var neighbours: Array = VolleyballRegions.REGION_ADJACENCY.get(home_region, [])
+	var away_region: String = str(neighbours[0]) if not neighbours.is_empty() \
+		else home_region
+	var opponents := [
+		{"region": home_region, "club": 0},
+		{"region": home_region, "club": 1},
+		{"region": away_region, "club": 0},
+	]
 	var result: Array[Resource] = []
 	for index in range(opponents.size()):
+		var opponent: Dictionary = opponents[index]
+		var opponent_region := str(opponent["region"])
+		var club_index := int(opponent["club"])
 		var fixture: Resource = FixtureModel.new()
 		fixture.id = index + 1
 		fixture.week = (index + 1) * 2
-		fixture.opponent_name = opponents[index]
+		fixture.opponent_region = opponent_region
+		fixture.opponent_club_index = club_index
+		fixture.opponent_name = VolleyballRegions.club_name(opponent_region, club_index)
 		fixture.competition_name = "Regional Series"
 		result.append(fixture)
 	return result

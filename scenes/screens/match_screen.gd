@@ -38,6 +38,9 @@ var playback_start_mismatches: Array[Dictionary] = []
 ## has drifted far enough from the timed one that the touch cannot be reached
 ## honestly.
 var playback_leg_overspeed: Array[Dictionary] = []
+## Diagnostic: send everyone but the ball-handler to their own baseline.
+## Toggled with M during playback; see `_apply_movement_proof`.
+var movement_proof: bool = false
 var playback_paused: bool = false
 var skip_requested: bool = false
 var playback_active: bool = false
@@ -77,6 +80,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		KEY_C:
 			_cycle_camera()
+			get_viewport().set_input_as_handled()
+		KEY_M:
+			movement_proof = not movement_proof
+			event_label.text = "MOVEMENT PROOF %s" % ["ON" if movement_proof else "OFF"]
 			get_viewport().set_input_as_handled()
 
 
@@ -176,7 +183,7 @@ func _run_rally(generation: int) -> void:
 			## answer, and where that gap is zero the two events are genuinely
 			## simultaneous and share a beat instead of queueing.
 			await _play_contact_pulse(
-				event, _gap_to_next(events, event_index), generation
+				event, next_contact, _gap_to_next(events, event_index), generation
 			)
 	match_court_3d.ball_actor.hold_at_rest()
 	match_court_3d.clear_cognition()
@@ -246,7 +253,36 @@ func _play_flight(
 	match_court_3d.reset_player_poses()
 
 
-func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) -> void:
+## A window the ball spends no time on, but the players do.
+##
+## **This is where off-ball movement was going.** Everything the resolver
+## publishes about where volis should be was read by `_build_movement_plan`, and
+## `_build_movement_plan` was only ever called from `_play_flight` -- the branch
+## for an event carrying an outgoing trajectory. A contact without one comes here
+## instead, and here nobody was placed at all: `reset_player_poses` and a pose
+## for the actor, and twelve bodies standing exactly where the previous leg left
+## them for the entire gap.
+##
+## That is not a rare branch. A block that stops the ball dead carries no
+## outgoing trajectory and **79.3%** of blocks are that block, so the window
+## between an attack being walled and the dig that follows -- the single moment
+## in a rally when the defending side most obviously has somewhere to be -- was
+## drawn frozen. Then the next flight began with the digger already at the ball,
+## because their leg had been planned across a window that no longer existed.
+## Reported from a screenshot as "no one moves until the blockers land, then the
+## receiver picks up the pass; it teleports into their arms", which is an exact
+## description of a plan that is built and never applied.
+##
+## The gap is a real span of time taken from `physical_time`; there is no reason
+## it should be the one span nobody walks during.
+func _play_contact_pulse(
+	event: RallyEvent, next_contact: RallyEvent, duration: float, generation: int
+) -> void:
+	var movement_plan := _build_movement_plan(event, next_contact, duration)
+	var carry := _carry_trajectory(event, next_contact, duration)
+	if not carry.is_empty():
+		match_court_3d.ball_actor.reset_flight()
+		match_court_3d.begin_ball_flight(carry, float(event.quality))
 	var elapsed := 0.0
 	while elapsed < duration:
 		if generation != playback_generation or skip_requested:
@@ -257,7 +293,12 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 		elapsed += get_process_delta_time() * playback_speed
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.reset_player_poses()
-		_sample_cognition(event, null, progress, duration)
+		if not carry.is_empty():
+			match_court_3d.set_ball_trajectory_sample(carry, progress)
+		## Before the poses, exactly as `_play_flight` orders it: a pose is drawn
+		## on a body that has already been placed for this frame.
+		match_court_3d.apply_movement_plan(movement_plan, progress, duration)
+		_sample_cognition(event, next_contact, progress, duration)
 		var direction := event.end_position - event.start_position
 		## A block that stopped the ball dead has no outgoing trajectory, so it
 		## arrives here rather than in `_apply_contact_poses` -- and that is
@@ -298,6 +339,50 @@ func _play_contact_pulse(event: RallyEvent, duration: float, generation: int) ->
 			_action_context(event, int(event.actor_id)),
 		)
 		await get_tree().process_frame
+	match_court_3d.finish_movement_plan(movement_plan, duration)
+
+
+## The ball's own journey across a window nobody published a trajectory for.
+##
+## A block that stops the ball dead publishes no outgoing flight, so during the
+## gap between it and the dig that follows the ball was not sampled at all: it
+## held the last position the previous flight left it in, and then the next
+## flight began somewhere else. That is the reported "the ball is clearly on the
+## floor, then the receiver picks up the pass; it teleports into their arms" --
+## the deflection off the block was never drawn, only its two endpoints, one of
+## them late.
+##
+## Built from the two endpoints the events already carry: where this contact left
+## the ball, and where the next one picks it up. Passed through
+## `BallPresentation.display_trajectory` rather than lerped, so it gets the same
+## gravity-true height curve as every other drawn flight -- launched from the
+## blocker's reach and arriving at the digger's, which is what a ball dropping
+## off a wall does. Sampling it also gives the window a moving ball for every
+## head on the court to follow, which `_watch_the_ball` could not do while
+## nothing was being sampled.
+##
+## Empty when the rally ends here, when the two endpoints coincide, or when the
+## window has no time in it. An empty result leaves the ball exactly as it was,
+## which is the previous behaviour.
+func _carry_trajectory(
+	event: RallyEvent, next_contact: RallyEvent, duration: float
+) -> Dictionary:
+	if next_contact == null or duration <= 0.0:
+		return {}
+	var from := Vector2(event.end_position)
+	var to := Vector2(next_contact.start_position)
+	if from.distance_to(to) < 0.002:
+		return {}
+	return BallPresentation.display_trajectory(
+		event, next_contact,
+		{
+			"start_position": from,
+			"end_position": to,
+			"control_position": from.lerp(to, 0.5),
+			"duration": duration,
+		},
+		player_physical_profiles,
+	)
 
 
 ## How strained this contact was, as the resolver recorded it.
@@ -680,7 +765,42 @@ func _build_movement_plan(
 				next_contact.metadata["approach_start_position"]
 			)
 	_pace_plan(plan, window_seconds, next_actor_id)
+	## After pacing, not before: `_set_plan_target` writes a fresh entry with no
+	## `seconds` key, so a proof leg is deliberately unpaced. See below.
+	if movement_proof:
+		_apply_movement_proof(plan, next_actor_id)
 	return plan
+
+
+## Send everybody except the player about to touch the ball to their own back
+## line, and say so on screen. Toggled with M during playback.
+##
+## Not a feature -- an instrument, and one asked for by name: *"can you try just
+## making them all except setter and hitter move to the back court or something
+## very visible to see that it's working?"* The question it answers is narrow and
+## worth being able to answer in one keypress: is the plan being **applied**, or
+## is it being built and dropped? Every previous attempt to settle that was a
+## headless probe measuring something adjacent -- targets published, plan legs
+## computed, normalised units mistaken for metres -- and each one said the court
+## was alive while the screen said it was not.
+##
+## A target this large cannot be confused with drift, cannot be hidden by pacing,
+## and does not depend on any resolver publishing anything. If the court does not
+## visibly empty toward both baselines with this on, playback is not applying
+## plans at all and nothing about the resolver is worth investigating yet.
+func _apply_movement_proof(plan: Dictionary, contact_actor_id: int) -> void:
+	for raw_player_id in match_court_3d.live_positions:
+		var player_id := int(raw_player_id)
+		if player_id == contact_actor_id:
+			continue
+		var here := Vector2(match_court_3d.live_positions[raw_player_id])
+		## Their own baseline, whichever side of the tape they are standing on.
+		## Unpaced on purpose, which is what running after `_pace_plan` buys.
+		## Pacing is honest and it is also the thing that would make this
+		## diagnostic inconclusive: a nine-metre leg paced at four metres a second
+		## inside a third of a second draws about a foot of movement, which is
+		## exactly the ambiguous result this exists to avoid.
+		_set_plan_target(plan, player_id, Vector2(here.x, 0.06 if here.y < 0.5 else 0.94))
 
 
 ## What is drawn as sprinting must be something a body can do.

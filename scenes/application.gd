@@ -11,6 +11,7 @@ const ScoutingScreenScript := preload(
 	"res://scenes/screens/scouting_screen.gd"
 )
 const ScheduleScreenScript := preload("res://scenes/screens/schedule_screen.gd")
+const LockInScreenScript := preload("res://scenes/screens/lock_in_screen.gd")
 const SETTINGS_PATH := "user://settings.cfg"
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
@@ -29,6 +30,7 @@ var _has_shown: bool = false
 var _training_screen: VolleyballTrainingScreen = null
 var _scouting_screen: VolleyballScoutingScreen = null
 var _schedule_screen: VolleyballScheduleScreen = null
+var _lock_in_screen: LockInScreen = null
 ## The theme currently up, kept because the style pass is a tree walk that
 ## happens once. A screen built after that walk was never in the tree for it, so
 ## it has to be given the same pass on the way in or it arrives unstyled -- a
@@ -61,7 +63,10 @@ func _ready() -> void:
 	new_career_screen.back_requested.connect(_show_title)
 	new_career_screen.career_created.connect(_show_journal)
 	journal.title_requested.connect(_show_title)
-	journal.play_match_requested.connect(_show_match)
+	## Not straight to the match. `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §2:
+	## a roster is only worth studying if committing to one is an act, and until
+	## now the last thing a manager did before a match was click a fixture.
+	journal.play_match_requested.connect(_show_lock_in)
 	call_deferred("_connect_match_center_signal")
 	## Added in code rather than the scene because it has to be the last child --
 	## later siblings draw over earlier ones -- and a node whose whole job is to
@@ -129,6 +134,16 @@ func _ensure_schedule_screen() -> void:
 ## Later siblings draw over earlier ones, so a screen added after the wipe covers
 ## the sheet that is supposed to cover it -- which is invisible until the one
 ## frame it matters, on the wipe that carried you to that very screen.
+func _ensure_lock_in_screen() -> void:
+	if _lock_in_screen != null:
+		return
+	_lock_in_screen = LockInScreenScript.new()
+	_adopt_screen(_lock_in_screen)
+	_lock_in_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_lock_in_screen.cancelled.connect(_show_journal)
+	_lock_in_screen.confirmed.connect(_show_match)
+
+
 func _adopt_screen(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	screen.visible = false
@@ -172,7 +187,7 @@ func _show_only(screen: Control) -> void:
 func _swap_to(screen: Control) -> void:
 	for candidate in [
 		title_screen, new_career_screen, journal, match_center,
-		_training_screen, _scouting_screen, _schedule_screen,
+		_training_screen, _scouting_screen, _schedule_screen, _lock_in_screen,
 	]:
 		if candidate != null:
 			candidate.visible = candidate == screen
@@ -200,6 +215,19 @@ func _load_career(save_id: String) -> void:
 func _show_journal() -> void:
 	journal.refresh()
 	_show_only(journal)
+
+
+## The gate in front of the match.
+##
+## `prepare_fixture` has already run by the time this is reached -- the journal
+## does it before emitting -- so the opponent, the fixture and the lineup the
+## board reads are the ones the match will actually be played with. Backing out
+## leaves the fixture prepared and unplayed, which is the same state the journal
+## was already in.
+func _show_lock_in() -> void:
+	_ensure_lock_in_screen()
+	_lock_in_screen.refresh()
+	_show_only(_lock_in_screen)
 
 
 func _show_match() -> void:
