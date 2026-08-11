@@ -8,6 +8,7 @@ signal title_requested
 ## every other screen change.
 signal training_requested
 signal scouting_requested
+signal encyclopedia_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -284,6 +285,13 @@ func _ready() -> void:
 		)
 		header.add_child(scouting_button)
 		header.move_child(scouting_button, %TitleButton.get_index())
+		var encyclopedia_button := Button.new()
+		encyclopedia_button.text = "Encyclopedia"
+		encyclopedia_button.pressed.connect(
+			func() -> void: encyclopedia_requested.emit()
+		)
+		header.add_child(encyclopedia_button)
+		header.move_child(encyclopedia_button, %TitleButton.get_index())
 	advance_week_button.pressed.connect(_confirm_advance)
 	%ApplyTrainingButton.pressed.connect(_apply_training_focus)
 	_name_team_sub_tabs()
