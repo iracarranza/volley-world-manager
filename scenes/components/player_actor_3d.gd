@@ -437,12 +437,9 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			## arrive. Travelling sideways therefore buys a much higher bound than
 			## travelling backwards does, and above `RUN_SPEED_MPS` even that gives
 			## way: a defender chasing a ball into the corner does open up and run.
-			var lateral_share := absf(sin(travel_heading_offset))
-			var open_up_speed := lerpf(
-				OPEN_UP_SPEED_MPS, LATERAL_OPEN_UP_SPEED_MPS, lateral_share
-			)
-			if absf(angle_difference(facing_yaw, travel_yaw)) <= OPEN_UP_CONE_RADIANS \
-					or ground_speed_mps >= open_up_speed:
+			if should_open_up(
+				facing_yaw, travel_yaw, ground_speed_mps, travel_heading_offset
+			):
 				_turn_toward(travel_yaw)
 	has_world_position = true
 	tactical_position = position
@@ -451,6 +448,35 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 
 ## Turns the actor toward a heading at `FACING_TURN_RATE`, or adopts it outright
 ## if this is the first heading it has ever had.
+## Whether a voli travelling this way has to turn and run, or can hold their
+## facing and move anyway.
+##
+## **Static because it is a rule, not a state.** It was five lines inside
+## `set_tactical_position`, which meant the only way to check it was to build a
+## court, run a rally and look -- and facing has no headless coverage at all, so
+## two wrong versions of this behaviour shipped and both passed the suite. Pulled
+## out here it is one pure function of four numbers and the gate can ask it
+## directly.
+##
+## The rule itself is unchanged. Inside the cone the travel *is* the facing, so
+## turning onto it is free. Otherwise it takes speed to force the issue: you can
+## shuffle and you cannot shuffle quickly, and travelling sideways buys a much
+## higher bound than travelling backwards because a blocker moving along the net
+## never turns their back on it.
+static func should_open_up(
+	facing_yaw: float,
+	travel_yaw: float,
+	speed_mps: float,
+	heading_offset: float,
+) -> bool:
+	var lateral_share := absf(sin(heading_offset))
+	var open_up_speed := lerpf(
+		OPEN_UP_SPEED_MPS, LATERAL_OPEN_UP_SPEED_MPS, lateral_share
+	)
+	return absf(angle_difference(facing_yaw, travel_yaw)) <= OPEN_UP_CONE_RADIANS \
+		or speed_mps >= open_up_speed
+
+
 ## Turn the body toward the ball, which is what a voli does when nothing else is
 ## asking anything of them.
 ##

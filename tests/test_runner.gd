@@ -193,6 +193,7 @@ func _initialize() -> void:
 	_test_stride_and_cadence_locomotion()
 	_test_setter_capability_gates()
 	_test_cognition_cues()
+	_test_body_facing_rule()
 	_test_attack_targets_are_continuous()
 	_test_post_block_trajectory_chain()
 	_test_opponent_setter_release_is_clear()
@@ -14489,3 +14490,79 @@ func _test_cognition_cues() -> void:
 		"two blockers on one wall recognise at their own moments rather than together",
 	)
 	manager.free()
+
+
+## Facing had no headless coverage at all, and it cost two wrong fixes.
+##
+## The body's heading is not something the resolver decides, so nothing in this
+## file ever looked at it -- and two consecutive attempts at "who faces where"
+## both passed 1049 checks and were both caught by a screenshot instead. The
+## first forced every voli onto their travel direction, which pointed defenders
+## away from the ball and left the neck clamp with no range. The second removed
+## that and left no default at all, so a voli who never sprinted and never
+## touched the ball never acquired a heading.
+##
+## `should_open_up` is the rule, extracted as a static so it can be asked
+## directly. What cannot be tested here is *call order* -- that the ball pass
+## runs before the movement plan -- because that needs frames and this runner has
+## none. `tools/measure_body_facing.gd` covers it and has to be run by hand.
+func _test_body_facing_rule() -> void:
+	var square := 0.0
+	var backward := PI
+	## 114 degrees, not 90. Ninety is exactly `OPEN_UP_CONE_RADIANS`, so a voli
+	## travelling perpendicular to their facing counts as *inside* the cone and
+	## opens up whatever their speed -- which means the lateral bound below can
+	## only ever govern travel that is already partly backward. That is a real
+	## finding rather than a test artefact: the comment on the constant describes
+	## a blocker shuffling along the net, and a blocker shuffling along the net is
+	## exactly the perpendicular case the cone swallows. Recorded here; narrowing
+	## the cone is a behaviour change and wants its own measurement.
+	var back_diagonal := 2.0
+
+	## Inside the cone the travel is the facing, so turning onto it is free and
+	## happens at any speed at all.
+	_check(
+		PlayerActor3D.should_open_up(square, 0.2, 0.1, 0.2)
+			and PlayerActor3D.should_open_up(square, 0.0, 0.0, 0.0),
+		"a voli already moving roughly where they face turns onto it at any speed",
+	)
+
+	## Backpedalling slowly keeps the ball in front of you. This is the case the
+	## first bad fix destroyed: every defender was spun to face their own
+	## footwork, so the head clamp ran out of range and nobody watched the ball.
+	_check(
+		not PlayerActor3D.should_open_up(square, backward, 1.4, backward)
+			and not PlayerActor3D.should_open_up(square, backward, 3.0, backward),
+		"a voli backpedalling below the run bound keeps their facing",
+	)
+
+	## And past it they do open up and go, because you cannot backpedal at a
+	## sprint.
+	_check(
+		PlayerActor3D.should_open_up(square, backward, 4.2, backward),
+		"a voli backpedalling above the run bound turns and runs",
+	)
+
+	## Sideways buys a much higher bound than backwards, which is what makes a
+	## middle shuffle to the pin rather than spin and sprint. Asserted as an
+	## ordering rather than against either constant, so tuning one cannot
+	## silently invert the relationship.
+	_check(
+		not PlayerActor3D.should_open_up(square, back_diagonal, 4.2, back_diagonal)
+			and PlayerActor3D.should_open_up(square, backward, 4.2, backward),
+		"travelling across tolerates more speed before opening up than straight back",
+	)
+	_check(
+		PlayerActor3D.LATERAL_OPEN_UP_SPEED_MPS > PlayerActor3D.OPEN_UP_SPEED_MPS,
+		"the lateral open-up bound sits above the backward one",
+	)
+
+	## The neck is measured off the torso, which is why the body has to point
+	## somewhere sensible before the head can. A limit that exceeded a half turn
+	## would let a voli look behind themselves and hide the defect this pair of
+	## bugs lived in.
+	_check(
+		PlayerActor3D.HEAD_YAW_LIMIT_DEGREES > 0.0
+			and PlayerActor3D.HEAD_YAW_LIMIT_DEGREES < 90.0,
+		"head yaw is limited to less than a quarter turn off the body",
+	)

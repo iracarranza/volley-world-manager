@@ -2705,6 +2705,31 @@ func resolve(
 	## block was scored as a hitter who had been stopped by it. This claims the
 	## point before the recycle branch can take the ball back into home coverage.
 	if not geometric.is_empty() and bool(geometric.hitter_point):
+		## The other side chases the ball off their own hands before the point is
+		## written down. See `_tool_pursuit_map`: they touched it, they have
+		## touches left, and it is not out until it lands.
+		if block_contacts_ball and opponent_team != null:
+			var tool_intents := {}
+			var tool_targets := _tool_pursuit_map(
+				opponent_team.on_court_players(),
+				opponent_team.current_lineup(),
+				Vector2(geometric.target),
+				float(opponent_block_trajectory.get("duration", 0.30)),
+				[
+					opponent_blocker.id if opponent_blocker != null else -1,
+					assisting_blocker.id if assisting_blocker != null else -1,
+				],
+				true, tool_intents,
+			)
+			var tool_event := result.events[-1] as RallyEvent
+			if tool_event != null and not tool_targets.is_empty():
+				tool_event.metadata["opponent_phase_targets"] = tool_targets
+				tool_event.metadata["opponent_phase_intents"] = tool_intents
+				## Reported rather than acted on, so whether a chase can ever save
+				## the point gets decided from a distribution instead of a guess.
+				tool_event.metadata["tool_pursuit_reached"] = float(
+					tool_intents.values()[0]["progress"]
+				)
 		result.key_factors.append(_factor("attack_control"))
 		## `EXPLANATIONS` has no bare `kill` -- only the called/improvised/default
 		## triplet. Without this key the geometric hitter-point path fell through
@@ -12341,6 +12366,69 @@ static func _uniform_intents(targets: Dictionary, intent: StringName) -> Diction
 ## The defender playing it is excluded; they already carry their own
 ## `movement_target`, and moving them twice is the defect the hitter taught.
 const DEFLECTION_LEAN: float = 0.28
+
+## The blocking side going after a ball that came off their own hands.
+##
+## **A tool is not a ball nobody may touch.** Three geometric outcomes end at the
+## net in the hitter's favour -- through the hands, off the hands and out, and
+## placed off them deliberately -- and all three claimed the point before the
+## recycle branch could see them, so the defending six stood still while a ball
+## they had just touched dropped. That is wrong on the rules as well as on the
+## screen: the deflection is the *blocking* team's contact, they have two touches
+## left, and a ball is not out until it lands, so chasing it past the sideline is
+## an ordinary play rather than an impossible one.
+##
+## What this publishes is the chase. Whether the chase can ever *save* the point
+## is a separate question with a separate cost -- a ball played from outside the
+## court arrives at a set and an attack whose geometry assumes an in-court
+## origin -- so this reports the arrival margin rather than acting on it, and the
+## conversion waits on a measurement of how often it would fire.
+##
+## The blockers themselves are excluded. They are at the net with their hands
+## above it and the ball has gone behind them; the people who chase are the ones
+## already facing the right way.
+func _tool_pursuit_map(
+	players: Array,
+	lineup: RotationLineup,
+	landing: Vector2,
+	window_seconds: float,
+	exclude_ids: Array,
+	opponent_side: bool,
+	out_intents: Dictionary = {},
+) -> Dictionary:
+	var targets := {}
+	if lineup == null or window_seconds <= 0.0:
+		return targets
+	var by_id := {}
+	for entry in players:
+		var candidate := entry as VolleyballPlayer
+		if candidate != null:
+			by_id[candidate.id] = candidate
+	var live: Dictionary = opponent_live_positions if opponent_side else live_positions
+	var chaser: VolleyballPlayer = null
+	var chaser_gap := 1.0e9
+	for slot_number in range(1, 7):
+		var player := by_id.get(int(lineup.player_at_slot(slot_number)), null) \
+			as VolleyballPlayer
+		if player == null or exclude_ids.has(player.id):
+			continue
+		var from: Vector2 = live.get(player.id, CourtConstants.slot_position(slot_number))
+		var gap := RallyKinematics.court_distance_meters(from, landing)
+		if gap < chaser_gap:
+			chaser_gap = gap
+			chaser = player
+	if chaser == null:
+		return targets
+	var here: Vector2 = live.get(chaser.id, landing)
+	var reached := _reached_point(chaser, here, landing, window_seconds, "transition")
+	targets[chaser.id] = reached
+	out_intents[chaser.id] = {
+		"intent": &"defending",
+		"progress": _travel_fraction(here, landing, reached),
+	}
+	live[chaser.id] = reached
+	return targets
+
 
 func _deflection_adjust_map(
 	floor_positions: Dictionary,
