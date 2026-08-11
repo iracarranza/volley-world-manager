@@ -2737,7 +2737,9 @@ func show_cognition_cue(cue: Resource, simulation_time: float = -1.0) -> void:
 			return
 		cognition_billboard = CognitionBillboard3D.new()
 		add_child(cognition_billboard)
-	cognition_billboard.show_cue(cue, _cognition_head_height(), simulation_time)
+	cognition_billboard.show_cue(
+		cue, cognition_head_anchor(), simulation_time
+	)
 
 
 func hide_cognition_cue() -> void:
@@ -2749,6 +2751,38 @@ func hide_cognition_cue() -> void:
 ## a tall middle's badge sits above their head and not through it.
 func _cognition_head_height() -> float:
 	return REFERENCE_RIG_HEIGHT_M * maxf(body_height_scale, 0.5)
+
+
+## Where this voli's head actually is, in the actor's own space.
+##
+## **The height was a number, and a number cannot lean.** `_cognition_head_height`
+## multiplies a rig constant by a body scale, which describes a voli standing to
+## attention. Every voli on this court is in a ready stance with the trunk
+## pitched forward, and `BodyPivot` carries that pitch -- so the head is a
+## decimetre or so in *front* of the actor's origin and the mark was being hung
+## above the origin, which is behind the head. Reported as marks reading behind
+## and to the left of their volis, and that is most of it.
+##
+## Reading the node instead picks up everything that moves a head for free: the
+## lean, the crouch, a jump's lift, the fold of a dig. A blocker at the top of
+## their jump now carries their mark up with them, which the constant could not
+## have done at any value.
+##
+## Falls back to the constant when the rig is not in the tree, which is the
+## portfolio and unit-test case -- a pose set by hand before `_ready` has no
+## global transforms to read.
+## **The crown, not the head's centre.** A `MeshInstance3D`'s origin is the
+## middle of its mesh, so anchoring to `head.global_position` hangs the mark
+## half a head too low and the blade's grip lands on the voli's face. The mesh
+## knows its own extent; asking it means a tall silhouette and a short one both
+## get their mark clear of the hair rather than one of them wearing it.
+func cognition_head_anchor() -> Vector3:
+	if head == null or not head.is_inside_tree() or not is_inside_tree():
+		return Vector3(0.0, _cognition_head_height(), 0.0)
+	var crown := head.global_position \
+		+ head.global_transform.basis.y.normalized() \
+		* head.get_aabb().size.y * 0.5 * head.scale.y
+	return global_transform.affine_inverse() * crown
 
 
 ## The swing itself, from the plant onward.

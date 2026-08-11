@@ -145,7 +145,7 @@ func _init() -> void:
 ## drive the head as well -- the actor's `look_toward` belongs to the actor, and
 ## this component should not reach into it.
 func show_cue(
-	cue: Resource, head_height_meters: float, simulation_time: float = -1.0
+	cue: Resource, head_anchor: Vector3, simulation_time: float = -1.0
 ) -> void:
 	if cue == null or not BadgeModel.is_worth_drawing(cue):
 		visible = false
@@ -177,14 +177,14 @@ func show_cue(
 		if _draw_mark(intent, float(reading.get("progress", 0.0)), strength):
 			text = ""
 			visible = true
-			position = Vector3(0.0, head_height_meters + MARK_LIFT_METERS, 0.0)
+			position = head_anchor + _screen_up() * MARK_LIFT_METERS
 			return
 		text = str(INTENT_GLYPHS.get(intent, "•"))
 		var ambient_color := Color(reading.color)
 		ambient_color.a = AMBIENT_ALPHA * strength
 		modulate = ambient_color
 		pixel_size = AMBIENT_PIXEL_SIZE * COGNITICON_SCALE
-		position = Vector3(0.0, head_height_meters, 0.0)
+		position = head_anchor + _screen_up() * MARK_LIFT_METERS
 		visible = true
 		return
 	var glyph := str(SHAPE_GLYPHS.get(str(reading.shape), "◦"))
@@ -200,8 +200,43 @@ func show_cue(
 	pixel_size = lerpf(
 		BADGE_PIXEL_SIZE_QUIET, BADGE_PIXEL_SIZE_LOUD, float(reading.emphasis)
 	) * COGNITICON_SCALE
-	position = Vector3(0.0, head_height_meters + HEIGHT_ABOVE_HEAD_METERS, 0.0)
+	position = head_anchor + _screen_up() * HEIGHT_ABOVE_HEAD_METERS
 	visible = true
+
+
+## Which way is up **on screen**, in this billboard's own parent space.
+##
+## **"Above the head" is a screen claim, not a world one.** Offsetting along
+## world +Y puts a mark above a voli only when the camera is level with the
+## court. The match centre opens on a preset looking down from eight metres, and
+## under that projection a world-vertical offset carries the mark up *and* away
+## from the body -- which is why a mark drawn above a head reads as sitting
+## behind and to one side of it. The higher the lift, the worse it gets, so the
+## fix cannot be a smaller number.
+##
+## Taking the offset along the camera's own up vector instead means the mark
+## lands directly above the head in the rendered image at any angle, because
+## that is the definition of the camera's up. The body of this component is
+## already billboarded for the same reason.
+##
+## Written now rather than when a dynamic camera arrives, because a camera that
+## moves would otherwise slide every mark around its voli as it swung -- and a
+## bug that only appears while the camera is in motion is the kind that gets
+## blamed on the camera.
+##
+## Falls back to world up with no camera, which is the portfolio and headless
+## case.
+func _screen_up() -> Vector3:
+	if not is_inside_tree():
+		return Vector3.UP
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return Vector3.UP
+	var parent_3d := get_parent() as Node3D
+	var up := camera.global_transform.basis.y
+	if parent_3d != null:
+		up = parent_3d.global_transform.basis.inverse() * up
+	return up.normalized() if up.length_squared() > 0.0001 else Vector3.UP
 
 
 func hide_cue() -> void:
@@ -274,7 +309,10 @@ const MARK_PIXEL_RATIO: float = 0.82
 ## in the space directly above the head where a thought bubble goes. Small and
 ## in metres: the mark is screen-relative and this is not, so a large gap would
 ## open up as the camera pulled back.
-const MARK_LIFT_METERS: float = 0.13
+## Half the mark hangs below its own centre, so the lift has to clear the crown
+## *and* that half -- at 0.13 the grip sat on the voli's head. Sized against the
+## badge tier's own 0.30, which has been sitting above heads without complaint.
+const MARK_LIFT_METERS: float = 0.34
 
 ## **A drawn mark is opaque; the character it replaced was not.**
 ##

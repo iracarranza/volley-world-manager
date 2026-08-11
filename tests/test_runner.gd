@@ -14663,7 +14663,14 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			eyes.get(mark, null) is Texture2D, "the %s eye is drawn" % mark
 		)
 	var eye: Image = (eyes["track"] as Texture2D).get_image()
-	var column := int(CogniticonMarks.PUPIL_CENTRE.x * float(CogniticonMarks.SCALE))
+	## Asked for, not recomputed. The pupil is shifted to centre the eye's ink in
+	## its canvas, and the first version of this gate went on sampling the
+	## authored column -- which after the shift is the eye's outer edge. It
+	## reported the pupil missing, which was true of where it looked and false of
+	## the drawing.
+	var column := int(
+		CogniticonMarks.pupil_centre().x * float(CogniticonMarks.SCALE)
+	)
 	var bands := 0
 	var lit := false
 	for y in range(eye.get_height()):

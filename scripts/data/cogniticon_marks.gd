@@ -166,6 +166,21 @@ static func attention_textures(dark_theme: bool) -> Dictionary:
 const EYE_INK_SHIFT := Vector2(-8.5, 0.0)
 
 
+## Where the pupil ends up once the shift above has been applied.
+##
+## Exposed because a caller that wants to *find* the pupil -- the gate that
+## checks it is still legible -- must not do this addition itself. It did, once:
+## the shift was added here and the gate went on sampling the authored column,
+## which after the move is the eye's outer edge rather than the pupil. It
+## reported the pupil gone, which was true of the place it was looking and false
+## of the drawing.
+##
+## One function, so the mark and the measurement cannot disagree about where the
+## pupil is.
+static func pupil_centre() -> Vector2:
+	return PUPIL_CENTRE + EYE_INK_SHIFT
+
+
 static func _eye(mark: String, dark_theme: bool) -> ImageTexture:
 	var width := int(EYE_CANVAS.x) * SCALE
 	var height := int(EYE_CANVAS.y) * SCALE
