@@ -185,7 +185,10 @@ func show_cue(
 			visible = true
 			position = head_anchor + _screen_up() * MARK_LIFT_METERS
 			return
-		if _draw_mark(intent, float(reading.get("progress", 0.0)), strength):
+		if _draw_mark(
+			intent, float(reading.get("progress", 0.0)), strength,
+			simulation_time - float(cue.starts_at),
+		):
 			text = ""
 			visible = true
 			position = head_anchor + _screen_up() * MARK_LIFT_METERS
@@ -259,7 +262,7 @@ func hide_cue() -> void:
 ##
 ## Static because they are the same three textures twelve times over, and
 ## rasterising them per actor would be twelve times the work for one result.
-static var _blades: Dictionary = {}
+static var _drawn: Dictionary = {}
 static var _blades_are_dark: bool = false
 
 ## This billboard's own two sprites: the mark, and the fill behind it.
@@ -415,31 +418,69 @@ func _ensure_eye() -> void:
 
 
 ## Draw this intent as a mark, or report that nothing is drawn for it yet.
-func _draw_mark(intent: String, progress: float, strength: float) -> bool:
-	if not CogniticonMarks.BLADE_INTENTS.has(intent):
-		return false
+func _draw_mark(
+	intent: String, progress: float, strength: float,
+	seconds_since_start: float = -1.0, course: float = 0.0
+) -> bool:
 	_ensure_marks()
-	var texture: Texture2D = _blades.get(intent, null)
+	var texture: Texture2D = _drawn.get(intent, null)
 	if texture == null:
 		return false
+	## **Arrival, so a mark swoops in rather than appearing.** Every mark used
+	## to pop into existence, which is most of why they read as overlays rather
+	## than as belonging to a body. Paced in real seconds -- see the window
+	## budget in `CogniticonMotion` -- so it finishes whatever the flight does.
+	var entry := {"alpha": 1.0, "offset": Vector2.ZERO,
+		"rotation_degrees": 0.0, "scale": 1.0}
+	if seconds_since_start >= 0.0:
+		entry = CogniticonMotion.arrival(seconds_since_start)
+	## And the charge: prominence rather than size, plus the course tilt that
+	## lets one mark carry both what a voli is doing and which way -- the reason
+	## a second concurrent mark is not needed.
+	var charge: Dictionary = CogniticonMotion.charge(progress, course)
+	var alpha := MARK_ALPHA * strength * float(entry["alpha"])
+	var size := AMBIENT_PIXEL_SIZE * COGNITICON_SCALE * MARK_PIXEL_RATIO \
+		* float(entry["scale"]) * float(charge["scale"])
+	var swing := float(entry["rotation_degrees"]) \
+		+ float(charge["rotation_degrees"])
+	var offset: Vector2 = entry["offset"]
+
 	_mark.texture = texture
-	_mark.modulate = Color(1.0, 1.0, 1.0, MARK_ALPHA * strength)
-	_mark.pixel_size = AMBIENT_PIXEL_SIZE * COGNITICON_SCALE * MARK_PIXEL_RATIO
+	_mark.modulate = Color(1.0, 1.0, 1.0, alpha)
+	_mark.pixel_size = size
+	_mark.rotation_degrees = Vector3(0.0, 0.0, -swing)
+	_mark.position = Vector3(offset.x * 0.2, offset.y * 0.2, 0.0)
 	_mark.visible = true
 	## Only the intents that accumulate carry a fill, and the review is explicit
 	## that the fill is *distance covered* and never *likelihood of arriving* --
 	## a hitter who will be late still fills, because they are running.
-	var fills := intent == "approaching" and progress > 0.001
+	var fills := FILLING_INTENTS.has(intent) and progress > 0.001
 	_mark_fill.visible = fills
 	if fills:
 		var region := CogniticonMarks.fill_region(progress)
-		_mark_fill.texture = _blades["fill"]
+		_mark_fill.texture = _drawn.get(
+			"shield_fill" if intent in CogniticonMarks.SHIELD_INTENTS else "fill",
+			_drawn.get("fill", null)
+		)
 		_mark_fill.region_enabled = true
 		_mark_fill.region_rect = region
 		_mark_fill.offset = CogniticonMarks.fill_offset(region)
-		_mark_fill.modulate = Color(1.0, 1.0, 1.0, MARK_ALPHA * strength * 0.72)
-		_mark_fill.pixel_size = _mark.pixel_size
+		_mark_fill.modulate = Color(1.0, 1.0, 1.0, alpha * 0.72)
+		_mark_fill.pixel_size = size
+		_mark_fill.rotation_degrees = _mark.rotation_degrees
+		_mark_fill.position = _mark.position
+	for part in [_eye_outline, _eye_pupil, _eye_lead, _eye_lid]:
+		if part != null:
+			part.visible = false
 	return true
+
+
+## Which intents accumulate, and therefore fill. A blade fills as a hitter
+## covers their run-up; a shield fills as a wall closes. Everything else has no
+## progress to show and draws plain.
+const FILLING_INTENTS: Array[String] = [
+	"approaching", "blocking", "covering",
+]
 
 
 ## How much larger a drawn mark is than the character it replaces.
@@ -492,9 +533,18 @@ func _hide_mark() -> void:
 
 
 func _ensure_marks() -> void:
-	if _blades.is_empty() or _blades_are_dark != _mark_theme_is_dark():
+	if _drawn.is_empty() or _blades_are_dark != _mark_theme_is_dark():
 		_blades_are_dark = _mark_theme_is_dark()
-		_blades = CogniticonMarks.blade_textures(_blades_are_dark)
+		## Every family that has been drawn, in one table. The renderer asks
+		## this rather than a family name, so a family switches from its
+		## Unicode stand-in to its mark the moment it is added here.
+		_drawn = CogniticonMarks.blade_textures(_blades_are_dark)
+		var shields: Dictionary = CogniticonMarks.shield_textures(_blades_are_dark)
+		_drawn["shield_fill"] = shields["fill"]
+		for intent in CogniticonMarks.SHIELD_INTENTS:
+			_drawn[intent] = shields[intent]
+		for intent in CogniticonMarks.HAND_INTENTS:
+			_drawn[intent] = CogniticonMarks.hand_textures(_blades_are_dark)[intent]
 	if _mark == null:
 		_mark_fill = _new_mark_sprite()
 		_mark = _new_mark_sprite()
