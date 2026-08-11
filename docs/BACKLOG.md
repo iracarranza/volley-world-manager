@@ -110,6 +110,49 @@ Ordered roughly by how much each one changes what a viewer believes.
     the court view, and a section title indexed by an `OptionButton` selection of
     -1 -- and neither is confirmed as the cause.
 
+11. **A defender takes two or three sets of small steps into a dig**, adjusting
+    into the platform pose, and then plants. Two things are wrong with that and
+    one of them is upstream of the other.
+
+    The near cause is the step quantiser. `step_quantised_fraction` breaks any
+    leg under `STEP_QUANTISE_MAX_METERS` (2.6 m) into up to `MAX_QUANTISED_STEPS`
+    (4) discrete steps, which is right for crossing the court and wrong for the
+    last metre before a contact. **A short final approach is not locomotion, it
+    is a reach** -- one plant and an extension -- and the rig already draws it:
+    `posture` has a `reaching` branch with its own platform yaw, roll and stance
+    width. It is simply never selected. The simulator's own comment records the
+    measurement: `reaching` fires on **0.0% of receptions** and `off-axis` on
+    2.5% of digs, which is why `PlatformAim.posture_for` exists at all as a
+    second, purely geometric opinion. So this is the §0 shape again -- a pose
+    built, measured as unreachable, and left in place with a knob that cannot
+    select it.
+
+    The far cause is why there is *time* for two or three adjustments at all. See
+    the next entry: the defender is not moving quickly, the window is too long.
+
+12. **The ball freezes on the floor**, and it is the same defect as the frozen
+    window from the top of this list wearing different clothes. A drawn leg's
+    duration is the interval between two events, but the ball's flight to its
+    landing takes whatever physics says it takes. When the flight is the shorter
+    of the two -- a ball nobody reached, a failed dig, the end of a rally -- the
+    ball arrives and then sits there for the remainder while the bodies keep
+    moving around it.
+
+    The fix is not to stretch the flight. It is that **the window has two parts**:
+    the flight, whose length comes from `BallFlightModel`, and the aftermath,
+    whose length is what is left over and in which the ball is dead and the
+    bodies are settling. Playback currently draws one part and calls it the whole
+    window. Everything that looks like "the voli had suspiciously long to do
+    that" is downstream of this.
+
+13. **A turn is made of steps.** Pivoting to look somewhere is currently a smooth
+    interpolation of the whole body. It should be head first, then torso, and for
+    anything steeper than a glance a *step* in the new direction -- the feet
+    reorder themselves or the turn does not happen. This is the concrete version
+    of "head, body and feet as one decision" below, and it shares a root with
+    entry 11: both are cases where the rig glides through something a body does
+    in discrete moves.
+
 ### Discussed, with the shape agreed
 
 **Gait by involvement.** A voli should walk when uninvolved and jog when reaching
