@@ -933,6 +933,7 @@ func _build_movement_plan(
 	## to publish it, not for playback to make it up.
 	_apply_base_positions(plan, event, next_contact)
 	_apply_cheat_steps(plan, action_target)
+	_hold_airborne_blocker(plan, event)
 	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
 	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
 	## The player who just made this contact goes where their own event said they
@@ -1317,6 +1318,36 @@ func _apply_base_positions(
 		if _court_metres(here, Vector2(resting[raw_player_id])) < BASE_RETURN_DEADBAND_METERS:
 			continue
 		_set_plan_target(plan, player_id, Vector2(resting[raw_player_id]))
+
+
+## A blocker who is off the floor does not slide along the net.
+##
+## Reported: the right-side attack goes high, and the blocker shuffles sideways
+## *in mid-air* and then executes a rolling receive. The plan was handing the
+## block's own actor a target for the next contact -- often a dig they take
+## after landing, which is legitimate and common enough that
+## `_apply_contact_poses` has a whole paragraph about it -- and then moving them
+## there across a window they spend in the air.
+##
+## `BlockPhaseModel.may_translate` is the rule: a body in the air travels on the
+## momentum it left the floor with. Applied to the along-net axis only. The
+## other one is free because coming *down* and backing off the net is exactly
+## what a landing blocker does; it is the sideways slide that no body can
+## perform.
+func _hold_airborne_blocker(plan: Dictionary, event: RallyEvent) -> void:
+	if event == null or event.event_type != RallyEventModel.EventType.BLOCK:
+		return
+	if BlockPhaseModel.may_translate("committed"):
+		## Defensive: if the rule is ever relaxed, this stops enforcing it
+		## rather than silently keeping a stale copy of it.
+		return
+	var blocker_id := int(event.actor_id)
+	if not plan.has(blocker_id) \
+			or not match_court_3d.live_positions.has(blocker_id):
+		return
+	var held := Vector2(match_court_3d.live_positions[blocker_id])
+	var target := Vector2(plan[blocker_id]["target"])
+	plan[blocker_id]["target"] = Vector2(held.x, target.y)
 
 
 ## How far a voli with no assignment will drift toward the play, in metres.
