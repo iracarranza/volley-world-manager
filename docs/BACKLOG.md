@@ -210,6 +210,22 @@ Ordered roughly by how much each one changes what a viewer believes.
     the falling reach -- which the rig has parts of, and which is the same
     missing selector as 13a rather than missing art.
 
+13d. **A net touch by a player.** Not the ball clipping the tape -- a body or a
+    hand touching the net, which is a fault and one of the few in the sport a
+    viewer can see happen. Nothing in the engine models where a player's hands
+    are relative to the tape after a jump, so this needs the blocker's and
+    hitter's extension in world space, which the rig has and the simulation does
+    not. Worth doing after collision, which needs the same bodies-in-space
+    question answered.
+
+13e. **Readable bodies.** `docs/design/READABLE_BODIES.md` -- the postures are
+    near-uniform in frequency (30/26/22/22 across moving, reaching, planted and
+    off-axis over 447 contacts) and still not legible, which makes it an
+    amplitude and silhouette problem rather than a rarity one. Plus expressive
+    gestures: a hand raised to call for the ball, setters and middles pointing
+    at targets, and the blocker's idle hands-up, which is the one to build
+    first because it covers two players for most of every rally.
+
 13c. **A blocker hangs in the air.** The block's descent is drawn over a window
     that outlasts the jump. Distinct from the block-timing work already landed:
     that fixed *when* the block happens, this is how long the body stays up

@@ -518,6 +518,26 @@ func _contact_posture(event: RallyEvent) -> String:
 	if event == null:
 		return "planted"
 	var recorded := str(event.metadata.get("contact_posture", "planted"))
+	## **A contact that never happened is not drawn square.**
+	##
+	## Reported from a rally whose caption read "Wonsik cannot reach the short
+	## court attack after moving 1.2m" -- a ball nobody touched -- over a body
+	## drawn in the platform pose, so the viewer could not tell a missed ball
+	## from a shanked one. Those are different events and the caption and the
+	## drawing were describing different ones.
+	##
+	## Nothing here asked `event.success`. `contact_posture` is on every contact
+	## whether or not it was made, so the pose selector treated a whiff exactly
+	## like a dig. The extension is the honest shape for it -- the defender did
+	## reach, they simply did not arrive -- and it is what the resolver already
+	## calls these balls: `reaching` fires on a *negative* margin, which is a
+	## ball beyond the range, which is this.
+	##
+	## Not the whole of 13a. A reach that misses and a reach that digs still
+	## share a pose, and telling them apart wants the ball's absence to be
+	## visible in the body rather than only in the ball. Logged.
+	if not event.success:
+		return "reaching"
 	## **A ball taken at the edge of the range is a reach.**
 	##
 	## The resolver reaches for `reaching` when `reach_margin_meters` is
