@@ -224,9 +224,20 @@ Ordered roughly by how much each one changes what a viewer believes.
     leg. Every drawn flight knows its endpoints, but nothing asks whether the
     last one finished on the floor or in somebody's hands, so there is no way
     today to tell a rally that has landed from one that is still falling.
-    Measure that before building the outro, because a 0.38 s outro that is
-    already long enough on most rallies would make this a fix for a case that
-    does not occur -- and this session has produced three of those.
+    Measured once, and the instrument was wrong. `run_final_ball_probe.gd` says
+    the rally's final contact carries a flight on **0.0% of 400 rallies** --
+    universal, so every rally does end on a window whose length is the outro
+    rather than the ball's. But "the last event has no flight" is not "the ball
+    is in the air": on a kill the attack's flight already ran to the floor and
+    the trailing failed dig is a correct beat over a dead ball. The probe cannot
+    separate those.
+
+    **The next step is therefore not the outro.** It is publishing a drawn
+    flight's end height, which nothing does, and which cannot be inferred from
+    `end_position` on precisely the case that matters -- a flight terminated at
+    an interception ends at a pair of hands whose height is not written down.
+    Publish that, re-run the probe with the question it was meant to ask, and
+    only then build the outro.
 
 13g. **Chase the ball off the court.** A deflection coming high off the block is
     playable, and a real player leaves the court to go after it. Nothing in the
