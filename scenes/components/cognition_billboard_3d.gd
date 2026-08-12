@@ -189,6 +189,7 @@ func show_cue(
 			intent, float(reading.get("progress", 0.0)), strength,
 			simulation_time - float(cue.starts_at), 0.0,
 			CogniticonMotion.variant_for(str(cue.state), str(cue.affect)),
+			CogniticonMotion.affect_grade(str(cue.state), str(cue.affect), false),
 		):
 			text = ""
 			visible = true
@@ -236,7 +237,7 @@ func show_cue(
 	if _draw_mark(
 		str(reading.get("intent", "watching")),
 		float(reading.get("progress", 0.0)), 1.0, -1.0, 0.0,
-		CogniticonMotion.variant_for(str(cue.state), str(cue.affect)),
+		CogniticonMotion.variant_for(str(cue.state), str(cue.affect)), grade,
 	):
 		text = ""
 		visible = true
@@ -268,7 +269,7 @@ func show_cue(
 ## rather than a second vocabulary.
 func _amplify(ink: Color) -> void:
 	var boost := BADGE_PIXEL_SIZE_LOUD / AMBIENT_PIXEL_SIZE
-	for part in [_mark, _mark_fill, _eye_outline, _eye_pupil, _eye_lead]:
+	for part in [_backdrop, _mark, _mark_fill, _eye_outline, _eye_pupil, _eye_lead]:
 		if part == null or not part.visible:
 			continue
 		part.pixel_size *= boost
@@ -319,6 +320,7 @@ func hide_cue() -> void:
 ## Static because they are the same three textures twelve times over, and
 ## rasterising them per actor would be twelve times the work for one result.
 static var _drawn: Dictionary = {}
+static var _backdrops: Dictionary = {}
 static var _blades_are_dark: bool = false
 
 ## This billboard's own two sprites: the mark, and the fill behind it.
@@ -329,6 +331,7 @@ static var _blades_are_dark: bool = false
 ## need the fill baked into the mark, which is a texture per progress value.
 var _mark: Sprite3D
 var _mark_fill: Sprite3D
+var _backdrop: Sprite3D
 
 
 ## The eye's three sprites, and the shared textures they wear.
@@ -352,6 +355,9 @@ var look_pitch_degrees: float = 0.0
 
 
 ## Draw the eye, or report that this cue is not a reading one.
+## The eye does not take a backdrop. It is already the loudest thing the layer
+## draws -- a lid, a pupil and a lead, three marks in one slot -- and a coloured
+## ground behind it turns a face into a badge.
 func _draw_eye(
 	cue: Resource, reading: Dictionary, strength: float, simulation_time: float
 ) -> bool:
@@ -399,6 +405,8 @@ func _draw_eye(
 	## the viewer. Cached per aperture step, since eight of them serve the whole
 	## court.
 	var step := CogniticonMarks.aperture_step(aperture * (1.0 - blink))
+	if _backdrop != null:
+		_backdrop.visible = false
 	_eye_outline.texture = _eye_parts["eye_%d" % step]
 	_eye_outline.pixel_size = size
 	_eye_outline.modulate = Color(ink.r, ink.g, ink.b, alpha)
@@ -459,7 +467,7 @@ func _ensure_eye() -> void:
 func _draw_mark(
 	intent: String, progress: float, strength: float,
 	seconds_since_start: float = -1.0, course: float = 0.0,
-	variant: String = "plain"
+	variant: String = "plain", grade: String = "C"
 ) -> bool:
 	_ensure_marks()
 	## **The variant is looked up, not required.** Only two intents have an
@@ -522,7 +530,54 @@ func _draw_mark(
 	for part in [_eye_outline, _eye_pupil, _eye_lead]:
 		if part != null:
 			part.visible = false
+	_draw_backdrop(intent, variant, grade, size, alpha)
 	return true
+
+
+## **Where a rating lives, and where a rally that came off lives.**
+##
+## Both behind the mark, because both were asking for the same thing. Tinting
+## the ink would spend the contrast that lets one ink work on any ground -- a
+## mark above a head sits against the lit court on one frame and the dark
+## surround on the next -- and drawing success into each family's paths meant
+## every family owing two more path lists for no shared meaning.
+##
+## Sized per family. `run_mark_extent_probe` put the spread across the
+## vocabulary at 64%: one radius for everything would make the same grade read
+## louder behind a shield than behind a blade, which is the opposite of what a
+## rating scale is for.
+func _draw_backdrop(
+	intent: String, variant: String, grade: String, size: float, alpha: float
+) -> void:
+	if _backdrop == null:
+		return
+	## Grade C is *nothing to report*, and a neutral disc behind every one of
+	## twelve volis is twelve pieces of furniture. It draws when the rally has
+	## something to say -- a grade off neutral, or a variant off plain.
+	if grade == "C" and variant == "plain":
+		_backdrop.visible = false
+		return
+	var texture: Texture2D = _backdrops.get(variant, null)
+	if texture == null:
+		_backdrop.visible = false
+		return
+	var tint := UIPalette.grade_color(grade, light_mode)
+	_backdrop.texture = texture
+	_backdrop.pixel_size = size * CogniticonMarks.backdrop_scale(intent)
+	_backdrop.modulate = Color(
+		tint.r, tint.g, tint.b, BACKDROP_ALPHA * alpha / maxf(MARK_ALPHA, 0.001)
+	)
+	_backdrop.rotation_degrees = Vector3.ZERO
+	_backdrop.position = _mark.position
+	_backdrop.visible = true
+
+
+## How solid the ground behind a mark is.
+##
+## Below the ink deliberately. The backdrop is a *ground*, and one that competes
+## with the mark it is behind has stopped being a backdrop -- which is the whole
+## reason the rating went here rather than into the ink.
+const BACKDROP_ALPHA: float = 0.55
 
 
 ## Which intents accumulate, and therefore fill. A blade fills as a hitter
@@ -573,6 +628,8 @@ const MARK_ALPHA: float = 0.76
 
 
 func _hide_mark() -> void:
+	if _backdrop != null:
+		_backdrop.visible = false
 	if _mark != null:
 		_mark.visible = false
 	if _mark_fill != null:
@@ -601,11 +658,20 @@ func _ensure_marks() -> void:
 		## later needs no new branch anywhere.
 		_drawn.merge(CogniticonMarks.blade_variant_textures(_blades_are_dark))
 		_drawn.merge(CogniticonMarks.shield_variant_textures(_blades_are_dark))
+		## The backdrops carry no ink, so they are theme-independent: they are
+		## drawn white and tinted by the grade at draw time. Keyed apart from the
+		## marks so a variant name can never collide with an intent name.
+		_backdrops = CogniticonMarks.backdrop_textures()
 	if _mark == null:
+		_backdrop = _new_mark_sprite()
 		_mark_fill = _new_mark_sprite()
 		_mark = _new_mark_sprite()
-		## The fill is added first so the outline draws over it, which is what
-		## keeps the blade's edge crisp as the interior rises past it.
+		## Added in draw order, because every one of these sets `no_depth_test`
+		## and a sprite with no depth test is drawn in the order its parent lists
+		## it. Backdrop, then fill, then outline: the ground first, then the
+		## interior, then the edge that keeps the blade crisp as the fill rises
+		## past it.
+		add_child(_backdrop)
 		add_child(_mark_fill)
 		add_child(_mark)
 

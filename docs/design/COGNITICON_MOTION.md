@@ -500,21 +500,48 @@ anticipates the *contact* rather than trailing the ball.
    charge, a hand-off, a swing, a shock and a slash inside one rally. Worth
    measuring the real windows before any envelope is tuned.
 
-## 13. Variants: three states per family, and how a rating reaches a mark
+## 13. Variants, and the backdrop that carries both the rating and the success
 
-A family now has three variants, drawn together on purpose. An interface that
-can only show triumph is a scoreboard; one that can only show failure is a list
-of complaints.
+A family says what a voli is doing. A **variant** says how it is going, and the
+rally's own events choose it — no mark reads another mark, so a fractured shield
+is fractured because the resolver says the ball went through it, not because
+some other voli's blade was drawn nearby.
 
-| family | `plain` | `ascendant` | `broken` |
-|---|---|---|---|
-| blade | the mark | **flaming** — three licks off the edge, unequal, leaning | **shattered** — a stump, the tip adrift and turned |
-| shield | the mark | **shining** — five rays off the rim, off the surface, not on it | **cleaved** — split on a diagonal, the halves parted *and slid* |
-| commitment | the diamond, drawn round | (none) | **broken** — parted, one half slumped and turned |
+| | ascendant | broken |
+|---|---|---|
+| where it lives | **behind** the mark, in the backdrop | **in** the mark |
+| blade | flares | fractures across its midpoint, the tip falling away |
+| shield | flares | fractures apex to hem, the halves parting |
+| commitment | — | fractures on its long axis |
 
-The variants do not interact. **The rally events decide which variant is
-showing** — nothing in the layer negotiates, and a mark never reacts to the mark
-beside it.
+**The two directions are not symmetrical, and that is the design.** Succeeding
+is something that happens *around* a voli: the mark is unchanged and the ground
+behind it catches light. Failing happens *to* the mark — it breaks, and the
+pieces fall away from each other.
+
+The first version drew both into the ink: flame tongues off a blade's edge, rays
+off a shield's rim. That meant every family owed two more path lists, and a
+flaming blade and a shining shield had nothing in common but intent. One flare
+behind any mark costs one drawing for the whole vocabulary and says the same
+thing about every family.
+
+### A break is a fracture, not a cut
+
+A shape parted along a straight line reads as **two shapes** — which is exactly
+what the first attempt produced: a shield in halves and a blade drawn in two
+pieces. A *jagged* seam is what makes it read as one thing that broke, because
+the two edges are complementary: the teeth of one side are the gaps of the
+other, and the eye reassembles them.
+
+The seams run where the shape is weakest, which is also where they read: **apex
+to hem** down a shield, **across the midpoint** of a blade. And the loose piece
+falls and turns — parted-but-level is a shape with a crack in it; falling away
+is what says it lost.
+
+Teeth are scaled to the shape being cut. `FRACTURE_JAG` on a blade's 12-unit
+width put teeth taller than they were wide, which rasterised as a scribble
+rather than as a break; the blade takes five shallow teeth against a shield's
+seven.
 
 ### Commitment stopped being a symbol
 
@@ -526,70 +553,76 @@ It comes back as a **duration**. Committing to a ball takes a moment, and a mark
 that draws itself around its own perimeter says that with no vocabulary at all:
 a loading bar bent into a shape. Half-drawn is a decision half-made.
 
-A bar also needs its **track**, which the first version did not have. Without
-one a half-formed commitment is just a short line — legible as motion, useless
-as a fraction, and at nought it rendered as literally nothing. The track is the
-same diamond, thinner and dashed, which is this vocabulary's existing word for
-*provisional*. So the empty part of the bar is already saying "not yet" without
-a second colour or an alpha channel.
+A bar also needs its **track**. Without one a half-formed commitment is just a
+short line — legible as motion, useless as a fraction, and at nought it rendered
+as literally nothing. The track is the same diamond, thinner and dashed, which
+is this vocabulary's existing word for *provisional*. So the empty part of the
+bar is already saying "not yet" without a second colour or an alpha channel.
 
-And a commitment that fails does not fade. It **breaks**, which is the
-hesitating passer of the scene in §6.
+A commitment that fails does not fade. It breaks, on the same jagged seam as
+everything else — three families breaking three different ways still have to
+break in one hand.
 
-### Colour: the ink, not a backdrop — measured
+### The backdrop: sized to its own mark
 
-Two routes were drawn on one sheet: recolour the mark's ink to the rating
-grade, or leave the ink neutral and seat the mark on a coloured disc.
+Two questions turned out to be one. A rating colour needs somewhere to sit that
+is **not** the ink — the ink is doing contrast, and a mark above a head sits
+against the lit court on one frame and the dark surround on the next, so tinting
+it spends the thing that makes one ink work everywhere. And succeeding needed a
+treatment that was not another set of paths per family.
 
-The disc makes a claim it never states — that one disc radius works for every
-family. `tools/run_mark_extent_probe.gd` measures the ink bounding box of every
-mark in the vocabulary and the radius a circle needs to contain it:
+Both are answered behind the mark: a **disc** for an ordinary contact, a
+**flare** for one that came off. The flare is the disc plus what it is throwing
+off — same radius, tongues on top, longest at the top because heat rises and a
+ring even all the way round reads as a stamp. A broken mark keeps the disc: the
+grade is already saying it went badly, and a second loud silhouette behind a
+shape that is coming apart is two things shouting the same word.
+
+It draws only when the rally has something to say — a grade off neutral, or a
+variant off plain. Grade C is *nothing to report*, and a neutral disc behind
+each of twelve volis is twelve pieces of furniture.
+
+**Sized per family, and that is what the extent probe bought.**
+`tools/run_mark_extent_probe.gd` measures the ink bounding box of every mark and
+the radius a circle needs to contain it:
 
 | mark | radius | vs canvas |
 |---|---|---|
 | eye, nominal | 91 | 84% |
-| blade, shattered | 96 | 89% |
-| commitment, full | 99 | 91% |
 | blade, plain | 111 | 102% |
-| blade, flaming | 122 | 113% |
 | shield, plain | 131 | 121% |
-| shield, cleaved | 139 | 129% |
-| shield, shining | 149 | 138% |
+| shield, fractured | 139 | 129% |
 
-**A disc sized for the largest is 64% wider than the smallest mark needs.** One
-disc therefore reads as two different weights depending on which family is
-inside it, and the same grade would look louder on a shield than on an eye — the
-opposite of what a rating scale is for. Sizing the disc per family fixes that
-and replaces one decision with one-per-family, plus a radius owed by every
-family added later.
+A single radius sized for the largest is **64% wider** than the smallest mark
+needs, so the same grade would read louder behind a shield than behind an eye —
+the opposite of what a rating scale is for. `backdrop_scale` derives the share
+from each family's authored geometry, which is free and exact; scanning ten
+textures at load is a million `get_pixel` calls.
 
-Recolouring the ink has none of that: it costs nothing per family, it survives
-any ground because the halo is doing that job already, and grade C is very
-nearly the ink already in use, so the neutral case is the drawing unchanged.
+The eye takes no backdrop at all. It is already the loudest thing the layer
+draws — a lid, a pupil and a lead in one slot — and a coloured ground behind it
+turns a face into a badge.
 
-**The ink carries the grade.** The disc is recorded here as measured and
-declined, not as untried.
+### Four defects the plates found by disagreeing with a gate
 
-### What the plate found that looking did not
+- **A cleaved shield carried *more* ink than a whole one.** The split filtered
+  the outline's vertices onto one side of the cut; a side's vertices are
+  contiguous only if the closed loop's start vertex sits on the far side. It did
+  not, the run wrapped, and the open polyline joined its two ends with a chord
+  straight across the shield — a stray diagonal that read plausibly as the cut.
+- **Then the fixed cut read as intact with a nick in the rim**, because the old
+  drawing had only looked cleaved because of the bug.
+- **A vertical break did nothing at all, silently.** `signf` has a third answer,
+  and a shield's apex sits exactly at x=27 — the vertex the cut was aimed
+  through scored zero, the walk saw no sign change, and the outline came back in
+  one piece. No error; just an unbroken shield labelled "fractured".
+  `_side_of` has two answers.
+- **The flare covered less ground than the disc**, because it was drawn at a
+  smaller base radius than the shape it was supposed to be the loud version of.
 
-The variant sheet was built to answer the colour question and answered two
-others on the way, both by disagreeing with a gate:
-
-- **The cleaved shield carried *more* ink than a whole one.** `_cleaved_paths`
-  filtered the outline's vertices onto one side of the cut or the other. A
-  side's vertices are contiguous only if the closed loop's start vertex sits on
-  the far side — it did not, the run wrapped, and the open polyline joined its
-  two ends with a chord straight across the shield. The stray diagonal read
-  plausibly as the cut itself. It is now split by *walking* the outline and
-  cutting where the line actually crosses it.
-- **And then the fixed cleave read as intact with a nick in the rim**, because
-  the old drawing had only looked cleaved because of the bug. A gap alone is a
-  gap; two pieces that no longer line up along the cut are a break. The halves
-  are parted *and* slid.
-
-The gate for the shield's break is width at the waist, not ink count — a cleave
-is a parting, not a loss, and the first version of that gate asked the wrong
-question of the right drawing.
+The gate for a break is width where it broke, not ink count — a fracture *adds*
+a seam, and the first version of that gate asked a shattered blade to carry less
+ink and failed on a drawing that was right.
 
 ### The variants are wired, and the compiler barely reaches them
 

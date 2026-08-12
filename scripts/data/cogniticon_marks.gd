@@ -574,119 +574,108 @@ static func hand_textures(dark_theme: bool) -> Dictionary:
 ## ## Variants: how a mark says the thing went well, or did not
 ##
 ## A family says what a voli is doing. A **variant** says how it is going, and
-## the rally's own events choose it -- no mark reads another mark, so a cleaved
-## shield is cleaved because the resolver says the ball went through it, not
+## the rally's own events choose it -- no mark reads another mark, so a shattered
+## shield is shattered because the resolver says the ball went through it, not
 ## because some other voli's blade was drawn nearby.
 ##
-## | family | ascendant | broken |
+## | | ascendant | broken |
 ## |---|---|---|
-## | blade | **flaming** -- tongues off the edge | **shattered** -- snapped, the tip adrift |
-## | shield | **shining** -- rays off the rim | **cleaved** -- split, the halves parted |
+## | where it lives | **behind** the mark, in the backdrop | **in** the mark |
+## | blade | flares | fractures across its midpoint |
+## | shield | flares | fractures apex to hem |
 ##
-## Both directions matter and the pair has to be drawn together: an interface
-## that can only show triumph is a scoreboard, and one that can only show
-## failure is a list of complaints.
+## **The two directions are not symmetrical, and that is the design.** Succeeding
+## is something that happens *around* a voli -- the mark is unchanged and the
+## ground behind it catches light. Failing happens *to* the mark: it breaks, and
+## the pieces fall away from each other.
+##
+## The first version drew both into the ink -- flame tongues off a blade's edge,
+## rays off a shield's rim -- which meant every family owed two more path lists,
+## and a flaming blade and a shining shield had nothing in common but intent.
+## One flare behind any mark costs one drawing for the whole vocabulary and says
+## the same thing about every family.
 const VARIANTS: Array[String] = ["plain", "ascendant", "broken"]
 
 
-## Flame tongues rising off a blade's edge, as three licks of differing height.
-static func _flame_paths() -> Array:
-	var out: Array = []
-	var licks := [
-		{"x": 21.0, "height": 9.0, "sway": -2.6},
-		{"x": 27.0, "height": 13.5, "sway": 1.8},
-		{"x": 33.0, "height": 8.0, "sway": 3.0},
-	]
-	for lick in licks:
-		var base := Vector2(float(lick["x"]), 8.0)
-		var tip := Vector2(
-			float(lick["x"]) + float(lick["sway"]), 8.0 - float(lick["height"])
-		)
-		## An S-curve rather than a spike: a flame leans and recovers, and a
-		## straight triangle reads as an arrow.
-		out.append({"points": _cubic(
-			base,
-			base + Vector2(-3.4, -float(lick["height"]) * 0.42),
-			tip + Vector2(3.0, float(lick["height"]) * 0.30),
-			tip
-		), "closed": false, "width": 1.9, "dash": 0.0})
-	return out
-
-
-## The break: a blade snapped across its middle, the tip carried away and
-## turned. Drawn as the two halves rather than as a crack, because a crack on a
-## stroke outline is a gap and reads as a dash.
-static func _shattered_paths() -> Array:
-	var lower := Rect2(21.0, 20.0, 12.0, 16.0)
-	var out: Array = [
-		{"points": _rounded_rect(lower, BLADE_RADIUS), "closed": true,
-			"width": BLADE_STROKE, "dash": 0.0},
-	]
-	## The tip, rotated and lifted clear of the stump.
-	var tip_points := PackedVector2Array()
-	for point in _rounded_rect(Rect2(21.0, 4.0, 12.0, 13.0), BLADE_RADIUS):
-		var centred := point - Vector2(27.0, 10.5)
-		var angle := deg_to_rad(26.0)
-		tip_points.append(Vector2(
-			centred.x * cos(angle) - centred.y * sin(angle),
-			centred.x * sin(angle) + centred.y * cos(angle)
-		) + Vector2(31.0, 9.0))
-	out.append({"points": tip_points, "closed": true,
-		"width": BLADE_STROKE, "dash": 0.0})
-	## Two shards leaving the break, which is what makes it a snap rather than
-	## a blade drawn in two pieces.
-	out.append({"points": _line(18.5, 18.0, 15.0, 14.5),
-		"closed": false, "width": 1.7, "dash": 0.0})
-	out.append({"points": _line(35.0, 19.5, 39.0, 16.5),
-		"closed": false, "width": 1.7, "dash": 0.0})
-	return out
-
-
-## Rays off a shield's rim. Short, unequal, and not touching the rim -- a gleam
-## sits off a surface rather than on it.
-static func _shine_paths() -> Array:
-	var out: Array = []
-	var rays := [
-		[Vector2(27.0, 2.0), Vector2(27.0, -3.5)],
-		[Vector2(44.0, 9.0), Vector2(48.5, 5.0)],
-		[Vector2(10.0, 9.0), Vector2(5.5, 5.0)],
-		[Vector2(48.0, 24.0), Vector2(52.5, 23.0)],
-		[Vector2(6.0, 24.0), Vector2(1.5, 23.0)],
-	]
-	for ray in rays:
-		out.append({"points": PackedVector2Array([ray[0], ray[1]]),
-			"closed": false, "width": 2.0, "dash": 0.0})
-	return out
-
-
-## The cleave: the shield split on a diagonal, its halves parted along the cut.
+## ## The break, as a fracture rather than a cut
 ##
-## Cut by **walking** the outline and splitting it at the two places the cut line
-## actually crosses it, rather than by filtering vertices onto one side or the
-## other. Filtering was the first version and it looked right in the code: the
-## outline is a closed loop, so a side's vertices are contiguous only if the
-## loop's start vertex happens to sit on the other side of the cut. It did not,
-## the run wrapped, and the open polyline joined its two ends with a chord
-## straight across the shield -- a stray diagonal that read plausibly as the cut
-## itself. Caught by an ink count, not by looking: a *cleaved* shield came out
-## carrying more ink than a whole one.
-static func _cleaved_paths() -> Array:
-	var out: Array = []
-	var outline := _shield_outline(false)
-	var cut_normal := Vector2(0.82, 0.57)
-	var centre := Vector2(27.0, 27.0)
+## A shape parted along a straight line reads as *two shapes*, which is what the
+## first attempt produced: a shield in halves and a blade drawn in two pieces.
+## A **jagged** seam is what makes it read as one thing that broke, because the
+## two edges are complementary -- the teeth of one side are the gaps of the
+## other, and the eye reassembles them.
+##
+## The seams run where the shape is weakest, which is also where they read:
+## **apex to hem** down a shield, and **across the midpoint** of a blade.
+const FRACTURE_TEETH: int = 7
+const FRACTURE_JAG: float = 2.3
+## How far the two pieces separate along the break, and how far the loose one
+## falls. Both matter: parted-but-level reads as a shape with a crack in it,
+## and it is *falling away* that says the thing failed.
+const FRACTURE_PART: float = 2.1
+const FRACTURE_FALL: float = 3.4
+const FRACTURE_TURN_DEGREES: float = 9.0
 
-	## Walk the closed loop once, cutting a new arc every time the sign flips and
-	## planting the crossing point on both arcs so neither end is ragged.
+
+## A zigzag from `from` to `to`, deviating either side of the straight line.
+##
+## Deterministic rather than random: the same mark has to rasterise identically
+## every run, and a break that is a different shape each time reads as noise
+## rather than as a property of the drawing.
+static func _jagged(
+	from: Vector2, to: Vector2, teeth: int = FRACTURE_TEETH,
+	jag: float = FRACTURE_JAG
+) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var normal := (to - from).normalized()
+	normal = Vector2(-normal.y, normal.x)
+	for step in range(teeth + 1):
+		var t := float(step) / float(teeth)
+		var side := 1.0 if step % 2 == 1 else -1.0
+		## The ends stay on the line so the seam meets the outline it cuts;
+		## a tooth at the endpoint would leave the break hanging off the edge.
+		var amount := 0.0 if step == 0 or step == teeth else jag * side
+		## The middle teeth are the deepest, which is where a break opens widest.
+		amount *= 1.0 - absf(t - 0.5)
+		out.append(from.lerp(to, t) + normal * amount)
+	return out
+
+
+## Which side of the cut a point is on, with **no third answer**.
+##
+## `signf` has one, and it is what made a vertical break silently do nothing: a
+## shield's apex sits exactly at x=27 and a diamond's corners exactly on their
+## own axis, so the vertex the cut is aimed through scored zero, the walk saw no
+## sign change, and the outline came back in one piece. The mark rendered as
+## whole and the failure was invisible -- there was no error, just an unbroken
+## shield labelled "fractured".
+##
+## A point on the line is counted as the positive side. Any consistent answer
+## works; having one is the point.
+static func _side_of(point: Vector2, centre: Vector2, cut_normal: Vector2) -> float:
+	return 1.0 if (point - centre).dot(cut_normal) >= 0.0 else -1.0
+
+
+## Split a closed outline where a cut line crosses it, returning one entry per
+## side with the crossing points planted on both.
+##
+## Walked rather than filtered. A side's vertices are contiguous only if the
+## loop's start vertex sits on the far side of the cut; the first version
+## filtered, the run wrapped, and the open polyline joined its two ends with a
+## chord straight across the shape. That stray diagonal read plausibly as the
+## cut itself, and was found by a *cleaved* shield carrying more ink than a whole
+## one -- not by looking at it.
+static func _split_at_cut(
+	outline: PackedVector2Array, centre: Vector2, cut_normal: Vector2
+) -> Array:
 	var arcs: Array = []
 	var current := PackedVector2Array()
-	var current_side := signf((outline[0] - centre).dot(cut_normal))
+	var current_side := _side_of(outline[0], centre, cut_normal)
 	for index in range(outline.size() + 1):
 		var point: Vector2 = outline[index % outline.size()]
 		var offset := (point - centre).dot(cut_normal)
-		var side := signf(offset)
-		if side != 0.0 and current_side != 0.0 and side != current_side \
-				and current.size() > 0:
+		var side := _side_of(point, centre, cut_normal)
+		if side != current_side and current.size() > 0:
 			var previous: Vector2 = current[current.size() - 1]
 			var previous_offset := (previous - centre).dot(cut_normal)
 			var span := previous_offset - offset
@@ -699,7 +688,6 @@ static func _cleaved_paths() -> Array:
 		current.append(point)
 	if current.size() > 1:
 		arcs.append({"side": current_side, "points": current})
-
 	## The loop's start sits mid-arc, so the first and last arcs are one arc that
 	## the walk happened to begin inside.
 	if arcs.size() > 2 and float(arcs[0]["side"]) == float(arcs[-1]["side"]):
@@ -707,73 +695,230 @@ static func _cleaved_paths() -> Array:
 		joined.append_array(arcs[0]["points"])
 		arcs[0] = {"side": arcs[0]["side"], "points": joined}
 		arcs.remove_at(arcs.size() - 1)
+	return arcs
 
-	## Parted *and* slid. Once the chord was gone the halves sat 2.4 units apart
-	## and the shield read as intact with a nick in the rim -- the old drawing had
-	## only looked cleaved because of the bug. A gap alone is a gap; two pieces
-	## that no longer line up along the cut are a break.
-	var cut_tangent := Vector2(-cut_normal.y, cut_normal.x)
+
+## Break a closed outline along a cut and let the pieces fall apart.
+##
+## Each piece is its own arc closed off by the jagged seam, so both halves carry
+## the break -- a seam drawn once and shared would sit between the pieces rather
+## than on them, and the halves would read as clipped rather than as broken.
+static func _fracture_paths(
+	outline: PackedVector2Array, centre: Vector2, cut_normal: Vector2,
+	stroke: float, falling_side: float = 1.0,
+	teeth: int = FRACTURE_TEETH, jag: float = FRACTURE_JAG
+) -> Array:
+	var arcs := _split_at_cut(outline, centre, cut_normal)
+	if arcs.size() < 2:
+		return [{"points": outline, "closed": true, "width": stroke, "dash": 0.0}]
+	var fall_direction := Vector2(cut_normal.y, -cut_normal.x)
+	var out: Array = []
 	for arc in arcs:
 		var points: PackedVector2Array = arc["points"]
 		if points.size() < 3:
 			continue
 		var side := float(arc["side"])
-		var shift := cut_normal * side * CLEAVE_PART + cut_tangent * side * CLEAVE_SLIDE
-		var parted := PackedVector2Array()
-		for point in points:
-			parted.append(point + shift)
-		out.append({"points": parted, "closed": false,
-			"width": SHIELD_STROKE, "dash": 0.0})
-	## Shards leaving the cut, the same tick the blade and the commitment use.
-	## Three families breaking three different ways still break in one hand.
-	out.append({"points": _line(20.0, 20.0, 15.5, 23.0), "closed": false,
-		"width": 1.7, "dash": 0.0})
-	out.append({"points": _line(35.0, 33.0, 39.5, 36.0), "closed": false,
-		"width": 1.7, "dash": 0.0})
+		## The seam between this arc's two ends, jagged. Reversed on one side so
+		## the two sets of teeth interlock instead of mirroring.
+		var seam := _jagged(points[points.size() - 1], points[0], teeth, jag)
+		if side < 0.0:
+			## Walked from the other end so the two sets of teeth interlock --
+			## drawn the same way round, both pieces would deviate to the same
+			## side of the seam and the break would read as a fold.
+			seam = _jagged(points[0], points[points.size() - 1], teeth, jag)
+			seam.reverse()
+		var piece := PackedVector2Array(points)
+		for index in range(1, seam.size() - 1):
+			piece.append(seam[index])
+		## Parted along the cut, and the loose piece also falls and turns. A
+		## level part is a shape with a crack in it; falling is what says it lost.
+		var shift := cut_normal * side * FRACTURE_PART
+		var turn := 0.0
+		if side == falling_side:
+			shift += fall_direction * FRACTURE_FALL
+			turn = deg_to_rad(FRACTURE_TURN_DEGREES)
+		var placed := PackedVector2Array()
+		for point in piece:
+			var centred := point - centre
+			placed.append(Vector2(
+				centred.x * cos(turn) - centred.y * sin(turn),
+				centred.x * sin(turn) + centred.y * cos(turn)
+			) + centre + shift)
+		out.append({"points": placed, "closed": true,
+			"width": stroke, "dash": 0.0})
 	return out
 
 
 ## Every blade, in every variant it can be in.
+##
+## `ascendant` is the plain drawing. Succeeding does not change the mark -- it
+## lights the ground behind it, which is `backdrop_textures`. Keyed here anyway
+## so the renderer's lookup is one dictionary read for every variant and a
+## family that later wants its own ascendant ink has somewhere to put it.
 static func blade_variant_textures(dark_theme: bool) -> Dictionary:
 	var out := {}
 	for intent in BLADE_INTENTS:
-		out["%s|plain" % intent] = _blade(
+		var plain := _blade(
 			intent == "preparing_attack", SERVE_RECT if intent == "serving" \
 				else BLADE_RECT, intent == "serving", dark_theme
 		)
-	out["approaching|ascendant"] = _blade_with(_flame_paths(), dark_theme)
+		out["%s|plain" % intent] = plain
+		out["%s|ascendant" % intent] = plain
 	out["approaching|broken"] = _composite(
-		PIXELS, PIXELS, _shattered_paths(), [], [], dark_theme
+		PIXELS, PIXELS, _shattered_blade_paths(), [], [], dark_theme
 	)
 	return out
 
 
-static func _blade_with(extra: Array, dark_theme: bool) -> ImageTexture:
-	var paths: Array = [
-		{"points": _rounded_rect(BLADE_RECT, BLADE_RADIUS), "closed": true,
-			"width": BLADE_STROKE, "dash": 0.0},
-		{"points": _line(13.0, 40.0, 41.0, 40.0), "closed": false,
-			"width": GUARD_STROKE, "dash": 0.0},
-		{"points": _line(27.0, 40.0, 27.0, 48.0), "closed": false,
-			"width": GUARD_STROKE, "dash": 0.0},
-	]
-	return _composite(PIXELS, PIXELS, paths + extra, [], [], dark_theme)
+## The blade broken **across its midpoint**, the tip half falling away.
+##
+## Horizontal, because that is the break a blade takes and the one that reads at
+## size: a blade split lengthways is two thin bars, and two thin bars beside each
+## other are indistinguishable from one blade drawn badly.
+static func _shattered_blade_paths() -> Array:
+	var blade := _rounded_rect(BLADE_RECT, BLADE_RADIUS)
+	var midpoint := BLADE_RECT.position.y + BLADE_RECT.size.y * 0.5
+	## Five shallow teeth, not seven deep ones. The seam runs across the blade's
+	## *width* -- 12 units against a shield's 38 -- and `FRACTURE_JAG` on that
+	## span puts teeth taller than they are wide, which rasterises as a scribble
+	## rather than as a break. Scaled to the shape being cut.
+	var out := _fracture_paths(
+		blade, Vector2(27.0, midpoint), Vector2(0.0, 1.0), BLADE_STROKE, -1.0,
+		5, 1.4
+	)
+	## The guard and grip stay with the half still in a hand. They are what makes
+	## the surviving piece read as *the blade a voli is still holding* rather than
+	## as the other fragment.
+	out.append({"points": _line(13.0, 40.0, 41.0, 40.0), "closed": false,
+		"width": GUARD_STROKE, "dash": 0.0})
+	out.append({"points": _line(27.0, 40.0, 27.0, 48.0), "closed": false,
+		"width": GUARD_STROKE, "dash": 0.0})
+	return out
 
 
 static func shield_variant_textures(dark_theme: bool) -> Dictionary:
-	var plain: Array = [
-		{"points": _shield_outline(false), "closed": true,
-			"width": SHIELD_STROKE, "dash": 0.0},
-	]
+	var out := {}
+	for intent in SHIELD_INTENTS:
+		var plain := _shield(intent, dark_theme)
+		out["%s|plain" % intent] = plain
+		out["%s|ascendant" % intent] = plain
+	out["defending|broken"] = _composite(
+		PIXELS, PIXELS,
+		_fracture_paths(
+			_shield_outline(false), Vector2(27.0, 27.0), Vector2(1.0, 0.0),
+			SHIELD_STROKE, 1.0
+		),
+		[], [], dark_theme
+	)
+	out["blocking|broken"] = _composite(
+		PIXELS, PIXELS,
+		_fracture_paths(
+			_shield_outline(true), Vector2(27.0, 29.0), Vector2(1.0, 0.0),
+			SHIELD_STROKE, 1.0
+		),
+		[], [], dark_theme
+	)
+	return out
+
+
+## ## The backdrop: where a rating lives, and where success lives
+##
+## Two questions turned out to be one. A rating colour needs somewhere to sit
+## that is not the ink -- the ink is doing contrast, and tinting it spends the
+## thing that makes a mark legible on any ground. And succeeding needed a
+## treatment that was not another set of paths per family.
+##
+## Both are answered by a shape **behind** the mark: a disc for an ordinary
+## contact, a flare for one that came off. It carries the grade as its colour and
+## the variant as its silhouette, and it costs one drawing rather than one per
+## family.
+##
+## ### Sized to its own mark, not to one radius
+##
+## `tools/run_mark_extent_probe.gd` measured the ink bounding box of every mark
+## in the vocabulary: an eye needs r=91, a plain blade r=111, a shield r=131. A
+## single disc sized for the largest is **64% wider** than the smallest mark
+## needs, so the same grade would read as two different weights depending on what
+## was inside it -- the opposite of what a rating scale is for.
+##
+## So the backdrop is scaled per mark, from the mark's own authored geometry
+## rather than by scanning its pixels. The geometry is free and exact; a scan of
+## ten textures is a million `get_pixel` calls at load.
+const BACKDROP_SHARE: float = 1.06
+const BACKDROP_RADIUS: float = 21.0
+const FLARE_TONGUES: int = 12
+const FLARE_REACH: float = 1.42
+
+
+## The backdrop shapes, drawn white so a grade colour can tint them.
+##
+## Not run through `_composite`: a backdrop has no ink and no halo. It is a soft
+## coloured ground, and giving it an outline would make it a second mark.
+static func backdrop_textures() -> Dictionary:
 	return {
-		"defending|plain": _composite(PIXELS, PIXELS, plain, [], [], dark_theme),
-		"defending|ascendant": _composite(
-			PIXELS, PIXELS, plain + _shine_paths(), [], [], dark_theme
-		),
-		"defending|broken": _composite(
-			PIXELS, PIXELS, _cleaved_paths(), [], [], dark_theme
-		),
+		"plain": _backdrop_disc(),
+		"ascendant": _flare(),
+		## A broken mark keeps the disc. The grade is already saying it went
+		## badly, and a second loud silhouette behind a shape that is coming apart
+		## is two things shouting the same word.
+		"broken": _backdrop_disc(),
 	}
+
+
+static func _backdrop_disc() -> ImageTexture:
+	var image := Image.create(PIXELS, PIXELS, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	_disc(image, Vector2(27.0, 27.0), BACKDROP_RADIUS, Color(1.0, 1.0, 1.0, 1.0))
+	return ImageTexture.create_from_image(image)
+
+
+## The flare: the same disc with flame tongues licking off it.
+##
+## Radial and irregular by construction rather than by chance -- tongues alternate
+## long and short and lean with their angle, which is what stops a ring of equal
+## spikes reading as a gear or a sun stamp.
+static func _flare() -> ImageTexture:
+	var image := Image.create(PIXELS, PIXELS, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var centre := Vector2(27.0, 27.0)
+	## The same radius as the plain disc, so a flare is exactly *the disc plus
+	## what it is throwing off*. Drawn smaller at first, which made the loud
+	## version cover less ground than the quiet one -- the opposite of the claim.
+	var base := BACKDROP_RADIUS
+	for index in range(FLARE_TONGUES):
+		var angle := TAU * float(index) / float(FLARE_TONGUES)
+		## Longest at the top and shortest at the bottom, because heat rises and
+		## a ring that is even all the way round reads as a stamp.
+		var lift := 0.5 - 0.5 * cos(angle + PI * 0.5)
+		var reach := base * (1.0 + (FLARE_REACH - 1.0) * (0.45 + 0.55 * lift))
+		if index % 2 == 1:
+			reach = base + (reach - base) * 0.55
+		## Drawn as a run of shrinking discs rather than a polygon, which keeps
+		## the tongue soft-edged and needs no polygon filler.
+		var steps := 7
+		for step in range(steps + 1):
+			var t := float(step) / float(steps)
+			var at := centre + Vector2(cos(angle), sin(angle)) * lerpf(base * 0.55, reach, t)
+			_disc(image, at, lerpf(6.0, 1.1, t), Color(1.0, 1.0, 1.0, 1.0))
+	_disc(image, centre, base, Color(1.0, 1.0, 1.0, 1.0))
+	return ImageTexture.create_from_image(image)
+
+
+## How large this mark's backdrop should be, relative to the mark itself.
+##
+## Derived from the authored geometry of each family rather than measured off
+## pixels, and stated as a share so the relationship survives any future change
+## to the size a mark is drawn at.
+static func backdrop_scale(intent: String) -> float:
+	if SHIELD_INTENTS.has(intent):
+		return BACKDROP_SHARE
+	if BLADE_INTENTS.has(intent):
+		## A blade is tall and narrow: 12 units across against a shield's 38. A
+		## disc that contained it would be a disc sized by its *length*, which is
+		## the 64% problem the probe found. Sized to the blade's own width
+		## instead, so the grade reads at the weight of the mark it belongs to.
+		return BACKDROP_SHARE * 0.78
+	return BACKDROP_SHARE * 0.70
 
 
 ## ## Commitment as a process, not a symbol
@@ -791,11 +936,6 @@ const COMMIT_RADII := Vector2(13.0, 16.0)
 const COMMIT_STROKE: float = 2.6
 const COMMIT_TRACK_STROKE: float = 1.3
 const COMMIT_TRACK_DASH: float = 2.6
-const COMMIT_BREAK_PART: float = 3.4
-const COMMIT_BREAK_SLUMP: float = 2.6
-const COMMIT_BREAK_DEGREES: float = 13.0
-const CLEAVE_PART: float = 4.4
-const CLEAVE_SLIDE: float = 2.6
 
 
 static func commitment(progress: float, broken: bool, dark_theme: bool) -> ImageTexture:
@@ -808,34 +948,19 @@ static func commitment(progress: float, broken: bool, dark_theme: bool) -> Image
 		centre + Vector2(0.0, -COMMIT_RADII.y),
 	])
 	if broken:
-		## Split down the middle and parted, with the halves left where they
-		## fell. A broken commitment is not an empty one.
+		## Broken the same way everything else in the vocabulary breaks: fractured
+		## on a jagged seam, parted, and one piece falling away. Vertical, apex to
+		## point, because that is the diamond's long axis and a horizontal break
+		## would leave two wide shallow pieces that read as a fold.
 		##
-		## Parted by `COMMIT_BREAK_PART` and the right half dropped and turned,
-		## because the first version parted the halves by 1.6px and read on the
-		## plate as an intact diamond with two specks in it. Symmetry is what made
-		## it read as whole: one half has to have *fallen*, not merely moved.
-		var left := PackedVector2Array()
-		for point in [corners[0], corners[3], corners[2]]:
-			left.append(point + Vector2(-COMMIT_BREAK_PART, 0.0))
-		var right := PackedVector2Array()
-		for point in [corners[0], corners[1], corners[2]]:
-			var centred: Vector2 = point - centre
-			var angle := deg_to_rad(COMMIT_BREAK_DEGREES)
-			right.append(Vector2(
-				centred.x * cos(angle) - centred.y * sin(angle),
-				centred.x * sin(angle) + centred.y * cos(angle)
-			) + centre + Vector2(COMMIT_BREAK_PART, COMMIT_BREAK_SLUMP))
-		return _composite(PIXELS, PIXELS, [
-			{"points": left, "closed": false, "width": COMMIT_STROKE, "dash": 0.0},
-			{"points": right, "closed": false, "width": COMMIT_STROKE, "dash": 0.0},
-			## Shards leaving the break, which is what says it snapped rather than
-			## that it was drawn in two pieces.
-			{"points": _line(23.0, 20.0, 18.5, 24.0), "closed": false,
-				"width": 1.7, "dash": 0.0},
-			{"points": _line(32.0, 31.0, 37.0, 34.5), "closed": false,
-				"width": 1.7, "dash": 0.0},
-		], [], [], dark_theme)
+		## Shares `_fracture_paths` with the blade and the shield rather than
+		## drawing its own split. Three families breaking three different ways
+		## still have to break in one hand, and the first version -- two straight
+		## half-outlines parted by 1.6 units -- read on the plate as an intact
+		## diamond with two specks in it.
+		return _composite(PIXELS, PIXELS, _fracture_paths(
+			corners, centre, Vector2(1.0, 0.0), COMMIT_STROKE, 1.0
+		), [], [], dark_theme)
 	## Drawn around its own perimeter to `progress`, which is the loading bar.
 	##
 	## A bar needs its *track* as much as its fill. Drawn without one, a

@@ -14971,45 +14971,69 @@ func _test_cogniticon_variants_and_commitment() -> void:
 		if not dark_theme:
 			continue
 
-		## **Ascendant adds, broken subtracts.** Stated as ink rather than as a
-		## description, because "flaming" and "shining" are additions to a mark
-		## that already exists and a variant that failed to draw its addition
-		## would otherwise pass every existence check above.
-		var plain_blade := _inked_samples(blades["approaching|plain"])
-		var flaming := _inked_samples(blades["approaching|ascendant"])
-		var shattered := _inked_samples(blades["approaching|broken"])
+		## **Ascendant is the plain drawing.** Succeeding is something that
+		## happens *around* a voli, so it lights the ground behind the mark and
+		## leaves the mark alone -- one flare for the whole vocabulary instead of
+		## two more path lists per family.
+		##
+		## Gated as identity rather than described, because "ascendant looks the
+		## same" is exactly the sentence a broken lookup would also produce.
 		_check(
-			flaming > plain_blade,
-			"a flaming blade carries more ink than a plain one (%d vs %d)"
-				% [flaming, plain_blade],
+			_inked_samples(blades["approaching|ascendant"])
+				== _inked_samples(blades["approaching|plain"]),
+			"an ascendant blade is the plain drawing; the flare is behind it",
 		)
 		_check(
-			shattered < plain_blade,
-			"and a shattered one carries less (%d)" % shattered,
+			_inked_samples(shields["defending|ascendant"])
+				== _inked_samples(shields["defending|plain"]),
+			"and so is an ascendant shield",
 		)
-		var plain_shield := _inked_samples(shields["defending|plain"])
+
+		## **Broken happens to the mark.** A fracture *adds* a jagged seam, so ink
+		## count says nothing about it -- the first version of this gate asked a
+		## shattered blade to carry less and failed on a drawing that was right.
+		## Width is the instrument: a break parts, and parting is the one thing
+		## that cannot be faked by drawing the same shape differently.
+		for pair in [
+			{"key": "approaching", "table": blades, "row": 0.28, "name": "blade"},
+			{"key": "defending", "table": shields, "row": 0.5, "name": "shield"},
+			{"key": "blocking", "table": shields, "row": 0.5, "name": "wall"},
+		]:
+			var table: Dictionary = pair["table"]
+			var whole := _ink_width(table["%s|plain" % pair["key"]], float(pair["row"]))
+			var split := _ink_width(table["%s|broken" % pair["key"]], float(pair["row"]))
+			_check(
+				split > whole,
+				"a broken %s is wider where it broke, because its pieces parted"
+					% pair["name"] + " (%d vs %d)" % [split, whole],
+			)
+
+		## **And the backdrop exists for every variant**, which is what makes the
+		## rating reachable at all now that the ink no longer carries it.
+		var grounds: Dictionary = CogniticonMarks.backdrop_textures()
+		for variant in CogniticonMarks.VARIANTS:
+			_check(
+				grounds.get(variant, null) is Texture2D,
+				"the %s backdrop is drawn" % variant,
+			)
 		_check(
-			_inked_samples(shields["defending|ascendant"]) > plain_shield,
-			"a shining shield carries more ink than a plain one (%d vs %d)" % [
-				_inked_samples(shields["defending|ascendant"]), plain_shield,
+			_inked_samples(grounds["ascendant"]) > _inked_samples(grounds["plain"]),
+			"and a flare reaches further than a disc (%d vs %d)" % [
+				_inked_samples(grounds["ascendant"]),
+				_inked_samples(grounds["plain"]),
 			],
 		)
-		## The shield's break is a *parting*, not a loss -- a cleaved shield keeps
-		## its whole outline and moves the halves apart, so ink count is the wrong
-		## instrument for it and width is the right one. Measured at the waist,
-		## where the cut runs.
-		##
-		## The first version of this gate asked a cleaved shield to carry *less*
-		## ink and it failed, which is how the stray chord in `_cleaved_paths` was
-		## found: the drawing was wrong and so was the question.
+		## **Sized per family.** `run_mark_extent_probe` measured a 64% spread
+		## across the vocabulary; one radius for everything would make the same
+		## grade read louder behind a shield than behind a blade, which is the
+		## opposite of what a rating scale is for.
 		_check(
-			_ink_width(shields["defending|broken"], 0.5)
-				> _ink_width(shields["defending|plain"], 0.5),
-			"and a cleaved one is wider at the waist, because its halves parted"
-				+ " (%d vs %d)" % [
-					_ink_width(shields["defending|broken"], 0.5),
-					_ink_width(shields["defending|plain"], 0.5),
-				],
+			CogniticonMarks.backdrop_scale("defending")
+				> CogniticonMarks.backdrop_scale("approaching"),
+			"a shield's ground is larger than a blade's (%.2f vs %.2f)" % [
+				CogniticonMarks.backdrop_scale("defending"),
+				CogniticonMarks.backdrop_scale("approaching"),
+			],
 		)
 
 	## **The loading bar.** More of the perimeter is drawn at every step, and the

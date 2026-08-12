@@ -1,19 +1,24 @@
 extends Node
 
-## Variants, and the two ways colour could carry a rating.
+## Variants, and the backdrop that carries both the rating and the success.
 ##
 ##     xvfb-run -a godot --path . res://tools/variant_plate.tscn
 ##
-## Two questions on one sheet because they interact. A recoloured mark and a
-## mark on a coloured disc do not read the same way once the mark itself is
-## also flaming or cleaved -- ink that is already saying "this went badly" by
-## being broken does not need to say it again in red, and a backdrop behind a
-## flaming blade may fight the flames.
+## Two questions turned out to be one. A rating colour needs somewhere to sit
+## that is not the ink, and succeeding needed a treatment that was not another
+## set of paths per family. Both are answered behind the mark: a disc for an
+## ordinary contact, a flare for one that came off.
+##
+## Drawn on one sheet because they interact -- a mark that is already coming
+## apart does not need a loud silhouette behind it saying the same word, which is
+## why `broken` keeps the disc.
 const Marks := preload("res://scripts/data/cogniticon_marks.gd")
 
 ## The rating scale, as the interface already uses it: S gold, A green, B blue,
 ## C neutral, D red.
 const GRADES := ["S", "A", "B", "C", "D"]
+
+var _backdrops: Dictionary = {}
 
 
 func _ready() -> void:
@@ -47,17 +52,18 @@ func _shoot(dark: bool) -> void:
 
 	var blades: Dictionary = Marks.blade_variant_textures(dark)
 	var shields: Dictionary = Marks.shield_variant_textures(dark)
+	_backdrops = Marks.backdrop_textures()
 
-	## Row one: the variants themselves, uncoloured, so their silhouettes can be
-	## judged before colour is added to the argument.
+	## Row one: the marks and their breaks, with no backdrop at all, so the
+	## fractures can be judged as drawings before colour joins the argument.
 	var column := -7.6
 	for entry in [
-		["approaching|plain", blades, "blade"],
-		["approaching|ascendant", blades, "flaming"],
-		["approaching|broken", blades, "shattered"],
-		["defending|plain", shields, "shield"],
-		["defending|ascendant", shields, "shining"],
-		["defending|broken", shields, "cleaved"],
+		["approaching|plain", blades, "blade", "approaching"],
+		["approaching|broken", blades, "shattered", "approaching"],
+		["defending|plain", shields, "shield", "defending"],
+		["defending|broken", shields, "fractured", "defending"],
+		["blocking|plain", shields, "wall", "blocking"],
+		["blocking|broken", shields, "breached", "blocking"],
 	]:
 		_mark(stage, (entry[1] as Dictionary)[entry[0]], Vector3(column, 4.4, 0.0),
 			0.0105, Color(1, 1, 1, 1))
@@ -75,40 +81,48 @@ func _shoot(dark: bool) -> void:
 	var gap := 1.7
 	var start := -7.6
 
-	## Row two: colour in the ink.
+	## Row two: the disc, across the whole rating scale. Sized per family, which
+	## is what the extent probe's 64% spread bought.
 	column = start
 	for grade in GRADES:
-		_mark(stage, blades["approaching|plain"], Vector3(column, 1.0, 0.0),
-			0.0105, UIPalette.grade_color(grade, not dark))
-		_mark(stage, shields["defending|plain"], Vector3(column + gap, 1.0, 0.0),
-			0.0105, UIPalette.grade_color(grade, not dark))
-		_caption(stage, "ink %s" % grade, Vector3(column + gap * 0.5, -0.4, 0.0), ink)
+		_seat(stage, blades["approaching|plain"], "approaching", "plain",
+			Vector3(column, 1.0, 0.0), UIPalette.grade_color(grade, not dark))
+		_seat(stage, shields["defending|plain"], "defending", "plain",
+			Vector3(column + gap, 1.0, 0.0), UIPalette.grade_color(grade, not dark))
+		_caption(stage, "disc %s" % grade, Vector3(column + gap * 0.5, -0.4, 0.0), ink)
 		column += stride
 
-	## Row three: colour behind the mark, ink left neutral.
+	## Row three: the flare. Same marks, same grades, loud ground -- so what a
+	## rally that came off looks like beside one that merely happened.
 	column = start
 	for grade in GRADES:
-		_disc(stage, Vector3(column, -2.6, -0.02),
-			UIPalette.grade_color(grade, not dark))
-		_mark(stage, blades["approaching|plain"], Vector3(column, -2.6, 0.0),
-			0.0105, Color(1, 1, 1, 1))
-		_disc(stage, Vector3(column + gap, -2.6, -0.02),
-			UIPalette.grade_color(grade, not dark))
-		_mark(stage, shields["defending|plain"], Vector3(column + gap, -2.6, 0.0),
-			0.0105, Color(1, 1, 1, 1))
-		_caption(stage, "disc %s" % grade, Vector3(column + gap * 0.5, -4.0, 0.0), ink)
+		_seat(stage, blades["approaching|ascendant"], "approaching", "ascendant",
+			Vector3(column, -2.6, 0.0), UIPalette.grade_color(grade, not dark))
+		_seat(stage, shields["defending|ascendant"], "defending", "ascendant",
+			Vector3(column + gap, -2.6, 0.0), UIPalette.grade_color(grade, not dark))
+		_caption(stage, "flare %s" % grade, Vector3(column + gap * 0.5, -4.0, 0.0), ink)
 		column += stride
 
-	## Row four: commitment forming, then failing.
+	## Row four: commitment forming, then failing -- and the two breaks seated on
+	## a D disc, which is how a failure actually reaches the court.
 	column = -7.6
 	for step in [0.0, 0.3, 0.6, 1.0]:
 		_mark(stage, Marks.commitment(step, false, dark),
 			Vector3(column, -6.2, 0.0), 0.0105, Color(1, 1, 1, 1))
 		_caption(stage, "%.0f%%" % (step * 100.0), Vector3(column, -7.5, 0.0), ink)
 		column += 2.7
-	_mark(stage, Marks.commitment(1.0, true, dark), Vector3(column + 0.6, -6.2, 0.0),
-		0.0105, UIPalette.grade_color("D", not dark))
-	_caption(stage, "broken", Vector3(column + 0.6, -7.5, 0.0), ink)
+	var failed := UIPalette.grade_color("D", not dark)
+	_seat(stage, Marks.commitment(1.0, true, dark), "commitment", "broken",
+		Vector3(column, -6.2, 0.0), failed)
+	_caption(stage, "broken", Vector3(column, -7.5, 0.0), ink)
+	column += 2.7
+	_seat(stage, blades["approaching|broken"], "approaching", "broken",
+		Vector3(column, -6.2, 0.0), failed)
+	_caption(stage, "blade D", Vector3(column, -7.5, 0.0), ink)
+	column += 2.7
+	_seat(stage, shields["defending|broken"], "defending", "broken",
+		Vector3(column, -6.2, 0.0), failed)
+	_caption(stage, "shield D", Vector3(column, -7.5, 0.0), ink)
 
 	for _frame in range(8):
 		await get_tree().process_frame
@@ -117,6 +131,23 @@ func _shoot(dark: bool) -> void:
 	print("saved %s" % ProjectSettings.globalize_path(path))
 	stage.queue_free()
 	await get_tree().process_frame
+
+
+## A mark on its backdrop, at the size that mark's family asks for.
+func _seat(
+	stage: Node3D, texture: Texture2D, intent: String, variant: String,
+	at: Vector3, tint: Color
+) -> void:
+	var size := 0.0105
+	var behind := Sprite3D.new()
+	behind.texture = _backdrops[variant]
+	behind.pixel_size = size * Marks.backdrop_scale(intent)
+	behind.shaded = false
+	behind.transparent = true
+	behind.modulate = Color(tint.r, tint.g, tint.b, 0.62)
+	behind.position = at + Vector3(0.0, 0.0, -0.02)
+	stage.add_child(behind)
+	_mark(stage, texture, at, size, Color(1, 1, 1, 1))
 
 
 func _mark(
@@ -130,28 +161,6 @@ func _mark(
 	sprite.modulate = tint
 	sprite.position = at
 	stage.add_child(sprite)
-
-
-## The backdrop option: a soft disc the mark sits on.
-func _disc(stage: Node3D, at: Vector3, tint: Color) -> void:
-	var disc := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.78
-	sphere.height = 1.56
-	sphere.radial_segments = 32
-	## Eight rings, not one. A one-ring sphere is a bicone, and flattened it
-	## silhouettes as a *diamond* -- which on this particular sheet collided with
-	## the commitment mark and made the backdrop option look like a second glyph.
-	sphere.rings = 8
-	disc.mesh = sphere
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(tint.r, tint.g, tint.b, 0.55)
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	disc.material_override = material
-	disc.position = at
-	disc.scale = Vector3(1.0, 1.0, 0.02)
-	stage.add_child(disc)
 
 
 func _caption(stage: Node3D, text: String, at: Vector3, ink: Color) -> void:
