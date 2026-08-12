@@ -1276,14 +1276,34 @@ Drafted for a read, not proposed. The claim: a structure is not neutral
 architecture, it is **how a region houses its athletes**, and a club importing
 one is importing somebody else's idea of how to live.
 
-| structure | reads as | because that region |
+| structure | reads as | because that region's own words say |
 |---|---|---|
-| **Longhouse** | Bloc du Larg | houses its squads together by default; the side is one household and privacy is not the value |
-| **Farmhouse** | Landavol | grows what it eats; the kitchen and the garden are how a club is normally organised there |
-| **The Row** | Spëddigh | treats rest as professional infrastructure; separate quarters are the standard, not a luxury |
-| **The Block** | Xérvu | builds upward and houses its youth alongside the senior side |
-| **Bunkhouse** | everywhere | the universal starting point, which is why it is nobody's identity |
-| **The Commons** | Nõ Errõ | organises around a shared room; the hall is the club and the bedrooms are where you sleep |
+| **Longhouse** | Spëddigh | *"close-knit and compact"* — the phrase is already a description of how they live |
+| **Farmhouse** | Landavol | *"intentionally broad… specialize into anything"* — a generalist culture that grows what it eats |
+| **The Quarters** | Pāwa Hitō | *"conditioning halls mold the Hitōue"* — you live where you train, and the hall is the address |
+| **The Block** | Bloc du Larg | *"methodical… perfecting its structure"*, and the name is already the building |
+| **The Row** | Xérvu | *"individualism and deep respect for routine"* — separate quarters, kept the same way every day |
+| **The Commons** | Taktikã | *"cerebral… strip the game down to its roots"* — a shared room, but it is a **working** room, not a warm one |
+| **Bunkhouse** | everywhere | which is why it is nobody's identity |
+
+**Corrected, and worth recording why.** The first draft of this table assigned
+the Commons to *Nõ Errõ*, which is not a region — it is a **club**, one of
+Taktikã's, sitting in `CLUB_NAMES` two lines away from the list I should have
+read. The rest of the mapping was no better: it was assigned by vibe rather than
+against the taglines each region already has, which are specific and were right
+there. Redone above by quoting them.
+
+**The Quarters is new**, and it exists because Pāwa Hitō's tagline demanded a
+structure nothing on the list provided: housing attached to the training hall.
+Best conditioning in the game, no separation between work and home, and the cost
+is that it is the one structure where *nothing about living there is not about
+volleyball* — no kitchen worth the name, nowhere to be a person. A region can be
+right about how to build athletes and wrong about how to keep them.
+
+**The Commons reads differently under Taktikã** than it did as a generic warm
+hall, and better: the shared room is where the squad works through what
+happened, not where they relax. Same structure, opposite temperature, which is
+what makes it Taktikã's rather than everybody's.
 
 Two consequences worth having, if this survives:
 
@@ -1363,3 +1383,130 @@ of this document that could be drafted *without* it, because a flow, a
 geography and an aversion are all facts about the world rather than multipliers
 on recovery — and having them would give the events in §9 something real to
 interrupt.
+
+---
+
+## 13. The food supply: a flow with a geography
+
+Drafted because it is the one part of this document not blocked on fatigue
+persisting — a flow, a geography and an aversion are facts about the world
+rather than multipliers on recovery.
+
+### The shape: nobody counts anything
+
+A club does not hold stock. It has a **standing supply**, which arrives, and
+which the chef turns into a week of meals. The manager sets an arrangement and
+hears about it only when it breaks.
+
+That is deliberate on two counts. Counting sacks of flour is a different and
+worse game, and — per §9 — a supply that simply works is a supply whose *events*
+carry all the information. You learn you were dependent on one region's harvest
+by the week it fails.
+
+### What a region has
+
+Every region produces a small set of **staples** and one or two **pastes**.
+Staples are the base of a food block; pastes are the flavour and the character,
+and `docs/world/` already treats them as regional.
+
+The list is not proposed here — authoring it is a world job, not a systems one.
+What the system needs from it is only this:
+
+- a region **produces** some things, always, at no cost to a club sited there
+- some of those things are **seasonal**, so the year has a shape
+- anything a region does not produce has to come from one that does
+
+### Distance is already modelled
+
+`VolleyballRegions.REGION_ADJACENCY` exists. A supply line's cost and fragility
+should be read off it rather than from a new number:
+
+| source | cost | reliability |
+|---|---|---|
+| your own region | none | total |
+| an adjacent region | modest | high |
+| two steps away | real | interruptible |
+| further | expensive | the events section's favourite target |
+
+**This is the thing that makes geography a constraint rather than a label.** A
+Landavol club eats Landavol food without ever choosing to. Eating like Pāwa Hitō
+is a supply line you are running on purpose, it costs, and a bad winter two
+regions away is now your problem.
+
+### Which is what an aversion *is*
+
+§11 gave volis food aversions and never defined one. Under a supply with a
+geography it defines itself:
+
+> **A voli is averse because the region they are in does not produce what they
+> grew up eating.**
+
+Not a personality quirk — a fact about two places, computed from the voli's
+`home_region` and the club's. It appears the moment you sign somebody from far
+away, it is *predictable at signing*, and it has four different answers already
+on the board: the **cookbook** (this voli, cheaply), the **kitchenette** (this
+room), the **Farmhouse** (the whole squad, structurally), and a **supply line**
+to their home region (the whole squad, expensively, and it feeds everyone else's
+palate rotation too).
+
+Four answers at four prices to one problem is the shape §11 wanted more of.
+
+### And palate is the same term, running the other way
+
+Aversion is *this is not what I eat*. Palate is *this is what I eat, and it has
+been for two months*. Both are a distance between a voli and what is on the
+plate; one is measured against where they are from, the other against what they
+have had recently.
+
+Modelling them as one quantity with two inputs is what stops the table needing
+two systems, and it means the paste rotation is not variety for its own sake:
+rotating is how you keep palate down, and the pastes you *can* rotate through
+are exactly what your geography and your supply lines allow.
+
+### The chef, who is already written for this
+
+`scripts/models/staff_member.gd` already says a chef cooks their own region's
+food and carries a palate memory. Under this design that note becomes
+load-bearing:
+
+- a chef **extends your supply** into their own region at reduced cost — they
+  know who to ask
+- a chef from a voli's home region can **answer that voli's aversion** directly,
+  without a cookbook or a supply line
+- a chef's palate memory is **how many pastes they can rotate before repeating**
+
+Which makes hiring a chef a decision about the squad you have rather than about
+staff quality — the §9 test for a purchase worth declining, and it passes
+cleanly. A brilliant chef from the wrong region is worse than a decent one from
+the right one, for a squad with two homesick imports.
+
+### The weekly loop, in full
+
+1. The supply arrives — your region's produce, plus whatever your lines carry.
+2. The chef builds the week from what is there, honouring the arrangement.
+3. Aversion is answered or it is not, per voli.
+4. Palate moves: up on repetition, down on rotation.
+5. Something occasionally fails, and you hear about it.
+
+The manager touches step 1 (which lines to run) and the arrangement in step 2.
+Everything else is the world running.
+
+### What it needs
+
+1. **Region produce lists** — a world-authoring job, and the only genuinely new
+   content. Staples and pastes per region, with seasonality.
+2. **Supply lines** on the club: which regions you source from. A short list,
+   costed by adjacency.
+3. **Aversion as a derived value**, from `home_region` against what is on the
+   plate. Nothing stored per voli — it is computed, which means it stays true
+   when a voli transfers.
+4. **One palate figure per voli**, moved weekly. The only new persistent state
+   in the whole design.
+5. **Interruption events**, which §9 already has a home for.
+
+Items 2 to 5 are small. Item 1 is the work, and it is the enjoyable kind.
+
+**It can all be built before fatigue persists**, and it should be: it gives the
+event system something real to interrupt, it gives the cookbook and the
+kitchenette something real to answer, and it turns the six regions from taglines
+into places that grow different things.
