@@ -30,11 +30,16 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 ## below its own border.
 const CARD_HEIGHT: float = 74.0
 const CARD_PADDING: float = 18.0
+## The right-hand column, sized to hold a region and a tenure on one line.
+const FIGURE_WIDTH: float = 168.0
 
 var _column: VBoxContainer = null
 var _title: Label = null
 var _flavour: Label = null
 var _reading: Label = null
+var _figure: Label = null
+var _figure_note: Label = null
+var _figures: VBoxContainer = null
 
 
 static func build(title: String, flavour: String) -> MenuCard:
@@ -61,10 +66,41 @@ func _compose(title: String, flavour: String) -> void:
 	margin.add_theme_constant_override("margin_bottom", 8)
 	add_child(margin)
 
+	## The text and the figures are two columns, because a card that carries a
+	## number has to let the eye run **down** the numbers across four cards
+	## without reading any of the sentences. A figure inline with prose is a
+	## figure nobody compares.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(row)
+
 	_column = VBoxContainer.new()
 	_column.add_theme_constant_override("separation", 1)
+	_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(_column)
+	row.add_child(_column)
+
+	## **Wide enough to hold its own caption, and never wrapping.**
+	##
+	## `_line` turns autowrap on, which is right for a sentence and catastrophic
+	## for a column with no width: the first build had `Landavol · 9 weeks here`
+	## breaking to one character per line and spilling six hundred pixels down
+	## the page past the card it belonged to.
+	_figures = VBoxContainer.new()
+	_figures.custom_minimum_size = Vector2(FIGURE_WIDTH, 0.0)
+	_figures.add_theme_constant_override("separation", 0)
+	_figures.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_figures.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_figures.visible = false
+	row.add_child(_figures)
+	_figure = _line(_figures, "", 24)
+	_figure.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_figure.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_figure_note = _line(_figures, "", 11)
+	_figure_note.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_figure_note.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_figure_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	_title = _line(_column, title, 17)
 	_flavour = _line(_column, flavour, 12)
@@ -89,6 +125,21 @@ func _line(into: VBoxContainer, text: String, size: int) -> Label:
 
 ## Rewrite the third line. Called on every refresh, and it touches nothing else,
 ## because the first two are what the card *is* and only the last is news.
+## A number for the right-hand column, and what it counts.
+##
+## Optional, and the accommodation page does not use it: a lease has no figure
+## that means the same thing as another lease's. A staff hub does -- everybody
+## has a rating and a tenure -- and a hub of four people you cannot compare is a
+## menu rather than a readout.
+func set_figure(value: String, note: String = "") -> void:
+	if _figure == null:
+		return
+	_figure.text = value
+	_figure_note.text = note
+	_figures.visible = not value.is_empty()
+	_grow_to_fit()
+
+
 func set_reading(reading: String) -> void:
 	if _reading != null:
 		_reading.text = reading

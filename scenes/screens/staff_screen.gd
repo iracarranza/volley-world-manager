@@ -12,22 +12,31 @@ extends Control
 ## chef comes to you, about food, in the first person, and the way you know the
 ## kitchen is going well is that they said so.
 ##
-## So the hub is not a staff table. It is four **cards**, in the page's own
-## language -- name, the room they are in, and what is true right now -- and each
-## one opens into a panel that takes the whole page.
+## So the hub is four **cards** in the page's own language -- name, the room they
+## are in, what is true right now, and their rating -- **beside** the selected
+## one's reports, in full, on the page.
 ##
-## The first draft split it: people down the left, the selected one's reports on
-## the right. That is a browser, and a browser is what you build when the list is
-## the subject. Here the list is four items you already know, and the subject is
-## whichever one you went to see -- so the reading gets the page and the choosing
-## gets a card. It also puts staff in the same shape as the accommodation page,
-## which matters more than either screen: a card that opens is now what this
-## interface *means* by a way in.
+## ## Reading is not clicking
 ##
-## Behind each card is a **log**, in the two-voice shape the inbox already uses.
-## The report names the mechanic and its figures; the utterance is what they
-## actually said, and it is shorter and vaguer, because a chef does not know they
-## are running at 0.91 of a week's paste.
+## A middle draft put every report behind a panel that took the whole page, on
+## the reasoning that a card-that-opens is what this interface means by a way in.
+## That applied the accommodation page's shape where it does not belong, and it
+## broke the rule the rest of the interface is built on: **a manager should get
+## what they need to know in the fewest clicks and the least looking.** Four
+## people whose reports are each one click away is four clicks to answer *how is
+## the club*, and three of them are spent finding out nothing changed.
+##
+## Submenus are for **specific changes**. The accommodation page hides twenty-one
+## equipment rows because fitting a console is an act you go and perform; it does
+## not hide the floor figure, because that is what you came to read. Everything
+## here is reading, so nothing is hidden. When staff gain something a manager
+## *does* -- hire, reassign, send somebody on a trip -- that is what opens a
+## panel.
+##
+## The reports are in the two-voice shape the inbox already uses. The report names
+## the mechanic and its figures; the utterance is what they actually said, and it
+## is shorter and vaguer, because a chef does not know they are running at 0.91 of
+## a week's paste.
 ##
 ## ## The head is reserved
 ##
@@ -45,7 +54,6 @@ const FoodBlock := preload("res://scripts/data/food_block.gd")
 const FoodSupply := preload("res://scripts/data/food_supply.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const CardScript := preload("res://scenes/components/menu_card.gd")
-const PopupScript := preload("res://scenes/components/desk_popup.gd")
 
 signal back_requested
 
@@ -54,10 +62,11 @@ const PORTRAIT: float = 104.0
 var _career_manager: Node = null
 var _game_manager: Node = null
 var _cards: VBoxContainer = null
-var _panel: DeskPopup = null
 var _log: VBoxContainer = null
-## Who the panel is showing, or -1. Kept because a refresh rebuilds the cards on
-## every advance and a panel that closed itself would be unusable.
+var _desk_title: Label = null
+## Whose reports are showing. Never -1 once anybody is employed: the page opens
+## on somebody, because a hub whose right half is blank until you click has spent
+## half the screen asking a question it could have answered.
 var _selected: int = -1
 
 
@@ -76,19 +85,34 @@ func _build() -> void:
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	var shell := ScreenShell.build(self, "Staff", [back_button] as Array[Button])
 
-	_cards = VBoxContainer.new()
-	_cards.add_theme_constant_override("separation", 10)
-	_cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	shell.content.add_child(_cards)
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 18)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shell.content.add_child(body)
 
-	## Last child of the screen root, which is a plain `Control` -- later siblings
-	## draw over earlier ones, and nothing recomputes the rect of a child that is
-	## not under a `Container`.
-	_panel = PopupScript.build()
-	_panel.fill_page()
-	_panel.closed.connect(func() -> void: _selected = -1)
-	add_child(_panel)
-	_log = _panel.body
+	## The four down the left, at the width their figures need: narrow enough
+	## that the reports get the rest, wide enough that the ratings still line up
+	## in a column somebody can read down.
+	_cards = VBoxContainer.new()
+	_cards.custom_minimum_size = Vector2(430.0, 0.0)
+	_cards.add_theme_constant_override("separation", 8)
+	body.add_child(_cards)
+
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 6)
+	body.add_child(right)
+	_desk_title = Label.new()
+	_desk_title.add_theme_font_size_override("font_size", 18)
+	right.add_child(_desk_title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right.add_child(scroll)
+	_log = VBoxContainer.new()
+	_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_log.add_theme_constant_override("separation", 10)
+	scroll.add_child(_log)
 
 
 func _staff() -> Array:
@@ -102,6 +126,8 @@ func refresh() -> void:
 		return
 	for child in _cards.get_children():
 		child.queue_free()
+	if _selected < 0 and not _staff().is_empty():
+		_selected = int(_staff()[0].id)
 	for entry in _staff():
 		var member := entry as VolleyballStaffMember
 		if member == null:
@@ -110,6 +136,16 @@ func refresh() -> void:
 			str(member.display_name), Reports.desk_name(str(member.role))
 		)
 		card.set_reading(_headline(member))
+		## The one number everybody has, so the hub can be read down rather than
+		## across: who is the best person here, and who just arrived.
+		card.set_figure(
+			str(int(member.rating)),
+			"%s · %s" % [
+				str(member.home_region), _tenure(int(member.weeks_employed)),
+			]
+		)
+		card.toggle_mode = true
+		card.button_pressed = int(member.id) == _selected
 		var who := int(member.id)
 		card.pressed.connect(func() -> void: _open(who))
 		_cards.add_child(card)
@@ -130,17 +166,7 @@ func _headline(member: Resource) -> String:
 
 func _open(staff_id: int) -> void:
 	_selected = staff_id
-	var member := _member(staff_id)
-	if member == null:
-		return
-	_panel.open(
-		str(member.display_name),
-		"%s · %s · %s" % [
-			Reports.desk_name(str(member.role)), str(member.home_region),
-			_tenure(int(member.weeks_employed)),
-		]
-	)
-	_refresh_log()
+	refresh()
 
 
 func _member(staff_id: int) -> Resource:
@@ -161,11 +187,12 @@ func _refresh_log() -> void:
 		return
 	for child in _log.get_children():
 		child.queue_free()
-	if _selected < 0:
-		return
 	var member := _member(_selected)
 	if member == null:
 		return
+	_desk_title.text = "%s · %s" % [
+		Reports.desk_name(str(member.role)), str(member.display_name),
+	]
 	var cards := _cards_for(member)
 	if cards.is_empty():
 		_log.add_child(_label("Nothing this week.", 13))
