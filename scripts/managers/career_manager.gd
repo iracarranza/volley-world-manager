@@ -1,5 +1,7 @@
 extends Node
 
+const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
+
 const CareerStateModel := preload("res://scripts/models/career_state.gd")
 const TeamModel := preload("res://scripts/models/team.gd")
 const FixtureModel := preload("res://scripts/models/fixture.gd")
@@ -485,6 +487,34 @@ func _apply_player_match_outcomes(won: bool) -> void:
 		var appeared := contacts > 0
 		if appeared:
 			_played_together.append(int(player.id))
+			## **A match has to cost something, and it was costing nothing.**
+			##
+			## `WEEKLY_FATIGUE_RECOVERY` is 0.40 and its own note says "a match
+			## costs an on-court player roughly 0.60" -- but that cost was only
+			## ever charged during live playback. A career that simulates its
+			## fixtures, which is every career, charged nothing at all.
+			##
+			## Measured before this line existed: 300 weekly readings of every
+			## voli's fatigue across 30 weeks came back **0.000 at every
+			## percentile**, peak 0.014, against a `LABOURED_ONSET` of 0.34. The
+			## three-stage fatigue model was unreachable between matches, and
+			## every design resting on it -- the table, the dorms, the care row
+			## in `ACCOMMODATIONS_AND_CARE.md` -- was a multiplier on a number
+			## that was always already zero.
+			##
+			## Scaled by involvement rather than flat, because a libero who
+			## touched the ball ninety times did not have the same afternoon as
+			## an opposite who came on for one rotation, and divided by the
+			## voli's own regional resistance, which `VolleyballRegions` has
+			## carried since F2 and which nothing outside a live rally read.
+			player.fatigue = clampf(
+				player.fatigue + FatigueModel.match_cost(
+					contacts, VolleyballRegions.fatigue_resistance(
+						str(player.home_region)
+					)
+				),
+				0.0, 1.0,
+			)
 		var satisfaction_change := 0.01 if won else -0.008
 		satisfaction_change += 0.005 if appeared else -0.004
 		player.satisfaction = clampf(

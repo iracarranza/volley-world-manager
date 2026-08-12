@@ -10,6 +10,7 @@ const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
+const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
@@ -205,6 +206,7 @@ func _initialize() -> void:
 	_test_pair_familiarity_is_a_rate()
 	_test_a_setter_goes_to_the_hitter_they_know()
 	_test_food_is_a_flow_with_a_geography()
+	_test_a_match_costs_something_that_survives_the_week()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14947,6 +14949,89 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A match has to cost something, and it was costing nothing.
+##
+## `CareerManager.WEEKLY_FATIGUE_RECOVERY` is 0.40 and its own note says a match
+## costs an on-court player roughly 0.60 -- but that cost was only ever charged
+## during live playback. A career that *simulates* its fixtures, which is every
+## career, charged nothing at all.
+##
+## Measured before the fix: 300 weekly readings of every voli across 30 weeks
+## came back **0.000 at every percentile**, peak 0.014, against a
+## `LABOURED_ONSET` of 0.34. The three-stage fatigue model was unreachable
+## between matches, and every design resting on it -- the table, the dorms, the
+## care row -- was a multiplier on a number that was always already zero.
+##
+## After: peak 0.340, exactly at Laboured. One match a week is survivable and
+## two is not, which is the shape the accommodation design needs.
+func _test_a_match_costs_something_that_survives_the_week() -> void:
+	## Involvement scales it, because a voli who came on for one rotation did
+	## not have the same afternoon as one who was on court for five sets.
+	var full := FATIGUE_MODEL_SCRIPT.match_cost(60, 1.0)
+	var cameo := FATIGUE_MODEL_SCRIPT.match_cost(3, 1.0)
+	_check(
+		full > cameo and cameo > 0.0,
+		"a full match costs more than a cameo, and a cameo is not free (%.2f vs %.2f)"
+			% [full, cameo],
+	)
+	## **The shape that matters**: one match survivable, two not. Read against
+	## the weekly recovery and the model's own stages rather than against a
+	## number somebody liked.
+	var recovery: float = CAREER_MANAGER_SCRIPT.WEEKLY_FATIGUE_RECOVERY
+	_check(
+		full - recovery < FATIGUE_MODEL_SCRIPT.LABOURED_ONSET,
+		"one match and a week's rest stays under Laboured (%.2f)"
+			% (full - recovery),
+	)
+	_check(
+		full * 2.0 - recovery > FATIGUE_MODEL_SCRIPT.LABOURED_ONSET,
+		"two matches in the same span does not (%.2f)"
+			% (full * 2.0 - recovery),
+	)
+	## Resistance divides rather than subtracts, so a hardy voli pays
+	## proportionally less of a big afternoon and barely notices a small one --
+	## which is what a resistance is.
+	var hardy := FATIGUE_MODEL_SCRIPT.match_cost(60, 1.25)
+	_check(hardy < full, "a hardy voli pays less for the same match (%.2f)" % hardy)
+	_check(
+		(full - hardy) > (cameo - FATIGUE_MODEL_SCRIPT.match_cost(3, 1.25)),
+		"and the saving is larger on a bigger afternoon",
+	)
+
+	## And it survives a week, which is the whole point. A career that plays a
+	## fixture must show somebody carrying something afterwards.
+	var career_manager := CAREER_MANAGER_SCRIPT.new()
+	var game := GAME_MANAGER_SCRIPT.new()
+	## Parented so their `_ready` runs; the runner is a SceneTree, not a Node.
+	Engine.get_main_loop().get_root().add_child(game)
+	Engine.get_main_loop().get_root().add_child(career_manager)
+	career_manager.game_manager_override = game
+	var error: String = career_manager.create_career(
+		"Fatigue Gate", "Probe VC", "Landavol", "Club", "Balanced"
+	)
+	_check(error.is_empty(), "the gate can start a career (%s)" % error)
+	var peak := 0.0
+	for _week in range(24):
+		for fixture in career_manager.career.fixtures:
+			if not bool(fixture.completed) \
+					and int(fixture.week) <= int(career_manager.career.absolute_week):
+				career_manager.simulate_fixture(int(fixture.id))
+				break
+		career_manager.advance_week()
+		for player in game.players:
+			peak = maxf(peak, float(player.fatigue))
+	_check(
+		peak > 0.15,
+		"fatigue survives a week of rest after a simulated fixture (%.2f)" % peak,
+	)
+	_check(
+		peak < 0.95,
+		"and a normal cadence does not exhaust anybody (%.2f)" % peak,
+	)
+	career_manager.queue_free()
+	game.queue_free()
 
 
 ## A club eats where it is, and an aversion is a fact about two places.

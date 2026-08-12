@@ -265,3 +265,38 @@ static func stage_name(fatigue: float) -> StringName:
 	if fatigue >= LABOURED_ONSET:
 		return &"laboured"
 	return &"working"
+
+
+## ## What one match takes out of somebody
+##
+## The three stages above describe what fatigue *does*. Nothing described where
+## it comes from outside a live rally, and the consequence was measurable and
+## total: 300 weekly readings across a simulated 30-week career came back 0.000
+## at every percentile, peak 0.014, against a `LABOURED_ONSET` of 0.34. A
+## simulated fixture charged nothing, so the stages were unreachable between
+## matches and every system resting on them was multiplying zero.
+##
+## Sized against `CareerManager.WEEKLY_FATIGUE_RECOVERY`, which is 0.40, and
+## against the sentence in its own note that a match should cost "roughly 0.60".
+## Which gives the shape the accommodation design needs: **one match a week is
+## survivable and two is not.** A squad playing a normal cadence hovers below
+## Laboured; a congested run pushes somebody through it, and a quiet fortnight
+## brings them back.
+const MATCH_COST_FULL: float = 0.58
+## How many contacts counts as having played the whole thing. Below it the cost
+## scales down, because a voli who came on for one rotation did not have the
+## same afternoon as one who was on court for five sets.
+const MATCH_CONTACTS_FULL: float = 42.0
+## And the floor: appearing at all costs something. Warming up, travelling and
+## sitting on a bench for two hours is not rest.
+const MATCH_COST_APPEARANCE: float = 0.11
+
+
+static func match_cost(contacts: int, resistance: float = 1.0) -> float:
+	var involvement := clampf(float(contacts) / MATCH_CONTACTS_FULL, 0.0, 1.0)
+	var raw := lerpf(MATCH_COST_APPEARANCE, MATCH_COST_FULL, involvement)
+	## Regional resistance divides rather than subtracts, so a hardy voli pays
+	## proportionally less of a big afternoon and barely notices a small one --
+	## which is what a resistance *is*, against a flat subtraction that would
+	## make short appearances free for them and long ones merely cheaper.
+	return raw / maxf(resistance, 0.35)

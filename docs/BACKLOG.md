@@ -6698,3 +6698,40 @@ been. Nothing surfaces it: the board reads the rotations and cannot edit them,
 so a manager can see that rotation 5 is the hole and cannot do anything about
 it on the screen that told them. Editing belongs on this board — it is the one
 place the information and the decision are in the same room.
+
+
+## ~~Fatigue never survives a week~~ CLOSED
+
+`CareerManager.WEEKLY_FATIGUE_RECOVERY` is 0.40 and its own note said a match
+costs an on-court player roughly 0.60 — but that cost was only ever charged
+during **live playback**. A career that simulates its fixtures, which is every
+career, charged nothing at all.
+
+Measured (`tools/run_recovery_headroom_probe.gd`), 300 weekly readings across a
+30-week career:
+
+| | p10 | p50 | p75 | p90 | p99 | peak |
+|---|---|---|---|---|---|---|
+| before | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | **0.014** |
+| after | 0.000 | 0.000 | 0.000 | 0.000 | 0.340 | **0.340** |
+
+`LABOURED_ONSET` is 0.34. Before the fix the three-stage fatigue model was
+unreachable between matches, and every design resting on it — the table, the
+dorms, the care row in `ACCOMMODATIONS_AND_CARE.md` — was a multiplier on a
+number that was always already zero.
+
+**Closed by `FatigueModel.match_cost`**, charged in
+`_apply_player_match_outcomes`, scaled by contacts so a one-rotation cameo is
+not a five-set afternoon, and divided by the voli's regional
+`fatigue_resistance` — which `VolleyballRegions` has carried since F2 and which
+nothing outside a live rally read.
+
+Sized against the recovery rate rather than for feel: **one match a week is
+survivable and two is not**, which is the shape the accommodation design needs
+and is gated as exactly that rather than as a number.
+
+**Still true and worth watching**: p50 remains 0.000, because fixtures are
+sparse in a 30-week career and one week of rest clears one match. That is a
+*fixture cadence* fact rather than a fatigue fact, and it will change on its own
+when competitions get denser. The design target — a congested run pushes
+somebody through Laboured — is reachable now, which it was not before.
