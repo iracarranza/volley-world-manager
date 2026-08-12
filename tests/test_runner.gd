@@ -13,6 +13,7 @@ const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd
 const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd")
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
 const CLUB_EVENTS_SCRIPT := preload("res://scripts/data/club_events.gd")
+const MANAGER_PROFILE_SCRIPT := preload("res://scripts/data/manager_profile.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
@@ -211,6 +212,7 @@ func _initialize() -> void:
 	_test_a_match_costs_something_that_survives_the_week()
 	_test_a_dorm_is_still_a_dorm()
 	_test_the_club_tells_you_what_the_rooms_did()
+	_test_the_manager_is_somebody()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14953,6 +14955,113 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## The desk belongs to somebody.
+##
+## `docs/design/CHARACTER_CREATION.md`. A save described the organisation five
+## ways -- career name, club name, region, seat, identity -- and the manager was
+## a text field. Every screen here is an object on a desk, and the interface has
+## been drawing that person's handwriting for months without saying who they are.
+func _test_the_manager_is_somebody() -> void:
+	## **Not a stat block.** The moment a manager has attributes, decisions are
+	## being made by the numbers rather than by the person reading the screen.
+	## Every background is a *redistribution*, gated as such: none of them wins
+	## on every axis, and each loses somewhere.
+	var ids: Array = MANAGER_PROFILE_SCRIPT.background_ids()
+	_check(ids.size() >= 4, "there are backgrounds to choose (%d)" % ids.size())
+	## **No row may beat another on every axis at once**, or it is a difficulty
+	## setting wearing a costume.
+	##
+	## The first version of the table failed this: `played` had more funds, more
+	## standing, a better scout and no offsetting loss against `youth`. The fix
+	## was not to nerf a number -- it was that `youth` was missing the axis it is
+	## supposed to win. The design says a youth coach knows their own roster
+	## unusually well and the world badly, and neither was encoded, so the row
+	## had upside nowhere.
+	var dominated := ""
+	for first in ids:
+		for second in ids:
+			if str(first) != str(second) \
+					and MANAGER_PROFILE_SCRIPT.dominates(str(first), str(second)):
+				dominated = "%s over %s" % [first, second]
+	_check(dominated.is_empty(), "no background dominates another (%s)" % dominated)
+	## And every axis a background is compared on has to be one somebody wins,
+	## or it is a column that exists to be ignored.
+	for axis in MANAGER_PROFILE_SCRIPT.COMPARED_AXES:
+		var high := -INF
+		var low := INF
+		for background in ids:
+			var value := float(MANAGER_PROFILE_SCRIPT.BACKGROUNDS[background][axis])
+			high = maxf(high, value)
+			low = minf(low, value)
+		_check(high > low, "%s is an axis somebody wins and somebody loses" % axis)
+
+	## And each is a sentence about a person rather than a modifier.
+	for background in ids:
+		_check(
+			not MANAGER_PROFILE_SCRIPT.label_for(str(background)).is_empty(),
+			"%s reads as something you did" % background,
+		)
+
+	## **Where you are from is a familiarity, not an advantage.** The one
+	## mechanical effect of question 1, and it is the per-region knowledge term
+	## `SCOUTING.md` already asks for on staff -- which makes the manager the
+	## first staff member rather than a separate concept.
+	_check(
+		MANAGER_PROFILE_SCRIPT.region_confidence("Landavol", "Landavol") > 0.0
+			and MANAGER_PROFILE_SCRIPT.region_confidence("Landavol", "Xérvu") == 0.0,
+		"a manager reads their own region's volis slightly better and nobody else's",
+	)
+	_check(
+		MANAGER_PROFILE_SCRIPT.HOME_REGION_CONFIDENCE < 0.20,
+		"slightly, because you still have to sign them (%.2f)"
+			% MANAGER_PROFILE_SCRIPT.HOME_REGION_CONFIDENCE,
+	)
+
+	## A name from your own region's naming tradition, which already exists.
+	var suggested := MANAGER_PROFILE_SCRIPT.suggested_name("Spëddigh", 3)
+	_check(
+		not suggested.is_empty()
+			and Array(VolleyballRegions.definition("Spëddigh")["names"]).has(suggested),
+		"and a name is offered from where you are from (%s)" % suggested,
+	)
+
+	## **The hand.** `BACKLOG`'s mirrored clipboard has been waiting on a manager
+	## who has one, and it belongs where the rest of the person is chosen rather
+	## than buried in options.
+	_check(
+		MANAGER_PROFILE_SCRIPT.mirrors_clipboard("left")
+			and not MANAGER_PROFILE_SCRIPT.mirrors_clipboard("right"),
+		"a left-handed manager mirrors the clipboard",
+	)
+
+	## **And the save carries all of it**, including the housing choice that
+	## replaces Established/Founded -- a lease is a monthly cost, a floor budget
+	## and a sentence about who you are, where a club type is a word nobody sees
+	## again.
+	var state := CAREER_STATE_SCRIPT.new()
+	state.manager_name = "Edda"
+	state.manager_region = "Spëddigh"
+	state.manager_background = "analyst"
+	state.manager_hand = "left"
+	state.housing_structure = "Longhouse"
+	var restored: Resource = CAREER_STATE_SCRIPT.from_dict(state.to_dict())
+	_check(
+		str(restored.manager_name) == "Edda"
+			and str(restored.manager_region) == "Spëddigh"
+			and str(restored.manager_background) == "analyst"
+			and str(restored.manager_hand) == "left"
+			and str(restored.housing_structure) == "Longhouse",
+		"the manager and the lease survive a save",
+	)
+	## The lease still says what kind of club it is, so nothing was lost when the
+	## abstraction went.
+	_check(
+		ACCOMMODATION_SCRIPT.organization_for(str(restored.housing_structure))
+			== "Founded",
+		"and a Longhouse still reads as a young club",
+	)
 
 
 ## A room becomes a question because somebody knocked on the door.

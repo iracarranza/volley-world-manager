@@ -13,6 +13,28 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 @export_enum("Established", "Founded") var organization_type: String = "Established"
 @export var region: String = "Landavol"
 @export var identity: String = "Balanced"
+## ## Who the manager is
+##
+## A save described the organisation five ways and the manager not at all. Every
+## screen here is an object on somebody's desk, and the interface has been
+## drawing that person's handwriting for months without saying who they are.
+## See `ManagerProfile` and `docs/design/CHARACTER_CREATION.md`.
+##
+## `manager_region` is where *you* are from, which is frequently not where you
+## manage -- a Landavoli in Taktikã is a specific and interesting position, and
+## it is the position most managers in a real league are in.
+@export var manager_name: String = ""
+@export var manager_region: String = "Landavol"
+@export var manager_background: String = "played"
+## Which hand holds the clipboard. The backlog's mirrored-clipboard entry has
+## been waiting on a manager who has one.
+@export_enum("right", "left") var manager_hand: String = "right"
+## What the club leases, and whether it owns it. Replaces Established/Founded at
+## save generation, per ACCOMMODATIONS_AND_CARE §15: every club has new volis and
+## old ones, and nobody starts by coaching a region's academy. A lease is a
+## monthly cost, a floor budget and a sentence about who you are; a club type is
+## a word the player never sees again.
+@export var housing_structure: String = "Bunkhouse"
 @export var absolute_week: int = 1
 ## Which day of that week it is, 1 for Monday.
 ##
@@ -118,6 +140,9 @@ func to_dict() -> Dictionary:
 		"staff": staff_data,
 		"organization_name": organization_name, "organization_type": organization_type,
 		"region": region, "identity": identity, "absolute_week": absolute_week,
+		"manager_name": manager_name, "manager_region": manager_region,
+		"manager_background": manager_background, "manager_hand": manager_hand,
+		"housing_structure": housing_structure,
 		"reputation": reputation, "finances": finances,
 		"training_focus": training_focus,
 		"training_regimens": _regimen_data(),
@@ -150,6 +175,11 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.organization_type = "Founded" if stored_type == "Founded" else "Established"
 	state.region = Regions.canonical_name(str(data.get("region", "Landavol")))
 	state.identity = str(data.get("identity", "Balanced"))
+	state.manager_name = str(data.get("manager_name", ""))
+	state.manager_region = str(data.get("manager_region", state.region))
+	state.manager_background = str(data.get("manager_background", "played"))
+	state.manager_hand = str(data.get("manager_hand", "right"))
+	state.housing_structure = str(data.get("housing_structure", "Bunkhouse"))
 	state.absolute_week = maxi(int(data.get("absolute_week", 1)), 1)
 	state.reputation = clampi(int(data.get("reputation", 10)), 0, 100)
 	state.finances = int(data.get("finances", 100000))
