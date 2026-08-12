@@ -12,6 +12,7 @@ const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
 const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd")
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
+const CLUB_EVENTS_SCRIPT := preload("res://scripts/data/club_events.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
@@ -209,6 +210,7 @@ func _initialize() -> void:
 	_test_food_is_a_flow_with_a_geography()
 	_test_a_match_costs_something_that_survives_the_week()
 	_test_a_dorm_is_still_a_dorm()
+	_test_the_club_tells_you_what_the_rooms_did()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14951,6 +14953,127 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A room becomes a question because somebody knocked on the door.
+##
+## `ACCOMMODATIONS_AND_CARE.md` §9. The equipment has real two-sided costs and
+## the objection that survived review was not that the costs were missing — it
+## was that **a standing −X% on a number nobody watches is a downside on paper.**
+## The events are how a room's downside becomes knowable.
+func _test_the_club_tells_you_what_the_rooms_did() -> void:
+	var quiet: Dictionary = {
+		"small_equipment": [], "large_equipment": [], "shared_installations": [],
+		"crowding": 0.0, "interrupted_lines": [],
+		"volis": [{"id": 1, "name": "Mila", "fatigue": 0.1, "palate": 0.0,
+			"discomfort": 0.0}],
+	}
+	_check(
+		CLUB_EVENTS_SCRIPT.weekly(quiet).is_empty(),
+		"a settled club with an empty room hears nothing",
+	)
+
+	## **The weights, reporting.** Not a random injury -- the room did this, and
+	## the card is the only way a manager finds out the cost was real.
+	var lifting: Dictionary = quiet.duplicate(true)
+	lifting["large_equipment"] = ["free_weights"]
+	lifting["volis"] = [{"id": 1, "name": "Mila", "fatigue": 0.6,
+		"palate": 0.0, "discomfort": 0.0}]
+	var lifted: Array = CLUB_EVENTS_SCRIPT.weekly(lifting)
+	_check(
+		_has_event(lifted, "extra_training"),
+		"a tired voli in a room with weights says something about their arm",
+	)
+	## And it is conditional on the fatigue, not on the furniture: the same room
+	## with a fresh squad is quiet, which is what stops it being a ticker.
+	var fresh: Dictionary = lifting.duplicate(true)
+	fresh["volis"] = [{"id": 1, "name": "Mila", "fatigue": 0.05,
+		"palate": 0.0, "discomfort": 0.0}]
+	_check(
+		not _has_event(CLUB_EVENTS_SCRIPT.weekly(fresh), "extra_training"),
+		"and the same room says nothing when nobody is tired",
+	)
+
+	## **The console, reporting** -- and it is a coach rather than a voli,
+	## because the cost is something the voli would not notice about themselves.
+	var playing: Dictionary = quiet.duplicate(true)
+	playing["small_equipment"] = ["console"]
+	var played: Array = CLUB_EVENTS_SCRIPT.weekly(playing)
+	_check(_has_event(played, "room_behind"), "a console produces a coach's note")
+	for event in played:
+		if str(event["id"]) == "room_behind":
+			_check(
+				int(event["speaker_id"]) < 0
+					and str(event["utterance"]).is_empty(),
+				"which is a report rather than something a voli said",
+			)
+
+	## **The crowding trade, reporting, early enough to act.** §8 requires that a
+	## relationship crash is never silent, and this is the warning.
+	var crowded: Dictionary = quiet.duplicate(true)
+	crowded["crowding"] = 1.0
+	crowded["strained_pair"] = [1, 2]
+	_check(
+		_has_event(CLUB_EVENTS_SCRIPT.weekly(crowded), "roommate_strain"),
+		"a crowded room is mentioned before it breaks",
+	)
+
+	## **The table, both ways it can be wrong**, per §17.
+	var bored: Dictionary = quiet.duplicate(true)
+	bored["volis"] = [{"id": 1, "name": "Mila", "fatigue": 0.1, "palate": 0.9,
+		"discomfort": 0.0}]
+	_check(
+		_has_event(CLUB_EVENTS_SCRIPT.weekly(bored), "palate_tired"),
+		"a voli tired of one paste asks for something else",
+	)
+	var stranded: Dictionary = quiet.duplicate(true)
+	stranded["volis"] = [{"id": 1, "name": "Mila", "fatigue": 0.1, "palate": 0.0,
+		"discomfort": 0.8}]
+	_check(
+		_has_event(CLUB_EVENTS_SCRIPT.weekly(stranded), "eating_among_strangers"),
+		"and a voli eating among strangers says so",
+	)
+
+	## **Two voices, kept apart.** A voli does not know their roommate is costing
+	## them 0.11 of a rest multiplier; they know the room has been difficult.
+	## Writing one text and using it twice would make every voli sound like a
+	## dossier, which is the register this game is furthest from.
+	for event in CLUB_EVENTS_SCRIPT.weekly(stranded):
+		if int(event["speaker_id"]) >= 0:
+			_check(
+				not str(event["utterance"]).is_empty()
+					and str(event["utterance"]) != str(event["report"]),
+				"a voli's own words are not the staff report",
+			)
+			## Every option has to hurt somewhere, or the card is a notification
+			## with buttons on it.
+			for option in Array(event["options"]):
+				_check(
+					not str(option.get("cost", "")).is_empty(),
+					"and every option states what it costs",
+				)
+
+	## **The noticeboard buys information, not outcomes.** The only shared
+	## installation whose whole effect is when you are told.
+	var boarded: Dictionary = stranded.duplicate(true)
+	boarded["shared_installations"] = ["noticeboard"]
+	var early: Array = CLUB_EVENTS_SCRIPT.weekly(boarded)
+	var late: Array = CLUB_EVENTS_SCRIPT.weekly(stranded)
+	_check(
+		early.size() == late.size(),
+		"a noticeboard changes no outcome (%d against %d)" % [early.size(), late.size()],
+	)
+	var lead := 0
+	for event in early:
+		lead = maxi(lead, int(event["lead_weeks"]))
+	_check(lead > 0, "it changes when you hear about it (%d week)" % lead)
+
+
+func _has_event(events: Array, id: String) -> bool:
+	for event in events:
+		if str(event.get("id", "")) == id:
+			return true
+	return false
 
 
 ## A dorm is still a dorm, and floor is what everything is spent against.
