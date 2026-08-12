@@ -2667,6 +2667,21 @@ func resolve(
 			),
 			"home_phase_intents": home_cover_intents,
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
+			## **What the wall was for, on the event that resolves it.**
+			##
+			## `block_intent` and `block_hands` are computed in `_contest_block`
+			## and were being dropped at this seam -- measured at 0% and 65.4%
+			## present across 246 block events. Without them a reader can only
+			## see whether the ball got past, and "the ball got past" is not the
+			## same question as "the block failed": a funnel that channels a
+			## swing into a waiting digger did exactly what it meant to.
+			"block_intent": str(block_resolution.get("block_intent", "Balanced")),
+			"block_hands": str(block_resolution.get("block_hands", "neutral")),
+			## And *how* the wall was beaten, which the attack event already
+			## carried and this one did not. Over the top is a reach problem and
+			## around the edge is a read problem -- they want opposite fixes, and
+			## only one of them is the blocker's misjudgement.
+			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
 			"signature_charge": float(geometric.get("signature_charge", 0.0)),
@@ -4337,6 +4352,10 @@ func _resolve_opponent_transition(
 			)),
 			"signature_actor_id": int(geometric.get("signature_actor_id", blocker_id)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
+			## Alongside the hands, and for the same reason -- see the note on the
+			## opponent block above. The plan's intent is what separates a funnel
+			## that funnelled from a seal that was beaten.
+			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			"contest_margin": float(block_result.get("contest_margin", 0.0)),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			"net_height_over_block_meters": float(
@@ -5319,6 +5338,8 @@ func _resolve_home_continuation(
 					if opponent_blocker != null else -1
 			)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
+			"block_intent": str(block_result.get("block_intent", "Balanced")),
+			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 		"primary_close": primary_close, "assist_close": assist_close,
 		"primary_close_terms": Dictionary(
 			block_result.get("primary_close_terms", {})

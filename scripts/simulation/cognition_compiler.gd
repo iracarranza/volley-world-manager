@@ -42,6 +42,12 @@ const PRIORITY_LOST_SIGHT: int = 40
 const PRIORITY_COMMITTED: int = 50
 const PRIORITY_CALLING: int = 60
 const PRIORITY_REACTING: int = 70
+## How long a wall wears its verdict.
+##
+## Sized against the window budget rather than picked: `run_window_budget_probe`
+## puts a tenth of drawn flights under 0.42 s, and a mark that outlives the next
+## contact is a mark still reporting the previous rally.
+const BLOCK_VERDICT_SECONDS: float = 0.75
 
 ## How long a setter's eye rests on one option before moving to the next.
 ##
@@ -585,6 +591,16 @@ static func _compile_block_read(
 			"close": float(metadata.get("assist_close", 0.0)),
 			"at": Vector2(metadata.get("assist_position", Vector2(0.5, 0.5))),
 		})
+	## One verdict for the wall, not one per blocker. A block is a joint action
+	## and its outcome is a joint outcome -- the assist did not have a different
+	## rally from the primary, and giving them separate answers would show two
+	## volis on the same wall disagreeing about what just happened to them.
+	var verdict := BlockVerdict.of(
+		str(metadata.get("block_intent", "Balanced")),
+		str(metadata.get("outcome", "")),
+		str(metadata.get("block_hands", "neutral")),
+		str(metadata.get("block_miss_reason", "")),
+	)
 	for entry in blockers:
 		var blocker_id := int(entry.id)
 		if blocker_id < 0:
@@ -643,6 +659,41 @@ static func _compile_block_read(
 		committed.priority = PRIORITY_COMMITTED
 		committed.audience = &"observable"
 		cues.append(committed)
+
+		## **And what the wall earned**, which is the one thing the block layer
+		## could not say before.
+		##
+		## A shield does not break because the ball got past it. It breaks when
+		## the block meant to *stop* the ball and was wrong about where it was
+		## going -- kill hands, beaten around the edge. A funnel that channelled
+		## the swing into a waiting digger did exactly what it set out to, and a
+		## blocker who was in the right place and got hit over the top was
+		## out-jumped rather than out-read. `BlockVerdict` holds that judgement;
+		## this only carries it into the cue vocabulary.
+		##
+		## Emitted only when there is something to say. A neutral verdict is the
+		## ordinary case and already has a mark -- the plain shield the
+		## `committed` cue above is drawing -- so adding a cue to assert it would
+		## be 62% of blocks spending a slot on "as expected".
+		if verdict != "plain":
+			var resolved := CueModel.create(
+				blocker_id, side, block_event.sequence,
+				contact_time, contact_time + BLOCK_VERDICT_SECONDS,
+				&"reacting", &"after",
+			)
+			resolved.attention_kind = &"ball"
+			## Still `blocking`, so what breaks is the wall rather than some
+			## generic reaction mark. The variant is the whole statement here.
+			resolved.intent = &"blocking"
+			resolved.as_held()
+			resolved.affect = BlockVerdict.affect_for(verdict)
+			resolved.affect_intensity = clampf(closed, 0.0, 1.0)
+			resolved.certainty = 1.0
+			resolved.trend = 0.5 if verdict == "ascendant" else -0.5
+			resolved.outcome_name = str(metadata.get("outcome", ""))
+			resolved.priority = PRIORITY_REACTING
+			resolved.audience = &"observable"
+			cues.append(resolved)
 
 
 static func _option_for(evaluation: Dictionary, player_id: int) -> Dictionary:

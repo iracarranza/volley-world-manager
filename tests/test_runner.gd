@@ -197,6 +197,7 @@ func _initialize() -> void:
 	_test_blade_cogniticons_fill_from_the_bottom()
 	_test_cogniticon_motion_envelopes()
 	_test_cogniticon_variants_and_commitment()
+	_test_block_verdict_separates_intent_from_outcome()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14939,6 +14940,86 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A shield breaks on a wrong read, not on a ball getting past.
+##
+## The distinction the whole variant rests on: **"the ball got past" is not the
+## same question as "the block failed"**. A funnel that channels a swing into a
+## waiting digger did exactly what it set out to do, and drawing that as a broken
+## shield says the opposite of what happened.
+##
+## Gated as a table rather than measured off rallies, and that is deliberate.
+## `run_block_verdict_probe` reports the vertical slice at **100% `Balanced`**
+## plan intent and **zero** `funnel` outcomes -- geometric promotion maps eight
+## resolver outcomes onto `stuff`, `touch` and `miss`, and has no word for a
+## funnel at all. So the two rows that motivated the rule cannot be reached by
+## simulating, and a gate that only ran rallies would report them as passing by
+## never asking. The table is the instrument that can ask.
+func _test_block_verdict_separates_intent_from_outcome() -> void:
+	## The row the rule exists for. Same outcome, opposite verdicts, because the
+	## two walls wanted different things.
+	_check(
+		BlockVerdict.of("Funnel", "funnel", "soft", "") == "ascendant",
+		"a funnel that funnelled succeeded, though the ball went past",
+	)
+	_check(
+		BlockVerdict.of("Seal", "funnel", "kill", "") != "ascendant",
+		"and a seal that only channelled did not do what it meant to",
+	)
+
+	## The user-facing sentence, both halves. Going up to stop the ball and being
+	## wrong about where it was going is the break; being out-jumped is not.
+	_check(
+		BlockVerdict.of("Balanced", "miss", "kill", "around") == "broken",
+		"a wall that went up to stop the ball and was beaten around it breaks",
+	)
+	_check(
+		BlockVerdict.of("Balanced", "miss", "kill", "over and around") == "broken",
+		"and so does one beaten around it as well as over it",
+	)
+	_check(
+		BlockVerdict.of("Balanced", "miss", "kill", "over") == "plain",
+		"but being hit over the top is being out-jumped, not out-read",
+	)
+	_check(
+		BlockVerdict.of("Balanced", "miss", "soft", "around") == "plain",
+		"and soft hands were never trying to stop it, so they cannot fail to",
+	)
+
+	## A stuff is a stuff whatever the plan said.
+	for intent in ["Seal", "Balanced", "Funnel"]:
+		_check(
+			BlockVerdict.of(intent, "stuff", "kill", "") == "ascendant",
+			"a %s wall that puts the ball down flares" % intent,
+		)
+
+	## **Absent facts claim nothing.** 34.6% of blocks published no `block_hands`
+	## and 52.4% no `block_miss_reason` before this pass plumbed them through, and
+	## a default that guessed "kill" would have shattered shields on every block
+	## the legacy path resolved -- a systematic bias dressed as a reading.
+	_check(
+		BlockVerdict.of("Balanced", "miss", "neutral", "") == "plain"
+			and BlockVerdict.of("Balanced", "miss", "kill", "") == "plain",
+		"a block that did not say how it was beaten does not break",
+	)
+
+	## And the affect each verdict is read with, since that is what reaches both
+	## the variant and the grade colour. Derived once, here, so the two cannot
+	## drift apart.
+	_check(
+		BlockVerdict.affect_for("broken") == &"upset"
+			and BlockVerdict.affect_for("ascendant") == &"confident"
+			and BlockVerdict.affect_for("plain") == &"neutral",
+		"each verdict reads as the affect the cue vocabulary already has",
+	)
+	for verdict in CogniticonMarks.VARIANTS:
+		_check(
+			CogniticonMotion.variant_for(
+				"reacting", str(BlockVerdict.affect_for(verdict))
+			) == verdict,
+			"and a %s verdict draws the %s mark" % [verdict, verdict],
+		)
 
 
 ## Variants, and commitment as a process.

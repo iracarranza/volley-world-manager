@@ -624,6 +624,82 @@ The gate for a break is width where it broke, not ink count — a fracture *adds
 a seam, and the first version of that gate asked a shattered blade to carry less
 ink and failed on a drawing that was right.
 
+### A shield breaks on a wrong read, not on a ball getting past
+
+**"The ball got past" is not the same question as "the block failed."** A funnel
+that channels a swing into a waiting digger did exactly what it set out to do,
+and drawing that as a broken shield says the opposite of what happened. What
+breaks a shield is a block that meant to *stop* the ball and was wrong about
+where it was going.
+
+`BlockVerdict` holds that judgement, from three facts the model already computes:
+
+| fact | source | means |
+|---|---|---|
+| `block_intent` | `DefensivePlan` | Seal, Balanced or Funnel — what the wall was *for* |
+| `outcome` | the contest's band | stuff, touch, funnel, miss |
+| `block_hands` | `_block_hands_intent` | kill, soft, neutral — what this blocker went up to do |
+| `block_miss_reason` | the geometric resolver | over the top, around the edge, or both |
+
+- **ascendant** — a stuff, whatever the plan said; or a Funnel wall that funnelled
+  or touched, because that is the plan working.
+- **broken** — kill hands, beaten, and the reason includes *around*. Went up to
+  stop it and was wrong about where.
+- **plain** — everything else. Including a Seal that only managed to channel
+  (it did not do what it meant to, but it still shaped the ball), and anyone
+  beaten purely **over the top**: being out-jumped is not being out-read.
+
+**The two sides do not have to agree.** A hitter can flare over a block that
+stays plain — a good swing against a sound block is a good swing, not a
+blocker's failure — and a block can break on a swing that was nothing special,
+because what broke it was the read. Each mark is computed from its own
+objective and neither reads the other's.
+
+### What that cost, and what it fixed
+
+The three facts were computed and then dropped at the event seam. Measured
+across 246 block events before the change: `block_intent` **0% present**,
+`block_hands` 65.4%, `block_miss_reason` 47.6%. All three are 100% now, at all
+three block-event sites.
+
+Absent facts claim nothing — `neutral` hands and an empty miss reason both
+resolve to `plain`. A default that guessed `kill` would have shattered a shield
+on every block the legacy path resolved, which is a systematic bias wearing the
+costume of a reading.
+
+The resulting mix, `run_block_verdict_probe` over the same 246 blocks:
+
+| verdict | share |
+|---|---|
+| plain | 61.8% |
+| broken | 28.0% |
+| ascendant | 10.2% |
+
+And in the layer as a whole, `run_variant_mix_probe` over 19,717 cues: plain
+97.5%, ascendant 1.8%, broken 0.7% — up from 0.2%, with the two-tier separation
+intact. `upset` is emitted for the first time.
+
+### Two reasons the funnel case cannot fire yet
+
+Both measured, neither fixed here:
+
+1. **Every plan is `Balanced`.** 100% of 246 blocks. The vertical slice never
+   sets Seal or Funnel, so the intent column has one value in it.
+2. **No block ever resolves as `funnel`.** The band exists in `_contest_block`
+   and is a real 0.117-wide window between the touch and funnel margins — but
+   `_geometric_promotion` maps eight resolver outcomes onto `stuff`, `touch` and
+   `miss`, and **has no word for a funnel at all**. Once geometric promotion is
+   on, which it is, every would-be funnel becomes a miss.
+
+So the rows that motivated the whole rule are unreachable by simulating today.
+That is why the gate is a **table**, not a rally sweep: a gate that only ran
+rallies would report those rows as passing by never asking them.
+
+The second one is a §0 defect in its own right — a band with a real window that
+a downstream mapping cannot express — and it is worth fixing on its own terms,
+because it is also a tactical choice the manager is offered and cannot currently
+feel.
+
 ### The variants are wired, and the compiler barely reaches them
 
 `CogniticonMotion.variant_for` reads the two axes a cue already carries —
@@ -644,12 +720,15 @@ over 19,559 compiled cues from 240 rallies:
 | confident | 0.5% | | recognizing | 2.5% |
 | — | — | | lost_sight | 0.2% |
 
-**`upset` and `sad` are emitted zero times.** Both branches exist in
+**`upset` and `sad` were emitted zero times.** Both branches exist in
 `_compile_reactions`, and both sit behind `named_action` — a signature move —
 which is only recorded when it comes off. So the only route to a `broken` mark
-today is `lost_sight`, at 0.2%: the shattered blade and the cleaved shield are
-drawn, gated and wired, and a viewer would see one about once every eight
-rallies.
+was `lost_sight`, at 0.2%.
+
+*Since closed for the block, by the verdict rule above — `upset` now reaches
+0.6% of cues and `broken` 0.7%. The hitter's side of it is still open: a swing
+that goes badly has no route to `upset` either, for the same `named_action`
+reason.*
 
 That is a **compiler gap, not a drawing gap**, and it is exactly the half of
 the §6 scenario that has no source: "the blockers' shields grey out and cleave"

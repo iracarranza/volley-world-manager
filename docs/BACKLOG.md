@@ -6575,3 +6575,58 @@ the block event, and give the blocker who was beaten an `upset` reaction cue the
 way the hitter already gets a `pleased` one. Re-run the mix probe afterwards —
 the number to watch is `plain`, which must stay far above the loud variants or
 the two-tier separation collapses.
+
+
+## The block's funnel band exists, has a real window, and cannot be reached
+
+`_contest_block` resolves four bands — `stuff`, `touch`, `funnel`, `miss` — off
+one number, the block's contest margin over the swing. The margins are ordered
+and the funnel band is a genuine 0.117-wide window:
+
+| band | margin |
+|---|---|
+| stuff | 0.34 |
+| touch | 0.237 |
+| funnel | 0.12 |
+
+`tools/run_block_verdict_probe.gd` finds **zero funnel outcomes in 246 block
+events**. `_geometric_promotion` maps the resolver's eight outcomes onto three —
+`stuff`, `touch`, `miss` — and has **no word for a funnel**. Geometric promotion
+is on, so it overwrites the contest's outcome and every would-be funnel becomes
+a miss.
+
+This is §0 wearing a new hat: not a threshold outside its distribution, but a
+band whose value a downstream mapping cannot express. It is silent — the band
+computes correctly and is discarded one function later.
+
+**Why it matters beyond tidiness.** `block_intent` is a tactical choice the
+manager makes on the clipboard — Seal, Balanced or Funnel — and `Funnel` is the
+one whose success looks like the ball going past. With no funnel outcome, a
+funnelling wall is indistinguishable from a beaten one in the events, and the
+manager cannot feel the choice they made. `BlockVerdict` already has the row
+that would draw it correctly; it is waiting on a fact nothing produces.
+
+**The shape of it**: give the promotion a funnel case. The resolver knows
+whether the hands were involved and whether the ball stayed playable
+(`block_contact_kind`, `block_deflection_playable` — both measured at 0% present
+on block events, so they need the same plumbing the other three just got).
+An outcome of `in` where the block shaped the ball toward the defence is a
+funnel, not a miss.
+
+Re-run `run_block_verdict_probe` afterwards. The numbers to watch: the funnel
+share against the 0.117-wide band it should be cutting, and the `broken` share,
+which must not move — a funnel becoming reachable should convert *misses*, not
+break more shields.
+
+
+## Every defensive plan in the vertical slice is `Balanced`
+
+100% of 246 blocks, measured. Seal and Funnel are modelled, carry real margin
+shifts (a seal's stuff rung sits about six points of the distribution below a
+funnel's), reach `_contest_block`, and are never chosen — so the whole lateral
+axis of block tactics is untested by simulation and invisible in play.
+
+Consequence for the cogniticon layer: the `intent` column of `BlockVerdict` has
+one value in it, so the rule's two intent-sensitive rows are gated by table
+rather than by rally. Consequence for the sim: the block-intent margins have
+never been exercised against a swinging opponent outside their own unit checks.
