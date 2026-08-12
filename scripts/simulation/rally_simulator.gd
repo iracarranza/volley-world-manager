@@ -10593,6 +10593,8 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		block_outcome = "stuff"
 	elif outcome in ["touch", "tool", "high_hands"]:
 		block_outcome = "touch"
+	elif outcome == "in" and _was_funnelled(record):
+		block_outcome = "funnel"
 	return {
 		"outcome": outcome,
 		"block_outcome": block_outcome,
@@ -10654,6 +10656,48 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 			Dictionary(record.get("narrative", {})).get("signature_timing_quality", 0.0)
 		),
 	}
+
+
+## Did the wall *shape* this swing, though it never touched it?
+##
+## `_contest_block` has four bands and this promotion had three words. Every
+## would-be funnel became a `miss`, so a wall that squeezed a hitter into the one
+## lane the defence was standing in was recorded identically to one beaten by
+## three metres -- and the `Funnel` block intent, which is a tactical choice the
+## manager makes on the clipboard, had no outcome that could express it working.
+##
+## That is §0 in a shape worth naming: not a threshold outside its distribution,
+## but a **band whose value a downstream mapping could not say**. It computed
+## correctly and was discarded one function later, silently, for as long as
+## geometric promotion has been on.
+##
+## ## Two conditions, both geometric
+##
+## **The ball went past an edge**, not over the top. Measured: of 140 beaten
+## blocks, the 56 hit `over` have an edge miss of 0.00 m to ten decimal places --
+## a ball that cleared the hands never went past them. Cutting the whole beaten
+## population would put a threshold inside a spike at zero and call every
+## over-the-top swing a funnel.
+##
+## **And it went past narrowly.** The 65 blocks with a lateral escape spread from
+## 0.02 m to over a metre, median 0.42. A funnel is the narrow end: the hitter
+## had to squeeze the ball past the hand rather than sail it wide.
+##
+## The cut is `BLOCKER_HALF_WIDTH_METERS` -- the ball crossed closer to the hand
+## than the hand is wide. That is a physical statement rather than a number
+## chosen to hit a rate, and it uses a constant the wall is already built from,
+## so a wider blocker funnels more without a second dial being invented.
+##
+## Measured at that cut: about 7% of blocks, which sits between the stuff band's
+## 10.2% and the touch band's 27.6% rather than swamping either.
+func _was_funnelled(record: Dictionary) -> bool:
+	if not str(record.get("block_miss_reason", "")).contains("around"):
+		return false
+	var escape = record.get("block_edge_miss_meters", null)
+	if escape == null:
+		return false
+	return absf(float(escape)) <= GeometricAttackPromotionModel.BLOCKER_HALF_WIDTH_METERS
+
 
 
 ## **How much a team's commitment moves the bar a swing has to clear.**

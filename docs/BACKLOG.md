@@ -6577,7 +6577,7 @@ the number to watch is `plain`, which must stay far above the loud variants or
 the two-tier separation collapses.
 
 
-## The block's funnel band exists, has a real window, and cannot be reached
+## ~~The block's funnel band exists, has a real window, and cannot be reached~~ CLOSED
 
 `_contest_block` resolves four bands — `stuff`, `touch`, `funnel`, `miss` — off
 one number, the block's contest margin over the swing. The margins are ordered
@@ -6617,6 +6617,32 @@ Re-run `run_block_verdict_probe` afterwards. The numbers to watch: the funnel
 share against the 0.117-wide band it should be cutting, and the `broken` share,
 which must not move — a funnel becoming reachable should convert *misses*, not
 break more shields.
+
+**Closed.** `_geometric_promotion` has a funnel case, cut on two geometric
+conditions rather than a new dial:
+
+1. The ball went past an **edge**, not over the top. Of 140 beaten blocks, the
+   56 hit `over` have an edge miss of 0.00 m — a ball that cleared the hands
+   never went past them, so cutting the whole beaten population would put a
+   threshold inside a spike at zero.
+2. And it went past **narrowly** — within `BLOCKER_HALF_WIDTH_METERS`. The 65
+   blocks with a lateral escape spread from 0.02 m to over a metre, median 0.42.
+   The cut is the hand's own width: the ball crossed closer to the hand than the
+   hand is wide. A physical statement, and it uses a constant the wall is
+   already built from, so a wider blocker funnels more without a second dial.
+
+Measured after: all four bands reached — stuff 9.9%, touch 26.7%, funnel 17.9%,
+miss 45.5%. The whole suite passes unchanged, including every stuff-rate,
+dig-rate and symmetry gate.
+
+**The prediction about `broken` was wrong, and wrong in a useful direction.**
+It was supposed not to move; it fell from 28.0% to 11.5%. Those 47 blocks were
+kill hands beaten narrowly around the edge, which the old rule called a wrong
+read and the funnel band now calls a wall that shaped the ball. That is the
+better answer: "beaten around the edge" now means beaten by more than a
+hand-width, which is much closer to *wrong about where it was going* than the
+version that counted every narrow escape as a failure. The funnel band did a
+discrimination the verdict rule could not do for itself.
 
 
 ## Every defensive plan in the vertical slice is `Balanced`

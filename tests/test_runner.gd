@@ -198,6 +198,7 @@ func _initialize() -> void:
 	_test_cogniticon_motion_envelopes()
 	_test_cogniticon_variants_and_commitment()
 	_test_block_verdict_separates_intent_from_outcome()
+	_test_the_funnel_band_is_reachable()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14940,6 +14941,78 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## The funnel band exists, and can now be reached.
+##
+## `_contest_block` resolves four bands and `_geometric_promotion` had three
+## words. Once promotion is on -- it is -- every would-be funnel became a `miss`,
+## so a wall that squeezed a hitter into the one lane the defence was standing in
+## was recorded identically to one beaten by three metres. Measured at **zero
+## funnels in 246 block events**.
+##
+## §0 in a shape worth its own name: not a threshold outside its distribution,
+## but a band whose value a downstream mapping could not say. It computed
+## correctly and was discarded one function later, in silence.
+##
+## Gated by sweeping rallies rather than by calling the promotion, because the
+## claim is about reachability and a unit call proves only that the branch
+## compiles.
+func _test_the_funnel_band_is_reachable() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var counts := {}
+	var blocks := 0
+	for rally_seed in range(74000, 74120):
+		manager.match_state.serving_home = (rally_seed % 2) == 0
+		var result: Resource = manager.resolve_active_rally(rally_seed)
+		if result == null:
+			continue
+		for event in result.events:
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				continue
+			blocks += 1
+			var outcome := str(event.metadata.get("outcome", ""))
+			counts[outcome] = int(counts.get(outcome, 0)) + 1
+	_check(blocks > 40, "the sweep contains blocks to classify (%d)" % blocks)
+	## All four bands, because three of them being present is exactly the state
+	## this gate exists to have caught.
+	for band in ["stuff", "touch", "funnel", "miss"]:
+		_check(
+			int(counts.get(band, 0)) > 0,
+			"the %s band is reached (%d of %d blocks)"
+				% [band, int(counts.get(band, 0)), blocks],
+		)
+	## And it is a band rather than a bucket. Measured at ~18% of blocks against
+	## the stuff band's 10% and the touch band's 27%; asserted loosely because
+	## the claim is "this is one outcome among four", not a calibration target.
+	var funnels := float(counts.get("funnel", 0)) / maxf(float(blocks), 1.0)
+	_check(
+		funnels > 0.02 and funnels < 0.45,
+		"and it is one band among four rather than a new default (%.1f%%)"
+			% (funnels * 100.0),
+	)
+	## The two facts the cut is made of, published on the event that carries the
+	## outcome. Without them the layer can see that a block was beaten and not
+	## whether the wall shaped the ball on its way past.
+	var missing := 0
+	for rally_seed in range(74200, 74240):
+		manager.match_state.serving_home = (rally_seed % 2) == 0
+		var result: Resource = manager.resolve_active_rally(rally_seed)
+		if result == null:
+			continue
+		for event in result.events:
+			if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.BLOCK:
+				continue
+			for key in ["block_intent", "block_hands", "block_miss_reason"]:
+				if not event.metadata.has(key):
+					missing += 1
+	_check(
+		missing == 0,
+		"every block event says what the wall was for and how it was beaten"
+			+ " (%d gaps)" % missing,
+	)
+	manager.free()
 
 
 ## A shield breaks on a wrong read, not on a ball getting past.
