@@ -1,6 +1,8 @@
 extends Node
 
 const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
+const Accommodation := preload("res://scripts/data/accommodation.gd")
+const FoodSupply := preload("res://scripts/data/food_supply.gd")
 
 const CareerStateModel := preload("res://scripts/models/career_state.gd")
 const TeamModel := preload("res://scripts/models/team.gd")
@@ -369,7 +371,19 @@ func advance_week() -> String:
 		## Weekly recovery must exceed every training load. The old 0.04 was
 		## smaller than default Team Practice's 0.05, so an idle week made a
 		## rested squad more tired and fixture-to-fixture fatigue only climbed.
-		recover_weekly_fatigue(player)
+		## **Recovery is now what living here buys you.**
+		##
+		## `ACCOMMODATIONS_AND_CARE.md` §11: a dorm is still a dorm, so the floor
+		## under this is high and nobody rests badly because of where they live.
+		## What reduces it are *conditions* -- a crowded room, a table with
+		## nothing familiar on it, being a long way from home with no way to call
+		## -- and every one of those is answerable by something a manager
+		## installs or arranges.
+		##
+		## This is the seam the whole accommodation design attaches to, and it
+		## could not exist until a match cost something that survived the week.
+		recover_weekly_fatigue(player, _weekly_recovery_share(player))
+		_advance_weekly_palate(player)
 		player.current_form *= 0.92
 		## A week spent under your own eyes. The other half of scouting
 		## confidence, and the half a scout cannot buy: `ScoutingSystem`
@@ -384,9 +398,63 @@ func advance_week() -> String:
 	return ""
 
 
-static func recover_weekly_fatigue(player: VolleyballPlayer) -> void:
+static func recover_weekly_fatigue(
+	player: VolleyballPlayer, share: float = 1.0
+) -> void:
 	if player != null:
-		player.fatigue = maxf(player.fatigue - WEEKLY_FATIGUE_RECOVERY, 0.0)
+		player.fatigue = maxf(
+			player.fatigue - WEEKLY_FATIGUE_RECOVERY * share, 0.0
+		)
+
+
+## What share of a full week's recovery this voli actually banks.
+func _weekly_recovery_share(player: VolleyballPlayer) -> float:
+	var team: Resource = _game_manager().team
+	if team == null or player == null:
+		return 1.0
+	## The club's region lives on the career, not the team -- the squad is the
+	## people and the region is the address.
+	var club_region := str(career.region) if career != null else str(player.club_region)
+	var week := int(career.absolute_week) if career != null else 1
+	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
+	var discomfort := FoodSupply.discomfort(player.palate_regions, table)
+	var crowding := Accommodation.crowding(
+		str(team.housing_structure), int(team.housing_occupants_per_room),
+		team.housing_small_equipment, team.housing_large_equipment,
+	)
+	return Accommodation.weekly_recovery_share(
+		crowding,
+		Accommodation.homesick(str(player.home_region), club_region),
+		discomfort,
+		FoodSupply.palate_of(_palate_clock, int(player.id)),
+		team.housing_small_equipment,
+	)
+
+
+## One paste per week, rotated by the chef, and one palate figure per voli.
+##
+## The chef rotates through whatever the table has rather than repeating -- a
+## manager who has given them three pastes gets three weeks before anything
+## repeats, which is `FoodSupply`'s own rule that rotating is the fix.
+var _palate_clock: Dictionary = {}
+
+
+func _advance_weekly_palate(player: VolleyballPlayer) -> void:
+	var team: Resource = _game_manager().team
+	if team == null or player == null:
+		return
+	## The club's region lives on the career, not the team -- the squad is the
+	## people and the region is the address.
+	var club_region := str(career.region) if career != null else str(player.club_region)
+	var week := int(career.absolute_week) if career != null else 1
+	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
+	var pastes: Array = Dictionary(table["pastes"]).keys()
+	var serving := "" if pastes.is_empty() else str(pastes[week % pastes.size()])
+	FoodSupply.advance_palate(_palate_clock, int(player.id), serving)
+	## And a week of eating somebody else's food widens a palate, which is the
+	## ceiling in §17 doing its job: comfortable is not the same as learning.
+	if FoodSupply.widens_palate(player.palate_regions, table):
+		FoodSupply.learn_region(player.palate_regions, club_region)
 
 
 func prepare_fixture(fixture_id: int) -> String:

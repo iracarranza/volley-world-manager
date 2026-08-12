@@ -16,6 +16,18 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 ## most important relationship, a setter and a hitter who have run the same quick
 ## two hundred times, unrepresentable. See `PairFamiliarity`.
 @export var pair_familiarity: Dictionary = {}
+## Where the squad lives, and what is in the rooms. See `Accommodation`.
+##
+## A structure name, whether the club owns it or leases it, and the equipment
+## installed -- squad-wide for now, because §11's rule is that a room is a
+## loadout and per-room assignment is a screen that does not exist yet.
+@export var housing_structure: String = "Bunkhouse"
+@export var housing_owned: bool = false
+@export var housing_small_equipment: Array[String] = []
+@export var housing_large_equipment: Array[String] = []
+@export var housing_occupants_per_room: int = 2
+## Which regions the club runs food lines to, beyond its own. See `FoodSupply`.
+@export var supply_lines: Array[String] = []
 ## Trust and emotional connection. Familiarity governs knowing the system;
 ## cohesion governs how strongly confidence and recovery spread through it.
 @export_range(0.0, 1.0) var cohesion: float = 0.50
@@ -125,6 +137,12 @@ func to_dict() -> Dictionary:
 		"principles": principles.to_dict() if principles != null else {},
 		"tactical_familiarity": tactical_familiarity,
 		"pair_familiarity": pair_familiarity.duplicate(true),
+		"housing_structure": housing_structure,
+		"housing_owned": housing_owned,
+		"housing_small_equipment": Array(housing_small_equipment).duplicate(),
+		"housing_large_equipment": Array(housing_large_equipment).duplicate(),
+		"housing_occupants_per_room": housing_occupants_per_room,
+		"supply_lines": Array(supply_lines).duplicate(),
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
@@ -156,6 +174,18 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.identity = str(team.principles.preset_name)
 	team.tactical_familiarity = clampf(float(data.get("tactical_familiarity", 0.35)), 0.0, 1.0)
 	team.pair_familiarity = Dictionary(data.get("pair_familiarity", {})).duplicate(true)
+	team.housing_structure = str(data.get("housing_structure", "Bunkhouse"))
+	team.housing_owned = bool(data.get("housing_owned", false))
+	team.housing_occupants_per_room = int(data.get("housing_occupants_per_room", 2))
+	team.housing_small_equipment.clear()
+	for item in Array(data.get("housing_small_equipment", [])):
+		team.housing_small_equipment.append(str(item))
+	team.housing_large_equipment.clear()
+	for item in Array(data.get("housing_large_equipment", [])):
+		team.housing_large_equipment.append(str(item))
+	team.supply_lines.clear()
+	for region in Array(data.get("supply_lines", [])):
+		team.supply_lines.append(str(region))
 	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
 	team.regional_alignment = clampf(
 		float(data.get("regional_alignment", 0.50)), 0.0, 1.0

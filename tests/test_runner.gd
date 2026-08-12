@@ -11,6 +11,7 @@ const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
 const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd")
+const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
@@ -207,6 +208,7 @@ func _initialize() -> void:
 	_test_a_setter_goes_to_the_hitter_they_know()
 	_test_food_is_a_flow_with_a_geography()
 	_test_a_match_costs_something_that_survives_the_week()
+	_test_a_dorm_is_still_a_dorm()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14949,6 +14951,137 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A dorm is still a dorm, and floor is what everything is spent against.
+##
+## `ACCOMMODATIONS_AND_CARE.md` §10-§17. Two rules carry the system: nobody rests
+## badly because of *where they live*, only because of what is happening to them;
+## and occupancy competes with equipment for the same floor, which is why a
+## bigger room means you may choose differently rather than that you are better.
+func _test_a_dorm_is_still_a_dorm() -> void:
+	## **The floor under rest.** Every condition at its worst, no answers
+	## installed, and it still cannot make somebody rest badly. This is the rule
+	## that killed quality-of-bed as an axis and with it the three-dials-against
+	## -money failure the review found in the first proposal.
+	var worst := ACCOMMODATION_SCRIPT.rest_multiplier(3.0, true, 1.0, [])
+	_check(
+		worst >= ACCOMMODATION_SCRIPT.REST_FLOOR - 0.001,
+		"the worst room in the game still rests somebody (%.2f)" % worst,
+	)
+	_check(
+		ACCOMMODATION_SCRIPT.rest_multiplier(0.0, false, 0.0, []) >= 0.999,
+		"and an ordinary one is unremarkable, which is the base case",
+	)
+
+	## **Conditions, not furniture.** Each cost is answerable by something a
+	## manager installs or arranges.
+	var homesick := ACCOMMODATION_SCRIPT.rest_multiplier(0.0, true, 0.0, [])
+	var called := ACCOMMODATION_SCRIPT.rest_multiplier(
+		0.0, true, 0.0, ["landline"]
+	)
+	_check(
+		called > homesick,
+		"a landline answers homesickness (%.2f against %.2f)" % [called, homesick],
+	)
+
+	## **Floor, and crowding as a play rather than a failure.**
+	_check(
+		ACCOMMODATION_SCRIPT.floor_used(2, ["console"], []) == 5.0,
+		"two volis and a console is five floor",
+	)
+	var crowded := ACCOMMODATION_SCRIPT.crowding("Bunkhouse", 3, [], [])
+	_check(crowded > 0.0, "three in a bunkhouse room is crowded (%.1f)" % crowded)
+	## The privacy screen spends floor to buy back occupancy, which is the floor
+	## rule paying off and the reason the unit is shared between the two.
+	_check(
+		ACCOMMODATION_SCRIPT.crowding("Bunkhouse", 3, ["privacy_screen"], [])
+			< crowded,
+		"and a privacy screen buys some of it back",
+	)
+	_check(
+		ACCOMMODATION_SCRIPT.crowding("Row", 1, [], []) == 0.0,
+		"a Row unit is never crowded, which is what it is for",
+	)
+
+	## **Structures specialise rather than climb.** There is no top of the list:
+	## the Row has the most floor and the Longhouse the least, and the Longhouse
+	## is the right answer for a young squad.
+	for name in ACCOMMODATION_SCRIPT.STRUCTURES:
+		var entry: Dictionary = ACCOMMODATION_SCRIPT.STRUCTURES[name]
+		_check(
+			float(entry["floor"]) > 0.0 and int(entry["rooms"]) > 0,
+			"%s has a floor and some rooms" % name,
+		)
+	_check(
+		float(ACCOMMODATION_SCRIPT.STRUCTURES["Row"]["floor"])
+			> float(ACCOMMODATION_SCRIPT.STRUCTURES["Longhouse"]["floor"])
+			and int(ACCOMMODATION_SCRIPT.STRUCTURES["Longhouse"]["rooms"])
+				> int(ACCOMMODATION_SCRIPT.STRUCTURES["Row"]["rooms"]),
+		"the Row trades capacity for floor and the Longhouse the reverse",
+	)
+
+	## **You rent, and unusual costs more.** Regional practice as an ownership
+	## rule would be a cage -- a club abroad would have nowhere to sleep -- so it
+	## is a price instead.
+	var at_home := ACCOMMODATION_SCRIPT.rent_for("Row", "Xérvu")
+	var abroad := ACCOMMODATION_SCRIPT.rent_for("Row", "Landavol")
+	_check(
+		abroad > at_home,
+		"a Row costs more outside Xérvu (%.2f against %.2f)" % [abroad, at_home],
+	)
+	_check(
+		ACCOMMODATION_SCRIPT.rent_for("Bunkhouse", "Landavol")
+			== ACCOMMODATION_SCRIPT.rent_for("Bunkhouse", "Xérvu"),
+		"and a Bunkhouse is nobody's identity, so it costs the same everywhere",
+	)
+	## The housing choice carries what Established/Founded used to, per §15.
+	_check(
+		ACCOMMODATION_SCRIPT.organization_for("Longhouse") == "Founded"
+			and ACCOMMODATION_SCRIPT.organization_for("Row") == "Established",
+		"what a club can lease already says what kind of club it is",
+	)
+
+	## **All of it domestic.** §11's correction: every club has a gym and a film
+	## room, so putting them here made accommodation a second training facility.
+	for banned in ["gym", "film_room", "ice_bath"]:
+		_check(
+			not ACCOMMODATION_SCRIPT.LARGE_EQUIPMENT.has(banned)
+				and not ACCOMMODATION_SCRIPT.SHARED_INSTALLATIONS.has(banned),
+			"%s is a facility and does not live here" % banned,
+		)
+	_check(
+		ACCOMMODATION_SCRIPT.SMALL_EQUIPMENT.size() >= 12,
+		"there are enough small items to be a decision (%d)"
+			% ACCOMMODATION_SCRIPT.SMALL_EQUIPMENT.size(),
+	)
+	## The curtain oversleeps -- a cost against the timetable rather than against
+	## another quantity, which is what makes it conditional.
+	_check(
+		str(ACCOMMODATION_SCRIPT.SMALL_EQUIPMENT["blackout_curtain"]["cost"])
+			== "oversleeps",
+		"and the blackout curtain costs a morning rather than a number",
+	)
+
+	## And the whole thing lands on one figure: what share of a week's recovery
+	## somebody banks. Multiplied rather than added, because sleeping badly and
+	## eating among strangers is worse than either and neither rescues the other.
+	var comfortable := ACCOMMODATION_SCRIPT.weekly_recovery_share(
+		0.0, false, 0.0, 0.0, []
+	)
+	var miserable := ACCOMMODATION_SCRIPT.weekly_recovery_share(
+		2.0, true, 1.0, 1.0, []
+	)
+	_check(
+		comfortable >= 0.999 and miserable < comfortable,
+		"a settled voli banks a full week and an unsettled one does not (%.2f)"
+			% miserable,
+	)
+	_check(
+		miserable > 0.2,
+		"but never so little that the squad cannot recover at all (%.2f)"
+			% miserable,
+	)
 
 
 ## A match has to cost something, and it was costing nothing.
