@@ -226,7 +226,7 @@ func _add_team_panel() -> void:
 	if starters.is_empty():
 		_note("No starting lineup set. Assign starters on the Roster tab.")
 		return
-	_heading("Your six")
+	_heading("On court")
 	var totals := {}
 	for player in starters:
 		var profile := AttributeProfiles.summary_profile(player)
@@ -268,11 +268,18 @@ func _add_team_panel() -> void:
 		grid.add_child(_cell(mark))
 		grid.add_child(_cell(str(axis)))
 		grid.add_child(_cell("%.1f  %s" % [mean, grade]))
-	_note(
-		"Averaged across all six starters, which puts a libero in the attack "
-		+ "figure. The functional axes that fix that are specified in "
-		+ "TEAM_ATTRIBUTE_WHEEL.md and are not built yet."
-	)
+	## **The caveat is not the player's problem.**
+	##
+	## This panel used to carry a note explaining that the figures average a
+	## libero into the attack score, and citing the design document where the
+	## fix is specified. That is the game apologising to the manager for its own
+	## incompleteness, in the manager's face, every week -- and naming a filename
+	## at somebody who is picking a volleyball team.
+	##
+	## The limitation is real and it is recorded where limitations go. On the
+	## board, the rotation rows underneath say the same thing by *being there*:
+	## a manager who compares the six-mean to the per-rotation figures finds the
+	## discrepancy themselves, which is the only way it teaches anything.
 
 
 ## **Six rotations, and the gap between them.**
@@ -298,7 +305,7 @@ func _add_rotation_panel() -> void:
 	var summary: Dictionary = RotationStrength.across(rotations, players_by_id)
 	if Dictionary(summary.get("mean", {})).is_empty():
 		return
-	_heading("Rotation by rotation")
+	_heading("By rotation")
 
 	var grid := GridContainer.new()
 	grid.columns = 9
@@ -340,12 +347,13 @@ func _add_rotation_panel() -> void:
 			)
 		grid.add_child(spread_cell)
 
-	_note(
-		"Spread is best rotation minus worst. Serving and Mental / Tactical "
-		+ "cannot vary across rotations -- everybody serves once a cycle and "
-		+ "reading the game is not a position -- so a flat row there is "
-		+ "arithmetic, not a finding."
-	)
+	## No note under this table.
+	##
+	## It had one, defining spread and explaining why two rows read zero. Both
+	## facts are already on screen: the column is headed SPREAD and sits beside
+	## the six numbers it is the range of, and a row of identical figures is a
+	## row of identical figures. A caption telling somebody what the number in
+	## front of them means is the game not trusting its own table.
 
 
 ## Above this gap an axis is worth looking at rather than merely uneven.
@@ -363,7 +371,13 @@ func _add_starter_cards() -> void:
 	var starters := _starters()
 	if starters.is_empty():
 		return
-	_heading("The six")
+	## No heading over the rack.
+	##
+	## The board said "Your six", then "Rotation by rotation", then "The six" --
+	## three headings, two of which name the same thing, on a screen whose title
+	## is already about confirming a lineup. A term repeated until it is a motif
+	## is the writing admiring itself. Six cards under a table of six columns do
+	## not need to be announced.
 	## **A rack, not a list.** The draft's whole argument for the card: six
 	## objects side by side are compared *across*, and six rows are read *down*.
 	## The question this screen asks -- is this the team -- is a comparison.

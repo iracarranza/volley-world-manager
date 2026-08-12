@@ -202,6 +202,7 @@ func _initialize() -> void:
 	_test_the_funnel_band_is_reachable()
 	_test_grade_bands_reach_their_own_range()
 	_test_rotation_strength_can_vary()
+	_test_pair_familiarity_is_a_rate()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14944,6 +14945,80 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## Two volis, and what they know about each other.
+##
+## Everything else the game tracks about knowing your job is between a voli and
+## a *slot*. Nothing was between two people, which left the sport's most
+## important relationship -- a setter and a hitter who have run the same quick
+## two hundred times -- with nowhere to live.
+##
+## The claim being gated is that it is a **rate**: built over matches and lost
+## over matches, not switched on by one good night. A quantity that reached its
+## ceiling in five games would be a loading bar with a person's name on it.
+func _test_pair_familiarity_is_a_rate() -> void:
+	var table := {}
+	var six: Array[int] = [1, 2, 3, 4, 5, 6]
+	_check(
+		absf(PairFamiliarity.of(table, 1, 2) - PairFamiliarity.BASELINE) < 0.001,
+		"a pair who have never played start above zero, not at it",
+	)
+	## Order is not something either of them owns.
+	PairFamiliarity.record_match(table, six)
+	_check(
+		absf(PairFamiliarity.of(table, 1, 2) - PairFamiliarity.of(table, 2, 1)) < 0.001,
+		"and the pair reads the same from either side",
+	)
+
+	## Slow, and slowing. Ten matches together must not exhaust it, and the
+	## tenth must be worth less than the first.
+	var after_one := PairFamiliarity.of(table, 1, 2)
+	var first_gain := after_one - PairFamiliarity.BASELINE
+	for _match in range(9):
+		PairFamiliarity.record_match(table, six)
+	var after_ten := PairFamiliarity.of(table, 1, 2)
+	_check(after_ten > after_one, "playing together builds it (%.1f)" % after_ten)
+	_check(
+		after_ten < PairFamiliarity.CEILING * 0.85,
+		"ten matches together does not exhaust it (%.1f)" % after_ten,
+	)
+	var last_gain := after_ten - PairFamiliarity.of({}, 1, 2)
+	_check(
+		first_gain > (after_ten - after_one) / 9.0,
+		"and each match teaches less than the one before",
+	)
+
+	## And it goes the other way. A pair who stop playing slip, and slip more
+	## slowly than they built -- a rotation used two weeks in three still creeps
+	## upward, which is what stops this punishing a manager for rotating at all.
+	var apart := {}
+	apart[PairFamiliarity.key(1, 2)] = 60.0
+	PairFamiliarity.record_match(apart, [3, 4, 5])
+	_check(
+		PairFamiliarity.of(apart, 1, 2) < 60.0,
+		"a pair kept apart slips (%.1f)" % PairFamiliarity.of(apart, 1, 2),
+	)
+	_check(
+		PairFamiliarity.MATCH_DECAY < PairFamiliarity.MATCH_GAIN,
+		"but slower than they built, so rotating a squad is not a punishment",
+	)
+
+	## **The reading the connection lines will draw**: not is my roster
+	## familiar, but can this setter reach somebody they know.
+	var reach := {}
+	reach[PairFamiliarity.key(1, 2)] = 90.0
+	reach[PairFamiliarity.key(1, 3)] = 20.0
+	var mean := PairFamiliarity.setter_reach(reach, 1, [2, 3])
+	_check(absf(mean - 55.0) < 0.001, "a setter's reach is their mean (%.1f)" % mean)
+	## And the weakest link, because the mean hides it -- the same argument the
+	## rotation spread is built on.
+	var weakest: Dictionary = PairFamiliarity.weakest_pair(reach, [1, 2, 3])
+	_check(
+		Array(weakest.get("ids", [])) == [1, 3]
+			and absf(float(weakest.get("value", 0.0)) - 20.0) < 0.001,
+		"and the weakest pair on court is named, not averaged away",
+	)
 
 
 ## A six is six teams, and an axis that cannot tell them apart is arithmetic.

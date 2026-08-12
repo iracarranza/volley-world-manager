@@ -9,6 +9,13 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var identity: String = "Balanced"
 @export var principles: Resource = TeamPrinciplesModel.for_identity("Balanced")
 @export_range(0.0, 1.0) var tactical_familiarity: float = 0.35
+## What each pair of volis knows about each other, keyed `"lowId:highId"`.
+##
+## The squad already had one familiarity number for the whole team and one per
+## voli per slot, and nothing at all between two people -- which left the sport's
+## most important relationship, a setter and a hitter who have run the same quick
+## two hundred times, unrepresentable. See `PairFamiliarity`.
+@export var pair_familiarity: Dictionary = {}
 ## Trust and emotional connection. Familiarity governs knowing the system;
 ## cohesion governs how strongly confidence and recovery spread through it.
 @export_range(0.0, 1.0) var cohesion: float = 0.50
@@ -117,6 +124,7 @@ func to_dict() -> Dictionary:
 		"identity": identity,
 		"principles": principles.to_dict() if principles != null else {},
 		"tactical_familiarity": tactical_familiarity,
+		"pair_familiarity": pair_familiarity.duplicate(true),
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
@@ -147,6 +155,7 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	)
 	team.identity = str(team.principles.preset_name)
 	team.tactical_familiarity = clampf(float(data.get("tactical_familiarity", 0.35)), 0.0, 1.0)
+	team.pair_familiarity = Dictionary(data.get("pair_familiarity", {})).duplicate(true)
 	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
 	team.regional_alignment = clampf(
 		float(data.get("regional_alignment", 0.50)), 0.0, 1.0

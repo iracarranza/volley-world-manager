@@ -475,10 +475,16 @@ func complete_active_match() -> void:
 func _apply_player_match_outcomes(won: bool) -> void:
 	var manager := _game_manager()
 	var player_statistics: Dictionary = manager.match_state.statistics.players
+	## Who was actually on court, for the pair table below. Read off contacts
+	## rather than off the lineup, because the lineup is who was *picked* and a
+	## pair does not learn anything about each other from the bench.
+	var _played_together: Array[int] = []
 	for player in manager.players:
 		var stats: Dictionary = player_statistics.get(str(player.id), {})
 		var contacts := int(stats.get("contacts", 0))
 		var appeared := contacts > 0
+		if appeared:
+			_played_together.append(int(player.id))
 		var satisfaction_change := 0.01 if won else -0.008
 		satisfaction_change += 0.005 if appeared else -0.004
 		player.satisfaction = clampf(
@@ -504,6 +510,17 @@ func _apply_player_match_outcomes(won: bool) -> void:
 	manager.team.cohesion = clampf(
 		float(manager.team.cohesion) + (0.006 if won else -0.003), 0.0, 1.0
 	)
+	## **The pair table, updated once per match rather than per rally.**
+	##
+	## A relationship is built over matches, not over contacts: two volis who
+	## happened to touch the ball forty times in one five-setter have not learned
+	## more about each other than a pair who played four tidy matches. Rate, not
+	## event -- see `PairFamiliarity`.
+	if manager.team != null:
+		PairFamiliarity.record_match(
+			manager.team.pair_familiarity, _played_together
+		)
+
 
 
 func sign_transfer(player_id: int) -> String:
