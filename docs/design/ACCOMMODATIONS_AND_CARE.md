@@ -1727,3 +1727,104 @@ Behind everything already listed, and reachable. It needs the larder (built),
 housing structures (designed), and `SCOUTING.md`'s existing confidence machinery
 (built). What it does not need is any new persistent state at all, which makes
 it unusually cheap for how much it changes.
+
+---
+
+## 17. A band, not a binary — and the palate widens
+
+§13 shipped `FoodSupply.aversion` as a **share missing**: count a voli's home
+staples, count how many are absent, divide. That is a binary dressed as a
+fraction, and it gets two things wrong that a **ratio inside a range** gets
+right.
+
+**Nobody needs all of it.** A voli wants *enough* of what they know, not every
+item. A share-missing model says a Pāwa Hitō voli with rice and sea greens but
+no soy is a third unhappy, which is not how eating works. A band says: you need
+about a third of the table to be food you recognise, and past that you are fine.
+
+**And most weeks should be fine.** A threshold a manager has to *hit* is
+fiddly; a window they have to stay *inside* is forgiving, which is the right
+register. A club that is broadly feeding its squad correctly should never think
+about this. It should think about it when somebody falls out of their band.
+
+### The number, and the band on it
+
+One figure per voli per week: **what share of the table is food they are
+comfortable with**. Their band has a floor and a ceiling.
+
+The floor is obvious — below it they are eating among strangers.
+
+The ceiling is the interesting one. A voli eating *only* what they have always
+eaten is not adapting, and a squad fed entirely on one region's larder is a
+squad that will struggle the moment it travels. So the ceiling is soft and its
+cost is not misery but **narrowness**: sitting above it stops the band widening.
+
+### The band widens, and that is the character
+
+This is where the third factor lands, and it is better than a modifier.
+
+A voli is not comfortable with *a region*, they are comfortable with **a set of
+regions** — and the set grows:
+
+| the set starts as | and gains a region when |
+|---|---|
+| where they grew up | they spend a season at a club in that region |
+| | they room long enough with somebody from it |
+
+The second one is the good one. **A foreign-born voli teaches their roommate how
+to enjoy their food**, and the mechanism for "long enough" already exists:
+`PairFamiliarity`, which is symmetric, already climbs by rooming, and already
+carries a 0–100 scale somebody can put a threshold on.
+
+That gives the pair table a use that has **nothing to do with volleyball**,
+which is exactly the sort of thing that makes a world feel like a world rather
+than a spreadsheet with names on it. Two volis who shared a room for two seasons
+eat each other's food now. That is true of people.
+
+### What this stores, and why it is affordable
+
+§16 was firm that preferences should not be stored. This is the one exception
+and it is a small, legible one:
+
+```
+palate_regions: Array[String]   # starts as [home_region]
+```
+
+Not a float — an array of region names, which is **readable on a card**:
+*eats: Landavol, Xérvu*. A player can see it, understand it, and predict it.
+A float called `adaptability_to_foreign_cuisine` would be the same data and
+nobody could tell you what it meant.
+
+Everything else stays derived. The band's floor and ceiling come off the set's
+size — a voli who knows one region has a narrow, high-floored band and a
+well-travelled one has a wide, forgiving band. Nothing per-voli is authored.
+
+### Which changes what a well-travelled voli is worth
+
+A voli with four regions in their set is **easy to feed anywhere**, and that is a
+real signing consideration that has nothing to do with their attributes. A club
+running a single-region larder can sign them without also running a supply line;
+a parochial star costs food money forever.
+
+It also gives an ageing voli something that gets *better* with time, which the
+attribute model does not have much of. A thirty-four-year-old who has played in
+three regions is a worse blocker and a much easier houseguest, and one of those
+is worth paying for.
+
+### What this changes in the built code
+
+`FoodSupply.aversion` needs replacing rather than tuning — it is the wrong
+shape, not the wrong number:
+
+1. **`comfort_share(palate_regions, table)`** — the share of this week's staples
+   drawn from any region in the set. Replaces `aversion`.
+2. **`band_for(palate_regions)`** — floor and ceiling, derived from the set's
+   size. Nothing authored per voli.
+3. **`palate_regions` on `VolleyballPlayer`**, seeded to `[home_region]`.
+4. **Two ways to add to the set**: a season in a region, and a roommate crossing
+   a `PairFamiliarity` threshold.
+
+The gate written for §13 keeps its shape — a voli far from home is still
+uncomfortable, a supply line still answers it — but the assertion moves from
+*missing staples* to *outside their band*, which is the honest version of what
+that gate was always trying to say.
