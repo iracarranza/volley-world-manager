@@ -45,8 +45,15 @@ func _shoot() -> void:
 		add_child(screen)
 		screen.bind(career_manager, game_manager)
 		load("res://scripts/systems/ui_style_system.gd").apply(screen, light_mode)
+		## The hub with nothing open, which is the state a manager arrives in and
+		## the one a shot of an open panel cannot show.
+		for _settle in range(4):
+			await get_tree().process_frame
+		var hub := "user://staff_%s_hub.png" % ("molten" if light_mode else "mikasa")
+		get_viewport().get_texture().get_image().save_png(hub)
+		print("saved %s" % ProjectSettings.globalize_path(hub))
 		for entry in career_manager.career.staff:
-			screen._select(int(entry.id))
+			screen._open(int(entry.id))
 			for _settle in range(4):
 				await get_tree().process_frame
 			var path := "user://staff_%s_%s.png" % [

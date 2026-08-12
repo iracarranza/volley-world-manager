@@ -12,12 +12,22 @@ extends Control
 ## chef comes to you, about food, in the first person, and the way you know the
 ## kitchen is going well is that they said so.
 ##
-## So the hub is not a staff table. It is four people you can go and talk to, and
-## the thing behind each one is a **log** — every report they have filed, newest
-## first, in the two-voice shape the inbox already uses. The report names the
-## mechanic and its figures; the utterance is what they actually said, and it is
-## shorter and vaguer, because a chef does not know they are running at 0.91 of a
-## week's paste.
+## So the hub is not a staff table. It is four **cards**, in the page's own
+## language -- name, the room they are in, and what is true right now -- and each
+## one opens into a panel that takes the whole page.
+##
+## The first draft split it: people down the left, the selected one's reports on
+## the right. That is a browser, and a browser is what you build when the list is
+## the subject. Here the list is four items you already know, and the subject is
+## whichever one you went to see -- so the reading gets the page and the choosing
+## gets a card. It also puts staff in the same shape as the accommodation page,
+## which matters more than either screen: a card that opens is now what this
+## interface *means* by a way in.
+##
+## Behind each card is a **log**, in the two-voice shape the inbox already uses.
+## The report names the mechanic and its figures; the utterance is what they
+## actually said, and it is shorter and vaguer, because a chef does not know they
+## are running at 0.91 of a week's paste.
 ##
 ## ## The head is reserved
 ##
@@ -34,6 +44,8 @@ const Familiarity := preload("res://scripts/data/staff_familiarity.gd")
 const FoodBlock := preload("res://scripts/data/food_block.gd")
 const FoodSupply := preload("res://scripts/data/food_supply.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
+const CardScript := preload("res://scenes/components/menu_card.gd")
+const PopupScript := preload("res://scenes/components/desk_popup.gd")
 
 signal back_requested
 
@@ -41,9 +53,11 @@ const PORTRAIT: float = 104.0
 
 var _career_manager: Node = null
 var _game_manager: Node = null
-var _people: VBoxContainer = null
+var _cards: VBoxContainer = null
+var _panel: DeskPopup = null
 var _log: VBoxContainer = null
-var _desk_title: Label = null
+## Who the panel is showing, or -1. Kept because a refresh rebuilds the cards on
+## every advance and a panel that closed itself would be unusable.
 var _selected: int = -1
 
 
@@ -62,35 +76,19 @@ func _build() -> void:
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	var shell := ScreenShell.build(self, "Staff", [back_button] as Array[Button])
 
-	var body := HBoxContainer.new()
-	body.add_theme_constant_override("separation", 20)
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	shell.content.add_child(body)
+	_cards = VBoxContainer.new()
+	_cards.add_theme_constant_override("separation", 10)
+	_cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shell.content.add_child(_cards)
 
-	## The four, down the left. Not a list of roles -- a row per person, with the
-	## space their face will take, because who you are talking to is the thing
-	## being chosen.
-	var side := VBoxContainer.new()
-	side.custom_minimum_size = Vector2(300.0, 0.0)
-	side.add_theme_constant_override("separation", 8)
-	body.add_child(side)
-	_people = side
-
-	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 8)
-	body.add_child(right)
-	_desk_title = Label.new()
-	_desk_title.add_theme_font_size_override("font_size", 19)
-	right.add_child(_desk_title)
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	right.add_child(scroll)
-	_log = VBoxContainer.new()
-	_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_log.add_theme_constant_override("separation", 12)
-	scroll.add_child(_log)
+	## Last child of the screen root, which is a plain `Control` -- later siblings
+	## draw over earlier ones, and nothing recomputes the rect of a child that is
+	## not under a `Container`.
+	_panel = PopupScript.build()
+	_panel.fill_page()
+	_panel.closed.connect(func() -> void: _selected = -1)
+	add_child(_panel)
+	_log = _panel.body
 
 
 func _staff() -> Array:
@@ -100,50 +98,56 @@ func _staff() -> Array:
 
 
 func refresh() -> void:
-	if _people == null:
+	if _cards == null:
 		return
-	var staff := _staff()
-	if staff.is_empty():
-		return
-	if _selected < 0:
-		_selected = int(staff[0].id)
-	_refresh_people()
-	_refresh_log()
-
-
-func _refresh_people() -> void:
-	for child in _people.get_children():
+	for child in _cards.get_children():
 		child.queue_free()
 	for entry in _staff():
 		var member := entry as VolleyballStaffMember
 		if member == null:
 			continue
-		var row := Button.new()
-		row.custom_minimum_size = Vector2(0.0, 78.0)
-		row.toggle_mode = true
-		row.button_pressed = int(member.id) == _selected
+		var card := CardScript.build(
+			str(member.display_name), Reports.desk_name(str(member.role))
+		)
+		card.set_reading(_headline(member))
 		var who := int(member.id)
-		row.pressed.connect(func() -> void: _select(who))
-		_people.add_child(row)
+		card.pressed.connect(func() -> void: _open(who))
+		_cards.add_child(card)
+	_refresh_log()
 
-		var line := HBoxContainer.new()
-		line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		line.add_theme_constant_override("separation", 10)
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(line)
-		line.add_child(_monogram(str(member.display_name), 54.0))
-		var text := VBoxContainer.new()
-		text.add_theme_constant_override("separation", 0)
-		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		line.add_child(text)
-		text.add_child(_label(str(member.display_name), 16))
-		text.add_child(_label(Reports.desk_name(str(member.role)), 12))
-		text.add_child(_label(
-			"%s · %s" % [str(member.home_region), _tenure(int(member.weeks_employed))],
-			11
-		))
+
+## The card's third line: what this person would lead with today.
+##
+## Their first report's *report* half, because that is already the one thing
+## worth saying and writing a second summary beside it is how two descriptions of
+## one fact start to disagree.
+func _headline(member: Resource) -> String:
+	var cards := _cards_for(member)
+	if cards.is_empty():
+		return "Nothing this week."
+	return str(Dictionary(cards[0]).get("report", ""))
+
+
+func _open(staff_id: int) -> void:
+	_selected = staff_id
+	var member := _member(staff_id)
+	if member == null:
+		return
+	_panel.open(
+		str(member.display_name),
+		"%s · %s · %s" % [
+			Reports.desk_name(str(member.role)), str(member.home_region),
+			_tenure(int(member.weeks_employed)),
+		]
+	)
+	_refresh_log()
+
+
+func _member(staff_id: int) -> Resource:
+	for entry in _staff():
+		if int(entry.id) == staff_id:
+			return entry
+	return null
 
 
 ## Everything this person has said, newest first.
@@ -153,35 +157,40 @@ func _refresh_people() -> void:
 ## reading of state that already exists and storing it would be a second copy of
 ## the club that could disagree with the first.
 func _refresh_log() -> void:
+	if _log == null:
+		return
 	for child in _log.get_children():
 		child.queue_free()
-	var member: Resource = null
-	for entry in _staff():
-		if int(entry.id) == _selected:
-			member = entry
+	if _selected < 0:
+		return
+	var member := _member(_selected)
 	if member == null:
 		return
-	_desk_title.text = "%s · %s" % [
-		Reports.desk_name(str(member.role)), str(member.display_name),
-	]
-
-	var cards: Array = []
-	match str(member.role):
-		StaffMember.ROLE_CHEF:
-			cards = Reports.kitchen(
-				member, _service(), _familiar(), str(_team().food_block)
-			)
-		StaffMember.ROLE_SCOUT:
-			cards = Reports.desk(member, _watched(), _marked())
-		StaffMember.ROLE_PHYSIO:
-			cards = Reports.treatment(member, _tired(), _squad())
-		_:
-			cards = []
+	var cards := _cards_for(member)
 	if cards.is_empty():
 		_log.add_child(_label("Nothing this week.", 13))
 		return
 	for card in cards:
 		_log.add_child(_card_panel(Dictionary(card), str(member.display_name)))
+
+
+## What this person has to say, derived on open rather than stored.
+##
+## The same trick §16 uses for a voli's preferences: a report is a *reading* of
+## state that already exists, and storing it would be a second copy of the club
+## that could disagree with the first. The cost, named honestly, is that the log
+## is a snapshot rather than a history.
+func _cards_for(member: Resource) -> Array:
+	match str(member.role):
+		StaffMember.ROLE_CHEF:
+			return Reports.kitchen(
+				member, _service(), _familiar(), str(_team().food_block)
+			)
+		StaffMember.ROLE_SCOUT:
+			return Reports.desk(member, _watched(), _marked())
+		StaffMember.ROLE_PHYSIO:
+			return Reports.treatment(member, _tired(), _squad())
+	return []
 
 
 ## One report, in the inbox's own shape: the mechanic above, the person below.
@@ -225,11 +234,6 @@ func _monogram(who: String, at: float) -> Control:
 	mark.size_flags_vertical = Control.SIZE_SHRINK_END
 	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return mark
-
-
-func _select(staff_id: int) -> void:
-	_selected = staff_id
-	refresh()
 
 
 func _team() -> Resource:

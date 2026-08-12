@@ -20,16 +20,37 @@ signal closed
 
 const FRAME_WIDTH: float = 620.0
 const FRAME_HEIGHT: float = 470.0
+## What a panel takes when it is the whole subject rather than a list you dip
+## into. A staff member's correspondence is not a lookup -- it is the thing you
+## came to read -- so it gets the page rather than a window on top of it.
+const FILL_MARGIN: float = 48.0
 
 var body: VBoxContainer = null
 var _title: Label = null
 var _flavour: Label = null
+var _frame: PanelContainer = null
 
 
 static func build() -> DeskPopup:
 	var popup := DeskPopup.new()
 	popup._compose()
 	return popup
+
+
+## Take the page, less a margin, instead of a fixed window.
+##
+## The scrim still shows at the edges, which is what keeps it reading as a panel
+## laid over the desk rather than as a screen the manager navigated to -- the
+## difference between opening something and going somewhere.
+func fill_page() -> void:
+	_frame.custom_minimum_size = Vector2.ZERO
+	_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var holder := _frame.get_parent() as MarginContainer
+	if holder == null:
+		return
+	for side in ["left", "right", "top", "bottom"]:
+		holder.add_theme_constant_override("margin_%s" % side, int(FILL_MARGIN))
 
 
 func _compose() -> void:
@@ -46,7 +67,10 @@ func _compose() -> void:
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(scrim)
 
-	var centre := CenterContainer.new()
+	## A `MarginContainer` rather than a `CenterContainer`, because a centred
+	## child takes its minimum size and a filling one has to be told how much of
+	## the page to leave -- and `fill_page` needs both behaviours from one node.
+	var centre := MarginContainer.new()
 	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(centre)
@@ -55,6 +79,7 @@ func _compose() -> void:
 	frame.custom_minimum_size = Vector2(FRAME_WIDTH, FRAME_HEIGHT)
 	frame.mouse_filter = Control.MOUSE_FILTER_STOP
 	centre.add_child(frame)
+	_frame = frame
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 18)
