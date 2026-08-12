@@ -204,6 +204,7 @@ func _initialize() -> void:
 	_test_rotation_strength_can_vary()
 	_test_pair_familiarity_is_a_rate()
 	_test_a_setter_goes_to_the_hitter_they_know()
+	_test_food_is_a_flow_with_a_geography()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14946,6 +14947,121 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A club eats where it is, and an aversion is a fact about two places.
+##
+## `ACCOMMODATIONS_AND_CARE.md` §13. The claims worth gating are the ones that
+## make geography a constraint rather than a label, and the one that turns a
+## food aversion from a personality trait into something derivable.
+func _test_food_is_a_flow_with_a_geography() -> void:
+	## Every core region grows something, and the two that do not are the two
+	## the world already says have no geography to speak of.
+	for region in VolleyballRegions.CORE_REGIONS:
+		_check(
+			RegionLarder.has_larder(str(region)),
+			"%s has a larder" % region,
+		)
+	for region in RegionLarder.IMPORTING_REGIONS:
+		_check(
+			not RegionLarder.has_larder(str(region)),
+			"%s grows nothing and imports, per its own note in regions.gd" % region,
+		)
+
+	## **Home costs nothing and everywhere else costs something**, which is the
+	## whole of what makes a club eat where it is.
+	_check(
+		FoodSupply.line_cost("Landavol", "Landavol") == 0.0,
+		"a club's own region is free",
+	)
+	var near := FoodSupply.line_cost("Landavol", "Bloc du Larg")
+	var far := FoodSupply.line_cost("Landavol", "Pāwa Hitō")
+	_check(
+		far > near and near > 0.0,
+		"and distance is dearer, off the adjacency graph (%.1f vs %.1f)"
+			% [far, near],
+	)
+	_check(
+		FoodSupply.line_reliability("Landavol", "Pāwa Hitō")
+			< FoodSupply.line_reliability("Landavol", "Bloc du Larg"),
+		"and further is more easily interrupted, which is the events' material",
+	)
+	## Distance is read off one graph, not two. A second distance table would be
+	## a second geography and they would drift.
+	_check(
+		RegionLarder.distance("Landavol", "Landavol") == 0
+			and RegionLarder.distance("Landavol", "Bloc du Larg") == 1
+			and RegionLarder.distance("Landavol", "Pāwa Hitō") > 1,
+		"adjacency steps come off REGION_ADJACENCY (%d to Pāwa Hitō)"
+			% RegionLarder.distance("Landavol", "Pāwa Hitō"),
+	)
+
+	## **The aversion, derived.** A Pāwa Hitō voli at a Landavol club is averse
+	## because Landavol does not grow rice; run a line to Pāwa Hitō and they are
+	## not. Nothing about the voli changed.
+	var home_table: Dictionary = FoodSupply.table("Landavol", [], 1)
+	var local := FoodSupply.aversion("Landavol", home_table)
+	var visitor := FoodSupply.aversion("Pāwa Hitō", home_table)
+	_check(
+		local <= 0.001,
+		"a voli at home is not averse (%.2f)" % local,
+	)
+	_check(
+		visitor > 0.5,
+		"a voli far from home is, and it is not a trait they carry (%.2f)"
+			% visitor,
+	)
+	var supplied: Dictionary = FoodSupply.table("Landavol", ["Pāwa Hitō"], 1)
+	_check(
+		FoodSupply.aversion("Pāwa Hitō", supplied) < visitor,
+		"and a supply line to their region answers it (%.2f)"
+			% FoodSupply.aversion("Pāwa Hitō", supplied),
+	)
+	_check(
+		float(supplied["weekly_cost"]) > float(home_table["weekly_cost"]),
+		"at a cost that shows up weekly (%.1f)" % float(supplied["weekly_cost"]),
+	)
+
+	## A lean season removes some of a region's produce and not all of it: a
+	## region does not stop growing food in winter, which is what makes a lean
+	## season a supply problem rather than a famine.
+	var lean_found := false
+	for week in range(1, 53):
+		var produce: Dictionary = RegionLarder.produces("Bloc du Larg", week)
+		if bool(produce["lean"]):
+			lean_found = true
+			_check(
+				not Array(produce["staples"]).is_empty(),
+				"a lean season still grows something",
+			)
+			break
+	_check(lean_found, "and some week of the year is lean for somebody")
+
+	## **Palate recovers faster than it builds**, because §6 is explicit that it
+	## must not become a timer to be optimised against.
+	var palate := {}
+	for _week in range(6):
+		FoodSupply.advance_palate(palate, 1, "red pepper")
+	var tired := FoodSupply.palate_of(palate, 1)
+	_check(tired > 0.3, "eating one paste for six weeks tires of it (%.2f)" % tired)
+	FoodSupply.advance_palate(palate, 1, "walnut")
+	_check(
+		FoodSupply.palate_of(palate, 1) < tired,
+		"and one week of something else relieves it (%.2f)"
+			% FoodSupply.palate_of(palate, 1),
+	)
+	_check(
+		FoodSupply.PALATE_ROTATE_RELIEF > FoodSupply.PALATE_REPEAT_GAIN,
+		"faster than it built, so rotating is a fix rather than a treadmill",
+	)
+
+	## And there is a floor under all of it. A dorm is still a dorm; a
+	## professional club's table is still a table.
+	_check(
+		FoodSupply.nourishment(1.0, 1.0) >= FoodSupply.NOURISHMENT_FLOOR
+			and FoodSupply.nourishment(0.0, 0.0) >= 0.999,
+		"eating badly has a floor, and eating well is unremarkable",
+	)
 
 
 ## A quantity that only decorates is the thing this repository keeps catching.

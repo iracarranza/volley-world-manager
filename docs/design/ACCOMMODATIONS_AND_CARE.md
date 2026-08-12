@@ -1163,7 +1163,7 @@ Twelve, so the matrix is a matrix.
 | **Cookbook** | food aversion | removes the aversion penalty for this voli | a slot |
 | **Letterbox** | homesickness | slow, cheap; letters rather than calls | a slot |
 | **Landline** | homesickness | fast and strong; scales with distance from home | a slot |
-| **Blackout curtain** | jet lag, bad sleep | shortens travel recovery | a slot |
+| **Blackout curtain** | jet lag, bad sleep | shortens travel recovery | **they sleep through the morning** |
 | **Mattress topper** | nothing in particular | small flat recovery | a slot |
 | **Fan / stove** | climate mismatch | a voli from a cold region in a hot one, or the reverse | a slot |
 | **Games console** | low morale | ↑morale, ↑in-room pair gain | ↓tactical familiarity growth |
@@ -1510,3 +1510,29 @@ Items 2 to 5 are small. Item 1 is the work, and it is the enjoyable kind.
 event system something real to interrupt, it gives the cookbook and the
 kitchenette something real to answer, and it turns the six regions from taglines
 into places that grow different things.
+
+
+---
+
+## 14. The blackout curtain oversleeps
+
+Recorded because it is the small item that most needed a real cost and had one
+available for free.
+
+A curtain that shortens travel recovery and costs only a slot was the weakest
+entry on §11's list — the mattress topper at least admits to being a flat
+trickle. What a blackout curtain actually does to a person is obvious and the
+design was ignoring it: **they wake up late.**
+
+That is a much better cost than a number, because it is a *different kind* of
+cost. Everything else on the list trades one quantity for another. This one
+trades against the **timetable** — a voli who oversleeps misses the start of a
+session, which reaches the training system rather than the recovery one, and
+which the manager finds out about from an assistant coach rather than from a
+figure moving.
+
+It also makes the curtain conditional in the way §8 asks all equipment to be:
+worth it for somebody who has just flown two regions, actively bad for somebody
+settled and training every morning. Install it for a trip, take it out after —
+or leave it in and accept that this voli is not a morning voli, which is a
+characterisation the game gets for free out of a piece of furniture.
