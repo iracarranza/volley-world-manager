@@ -684,3 +684,119 @@ grade colour is the same scale as everything else.
 
 §6 had (2) first and that was right for the wrong reason: it read as a
 refactor, and it is actually the seam where the missing quantity goes.
+
+---
+
+## 8. The room is a loadout, not a tier
+
+A revision of §6 and §7, and a better one. Recorded as a working design rather
+than a settled one.
+
+### The correction that fixes the money problem
+
+**A dorm is still a dorm.** Even at base it is a room built for athletes to
+sleep in, and there is no reason rest should be *poor* because of where somebody
+lives. That single line kills the failure §7 named — three dials that only trade
+against money — because it removes quality-of-bed as an axis at all.
+
+What is left is far better: a room is differentiated by **what else it does**,
+not by how much it cost. Accommodation stops being a tier list you climb and
+becomes a loadout you compose.
+
+### Rest is reduced by conditions, not by furniture
+
+The things that make rest worth less are **personal and situational**: jet lag,
+homesickness, a voli who cannot eat what the region eats. All three vary by who
+you signed and where you are playing, which is exactly what a purchase cannot
+replicate — the same room is a different room for two different volis.
+
+**On hunger.** The instinct to wave away *they did not eat* is right, and there
+is a framing that does it without a hand-wave: hunger here is not a quantity
+problem, it is a **familiarity** problem. A voli whose region's food is wrong for
+them eats badly rather than not at all — the same safe thing every day, snacks
+in the room — and pays for it in recovery.
+
+Which makes aversion and palate **one mechanic seen from two ends**: aversion is
+*this food is wrong for me*, palate is *this food has been right for too long*.
+Both are the same term, and unifying them means the cookbook has something to
+act on and the paste rotation has a reason to exist beyond variety for its own
+sake.
+
+### Equipment answers a condition, not a role
+
+The two-sided costs are the strongest idea here. Free weights buy physical
+growth and cost fatigue decay — a gain in the long horizon paid for in the short
+one, which is a genuinely different axis from spending money. The console buys
+morale and in-room socialising and costs tactical familiarity growth.
+
+**The risk is that it solves.** A manager finds *weights for middles, console
+for the young ones* and never opens the screen again — the money pitfall
+returning in a different costume.
+
+The cookbook and the landline already avoid it, and they show why: they answer a
+**condition** — aversion, homesickness — which a voli has or does not have, and
+which changes. The weights and the console do not; they are flat bonuses.
+
+So the rule that keeps the system alive is to generalise what the cookbook is
+already doing: **equipment answers a condition, not a role.** Weights matter to a
+voli with growth headroom left and are nearly wasted on one without. A console
+matters to a voli whose morale is low and is a tactical tax on one whose morale
+is fine. Then a room's right loadout changes as the voli in it changes, and the
+screen stays open.
+
+### Rooming, and the asymmetry that makes it a risk
+
+Roommates trading rest for relationship is the right shape, and
+`PairFamiliarity` is already the quantity — symmetric, 0–100, and the setter
+already reads it when choosing a hitter.
+
+One structural note. The upside should be a **rate** and the downside should be
+**conditional**: rooming builds a pair steadily, the way matches do, and the
+crash is what happens when fatigue is high *and* rest keeps coming up short.
+Making the gain a chance as well would turn a season-long relationship into a
+slot machine, and the interesting version is the one where you can rely on the
+gain and cannot ignore the risk.
+
+**And the crash cannot be a surprise.** A relationship that fails silently
+teaches a manager nothing except that something invisible was taken. The strain
+needs a surface before the break — the card already has a condition stripe and
+the cogniticon layer has a quiet ambient tier carrying almost nothing. A pair
+under strain should be legible for weeks before it goes.
+
+### What the pavilion should be, so it is not a cohesion buff
+
+A social area that raises team cohesion is a purchase again. The version that
+is not: **rooms build pairs, the pavilion builds the graph between them.**
+
+Rooming makes a few strong edges — the two or three people you actually live
+with. The pavilion makes many weak ones, across rooms. Those are different
+squads at the same average familiarity: a side of tight pairs who barely know
+each other, against a side that all know each other a little. The first has
+devastating combinations and falls apart when a rotation splits a pair; the
+second has no standout connection and no hole either.
+
+That is a real strategic choice, it is legible on the connection lines in
+`FILLING_THE_SIX.md`, and it gives the pavilion something to do that money
+alone cannot buy.
+
+### What this needs, and what it already fixes
+
+**It fixes §7's blocker by design.** "They regain some of what they lost after a
+match, and some more each week of rest" *is* the persistent-fatigue prerequisite
+— measured at 0.000 across 300 weekly readings today. Partial recovery is the
+change; everything else here sits on top of it and nothing else can be built
+first.
+
+Still owed:
+
+1. **Numbers for partial recovery**, measured rather than chosen. The target is
+   that a congested run pushes somebody past `LABOURED_ONSET` (0.34) and a quiet
+   fortnight brings them back — the model's own stages are the calibration
+   target and they are currently unreachable between matches.
+2. **Jet lag needs travel.** Fixtures know home and away; nothing models distance
+   or a trip. It is the one reducer here with no substrate at all.
+3. **Growth headroom as a readable quantity**, if weights are to answer a
+   condition rather than a role.
+4. **Oversized equipment** is still open, and the constraint that makes it
+   interesting is already stated: it needs a bigger room *and* fewer people in
+   it. Anything that trades occupancy against capability is buying its place.
