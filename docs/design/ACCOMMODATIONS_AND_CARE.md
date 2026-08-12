@@ -1094,3 +1094,156 @@ is a multiplier on recovery, growth or familiarity, and two of those three are
 currently pinned — recovery at zero, and growth headroom not yet readable at all.
 Choosing magnitudes now would be picking thresholds outside their distributions,
 which is the mistake this document has already recorded twice.
+
+---
+
+## 11. Accommodation is a home, not a facility
+
+§10's shared installations were **the gym, the film room, the long table**. Two
+of those three are wrong, and wrong in a way that mattered: every club has a
+gym. Every club has a film room. Putting them here made accommodation into a
+second training facility, which is the one thing it is not.
+
+**The volis live here.** That is the whole subject. Accommodation answers *what
+is it like to be at this club when you are not working* — and everything in it
+should be something a person would recognise from a home, not from a
+performance centre.
+
+That also settles the ice bath, which §10 got wrong for the same reason. An ice
+bath is recovery equipment and belongs to the medical staff. **A bath** is a
+different object entirely: it is domestic, it is comfort, it happens to help,
+and a voli would think of it as a nice place to live rather than as treatment.
+Same effect, right register.
+
+Everything below supersedes §10's installation list. The floor rule survives
+unchanged.
+
+### The structures, which specialise rather than climb
+
+A structure gets something by **giving something up**. There is no top of this
+list — a club picks the shape that suits the squad it has.
+
+| structure | capacity | floor / room | what it specialises in | what it gives up |
+|---|---|---|---|---|
+| **Bunkhouse** | high | 5 | pairs, cheaply — almost everybody shares | space, privacy, anywhere to be together as a squad |
+| **The Commons** | medium | 6 | a genuine shared room at the heart of it | in-room floor; nobody gets a big private setup |
+| **The Row** | low | 7 | rest and personal floor | pair building entirely; no shared room |
+| **Longhouse** | high | 3 | the whole squad knowing the whole squad | rest, and personal space almost completely |
+| **Farmhouse** | low | 6 | food and homeliness — a real kitchen, a garden | capacity; it houses a small squad and no more |
+| **The Block** | very high | 6 | housing everyone, including the youth setup | cohesion — people do not run into each other |
+
+Notes on four of them.
+
+**The Commons is §10's Pavilion, renamed and corrected.** Pavilion reads as a
+sports structure, which is exactly the confusion this section is fixing. The
+thing wanted is a *dorm with a shared room at the heart of it*, and the cost is
+that the rooms themselves are ordinary — you cannot also have the club with the
+best-equipped bedrooms. Other candidate names: **the Hall**, **the Lodge**,
+**the Hearth**. Commons is the plainest and says what it is.
+
+**The Longhouse is the Bunkhouse taken to its end**, and it should be a real
+option for a young squad in a poor club: everybody knows everybody, nobody
+sleeps well. It is not a punishment tier, it is a bet on familiarity over
+condition.
+
+**The Farmhouse is where the food design lives.** A kitchen and a garden mean
+aversion is answered squad-wide without a single cookbook, and the paste
+rotation has somewhere to happen. It cannot house a full senior squad, which is
+the price.
+
+**The Block is the high-rise** from §9's example. Its weakness is the honest one
+for a tower: you can house everyone and they still never meet.
+
+### Small equipment — one floor, and all of it domestic
+
+Twelve, so the matrix is a matrix.
+
+| item | answers | what it does | what it costs |
+|---|---|---|---|
+| **Cookbook** | food aversion | removes the aversion penalty for this voli | a slot |
+| **Letterbox** | homesickness | slow, cheap; letters rather than calls | a slot |
+| **Landline** | homesickness | fast and strong; scales with distance from home | a slot |
+| **Blackout curtain** | jet lag, bad sleep | shortens travel recovery | a slot |
+| **Mattress topper** | nothing in particular | small flat recovery | a slot |
+| **Fan / stove** | climate mismatch | a voli from a cold region in a hot one, or the reverse | a slot |
+| **Games console** | low morale | ↑morale, ↑in-room pair gain | ↓tactical familiarity growth |
+| **Bookshelf** | tactical lag | slow tactical growth, and morale for some volis | ↓nothing, but it is slow |
+| **Study desk** | tactical lag | fast tactical growth | ↓morale |
+| **Record player** | low morale | morale for the room, and it **carries into the corridor** — a small cross-room tie | ↓rest for the neighbours |
+| **Kettle and tin** | isolation | people come round; small pair gain with *visitors*, not roommates | a slot |
+| **Privacy screen** | crowding | buys back one occupant of crowding friction | a slot, obviously |
+| **Houseplant** | nothing | a very small morale trickle | a slot |
+| **Drying rack** | mundane friction | a small standing morale floor — the room works | a slot |
+
+Four of those are doing structural work rather than being flavour.
+
+**The privacy screen is the best item on the list**, because it spends floor to
+buy back occupancy. A crowded three-person room plus a screen is a real
+alternative to a two-person room, at a different price, with a different
+familiarity outcome. That is the floor rule paying off.
+
+**The letterbox and the landline are the same condition at two prices.** Cheap
+and slow against strong and immediate is a shape this list should use more than
+once; it is how a small club and a rich one make the same decision differently.
+
+**The record player is the only small item that leaves the room.** It builds a
+weak cross-room tie and costs the neighbours rest — which makes it the one small
+item whose right answer depends on who is in the *next* room.
+
+**The kettle builds pairs with visitors rather than roommates.** Every other
+pair-building thing here strengthens edges you already have; this one adds new
+ones. In a Bunkhouse it is nearly redundant. In the Row it is the only thing
+that works at all.
+
+### Large equipment — three floor, and still domestic
+
+| item | what it does | what it costs |
+|---|---|---|
+| **Free weights** | physical growth ceiling | fatigue decay, and it is the source of the "hurt my arm doing extra" event |
+| **The bath** | strong recovery, and morale | floor, and it is the most expensive comfort here |
+| **Kitchenette** | removes aversion for the room; a paste can be used privately | occasional morale cost for whoever lives with the cook |
+| **Lounge corner** | in-room social area: pairs and morale together | ↓tactical growth and ↓rest — it is never quiet |
+| **Wardrobe and storage** | frees **two** small slots in this room | three floor to give back two |
+| **Study nook** | the desk, at scale: strong tactical growth for the room | ↓morale for everyone in it |
+| **Instrument corner** | morale, and it draws people from other rooms | ↓rest for the room and its neighbours |
+
+**Wardrobe and storage is deliberately a bad trade on paper** — three floor for
+two slots — and becomes a good one in a large room where floor is not the
+binding constraint. An item that is wrong in most rooms and right in a few is
+worth more to this design than one that is mildly correct everywhere.
+
+**Weights are the only athletic object left**, and they survive because volis
+genuinely keep weights in their rooms and genuinely hurt themselves doing extra.
+It is the exception that the register allows, not the start of a category.
+
+### Shared installations — what a common room can hold
+
+Only structures with a shared room can install these, which is what the Commons
+buys and what the Row gives up. All of them are **domestic**: this is a living
+room, not a facility.
+
+| installation | what it does |
+|---|---|
+| **The long table** | everybody eats together; squad-wide comfort, and it builds **cross-room** ties — the weak edges of §8 |
+| **The hearth** | a place to sit after a bad night; squad-wide morale floor, strongest when results are poor |
+| **The big kitchen** | aversion answered for the whole squad, and the paste rotation lives here |
+| **The washing room** | mundane, squad-wide, removes a small standing friction — the club that has one never thinks about it |
+| **The porch / garden** | outdoor sitting; morale that scales with the region's climate and season |
+| **The noticeboard** | events reach the squad faster — a strain warning arrives a week earlier |
+
+The noticeboard is the one that touches §9 directly: it does not change what
+happens, it changes **when you are told**, which is the whole currency of the
+event system.
+
+### What this changed, and what it did not
+
+- **Removed**: gym, film room, ice bath. All facility, none of them home.
+- **Renamed**: Pavilion → the Commons, with the reason recorded.
+- **Kept**: floor as the single constraint, crowding as a play rather than a
+  failure, equipment answering conditions, events as the readout, transition as
+  the cost of changing structure.
+- **Grew**: six structures against three, fourteen small items against seven,
+  seven large against four, six shared against four.
+
+Still no numbers, for the reason in §10: two of the three quantities everything
+here multiplies are currently pinned.
