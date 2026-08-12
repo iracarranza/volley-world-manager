@@ -14996,30 +14996,92 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 			% RegionLarder.distance("Landavol", "Pāwa Hitō"),
 	)
 
-	## **The aversion, derived.** A Pāwa Hitō voli at a Landavol club is averse
-	## because Landavol does not grow rice; run a line to Pāwa Hitō and they are
-	## not. Nothing about the voli changed.
+	## **Comfort is a band, and it is derived.** A Pāwa Hitō voli at a Landavol
+	## club is uncomfortable because Landavol does not grow rice; run a line to
+	## Pāwa Hitō and they are not. Nothing about the voli changed.
 	var home_table: Dictionary = FoodSupply.table("Landavol", [], 1)
-	var local := FoodSupply.aversion("Landavol", home_table)
-	var visitor := FoodSupply.aversion("Pāwa Hitō", home_table)
-	_check(
-		local <= 0.001,
-		"a voli at home is not averse (%.2f)" % local,
-	)
+	var local := FoodSupply.discomfort(["Landavol"], home_table)
+	var visitor := FoodSupply.discomfort(["Pāwa Hitō"], home_table)
+	_check(local <= 0.001, "a voli at home is inside their band (%.2f)" % local)
 	_check(
 		visitor > 0.5,
-		"a voli far from home is, and it is not a trait they carry (%.2f)"
+		"a voli far from home is outside it, and it is not a trait (%.2f)"
 			% visitor,
 	)
 	var supplied: Dictionary = FoodSupply.table("Landavol", ["Pāwa Hitō"], 1)
 	_check(
-		FoodSupply.aversion("Pāwa Hitō", supplied) < visitor,
+		FoodSupply.discomfort(["Pāwa Hitō"], supplied) < visitor,
 		"and a supply line to their region answers it (%.2f)"
-			% FoodSupply.aversion("Pāwa Hitō", supplied),
+			% FoodSupply.discomfort(["Pāwa Hitō"], supplied),
 	)
 	_check(
 		float(supplied["weekly_cost"]) > float(home_table["weekly_cost"]),
 		"at a cost that shows up weekly (%.1f)" % float(supplied["weekly_cost"]),
+	)
+
+	## **A band, not a target.** Nobody needs all of it -- a share-missing model
+	## would call a voli with two of three staples a third unhappy, and this one
+	## calls them fine, which is how eating works.
+	var partial: Dictionary = FoodSupply.table("Pāwa Hitō", [], 1)
+	_check(
+		FoodSupply.comfort_share(["Pāwa Hitō"], partial) >= 0.99
+			and FoodSupply.discomfort(["Pāwa Hitō"], partial) <= 0.001,
+		"a full table is comfortable",
+	)
+	_check(
+		float(FoodSupply.band_for(["Pāwa Hitō"])["floor"]) < 1.0,
+		"and the floor is a share rather than everything (%.2f)"
+			% float(FoodSupply.band_for(["Pāwa Hitō"])["floor"]),
+	)
+
+	## **The band widens with the set**, which is what makes a well-travelled
+	## voli easy to feed and worth something at signing that has nothing to do
+	## with their attributes.
+	var narrow := float(FoodSupply.band_for(["Landavol"])["floor"])
+	var wide := float(FoodSupply.band_for(
+		["Landavol", "Xérvu", "Spëddigh", "Taktikã"]
+	)["floor"])
+	_check(
+		wide < narrow,
+		"four regions is a more forgiving palate than one (%.2f vs %.2f)"
+			% [wide, narrow],
+	)
+	var travelled: Array = ["Pāwa Hitō", "Landavol"]
+	_check(
+		FoodSupply.discomfort(travelled, home_table) < visitor,
+		"and a voli who has lived here is comfortable here (%.2f)"
+			% FoodSupply.discomfort(travelled, home_table),
+	)
+
+	## **The ceiling is not a misery, it is a missed opportunity.** A voli eating
+	## entirely their own food is not unhappy; they are just not learning, which
+	## is what stops a squad fed on one larder from ever travelling well.
+	_check(
+		FoodSupply.discomfort(["Landavol"], home_table) <= 0.001
+			and not FoodSupply.widens_palate(["Landavol"], home_table),
+		"eating entirely at home is comfortable and teaches nothing",
+	)
+	_check(
+		FoodSupply.widens_palate(["Landavol"], supplied),
+		"and a table with somebody else's food on it does teach",
+	)
+
+	## And the set grows, once each.
+	var learning: Array = ["Landavol"]
+	_check(
+		FoodSupply.learn_region(learning, "Xérvu")
+			and not FoodSupply.learn_region(learning, "Xérvu")
+			and learning.size() == 2,
+		"a palate learns a region once",
+	)
+	## The threshold a roommate has to cross before their food becomes yours,
+	## read against PairFamiliarity's own scale -- two seasons of sharing a room,
+	## not a friendly conversation.
+	_check(
+		FoodSupply.PALATE_SHARING_THRESHOLD > PairFamiliarity.BASELINE
+			and FoodSupply.PALATE_SHARING_THRESHOLD < PairFamiliarity.CEILING,
+		"and rooming teaches it, at a familiarity somebody has to reach (%.0f)"
+			% FoodSupply.PALATE_SHARING_THRESHOLD,
 	)
 
 	## A lean season removes some of a region's produce and not all of it: a

@@ -14,6 +14,8 @@ static func initialize_player(player: VolleyballPlayer, rng: RandomNumberGenerat
 	player.primary_position = player.position_role
 	player.natural_positions = [player.position_role]
 	player.position_familiarity.clear()
+	## A palate starts where they grew up and grows from there. See `FoodSupply`.
+	player.palate_regions = [player.home_region] as Array[String]
 	for position_name in POSITIONS:
 		player.position_familiarity[position_name] = 92 if position_name == player.position_role else roundi(18.0 + 35.0 * similarity(player.position_role, position_name))
 	if rng != null:

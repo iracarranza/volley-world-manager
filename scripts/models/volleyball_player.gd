@@ -180,6 +180,15 @@ var body_type: String = "Vegi"
 @export var primary_position: String = "Outside Hitter"
 @export var natural_positions: Array[String] = []
 @export var position_familiarity: Dictionary = {}
+## The regions whose food this voli is comfortable with.
+##
+## Starts as where they grew up and grows: a season at a club in a region, or
+## long enough rooming with somebody from one. Stored as region names rather
+## than as a number because it is meant to be **read on a card** -- "eats:
+## Landavol, Xérvu" is something a player can see, understand and predict, and a
+## float called `adaptability_to_foreign_cuisine` would be the same data with
+## nobody able to say what it meant. See `FoodSupply`.
+@export var palate_regions: Array[String] = []
 @export var situation_experience: Dictionary = {}
 @export var position_training_target: String = ""
 
@@ -459,6 +468,7 @@ func to_dict() -> Dictionary:
 		"home_region": home_region, "club_region": club_region,
 		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
 		"position_familiarity": position_familiarity.duplicate(true),
+		"palate_regions": Array(palate_regions).duplicate(),
 		"situation_experience": situation_experience.duplicate(true),
 		"position_training_target": position_training_target,
 		"weeks_observed": weeks_observed,
@@ -519,6 +529,9 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.primary_position = str(data.get("primary_position", player.position_role))
 	player.natural_positions = Array(data.get("natural_positions", [player.primary_position]), TYPE_STRING, "", null)
 	player.position_familiarity = Dictionary(data.get("position_familiarity", {player.primary_position: 90})).duplicate(true)
+	player.palate_regions.clear()
+	for region in Array(data.get("palate_regions", [player.home_region])):
+		player.palate_regions.append(str(region))
 	player.situation_experience = Dictionary(data.get("situation_experience", {})).duplicate(true)
 	player.position_training_target = str(data.get("position_training_target", ""))
 	player.fatigue = clampf(float(data.get("fatigue", 0.0)), 0.0, 1.0)

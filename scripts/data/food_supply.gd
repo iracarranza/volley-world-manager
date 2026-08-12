@@ -82,28 +82,113 @@ static func table(club_region: String, lines: Array, week: int = 1) -> Dictionar
 	}
 
 
-## How badly this voli is eating, from 0 (at home) to 1 (nothing familiar).
+## ## Comfort is a band, not a target
 ##
-## The share of their home region's staples that are **not** on the table. Not a
-## stored trait: two volis from the same region are equally averse at the same
-## club, and both stop being averse the moment a line reaches home.
+## The first version of this was `aversion`: count a voli's home staples, count
+## how many are absent, divide. A binary dressed as a fraction, and wrong twice.
 ##
-## Staples rather than pastes, deliberately. Missing a flavour you like is a
-## disappointment; missing everything you have ever eaten is the thing that
-## costs somebody their rest.
-static func aversion(home_region: String, table_now: Dictionary) -> float:
-	var home: Dictionary = Larder.produces(home_region, 1)
-	var wanted: Array = Array(home["staples"])
-	if wanted.is_empty():
-		## A voli from an importing region grew up on everybody's food, so there
-		## is nothing in particular for them to miss. See `IMPORTING_REGIONS`.
+## **Nobody needs all of it.** A voli wants *enough* of what they know, not every
+## item — a share-missing model calls a Pāwa Hitō voli with rice and sea greens
+## but no soy a third unhappy, which is not how eating works.
+##
+## **And most weeks should be fine.** A threshold a manager has to *hit* is
+## fiddly; a window they stay *inside* is forgiving, which is the register this
+## game is in. A club broadly feeding its squad correctly should never think
+## about food at all — only when somebody falls out of their band.
+##
+## ## And the band widens
+##
+## A voli is comfortable with a **set of regions**, not one. It starts as where
+## they grew up and grows when they spend a season somewhere, or when they room
+## long enough with somebody from there. The second is the good one: a
+## foreign-born voli teaches their roommate to enjoy their food, which gives
+## `PairFamiliarity` a use with nothing to do with volleyball.
+##
+## The set's size sets the band. One region is a narrow, high-floored palate —
+## they need most of the table to be theirs. Four regions is a wide, forgiving
+## one, and a voli who is easy to feed anywhere is worth something at signing
+## that has nothing to do with their attributes.
+
+## The floor for a voli who knows only where they grew up, and for one who has
+## lived everywhere. Both are shares of the week's table.
+const COMFORT_FLOOR_NARROW: float = 0.55
+const COMFORT_FLOOR_WIDE: float = 0.20
+## How many regions a palate has to reach before it stops widening usefully.
+const PALATE_BREADTH_FULL: int = 4
+## And the ceiling, which is not about misery.
+##
+## A voli eating only what they have always eaten is not adapting. Sitting above
+## this does not hurt them; it stops the set growing, which is the cost. A squad
+## fed entirely on one larder is a squad that will struggle the week it travels.
+const COMFORT_CEILING: float = 0.92
+
+
+## The floor and ceiling of this voli's comfortable range.
+static func band_for(palate_regions: Array) -> Dictionary:
+	var breadth := clampf(
+		float(maxi(palate_regions.size(), 1) - 1) / float(PALATE_BREADTH_FULL - 1),
+		0.0, 1.0,
+	)
+	return {
+		"floor": lerpf(COMFORT_FLOOR_NARROW, COMFORT_FLOOR_WIDE, breadth),
+		"ceiling": COMFORT_CEILING,
+	}
+
+
+## What share of this week's table this voli is comfortable with.
+##
+## Read off where each staple came from, which `table()` already records, so a
+## voli is comfortable with a Pāwa Hitō staple whether it grew at home or
+## arrived down a supply line. The food does not know how far it travelled.
+static func comfort_share(palate_regions: Array, table_now: Dictionary) -> float:
+	var staples: Dictionary = table_now.get("staples", {})
+	if staples.is_empty():
 		return 0.0
-	var present: Dictionary = table_now.get("staples", {})
-	var missing := 0
-	for item in wanted:
-		if not present.has(str(item)):
-			missing += 1
-	return float(missing) / float(wanted.size())
+	var known := {}
+	for region in palate_regions:
+		known[str(region)] = true
+	var comfortable := 0
+	for item in staples:
+		if known.has(str(staples[item])):
+			comfortable += 1
+	return float(comfortable) / float(staples.size())
+
+
+## How far outside their band they are, as a positive number, or zero inside it.
+##
+## Only the floor is a shortfall. Being above the ceiling is not a discomfort —
+## it is a missed opportunity, and `widens_palate` below is where that lands.
+static func discomfort(palate_regions: Array, table_now: Dictionary) -> float:
+	var band := band_for(palate_regions)
+	var share := comfort_share(palate_regions, table_now)
+	if share >= float(band["floor"]):
+		return 0.0
+	return (float(band["floor"]) - share) / maxf(float(band["floor"]), 0.001)
+
+
+## Whether a week of this table gives a voli anything new to get used to.
+##
+## Below the ceiling there is enough unfamiliar food on the table to be learning
+## from. Above it they are eating at home, which is comfortable and teaches them
+## nothing.
+static func widens_palate(palate_regions: Array, table_now: Dictionary) -> bool:
+	return comfort_share(palate_regions, table_now) < COMFORT_CEILING
+
+
+## Add a region to a voli's palate, if it is not already there.
+static func learn_region(palate_regions: Array, region: String) -> bool:
+	if region.is_empty() or palate_regions.has(region):
+		return false
+	palate_regions.append(region)
+	return true
+
+
+## How familiar two volis have to be before one's food becomes the other's.
+##
+## Read against `PairFamiliarity`'s own 0-100 scale. High on purpose: this is
+## two seasons of sharing a room, not a friendly conversation, and it should
+## feel like something a manager arranged rather than something that happens.
+const PALATE_SHARING_THRESHOLD: float = 72.0
 
 
 ## And the same distance measured the other way: how tired this voli is of what
