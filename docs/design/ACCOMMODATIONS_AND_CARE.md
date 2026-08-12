@@ -1247,3 +1247,119 @@ event system.
 
 Still no numbers, for the reason in §10: two of the three quantities everything
 here multiplies are currently pinned.
+
+---
+
+## 12. Cutting the wardrobe, regional structures, and where the food comes from
+
+### The wardrobe was arithmetic, not a decision
+
+Three floor to give back two slots is strictly worse than three floor of slots.
+There is no room in which it is right, and §11's defence of it — *wrong in most
+rooms and right in a few* — was a good-sounding sentence wrapped around a bad
+item. **Cut.**
+
+If storage should exist it is small and it does something real rather than
+playing with the slot economy. The version that works:
+
+| item | floor | what it does |
+|---|---|---|
+| **Trunk** | 1 | somewhere to keep what they brought with them: a small standing reduction in homesickness, permanent and cheap |
+
+That is a domestic object doing a domestic job. It does not touch the floor
+rule at all, which is the point — the floor rule should be the thing items are
+*spent against*, never the thing they are about.
+
+### Structures as regional practice
+
+Drafted for a read, not proposed. The claim: a structure is not neutral
+architecture, it is **how a region houses its athletes**, and a club importing
+one is importing somebody else's idea of how to live.
+
+| structure | reads as | because that region |
+|---|---|---|
+| **Longhouse** | Bloc du Larg | houses its squads together by default; the side is one household and privacy is not the value |
+| **Farmhouse** | Landavol | grows what it eats; the kitchen and the garden are how a club is normally organised there |
+| **The Row** | Spëddigh | treats rest as professional infrastructure; separate quarters are the standard, not a luxury |
+| **The Block** | Xérvu | builds upward and houses its youth alongside the senior side |
+| **Bunkhouse** | everywhere | the universal starting point, which is why it is nobody's identity |
+| **The Commons** | Nõ Errõ | organises around a shared room; the hall is the club and the bedrooms are where you sleep |
+
+Two consequences worth having, if this survives:
+
+**A structure out of its region costs something.** Building a Row in Landavol is
+importing a way of living that the local staff and the local volis do not
+practise — so it works, and it works slightly worse, and it makes you slightly
+strange. That is a *far* better cost than money.
+
+**And it makes a club legible before you read a single number.** A Longhouse
+club and a Row club are different places to work, and a voli deciding whether to
+sign is deciding about that as much as about wages.
+
+The risk, stated so it can be checked later: this could collapse into *pick your
+region's structure, always*. It only stays interesting if a squad's needs and
+its region's practice disagree often enough — which is a thing to measure once
+squads have needs, not a thing to assert now.
+
+### What is built: character creation and food
+
+**Character creation is club creation, and the manager is barely in it.**
+`scenes/screens/new_career_screen.gd` runs region → club type → identity, and
+writes principles. `docs/design/CHARACTER_CREATION.md` is about *who the manager
+is*, and almost none of that is there. `BACKLOG` already carries the
+consequence: entry "Mirror the clipboard for a left-handed manager" depends on a
+manager handedness that nothing sets.
+
+**Food is not built at all.** There is a `Chef` staff role in
+`scripts/models/staff_member.gd` — with a good note already on it, that a chef
+cooks their own region's food and carries a palate memory — and mentions in the
+encyclopedia and the inbox. No blocks, no pastes, no aversion, no palate. The
+whole of §1 and §2 of this document is unwritten code.
+
+### Where the food comes from: a flow, not a stockpile
+
+The question is whether the club stocks up, and the answer that fits everything
+else here is **no — you have a supply, not an inventory.**
+
+A weekly flow from the chef, sourced from **where you are**:
+
+- every region grows and makes certain things, continuously
+- a club receives its own region's staples as a matter of course, at no
+  particular cost and no particular thought
+- anything from elsewhere arrives by distance: further is dearer, slower, and
+  more easily interrupted
+- the chef manages all of it, and the manager hears about it **only when
+  something breaks** — which is §9's event system doing exactly its job
+
+That gives three things at once.
+
+**No inventory screen.** Counting sacks of flour is the wrong game. The manager
+sets a standing arrangement and the chef runs it, the same way the four rows of
+§6 are standing arrangements.
+
+**Geography becomes a constraint rather than a label.** Your menu is bounded by
+what your region produces. A Landavol club eats Landavol food without deciding
+to; eating anything else is a supply line you are choosing to run.
+
+**And it closes the loop on aversion.** §11 has volis with food aversions and
+gives the cookbook, the kitchenette and the Farmhouse as answers — but never
+said what an aversion *is*. Now it is obvious: **a voli is averse because the
+region they are in does not grow what they grew up eating.** Aversion is not a
+personality quirk, it is a fact about two places, and it appears the moment you
+sign somebody from far away. Which makes the landline, the letterbox, the
+cookbook and the trunk all the same shape of problem — *this is not where they
+are from* — approached four different ways.
+
+The chef's own origin, already noted in `staff_member.gd`, becomes load-bearing
+under this: a chef from a voli's home region can cook what that voli misses, and
+hiring one is a signing decision about the squad you have rather than about
+staff quality. That is the same "purchase you might decline" test §9 sets, and
+it passes.
+
+### Order, unchanged in shape
+
+Fatigue persisting still gates everything. But the food supply is the one part
+of this document that could be drafted *without* it, because a flow, a
+geography and an aversion are all facts about the world rather than multipliers
+on recovery — and having them would give the events in §9 something real to
+interrupt.
