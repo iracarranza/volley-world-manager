@@ -78,6 +78,8 @@ var _libero: bool = false
 ## it. Shared so the tilt and the magnet agree with each other -- a card leaning
 ## left with its magnet pulled right looks like a mistake rather than a hand.
 var _jitter: float = 0.5
+## How far down its own layout cell this card sits, in pixels.
+var _stagger: float = 0.0
 
 
 ## Build the card for one voli in one slot.
@@ -113,12 +115,7 @@ static func build(
 	## not also always the one sitting low -- one number driving both would put
 	## the whole rack on a diagonal.
 	var lift := float(int(player.id) * 40503 % 1000) / 1000.0
-	card.add_theme_constant_override("margin_top", int(
-		12.0 + lerpf(0.0, STAGGER_PIXELS, lift)
-	))
-	card.add_theme_constant_override("margin_bottom", int(
-		11.0 + STAGGER_PIXELS - lerpf(0.0, STAGGER_PIXELS, lift)
-	))
+	card._stagger = lerpf(0.0, STAGGER_PIXELS, lift)
 	card._compose(player, slot_number)
 	return card
 
@@ -131,8 +128,21 @@ func _compose(player: Resource, slot_number: int) -> void:
 	_stage = str(FatigueModel.stage_name(_fatigue))
 	## Margins on the container, since the stock behind them is drawn rather than
 	## supplied by a stylebox whose content margins a walk could overwrite.
+	## **The stagger has to move the card, not the writing on it.**
+	##
+	## The first version put it in the container's own top margin, which pushes
+	## the *content* down and leaves the card's rect exactly where the flow
+	## container put it -- so the stock, the stripe and the magnet all stayed on
+	## one dead-level line and only the text inside shifted. Which reads as six
+	## cards padded inconsistently, and is worse than no stagger at all.
+	##
+	## The rect belongs to the container and cannot be argued with, so the card
+	## paints itself lower inside it instead and pads the content down to match.
+	## Both come off the same number, so the stock and the writing move together.
 	add_theme_constant_override("margin_left", int(CONDITION_EDGE) + 11)
 	add_theme_constant_override("margin_right", 12)
+	add_theme_constant_override("margin_top", int(12.0 + _stagger))
+	add_theme_constant_override("margin_bottom", int(11.0 + STAGGER_PIXELS - _stagger))
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 3)
@@ -289,14 +299,16 @@ func _signed(value: float) -> Label:
 ## `_draw` rather than added as a child so it can overhang the panel, which is
 ## what makes it read as sitting *on* the card rather than inside it.
 func _draw() -> void:
-	var body := Rect2(Vector2.ZERO, size)
+	var body := Rect2(
+		Vector2(0.0, _stagger), Vector2(size.x, size.y - STAGGER_PIXELS)
+	)
 	draw_rect(body, UIPalette.board_color(&"card", _light_mode), true)
 	draw_rect(body, UIPalette.board_color(&"ghost", _light_mode), false, 1.0)
 	## The one edge that carries colour, and it carries **condition** rather than
 	## quality: a card's left edge is the first thing scanned down a rack, and
 	## "can this person play ninety minutes" is the question a rack answers.
 	draw_rect(
-		Rect2(Vector2.ZERO, Vector2(CONDITION_EDGE, size.y)),
+		Rect2(body.position, Vector2(CONDITION_EDGE, body.size.y)),
 		UIPalette.board_stage_color(_stage, _light_mode), true
 	)
 	## And the magnet, overhanging the top edge -- which is the whole reason the
@@ -304,7 +316,10 @@ func _draw() -> void:
 	## over the edge is what is holding it up.
 	var centre := size.x * (0.5 + lerpf(-MAGNET_DRIFT, MAGNET_DRIFT, _jitter))
 	draw_rect(Rect2(
-		Vector2(centre - MAGNET_SIZE.x * 0.5, -MAGNET_SIZE.y * 0.55),
+		Vector2(
+			centre - MAGNET_SIZE.x * 0.5,
+			body.position.y - MAGNET_SIZE.y * 0.55
+		),
 		MAGNET_SIZE
 	), UIPalette.board_color(&"magnet", _light_mode), true)
 
