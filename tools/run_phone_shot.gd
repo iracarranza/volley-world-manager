@@ -1,12 +1,8 @@
 extends Node
 
-## The folders, as a picture.
+## The phone ringing over the board it interrupted.
 ##
-##     xvfb-run -a godot --path . res://tools/scouting_shot.tscn
-##
-## Shot with a mark on three of them, because an unmarked drawer proves the
-## stagger and nothing else -- the point of the render is whether a pencil word
-## on a tab is legible against manila in both themes.
+##     xvfb-run -a godot --path . res://tools/phone_shot.tscn
 
 
 func _ready() -> void:
@@ -19,7 +15,7 @@ func _shoot() -> void:
 	var career_manager: Node = get_node("/root/CareerManager")
 	var game_manager: Node = get_node("/root/GameManager")
 	var error: String = career_manager.create_career(
-		"Folder Probe", "Probe VC", "Landavol", "Established", "Balanced"
+		"Phone Probe", "Probe VC", "Landavol", "Established", "Balanced"
 	)
 	if not error.is_empty():
 		print("could not start a career: %s" % error)
@@ -32,24 +28,16 @@ func _shoot() -> void:
 		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(screen)
 		screen.bind(career_manager, game_manager)
-		var marks: Dictionary = career_manager.career.scouting_marks
-		var players: Array = game_manager.players
-		for index in range(mini(players.size(), 6)):
-			if index % 2 == 0:
-				marks[int(players[index].id)] = 1 + (index % 3)
-		screen.refresh()
 		load("res://scripts/systems/ui_style_system.gd").apply(screen, light_mode)
+		var call_panel: Control = load("res://scenes/components/call_intrusion.gd").build()
+		screen.add_child(call_panel)
+		call_panel.ring(
+			"Your scout", "Something strange is happening with Mendoza.", true
+		)
 		var tag := "molten" if light_mode else "mikasa"
-		for _settle in range(6):
-			await get_tree().process_frame
-		get_viewport().get_texture().get_image().save_png("user://scouting_%s.png" % tag)
-		print("saved scouting_%s" % tag)
-		screen._open(int(players[0].id))
 		for _settle in range(4):
 			await get_tree().process_frame
-		get_viewport().get_texture().get_image().save_png(
-			"user://scouting_%s_report.png" % tag
-		)
-		print("saved scouting_%s_report" % tag)
+		get_viewport().get_texture().get_image().save_png("user://phone_%s.png" % tag)
+		print("saved phone_%s" % tag)
 		screen.queue_free()
 		await get_tree().process_frame

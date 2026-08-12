@@ -786,7 +786,7 @@ static func _style_panel(panel: PanelContainer, medium: StringName) -> void:
 	if node_name in ["ContentPanel", "QuestionPanel", "MenuPanel"]:
 		panel.theme_type_variation = &"RaisedPanel"
 	elif node_name.ends_with("Strip") or node_name.ends_with("Bar") \
-			or node_name == "DropdownPanel":
+			or node_name.ends_with("Region") or node_name == "DropdownPanel":
 		## A bar is where a control lives, not a surface in its own right.
 		##
 		## `NavStrip` holds one button and a line of hint text, and drawing an

@@ -37,8 +37,16 @@ const CLAMP_CORNER: float = 4.0
 ## sparse dark bark. Counts are per 10,000 px² so a resize does not change how
 ## coarse the material looks -- which it did when they were flat counts, and a
 ## maximised window turned the cork to suede.
-const FINE_PER_AREA: float = 0.9
-const FLECK_PER_AREA: float = 0.11
+## Raised for the open board.
+##
+## These were set against the clipboard, where the cork is a 21px margin round a
+## page -- and a margin reads as a material off almost nothing, because your eye
+## has the page beside it for comparison. The scouting board is nearly a
+## thousand times the area with nothing to compare against, and at the old
+## density it rendered as flat brown paper: about one granule per two hundred
+## square pixels, which at arm's length is not a texture, it is dust.
+const FINE_PER_AREA: float = 3.4
+const FLECK_PER_AREA: float = 0.38
 
 ## Cork, and what cork becomes at night.
 ##
@@ -50,7 +58,7 @@ const FLECK_PER_AREA: float = 0.11
 ## doing. Its grain also inverts -- flecks read lighter than the ground rather
 ## than darker -- because in the dark what you can see of a texture is where it
 ## catches what light there is.
-const CORK_LIGHT := Color(0.72, 0.55, 0.35)
+const CORK_LIGHT := Color(0.70, 0.54, 0.36)
 const CORK_DARK := Color(0.33, 0.24, 0.16)
 
 var _seed: int = 0
@@ -71,6 +79,22 @@ func _notification(what: int) -> void:
 		queue_redraw()
 
 
+## Whether this cork is holding a sheet or *is* the surface.
+##
+## The clipboard is a board with one page clamped to it; the scouting board is a
+## wall with a dozen things pinned to it. Both are cork and the same component
+## draws both, so the two marks that belong only to the clipboard -- the steel
+## clamp, and the shadow the single page drops onto the board -- are switched off
+## here rather than being a second component that would drift.
+##
+## `UIPinnedSlip`'s header carries the full table of what separates the two
+## objects; this flag is the drawing half of it.
+@export var clamped: bool = true:
+	set(value):
+		clamped = value
+		queue_redraw()
+
+
 func _draw() -> void:
 	if size.x < 24.0 or size.y < 24.0:
 		return
@@ -84,8 +108,12 @@ func _draw() -> void:
 	_draw_grain(board, cork, light_mode)
 	draw_rect(board, Color(cork.darkened(0.34), 0.85), false, 1.6)
 
+	if not clamped:
+		return
 	## And the shadow the page casts onto the cork, which is what says the paper
-	## is lying on the board rather than printed on it.
+	## is lying on the board rather than printed on it. Only when there *is* one
+	## page: on the open board every scrap drops its own shadow and one the size
+	## of the whole surface would be a grey rectangle over the cork.
 	draw_rect(
 		Rect2(Vector2(2.0, 3.0), size), Color(0.0, 0.0, 0.0, 0.16)
 	)

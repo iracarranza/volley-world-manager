@@ -14190,16 +14190,38 @@ func _test_the_folders_are_card() -> void:
 	)
 	sheet.free()
 
-	## The screen declares it. This is the assertion that was missing: the medium
-	## existing is no use if the one object made of it never says so.
-	var screen: Control = load("res://scenes/screens/scouting_screen.gd").new()
-	screen._build()
+	## **Which screen is the folder.**
+	##
+	## Card was built for scouting and moved to housing, because a folder is a
+	## container for one subject and a board is a surface where things accumulate
+	## -- and each metaphor had been attached to the system whose information shape
+	## it did not fit. This check moved with it, and asserts both halves: the
+	## folder is card, and the board is emphatically not, because "housing is card"
+	## alone would still pass with both screens made of it.
+	var housing: Control = load("res://scenes/screens/accommodation_screen.gd").new()
+	housing._build()
 	_check(
-		StringName(screen.get_meta(UIStyleSystemScript.MEDIUM_META, &""))
+		StringName(housing.get_meta(UIStyleSystemScript.MEDIUM_META, &""))
 			== UIStyleSystemScript.MEDIUM_CARD,
-		"the scouting screen is made of card",
+		"the housing folder is made of card",
 	)
-	screen.free()
+	housing.free()
+	var board: Control = load("res://scenes/screens/scouting_screen.gd").new()
+	board._build()
+	_check(
+		StringName(board.get_meta(UIStyleSystemScript.MEDIUM_META, &""))
+			!= UIStyleSystemScript.MEDIUM_CARD,
+		"the scouting board is not a folder",
+	)
+	## And the cork it sits on is not the clipboard's. One flag separates two
+	## objects made of one material, which is the failure this codebase has made
+	## three times -- so it is asserted rather than trusted.
+	var cork := board.find_child("CorkBoard", true, false)
+	_check(
+		cork != null and not bool(cork.clamped),
+		"the scouting board's cork has no clamp on it",
+	)
+	board.free()
 
 	## **The report reads the keys the game uses.**
 	##

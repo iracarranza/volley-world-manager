@@ -41,6 +41,7 @@ extends Control
 ## moving a squad is a lease and a fortnight of nobody knowing where anything is.
 ## The prices do not leave the account yet; see `BACKLOG`.
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
+const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const Accommodation := preload("res://scripts/data/accommodation.gd")
 const PairFamiliarity := preload("res://scripts/data/pair_familiarity.gd")
 const FloorPlanScript := preload("res://scenes/components/floor_plan.gd")
@@ -74,11 +75,11 @@ var _showing: String = ""
 ## than three near-identical branches, because the next card is a row here.
 const CARDS := {
 	"building": {
-		"title": "Building",
+		"title": "The lease",
 		"flavour": "Rent or buy a space for your volis",
 	},
 	"kit": {
-		"title": "Equipment",
+		"title": "The catalogue",
 		"flavour": "Fit your volis' rooms with helpful stuff",
 	},
 	"people": {
@@ -99,6 +100,18 @@ func _ready() -> void:
 
 
 func _build() -> void:
+	## **The housing folder.**
+	##
+	## `MEDIUM_CARD` was built for scouting and pointed at the wrong system. A
+	## folder is a container for *one subject* and a board is a surface where
+	## things accumulate -- scouting is the second and housing is emphatically the
+	## first. There is one property; the lease, the plan, the inventory and the
+	## catalogue are all documents about it, which is the definition of a folder.
+	##
+	## So the manila, the fold and the pencil come here, and the floor plan reads
+	## as the plan enclosed with the lease rather than as a diagram on a page.
+	## Declared before anything is added, so the first style pass sees it.
+	set_meta(UIStyleSystemScript.MEDIUM_META, UIStyleSystemScript.MEDIUM_CARD)
 	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	var shell := ScreenShell.build(

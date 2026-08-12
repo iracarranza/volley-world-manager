@@ -75,11 +75,13 @@ away.
 |---|---|
 | The journal -- the club | `scenes/screens/journal_screen.gd` |
 | Training clipboard -- tactics and drills | `scenes/screens/training_screen.gd` |
-| Scouting folders | `scenes/screens/scouting_screen.gd` |
+| The scouting board -- cork, pinned | `scenes/screens/scouting_screen.gd` |
 | The planner -- the daily schedule | `scenes/screens/schedule_screen.gd` |
 | Match centre | `scenes/screens/match_screen.gd` |
-| The lease -- where the squad lives | `scenes/screens/accommodation_screen.gd` |
-| The desk -- the menu | *not built yet* |
+| The housing folder -- where the squad lives | `scenes/screens/accommodation_screen.gd` |
+| The kitchen -- the block and the paste on it | `scenes/screens/kitchen_screen.gd` |
+| The desk -- the home state, not a menu | `scenes/screens/desk_screen.gd` |
+| The phone -- a call cutting in | `scenes/components/call_intrusion.gd` |
 
 "Career dashboard" and "recruitment" are dead names. A player is a **voli**.
 
@@ -99,7 +101,22 @@ away.
   | `form` -- the clipboard | flat stock, cooler, unscreened | printed hairlines, square corners, faint grid | only the annotation: marker, red pen, highlighter |
   | `drawn` -- default | halftone, pen edge | broad-nib pen | by hand |
   | `board` -- the match centre | melamine, cool, a wiped smear, no screen | marker rules edge to edge; magnets, not borders | all of it, in four markers, minutes ago |
-  | `card` -- the scouting folders | manila, buff, a fibre fleck one pixel across | a fold and three cut edges -- no border at all | pencil, and only on hover |
+  | `card` -- the housing folder | manila, buff, a fibre fleck one pixel across | a fold and three cut edges -- no border at all | pencil, and only on hover |
+  | `pinned` -- the scouting board | no surface at all: separate scraps on cork | none -- air and shadow, never a line | a pin per item, and biro on the slips |
+
+  **`card` was built for scouting and is now housing's.** A folder is a container
+  for *one subject*; a board is a surface where things accumulate and relate.
+  Scouting is the second -- connections, unsolicited discoveries, a shortlist
+  compared against itself -- and housing is emphatically the first. Each metaphor
+  had been attached to the system whose information shape it did not fit. See
+  `docs/design/THE_DESK_AND_THE_PHONE.md` §0.
+
+  `pinned` shares its cork with the training clipboard, which is the fourth
+  chance this codebase has had to make two objects out of one material. The
+  separation is structural, not tonal: a clipboard is mostly *sheet* with a
+  margin of cork and one steel clamp; the board is mostly *board*, with many
+  tilted scraps and a pin each. `UICorkBoard.clamped` is the one flag that
+  switches between them, and `UIPinnedSlip`'s header carries the table.
 
   `card` is the only medium whose texture is the **material** rather than
   something done to it: a halftone is a reproduction, a form and a board are

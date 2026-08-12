@@ -1,114 +1,92 @@
 class_name VolleyballScoutingScreen
 extends Control
 
-## The scouting folders, on the one medium they were always documented as.
+## The cork board.
 ##
-## `TITLE_SCREEN.md` has said since the medium rule was written that the objects
-## on the desk are made of different things -- *"the clipboard is paper somebody
-## drew on, the folders are card"* -- and until now there was no `card` medium to
-## be made of. So this screen fell through to `drawn`, which is the default, and
-## rendered as the planner with different words on it.
+## ## Why this stopped being a drawer of folders
 ##
-## ## What was here, and what it got wrong
+## It was one, briefly, and on a defensible argument: `TITLE_SCREEN.md` said "the
+## folders are card", so `MEDIUM_CARD` was built and scouting was put on it. The
+## build was fine and the *assignment* was wrong, and the reason is worth keeping
+## because it generalises to every other screen on this desk:
 ##
-## A list of names on ruled paper, columnar and unruled, on the argument that a
-## scout keeps a page and ticks it. The argument is fine and the object is wrong:
-## a page of names is *paper*, and paper is the clipboard. Two objects on one desk
-## cannot be the same material and still be two objects, which is the failure
-## `UIPrintedRule`'s header documents at length and this is the third instance of.
+## > A folder is a **container for one subject**. A board is a **surface where
+## > things accumulate and relate to each other**.
 ##
-## A folder is also a better fit for what scouting *is*. A page of names says
-## every prospect is a row and your job is to sort them. A drawer of folders says
-## each one is a thing you have collected material about, that you open one at a
-## time, and that most of what you know about them is inside rather than on the
-## front -- which is exactly `SCOUTING.md`'s model, where a report is partial and
-## widens with observation.
+## Everything scouting is about is the second thing. Connections between volis,
+## clubs, agents and regions; reports arriving unasked; a shortlist you compare
+## against itself. A drawer can show you exactly one open folder, because that is
+## what a drawer is *for* -- so the folder metaphor did not merely fail to help
+## here, it structurally forbade the thing the screen exists to do.
 ##
-## ## The drawer, and why the tabs are staggered
+## The folder went to housing, where there is one property and every document is
+## about it. Card was not wasted; it was pointed at the wrong system.
 ##
-## Folders in a drawer are cut so that no two adjacent tabs are in the same
-## position -- third-cut stock alternates left, centre, right -- because a column
-## of tabs at one position is a column you cannot read past the first one. The
-## stagger here is that, not decoration, and it is what makes a vertical list of
-## folders read as a drawer seen from above rather than as a list of buttons.
+## ## What the board has that a list does not
 ##
-## ## The mark is on the tab, and setting it is not
+## Three things, and each one is a thing a table cannot express:
 ##
-## What was here cycled the mark by clicking the name, and needed a line of hint
-## text to say so -- which is the tell that the interaction was invisible. A tab
-## click now opens the folder, which is what a tab is for, and the three marks
-## are three named things inside it. The mark still shows on the tab, because the
-## whole point of writing on a tab is reading it with the folder shut.
+## **Position means something.** A slip near another slip is related to it. The
+## groupings here -- who is out, who is being watched, what came back -- are
+## regions of a wall rather than rows under a header, and a manager rearranging
+## their own board is doing the reasoning rather than reporting it.
+##
+## **Everything is visible at once.** `SCOUTING.md`'s whole model is partial
+## information widening with observation, and the comparison a manager actually
+## makes is *between* partial reports. Behind one click each, they cannot make it.
+##
+## **Nothing is uniform.** Reports arrive at different sizes because they contain
+## different amounts. A row of equal cells says every prospect is the same kind of
+## thing and your job is to sort them; a wall of unequal scraps says somebody has
+## been finding things out at an uneven rate, which is what happened.
+##
+## ## Not string and pins
+##
+## The metaphor is a claim about information, not a puzzle-board aesthetic. There
+## is no red yarn. Everything on this board is pinned, tilted a degree and
+## clickable, and it is still a management interface you can work quickly.
 
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
-const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
+const SlipScript := preload("res://scenes/components/pinned_slip.gd")
+const PopupScript := preload("res://scenes/components/desk_popup.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 const MARK_NONE: int = 0
 const MARK_SIGN: int = 1
 const MARK_WATCH: int = 2
 const MARK_PASS: int = 3
 
-## What a mark is called on the tab, and on the button that sets it.
-##
-## One table, so the word on the tab and the word on the control can never drift
-## apart -- a folder that says "watch" and a button that says "keep an eye on"
-## is two names for one state, and a manager has to work out that they are the
-## same thing.
+## What a mark is called, everywhere it is named. One table, so the word pinned
+## to the board and the word on the control that sets it cannot drift apart.
 const MARK_WORDS := {
-	MARK_SIGN: "sign", MARK_WATCH: "watch", MARK_PASS: "pass",
+	MARK_SIGN: "sign", MARK_WATCH: "watch", MARK_PASS: "seen enough",
 }
 const MARK_ORDER := [MARK_SIGN, MARK_WATCH, MARK_PASS]
 
-## Third-cut stock: three tab positions, and the drawer cycles through them.
-const TAB_CUTS: int = 3
-const TAB_STAGGER: float = 26.0
-const DRAWER_WIDTH: float = 300.0
-const TAB_HEIGHT: float = 34.0
-## How far the folder you are reading stands out of the drawer.
-const TAB_LIFT: float = 12.0
+## The pin colours the marks claim.
+##
+## The only place on this board where a pin colour means anything, and it is
+## stated rather than inferred -- `UIPinnedSlip` deliberately treats a box of pins
+## as a box of pins, so a colour key has to be opted into by a caller who has a
+## key. Unmarked slips keep the meaningless colours, which is what makes the
+## marked ones read.
+const MARK_PINS := {
+	MARK_SIGN: Color("3f7d52"), MARK_WATCH: Color("d9982f"),
+	MARK_PASS: Color("8d8377"),
+}
 
-## What a report is a report *of*.
-##
-## `AttributeProfiles.summary_profile` returns these six and an `Overall` derived
-## from them. The six are what goes in the folder and the Overall goes on the
-## front, which is the split the wheel already makes -- a rating is what you say
-## about somebody in one number and the categories are what you actually watched.
-##
-## **Spelled `Setting / Control` and `Mental / Tactical`, not `&`.** The two
-## spellings and why both exist are documented at `CATEGORY_ALIASES`, along with
-## the last thing that used the wrong one: `ScoutingSystem.KNOWABILITY`, whose
-## whole entry for the least observable category silently did nothing. This list
-## was written with `&` and made the same mistake, and the measurement is what
-## found it -- every player's Setting and Mental read *exactly* 50.0, 264 of 264,
-## because a `.get(category, 50.0)` was answering for a key that was never there.
-const REPORT_CATEGORIES := [
-	"Attacking", "Defensive", "Setting / Control",
-	"Physical", "Serving", "Mental / Tactical",
-]
-
-## Where a number stops being worth a word.
-##
-## Measured, not picked, because §0's standing failure is a threshold outside the
-## distribution it acts on -- and it fails *silently*, which is the part that
-## costs the time. 1,584 category scores off 24 generated rosters, half founded
-## and half established:
-##
-##     p05 40 · p25 52 · p50 63 · p75 72 · p95 85   (min 26, max 99)
-##
-## So 72 is the top quarter (27.8% at or above) and 48 is the bottom sixth (17.2%
-## at or below). The first draft of these was 68 and 42, guessed at from a
-## remembered "centred near 50" -- 42 would have fired on well under a tenth of
-## reads and a scout would have had almost nothing bad to say about anybody.
-const REPORT_STRONG: float = 72.0
-const REPORT_WEAK: float = 48.0
+const CARD_SIZE := Vector2(178.0, 116.0)
+const NOTE_WIDTH: float = 210.0
 
 signal back_requested
 
 var _career_manager: Node = null
 var _game_manager: Node = null
-var _drawer: VBoxContainer = null
-var _face: VBoxContainer = null
+var _board: HBoxContainer = null
+var _shortlist: HFlowContainer = null
+var _notes: VBoxContainer = null
+var _panel: DeskPopup = null
 var _open_id: int = -1
 
 
@@ -123,86 +101,73 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	## Declared before anything is added, so every node built below inherits it on
-	## the first style pass rather than on whichever one happens to run second.
-	set_meta(UIStyleSystemScript.MEDIUM_META, UIStyleSystemScript.MEDIUM_CARD)
-
 	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
-	var shell := ScreenShell.build(self, "Scouting", [back_button] as Array[Button])
-	var column := shell.content
+	## `BACKING_BOARD`: the same cork the training clipboard lies on, with the page
+	## taken off it. That is the whole structural difference between the two
+	## objects, and it is one flag rather than two components because two would
+	## drift.
+	## `UIPinnedSlip`'s header carries the table that keeps the two objects apart;
+	## the short version is that a clipboard is mostly sheet and a board is mostly
+	## board.
+	var shell := ScreenShell.build(
+		self, "Scouting", [back_button] as Array[Button], ScreenShell.BACKING_BOARD
+	)
 
-	var body := HBoxContainer.new()
-	body.name = "ScoutingBody"
-	body.add_theme_constant_override("separation", 14)
-	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(body)
+	_board = HBoxContainer.new()
+	_board.name = "Board"
+	_board.add_theme_constant_override("separation", 18)
+	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shell.content.add_child(_board)
 
-	## The drawer scrolls and the open folder does not, which is the right way
-	## round: you push folders back and forth to find one, and then the one in
-	## your hands is the whole of what you are looking at.
 	var scroll := ScrollContainer.new()
-	scroll.name = "DrawerScroll"
-	scroll.custom_minimum_size = Vector2(DRAWER_WIDTH, 0.0)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.name = "ShortlistScroll"
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(scroll)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_board.add_child(scroll)
+	## A flow rather than a grid. Cards are pinned where there is room, so a
+	## narrower window puts fewer on a row -- which is what happens to a real
+	## board and is also the only layout that survives the cards not all being the
+	## same size later.
+	_shortlist = HFlowContainer.new()
+	_shortlist.name = "Shortlist"
+	_shortlist.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_shortlist.add_theme_constant_override("h_separation", 16)
+	_shortlist.add_theme_constant_override("v_separation", 16)
+	scroll.add_child(_shortlist)
 
-	_drawer = VBoxContainer.new()
-	_drawer.name = "Drawer"
-	_drawer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	## Tabs touch. Folders in a drawer are packed against each other, and a gap
-	## between them would say each one is sitting on its own shelf.
-	_drawer.add_theme_constant_override("separation", 0)
-	scroll.add_child(_drawer)
+	_notes = VBoxContainer.new()
+	_notes.name = "Notes"
+	_notes.custom_minimum_size = Vector2(NOTE_WIDTH + 20.0, 0.0)
+	_notes.add_theme_constant_override("separation", 14)
+	_board.add_child(_notes)
 
-	var face_panel := PanelContainer.new()
-	face_panel.name = "OpenFolder"
-	face_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	face_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_child(face_panel)
-	var face_margin := MarginContainer.new()
-	for side in ["left", "right"]:
-		face_margin.add_theme_constant_override("margin_%s" % side, 20)
-	for side in ["top", "bottom"]:
-		face_margin.add_theme_constant_override("margin_%s" % side, 16)
-	face_panel.add_child(face_margin)
-	_face = VBoxContainer.new()
-	_face.name = "FolderFace"
-	_face.add_theme_constant_override("separation", 8)
-	face_margin.add_child(_face)
+	_panel = PopupScript.build()
+	add_child(_panel)
 
 
 func refresh() -> void:
-	if _drawer == null:
+	if _shortlist == null or _career_manager == null:
 		return
-	for child in _drawer.get_children():
+	for child in _shortlist.get_children():
 		child.queue_free()
-	if _career_manager == null:
-		return
+	for child in _notes.get_children():
+		child.queue_free()
 	var prospects := _prospects()
 	if prospects.is_empty():
-		var empty := Label.new()
-		empty.name = "DrawerEmptySummary"
-		empty.text = "The drawer is empty."
-		_drawer.add_child(empty)
-		_fill_face(null)
+		_notes.add_child(_note_slip(
+			"Nothing on the board", "Send somebody to a game.", "empty"
+		))
 		return
-	## The open folder survives a refresh, and only falls back to the first when
-	## whoever was open has left the drawer -- a mark that closed the folder you
-	## just marked would make marking three of them three separate journeys.
-	var open: Variant = _prospect_by_id(prospects, _open_id)
-	if open == null:
-		open = prospects[0]
-		_open_id = int(open.id)
-	for index in range(prospects.size()):
-		_drawer.add_child(_tab_for(prospects[index], index))
-	_fill_face(open)
+	for prospect in prospects:
+		_shortlist.add_child(_card_slip(prospect))
+	_refresh_notes(prospects)
 
 
 ## Whoever the career is currently looking at. Falls back to the club's own
-## roster so the screen has something true to draw before a scouting pipeline
-## exists -- the layout is the thing being proven here.
+## roster so the board has something true on it before a scouting pipeline
+## exists -- the arrangement is the thing being proven here.
 func _prospects() -> Array:
 	var career = _career_manager.career
 	if career != null and "scouted_players" in career:
@@ -214,140 +179,248 @@ func _prospects() -> Array:
 	return _game_manager.players
 
 
-func _prospect_by_id(prospects: Array, prospect_id: int):
-	if prospect_id < 0:
-		return null
-	for prospect in prospects:
-		if int(prospect.id) == prospect_id:
-			return prospect
-	return null
-
-
-## One folder, seen edge-on in the drawer: its tab and nothing else.
-func _tab_for(prospect, index: int) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 0)
-	## The cut. A spacer rather than a margin, because the amount is per-folder
-	## and a theme constant is per-container.
-	var cut := Control.new()
-	cut.custom_minimum_size = Vector2(float(index % TAB_CUTS) * TAB_STAGGER, 0.0)
-	cut.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(cut)
-
+## One voli, as the thing a scout pinned up about them.
+##
+## A photograph with the particulars written under it, which is what a scouting
+## card physically is. What it deliberately does **not** carry is the six-category
+## report: that is what opening it is for, and a card that showed everything would
+## make the board a table with rounded corners.
+func _card_slip(prospect) -> Control:
 	var prospect_id := int(prospect.id)
-	var open := prospect_id == _open_id
-	var tab := Button.new()
-	tab.name = "FolderTab%d" % prospect_id
-	## **The open folder is taller, not coloured.**
-	##
-	## It was a toggle first, which meant the theme's pressed state -- accent red
-	## on the chip -- said *this one is open*. On a screen where one of the three
-	## marks is literally called "sign" and gets the same red when set, that is two
-	## different facts in one colour, and the first render had a red tab labelled
-	## "sign" sitting above a red button labelled "sign" meaning something else.
-	##
-	## So the open folder is the one standing proud of the drawer, which is what
-	## you do to a folder you are reading and needs no colour at all.
-	tab.custom_minimum_size = Vector2(0.0, TAB_HEIGHT + (TAB_LIFT if open else 0.0))
-	tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab.text = str(prospect.display_name)
-	tab.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	## What is written on the tab, when anything is. An unmarked folder says
-	## nothing, which is the state most folders in a drawer are in.
 	var mark := _mark_for(prospect_id)
-	if mark != MARK_NONE:
-		tab.text = "%s — %s" % [tab.text, MARK_WORDS[mark]]
-	## A folder you have seen enough of stays in the drawer and stops asking to be
-	## read. Alpha rather than a strike-through: pencil comes off card, so the
-	## honest way to say "done with this" is a mark that faded, not a damaged tab.
-	if mark == MARK_PASS:
-		tab.modulate = Color(1.0, 1.0, 1.0, 0.55)
-	elif not open:
-		## Everything not in your hand is a little further away. Small enough that
-		## nobody reads it as disabled, and enough that the lifted tab is the one
-		## the eye lands on.
-		tab.modulate = Color(1.0, 1.0, 1.0, 0.88)
-	tab.pressed.connect(func() -> void:
-		_open_id = prospect_id
-		refresh()
-	)
-	row.add_child(tab)
-	return row
 
+	var face := Button.new()
+	face.name = "Card%d" % prospect_id
+	face.flat = true
+	face.custom_minimum_size = CARD_SIZE
+	face.pressed.connect(func() -> void: _open(prospect_id))
 
-## What is inside the folder.
-func _fill_face(prospect) -> void:
-	if _face == null:
-		return
-	for child in _face.get_children():
-		child.queue_free()
-	if prospect == null:
-		var empty := Label.new()
-		empty.name = "FolderEmptySummary"
-		empty.text = "Nobody has been watched yet. Send somebody to a game."
-		_face.add_child(empty)
-		return
+	var column := VBoxContainer.new()
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.add_theme_constant_override("separation", 2)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right", "top", "bottom"]:
+		column.add_theme_constant_override("margin_%s" % side, 10)
+	face.add_child(column)
+
+	var portrait := _Portrait.new()
+	portrait.custom_minimum_size = Vector2(0.0, 44.0)
+	portrait.seed_value = prospect_id
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(portrait)
 
 	var name_label := Label.new()
-	name_label.name = "FolderTitle"
+	name_label.name = "Card%dTitle" % prospect_id
 	name_label.text = str(prospect.display_name)
-	_face.add_child(name_label)
+	name_label.clip_text = true
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(name_label)
 
-	var particulars := Label.new()
-	particulars.name = "FolderDetail"
-	particulars.text = "%s · %d · %s" % [
-		str(prospect.position_role), int(prospect.age), _origin_of(prospect),
-	]
-	_face.add_child(particulars)
+	var line := Label.new()
+	line.name = "Card%dDetail" % prospect_id
+	line.text = "%s · %d" % [_short_role(str(prospect.position_role)), int(prospect.age)]
+	line.add_theme_font_size_override("font_size", 11)
+	line.clip_text = true
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(line)
 
+	## What is written on the card, when anything is. A scout writes the mark on
+	## the card itself, not on a legend somewhere else.
+	if mark != MARK_NONE:
+		var written := Label.new()
+		written.name = "Card%dStatus" % prospect_id
+		written.text = str(MARK_WORDS[mark])
+		written.add_theme_font_size_override("font_size", 11)
+		written.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		column.add_child(written)
+
+	## **Not a photographic slip.** A scouting card is a card with a photograph on
+	## it, not a photograph with writing over it -- and passing `true` here made it
+	## the second thing: the print's image area covered the whole slip and the name,
+	## the position and the mark were all written across the picture. The print
+	## border belongs to `_Portrait`, which is the part that is actually a print.
+	var slip := SlipScript.wrap(face, str(prospect.display_name), false)
+	slip.custom_minimum_size = CARD_SIZE
+	if mark != MARK_NONE:
+		slip.tack_colour = MARK_PINS[mark]
+	## Seen enough stays on the board and stops asking to be read. It is not
+	## removed: a board you have to remember having cleared is worse than one
+	## carrying a faded card you can see you already dismissed.
+	if mark == MARK_PASS:
+		slip.modulate = Color(1.0, 1.0, 1.0, 0.62)
+	return slip
+
+
+## The right-hand column: what the board says about itself.
+##
+## Counts rather than a list, because these are the facts a manager checks
+## *before* reading any one card -- how much is out, how much has come back, how
+## much of it they have made a decision about.
+func _refresh_notes(prospects: Array) -> void:
+	var marked := {MARK_SIGN: 0, MARK_WATCH: 0, MARK_PASS: 0, MARK_NONE: 0}
+	var watched := 0
+	for prospect in prospects:
+		marked[_mark_for(int(prospect.id))] += 1
+		if int(prospect.weeks_observed) if "weeks_observed" in prospect else 0:
+			watched += 1
+	_notes.add_child(_note_slip(
+		"On the board",
+		"%d pinned up · %d of them watched at least once" % [prospects.size(), watched],
+		"count"
+	))
+	_notes.add_child(_note_slip(
+		"Decided",
+		"%d to sign · %d worth watching · %d seen enough · %d untouched" % [
+			marked[MARK_SIGN], marked[MARK_WATCH],
+			marked[MARK_PASS], marked[MARK_NONE],
+		],
+		"decided"
+	))
+	_notes.add_child(_note_slip(
+		"Where they are from",
+		_regions_of(prospects),
+		"regions"
+	))
+
+
+func _regions_of(prospects: Array) -> String:
+	var counted := {}
+	for prospect in prospects:
+		var home := str(prospect.home_region) if "home_region" in prospect else ""
+		if home.is_empty():
+			continue
+		counted[home] = int(counted.get(home, 0)) + 1
+	if counted.is_empty():
+		return "Nobody's origin is written down."
+	var names: Array = counted.keys()
+	names.sort()
+	var parts: Array[String] = []
+	for name in names:
+		parts.append("%s %d" % [str(name), int(counted[name])])
+	return " · ".join(parts)
+
+
+func _note_slip(heading: String, body: String, key: String) -> Control:
+	var panel := Control.new()
+	panel.custom_minimum_size = Vector2(NOTE_WIDTH, 0.0)
+	var column := VBoxContainer.new()
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.add_theme_constant_override("separation", 2)
+	for side in ["left", "right", "top", "bottom"]:
+		column.add_theme_constant_override("margin_%s" % side, 12)
+	panel.add_child(column)
+	var title := Label.new()
+	title.name = "%sTitle" % key.capitalize()
+	title.text = heading
+	column.add_child(title)
+	var text := Label.new()
+	text.name = "%sSummary" % key.capitalize()
+	text.text = body
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.add_theme_font_size_override("font_size", 11)
+	column.add_child(text)
+	var slip := SlipScript.wrap(panel, key, false)
+	slip.custom_minimum_size = Vector2(NOTE_WIDTH, 74.0)
+	return slip
+
+
+## ## The report
+##
+## Taking the card off the board and reading what is on the back of it. Opened
+## rather than always visible, for the reason the card is small: what the board is
+## for is comparison, and six categories times a dozen prospects is not a board,
+## it is a spreadsheet somebody pinned up.
+func _open(prospect_id: int) -> void:
+	_open_id = prospect_id
+	var prospect = _prospect_by_id(prospect_id)
+	if prospect == null:
+		return
+	_panel.open(str(prospect.display_name), _origin_of(prospect))
+	_fill_report(prospect)
+
+
+## What a report is a report *of*.
+##
+## **Spelled `Setting / Control` and `Mental / Tactical`, not `&`.** Both
+## spellings are load bearing and the reason is at `CATEGORY_ALIASES`; the last
+## two things to use the wrong one were `ScoutingSystem.KNOWABILITY` and the first
+## draft of this screen, which read *exactly* 50.0 on two of six categories for
+## every prospect, 264 of 264, because a `.get(key, 50.0)` was answering for a key
+## that was never there.
+const REPORT_CATEGORIES := [
+	"Attacking", "Defensive", "Setting / Control",
+	"Physical", "Serving", "Mental / Tactical",
+]
+
+## Where a number stops being worth a word.
+##
+## Measured, not picked: 1,584 category scores over 24 generated rosters give
+## p25 52, p50 63, p75 72. So 72 is the top quarter and 48 the bottom sixth. The
+## first draft guessed 68 and 42 from a half-remembered "centred near 50", and 42
+## sits below the fifth percentile -- a scout who would have had almost nothing
+## bad to say about anybody, silently, which is §0's standing failure.
+const REPORT_STRONG: float = 72.0
+const REPORT_WEAK: float = 48.0
+
+
+func _fill_report(prospect) -> void:
+	for child in _panel.body.get_children():
+		child.queue_free()
 	var summary: Dictionary = AttributeProfiles.summary_profile(prospect)
-	_stat_row("Rated", str(roundi(float(summary.get("Overall", 50.0)))))
-	_stat_row("Asking", _salary_of(prospect))
-	_stat_row("Watched", _watched_of(prospect))
-
+	_report_row("Rated", str(roundi(float(summary.get("Overall", 50.0)))))
+	_report_row("Asking", _salary_of(prospect))
+	_report_row("Watched", _watched_of(prospect))
 	var traits := _traits_of(prospect)
 	if not traits.is_empty():
-		_stat_row("Noted", traits)
+		_report_row("Noted", traits)
 
-	## The report itself, which is most of what a folder holds.
-	##
-	## Six rows and a word beside each, rather than six numbers. A number is what
-	## the club's own profile page gives you; a folder is somebody's *account* of
-	## watching them, and "quick off the floor" and "62" are not the same claim
-	## even when they come from the same figure.
-	var rule := HSeparator.new()
-	rule.name = "ReportRule"
-	_face.add_child(rule)
+	_panel.body.add_child(HSeparator.new())
 	for category in REPORT_CATEGORIES:
-		## No fallback. A default here is what hid the wrong spellings above, and
-		## a category that has stopped being returned should print an obviously
-		## broken row rather than a plausible 50.
+		## No fallback. A default is what hid the wrong spellings above, and a
+		## category that stops being returned should print an obviously broken row
+		## rather than a plausible 50.
 		if not summary.has(category):
-			_stat_row(str(category), "missing")
+			_report_row(str(category), "missing")
 			continue
 		var value := float(summary[category])
-		_stat_row(str(category), "%d — %s" % [roundi(value), _read_of(value)])
+		_report_row(str(category), "%d — %s" % [roundi(value), _read_of(value)])
 
-	## The marks, as three named things rather than a state you cycle blindly.
-	##
-	## Pressing the mark a folder already carries takes it off, which is the only
-	## way to get back to unmarked without a fourth button called "nothing" --
-	## and "nothing" is not a mark somebody makes, it is the absence of one.
 	var marks := HBoxContainer.new()
-	marks.name = "FolderMarks"
+	marks.name = "ReportMarks"
 	marks.add_theme_constant_override("separation", 6)
-	_face.add_child(marks)
-	var prospect_id := int(prospect.id)
-	var current := _mark_for(prospect_id)
+	_panel.body.add_child(marks)
+	var current := _mark_for(_open_id)
 	for mark in MARK_ORDER:
 		var button := Button.new()
-		button.name = "Mark%sButton" % str(MARK_WORDS[mark]).capitalize()
+		button.name = "Mark%dButton" % int(mark)
 		button.text = str(MARK_WORDS[mark])
 		button.toggle_mode = true
 		button.button_pressed = mark == current
 		var value := int(mark)
-		button.pressed.connect(func() -> void: _set_mark(prospect_id, value))
+		## Pressing the mark a card already carries takes it off, which is the only
+		## way back to unmarked without a fourth button called "nothing" -- and
+		## nothing is the absence of a mark, not a mark somebody made.
+		button.pressed.connect(func() -> void: _set_mark(_open_id, value))
 		marks.add_child(button)
+
+
+func _report_row(label_text: String, value_text: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_panel.body.add_child(row)
+	var key := Label.new()
+	## Wide enough for `Mental / Tactical`, which is the longest thing in this
+	## column. Sized against `Watched` it was 84, and the two category names with a
+	## slash in them pushed their own figures along.
+	key.name = "%sContext" % label_text
+	key.text = label_text
+	key.custom_minimum_size = Vector2(150.0, 0.0)
+	row.add_child(key)
+	var value := Label.new()
+	value.name = "%sValue" % label_text
+	value.text = value_text
+	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(value)
 
 
 ## What a scout would say instead of the number.
@@ -359,29 +432,16 @@ func _read_of(value: float) -> String:
 	return "gets by"
 
 
-func _stat_row(label_text: String, value_text: String) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	_face.add_child(row)
-	var key := Label.new()
-	key.name = "%sContext" % label_text
-	key.text = label_text
-	## Wide enough for `Mental / Tactical`, which is the longest thing that goes in
-	## this column. It was 84, sized against `Watched`, so the two category names
-	## with a slash in them pushed their own values along and the column of figures
-	## the folder is read down stopped being a column.
-	key.custom_minimum_size = Vector2(150.0, 0.0)
-	row.add_child(key)
-	var value := Label.new()
-	value.name = "%sValue" % label_text
-	value.text = value_text
-	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(value)
+func _prospect_by_id(prospect_id: int):
+	for prospect in _prospects():
+		if int(prospect.id) == prospect_id:
+			return prospect
+	return null
 
 
-## Marks live on the career, not the screen. A note you have to re-make every
-## time you open the page is not a note, and a shortlist that forgets itself
-## between sessions is worse than none.
+## Marks live on the career, not the screen. A note you have to re-make every time
+## you open the page is not a note, and a shortlist that forgets itself between
+## sessions is worse than none.
 func _mark_for(prospect_id: int) -> int:
 	if _career_manager == null or _career_manager.career == null:
 		return MARK_NONE
@@ -397,30 +457,29 @@ func _set_mark(prospect_id: int, mark: int) -> void:
 	else:
 		marks[prospect_id] = mark
 	refresh()
+	var prospect = _prospect_by_id(prospect_id)
+	if prospect != null and _panel.visible:
+		_fill_report(prospect)
 
 
-## Where they were raised, and where they play now if that is somewhere else.
-##
+## Where they were raised, and where they play now when that is somewhere else.
 ## Both fields have been on `VolleyballPlayer` since regions were built and this
-## is the first screen to read them. A scout's first line about somebody is where
-## they are from; it is not a decoration here.
+## is the first screen to read either: a scout's first line about somebody is
+## where they are from.
 func _origin_of(prospect) -> String:
 	var home := str(prospect.home_region) if "home_region" in prospect else ""
 	var club := str(prospect.club_region) if "club_region" in prospect else ""
 	if home.is_empty() and club.is_empty():
-		return "no fixed club"
+		return "No fixed club"
 	if club.is_empty() or club == home:
 		return home
 	if home.is_empty():
-		return "playing in %s" % club
+		return "Playing in %s" % club
 	return "%s, playing in %s" % [home, club]
 
 
-## How much of this is worth believing.
-##
-## `weeks_observed` is `SCOUTING.md`'s freshness clock and it decides how much a
-## report is worth, so it belongs on the face of the folder rather than behind a
-## report screen. Nobody watched is stated as such rather than as "0 weeks",
+## How much of this is worth believing. `weeks_observed` is `SCOUTING.md`'s
+## freshness clock. Nobody watched is said as such rather than as "0 weeks",
 ## which reads as a measurement that came back zero.
 func _watched_of(prospect) -> String:
 	var weeks := int(prospect.weeks_observed) if "weeks_observed" in prospect else 0
@@ -432,20 +491,10 @@ func _watched_of(prospect) -> String:
 func _traits_of(prospect) -> String:
 	if not "traits" in prospect:
 		return ""
-	var traits: Array = prospect.traits
-	if traits.is_empty():
-		return ""
 	var words: Array[String] = []
-	for entry in traits:
+	for entry in Array(prospect.traits):
 		words.append(str(entry))
 	return ", ".join(words)
-
-
-func _rating_of(prospect) -> int:
-	## Whatever the club's own summary says they are worth, so the number in this
-	## folder is the number on their profile page rather than a second opinion.
-	var summary: Dictionary = AttributeProfiles.summary_profile(prospect)
-	return roundi(float(summary.get("Overall", 50.0)))
 
 
 func _salary_of(prospect) -> String:
@@ -454,4 +503,67 @@ func _salary_of(prospect) -> String:
 	## No salary model yet. Derived from the rating so the row is populated with
 	## something monotone rather than a placeholder that sorts randomly -- and
 	## stated here so nobody reads it as a real wage bill.
-	return "~%d/wk" % (_rating_of(prospect) * 18)
+	var summary: Dictionary = AttributeProfiles.summary_profile(prospect)
+	return "~%d/wk" % (roundi(float(summary.get("Overall", 50.0))) * 18)
+
+
+## `Outside Hitter` does not fit on a card that is 178 across, and a clipped
+## label is worse than an abbreviation somebody has to learn once.
+const SHORT_ROLES := {
+	"Outside Hitter": "OH", "Opposite Hitter": "OPP", "Middle Blocker": "MB",
+	"Setter": "S", "Libero": "L", "Defensive Specialist": "DS",
+}
+
+
+func _short_role(role: String) -> String:
+	return str(SHORT_ROLES.get(role, role))
+
+
+## A photograph that is not a photograph yet.
+##
+## `voli_card.gd` can draw a real body and this board will eventually use it. Until
+## then a print with nothing recognisable in it is more honest than a placeholder
+## that says "photo": what a scout has is a picture, and a picture of somebody you
+## have not watched properly is exactly this useless.
+class _Portrait extends Control:
+	var seed_value: int = 0
+
+	func _ready() -> void:
+		set_meta("ui_style_exempt", true)
+
+	## The unexposed margin of the paper the picture was printed on. It is the one
+	## mark that says "photograph" rather than "grey box", and it costs a rect.
+	const PRINT_BORDER: float = 3.0
+
+	func _draw() -> void:
+		var light := UIPalette.control_is_light(self)
+		var ink := UIPalette.color(&"ink_faint", light)
+		draw_rect(
+			Rect2(Vector2.ZERO, size),
+			Color(1.0, 0.99, 0.96) if light else Color(0.86, 0.85, 0.81), true
+		)
+		draw_rect(
+			Rect2(
+				Vector2(PRINT_BORDER, PRINT_BORDER),
+				size - Vector2(PRINT_BORDER, PRINT_BORDER) * 2.0
+			),
+			Color(ink, 0.30), true
+		)
+		## A head and shoulders in silhouette, placed off-centre by the voli's own
+		## id so no two prints are framed identically -- which is the one thing
+		## about a snapshot you notice before you notice the person.
+		var drift := (float(seed_value * 37 % 100) / 100.0 - 0.5) * size.x * 0.18
+		var centre := Vector2(size.x * 0.5 + drift, size.y * 0.66)
+		var head := size.y * 0.24
+		draw_circle(centre - Vector2(0.0, head * 1.35), head, Color(ink, 0.55))
+		draw_rect(
+			Rect2(
+				centre - Vector2(head * 1.5, 0.0),
+				Vector2(head * 3.0, size.y - centre.y - PRINT_BORDER)
+			),
+			Color(ink, 0.55), true
+		)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_THEME_CHANGED:
+			queue_redraw()

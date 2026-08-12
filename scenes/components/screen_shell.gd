@@ -27,6 +27,15 @@ const UICorkBoardScript := preload("res://scenes/components/cork_board.gd")
 ## training screen is: the one object on the desk you carry to a session.
 const BACKING_PAPER: StringName = &"paper"
 const BACKING_CORK: StringName = &"cork"
+## Cork as the page itself, with nothing clipped over it.
+##
+## `BACKING_CORK` puts a board *behind* a card and the card is opaque, so the
+## cork only ever shows as a margin -- correct for a clipboard, and it made the
+## first scouting board a pale rectangle with a brown frame round it. The board
+## needs the opposite: the cork is the surface, and the card that would normally
+## hold the page gives up its own panel so that things can be pinned straight to
+## the wall.
+const BACKING_BOARD: StringName = &"board"
 
 ## Matched to `journal_screen.tscn` rather than chosen. Two pages an inch apart
 ## in their margins read as a bug in the one the player sees second.
@@ -71,7 +80,8 @@ static func build(
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var extra := CORK_MARGIN if backing == BACKING_CORK else 0
+	var extra := CORK_MARGIN if backing == BACKING_CORK or backing == BACKING_BOARD \
+		else 0
 	margin.add_theme_constant_override("margin_left", PAGE_MARGIN_X + extra)
 	margin.add_theme_constant_override("margin_right", PAGE_MARGIN_X + extra)
 	## The top gets the allowance too. It did not, on the reasoning that the ribbon
@@ -103,15 +113,21 @@ static func build(
 	## The card. Everything a screen has to say lives inside this one panel, which
 	## is what makes a page feel like a page rather than controls on a desk.
 	var card := PanelContainer.new()
+	## Named for the style pass, which gives anything ending in `Region` an empty
+	## stylebox -- the same escape the nav strip uses, and for the same reason: a
+	## wrapper whose whole job is to hold something else should not also be a
+	## surface.
+	card.name = "BoardRegion" if backing == BACKING_BOARD else "PageCard"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(card)
-	if backing == BACKING_CORK:
+	if backing == BACKING_CORK or backing == BACKING_BOARD:
 		## Added as a child of the card and drawn behind it, so the board tracks
 		## the card's rect through every layout pass without anything having to
 		## keep two rects in step.
 		var cork := UICorkBoardScript.new()
 		cork.name = "CorkBoard"
+		cork.clamped = backing == BACKING_CORK
 		cork.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		card.add_child(cork)
 	var card_margin := MarginContainer.new()
