@@ -78,6 +78,7 @@ away.
 | Scouting folders | `scenes/screens/scouting_screen.gd` |
 | The planner -- the daily schedule | `scenes/screens/schedule_screen.gd` |
 | Match centre | `scenes/screens/match_screen.gd` |
+| The lease -- where the squad lives | `scenes/screens/accommodation_screen.gd` |
 | The desk -- the menu | *not built yet* |
 
 "Career dashboard" and "recruitment" are dead names. A player is a **voli**.

@@ -35,6 +35,14 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 ## monthly cost, a floor budget and a sentence about who you are; a club type is
 ## a word the player never sees again.
 @export var housing_structure: String = "Bunkhouse"
+## What each voli has been eating, keyed by player id. See `FoodSupply`.
+##
+## On the career rather than on the manager that advances the week, which is
+## where it started: a bare ivar is not saved, so every load handed the whole
+## squad a fresh palate and the one quantity that is *supposed* to be a slow
+## clock reset to zero every time the game was reopened. Nobody would have
+## noticed from the numbers -- a reset palate reads as a well-fed squad.
+@export var palate_clock: Dictionary = {}
 @export var absolute_week: int = 1
 ## Which day of that week it is, 1 for Monday.
 ##
@@ -143,6 +151,7 @@ func to_dict() -> Dictionary:
 		"manager_name": manager_name, "manager_region": manager_region,
 		"manager_background": manager_background, "manager_hand": manager_hand,
 		"housing_structure": housing_structure,
+		"palate_clock": palate_clock.duplicate(true),
 		"reputation": reputation, "finances": finances,
 		"training_focus": training_focus,
 		"training_regimens": _regimen_data(),
@@ -180,6 +189,7 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.manager_background = str(data.get("manager_background", "played"))
 	state.manager_hand = str(data.get("manager_hand", "right"))
 	state.housing_structure = str(data.get("housing_structure", "Bunkhouse"))
+	state.palate_clock = Dictionary(data.get("palate_clock", {})).duplicate(true)
 	state.absolute_week = maxi(int(data.get("absolute_week", 1)), 1)
 	state.reputation = clampi(int(data.get("reputation", 10)), 0, 100)
 	state.finances = int(data.get("finances", 100000))

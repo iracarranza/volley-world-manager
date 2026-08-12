@@ -426,7 +426,7 @@ func _weekly_recovery_share(player: VolleyballPlayer) -> float:
 		crowding,
 		Accommodation.homesick(str(player.home_region), club_region),
 		discomfort,
-		FoodSupply.palate_of(_palate_clock, int(player.id)),
+		FoodSupply.palate_of(_palate_clock(), int(player.id)),
 		team.housing_small_equipment,
 	)
 
@@ -436,7 +436,13 @@ func _weekly_recovery_share(player: VolleyballPlayer) -> float:
 ## The chef rotates through whatever the table has rather than repeating -- a
 ## manager who has given them three pastes gets three weeks before anything
 ## repeats, which is `FoodSupply`'s own rule that rotating is the fix.
-var _palate_clock: Dictionary = {}
+##
+## It lives on the career rather than here. It was an ivar on the manager, which
+## is not saved, so a palate reset to zero every time the game was reopened --
+## invisible in the numbers, because a reset palate looks exactly like a squad
+## that has been fed well.
+func _palate_clock() -> Dictionary:
+	return career.palate_clock if career != null else {}
 
 
 func _advance_weekly_palate(player: VolleyballPlayer) -> void:
@@ -450,7 +456,7 @@ func _advance_weekly_palate(player: VolleyballPlayer) -> void:
 	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
 	var pastes: Array = Dictionary(table["pastes"]).keys()
 	var serving := "" if pastes.is_empty() else str(pastes[week % pastes.size()])
-	FoodSupply.advance_palate(_palate_clock, int(player.id), serving)
+	FoodSupply.advance_palate(_palate_clock(), int(player.id), serving)
 	## And a week of eating somebody else's food widens a palate, which is the
 	## ceiling in §17 doing its job: comfortable is not the same as learning.
 	if FoodSupply.widens_palate(player.palate_regions, table):

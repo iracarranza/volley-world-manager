@@ -1828,3 +1828,121 @@ The gate written for §13 keeps its shape — a voli far from home is still
 uncomfortable, a supply line still answers it — but the assertion moves from
 *missing staples* to *outside their band*, which is the honest version of what
 that gate was always trying to say.
+
+---
+
+## 18. The page: three arrangements and a column of consequences
+
+Everything above is built and none of it was drawn, which meant every decision
+in this document was being made for the manager by a default they could not see.
+`scenes/screens/accommodation_screen.gd`.
+
+### Not four rows, and not four tabs
+
+§6 proposed a board with four rows and §7 threw three of them out for moving the
+same quantity against the same axis. What survived is **three arrangements that
+genuinely trade against each other, and one column that says who they land on**:
+
+| column | the decision | reads |
+|---|---|---|
+| the lease | which building, and what an unusual one costs here | `Accommodation.STRUCTURES`, `rent_for` |
+| the room | who is in it and what else is | `crowding`, `floor_used` |
+| the table | which larders you reach, at what cost and reliability | `FoodSupply.table`, `line_cost`, `line_reliability` |
+| the week | and what all three do to one particular voli | `weekly_recovery_share` |
+
+The fourth column is the reason for the other three, and it is the difference
+between this page and a shop. A room is not better or worse; it is right for
+*this* squad or wrong for it, because §11 removed quality-of-bed as an axis and
+left conditions — homesick, eating among strangers, sharing with two others —
+every one of which varies by who you signed. A page that stopped at the first
+three columns would be a page of purchases with the consequences off screen.
+
+Which is also why the per-voli tags are only present when they are true. Twelve
+rows reading *not homesick, not hungry* is a column of noise around the two
+volis the page exists to surface.
+
+### The tags had a threshold of zero, and blamed the wrong thing
+
+Worth recording because a screenshot caught it and no gate would have. The first
+build tagged any discomfort above `0.0`, and the crowded shot —  a Bunkhouse
+with three beds, a rack of weights, and one supply line to Pāwa Hitō — came out
+with **every voli reading *eating among strangers* at 62%**.
+
+The food term was 0.09. A Landavol squad given a second larder drops from a
+comfort share of 1.00 to 0.50 against a floor of 0.55, which is a shortfall of
+nine hundredths and worth almost nothing. The missing 38% was the third bed.
+
+So the page named the one thing that was barely wrong and stayed silent about
+the thing that was — §0 in its interface form: a threshold at zero cannot
+distinguish 0.09 from 0.9, so it reports both as *true*. The fix is two-sided:
+
+1. **Tag at the club's own thresholds.** `ClubEvents.DISCOMFORT_MENTIONED` and
+   `PALATE_MENTIONED` are already the numbers at which somebody knocks on the
+   door about this. The page mentioning something the inbox would not is the
+   two of them disagreeing about what deserves a manager's attention, and there
+   is no reason for two answers.
+2. **Tag crowding at all**, which was missing entirely — the term carrying most
+   of the loss had no row-level presence, only a line in the room column.
+
+### The plan is load-bearing, so it is gated
+
+§10's rule — occupancy and equipment compete for the same floor — is the one
+thing a column of checkboxes cannot show. Two volis and a rack of weights is
+seven floor in a Bunkhouse's five, and two ticked boxes do not say so.
+
+So `scenes/components/floor_plan.gd` draws the room at the size the structure
+actually is, lays the things in it end to end **at their real widths**, and puts
+a heavy line at capacity. An occupant is twice the width of a fan because an
+occupant is twice the floor. Anything past the line is drawn outside the room,
+which is what crowding is: not a penalty that fires, a bed that does not fit.
+
+A picture that is load-bearing and derives its own arithmetic is a second
+opinion about the floor, so a gate walks it: the block widths must sum to
+`Accommodation.floor_used`, and *past the wall* must mean exactly `crowding > 0`
+in both directions, across five rooms.
+
+### The privacy screen is the case that caught it
+
+A privacy screen costs one floor and gives back an occupant's worth, so a room
+can sit past its own built wall and be uncrowded. The first version drew the
+wall at `capacity` and printed the crowding figure beside it, which put *a bed
+outside the room* directly above *over by 0.0* — the page contradicting itself
+about the single rule it exists to teach.
+
+The fix is to draw what the screen does. The partition is a second, lighter wall
+further out, `capacity + FLOOR_PER_OCCUPANT`, and blocks are judged against it —
+which is `crowding`'s own arithmetic rather than a second opinion, so the two
+cannot separate again. It is also the more honest picture: a privacy screen
+partitions a room, and now it looks like one.
+
+### What the page deliberately does not do
+
+**It does not charge rent.** §15 says rent is the first recurring cost and the
+pressure that makes the economy mean anything, and that is still right — but
+`career.finances` is written once at career creation and only ever read after.
+There is no income, no other outgoing and no bankruptcy path, so charging rent
+today is a one-way drain against nothing, which is a club economy rather than a
+screen. What the page shows instead is the **comparison**, which is the part
+that is real: a Row at 2.6 against a Longhouse at 0.7, and ×1.55 on either if
+you want it somewhere it is not from. That number decides between buildings
+without pretending to leave an account.
+
+**It is squad-wide.** `team.housing_*` holds one arrangement for everybody, per
+§11's note that a room is a loadout and per-room assignment is a screen that
+does not exist. The page inherits that honestly rather than implying rooms it
+cannot address — which is also why crowding is stated as the trade it is (rest
+down, the pairs in that room faster) rather than as a warning.
+
+**Shared installations are absent.** §15's rule is that you can furnish what you
+rent and only build what you own, and nothing owns anything yet. `ClubEvents`
+already reads `shared_installations` and receives an empty list, which is
+correct and will stay correct until building exists.
+
+### One thing this fixed on the way past
+
+`CareerManager._palate_clock` was a bare ivar on the manager, so it was never
+written to a save. Every load handed the whole squad a fresh palate, and the one
+quantity in the food model that is *supposed* to be a slow clock reset each time
+the game was reopened. Nothing errored and no figure looked wrong — a reset
+palate reads exactly like a squad that has been fed well, which is §0 at its
+quietest. It lives on `CareerState` now and round-trips under gate.

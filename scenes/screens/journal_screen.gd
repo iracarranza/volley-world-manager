@@ -9,6 +9,7 @@ signal title_requested
 signal training_requested
 signal scouting_requested
 signal encyclopedia_requested
+signal accommodation_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -17,6 +18,8 @@ const Scouting := preload("res://scripts/systems/scouting_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const Regions := preload("res://scripts/data/regions.gd")
+const AccommodationModel := preload("res://scripts/data/accommodation.gd")
+const FoodSupplyModel := preload("res://scripts/data/food_supply.gd")
 const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
 const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
@@ -285,6 +288,13 @@ func _ready() -> void:
 		)
 		header.add_child(scouting_button)
 		header.move_child(scouting_button, %TitleButton.get_index())
+		var accommodation_button := Button.new()
+		accommodation_button.text = "Accommodation"
+		accommodation_button.pressed.connect(
+			func() -> void: accommodation_requested.emit()
+		)
+		header.add_child(accommodation_button)
+		header.move_child(accommodation_button, %TitleButton.get_index())
 		var encyclopedia_button := Button.new()
 		encyclopedia_button.text = "Encyclopedia"
 		encyclopedia_button.pressed.connect(
@@ -751,14 +761,8 @@ const SAMPLE_STAFF: Array = [
 ## a cheap thick brick you would rather not chew, and neither fact explains the
 ## other. Blan'deral takes A'ace's apostrophe and is the block palate fatigue does
 ## not accumulate on -- the reset week. See `ACCOMMODATIONS_AND_CARE.md`.
-const SAMPLE_MEALS: Array[String] = [
-	"Supergruel", "Chutum Üch", "Blan'deral", "Vollyslommy",
-]
 
-## Two to four pastes on a block, bounded by the chef. Sample mix only.
-const SAMPLE_PASTES: Array = [
-	["Sharp ferment", 40], ["Smoky char", 25], ["Clean umami", 20],
-]
+
 
 
 func _refresh_club() -> void:
@@ -779,35 +783,48 @@ func _refresh_staff() -> void:
 	staff_summary.text = "\n".join(lines)
 
 
+## What the club has arranged, and a door to changing it.
+##
+## **This was four disabled chips and a sample menu.** It was honest about being
+## a mockup -- it carried `CLUB_UNBUILT` -- but the thing it was standing in for
+## exists now, and a panel showing `Supergruel` beside a real Longhouse is worse
+## than a panel showing nothing. So it reads the same model the accommodation
+## page and the weekly seam do, and says where to go to change it.
 func _refresh_accommodations() -> void:
-	if meal_option.item_count == 0:
-		for meal in SAMPLE_MEALS:
-			meal_option.add_item(meal)
-		meal_option.selected = 2
-		meal_option.disabled = true
-	## The paste board, as chips. The real control drags pastes onto a food block
-	## and offers a raw number editor for anyone who wants to type the ratio --
-	## operable by feel, inspectable by number, neither the authoritative one.
+	meal_option.visible = false
+	var team = GameManager.team
+	var region := str(CareerManager.career.region)
+	var week := int(CareerManager.career.absolute_week)
+	var table: Dictionary = FoodSupplyModel.table(region, team.supply_lines, week)
 	for child in paste_row.get_children():
 		child.queue_free()
 	var caption := Label.new()
 	caption.text = "Pastes"
 	paste_row.add_child(caption)
-	for paste in SAMPLE_PASTES:
+	var pastes: Array = Dictionary(table["pastes"]).keys()
+	for paste in pastes:
 		var chip := Button.new()
-		chip.text = "%s  %d%%" % [str(paste[0]), int(paste[1])]
+		chip.text = str(paste)
 		chip.disabled = true
 		paste_row.add_child(chip)
-	var add_chip := Button.new()
-	add_chip.text = "+"
-	add_chip.disabled = true
-	paste_row.add_child(add_chip)
+	if pastes.is_empty():
+		paste_row.add_child(Label.new())
+	var crowding := AccommodationModel.crowding(
+		str(team.housing_structure), int(team.housing_occupants_per_room),
+		team.housing_small_equipment, team.housing_large_equipment,
+	)
 	accommodations_summary.text = "\n".join([
-		"[b]Accommodations[/b]  %s" % CLUB_UNBUILT,
-		"Blocks are manufactured; the pastes are where a region tastes of itself.",
-		"The table is squad-wide by default; feeding volis separately costs more",
-		"each time. A block holds two to four pastes, and how many is the chef's",
-		"ceiling.",
+		"[b]Accommodations[/b]",
+		"%s in %s, %s, %d to a room%s." % [
+			str(team.housing_structure), region,
+			"owned" if bool(team.housing_owned) else "leased",
+			int(team.housing_occupants_per_room),
+			"" if crowding <= 0.0 else " and over its floor",
+		],
+		"Lines to %s." % (
+			"nowhere -- the table is what grows here"
+				if team.supply_lines.is_empty() else ", ".join(team.supply_lines)
+		),
 	])
 	## Foldouts rather than one long column.
 	##

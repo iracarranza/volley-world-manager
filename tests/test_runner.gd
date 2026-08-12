@@ -13,6 +13,11 @@ const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd
 const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd")
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
 const CLUB_EVENTS_SCRIPT := preload("res://scripts/data/club_events.gd")
+const FOOD_SUPPLY_SCRIPT := preload("res://scripts/data/food_supply.gd")
+const FLOOR_PLAN_SCRIPT := preload("res://scenes/components/floor_plan.gd")
+const ACCOMMODATION_SCREEN_SCRIPT := preload(
+	"res://scenes/screens/accommodation_screen.gd"
+)
 const MANAGER_PROFILE_SCRIPT := preload("res://scripts/data/manager_profile.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
@@ -211,6 +216,8 @@ func _initialize() -> void:
 	_test_food_is_a_flow_with_a_geography()
 	_test_a_match_costs_something_that_survives_the_week()
 	_test_a_dorm_is_still_a_dorm()
+	_test_the_room_is_drawn_where_the_model_says()
+	_test_the_accommodation_page_writes_what_the_week_reads()
 	_test_the_club_tells_you_what_the_rooms_did()
 	_test_the_manager_is_somebody()
 	_test_eye_parts_and_the_forked_lead()
@@ -15063,6 +15070,21 @@ func _test_the_manager_is_somebody() -> void:
 		"and a Longhouse still reads as a young club",
 	)
 
+	## **The palate clock survives too**, which it did not.
+	##
+	## It was an ivar on `CareerManager`, so it was never written to a save, and
+	## every load handed the whole squad a fresh palate. That is the failure mode
+	## §0 names in its quietest form: nothing errored, no figure looked wrong, and
+	## a reset palate reads exactly like a squad that has been fed well. The one
+	## quantity in the food model that is *supposed* to be a slow clock was
+	## reset by the act of reopening the game.
+	state.palate_clock = {"7": {"paste": "smoked roe", "value": 0.42}}
+	var reloaded: Resource = CAREER_STATE_SCRIPT.from_dict(state.to_dict())
+	_check(
+		absf(FOOD_SUPPLY_SCRIPT.palate_of(reloaded.palate_clock, 7) - 0.42) < 0.001,
+		"a voli who has eaten the same paste for weeks is still tired of it",
+	)
+
 
 ## A room becomes a question because somebody knocked on the door.
 ##
@@ -15314,6 +15336,149 @@ func _test_a_dorm_is_still_a_dorm() -> void:
 		"but never so little that the squad cannot recover at all (%.2f)"
 			% miserable,
 	)
+
+
+## The room in plan, and whether the picture can disagree with the model.
+##
+## `FloorPlan` exists because §10's one rule -- occupancy and equipment compete
+## for the same floor -- is the thing a column of checkboxes cannot show. Which
+## makes the picture load-bearing, and a load-bearing picture that derives its
+## own arithmetic is a second opinion about the floor. Every check here is the
+## same question: does the drawing come out where `Accommodation` says.
+func _test_the_room_is_drawn_where_the_model_says() -> void:
+	var plan: FloorPlan = FLOOR_PLAN_SCRIPT.new()
+
+	## **The blocks are the arithmetic.** A block's width is its floor cost, so
+	## the widths have to sum to `floor_used` -- if they ever stop, the plan is
+	## drawing a room the week does not charge for.
+	for room in [
+		{"structure": "Bunkhouse", "occupants": 2, "small": [], "large": []},
+		{"structure": "Bunkhouse", "occupants": 2, "small": ["fan"], "large": ["bath"]},
+		{"structure": "Row", "occupants": 1, "small": ["desk", "kettle"], "large": []},
+		{"structure": "Longhouse", "occupants": 4, "small": [], "large": ["free_weights"]},
+	]:
+		plan.set_room(
+			str(room["structure"]), int(room["occupants"]),
+			Array(room["small"]), Array(room["large"]),
+		)
+		var drawn := 0.0
+		for block in plan.blocks():
+			drawn += float(block["floor"])
+		_check(
+			absf(drawn - plan.used()) < 0.001,
+			"%s at %d: the plan draws %.0f floor and the model charges %.0f" % [
+				str(room["structure"]), int(room["occupants"]), drawn, plan.used(),
+			],
+		)
+
+	## **And the wall is where crowding starts.** Past the line in the picture
+	## and past zero in the model are the same condition, in both directions.
+	for room in [
+		{"structure": "Bunkhouse", "occupants": 2, "small": [], "large": []},
+		{"structure": "Bunkhouse", "occupants": 3, "small": [], "large": []},
+		{"structure": "Bunkhouse", "occupants": 2, "small": [], "large": ["free_weights"]},
+		{"structure": "Longhouse", "occupants": 2, "small": ["fan"], "large": []},
+		{"structure": "Row", "occupants": 3, "small": [], "large": []},
+	]:
+		plan.set_room(
+			str(room["structure"]), int(room["occupants"]),
+			Array(room["small"]), Array(room["large"]),
+		)
+		var over_the_wall := plan.used() > plan.effective_capacity() + 0.001
+		var crowded: float = ACCOMMODATION_SCRIPT.crowding(
+			str(room["structure"]), int(room["occupants"]),
+			Array(room["small"]), Array(room["large"]),
+		)
+		_check(
+			over_the_wall == (crowded > 0.0),
+			"%s at %d: drawn %s the wall, model says %.1f crowding" % [
+				str(room["structure"]), int(room["occupants"]),
+				"past" if over_the_wall else "inside", crowded,
+			],
+		)
+
+	## **The privacy screen is the case that catches this.** It costs a floor and
+	## gives back an occupant's worth, so a room can sit past its own built wall
+	## and be uncrowded -- which is precisely where a plan drawing one wall and a
+	## caption reading another would contradict each other on screen.
+	plan.set_room("Bunkhouse", 3, ["privacy_screen"], [])
+	_check(
+		plan.used() > plan.capacity()
+			and plan.used() <= plan.effective_capacity() + 0.001
+			and ACCOMMODATION_SCRIPT.crowding("Bunkhouse", 3, ["privacy_screen"], []) == 0.0,
+		"a screened room is past its built wall (%.0f of %.0f) and not crowded"
+			% [plan.used(), plan.capacity()],
+	)
+	_check(
+		plan.partition_relief() == ACCOMMODATION_SCRIPT.FLOOR_PER_OCCUPANT,
+		"and the partition is drawn exactly as far out as crowding forgives",
+	)
+	plan.free()
+
+
+## The page that draws all of it.
+##
+## A screen test rather than a model one, and it is here because every figure on
+## the accommodation page is read from a model that a career has to have stood
+## up first. What it checks is the boring half: that the page builds, that it
+## survives having nothing bound to it, and that editing the room through the
+## screen moves the same fields the weekly seam reads.
+func _test_the_accommodation_page_writes_what_the_week_reads() -> void:
+	var screen: AccommodationScreen = ACCOMMODATION_SCREEN_SCRIPT.new()
+	Engine.get_main_loop().get_root().add_child(screen)
+	## Unbound. A screen shown before a career exists must not take the game
+	## down with it, and every screen built in code here has had that bug once.
+	screen.refresh()
+	_check(true, "the accommodation page survives being refreshed with no career")
+
+	var team := VolleyballTeam.new()
+	team.housing_structure = "Bunkhouse"
+	team.housing_occupants_per_room = 2
+	var stub := _StubGameManager.new(team, [])
+	screen._game_manager = stub
+	screen.refresh()
+	screen._lease_signed("Row")
+	_check(
+		str(team.housing_structure) == "Row",
+		"signing a lease on the page moves the field the week reads",
+	)
+	screen._change_occupants(1)
+	_check(
+		int(team.housing_occupants_per_room) == 3,
+		"and so does crowding a room",
+	)
+	screen._install(team.housing_small_equipment, "privacy_screen", true)
+	_check(
+		team.housing_small_equipment.has("privacy_screen"),
+		"and installing something",
+	)
+	screen._run_line("Xérvu", true)
+	_check(
+		team.supply_lines.has("Xérvu"),
+		"and running a line to somewhere that grows something else",
+	)
+	## Occupancy is bounded, because §10's floor rule only means anything if a
+	## manager can push past it -- and only stays legible if they cannot push a
+	## dozen people into one room.
+	for _step in range(12):
+		screen._change_occupants(1)
+	_check(
+		int(team.housing_occupants_per_room) == screen.MAX_OCCUPANTS,
+		"a room stops at %d however many times the button is pressed"
+			% screen.MAX_OCCUPANTS,
+	)
+	screen.queue_free()
+	stub.free()
+
+
+## Enough of a GameManager for a screen to draw itself against.
+class _StubGameManager extends Node:
+	var team: Resource
+	var players: Array
+
+	func _init(team_resource: Resource, roster: Array) -> void:
+		team = team_resource
+		players = roster
 
 
 ## A match has to cost something, and it was costing nothing.

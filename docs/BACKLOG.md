@@ -6735,3 +6735,57 @@ sparse in a 30-week career and one week of rest clears one match. That is a
 *fixture cadence* fact rather than a fatigue fact, and it will change on its own
 when competitions get denser. The design target — a congested run pushes
 somebody through Laboured — is reachable now, which it was not before.
+
+---
+
+## Rent is a number nobody pays, because nothing else moves the money either
+
+`Accommodation.rent_for` has been built and correct since §15 and has never been
+called by anything but a gate. `FoodSupply.table` returns a `weekly_cost` that
+nothing spends. The accommodation page prints both.
+
+The reason it prints them rather than charging them is a measurement rather than
+an oversight: **`career.finances` is written once, at career creation
+(`career_manager.gd:117`), and only ever read after.** There is no income, no
+other recurring outgoing, and no bankruptcy path. A weekly rent charged into
+that is a one-way drain against nothing — a club economy, not a screen — and a
+game where the correct move is always the cheapest lease is a worse game than
+one where rent is a comparison between buildings.
+
+So the page shows the comparison, which is the part that is real today: a Row at
+2.6 against a Longhouse at 0.7, ×1.55 for either one somewhere it is not from.
+
+**What would close this**, in order:
+
+1. **An income.** Gate receipts, a sponsor line, a Sixnet placement payment —
+   anything with a direction opposite to rent. Without one, step 2 is a
+   countdown.
+2. **A currency conversion, measured.** `LINE_COST` and `rent` are in an
+   abstract unit and `food_supply.gd` says so in its own comment: *"No number
+   here has been measured against a budget, because the club finances that would
+   judge it are not in this model yet."* The measurement is what share of a
+   season's income a Row should be, and it cannot be taken until (1).
+3. **What happens at zero.** §16 already has the answer — a forced move is a
+   morale hit about *what it says* rather than about the beds, and moving twice
+   compounds superlinearly. That is the most interesting consequence in the
+   document and it is unreachable until money can run out.
+
+---
+
+## The accommodation page cannot address a room, only the club
+
+`team.housing_*` holds one structure, one occupancy and one equipment list for
+the whole squad, and the page inherits that. §11 called per-room assignment "a
+screen that does not exist yet" and it still does not.
+
+What that costs is specific and worth naming, because it is the best thing in
+the design: §7's dorms row is *who shares a room is who knows each other*, and
+crowding is supposed to be a **play** — you crowd a particular room when you
+want a particular setter and a particular hitter to know each other by the
+qualifier. Squad-wide, crowding is a blunt trade against everybody's rest at
+once, which is the version of the mechanic with the interesting half removed.
+
+It needs rooms as objects (a structure has a `rooms` count already), volis
+assigned to them, and `PairFamiliarity` gaining faster inside one — plus the
+connection lines in `FILLING_THE_SIX.md`, which would finally have the second
+input the manager controls that makes them a graph you play rather than watch.
