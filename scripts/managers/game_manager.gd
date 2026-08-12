@@ -206,6 +206,11 @@ func seed_vertical_slice_data() -> void:
 			lineup.assign_slot(slot_number, player_id)
 		rotations[rotation_number] = lineup
 	selected_rotation = 1
+	## Seed what the squad already knows about each other. A fresh career would
+	## otherwise open with one identical number for every pair, and a connection
+	## drawn between six identical numbers reports nothing for most of a season.
+	if team != null:
+		Familiarity.seed_pair_familiarity(players, team.pair_familiarity)
 	saved_plays.clear()
 	called_play_id = -1
 	active_play_ids_by_rotation.clear()
@@ -606,6 +611,10 @@ func resolve_active_rally(
 	development_continuous_reception: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
+	## Handed in before the resolve, not looked up inside it. The resolver stays
+	## a function of what it was given, which is what makes a rally replayable
+	## from a seed.
+	simulator.pair_familiarity = team.pair_familiarity if team != null else {}
 	return simulator.resolve(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,

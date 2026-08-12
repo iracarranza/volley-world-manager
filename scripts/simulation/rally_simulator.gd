@@ -19,6 +19,21 @@ const RallyFeatureFlagsModel := preload("res://scripts/simulation/rally_feature_
 const GeometricAttackResolverModel := preload(
 	"res://scripts/simulation/geometric_attack_resolver.gd"
 )
+## What two volis on this side know about each other. Handed in by the manager
+## before a rally rather than looked up, so the resolver stays a pure function of
+## what it was given -- see the note on `rally_seed`.
+const PairFamiliarityModel := preload("res://scripts/data/pair_familiarity.gd")
+## How much a trusted hitter is worth to the setter's option score.
+##
+## Sized against `leadership_pull`, the other pull term here, which tops out at
+## 0.18. A pair at the ceiling sits 76 points above the baseline, so 0.16 buys
+## about 0.12 of score at full trust for a good setter -- comparable to the
+## captain's pull and well below `base_quality`, whose spread across a roster is
+## the better part of a point. The intent is that trust breaks a tie between
+## comparable arms and never overrules a much better one.
+const SETTER_TRUST_WEIGHT_LOW: float = 0.06
+const SETTER_TRUST_WEIGHT_HIGH: float = 0.16
+
 const GeometricAttackPromotionModel := preload(
 	"res://scripts/simulation/geometric_attack_promotion.gd"
 )
@@ -992,6 +1007,12 @@ var opponent_anticipated_lane: String = ""
 var previous_serves: Dictionary = {}
 ## Signed from the home side's perspective. Opponent decisions read the inverse.
 var current_match_flow: float = 0.0
+## The home squad's pair table, handed in rather than reached for.
+##
+## Empty is a valid state and means *nobody is tracking this* -- every pair reads
+## at the baseline and the trust term contributes nothing, which is what the
+## opponent's setter should get until opponents keep tables of their own.
+var pair_familiarity: Dictionary = {}
 var last_set_decision: Dictionary = {}
 ## Names available to player-facing narration, filled in as the rally reaches
 ## each contact.
@@ -9331,13 +9352,33 @@ func _setter_option_terms(
 		0.0, 1.0,
 	)
 	var leadership_pull := desperation * float(hitter.leadership) / 100.0 * 0.18
+	## **How well this setter knows this hitter.**
+	##
+	## The one term here that is about a *pair* rather than about either voli
+	## alone. A setter goes to the hitter whose run they can feel, and stays away
+	## from the one whose timing they are still guessing at -- which is why
+	## bringing in a better arm does not immediately make them the first option.
+	##
+	## Read through the setter's own judgement, as everything else here is: a
+	## good setter's preference for a trusted hitter is a *read*, and a poor
+	## one's is a habit. Centred on the baseline so an untracked pair -- a
+	## friendly, an opponent whose table nobody keeps -- scores neutral rather
+	## than as strangers.
+	var trust := (
+		PairFamiliarityModel.of(pair_familiarity, int(setter.id), int(hitter.id))
+		- PairFamiliarityModel.BASELINE
+	) / 100.0
+	var trust_pull := trust * lerpf(
+		SETTER_TRUST_WEIGHT_LOW, SETTER_TRUST_WEIGHT_HIGH, judgment
+	)
 	var noise_key := "%d|%d|%d|%s" % [
 		rally_seed, setter.id, hitter.id, lane,
 	]
 	var stable_noise := float(posmod(hash(noise_key), 2001)) / 1000.0 - 1.0
 	var misread := stable_noise * (1.0 - judgment) * 0.22
 	var score := base_quality + set_quality * 0.10 + instruction_bias \
-		+ leadership_pull + misread - feasibility_cost - height_cost - read_penalty
+		+ leadership_pull + trust_pull + misread \
+		- feasibility_cost - height_cost - read_penalty
 	return {
 		"player_id": hitter.id,
 		"lane": lane,
@@ -9353,6 +9394,7 @@ func _setter_option_terms(
 		"read_penalty": read_penalty,
 		"instruction_bias": instruction_bias,
 		"leadership_pull": leadership_pull,
+		"trust_pull": trust_pull,
 		"misread": misread,
 	}
 
