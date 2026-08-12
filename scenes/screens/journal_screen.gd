@@ -724,14 +724,16 @@ func _navigate(section_name: String) -> void:
 
 ## The Club section: staff, accommodations, sponsorships.
 ##
-## Deliberately inert. Every control here is laid out and populated with
-## plausible sample data, nothing persists, and nothing reaches the simulation.
-## The point is to see the shape and judge the information density before any of
-## it is built -- and to make the systems visible as *intended* rather than
-## leaving them as a doc nobody opens.
+## **Two of the three are real now.** It was laid out entirely with plausible
+## sample data on the reasoning that seeing the shape early is worth more than
+## waiting for the systems -- which was true, and which has an expiry date that
+## this panel went well past. Staff and accommodations both had working models
+## while this page showed invented people eating invented food.
 ##
-## Every panel says so on its own face. A stub that does not announce itself is
-## indistinguishable from a feature that is broken.
+## Only sponsorships is still a stub, and the rule it obeys is the one this
+## comment always stated: a stub that does not announce itself is
+## indistinguishable from a feature that is broken. What it no longer does is
+## *describe* the system it stands in for -- see `_refresh_sponsorships`.
 const CLUB_UNBUILT := "[i]Not implemented. Shown to judge layout.[/i]"
 
 ## ## The staff panel was four people who did not exist
@@ -750,7 +752,6 @@ const CLUB_UNBUILT := "[i]Not implemented. Shown to judge layout.[/i]"
 ## their tenure, which is the same fact without the lesson attached.
 
 
-func _refresh_club() -> void:
 func _refresh_club() -> void:
 	_refresh_staff()
 	_refresh_accommodations()
@@ -771,8 +772,7 @@ func _refresh_staff() -> void:
 		lines.append("[b]%s[/b] · %s" % [str(member.role), str(member.display_name)])
 		lines.append("    %s · %s · %d · %s" % [
 			str(member.home_region), member.resource_owned(), int(member.rating),
-			("%d weeks here" % int(member.weeks_employed))
-				if int(member.weeks_employed) > 0 else "just arrived",
+			_tenure(int(member.weeks_employed)),
 		])
 		lines.append("")
 	staff_summary.text = "\n".join(lines)
@@ -785,6 +785,43 @@ func _refresh_staff() -> void:
 ## exists now, and a panel showing `Supergruel` beside a real Longhouse is worse
 ## than a panel showing nothing. So it reads the same model the accommodation
 ## page and the weekly seam do, and says where to go to change it.
+## The four, in one line each, for the panel beside the wheel.
+func _staff_brief() -> String:
+	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
+		else []
+	if staff.is_empty():
+		return "Nobody hired."
+	var lines: Array[String] = []
+	for entry in staff:
+		var member := entry as VolleyballStaffMember
+		if member != null:
+			lines.append("%s  %d" % [str(member.role), int(member.rating)])
+	return "\n".join(lines)
+
+
+## Five figures unbroken is a number nobody reads at a glance.
+func _grouped(amount: int) -> String:
+	var digits := str(absi(amount))
+	var out := ""
+	for index in range(digits.length()):
+		if index > 0 and (digits.length() - index) % 3 == 0:
+			out += ","
+		out += digits[index]
+	return out
+
+
+## How long they have been here, said the way somebody would say it.
+func _tenure(weeks: int) -> String:
+	if weeks <= 0:
+		return "just arrived"
+	if weeks == 1:
+		return "one week here"
+	if weeks < 52:
+		return "%d weeks here" % weeks
+	var years := weeks / 52
+	return "a year here" if years == 1 else "%d years here" % years
+
+
 func _refresh_accommodations() -> void:
 	meal_option.visible = false
 	var team = GameManager.team
@@ -2101,9 +2138,13 @@ func _refresh_team() -> void:
 		_player_name(GameManager.team.captain_id),
 		_player_name(GameManager.team.libero_ids[0]) if not GameManager.team.libero_ids.is_empty() else "None",
 		_depth_chart_text()]
-	identity_finance_panel.text = "[b]Identity[/b]\n%s\n\n[b]Reputation[/b]\n%d/100\n\n[b]Funds[/b]\n$%d\n\n[b]Region[/b]\n%s" % [
+	identity_finance_panel.text = "[b]Identity[/b]\n%s\n\n[b]Reputation[/b]\n%d/100\n\n[b]Funds[/b]\n$%s\n\n[b]Region[/b]\n%s" % [
 		CareerManager.career.identity, CareerManager.career.reputation,
-		CareerManager.career.finances, CareerManager.career.region]
+		_grouped(int(CareerManager.career.finances)), CareerManager.career.region]
+	## The reserved box said `Coaching staff (reserved)` while four staff members
+	## existed and were listed one tab away. A placeholder outliving the thing it
+	## held space for reads as a broken feature.
+	%StaffPlaceholderLabel.text = _staff_brief()
 	_refresh_team_wheel()
 	_populate_roster_list(individual_training_roster_list)
 	if individual_training_roster_list.item_count > 0:

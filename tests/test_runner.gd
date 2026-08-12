@@ -14,6 +14,9 @@ const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
 const CLUB_EVENTS_SCRIPT := preload("res://scripts/data/club_events.gd")
 const FOOD_SUPPLY_SCRIPT := preload("res://scripts/data/food_supply.gd")
+const STAFF_GENERATOR_SCRIPT := preload("res://scripts/systems/staff_generator.gd")
+const STAFF_MEMBER_SCRIPT := preload("res://scripts/models/staff_member.gd")
+const SCOUTING_SCRIPT := preload("res://scripts/systems/scouting_system.gd")
 const FLOOR_PLAN_SCRIPT := preload("res://scenes/components/floor_plan.gd")
 const ACCOMMODATION_SCREEN_SCRIPT := preload(
 	"res://scenes/screens/accommodation_screen.gd"
@@ -220,6 +223,7 @@ func _initialize() -> void:
 	_test_the_accommodation_page_writes_what_the_week_reads()
 	_test_changing_where_they_live_has_a_price()
 	_test_a_region_makes_pastes_and_not_a_grocery_list()
+	_test_the_club_already_has_staff()
 	_test_the_club_tells_you_what_the_rooms_did()
 	_test_the_manager_is_somebody()
 	_test_eye_parts_and_the_forked_lead()
@@ -15559,6 +15563,90 @@ func _test_changing_where_they_live_has_a_price() -> void:
 		ACCOMMODATION_SCRIPT.rooms_occupied("Farmhouse", 40, 2)
 			== int(ACCOMMODATION_SCRIPT.STRUCTURES["Farmhouse"]["rooms"]),
 		"and a squad bigger than the building is still inside the building",
+	)
+
+
+## The club already has staff, and for the whole life of the project it did not.
+##
+## `VolleyballStaffMember` was modelled, persisted, had its tenure incremented
+## every week by `advance_week`, and was read by `ScoutingSystem` -- and nothing
+## ever created one. `career.staff` was empty in every save ever played, so
+## `scout_rating` returned **0** every time. Every scouting reading in the game
+## ran at the worst possible scout, silently, and `scout_id_for` never found
+## anybody, so the per-scout belief the design is built around had exactly one
+## view: the club's.
+##
+## `FAILURE_MODES` §0 at its quietest -- a knob with a stated range of 1 to 100
+## that could only ever hold one value, failing without a single error. This gate
+## exists so it cannot happen again by the same route: the assertion is not that
+## the generator works, it is that **a scout rating is reachable at all.**
+func _test_the_club_already_has_staff() -> void:
+	var staff: Array = STAFF_GENERATOR_SCRIPT.for_club("Landavol", "Established", 4242)
+
+	## One of each role, because the design's whole argument for four roles is
+	## that each owns one resource -- a club missing its physio would have a
+	## resource with no owner and nothing to say so.
+	var roles := {}
+	for entry in staff:
+		roles[str(entry.role)] = true
+	for role in STAFF_MEMBER_SCRIPT.ROLES:
+		_check(roles.has(str(role)), "a new club has a %s" % str(role))
+
+	## **The one that would have caught the bug.**
+	var rating: int = SCOUTING_SCRIPT.scout_rating(staff)
+	_check(
+		rating > 0,
+		"and a scout whose rating is reachable at all (%d)" % rating,
+	)
+
+	## The spread inside a club is the point of the layer: one with a good scout
+	## and a poor chef is a different club from the reverse, and neither is
+	## better. Four identical numbers would be four hires with interchangeable
+	## values, which is the failure `staff_member.gd` names in its own header.
+	var lowest := 101
+	var highest := 0
+	for entry in staff:
+		lowest = mini(lowest, int(entry.rating))
+		highest = maxi(highest, int(entry.rating))
+	_check(
+		highest - lowest >= 5,
+		"the four are not interchangeable (%d to %d)" % [lowest, highest],
+	)
+
+	## And where you took the job still says what you inherited, off the same two
+	## facts `create_career` already reads for funds and standing.
+	var comfortable := 0
+	var scraping := 0
+	for entry in STAFF_GENERATOR_SCRIPT.for_club("Landavol", "Established", 77):
+		comfortable += int(entry.rating)
+	for entry in STAFF_GENERATOR_SCRIPT.for_club("Tu'ul ys Feynt", "Founded", 77):
+		scraping += int(entry.rating)
+	_check(
+		comfortable > scraping,
+		"an established major-region club inherits better people (%d against %d)"
+			% [comfortable, scraping],
+	)
+
+	## Staff are from somewhere, and the name says where -- the same rule the
+	## roster obeys. A staff list of `Staff` is a list nobody authored.
+	for entry in staff:
+		_check(
+			str(entry.display_name) != "Staff"
+				and not str(entry.display_name).is_empty(),
+			"%s is a person with a name (%s, from %s)" % [
+				str(entry.role), str(entry.display_name), str(entry.home_region),
+			],
+		)
+
+	## And they survive a save, since tenure is a slow clock the same way the
+	## palate is and a reset one reads as a club that just hired everybody.
+	var state := CAREER_STATE_SCRIPT.new()
+	state.staff.assign(staff)
+	var restored: Resource = CAREER_STATE_SCRIPT.from_dict(state.to_dict())
+	_check(
+		restored.staff.size() == staff.size()
+			and SCOUTING_SCRIPT.scout_rating(restored.staff) == rating,
+		"and the people you inherited are still here after a reload",
 	)
 
 
