@@ -15,6 +15,7 @@ const Calendar := preload("res://scripts/data/calendar_rules.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const WorldPopulation := preload("res://scripts/systems/world_population.gd")
 const WorldAging := preload("res://scripts/systems/world_aging.gd")
+const StaffGen := preload("res://scripts/systems/staff_generator.gd")
 
 signal career_changed
 signal career_loaded
@@ -142,6 +143,10 @@ func create_career(
 	if not error.is_empty():
 		return error
 	state.fixtures = _starting_fixtures(region)
+	## **The club already has staff, and until now it never did.** `career.staff`
+	## was empty in every save ever played, which meant `ScoutingSystem` read a
+	## scout rating of zero for the whole game and nothing said so.
+	state.staff.assign(StaffGen.for_club(region, organization_type, seed_value + 313))
 	## The world is built once, here, and then kept. The transfer market is a
 	## slice taken out of it rather than a separate roll, so every player the
 	## manager can sign is a real person from somewhere with a real place in

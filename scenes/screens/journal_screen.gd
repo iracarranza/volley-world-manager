@@ -734,37 +734,23 @@ func _navigate(section_name: String) -> void:
 ## indistinguishable from a feature that is broken.
 const CLUB_UNBUILT := "[i]Not implemented. Shown to judge layout.[/i]"
 
-## Sample staff. Four roles, each owning one resource -- see CLUB_LIFE.md.
-## Regions come from `VolleyballRegions.DEFINITIONS`, and each staff name follows
-## that region's naming tradition -- the same rule the roster already obeys.
-## Invented place names here would undercut the one thing this panel is trying to
-## teach, which is that origin is a real coordinate with a cost attached.
-const SAMPLE_STAFF: Array = [
-	["Assistant Coach", "Rennik Vaal", "Landavol", "Training throughput",
-		"Runs the week's sessions. Better coaches convert the same hours into more."],
-	["Scout", "Edda Vinter", "Spëddigh", "Information confidence",
-		"A weak scout does not give you worse volis. It gives you a blurrier roster."],
-	## Region column names the *place*; the familiarity line uses the *demonym*
-	## (`VolleyballRegions.DEMONYMS`). That is the distinction doing visible work:
-	## you are from Xérvu, the flavour is Xérvyan.
-	["Chef / Nutritionist", "Amara Oyelaran", "Xérvu", "Morale and nourishment",
-		"Works Xérvyan and Largen flavours well. Can hold three plans a week."],
-	["Physio", "Remy Aucoin", "Bloc du Larg", "Condition and recovery",
-		"Owns fatigue. Occasionally owns the complaints that follow it."],
-]
-
-## Blocks, not dishes. These are manufactured products, and the spelling of a
-## product name is where it was made -- Chutum Üch takes Spëddigh's umlaut. The
-## culture is in the pastes below, never in the block.
+## ## The staff panel was four people who did not exist
 ##
-## Origin and function are separate axes: Chutum Üch is Spëddigh-made *and* it is
-## a cheap thick brick you would rather not chew, and neither fact explains the
-## other. Blan'deral takes A'ace's apostrophe and is the block palate fatigue does
-## not accumulate on -- the reset week. See `ACCOMMODATIONS_AND_CARE.md`.
+## It printed `Rennik Vaal`, `Edda Vinter`, `Amara Oyelaran` and `Remy Aucoin`
+## with regions, the resource each owns, and a sentence explaining what that
+## resource does — under a `CLUB_UNBUILT` marker, so it was honest about being a
+## mockup. What it was a mockup *of* had been built for months: the model, the
+## save, the weekly tenure counter and the scouting system that reads it. The one
+## missing piece was anybody creating one, and `StaffGenerator` closes that.
+##
+## The sentences are gone with the sample. `"A weak scout does not give you worse
+## volis. It gives you a blurrier roster."` is a good sentence and it is the game
+## telling a player the conclusion they are supposed to reach by signing somebody
+## on a vague report and finding out. What replaces it is the scout's rating and
+## their tenure, which is the same fact without the lesson attached.
 
 
-
-
+func _refresh_club() -> void:
 func _refresh_club() -> void:
 	_refresh_staff()
 	_refresh_accommodations()
@@ -772,14 +758,23 @@ func _refresh_club() -> void:
 
 
 func _refresh_staff() -> void:
-	var lines: Array[String] = ["[b]Staff[/b]  %s" % CLUB_UNBUILT, ""]
-	for entry in SAMPLE_STAFF:
-		lines.append("[b]%s[/b] · %s" % [str(entry[0]), str(entry[1])])
-		lines.append("    Region: %s    Owns: %s" % [str(entry[2]), str(entry[3])])
-		lines.append("    [i]%s[/i]" % str(entry[4]))
+	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
+		else []
+	if staff.is_empty():
+		staff_summary.text = "[b]Staff[/b]\n\nNobody hired."
+		return
+	var lines: Array[String] = ["[b]Staff[/b]", ""]
+	for entry in staff:
+		var member := entry as VolleyballStaffMember
+		if member == null:
+			continue
+		lines.append("[b]%s[/b] · %s" % [str(member.role), str(member.display_name)])
+		lines.append("    %s · %s · %d · %s" % [
+			str(member.home_region), member.resource_owned(), int(member.rating),
+			("%d weeks here" % int(member.weeks_employed))
+				if int(member.weeks_employed) > 0 else "just arrived",
+		])
 		lines.append("")
-	lines.append("Four roles, two tiers. Two make volis better; two keep them")
-	lines.append("knowable and available.")
 	staff_summary.text = "\n".join(lines)
 
 
@@ -839,22 +834,26 @@ func _refresh_accommodations() -> void:
 	## space the controls do not need: a full-width dropdown over a narrow list
 	## is mostly whitespace, and whitespace that carries nothing is not legible,
 	## it is just empty.
-	reaction_panel.text = "\n".join([
-		"[b]Feli · Rusa Kentaro[/b]",
-		"    [i]happy; the ferment tastes like home[/i]",
-		"",
-		"[b]Vegi · Odile Ferrand[/b]",
-		"    [i]tiring of the ferment[/i]",
-		"",
-		"[b]Avi · Sanne Rooijakkers[/b]",
-		"    [i]\"I think I'm allergic to Xérvyan food.\"[/i]",
-		"",
-		"[b]Vegi · Petra Hallam[/b]",
-		"    [i]no comment[/i]",
-		"",
-		"[i]The allergy may not be real. Volis report what they feel, not what",
-		"is happening to them, and telling those apart is the physio's job.[/i]",
-	])
+	## What the squad is actually eating, per voli, rather than four invented
+	## quotes and a paragraph explaining that volis report what they feel. The
+	## paragraph was the game telling a player the thing an unreliable report is
+	## supposed to teach them by being unreliable.
+	var reactions: Array[String] = []
+	for player in GameManager.players:
+		var palate := FoodSupplyModel.palate_of(
+			CareerManager.career.palate_clock, int(player.id)
+		)
+		var discomfort := FoodSupplyModel.discomfort(player.palate_regions, table)
+		var word := "settled"
+		if discomfort >= 0.35:
+			word = "nothing here is theirs"
+		elif palate >= 0.55:
+			word = "tired of it"
+		reactions.append("[b]%s[/b] · %s" % [str(player.display_name), word])
+		if reactions.size() >= 6:
+			break
+	reaction_panel.text = "\n".join(reactions) if not reactions.is_empty() \
+		else "Nobody on the roster."
 	## Two columns because there are two places: grower ▸ seller. Every core
 	## region sells a paste its minor neighbour grows, and the pairing is already
 	## in `VolleyballRegions.REGION_ADJACENCY` -- six majors, six minors, one
@@ -933,28 +932,17 @@ func _add_foldout(
 		header.text = ("▾  " if pressed else "▸  ") + title)
 
 
+## Sponsorships are not built, and this says so in one line.
+##
+## It used to carry two paragraphs explaining that an organisation approaches a
+## voli rather than the club, four invented contracts with progress bars, and a
+## closing note about how a rival's requirements would read fuzzier. All of it
+## described a system with no model, no save field and no code — so every word
+## was the design document leaking onto the page, and the progress bars were the
+## worst of it: `4 / 5` is a number, and a number that is not counting anything
+## is the one thing this interface may never print.
 func _refresh_sponsorships() -> void:
-	sponsorship_summary.text = "\n".join([
-		"[b]Sponsorships[/b]  %s" % CLUB_UNBUILT,
-		"",
-		"An organisation approaches a [i]voli[/i], not the club, and keeps paying",
-		"only while the terms are met. Failing costs their morale and your standing",
-		"with that sponsor — never the club's survival.",
-		"",
-		"[b]Active[/b]",
-		"    Rusa Kentaro — Harbour Produce Co.",
-		"        Play in 5 consecutive fixtures.        [color=#7fbf6a]4 / 5[/color]",
-		"    Odile Ferrand — Spëddigh Ironworks",
-		"        Record 20 digs across 5 matches.       [color=#c9a227]11 / 20[/color]",
-		"",
-		"[b]Offered[/b]",
-		"    Sanne Rooijakkers — Vollyslommy Kitchens",
-		"        Keep a sweet paste on the table all month.",
-		"        [i]Collides with what the chef would otherwise cook.[/i]",
-		"",
-		"[i]Requirements a rival's volis are chasing would read fuzzier than this;",
-		"how much you can see is the scout's business.[/i]",
-	])
+	sponsorship_summary.text = "[b]Sponsorships[/b]  %s" % CLUB_UNBUILT
 
 
 func _refresh_home() -> void:
@@ -1299,10 +1287,10 @@ func _refresh_news() -> void:
 func _refresh_roster_status() -> void:
 	var errors := GameManager.match_roster_errors()
 	if errors.is_empty():
-		roster_status_label.text = "Lineup complete: six rotation slots filled, no conflicts."
+		roster_status_label.text = "Six named."
 		roster_status_label.remove_theme_color_override("font_color")
 	else:
-		roster_status_label.text = "Lineup incomplete -- %s" % "; ".join(errors)
+		roster_status_label.text = "; ".join(errors)
 		roster_status_label.add_theme_color_override("font_color", Color(0.95, 0.55, 0.35))
 
 
@@ -1646,7 +1634,7 @@ func _position_training_preview(_index: int) -> void:
 	if player == null: return
 	var target := position_training_option.get_item_text(position_training_option.selected)
 	if target == "None":
-		position_training_summary.text = "No individual position training assigned."
+		position_training_summary.text = "Nothing assigned."
 		return
 	var familiarity := float(player.position_familiarity.get(target, 0.0))
 	position_training_summary.text = "%s: %s (%d%%) · suitability %d%% · adaptability %d" % [target,
@@ -2101,7 +2089,10 @@ func _key_attributes(player: VolleyballPlayer) -> String:
 
 
 func _refresh_team() -> void:
-	team_summary.text = "[font_size=22][b]%s Identity[/b][/font_size]\n%s\nRegional alignment %d%% · Opponent adaptation %d%%\nTactical familiarity %d%% · Cohesion %d%%\nCaptain: %s · Libero: %s\n\n[b]Depth chart[/b]\n%s" % [
+	## Figures and names. The heading used to read `Harbor City VC Identity`,
+	## which is the club's name with a category noun stapled to it -- the panel is
+	## on the Team tab, so what else would it be.
+	team_summary.text = "[font_size=22][b]%s[/b][/font_size]\n%s\nRegional alignment %d%% · Opponent adaptation %d%%\nTactical familiarity %d%% · Cohesion %d%%\nCaptain: %s · Libero: %s\n\n[b]Depth chart[/b]\n%s" % [
 		GameManager.team.team_name, GameManager.team.identity,
 		roundi(GameManager.team.regional_alignment * 100.0),
 		roundi(lerpf(0.09, 0.18, GameManager.team.regional_alignment) * 100.0),
@@ -2146,10 +2137,15 @@ func _refresh_team_wheel() -> void:
 			starters.append(player)
 	if starters.is_empty():
 		team_attribute_wheel.visible = false
-		team_wheel_caption.text = "No starting lineup set. Assign starters on the Roster tab to see the squad's aggregate profile."
+		team_wheel_caption.text = "No starters named."
 		return
 	team_attribute_wheel.visible = true
-	team_wheel_caption.text = "Starting lineup average across %d players. Differences between axes are amplified so real strengths and weaknesses read clearly; a balanced squad still shows as balanced." % starters.size()
+	## **The caption used to explain the amplification.** *"Differences between
+	## axes are amplified so real strengths and weaknesses read clearly; a
+	## balanced squad still shows as balanced."* That is the drawing apologising
+	## for itself in advance, and it is telling a player how to read a shape they
+	## can see. What the caption is for is saying whose shape it is.
+	team_wheel_caption.text = "The six who start"
 
 	var totals := {}
 	for player in starters:
@@ -2191,7 +2187,7 @@ func _refresh_transfers() -> void:
 		transfer_list.select(0)
 		_transfer_selected(0)
 	else:
-		transfer_detail.text = "No regional candidates currently available."
+		transfer_detail.text = "Nobody available."
 		sign_button.disabled = true
 
 
@@ -2200,7 +2196,7 @@ func _transfer_selected(index: int) -> void:
 	var player := _market_player(selected_transfer_id)
 	if player == null:
 		return
-	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Ability %s · Potential %s\n%s\n\nPrototype testing: freely add this player to the roster." % [
+	transfer_detail.text = "[font_size=22][b]%s[/b][/font_size] · %s\nAge %d · Ability %s · Potential %s\n%s" % [
 		player.display_name, player.position_role, player.age,
 		AttributeProfiles.grade(float(player.current_ability_score())),
 		AttributeProfiles.grade(float(player.potential)), _key_attributes(player)]
@@ -2212,7 +2208,7 @@ func _transfer_selected(index: int) -> void:
 		transfer_player_attribute_wheel, player, scouting_confidence(player)
 	)
 	sign_button.disabled = false
-	sign_button.text = "Add to Testing Roster"
+	sign_button.text = "Sign"
 
 
 func _sign_transfer() -> void:
