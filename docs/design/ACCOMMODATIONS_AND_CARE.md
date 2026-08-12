@@ -589,3 +589,98 @@ because it is the only genuinely new state, then (1) and (4) together.
 - Whether differentiating one voli's table from the squad's is paid in money, in
   the chef's attention, or both. §2c settles that it *compounds*; it does not
   settle in what currency.
+
+---
+
+## 7. Review: three of the four rows cannot work yet, and one row got better
+
+### The measurement §6 skipped
+
+§6 proposes four rows. Three of them — table, dorms, care — are multipliers on
+fatigue recovery, and it names "perhaps ±15%" before anything had looked at what
+that is fifteen percent *of*.
+
+`tools/run_recovery_headroom_probe.gd`, a career simulated 30 weeks, 300 weekly
+readings of every voli's fatigue:
+
+| p10 | p50 | p75 | p90 | p99 | peak |
+|---|---|---|---|---|---|
+| 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | **0.014** |
+
+**One week in thirty had anybody carrying any fatigue at all**, and the worst
+reading all season was 0.014 against a `LABOURED_ONSET` of 0.34.
+
+So the table, the dorms and the care row are three dials on a number that is
+already spent. Not mis-tuned — *inoperable*. A ±15% multiplier on a recovery
+that has nothing to recover is exactly §0: a knob that cannot reach its own
+stated range, failing silently, and it would fail silently here because a
+manager buying better food and seeing no change has no way to tell whether the
+food is weak or the mechanic is dead.
+
+This is not an accommodation bug. Weekly recovery currently returns every voli
+to zero, which means `FatigueModel`'s three stages are unreachable outside a
+single match — the staged design §6 correctly notes is built is also, between
+matches, never entered. **That is the prerequisite, and it is a simulation
+change rather than a screen.** Accommodation cannot be built on top of it until
+a week can end with somebody tired.
+
+### And the rows are not four decisions
+
+Even once fatigue persists: table, dorms and care all move the same quantity,
+so they are one decision with three dials. They trade only against **money**,
+which is the weakest axis available — it asks a manager to have funds, not to
+understand anything. A player will set all three as high as the budget allows
+and never think about them again.
+
+Hours is the exception and shows what the others should look like: unstructured
+time against training time is a real opposition, and a club that chooses either
+is choosing, not merely affording.
+
+### The row that can be fixed today: dorms
+
+§6 gives dorms "recovery ceiling, and the pairings mentoring reads" — the second
+half vague because nothing pair-shaped existed. `PairFamiliarity` exists now,
+it is symmetric, it is on the same 0–100 scale as everything else, and the
+setter already reads it when choosing a hitter.
+
+So **who shares a room is who knows each other**, and the row becomes a real
+opposition rather than a purchase:
+
+| arrangement | recovery | what it builds |
+|---|---|---|
+| singles | best ceiling | nothing; every pair drifts at the idle rate |
+| shared, chosen | slightly worse | the pairs you chose, faster than matches build them |
+| shared, crowded | worst | pairs across the whole squad, thinly |
+
+That is a decision with two goods on opposite ends, it is legible without a
+tutorial, and it lands somewhere the manager already looks: a setter and a
+hitter who room together are a setter and a hitter who get set to each other.
+It also gives the connection lines in `FILLING_THE_SIX.md` a **second input the
+manager controls**, which is the difference between a graph you watch and a
+graph you play.
+
+### Palate's open question has an answer now
+
+§5 leaves open "whether palate fatigue is visible as a number or has to be read
+from behaviour", preferring behaviour and worrying about usability.
+
+The cogniticon layer answers it. It has an **ambient tier** — quiet, persistent,
+drawn above every voli — which is currently carrying almost nothing but
+`committed`, and a rule that ambient marks are *dimmer, not smaller*. A tired
+palate is exactly that shape: a low-grade standing state, true of somebody for
+weeks, that should never interrupt a rally. It reads from behaviour because it
+is a mark on a voli rather than a row in a table, and it is legible because the
+grade colour is the same scale as everything else.
+
+### Order, revised
+
+1. **Fatigue has to survive a week.** Nothing else here is buildable first, and
+   the measurement above is the argument.
+2. **Weekly recovery as a named function**, per §6 — but now with something to
+   attach to.
+3. **Dorms against pair familiarity**, which is the only row that already has
+   both of its ends built.
+4. Palate, table, care, and the screen.
+
+§6 had (2) first and that was right for the wrong reason: it read as a
+refactor, and it is actually the seam where the missing quantity goes.
