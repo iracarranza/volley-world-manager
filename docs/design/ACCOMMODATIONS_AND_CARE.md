@@ -897,3 +897,200 @@ stops working the moment the objection is *to volleyball*, because that imports
 a value conflict the setting has no use for.
 
 Recorded as a lean, not a decision: **indifference, not antagonism.**
+
+---
+
+## 10. Housing in full: floor, rooms, and three sizes of thing to put in them
+
+A complete proposal, built on one constraint. Everything below is shape rather
+than calibration — no number here has been measured, and none should be until
+fatigue survives a week (§7).
+
+### The one rule: **occupancy and equipment compete for the same floor**
+
+A room has a capacity measured in **floor**. A person takes floor. So does a
+rack of weights. That single rule generates every decision in this section, and
+it is the reason the design cannot collapse into a ladder: a bigger room does
+not mean *better*, it means *you may choose differently*.
+
+| | floor |
+|---|---|
+| one occupant | 2 |
+| small equipment | 1 |
+| large equipment | 3 |
+
+**Comfort, and one over.** A room at or under its floor is comfortable. A room
+one occupant over is **crowded**: rest efficacy drops, pair familiarity builds
+faster, and the crash condition in §8 becomes reachable. Crowding is a
+deliberate play, not a failure — you crowd a room when you want two volis to
+know each other by the qualifier.
+
+### Housing types
+
+Three, and the third is deliberately not "the best one".
+
+#### Bunkhouse — the base, and genuinely adequate
+
+Many small rooms, **5 floor** each. No common area.
+
+Two occupants and one small item, or one occupant and three. It is a place built
+for athletes to sleep, and it does that job completely: **nobody rests badly
+because they live in a bunkhouse.** What it lacks is room to do anything else.
+
+Its quiet strength is that almost everybody has a roommate, so a bunkhouse squad
+builds pairs faster than any other housing. A young side in a bunkhouse is doing
+the right thing.
+
+#### Pavilion — the upgrade, and it reads as one
+
+Fewer, larger rooms at **9 floor**, plus the pavilion itself: a common area.
+
+Two occupants leave 5 floor — a large item and two small, or five small. Three
+occupants fit at 6 floor and are crowded, which is a choice rather than a
+penalty. And the common area unlocks the third size of equipment, below.
+
+Pavilion is a plain upgrade and should look like one. Per §9, what makes it a
+decision is not a hidden catch but **the transition**.
+
+#### The Row — private units, and the wrong answer for a young squad
+
+Individual units at **7 floor**, one occupant. No roommates anywhere, no common
+area.
+
+Best rest in the game, the most equipment floor per voli, and it **builds no
+pairs at all** — every relationship drifts at the idle rate. A squad that has
+played together for four seasons and is carrying a congested calendar wants the
+Row. A squad still learning each other would be buying the thing they least
+need, at the highest price.
+
+That is what stops the housing types being a ladder. The Row is not above the
+Pavilion; it is *later*, and only for some sides.
+
+> **Siting** — whether housing sits at the hall, in town, or out of it — is a
+> second axis trading commute time against social access and homesickness. It is
+> real design space and it is not proposed here, because one axis at a time is
+> how a system stays legible while it is being tuned.
+
+### Small equipment: one floor, and it answers a condition
+
+Per §8's rule. Each of these is nearly worthless to a voli who does not have the
+condition it addresses, which is what keeps the room worth reopening.
+
+| item | answers | effect | cost |
+|---|---|---|---|
+| **Cookbook** | food aversion | removes the aversion penalty for this voli | a slot |
+| **Landline** | homesickness | scales with distance from `home_region` | a slot |
+| **Blackout curtain** | jet lag | shortens travel recovery | a slot |
+| **Foam mat** | nothing in particular | small flat recovery | a slot |
+| **Games console** | low morale | ↑morale, ↑in-room pair gain | ↓tactical familiarity growth |
+| **Study desk** | tactical lag | ↑tactical familiarity growth | ↓morale, slightly |
+| **Plant** | nothing | a very small morale trickle | a slot |
+
+Three notes on the table.
+
+**The console and the desk are deliberate opposites.** Room for one, not both,
+in most bunkhouse rooms — which is the smallest complete version of this whole
+system: two items, one slot, and no correct answer.
+
+**The foam mat's cost is the slot.** An item with no downside is fine as long as
+floor is scarce; the opportunity cost does the work a drawback would.
+
+**The plant earns its place by being nearly nothing.** A system where every
+choice is optimal pressure is exhausting. One item that is just *nice* is what
+makes the others read as decisions rather than as a test.
+
+### Large equipment: three floor, and it trades across time horizons
+
+These need a Pavilion or Row room, and they are the reason to want floor.
+
+| item | buys | costs |
+|---|---|---|
+| **Free weights** | physical growth ceiling | fatigue decay — you recover slower while you have them |
+| **Ice bath** | strong recovery | physical growth — cold blunts adaptation |
+| **Tape setup** | tactical familiarity, *and* pair familiarity for the occupants | morale: it is work, at home |
+| **Kitchenette** | removes food aversion entirely, and lets a paste be used privately | morale of anyone rooming with the cook, occasionally |
+
+**Weights and the ice bath are the same axis pointing opposite ways**, and a
+room can only hold one. That is the clearest trade in the design: are these two
+volis *becoming* better, or *staying available*? A squad mid-season with a
+qualifier coming wants baths. The same squad in preseason wants weights. Which
+means the right answer changes twice a year without a single number moving.
+
+**The tape setup is the one that builds a pair through work.** Two volis who
+study together get familiarity the way roommates do, plus tactical growth, and
+pay in morale. It is the mirror of the console: same pair gain, opposite
+mechanism, opposite side-effect.
+
+### Oversized equipment: it does not go in a room at all
+
+§8 left this open, and the resolution is that the question was pointed the wrong
+way. Oversized things are not *large equipment for larger rooms* — they are
+**shared equipment that requires a common area**, which is what a Pavilion is
+for.
+
+| installation | effect |
+|---|---|
+| **The long table** | squad-wide recovery trickle; builds **cross-room** familiarity — the weak edges of §8 |
+| **The gym** | squad-wide physical growth, but it is *scheduled*, so it competes with training hours |
+| **The film room** | squad-wide tactical familiarity, same competition for hours |
+| **The kit wall** | a second small-equipment slot in every room, since storage stops living in them |
+
+This gives the Pavilion a reason beyond bigger rooms: it is the gateway to an
+entire equipment class, and that class is the only one that touches the whole
+squad at once. It also makes the Row's missing common area a real cost rather
+than a cosmetic one — private units cannot install any of this.
+
+**The gym and the film room compete with training hours**, which connects
+housing to the planner rather than leaving it a sealed screen. A club that
+installs a gym has a training week with less room in it, and that is the same
+kind of decision as the Hours row in §6.
+
+### What the events say, per installation
+
+Per §9 — every effect below has a voice, and the voice is how the effect becomes
+knowable:
+
+| installation | who tells you, and about what |
+|---|---|
+| free weights | a voli, about their arm, after doing extra |
+| console | an assistant coach, about a room turning up behind |
+| desk | a voli, about the room being no fun |
+| crowded room | a voli, about their roommate — early enough to act |
+| ice bath | a coach, about somebody's numbers plateauing |
+| kitchenette | the chef, about somebody cooking for themselves |
+| long table | nobody, ever — it just works, which is what makes it worth its cost |
+
+### The transition, which is what makes housing a real decision
+
+Per §9. Changing housing type **displaces the squad** for a stretch:
+
+- rest efficacy reduced for the duration
+- **no equipment at all** while displaced, so every condition goes unanswered
+- pair familiarity drifts at the idle rate
+
+The duration is the design's real currency. Bunkhouse → Pavilion is the long
+one; adding a single installation to an existing common area is short. Which
+makes the question *when*, not *whether* — and a manager who never finds a
+window is declining for a reason they can state, which is exactly what §9 asks
+of a purchase.
+
+### Order of work, and what must be measured
+
+1. **Fatigue survives a week.** Nothing here is buildable first; §7 measured the
+   current state at 0.000 across 300 weekly readings.
+2. **Floor, rooms, occupancy.** The constraint before anything that uses it.
+   Crowding is the first effect, and it can be measured against `PairFamiliarity`
+   immediately — that quantity already exists and already feeds the setter.
+3. **Small equipment.** Cheapest to author, and the console-versus-desk pair is
+   the whole system in miniature; if that one choice is not interesting, the
+   large items will not rescue it.
+4. **The Pavilion and shared installations**, which is also when the transition
+   cost has to be real.
+5. **Large equipment**, last, because weights-versus-baths only means anything
+   once growth and recovery both have measured ranges to trade against.
+
+**Nothing above should be given a number until step 1 lands.** Every effect here
+is a multiplier on recovery, growth or familiarity, and two of those three are
+currently pinned — recovery at zero, and growth headroom not yet readable at all.
+Choosing magnitudes now would be picking thresholds outside their distributions,
+which is the mistake this document has already recorded twice.
