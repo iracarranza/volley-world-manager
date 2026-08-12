@@ -10,6 +10,8 @@ signal training_requested
 signal scouting_requested
 signal encyclopedia_requested
 signal accommodation_requested
+signal kitchen_requested
+signal menu_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -22,6 +24,7 @@ const AccommodationModel := preload("res://scripts/data/accommodation.gd")
 const FoodSupplyModel := preload("res://scripts/data/food_supply.gd")
 const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
 const StaffReportsModel := preload("res://scripts/data/staff_reports.gd")
+const PasteRatioModel := preload("res://scripts/data/paste_ratio.gd")
 const MenuCardScript := preload("res://scenes/components/menu_card.gd")
 const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
 const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
@@ -273,8 +276,12 @@ func _ready() -> void:
 	_build_attribute_columns()
 	attribute_prev_button.pressed.connect(_step_attribute_page.bind(-1))
 	attribute_next_button.pressed.connect(_step_attribute_page.bind(1))
-	%SaveButton.pressed.connect(_save)
-	%TitleButton.pressed.connect(func() -> void: title_requested.emit())
+	## **Saving and leaving are not rooms.** They sat in this row beside Training
+	## and Scouting as though they were the same kind of thing, which cost the
+	## ribbon two slots and told a manager that quitting is as ordinary as opening
+	## the clipboard. They live behind Escape now; see `EscMenu`.
+	%SaveButton.visible = false
+	%TitleButton.visible = false
 	## Training and scouting left the dashboard for their own screens, so the
 	## header gains the two doors. Added in code beside the existing header
 	## buttons rather than in the .tscn, because they are routing rather than
@@ -295,8 +302,15 @@ func _ready() -> void:
 		)
 		header.add_child(scouting_button)
 		header.move_child(scouting_button, %TitleButton.get_index())
+		var kitchen_button := Button.new()
+		kitchen_button.text = "Kitchen"
+		kitchen_button.pressed.connect(func() -> void: kitchen_requested.emit())
+		header.add_child(kitchen_button)
+		header.move_child(kitchen_button, %TitleButton.get_index())
 		var accommodation_button := Button.new()
-		accommodation_button.text = "Accommodation"
+		## Housing, not Accommodation. Food left this page in §19 and took half the
+		## word's meaning with it -- what is behind this door is a building.
+		accommodation_button.text = "Housing"
 		accommodation_button.pressed.connect(
 			func() -> void: accommodation_requested.emit()
 		)
@@ -903,10 +917,29 @@ func _staff_reports(member: Resource) -> Array:
 	var week := int(CareerManager.career.absolute_week)
 	match str(member.role):
 		StaffMemberModel.ROLE_CHEF:
+			var service: Dictionary = CareerManager._week_service(region, week)
+			## What last week's food did, gathered here rather than inside the
+			## report so the chef's card and the kitchen page read the same
+			## service dictionary.
+			var uneasy := 0
+			for player in GameManager.players:
+				if FoodSupplyModel.discomfort(player.palate_regions, service) > 0.0:
+					uneasy += 1
 			return StaffReportsModel.kitchen(
-				member, CareerManager._week_service(region, week),
+				member, service,
 				CareerManager.career.staff_familiarity,
-				str(GameManager.team.food_block)
+				str(GameManager.team.food_block),
+				{
+					"nourishment": PasteRatioModel.nourishment(
+						Dictionary(service.get("ratio", {})),
+						Dictionary(service.get("pastes", {})), week
+					),
+					"uneasy": uneasy,
+					"squad": GameManager.players.size(),
+					"cost": PasteRatioModel.cost(
+						Dictionary(service.get("ratio", {}))
+					),
+				}
 			)
 		StaffMemberModel.ROLE_SCOUT:
 			var watched := 0

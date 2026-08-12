@@ -51,13 +51,31 @@ static func flavour_word(region: String) -> String:
 ## `service` is the week's table-shaped serving from `FoodSupply.served`, and
 ## `familiar` is the club's staff familiarity table.
 static func kitchen(
-	chef: Resource, service: Dictionary, familiar: Dictionary, block: String
+	chef: Resource, service: Dictionary, familiar: Dictionary, block: String,
+	fed: Dictionary = {}
 ) -> Array:
 	var out: Array = []
 	if chef == null:
 		return out
 	var pastes: Dictionary = service.get("pastes", {})
 	var slots := FoodBlock.paste_slots(int(chef.rating))
+
+	## **How the week actually went**, which is the chef's own business and does
+	## not belong on the kitchen page. The kitchen is where a manager sets the
+	## block, the mix and the lines; what came of it is a *report*, and a report
+	## is somebody telling you. Splitting it that way is also what keeps the
+	## kitchen from becoming a dashboard with controls attached.
+	if not fed.is_empty():
+		var uneasy := int(fed.get("uneasy", 0))
+		var squad := int(fed.get("squad", 0))
+		out.append(_card(
+			"kitchen_week", chef,
+			"Nourishment %d%% · %d of %d eating badly · mix cost %.2f" % [
+				roundi(float(fed.get("nourishment", 1.0)) * 100.0),
+				uneasy, squad, float(fed.get("cost", 0.0)),
+			],
+			_week_line(uneasy, squad, float(fed.get("nourishment", 1.0)))
+		))
 
 	## The line the whole idea started from. It fires when a paste crosses a
 	## step of familiarity, which is what makes it news rather than a status.
@@ -105,6 +123,19 @@ static func kitchen(
 		_service_line(block, pastes.size(), slots)
 	))
 	return out
+
+
+## What the chef says about how it landed, which is vaguer than the figures
+## above it because a chef does not know a nourishment percentage -- they know
+## whether plates came back empty.
+static func _week_line(uneasy: int, squad: int, nourishment: float) -> String:
+	if squad > 0 and uneasy * 2 >= squad:
+		return "Half the room is pushing it round the plate."
+	if uneasy > 0:
+		return "A couple of them are not eating what I put out."
+	if nourishment >= 1.05:
+		return "Good week for it. Everything came in better than usual."
+	return "Plates come back empty. No complaints."
 
 
 static func _service_line(block: String, serving: int, slots: int) -> String:

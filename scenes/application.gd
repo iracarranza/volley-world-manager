@@ -15,6 +15,8 @@ const LockInScreenScript := preload("res://scenes/screens/lock_in_screen.gd")
 const AccommodationScreenScript := preload(
 	"res://scenes/screens/accommodation_screen.gd"
 )
+const KitchenScreenScript := preload("res://scenes/screens/kitchen_screen.gd")
+const EscMenuScript := preload("res://scenes/components/esc_menu.gd")
 const EncyclopediaScreenScript := preload(
 	"res://scenes/screens/encyclopedia_screen.gd"
 )
@@ -38,6 +40,8 @@ var _scouting_screen: VolleyballScoutingScreen = null
 var _schedule_screen: VolleyballScheduleScreen = null
 var _lock_in_screen: LockInScreen = null
 var _accommodation_screen: AccommodationScreen = null
+var _kitchen_screen: KitchenScreen = null
+var _esc_menu: EscMenu = null
 var _encyclopedia_screen: EncyclopediaScreen = null
 ## The theme currently up, kept because the style pass is a tree walk that
 ## happens once. A screen built after that walk was never in the tree for it, so
@@ -84,6 +88,8 @@ func _ready() -> void:
 	journal.scouting_requested.connect(_show_scouting)
 	journal.encyclopedia_requested.connect(_show_encyclopedia)
 	journal.accommodation_requested.connect(_show_accommodation)
+	journal.kitchen_requested.connect(_show_kitchen)
+	journal.menu_requested.connect(_open_menu)
 	## Last, so the sheet covers everything, including the screens built later.
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
@@ -147,6 +153,14 @@ func _ensure_accommodation_screen() -> void:
 	_accommodation_screen = AccommodationScreenScript.new()
 	_adopt_screen(_accommodation_screen)
 	_accommodation_screen.back_requested.connect(_show_journal)
+
+
+func _ensure_kitchen_screen() -> void:
+	if _kitchen_screen != null:
+		return
+	_kitchen_screen = KitchenScreenScript.new()
+	_adopt_screen(_kitchen_screen)
+	_kitchen_screen.back_requested.connect(_show_journal)
 
 
 func _ensure_encyclopedia_screen() -> void:
@@ -216,7 +230,7 @@ func _swap_to(screen: Control) -> void:
 	for candidate in [
 		title_screen, new_career_screen, journal, match_center,
 		_training_screen, _scouting_screen, _schedule_screen, _lock_in_screen,
-		_encyclopedia_screen, _accommodation_screen,
+		_encyclopedia_screen, _accommodation_screen, _kitchen_screen,
 	]:
 		if candidate != null:
 			candidate.visible = candidate == screen
@@ -263,6 +277,72 @@ func _show_accommodation() -> void:
 	_ensure_accommodation_screen()
 	_accommodation_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_show_only(_accommodation_screen)
+
+
+func _show_kitchen() -> void:
+	_ensure_kitchen_screen()
+	_kitchen_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_kitchen_screen)
+
+
+## ## The escape menu
+##
+## Built after the wipe and moved above it, because it has to cover everything
+## including the sheet -- it is the one overlay that is *not* part of the game
+## being played, so nothing in the game may draw over it.
+func _ensure_esc_menu() -> void:
+	if _esc_menu != null:
+		return
+	_esc_menu = EscMenuScript.new()
+	add_child(_esc_menu)
+	UIStyleSystem.apply(_esc_menu, _theme_name == "light")
+	_esc_menu.save_requested.connect(func() -> void:
+		if CareerManager.has_career():
+			CareerManager.save_career()
+	)
+	_esc_menu.title_requested.connect(_show_title)
+	_esc_menu.load_requested.connect(_load_career)
+	_esc_menu.theme_requested.connect(func(name: String) -> void:
+		_apply_theme(name)
+		UIStyleSystem.apply(_esc_menu, name == "light")
+	)
+	_esc_menu.quit_requested.connect(func() -> void: get_tree().quit())
+
+
+func _open_menu() -> void:
+	_ensure_esc_menu()
+	move_child(_esc_menu, -1)
+	_esc_menu.open_menu(
+		_save_entries(), _theme_name, CareerManager.has_career()
+	)
+
+
+func _save_entries() -> Array:
+	var out: Array = []
+	for metadata in CareerManager.list_save_metadata():
+		out.append({
+			"id": str(metadata.get("save_id", "")),
+			"label": "%s  /  %s" % [
+				str(metadata.get("career_name", "Career")),
+				str(metadata.get("organization_name", "Organization")),
+			],
+		})
+	return out
+
+
+## Escape, from anywhere. `_unhandled_key_input` rather than `_input`, so a
+## screen that wants Escape for its own panel -- the kitchen's, the housing
+## page's -- gets it first and this only fires when nothing else claimed it.
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed:
+		return
+	if (event as InputEventKey).keycode != KEY_ESCAPE:
+		return
+	if _esc_menu != null and _esc_menu.visible:
+		_esc_menu.close_menu()
+	else:
+		_open_menu()
+	get_viewport().set_input_as_handled()
 
 
 func _show_encyclopedia() -> void:

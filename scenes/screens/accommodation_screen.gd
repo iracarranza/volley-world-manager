@@ -102,7 +102,7 @@ func _build() -> void:
 	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	var shell := ScreenShell.build(
-		self, "Accommodation", [back_button] as Array[Button]
+		self, "Housing", [back_button] as Array[Button]
 	)
 	var column := shell.content
 
