@@ -42,6 +42,7 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const VoliCardScene := preload("res://scenes/components/voli_card.gd")
 const BoardCourtScene := preload("res://scenes/components/board_court.gd")
 const BoardTrayScene := preload("res://scenes/components/board_tray.gd")
+const RotationStrength := preload("res://scripts/data/rotation_strength.gd")
 
 signal confirmed
 signal cancelled
@@ -134,6 +135,7 @@ func refresh() -> void:
 	_add_fixture_line()
 	_add_court_and_opponent()
 	_add_team_panel()
+	_add_rotation_panel()
 	_add_starter_cards()
 
 
@@ -271,6 +273,90 @@ func _add_team_panel() -> void:
 		+ "figure. The functional axes that fix that are specified in "
 		+ "TEAM_ATTRIBUTE_WHEEL.md and are not built yet."
 	)
+
+
+## **Six rotations, and the gap between them.**
+##
+## The team panel above averages every starter into every category, which is a
+## fiction the sport does not contain: three of your six are at the net and
+## three are behind the line, and which three changes every point. A wall of two
+## middles is a different object from a wall with the setter in it, and a mean
+## has already added them together.
+##
+## The row that matters is **spread** -- best rotation minus worst. A team that
+## is excellent in rotation 2 and poor in rotation 5 is not the same team as one
+## that is merely good in all six, because the opponent gets to choose: they
+## serve to reach the weak rotation and stay there. A mean hides the one thing
+## an opponent is looking for.
+func _add_rotation_panel() -> void:
+	var rotations: Dictionary = game_manager.rotations if game_manager != null else {}
+	if rotations.is_empty():
+		return
+	var players_by_id := {}
+	for player in game_manager.players:
+		players_by_id[int(player.id)] = player
+	var summary: Dictionary = RotationStrength.across(rotations, players_by_id)
+	if Dictionary(summary.get("mean", {})).is_empty():
+		return
+	_heading("Rotation by rotation")
+
+	var grid := GridContainer.new()
+	grid.columns = 9
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 3)
+	_body.add_child(grid)
+	var numbers: Array = rotations.keys()
+	numbers.sort()
+	grid.add_child(_cell(""))
+	for number in numbers:
+		grid.add_child(_cell("R%d" % int(number)))
+	grid.add_child(_cell("MEAN"))
+	grid.add_child(_cell("SPREAD"))
+
+	var light := _light_mode()
+	for axis in RotationStrength.ROTATION_AXES:
+		if not Dictionary(summary["mean"]).has(axis):
+			continue
+		grid.add_child(_cell(str(axis)))
+		var weakest := int(Dictionary(summary["weakest"]).get(axis, -1))
+		for number in numbers:
+			var row: Dictionary = Dictionary(summary["rotations"]).get(number, {})
+			var cell := _cell("%.0f" % float(row.get(axis, 0.0)))
+			## The weakest rotation on each axis is the only thing marked, and it
+			## is marked in red because it is the one an opponent will serve at.
+			## Marking the strongest too would make every row carry two marks and
+			## say nothing about which way to look.
+			if int(number) == weakest:
+				cell.add_theme_color_override(
+					"font_color", UIPalette.board_color(&"marker_red", light)
+				)
+			grid.add_child(cell)
+		grid.add_child(_cell("%.0f" % float(Dictionary(summary["mean"])[axis])))
+		var gap := float(Dictionary(summary["spread"]).get(axis, 0.0))
+		var spread_cell := _cell("%.0f" % gap)
+		if gap >= EXPOSED_SPREAD:
+			spread_cell.add_theme_color_override(
+				"font_color", UIPalette.board_color(&"amber", light)
+			)
+		grid.add_child(spread_cell)
+
+	_note(
+		"Spread is best rotation minus worst. Serving and Mental / Tactical "
+		+ "cannot vary across rotations -- everybody serves once a cycle and "
+		+ "reading the game is not a position -- so a flat row there is "
+		+ "arithmetic, not a finding."
+	)
+
+
+## Above this gap an axis is worth looking at rather than merely uneven.
+##
+## **A placeholder, and marked as one.** Measured on the seeded six the axes run
+## 0.8 to 7.3 and a deliberately lopsided six reaches 11.6, so 6 sits inside the
+## observed range rather than outside it -- which is the minimum bar. It is not
+## yet a threshold read off a distribution of *managed* lineups, because the
+## screen that produces those is the one being built. Same debt as the grade
+## bands, written down in the same place.
+const EXPOSED_SPREAD: float = 6.0
 
 
 func _add_starter_cards() -> void:

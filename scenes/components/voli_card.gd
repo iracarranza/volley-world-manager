@@ -52,11 +52,32 @@ const CARD_WIDTH: float = 262.0
 ## everything on it was put there by hand.
 const CONDITION_EDGE: float = 5.0
 const MAGNET_SIZE := Vector2(26.0, 9.0)
+## How far off square a card can sit. Small: this is a card somebody slapped on
+## a board, not a photograph in a scrapbook, and past about a degree it stops
+## reading as haste and starts reading as a fan of playing cards.
+## Raised from 0.9 after looking: at that angle a 262px card shifts four pixels
+## corner to corner, which is inside the width of its own border and reads as
+## square. Tilt alone was never going to carry this anyway -- see the stagger.
+const TILT_DEGREES: float = 1.7
+## And how far along the top edge its magnet can wander, as a share of the
+## card's width either side of centre.
+const MAGNET_DRIFT: float = 0.16
+## How far up or down a card can sit relative to its neighbours, in pixels.
+##
+## **The one that actually does the work.** A row of cards at identical heights
+## reads as a table however far each one is rotated, because the eye follows the
+## shared top edge and never sees the angles. Break the edge and the same cards
+## read as six things somebody stuck up one at a time.
+const STAGGER_PIXELS: float = 9.0
 
 var _light_mode: bool = false
 var _stage: String = "working"
 var _fatigue: float = 0.0
 var _libero: bool = false
+## One number per card, from the voli's id, driving every off-square choice on
+## it. Shared so the tilt and the magnet agree with each other -- a card leaning
+## left with its magnet pulled right looks like a mistake rather than a hand.
+var _jitter: float = 0.5
 
 
 ## Build the card for one voli in one slot.
@@ -74,19 +95,44 @@ static func build(
 	## The magnet hangs above the card, so the rack has to leave room for it or
 	## every card in the second row clips the one above.
 	card.add_theme_constant_override("margin_top", 12)
+	## **Hand-placed, not laid out.**
+	##
+	## Six cards on an exact grid read as a table with rounded corners. What
+	## makes a magnet look like a magnet is that somebody put it there in a hurry
+	## and it is very slightly off -- so each card gets a small rotation and its
+	## magnet sits a little off centre.
+	##
+	## Derived from the voli's id rather than randomised, because a card that
+	## tilts differently every time the board is rebuilt is a twitch rather than
+	## a placement. Rotation survives a Container's layout pass -- containers set
+	## position and size, not transform -- which is why this is a property and
+	## not a second wrapper node.
+	card._jitter = float(int(player.id) * 2654435761 % 1000) / 1000.0
+	card.rotation = deg_to_rad(lerpf(-TILT_DEGREES, TILT_DEGREES, card._jitter))
+	## A second, independent draw from the same id, so a card that leans left is
+	## not also always the one sitting low -- one number driving both would put
+	## the whole rack on a diagonal.
+	var lift := float(int(player.id) * 40503 % 1000) / 1000.0
+	card.add_theme_constant_override("margin_top", int(
+		12.0 + lerpf(0.0, STAGGER_PIXELS, lift)
+	))
+	card.add_theme_constant_override("margin_bottom", int(
+		11.0 + STAGGER_PIXELS - lerpf(0.0, STAGGER_PIXELS, lift)
+	))
 	card._compose(player, slot_number)
 	return card
 
 
 func _compose(player: Resource, slot_number: int) -> void:
+	## Rotate about the middle, so a tilted card stays where the rack put it
+	## instead of swinging away from its top-left corner.
+	pivot_offset = Vector2(CARD_WIDTH * 0.5, 90.0)
 	_fatigue = float(player.fatigue)
 	_stage = str(FatigueModel.stage_name(_fatigue))
 	## Margins on the container, since the stock behind them is drawn rather than
 	## supplied by a stylebox whose content margins a walk could overwrite.
 	add_theme_constant_override("margin_left", int(CONDITION_EDGE) + 11)
 	add_theme_constant_override("margin_right", 12)
-	add_theme_constant_override("margin_top", 12)
-	add_theme_constant_override("margin_bottom", 11)
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 3)
@@ -256,7 +302,7 @@ func _draw() -> void:
 	## And the magnet, overhanging the top edge -- which is the whole reason the
 	## card draws itself. A magnet inside the card is a decoration; one sitting
 	## over the edge is what is holding it up.
-	var centre := size.x * 0.5
+	var centre := size.x * (0.5 + lerpf(-MAGNET_DRIFT, MAGNET_DRIFT, _jitter))
 	draw_rect(Rect2(
 		Vector2(centre - MAGNET_SIZE.x * 0.5, -MAGNET_SIZE.y * 0.55),
 		MAGNET_SIZE

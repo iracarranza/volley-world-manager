@@ -6656,3 +6656,45 @@ Consequence for the cogniticon layer: the `intent` column of `BlockVerdict` has
 one value in it, so the rule's two intent-sensitive rows are gated by table
 rather than by rally. Consequence for the sim: the block-intent margins have
 never been exercised against a swinging opponent outside their own unit checks.
+
+
+## Rotation strength is built; the thresholds on it are placeholders
+
+`RotationStrength` reads each of a lineup's six rotations from the volis
+actually in a position to supply each axis, and reports the **spread** — best
+rotation minus worst — which is the figure a team mean structurally cannot
+carry.
+
+Measured (`tools/run_rotation_spread_probe.gd`), the seeded six:
+
+| axis | R1 | R2 | R3 | R4 | R5 | R6 | mean | spread |
+|---|---|---|---|---|---|---|---|---|
+| Attacking | 66.3 | 64.3 | 61.9 | 61.9 | 63.9 | 66.3 | 64.1 | 4.4 |
+| Block | 65.3 | 69.7 | 68.7 | 66.7 | 62.3 | 63.3 | 66.0 | **7.3** |
+| Floor | 73.0 | 68.7 | 68.7 | 70.7 | 75.0 | 75.0 | 71.8 | 6.3 |
+| Setting / Control | 63.0 | 57.2 | 56.8 | 56.2 | 62.0 | 62.3 | 59.6 | 6.8 |
+
+A deliberately lopsided six — three tallest against three shortest — reaches an
+Attacking spread of 11.6 and an exposure of 5.1 against the seeded six's 4.0.
+
+**Two things are owed.**
+
+1. **`EXPOSED_SPREAD` is a placeholder.** It is 6.0, which sits inside the
+   observed 0.8–11.6 range rather than outside it, and that is the minimum bar,
+   not a calibration. It wants measuring against a distribution of *managed*
+   lineups — the same debt as the grade bands, and blocked on the same thing:
+   the screen that produces managed lineups is the one being built.
+2. **Reordering the same six barely moves it.** 400 orderings of the seeded six
+   move exposure from 1.6 to 3.3 — under two points. The mechanism is sensitive
+   (the lopsided six proves that); the vertical slice's roster is flat, one
+   club's core from one region. Until rosters carry real specialists, rotation
+   order is a decision with almost nothing riding on it, and the panel is
+   honest but quiet.
+
+**And the interface half is not built.** `RotationLineup.assign_slot` already
+puts any voli in any slot and `GameManager.rotations` holds six independent
+lineups, so mutable rotations are *structurally* supported and always have
+been. Nothing surfaces it: the board reads the rotations and cannot edit them,
+so a manager can see that rotation 5 is the hole and cannot do anything about
+it on the screen that told them. Editing belongs on this board — it is the one
+place the information and the decision are in the same room.

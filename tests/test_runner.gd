@@ -20,6 +20,7 @@ const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
 const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population.gd")
 const WORLD_AGING_SCRIPT := preload("res://scripts/systems/world_aging.gd")
 const ATTRIBUTE_PROFILE_SCRIPT := preload("res://scripts/systems/attribute_profile_system.gd")
+const ROTATION_STRENGTH_SCRIPT := preload("res://scripts/data/rotation_strength.gd")
 const ATTRIBUTE_WHEEL_SCRIPT := preload("res://scenes/components/player_attribute_wheel.gd")
 const UI_PALETTE_SCRIPT := preload("res://scripts/data/ui_palette.gd")
 const UI_STYLE_SCRIPT := preload("res://scripts/systems/ui_style_system.gd")
@@ -200,6 +201,7 @@ func _initialize() -> void:
 	_test_block_verdict_separates_intent_from_outcome()
 	_test_the_funnel_band_is_reachable()
 	_test_grade_bands_reach_their_own_range()
+	_test_rotation_strength_can_vary()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14942,6 +14944,87 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A six is six teams, and an axis that cannot tell them apart is arithmetic.
+##
+## `RotationStrength` reads each rotation from the volis actually in a position
+## to supply the axis -- the front three block, the back three dig -- so that the
+## board can answer the question a team mean cannot: how does rotation one's
+## block compare to rotation six.
+##
+## The gate that matters is the one that caught the first version.
+## `tools/run_rotation_spread_probe.gd` measured a deliberately lopsided six --
+## three tallest against three shortest -- and `Defensive` came back with a
+## spread of **exactly 0.0** in every rotation. Not an even squad: arithmetic.
+## Under a cyclic rotation every voli spends the same three rotations in front
+## as behind, so a 50/50 axis is rotation-invariant by construction.
+func _test_rotation_strength_can_vary() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var players_by_id := {}
+	for player in manager.players:
+		players_by_id[int(player.id)] = player
+	var summary: Dictionary = ROTATION_STRENGTH_SCRIPT.across(
+		manager.rotations, players_by_id
+	)
+	_check(
+		Dictionary(summary.get("rotations", {})).size() == 6,
+		"every rotation is read, not just the one on screen",
+	)
+
+	## **The two axes that must be able to move**, because they are the whole
+	## point: they are supplied by one half of the court each.
+	var spread: Dictionary = summary.get("spread", {})
+	for axis in ["Block", "Floor"]:
+		_check(
+			float(spread.get(axis, 0.0)) > 0.5,
+			"%s varies across rotations (%.1f)" % [axis, float(spread.get(axis, 0.0))],
+		)
+	## And the two that must not, which is equally a claim: everybody serves once
+	## a cycle and reading the game is not a position. A flat row there is right,
+	## and gating it stops someone "fixing" it later.
+	for axis in ["Serving", "Mental / Tactical"]:
+		var weights: Dictionary = ROTATION_STRENGTH_SCRIPT.AXIS_SOURCES[axis]
+		_check(
+			absf(float(weights["front"]) - float(weights["back"])) < 0.001,
+			"%s is evenly sourced, so it cannot vary by rotation" % axis,
+		)
+
+	## A weakest rotation on every axis, and it has to be a real rotation number
+	## -- the board paints that one red and an off-by-one would accuse the wrong
+	## six of being the hole.
+	for axis in ROTATION_STRENGTH_SCRIPT.ROTATION_AXES:
+		var weakest := int(Dictionary(summary["weakest"]).get(axis, -1))
+		_check(
+			weakest >= 1 and weakest <= 6,
+			"%s names a real weakest rotation (%d)" % [axis, weakest],
+		)
+
+	## **Reordering the same six changes the answer.** If it did not, spread
+	## would be a fact about the roster and the panel would be implying a
+	## decision that does not exist.
+	var ids: Array[int] = []
+	for slot in range(1, 7):
+		ids.append(int(manager.rotations[1].player_at_slot(slot)))
+	var reversed_ids := ids.duplicate()
+	reversed_ids.reverse()
+	var swapped := {}
+	for number in range(1, 7):
+		var lineup: RotationLineup = RotationLineup.new()
+		lineup.rotation_number = number
+		for slot in range(1, 7):
+			lineup.slot_player_ids[slot] = reversed_ids[posmod(slot - number, 6)]
+		swapped[number] = lineup
+	var other: Dictionary = ROTATION_STRENGTH_SCRIPT.across(swapped, players_by_id)
+	_check(
+		absf(ROTATION_STRENGTH_SCRIPT.exposure(other)
+			- ROTATION_STRENGTH_SCRIPT.exposure(summary)) > 0.01
+			or float(Dictionary(other["spread"]).get("Block", 0.0))
+				!= float(spread.get("Block", 0.0)),
+		"reordering the same six moves the reading, so the order is a decision",
+	)
+	manager.free()
 
 
 ## A grade has to be able to say more than one thing.
