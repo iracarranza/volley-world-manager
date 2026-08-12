@@ -1989,14 +1989,39 @@ a knife edge with nothing between comfortable and not.
 
 ### The building is the page
 
-The plan takes the room and everything else is a card that says one thing until
-opened. The closed line is a **reading, not a heading** — `Nothing fitted`,
-`Average social level: sharing` — so the common visit, the one where you are
-checking rather than changing, never has to open anything. A card whose closed
-state says only what is inside it has spent a row of the page saying nothing.
-Which is also why there is no count in a label unless the count is the reading:
-*Equipment (3)* is a fact about the interface, *a fan and two more, in nine
-rooms* is a fact about the club.
+The plan takes the room and everything else is a **card that opens into a
+panel**. The first pass made them dropdowns and that was wrong for a mechanical
+reason: a dropdown puts what you opened inside the column you opened it from, so
+twenty-one equipment rows either scroll inside a 330px gutter or shove
+everything under them off the page. Both happened. A card is a way in, and the
+thing it is a way into deserves the room to be itself — the building comparison
+in particular, which is seven structures being read against each other and is
+the only place the `STRUCTURES.why` sentences can all be on screen at once.
+
+**Three labels, and each is a different job.**
+
+| line | is | example |
+|---|---|---|
+| title | the name of the thing | `Equipment` |
+| flavour | what it is for, in the register of somebody explaining it once | `Fit your volis' rooms with helpful stuff` |
+| reading | what is true right now | `cookbook, in 5 rooms` |
+
+The third is what earns the card its space. A card carrying only a name and a
+purpose is a menu item; one that also says `Nothing fitted` has answered the
+question most visits are asking without being opened. And it is a *reading*:
+*Equipment (3)* is a fact about the interface, *cookbook, in 5 rooms* is a fact
+about the club.
+
+The panel is a `Control` overlay rather than the `PopupPanel` the journal's
+attribute lab uses. A `PopupPanel` is a `Window` — no `modulate` to fade, sized
+in screen space rather than against the page it belongs to, and a second surface
+the style walk and the halftone screen have to be told about separately. What is
+wanted is a panel on the same sheet of paper.
+
+**And a card is not a `Container`.** Nothing grows a `Button` when a flavour line
+wraps, so the longest of the three printed its reading on the page below its own
+border. It takes the height three lines of its actual width need, with the fixed
+height as a floor.
 
 ### And it turns
 

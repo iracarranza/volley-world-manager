@@ -78,5 +78,18 @@ func _shoot() -> void:
 			]
 			get_viewport().get_texture().get_image().save_png(path)
 			print("saved %s" % ProjectSettings.globalize_path(path))
+			## And a panel open, which is the whole point of a card now. Shot on
+			## the settled club only -- the panels do not vary with crowding and
+			## four more frames of the same list is not evidence of anything.
+			if not crowded:
+				for card in ["building", "kit", "people"]:
+					page._open_panel(str(card))
+					for _settle in range(3):
+						await get_tree().process_frame
+					var panel_path := "user://accommodation_%s_%s.png" % [
+						"molten" if light_mode else "mikasa", str(card),
+					]
+					get_viewport().get_texture().get_image().save_png(panel_path)
+					print("saved %s" % ProjectSettings.globalize_path(panel_path))
 			page.queue_free()
 			await get_tree().process_frame

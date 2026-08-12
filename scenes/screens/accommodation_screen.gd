@@ -15,10 +15,16 @@ extends Control
 ## supply. That is a page about *arrangements*, and the arrangement a manager
 ## actually holds in their head is the rooms.
 ##
-## So the plan takes the room, and everything else is a card that says one thing
-## until opened. A card's closed line is a **reading, not a heading** -- `Nothing
-## fitted`, `Average social level: sharing` -- so the common visit, the one where
-## you are checking rather than changing, never has to open anything.
+## So the plan takes the room, and everything else is a **card that opens into a
+## panel**. Not a dropdown: a dropdown puts what you opened inside the column you
+## opened it from, so twenty-one items either scroll in a 330px gutter or shove
+## everything under them off the page -- both of which happened.
+##
+## Each card carries three lines, and the third is the one that earns it the
+## space: a title, what it is for, and **what is true right now**. `Equipment` /
+## `Fit your volis' rooms with helpful stuff` / `cookbook, in 5 rooms`. The
+## common visit is somebody checking rather than changing, and it never has to
+## open anything.
 ##
 ## ## The table went with the food
 ##
@@ -38,7 +44,8 @@ const ScreenShell := preload("res://scenes/components/screen_shell.gd")
 const Accommodation := preload("res://scripts/data/accommodation.gd")
 const PairFamiliarity := preload("res://scripts/data/pair_familiarity.gd")
 const FloorPlanScript := preload("res://scenes/components/floor_plan.gd")
-const CardScript := preload("res://scenes/components/expanding_card.gd")
+const CardScript := preload("res://scenes/components/menu_card.gd")
+const PopupScript := preload("res://scenes/components/desk_popup.gd")
 
 signal back_requested
 
@@ -51,13 +58,34 @@ var _career_manager: Node = null
 var _game_manager: Node = null
 var _plan: FloorPlan = null
 var _caption: Label = null
-var _lease_card: ExpandingCard = null
-var _kit_card: ExpandingCard = null
-var _people_card: ExpandingCard = null
-## What a manager has opened stays open across a refresh, and a refresh happens
-## on every click. A card that shut itself the moment you used it would be
-## unusable for exactly the task it exists for.
-var _open: Dictionary = {}
+var _lease_card: MenuCard = null
+var _kit_card: MenuCard = null
+var _people_card: MenuCard = null
+var _panel: DeskPopup = null
+## Which card the panel is showing, or empty. Kept because a refresh happens on
+## every click *inside* the panel -- fitting a fan rebuilds the page -- and a
+## panel that closed itself the moment you used it would be unusable for exactly
+## the task it exists for.
+var _showing: String = ""
+
+## The three, in the order they sit on the page.
+##
+## Title, flavour, and the function that fills the panel. Held as data rather
+## than three near-identical branches, because the next card is a row here.
+const CARDS := {
+	"building": {
+		"title": "Building",
+		"flavour": "Rent or buy a space for your volis",
+	},
+	"kit": {
+		"title": "Equipment",
+		"flavour": "Fit your volis' rooms with helpful stuff",
+	},
+	"people": {
+		"title": "Familiarity",
+		"flavour": "See who has got to know who",
+	},
+}
 
 
 func bind(career_manager: Node, game_manager: Node) -> void:
@@ -119,21 +147,57 @@ func _build() -> void:
 	side.add_theme_constant_override("separation", 10)
 	body.add_child(side)
 
-	_lease_card = CardScript.build("The lease")
-	side.add_child(_lease_card)
-	_kit_card = CardScript.build("Fit your volis' rooms with helpful stuff")
-	side.add_child(_kit_card)
-	_people_card = CardScript.build("Familiarity")
-	side.add_child(_people_card)
-	for key in ["lease", "kit", "people"]:
-		var card := _card_for(str(key))
+	for key in CARDS:
+		var entry: Dictionary = CARDS[key]
+		var card := CardScript.build(str(entry["title"]), str(entry["flavour"]))
 		var name := str(key)
-		card.toggled_open.connect(func(open: bool) -> void: _open[name] = open)
+		card.pressed.connect(func() -> void: _open_panel(name))
+		side.add_child(card)
+		match name:
+			"building":
+				_lease_card = card
+			"kit":
+				_kit_card = card
+			_:
+				_people_card = card
+
+	## Last child of the screen root, which is a plain `Control` -- later siblings
+	## draw over earlier ones, and nothing recomputes the rect of a child that is
+	## not under a `Container`.
+	_panel = PopupScript.build()
+	_panel.closed.connect(func() -> void: _showing = "")
+	add_child(_panel)
 
 
-func _card_for(key: String) -> ExpandingCard:
+func _open_panel(key: String) -> void:
+	_showing = key
+	var entry: Dictionary = CARDS.get(key, {})
+	_panel.open(str(entry.get("title", "")), str(entry.get("flavour", "")))
+	_fill_panel()
+
+
+## Repaint whatever the panel is showing, without opening or closing it.
+##
+## Every control inside the panel edits the club and then calls `refresh`, so
+## this runs on each of those clicks and has to leave the panel exactly where it
+## was.
+func _fill_panel() -> void:
+	if _panel == null or _showing.is_empty():
+		return
+	for child in _panel.body.get_children():
+		child.queue_free()
+	match _showing:
+		"building":
+			_fill_building()
+		"kit":
+			_fill_kit()
+		"people":
+			_fill_people()
+
+
+func _card_for(key: String) -> MenuCard:
 	match key:
-		"lease":
+		"building":
 			return _lease_card
 		"kit":
 			return _kit_card
@@ -173,8 +237,7 @@ func refresh() -> void:
 	_refresh_lease()
 	_refresh_kit()
 	_refresh_people()
-	for key in ["lease", "kit", "people"]:
-		_card_for(str(key)).set_open(bool(_open.get(str(key), false)))
+	_fill_panel()
 
 
 ## The one line under the building, and it is the floor rule.
@@ -205,7 +268,7 @@ func _refresh_caption() -> void:
 	_caption.text = "  ·  ".join(parts)
 
 
-## ## The lease
+## ## Building
 ##
 ## All seven, with what each costs to move into *here*. A picker showing only
 ## what is available in this region would be §15's cage rebuilt in the
@@ -221,25 +284,39 @@ func _refresh_lease() -> void:
 		"built everywhere" if home.is_empty()
 			else ("local practice" if home == region else "%s practice" % home),
 	])
-	for child in _lease_card.body.get_children():
-		child.queue_free()
+
+
+func _fill_building() -> void:
+	var team := _team()
+	var region := _club_region()
+	var current := str(team.housing_structure)
 	for structure_name in Accommodation.STRUCTURES:
 		var entry: Dictionary = Accommodation.STRUCTURES[structure_name]
 		var name := str(structure_name)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
-		_lease_card.body.add_child(row)
+		_panel.body.add_child(row)
+		var titles := VBoxContainer.new()
+		titles.add_theme_constant_override("separation", 0)
+		titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(titles)
 		var label := Label.new()
-		label.text = "%s · %d rooms" % [name, int(entry.get("rooms", 0))]
-		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.tooltip_text = "%s\n\nRent %.1f a week here.%s" % [
-			str(entry.get("why", "")), Accommodation.rent_for(name, region),
-			"" if str(entry.get("region", "")) in ["", region]
-				else "\n\n%s practice, so leasing one here costs ×%.2f."
-					% [str(entry.get("region", "")), Accommodation.FOREIGN_RENT_MULTIPLIER],
+		label.text = name
+		titles.add_child(label)
+		## The sentence already authored in `STRUCTURES.why`, on the page rather
+		## than in a tooltip -- there is room here, and seven of them stacked is
+		## the comparison this panel exists to make.
+		var why := Label.new()
+		why.text = "%s · %d rooms, %.0f floor each · %s" % [
+			str(entry.get("why", "")), int(entry.get("rooms", 0)),
+			float(entry.get("floor", 0.0)),
+			"rent %.1f" % Accommodation.rent_for(name, region),
 		]
-		row.add_child(label)
+		why.add_theme_font_size_override("font_size", 11)
+		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		titles.add_child(why)
 		var action := Button.new()
+		action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		if name == current:
 			action.text = "Here"
 			action.disabled = true
@@ -252,8 +329,17 @@ func _refresh_lease() -> void:
 			action.pressed.connect(func() -> void: _lease_signed(name))
 		row.add_child(action)
 
+	## §15: you can furnish what you rent and you can only build what you own,
+	## and nothing owns anything yet. Named rather than left out, because the
+	## card's own flavour says *rent or buy* and a panel with no buying in it
+	## would be the page contradicting its own label.
+	var owning := Label.new()
+	owning.text = "Buying one of your own is not built yet."
+	owning.add_theme_font_size_override("font_size", 11)
+	_panel.body.add_child(owning)
 
-## ## The kit
+
+## ## Equipment
 ##
 ## A list with prices, and the description in the tooltip. The first build put
 ## `console  morale · tactical` on the row, which is two words standing in for a
@@ -270,8 +356,10 @@ func _refresh_kit() -> void:
 		"Nothing fitted" if fitted.is_empty()
 			else "%s, in %d rooms" % [_readable(fitted), _rooms()]
 	)
-	for child in _kit_card.body.get_children():
-		child.queue_free()
+
+
+func _fill_kit() -> void:
+	var team := _team()
 	_kit_rows(
 		Accommodation.LARGE_EQUIPMENT, team.housing_large_equipment,
 		Accommodation.FLOOR_LARGE_ITEM
@@ -287,13 +375,11 @@ func _kit_rows(catalogue: Dictionary, installed: Array, floor_cost: float) -> vo
 		var name := str(item)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
-		_kit_card.body.add_child(row)
+		_panel.body.add_child(row)
 		var label := Label.new()
-		label.text = name.replace("_", " ")
+		label.text = "%s · %.0f floor" % [name.replace("_", " "), floor_cost]
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		label.tooltip_text = "%s\n\n%.0f floor per room." % [
-			Accommodation.detail_for(name), floor_cost,
-		]
+		label.tooltip_text = Accommodation.detail_for(name)
 		row.add_child(label)
 		var action := Button.new()
 		var here := installed.has(name)
@@ -305,22 +391,23 @@ func _kit_rows(catalogue: Dictionary, installed: Array, floor_cost: float) -> vo
 		row.add_child(action)
 
 
-## ## The people
+## ## Familiarity
 ##
-## §7's dorms row: **who shares a room is who knows each other.** The closed line
-## is the arrangement, because that is the decision; the open card is what it has
-## bought, which is the pairs.
+## §7's dorms row: **who shares a room is who knows each other.** The card's
+## reading is the arrangement, because that is the decision; the panel is what it
+## has bought, which is the pairs.
 func _refresh_people() -> void:
 	var team := _team()
 	_people_card.set_reading(
 		"Average social level: %s" % _social_level(int(team.housing_occupants_per_room))
 	)
-	for child in _people_card.body.get_children():
-		child.queue_free()
 
+
+func _fill_people() -> void:
+	var team := _team()
 	var sharing := HBoxContainer.new()
 	sharing.add_theme_constant_override("separation", 8)
-	_people_card.body.add_child(sharing)
+	_panel.body.add_child(sharing)
 	var label := Label.new()
 	label.text = "To a room"
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -350,14 +437,14 @@ func _refresh_people() -> void:
 			})
 	pairs.sort_custom(func(a, b) -> bool: return float(a["level"]) > float(b["level"]))
 	## The top of the list only. Every pair in a fourteen-voli squad is
-	## ninety-one rows, which is a table nobody reads and a card nobody opens
-	## twice -- and the reading a manager wants from this is *who already knows
-	## each other*, which is the top of it.
-	for entry in pairs.slice(0, 8):
+	## ninety-one rows, which is a table nobody reads twice -- and the reading a
+	## manager wants from this is *who already knows each other*, which is the
+	## top of it.
+	for entry in pairs.slice(0, 10):
 		var line := Label.new()
 		line.text = "%s — %d" % [str(entry["who"]), roundi(float(entry["level"]))]
 		line.add_theme_font_size_override("font_size", 12)
-		_people_card.body.add_child(line)
+		_panel.body.add_child(line)
 
 
 ## The word for an occupancy, which is what the closed card says.
