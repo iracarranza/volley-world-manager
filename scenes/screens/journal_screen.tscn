@@ -864,12 +864,11 @@ tabs_visible = true
 [node name="Staff" type="VBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs"]
 layout_mode = 2
 
-[node name="StaffSummary" type="RichTextLabel" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff"]
+[node name="StaffBody" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-bbcode_enabled = true
-scroll_active = true
+theme_override_constants/separation = 18
 
 [node name="StaffActions" type="HBoxContainer" parent="Margin/Root/Body/ContentPanel/ContentMargin/Content/Sections/Club/ClubSubTabs/Staff"]
 layout_mode = 2

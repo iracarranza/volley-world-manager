@@ -48,6 +48,9 @@ func _shoot() -> void:
 		add_child(journal)
 		journal.refresh()
 		styler.apply(journal, light_mode)
+		## Club opens on its Staff sub-tab, which is where the staff hub now
+		## lives -- the standalone page it was drafted as duplicated a submenu the
+		## journal already had.
 		for section in ["Club", "Team"]:
 			journal._navigate(str(section))
 			for _settle in range(4):

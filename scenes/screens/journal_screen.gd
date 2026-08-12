@@ -10,7 +10,6 @@ signal training_requested
 signal scouting_requested
 signal encyclopedia_requested
 signal accommodation_requested
-signal staff_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -21,6 +20,9 @@ const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const Regions := preload("res://scripts/data/regions.gd")
 const AccommodationModel := preload("res://scripts/data/accommodation.gd")
 const FoodSupplyModel := preload("res://scripts/data/food_supply.gd")
+const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
+const StaffReportsModel := preload("res://scripts/data/staff_reports.gd")
+const MenuCardScript := preload("res://scenes/components/menu_card.gd")
 const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
 const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
 const WHEEL_PROFILES: Array[String] = AttributeProfiles.PROFILE_NAMES
@@ -178,7 +180,7 @@ var roster_environment: Environment = null
 @onready var lineup_status_option: OptionButton = %LineupStatusOption
 @onready var roster_status_label: Label = %RosterStatusLabel
 @onready var team_summary: RichTextLabel = %TeamSummary
-@onready var staff_summary: RichTextLabel = %StaffSummary
+@onready var staff_body: HBoxContainer = %StaffBody
 @onready var meal_option: OptionButton = %MealOption
 @onready var paste_row: HBoxContainer = %PasteRow
 @onready var accommodations_summary: RichTextLabel = %AccommodationsSummary
@@ -248,6 +250,10 @@ var _attribute_column_boxes: Array[VBoxContainer] = []
 var _attribute_column_rows: Array = []
 var _advance_revealed: bool = false
 var _advance_tween: Tween
+## Whose reports the Staff tab is showing. Never -1 once anybody is employed:
+## the tab opens on somebody, because a page whose right half is blank until you
+## click has spent half the screen asking a question it could have answered.
+var _selected_staff_id: int = -1
 
 
 func _ready() -> void:
@@ -289,11 +295,6 @@ func _ready() -> void:
 		)
 		header.add_child(scouting_button)
 		header.move_child(scouting_button, %TitleButton.get_index())
-		var staff_button := Button.new()
-		staff_button.text = "Staff"
-		staff_button.pressed.connect(func() -> void: staff_requested.emit())
-		header.add_child(staff_button)
-		header.move_child(staff_button, %TitleButton.get_index())
 		var accommodation_button := Button.new()
 		accommodation_button.text = "Accommodation"
 		accommodation_button.pressed.connect(
@@ -764,34 +765,248 @@ func _refresh_club() -> void:
 	_refresh_sponsorships()
 
 
+## ## The staff hub, inside the journal rather than beside it
+##
+## It was drafted as its own full-screen page reached from the ribbon, and that
+## was wrong twice over. Staff is **already** a submenu of this journal -- Club ▸
+## Staff -- so the page was a second door to a room that had one, and a manager
+## reading the club's business had to leave the club's section to see who works
+## there. It also meant the hub sat outside everything a journal page gets for
+## free: the sewn medium, the section title, the nav dropdown, the tab it belongs
+## to.
+##
+## So it lives here, in the tab that was already called Staff, and the standalone
+## screen is gone.
+##
+## The shape is the draft's, which was right: four cards down the left carrying
+## name, room, lead line, and the rating with region and tenure beside it -- so
+## the four can be read *down* -- and the selected one's reports in full on the
+## right. Nothing is behind a click, because everything here is reading. The
+## actions row underneath is where hiring will go, and it already says it is not
+## built.
 func _refresh_staff() -> void:
+	if not staff_body.get_children().is_empty():
+		_refresh_staff_cards()
+		return
+	var cards := VBoxContainer.new()
+	cards.name = "StaffCards"
+	cards.custom_minimum_size = Vector2(400.0, 0.0)
+	cards.add_theme_constant_override("separation", 8)
+	staff_body.add_child(cards)
+	var right := VBoxContainer.new()
+	right.name = "StaffLog"
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 6)
+	staff_body.add_child(right)
+	var title := Label.new()
+	title.name = "StaffDeskTitle"
+	title.add_theme_font_size_override("font_size", 17)
+	right.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right.add_child(scroll)
+	var log_box := VBoxContainer.new()
+	log_box.name = "StaffLogBox"
+	log_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	log_box.add_theme_constant_override("separation", 10)
+	scroll.add_child(log_box)
+	_refresh_staff_cards()
+
+
+func _refresh_staff_cards() -> void:
 	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
 		else []
+	var cards: VBoxContainer = staff_body.get_node("StaffCards")
+	for child in cards.get_children():
+		child.queue_free()
 	if staff.is_empty():
-		staff_summary.text = "[b]Staff[/b]\n\nNobody hired."
+		_staff_log().text = ""
 		return
-	var lines: Array[String] = ["[b]Staff[/b]", ""]
+	if _selected_staff_id < 0:
+		## **On somebody with something to say.** The first version opened on
+		## whoever came first in the list, which is the assistant coach -- the one
+		## desk with no mechanic behind it -- so the tab greeted every manager with
+		## *Nothing this week* while three people had reports waiting.
+		_selected_staff_id = int(staff[0].id)
+		for entry in staff:
+			if not _staff_reports(entry).is_empty():
+				_selected_staff_id = int(entry.id)
+				break
 	for entry in staff:
 		var member := entry as VolleyballStaffMember
 		if member == null:
 			continue
-		lines.append("[b]%s[/b] · %s" % [str(member.role), str(member.display_name)])
-		lines.append("    %s · %s · %d · %s" % [
-			str(member.home_region), member.resource_owned(), int(member.rating),
-			_tenure(int(member.weeks_employed)),
+		var card: MenuCard = MenuCardScript.build(
+			str(member.display_name),
+			StaffReportsModel.desk_name(str(member.role))
+		)
+		var reports := _staff_reports(member)
+		card.set_reading(
+			"Nothing this week." if reports.is_empty()
+				else str(Dictionary(reports[0]).get("report", ""))
+		)
+		## The one number everybody has, so the four can be compared without
+		## opening any of them.
+		card.set_figure(str(int(member.rating)), "%s · %s" % [
+			str(member.home_region), _tenure(int(member.weeks_employed)),
 		])
-		lines.append("")
-	staff_summary.text = "\n".join(lines)
+		card.toggle_mode = true
+		card.button_pressed = int(member.id) == _selected_staff_id
+		var who := int(member.id)
+		card.pressed.connect(func() -> void:
+			_selected_staff_id = who
+			_refresh_staff_cards()
+		)
+		cards.add_child(card)
+	_refresh_staff_log()
 
 
-## What the club has arranged, and a door to changing it.
+func _staff_log() -> Label:
+	return staff_body.get_node("StaffLog/StaffDeskTitle")
+
+
+func _refresh_staff_log() -> void:
+	var box: VBoxContainer = staff_body.get_node(
+		"StaffLog"
+	).find_child("StaffLogBox", true, false)
+	if box == null:
+		return
+	for child in box.get_children():
+		child.queue_free()
+	var member: Resource = null
+	for entry in Array(CareerManager.career.staff):
+		if int(entry.id) == _selected_staff_id:
+			member = entry
+	if member == null:
+		return
+	_staff_log().text = "%s · %s" % [
+		StaffReportsModel.desk_name(str(member.role)), str(member.display_name),
+	]
+	var reports := _staff_reports(member)
+	if reports.is_empty():
+		var empty := Label.new()
+		empty.text = "Nothing this week."
+		empty.add_theme_font_size_override("font_size", 13)
+		box.add_child(empty)
+		return
+	for card in reports:
+		box.add_child(_staff_report_panel(Dictionary(card)))
+
+
+## What this person has to say, derived rather than stored -- the same trick §16
+## uses for a voli's preferences. A report is a *reading* of state that already
+## exists, and storing it would be a second copy of the club that could disagree
+## with the first.
+func _staff_reports(member: Resource) -> Array:
+	var region := str(CareerManager.career.region)
+	var week := int(CareerManager.career.absolute_week)
+	match str(member.role):
+		StaffMemberModel.ROLE_CHEF:
+			return StaffReportsModel.kitchen(
+				member, CareerManager._week_service(region, week),
+				CareerManager.career.staff_familiarity,
+				str(GameManager.team.food_block)
+			)
+		StaffMemberModel.ROLE_SCOUT:
+			var watched := 0
+			for player in GameManager.players:
+				if int(player.weeks_observed) >= 8:
+					watched += 1
+			return StaffReportsModel.desk(
+				member, watched,
+				Dictionary(CareerManager.career.scouting_marks).size()
+			)
+		StaffMemberModel.ROLE_PHYSIO:
+			var tired := 0
+			for player in GameManager.players:
+				if float(player.fatigue) >= 0.34:
+					tired += 1
+			return StaffReportsModel.treatment(
+				member, tired, GameManager.players.size()
+			)
+	return []
+
+
+## One report: the mechanic above, the person below.
 ##
-## **This was four disabled chips and a sample menu.** It was honest about being
-## a mockup -- it carried `CLUB_UNBUILT` -- but the thing it was standing in for
-## exists now, and a panel showing `Supergruel` beside a real Longhouse is worse
-## than a panel showing nothing. So it reads the same model the accommodation
-## page and the weekly seam do, and says where to go to change it.
-## The four, in one line each, for the panel beside the wheel.
+## The utterance sits at the bottom bound beside their face and is read last --
+## the inbox's own order, for the inbox's own reason. The figures are what you
+## act on and the sentence is who is asking.
+func _staff_report_panel(card: Dictionary) -> Control:
+	var panel := PanelContainer.new()
+	var margin := MarginContainer.new()
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_%s" % side, 14)
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_%s" % side, 12)
+	panel.add_child(margin)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	margin.add_child(column)
+	var report := Label.new()
+	report.text = str(card.get("report", ""))
+	report.add_theme_font_size_override("font_size", 15)
+	report.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(report)
+	var speech := HBoxContainer.new()
+	speech.add_theme_constant_override("separation", 12)
+	column.add_child(speech)
+	speech.add_child(_staff_monogram(str(card.get("speaker", ""))))
+	var said := Label.new()
+	said.text = "“%s”" % str(card.get("utterance", ""))
+	said.add_theme_font_size_override("font_size", 15)
+	said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	said.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	said.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	speech.add_child(said)
+	return panel
+
+
+## The frame a head will go in, with a letter in it until there is one.
+##
+## The inbox renders a voli's actual body into a `SubViewport`; staff have none,
+## and a second character pipeline for four people who never step on court is the
+## most expensive possible way to answer *who is this*. This is the inbox's frame
+## at the inbox's size, so the layout is honest about the space.
+func _staff_monogram(who: String) -> Control:
+	var mark := StaffMonogram.new()
+	mark.letter = who.substr(0, 1).to_upper() if not who.is_empty() else "?"
+	mark.custom_minimum_size = Vector2(96.0, 96.0)
+	mark.size_flags_vertical = Control.SIZE_SHRINK_END
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return mark
+
+
+class StaffMonogram extends Control:
+	var letter: String = "?"
+
+	func _draw() -> void:
+		var light := UIPaletteScript.control_is_light(self)
+		var middle := size * 0.5
+		var radius := minf(size.x, size.y) * 0.5 - 1.0
+		draw_circle(middle, radius, UIPaletteScript.color(&"surface_raised", light))
+		draw_arc(
+			middle, radius, 0.0, TAU, 48,
+			UIPaletteScript.color(&"stroke_strong", light), 1.5, true
+		)
+		var font := get_theme_default_font()
+		if font == null:
+			return
+		var at := int(radius * 0.9)
+		var extent := font.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, at)
+		draw_string(
+			font, middle + Vector2(-extent.x * 0.5, extent.y * 0.34),
+			letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, at,
+			UIPaletteScript.color(&"ink_muted", light)
+		)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_THEME_CHANGED or what == NOTIFICATION_RESIZED:
+			queue_redraw()
+
+
+## The four, in one line each, for the panel beside the team wheel.
 func _staff_brief() -> String:
 	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
 		else []
@@ -805,7 +1020,8 @@ func _staff_brief() -> String:
 	return "\n".join(lines)
 
 
-## Five figures unbroken is a number nobody reads at a glance.
+## Five figures unbroken is a number nobody reads at a glance, and every one of
+## these is being compared to another.
 func _grouped(amount: int) -> String:
 	var digits := str(absi(amount))
 	var out := ""
