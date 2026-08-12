@@ -1626,3 +1626,104 @@ what kind of club rents it rather than an accident.
   does not make a structure better. It makes it *yours*, which buys shared
   installations and removes rent, and a Row you own is still a Row: excellent
   rest, no pairs. Money buys you out of a lease, not out of a trade-off.
+
+---
+
+## 16. Moving hurts, and a voli's preferences are already derivable
+
+### The forced move
+
+§15's lean: leases run to a term, and breaking one mid-season is expensive but
+possible. Two additions, both about **why** you moved rather than that you did.
+
+**Moving because you could not afford to stay is a morale hit on the whole
+squad**, and it should be a real one. A club that moves to a Bunkhouse because
+the Row became unaffordable has told its squad something it cannot take back —
+not that the beds are worse, but that the club is losing. That is the correct
+place for morale to live: not in the quality of the accommodation, which §11
+already ruled out, but in **what the move says**.
+
+Which means the same move costs different amounts depending on its reason:
+
+| the move | morale |
+|---|---|
+| upgrading, planned, between seasons | positive; this is the club going somewhere |
+| lateral, for a squad's needs | neutral; a decision, explained |
+| forced by finances | a real hit, and it is about the club rather than the building |
+
+**And moving twice in a short period compounds**, harder than twice the single
+hit. A squad that has been moved once has been unsettled; a squad moved twice
+has learned that where they live is not stable, and settling is the thing
+accommodation is *for*. This is the one place in the design where a penalty
+should be superlinear, and it is worth the exception because it is the only way
+to make "we will sort it out next year" a promise with weight.
+
+### Scouting: what a voli wants is not stored, it is derived
+
+The concept: a voli weighs more than role, minutes and money. They also care
+about the paste rotation, whether the dorms are a Longhouse or Quarters, and
+whether there is room for a console. And the concern that came with it — that
+this might mean storing per-voli preferences *and* per-scout club knowledge — is
+the right thing to worry about and does not have to be paid.
+
+**§13 already solved this shape once.** Aversion is not stored on a voli; it is
+*derived* from their `home_region` against what is on the table. Preferences are
+the same trick applied wider:
+
+| what a voli wants | derived from |
+|---|---|
+| this housing structure | the practice of the region they grew up in (§12) |
+| these pastes, this rotation | their home region's larder (§13) |
+| a console, a desk, a landline | their own attributes and situation — young and far from home wants different things from settled and studious |
+| roommates, or not | age, and how long they have been professional |
+
+Nothing new is stored on a voli. Their preferences are a **reading of who they
+already are**, which means two Spëddigh twenty-year-olds want similar things and
+nobody had to author that, and a voli's preferences change as they age without
+anything being updated.
+
+### And the scout's skill is an error bar, not a key
+
+The second half of the worry — that a scout must learn about a *club* — dissolves
+the same way. There is no hidden club data to discover: what a club has is what
+it has, publicly. Housing type, larder, supply lines, equipment are all facts.
+
+So a scout does not fetch information. **A scout reports a fit, with a
+confidence**, and their skill sets the width of the interval — which is exactly
+how `SCOUTING.md` already handles attribute estimates. One mechanism, extended:
+
+> *"Would settle here well"* — confident
+> *"Might struggle with the food, hard to say"* — uncertain
+> *"No read"* — a poor scout, or too little time
+
+A weak scout is not *wrong* about a voli's preferences; they are **vague**, and
+vagueness is what makes a signing a risk rather than a lookup. The same scout
+attribute already governing whether an attack rating is ±3 or ±14 governs
+whether a fit report is a sentence or a shrug.
+
+**No new storage anywhere.** No club knowledge table, no preference table, no
+distinction between learning a club and learning a voli — because the scout is
+reporting on neither. They are reporting on the *distance between them*, which
+is computed on demand from two things that already exist.
+
+### What this does to recruitment, which is the payoff
+
+A poor club cannot outbid anybody. It can be **the right place**.
+
+A Longhouse in Spëddigh signs Spëddigh volis cheaply, because it is how they
+grew up living and the food is what they ate. The same club would have to
+massively overpay a Pāwa Hitō import, who would arrive averse, homesick and
+sleeping badly in a shared hall.
+
+That is a real competitive axis that money does not flatten, it makes
+accommodation a **recruitment tool rather than only a retention one**, and it
+gives a manager a reason to know their own club's character rather than just its
+budget. It also gives the forced move above a second cost: a squad that had to
+move for money has a club that just got harder to sign for.
+
+### The order this belongs in
+
+Behind everything already listed, and reachable. It needs the larder (built),
+housing structures (designed), and `SCOUTING.md`'s existing confidence machinery
+(built). What it does not need is any new persistent state at all, which makes
+it unusually cheap for how much it changes.
