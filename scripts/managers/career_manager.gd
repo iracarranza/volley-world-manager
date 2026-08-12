@@ -3,6 +3,8 @@ extends Node
 const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
 const Accommodation := preload("res://scripts/data/accommodation.gd")
 const FoodSupply := preload("res://scripts/data/food_supply.gd")
+const FoodBlock := preload("res://scripts/data/food_block.gd")
+const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
 
 const CareerStateModel := preload("res://scripts/models/career_state.gd")
 const TeamModel := preload("res://scripts/models/team.gd")
@@ -425,8 +427,11 @@ func _weekly_recovery_share(player: VolleyballPlayer) -> float:
 	## people and the region is the address.
 	var club_region := str(career.region) if career != null else str(player.club_region)
 	var week := int(career.absolute_week) if career != null else 1
-	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
-	var discomfort := FoodSupply.discomfort(player.palate_regions, table)
+	## Against what the chef put on the block, not against the whole larder --
+	## see `FoodSupply.served`. Measuring the larder made a supply line a penalty
+	## for a squad that was already eating what it knew.
+	var served: Dictionary = _week_service(club_region, week)
+	var discomfort := FoodSupply.discomfort(player.palate_regions, served)
 	var crowding := Accommodation.crowding(
 		str(team.housing_structure), int(team.housing_occupants_per_room),
 		team.housing_small_equipment, team.housing_large_equipment,
@@ -438,7 +443,34 @@ func _weekly_recovery_share(player: VolleyballPlayer) -> float:
 		FoodSupply.palate_of(_palate_clock(), int(player.id)),
 		team.housing_small_equipment,
 		int(team.housing_settling_weeks),
+		str(team.food_block),
 	)
+
+
+## What is on the block this week, for whoever asks.
+##
+## One function so the weekly seam, the palate clock and every screen agree about
+## what the squad is eating -- three callers deriving it separately is how the
+## page ends up naming a different paste than the week charged for.
+func _week_service(club_region: String, week: int) -> Dictionary:
+	var team: Resource = _game_manager().team
+	if team == null:
+		return {}
+	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
+	return FoodSupply.served(table, FoodBlock.paste_slots(chef_rating()), week)
+
+
+## How good the chef is, which until this week nothing could read: no career had
+## any staff at all. §1's paste ceiling is the first job the rating has.
+func chef_rating() -> int:
+	if career == null:
+		return 0
+	var best := 0
+	for entry in career.staff:
+		var member := entry as VolleyballStaffMember
+		if member != null and str(member.role) == StaffMemberModel.ROLE_CHEF:
+			best = maxi(best, int(member.rating))
+	return best
 
 
 ## One paste per week, rotated by the chef, and one palate figure per voli.
@@ -463,13 +495,19 @@ func _advance_weekly_palate(player: VolleyballPlayer) -> void:
 	## people and the region is the address.
 	var club_region := str(career.region) if career != null else str(player.club_region)
 	var week := int(career.absolute_week) if career != null else 1
-	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
-	var pastes: Array = Dictionary(table["pastes"]).keys()
-	var serving := "" if pastes.is_empty() else str(pastes[week % pastes.size()])
+	var served: Dictionary = _week_service(club_region, week)
+	var pastes: Array = served.keys()
+	pastes.sort()
+	var serving := "" if pastes.is_empty() else str(pastes[0])
+	## Blan'deral is the reset block: §1 makes it the one thing palate fatigue
+	## does not accumulate on, which is the week a manager spends to make the
+	## next paste land again.
+	if FoodBlock.resets_palate(str(team.food_block)):
+		serving = ""
 	FoodSupply.advance_palate(_palate_clock(), int(player.id), serving)
 	## And a week of eating somebody else's food widens a palate, which is the
 	## ceiling in §17 doing its job: comfortable is not the same as learning.
-	if FoodSupply.widens_palate(player.palate_regions, table):
+	if FoodSupply.widens_palate(player.palate_regions, served):
 		FoodSupply.learn_region(player.palate_regions, club_region)
 
 

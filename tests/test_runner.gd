@@ -14,6 +14,7 @@ const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
 const CLUB_EVENTS_SCRIPT := preload("res://scripts/data/club_events.gd")
 const FOOD_SUPPLY_SCRIPT := preload("res://scripts/data/food_supply.gd")
+const FOOD_BLOCK_SCRIPT := preload("res://scripts/data/food_block.gd")
 const STAFF_GENERATOR_SCRIPT := preload("res://scripts/systems/staff_generator.gd")
 const STAFF_MEMBER_SCRIPT := preload("res://scripts/models/staff_member.gd")
 const SCOUTING_SCRIPT := preload("res://scripts/systems/scouting_system.gd")
@@ -224,6 +225,7 @@ func _initialize() -> void:
 	_test_changing_where_they_live_has_a_price()
 	_test_a_region_makes_pastes_and_not_a_grocery_list()
 	_test_the_club_already_has_staff()
+	_test_the_chef_serves_a_block_and_a_few_pastes()
 	_test_the_club_tells_you_what_the_rooms_did()
 	_test_the_manager_is_somebody()
 	_test_eye_parts_and_the_forked_lead()
@@ -15647,6 +15649,99 @@ func _test_the_club_already_has_staff() -> void:
 		restored.staff.size() == staff.size()
 			and SCOUTING_SCRIPT.scout_rating(restored.staff) == rating,
 		"and the people you inherited are still here after a reload",
+	)
+
+
+## The block is the base, the chef picks the pastes, and a supply line stopped
+## being a punishment.
+##
+## §1 authored four manufactured blocks across nutrition, morale, cost and *takes
+## paste*, and the code had none of it -- so the layer that is supposed to carry
+## the weight of the meal was absent while the paste layer carried everything.
+##
+## And comfort was measured against the whole larder, which made a supply line a
+## penalty: a Landavol club reaching Xérvu took its Landavol volis from 1.00 to
+## 0.50 and through their band's floor. A system whose best play is *do not use
+## the system* is not a decision. The chef serves two to four pastes, so that is
+## what a week is measured against.
+func _test_the_chef_serves_a_block_and_a_few_pastes() -> void:
+	## The four axes do not move together -- otherwise the table is a price list
+	## and a price list is solved once.
+	var gruel: Dictionary = FOOD_BLOCK_SCRIPT.of("Supergruel")
+	var slommy: Dictionary = FOOD_BLOCK_SCRIPT.of("Vollyslommy")
+	_check(
+		float(gruel["nutrition"]) > float(slommy["nutrition"])
+			and float(gruel["morale"]) < float(slommy["morale"])
+			and float(gruel["cost"]) < float(slommy["cost"]),
+		"the two ends are both bad taken alone and bad in opposite directions",
+	)
+	## `takes_paste` is what stops the layer being a ladder: the cheapest block
+	## fights flavour hardest, so cheap-plus-heavy-mix is not dominant.
+	_check(
+		FOOD_BLOCK_SCRIPT.takes_paste("Chutum Üch")
+			> FOOD_BLOCK_SCRIPT.takes_paste("Blan'deral")
+			and FOOD_BLOCK_SCRIPT.takes_paste("Blan'deral")
+				> FOOD_BLOCK_SCRIPT.takes_paste("Supergruel"),
+		"and the cheap thick brick carries flavour better than engineered gruel",
+	)
+	_check(
+		FOOD_BLOCK_SCRIPT.resets_palate("Blan'deral")
+			and not FOOD_BLOCK_SCRIPT.resets_palate("Chutum Üch"),
+		"Blan'deral is the reset week and nothing else is",
+	)
+
+	## The chef's ceiling, which is the first job a staff rating has ever had
+	## outside the scout -- and could not have had one until this week, because
+	## no career had any staff at all.
+	_check(
+		FOOD_BLOCK_SCRIPT.paste_slots(20) == FOOD_BLOCK_SCRIPT.SLOTS_MIN
+			and FOOD_BLOCK_SCRIPT.paste_slots(99) == FOOD_BLOCK_SCRIPT.SLOTS_MAX
+			and FOOD_BLOCK_SCRIPT.paste_slots(55) == 3,
+		"a better chef holds more pastes on the same block",
+	)
+
+	## **The one that would have caught the punishment.**
+	var alone: Dictionary = FOOD_SUPPLY_SCRIPT.table("Landavol", [], 1)
+	var reaching: Dictionary = FOOD_SUPPLY_SCRIPT.table("Landavol", ["Xérvu"], 1)
+	var at_home := FOOD_SUPPLY_SCRIPT.comfort_share(
+		["Landavol"], FOOD_SUPPLY_SCRIPT.served(alone, 3, 1)
+	)
+	_check(
+		at_home >= 0.99,
+		"a club eating its own larder serves its own volis everything (%.2f)"
+			% at_home,
+	)
+	## A line costs money and risks a lean season. It must not also empty the
+	## plate of everything the squad recognises.
+	for week in range(1, 7):
+		var mixed := FOOD_SUPPLY_SCRIPT.comfort_share(
+			["Landavol"], FOOD_SUPPLY_SCRIPT.served(reaching, 2, week)
+		)
+		_check(
+			mixed > 0.0,
+			"week %d: a chef with a home larder and an import serves both (%.2f)"
+				% [week, mixed],
+		)
+
+	## And the served set is the size the chef can hold, not the size of the
+	## larder -- which is the whole difference between measuring the meal and
+	## measuring the shopping.
+	for slots in [2, 3, 4]:
+		var plate: Dictionary = Dictionary(
+			FOOD_SUPPLY_SCRIPT.served(reaching, slots, 2)["pastes"]
+		)
+		_check(
+			plate.size() == slots,
+			"a %d-slot chef puts %d pastes on the block (%d)"
+				% [slots, slots, plate.size()],
+		)
+
+	## The block reaches recovery, which is what makes the choice a decision
+	## rather than a flavour note.
+	_check(
+		FOOD_SUPPLY_SCRIPT.nourishment(0.0, 0.0, "Supergruel")
+			> FOOD_SUPPLY_SCRIPT.nourishment(0.0, 0.0, "Vollyslommy"),
+		"gruel feeds an athlete and indulgence does not",
 	)
 
 

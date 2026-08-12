@@ -33,6 +33,9 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var housing_settling_weeks: int = 0
 ## Which regions the club runs food lines to, beyond its own. See `FoodSupply`.
 @export var supply_lines: Array[String] = []
+## The base of the week. See `FoodBlock` -- manufactured, universal, and the
+## layer §1 authored that the code did not have until the food screen.
+@export var food_block: String = "Blan'deral"
 ## Trust and emotional connection. Familiarity governs knowing the system;
 ## cohesion governs how strongly confidence and recovery spread through it.
 @export_range(0.0, 1.0) var cohesion: float = 0.50
@@ -149,6 +152,7 @@ func to_dict() -> Dictionary:
 		"housing_occupants_per_room": housing_occupants_per_room,
 		"housing_settling_weeks": housing_settling_weeks,
 		"supply_lines": Array(supply_lines).duplicate(),
+		"food_block": food_block,
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
@@ -193,6 +197,7 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.supply_lines.clear()
 	for region in Array(data.get("supply_lines", [])):
 		team.supply_lines.append(str(region))
+	team.food_block = str(data.get("food_block", "Blan'deral"))
 	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
 	team.regional_alignment = clampf(
 		float(data.get("regional_alignment", 0.50)), 0.0, 1.0

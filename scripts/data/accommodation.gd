@@ -329,10 +329,11 @@ static func homesick(home_region: String, club_region: String) -> bool:
 ## either alone, and neither can rescue the other.
 static func weekly_recovery_share(
 	crowding_now: float, homesick_now: bool, discomfort_now: float,
-	palate_now: float, small: Array = [], settling_weeks: int = 0
+	palate_now: float, small: Array = [], settling_weeks: int = 0,
+	block: String = ""
 ) -> float:
 	var share := rest_multiplier(crowding_now, homesick_now, discomfort_now, small) \
-		* FoodSupply.nourishment(discomfort_now, palate_now)
+		* FoodSupply.nourishment(discomfort_now, palate_now, block)
 	## A squad that has just moved banks less of the week, and it is the same
 	## number whatever they moved into -- §16 is explicit that the hit is about
 	## what the move says rather than about the quality of the beds.
