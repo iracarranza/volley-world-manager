@@ -8,7 +8,7 @@ extends RefCounted
 ## that makes that true — the thing that turns six taglines into six places that
 ## eat differently.
 ##
-## ## A region makes pastes. It does not have a grocery list.
+## ## A region makes *one* paste, and it is called after the region
 ##
 ## **The staples layer is gone, and it was the mistake.** Every region used to
 ## carry three of them -- barley, rice, sorghum -- alongside its pastes, and that
@@ -20,10 +20,17 @@ extends RefCounted
 ## decorative, because if the bulk of the plate already tastes of somewhere, the
 ## carrier under it has nothing left to do.
 ##
-## So a region produces **pastes and nothing else**. What a voli grew up eating
-## is a set of pastes; what a club runs a line for is pastes; what a lean season
-## takes away is a paste. The base of the week comes off a shelf and is the same
-## shelf everywhere, which is what makes the paste worth caring about.
+## So a region produces **one paste and nothing else**, and it is named after the
+## region: Landavolan paste, Spëddigh paste, Xérvyan paste. That is the second
+## correction. The first pass gave each region two or three *ingredients* --
+## `pale onion`, `sour cream`, `smoked groundnut` -- which is the grocery list
+## again wearing a smaller hat. §2 is explicit that the authored names are a
+## *sketch of an axis* and that "the point is coverage, not these exact names",
+## so the axis stays as a property and the name comes off the map.
+##
+## Which is also the only naming that lets a chef say the sentence the whole
+## staff correspondence is built on -- *"I improved my use of Landavolan paste"*
+## -- without the manager having to remember that pale onion is a Landavol thing.
 ##
 ## ## Every entry is authored from the region's own tagline
 ##
@@ -48,77 +55,128 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## exactly half its own food, which put a share-based comfort band on a knife
 ## edge with nothing between comfortable and not. Three is the smallest number
 ## that gives §17's band somewhere to sit.
+## What each region makes, and what kind of thing it is.
+##
+## `axis` is §2's coverage sketch -- a sharp ferment, a bitter herb, a heavy
+## sweet, a fatty savoury, a sour citrus, a numbing spice, a smoky char, a clean
+## umami. Eight axes across twelve larders, so some regions share one, which is
+## correct: two places can both make something sharp without making the same
+## thing. The axis is what a **body type** tolerates, per §2's rule that region
+## supplies familiarity and body supplies tolerance and the two are allowed to
+## disagree.
 const LARDERS := {
-	"Landavol": {
-		"pastes": ["green herb", "sour cream", "pale onion"],
-		"lean_seasons": ["winter"],
-	},
-	"Spëddigh": {
-		"pastes": ["smoked roe", "dill and caraway", "brined juniper"],
-		## Preserving is the whole point of this larder, so it is the one region
-		## with no lean season. It costs them variety instead.
-		"lean_seasons": [],
-	},
-	"Pāwa Hitō": {
-		"pastes": ["fermented bean", "citrus salt", "toasted sesame"],
-		"lean_seasons": ["autumn"],
-	},
-	"Bloc du Larg": {
-		"pastes": ["shallot and wine", "walnut", "herb butter"],
-		"lean_seasons": ["winter", "spring"],
-	},
-	"Xérvu": {
-		"pastes": ["red pepper", "smoked groundnut", "tamarind"],
-		"lean_seasons": ["summer"],
-	},
-	"Taktikã": {
-		"pastes": ["ash and lime", "burnt chilli", "pumpkin seed"],
-		"lean_seasons": ["spring"],
-	},
+	"Landavol": {"axis": "clean umami", "lean_seasons": ["winter"]},
+	## Preserving is the whole point of this larder, so it is the one region with
+	## no lean season. It costs them variety instead.
+	"Spëddigh": {"axis": "sharp ferment", "lean_seasons": []},
+	"Pāwa Hitō": {"axis": "fatty savoury", "lean_seasons": ["autumn"]},
+	"Bloc du Larg": {"axis": "bitter herb", "lean_seasons": ["winter", "spring"]},
+	"Xérvu": {"axis": "numbing spice", "lean_seasons": ["summer"]},
+	"Taktikã": {"axis": "smoky char", "lean_seasons": ["spring"]},
+	"Tu'ul ys Feynt": {"axis": "sour citrus", "lean_seasons": ["winter"]},
+	"Lo-onğ Ralī": {"axis": "heavy sweet", "lean_seasons": ["summer"]},
+	"Bompaşao": {"axis": "sharp ferment", "lean_seasons": ["autumn"]},
+	"Rhen Tempaol": {"axis": "bitter herb", "lean_seasons": ["winter"]},
+	"Kutré Lyn": {"axis": "numbing spice", "lean_seasons": ["spring"]},
+	"Zaitgaist": {"axis": "clean umami", "lean_seasons": ["autumn"]},
 }
 
-## The two regions that grow nothing, and it is the same fact about both.
+
+## The two regions that make nothing, and it is the same fact about both.
 ##
 ## `regions.gd` already says Ispayk and A'ace are excluded from the development
 ## system because *"their identity comes from history and money, not
-## geography"*. A larder is geography. So neither has one, and both eat
-## imported — which is not a penalty but a description: A'ace buys the best of
+## geography"*. A paste is geography. So neither has one, and both eat imported
+## -- which is not a penalty but a description: A'ace buys the best of
 ## everywhere, Ispayk imports on credit it earned decades ago.
 const IMPORTING_REGIONS: Array[String] = ["Ispayk", "A'ace"]
 
-## Four seasons over a season's weeks, so a year has a shape. Weeks are the
-## career's own unit; the offset puts week one in spring, which is where a
-## volleyball season starts.
 const WEEKS_PER_SEASON: int = 13
 const SEASONS: Array[String] = ["spring", "summer", "autumn", "winter"]
 
 
 static func season_for_week(week: int) -> String:
-	return SEASONS[posmod(int(floor(float(maxi(week, 1) - 1) / float(WEEKS_PER_SEASON))), SEASONS.size())]
+	return SEASONS[posmod(int(floor(
+		float(maxi(week, 1) - 1) / float(WEEKS_PER_SEASON)
+	)), SEASONS.size())]
 
 
 static func has_larder(region: String) -> bool:
 	return LARDERS.has(Regions.canonical_name(region))
 
 
+## What this region's paste is called.
+##
+## The demonym, which `DEMONYMS` already carries and the roster already obeys:
+## you are *from* Xérvu and the flavour is *Xérvyan*.
+static func paste_name(region: String) -> String:
+	var canonical := Regions.canonical_name(region)
+	return "%s paste" % str(Regions.DEMONYMS.get(canonical, canonical))
+
+
+static func axis_of(region: String) -> String:
+	return str(Dictionary(LARDERS.get(
+		Regions.canonical_name(region), {}
+	)).get("axis", ""))
+
+
+## ## A paste is not the same every season
+##
+## The event the design asks for: a paste can come in hardier or leaner, richer
+## or thinner, and that is a reason to change what you feed a squad **against**
+## your chef's proficiency and your volis' preferences. A club with a chef who
+## knows Landavolan paste and a squad that likes it still has to decide what to
+## do about a year when the Xérvyan is unusually nourishing.
+##
+## Derived from the region and the season rather than rolled, for the reason the
+## whole world is derived: a fact about a place in a year is the same fact every
+## time it is asked, and a roll would make the chef's report and the food screen
+## disagree about the same paste.
+const CONDITION_LEAN: String = "lean"
+const CONDITION_USUAL: String = "usual"
+const CONDITION_RICH: String = "rich"
+## What each condition does to the nourishment a paste carries.
+const CONDITION_NOURISHMENT := {
+	CONDITION_LEAN: 0.82, CONDITION_USUAL: 1.0, CONDITION_RICH: 1.18,
+}
+
+
+static func condition(region: String, week: int = 1) -> String:
+	var canonical := Regions.canonical_name(region)
+	if not has_larder(canonical):
+		return CONDITION_USUAL
+	## A season, not a week: food does not change character on a Tuesday, and a
+	## condition that moved weekly would be noise rather than news.
+	var season := int(floor(float(maxi(week, 1) - 1) / float(WEEKS_PER_SEASON)))
+	var roll := absi(hash("%s:%d" % [canonical, season])) % 100
+	if roll < 18:
+		return CONDITION_LEAN
+	if roll < 34:
+		return CONDITION_RICH
+	return CONDITION_USUAL
+
+
+static func nourishment_of(region: String, week: int = 1) -> float:
+	return float(CONDITION_NOURISHMENT.get(condition(region, week), 1.0))
+
+
 ## What this region produces, this week.
 ##
-## A lean season removes the *last* paste rather than all of them: a region does
-## not stop making food in winter, it stops making some of it. Which is what
-## makes a lean season a supply problem instead of a famine.
+## A lean *season* is a supply problem -- the paste is short, and a club running
+## a line to it may not get what it paid for. A lean *condition* is a quality
+## problem, and the two are deliberately different: one is about whether the
+## paste arrives, the other about what is in it when it does.
 static func produces(region: String, week: int = 1) -> Dictionary:
 	var canonical := Regions.canonical_name(region)
 	var larder: Dictionary = LARDERS.get(canonical, {})
 	if larder.is_empty():
-		return {"pastes": [], "lean": false}
-	var pastes: Array = Array(larder["pastes"]).duplicate()
+		return {"pastes": [], "lean": false, "condition": CONDITION_USUAL}
 	var lean := Array(larder["lean_seasons"]).has(season_for_week(week))
-	## Never down to nothing. A region with one paste left is a region having a
-	## bad year; a region with none has stopped existing, and no season should do
-	## that to a place the map still has volis coming out of.
-	if lean and pastes.size() > 1:
-		pastes.pop_back()
-	return {"pastes": pastes, "lean": lean}
+	return {
+		"pastes": [paste_name(canonical)],
+		"lean": lean,
+		"condition": condition(canonical, week),
+	}
 
 
 ## How far one region is from another, in adjacency steps.

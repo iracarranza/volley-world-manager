@@ -14,6 +14,7 @@ const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
 const CLUB_EVENTS_SCRIPT := preload("res://scripts/data/club_events.gd")
 const FOOD_SUPPLY_SCRIPT := preload("res://scripts/data/food_supply.gd")
+const PASTE_RATIO_SCRIPT := preload("res://scripts/data/paste_ratio.gd")
 const FOOD_BLOCK_SCRIPT := preload("res://scripts/data/food_block.gd")
 const STAFF_GENERATOR_SCRIPT := preload("res://scripts/systems/staff_generator.gd")
 const STAFF_MEMBER_SCRIPT := preload("res://scripts/models/staff_member.gd")
@@ -15723,18 +15724,80 @@ func _test_the_chef_serves_a_block_and_a_few_pastes() -> void:
 				% [week, mixed],
 		)
 
-	## And the served set is the size the chef can hold, not the size of the
-	## larder -- which is the whole difference between measuring the meal and
-	## measuring the shopping.
+	## And the served set is the size the chef can hold **or** the size of the
+	## larder, whichever is smaller. One paste per region means a club running
+	## one line has two to reach, and a four-slot chef cannot conjure a third --
+	## which is the supply decision showing up in the kitchen.
+	var available := Dictionary(reaching["pastes"]).size()
 	for slots in [2, 3, 4]:
 		var plate: Dictionary = Dictionary(
 			FOOD_SUPPLY_SCRIPT.served(reaching, slots, 2)["pastes"]
 		)
 		_check(
-			plate.size() == slots,
-			"a %d-slot chef puts %d pastes on the block (%d)"
-				% [slots, slots, plate.size()],
+			plate.size() == mini(slots, available),
+			"a %d-slot chef with %d pastes to hand cooks with %d (%d)"
+				% [slots, available, mini(slots, available), plate.size()],
 		)
+
+	## **A preset is a target, not an instruction.** A chef approximates it, and
+	## how closely is their rating and their familiarity -- which is the trade
+	## the whole feature exists for: convenience bought with precision.
+	var target := {
+		RegionLarder.paste_name("Landavol"): 0.7,
+		RegionLarder.paste_name("Xérvu"): 0.3,
+	}
+	var poor: Dictionary = FOOD_SUPPLY_SCRIPT.served(
+		reaching, 3, 1, target, 25, 28.0
+	)["ratio"]
+	var good: Dictionary = FOOD_SUPPLY_SCRIPT.served(
+		reaching, 3, 1, target, 95, 90.0
+	)["ratio"]
+	var poor_miss := absf(float(poor.get(RegionLarder.paste_name("Landavol"), 0.0)) - 0.7)
+	var good_miss := absf(float(good.get(RegionLarder.paste_name("Landavol"), 0.0)) - 0.7)
+	_check(
+		good_miss < poor_miss,
+		"a better chef holds the mix closer (%.3f against %.3f)"
+			% [good_miss, poor_miss],
+	)
+	_check(
+		poor_miss > 0.0,
+		"and nobody holds it exactly without the manager in the kitchen (%.3f)"
+			% poor_miss,
+	)
+
+	## Palate tires on the **ratio**, per §2 -- so varying the blend is a real
+	## answer and rotating pastes entirely is a stronger one. The first build
+	## keyed it on one paste, which made varying the mix worthless.
+	_check(
+		PASTE_RATIO_SCRIPT.key({"a": 0.7, "b": 0.3})
+			!= PASTE_RATIO_SCRIPT.key({"a": 0.4, "b": 0.6}),
+		"two different mixes of the same pastes are two different meals",
+	)
+	_check(
+		PASTE_RATIO_SCRIPT.key({"a": 0.700, "b": 0.300})
+			== PASTE_RATIO_SCRIPT.key({"a": 0.702, "b": 0.298}),
+		"and a mix that drifted by a thousandth is the same meal",
+	)
+
+	## A heavy mix costs disproportionately, so a squad-wide indulgence is a
+	## budget decision while a trace for one voli stays affordable.
+	_check(
+		PASTE_RATIO_SCRIPT.cost({"a": 1.0})
+			> PASTE_RATIO_SCRIPT.cost({"a": 0.5, "b": 0.5}),
+		"and leaning on one paste costs more than spreading the same week",
+	)
+
+	## A paste is not the same every season, which is the reason to feed
+	## something your chef does not know and your squad did not grow up on.
+	var conditions := {}
+	for region in RegionLarder.LARDERS:
+		for season_week in [1, 14, 27, 40]:
+			conditions[RegionLarder.condition(str(region), season_week)] = true
+	_check(
+		conditions.size() >= 2,
+		"some paste, some season, comes in better or worse than usual (%s)"
+			% str(conditions.keys()),
+	)
 
 	## The block reaches recovery, which is what makes the choice a decision
 	## rather than a flavour note.
@@ -15761,14 +15824,24 @@ func _test_a_region_makes_pastes_and_not_a_grocery_list() -> void:
 			not larder.has("staples"),
 			"%s makes pastes and does not grow a shopping list" % str(region),
 		)
-		## Three, not two. With the staples gone the paste list *is* the
-		## region's whole table, and two items made every comparison binary --
-		## a club running one foreign line sat at exactly half its own food,
-		## which puts §17's share-based band on a knife edge.
+		## **One paste, named after the region.** The middle version gave each
+		## region two or three *ingredients* -- `pale onion`, `sour cream` --
+		## which is the grocery list again wearing a smaller hat. §2 says the
+		## authored names are a sketch of an *axis* and "the point is coverage,
+		## not these exact names", so the axis is a property and the name comes
+		## off the map. It is also the only naming that lets a chef say
+		## "I improved my use of Landavolan paste" without the manager having to
+		## remember that pale onion is a Landavol thing.
 		_check(
-			Array(larder["pastes"]).size() >= 3,
-			"%s makes enough of them for a share to mean anything (%d)"
-				% [str(region), Array(larder["pastes"]).size()],
+			str(larder.get("axis", "")).length() > 0,
+			"%s's paste is a kind of thing (%s)"
+				% [str(region), str(larder.get("axis", ""))],
+		)
+		_check(
+			RegionLarder.paste_name(str(region)).ends_with(" paste")
+				and Array(RegionLarder.produces(str(region), 1)["pastes"]).size() == 1,
+			"%s makes one paste and it is called %s"
+				% [str(region), RegionLarder.paste_name(str(region))],
 		)
 	var table: Dictionary = FOOD_SUPPLY_SCRIPT.table("Landavol", [], 1)
 	_check(

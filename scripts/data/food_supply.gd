@@ -22,6 +22,7 @@ extends RefCounted
 ## transfer and is predictable before you sign them.
 const Larder := preload("res://scripts/data/region_larder.gd")
 const Block := preload("res://scripts/data/food_block.gd")
+const Ratio := preload("res://scripts/data/paste_ratio.gd")
 
 ## What a line costs per week, by distance in adjacency steps, and how often it
 ## arrives intact.
@@ -107,71 +108,78 @@ static func table(club_region: String, lines: Array, week: int = 1) -> Dictionar
 ## instead: every comfort reading in the game came out `0.00`, including for a
 ## squad being served its own region's pastes. Caught by a probe printing the
 ## served set beside the share it produced, which disagreed on their face.
-static func served(table_now: Dictionary, slots: int, week: int = 1) -> Dictionary:
+static func served(
+	table_now: Dictionary, slots: int, week: int = 1,
+	preset: Dictionary = {}, chef_rating: int = 50, familiarity: float = 28.0
+) -> Dictionary:
 	var pastes: Dictionary = table_now.get("pastes", {})
 	if pastes.is_empty():
-		return {"pastes": {}, "sources": [], "lean": [], "weekly_cost": 0.0}
-	## **Grouped by where it came from, and dealt round-robin.**
+		return {"pastes": {}, "ratio": {}, "sources": [], "lean": [], "weekly_cost": 0.0}
+
+	## **A target, if the manager set one; otherwise the chef's own rotation.**
 	##
-	## The first version rotated a flat sorted list by index, which let a
-	## Landavol club running one Xérvu line be served two Xérvu pastes and
-	## nothing else for a whole week -- comfort `0.00` for a squad eating at
-	## home, which is worse than the dilution this function was written to fix.
-	## A chef with a home larder and an import does not serve only the import.
-	##
-	## So each source gets a turn before any source gets a second, in the order
-	## the table lists them, which puts the club's own region first because
-	## `table()` always builds it first. The rotation is *within* a source, so a
-	## club with three home pastes and one slot still sees all three over three
-	## weeks -- which is `advance_palate`'s rule that rotation is what relieves a
-	## tired palate.
+	## A preset is convenience bought with precision: the chef approximates it,
+	## and how closely is their rating and their familiarity with what is in it.
+	## Only a manager standing in the kitchen gets the mix exactly, which is what
+	## keeps a preset from being a solve-once button.
+	var target: Dictionary = {}
+	if not preset.is_empty():
+		## Anything the club can no longer reach drops out, so a preset written
+		## when a line was running does not keep asking for a paste that stopped
+		## arriving.
+		for paste in preset:
+			if pastes.has(str(paste)):
+				target[str(paste)] = float(preset[paste])
+		target = Ratio.normalised(target)
+	if target.is_empty():
+		target = Ratio.even(_rotated(pastes, slots, week))
+	var ratio := Ratio.approximated(target, chef_rating, familiarity, week)
+
+	var on_block := {}
+	for paste in ratio:
+		on_block[str(paste)] = pastes[str(paste)]
+	return {
+		"pastes": on_block,
+		"ratio": ratio,
+		"sources": table_now.get("sources", []),
+		"lean": table_now.get("lean", []),
+		"weekly_cost": float(table_now.get("weekly_cost", 0.0)) + Ratio.cost(ratio),
+	}
+
+
+## Which pastes the chef reaches for when nobody has said otherwise.
+##
+## Grouped by where they came from and dealt round-robin, so a club with a home
+## larder and an import gets both. The first version rotated a flat sorted list
+## by index, which let a Landavol club running one Xérvu line be served nothing
+## it knew for a whole week -- comfort `0.00` for a squad eating at home, which
+## is worse than the dilution the whole function was written to fix.
+static func _rotated(pastes: Dictionary, slots: int, week: int) -> Array:
 	var by_source := {}
 	var order: Array[String] = []
 	var names: Array = pastes.keys()
 	names.sort()
-	for source in Array(table_now.get("sources", [])):
-		by_source[str(source)] = []
-		order.append(str(source))
 	for name in names:
 		var source := str(pastes[name])
 		if not by_source.has(source):
 			by_source[source] = []
 			order.append(source)
 		Array(by_source[source]).append(str(name))
-
-	var taken := {}
+	var taken: Array[String] = []
 	var count := clampi(slots, 1, names.size())
 	var round_index := 0
-	while taken.size() < count:
-		var placed_any := false
+	while taken.size() < count and round_index < names.size():
 		for source in order:
 			if taken.size() >= count:
 				break
-			var available: Array = Array(by_source.get(source, []))
+			var available: Array = Array(by_source[source])
 			if available.size() <= round_index:
 				continue
-			## Rotate within the source by week, so which of a region's pastes
-			## turns up changes without the manager touching anything.
-			var pick := str(available[
-				posmod(week + round_index, available.size())
-			])
-			var guard := 0
-			while taken.has(pick) and guard < available.size():
-				guard += 1
-				pick = str(available[posmod(week + round_index + guard, available.size())])
-			if taken.has(pick):
-				continue
-			taken[pick] = source
-			placed_any = true
-		if not placed_any:
-			break
+			var pick := str(available[posmod(week + round_index, available.size())])
+			if not taken.has(pick):
+				taken.append(pick)
 		round_index += 1
-	return {
-		"pastes": taken,
-		"sources": table_now.get("sources", []),
-		"lean": table_now.get("lean", []),
-		"weekly_cost": table_now.get("weekly_cost", 0.0),
-	}
+	return taken
 
 
 ## ## Comfort is a band, not a target
@@ -301,6 +309,10 @@ const PALATE_CEILING: float = 1.0
 ## manager *fixes by rotating*, not a clock they lose to -- §6 is explicit that
 ## it must not become a timer to be optimised against, so recovering from it is
 ## fast and drifting into it is slow.
+## §2: palate fatigue decays on the **specific ratio, not the paste**, so
+## varying the mix is a real answer and rotating pastes entirely is a stronger
+## one. The first build tired a voli of `smoked roe` rather than of *this mix*,
+## which made varying the blend worthless.
 static func advance_palate(
 	palate: Dictionary, player_id: int, paste: String
 ) -> float:

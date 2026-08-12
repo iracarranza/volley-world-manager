@@ -4,6 +4,7 @@ const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
 const Accommodation := preload("res://scripts/data/accommodation.gd")
 const FoodSupply := preload("res://scripts/data/food_supply.gd")
 const FoodBlock := preload("res://scripts/data/food_block.gd")
+const PasteRatioModel := preload("res://scripts/data/paste_ratio.gd")
 const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
 
 const CareerStateModel := preload("res://scripts/models/career_state.gd")
@@ -471,7 +472,19 @@ func _week_service(club_region: String, week: int) -> Dictionary:
 	if team == null:
 		return {}
 	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
-	return FoodSupply.served(table, FoodBlock.paste_slots(chef_rating()), week)
+	var chef := _chef()
+	var known := 0.0
+	if chef != null:
+		for paste in Dictionary(team.paste_preset):
+			known += StaffFamiliar.of(
+				career.staff_familiarity, int(chef.id), str(paste)
+			)
+		known = known / maxf(float(Dictionary(team.paste_preset).size()), 1.0)
+	return FoodSupply.served(
+		table, FoodBlock.paste_slots(chef_rating()), week,
+		team.paste_preset, chef_rating(),
+		known if known > 0.0 else StaffFamiliar.BASELINE
+	)
 
 
 ## How good the chef is, which until this week nothing could read: no career had
@@ -514,9 +527,10 @@ func _advance_weekly_palate(player: VolleyballPlayer) -> void:
 	var club_region := str(career.region) if career != null else str(player.club_region)
 	var week := int(career.absolute_week) if career != null else 1
 	var served: Dictionary = _week_service(club_region, week)
-	var pastes: Array = served.keys()
-	pastes.sort()
-	var serving := "" if pastes.is_empty() else str(pastes[0])
+	## Keyed on the **mix**, per §2 -- a voli tires of this week's blend rather
+	## than of one ingredient in it, which is what makes varying the ratio a real
+	## answer and rotating pastes entirely a stronger one.
+	var serving := PasteRatioModel.key(Dictionary(served.get("ratio", {})))
 	## Blan'deral is the reset block: §1 makes it the one thing palate fatigue
 	## does not accumulate on, which is the week a manager spends to make the
 	## next paste land again.

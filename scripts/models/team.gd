@@ -36,6 +36,14 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 ## The base of the week. See `FoodBlock` -- manufactured, universal, and the
 ## layer §1 authored that the code did not have until the food screen.
 @export var food_block: String = "Blan'deral"
+## The mix the chef is told to aim for, as `{paste: share}`. Empty means the
+## chef rotates on their own. See `PasteRatio` -- a preset is a *target*, and
+## only a manager in the kitchen gets it exactly.
+@export var paste_preset: Dictionary = {}
+## Mixes worth keeping, named by the manager. A preset can only be saved from a
+## week that was actually cooked, so the list is a record of things this club has
+## really eaten rather than a recipe book somebody typed.
+@export var paste_presets: Dictionary = {}
 ## Trust and emotional connection. Familiarity governs knowing the system;
 ## cohesion governs how strongly confidence and recovery spread through it.
 @export_range(0.0, 1.0) var cohesion: float = 0.50
@@ -153,6 +161,8 @@ func to_dict() -> Dictionary:
 		"housing_settling_weeks": housing_settling_weeks,
 		"supply_lines": Array(supply_lines).duplicate(),
 		"food_block": food_block,
+		"paste_preset": paste_preset.duplicate(true),
+		"paste_presets": paste_presets.duplicate(true),
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
@@ -198,6 +208,8 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	for region in Array(data.get("supply_lines", [])):
 		team.supply_lines.append(str(region))
 	team.food_block = str(data.get("food_block", "Blan'deral"))
+	team.paste_preset = Dictionary(data.get("paste_preset", {})).duplicate(true)
+	team.paste_presets = Dictionary(data.get("paste_presets", {})).duplicate(true)
 	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
 	team.regional_alignment = clampf(
 		float(data.get("regional_alignment", 0.50)), 0.0, 1.0
