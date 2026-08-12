@@ -499,3 +499,97 @@ static func _weighted(values: Array, weights: Array) -> int:
 	for index in range(mini(values.size(), weights.size())):
 		total += float(values[index]) * float(weights[index])
 	return clampi(roundi(total), 1, 100)
+
+
+## ## The graded scale, measured rather than assumed
+##
+## `grade` above is **one absolute scale**, and it is shared by every reading in
+## the game: a voli's overall ability, their potential, a category score, and --
+## on the lock-in board -- the mean of six volis in one category. Three claims
+## are folded into that, and `tools/run_grade_band_probe.gd` measured all three
+## over 2,400 volis and 240 rosters:
+##
+## **A team mean is not a person's score.** Averaging six collapses the spread to
+## between 0.34 and 0.55 of the individual one. On the shared scale a *chosen*
+## six -- the roster's best, which is what a manager puts on court -- grades:
+##
+## | | S | A | B | C | D |
+## |---|---|---|---|---|---|
+## | one voli | 0.3% | 2.9% | 43.7% | 33.9% | 19.2% |
+## | chosen six | **0.0%** | **0.2%** | **76.5%** | 23.3% | **0.1%** |
+##
+## Two letters carry 99.8% of everything the board can print, and three of the
+## five are unreachable. That is §0 exactly: a knob that cannot reach its own
+## stated range, failing silently, because a B is a perfectly plausible-looking
+## answer every single time.
+##
+## **And the six categories are not on one scale as each other.** Median
+## Attacking is 68 against Mental / Tactical's 60, so a shared cut makes every
+## squad look tactically weak and physically fine -- which is a property of the
+## generator, not of the squad.
+##
+## So the bands are **per category and per scale**, cut at the measured p10 /
+## p30 / p75 / p95 of the distribution each one actually acts on. That lands
+## 10% D, 20% C, 45% B, 20% A, 5% S: S stays a genuine outlier and D stays
+## reachable.
+##
+## ### The debt this pays, and the one it does not
+##
+## The whiteboard draft measured this against **random** sixes and flagged its
+## own debt: a managed lineup is a chosen six and sits higher, so bands read off
+## random sixes grade real teams generously. `TEAM_BANDS` is read off the chosen
+## six for that reason -- random-six p50 Attacking is 67.7 against a chosen
+## six's 75.5, which is most of a grade.
+##
+## What is still owed: "chosen" here is the roster's best by Overall. A manager
+## picking for a system, or around a fatigued setter, picks differently. These
+## want re-measuring against lineups the game has actually seen played once
+## enough of them exist to measure.
+const GRADE_BAND_CATEGORIES: Array[String] = [
+	"Attacking", "Defensive", "Setting / Control",
+	"Physical", "Serving", "Mental / Tactical",
+]
+
+## One voli, one category. Read off 2,400 generated club volis.
+const VOLI_BANDS := {
+	"Attacking": [48.0, 59.0, 79.0, 89.0],
+	"Defensive": [48.0, 59.0, 77.0, 87.0],
+	"Setting / Control": [40.0, 51.0, 72.0, 88.0],
+	"Physical": [46.0, 57.0, 75.0, 84.0],
+	"Serving": [44.0, 55.0, 74.0, 86.0],
+	"Mental / Tactical": [40.0, 51.0, 71.0, 85.0],
+}
+
+## The mean of six, one category. Read off 240 chosen sixes.
+const TEAM_BANDS := {
+	"Attacking": [68.0, 72.5, 78.5, 82.7],
+	"Defensive": [65.8, 69.8, 77.7, 84.0],
+	"Setting / Control": [61.0, 66.2, 73.2, 78.3],
+	"Physical": [61.5, 67.0, 74.0, 80.5],
+	"Serving": [62.5, 66.7, 75.0, 86.0],
+	"Mental / Tactical": [59.3, 63.7, 71.7, 80.2],
+}
+
+
+## The grade this score earns *in this category*, against this scale.
+##
+## Returns the same five letters `grade_tier` does, so anything already keyed on
+## a tier -- `UIPalette.GRADE_COLORS`, the board's marks -- works unchanged.
+static func category_grade(
+	category: String, score: float, team_scale: bool = false
+) -> String:
+	var table: Dictionary = TEAM_BANDS if team_scale else VOLI_BANDS
+	var bands = table.get(category, null)
+	if bands == null:
+		## An unmeasured category falls back to the absolute scale rather than
+		## to a guess. Wrong is better than wrong *and* invented.
+		return grade_tier(score)
+	if score >= float(bands[3]):
+		return "S"
+	if score >= float(bands[2]):
+		return "A"
+	if score >= float(bands[1]):
+		return "B"
+	if score >= float(bands[0]):
+		return "C"
+	return "D"

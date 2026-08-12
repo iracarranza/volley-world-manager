@@ -236,19 +236,25 @@ func _add_team_panel() -> void:
 	_body.add_child(grid)
 	for axis in totals:
 		var mean := float(totals[axis]) / float(starters.size())
-		var grade := AttributeProfiles.grade(mean)
+		## **On the team scale, in this category.** `grade` is one absolute
+		## scale shared by a voli's ability, their potential and a six-mean, and
+		## measured over 240 chosen sixes it hands the board B 76.5% / C 23.3%,
+		## with S, A and D between them reaching 0.3%. Three of five letters
+		## unreachable, silently, because B always looks like a plausible answer.
+		var grade: String = AttributeProfiles.category_grade(str(axis), mean, true)
 		## Marked only at the ends. A balanced side draws no marks at all, which
 		## is how the panel stays quiet most weeks by construction rather than by
 		## a tuning pass.
 		##
-		## Off the *tier*, not off a list of grade letters. The first draft here
-		## tested `grade in ["D", "E", "F", "C-"]` -- and `grade()` has never
-		## returned E or F, so two thirds of that list were unreachable and would
-		## have stayed unreachable silently. `grade_tier` returns exactly five
-		## values and every one of them is named below.
+		## Marked at D and at A/S only -- not at C. C is the *ordinary* quarter
+		## of the distribution by construction now, and marking a fifth of a
+		## balanced squad's rows with a warning is how a quiet panel stops being
+		## quiet. The earlier draft tested `grade in ["D", "E", "F", "C-"]`,
+		## against a function that has never returned E or F: two thirds of that
+		## list were unreachable, and unreachable in silence.
 		var mark := ""
-		match AttributeProfiles.grade_tier(mean):
-			"D", "C":
+		match grade:
+			"D":
 				mark = "!"
 			"S", "A":
 				mark = "✓"
@@ -284,6 +290,38 @@ func _add_starter_cards() -> void:
 		line.add_child(_cell(
 			"slot %d%s" % [familiarity, "  !" if familiarity < 50 else ""]
 		))
+		## **The six category grades, which are what a card is for.**
+		##
+		## The draft's whole argument: a card is too small for a wheel, and a
+		## grade is what you compare across six cards anyway. On the *voli*
+		## scale, not the team one -- a person and a six-mean live on different
+		## distributions and this is the same file that prints both.
+		var profile := AttributeProfiles.summary_profile(player)
+		var grades := HBoxContainer.new()
+		grades.add_theme_constant_override("separation", 10)
+		_body.add_child(grades)
+		for axis in AttributeProfiles.GRADE_BAND_CATEGORIES:
+			grades.add_child(_cell("%s %s" % [
+				_axis_short(str(axis)),
+				AttributeProfiles.category_grade(
+					str(axis), float(profile.get(axis, 0.0)), false
+				),
+			]))
+
+
+## The three-letter tags the board writes categories as.
+##
+## A card is 262px in the draft and "Setting / Control" is not going on it.
+## Spelled here rather than derived, because a truncation rule that happened to
+## produce readable tags for these six would produce nonsense for the seventh.
+const AXIS_TAGS := {
+	"Attacking": "ATK", "Defensive": "DEF", "Setting / Control": "SET",
+	"Physical": "PHY", "Serving": "SRV", "Mental / Tactical": "MTL",
+}
+
+
+func _axis_short(axis: String) -> String:
+	return str(AXIS_TAGS.get(axis, axis.substr(0, 3).to_upper()))
 
 
 func _starters() -> Array:

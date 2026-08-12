@@ -199,6 +199,7 @@ func _initialize() -> void:
 	_test_cogniticon_variants_and_commitment()
 	_test_block_verdict_separates_intent_from_outcome()
 	_test_the_funnel_band_is_reachable()
+	_test_grade_bands_reach_their_own_range()
 	_test_eye_parts_and_the_forked_lead()
 	_test_body_facing_rule()
 	_test_movement_knows_what_it_is_for()
@@ -14941,6 +14942,83 @@ func _test_blade_cogniticons_fill_from_the_bottom() -> void:
 			if image.get_pixel(x, y).a > 0.5:
 				inked += 1
 	_check(inked > 40, "and the blade is actually drawn (%d inked samples)" % inked)
+
+
+## A grade has to be able to say more than one thing.
+##
+## `grade` is one absolute scale shared by a voli's ability, their potential, a
+## category score and -- on the lock-in board -- the mean of six volis in one
+## category. `tools/run_grade_band_probe.gd` measured what that hands a *chosen*
+## six, which is what a manager puts on court:
+##
+## | | S | A | B | C | D |
+## |---|---|---|---|---|---|
+## | one voli | 0.3% | 2.9% | 43.7% | 33.9% | 19.2% |
+## | chosen six | 0.0% | 0.2% | **76.5%** | 23.3% | 0.1% |
+##
+## Two letters carrying 99.8% of everything the board can print, and three of
+## five unreachable -- §0 exactly, and silent, because B looks like a plausible
+## answer every single time.
+##
+## Gated on the shape of the bands rather than by re-running the sweep: the
+## sweep is 2,400 volis and 240 rosters and belongs in a probe, but the property
+## it bought -- five reachable letters on each scale, per category -- is cheap to
+## assert and is the thing that must not drift.
+func _test_grade_bands_reach_their_own_range() -> void:
+	for category in ATTRIBUTE_PROFILE_SCRIPT.GRADE_BAND_CATEGORIES:
+		for team_scale in [false, true]:
+			var table: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.TEAM_BANDS if team_scale \
+				else ATTRIBUTE_PROFILE_SCRIPT.VOLI_BANDS
+			_check(
+				table.has(category),
+				"%s has bands on the %s scale"
+					% [category, "team" if team_scale else "voli"],
+			)
+			var bands: Array = table[category]
+			## Ordered and distinct. A band table whose cuts collide has letters
+			## that exist in the code and never in the output.
+			var rising := true
+			for index in range(bands.size() - 1):
+				if float(bands[index]) >= float(bands[index + 1]):
+					rising = false
+			_check(rising, "and its cuts rise strictly (%s)" % str(bands))
+			## Every letter reachable, asked of the function rather than the
+			## table -- the table being right does not prove the lookup is.
+			var seen := {}
+			for probe in [
+				float(bands[0]) - 5.0, float(bands[0]), float(bands[1]),
+				float(bands[2]), float(bands[3]),
+			]:
+				seen[ATTRIBUTE_PROFILE_SCRIPT.category_grade(category, probe, team_scale)] = true
+			_check(
+				seen.size() == 5,
+				"and all five letters are reachable in it (%d)" % seen.size(),
+			)
+
+	## **The two scales are actually different**, which is the finding. A team
+	## mean sits far above a voli's own median because averaging six collapses
+	## the spread -- measured at 0.34 to 0.55 of it -- so a shared cut grades
+	## every team the same letter forever.
+	var apart := 0
+	for category in ATTRIBUTE_PROFILE_SCRIPT.GRADE_BAND_CATEGORIES:
+		var voli: Array = ATTRIBUTE_PROFILE_SCRIPT.VOLI_BANDS[category]
+		var team: Array = ATTRIBUTE_PROFILE_SCRIPT.TEAM_BANDS[category]
+		if float(team[0]) > float(voli[0]):
+			apart += 1
+	_check(
+		apart == ATTRIBUTE_PROFILE_SCRIPT.GRADE_BAND_CATEGORIES.size(),
+		"a team's D floor sits above a voli's in every category (%d of %d)"
+			% [apart, ATTRIBUTE_PROFILE_SCRIPT.GRADE_BAND_CATEGORIES.size()],
+	)
+	## And the categories are not on one scale as each other: median Attacking
+	## runs eight points above Mental / Tactical, so a shared cut makes every
+	## squad look tactically weak and physically fine -- a property of the
+	## generator, not of the squad.
+	_check(
+		ATTRIBUTE_PROFILE_SCRIPT.VOLI_BANDS["Attacking"][0]
+			> ATTRIBUTE_PROFILE_SCRIPT.VOLI_BANDS["Mental / Tactical"][0],
+		"and attacking is graded harder than reading the game, as measured",
+	)
 
 
 ## The funnel band exists, and can now be reached.
