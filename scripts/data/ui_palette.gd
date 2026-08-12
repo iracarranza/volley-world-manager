@@ -123,3 +123,90 @@ static func grade_color_hex(tier: String, light_mode: bool = false) -> String:
 
 static func control_is_light(control: Control) -> bool:
 	return control.get_theme_color("font_color", "Label").get_luminance() < 0.45
+
+
+## ## The board's own four markers
+##
+## The match centre is not lit by the journal's palette. `docs/design/
+## THE_TACTICAL_WHITEBOARD.md` gives it melamine and **four markers**, and the
+## four are the whole of what the object can say in colour -- there is no fifth
+## pen in the tray.
+##
+## Kept apart from `DARK`/`LIGHT` rather than folded into them, because those
+## two tables are the desk's palette and the board is on the wall. A screen that
+## wants a marker asks for one by name; nothing else on the desk can.
+##
+## | pen | what it is for |
+## |---|---|
+## | black | everything written, the default hand |
+## | blue | *structure* -- the court, the slot numbers, rules |
+## | green | a good reading: A and S, and Working |
+## | red | a bad one: D, and Spent |
+##
+## Amber is the fifth colour and is deliberately not a pen: it marks the middle
+## fatigue stage only, which is the one state that is neither and would
+## otherwise have to borrow green or red and say the wrong thing.
+const BOARD_LIGHT := {
+	&"board": Color("e7edea"),
+	&"board_deep": Color("dbe3df"),
+	&"tray": Color("a6afb0"),
+	&"tray_lip": Color("8b9496"),
+	&"card": Color("f5f8f6"),
+	&"ink": Color("242a2c"),
+	&"ink_soft": Color("5c6669"),
+	&"ghost": Color("b9c4c0"),
+	&"magnet": Color("6e7a7c"),
+	&"marker_red": Color("bf3a2b"),
+	&"marker_blue": Color("2b6ba6"),
+	&"marker_green": Color("378554"),
+	&"amber": Color("b77a15"),
+}
+
+const BOARD_DARK := {
+	&"board": Color("151b1d"),
+	&"board_deep": Color("0f1416"),
+	&"tray": Color("333c3e"),
+	&"tray_lip": Color("454f51"),
+	&"card": Color("1c2426"),
+	&"ink": Color("dfe7e4"),
+	&"ink_soft": Color("96a3a2"),
+	&"ghost": Color("394446"),
+	&"magnet": Color("7e8b8d"),
+	&"marker_red": Color("e2705f"),
+	&"marker_blue": Color("74aedd"),
+	&"marker_green": Color("6fc28c"),
+	&"amber": Color("dda83f"),
+}
+
+
+static func board_color(token: StringName, light_mode: bool = false) -> Color:
+	var table: Dictionary = BOARD_LIGHT if light_mode else BOARD_DARK
+	return Color(table.get(token, table[&"ink"]))
+
+
+## Which marker a grade is written in.
+##
+## Only the ends are coloured. B and C are the ordinary two thirds of the
+## distribution and they are written in the same black as everything else --
+## which is what leaves green and red meaning something when they appear, and is
+## the same argument the board's `!`/`✓` marks are made on.
+static func board_grade_color(tier: String, light_mode: bool = false) -> Color:
+	match tier:
+		"S", "A":
+			return board_color(&"marker_green", light_mode)
+		"D":
+			return board_color(&"marker_red", light_mode)
+		"C":
+			return board_color(&"ink_soft", light_mode)
+	return board_color(&"ink", light_mode)
+
+
+## And which one a fatigue stage is written in. Amber is the middle stage and
+## only the middle stage -- see the note on `BOARD_LIGHT`.
+static func board_stage_color(stage: String, light_mode: bool = false) -> Color:
+	match stage.to_lower():
+		"spent":
+			return board_color(&"marker_red", light_mode)
+		"laboured", "labored":
+			return board_color(&"amber", light_mode)
+	return board_color(&"marker_green", light_mode)

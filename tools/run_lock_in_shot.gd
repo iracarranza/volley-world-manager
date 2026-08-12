@@ -108,5 +108,28 @@ func _shoot() -> void:
 		var path := "user://lock_in_%s.png" % ("molten" if light_mode else "mikasa")
 		get_viewport().get_texture().get_image().save_png(path)
 		print("saved %s" % ProjectSettings.globalize_path(path))
+		## And the rack, which is below the fold on a 720-high viewport. The
+		## screen scrolls in the app; a shot that only ever framed the top would
+		## report the cards as built without once having drawn one.
+		var scroll := _find_scroll(board)
+		if scroll != null:
+			scroll.scroll_vertical = 100000
+			for _settle in range(4):
+				await get_tree().process_frame
+			var lower := "user://lock_in_%s_rack.png" % (
+				"molten" if light_mode else "mikasa"
+			)
+			get_viewport().get_texture().get_image().save_png(lower)
+			print("saved %s" % ProjectSettings.globalize_path(lower))
 		board.queue_free()
 		await get_tree().process_frame
+
+
+func _find_scroll(node: Node) -> ScrollContainer:
+	if node is ScrollContainer:
+		return node as ScrollContainer
+	for child in node.get_children():
+		var found := _find_scroll(child)
+		if found != null:
+			return found
+	return null

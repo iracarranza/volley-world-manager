@@ -38,6 +38,10 @@ const BoardFace := preload("res://Yatra_One/YatraOne-Regular.ttf")
 const BoardHand := preload("res://Short_Stack/ShortStack-Regular.ttf")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
+const UIPalette := preload("res://scripts/data/ui_palette.gd")
+const VoliCardScene := preload("res://scenes/components/voli_card.gd")
+const BoardCourtScene := preload("res://scenes/components/board_court.gd")
+const BoardTrayScene := preload("res://scenes/components/board_tray.gd")
 
 signal confirmed
 signal cancelled
@@ -126,8 +130,9 @@ func refresh() -> void:
 		child.queue_free()
 	if game_manager == null or career_manager == null:
 		return
+	_add_tray()
 	_add_fixture_line()
-	_add_opponent_panel()
+	_add_court_and_opponent()
 	_add_team_panel()
 	_add_starter_cards()
 
@@ -273,40 +278,111 @@ func _add_starter_cards() -> void:
 	if starters.is_empty():
 		return
 	_heading("The six")
+	## **A rack, not a list.** The draft's whole argument for the card: six
+	## objects side by side are compared *across*, and six rows are read *down*.
+	## The question this screen asks -- is this the team -- is a comparison.
+	var rack := HFlowContainer.new()
+	rack.add_theme_constant_override("h_separation", 18)
+	rack.add_theme_constant_override("v_separation", 18)
+	_body.add_child(rack)
+	var slot := 0
 	for player in starters:
-		var line := HBoxContainer.new()
-		line.add_theme_constant_override("separation", 14)
-		_body.add_child(line)
-		line.add_child(_cell(str(player.display_name), true))
-		line.add_child(_cell(str(player.position_role)))
-		line.add_child(_cell("%s · %d" % [str(player.home_region), int(player.age)]))
-		var stage := str(FatigueModel.stage_name(float(player.fatigue)))
-		line.add_child(_cell("%s %.2f" % [stage.capitalize(), float(player.fatigue)]))
-		line.add_child(_cell("form %+.2f" % float(player.current_form)))
-		line.add_child(_cell("conf %+.2f" % float(player.match_confidence)))
+		slot += 1
+		rack.add_child(VoliCardScene.build(
+			player, _slot_number(slot), _light_mode(), _is_libero(player)
+		))
+
+
+## Which rotation slot the nth starter is standing in.
+##
+## The lineup array is in order 1..6 and the court numbers them anticlockwise
+## from right back, so this is a relabelling and not a rearrangement. Written
+## out because the two orders are easy to confuse and a lineup drawn in the
+## wrong one looks entirely plausible.
+const SLOT_ORDER: Array[int] = [1, 2, 3, 4, 5, 6]
+
+
+func _slot_number(index: int) -> int:
+	return SLOT_ORDER[clampi(index - 1, 0, SLOT_ORDER.size() - 1)]
+
+
+## **A libero is not a seventh court position.**
+##
+## The lineup carries seven ids and the first build drew seven cards, two of
+## them numbered 6 -- because `_slot_number` clamps and the seventh had nowhere
+## to go. That is a drawing of a rotation that cannot exist.
+##
+## A libero is a *swap* for whoever is in middle back, which is why the draft
+## tucks their card under that slot rather than beside it. They keep a card,
+## because the question "could this person go on" is exactly what a card
+## answers, and they lose the slot number, because they do not have one.
+func _is_libero(player: Resource) -> bool:
+	var team: Resource = game_manager.team if game_manager != null else null
+	if team == null:
+		return false
+	return int(player.id) in team.libero_ids
+
+
+## The board's own light state.
+##
+## Read off the palette's own test rather than tracked here, so the board cannot
+## disagree with the theme walk that coloured everything around it.
+func _light_mode() -> bool:
+	return UIPalette.control_is_light(self)
+
+
+func _add_tray() -> void:
+	var tray := BoardTrayScene.new()
+	tray.light_mode = _light_mode()
+	tray.caption = "MATCH CENTRE · LOCK-IN"
+	tray.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_body.add_child(tray)
+
+
+## The court and the opponent's figures, side by side.
+##
+## They belong on one line because they are the two halves of the same question:
+## this is who is on court, and this is what the other side did last time. Read
+## apart they are a diagram and a table; read together they are the argument for
+## changing the lineup.
+func _add_court_and_opponent() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 26)
+	_body.add_child(row)
+
+	var court := BoardCourtScene.new()
+	court.light_mode = _light_mode()
+	var slot := 0
+	for player in _starters():
+		if _is_libero(player):
+			continue
+		slot += 1
+		if slot > SLOT_ORDER.size():
+			break
+		var number := _slot_number(slot)
 		var familiarity := int(
 			player.position_familiarity.get(player.position_role, 0)
 		)
-		line.add_child(_cell(
-			"slot %d%s" % [familiarity, "  !" if familiarity < 50 else ""]
-		))
-		## **The six category grades, which are what a card is for.**
-		##
-		## The draft's whole argument: a card is too small for a wheel, and a
-		## grade is what you compare across six cards anyway. On the *voli*
-		## scale, not the team one -- a person and a six-mean live on different
-		## distributions and this is the same file that prints both.
-		var profile := AttributeProfiles.summary_profile(player)
-		var grades := HBoxContainer.new()
-		grades.add_theme_constant_override("separation", 10)
-		_body.add_child(grades)
-		for axis in AttributeProfiles.GRADE_BAND_CATEGORIES:
-			grades.add_child(_cell("%s %s" % [
-				_axis_short(str(axis)),
-				AttributeProfiles.category_grade(
-					str(axis), float(profile.get(axis, 0.0)), false
-				),
-			]))
+		var stage := str(FatigueModel.stage_name(float(player.fatigue)))
+		## The court says one thing about quality and only one: whether this voli
+		## is a problem *in this slot*. Fatigue and familiarity are the two ways
+		## that is true, so they share the mark rather than each getting one.
+		var alarm := ""
+		if stage == "laboured" or familiarity < VoliCardScene.FAMILIARITY_WARNING:
+			alarm = "warn"
+		if stage == "spent":
+			alarm = "bad"
+		court.slots[number] = {"label": str(number), "alarm": alarm}
+	row.add_child(court)
+
+	var beside := VBoxContainer.new()
+	beside.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	beside.add_theme_constant_override("separation", 6)
+	row.add_child(beside)
+	var held := _body
+	_body = beside
+	_add_opponent_panel()
+	_body = held
 
 
 ## The three-letter tags the board writes categories as.
