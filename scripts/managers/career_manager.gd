@@ -390,6 +390,10 @@ func advance_week() -> String:
 		## saturates this after about a season and a half, so it is free to
 		## climb without bound.
 		player.weeks_observed += 1
+	## And the squad settles into wherever they were moved, a week at a time.
+	var housed: Resource = _game_manager().team
+	if housed != null and int(housed.housing_settling_weeks) > 0:
+		housed.housing_settling_weeks -= 1
 	for member in career.staff:
 		member.weeks_employed += 1
 	save_career()
@@ -428,6 +432,7 @@ func _weekly_recovery_share(player: VolleyballPlayer) -> float:
 		discomfort,
 		FoodSupply.palate_of(_palate_clock(), int(player.id)),
 		team.housing_small_equipment,
+		int(team.housing_settling_weeks),
 	)
 
 

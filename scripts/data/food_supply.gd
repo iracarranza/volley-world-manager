@@ -58,7 +58,6 @@ static func line_reliability(from_region: String, to_region: String) -> float:
 ## always included and is never charged, which is the whole point — you do not
 ## run a supply line to the field outside.
 static func table(club_region: String, lines: Array, week: int = 1) -> Dictionary:
-	var staples := {}
 	var pastes := {}
 	var sources: Array[String] = [club_region]
 	for line in lines:
@@ -70,13 +69,11 @@ static func table(club_region: String, lines: Array, week: int = 1) -> Dictionar
 		var produce: Dictionary = Larder.produces(source, week)
 		if bool(produce.get("lean", false)):
 			lean_sources.append(source)
-		for item in Array(produce["staples"]):
-			staples[str(item)] = source
 		for item in Array(produce["pastes"]):
 			pastes[str(item)] = source
 		weekly_cost += line_cost(club_region, source)
 	return {
-		"staples": staples, "pastes": pastes,
+		"pastes": pastes,
 		"sources": sources, "lean": lean_sources,
 		"weekly_cost": weekly_cost,
 	}
@@ -84,12 +81,13 @@ static func table(club_region: String, lines: Array, week: int = 1) -> Dictionar
 
 ## ## Comfort is a band, not a target
 ##
-## The first version of this was `aversion`: count a voli's home staples, count
+## The first version of this was `aversion`: count a voli's home pastes, count
 ## how many are absent, divide. A binary dressed as a fraction, and wrong twice.
 ##
 ## **Nobody needs all of it.** A voli wants *enough* of what they know, not every
-## item — a share-missing model calls a Pāwa Hitō voli with rice and sea greens
-## but no soy a third unhappy, which is not how eating works.
+## paste — a share-missing model calls a Pāwa Hitō voli with fermented bean and
+## citrus salt but no toasted sesame a third unhappy, which is not how eating
+## works.
 ##
 ## **And most weeks should be fine.** A threshold a manager has to *hit* is
 ## fiddly; a window they stay *inside* is forgiving, which is the register this
@@ -137,21 +135,21 @@ static func band_for(palate_regions: Array) -> Dictionary:
 
 ## What share of this week's table this voli is comfortable with.
 ##
-## Read off where each staple came from, which `table()` already records, so a
-## voli is comfortable with a Pāwa Hitō staple whether it grew at home or
+## Read off where each paste came from, which `table()` already records, so a
+## voli is comfortable with a Pāwa Hitō paste whether it was made at home or
 ## arrived down a supply line. The food does not know how far it travelled.
 static func comfort_share(palate_regions: Array, table_now: Dictionary) -> float:
-	var staples: Dictionary = table_now.get("staples", {})
-	if staples.is_empty():
+	var pastes: Dictionary = table_now.get("pastes", {})
+	if pastes.is_empty():
 		return 0.0
 	var known := {}
 	for region in palate_regions:
 		known[str(region)] = true
 	var comfortable := 0
-	for item in staples:
-		if known.has(str(staples[item])):
+	for item in pastes:
+		if known.has(str(pastes[item])):
 			comfortable += 1
-	return float(comfortable) / float(staples.size())
+	return float(comfortable) / float(pastes.size())
 
 
 ## How far outside their band they are, as a positive number, or zero inside it.

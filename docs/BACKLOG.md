@@ -6789,3 +6789,31 @@ It needs rooms as objects (a structure has a `rooms` count already), volis
 assigned to them, and `PairFamiliarity` gaining faster inside one — plus the
 connection lines in `FILLING_THE_SIX.md`, which would finally have the second
 input the manager controls that makes them a graph you play rather than watch.
+
+
+---
+
+## The food screen, and what the paste correction left open
+
+Housing and food came apart in §19: the accommodation page is the building, and
+supply lines, pastes and who is eating badly need their own page. The model
+underneath is corrected and gated — regions make pastes, blocks are manufactured
+and universal, comfort measures against pastes — and none of it is drawn.
+
+What that page has to hold, and the two questions it will have to answer:
+
+1. **The blocks are not in the code at all.** §1 authors four of them
+   (Supergruel, Chutum Üch, Blan'deral, Vollyslommy) across nutrition, morale,
+   cost and *takes paste*, and `FoodSupply` knows about none of it. The fourth
+   column is the one that matters — a paste mix is worth different amounts on
+   different carriers, which is what stops either table being readable alone —
+   and §1 marks the multiplier's shape **untested**: does a bad carrier scale
+   the paste's return, cap the ratio the chef can apply, or both.
+2. **A supply line dilutes.** Comfort is a share of the week's table, so a
+   Landavol club running one line to Xérvu takes its Landavol volis from 1.00 to
+   0.50 and through their band's floor. That is coherent — §16's payoff is
+   exactly that a Spëddigh club signs Spëddigh volis cheaply — but it means the
+   optimal food strategy for a homogeneous squad is to run no lines at all, and
+   it wants measuring against a mixed squad before the page is built on top of
+   it. The chef serves one paste a week; whether comfort should read what is
+   *served* rather than what is *available* is the open question.

@@ -1,22 +1,29 @@
 class_name RegionLarder
 extends RefCounted
 
-## What each region grows, and what it makes of it.
+## What each region makes.
 ##
 ## `docs/design/ACCOMMODATIONS_AND_CARE.md` §13: a club does not hold stock, it
 ## has a supply, and the supply is bounded by **where it is**. This is the table
 ## that makes that true — the thing that turns six taglines into six places that
 ## eat differently.
 ##
-## ## Staples and pastes are two different jobs
+## ## A region makes pastes. It does not have a grocery list.
 ##
-## **Staples** are the base of a week's food. They are what a voli grew up eating
-## and therefore what their absence is felt as: an aversion is not *this dish is
-## unfamiliar*, it is *nothing here is what I eat*.
+## **The staples layer is gone, and it was the mistake.** Every region used to
+## carry three of them -- barley, rice, sorghum -- alongside its pastes, and that
+## quietly built a *second* food system beside the one §1 and §2 already
+## describe: blocks are manufactured, universal and bought; pastes are what a
+## place makes and what carries its identity. Giving each region a list of
+## foodstuffs put culture back in the base of the meal, which is precisely the
+## regional-dish reading §1 rejects in writing -- and it made the block layer
+## decorative, because if the bulk of the plate already tastes of somewhere, the
+## carrier under it has nothing left to do.
 ##
-## **Pastes** are flavour and character. They are what a squad rotates through to
-## keep palate down, and what a region is known for elsewhere. A club can live
-## without any paste at all; it will just be eating the same plain week forever.
+## So a region produces **pastes and nothing else**. What a voli grew up eating
+## is a set of pastes; what a club runs a line for is pastes; what a lean season
+## takes away is a paste. The base of the week comes off a shelf and is the same
+## shelf everywhere, which is what makes the paste worth caring about.
 ##
 ## ## Every entry is authored from the region's own tagline
 ##
@@ -34,37 +41,38 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## | Bloc du Larg | *"methodical… complete control"* — technique food; things that take a method |
 ## | Xérvu | *"ancient and new rhythms… individualism"* — heat, and two traditions on one plate |
 ## | Taktikã | *"strip the game down to its roots"* — the three that grow together and need nothing else |
+## Three each, not two.
+##
+## With the staples gone the paste list *is* the region's whole table, and two
+## items made every comparison binary -- a club running one foreign line sat at
+## exactly half its own food, which put a share-based comfort band on a knife
+## edge with nothing between comfortable and not. Three is the smallest number
+## that gives §17's band somewhere to sit.
 const LARDERS := {
 	"Landavol": {
-		"staples": ["barley", "root vegetables", "soft dairy"],
-		"pastes": ["green herb", "sour cream"],
+		"pastes": ["green herb", "sour cream", "pale onion"],
 		"lean_seasons": ["winter"],
 	},
 	"Spëddigh": {
-		"staples": ["rye", "cured fish", "hard cheese"],
-		"pastes": ["smoked roe", "dill and caraway"],
+		"pastes": ["smoked roe", "dill and caraway", "brined juniper"],
 		## Preserving is the whole point of this larder, so it is the one region
 		## with no lean season. It costs them variety instead.
 		"lean_seasons": [],
 	},
 	"Pāwa Hitō": {
-		"staples": ["rice", "sea greens", "soy"],
-		"pastes": ["fermented bean", "citrus salt"],
+		"pastes": ["fermented bean", "citrus salt", "toasted sesame"],
 		"lean_seasons": ["autumn"],
 	},
 	"Bloc du Larg": {
-		"staples": ["wheat", "cultured butter", "stone fruit"],
-		"pastes": ["shallot and wine", "walnut"],
+		"pastes": ["shallot and wine", "walnut", "herb butter"],
 		"lean_seasons": ["winter", "spring"],
 	},
 	"Xérvu": {
-		"staples": ["sorghum", "groundnut", "peppers"],
 		"pastes": ["red pepper", "smoked groundnut", "tamarind"],
 		"lean_seasons": ["summer"],
 	},
 	"Taktikã": {
-		"staples": ["maize", "beans", "squash"],
-		"pastes": ["ash and lime", "burnt chilli"],
+		"pastes": ["ash and lime", "burnt chilli", "pumpkin seed"],
 		"lean_seasons": ["spring"],
 	},
 }
@@ -95,24 +103,22 @@ static func has_larder(region: String) -> bool:
 
 ## What this region produces, this week.
 ##
-## A lean season removes the *last* staple and the last paste rather than
-## everything: a region does not stop growing food in winter, it stops growing
-## some of it. Which is what makes a lean season a supply problem instead of a
-## famine.
+## A lean season removes the *last* paste rather than all of them: a region does
+## not stop making food in winter, it stops making some of it. Which is what
+## makes a lean season a supply problem instead of a famine.
 static func produces(region: String, week: int = 1) -> Dictionary:
 	var canonical := Regions.canonical_name(region)
 	var larder: Dictionary = LARDERS.get(canonical, {})
 	if larder.is_empty():
-		return {"staples": [], "pastes": [], "lean": false}
-	var staples: Array = Array(larder["staples"]).duplicate()
+		return {"pastes": [], "lean": false}
 	var pastes: Array = Array(larder["pastes"]).duplicate()
 	var lean := Array(larder["lean_seasons"]).has(season_for_week(week))
-	if lean:
-		if staples.size() > 1:
-			staples.pop_back()
-		if pastes.size() > 1:
-			pastes.pop_back()
-	return {"staples": staples, "pastes": pastes, "lean": lean}
+	## Never down to nothing. A region with one paste left is a region having a
+	## bad year; a region with none has stopped existing, and no season should do
+	## that to a place the map still has volis coming out of.
+	if lean and pastes.size() > 1:
+		pastes.pop_back()
+	return {"pastes": pastes, "lean": lean}
 
 
 ## How far one region is from another, in adjacency steps.

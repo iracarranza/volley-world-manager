@@ -218,6 +218,8 @@ func _initialize() -> void:
 	_test_a_dorm_is_still_a_dorm()
 	_test_the_room_is_drawn_where_the_model_says()
 	_test_the_accommodation_page_writes_what_the_week_reads()
+	_test_changing_where_they_live_has_a_price()
+	_test_a_region_makes_pastes_and_not_a_grocery_list()
 	_test_the_club_tells_you_what_the_rooms_did()
 	_test_the_manager_is_somebody()
 	_test_eye_parts_and_the_forked_lead()
@@ -15442,20 +15444,28 @@ func _test_the_accommodation_page_writes_what_the_week_reads() -> void:
 		str(team.housing_structure) == "Row",
 		"signing a lease on the page moves the field the week reads",
 	)
+	## **And moving costs the thing that is not money.** §16: the hit is about
+	## what the move says rather than about the beds, so it lands whatever you
+	## moved into and it lands the moment the lease is signed.
+	_check(
+		int(team.housing_settling_weeks) == ACCOMMODATION_SCRIPT.SETTLING_WEEKS,
+		"and it starts the squad settling (%d weeks)"
+			% int(team.housing_settling_weeks),
+	)
 	screen._change_occupants(1)
 	_check(
 		int(team.housing_occupants_per_room) == 3,
 		"and so does crowding a room",
 	)
-	screen._install(team.housing_small_equipment, "privacy_screen", true)
+	screen._fit(team.housing_small_equipment, "privacy_screen", true)
 	_check(
 		team.housing_small_equipment.has("privacy_screen"),
-		"and installing something",
+		"and fitting something out",
 	)
-	screen._run_line("Xérvu", true)
+	screen._fit(team.housing_small_equipment, "privacy_screen", false)
 	_check(
-		team.supply_lines.has("Xérvu"),
-		"and running a line to somewhere that grows something else",
+		not team.housing_small_equipment.has("privacy_screen"),
+		"and taking it back out again",
 	)
 	## Occupancy is bounded, because §10's floor rule only means anything if a
 	## manager can push past it -- and only stays legible if they cannot push a
@@ -15469,6 +15479,126 @@ func _test_the_accommodation_page_writes_what_the_week_reads() -> void:
 	)
 	screen.queue_free()
 	stub.free()
+
+
+## Nothing on this page is free, and the page has to say so.
+##
+## §18's correction. Every arrangement was a checkbox, which is the interface
+## telling a manager that fitting nine rooms with a console costs the same as
+## fitting none -- and the answer is not a confirmation dialog, it is a price
+## on the thing being changed.
+##
+## Priced rather than charged; see `BACKLOG`. What is gated here is that the
+## prices are *there*, that they move with the things they should move with,
+## and that no item is missing one.
+func _test_changing_where_they_live_has_a_price() -> void:
+	for catalogue in [
+		ACCOMMODATION_SCRIPT.SMALL_EQUIPMENT, ACCOMMODATION_SCRIPT.LARGE_EQUIPMENT,
+	]:
+		for item in catalogue:
+			var entry: Dictionary = catalogue[item]
+			_check(
+				int(entry.get("price", 0)) > 0,
+				"%s costs something to fit" % str(item),
+			)
+			## The tooltip is the description now, because `morale · tactical`
+			## on the row was two words standing in for a trade and read as
+			## neither. An item with no detail has nothing to say when opened.
+			_check(
+				str(entry.get("detail", "")).length() > 30,
+				"%s says what it does when you ask it" % str(item),
+			)
+
+	## **Per room, not per club.** The building's size is a term in the equipment
+	## decision rather than a label on it.
+	var one := ACCOMMODATION_SCRIPT.fitting_cost("fan", 1)
+	var nine := ACCOMMODATION_SCRIPT.fitting_cost("fan", 9)
+	_check(
+		nine == one * 9 and one > 0,
+		"nine rooms of fans cost nine fans (%d against %d)" % [nine, one],
+	)
+
+	## A move is priced off the lease, so a structure dear to rent is dear to
+	## move into and the foreign multiplier carries through once rather than
+	## twice.
+	var at_home := ACCOMMODATION_SCRIPT.move_cost("Row", "Xérvu")
+	var abroad := ACCOMMODATION_SCRIPT.move_cost("Row", "Landavol")
+	_check(
+		abroad > at_home and at_home > 0,
+		"moving into a Row costs more outside Xérvu (%d against %d)"
+			% [abroad, at_home],
+	)
+	_check(
+		ACCOMMODATION_SCRIPT.move_cost("Row", "Xérvu")
+			> ACCOMMODATION_SCRIPT.move_cost("Bunkhouse", "Xérvu"),
+		"and the dear lease is the dear move",
+	)
+
+	## **Settling costs recovery and nothing else.** Whatever you moved into.
+	var settled := ACCOMMODATION_SCRIPT.weekly_recovery_share(0.0, false, 0.0, 0.0, [], 0)
+	var unsettled := ACCOMMODATION_SCRIPT.weekly_recovery_share(0.0, false, 0.0, 0.0, [], 2)
+	_check(
+		unsettled < settled and unsettled > 0.5,
+		"a squad that has just moved banks less of the week (%.2f against %.2f)"
+			% [unsettled, settled],
+	)
+	_check(
+		ACCOMMODATION_SCRIPT.weekly_recovery_share(0.0, false, 0.0, 0.0, [], 2)
+			== ACCOMMODATION_SCRIPT.weekly_recovery_share(0.0, false, 0.0, 0.0, [], 9),
+		"and it is the same hit however long is left of it",
+	)
+
+	## How many rooms a squad is actually in, which is what equipment is priced
+	## against and what the building draws as occupied.
+	_check(
+		ACCOMMODATION_SCRIPT.rooms_occupied("Bunkhouse", 14, 2) == 7,
+		"fourteen volis two to a room fill seven of them (%d)"
+			% ACCOMMODATION_SCRIPT.rooms_occupied("Bunkhouse", 14, 2),
+	)
+	_check(
+		ACCOMMODATION_SCRIPT.rooms_occupied("Farmhouse", 40, 2)
+			== int(ACCOMMODATION_SCRIPT.STRUCTURES["Farmhouse"]["rooms"]),
+		"and a squad bigger than the building is still inside the building",
+	)
+
+
+## A region makes pastes. It does not have a grocery list.
+##
+## The larder carried three staples per region alongside its pastes, which
+## quietly built a *second* food system beside the one §1 and §2 describe:
+## blocks are manufactured, universal and bought; pastes are what a place makes.
+## Giving each region a list of foodstuffs put culture back into the base of the
+## meal -- the regional-dish reading §1 rejects in writing -- and left the block
+## layer with nothing to do, because if the bulk of the plate already tastes of
+## somewhere then the carrier under it is decoration.
+func _test_a_region_makes_pastes_and_not_a_grocery_list() -> void:
+	for region in RegionLarder.LARDERS:
+		var larder: Dictionary = RegionLarder.LARDERS[region]
+		_check(
+			not larder.has("staples"),
+			"%s makes pastes and does not grow a shopping list" % str(region),
+		)
+		## Three, not two. With the staples gone the paste list *is* the
+		## region's whole table, and two items made every comparison binary --
+		## a club running one foreign line sat at exactly half its own food,
+		## which puts §17's share-based band on a knife edge.
+		_check(
+			Array(larder["pastes"]).size() >= 3,
+			"%s makes enough of them for a share to mean anything (%d)"
+				% [str(region), Array(larder["pastes"]).size()],
+		)
+	var table: Dictionary = FOOD_SUPPLY_SCRIPT.table("Landavol", [], 1)
+	_check(
+		not table.has("staples") and not Dictionary(table["pastes"]).is_empty(),
+		"and a week's table is pastes and where each one came from",
+	)
+	## Comfort is measured against them, which is the whole reason the layer has
+	## to be the one carrying identity.
+	_check(
+		FOOD_SUPPLY_SCRIPT.comfort_share(["Landavol"], table) >= 0.99
+			and FOOD_SUPPLY_SCRIPT.comfort_share(["Xérvu"], table) <= 0.01,
+		"a voli is comfortable with the pastes they grew up on and no others",
+	)
 
 
 ## Enough of a GameManager for a screen to draw itself against.
@@ -15635,8 +15765,8 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 	)
 
 	## **A band, not a target.** Nobody needs all of it -- a share-missing model
-	## would call a voli with two of three staples a third unhappy, and this one
-	## calls them fine, which is how eating works.
+	## would call a voli with two of their three pastes a third unhappy, and this
+	## one calls them fine, which is how eating works.
 	var partial: Dictionary = FoodSupply.table("Pāwa Hitō", [], 1)
 	_check(
 		FoodSupply.comfort_share(["Pāwa Hitō"], partial) >= 0.99
@@ -15700,7 +15830,7 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 	)
 
 	## A lean season removes some of a region's produce and not all of it: a
-	## region does not stop growing food in winter, which is what makes a lean
+	## region does not stop making food in winter, which is what makes a lean
 	## season a supply problem rather than a famine.
 	var lean_found := false
 	for week in range(1, 53):
@@ -15708,8 +15838,8 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 		if bool(produce["lean"]):
 			lean_found = true
 			_check(
-				not Array(produce["staples"]).is_empty(),
-				"a lean season still grows something",
+				not Array(produce["pastes"]).is_empty(),
+				"a lean season still makes something",
 			)
 			break
 	_check(lean_found, "and some week of the year is lean for somebody")

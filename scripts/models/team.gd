@@ -26,6 +26,11 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var housing_small_equipment: Array[String] = []
 @export var housing_large_equipment: Array[String] = []
 @export var housing_occupants_per_room: int = 2
+## Weeks left before the squad has settled where they are. See `Accommodation`.
+##
+## Set when a lease changes and counted down weekly. §16: moving hurts, and the
+## cost that is not money is that nobody knows where anything is for a fortnight.
+@export var housing_settling_weeks: int = 0
 ## Which regions the club runs food lines to, beyond its own. See `FoodSupply`.
 @export var supply_lines: Array[String] = []
 ## Trust and emotional connection. Familiarity governs knowing the system;
@@ -142,6 +147,7 @@ func to_dict() -> Dictionary:
 		"housing_small_equipment": Array(housing_small_equipment).duplicate(),
 		"housing_large_equipment": Array(housing_large_equipment).duplicate(),
 		"housing_occupants_per_room": housing_occupants_per_room,
+		"housing_settling_weeks": housing_settling_weeks,
 		"supply_lines": Array(supply_lines).duplicate(),
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
@@ -177,6 +183,7 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.housing_structure = str(data.get("housing_structure", "Bunkhouse"))
 	team.housing_owned = bool(data.get("housing_owned", false))
 	team.housing_occupants_per_room = int(data.get("housing_occupants_per_room", 2))
+	team.housing_settling_weeks = int(data.get("housing_settling_weeks", 0))
 	team.housing_small_equipment.clear()
 	for item in Array(data.get("housing_small_equipment", [])):
 		team.housing_small_equipment.append(str(item))

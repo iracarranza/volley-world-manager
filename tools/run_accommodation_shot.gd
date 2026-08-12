@@ -42,19 +42,20 @@ func _shoot() -> void:
 		for crowded in [false, true]:
 			var team: Resource = game_manager.team
 			if crowded:
-				## §10's own example: two volis and a rack of weights is seven
-				## floor in a room that holds five.
+				## §10's own example: three volis and a fan is seven floor in a
+				## room that holds five, so one bed and the fan are in the
+				## corridor. Deliberately not the worst case -- a room where
+				## everything is outside the wall is a picture of red, and what
+				## needs to read is *which* things did not fit.
 				team.housing_structure = "Bunkhouse"
 				team.housing_occupants_per_room = 3
-				team.housing_large_equipment.assign(["free_weights"])
-				team.housing_small_equipment.assign(["console", "landline"])
-				team.supply_lines.assign(["Pāwa Hitō"])
+				team.housing_large_equipment.assign([])
+				team.housing_small_equipment.assign(["fan"])
 			else:
 				team.housing_structure = "Farmhouse"
 				team.housing_occupants_per_room = 2
 				team.housing_large_equipment.assign([])
 				team.housing_small_equipment.assign(["cookbook"])
-				team.supply_lines.assign([])
 
 			## The theme first, then the walk -- `application.gd`'s own order. A
 			## probe that skips the theme shoots a dark card lit for the light

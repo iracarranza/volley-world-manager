@@ -1946,3 +1946,107 @@ quantity in the food model that is *supposed* to be a slow clock reset each time
 the game was reopened. Nothing errored and no figure looked wrong — a reset
 palate reads exactly like a squad that has been fed well, which is §0 at its
 quietest. It lives on `CareerState` now and round-trips under gate.
+
+
+---
+
+## 19. The rebuild: a building you can walk round, and nothing on it is free
+
+§18's page shipped and came back with nine things wrong. Six of them were one
+thing: **it was a page of arrangements when it should have been a page about a
+building.**
+
+### The table left
+
+Supply lines, pastes and who is eating badly were on the housing page and should
+not have been. Housing and food are two systems that share a rest multiplier,
+which is not the same as being one screen — putting them together made this
+*everything that is not volleyball*, and it gave the food layer a third of a
+page rather than a page. Food gets its own. What stayed is the lease, the rooms
+and who is in them.
+
+### A region makes pastes. It does not have a grocery list.
+
+The correction that had to land first, because everything downstream reads it.
+
+`RegionLarder` carried three **staples** per region alongside its pastes —
+barley, rice, sorghum — and that quietly built a *second* food system beside the
+one §1 and §2 already describe. Blocks are manufactured, universal and bought;
+pastes are what a place makes and what carries its identity. A per-region list
+of foodstuffs puts culture back into the base of the meal, which is precisely
+the regional-dish reading §1 rejects **in writing**, and it leaves the block
+layer decorative: if the bulk of the plate already tastes of somewhere, the
+carrier under it has nothing to do.
+
+So a region produces pastes and nothing else. What a voli grew up on is a set of
+pastes, what a club runs a line for is pastes, and what a lean season takes is a
+paste. Comfort in §17 measures against them.
+
+**Three each rather than two.** With the staples gone the paste list *is* the
+region's table, and two items made every comparison binary: a club running one
+foreign line sat at exactly half its own food, which puts a share-based band on
+a knife edge with nothing between comfortable and not.
+
+### The building is the page
+
+The plan takes the room and everything else is a card that says one thing until
+opened. The closed line is a **reading, not a heading** — `Nothing fitted`,
+`Average social level: sharing` — so the common visit, the one where you are
+checking rather than changing, never has to open anything. A card whose closed
+state says only what is inside it has spent a row of the page saying nothing.
+Which is also why there is no count in a label unless the count is the reading:
+*Equipment (3)* is a fact about the interface, *a fan and two more, in nine
+rooms* is a fact about the club.
+
+### And it turns
+
+The first plan drew one room flat from directly above, and it was correct and
+inert — a bar chart with a wall on the end. What a manager is being asked about
+is where their squad lives, and a place you can only see from one angle is a
+diagram of a place rather than the place.
+
+So the whole building, in the same axonometric projection the training worksheet
+uses, with one difference that matters: **the worksheet has three named views
+because a coach asks three specific questions of a court.** Nobody asks a
+specific question of a dormitory; they look at it. So the angle is continuous —
+drag and it turns — and the tilt stays put, because a building read from a
+consistent height is one you can compare week to week. Wheel zooms, clicking a
+room goes to it, clicking it again comes back out.
+
+Every wall whose outside faces the viewer is dropped. That is the cutaway every
+building game uses and it is not decoration: a room with four walls up, seen
+from above and to one side, shows you a roof.
+
+**Two things the render caught.** The grid was spaced by whatever was *in* a
+room, so one overcrowded room drew every room in the building eleven floor wide,
+none of which is eleven floor — a room is the size the structure says it is, and
+what does not fit is in the corridor, which widens to hold it. And the floors
+were `surface_inset`, which in Mikasa is `07101a` against a `08131f` canvas: a
+room drawn darker than the room it is standing in, which is a hole.
+
+### Nothing on it is free
+
+Every arrangement was a checkbox, and a checkbox is the interface saying the
+change costs nothing. None of these do: fitting nine rooms with a console is
+nine consoles, and moving a squad is a lease and a fortnight of nobody knowing
+where anything is.
+
+| change | priced as |
+|---|---|
+| fitting equipment | the item's price × **rooms occupied**, so the building's size is a term rather than a label |
+| a move | the lease × `MOVE_COST_PER_RENT`, so a dear structure is a dear move and the foreign multiplier carries through once |
+| a move, again | `SETTLING_WEEKS` at `SETTLING_REST` — §16's cost that is not money, and it is the same hit whatever you moved into |
+
+**Priced, not charged.** The prices do not leave `career.finances`, for the
+reason in `BACKLOG`: there is no income, no other outgoing and no bankruptcy
+path, so a deduction would be a club economy rather than a screen. What the
+price is *for* is the interface, and that job it does whether or not the money
+moves.
+
+### The description moved to the tooltip
+
+`console  morale · tactical` was two words standing in for a trade and read as
+neither. What a console does is keep a room in it and keep that room a week
+behind on the week's tactical work — that is a sentence, it belongs in a
+tooltip, and the row itself carries a name and a price. Every item now has a
+`detail`, gated at a length that a two-word summary cannot reach.
