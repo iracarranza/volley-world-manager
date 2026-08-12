@@ -800,3 +800,100 @@ Still owed:
 4. **Oversized equipment** is still open, and the constraint that makes it
    interesting is already stated: it needs a bigger room *and* fewer people in
    it. Anything that trades occupancy against capability is buying its place.
+
+---
+
+## 9. Events are the loadout's readout; and a purchase is allowed to be a purchase
+
+Two corrections to §8, one of them factual.
+
+### The weights and the console do have costs
+
+§8 called them "flat bonuses". That was wrong: free weights cost fatigue decay
+and the console costs tactical familiarity growth, and both were stated from the
+start.
+
+The real objection survives the correction but is narrower than the one written
+down. **A two-sided trade still solves if both sides are constant.** Weights are
+always growth-for-recovery; a manager works out which volis want that once and
+the room stops being a question. The cookbook and the landline escape it not by
+having a downside but because their *value* varies — a voli either is homesick or
+is not, and that changes.
+
+So the problem was never missing costs. It was that the cost is **not felt**. A
+standing −X% on a number nobody watches is a downside on paper.
+
+### Which is what the events are for
+
+Random events sent by volis, staff and the world are not a separate system that
+happens to touch this one. **They are how a room's downside becomes knowable.**
+
+- a voli hurts their arm doing extra training — *the weights room, reporting*
+- an assistant coach says a set of roommates keeps turning up behind on tactical
+  work — *the console, reporting*
+- a voli says they have stopped getting on with their roommate — *the rooming
+  trade, reporting, and early enough to act on*
+- the chef says the paste is short after record snowfall — *the supply chain
+  behind the table, reporting*
+
+That closes the loop §8 was reaching for and closes it better than varying the
+numbers would. The loadout's effects stay legible and constant — which is good,
+because a manager should be able to reason about them — and what varies is
+**whether you have been told yet**. A room does not become a question because
+its multiplier moved; it becomes a question because somebody knocked on the
+door.
+
+It also answers §8's demand that a relationship crash cannot be silent. The
+warning is not a gauge, it is a voli mentioning it.
+
+### Housing is a purchase, and that is fine
+
+§8 leaned too hard on *not a purchase*. A better voli is a purchase; a better
+staff member is a purchase. Paying for capability is not the failure mode.
+
+The failure mode is a purchase you would **never decline**. And the reasons to
+decline are already the interesting ones everywhere else in this game:
+familiarity, sentiment, and what the club needs right now.
+
+For housing that does not translate one-to-one, and the reason it does not is
+the good part: **upgrading displaces people.** You do not decline the pavilion
+because it is secretly bad. You decline it because building it means the squad
+sleeps somewhere temporary for a stretch, and the stretch you have available
+runs straight into a Sixnet qualifier. Or because a squad that has been in a
+small complex for four years is *familiar* there, and a bigger facility spends
+something that took four years to build.
+
+So the pavilion **should read as an upgrade**, plainly, and the friction should
+be the **transition** rather than a hidden catch. That makes it a timing
+decision — do it in the off-season, or gamble on a gap mid-season — which is the
+same decision a real club makes and is far more interesting than a hidden
+downside would be. A manager who never finds a window they can afford is not
+being denied content; they are declining for a reason they can state.
+
+### On stakes, since §9's example raised it
+
+*"Anti-volleyball protesters have blockaded the new high-rise"* sits badly
+against a world without real conflict, and the discomfort is worth listening to,
+because the two are separable.
+
+**Stakes do not require antagonism.** A world can be full of friction that costs
+you something without containing anybody who is against you:
+
+| indifference | antagonism |
+|---|---|
+| record snowfall ruined the paste harvest | someone destroyed the harvest |
+| the permit is stuck behind a bridge repair | the council has it in for your club |
+| the hall is booked for a wedding | a rival booked the hall to spite you |
+
+The left column generates events with real consequence, real cost and no
+villains — the world simply has its own business, and volleyball is not the
+centre of it. That is a *warmer* fiction than a conflict-free one, not a colder
+one: a setting where nothing can go wrong is a setting where nothing else is
+happening.
+
+The high-rise example works if the objection is ordinary — neighbours who did
+not want a large building, which is a thing that happens to buildings — and
+stops working the moment the objection is *to volleyball*, because that imports
+a value conflict the setting has no use for.
+
+Recorded as a lean, not a decision: **indifference, not antagonism.**
