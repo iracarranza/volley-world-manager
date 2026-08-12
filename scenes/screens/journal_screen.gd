@@ -10,6 +10,7 @@ signal training_requested
 signal scouting_requested
 signal encyclopedia_requested
 signal accommodation_requested
+signal staff_requested
 
 const Training := preload("res://scripts/systems/training_system.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
@@ -288,6 +289,11 @@ func _ready() -> void:
 		)
 		header.add_child(scouting_button)
 		header.move_child(scouting_button, %TitleButton.get_index())
+		var staff_button := Button.new()
+		staff_button.text = "Staff"
+		staff_button.pressed.connect(func() -> void: staff_requested.emit())
+		header.add_child(staff_button)
+		header.move_child(staff_button, %TitleButton.get_index())
 		var accommodation_button := Button.new()
 		accommodation_button.text = "Accommodation"
 		accommodation_button.pressed.connect(

@@ -15,6 +15,7 @@ const LockInScreenScript := preload("res://scenes/screens/lock_in_screen.gd")
 const AccommodationScreenScript := preload(
 	"res://scenes/screens/accommodation_screen.gd"
 )
+const StaffScreenScript := preload("res://scenes/screens/staff_screen.gd")
 const EncyclopediaScreenScript := preload(
 	"res://scenes/screens/encyclopedia_screen.gd"
 )
@@ -38,6 +39,7 @@ var _scouting_screen: VolleyballScoutingScreen = null
 var _schedule_screen: VolleyballScheduleScreen = null
 var _lock_in_screen: LockInScreen = null
 var _accommodation_screen: AccommodationScreen = null
+var _staff_screen: StaffScreen = null
 var _encyclopedia_screen: EncyclopediaScreen = null
 ## The theme currently up, kept because the style pass is a tree walk that
 ## happens once. A screen built after that walk was never in the tree for it, so
@@ -84,6 +86,7 @@ func _ready() -> void:
 	journal.scouting_requested.connect(_show_scouting)
 	journal.encyclopedia_requested.connect(_show_encyclopedia)
 	journal.accommodation_requested.connect(_show_accommodation)
+	journal.staff_requested.connect(_show_staff)
 	## Last, so the sheet covers everything, including the screens built later.
 	_wipe = ScreenWipeScript.new()
 	add_child(_wipe)
@@ -147,6 +150,14 @@ func _ensure_accommodation_screen() -> void:
 	_accommodation_screen = AccommodationScreenScript.new()
 	_adopt_screen(_accommodation_screen)
 	_accommodation_screen.back_requested.connect(_show_journal)
+
+
+func _ensure_staff_screen() -> void:
+	if _staff_screen != null:
+		return
+	_staff_screen = StaffScreenScript.new()
+	_adopt_screen(_staff_screen)
+	_staff_screen.back_requested.connect(_show_journal)
 
 
 func _ensure_encyclopedia_screen() -> void:
@@ -216,7 +227,7 @@ func _swap_to(screen: Control) -> void:
 	for candidate in [
 		title_screen, new_career_screen, journal, match_center,
 		_training_screen, _scouting_screen, _schedule_screen, _lock_in_screen,
-		_encyclopedia_screen, _accommodation_screen,
+		_encyclopedia_screen, _accommodation_screen, _staff_screen,
 	]:
 		if candidate != null:
 			candidate.visible = candidate == screen
@@ -263,6 +274,12 @@ func _show_accommodation() -> void:
 	_ensure_accommodation_screen()
 	_accommodation_screen.bind(CareerManager, get_node("/root/GameManager"))
 	_show_only(_accommodation_screen)
+
+
+func _show_staff() -> void:
+	_ensure_staff_screen()
+	_staff_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_staff_screen)
 
 
 func _show_encyclopedia() -> void:

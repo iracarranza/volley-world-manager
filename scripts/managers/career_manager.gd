@@ -18,6 +18,7 @@ const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const WorldPopulation := preload("res://scripts/systems/world_population.gd")
 const WorldAging := preload("res://scripts/systems/world_aging.gd")
 const StaffGen := preload("res://scripts/systems/staff_generator.gd")
+const StaffFamiliar := preload("res://scripts/data/staff_familiarity.gd")
 
 signal career_changed
 signal career_loaded
@@ -397,6 +398,19 @@ func advance_week() -> String:
 		## saturates this after about a season and a half, so it is free to
 		## climb without bound.
 		player.weeks_observed += 1
+	## The chef gets a week better at whatever they cooked, and a week rustier at
+	## whatever they did not. Both halves here, because a decay applied somewhere
+	## else is a decay somebody forgets -- and a familiarity that only climbs
+	## looks exactly like a chef who is learning.
+	var kitchen_chef := _chef()
+	if kitchen_chef != null:
+		var served_now: Dictionary = _week_service(
+			str(career.region), int(career.absolute_week)
+		)
+		StaffFamiliar.record_week(
+			career.staff_familiarity, int(kitchen_chef.id),
+			Dictionary(served_now.get("pastes", {})).keys()
+		)
 	## And the squad settles into wherever they were moved, a week at a time.
 	var housed: Resource = _game_manager().team
 	if housed != null and int(housed.housing_settling_weeks) > 0:
@@ -463,14 +477,18 @@ func _week_service(club_region: String, week: int) -> Dictionary:
 ## How good the chef is, which until this week nothing could read: no career had
 ## any staff at all. §1's paste ceiling is the first job the rating has.
 func chef_rating() -> int:
+	var member := _chef()
+	return int(member.rating) if member != null else 0
+
+
+func _chef() -> Resource:
 	if career == null:
-		return 0
-	var best := 0
+		return null
 	for entry in career.staff:
 		var member := entry as VolleyballStaffMember
 		if member != null and str(member.role) == StaffMemberModel.ROLE_CHEF:
-			best = maxi(best, int(member.rating))
-	return best
+			return member
+	return null
 
 
 ## One paste per week, rotated by the chef, and one palate figure per voli.
