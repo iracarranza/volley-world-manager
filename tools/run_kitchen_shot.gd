@@ -44,12 +44,34 @@ func _shoot() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("user://kitchen_%s.png" % tag)
 		print("saved kitchen_%s" % tag)
-		## And with a preset running, which is the state the two bars exist for.
-		screen._nudge(load("res://scripts/data/region_larder.gd").paste_name("Landavol"), 0.3)
+		## And with paste spread on it, which is the state the block exists for.
+		var Larder := load("res://scripts/data/region_larder.gd")
+		var paint = screen._paint_now()
+		var ceiling: int = load("res://scripts/data/food_block.gd").paste_slots(
+			career_manager.chef_rating()
+		)
+		## Cell coordinates and radii scale with the grid, so the probe paints the
+		## same picture whatever `CANVAS` is. Written in absolute cells first, and
+		## doubling the canvas quietly shrank every blob to a quarter of its area.
+		var span := float(load("res://scripts/data/paste_paint.gd").CANVAS)
+		for stroke in [
+			[Vector2(0.28, 0.31), 0.17, "Landavol"], [Vector2(0.69, 0.41), 0.14, "Xérvu"],
+			[Vector2(0.47, 0.72), 0.12, "Spëddigh"], [Vector2(0.37, 0.53), 0.11, "Landavol"],
+		]:
+			paint.paint(
+				Vector2(stroke[0]) * span, float(stroke[1]) * span,
+				Larder.paste_name(str(stroke[2])), ceiling
+			)
+		screen._paint_changed()
 		for _settle in range(4):
 			await get_tree().process_frame
-		get_viewport().get_texture().get_image().save_png("user://kitchen_%s_preset.png" % tag)
-		print("saved kitchen_%s_preset" % tag)
+		get_viewport().get_texture().get_image().save_png("user://kitchen_%s_painted.png" % tag)
+		print("saved kitchen_%s_painted" % tag)
+		screen._open("paint")
+		for _settle in range(4):
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("user://kitchen_%s_painter.png" % tag)
+		print("saved kitchen_%s_painter" % tag)
 		for card in ["block", "lines", "presets"]:
 			screen._open(str(card))
 			for _settle in range(3):

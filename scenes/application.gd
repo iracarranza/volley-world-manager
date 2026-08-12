@@ -5,6 +5,7 @@ const DarkTheme := preload("res://scenes/themes/dark_theme.tres")
 const LightTheme := preload("res://scenes/themes/light_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
+const UICardStock := preload("res://scripts/data/ui_card_stock.gd")
 const ScreenWipeScript := preload("res://scenes/components/screen_wipe.gd")
 const TrainingScreenScript := preload("res://scenes/screens/training_screen.gd")
 const ScoutingScreenScript := preload(
@@ -363,8 +364,14 @@ func _load_theme() -> void:
 	_apply_theme(theme_name, false)
 
 
+## Both substrates, from one signal. The halftone and the card fleck are separate
+## systems on purpose -- see `UICardStock`'s header -- but they are the same kind
+## of pixel-pitch texture and a window resize is the same event for both. Missing
+## one here is a bug you can only see at a window size nobody develops at.
 func _sync_halftone_scale() -> void:
-	UIHalftone.set_viewport_height(float(get_viewport().get_visible_rect().size.y))
+	var height := float(get_viewport().get_visible_rect().size.y)
+	UIHalftone.set_viewport_height(height)
+	UICardStock.set_viewport_height(height)
 
 
 func _apply_theme(theme_name: String, persist: bool = true) -> void:
@@ -388,6 +395,7 @@ func _apply_theme(theme_name: String, persist: bool = true) -> void:
 	## every panel screened in the previous theme's ink -- close enough to right
 	## that nothing looks broken, which is the worst kind of stale.
 	UIHalftone.clear_cache()
+	UICardStock.clear_cache()
 	UIStyleSystem.apply(self, resolved == "light")
 	for palette_node in get_tree().get_nodes_in_group("ui_palette_3d"):
 		if palette_node.has_method("apply_ui_palette"):

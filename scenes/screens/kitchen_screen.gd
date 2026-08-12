@@ -22,6 +22,19 @@ extends Control
 ## approximates a target, how closely is their rating and their familiarity, and
 ## a screen showing only the target would be reporting the manager's intention
 ## as though it were the week.
+##
+## ## The block is the object and the bar is its shadow
+##
+## What was here made the bar the page, on the reasoning that the mix is the only
+## thing with a shape. That was half right. The mix does have a shape -- it is the
+## shape of a block with paste spread on it, and the bar is a *cross-section* of
+## that. So the block itself is the stage now, drawn in three-quarter view with
+## whatever is on it visible, and clicking it opens `BlockPainter`.
+##
+## The steppers are gone with it. A `+`/`−` on a percentage is a second way to say
+## the same thing as the picture and the two would disagree the moment one of them
+## rounded; the rows underneath are a readout, and the way to change the mix is to
+## spread paste on the block.
 const ScreenShell := preload("res://scenes/components/screen_shell.gd")
 const FoodBlock := preload("res://scripts/data/food_block.gd")
 const FoodSupply := preload("res://scripts/data/food_supply.gd")
@@ -30,13 +43,17 @@ const Ratio := preload("res://scripts/data/paste_ratio.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const CardScript := preload("res://scenes/components/menu_card.gd")
 const PopupScript := preload("res://scenes/components/desk_popup.gd")
+const BlockScript := preload("res://scenes/components/tofu_block.gd")
+const PainterScript := preload("res://scenes/components/block_painter.gd")
+const Paint := preload("res://scripts/data/paste_paint.gd")
+const Store := preload("res://scripts/data/paste_store.gd")
 
 signal back_requested
 
-## How much a stepper moves a paste's share. A tenth, because the ratio key
-## rounds to a tenth -- a step finer than the thing palate fatigue notices would
-## be a control with no consequence.
-const STEP: float = 0.1
+## How tall the block sits on the stage. Big enough that a nozzle stroke is a
+## deliberate gesture rather than a twitch, which is most of what separates
+## painting from dragging a slider.
+const BLOCK_HEIGHT: float = 230.0
 
 var _career_manager: Node = null
 var _game_manager: Node = null
@@ -48,6 +65,9 @@ var _lines_card: MenuCard = null
 var _preset_card: MenuCard = null
 var _panel: DeskPopup = null
 var _showing: String = ""
+var _stage_block: TofuBlock = null
+var _painter: BlockPainter = null
+var _paint: PastePaint = null
 
 
 func bind(career_manager: Node, game_manager: Node) -> void:
@@ -76,8 +96,25 @@ func _build() -> void:
 	stage.add_theme_constant_override("separation", 8)
 	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(stage)
+	## The block sits inside a flat, textless `Button` so that clicking anywhere on
+	## it opens the painter. `_is_hit_area` gives that button a tier of its own and
+	## the style pass leaves it entirely alone -- the alternative, found the hard
+	## way on the match centre, is a nib outline drawn round the whole block and a
+	## highlighter sweeping across it on hover.
+	var block_hit := Button.new()
+	block_hit.name = "OpenPainterButton"
+	block_hit.flat = true
+	block_hit.custom_minimum_size = Vector2(0.0, BLOCK_HEIGHT)
+	block_hit.pressed.connect(func() -> void: _open("paint"))
+	stage.add_child(block_hit)
+	_stage_block = BlockScript.new()
+	_stage_block.name = "StageBlock"
+	_stage_block.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_stage_block.interactive = false
+	block_hit.add_child(_stage_block)
+
 	_bar = MixBar.new()
-	_bar.custom_minimum_size = Vector2(0.0, 96.0)
+	_bar.custom_minimum_size = Vector2(0.0, 64.0)
 	stage.add_child(_bar)
 	_caption = Label.new()
 	_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -145,10 +182,16 @@ func refresh() -> void:
 	var target: Dictionary = Ratio.normalised(team.paste_preset)
 	_bar.set_mix(served, target, _table().get("pastes", {}), _week())
 
+	_stage_block.set_paint(_paint_now())
 	var block := str(team.food_block)
-	_caption.text = "%s  ·  %d of %d slots  ·  mix %.2f  ·  lines %.1f" % [
+	## Coverage rather than cost as the third figure. Cost is a number the club
+	## pays; coverage is how much of the meal has anything on it, which is the one
+	## thing about a painted block you cannot see by looking at the picture -- a
+	## block covered evenly at 40% looks much like one covered at 90%.
+	_caption.text = "%s  ·  %d of %d slots  ·  %d%% covered  ·  mix %.2f  ·  lines %.1f" % [
 		block, Ratio.slots_used(served),
 		FoodBlock.paste_slots(_career_manager.chef_rating()),
+		roundi(_paint_now().coverage() * 100.0),
 		Ratio.cost(served), float(_table().get("weekly_cost", 0.0)),
 	]
 	_refresh_rows(served, target)
@@ -162,6 +205,7 @@ func _refresh_rows(served: Dictionary, target: Dictionary) -> void:
 	for child in _rows.get_children():
 		child.queue_free()
 	var pastes: Dictionary = _table().get("pastes", {})
+	var left := _left()
 	var names: Array = pastes.keys()
 	names.sort()
 	for paste in names:
@@ -199,12 +243,15 @@ func _refresh_rows(served: Dictionary, target: Dictionary) -> void:
 		figure.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(figure)
 
-		for step in [-STEP, STEP]:
-			var button := Button.new()
-			button.text = "−" if step < 0.0 else "+"
-			var delta := float(step)
-			button.pressed.connect(func() -> void: _nudge(name, delta))
-			row.add_child(button)
+		## What is left in the pot, which is now a real quantity rather than a rate.
+		## It belongs on this row because the row is where a manager is deciding
+		## whether to spend it.
+		var store := Label.new()
+		store.name = "%sStoreValue" % name.replace(" ", "")
+		store.text = "%.2f left" % float(left.get(name, 0.0))
+		store.custom_minimum_size = Vector2(96.0, 0.0)
+		store.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(store)
 
 
 func _refresh_cards(served: Dictionary) -> void:
@@ -239,6 +286,9 @@ func _refresh_cards(served: Dictionary) -> void:
 func _open(key: String) -> void:
 	_showing = key
 	match key:
+		"paint":
+			_panel.open("The block", "Spread it yourself, and it is served as spread")
+			_panel.fill_page()
 		"block":
 			_panel.open("Block", "The base of the week, off a shelf")
 		"lines":
@@ -254,12 +304,31 @@ func _fill_panel() -> void:
 	for child in _panel.body.get_children():
 		child.queue_free()
 	match _showing:
+		"paint":
+			_fill_painter()
 		"block":
 			_fill_block()
 		"lines":
 			_fill_lines()
 		"presets":
 			_fill_presets()
+
+
+## The painter, rebuilt each time it is opened.
+##
+## Rebuilt rather than kept, because `_fill_panel` frees the panel's body on every
+## refresh and a painter held across that would be a freed node with live signal
+## connections. It is cheap: the canvas it edits lives on this screen, not in the
+## widget, so nothing about the picture is lost by remaking the interface round
+## it.
+func _fill_painter() -> void:
+	_painter = PainterScript.build()
+	_painter.changed.connect(_paint_changed)
+	_panel.body.add_child(_painter)
+	_painter.open_with(
+		_paint_now(), str(_team().food_block), _delivered(),
+		FoodBlock.paste_slots(_career_manager.chef_rating())
+	)
 
 
 func _fill_block() -> void:
@@ -409,17 +478,41 @@ func _mix_text(ratio: Dictionary) -> String:
 	return ", ".join(parts)
 
 
-## Move one paste's share and let the rest take up the slack.
+## ## The painting, the store, and what the week costs
 ##
-## Editing the mix by hand **clears the preset**, because a manager who has
-## reached in and changed the ratio is a manager standing in the kitchen -- which
-## is exactly the case §2 says gets the mix exactly rather than approximately.
-func _nudge(paste: String, delta: float) -> void:
+## `_paint` is loaded from the team once and written back on every stroke, so the
+## canvas on screen and the canvas in the save are the same picture. It is not
+## rebuilt on `refresh`, because a refresh happens while the painter is open and
+## rebuilding underneath it would drop whatever stroke was in progress.
+func _paint_now() -> PastePaint:
+	if _paint == null:
+		_paint = Paint.from_dict(_team().paste_canvas)
+	return _paint
+
+
+func _delivered() -> Dictionary:
+	return Store.delivered(_region(), _team().supply_lines, _week())
+
+
+func _left() -> Dictionary:
+	return Store.remaining(
+		_delivered(), Store.spent_on(_paint_now()), str(_team().food_block)
+	)
+
+
+## Write the picture back and let everything downstream re-read it.
+##
+## The preset is cleared here for the reason the old stepper cleared it: a
+## manager who has stood at the bench and spread the paste is not asking the chef
+## to approximate anything. Leaving both set would put a standing order and a
+## finished block on the same week, and `_week_service` would have to pick --
+## which it does, in the painting's favour, so the preset would be a setting that
+## silently did nothing.
+func _paint_changed() -> void:
 	var team := _team()
-	var current: Dictionary = _service().get("ratio", {}).duplicate()
-	current[paste] = clampf(float(current.get(paste, 0.0)) + delta, 0.0, 1.0)
-	var normalised := Ratio.normalised(current)
-	team.paste_preset = normalised
+	team.paste_canvas = _paint_now().to_dict()
+	if not _paint_now().shares().is_empty():
+		team.paste_preset = {}
 	refresh()
 
 

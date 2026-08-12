@@ -227,3 +227,68 @@ the old assertion's reasoning preserved — it was protecting something real.
 8. **Form versus underlying**, after the wheel's talent/current split exists.
 9. **Investigations**, when the day model can charge for them.
 10. **The query ladder**, tier by tier, with 5★ waiting on clubs.
+
+## Medium
+
+The spec above says nothing about what this screen is made of, which is why the
+screen was made of the wrong thing for as long as it existed. `CLAUDE.md` calls
+it "Scouting folders" and `TITLE_SCREEN.md` has said since the medium rule was
+first written that *"the clipboard is paper somebody drew on, **the folders are
+card**"* — and there was no `card` medium, so the screen fell through to the
+`drawn` default and rendered as the planner with different words on it.
+
+`MEDIUM_CARD` is that medium. Its three claims, so that a later pass does not
+"simplify" it back into a variant of one of the others:
+
+**The substrate is the material.** Manila is unbleached pulp with the fibre
+still in it. Every other medium's texture is something *done* to a surface — a
+halftone is a printing screen, a form and a board are manufactured featureless —
+and this one is the sheet itself. `UICardStock` and `card_fibre.gdshader` carry
+it: short dark specks a pixel across, pale flecks where a bundle never took the
+dye, and a slow mottle from how the pulp settled. Screen-space rather than
+per-panel, because the folders came out of one box.
+
+**There is no border.** What reads as a folder's edge is a **fold** on one side
+and the thickness of the stock seen end-on on the other three. `UICreasedEdge`
+draws exactly that: a valley and a lit shoulder for the crease, short inward
+bands for the cut sides, and nothing on the folded side — the asymmetry is what
+makes the eye read a folded sheet rather than a rectangle. No stitch, no nib, no
+printed hairline.
+
+**The hand is a pencil.** Each medium allows exactly one instrument, which is
+how a hover affordance stays inside the object's vocabulary: cloth allows
+nothing, paper takes a highlighter, a form takes marker and red pen over
+machine-set type, a board takes four markers and a wipe. A folder is annotated
+in pencil, because its contents change and pencil comes off. So hovering a
+control here drags a graphite line under it — grey and slightly cold, skipping
+where the tooth of the card stood proud of the tip.
+
+### What the screen does with it
+
+A drawer of folders down the left and the open one on the right. The tabs are
+staggered on a three-position cut, which is not decoration: third-cut stock
+alternates left, centre and right precisely because a column of tabs at one
+position is a column you cannot read past the first entry.
+
+The open folder stands **taller** than the rest rather than being coloured.
+It was a toggle first, so the theme's pressed state — accent — said *this one is
+open*; on a screen where one of the three marks is called "sign" and gets the
+same accent when set, that put two different facts in one colour. A folder
+pulled proud of the drawer is what you actually do to the one you are reading.
+
+Inside is the six-category report, each figure with the word a scout would use
+instead of it. The bands are measured against the distribution rather than
+picked — 1,584 category scores off 24 generated rosters give p25 52, p50 63,
+p75 72, so "worth the trip" at 72 is the top quarter and "not there yet" at 48
+is the bottom sixth. The first draft guessed 68 and 42 from a half-remembered
+"centred near 50"; 42 sits below the fifth percentile and a scout would have had
+almost nothing bad to say about anybody.
+
+That measurement also turned up a live defect. The category list was written
+`Setting & Control` and `Mental & Tactical`, but `summary_profile` keys them
+`Setting / Control` and `Mental / Tactical` — both spellings are load-bearing and
+documented at `CATEGORY_ALIASES`, where the last thing to get it wrong was
+`ScoutingSystem.KNOWABILITY`'s entry for the least observable category. A
+`.get(category, 50.0)` answered for the missing keys, so every prospect read
+*exactly* 50.0 on two of six categories, 264 of 264. The fallback is gone: a
+category that stops being returned now prints "missing".

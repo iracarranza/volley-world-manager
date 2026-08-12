@@ -147,6 +147,48 @@ static func served(
 	}
 
 
+## The week a manager spread themselves, served as it was spread.
+##
+## No rotation, no approximation, no ceiling check -- all three of those are
+## decisions about what the chef would do with an instruction, and this is the
+## case where the manager did it instead. §1's paste ceiling still holds because
+## `PastePaint.paint` enforces it at the point paste goes on the block, which is
+## the only place it can be enforced against a save file as well as against a
+## click.
+##
+## `coverage` rides along rather than being folded into the ratio. A block that
+## is entirely Xérvyan across a third of its surface is a thin meal that tastes
+## of one thing; a ratio alone cannot say that, and quietly scaling the shares
+## down to sum to a third would have every downstream reader treating a thin week
+## as a *mixed* one.
+static func served_exactly(
+	table_now: Dictionary, painted: Dictionary, _week: int = 1,
+	coverage: float = 1.0
+) -> Dictionary:
+	var pastes: Dictionary = table_now.get("pastes", {})
+	var ratio := {}
+	var on_block := {}
+	for paste in painted:
+		var name := str(paste)
+		## Painted with something the club can no longer reach. Kept out of the
+		## meal rather than silently sourced from nowhere -- a cancelled supply
+		## line should cost you the paste on the block, and the coverage figure is
+		## where that shows up.
+		if not pastes.has(name):
+			continue
+		ratio[name] = float(painted[paste])
+		on_block[name] = pastes[name]
+	ratio = Ratio.normalised(ratio)
+	return {
+		"pastes": on_block,
+		"ratio": ratio,
+		"sources": table_now.get("sources", []),
+		"lean": table_now.get("lean", []),
+		"coverage": clampf(coverage, 0.0, 1.0),
+		"weekly_cost": float(table_now.get("weekly_cost", 0.0)) + Ratio.cost(ratio),
+	}
+
+
 ## Which pastes the chef reaches for when nobody has said otherwise.
 ##
 ## Grouped by where they came from and dealt round-robin, so a club with a home

@@ -3,7 +3,9 @@ extends RefCounted
 
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const UIHalftone := preload("res://scripts/data/ui_halftone.gd")
+const UICardStock := preload("res://scripts/data/ui_card_stock.gd")
 const UIInkOutline := preload("res://scenes/components/ink_outline.gd")
+const UICreasedEdge := preload("res://scenes/components/creased_edge.gd")
 const UIPaperWindowScript := preload("res://scenes/components/paper_window.gd")
 const UIPaperTabsScript := preload("res://scenes/components/paper_tabs.gd")
 const UIPlasticTabsScript := preload("res://scenes/components/plastic_tabs.gd")
@@ -112,6 +114,18 @@ const MEDIUM_FORM := &"form"
 ## says so explicitly, and building it off the form is the named way to
 ## reproduce the defect that made the clipboard read as the journal.
 const MEDIUM_BOARD := &"board"
+## Manila card: the scouting folders. `TITLE_SCREEN.md` has said "the folders are
+## card" since the medium rule was first written down, and until now there was no
+## `card` -- so the folders fell through to `drawn` and the scouting screen was
+## the planner with different words on it.
+##
+## It is the only medium whose surface texture is the **material** rather than
+## something done to the material: the journal's halftone is a reproduction, the
+## form and the board are manufactured featureless, and manila is unbleached pulp
+## with the fibre still in it. Its edges are a fold and three cut sides rather
+## than a border of any kind, and the one instrument allowed on it is a pencil.
+## `UICreasedEdge` and `UICardStock` carry those two claims respectively.
+const MEDIUM_CARD := &"card"
 
 
 static func apply(
@@ -289,9 +303,19 @@ static func _screen_surface(
 	## reasons: office stock is flat because it is bleached pulp, and melamine is
 	## flat because it is plastic. Written as two names rather than one condition
 	## so that a change to one does not silently move the other.
+	## Card is neither screened nor bare: it has a texture and the texture is not a
+	## print. Handled as its own branch rather than as a third name in
+	## `unscreened`, because "not screened" is a statement about ink and this is a
+	## statement about pulp -- the two happen to agree that the halftone is wrong
+	## here and agree about nothing else.
 	var unscreened := medium == MEDIUM_FORM or medium == MEDIUM_BOARD
-	control.material = null if unscreened \
-		else UIHalftone.material_for(control.theme_type_variation, light_mode)
+	if medium == MEDIUM_CARD:
+		control.material = UICardStock.material_for(
+			control.theme_type_variation, light_mode
+		)
+	else:
+		control.material = null if unscreened \
+			else UIHalftone.material_for(control.theme_type_variation, light_mode)
 	_ink_surface(control, medium)
 	_vary_patch_colour(control, medium)
 	_stock_colour(control, medium)
@@ -332,17 +356,97 @@ const FORM_STOCK_DARK := Color(0.93, 0.96, 1.02)
 const BOARD_STOCK_LIGHT := Color(0.985, 1.005, 1.0)
 const BOARD_STOCK_DARK := Color(0.90, 0.95, 0.965)
 
+## Manila, which is the one stock on the desk that is a *colour* rather than an
+## absence of one.
+##
+## The journal's cream, the office sheet and the whiteboard are all near-neutral
+## and separate from each other by a percent or two of hue. Card is not: it is
+## buff, and it is buff because it was never bleached. So this is the largest
+## stock shift of the four by an order of magnitude, and it has to be -- a folder
+## that reads as slightly-warm paper is a sheet of paper.
+##
+## Darker as well as warmer in the light theme, which is the half that is easy to
+## miss. Paper is the brightest thing on a desk; card is heavier and duller and
+## sits visibly below it, and a manila folder rendered at paper's brightness
+## reads as a yellow highlight rather than as a different material.
+##
+## **The dark multiplier is large and it has to be.** `self_modulate` multiplies,
+## and Mikasa's surfaces are blue -- `surface` is `#10283a`, whose blue channel is
+## three and a half times its red. A gentle warm nudge of the kind the form and
+## the board take leaves a blue panel that is very slightly less blue, which is
+## what the first dark render showed: a drawer of slate folders. Getting to
+## manila from a blue ground means most of the blue has to go and the red has to
+## roughly quadruple. Checked against all three surface tiers rather than one:
+## `#10283a` lands at `#3c3322`, `surface_raised` at `#56472c`, `surface_inset`
+## at `#1a140f` -- a related family of warm browns, which is what a drawer of
+## card in a dim room is.
+const CARD_STOCK_LIGHT := Color(1.02, 0.955, 0.845)
+const CARD_STOCK_DARK := Color(3.75, 1.275, 0.586)
+
 
 static func _stock_colour(control: Control, medium: StringName) -> void:
-	if medium != MEDIUM_FORM and medium != MEDIUM_BOARD:
+	if medium != MEDIUM_FORM and medium != MEDIUM_BOARD and medium != MEDIUM_CARD:
+		return
+	var light := UIPalette.control_is_light(control)
+	## **Card stocks the controls too, and the other two media do not.**
+	##
+	## On a form or a board the surface is one material and the controls are
+	## something a hand added to it, so only the surfaces take the stock. A folder
+	## has no such split: a tab is a piece of the same sheet, folded over. Leaving
+	## the buttons out gave the first render a drawer of manila folders with slate
+	## tabs on them, which is a thing that does not exist.
+	if medium == MEDIUM_CARD:
+		if UICardStock.TIERS.has(control.theme_type_variation):
+			var stock := CARD_STOCK_LIGHT if light else CARD_STOCK_DARK
+			control.self_modulate = stock
+			_uncolour_text(control, stock)
 		return
 	if not control.theme_type_variation in STITCHED_TIERS:
 		return
-	var light := UIPalette.control_is_light(control)
 	if medium == MEDIUM_BOARD:
 		control.self_modulate = BOARD_STOCK_LIGHT if light else BOARD_STOCK_DARK
 		return
 	control.self_modulate = FORM_STOCK_LIGHT if light else FORM_STOCK_DARK
+
+
+## Divide the stock back out of a button's lettering.
+##
+## `self_modulate` tints everything a control draws *itself*, and a `Button` draws
+## its own text. That is harmless for a panel, which draws only a stylebox, and it
+## is not harmless here: Mikasa's manila multiplier is `(3.75, 1.275, 0.586)`, so
+## the white it was applied to came out `(1.0, 1.0, 0.586)` and every word on the
+## scouting screen turned yellow -- tabs, marks and all, which also erased the
+## pressed state that says which mark is set.
+##
+## The fix is arithmetic rather than a second colour system. Each font colour is
+## divided by the stock before the stock multiplies it back, so the lettering
+## lands exactly where the theme put it while the stock still colours the card.
+## Components above one are fine and are the whole mechanism: `1.0 / 0.586` is
+## `1.71`, and `1.71 * 0.586` is white again.
+##
+## Set as overrides, which this same pass strips at the top of every run -- so
+## they are recomputed rather than accumulated, and a control that stops being
+## card gets its own colours back on the next pass rather than keeping a division
+## by a stock it no longer has.
+const CARD_TEXT_COLOURS: Array[StringName] = [
+	&"font_color", &"font_pressed_color", &"font_hover_color",
+	&"font_focus_color", &"font_disabled_color",
+]
+
+
+static func _uncolour_text(control: Control, stock: Color) -> void:
+	if not control is Button:
+		return
+	for key in CARD_TEXT_COLOURS:
+		if not control.has_theme_color(key):
+			continue
+		var colour := control.get_theme_color(key)
+		control.add_theme_color_override(key, Color(
+			colour.r / maxf(stock.r, 0.001),
+			colour.g / maxf(stock.g, 0.001),
+			colour.b / maxf(stock.b, 0.001),
+			colour.a,
+		))
 
 
 static func _vary_patch_colour(control: Control, medium: StringName) -> void:
@@ -352,7 +456,10 @@ static func _vary_patch_colour(control: Control, medium: StringName) -> void:
 	## A board is one wiped surface. Tinting each panel differently would say the
 	## page was assembled from scraps, which is the journal's fact and not this
 	## object's.
-	if medium == MEDIUM_FORM or medium == MEDIUM_BOARD:
+	## A box of folders is a box of folders. They vary in how grubby they are, not
+	## in what they are cut from, and the journal's per-scrap tint would say a
+	## manager assembled their filing out of found card.
+	if medium == MEDIUM_FORM or medium == MEDIUM_BOARD or medium == MEDIUM_CARD:
 		return
 	if not control.theme_type_variation in STITCHED_TIERS \
 			or control.theme_type_variation in UNTINTED_TIERS:
@@ -399,11 +506,23 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	if medium == MEDIUM_FORM:
 		if existing != null:
 			existing.queue_free()
+		_creased_edge(control, false)
 		_printed_rule(control)
 		return
 	var printed := control.get_node_or_null("PrintedRule")
 	if printed != null:
 		printed.queue_free()
+	## A folder takes neither. It has no border at all: the fold and the three cut
+	## sides *are* the edge, and they are geometry rather than a mark. Handled
+	## before the stroke choice below because there is no stroke to choose -- a
+	## `card` surface that fell through to the `else` would take the pen, which is
+	## the exact shape of the mistake that made the clipboard read as the journal.
+	if medium == MEDIUM_CARD:
+		if existing != null:
+			existing.queue_free()
+		_creased_edge(control, true)
+		return
+	_creased_edge(control, false)
 	## **A board takes no highlighter.**
 	##
 	## `hover_highlight` sweeps a translucent highlighter band -- see
@@ -497,6 +616,48 @@ static func _paper_window(control: Control) -> void:
 ## child is not laid out by anything and simply lies on it.
 ## The press rule for one surface, added once. `gridded` only for the panels big
 ## enough to be a sheet -- a button is a printed box on the form, not a form.
+## The fold and the cut sides, added once, removed the moment the medium changes.
+##
+## Same shape as `_printed_rule` and `_ink_surface` -- an exempt child, reused
+## across passes rather than restacked -- because it answers the same question
+## about the same node.
+##
+## The `wanted` flag is what makes it removable. A screen can be restyled into a
+## different medium at runtime (the theme switch reruns this whole pass), and an
+## edge component that only ever adds itself would leave a folder's crease drawn
+## down the side of a clipboard.
+static func _creased_edge(control: Control, wanted: bool) -> void:
+	var existing := control.get_node_or_null("CreasedEdge") as UICreasedEdge
+	if not wanted:
+		if existing != null:
+			## Detached before it is freed, not merely queued.
+			##
+			## `queue_free` runs at the end of the frame, so a node freed that way
+			## is still a child -- and still *drawing* -- for the rest of the pass
+			## that removed it. Since a theme switch reruns this whole walk
+			## synchronously, a surface that changed medium would draw one more
+			## frame with both its old edge and its new one. Removing first makes
+			## the tree honest the moment the decision is made.
+			control.remove_child(existing)
+			existing.queue_free()
+		return
+	## Only the surfaces are folded sheets. A control is a *tab* -- a smaller
+	## piece of the same card -- and a tab is not folded on its long side, so it
+	## gets the cut edges and the pencil and no crease.
+	var surface := control.theme_type_variation in STITCHED_TIERS
+	if existing != null:
+		existing.fold = UICreasedEdge.Fold.LEFT if surface else UICreasedEdge.Fold.NONE
+		existing.pencil_hover = not surface
+		existing.queue_redraw()
+		return
+	var edge := UICreasedEdge.new()
+	edge.name = "CreasedEdge"
+	edge.fold = UICreasedEdge.Fold.LEFT if surface else UICreasedEdge.Fold.NONE
+	edge.pencil_hover = not surface
+	edge.pencil_seed = int(String(control.name).hash() & 0x7FFFFFFF)
+	control.add_child(edge)
+
+
 static func _printed_rule(control: Control) -> void:
 	var existing := control.get_node_or_null("PrintedRule") as UIPrintedRule
 	var wants_grid := control.theme_type_variation in [

@@ -44,6 +44,19 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 ## week that was actually cooked, so the list is a record of things this club has
 ## really eaten rather than a recipe book somebody typed.
 @export var paste_presets: Dictionary = {}
+
+## This week's painted block, as `PastePaint.to_dict`.
+##
+## Saved because it is an *instruction*, not a readout. A manager who painted
+## three quarters of the block Xérvyan and closed the game has told the kitchen
+## something, and a block that came back bare on Monday would have thrown it
+## away -- along with the paste it cost, which the store has already been charged
+## for.
+##
+## Empty means nobody painted this week, which is a different state from a bare
+## block somebody scraped clean: the first lets the chef rotate, the second is a
+## deliberate week of unpasted meals.
+@export var paste_canvas: Dictionary = {}
 ## Trust and emotional connection. Familiarity governs knowing the system;
 ## cohesion governs how strongly confidence and recovery spread through it.
 @export_range(0.0, 1.0) var cohesion: float = 0.50
@@ -163,6 +176,7 @@ func to_dict() -> Dictionary:
 		"food_block": food_block,
 		"paste_preset": paste_preset.duplicate(true),
 		"paste_presets": paste_presets.duplicate(true),
+		"paste_canvas": paste_canvas.duplicate(true),
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
@@ -210,6 +224,7 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	team.food_block = str(data.get("food_block", "Blan'deral"))
 	team.paste_preset = Dictionary(data.get("paste_preset", {})).duplicate(true)
 	team.paste_presets = Dictionary(data.get("paste_presets", {})).duplicate(true)
+	team.paste_canvas = Dictionary(data.get("paste_canvas", {})).duplicate(true)
 	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
 	team.regional_alignment = clampf(
 		float(data.get("regional_alignment", 0.50)), 0.0, 1.0

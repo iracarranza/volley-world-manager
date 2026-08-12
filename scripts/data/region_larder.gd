@@ -207,3 +207,54 @@ static func distance(from_region: String, to_region: String) -> int:
 				next.append(name)
 		frontier = next
 	return -1
+
+
+## ## What a paste looks like in the pot
+##
+## The block is painted with these, so a paste has to be a colour before it can be
+## a share -- and the colour has to say *what it tastes of*, because that is the
+## only property of a paste a cook can see. Two regions on the same axis are near
+## neighbours here on purpose: a Bompaşaon ferment and a Spëddigh ferment are both
+## pale and sour-looking, and telling them apart is the label's job, not the
+## colour's.
+##
+## Deliberately not the region's map colour. A paste is not a flag; a heavy sweet
+## is treacle-dark wherever it was made.
+const AXIS_COLOURS := {
+	"clean umami": Color("9a6f3c"),
+	"sharp ferment": Color("c4b25c"),
+	"fatty savoury": Color("8c3f2c"),
+	"bitter herb": Color("55663a"),
+	"numbing spice": Color("a83b34"),
+	"smoky char": Color("4a423c"),
+	"sour citrus": Color("bdc457"),
+	"heavy sweet": Color("5c3a30"),
+}
+## The unknown paste, which should not be pretty. Nobody should be able to paint
+## a nice-looking block out of a region that has no larder.
+const UNKNOWN_COLOUR := Color("7a7168")
+
+## How far two pastes on one axis are allowed to drift apart.
+##
+## Small: they are the same kind of thing. Large enough that a manager mixing two
+## ferments can tell which half of the block is which, which is the whole reason
+## this is not just `AXIS_COLOURS[axis]`.
+const REGION_TINT_SPREAD: float = 0.12
+
+
+static func paste_colour(region: String) -> Color:
+	var canonical := Regions.canonical_name(region)
+	var base: Color = AXIS_COLOURS.get(axis_of(canonical), UNKNOWN_COLOUR)
+	if not has_larder(canonical):
+		return UNKNOWN_COLOUR
+	## Seeded from the region's own name, so a paste is the same colour every time
+	## it is poured and no two are mixed by hand.
+	var seed_value := int(canonical.hash() & 0x7FFFFFFF)
+	var shade := (float(seed_value % 1000) / 1000.0 - 0.5) * REGION_TINT_SPREAD
+	var warmth := (float((seed_value / 1000) % 1000) / 1000.0 - 0.5) \
+		* REGION_TINT_SPREAD * 0.7
+	return Color(
+		clampf(base.r + shade + warmth, 0.0, 1.0),
+		clampf(base.g + shade, 0.0, 1.0),
+		clampf(base.b + shade - warmth, 0.0, 1.0),
+	)

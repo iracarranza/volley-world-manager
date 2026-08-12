@@ -472,6 +472,22 @@ func _week_service(club_region: String, week: int) -> Dictionary:
 	if team == null:
 		return {}
 	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
+	## **A painted block is served exactly.**
+	##
+	## §2's rule is that only manual instruction guarantees the ratio, and
+	## painting the block *is* manual instruction -- a manager who stood at the
+	## bench and spread the paste themselves has done the thing the rule is about.
+	## So the chef's drift does not apply: there is nothing for them to
+	## approximate, because the mix is already on the block in front of them.
+	##
+	## This is also what stops the two inputs contradicting each other. A preset
+	## is a standing order the chef interprets; a painting is this week, done.
+	## When both exist the painting wins, because it is the more recent and the
+	## more specific instruction.
+	var painted: PastePaint = PastePaint.from_dict(team.paste_canvas)
+	var painted_shares: Dictionary = painted.shares()
+	if not painted_shares.is_empty():
+		return FoodSupply.served_exactly(table, painted_shares, week, painted.coverage())
 	var chef := _chef()
 	var known := 0.0
 	if chef != null:

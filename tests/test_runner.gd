@@ -275,6 +275,7 @@ func _initialize() -> void:
 	_test_landing_absorbs_and_returns_to_neutral()
 	_test_block_is_a_jump_not_a_shape()
 	_test_surface_screen_and_card_variation()
+	_test_the_folders_are_card()
 	_test_scouting_confidence_and_fog()
 	_test_attack_courses_are_relative_to_the_hitter()
 	_test_attack_power_is_a_choice()
@@ -14071,6 +14072,175 @@ func _midpoint_phase(
 	return _first_phase_where(from_phase, func(row: Dictionary) -> bool:
 		return float(row[key]) < midpoint if descending \
 			else float(row[key]) > midpoint
+	)
+
+
+## The fourth medium, and the three ways it has to differ from the other three.
+##
+## `TITLE_SCREEN.md` documented the folders as card before there was a `card`, so
+## the scouting screen rendered on the `drawn` default -- the planner with
+## different words on it -- for as long as it existed. These are the checks that
+## would have caught it.
+func _test_the_folders_are_card() -> void:
+	for tier in UICardStock.TIERS:
+		_check(
+			UICardStock.material_for(StringName(tier), false) != null,
+			"card stock tier %s builds a material" % str(tier),
+		)
+	_check(
+		UICardStock.material_for(&"NotATier", false) == null,
+		"an unknown tier is not stocked",
+	)
+
+	## Same elevation ordering the halftone keeps, reached by a different
+	## argument -- see `UICardStock.TIERS`.
+	var inset: float = float(UICardStock.TIERS[&"InsetPanel"].strength)
+	var card: float = float(UICardStock.TIERS[&"CardPanel"].strength)
+	var raised: float = float(UICardStock.TIERS[&"RaisedPanel"].strength)
+	_check(
+		inset > card and card > raised,
+		"fleck falls as a surface rises (%.3f > %.3f > %.3f)" % [inset, card, raised],
+	)
+
+	## The pale speck is the one that turns a dark folder into a woven mat.
+	var dark_stock := UICardStock.material_for(&"CardPanel", false)
+	var light_stock := UICardStock.material_for(&"CardPanel", true)
+	_check(
+		float(dark_stock.get_shader_parameter("pale_scale"))
+			< float(light_stock.get_shader_parameter("pale_scale")),
+		"the dark theme lifts less of the pale fleck",
+	)
+	UICardStock.clear_cache()
+	_check(
+		UICardStock.material_for(&"CardPanel", false) != dark_stock,
+		"clearing the card cache rebuilds the materials",
+	)
+
+	## **A card surface has no border of any kind**, which is the claim the whole
+	## medium rests on. Checked against a form built the same way, because "it
+	## looks different" was true of the clipboard too right up until it was not.
+	var folder := PanelContainer.new()
+	folder.name = "OpenFolder"
+	var folder_tab := Button.new()
+	folder_tab.name = "FolderTab1"
+	folder_tab.text = "somebody"
+	folder.add_child(folder_tab)
+	UIStyleSystemScript.apply(folder, false, UIStyleSystemScript.MEDIUM_CARD)
+	_check(
+		folder.get_node_or_null("CreasedEdge") != null,
+		"a card surface is folded and cut",
+	)
+	_check(
+		folder.get_node_or_null("InkOutline") == null
+			and folder.get_node_or_null("PrintedRule") == null,
+		"a card surface has neither a drawn nor a printed edge",
+	)
+	_check(
+		folder.material != null,
+		"a card surface carries its stock",
+	)
+	## The tab is the same sheet, folded over: same stock, no crease of its own.
+	_check(
+		folder_tab.self_modulate == UIStyleSystemScript.CARD_STOCK_DARK,
+		"a tab is cut from the same card as the folder",
+	)
+	var tab_edge := folder_tab.get_node_or_null("CreasedEdge") as UICreasedEdge
+	_check(
+		tab_edge != null and tab_edge.fold == UICreasedEdge.Fold.NONE
+			and tab_edge.pencil_hover,
+		"a tab is cut on every side and takes the pencil",
+	)
+	## And the lettering survives the stock. Mikasa's manila multiplier is well
+	## above one in red, so an uncompensated white label comes out yellow -- which
+	## is what the first render showed, on every word on the screen.
+	##
+	## Compared against the same button on the default medium rather than against
+	## white, because the theme's own lettering is not white and a check that
+	## assumed it was would be measuring with the wrong instrument -- passing or
+	## failing on the theme's warmth rather than on the compensation.
+	var plain_tab := Button.new()
+	plain_tab.name = "FolderTab1"
+	plain_tab.text = "somebody"
+	UIStyleSystemScript.apply(plain_tab, false, UIStyleSystemScript.MEDIUM_DRAWN)
+	var wanted := plain_tab.get_theme_color(&"font_color")
+	var lettering := folder_tab.get_theme_color(&"font_color")
+	var stock := UIStyleSystemScript.CARD_STOCK_DARK
+	var landed := Color(
+		lettering.r * stock.r, lettering.g * stock.g, lettering.b * stock.b, lettering.a
+	)
+	_check(
+		landed.is_equal_approx(wanted),
+		"the stock does not tint a tab's own lettering (%s, wanted %s)"
+			% [str(landed), str(wanted)],
+	)
+	plain_tab.free()
+	folder.free()
+
+	## Switched to a form, the crease has to go. The style pass runs again on
+	## every theme change, and an edge component that only ever adds itself would
+	## leave a fold down the side of a clipboard.
+	var sheet := PanelContainer.new()
+	sheet.name = "FormPanel"
+	UIStyleSystemScript.apply(sheet, false, UIStyleSystemScript.MEDIUM_CARD)
+	UIStyleSystemScript.apply(sheet, false, UIStyleSystemScript.MEDIUM_FORM)
+	_check(
+		sheet.get_node_or_null("CreasedEdge") == null
+			and sheet.get_node_or_null("PrintedRule") != null,
+		"a surface that stops being card stops being folded",
+	)
+	sheet.free()
+
+	## The screen declares it. This is the assertion that was missing: the medium
+	## existing is no use if the one object made of it never says so.
+	var screen: Control = load("res://scenes/screens/scouting_screen.gd").new()
+	screen._build()
+	_check(
+		StringName(screen.get_meta(UIStyleSystemScript.MEDIUM_META, &""))
+			== UIStyleSystemScript.MEDIUM_CARD,
+		"the scouting screen is made of card",
+	)
+	screen.free()
+
+	## **The report reads the keys the game uses.**
+	##
+	## `summary_profile` spells two categories with a slash and
+	## `CATEGORY_ATTRIBUTES` spells them with an ampersand; both are load bearing
+	## and this is the third thing to cross between them. The screen's first draft
+	## used the wrong spelling and a `.get(key, 50.0)` answered for it, so every
+	## prospect read exactly 50.0 on Setting and on Mental, 264 of 264.
+	var scouting_screen := load("res://scenes/screens/scouting_screen.gd")
+	var roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
+		"Landavol", "Established", 8181
+	)
+	var reads: Array[float] = []
+	for player in roster:
+		var summary: Dictionary = ATTRIBUTE_PROFILE_SCRIPT.summary_profile(player)
+		for category in scouting_screen.REPORT_CATEGORIES:
+			_check(
+				summary.has(str(category)),
+				"a folder's %s is a key the profile actually returns" % str(category),
+			)
+			reads.append(float(summary.get(str(category), 50.0)))
+
+	## And the bands sit inside the distribution they act on -- §0's standing
+	## failure, which is silent by construction. Measured at p25 52 / p75 72 over
+	## 24 rosters; a band that never fires would pass every other check here.
+	var strong := 0
+	var weak := 0
+	for value in reads:
+		if value >= scouting_screen.REPORT_STRONG:
+			strong += 1
+		elif value <= scouting_screen.REPORT_WEAK:
+			weak += 1
+	var strong_share := float(strong) / maxf(float(reads.size()), 1.0)
+	var weak_share := float(weak) / maxf(float(reads.size()), 1.0)
+	_check(
+		strong_share > 0.08 and strong_share < 0.55,
+		"a scout calls some of them worth the trip (%.0f%%)" % [strong_share * 100.0],
+	)
+	_check(
+		weak_share > 0.05 and weak_share < 0.45,
+		"and some of them not there yet (%.0f%%)" % [weak_share * 100.0],
 	)
 
 

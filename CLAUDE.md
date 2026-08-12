@@ -99,6 +99,16 @@ away.
   | `form` -- the clipboard | flat stock, cooler, unscreened | printed hairlines, square corners, faint grid | only the annotation: marker, red pen, highlighter |
   | `drawn` -- default | halftone, pen edge | broad-nib pen | by hand |
   | `board` -- the match centre | melamine, cool, a wiped smear, no screen | marker rules edge to edge; magnets, not borders | all of it, in four markers, minutes ago |
+  | `card` -- the scouting folders | manila, buff, a fibre fleck one pixel across | a fold and three cut edges -- no border at all | pencil, and only on hover |
+
+  `card` is the only medium whose texture is the **material** rather than
+  something done to it: a halftone is a reproduction, a form and a board are
+  manufactured featureless, and manila is unbleached pulp with the fibre still
+  in it. It is also the only one with no line around a surface -- see
+  `UICreasedEdge`. Its stock multiplier in Mikasa is large (`3.75, 1.275, 0.586`)
+  because getting to buff from a blue ground takes most of the blue out, and that
+  multiplier tints a `Button`'s own lettering, which is why `_uncolour_text`
+  exists. `docs/design/SCOUTING.md` §Medium.
 
   `board` is drafted but unbuilt; see `docs/design/THE_TACTICAL_WHITEBOARD.md`.
   Its display face is **Yatra One**, not Cherry Bomb One, and it shares exactly

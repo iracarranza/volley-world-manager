@@ -1,0 +1,48 @@
+extends Node
+
+## The folders, as a picture.
+##
+##     xvfb-run -a godot --path . res://tools/scouting_shot.tscn
+##
+## Shot with a mark on three of them, because an unmarked drawer proves the
+## stagger and nothing else -- the point of the render is whether a pencil word
+## on a tab is legible against manila in both themes.
+
+
+func _ready() -> void:
+	await get_tree().process_frame
+	await _shoot()
+	get_tree().quit()
+
+
+func _shoot() -> void:
+	var career_manager: Node = get_node("/root/CareerManager")
+	var game_manager: Node = get_node("/root/GameManager")
+	var error: String = career_manager.create_career(
+		"Folder Probe", "Probe VC", "Landavol", "Established", "Balanced"
+	)
+	if not error.is_empty():
+		print("could not start a career: %s" % error)
+		return
+
+	for light_mode in [false, true]:
+		var screen: Control = load("res://scenes/screens/scouting_screen.gd").new()
+		screen.theme = load("res://scenes/themes/light_theme.tres") if light_mode \
+			else load("res://scenes/themes/dark_theme.tres")
+		screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(screen)
+		screen.bind(career_manager, game_manager)
+		var marks: Dictionary = career_manager.career.scouting_marks
+		var players: Array = game_manager.players
+		for index in range(mini(players.size(), 6)):
+			if index % 2 == 0:
+				marks[int(players[index].id)] = 1 + (index % 3)
+		screen.refresh()
+		load("res://scripts/systems/ui_style_system.gd").apply(screen, light_mode)
+		var tag := "molten" if light_mode else "mikasa"
+		for _settle in range(4):
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("user://scouting_%s.png" % tag)
+		print("saved scouting_%s" % tag)
+		screen.queue_free()
+		await get_tree().process_frame
