@@ -1536,3 +1536,93 @@ worth it for somebody who has just flown two regions, actively bad for somebody
 settled and training every morning. Install it for a trip, take it out after —
 or leave it in and accept that this voli is not a morning voli, which is a
 characterisation the game gets for free out of a piece of furniture.
+
+---
+
+## 15. You rent before you build, and that is where a save starts
+
+### Renting first solves the problem §12 created
+
+§12 made structures regional practice, which was right and immediately broke
+something: if a Row is Xérvu's way of housing athletes, a Landavol club cannot
+have one, and a club playing abroad is stuck. Regional practice as an
+*ownership* rule is a cage.
+
+**Clubs rent.** A region has existing stock — buildings that are already there,
+put up by somebody else at some point — and a club takes a lease on one. What is
+available in a region skews heavily toward that region's practice, because that
+is what got built there, but it is stock rather than law: cities have mixed
+buildings, somebody's Longhouse went up in Bloc du Larg forty years ago and is
+still standing, and a club can lease it.
+
+So regional practice survives as **what is easy to find and cheap to rent**,
+which is a far better statement of a culture than a prohibition. You can house
+your squad any way you like. You will pay for the ways that are unusual here.
+
+### And owning is the thing money eventually buys
+
+With enough in the bank a club stops leasing and **builds its own**. That is the
+long-horizon money sink the design has otherwise lacked, and it should be
+genuinely far off.
+
+The rule that makes owning matter without making renting bad:
+
+> **You can furnish what you rent. You can only build what you own.**
+
+Small and large equipment go in any room — they are yours, you brought them, you
+take them with you. **Shared installations are part of the building**: the
+hearth, the long table, the big kitchen, the washing room. A club that leases
+gets whatever the building already has; a club that builds chooses.
+
+That gives ownership a concrete meaning beyond "no more rent", and it means the
+Commons is not fully itself until you own one — its whole value is a shared room
+you have furnished on purpose.
+
+**Building abroad costs astronomically more**, and not only in money. Per §12, a
+structure out of its region is importing a way of living; building one abroad is
+importing it *and* paying local trades to construct something they have never
+built. The money is the visible cost and the friction is the real one.
+
+### This replaces Established / Founded at save generation
+
+`new_career_screen.gd` currently asks region → **Established or Founded** →
+identity. The middle step should become **what you are renting**, for the reason
+already stated: every club has new volis and old ones, and nobody starts by
+coaching a region's academy. Established-versus-Founded is an abstraction over a
+thing the player never sees again.
+
+A lease is not an abstraction. It is a monthly cost, a floor budget, a squad
+already living somewhere, and a sentence about who you are.
+
+**And it does not lose information — it carries it more concretely.**
+`PlayerGenerator.generate_roster` takes an `organization_type` and branches on
+founded-versus-established to decide whether a squad is small and young. That
+branch stays; the housing choice simply *implies* it, because what a club can
+afford to lease already says what kind of club it is:
+
+| you are renting | rent | implies | and the squad is |
+|---|---|---|---|
+| a corner of a **Longhouse** | lowest | Founded | small, young, sharing everything |
+| a **Bunkhouse** block | low | Founded | the ordinary young club |
+| a **Farmhouse** | modest | Established | small, settled, eats well |
+| rooms in a **Block** | modest | Established | large, including youth |
+| the **Quarters** at a hall | high | Established | serious, and it shows |
+| a **Row** terrace | highest | Established | a club with money and no chemistry |
+
+One concrete choice doing the work of one abstract one, and setting the
+accommodation state on the way through. The mapping has to be explicit in code
+rather than inferred, so that adding a seventh structure is a decision about
+what kind of club rents it rather than an accident.
+
+### What this changes elsewhere
+
+- **Finances get a standing outgoing.** Rent is the first recurring cost in the
+  game, and it is the pressure that makes the rest of the economy mean anything.
+- **Housing becomes tractable early.** A lease can be changed at the cost of
+  §9's transition — displacement, no equipment, drift — rather than requiring
+  construction. Moving is a real mid-career option, and the astronomically
+  expensive version is the endgame rather than the only version.
+- **The "get money and stop looking" pitfall stays closed**, because ownership
+  does not make a structure better. It makes it *yours*, which buys shared
+  installations and removes rent, and a Row you own is still a Row: excellent
+  rest, no pairs. Money buys you out of a lease, not out of a trade-off.
