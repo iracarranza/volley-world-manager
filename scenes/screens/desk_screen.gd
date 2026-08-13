@@ -942,66 +942,113 @@ class _Surface extends Control:
 		draw_circle(centre, radius * 0.24, Color(steel.darkened(0.45), 1.0))
 		draw_circle(_at(entry, 0.32, 1.0, top_h * 0.62), 3.4, Color(0.10, 0.10, 0.11))
 
-	## An anglepoise, built in centimetres and projected like everything else.
+	## The silhouette of a solid of revolution, from two rings.
 	##
-	## The old one was a screen-space stick with the shade offset by a fixed pixel
-	## count, so it leaned the wrong way and did not agree with the desk about how
-	## far away it was. Every point here is a place in the room.
-	func _model_lamp(entry: Dictionary, top_h: float, light: bool) -> void:
-		var metal := _stock_of("lamp", light)
-		var foot: Rect2 = entry["foot"]
-		var mid_u := foot.position.x + foot.size.x * 0.5
-		var back_v := foot.position.y + foot.size.y * 0.35
-		## A weighted disc for a base, drawn as an ellipse the projection made.
-		draw_colored_polygon(
-			PackedVector2Array(_disc(mid_u, foot.position.y + foot.size.y * 0.5, 0.6, 7.0)),
-			Color(metal.darkened(0.24), 1.0)
-		)
-		var base := _to_screen(mid_u, back_v, 1.2)
-		var elbow := _to_screen(mid_u, back_v, top_h * 0.60)
-		## The arm reaches forward over the desk, which is what an anglepoise does
-		## and is also why the pool of light lands where it does.
-		var head := _to_screen(mid_u, back_v + 16.0, top_h)
-		draw_line(base, elbow, Color(metal.darkened(0.14), 1.0), 5.0)
-		draw_line(elbow, head, Color(metal.darkened(0.14), 1.0), 5.0)
-		draw_circle(elbow, 4.2, Color(metal.lightened(0.16), 1.0))
-		## The shade: a cone whose mouth is a real circle on a plane below the head,
-		## so it is an ellipse of the right squash rather than a hand-drawn wedge.
-		var mouth_h := top_h - 9.0
-		var mouth := _disc(mid_u, back_v + 16.0, mouth_h, 9.0)
-		draw_colored_polygon(
-			PackedVector2Array([
-				head + Vector2(-6.0, -4.0), head + Vector2(6.0, -4.0),
-				mouth[0], mouth[mouth.size() / 2],
-			]), metal
-		)
-		draw_colored_polygon(PackedVector2Array(mouth), Color(metal.darkened(0.34), 1.0))
-		var bulb := _to_screen(mid_u, back_v + 16.0, mouth_h - 1.0)
-		draw_circle(bulb, 6.0, Color(0.32, 0.34, 0.36) if light else LAMP_WARMTH)
-		if not light:
-			for step in range(4):
-				draw_circle(
-					bulb, 8.0 + float(step) * 7.0,
-					Color(LAMP_WARMTH, 0.11 / float(step + 1))
-				)
+	## Both round things here -- the mug and the lampshade -- were built by hand
+	## from "the front half" of one ring and "the back half" of another, and both
+	## got it wrong: `_disc` starts at the *right* of the circle and runs through
+	## the front, so the half a naive split takes is the back one. The mug came out
+	## with its wall behind its rim, which reads exactly as a cup tilted away on a
+	## slope, and the shade came out inside out.
+	##
+	## A convex hull of both rings cannot get it wrong. The outline of a cylinder or
+	## a cone *is* the hull of its two ends, whatever the projection does to them,
+	## and there is no half to pick.
+	func _hull(lower: Array, upper: Array) -> PackedVector2Array:
+		var all := PackedVector2Array()
+		for point in lower:
+			all.append(point)
+		for point in upper:
+			all.append(point)
+		return Geometry2D.convex_hull(all)
 
-	## A circle on the desk, at a height, as the projection makes it -- an ellipse
-	## squashed by the viewing angle, which is what a round thing looks like from a
-	## chair and what neither the mug nor the lampshade were before.
+	## A circle on the desk at a height, as the projection makes it. Index 0 is the
+	## right of the circle, a quarter of the way round is the front.
 	func _disc(u_cm: float, v_cm: float, h_cm: float, radius_cm: float) -> Array:
 		var points: Array = []
-		for step in range(20):
-			var angle := TAU * float(step) / 20.0
+		for step in range(24):
+			var angle := TAU * float(step) / 24.0
 			points.append(_to_screen(
 				u_cm + cos(angle) * radius_cm, v_cm + sin(angle) * radius_cm, h_cm
 			))
 		return points
 
+	## An anglepoise: a weighted base, an upright, an arm reaching out over the
+	## desk, and a shade on the end of it.
+	##
+	## Drawn in that order, which is the fix as much as the geometry is. The shade
+	## used to be a flat wedge with the mouth painted over it *and* the arm drawn
+	## first and then covered -- so the lamp read as a dark disc lying on the table
+	## with its leg collapsed, which is a thing cheap lamps do and not what this is.
+	func _model_lamp(entry: Dictionary, top_h: float, light: bool) -> void:
+		var metal := _stock_of("lamp", light)
+		var foot: Rect2 = entry["foot"]
+		var mid_u := foot.position.x + foot.size.x * 0.5
+		var back_v := foot.position.y + foot.size.y * 0.5
+		## The base, and the small step up off it.
+		draw_colored_polygon(
+			PackedVector2Array(_disc(mid_u, back_v, 0.4, 6.5)),
+			Color(metal.darkened(0.30), 1.0)
+		)
+		draw_colored_polygon(
+			PackedVector2Array(_disc(mid_u, back_v, 1.6, 4.2)),
+			Color(metal.darkened(0.12), 1.0)
+		)
+		## The upright, straight and clearly vertical, then the arm angling forward
+		## over the desk. Two members with a joint, which is what an anglepoise is
+		## and what a single line from base to shade cannot be.
+		var elbow_h := top_h * 0.72
+		var post_foot := _to_screen(mid_u, back_v, 1.6)
+		var elbow := _to_screen(mid_u, back_v, elbow_h)
+		## Reaching far enough forward that the shade is not sitting on top of its
+		## own post. It was fifteen centimetres against a shade ten across, so the
+		## upright vanished inside it and only its tip showed -- which is what read
+		## as a collapsed leg.
+		var reach_v := back_v + 21.0
+		var head_h := top_h - 2.0
+		var head := _to_screen(mid_u, reach_v, head_h)
+		draw_line(post_foot, elbow, Color(metal.lightened(0.06), 1.0), 6.5)
+		draw_line(elbow, head, Color(metal.lightened(0.06), 1.0), 6.0)
+		draw_circle(elbow, 4.4, Color(metal.lightened(0.22), 1.0))
+		draw_circle(head, 3.4, Color(metal.lightened(0.14), 1.0))
+		## The shade: a cone hanging under the head, drawn as the hull of its two
+		## rings so the silhouette is whatever the projection says it is.
+		var mouth_h := head_h - 10.0
+		var cap := _disc(mid_u, reach_v, head_h, 3.4)
+		var mouth := _disc(mid_u, reach_v, mouth_h, 8.5)
+		## **You are above it, so you see the outside of the shade.**
+		##
+		## The mouth faces the desk. Filling it bright painted the lit *interior*
+		## over the whole cone, which is the view from underneath -- so the lamp
+		## came out as a glowing blob with a stalk. What a lit lamp looks like from
+		## a chair is a dark shade with light escaping under its rim and a pool on
+		## the wood, and the pool is already painted.
+		draw_colored_polygon(_hull(mouth, cap), metal)
+		draw_colored_polygon(PackedVector2Array(cap), Color(metal.lightened(0.12), 1.0))
+		if not light:
+			## The rim, lit from inside. Only the front of it: the back of the rim
+			## is on the far side of the shade and is not visible from here, and
+			## lighting the whole ring is how the mouth ends up looking like a
+			## floating disc again.
+			for index in range(mouth.size() / 4, mouth.size() * 3 / 4):
+				draw_line(
+					mouth[index], mouth[(index + 1) % mouth.size()],
+					Color(1.0, 0.95, 0.80, 0.9), 3.0
+				)
+			## And the spill just under the rim, which is the light leaving the
+			## shade rather than the shade glowing.
+			var under := _to_screen(mid_u, reach_v + 3.0, mouth_h - 2.0)
+			for step in range(4):
+				draw_circle(
+					under, 10.0 + float(step) * 9.0,
+					Color(LAMP_WARMTH, 0.09 / float(step + 1))
+				)
+
 	## A mug: a cylinder with a handle, which is what it is.
 	##
 	## It was a flat ring of fixed pixel radius seen from directly above, on a desk
 	## seen from a chair -- the one object in the room drawn from a different
-	## viewpoint, which is why it read as wrong rather than as small.
+	## viewpoint -- and then a cylinder whose wall was on the wrong side of it.
 	func _model_mug(entry: Dictionary, top_h: float, light: bool) -> void:
 		var china := _stock_of("mug", light)
 		var foot: Rect2 = entry["foot"]
@@ -1010,20 +1057,15 @@ class _Surface extends Control:
 		var radius := foot.size.x * 0.5
 		## The handle first, so the body draws over where it joins.
 		var handle := _to_screen(mid_u + radius, mid_v, top_h * 0.55)
-		draw_arc(handle, 8.0, -PI * 0.55, PI * 0.55, 14, Color(china.darkened(0.22), 1.0), 3.6)
+		draw_arc(
+			handle, 8.0, -PI * 0.55, PI * 0.55, 14, Color(china.darkened(0.26), 1.0), 3.8
+		)
 		var rim := _disc(mid_u, mid_v, top_h, radius)
 		var base := _disc(mid_u, mid_v, 0.0, radius)
-		## The wall of the cylinder: the front half of the rim down to the front
-		## half of the base. Only the front, because the back of a mug is inside it.
-		var wall := PackedVector2Array()
-		for index in range(rim.size() / 2, rim.size()):
-			wall.append(rim[index])
-		for index in range(base.size() - 1, base.size() / 2 - 1, -1):
-			wall.append(base[index])
-		draw_colored_polygon(wall, Color(china.darkened(0.18), 1.0))
+		draw_colored_polygon(_hull(base, rim), Color(china.darkened(0.16), 1.0))
 		draw_colored_polygon(PackedVector2Array(rim), china)
 		## What is in it, and the last of it, which is not a mechanic.
 		draw_colored_polygon(
-			PackedVector2Array(_disc(mid_u, mid_v, top_h - 1.4, radius * 0.78)),
+			PackedVector2Array(_disc(mid_u, mid_v, top_h - 1.2, radius * 0.76)),
 			Color(0.30, 0.18, 0.11)
 		)
