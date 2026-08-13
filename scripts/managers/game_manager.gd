@@ -408,6 +408,15 @@ func _make_player(
 		)
 	if not overrides.has("serve_variation"):
 		player.serve_variation = player.serve_accuracy
+	## The vertical slice's `ego` figures were authored when one number meant
+	## both temperaments, and every one of them was chosen as *aggression* --
+	## Kova at 84 is the opposite who swings through the block, not the player
+	## hardest to talk out of a read. Mirroring rather than defaulting to 50
+	## keeps these twelve volis hitting exactly as they did; their ego is then
+	## the same number meaning the new thing, which is a starting point and not
+	## a claim.
+	if not overrides.has("aggression"):
+		player.aggression = player.ego
 	AttributeProfiles.assign_serve_style(player)
 	Familiarity.initialize_player(player)
 	return player
@@ -615,6 +624,9 @@ func resolve_active_rally(
 	## a function of what it was given, which is what makes a rally replayable
 	## from a seed.
 	simulator.pair_familiarity = team.pair_familiarity if team != null else {}
+	if team != null:
+		simulator.team_cohesion = float(team.cohesion)
+		simulator.team_tactical_familiarity = float(team.tactical_familiarity)
 	return simulator.resolve(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,

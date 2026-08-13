@@ -1039,6 +1039,16 @@ var current_match_flow: float = 0.0
 ## at the baseline and the trust term contributes nothing, which is what the
 ## opponent's setter should get until opponents keep tables of their own.
 var pair_familiarity: Dictionary = {}
+## How settled this squad is, handed in on the same principle as the pair table
+## above: the simulator does not reach for a `Team`, it is given the two numbers
+## it needs. The defaults are `Team`'s own, so a caller that forgets gets an
+## ordinary squad rather than a perfect or a broken one.
+##
+## Both, not one. Cohesion is whether they get on; tactical familiarity is
+## whether they have drilled the overlap. A squad can have either without the
+## other and the seam wants both.
+var team_cohesion: float = 0.50
+var team_tactical_familiarity: float = 0.35
 var last_set_decision: Dictionary = {}
 ## Names available to player-facing narration, filled in as the rally reaches
 ## each contact.
@@ -1900,18 +1910,43 @@ func resolve(
 			assignment.lane, HOME_SET_DELIVERY_MIN_Y
 		),
 		HOME_SET_DELIVERY_MAX_Y,
+		## How far this ball is being thrown, so a long set scatters like a long
+		## set. Measured from the intent rather than from the delivered point,
+		## which is the thing being computed.
+		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
 	)
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
 	)
+	## Standing or off the floor, decided here because this is the first point
+	## that knows both halves of it: the pass has an apex and the setter has an
+	## arrival margin. `_reception_pass_result` has the apex but runs before the
+	## chooser, so it cannot know how rushed this body is.
+	var jump_set := _jump_set_decision(
+		setter, float(reception_pass.get("pass_apex_meters", 0.0)),
+		setter_arrival_margin,
+	)
+	var set_release_height := GeometricAttackPromotionModel \
+		.set_contact_height_meters(setter, bool(jump_set.jumping))
 	var set_arc := _set_arc(
 		setter, assignment.tempo, float(result.set_quality),
-		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		## Bounded by where the ball actually got to. A setter cannot release
+		## from above the pass's own apex whatever they do with their legs, and
+		## this is the half of the clamp that was always right -- it was inert
+		## only because the other half never moved.
+		minf(set_release_height, maxf(
+			float(reception_pass.get("pass_apex_meters", set_release_height)),
+			0.01,
+		)),
 		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		RallyKinematics.court_distance_meters(set_contact, set_target),
 		set_height_extra,
 	)
-	var set_flight_time: float = float(set_arc.duration_seconds)
+	## Pace, not shape. The flatter parabola a higher contact allows already
+	## falls out of `_set_arc`; this is the kinetic half the geometry cannot
+	## give, and it shortens the flight rather than changing where the ball goes.
+	var set_flight_time: float = float(set_arc.duration_seconds) \
+		/ maxf(_set_pace_scale(setter, bool(jump_set.jumping)), 0.5)
 	var release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
 	var release_interval := _release_interval(release_profile, float(result.set_quality))
 	## The instant the ball leaves the setter's hands. The set flight, the SET
@@ -1976,6 +2011,19 @@ func resolve(
 	(result.events[-1] as RallyEvent).metadata["height_difficulty"] = set_height_difficulty
 	var set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(set_event, setter_choice)
+	## Which posture this set was released from, and why it was not the other
+	## one. `reason` is diagnostic rather than narratable -- a rushed setter
+	## should read as a setter with their feet on the floor, not as a caption --
+	## but a jump set that never fires and a jump set that fires always look
+	## identical without it, and one of those is the bug this replaces.
+	if set_event != null:
+		set_event.metadata["set_posture"] = "jump" if bool(jump_set.jumping) \
+			else "standing"
+		set_event.metadata["set_posture_reason"] = str(jump_set.reason)
+		set_event.metadata["set_release_height_meters"] = set_release_height
+		set_event.metadata["set_pace_scale"] = _set_pace_scale(
+			setter, bool(jump_set.jumping)
+		)
 	if set_event != null and not home_transition_targets.is_empty():
 		set_event.metadata["home_phase_targets"] = home_transition_targets
 		set_event.metadata["home_phase_intents"] = home_transition_intents
@@ -4954,6 +5002,7 @@ func _resolve_home_continuation(
 			assignment.lane, HOME_SET_DELIVERY_MIN_Y
 		),
 		HOME_SET_DELIVERY_MAX_Y,
+		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
 	)
 	var continuation_set_arc := _set_arc(
 		setter, assignment.tempo, set_quality,
@@ -8707,6 +8756,85 @@ func _recovery_debt(player_id: int, at_time: float) -> float:
 ## clearance, so the whole thing was inert over there. The second-contact
 ## candidate `starts` are side-correct and cover all six, so they are what gets
 ## passed in.
+## How much room this mover leaves *this* teammate, as a multiple of a torso.
+##
+## Two volis who have run this overlap a hundred times pass close: each knows
+## which way the other will break, so neither swings wide. Two who have not both
+## hedge, and hedging is a wider berth and therefore a longer route -- which is
+## the cost of poor cohesion expressed as geometry rather than as a penalty
+## added to a number.
+##
+## Ego is the other half and it acts on the *mover*: a voli who does not expect
+## to be moved for holds their line and cuts close, and the give-way is somebody
+## else's problem. That is not a virtue. It is why a squad of high-ego volis
+## produces the collisions this model is for, and it is measured on the mover
+## alone because the obstructing body is not making a decision here -- they are
+## standing somewhere.
+## **Centred, not lerped between two ends.** The first version was
+## `lerp(1.30, 0.80, settled)`, which hands an ordinary squad 1.12 -- so the
+## knob did not separate squads, it widened every berth in the game by 12% and
+## called that cohesion. The movement-agreement gate caught it: SET already
+## carries a documented residual at its lower bound and a systematically longer
+## second-contact route tipped it.
+##
+## So this is a deviation from 1.0 about a stated neutral. A default squad
+## (`Team` ships 0.50 cohesion and 0.35 familiarity, and an unknown pair reads
+## `BASELINE` 24 of 100) computes `settled` = 0.361, which sits slightly wide of
+## neutral on purpose: a squad that has not played together should hedge a
+## little.
+##
+## The swing is deliberately modest and deliberately measured rather than felt.
+## It is not yet known whether +/-8% of a torso changes anything a player would
+## notice -- `tools/obstruction_probe.tscn` is what says so, and the value stays
+## small until it does.
+const BERTH_NEUTRAL_SETTLED: float = 0.50
+const BERTH_COHESION_SWING: float = 0.16
+## **Sized against the cohesion swing, after being six times it.** This was 0.18
+## next to a 0.16 *total* span, so a high-ego voli cut 18% closer than an
+## ordinary one while the entire cohesion axis moved 8% -- the temperament
+## dominated the thing it was supposed to modulate, and the fatigue gate caught
+## it: with this function stubbed out the suite passed, with it live peak
+## fatigue over 24 weeks fell from above 0.15 to 0.10. Every detour in the game
+## was being resized by one attribute.
+##
+## It is the same mistake as `SECOND_CONTACT_EGO_PULL`, made twice in one
+## change: a magnitude asserted in prose and never checked against the terms
+## beside it.
+const BERTH_EGO_RELIEF: float = 0.06
+
+
+## `PairFamiliarityModel` counts to `CEILING`, which is 100, and everything on
+## this page works in fractions.
+##
+## Written without this, both cohesion knobs read a pair table entry of 24.0 as
+## a 0-1 weight, so `clampf(0.28 + 8.4, 0.0, 1.0)` pinned them at 1.0 for every
+## pair on the court. Cohesion had no effect whatever, in either direction, and
+## the code looked exactly as though it did -- the §0 failure, in the same
+## commit that adds the knob it disables. Caught by a fatigue gate, not by
+## reading it.
+func _pair_fraction(first_id: int, second_id: int) -> float:
+	return clampf(
+		PairFamiliarityModel.of(pair_familiarity, first_id, second_id)
+			/ PairFamiliarityModel.CEILING,
+		0.0, 1.0,
+	)
+
+
+func _berth_scale(mover: VolleyballPlayer, other_id: int) -> float:
+	if mover == null:
+		return 1.0
+	var settled := clampf(
+		(team_cohesion + team_tactical_familiarity) * 0.5 * 0.65
+			+ _pair_fraction(mover.id, other_id) * 0.35,
+		0.0, 1.0,
+	)
+	var ego_lean := (float(mover.ego) - 50.0) / 50.0 * BERTH_EGO_RELIEF
+	return clampf(
+		1.0 + (BERTH_NEUTRAL_SETTLED - settled) * BERTH_COHESION_SWING - ego_lean,
+		0.72, 1.24,
+	)
+
+
 func _navigation_waypoint(
 	mover: VolleyballPlayer, start: Vector2, target: Vector2, bodies: Dictionary
 ) -> Variant:
@@ -8732,7 +8860,7 @@ func _navigation_waypoint(
 			continue
 		## A body already on the floor is given a wider berth than one standing:
 		## they cannot shift, so the whole of the avoiding is the mover's to do.
-		var clearance := OBSTRUCTION_CLEARANCE_M
+		var clearance := OBSTRUCTION_CLEARANCE_M * _berth_scale(mover, int(other_id))
 		if float(player_recovery.get(int(other_id), {}).get("delay", 0.0)) > 0.0:
 			clearance *= OBSTRUCTION_GROUNDED_BERTH
 		var shortfall := clearance - gap
@@ -8813,6 +8941,57 @@ func _stamp_navigation(event: RallyEvent, navigation: Variant) -> void:
 	)
 
 
+## How much this voli calls for a ball nobody has been assigned.
+##
+## Legs and duty decide most of a second contact and they are the two terms
+## above this one. What they cannot express is that a loose ball between two
+## bodies is settled by who *shouts* -- and three separate temperaments answer
+## that differently:
+##
+## - **ego** is the one that takes a ball it has no business taking. It is the
+##   unwillingness to be talked off a decision, so it belongs here rather than
+##   in a duty weight: duty is what the sheet says and ego is what happens when
+##   nobody consults the sheet.
+## - **leadership** is the mirror image, and it is why it is worth half as much.
+##   Both make a voli likelier to end up with the ball, but leadership does it
+##   by the others *clearing out*, which is a good outcome, and ego does it by
+##   the others being overruled, which is often not.
+## - **aggression** barely belongs and is here small and deliberate: a second
+##   ball is not a terminal contact, so the voli who wants to end rallies has
+##   only a slight pull toward being the one who touches it. If this term grows
+##   it is a sign the second contact is being modelled as an attack.
+##
+## Sized against `duty_bonus`, whose extremes are +0.46 for the designated
+## setter and -0.24 for no duty at all -- a spread of 0.70.
+##
+## **The first sizing said a tenth and was a third.** 0.14 + 0.07 + 0.04 reaches
+## 0.25 for a voli at the top of all three, which is enough to hand a second
+## ball to somebody with no duty at all, and the fatigue gate caught it: matches
+## resolved differently enough that peak fatigue over 24 weeks fell from above
+## 0.15 to 0.10. Stating a magnitude in a comment is not the same as having it,
+## and the arithmetic was never done. These reach 0.09 together, which is the
+## tenth the paragraph claims: it decides a coin flip and never overrules the
+## sheet.
+##
+## Cohesion is *not* here on purpose. A confident squad does not produce a voli
+## who wants the ball more; it produces one who yields cleanly when somebody
+## else has it. That is the seam, and it is handled there.
+const SECOND_CONTACT_EGO_PULL: float = 0.050
+const SECOND_CONTACT_LEADERSHIP_PULL: float = 0.025
+const SECOND_CONTACT_AGGRESSION_PULL: float = 0.015
+
+
+func _second_contact_temperament(candidate: VolleyballPlayer) -> float:
+	if candidate == null:
+		return 0.0
+	## Centred on 50, so an ordinary voli contributes nothing and the term is a
+	## deviation rather than a bonus everyone collects. A knob that only ever
+	## adds is a knob that has moved the baseline instead of separating players.
+	return (float(candidate.ego) - 50.0) / 50.0 * SECOND_CONTACT_EGO_PULL \
+		+ (float(candidate.leadership) - 50.0) / 50.0 * SECOND_CONTACT_LEADERSHIP_PULL \
+		+ (float(candidate.aggression) - 50.0) / 50.0 * SECOND_CONTACT_AGGRESSION_PULL
+
+
 func _spatial_setter_choice(
 	candidates: Array[VolleyballPlayer],
 	starts: Dictionary,
@@ -8883,7 +9062,8 @@ func _spatial_setter_choice(
 		var arrival_score := clampf((available_time - travel_time) / 1.2, -1.0, 1.0)
 		var score := arrival_score * 0.52 \
 			+ _rating(candidate, "set_accuracy") * 0.28 \
-			+ _rating(candidate, "decision_making") * 0.12 + duty_bonus
+			+ _rating(candidate, "decision_making") * 0.12 + duty_bonus \
+			+ _second_contact_temperament(candidate)
 		if score > best_score:
 			best_score = score
 			best = {
@@ -8921,9 +9101,67 @@ func _spatial_setter_choice(
 	if claimants.size() >= 2:
 		var gap := float(claimants[0].score) - float(claimants[1].score)
 		best["claim_margin"] = gap
-		best["seam_conflict"] = gap < SECOND_CONTACT_SEAM_MARGIN
+		## **A seam is a failure to delegate, so cohesion is the width of it.**
+		##
+		## The gap is how far apart two volis' claims are; the threshold is how
+		## small a gap this squad can still resolve without both going or neither.
+		## A side that has played together reads the same ball the same way and
+		## one of them clears out early -- so the window in which they collide is
+		## narrow. A side that has not hedges, and a gap that a settled squad
+		## would have delegated cleanly becomes two people calling for it.
+		##
+		## Leadership is the other half and it applies to the *leader of the two*:
+		## somebody the room follows shuts a seam that two equals would argue
+		## over. Read off whichever claimant leads, not the winner, because a
+		## captain deferring is still a captain resolving it.
+		best["seam_conflict"] = gap < _seam_margin(
+			_player_by_id(candidates, int(claimants[0].id)),
+			_player_by_id(candidates, int(claimants[1].id)),
+		)
 		best["contested_by"] = int(claimants[1].id)
 	return best
+
+
+## How wide the window is in which two volis both think the ball is theirs.
+##
+## `SECOND_CONTACT_SEAM_MARGIN` is the middle of the range rather than the whole
+## of it -- it is what a squad at 0.5 cohesion with two ordinary volis gets.
+## Measured over 1,520 second contacts before this existed: the fixed 0.10 fired
+## zero times against a real claim-gap distribution starting at p05 0.142, which
+## is a threshold sitting outside its own distribution, so a *constant* here was
+## never going to be the answer whatever value it took.
+##
+## The spread is deliberately wide for that reason: at zero cohesion between two
+## volis nobody follows it reaches 0.10 * 2.2 = 0.22, which is above the p05 of
+## the distribution, and at full cohesion it falls to 0.10 * 0.4 = 0.04, well
+## below it. A knob that cannot reach its own range is the failure this
+## repository keeps making; this one is built to span it and then be measured.
+const SEAM_COHESION_SPAN: Vector2 = Vector2(2.2, 0.4)
+const SEAM_LEADERSHIP_RELIEF: float = 0.35
+
+
+func _seam_margin(first: VolleyballPlayer, second: VolleyballPlayer) -> float:
+	## Averaged rather than multiplied, so a new squad who get on is not as bad
+	## as a squad who neither drill nor speak.
+	var cohesion := clampf(
+		(team_cohesion + team_tactical_familiarity) * 0.5, 0.0, 1.0
+	)
+	## And then *these two specifically*. A squad average says how the room is;
+	## `pair_familiarity` says whether these two have played this overlap before,
+	## which is the thing that actually decides whether one of them clears out.
+	## Weighted below the squad figure because a pair table is sparse early and a
+	## missing pair must not read as a hostile one -- `PairFamiliarityModel.of`
+	## returns the baseline for an unknown pair, not zero.
+	if first != null and second != null:
+		cohesion = clampf(
+			cohesion * 0.65 + _pair_fraction(first.id, second.id) * 0.35, 0.0, 1.0
+		)
+	var scale := lerpf(SEAM_COHESION_SPAN.x, SEAM_COHESION_SPAN.y, cohesion)
+	var lead := 0.0
+	if first != null and second != null:
+		lead = maxf(float(first.leadership), float(second.leadership)) / 100.0
+	return SECOND_CONTACT_SEAM_MARGIN * scale \
+		* lerpf(1.0, 1.0 - SEAM_LEADERSHIP_RELIEF, lead)
 
 
 ## The designated setter, unless they took the first contact -- then whoever the
@@ -11311,6 +11549,32 @@ func _normal_from_uniform_halfwidth(half_width: float) -> float:
 ## would make "can this setter miss the pin" a hard threshold on quality instead
 ## of a tail, which is the same defect that made block outcomes impossible
 ## rather than unlikely.
+## How far a ball misses the point it was aimed at, and how much further a long
+## one misses.
+##
+## **Scatter did not know how far the ball was going.** One standard deviation
+## from set quality, applied identically to a 1.5 m back-set and a 9 m ball to
+## the far pin. Measured over 1,216 sets before this: drift ran 0.26 m at 3-6 m
+## and 0.40 m beyond 6 m, and *0.34 m under 3 m* -- worse at short range than at
+## medium, which is backwards for anything thrown. What that non-monotonicity
+## actually shows is that distance was never an input; the buckets differ only
+## because short sets are attempted in worse situations.
+##
+## An angular error is the shape that fixes it. A setter releases the ball a few
+## degrees off, and a few degrees is centimetres near the net and half a metre
+## across the court -- so the deviation grows with the throw rather than being
+## a fixed radius the whole offence lives inside.
+##
+## The existing quality band stays and is now the *angular* term. The reference
+## distance is where the two agree, chosen as the measured median set so that
+## the population's middle is unchanged and only its tails move.
+const SET_DELIVERY_REFERENCE_METERS: float = 3.63
+## How much of the error is angular rather than fixed. A release is not purely
+## a rotation -- a mishandled ball leaves the hands wrong at any range -- so the
+## fixed share stays and this is what rides on distance.
+const SET_DELIVERY_ANGULAR_SHARE: float = 0.70
+
+
 func _delivered_point(
 	intended: Vector2,
 	quality: float,
@@ -11318,10 +11582,18 @@ func _delivered_point(
 	best_stdev_meters: float,
 	min_y: float,
 	max_y: float,
+	## Zero means "no distance known", which keeps every caller that has not been
+	## given one on exactly the behaviour it had -- the reference ratio is 1.0.
+	distance_meters: float = 0.0,
 ) -> Vector2:
 	var stdev_meters := lerpf(
 		worst_stdev_meters, best_stdev_meters, clampf(quality, 0.0, 1.0)
 	)
+	if distance_meters > 0.0:
+		var reach := distance_meters / SET_DELIVERY_REFERENCE_METERS
+		stdev_meters *= lerpf(
+			1.0, reach, clampf(SET_DELIVERY_ANGULAR_SHARE, 0.0, 1.0)
+		)
 	var limit := stdev_meters * EXECUTION_ERROR_DEVIATION_LIMIT
 	var offset_x := clampf(rng.randfn(0.0, stdev_meters), -limit, limit) \
 		/ CourtConstants.COURT_WIDTH_METERS
@@ -13169,6 +13441,97 @@ func _set_apex_meters(
 ## floor-defense calibration recorded beside the flag. Real hang times are about
 ## triple the legacy launch-angle times, so this must not be toggled independently
 ## of the timing and balance gates named there.
+## The ball has to be up there, and you have to have got there in time.
+##
+## Every set in this game was a standing set. `set_contact_height_meters` takes
+## a `jumping` flag, `JUMP_SET_EFFORT` prices the hop, `SetterCapability` prices
+## the penalty and `shadow_setter_response_system` lists `jump_set` as an
+## option -- and the live path called the function with the default and never
+## asked. That made the pass apex inert too: contact was
+## `min(pass_apex, standing_reach * 0.97)` and the reach was always the smaller,
+## so a 3.16 m pass and a 2.42 m pass were played from exactly the same height.
+## Measured over 1,052 passes, apex ran 2.42-3.31 m and *every* one of them was
+## truncated to the setter's standing hands.
+##
+## Three conditions, and the point is that they can each fail alone:
+##
+## - **The ball got high enough.** You cannot jump to meet a ball that never
+##   rose to where you would be. A pass below the standing release is played
+##   underhand and this is what says so.
+## - **There was time to load.** Measured, the budget between the pass being
+##   played and the ball leaving the hands runs p05 1.12 s to p95 2.64 s about a
+##   1.67 s median -- so a rushed setter is common rather than exotic, and the
+##   hop is the first thing they lose.
+## - **The body can do it under pressure.** Balance and stability, not leap:
+##   a setter jumping is not trying to get high, they are trying to arrive
+##   square and release from a moving platform.
+const JUMP_SET_LOAD_SECONDS: float = 0.34
+const JUMP_SET_COMPOSURE_FLOOR: float = 0.30
+
+
+func _jump_set_decision(
+	setter: VolleyballPlayer, pass_apex_meters: float, arrival_margin: float
+) -> Dictionary:
+	if setter == null:
+		return {"jumping": false, "reason": "no setter"}
+	var standing := GeometricAttackPromotionModel.set_contact_height_meters(setter)
+	var airborne := GeometricAttackPromotionModel.set_contact_height_meters(
+		setter, true
+	)
+	var poise := (_rating(setter, "set_balance") + _rating(setter, "set_stability")) \
+		* 0.5
+	## A high pass with a rushed setter and a low pass with all the time in the
+	## world both come out standing, and they are different failures. Named so
+	## the probe can tell them apart before anything here is tuned.
+	if pass_apex_meters < standing:
+		return {
+			"jumping": false, "reason": "under the hands",
+			"standing_height": standing, "airborne_height": airborne,
+		}
+	if arrival_margin < JUMP_SET_LOAD_SECONDS:
+		return {
+			"jumping": false, "reason": "no time to load",
+			"standing_height": standing, "airborne_height": airborne,
+		}
+	if poise < JUMP_SET_COMPOSURE_FLOOR:
+		return {
+			"jumping": false, "reason": "cannot release off the floor",
+			"standing_height": standing, "airborne_height": airborne,
+		}
+	return {
+		"jumping": true, "reason": "jump set",
+		"standing_height": standing, "airborne_height": airborne,
+	}
+
+
+## What a set's pace comes from, as a multiple of the baseline.
+##
+## Two halves, and the geometric one is already free: `_set_arc` solves the
+## flight from the release height, so a higher contact flattens the parabola to
+## the same destination without anything here asking it to. What is missing is
+## the kinetic half -- the jump puts the body's momentum into the ball, and a
+## setter who stays on the floor has to find the same pace out of the arm alone.
+##
+## So a standing set is not merely lower, it is *slower unless the arm is
+## strong*. `arm_speed` is the nearest thing this engine has to arm strength and
+## it is already generated, rated and trained; adding an eighth attribute for
+## the one contact that needs it would be a worse answer than reading the one
+## that already means "how hard this body can move a ball with the arm".
+##
+## Centred so an ordinary arm standing is 1.0 and the jump is the bonus, rather
+## than penalising every standing set and calling the jump neutral.
+const JUMP_SET_PACE_BONUS: float = 0.12
+const STANDING_SET_ARM_SWING: float = 0.16
+
+
+func _set_pace_scale(setter: VolleyballPlayer, jumping: bool) -> float:
+	if setter == null:
+		return 1.0
+	if jumping:
+		return 1.0 + JUMP_SET_PACE_BONUS
+	return 1.0 + (_rating(setter, "arm_speed") - 0.5) * 2.0 * STANDING_SET_ARM_SWING
+
+
 func _set_arc(
 	setter: VolleyballPlayer,
 	tempo: int,

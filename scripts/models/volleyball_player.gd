@@ -162,11 +162,39 @@ var body_type: String = "Vegi"
 ## whose high end is not an improvement. A hitter with ego 90 is not stronger
 ## than one with 50; they attempt different shots and fail differently.
 ##
-## It cuts both ways in the simulation. High ego swings bigger than the
-## situation asks and sails long; low ego leaves something on the ball and gets
-## dug. See `AttackPowerModel.choose_power()`, which centres it on 50 so that an
-## ordinary player takes the shot the situation calls for.
+## **Ego is how hard a decision is to change, not how big a swing is.** It used
+## to be both, and doing two jobs it was only ever read as one: every call site
+## asked it how hard this player hits. That is `aggression` below. What is left
+## here is the question nothing else in the engine could ask -- once this voli
+## has decided, how easily do they decide otherwise?
+##
+## High ego holds the read: a blocker who chose line closes line even as the
+## hitter turns cross, a setter who called the ball does not give it up, a voli
+## crossing somebody else's ground expects the other one to move. Low ego
+## changes course readily, yields a contested ball, and gives way in a corridor.
+## Neither is better. High ego is right when the read was right.
+##
+## It cuts both ways and the cost is late: changing a decision late is worse
+## than changing it early *and* worse than never changing it, which is why this
+## is a separate axis from being correct.
 @export_range(1, 100) var ego: int = 50
+## How committed this voli is to creating a terminal play.
+##
+## Out of `ABILITY_ATTRIBUTES` with `ego` and `leadership`, for the same reason:
+## a temperament is not a capability, and folding it into a category rating
+## would inflate Overall for a trait whose high end is not an improvement.
+##
+## This is the axis `ego` was silently carrying. High aggression swings bigger
+## than the situation asks and sails long, closes a block lane hard enough to
+## risk arriving into a teammate, and takes the second ball to attack rather
+## than to keep the rally alive. Low aggression leaves something on the ball and
+## gets dug, blocks to touch rather than to stuff, and plays the percentage.
+##
+## Separate from ego on purpose: a voli can be certain and cautious (holds a
+## conservative read), or uncertain and violent (changes their mind, then
+## crushes it). Those are different players and the engine could not tell them
+## apart while one number meant both.
+@export_range(1, 100) var aggression: int = 50
 ## Where this player was raised, and where they actually play now. These are
 ## deliberately separate: talent is *born* roughly evenly across the world but
 ## *accumulates* wherever the money is, and collapsing the two would erase the
@@ -464,7 +492,7 @@ func to_dict() -> Dictionary:
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
 		"dominant_hand": dominant_hand, "body_type": body_type,
-		"adaptability": adaptability, "ego": ego,
+		"adaptability": adaptability, "ego": ego, "aggression": aggression,
 		"home_region": home_region, "club_region": club_region,
 		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
 		"position_familiarity": position_familiarity.duplicate(true),
@@ -523,6 +551,10 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	if player.body_type == "Homi":
 		player.body_type = "Vegi"
 	player.ego = clampi(int(data.get("ego", 50)), 1, 100)
+	## Saves written before ego and aggression were separated carry one number
+	## that meant both, and every simulation reader of it meant aggression. An
+	## old career keeps the swing it had rather than reverting to the default.
+	player.aggression = clampi(int(data.get("aggression", player.ego)), 1, 100)
 	player.home_region = str(data.get("home_region", ""))
 	player.club_region = str(data.get("club_region", player.home_region))
 	player.adaptability = clampi(int(data.get("adaptability", 50)), 1, 100)

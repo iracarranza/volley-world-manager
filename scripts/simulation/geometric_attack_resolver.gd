@@ -290,7 +290,7 @@ static func resolve_swing(
 		ceiling, float(draws.get("intent", AttackPowerModel.DRIVE_INTENT)),
 		aim_distance, contact_height_meters,
 		AttackPowerModel.aggression_from(
-			float(hitter.ego) / 100.0, team_decisiveness,
+			float(hitter.aggression) / 100.0, team_decisiveness,
 			_rating(hitter, "tactical_discipline"),
 		),
 		_rating(hitter, "composure"),
@@ -412,7 +412,7 @@ static func resolve_swing(
 				SignatureMoveModel.charge(
 					SignatureMoveModel.crush_capability(
 						_rating(hitter, "attack_power"),
-						float(hitter.ego) / 100.0,
+						float(hitter.aggression) / 100.0,
 						_rating(hitter, "leadership"),
 					),
 					match_confidence, flow_for_team,

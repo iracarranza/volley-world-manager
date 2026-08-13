@@ -275,6 +275,7 @@ static func generate_roster(
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
 		assign_body_type(player, rng)
 		assign_ego(player, rng, canonical_region)
+		assign_aggression(player, rng, canonical_region)
 		assign_leadership(player, rng, canonical_region)
 		_apply_body_variation(player, rng, canonical_region, overlay)
 		player.stride_length_m = player.default_stride_length_m()
@@ -366,6 +367,7 @@ static func _build_prospect(
 	player.professional_experience = maxi(age - 20, 0)
 	assign_body_type(player, rng)
 	assign_ego(player, rng, canonical_region)
+	assign_aggression(player, rng, canonical_region)
 	assign_leadership(player, rng, canonical_region)
 	_apply_body_variation(player, rng, canonical_region, overlay)
 	player.stride_length_m = player.default_stride_length_m()
@@ -690,6 +692,54 @@ static func assign_ego(
 		base
 		+ float(REGION_EGO_BIAS.get(region_name, 0.0))
 		+ float(POSITION_EGO_BIAS.get(player.position_role, 0.0))
+	), 1, 100)
+
+
+## How committed a region's and a role's players are to ending the rally.
+##
+## Shares the shape of the ego biases and deliberately not their values: the two
+## used to be one number and separating them is worthless if the biases keep
+## them correlated. Ispayk leads both, because swinging first and backing
+## yourself genuinely are the same tradition -- but Taktikã is the region built
+## on not being moved, which is high ego and *low* aggression, and Bloc du Larg
+## defends rather than closes, which is the reverse of its ego lean.
+const REGION_AGGRESSION_BIAS := {
+	"Ispayk": 15.0, "Xérvu": 11.0, "Pāwa Hitō": 7.0, "A'ace": 4.0,
+	"Spëddigh": 3.0, "Landavol": 0.0, "Bloc du Larg": -4.0, "Taktikã": -9.0,
+	"Tu'ul ys Feynt": -3.0,
+	"Lo-onğ Ralī": -11.0,
+	"Bompaşao": -8.0,
+	"Rhen Tempaol": 6.0,
+	"Kutré Lyn": 2.0,
+	"Zaitgaist": 0.0,
+}
+
+## Terminal roles want the terminal ball. Steeper than the ego lean, because
+## wanting to end the rally is much more nearly the job description of an
+## opposite than backing yourself is.
+const POSITION_AGGRESSION_BIAS := {
+	"Opposite": 12.0, "Outside Hitter": 6.0, "Middle Blocker": 2.0,
+	"Setter": -7.0, "Libero": -13.0,
+}
+
+
+static func assign_aggression(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+	region_name: String,
+) -> void:
+	## Its own stream, for the reason spelled out on `assign_ego`: taking a draw
+	## from the shared generation rng advances it for every attribute after, so
+	## adding an attribute silently rerolls the whole world. `_test_world_aging`
+	## is the check that would notice, twenty seasons later.
+	var aggression_rng := RandomNumberGenerator.new()
+	aggression_rng.seed = hash("%d|aggression|%d|%s" % [
+		rng.seed, player.id, region_name,
+	])
+	player.aggression = clampi(roundi(
+		aggression_rng.randfn(50.0, 15.0)
+		+ float(REGION_AGGRESSION_BIAS.get(region_name, 0.0))
+		+ float(POSITION_AGGRESSION_BIAS.get(player.position_role, 0.0))
 	), 1, 100)
 
 

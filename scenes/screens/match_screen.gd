@@ -979,7 +979,7 @@ func _build_movement_plan(
 	## If serve-receive movement turns out to matter, the fix is for the resolver
 	## to publish it, not for playback to make it up.
 	_apply_base_positions(plan, event, next_contact)
-	_apply_cheat_steps(plan, action_target)
+	_apply_cheat_steps(plan, action_target, next_contact)
 	_hold_airborne_blocker(plan, event)
 	_apply_explicit_targets(plan, next_contact.metadata.get("home_phase_targets", {}))
 	_apply_explicit_targets(plan, next_contact.metadata.get("opponent_phase_targets", {}))
@@ -1409,6 +1409,25 @@ func _hold_airborne_blocker(plan: Dictionary, event: RallyEvent) -> void:
 ## One step. The bound is the whole point of the entry.
 const CHEAT_STEP_METERS: float = 0.55
 
+## How far along the line from their own posture to the ball an unassigned voli
+## aims, before the committed teammates push them off it.
+##
+## Half. A lean is a deviation from your responsibility, not an abandonment of
+## it, and a voli who aims at the ball has abandoned it -- that is what the
+## previous version did with no coefficient at all, which is the same as this
+## sitting at 1.0.
+const UNCOVERED_PULL: float = 0.5
+
+## How much floor a committed teammate is treated as already having, in metres.
+##
+## Wider than a body on purpose: this is not about not colliding -- `_unstack`
+## on the court does that -- it is about not *duplicating*. A second voli
+## standing two metres from the digger is not in their way and is still not
+## helping. Unmeasured, and named as such: nothing has ever published how far
+## apart two defenders end up, so this is a starting value and the probe comes
+## before the tuning.
+const COVERED_GROUND_METERS: float = 2.2
+
 
 ## A voli with no published target cheats a step; they do not hold rigid.
 ##
@@ -1423,30 +1442,140 @@ const CHEAT_STEP_METERS: float = 0.55
 ## about, never past `CHEAT_STEP_METERS`, and never at all once they are already
 ## closer than that. A voli reading the play leans a step toward it; they do not
 ## leave their zone, which is exactly the distinction the report drew.
-func _apply_cheat_steps(plan: Dictionary, action_target: Vector2) -> void:
+func _apply_cheat_steps(
+	plan: Dictionary, action_target: Vector2, next_contact: RallyEvent
+) -> void:
+	var committed := _committed_ground(next_contact)
 	for player_id in match_court_3d.live_positions:
 		if plan.has(player_id):
 			continue
-		var start := Vector2(match_court_3d.live_positions[player_id])
-		var step := cheat_step(start, action_target)
+		var id := int(player_id)
+		var start := Vector2(match_court_3d.live_positions[id])
+		var step := cheat_step(
+			start, action_target, _responsibility_position(id),
+			_same_side_ground(committed, id),
+		)
 		if step == start:
 			continue
-		_set_plan_target(plan, int(player_id), step)
+		_set_plan_target(plan, id, step)
 
 
-## One step toward the action, in normalised court coordinates.
+## Where the teammates who *are* participating have committed to stand.
 ##
-## Static and pure so the suite can hold the cap without a court to run it in.
-static func cheat_step(start: Vector2, action_target: Vector2) -> Vector2:
-	var across := (action_target.x - start.x) * CourtConstants.COURT_WIDTH_METERS
-	var along := (action_target.y - start.y) * CourtConstants.COURT_LENGTH_METERS
-	var distance := sqrt(across * across + along * along)
-	## Already there. Nothing to lean toward, and a voli standing on the play
-	## does not shuffle on the spot.
+## Read from the same two phase maps `_apply_explicit_targets` lays down a few
+## lines later, plus the voli about to touch the ball. Those are the volis whose
+## ground is spoken for this window; everybody else is deciding what is left.
+func _committed_ground(next_contact: RallyEvent) -> Dictionary:
+	var ground := {}
+	if next_contact == null:
+		return ground
+	for key in ["home_phase_targets", "opponent_phase_targets"]:
+		for raw_player_id in Dictionary(next_contact.metadata.get(key, {})):
+			ground[int(raw_player_id)] = Vector2(
+				Dictionary(next_contact.metadata[key])[raw_player_id]
+			)
+	if int(next_contact.actor_id) >= 0:
+		ground[int(next_contact.actor_id)] = next_contact.start_position
+	return ground
+
+
+## The committed ground belonging to this voli's own side, as a plain array.
+##
+## Opponents are not covering for you. Side is the id split the rest of this
+## screen uses -- home ids are below 100.
+func _same_side_ground(committed: Dictionary, player_id: int) -> Array[Vector2]:
+	var mine: Array[Vector2] = []
+	for other_id in committed:
+		if int(other_id) == player_id:
+			continue
+		if (int(other_id) < 100) != (player_id < 100):
+			continue
+		mine.append(Vector2(committed[other_id]))
+	return mine
+
+
+## Where this voli is supposed to stand when nothing specific is asked of them.
+##
+## `home_base_positions` and `opponent_base_positions` are the resolver's own
+## postures, derived from position, rotation and the defensive plan -- the same
+## dictionaries `_apply_base_positions` resets to. Falling back to where the
+## voli is standing means a missing posture reads as "no opinion" rather than as
+## a pull toward the middle of the court.
+func _responsibility_position(player_id: int) -> Vector2:
+	var here := Vector2(match_court_3d.live_positions.get(player_id, Vector2(0.5, 0.75)))
+	if active_result == null:
+		return here
+	var postures: Dictionary = active_result.home_base_positions if player_id < 100 \
+		else active_result.opponent_base_positions
+	return Vector2(postures.get(player_id, here))
+
+
+## One step toward the part of the play nobody else has.
+##
+## **It used to aim at the ball, and that was the defect.** Every unassigned
+## voli leaned along the straight line to the contact point, so a back-row voli
+## drifted at the libero already digging cross, and the defensive outside
+## drifted at the same ball down the line -- three bodies converging on ground
+## one of them was going to cover, and the seam between them left open. A lean
+## that duplicates a teammate is worse than standing still, because standing
+## still at least keeps the shape.
+##
+## What a voli actually does is cover what the participants leave. So the target
+## here is built from three things rather than one:
+##
+## - **their own responsibility**, the posture their position, rotation and
+##   tactic put them in, which is the thing a lean is a deviation *from*;
+## - **the play**, which is what pulls them off it;
+## - **the committed teammates**, who cancel the pull along their own bearing --
+##   ground somebody else is standing on is not ground worth leaning toward.
+##
+## The pull is scaled by how much of the line from posture to ball is already
+## somebody else's, and what is left is then pushed off the nearest committed
+## body so the step lands in the seam rather than on a teammate. The cap is
+## unchanged and still the point of the entry: this is a lean, not a rotation.
+##
+## Static and pure so the suite can hold the cap and the seam without a court to
+## run them in.
+static func cheat_step(
+	start: Vector2,
+	action_target: Vector2,
+	responsibility: Vector2,
+	committed: Array[Vector2] = [],
+) -> Vector2:
+	## The aim is a point between the posture this voli owes and the ball, not
+	## the ball. Half way is the neutral reading of "contributes defensively
+	## without leaving your zone"; the covered share below moves it back toward
+	## the posture when teammates already have the ball's side of the court.
+	var aim := responsibility.lerp(action_target, UNCOVERED_PULL)
+	if not committed.is_empty():
+		var nearest := committed[0]
+		var best := _metres(aim, nearest)
+		for candidate in committed:
+			var gap := _metres(aim, candidate)
+			if gap < best:
+				best = gap
+				nearest = candidate
+		## Somebody already owns this ground. Slide off them rather than stack:
+		## the direction is away from the nearest committed body, and the size is
+		## how far inside their share of the floor the aim had landed.
+		if best < COVERED_GROUND_METERS and best > 0.0001:
+			var away := (aim - nearest).normalized()
+			var push := (COVERED_GROUND_METERS - best) / CourtConstants.COURT_WIDTH_METERS
+			aim += away * push
+	var distance := _metres(start, aim)
+	## Already there. Nothing to lean toward, and a voli standing on their own
+	## share of the play does not shuffle on the spot.
 	if distance <= CHEAT_STEP_METERS:
 		return start
-	var share := CHEAT_STEP_METERS / distance
-	return start + (action_target - start) * share
+	return start + (aim - start) * (CHEAT_STEP_METERS / distance)
+
+
+static func _metres(from_position: Vector2, to_position: Vector2) -> float:
+	var delta := to_position - from_position
+	return Vector2(
+		delta.x * CourtConstants.COURT_WIDTH_METERS,
+		delta.y * CourtConstants.COURT_LENGTH_METERS,
+	).length()
 
 
 func _apply_explicit_targets(plan: Dictionary, targets: Dictionary) -> void:

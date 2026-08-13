@@ -95,12 +95,12 @@ static func is_available(charge_value: float) -> bool:
 ## themselves, and how much the room follows them.
 static func crush_capability(
 	attack_power: float,
-	ego: float,
+	aggression: float,
 	leadership: float,
 ) -> float:
 	return clampf(
 		clampf(attack_power, 0.0, 1.0) * 0.58
-		+ clampf(ego, 0.0, 1.0) * 0.24
+		+ clampf(aggression, 0.0, 1.0) * 0.24
 		+ clampf(leadership, 0.0, 1.0) * 0.18,
 		0.0, 1.0,
 	)

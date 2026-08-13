@@ -18080,7 +18080,7 @@ func _test_movement_knows_what_it_is_for() -> void:
 	## A voli already on top of the play does not shuffle on the spot.
 	var here := Vector2(0.5, 0.5)
 	_check(
-		MatchScreen.cheat_step(here, Vector2(0.52, 0.51)) == here,
+		MatchScreen.cheat_step(here, Vector2(0.52, 0.51), here) == here,
 		"a voli already at the action does not cheat",
 	)
 
@@ -18088,7 +18088,7 @@ func _test_movement_knows_what_it_is_for() -> void:
 	## entry: the invented drift this replaces was unbounded, and the difference
 	## between leaning toward a play and abandoning a zone is the metre.
 	var far := Vector2(0.1, 0.1)
-	var stepped := MatchScreen.cheat_step(far, Vector2(0.9, 0.9))
+	var stepped := MatchScreen.cheat_step(far, Vector2(0.9, 0.9), far)
 	var across := (stepped.x - far.x) * CourtConstants.COURT_WIDTH_METERS
 	var along := (stepped.y - far.y) * CourtConstants.COURT_LENGTH_METERS
 	var travelled := sqrt(across * across + along * along)
@@ -18102,6 +18102,49 @@ func _test_movement_knows_what_it_is_for() -> void:
 		stepped.x > far.x and stepped.y > far.y,
 		"the step goes toward the action rather than anywhere else",
 	)
+
+	## **And it leans toward what nobody has, not at the ball.**
+	##
+	## The defect this replaces: every unassigned voli aimed down the straight
+	## line to the contact point, so a back-row voli drifted at the libero
+	## already digging cross and the seam between them stayed open. A lean that
+	## duplicates a teammate is worse than standing still.
+	## Geometry chosen so the lean *lands* near the committed body. The first
+	## version put the digger 2.9 m from the aim -- outside
+	## `COVERED_GROUND_METERS`, so the push correctly did not fire and the gate
+	## was asserting on a case the model deliberately leaves alone.
+	var deep := Vector2(0.50, 0.90)
+	var dug := Vector2(0.45, 0.70)
+	var alone := MatchScreen.cheat_step(deep, dug, deep)
+	var covered := MatchScreen.cheat_step(deep, dug, deep, [dug])
+	_check(
+		alone != covered,
+		"a teammate already on the ball changes where the lean goes",
+	)
+	## Specifically: further from the body that has it. Not merely different --
+	## a version that pushed toward the digger would also pass an inequality.
+	_check(
+		covered.distance_to(dug) > alone.distance_to(dug),
+		"and the lean lands off the teammate rather than on top of them",
+	)
+	## The posture is the anchor, so two volis standing in the same place but
+	## owing different ground lean differently. Without this the responsibility
+	## argument would be decorative -- it is read, and it decides.
+	var wide_duty := MatchScreen.cheat_step(deep, dug, Vector2(0.85, 0.80))
+	_check(
+		wide_duty != alone,
+		"the lean is measured from the voli's own responsibility, not only the ball",
+	)
+	## And the cap survives all of it. Every branch above still leans one step.
+	for sample in [alone, covered, wide_duty]:
+		var moved := Vector2(
+			(Vector2(sample).x - deep.x) * CourtConstants.COURT_WIDTH_METERS,
+			(Vector2(sample).y - deep.y) * CourtConstants.COURT_LENGTH_METERS,
+		).length()
+		_check(
+			moved <= MatchScreen.CHEAT_STEP_METERS + 0.0001,
+			"a seam-aware lean is still capped at one step (%.3f m)" % moved,
+		)
 
 
 ## Looking around is three systems, and they go in order.
