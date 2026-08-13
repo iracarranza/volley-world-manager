@@ -1741,12 +1741,6 @@ func _shadow_setter_candidate(candidates: Array, player_id: int) -> Dictionary:
 ## and blocks read as flat slides. The resolver already knows who left the floor
 ## and how well -- `jump_multiplier` for a hitter, the setter's own reach state
 ## for a jump set -- so the drawing layer reads that rather than inventing it.
-## What a full block jump draws as, against the 0.85 the flat version used. The
-## same number, so this change moves *when* a blocker is in the air and not how
-## high they appear at the top of it.
-const BLOCK_JUMP_DRAW_SCALE: float = 0.85
-
-
 func _contact_elevation(player_id: int, side: String) -> float:
 	if player_id < 0:
 		return 0.0
@@ -1806,7 +1800,7 @@ func _block_elevation(player_id: int, side: String) -> float:
 			BlockJumpModel.jump_timeline(
 				float(event.metadata.get("event_time", cognition_time)), leap
 			),
-		) * BLOCK_JUMP_DRAW_SCALE
+		) * BlockJumpModel.draw_peak(leap)
 	return -1.0
 
 

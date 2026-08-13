@@ -8804,6 +8804,31 @@ func _test_a_blocker_lands_when_their_jump_ends() -> void:
 		"the same jump lasts the same time wherever the contact falls (%.3f s against %.3f s)"
 			% [moved, measured],
 	)
+	## Height is legible too, and for the same reason: it was a flat 0.85 for
+	## everybody, so the one place a physique shows drew every blocker alike. The
+	## band is fitted to a measured leap distribution -- p05 0.354 m, p95 0.847 --
+	## so the assertions are against that population rather than against taste.
+	var weak: float = BLOCK_JUMP_SCRIPT.draw_peak(0.354)
+	var strong: float = BLOCK_JUMP_SCRIPT.draw_peak(0.847)
+	var typical: float = BLOCK_JUMP_SCRIPT.draw_peak(0.610)
+	_check(
+		strong > weak * 1.4,
+		"a good jumper is drawn markedly higher than a poor one (%.2f against %.2f)"
+			% [strong, weak],
+	)
+	_check(
+		absf(typical - 0.85) < 0.05,
+		"the population mean is drawn where the old flat constant put it (%.3f)"
+			% typical,
+	)
+	## Past the clamp everyone would flatten onto one ceiling, which is the fault
+	## being fixed reappearing at the other end.
+	_check(
+		BLOCK_JUMP_SCRIPT.draw_peak(2.0) <= 1.0
+			and BLOCK_JUMP_SCRIPT.draw_peak(0.0) >= 0.0,
+		"the drawn peak stays inside the elevation the renderers clamp to",
+	)
+
 	## And a taller blocker is genuinely airborne longer, so the window is the
 	## jump's and not a constant wearing the jump's name.
 	var taller := _airborne_seconds(BLOCK_JUMP_SCRIPT.jump_timeline(4.00, 0.85))

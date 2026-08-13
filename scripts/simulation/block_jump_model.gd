@@ -165,6 +165,38 @@ static func jump_timeline(
 	}
 
 
+## How high this jump is *drawn* at its apex, 0 to 1.
+##
+## **A blocker's height has to be legible, and it was a constant.** The drawn
+## peak was a flat 0.85 for everybody, so a voli who leaves the floor 0.85 m and
+## one who manages 0.35 m reached exactly the same height on screen -- the one
+## place a physique is visible at all, showing nothing.
+##
+## The band is fitted to the measured population rather than chosen
+## (`tools/leap_probe.tscn`, 1,500 generated volis): leap runs p05 0.354 m, p50
+## 0.609, p95 0.847, mean 0.610. Mapping that 5th-to-95th span onto 0.66-1.00
+## puts the population mean at 0.84 -- within a hair of the 0.85 it replaces, so
+## the wall does not get taller on average -- while separating a poor jumper from
+## a good one by half again as much height.
+##
+## Topping out at 1.00 rather than above it because the renderers clamp
+## elevation to one, and a band that ran past the clamp would flatten every good
+## jumper onto the same ceiling: the exact fault being fixed, reintroduced at the
+## other end.
+const DRAW_PEAK_LEAP_LOW: float = 0.354
+const DRAW_PEAK_LEAP_HIGH: float = 0.847
+const DRAW_PEAK_LOW: float = 0.66
+const DRAW_PEAK_HIGH: float = 1.00
+
+static func draw_peak(leap_meters: float) -> float:
+	return clampf(
+		lerpf(DRAW_PEAK_LOW, DRAW_PEAK_HIGH, inverse_lerp(
+			DRAW_PEAK_LEAP_LOW, DRAW_PEAK_LEAP_HIGH, leap_meters
+		)),
+		DRAW_PEAK_LOW, DRAW_PEAK_HIGH,
+	)
+
+
 ## How far off the floor this jump is at a moment, 0 at the feet and 1 at the
 ## apex.
 ##
