@@ -346,7 +346,12 @@ func _show_kitchen() -> void:
 func _ensure_esc_menu() -> void:
 	if _esc_menu != null:
 		return
-	_esc_menu = EscMenuScript.new()
+	## `build()`, not `new()`. `EscMenu` composes its children in `_compose`, which
+	## only `build` calls -- there is no `_ready` to catch the omission -- so a
+	## plain `new()` produced a menu with no children at all. Every field it
+	## touches was null, and the first one `open_menu` reached was
+	## `_career_actions.visible`, which is the crash on Escape.
+	_esc_menu = EscMenuScript.build()
 	add_child(_esc_menu)
 	UIStyleSystem.apply(_esc_menu, _theme_name == "light")
 	_esc_menu.save_requested.connect(func() -> void:
