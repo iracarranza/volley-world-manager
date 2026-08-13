@@ -159,7 +159,7 @@ const SHOULDER_FOLLOW_DEGREES: float = -252.0
 ## real bend -- 64 degrees is a bend anyone would draw -- and still folding
 ## forward-and-up out of the joint, which was the previous correction and is not
 ## being undone.
-const ELBOW_COCK_DEGREES: float = -98.0
+const ELBOW_COCK_DEGREES: float = -64.0
 
 ## **The arm is not in one plane, and that was the whole thing missing.**
 ##
