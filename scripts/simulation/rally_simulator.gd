@@ -2368,6 +2368,11 @@ func resolve(
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
 			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## When each blocker jumped, so playback can draw the apex where the
+			## blocker actually put it. Without this the drawn jump was centred on
+			## the contact for everybody, which makes a mistimed block look
+			## perfectly timed -- the one thing `block_timing` is supposed to show.
+			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -2702,6 +2707,11 @@ func resolve(
 			## carried and this one did not. Over the top is a reach problem and
 			## around the edge is a read problem -- they want opposite fixes, and
 			## only one of them is the blocker's misjudgement.
+			## When each blocker jumped, so playback can draw the apex where the
+			## blocker actually put it. Without this the drawn jump was centred on
+			## the contact for everybody, which makes a mistimed block look
+			## perfectly timed -- the one thing `block_timing` is supposed to show.
+			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
@@ -4204,6 +4214,11 @@ func _resolve_opponent_transition(
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
 			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## When each blocker jumped, so playback can draw the apex where the
+			## blocker actually put it. Without this the drawn jump was centred on
+			## the contact for everybody, which makes a mistimed block look
+			## perfectly timed -- the one thing `block_timing` is supposed to show.
+			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -4378,6 +4393,11 @@ func _resolve_opponent_transition(
 			## that funnelled from a seal that was beaten.
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
 			"contest_margin": float(block_result.get("contest_margin", 0.0)),
+			## When each blocker jumped, so playback can draw the apex where the
+			## blocker actually put it. Without this the drawn jump was centred on
+			## the contact for everybody, which makes a mistimed block look
+			## perfectly timed -- the one thing `block_timing` is supposed to show.
+			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			"net_height_over_block_meters": float(
 				geometric.get("net_height_over_block_meters", 0.0)
@@ -5214,6 +5234,11 @@ func _resolve_home_continuation(
 			## were to arriving.
 			"wall_size": int(geometric.get("wall_size", 0)),
 			"wall_reach_heights": geometric.get("wall_reach_heights", []),
+			## When each blocker jumped, so playback can draw the apex where the
+			## blocker actually put it. Without this the drawn jump was centred on
+			## the contact for everybody, which makes a mistimed block look
+			## perfectly timed -- the one thing `block_timing` is supposed to show.
+			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 			## Absent rather than NaN when the wall was never touched.
 			##
@@ -5360,6 +5385,11 @@ func _resolve_home_continuation(
 			)),
 			"block_hands": str(block_result.get("block_hands", "neutral")),
 			"block_intent": str(block_result.get("block_intent", "Balanced")),
+			## When each blocker jumped, so playback can draw the apex where the
+			## blocker actually put it. Without this the drawn jump was centred on
+			## the contact for everybody, which makes a mistimed block look
+			## perfectly timed -- the one thing `block_timing` is supposed to show.
+			"block_jump_timing": geometric.get("block_jump_timing", {}),
 			"block_miss_reason": str(geometric.get("block_miss_reason", "")),
 		"primary_close": primary_close, "assist_close": assist_close,
 		"primary_close_terms": Dictionary(

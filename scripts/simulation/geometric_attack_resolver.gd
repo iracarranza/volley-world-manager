@@ -441,6 +441,15 @@ static func resolve_swing(
 		"signature_move": move,
 		"landing": resolved.landing,
 		"flight": resolved.flight,
+		## **When the wall jumped**, taken off the actual blockers rather than off
+		## the contact.
+		##
+		## Read from `blockers` and not from `resolution.block`, because a wall that
+		## never touched the ball still left the floor -- keying this off the
+		## contact would give playback a jump for the blocks that connected and
+		## nothing for the ones that were beaten, which are exactly the jumps whose
+		## timing is worth seeing.
+		"block_jump_timing": _wall_jump_timing(blockers),
 		## Why the wall was beaten, carried up rather than left in `resolution`.
 		## Every consumer reads the flat keys; a diagnostic buried one level down is
 		## a diagnostic nobody asks for. Over the top is a reach problem and around
@@ -1020,3 +1029,26 @@ static func _block_presence(blockers: Array) -> float:
 
 static func _rating(player: VolleyballPlayer, attribute: String) -> float:
 	return clampf(float(player.get(attribute)) / 100.0, 0.0, 1.0)
+
+
+## What each blocker's jump was, keyed by player id.
+##
+## One entry per body that left the floor, so playback can draw two blockers on
+## two different clocks -- a middle who went early beside a pin who went late is
+## the picture the wall's timing actually makes, and a single shared figure
+## cannot show it.
+static func _wall_jump_timing(blockers: Array) -> Dictionary:
+	var out := {}
+	for raw in blockers:
+		var blocker: Dictionary = raw
+		if not blocker.has("timing_error_seconds"):
+			continue
+		out[int(blocker.get("player_id", -1))] = {
+			"timing_error_seconds": float(blocker["timing_error_seconds"]),
+			"hang_seconds": float(blocker.get("hang_seconds", 0.0)),
+			## `rising` means the ball beat them to the apex, which is a late
+			## jump. `resolve` makes that split on the close fraction rather than
+			## on a draw, and it is the sign the apex is offset by.
+			"late": str(blocker.get("arm_state", "extended")) == "rising",
+		}
+	return out

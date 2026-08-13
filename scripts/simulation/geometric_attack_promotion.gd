@@ -280,6 +280,21 @@ static func block_wall(
 			"block_effectiveness": float(jump.effectiveness) \
 				if FeatureFlags.ENABLE_BLOCK_JUMP_TIMING else null,
 			"timing_quality": float(jump.timing_quality),
+			## **When this jump happened, not just how well it went.**
+			##
+			## `resolve` computes both of these and the wall entry kept neither, so
+			## a blocker's apex could only ever be guessed at downstream -- and
+			## playback, having nothing, drew every blocker peaking exactly on the
+			## ball however badly they timed it. A value computed and dropped at a
+			## seam, which is the fault this repository logs more than any other.
+			##
+			## Carried unconditionally rather than behind the timing flag: these
+			## describe the jump the blocker made, not the contest term the flag
+			## gates, and a renderer that had to branch on a feature flag to know
+			## when a body is in the air would be reading a switch for an answer
+			## about physics.
+			"timing_error_seconds": float(jump.timing_error_seconds),
+			"hang_seconds": float(jump.hang_seconds),
 			"monster_block_charge": SignatureMoveModelRef.charge(
 				SignatureMoveModelRef.monster_block_capability(
 					clampf(float(blocker.block_timing) / 100.0, 0.0, 1.0),

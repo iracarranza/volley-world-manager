@@ -8829,6 +8829,43 @@ func _test_a_blocker_lands_when_their_jump_ends() -> void:
 		"the drawn peak stays inside the elevation the renderers clamp to",
 	)
 
+	## **A mistimed blocker peaks off the ball, and in the right direction.**
+	##
+	## This is the half `block_timing` was invisible in: with the apex centred on
+	## the contact, an early jumper and a late one are drawn identically. The
+	## error now arrives from `BlockJumpModel.resolve` through four hops, and a
+	## plumb that reached the renderer but changed nothing would look exactly like
+	## a working one -- so the check is that the drawn height at the contact
+	## actually differs, and that early and late fall on opposite sides.
+	var contact := 4.00
+	var on_time := BLOCK_JUMP_SCRIPT.jump_timeline(contact, 0.55, 0.0, false)
+	var early := BLOCK_JUMP_SCRIPT.jump_timeline(contact, 0.55, 0.20, false)
+	var late := BLOCK_JUMP_SCRIPT.jump_timeline(contact, 0.55, 0.20, true)
+	_check(
+		float(early["peak"]) < contact and float(late["peak"]) > contact,
+		"an early blocker peaks before the ball and a late one after it",
+	)
+	_check(
+		BLOCK_JUMP_SCRIPT.elevation_at(contact, on_time)
+			> BLOCK_JUMP_SCRIPT.elevation_at(contact, early) + 0.1,
+		"a mistimed blocker is lower at the ball than a well-timed one",
+	)
+	_check(
+		absf(
+			BLOCK_JUMP_SCRIPT.elevation_at(contact, early)
+				- BLOCK_JUMP_SCRIPT.elevation_at(contact, late)
+		) < 0.0001,
+		"early and late cost the same height; only the direction differs",
+	)
+	## The offset must not outrun the jump. `resolve` caps the error at half the
+	## hang for its own arc, and a timeline that let it past would put a blocker
+	## on the floor at the moment they are contesting the ball.
+	var wild := BLOCK_JUMP_SCRIPT.jump_timeline(contact, 0.55, 5.0, false)
+	_check(
+		BLOCK_JUMP_SCRIPT.elevation_at(contact, wild) <= 0.0,
+		"an error past the whole jump leaves the blocker grounded rather than negative",
+	)
+
 	## And a taller blocker is genuinely airborne longer, so the window is the
 	## jump's and not a constant wearing the jump's name.
 	var taller := _airborne_seconds(BLOCK_JUMP_SCRIPT.jump_timeline(4.00, 0.85))

@@ -1786,19 +1786,25 @@ func _block_elevation(player_id: int, side: String) -> float:
 		var leap := _leap_meters(player_id, side)
 		if leap <= 0.0:
 			continue
-		## **The apex is centred on the contact, and that is a known
-		## simplification.** `BlockJumpModel.resolve` computes exactly how far off
-		## the ball this blocker peaked, and the wall entry in
-		## `geometric_attack_promotion` keeps `arm_state` and `timing_quality` while
-		## dropping `timing_error_seconds` and `hang_seconds` -- a value computed
-		## and discarded at a seam, which is the fault this repository logs more
-		## than any other. Carrying them needs both block sources changed, so the
-		## offset is left at zero here rather than invented, and the hang below is
-		## the blocker's real leap rather than a constant.
+		## **The apex sits where this blocker actually put it**, which is what
+		## makes `block_timing` visible rather than merely consequential.
+		##
+		## Centred on the contact -- as it was until the timing reached here -- a
+		## blocker who went up early and a blocker who went up late are drawn
+		## identically, peaking perfectly on the ball. The attribute decided the
+		## contest and showed nothing.
+		##
+		## Per blocker, not per event, because a middle who jumped early beside a
+		## pin who jumped late is the picture a wall's timing actually makes.
+		var timing: Dictionary = Dictionary(
+			event.metadata.get("block_jump_timing", {})
+		).get(player_id, {})
 		return BlockJumpModel.elevation_at(
 			cognition_time,
 			BlockJumpModel.jump_timeline(
-				float(event.metadata.get("event_time", cognition_time)), leap
+				float(event.metadata.get("event_time", cognition_time)), leap,
+				float(timing.get("timing_error_seconds", 0.0)),
+				bool(timing.get("late", false)),
 			),
 		) * BlockJumpModel.draw_peak(leap)
 	return -1.0
