@@ -133,17 +133,50 @@ const LIP: float = 12.0
 ## mug should look.
 const OBJECTS := [
 	{
-		"key": "encyclopedia", "label": "Encyclopedia", "tip": "The encyclopedia",
-		"foot": Rect2(7.0, 3.0, 21.0, 27.0), "tilt": -5.0,
-		"rest": 0.0, "height": 6.5,
+		## ## The books, under the lamp
+		##
+		## Three of them lying face up with their **spines toward the chair**,
+		## which is how books end up on a desk you actually use: you put them down
+		## so you can read the spines without picking anything up. Two are
+		## furniture and one is the encyclopedia, and which is which is not marked
+		## -- you find out by pointing at them, the same as everything else here.
+		##
+		## They sit in the overhang the lamp's arm makes, because that is where the
+		## light is and where nothing else can go.
+		##
+		## **A stack is read from its edges, so the edges have to show.** The
+		## encyclopedia used to sit on `book_a` at within a centimetre of the same
+		## footprint and within five degrees of the same angle, which under this
+		## projection covered it completely -- three books came out as one slab with
+		## a line on it. The one on top is smaller, set back, and turned twice as far
+		## off square as the one beneath, which is what makes the pile a pile.
+		"key": "book_a", "label": "", "tip": "",
+		"foot": Rect2(33.0, 2.0, 28.0, 19.0), "tilt": -4.0,
+		"rest": 0.0, "height": 4.0, "spine_near": true,
 	},
 	{
+		"key": "encyclopedia", "label": "Encyclopedia", "tip": "The encyclopedia",
+		"foot": Rect2(37.0, 5.0, 21.0, 14.0), "tilt": 9.0,
+		"rest": 4.0, "height": 5.5, "spine_near": true,
+	},
+	{
+		"key": "book_b", "label": "", "tip": "",
+		"foot": Rect2(13.0, 4.0, 20.0, 15.0), "tilt": 5.0,
+		"rest": 0.0, "height": 3.5, "spine_near": true,
+	},
+	{
+		## **Turned side-on, along the far edge.**
+		##
+		## It used to reach toward the chair, which is the one direction an
+		## anglepoise never points: its arm would be foreshortened to nearly
+		## nothing and the shade would sit on top of its own post. Running along the
+		## far edge shows the arm at its full length, and raising the head puts it
+		## across the window -- which is the only object in the room that overlaps
+		## another, and is what stops the wall and the desk reading as two
+		## unrelated pictures stacked up.
 		"key": "lamp", "label": "", "tip": "",
-		## Shorter and to the right of the window, because a lamp at forty
-		## centimetres crosses the whole frame at this angle -- which is true of a
-		## real lamp and makes for a worse photograph.
-		"foot": Rect2(96.0, 2.0, 13.0, 13.0), "tilt": 0.0,
-		"rest": 0.0, "height": 30.0,
+		"foot": Rect2(64.0, 1.0, 14.0, 14.0), "tilt": 0.0,
+		"rest": 0.0, "height": 46.0,
 	},
 	{
 		"key": "phone", "label": "Telephone", "tip": "The telephone",
@@ -197,7 +230,7 @@ const OBJECTS := [
 
 ## Things that open nothing. A desk with only useful objects on it is a toolbar;
 ## what makes a room somebody's is the stuff that is just stuff.
-const FURNITURE := ["lamp", "mug"]
+const FURNITURE := ["lamp", "mug", "book_a", "book_b"]
 
 ## Things that are **not boxes**, and so do not get the shared body.
 ##
@@ -209,6 +242,15 @@ const FURNITURE := ["lamp", "mug"]
 ##
 ## Their models draw the whole object instead.
 const BODYLESS := ["lamp", "mug"]
+
+## ## The volleyball is in the objects, not on them
+##
+## The desk belongs to somebody who does this for a living, and the cheapest way
+## to say so is that the things on it have been *marked* -- a ball embossed on a
+## journal's cloth, a court doodled in the corner of a clipboard sheet, a stamp on
+## a folder tab. Not a logo applied to every surface: a few marks, each on the one
+## object that would plausibly carry it, in the material's own hand.
+const BALL_SEAMS: int = 3
 
 ## Behind and beside the desk. The trapezoid does not reach the corners of the
 ## screen -- that is what makes it a desk seen from a chair rather than a
@@ -424,14 +466,45 @@ class _Surface extends Control:
 
 	## Far to near, on the near edge of the footprint, because that is what decides
 	## which of two overlapping things is in front.
+	##
+	## **Except when one is standing on another**, which the near edge gets exactly
+	## backwards. The encyclopedia lies on a bigger book, so the book underneath has
+	## the nearer edge, so it sorted last and painted over the thing sitting on it --
+	## three books came out as one slab with a purple sliver behind it. The
+	## clipboard's own comment has claimed since it was written that it is "above
+	## both, occludes both", and it was not: the cork board's near edge is further
+	## forward, so the board painted over the clipboard lying on it.
+	##
+	## So a raised thing sorts **where its support sorts**, and then above it. Not
+	## simply "higher draws later": that would put the clipboard over the housing
+	## folder, which is a separate object further down the desk and genuinely in
+	## front. Both parts of the key are plain numbers, so the comparator stays a
+	## consistent ordering -- an overlap test inside `sort_custom` would not be.
 	func _by_depth() -> Array:
 		var order := OBJECTS.duplicate()
 		order.sort_custom(func(a, b) -> bool:
-			var one: Rect2 = a["foot"]
-			var two: Rect2 = b["foot"]
-			return one.position.y + one.size.y < two.position.y + two.size.y
+			var one := _depth_key(a)
+			var two := _depth_key(b)
+			if not is_equal_approx(one, two):
+				return one < two
+			return float(a["rest"]) < float(b["rest"])
 		)
 		return order
+
+	## Where a thing sorts: its own near edge, or the near edge of whatever it is
+	## lying on, so a pile sorts as one object at the depth of its bottom book.
+	func _depth_key(entry: Dictionary) -> float:
+		var foot: Rect2 = entry["foot"]
+		var mine := foot.position.y + foot.size.y
+		var rest := float(entry["rest"])
+		if rest <= 0.01:
+			return mine
+		for other in OBJECTS:
+			var below: Rect2 = other["foot"]
+			if float(other["rest"]) >= rest or not below.intersects(foot):
+				continue
+			mine = maxf(mine, below.position.y + below.size.y)
+		return mine
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_MOUSE_EXIT:
@@ -459,6 +532,7 @@ class _Surface extends Control:
 			WALL_LIGHT if light else WALL_DARK, true
 		)
 		_draw_window(light)
+		_draw_calendar(light)
 
 		## The desk top as the trapezoid it is, taken from the projection rather
 		## than drawn as a rect -- so the surface and the things standing on it
@@ -590,16 +664,166 @@ class _Surface extends Control:
 			]), Color(ink.lightened(0.18), 1.0)
 		)
 
+	## ## The wall calendar
+	##
+	## On the wall rather than on the desk, and that is the whole of why it is a
+	## calendar rather than a diary: a diary is a book you open and a wall calendar
+	## is a thing you *glance at* -- which is what a manager does with next week's
+	## fixtures. It hangs beside the window, at the same negative depth, so it
+	## narrows with the wall and sits in the room rather than on the glass.
+	##
+	## **Nothing here is wired.** The grid is a month of squares with a few marked,
+	## which is what a calendar looks like from a chair; when fixtures and the
+	## training week are hung off it, the marks come from them. Drawing plausible
+	## marks now and real ones later is the honest order, because the shape has to
+	## be right before there is anything to put in it.
+	## Sized against the wall that is actually visible rather than against a real
+	## calendar: with the head clamped to about 32cm and a 50cm sheet, seven columns
+	## came out nearly three times as wide as the rows were tall, which reads as
+	## ruled paper and not as a month. Narrower, with a shorter header, puts the
+	## cells back within half again of square.
+	const CALENDAR_LEFT_CM: float = 78.0
+	const CALENDAR_WIDTH_CM: float = 40.0
+	const CALENDAR_FOOT_CM: float = 2.0
+	const CALENDAR_HEIGHT_CM: float = 46.0
+	const CALENDAR_HEAD_CM: float = 7.0
+	const CALENDAR_COLUMNS: int = 7
+	const CALENDAR_ROWS: int = 5
+
+	## Clearance for the nail above the sheet, and for the frame above the nail.
+	const CALENDAR_NAIL_CM: float = 2.6
+	const CALENDAR_MARGIN_PX: float = 12.0
+
+	func _draw_calendar(light: bool) -> void:
+		var left := CALENDAR_LEFT_CM
+		var right := left + CALENDAR_WIDTH_CM
+		var foot := CALENDAR_FOOT_CM
+		## **How much wall there is gets measured.** The first version hung the sheet
+		## at 52cm because 52cm is a sensible height for a calendar, and the top of
+		## the visible wall is about 42 -- so the header band, the month and the ball
+		## on it, everything that makes the sheet a calendar rather than graph paper,
+		## was above the frame. How much wall shows depends on `WALL_SHARE`, on the
+		## window, and on the size of the control, and none of those were consulted.
+		## §0 again, at the scale of a wall: a value fixed without measuring the
+		## thing it has to fit inside.
+		var head := minf(
+			foot + CALENDAR_HEIGHT_CM, _wall_ceiling_cm() - CALENDAR_NAIL_CM - 1.5
+		)
+		var stock := _stock_of("calendar", light)
+		var ink := Color(0.30, 0.28, 0.25) if light else Color(0.14, 0.14, 0.15)
+
+		## The nail it hangs from, above the sheet, because a calendar that floats
+		## on a wall is a poster.
+		var nail := _wall_point(left + CALENDAR_WIDTH_CM * 0.5, head + CALENDAR_NAIL_CM)
+		draw_circle(nail, 2.4, Color(0.55, 0.56, 0.58))
+		draw_line(nail, _wall_point(left + CALENDAR_WIDTH_CM * 0.5, head), ink, 1.4)
+
+		draw_colored_polygon(
+			PackedVector2Array([
+				_wall_point(left, head), _wall_point(right, head),
+				_wall_point(right, foot), _wall_point(left, foot),
+			]), stock
+		)
+		## The header band, with the club's ball on it. Darker stock rather than a
+		## printed strip: a wall calendar's top block is card and the month is
+		## printed on it.
+		var band_low := head - CALENDAR_HEAD_CM
+		draw_colored_polygon(
+			PackedVector2Array([
+				_wall_point(left, head), _wall_point(right, head),
+				_wall_point(right, band_low), _wall_point(left, band_low),
+			]), Color(stock.darkened(0.30), 1.0)
+		)
+		_wall_ball(
+			left + 7.0, (head + band_low) * 0.5, 3.6,
+			Color(stock.lightened(0.45), 0.85)
+		)
+		for bar in range(3):
+			var y := lerpf(head - 3.0, band_low + 3.0, float(bar) / 2.0)
+			draw_line(
+				_wall_point(left + 14.0, y), _wall_point(left + 30.0 - float(bar) * 4.0, y),
+				Color(stock.lightened(0.45), 0.55), 2.0
+			)
+
+		## The grid. Ruled from the sheet's own size, so the squares stay square in
+		## centimetres and the calendar can be resized without the month changing
+		## shape.
+		var grid_top := band_low - 2.0
+		var cell_w := CALENDAR_WIDTH_CM / float(CALENDAR_COLUMNS)
+		var cell_h := (grid_top - foot - 2.0) / float(CALENDAR_ROWS)
+		for column in range(CALENDAR_COLUMNS + 1):
+			var at := left + cell_w * float(column)
+			draw_line(
+				_wall_point(at, grid_top), _wall_point(at, foot + 2.0),
+				Color(ink, 0.35), 1.2
+			)
+		for row in range(CALENDAR_ROWS + 1):
+			var at := grid_top - cell_h * float(row)
+			draw_line(
+				_wall_point(left, at), _wall_point(right, at), Color(ink, 0.35), 1.2
+			)
+		## A few days ringed in red. Deterministic, so the month does not reshuffle
+		## itself every frame -- and sparse, because a calendar with something on
+		## every day is a timetable.
+		for index in range(4):
+			var seed_value := ((index + 7) * 2654435761) & 0x7FFFFFFF
+			var column := seed_value % CALENDAR_COLUMNS
+			var row := (seed_value / 7) % CALENDAR_ROWS
+			var centre_u := left + cell_w * (float(column) + 0.5)
+			var centre_h := grid_top - cell_h * (float(row) + 0.5)
+			draw_polyline(
+				_wall_ring(centre_u, centre_h, minf(cell_w, cell_h) * 0.34),
+				Color(0.78, 0.28, 0.24, 0.85), 1.8
+			)
+
+	## The greatest height on the wall the frame still shows, in centimetres.
+	##
+	## Read off the projection by sampling it twice rather than derived from the
+	## constants, because the constants are not the whole story -- the control's own
+	## size is in there too, and a formula that forgot it would be right at one
+	## window size and wrong at every other.
+	func _wall_ceiling_cm() -> float:
+		var at_floor := _wall_point(0.0, 0.0).y
+		var per_cm := (at_floor - _wall_point(0.0, 10.0).y) / 10.0
+		if per_cm <= 0.001:
+			return 0.0
+		return (at_floor - CALENDAR_MARGIN_PX) / per_cm
+
+	## A ring on the wall plane, and a ball on it. Both sample a circle in
+	## centimetres and project it, so they narrow with the wall like everything
+	## else pinned to it.
+	func _wall_ring(u_cm: float, h_cm: float, radius_cm: float) -> PackedVector2Array:
+		var points := PackedVector2Array()
+		for step in range(17):
+			var angle := TAU * float(step) / 16.0
+			points.append(_wall_point(
+				u_cm + cos(angle) * radius_cm, h_cm + sin(angle) * radius_cm
+			))
+		return points
+
+	func _wall_ball(u_cm: float, h_cm: float, radius_cm: float, ink: Color) -> void:
+		draw_polyline(_wall_ring(u_cm, h_cm, radius_cm), ink, 1.8)
+		for seam in range(BALL_SEAMS):
+			var turn := TAU * float(seam) / float(BALL_SEAMS)
+			var curve := PackedVector2Array()
+			for step in range(11):
+				var t := lerpf(-0.92, 0.92, float(step) / 10.0)
+				var local := Vector2(t, (1.0 - t * t) * 0.42 - 0.2).rotated(turn) * radius_cm
+				curve.append(_wall_point(u_cm + local.x, h_cm + local.y))
+			draw_polyline(curve, ink, 1.4)
+
 	## The lamp's pool, painted on the wood *before* anything is put on it -- so the
 	## light falls on the desk and every object keeps its own colour, which a wash
 	## over the top would take away.
 	func _draw_lamplight() -> void:
 		var lamp := _lamp()
-		var foot: Rect2 = lamp["foot"]
-		var at := _to_screen(
-			foot.position.x + foot.size.x * 0.5,
-			foot.position.y + foot.size.y + 13.0, 0.0
-		)
+		## **Where the light lands is derived from where the shade points**, not
+		## chosen. It used to be the base plus a hand-picked offset, and every time
+		## the arm moved the pool stayed behind -- a lamp beside its own puddle of
+		## light, which is the giveaway that nothing in the picture is actually lit.
+		var optics := _lamp_optics(lamp, float(lamp["rest"]) + float(lamp["height"]))
+		var pool: Vector2 = optics["pool"]
+		var at := _to_screen(pool.x, pool.y, 0.0)
 		for step in range(12):
 			var t := float(step) / 12.0
 			draw_circle(
@@ -612,6 +836,46 @@ class _Surface extends Control:
 			if str(entry["key"]) == "lamp":
 				return entry
 		return OBJECTS[0]
+
+	## How far along the far edge the arm reaches, and how far forward off it.
+	const LAMP_ARM_ACROSS_CM: float = 20.0
+	const LAMP_ARM_FORWARD_CM: float = 3.0
+	const LAMP_HEAD_DROP_CM: float = 3.0
+	const LAMP_SHADE_DEPTH_CM: float = 11.0
+	const LAMP_SHADE_MOUTH_CM: float = 8.5
+	const LAMP_SHADE_CAP_CM: float = 3.2
+
+	## **The head is aimed, and everything about the lamp follows from the aim.**
+	##
+	## Down and forward onto the desk in front of it -- 25 degrees off vertical,
+	## which is less than the 38 degrees the camera is off vertical, so the mouth
+	## still faces away from the chair and what you see is the outside of the shade.
+	## That margin is the whole reason there is no lit interior painted here.
+	const LAMP_AIM := Vector3(0.0, 0.42, -0.91)
+
+	## Head, aim, mouth centre and the spot on the wood the light is pointed at, all
+	## from one place, because the shade and the pool disagreeing is what made the
+	## first two lamps read as scenery rather than as a light.
+	func _lamp_optics(entry: Dictionary, top_h: float) -> Dictionary:
+		var foot: Rect2 = entry["foot"]
+		var mid_u := foot.position.x + foot.size.x * 0.5
+		var back_v := foot.position.y + foot.size.y * 0.5
+		var head := Vector3(
+			mid_u - LAMP_ARM_ACROSS_CM,
+			back_v + LAMP_ARM_FORWARD_CM,
+			top_h - LAMP_HEAD_DROP_CM
+		)
+		var axis := LAMP_AIM.normalized()
+		var mouth := head + axis * LAMP_SHADE_DEPTH_CM
+		## Follow the aim down to the wood. `maxf` only guards against somebody
+		## aiming the head level or upward later; at any real aim it is `-axis.z`.
+		var travel := mouth.z / maxf(-axis.z, 0.01)
+		return {
+			"head": head,
+			"axis": axis,
+			"mouth": mouth,
+			"pool": Vector2(mouth.x + axis.x * travel, mouth.y + axis.y * travel),
+		}
 
 	# --------------------------------------------------------------- the objects
 
@@ -694,7 +958,12 @@ class _Surface extends Control:
 	func _stock_of(key: String, light: bool) -> Color:
 		match key:
 			"journal":
-				return Color("9a5741") if light else Color("47281e")
+				## The journal screen's own blue, so the object and the page it
+				## opens are the same colour rather than merely related. It was a
+				## red cloth chosen to look like a book, which made the one
+				## continuity the desk exists to sell -- pick a thing up, land on
+				## its page -- the one it did not have.
+				return Color("2c536b") if light else Color("17384b")
 			"training", "scouting":
 				return Color("a87a4c") if light else Color("4d3728")
 			"housing":
@@ -711,6 +980,12 @@ class _Surface extends Control:
 				return Color("46505b") if light else Color("2b323a")
 			"mug":
 				return Color("c6d3d0") if light else Color("6d7c7a")
+			"book_a":
+				return Color("7a6b4e") if light else Color("3d372a")
+			"book_b":
+				return Color("4c6b5a") if light else Color("2a3830")
+			"calendar":
+				return Color("e8e3d4") if light else Color("585349")
 			_:
 				return UIPalette.color(&"surface", light)
 
@@ -722,7 +997,7 @@ class _Surface extends Control:
 		match key:
 			"journal":
 				_model_book(entry, top_h, light, true)
-			"encyclopedia":
+			"encyclopedia", "book_a", "book_b":
 				_model_book(entry, top_h, light, false)
 			"training":
 				_model_clipboard(entry, top_h, light)
@@ -750,35 +1025,127 @@ class _Surface extends Control:
 	) -> void:
 		var cloth := _stock_of(str(entry["key"]), light)
 		var pages := Color(0.93, 0.90, 0.80) if light else Color(0.70, 0.67, 0.60)
-		## The block is *inside* the covers, so it shows as a band on the near face
-		## between two heights -- which is what reads as a stack rather than as a
-		## stripe painted on the side.
+		var rest := float(entry["rest"])
 		var block_top := top_h - 0.9
-		var block_low := float(entry["rest"]) + 0.9
-		var high := _quad(entry, 0.08, 1.0, 1.0, 1.0, block_top)
-		var low := _quad(entry, 0.08, 1.0, 1.0, 1.0, block_low)
-		draw_colored_polygon(
-			PackedVector2Array([high[0], high[1], low[1], low[0]]), pages
-		)
-		var leaf := Color(pages.darkened(0.26), 0.55)
-		for line in range(4):
-			var h := lerpf(block_low, block_top, float(line) / 3.0)
-			draw_line(_at(entry, 0.08, 1.0, h), _at(entry, 1.0, 1.0, h), leaf, 1.0)
-		draw_colored_polygon(
-			_quad(entry, 0.0, 0.0, 0.11, 1.0, top_h), Color(cloth.darkened(0.18), 1.0)
-		)
-		if worn:
-			for band in [0.32, 0.70]:
+		var block_low := rest + 0.9
+		## **Which edge the spine is on**, and it is a real difference rather than a
+		## rotation. A book with its spine to the left shows its page block on the
+		## near face; a book with its spine toward the chair shows the *spine* on
+		## the near face and its pages down the flanks -- which is how books end up
+		## on a desk somebody uses, because that is the way round you can read the
+		## titles without picking anything up.
+		var spine_near := bool(entry.get("spine_near", false))
+		if spine_near:
+			## The spine, rounded, along the near edge: the cloth wrapping over the
+			## block rather than the block itself.
+			var band := _quad(entry, 0.0, 0.88, 1.0, 1.0, top_h)
+			draw_colored_polygon(band, Color(cloth.darkened(0.12), 1.0))
+			var high := _quad(entry, 0.0, 1.0, 1.0, 1.0, top_h - 0.4)
+			var low := _quad(entry, 0.0, 1.0, 1.0, 1.0, rest)
+			draw_colored_polygon(
+				PackedVector2Array([high[0], high[1], low[1], low[0]]),
+				Color(cloth.darkened(0.30), 1.0)
+			)
+			## Two bands and a lettering panel, which is all a spine has on it.
+			for at in [0.24, 0.76]:
 				draw_line(
-					_at(entry, 0.0, band, top_h), _at(entry, 0.11, band, top_h),
-					Color(cloth.darkened(0.36), 0.8), 2.0
+					_at(entry, at, 0.88, top_h), _at(entry, at, 1.0, top_h),
+					Color(cloth.darkened(0.42), 0.85), 2.0
 				)
-		## A blank plate on the cover. Blank because the desk carries no lettering:
-		## what it says is in the tooltip.
-		draw_colored_polygon(
-			_quad(entry, 0.30, 0.26, 0.82, 0.64, top_h),
-			Color(cloth.lightened(0.18), 0.5)
+			draw_colored_polygon(
+				_quad(entry, 0.34, 0.90, 0.66, 0.98, top_h),
+				Color(cloth.lightened(0.22), 0.6)
+			)
+			## And the page block down the outer flank, where it now shows.
+			var flank_high := _quad(entry, 1.0, 0.0, 1.0, 0.88, block_top)
+			var flank_low := _quad(entry, 1.0, 0.0, 1.0, 0.88, block_low)
+			draw_colored_polygon(
+				PackedVector2Array([
+					flank_high[0], flank_high[3], flank_low[3], flank_low[0],
+				]), pages
+			)
+		else:
+			var high := _quad(entry, 0.08, 1.0, 1.0, 1.0, block_top)
+			var low := _quad(entry, 0.08, 1.0, 1.0, 1.0, block_low)
+			draw_colored_polygon(
+				PackedVector2Array([high[0], high[1], low[1], low[0]]), pages
+			)
+			var leaf := Color(pages.darkened(0.26), 0.55)
+			for line in range(4):
+				var h := lerpf(block_low, block_top, float(line) / 3.0)
+				draw_line(_at(entry, 0.08, 1.0, h), _at(entry, 1.0, 1.0, h), leaf, 1.0)
+			draw_colored_polygon(
+				_quad(entry, 0.0, 0.0, 0.11, 1.0, top_h),
+				Color(cloth.darkened(0.18), 1.0)
+			)
+			if worn:
+				for band_at in [0.32, 0.70]:
+					draw_line(
+						_at(entry, 0.0, band_at, top_h), _at(entry, 0.11, band_at, top_h),
+						Color(cloth.darkened(0.36), 0.8), 2.0
+					)
+		## The ball embossed on the cover. Blind-stamped rather than printed: the
+		## same cloth, a shade lighter where the die pressed it, which is what a
+		## club's own book would have on it and is the only lettering-free way to
+		## say whose desk this is.
+		##
+		## The encyclopedia gets the same die at half the size, up in the corner with
+		## the title rules beside it, because a reference book puts its device where
+		## a club's own book puts its badge -- out of the way of the lettering.
+		var key := str(entry["key"])
+		if key != "journal" and key != "encyclopedia":
+			return
+		var foot: Rect2 = entry["foot"]
+		var span := minf(foot.size.x, foot.size.y)
+		if key == "journal":
+			_emboss_ball(
+				entry, 0.5, 0.44, top_h, span * 0.30, Color(cloth.lightened(0.20), 0.75)
+			)
+			return
+		_emboss_ball(
+			entry, 0.22, 0.30, top_h, span * 0.17, Color(cloth.lightened(0.28), 0.7)
 		)
+		for rule in range(2):
+			var at := 0.24 + float(rule) * 0.14
+			draw_line(
+				_at(entry, 0.42, at, top_h), _at(entry, 0.84 - float(rule) * 0.16, at, top_h),
+				Color(cloth.lightened(0.28), 0.5), 2.0
+			)
+
+	## A volleyball, in the object's own coordinates.
+	##
+	## A circle and three curved seams, which is the whole of what makes a ball
+	## read as *this* ball rather than as a dot. Drawn through `_at`, so it lies on
+	## the surface it is stamped into and turns with it -- a decal drawn in screen
+	## space would float above whatever it was meant to be part of.
+	func _emboss_ball(
+		entry: Dictionary, s_at: float, t_at: float, h: float,
+		radius_cm: float, ink: Color
+	) -> void:
+		var foot: Rect2 = entry["foot"]
+		var ring := PackedVector2Array()
+		for step in range(21):
+			var angle := TAU * float(step) / 20.0
+			ring.append(_at(
+				entry,
+				s_at + cos(angle) * radius_cm / foot.size.x,
+				t_at + sin(angle) * radius_cm / foot.size.y, h
+			))
+		draw_polyline(ring, ink, 2.0)
+		## Three seams. Each is an arc across the face, offset and turned, which is
+		## the pattern a volleyball's panels make and a tennis ball's does not.
+		for seam in range(BALL_SEAMS):
+			var turn := TAU * float(seam) / float(BALL_SEAMS)
+			var curve := PackedVector2Array()
+			for step in range(13):
+				var t := lerpf(-0.92, 0.92, float(step) / 12.0)
+				var bend := (1.0 - t * t) * 0.42
+				var local := Vector2(t, bend - 0.2).rotated(turn) * radius_cm
+				curve.append(_at(
+					entry, s_at + local.x / foot.size.x,
+					t_at + local.y / foot.size.y, h
+				))
+			draw_polyline(curve, ink, 1.8)
 
 	func _model_clipboard(entry: Dictionary, top_h: float, light: bool) -> void:
 		var sheet := Color(0.97, 0.95, 0.88) if light else Color(0.74, 0.73, 0.68)
@@ -790,10 +1157,25 @@ class _Surface extends Control:
 			Color(steel.darkened(0.35), 1.0)
 		)
 		for line in range(5):
-			var t := lerpf(0.32, 0.86, float(line) / 4.0)
+			var t := lerpf(0.32, 0.72, float(line) / 4.0)
 			draw_line(
 				_at(entry, 0.16, t, top_h + 0.3), _at(entry, 0.84, t, top_h + 0.3),
 				Color(0.45, 0.50, 0.55, 0.28), 1.0
+			)
+		## A court, doodled in the corner of the sheet in the same blue as the
+		## ruling -- a rectangle, the net, and the three-metre line, which is the
+		## least anybody has ever drawn a court with.
+		var pen := Color(0.28, 0.38, 0.52, 0.55)
+		var court := _quad(entry, 0.24, 0.80, 0.76, 0.94, top_h + 0.3)
+		draw_polyline(court + PackedVector2Array([court[0]]), pen, 1.6)
+		draw_line(
+			_at(entry, 0.50, 0.80, top_h + 0.3), _at(entry, 0.50, 0.94, top_h + 0.3),
+			pen, 2.2
+		)
+		for at in [0.37, 0.63]:
+			draw_line(
+				_at(entry, at, 0.80, top_h + 0.3), _at(entry, at, 0.94, top_h + 0.3),
+				Color(pen, 0.35), 1.2
 			)
 
 	## Cork with scraps pinned to it: the board on the desk shows what the board
@@ -850,6 +1232,10 @@ class _Surface extends Control:
 		draw_line(
 			_at(entry, 0.065, 0.03, top_h), _at(entry, 0.065, 0.98, top_h),
 			Color(manila.lightened(0.24), 0.55), 1.4
+		)
+		## A ball stamped on the tab, in the ink a filing stamp actually uses.
+		_emboss_ball(
+			entry, 0.60, 0.10, top_h, 3.2, Color(0.42, 0.26, 0.24, 0.55)
 		)
 
 	func _model_pad(entry: Dictionary, top_h: float, light: bool) -> void:
@@ -962,6 +1348,50 @@ class _Surface extends Control:
 			all.append(point)
 		return Geometry2D.convex_hull(all)
 
+	## A circle anywhere in the room, from its centre and two perpendicular radii.
+	##
+	## `_disc` can only make circles lying flat on the desk, which is why the shade
+	## could only ever hang straight down: the one mouth it could draw was a level
+	## one, and a level mouth under a level cap has no silhouette worth the name. A
+	## lamp head is *aimed*, and the mouth of an aimed cone is a tilted circle.
+	##
+	## Components are `(u, v, h)`, the same as everywhere else here.
+	func _ring(
+		centre: Vector3, across: Vector3, along: Vector3, steps: int = 24
+	) -> Array:
+		var points: Array = []
+		for step in range(steps):
+			var angle := TAU * float(step) / float(steps)
+			var at := centre + across * cos(angle) + along * sin(angle)
+			points.append(_to_screen(at.x, at.y, at.z))
+		return points
+
+	## The half of a projected ring nearest the viewer -- or furthest, for the flank
+	## the window lights.
+	##
+	## **Every hand-picked half in this file has been the wrong one.** The mug's
+	## wall, the shade's rim and the mug's printed band were all written as an index
+	## range from a quarter to three quarters, which is the half through the *left*
+	## rather than the half through the front -- so the band came out as a ribbon
+	## hanging off the side of the cup. Which index is the front depends on the
+	## ring's own orientation and on the projection, and both have changed since the
+	## ranges were written.
+	##
+	## Asking the points where they landed is not clever. It is the only version
+	## that cannot drift when the thing it draws is turned.
+	func _near_half(ring: Array, near: bool) -> Array:
+		var pick := 0
+		for index in range(ring.size()):
+			var better: bool = ring[index].y > ring[pick].y if near \
+				else ring[index].y < ring[pick].y
+			if better:
+				pick = index
+		var span := ring.size() / 2
+		var out: Array = []
+		for step in range(span + 1):
+			out.append(ring[(pick - span / 2 + step + ring.size()) % ring.size()])
+		return out
+
 	## A circle on the desk at a height, as the projection makes it. Index 0 is the
 	## right of the circle, a quarter of the way round is the front.
 	func _disc(u_cm: float, v_cm: float, h_cm: float, radius_cm: float) -> Array:
@@ -997,25 +1427,39 @@ class _Surface extends Control:
 		## The upright, straight and clearly vertical, then the arm angling forward
 		## over the desk. Two members with a joint, which is what an anglepoise is
 		## and what a single line from base to shade cannot be.
+		var optics := _lamp_optics(entry, top_h)
+		var head_at: Vector3 = optics["head"]
+		var axis: Vector3 = optics["axis"]
+		var mouth_at: Vector3 = optics["mouth"]
 		var elbow_h := top_h * 0.72
 		var post_foot := _to_screen(mid_u, back_v, 1.6)
 		var elbow := _to_screen(mid_u, back_v, elbow_h)
-		## Reaching far enough forward that the shade is not sitting on top of its
-		## own post. It was fifteen centimetres against a shade ten across, so the
-		## upright vanished inside it and only its tip showed -- which is what read
-		## as a collapsed leg.
-		var reach_v := back_v + 21.0
-		var head_h := top_h - 2.0
-		var head := _to_screen(mid_u, reach_v, head_h)
+		## **The arm reaches across, not forward.** Pointing it at the chair
+		## foreshortens it to nearly nothing at this angle and buries the post
+		## inside the shade; along the far edge it is seen at its full length, which
+		## is the one view an anglepoise actually has a shape in.
+		var head := _to_screen(head_at.x, head_at.y, head_at.z)
 		draw_line(post_foot, elbow, Color(metal.lightened(0.06), 1.0), 6.5)
 		draw_line(elbow, head, Color(metal.lightened(0.06), 1.0), 6.0)
 		draw_circle(elbow, 4.4, Color(metal.lightened(0.22), 1.0))
 		draw_circle(head, 3.4, Color(metal.lightened(0.14), 1.0))
-		## The shade: a cone hanging under the head, drawn as the hull of its two
-		## rings so the silhouette is whatever the projection says it is.
-		var mouth_h := head_h - 10.0
-		var cap := _disc(mid_u, reach_v, head_h, 3.4)
-		var mouth := _disc(mid_u, reach_v, mouth_h, 8.5)
+		## **The shade is a cone that has been aimed, and that is what gives it a
+		## shape.** Hung straight down it was a small level ring directly above a
+		## big level ring, whose hull is a blob with a bump on it -- and a blob is
+		## precisely what shipped. Tilting the mouth puts the cap up and back from
+		## the mouth's centre, so the wall is seen as a wall.
+		##
+		## The two radii of the mouth are built from the aim rather than assumed:
+		## one straight across the desk, one perpendicular to both. Re-aim the head
+		## and the mouth tilts with it.
+		var across := Vector3(1.0, 0.0, 0.0)
+		var along := Vector3(0.0, axis.z, -axis.y).normalized()
+		var mouth := _ring(
+			mouth_at, across * LAMP_SHADE_MOUTH_CM, along * LAMP_SHADE_MOUTH_CM
+		)
+		var cap := _ring(
+			head_at, across * LAMP_SHADE_CAP_CM, along * LAMP_SHADE_CAP_CM
+		)
 		## **You are above it, so you see the outside of the shade.**
 		##
 		## The mouth faces the desk. Filling it bright painted the lit *interior*
@@ -1025,19 +1469,27 @@ class _Surface extends Control:
 		## the wood, and the pool is already painted.
 		draw_colored_polygon(_hull(mouth, cap), metal)
 		draw_colored_polygon(PackedVector2Array(cap), Color(metal.lightened(0.12), 1.0))
+		## The one highlight the cone gets: the far flank, where the window is. It
+		## costs a line and it is the difference between a cone and a silhouette.
+		var lit := _near_half(_ring(
+			mouth_at + axis * -1.2,
+			across * (LAMP_SHADE_MOUTH_CM * 0.94),
+			along * (LAMP_SHADE_MOUTH_CM * 0.94)
+		), false)
+		draw_polyline(PackedVector2Array(lit), Color(metal.lightened(0.30), 0.55), 3.0)
 		if not light:
-			## The rim, lit from inside. Only the front of it: the back of the rim
-			## is on the far side of the shade and is not visible from here, and
-			## lighting the whole ring is how the mouth ends up looking like a
-			## floating disc again.
-			for index in range(mouth.size() / 4, mouth.size() * 3 / 4):
-				draw_line(
-					mouth[index], mouth[(index + 1) % mouth.size()],
-					Color(1.0, 0.95, 0.80, 0.9), 3.0
-				)
+			## The rim, lit from inside -- the near half only, because the far half
+			## of the rim is behind the cone. Which indices those are depends on how
+			## the head is aimed, so `_near_half` is asked rather than guessed.
+			draw_polyline(
+				PackedVector2Array(_near_half(mouth, true)),
+				Color(1.0, 0.95, 0.80, 0.9), 3.0
+			)
 			## And the spill just under the rim, which is the light leaving the
 			## shade rather than the shade glowing.
-			var under := _to_screen(mid_u, reach_v + 3.0, mouth_h - 2.0)
+			var under := _to_screen(
+				mouth_at.x, mouth_at.y + 2.0, maxf(mouth_at.z - 2.0, 0.0)
+			)
 			for step in range(4):
 				draw_circle(
 					under, 10.0 + float(step) * 9.0,
@@ -1068,4 +1520,12 @@ class _Surface extends Control:
 		draw_colored_polygon(
 			PackedVector2Array(_disc(mid_u, mid_v, top_h - 1.2, radius * 0.76)),
 			Color(0.30, 0.18, 0.11)
+		)
+		## A printed band round the front of it, because club mugs have one. The
+		## front half is asked for rather than sliced out by index -- the sliced
+		## version took the half through the *left* of the cup and printed the band
+		## down its side like a ribbon hanging off it.
+		draw_polyline(
+			PackedVector2Array(_near_half(_disc(mid_u, mid_v, top_h * 0.62, radius), true)),
+			Color(0.82, 0.62, 0.36, 0.9), 3.0
 		)
