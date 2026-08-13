@@ -17,6 +17,8 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 @onready var load_menu_button: Button = %LoadMenuButton
 @onready var continue_button: Button = %ContinueButton
 @onready var theme_option: OptionButton = %ThemeOption
+@onready var desk_surface: TitleDeskSurface = %TitleDeskSurface
+@onready var content: MarginContainer = %Content
 
 var saves: Array[Dictionary] = []
 
@@ -89,6 +91,8 @@ func _continue_last_played() -> void:
 
 func set_theme_name(theme_name: String) -> void:
 	var light_mode := theme_name == "light"
+	if desk_surface != null:
+		desk_surface.set_light_mode(light_mode)
 	theme_option.select(1 if light_mode else 0)
 	%Background.color = UIPalette.color(&"canvas", light_mode)
 	%CourtBand.color = UIPalette.color(&"canvas_alt", light_mode)
@@ -96,6 +100,32 @@ func set_theme_name(theme_name: String) -> void:
 	%Title.modulate = UIPalette.color(&"ink", light_mode)
 	%Edition.modulate = UIPalette.color(&"accent", light_mode)
 	_tint_menu(light_mode)
+
+
+## Continue/load are the two exits which already have a room on the other side.
+## The overhead plan rolls and pitches into the seated desk perspective. Its
+## endpoint uses the desk interface's actual projection, so the application can
+## swap views without inventing a second camera angle on the way there.
+## The application waits for this before doing its normal paper wipe.
+func play_desk_departure() -> void:
+	if not visible or desk_surface == null:
+		return
+	var tween := create_tween().set_parallel(true)
+	tween.set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_IN_OUT)
+	# Long enough to read the three motions separately: first the room begins to
+	# turn, then the title furniture falls away, then the camera settles inward.
+	tween.tween_property(desk_surface, "departure", 1.0, 1.55)
+	tween.tween_property(%MenuPanel, "modulate:a", 0.0, 0.82).set_delay(0.28)
+	tween.tween_property(%Brand, "modulate:a", 0.0, 0.72).set_delay(0.42)
+	await tween.finished
+
+
+func reset_departure() -> void:
+	if desk_surface != null:
+		desk_surface.reset_departure()
+	if is_instance_valid(content):
+		%MenuPanel.modulate = Color.WHITE
+		%Brand.modulate = Color.WHITE
 
 
 ## Everything on this screen painted by a hand-rolled `StyleBoxFlat` or a

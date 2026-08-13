@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://m3nkbwbjxc0h" path="res://scenes/screens/title_screen.gd" id="1"]
 [ext_resource type="Script" uid="uid://bk18pfym1p674" path="res://scenes/components/ui_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Script" path="res://scenes/screens/title_desk_surface.gd" id="3_desk"]
 
 [sub_resource type="StyleBoxFlat" id="MenuPanel"]
 bg_color = Color(0.025, 0.065, 0.11, 0.96)
@@ -104,6 +105,17 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.035, 0.137, 0.192, 1)
 
+[node name="TitleDeskSurface" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_desk")
+
 [node name="CourtLineA" type="ColorRect" parent="." unique_id=395404625]
 layout_mode = 1
 anchors_preset = -1
@@ -134,6 +146,7 @@ grow_horizontal = 2
 color = Color(0.84, 0.67, 0.16, 1)
 
 [node name="Content" type="MarginContainer" parent="." unique_id=185262592]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -150,6 +163,7 @@ layout_mode = 2
 theme_override_constants/separation = 72
 
 [node name="Brand" type="VBoxContainer" parent="Content/Columns" unique_id=979713392]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 12

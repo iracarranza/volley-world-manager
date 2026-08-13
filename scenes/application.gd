@@ -247,6 +247,7 @@ func _show_title() -> void:
 	if CareerManager.has_career():
 		CareerManager.save_career()
 	title_screen.refresh_saves()
+	title_screen.reset_departure()
 	_show_only(title_screen)
 
 
@@ -258,7 +259,8 @@ func _show_new_career() -> void:
 func _load_career(save_id: String) -> void:
 	var error := CareerManager.load_career(save_id)
 	if error.is_empty():
-		_show_journal()
+		await title_screen.play_desk_departure()
+		_show_desk()
 
 
 func _show_journal() -> void:
