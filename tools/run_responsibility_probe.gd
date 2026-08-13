@@ -38,6 +38,13 @@ func _probe() -> void:
 
 	var by_kind := {}
 	for index in range(RALLIES):
+		## **Rotate.** The first cut of this probe left `selected_rotation` on 1
+		## for all 1,200 rallies and then reported that the receiving side is in
+		## the identical shape every time -- which was true of the probe and said
+		## nothing about the game. A serve-receive formation is static *within* a
+		## rotation, correctly: a team does line up the same way. It is supposed
+		## to change when the rotation does, and that is what this now exercises.
+		game_manager.selected_rotation = (index % 6) + 1
 		var result: Resource = game_manager.resolve_active_rally(
 			hash("responsibility|%d" % index)
 		)

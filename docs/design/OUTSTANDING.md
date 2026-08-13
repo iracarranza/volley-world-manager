@@ -147,26 +147,39 @@ was 1.14 m in 1,200 rallies. What existed was a tie-break between adjacent
 bodies, and the lock is still right to remove it -- ownership should not be
 purchasable -- but it was never a six-metre steal.
 
-**The spacing term cannot fire, and the reason is upstream.** Crowding is
-measured as the distance from the claimant to the nearest other reachable
-teammate, and over 590 contested receptions that distance is **2.99 m at p05,
-median, mean, p95 and max** -- one value, 590 times. Passing real body origins
-instead of formation zone centres changed nothing, so it is not a plumbing
-fault: the receiving side is in the *identical shape* on every rally in the
-sample. Rotation is not reaching the formation, or the formation does not vary.
+**The spacing term is inert at serve receive, and that turns out to be
+correct.** Crowding is the distance from the claimant to the nearest other
+reachable teammate, and over 590 contested receptions it reads **2.99 m at p05,
+median, mean, p95 and max** -- one value, 590 times.
 
-Until that is fixed, any spacing-aware rule is inert on the path where 1,059 of
-1,101 claims happen. The term is shipped anyway because the flat
-`min(count * 0.025, 0.075)` it replaces was wrong in principle -- it scored two
-volis in one space as double coverage -- and because it does reach the dig path.
-But its crowding floor has never been exercised and must not be tuned as though
-it has.
+Two wrong explanations were tried and measured away before the right one. It is
+not that `choose_claimant` was handed formation zone centres instead of bodies:
+passing real origins changed nothing, because `_initial_home_positions` places a
+receiving side *on* its zone centres, so the bodies and the diagram are the same
+points. It is not that the probe held one rotation either: cycling all six left
+reception spacing at 2.99 m across 454 samples.
+
+The actual reason is in `serve_receive_formation`. The seams come from a fixed
+preset and `_best_seam_assignment` maps passers onto those same points, so a
+rotation changes *who* stands on each seam and never *where the seams are*. A
+serve-receive shape is supposed to be invariant -- that is what makes it a
+formation -- and a formation is spaced on purpose. There is nothing to fix.
+
+So crowding is a **mid-rally** phenomenon, not a reception one, and the measured
+DEFENSE spacing says the same thing from the other side: 0.86 m to 2.24 m with
+real variance, and the p05 sits *below* the 1.05 m crowding threshold. The floor
+can fire; it fires where bodies actually converge.
+
+**And the dig count nearly trebles when rotations vary**: 42 claims on one
+rotation, 119 across six. Whatever suppresses floor defence is rotation-shaped,
+which is a sharper lead than "digging is weak" and belongs with the short-rally
+question rather than with the coverage constants.
 
 **Next, in order:** the previous contacter yielding and clearing (then
 re-measure the 46.7% obstruction, do not tune the clearance first); ready stance
 as a directional state; short-ball ownership.
 
-**And the number that keeps not moving:** 42 dig claims against 1,059
+**And the number to chase next:** even at 119, dig claims are a ninth of the
 receptions in the same 1,200 rallies. The home floor defence is barely being
 asked who owns the ball, which is a different failure from being asked and
 answering wrong, and it is the responsibility-side view of the short-rally
