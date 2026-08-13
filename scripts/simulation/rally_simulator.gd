@@ -5,6 +5,16 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const RallyResultModel := preload("res://scripts/models/rally_result.gd")
 const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd")
+
+## How close two second-contact claims have to be before the ball is contested.
+##
+## A gap on the same 0-1 claim scale the chooser scores in, so it reads as "these
+## two ranked within a tenth of each other" rather than as a distance or a time.
+## Deliberately not measured yet: nothing has ever published a second-contact
+## claim gap, so there is no distribution to cut. It is a starting value and the
+## first thing to re-derive once the probe exists -- naming that here rather than
+## letting a guessed constant pass as a fitted one.
+const SECOND_CONTACT_SEAM_MARGIN: float = 0.10
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const DefensivePlanModel := preload("res://scripts/models/defensive_plan.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
@@ -8643,6 +8653,7 @@ func _spatial_setter_choice(
 ) -> Dictionary:
 	var best := {"player": preferred_setter, "start": target, "travel_time": 4.0}
 	var best_score := -1000.0
+	var claimants: Array = []
 	for candidate in candidates:
 		if candidate == null or candidate.id == first_contact_player_id:
 			continue
@@ -8654,6 +8665,25 @@ func _spatial_setter_choice(
 		var travel_time := _movement_time(candidate, start, target, "transition") \
 			+ float(player_recovery.get(candidate.id, {}).get("delay", 0.0)) \
 			* _recovery_debt(candidate.id, rally_clock)
+		## **How confidently, not merely whether.**
+		##
+		## The physical half now comes from the same `evaluate_arrival` the first
+		## contact uses, judged from where this body actually is rather than from a
+		## formation slot -- so a second contact reports a reach margin in metres
+		## the way a reception always has. The duty weighting below stays local,
+		## because a serve receive and a second ball genuinely do rank
+		## responsibility differently and one shared chooser would have to pretend
+		## otherwise.
+		##
+		## No zone: there is no second-contact zone type, and a null one used to
+		## exclude a candidate outright. Admitted with no responsibility credit
+		## instead, which is the same correction `assigned_reach` already carries
+		## -- legs decide who can get there, the assignment decides who should.
+		var arrival: Dictionary = CoverageModel.evaluate_arrival(
+			candidate, null, target, maxf(available_time, 0.02),
+			"set_accuracy", start, 0.0,
+		)
+		var reach_margin := float(arrival.get("reach_margin_meters", 0.0))
 		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
 			if defensive_plan != null else null
 		var duty := str(assignment.second_contact_responsibility) \
@@ -8674,7 +8704,30 @@ func _spatial_setter_choice(
 			+ _rating(candidate, "decision_making") * 0.12 + duty_bonus
 		if score > best_score:
 			best_score = score
-			best = {"player": candidate, "start": start, "travel_time": travel_time}
+			best = {
+				"player": candidate, "start": start, "travel_time": travel_time,
+				## Published so a caller can tell a setter who arrived with time
+				## to spare from one who barely got there, which is the whole of
+				## what "confidently" means here and was not expressible before.
+				"reach_margin_meters": reach_margin,
+				"arrival_margin": available_time - travel_time,
+				"reachable": bool(arrival.get("reachable", false)),
+			}
+		if bool(arrival.get("reachable", false)):
+			claimants.append({"id": candidate.id, "score": score})
+	## **Two volis who both think it is theirs.** The first contact has called
+	## this a seam conflict since it was written; the second never had the
+	## concept, so a setter and a libero converging on the same ball were
+	## indistinguishable from a setter taking it alone.
+	claimants.sort_custom(func(a, b) -> bool: return float(a.score) > float(b.score))
+	if claimants.size() >= 2:
+		var gap := float(claimants[0].score) - float(claimants[1].score)
+		best["claim_margin"] = gap
+		best["seam_conflict"] = gap < SECOND_CONTACT_SEAM_MARGIN
+		best["contested_by"] = int(claimants[1].id)
+	else:
+		best["claim_margin"] = 1.0
+		best["seam_conflict"] = false
 	return best
 
 

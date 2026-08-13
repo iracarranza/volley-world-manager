@@ -18,16 +18,36 @@ static func court_distance_meters(from: Vector2, to: Vector2) -> float:
 	return RallyKinematics.court_distance_meters(from, to)
 
 
+## `origin` is where this body actually is. Omit it and the zone's centre is
+## used, which is where a voli stands in a serve-receive formation and is why
+## the two were ever the same thing.
+##
+## **They are not the same thing anywhere else.** Mid-rally nobody is at their
+## zone centre: the passer just played the ball, the setter has been chasing it,
+## the pins are starting approaches. Measuring reach from the formation position
+## would ask whether a voli could have got there *from where they were supposed
+## to be standing*, which is the same confusion between a body and its
+## assignment that `assigned_reach` below was already caught making.
+##
+## `unassigned_reach_meters` lets a caller admit candidates with no zone for this
+## contact at all. The guard used to reject them outright -- a null-zone leash
+## doing exactly what the radius was stopped from doing one field down.
 static func evaluate_arrival(
 	player: VolleyballPlayer,
 	zone: Resource,
 	landing_point: Vector2,
 	ball_time_seconds: float,
 	contact_skill: String,
+	origin: Variant = null,
+	unassigned_reach_meters: float = -1.0,
 ) -> Dictionary:
-	if player == null or zone == null or not bool(zone.enabled):
+	if player == null:
 		return {"reachable": false, "claim_score": -1000.0}
-	var distance := court_distance_meters(zone.center, landing_point)
+	var assigned := zone != null and bool(zone.enabled)
+	if not assigned and unassigned_reach_meters < 0.0:
+		return {"reachable": false, "claim_score": -1000.0}
+	var from_point: Vector2 = Vector2(origin) if origin != null 		else (Vector2(zone.center) if assigned else landing_point)
+	var distance := court_distance_meters(from_point, landing_point)
 	var anticipation := float(player.anticipation) / 100.0
 	var reaction_delay := lerpf(0.56, 0.18, anticipation)
 	var available_time := maxf(ball_time_seconds - reaction_delay, 0.0)
@@ -79,7 +99,7 @@ static func evaluate_arrival(
 	)
 	var base_reach := _base_reach_meters(player, contact_skill)
 	var physical_reach := base_reach + travel_distance
-	var assigned_reach := float(zone.radius_meters)
+	var assigned_reach := float(zone.radius_meters) if assigned 		else unassigned_reach_meters
 	## Legs, not paperwork.
 	##
 	## This was `distance <= minf(physical_reach, assigned_reach)`, so a zone
@@ -112,7 +132,7 @@ static func evaluate_arrival(
 	var zone_margin := assigned_reach - distance
 	var edge_ratio := distance / maxf(assigned_reach, 0.1)
 	var skill_rating := float(player.get(contact_skill)) / 100.0
-	var claim_score := float(zone.priority) * 0.24 \
+	var claim_score := (float(zone.priority) if assigned else 0.0) * 0.24 \
 		+ clampf(reach_margin / 3.0, -0.5, 0.5) * 0.34 \
 		+ clampf(zone_margin / 3.0, -0.5, 0.5) * 0.16 \
 		+ anticipation * 0.14 + skill_rating * 0.12
@@ -153,6 +173,13 @@ static func choose_claimant(
 	## discounting their dig after the fact, which lets someone lying down claim a
 	## ball and then merely play it badly.
 	time_penalties: Dictionary = {},
+	## Where each body actually is, keyed by id. Omit it and every voli is judged
+	## from their zone centre, which is true in a serve-receive formation and true
+	## nowhere else.
+	origins: Dictionary = {},
+	## Reach credited to a voli with no zone for this contact. Negative keeps the
+	## old behaviour of excluding them outright.
+	unassigned_reach_meters: float = -1.0,
 ) -> Dictionary:
 	var best := {
 		"player": null, "arrival": {}, "support_count": 0,
@@ -169,6 +196,8 @@ static func choose_claimant(
 				0.02,
 			),
 			contact_skill,
+			origins.get(player.id),
+			unassigned_reach_meters,
 		)
 		if not bool(arrival.get("reachable", false)):
 			continue

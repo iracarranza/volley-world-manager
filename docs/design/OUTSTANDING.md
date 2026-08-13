@@ -89,12 +89,40 @@ and returns the first moment the ball sits inside a playable height band --
 literally the tight window a low shank offers. The second contact simply does
 not use it.
 
-Fix, smallest first, in §5's order:
+**A first attempt was reverted.** Sampling `earliest_contact_time` for the
+*first* playable moment put the second contact next to the passer on every
+ordinary pass, because a pass leaves the platform already inside the 0.15-1.40
+band. Three gates caught it. The right shape is an interception considered only
+when the destination is unreachable -- evaluate both, take the better -- rather
+than a rule that replaces the destination unconditionally.
 
-1. Sample the pass trajectory for a playable moment and test candidates against
-   *that point at that time*, keeping the endpoint as the fallback so a good
-   pass behaves exactly as it does now.
-2. Widen the candidate pool only if step 1 proves insufficient.
+**Confidence, proficiency and the seam are now in.** `_spatial_setter_choice`
+takes its physical half from the same `CoverageModel.evaluate_arrival` the first
+contact uses, judged from where the body actually is, and publishes
+`reach_margin_meters`, `arrival_margin`, `claim_margin`, `seam_conflict` and
+`contested_by`. The duty weighting stays local on purpose: a serve receive and a
+second ball rank responsibility differently, and one shared chooser would have
+to pretend otherwise.
+
+`evaluate_arrival` gained an `origin` -- it measured reach from the *zone
+centre*, which is where a voli stands in a serve-receive formation and nowhere
+else. Mid-rally the passer has just played the ball and the setter has been
+chasing it; judging them from a formation slot is the same confusion between a
+body and its assignment that `assigned_reach` was already caught making one
+field below.
+
+Still to do here:
+
+1. The interception attempt, in the shape above.
+2. **Collisions.** Nothing anywhere models one body impeding another's path --
+   the setter who *could* have reached it but ran into a hitter's approach or a
+   libero's dive. Not a movement-model change: `traversal_seconds` should stay
+   pure kinematics. It belongs after the claim, as a second pass asking whether
+   the winner's path crossed a committed body during the window, downgrading or
+   transferring the contact.
+3. `SECOND_CONTACT_SEAM_MARGIN` is 0.10 and **unmeasured**. Nothing has ever
+   published a second-contact claim gap, so there is no distribution to cut it
+   from. It is a starting value; the probe comes before the tuning.
 
 ## §5 Measurement debt
 
