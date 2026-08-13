@@ -25,6 +25,7 @@ const FoodSupplyModel := preload("res://scripts/data/food_supply.gd")
 const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
 const StaffReportsModel := preload("res://scripts/data/staff_reports.gd")
 const PasteRatioModel := preload("res://scripts/data/paste_ratio.gd")
+const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const MenuCardScript := preload("res://scenes/components/menu_card.gd")
 const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
 const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
@@ -151,6 +152,7 @@ var roster_viewport: SubViewport = null
 var roster_turntable: Node3D = null
 var roster_actor: Node3D = null
 var roster_environment: Environment = null
+var roster_camera: Camera3D = null
 @onready var attribute_columns: HBoxContainer = %AttributeColumns
 @onready var attribute_prev_button: Button = %AttributePrevButton
 @onready var attribute_next_button: Button = %AttributeNextButton
@@ -1738,14 +1740,17 @@ func _build_roster_viewport() -> void:
 	light.light_energy = 1.35
 	roster_viewport.add_child(light)
 
-	var camera := Camera3D.new()
+	roster_camera = Camera3D.new()
 	## Framed so the tallest rig in the game still fits with a little headroom:
 	## an Avi stands 2.16 m in mesh space against a Pumpkin's 1.76 m, and a
 	## framing fitted to the average silently crops the tall one.
-	camera.position = Vector3(0.0, 1.06, -2.95)
-	camera.rotation_degrees = Vector3(-1.0, 180.0, 0.0)
-	camera.fov = 39.0
-	roster_viewport.add_child(camera)
+	##
+	## The resting framing; `_frame_roster_camera` swaps it per pose. It was the
+	## only one when every voli in this panel stood still.
+	roster_camera.position = ROSTER_FRAMINGS[DEFAULT_FRAMING]
+	roster_camera.rotation_degrees = Vector3(-1.0, 180.0, 0.0)
+	roster_camera.fov = ROSTER_FOV_DEGREES
+	roster_viewport.add_child(roster_camera)
 
 	## The actor is spun by a parent rather than by its own transform: `set_pose`
 	## and `set_tactical_position` both write the actor's rotation, so a drag
@@ -1795,7 +1800,126 @@ func _refresh_roster_actor(player) -> void:
 	)
 	roster_actor.identity_label.visible = false
 	roster_actor.set_highlighted(false)
-	roster_actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+	_pose_roster_actor(str(player.primary_position))
+
+
+## What a voli is doing when you look them up.
+##
+## `primary_position` to the action that position exists for: the pins and the
+## opposite swing, the middle blocks, the setter sets, the libero digs. The rig
+## already draws all four for the match court, so this is a lookup and one call
+## rather than any new animation.
+##
+## Two things about `set_pose` decide the arguments, and both have been got wrong
+## before in this repository:
+##
+## **`is_contact_actor` has to be true.** Every pose-specific limb movement in
+## `set_pose` sits behind that gate, so passing `false` leaves the rig in its
+## neutral stance -- which, with an event type of -1 beside it, is exactly what
+## the roster had been doing, and why the panel's own comment described it as
+## "one voli standing still".
+##
+## **`phase` is the signed contact phase**, not a 0-to-1 progress bar. Zero is
+## the instant of contact: the hand on the ball, the top of the block. Negative
+## is the approach and positive the follow-through, which is why the same number
+## is right for all four actions.
+## `framing` is which camera the action needs, and it is keyed off **reach, not
+## off whether the feet leave the floor**. A setter stands still and contacts
+## overhead; a libero stands still and contacts at the knee. Framing those two
+## the same way is what clipped the setter's hands off the top of the panel while
+## the libero sat comfortably inside it.
+const POSITION_POSES := {
+	"Outside Hitter": {
+		"event": RallyEventModel.EventType.ATTACK,
+		"airborne": true, "framing": &"struck",
+	},
+	"Opposite": {
+		"event": RallyEventModel.EventType.ATTACK,
+		"airborne": true, "framing": &"struck",
+	},
+	"Middle Blocker": {
+		"event": RallyEventModel.EventType.BLOCK,
+		"airborne": true, "framing": &"walled",
+	},
+	"Setter": {
+		"event": RallyEventModel.EventType.SET,
+		"airborne": false, "framing": &"overhead",
+	},
+	"Libero": {
+		"event": RallyEventModel.EventType.DEFENSE,
+		"airborne": false, "framing": &"low",
+	},
+}
+
+## The direction the contact is played toward, in the actor's own terms. Only its
+## bearing matters here; the roster has no ball and no opponent.
+const ROSTER_CONTACT_DIRECTION := Vector2(0.0, -1.0)
+
+## **A camera per reach, because the panel was framed for a voli standing still
+## and now nobody is.**
+##
+## The original framing covers roughly 0.0 to 2.1 m, which fits the tallest rig
+## upright with a little headroom and nothing else. Posing against it went wrong
+## twice, and both are worth keeping because they are different mistakes:
+##
+## 1. At full elevation the middle blocker rendered as **a pair of shoes** with
+##    everything above the knee out of frame -- `set_pose` raises the body by
+##    `elevation * 0.82 m` and the camera did not follow.
+## 2. Raising the camera for the airborne pair alone still clipped the setter's
+##    hands, because a set is contacted overhead from a standing position. Reach
+##    is the thing that decides the framing; leaving the floor is only one way to
+##    gain it.
+##
+## So there are four, keyed by reach: `low` for a dig taken near the knee,
+## `overhead` for hands above the head with the feet down, `struck` for a swing
+## at the top of a jump, and `walled` for a block.
+##
+## A block and a spike both leave the floor and are still not the same framing: a
+## block puts both arms straight up and a swing carries one arm out at an angle,
+## so the block reaches higher off the same jump. Sharing `struck` between them
+## cut the blocker's hands off, which is the same clipping as before one level
+## further in. The swing's camera is also nudged off the centre line, because the
+## body rotates away from the arm and a centred camera leaves it sitting left.
+const ROSTER_FOV_DEGREES: float = 39.0
+const ROSTER_FRAMINGS := {
+	&"low": Vector3(0.0, 1.06, -2.95),
+	&"overhead": Vector3(0.0, 1.52, -3.40),
+	&"struck": Vector3(-0.20, 2.10, -4.35),
+	&"walled": Vector3(0.0, 2.46, -5.00),
+}
+const DEFAULT_FRAMING: StringName = &"low"
+
+
+func _pose_roster_actor(position_name: String) -> void:
+	var pose: Dictionary = POSITION_POSES.get(position_name, {})
+	_frame_roster_camera(
+		StringName(pose.get("framing", DEFAULT_FRAMING)) if not pose.is_empty()
+			else DEFAULT_FRAMING
+	)
+	if pose.is_empty():
+		## A position with no entry stands as it always did. A new position should
+		## look unfinished rather than be silently drawn as somebody else's job,
+		## which is what a default entry here would buy.
+		roster_actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
+		return
+	roster_actor.set_pose(
+		int(pose["event"]), 1.0 if bool(pose["airborne"]) else 0.0, 0.0,
+		ROSTER_CONTACT_DIRECTION, true,
+	)
+	## `set_pose` ends in `_turn_toward`, which writes `rotation.y` outright, and a
+	## block squares to the net rather than to the contact -- so the middle would
+	## face a different way from the other four and the turntable's drag would
+	## start from a different place per voli. Facing here belongs to the
+	## turntable, which is why the actor is parented to one at all, so the actor's
+	## own yaw goes back to zero afterwards. `voli_sticker` needs the same order
+	## for the same reason and says so.
+	roster_actor.rotation.y = 0.0
+
+
+func _frame_roster_camera(framing: StringName) -> void:
+	if roster_camera == null:
+		return
+	roster_camera.position = ROSTER_FRAMINGS[framing]
 
 
 ## Each visible category is a real column of real rows -- a name Label that
