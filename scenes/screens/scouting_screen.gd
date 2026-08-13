@@ -103,6 +103,7 @@ var _open_id: int = -1
 var _strip: HFlowContainer = null
 var _strip_scroll: ScrollContainer = null
 var _strip_button: Button = null
+var _strip_tape: _Tape = null
 var _strip_open: bool = false
 
 
@@ -174,15 +175,33 @@ func _build() -> void:
 	strip_column.name = "Clippings"
 	strip_column.add_theme_constant_override("separation", 4)
 	shell.content.add_child(strip_column)
+	## **Tape, not a button.**
+	##
+	## It was a full-width `Button`, which on the `drawn` medium came with a pen
+	## edge -- a hard ruled box across the bottom of a cork board, and the only
+	## drawn line anywhere on a surface whose entire vocabulary is air, shadow and
+	## pins. Nothing on a cork board has a border, including the labels.
+	##
+	## What a cork board actually has is a strip of masking tape with a word
+	## written on it. So the control is a hit area with no styling of its own --
+	## `_is_hit_area` gives it a tier the style pass walks straight past -- and the
+	## tape is drawn underneath it.
+	var tape_row := HBoxContainer.new()
+	tape_row.name = "ClippingsLabelRow"
+	strip_column.add_child(tape_row)
 	_strip_button = Button.new()
 	_strip_button.name = "ClippingsButton"
-	_strip_button.text = "Cuttings"
-	_strip_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_strip_button.flat = true
+	_strip_button.custom_minimum_size = Vector2(196.0, 30.0)
 	_strip_button.pressed.connect(func() -> void:
 		_strip_open = not _strip_open
 		_refresh_strip_size()
 	)
-	strip_column.add_child(_strip_button)
+	tape_row.add_child(_strip_button)
+	_strip_tape = _Tape.new()
+	_strip_tape.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_strip_tape.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_strip_button.add_child(_strip_tape)
 	_strip_scroll = ScrollContainer.new()
 	_strip_scroll.name = "ClippingsScroll"
 	_strip_scroll.custom_minimum_size = Vector2(0.0, STRIP_SHUT)
@@ -239,8 +258,10 @@ func _refresh_clippings() -> void:
 	var fixtures: Array = career.fixtures if career != null else []
 	var roster: Array = _game_manager.players if _game_manager != null else []
 	var cuttings := Clippings.recent(fixtures, roster)
-	_strip_button.text = "Cuttings — nothing yet" if cuttings.is_empty() \
-		else "Cuttings (%d)" % cuttings.size()
+	_strip_tape.label = "cuttings" if cuttings.is_empty() \
+		else "cuttings · %d" % cuttings.size()
+	_strip_tape.faded = cuttings.is_empty()
+	_strip_tape.queue_redraw()
 	if cuttings.is_empty():
 		return
 	for clipping in cuttings:
@@ -733,6 +754,70 @@ const SHORT_ROLES := {
 
 func _short_role(role: String) -> String:
 	return str(SHORT_ROLES.get(role, role))
+
+
+## A strip of masking tape with a word on it.
+##
+## The one label on a cork board that is not a pinned slip, because it names a
+## *region* of the board rather than a thing on it -- and you do not pin a pin.
+## Torn at both ends, slightly translucent so the cork shows through, and written
+## in biro, which is the board's own hand.
+class _Tape extends Control:
+	var label: String = ""
+	var faded: bool = false
+
+	## Masking tape is a warm off-white that never quite covers what is under it.
+	const TAPE_ALPHA: float = 0.88
+	const TEAR_STEPS: int = 5
+	const TEAR_DEPTH: float = 3.0
+	const TILT_DEGREES: float = -0.9
+
+	func _ready() -> void:
+		set_meta("ui_style_exempt", true)
+
+	func _draw() -> void:
+		if size.x < 20.0:
+			return
+		var light := UIPalette.control_is_light(self)
+		draw_set_transform(size * 0.5, deg_to_rad(TILT_DEGREES), Vector2.ONE)
+		var rect := Rect2(-size * 0.5, size)
+		var tape := Color(0.93, 0.90, 0.80, TAPE_ALPHA) if light \
+			else Color(0.80, 0.77, 0.69, TAPE_ALPHA)
+		draw_rect(Rect2(rect.position + Vector2(1.5, 2.0), rect.size), Color(0, 0, 0, 0.18), true)
+		draw_colored_polygon(_torn(rect), tape)
+		var font := get_theme_default_font()
+		if font != null:
+			draw_string(
+				font, rect.position + Vector2(14.0, rect.size.y * 0.5 + 5.0),
+				label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24.0, 13,
+				Color(0.16, 0.20, 0.34, 0.55 if faded else 0.92)
+			)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	## Torn at both ends and straight along the top and bottom, which is what tape
+	## off a roll does: the edges are the roll's and the ends are your thumbnail.
+	func _torn(rect: Rect2) -> PackedVector2Array:
+		var points := PackedVector2Array()
+		for step in range(TEAR_STEPS + 1):
+			var t := float(step) / float(TEAR_STEPS)
+			points.append(Vector2(
+				rect.position.x + _jag(step), rect.position.y + rect.size.y * t
+			))
+		points.append(rect.position + Vector2(rect.size.x, rect.size.y))
+		for step in range(TEAR_STEPS + 1):
+			var t := 1.0 - float(step) / float(TEAR_STEPS)
+			points.append(Vector2(
+				rect.position.x + rect.size.x - _jag(step + 17),
+				rect.position.y + rect.size.y * t
+			))
+		return points
+
+	func _jag(step: int) -> float:
+		return float((step * 2654435761) % 1000) / 1000.0 * TEAR_DEPTH
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_THEME_CHANGED:
+			queue_redraw()
 
 
 ## A photograph that is not a photograph yet.

@@ -58,38 +58,90 @@ signal opened(what: String)
 ## the furthest away because it is the thing you get up for.
 ##
 ## `x`, `y`, `w`, `h` are all in `[0, 1]` of the desk rect.
+## Where everything lies, how thick it is, and what it is resting on.
+##
+## ## Seen from the chair
+##
+## The desk is drawn from where a manager sits: looking down at it, but not from
+## directly above. That is one property and it changes everything -- from
+## overhead, objects are outlines, and from a chair they have **sides**. You can
+## see the block of pages in a shut journal, the moulded body of a telephone, and
+## the fact that the clipboard is not lying on the desk at all but bridging
+## between the journal and the board.
+##
+## The projection is oblique rather than perspective: no vanishing point, no
+## scaling with distance. `thickness` is how far an object's near face drops on
+## screen, and `z` is what it is stacked on. Perspective would be more correct and
+## would cost the closed-form hit test that lets a click be a rect check -- the
+## same trade `TofuBlock` and `FloorPlan` already make, and for the same reason.
+##
+## **`z` is a stacking order and a shadow length at once.** Later entries draw
+## over earlier ones, and an object's shadow grows and softens with its height, so
+## the clipboard reading as *suspended* over two things is one number rather than
+## a drawn effect.
+##
+## `rect` is in shares of the desk surface, which is the room minus the wall.
 const OBJECTS := [
 	{
 		"key": "encyclopedia", "label": "Encyclopedia",
-		"rect": Rect2(0.030, 0.07, 0.185, 0.27), "tilt": -4.0,
+		"rect": Rect2(0.028, 0.05, 0.175, 0.30), "tilt": -4.0,
+		"thickness": 13.0, "z": 0.0,
 	},
 	{
 		"key": "scouting", "label": "Scouting board",
-		"rect": Rect2(0.045, 0.40, 0.27, 0.45), "tilt": 2.5,
-	},
-	{
-		"key": "training", "label": "Training clipboard",
-		"rect": Rect2(0.245, 0.11, 0.235, 0.40), "tilt": 5.0,
+		"rect": Rect2(0.042, 0.40, 0.27, 0.47), "tilt": 2.5,
+		"thickness": 7.0, "z": 0.0,
 	},
 	{
 		"key": "housing", "label": "Housing folder",
-		"rect": Rect2(0.290, 0.50, 0.255, 0.38), "tilt": -3.0,
-	},
-	{
-		"key": "kitchen", "label": "Meal plan",
-		"rect": Rect2(0.500, 0.56, 0.215, 0.31), "tilt": 6.0,
+		"rect": Rect2(0.285, 0.50, 0.255, 0.40), "tilt": -3.0,
+		"thickness": 5.0, "z": 1.0,
 	},
 	{
 		"key": "journal", "label": "The journal",
-		"rect": Rect2(0.455, 0.09, 0.29, 0.44), "tilt": -1.5,
+		"rect": Rect2(0.450, 0.07, 0.29, 0.46), "tilt": -1.5,
+		"thickness": 19.0, "z": 1.0,
+	},
+	{
+		"key": "kitchen", "label": "Meal plan",
+		"rect": Rect2(0.495, 0.56, 0.215, 0.32), "tilt": 6.0,
+		"thickness": 8.0, "z": 2.0,
+	},
+	{
+		## **Suspended.** It rests on the journal's near edge at one end and the
+		## board at the other, so it is above both and its shadow falls on both --
+		## which is the whole reason objects have a height rather than an order.
+		"key": "training", "label": "Training clipboard",
+		"rect": Rect2(0.238, 0.10, 0.235, 0.42), "tilt": 5.0,
+		"thickness": 11.0, "z": 3.0,
 	},
 	{
 		"key": "phone", "label": "Telephone",
-		"rect": Rect2(0.775, 0.16, 0.175, 0.28), "tilt": -1.0,
+		"rect": Rect2(0.780, 0.13, 0.170, 0.26), "tilt": -1.0,
+		"thickness": 26.0, "z": 0.0,
 	},
 	{
 		"key": "machine", "label": "Answering machine",
-		"rect": Rect2(0.760, 0.55, 0.195, 0.20), "tilt": 2.0,
+		"rect": Rect2(0.766, 0.45, 0.185, 0.17), "tilt": 2.0,
+		"thickness": 20.0, "z": 0.0,
+	},
+	{
+		## Settings, as a thing on a desk rather than a cog in a corner.
+		##
+		## A rotary pencil sharpener: the body is unremarkable stationery and the
+		## crank wheel is a toothed disc, which from a chair reads as a gear
+		## without ever being one. Nobody has to be told what it opens, and the
+		## desk does not acquire an icon from a different design language to say
+		## so.
+		"key": "settings", "label": "", "rect": Rect2(0.792, 0.70, 0.098, 0.15),
+		"tilt": -6.0, "thickness": 15.0, "z": 0.0,
+	},
+	{
+		## Drawn last so its light falls over everything. It is furniture and it
+		## opens nothing -- the one object here with no destination, which is why
+		## it has no label and why `_object_at` skips it.
+		"key": "lamp", "label": "", "rect": Rect2(0.610, 0.03, 0.115, 0.17),
+		"tilt": 0.0, "thickness": 34.0, "z": 4.0,
 	},
 ]
 
@@ -98,6 +150,33 @@ const OBJECTS := [
 ## that went slate in the dark theme would be a different piece of furniture.
 const WOOD_LIGHT := Color(0.52, 0.38, 0.26)
 const WOOD_DARK := Color(0.17, 0.13, 0.10)
+
+## The wall behind the desk, and the window in it.
+##
+## Reserved before anything is placed, because the far edge of a desk seen from a
+## chair is *not* the top of the screen -- there is a room behind it, and leaving
+## that out is what made the first draft read as a texture rather than a place.
+const WALL_SHARE: float = 0.17
+## The desk's own front lip, which is the near edge you are sitting at.
+const LIP: float = 9.0
+
+## What is out of the window, and it is the same window at two times of day.
+##
+## This is the one place a theme means something rather than being a preference:
+## Molten is the afternoon and Mikasa is late, so the light in the room has a
+## *source*, and the lamp being on in one and off in the other follows from it
+## instead of being a second decision. A dark theme that is merely darker is a
+## filter; a dark theme that is night is a room.
+const SKY_DAY_TOP := Color(0.60, 0.76, 0.86)
+const SKY_DAY_LOW := Color(0.86, 0.88, 0.82)
+const SKY_NIGHT_TOP := Color(0.05, 0.07, 0.14)
+const SKY_NIGHT_LOW := Color(0.12, 0.14, 0.23)
+const WALL_LIGHT := Color(0.80, 0.75, 0.66)
+const WALL_DARK := Color(0.15, 0.14, 0.16)
+
+## The lamp's pool on the desk, which only exists at night.
+const LAMP_REACH: float = 260.0
+const LAMP_WARMTH := Color(1.0, 0.87, 0.62)
 
 ## How much of the surface the desk takes, leaving room for the ribbon.
 const SURFACE_INSET := Vector2(0.0, 0.0)
@@ -231,6 +310,11 @@ class _Surface extends Control:
 	func _object_at(where: Vector2) -> String:
 		for index in range(OBJECTS.size() - 1, -1, -1):
 			var entry: Dictionary = OBJECTS[index]
+			## Furniture is not clickable. The lamp is on the desk and opens
+			## nothing, and a lamp that swallowed clicks meant for the journal
+			## under it would be a hit box shaped like a joke.
+			if str(entry["key"]) == "lamp":
+				continue
 			## Tested in the object's own frame rather than against its screen
 			## rect: everything on this desk is rotated a few degrees, and a
 			## hit test against the un-rotated rect is wrong along every edge --
@@ -243,11 +327,17 @@ class _Surface extends Control:
 				return str(entry["key"])
 		return ""
 
+	## The desk itself, which is the room minus the wall behind it.
+	func _desk_rect() -> Rect2:
+		var top := size.y * WALL_SHARE
+		return Rect2(Vector2(0.0, top), Vector2(size.x, size.y - top))
+
 	func _rect_for(entry: Dictionary) -> Rect2:
+		var desk := _desk_rect()
 		var share: Rect2 = entry["rect"]
 		return Rect2(
-			Vector2(share.position.x * size.x, share.position.y * size.y),
-			Vector2(share.size.x * size.x, share.size.y * size.y)
+			desk.position + Vector2(share.position.x * desk.size.x, share.position.y * desk.size.y),
+			Vector2(share.size.x * desk.size.x, share.size.y * desk.size.y)
 		)
 
 	func _notification(what: int) -> void:
@@ -261,6 +351,7 @@ class _Surface extends Control:
 		if size.x < 200.0 or size.y < 150.0:
 			return
 		var light := UIPalette.control_is_light(self)
+		_draw_wall(light)
 		_draw_desktop(light)
 		for entry in OBJECTS:
 			_draw_object(entry, light)
@@ -272,25 +363,111 @@ class _Surface extends Control:
 	## isotropic noise reads as stone. Deterministic off the row index so the desk
 	## is the same desk every time it is opened.
 	func _draw_desktop(light: bool) -> void:
+		var desk := _desk_rect()
 		var wood := WOOD_LIGHT if light else WOOD_DARK
-		draw_rect(Rect2(Vector2.ZERO, size), wood, true)
-		var rows := int(size.y / 7.0)
+		draw_rect(desk, wood, true)
+		var rows := int(desk.size.y / 7.0)
 		for row in range(rows):
 			var seed_value := (row * 2654435761) & 0x7FFFFFFF
 			var shade := (float(seed_value % 1000) / 1000.0 - 0.5) * 0.06
-			var y := float(row) * 7.0
+			var y := desk.position.y + float(row) * 7.0
 			draw_rect(
 				Rect2(Vector2(0.0, y), Vector2(size.x, 7.0)),
 				Color(wood.r + shade, wood.g + shade * 0.8, wood.b + shade * 0.6),
 				true
 			)
-		## A soft vignette, so the middle of the desk is where the lamp is.
-		for step in range(6):
-			var inset := float(step) * 14.0
+		## The front lip: the near edge of the desk, which you can see because you
+		## are looking down at it rather than straight on. One band, and it is what
+		## makes the surface a *table* rather than a background.
+		draw_rect(
+			Rect2(Vector2(0.0, size.y - LIP), Vector2(size.x, LIP)),
+			Color(wood.darkened(0.34), 1.0), true
+		)
+
+		## The lamp's pool, and only at night. In the afternoon the light comes
+		## from the window and the lamp is off, so painting a pool would be a
+		## second light source with no lamp lit under it.
+		if not light:
+			var lamp := _rect_for(_lamp_entry())
+			var at := lamp.position + Vector2(lamp.size.x * 0.5, lamp.size.y)
+			## Painted under the objects, so the lamp lights the desk and the things
+			## on it keep their own colour -- a pool drawn over the top would tint
+			## every material it reached and undo the whole point of them having
+			## one. Stronger than the first pass, which was too faint to see it
+			## was there at all.
+			for step in range(10):
+				var t := float(step) / 10.0
+				draw_circle(
+					at + Vector2(0.0, LAMP_REACH * 0.40),
+					LAMP_REACH * (0.28 + t * 0.82),
+					Color(LAMP_WARMTH, 0.075 * (1.0 - t) * (1.0 - t))
+				)
+
+	func _lamp_entry() -> Dictionary:
+		for entry in OBJECTS:
+			if str(entry["key"]) == "lamp":
+				return entry
+		return OBJECTS[0]
+
+	## The room behind the desk, and the window in it.
+	func _draw_wall(light: bool) -> void:
+		var wall_rect := Rect2(Vector2.ZERO, Vector2(size.x, size.y * WALL_SHARE))
+		draw_rect(wall_rect, WALL_LIGHT if light else WALL_DARK, true)
+
+		var window_rect := Rect2(
+			Vector2(size.x * 0.09, wall_rect.size.y * 0.13),
+			Vector2(size.x * 0.30, wall_rect.size.y * 0.78)
+		)
+		var top_sky := SKY_DAY_TOP if light else SKY_NIGHT_TOP
+		var low_sky := SKY_DAY_LOW if light else SKY_NIGHT_LOW
+		## A vertical gradient in slices, because canvas drawing has no gradient
+		## fill and eighteen bands at this height is under a pixel of banding.
+		var bands := 18
+		for band in range(bands):
+			var t := float(band) / float(bands)
 			draw_rect(
-				Rect2(Vector2(inset, inset), size - Vector2(inset, inset) * 2.0),
-				Color(0.0, 0.0, 0.0, 0.035), false, 14.0
+				Rect2(
+					window_rect.position + Vector2(0.0, window_rect.size.y * t),
+					Vector2(window_rect.size.x, window_rect.size.y / float(bands) + 1.0)
+				),
+				top_sky.lerp(low_sky, t), true
 			)
+		if not light:
+			## Lights on the other side of whatever is out there. Deterministic,
+			## because a window whose city rearranges itself every frame is a
+			## screensaver.
+			for index in range(26):
+				var seed_value := ((index + 3) * 2654435761) & 0x7FFFFFFF
+				var at := window_rect.position + Vector2(
+					float(seed_value % 1000) / 1000.0 * window_rect.size.x,
+					float((seed_value / 1000) % 1000) / 1000.0 * window_rect.size.y
+				)
+				draw_rect(
+					Rect2(at, Vector2(2.0, 2.0)),
+					Color(1.0, 0.92, 0.7, 0.28 + float(seed_value % 60) / 160.0), true
+				)
+		## The frame and its one glazing bar. A window with no bar is a hole.
+		var frame_ink := Color(WALL_LIGHT.darkened(0.45) if light else Color(0.06, 0.06, 0.08))
+		draw_rect(window_rect, frame_ink, false, 4.0)
+		draw_line(
+			Vector2(window_rect.position.x + window_rect.size.x * 0.5, window_rect.position.y),
+			Vector2(
+				window_rect.position.x + window_rect.size.x * 0.5,
+				window_rect.position.y + window_rect.size.y
+			), frame_ink, 3.0
+		)
+		## The sill, which is the one horizontal that says the wall has depth.
+		draw_rect(
+			Rect2(
+				window_rect.position + Vector2(-6.0, window_rect.size.y),
+				Vector2(window_rect.size.x + 12.0, 5.0)
+			), frame_ink, true
+		)
+		## And the shadow the wall drops onto the back of the desk.
+		draw_rect(
+			Rect2(Vector2(0.0, wall_rect.size.y), Vector2(size.x, 14.0)),
+			Color(0.0, 0.0, 0.0, 0.22), true
+		)
 
 	## One object: its shadow, its body in its own material, its name, and what it
 	## has to say today.
@@ -323,15 +500,26 @@ class _Surface extends Control:
 		var rise := 3.0 if hovered else 0.0
 		var font := get_theme_default_font()
 		var body := Rect2(rect.position - Vector2(0.0, rise), rect.size)
-		for step in range(3):
+		## **The shadow is the height.**
+		##
+		## An object's shadow drops further and spreads wider the higher it sits,
+		## so the clipboard bridging the journal and the board casts a long soft
+		## one onto both -- which is what says *suspended* without a single line
+		## being drawn to say it. Height is `z` plus the object's own thickness,
+		## because a thick thing on the desk is as high as a thin thing on a book.
+		var height := float(entry["z"]) * 7.0 + float(entry["thickness"]) * 0.5 + rise
+		for step in range(4):
 			draw_rect(
 				Rect2(
-					body.position + Vector2(2.0, 3.0 + rise) + Vector2(float(step), float(step)) * 0.5,
+					body.position
+						+ Vector2(height * 0.22, height * 0.42)
+						+ Vector2(float(step), float(step)) * (1.0 + height * 0.05),
 					body.size
 				),
-				Color(0.0, 0.0, 0.0, (0.22 if hovered else 0.16) / float(step + 1)),
+				Color(0.0, 0.0, 0.0, (0.24 if hovered else 0.18) / float(step + 1)),
 				true
 			)
+		_draw_sides(key, body, float(entry["thickness"]), light)
 		var stock := _stock_of(key, light)
 		draw_rect(body, stock, true)
 		_draw_grain(key, body, stock)
@@ -346,6 +534,10 @@ class _Surface extends Control:
 		if font == null:
 			return
 		var ink := _lettering_of(key, light)
+		if str(entry["label"]).is_empty():
+			## Furniture and the sharpener carry no name. A label on a lamp is a
+			## caption on a photograph of a lamp.
+			return
 		draw_string(
 			font, body.position + Vector2(10.0, 22.0), str(entry["label"]),
 			HORIZONTAL_ALIGNMENT_LEFT, body.size.x - 20.0, LABEL_SIZE, ink
@@ -401,6 +593,13 @@ class _Surface extends Control:
 				return Color("7d5a72") if light else Color("40303c")
 			"phone", "machine":
 				return Color("2b2e33") if light else Color("1d2126")
+			"settings":
+				## Unremarkable stationery: the grey-green of a metal desk tidy,
+				## which is the point -- it should be the least interesting thing
+				## on the desk until you notice the wheel.
+				return Color("6f7566") if light else Color("3b4038")
+			"lamp":
+				return Color("47505a") if light else Color("2c333b")
 			_:
 				return UIPalette.color(&"surface", light)
 
@@ -455,7 +654,7 @@ class _Surface extends Control:
 				## The board has no page: what you see when you open it is more
 				## cork. So it returns its own stock, and the object draws no leaf.
 				return Color(0, 0, 0, 0)
-			"phone", "machine":
+			"phone", "machine", "settings", "lamp":
 				return Color(0, 0, 0, 0)
 			"journal", "encyclopedia":
 				return UIPalette.color(&"surface_raised", light)
@@ -474,14 +673,102 @@ class _Surface extends Control:
 	## showing, the label was pale ink on a cream page and vanished entirely. The
 	## thing behind the words is the page, not the cover.
 	func _lettering_of(key: String, light: bool) -> Color:
-		if _ground_of(key, light).a <= 0.0:
-			## No page: the label is written on the object itself, which for the
-			## phone and the machine is dark plastic and for the board is cork.
-			if key in ["phone", "machine"]:
-				return Color(0.94, 0.93, 0.90)
-			return UIPalette.color(&"ink", light) if light \
-				else Color(0.90, 0.88, 0.83)
-		return UIPalette.color(&"ink", true) if light else Color(0.16, 0.14, 0.11)
+		## **Chosen by the luminance of whatever is behind the word**, not by the
+		## theme.
+		##
+		## It used to assume a page is pale, which is true in Molten and false in
+		## Mikasa -- the journal's ground is the journal screen's own surface and
+		## that is dark blue at night, so the label came out dark ink on a dark
+		## page and vanished. Asking the colour is the only version of this that
+		## cannot be wrong when a palette moves.
+		var behind := _ground_of(key, light)
+		if behind.a <= 0.0:
+			behind = _stock_of(key, light)
+		var luma := behind.r * 0.299 + behind.g * 0.587 + behind.b * 0.114
+		return Color(0.13, 0.12, 0.10) if luma > 0.52 else Color(0.94, 0.93, 0.89)
+
+	## The near and side faces, which are the whole of what "from the chair"
+	## means.
+	##
+	## Only two of the four are ever visible, and which two follows from where the
+	## object is: the near face always, and whichever side faces away from the
+	## middle of the desk -- because you are sitting at the centre of the near
+	## edge, so things on the left show their right side and things on the right
+	## show their left. Drawing all four would be an exploded diagram, and drawing
+	## only the near one makes everything look like it is against a wall.
+	func _draw_sides(key: String, body: Rect2, thickness: float, light: bool) -> void:
+		if thickness <= 0.5:
+			return
+		var stock := _stock_of(key, light)
+		var near := Color(stock.darkened(0.30), 1.0)
+		var side := Color(stock.darkened(0.44), 1.0)
+		var drop := Vector2(0.0, thickness)
+		## Which side is turned toward the viewer's eye line.
+		var to_the_right := body.position.x + body.size.x * 0.5 < size.x * 0.5
+		var x := body.position.x + body.size.x if to_the_right else body.position.x
+		var edge := Vector2(x, body.position.y)
+		var lean := thickness * (0.16 if to_the_right else -0.16)
+		draw_colored_polygon(
+			PackedVector2Array([
+				edge, edge + Vector2(lean, thickness),
+				edge + Vector2(lean, thickness) + Vector2(0.0, body.size.y),
+				edge + Vector2(0.0, body.size.y),
+			]), side
+		)
+		draw_colored_polygon(
+			PackedVector2Array([
+				body.position + Vector2(0.0, body.size.y),
+				body.position + Vector2(body.size.x, body.size.y),
+				body.position + Vector2(body.size.x, body.size.y) + drop,
+				body.position + Vector2(0.0, body.size.y) + drop,
+			]), near
+		)
+		_draw_edge_detail(key, body, thickness, light)
+
+	## What the near face is made of, where that is a different thing from what
+	## the top is.
+	func _draw_edge_detail(key: String, body: Rect2, thickness: float, light: bool) -> void:
+		var near_top := body.position.y + body.size.y
+		match key:
+			"journal":
+				## **The page block.** A shut book seen from a chair is mostly this
+				## -- a stack of leaves, cream, with the cloth of the cover above
+				## and below it. It is the single mark that says "book" rather than
+				## "coloured rectangle", and it is four lines.
+				var pages := Color(0.94, 0.91, 0.82) if light else Color(0.74, 0.71, 0.64)
+				draw_rect(
+					Rect2(
+						Vector2(body.position.x + 4.0, near_top + 3.0),
+						Vector2(body.size.x - 8.0, thickness - 7.0)
+					), pages, true
+				)
+				var leaf := Color(pages.darkened(0.22), 0.7)
+				var y := near_top + 5.0
+				while y < near_top + thickness - 4.0:
+					draw_line(
+						Vector2(body.position.x + 4.0, y),
+						Vector2(body.position.x + body.size.x - 4.0, y), leaf, 1.0
+					)
+					y += 3.0
+				## And the spine, down the left, where the cloth wraps round.
+				draw_rect(
+					Rect2(
+						body.position + Vector2(0.0, 0.0),
+						Vector2(11.0, body.size.y + thickness)
+					), Color(_stock_of(key, light).darkened(0.18), 1.0), true
+				)
+			"phone":
+				## The moulded body: a lighter chamfer along the top of the near
+				## face, which is what a plastic case has and a slab does not.
+				draw_rect(
+					Rect2(Vector2(body.position.x, near_top), Vector2(body.size.x, 3.0)),
+					Color(0.42, 0.45, 0.49, 0.85), true
+				)
+			"machine":
+				draw_rect(
+					Rect2(Vector2(body.position.x, near_top), Vector2(body.size.x, 3.0)),
+					Color(0.42, 0.45, 0.49, 0.85), true
+				)
 
 	## The one texture mark that says which material this is.
 	##
@@ -547,6 +834,75 @@ class _Surface extends Control:
 				_draw_handset(body)
 			"machine":
 				_draw_machine(body, light)
+			"settings":
+				_draw_sharpener(body, light)
+			"lamp":
+				_draw_lamp(body, light)
+
+	## A rotary pencil sharpener, whose crank wheel is a toothed disc.
+	##
+	## The brief asked for "stationery with a camouflaged gear icon", and the
+	## camouflage has to work both ways: it must read as a gear at a glance, so
+	## nobody has to be told it is settings, and it must be a real object, so the
+	## desk does not acquire an icon from a different design language. A sharpener
+	## is the one piece of stationery whose working part is genuinely a wheel with
+	## teeth in it.
+	func _draw_sharpener(body: Rect2, light: bool) -> void:
+		var centre := body.position + body.size * 0.5
+		## Smaller and darker than the first pass, which drew a nine-petalled white
+		## flower filling the whole body. A sharpener's wheel is a *part* of it,
+		## and steel on a dark desk at night is much closer to the body than to
+		## white -- it was reading as the brightest object in the room, which for a
+		## settings control is exactly backwards.
+		var radius := minf(body.size.x, body.size.y) * 0.24
+		var steel := Color(0.58, 0.59, 0.60) if light else Color(0.40, 0.42, 0.44)
+		var teeth := 9
+		for tooth in range(teeth):
+			var angle := TAU * float(tooth) / float(teeth)
+			var at := centre + Vector2(cos(angle), sin(angle)) * radius
+			draw_circle(at, radius * 0.34, steel)
+		draw_circle(centre, radius * 0.86, steel)
+		draw_circle(centre, radius * 0.30, Color(_stock_of("settings", light).darkened(0.4), 1.0))
+		## The shavings drawer, on the near side, so it is a sharpener rather than
+		## a cog somebody put on a desk.
+		draw_rect(
+			Rect2(
+				Vector2(body.position.x + body.size.x * 0.18, body.position.y + body.size.y - 7.0),
+				Vector2(body.size.x * 0.64, 5.0)
+			), Color(steel.darkened(0.3), 0.9), true
+		)
+
+	## A desk lamp, seen from a chair: the shade from slightly above, the arm, and
+	## the base. Lit or not, which is the theme.
+	func _draw_lamp(body: Rect2, light: bool) -> void:
+		var shade := Color(0.36, 0.42, 0.46) if light else Color(0.30, 0.33, 0.38)
+		var mouth := body.position + Vector2(body.size.x * 0.5, body.size.y * 0.74)
+		## The shade, as a wedge opening toward the desk.
+		draw_colored_polygon(
+			PackedVector2Array([
+				body.position + Vector2(body.size.x * 0.34, 0.0),
+				body.position + Vector2(body.size.x * 0.66, 0.0),
+				mouth + Vector2(body.size.x * 0.44, 0.0),
+				mouth - Vector2(body.size.x * 0.44, 0.0),
+			]), shade
+		)
+		## The bulb, which is the only thing on this desk that is a light rather
+		## than a thing lit.
+		draw_circle(
+			mouth, body.size.x * 0.16,
+			Color(0.30, 0.32, 0.35) if light else LAMP_WARMTH
+		)
+		if not light:
+			for step in range(3):
+				draw_circle(
+					mouth, body.size.x * (0.24 + float(step) * 0.16),
+					Color(LAMP_WARMTH, 0.13 / float(step + 1))
+				)
+		draw_line(
+			body.position + Vector2(body.size.x * 0.5, body.size.y * 0.72),
+			body.position + Vector2(body.size.x * 0.5, body.size.y),
+			Color(shade.darkened(0.2), 1.0), 4.0
+		)
 
 	func _draw_handset(body: Rect2) -> void:
 		## A handset lying in its cradle, seen from above: two ends and a bar.
