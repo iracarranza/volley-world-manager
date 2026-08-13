@@ -1297,10 +1297,28 @@ func resolve(
 	if serve_error:
 		return _finish_serve_error(result, server_name)
 
+	## **Judged from the bodies, not the formation.** `origins` is optional and
+	## this call omitted it, so every voli was measured from their zone centre --
+	## which `evaluate_arrival` itself says is "true in a serve-receive formation
+	## and true nowhere else". At serve time it is nearly true, and the cost was
+	## invisible until something asked about *spacing*: measured over 590
+	## contested receptions the nearest-teammate distance came back 2.99 m on
+	## every single one, p05 through max, because it was the distance between two
+	## fixed points on a formation diagram rather than between two volis.
+	##
+	## A constant input is a knob that cannot reach its own range, which is this
+	## repository's most-repeated failure, and it would have made the crowding
+	## term below unfireable while looking exactly as though it worked.
+	var reception_origins := {}
+	for reception_candidate in _lineup_players(players, lineup):
+		if live_positions.has(reception_candidate.id):
+			reception_origins[reception_candidate.id] = Vector2(
+				live_positions[reception_candidate.id]
+			)
 	var reception_claim: Dictionary = CoverageModel.choose_claimant(
 		_lineup_players(players, lineup),
 		defensive_plan.zones_for(DefensiveZoneModel.ZoneType.SERVE_RECEIVE),
-		serve_landing, serve_time, "reception",
+		serve_landing, serve_time, "reception", {}, reception_origins,
 	)
 	var receiver := reception_claim.get("player") as VolleyballPlayer
 	var receiver_arrived := receiver != null
@@ -1402,7 +1420,10 @@ func resolve(
 		float(arrival.get("reach_margin_meters", -1.0)) * 0.07, -0.16, 0.12
 	)
 	var support_count := int(reception_claim.get("support_count", 0))
-	var support_bonus := minf(float(support_count) * 0.025, 0.075)
+	var support_bonus := _support_term(
+		support_count,
+		float(reception_claim.get("nearest_teammate_meters", 1000.0)),
+	)
 	var seam_conflict := bool(reception_claim.get("seam_conflict", false))
 	if using_live_reception:
 		support_count = 0
@@ -1569,6 +1590,9 @@ func resolve(
 			"reachable_count": int(reception_claim.get("reachable_count", 0)),
 			"immediate_lock": bool(reception_claim.get("immediate_lock", false)),
 			"immediate_owner_count": int(reception_claim.get("immediate_owner_count", 0)),
+			"nearest_teammate_meters": float(reception_claim.get(
+				"nearest_teammate_meters", -1.0
+			)),
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
@@ -3322,6 +3346,10 @@ func _resolve_home_serve(
 		receiver, receiver_start, opponent_landing, "lateral"
 	)
 	var support_count := int(opponent_claim.get("support_count", 0))
+	var opponent_support_term := _support_term(
+		support_count,
+		float(opponent_claim.get("nearest_teammate_meters", 1000.0)),
+	)
 	var serve_receive_bonus := _opponent_serve_receive_adaptation_bonus(
 		opponent_team, str(serve_decision.target)
 	)
@@ -3343,7 +3371,7 @@ func _resolve_home_serve(
 			float(opponent_arrival.get("reach_margin_meters", -1.0)) * 0.07,
 			-0.16, 0.12,
 		)
-		+ minf(float(support_count) * 0.025, 0.075)
+		+ opponent_support_term
 		+ serve_receive_bonus + rng.randf_range(-0.12, 0.12),
 		0.0, 1.0,
 	)
@@ -4952,6 +4980,9 @@ func _resolve_opponent_transition(
 			"reachable_count": int(defense_claim.get("reachable_count", 0)),
 			"immediate_lock": bool(defense_claim.get("immediate_lock", false)),
 			"immediate_owner_count": int(defense_claim.get("immediate_owner_count", 0)),
+			"nearest_teammate_meters": float(defense_claim.get(
+				"nearest_teammate_meters", -1.0
+			)),
 			"planner_floor_center": Vector2(floor_phase_positions.get(
 				defender.id, defender_start
 			)),
@@ -9224,6 +9255,64 @@ func _second_contact_temperament(candidate: VolleyballPlayer) -> float:
 	return (float(candidate.ego) - 50.0) / 50.0 * SECOND_CONTACT_EGO_PULL \
 		+ (float(candidate.leadership) - 50.0) / 50.0 * SECOND_CONTACT_LEADERSHIP_PULL \
 		+ (float(candidate.aggression) - 50.0) / 50.0 * SECOND_CONTACT_AGGRESSION_PULL
+
+
+## What a teammate nearby is worth, which is not always positive.
+##
+## **Two volis in one space were being scored as double coverage.** The term
+## this replaces was `min(count * 0.025, 0.075)` -- a count of reachable
+## teammates, with no distance in it at all, added as a bonus. A teammate five
+## metres away and one thirty centimetres away contributed identically, and the
+## crowded case contributed *more* because crowding puts more bodies in reach.
+##
+## Cover is a band, not a monotone. A teammate too far away is not covering this
+## ball; one on top of you is worse than nobody, because at that spacing you get
+## platform interference, a blocked sightline, a foot in your step and a moment
+## of who-has-it. The peak sits where a second body can chase a deflection
+## without being inside your swing.
+##
+## Sized so the harm can exceed the help. A bonus that bottoms out at zero would
+## make stacking *neutral*, and neutral is still not a reason to stop doing it
+## -- the handoff's point is that bad spacing has to cost something a manager
+## can see. The floor is deliberately deeper than the ceiling is high.
+##
+## Distances are unmeasured as thresholds: nothing had ever published defender
+## spacing, which is why the old term could go this long without anyone
+## noticing it had no distance in it. `tools/responsibility_probe.gd` prints the
+## distribution now, and these want cutting from it rather than from taste.
+const SUPPORT_CROWDING_METERS: float = 1.05
+const SUPPORT_PEAK_METERS: float = 2.40
+const SUPPORT_FADE_METERS: float = 5.00
+const SUPPORT_HELP_CEILING: float = 0.075
+const SUPPORT_CROWDING_FLOOR: float = -0.140
+
+
+func _support_term(support_count: int, nearest_teammate_meters: float) -> float:
+	if support_count <= 0:
+		return 0.0
+	var spacing := nearest_teammate_meters
+	if spacing >= SUPPORT_FADE_METERS:
+		## Reachable, but not near enough to be doing anything about this ball.
+		return 0.0
+	if spacing <= SUPPORT_CROWDING_METERS:
+		## Inside each other. Worst at zero and easing to neutral at the edge of
+		## the crowding band, so a voli at 1.04 m is not treated the same as one
+		## standing on the claimant's feet.
+		return lerpf(
+			SUPPORT_CROWDING_FLOOR, 0.0,
+			clampf(spacing / maxf(SUPPORT_CROWDING_METERS, 0.01), 0.0, 1.0),
+		)
+	## Useful cover, strongest at the peak and fading out to nothing. The count
+	## still matters a little -- three teammates covering is better than one --
+	## but it is capped hard, because the second body does most of the work and
+	## the fourth does almost none.
+	var closeness := 1.0 - clampf(
+		absf(spacing - SUPPORT_PEAK_METERS)
+			/ maxf(SUPPORT_FADE_METERS - SUPPORT_PEAK_METERS, 0.01),
+		0.0, 1.0,
+	)
+	return SUPPORT_HELP_CEILING * closeness \
+		* minf(float(support_count) / 2.0, 1.0)
 
 
 func _spatial_setter_choice(

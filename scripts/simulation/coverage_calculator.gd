@@ -190,6 +190,7 @@ static func evaluate_arrival(
 		"reach_margin_meters": reach_margin,
 		"edge_ratio": edge_ratio,
 		"claim_score": claim_score,
+		"origin_position": from_point,
 		"immediate_control": immediate_control,
 		"immediate_control_reach_meters": base_reach
 			+ IMMEDIATE_CONTROL_STEP_METERS,
@@ -265,6 +266,33 @@ static func choose_claimant(
 			}
 	best["immediate_owner_count"] = owners.size()
 	best["immediate_lock"] = not owners.is_empty()
+	## **How close the nearest other body is to the one taking the ball.**
+	##
+	## `support_count` counts teammates and knows nothing about where they are,
+	## so a voli five metres away and one thirty centimetres away are the same
+	## number -- and the consumer turned that count into a *bonus*. Two bodies
+	## in one space were being scored as double coverage, which is the opposite
+	## of what they are.
+	##
+	## This is the spacing the consumer actually needs. Measured from the
+	## origins `evaluate_arrival` judged each voli from, so it is where the
+	## bodies are rather than where their zones are drawn.
+	var crowding := 1000.0
+	if best.player != null:
+		var winner_origin := Vector2(
+			Dictionary(best.arrival).get("origin_position", landing_point)
+		)
+		for evaluation in reachable_evaluations:
+			if int((evaluation.player as VolleyballPlayer).id) \
+					== int((best.player as VolleyballPlayer).id):
+				continue
+			crowding = minf(crowding, court_distance_meters(
+				winner_origin,
+				Vector2(Dictionary(evaluation.arrival).get(
+					"origin_position", landing_point
+				)),
+			))
+	best["nearest_teammate_meters"] = crowding
 	if best.player == null:
 		return best
 	var support_count := 0

@@ -53,7 +53,7 @@ func _probe() -> void:
 			var bucket: Dictionary = by_kind.get(kind, {
 				"claims": 0, "overtaken": 0, "contested": 0, "locked": 0,
 				"locked_multi": 0,
-				"overtake_meters": [], "winner_meters": [],
+				"overtake_meters": [], "winner_meters": [], "spacing": [],
 			})
 			bucket.claims += 1
 			## Only a claim with more than one reachable body could have gone
@@ -65,6 +65,14 @@ func _probe() -> void:
 				bucket.locked += 1
 				if int(event.metadata.get("immediate_owner_count", 0)) > 1:
 					bucket.locked_multi += 1
+			var spacing := float(event.metadata.get("nearest_teammate_meters", -1.0))
+			## The distribution the crowding constants have to be cut from. It
+			## has never been published, which is how a support term with no
+			## distance in it survived this long.
+			if spacing >= 0.0 and spacing < 900.0:
+				var spacings: Array = bucket.spacing
+				spacings.append(spacing)
+				bucket.spacing = spacings
 			var nearest_id := int(event.metadata["nearest_id"])
 			var winner := float(event.metadata.get("winner_distance_meters", -1.0))
 			var nearest := float(event.metadata.get("nearest_distance_meters", -1.0))
@@ -98,6 +106,7 @@ func _probe() -> void:
 			100.0 * float(bucket.overtaken) / maxf(float(bucket.claims), 1.0),
 			100.0 * float(bucket.overtaken) / maxf(float(bucket.contested), 1.0),
 		])
+		_report("  spacing to the nearest other reachable voli (m)", bucket.spacing)
 		_report("  how much further the winner was (m)", bucket.overtake_meters)
 		_report("  the winner's own distance to the ball (m)", bucket.winner_meters)
 
