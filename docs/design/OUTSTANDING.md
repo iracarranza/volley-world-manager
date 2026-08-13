@@ -170,10 +170,38 @@ DEFENSE spacing says the same thing from the other side: 0.86 m to 2.24 m with
 real variance, and the p05 sits *below* the 1.05 m crowding threshold. The floor
 can fire; it fires where bodies actually converge.
 
-**And the dig count nearly trebles when rotations vary**: 42 claims on one
-rotation, 119 across six. Whatever suppresses floor defence is rotation-shaped,
-which is a sharper lead than "digging is weak" and belongs with the short-rally
-question rather than with the coverage constants.
+**`DEFENSE` conflates block coverage with floor defence**, and the conflation
+had already produced one wrong conclusion. `rally_simulator.gd:2978` emits a
+DEFENSE event for a voli covering their *own* blocked hitter -- a response to
+the opponent's block, not to their attack -- under the same event type as a dig.
+Counting DEFENSE therefore reported more digs than there were swings to dig in
+five rotations of six, and the "dig claims treble across rotations" reading was
+mostly coverage moving, not defence.
+
+Split, over 1,200 rallies at 200 per rotation:
+
+| | R1 | R2 | R3 | R4 | R5 | R6 |
+|---|---|---|---|---|---|---|
+| opponent swings | 13 | **1** | 16 | **58** | 26 | 35 |
+| floor digs | 9 | 1 | 15 | 45 | 21 | 28 |
+| digs per swing | 0.69 | 1.00 | 0.94 | 0.78 | 0.81 | 0.80 |
+| block coverage | 39 | 21 | 60 | 18 | 16 | 57 |
+
+**Floor defence is not weak per opportunity.** It answers 0.69 to 1.00 swings
+per swing, which is what it should do. The anomaly is the row above it: the
+opponent gets to swing **once** in 200 rallies from one home rotation and
+**fifty-eight** times from another, against the same opponent, differing only in
+which six volis the home side has where.
+
+The coverage row says where those rallies went instead: R2 and R3 and R6, the
+low-swing rotations, are the high-coverage ones. Rallies are ending on the *home*
+attack being blocked, at a rate that swings 58-fold with rotation, so the
+opponent's offence -- and therefore the home floor defence, and therefore rally
+length -- barely runs at all in half the rotation cycle.
+
+That is the short-rally symptom's actual shape, and it is not a defensive
+problem. Do not buff digging. The next question is why a home attack's survival
+depends on the home rotation this strongly, which is the block's business.
 
 **Next, in order:** the previous contacter yielding and clearing (then
 re-measure the 46.7% obstruction, do not tune the clearance first); ready stance

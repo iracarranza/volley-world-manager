@@ -37,6 +37,11 @@ func _probe() -> void:
 		return
 
 	var by_kind := {}
+	## Per rotation: how often the home floor is *asked* to defend, against how
+	## often it could have been. A dig claim needs an opponent swing to defend,
+	## so counting claims alone cannot tell "the defence was never offered the
+	## ball" from "it was offered and nobody owned it".
+	var by_rotation := {}
 	for index in range(RALLIES):
 		## **Rotate.** The first cut of this probe left `selected_rotation` on 1
 		## for all 1,200 rallies and then reported that the receiving side is in
@@ -50,6 +55,45 @@ func _probe() -> void:
 		)
 		if result == null:
 			continue
+		var rotation := int(game_manager.selected_rotation)
+		var row: Dictionary = by_rotation.get(rotation, {
+			"rallies": 0, "opponent_swings": 0, "home_digs": 0, "home_receptions": 0,
+			"home_coverage": 0,
+		})
+		row.rallies += 1
+		for raw_event in result.events:
+			var scan: Resource = raw_event
+			if scan == null:
+				continue
+			## By actor id, not by a metadata string. The `side` key is not on
+			## every path -- counting on it gave more home digs than opponent
+			## swings in five rotations of six, which is impossible and was the
+			## counter's fault rather than the engine's. Opponent ids are >= 100
+			## throughout this codebase; `match_screen` splits sides on the same
+			## rule.
+			var is_opponent := int(scan.actor_id) >= 100
+			match int(scan.event_type):
+				RallyEvent.EventType.ATTACK:
+					if is_opponent:
+						row.opponent_swings += 1
+				RallyEvent.EventType.DEFENSE:
+					if not is_opponent:
+						## **Block coverage is the same event type as a dig.**
+						## `rally_simulator.gd:2978` emits DEFENSE for a voli
+						## covering their own blocked hitter, which is a response
+						## to the opponent's *block*, not to their attack -- so any
+						## count of "home digs" silently mixes two situations with
+						## nothing in common. It is why this probe first reported
+						## more digs than there were swings to dig.
+						if str(scan.detail).contains("covers the block touch") \
+								or str(scan.headline).contains("covers the block"):
+							row.home_coverage += 1
+						else:
+							row.home_digs += 1
+				RallyEvent.EventType.RECEPTION:
+					if not is_opponent:
+						row.home_receptions += 1
+		by_rotation[rotation] = row
 		for raw in result.events:
 			var event: Resource = raw
 			if event == null or not event.metadata.has("nearest_id"):
@@ -96,6 +140,17 @@ func _probe() -> void:
 			by_kind[kind] = bucket
 
 	print("=== responsibility: %d rallies" % RALLIES)
+	print("--- per rotation: is the home floor even asked?")
+	var rotations: Array = by_rotation.keys()
+	rotations.sort()
+	for rotation in rotations:
+		var row: Dictionary = by_rotation[rotation]
+		print("  R%d  rallies %4d   receptions %4d   opp swings %3d   floor digs %3d (%.2f/swing)   block coverage %3d" % [
+			int(rotation), int(row.rallies), int(row.home_receptions),
+			int(row.opponent_swings), int(row.home_digs),
+			float(row.home_digs) / maxf(float(row.opponent_swings), 1.0),
+			int(row.home_coverage),
+		])
 	var kinds: Array = by_kind.keys()
 	kinds.sort()
 	for kind in kinds:
