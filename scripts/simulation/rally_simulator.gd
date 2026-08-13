@@ -24,13 +24,13 @@ const SECOND_CONTACT_SEAM_MARGIN: float = 0.10
 ## between their centres to pass, and inside it somebody swerves.
 const OBSTRUCTION_CLEARANCE_M: float = 0.715
 
-## What a body that cannot move out of the way costs against one that can.
+## How much wider a berth a grounded body gets than a standing one.
 ##
-## A voli on the floor after a dig is not going to step aside, and neither is one
-## already committed down an approach: those are the two obstructions worth
-## having, because they are the ones a setter cannot call out of. A teammate
-## merely standing there yields, so they cost the swerve and nothing more.
-const OBSTRUCTION_COMMITTED_MULTIPLIER: float = 2.2
+## A voli still getting up cannot step aside, so the whole of the avoiding falls
+## to the mover; two upright volis each give way a little and meet in the middle.
+## Unmeasured, and named as such: no obstruction frequency has ever been
+## published, so there is no distribution to fit this against.
+const OBSTRUCTION_GROUNDED_BERTH: float = 1.6
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const DefensivePlanModel := preload("res://scripts/models/defensive_plan.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
@@ -8657,51 +8657,64 @@ func _recovery_debt(player_id: int, at_time: float) -> float:
 ## home transition set against 0.878 for the opponent's, which is only possible
 ## if the two sides are choosing different people to set. One of them was not
 ## choosing at all.
-## How much longer this route takes because other bodies are on it.
+## Where this voli has to run to get round the bodies in their way, or `null`
+## when the line is clear.
 ##
-## A straight line between two points is what `_movement_time` costs, and a court
-## is not empty. This charges the swerve: for every other voli whose position
-## falls inside `OBSTRUCTION_CLEARANCE_M` of the path, the mover has to displace
-## by the shortfall and displacing costs distance over their own lateral speed.
+## **A collision is not a decision.** The first version of this charged a flat
+## delay before the claim, so a badly obstructed setter simply lost the ball to
+## somebody clearer -- which is a setter choosing not to go, and a setter
+## choosing not to go is not a collision. It was also invisible: a number added
+## to a number, with nothing for playback to draw.
 ##
-## **Derived rather than banded.** A body dead in the path costs the whole
-## clearance, one at the edge of it costs nothing, and everything between scales
-## -- so there is no threshold here to sit outside its own distribution. The one
-## chosen number is the clearance, and that is the widest torso in the game
-## rather than a value picked for this function.
+## What actually happens is that the voli still goes and their route bends. A
+## back-row setter runs round the passer who stepped in short; a middle loses
+## their approach to a libero on the floor behind them; two volis crossing the
+## same ground each give way a little. So this returns the corner they have to
+## turn, `_movement_time` times the staged route through it, and the cost falls
+## out of the geometry rather than being asserted.
 ##
-## Doubled for a body that cannot yield. A voli still getting up off the floor is
-## not going to step aside, and that is exactly the obstruction worth having: a
-## libero who dug the ball and is lying where the setter wanted to run.
-func _path_obstruction_seconds(
+## The corner is the closest point on the line, pushed sideways until the
+## obstructing body clears -- away from them, so the detour goes round rather
+## than through. Worst obstruction only: a voli threading two bodies takes the
+## wider berth, and stacking every detour would bend a path into a spiral for
+## a court that has five other people on it.
+func _navigation_waypoint(
 	mover: VolleyballPlayer, start: Vector2, target: Vector2
-) -> float:
+) -> Variant:
 	if mover == null or start.is_equal_approx(target):
-		return 0.0
-	var speed := maxf(LocomotionModel.maximum_speed(
-		mover, RallyPlayerState.MovementMode.LATERAL
-	), 0.4)
-	var worst := 0.0
+		return null
+	var worst_shortfall := 0.0
+	var corner: Variant = null
 	for other_id in live_positions:
 		if int(other_id) == mover.id:
 			continue
 		var here := Vector2(live_positions[other_id])
-		var closest := Geometry2D.get_closest_point_to_segment(
-			here, start, target
-		)
-		var gap := RallyKinematics.court_delta_meters(here, closest).length()
+		var closest := Geometry2D.get_closest_point_to_segment(here, start, target)
+		var offset := RallyKinematics.court_delta_meters(here, closest)
+		var gap := offset.length()
 		if gap >= OBSTRUCTION_CLEARANCE_M:
 			continue
-		var displace := OBSTRUCTION_CLEARANCE_M - gap
-		## Somebody on the floor cannot get out of the way; somebody upright can.
-		var committed := float(
-			player_recovery.get(int(other_id), {}).get("delay", 0.0)
-		) > 0.0
-		var cost := displace / speed
-		if committed:
-			cost *= OBSTRUCTION_COMMITTED_MULTIPLIER
-		worst = maxf(worst, cost)
-	return worst
+		## A body already on the floor is given a wider berth than one standing:
+		## they cannot shift, so the whole of the avoiding is the mover's to do.
+		var clearance := OBSTRUCTION_CLEARANCE_M
+		if float(player_recovery.get(int(other_id), {}).get("delay", 0.0)) > 0.0:
+			clearance *= OBSTRUCTION_GROUNDED_BERTH
+		var shortfall := clearance - gap
+		if shortfall <= worst_shortfall:
+			continue
+		worst_shortfall = shortfall
+		## Straight out from the obstruction through the point on the path
+		## nearest it, which is the shortest way past. Degenerate only when a body
+		## is exactly on the line, and then any side will do -- the path's own
+		## normal is the one that stays deterministic.
+		var direction := offset.normalized() if gap > 0.001 else Vector2(
+			-(target - start).normalized().y, (target - start).normalized().x
+		)
+		corner = closest + Vector2(
+			direction.x * shortfall / CourtConstants.COURT_WIDTH_METERS,
+			direction.y * shortfall / CourtConstants.COURT_LENGTH_METERS,
+		)
+	return corner
 
 
 func _spatial_setter_choice(
@@ -8725,8 +8738,17 @@ func _spatial_setter_choice(
 		## on the floor is not a candidate to set the next ball, and this is what
 		## says so -- without it the emergency setter search would happily pick
 		## someone lying down because they were standing in the right place.
-		var travel_time := _movement_time(candidate, start, target, "transition") \
-			+ float(player_recovery.get(candidate.id, {}).get("delay", 0.0)) \
+		##
+		## **Somebody was standing in the way.** Travel time was a straight line
+		## across an empty floor, so a setter who ran into the passer stepping in
+		## short arrived exactly as fast as one with a clear run. The route bends
+		## round them now and the cost is the bend, not a charge -- see
+		## `_navigation_waypoint`, and note that `_movement_time` already staged a
+		## corner correctly, carrying speed through it rather than restarting.
+		var detour: Variant = _navigation_waypoint(candidate, start, target)
+		var travel_time := _movement_time(
+			candidate, start, target, "transition", detour
+		) + float(player_recovery.get(candidate.id, {}).get("delay", 0.0)) \
 			* _recovery_debt(candidate.id, rally_clock)
 		## **How confidently, not merely whether.**
 		##
@@ -8742,21 +8764,6 @@ func _spatial_setter_choice(
 		## exclude a candidate outright. Admitted with no responsibility credit
 		## instead, which is the same correction `assigned_reach` already carries
 		## -- legs decide who can get there, the assignment decides who should.
-		## **Somebody was standing in the way.**
-		##
-		## Nothing modelled this: travel time was a straight line between two
-		## points across an empty floor, so a setter who could have reached the
-		## ball but ran into a hitter's approach or a libero already on the ground
-		## arrived exactly as fast as one with a clear path.
-		##
-		## Charged as time rather than as an outcome, and charged *before* the
-		## choice, so a transfer falls out of the existing scoring instead of
-		## being a special case: an obstructed setter is simply a worse claimant,
-		## and if the obstruction is bad enough somebody else is better. That also
-		## keeps it out of `traversal_seconds`, which is kinematics and should not
-		## know about other bodies.
-		var obstruction := _path_obstruction_seconds(candidate, start, target)
-		travel_time += obstruction
 		var arrival: Dictionary = CoverageModel.evaluate_arrival(
 			candidate, null, target, maxf(available_time, 0.02),
 			"set_accuracy", start, 0.0,
@@ -8789,7 +8796,9 @@ func _spatial_setter_choice(
 				## what "confidently" means here and was not expressible before.
 				"reach_margin_meters": reach_margin,
 				"arrival_margin": available_time - travel_time,
-				"obstruction_seconds": obstruction,
+				## The corner they had to turn, so playback bends the run rather
+				## than drawing a straight line through somebody.
+				"navigation_waypoint": detour,
 				"reachable": bool(arrival.get("reachable", false)),
 			}
 		if bool(arrival.get("reachable", false)):
