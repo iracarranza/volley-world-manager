@@ -1632,8 +1632,8 @@ func _play_rally(
 		)
 		var next_contact := _next_contact_event(result.events, event_index + 1)
 		if not outgoing_trajectory.is_empty() and next_contact != null:
-			var trajectory_duration := clampf(
-				float(outgoing_trajectory.get("duration", 0.5)), 0.28, 2.60
+			var trajectory_duration := _watchable(
+				float(outgoing_trajectory.get("duration", 0.5)), "ball leg"
 			) / maxf(playback_speed, 0.1)
 			## A transition leg draws the ball travelling from *this* contact to
 			## the next one, so the physical window it depicts is [this event, next
@@ -1679,8 +1679,39 @@ func _play_rally(
 			"event_duration",
 			maxf(0.46, simulated_movement + simulated_flight * 0.55),
 		))
-		var event_duration := clampf(simulated_duration, 0.55, 2.60) \
-			/ maxf(playback_speed, 0.1)
+		var pre_targets: Array[Vector2] = []
+		if not already_arrived:
+			pre_targets = tactical_court.movement_phase_targets(event)
+		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
+		var draws_movement := has_movement and not pre_targets.is_empty()
+		## **The approach and the contact are two different physical spans**, and
+		## the resolver has always reported them separately -- `movement_duration`
+		## is how long the voli takes to get there, `event_duration` is the contact
+		## itself. The old code carved the approach out of the contact's own window
+		## with `clampf(movement / duration, 0.30, 0.72)`, a share that was pinned
+		## at its ceiling almost always: the measured contact is 0.10-0.24s and an
+		## approach runs to about a second, so the true ratio is around eight and
+		## the clamp reported 0.72.
+		##
+		## Drawn one after the other they are at least both honest lengths. They
+		## should *overlap the preceding flight* rather than follow it, which is
+		## the per-player timeline work and is not this change.
+		var movement_seconds := _watchable(simulated_movement, "approach") \
+			if draws_movement else 0.0
+		## The terminal contact has a flight after it and no next contact to hand
+		## it to, so the loop draws its ball here. Pacing that on the contact's own
+		## 0.12s is how a rally could finish before the ball landed.
+		var ball_seconds := _watchable(_terminal_flight_seconds(
+			outgoing_trajectory, next_contact, simulated_duration
+		), "ball")
+		var contact_pause := ball_seconds * 0.10 if has_movement else 0.0
+		var post_budget := ball_seconds * 0.18 if has_movement else 0.0
+		var event_duration := (movement_seconds + ball_seconds + contact_pause
+			+ post_budget) / maxf(playback_speed, 0.1)
+		var pre_budget := movement_seconds / maxf(playback_speed, 0.1)
+		var ball_duration := ball_seconds / maxf(playback_speed, 0.1)
+		contact_pause /= maxf(playback_speed, 0.1)
+		post_budget /= maxf(playback_speed, 0.1)
 		## A contact drawn in place resolves *at* its own stamp, so its window
 		## is the one ending here.
 		var contact_moment := float(
@@ -1688,18 +1719,6 @@ func _play_rally(
 		)
 		_advance_cognition(cognition_clock, contact_moment, event_duration)
 		cognition_clock = contact_moment
-		var pre_targets: Array[Vector2] = []
-		if not already_arrived:
-			pre_targets = tactical_court.movement_phase_targets(event)
-		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
-		var movement_share := clampf(
-			simulated_movement / maxf(simulated_duration, 0.1), 0.30, 0.72
-		)
-		var pre_budget := event_duration * movement_share \
-			if has_movement and not pre_targets.is_empty() else 0.0
-		var contact_pause := event_duration * 0.10 if has_movement else 0.0
-		var post_budget := event_duration * 0.18 if has_movement else 0.0
-		var ball_duration := event_duration - pre_budget - contact_pause - post_budget
 		if has_movement and not pre_targets.is_empty():
 			var pre_phase_duration := pre_budget / maxf(float(pre_targets.size()), 1.0)
 			for phase_index in range(pre_targets.size()):
@@ -1798,6 +1817,76 @@ func _next_contact_event(events: Array, start_index: int) -> Resource:
 		]:
 			return candidate
 	return null
+
+
+## Playback runs slower than life so a contact can be seen at all, and it runs
+## slower by **one factor for the whole rally**.
+##
+## What this replaces was two hand-written clamps -- `[0.28, 2.60]` on a ball leg
+## and `[0.55, 2.60]` on a contact -- neither measured against the distribution
+## it acted on. `tools/playback_timing_probe.tscn` measured them over 240
+## rallies: the leg clamp rewrote 20.7% of legs, and the contact clamp rewrote
+## **100.0%** of contacts, whose real durations run 0.10 to 0.24 seconds against
+## a floor of 0.55. A floor above the maximum of its own distribution is not a
+## clamp; it is a constant with a `clampf` written round it, and playback had
+## therefore never once drawn a contact at its simulated length.
+##
+## Being 18% slower than life was never the problem. Being slower *unevenly*
+## was: a 0.12s contact was stretched 4.6x while the 1.2s flight beside it was
+## not stretched at all, so every ratio between two events was destroyed. A
+## blocker outlived the contact its jump was built around for that reason alone
+## -- nothing about the jump model was wrong. One factor keeps every ratio
+## exact and leaves only the overall rate as a presentation choice.
+const PLAYBACK_READABILITY_SCALE: float = 1.8
+
+## Below this a tween is one or two frames and reads as a jump rather than a
+## movement. A limit of the display, not of the model -- and it sits below the
+## 5th percentile of both measured distributions, so it stays a rounding rule
+## rather than becoming another constant in disguise.
+const PLAYBACK_MINIMUM_PHASE_SECONDS: float = 0.06
+
+## Nothing a rally does physically lasts this long: the measured 95th percentile
+## of a ball leg is 1.51 seconds and the longest plausible is nearer three.
+##
+## **It reports rather than absorbs.** The old ceiling of 2.60 silently swallowed
+## two legs over four seconds -- one of them 31 -- which is how a defect that
+## obvious stayed invisible. Playback still has to stay watchable, so the value
+## is capped, but the cap says so.
+const PLAYBACK_IMPLAUSIBLE_SECONDS: float = 6.0
+
+
+## Physical seconds as playback seconds, at the one rate the rally is drawn at.
+func _watchable(physical_seconds: float, what: String) -> float:
+	var seconds := maxf(physical_seconds, 0.0)
+	if seconds > PLAYBACK_IMPLAUSIBLE_SECONDS:
+		push_warning(
+			"playback: a %s lasts %.2f physical seconds, which no rally action does"
+				% [what, seconds]
+		)
+		seconds = PLAYBACK_IMPLAUSIBLE_SECONDS
+	return maxf(
+		seconds * PLAYBACK_READABILITY_SCALE, PLAYBACK_MINIMUM_PHASE_SECONDS
+	)
+
+
+## How long the ball is drawn for at a contact that has no next contact to hand
+## the flight to.
+##
+## Every other event passes its flight to the following contact and the leg is
+## drawn between the two. The last one cannot, so its ball is drawn here -- and
+## it was drawn for the *contact's* duration, around 0.12 seconds, while the
+## flight it depicts runs to the floor. That is the rally finishing before the
+## ball lands: 15 of 240 rallies measured, worst case 0.08 seconds. Small, but
+## it is the same boundary that once made the ball vanish at point-end, and it
+## was patched locally then rather than at the join.
+func _terminal_flight_seconds(
+	outgoing_trajectory: Dictionary, next_contact: Resource, contact_seconds: float
+) -> float:
+	if outgoing_trajectory.is_empty() or next_contact != null:
+		return contact_seconds
+	return maxf(
+		float(outgoing_trajectory.get("duration", contact_seconds)), contact_seconds
+	)
 
 
 func _wait_for_playback_phase(duration: float) -> void:

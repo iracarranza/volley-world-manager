@@ -6,6 +6,10 @@ const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_leg
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
+## For the playback pacing constants only. Read rather than copied, so a gate
+## asserting "no flight outlasts what playback can draw" cannot drift away from
+## what playback actually draws.
+const MAIN_SCRIPT := preload("res://scenes/main/main.gd")
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
@@ -253,6 +257,7 @@ func _initialize() -> void:
 	_test_manager_playbook_and_serialization()
 	_test_seeded_rally_resolution()
 	_test_seeded_floor_defense_geometry()
+	_test_the_rally_clock_is_ordered_and_outlives_the_ball()
 	_test_playback_movement_is_humanly_possible()
 	_test_body_type_distribution_is_flat()
 	_test_every_script_has_a_uid()
@@ -8737,6 +8742,105 @@ func _test_seeded_rally_resolution() -> void:
 		"identical rally seeds produce identical outcomes",
 	)
 	_check(not first.explanation.is_empty(), "rally result includes an explanation")
+
+
+## Playback draws each contact's actor travelling to that contact over the
+## previous ball's flight. Nothing previously constrained the two to be
+## compatible, and they were not: an opponent hitter was handed a contact point
+## on the far pin regardless of where the rotation had put them, so a back-row
+## opposite was drawn covering eight metres in the 0.3s a quick set is in the
+## air -- twenty-five metres a second, roughly two and a half times the 100m
+## world record peak. This asserts the geometry the picture is built from.
+## The rally clock is the one the renderers are supposed to obey, so it is worth
+## asserting that it says something obeyable.
+##
+## Nothing here was failing when it was written -- 2,116 sampled events, none
+## unstamped, none out of order. That is the point. The brief that prompted this
+## work proposed *building* a cumulative physical clock, and the clock already
+## existed and was already right; what had gone wrong was that playback threw it
+## away and re-timed everything with two clamps. A gate that records the
+## simulator's half as sound is what stops the next such brief from rebuilding
+## it, which is the specific mistake `FAILURE_MODES.md` warns about under
+## measuring with the wrong instrument.
+##
+## The terminal check is the one with a real failure behind it: 15 of 240
+## rallies had their last stamped event land *before* the terminal ball finished
+## its flight, so playback could resolve the point with the ball still in the
+## air. That is the same boundary that once made the ball vanish at point-end.
+func _test_the_rally_clock_is_ordered_and_outlives_the_ball() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var unstamped := 0
+	var out_of_order := 0
+	var events_seen := 0
+	var rallies := 0
+	var ends_before_the_ball := 0
+	var worst_early := 0.0
+	var implausible_flights := 0
+	var longest_flight := 0.0
+	for seed_value in range(7300, 7460):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null or result.events.is_empty():
+			continue
+		rallies += 1
+		var previous := -1.0
+		var last_stamp := 0.0
+		var last_landing := 0.0
+		for raw_event in result.events:
+			var event: Resource = raw_event
+			if event == null:
+				continue
+			events_seen += 1
+			if not event.metadata.has("event_time"):
+				unstamped += 1
+				continue
+			var stamp := float(event.metadata["event_time"])
+			if stamp < previous - 0.0001:
+				out_of_order += 1
+			previous = stamp
+			last_stamp = maxf(last_stamp, stamp)
+			var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			if trajectory.is_empty():
+				continue
+			var flight := float(trajectory.get("duration", 0.0))
+			longest_flight = maxf(longest_flight, flight)
+			## The measured 95th percentile of a ball leg is 1.51s. Anything past
+			## six is not a volleyball flight, and the old playback ceiling of 2.60
+			## is exactly why two of them -- one lasting 31 seconds -- went unseen.
+			implausible_flights += int(flight > MAIN_SCRIPT.PLAYBACK_IMPLAUSIBLE_SECONDS)
+			last_landing = maxf(
+				last_landing, float(trajectory.get("end_time", stamp + flight))
+			)
+		if last_landing > last_stamp + 0.0001:
+			ends_before_the_ball += 1
+			worst_early = maxf(worst_early, last_landing - last_stamp)
+
+	_check(
+		unstamped == 0,
+		"every rally event carries a physical timestamp (%d of %d without one)"
+			% [unstamped, events_seen],
+	)
+	_check(
+		out_of_order == 0,
+		"the rally clock never runs backwards (%d events out of order)" % out_of_order,
+	)
+	## Asserted against the playback constant rather than a number written here,
+	## so raising the cap cannot quietly re-hide the flights it exists to expose.
+	_check(
+		implausible_flights == 0,
+		"no ball flight outlasts a volleyball rally (%d over %.1fs, longest %.2fs)"
+			% [
+				implausible_flights, MAIN_SCRIPT.PLAYBACK_IMPLAUSIBLE_SECONDS,
+				longest_flight,
+			],
+	)
+	## The invariant the brief asks for: the logical result may be known early,
+	## but the physical rally cannot be over while the ball is still travelling.
+	_check(
+		ends_before_the_ball == 0,
+		"no rally's last contact precedes its own terminal landing (%d of %d, worst %.2fs)"
+			% [ends_before_the_ball, rallies, worst_early],
+	)
 
 
 ## Playback draws each contact's actor travelling to that contact over the

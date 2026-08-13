@@ -20,6 +20,26 @@ const CONTACT_FLOOR: float = 0.55
 const CONTACT_CEILING: float = 2.60
 const RALLIES: int = 240
 
+## What `main.gd` paces on now. Mirrored here rather than imported because
+## `main.gd` cannot be loaded outside a booted scene tree -- so these two have to
+## be kept in step by hand, and the probe says so where it prints them.
+const SCALE: float = 1.8
+const MINIMUM_PHASE: float = 0.06
+const IMPLAUSIBLE: float = 6.0
+
+
+## The stretch each event actually receives. One factor means this is flat; the
+## clamps meant it ran from 1.0 to 4.6 across one rally, and that spread is what
+## desynchronised the bodies from the ball.
+static func _stretch_now(physical: float) -> float:
+	var seconds := minf(maxf(physical, 0.0), IMPLAUSIBLE)
+	var drawn := maxf(seconds * SCALE, MINIMUM_PHASE)
+	return drawn / maxf(physical, 0.001)
+
+
+static func _stretch_before(physical: float, low: float, high: float) -> float:
+	return clampf(physical, low, high) / maxf(physical, 0.001)
+
 
 func _ready() -> void:
 	await get_tree().process_frame
@@ -127,6 +147,42 @@ func _probe() -> void:
 	print("physical seconds: %.1f | playback seconds: %.1f | ratio %.3f" % [
 		physical_total, playback_total,
 		playback_total / maxf(physical_total, 0.001),
+	])
+	## The headline. An event's *stretch* is how much longer than life it is
+	## drawn; if the spread of stretches across a rally is not flat, the bodies
+	## and the ball are on different clocks no matter what the total says.
+	var everything: Array[float] = []
+	for sample in leg_durations:
+		everything.append(sample)
+	for sample in contact_durations:
+		everything.append(sample)
+	var was: Array[float] = []
+	var now: Array[float] = []
+	for index in range(everything.size()):
+		var physical: float = everything[index]
+		var is_leg := index < leg_durations.size()
+		was.append(_stretch_before(
+			physical,
+			LEG_FLOOR if is_leg else CONTACT_FLOOR,
+			LEG_CEILING if is_leg else CONTACT_CEILING,
+		))
+		now.append(_stretch_now(physical))
+	_spread("stretch with the old clamps", was)
+	_spread("stretch at one scale of %.2f" % SCALE, now)
+
+
+## How evenly a rally is slowed. `p95 / p05` is the number that matters: at 1.00
+## every event is drawn at the same multiple of its own length and every ratio
+## between two events survives.
+func _spread(label: String, samples: Array[float]) -> void:
+	if samples.is_empty():
+		return
+	samples.sort()
+	var count := samples.size()
+	var low: float = samples[int(count * 0.05)]
+	var high: float = samples[mini(int(count * 0.95), count - 1)]
+	print("%s: p05 %.2fx  p50 %.2fx  p95 %.2fx  -> spread %.2fx" % [
+		label, low, samples[count / 2], high, high / maxf(low, 0.001),
 	])
 	print("rallies whose last stamp precedes the terminal landing: %d of %d (worst %.2fs)"
 		% [ends_early, rallies_read, early_worst])
