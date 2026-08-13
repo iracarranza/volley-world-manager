@@ -1786,10 +1786,15 @@ const POSITION_POSES := {
 		"airborne": false, "framing": &"coiled",
 		"phase": SpikeBiomechanics.PLANT_END,
 	},
+	## **The two pins are drawn at different moments on purpose.** An outside is
+	## shown at the plant -- feet down, arms swung back, about to go -- and an
+	## opposite at the cock, airborne with the arm loaded behind the head. Two
+	## halves of the same action, so the pair reads as one position seen twice
+	## rather than as two copies of one pose.
 	"Opposite": {
 		"event": RallyEventModel.EventType.ATTACK,
-		"airborne": false, "framing": &"coiled",
-		"phase": SpikeBiomechanics.PLANT_END,
+		"airborne": true, "framing": &"struck",
+		"phase": SpikeBiomechanics.COCK_END,
 	},
 	"Middle Blocker": {
 		"event": RallyEventModel.EventType.BLOCK,
@@ -1855,6 +1860,24 @@ const ROSTER_CONTACT_DIRECTION := Vector2(0.0, -1.0)
 ## further in. The swing's camera is also nudged off the centre line, because the
 ## body rotates away from the arm and a centred camera leaves it sitting left.
 const ROSTER_FOV_DEGREES: float = 39.0
+## How far round the turntable each pose is shown from.
+##
+## **Because a cocked arm folds backward, and a camera in front cannot see
+## backward.** `ELBOW_COCK_DEGREES` puts the elbow 0.26 m behind the shoulder
+## and the hand 0.23 m behind that, so from dead front the whole arm projects as
+## one straight vertical line -- the pose reads as a raised arm, which is a
+## block. Deepening the fold from -64 to -98 changed the render by nothing at
+## all, which is how the camera rather than the angle was identified as the
+## fault.
+##
+## So the loaded poses are turned to three-quarter, where a fold in depth becomes
+## a fold on screen. The others keep the resting yaw: a platform and a block are
+## both shapes in the frontal plane and lose nothing to a square view.
+const ROSTER_POSE_YAW := {
+	&"struck": -58.0,
+	&"coiled": -46.0,
+}
+
 const ROSTER_FRAMINGS := {
 	&"low": Vector3(0.0, 1.06, -2.95),
 	&"overhead": Vector3(0.0, 1.52, -3.40),
@@ -1902,6 +1925,10 @@ func _frame_roster_camera(framing: StringName) -> void:
 	if roster_camera == null:
 		return
 	roster_camera.position = ROSTER_FRAMINGS[framing]
+	if roster_turntable != null:
+		roster_turntable.rotation_degrees.y = float(
+			ROSTER_POSE_YAW.get(framing, ROSTER_REST_YAW_DEGREES)
+		)
 
 ## Each visible category is a real column of real rows -- a name Label that
 ## expands and a value Label pinned right -- rather than BBCode markup inside one
