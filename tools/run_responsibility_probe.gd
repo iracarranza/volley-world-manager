@@ -51,7 +51,8 @@ func _probe() -> void:
 				if int(event.event_type) == RallyEvent.EventType.RECEPTION \
 				else "DEFENSE"
 			var bucket: Dictionary = by_kind.get(kind, {
-				"claims": 0, "overtaken": 0, "contested": 0,
+				"claims": 0, "overtaken": 0, "contested": 0, "locked": 0,
+				"locked_multi": 0,
 				"overtake_meters": [], "winner_meters": [],
 			})
 			bucket.claims += 1
@@ -60,6 +61,10 @@ func _probe() -> void:
 			## the score overriding anything.
 			if int(event.metadata.get("reachable_count", 0)) > 1:
 				bucket.contested += 1
+			if bool(event.metadata.get("immediate_lock", false)):
+				bucket.locked += 1
+				if int(event.metadata.get("immediate_owner_count", 0)) > 1:
+					bucket.locked_multi += 1
 			var nearest_id := int(event.metadata["nearest_id"])
 			var winner := float(event.metadata.get("winner_distance_meters", -1.0))
 			var nearest := float(event.metadata.get("nearest_distance_meters", -1.0))
@@ -83,6 +88,11 @@ func _probe() -> void:
 		print("--- %s" % kind)
 		print("  claims %d, of which %d had a second reachable body"
 			% [int(bucket.claims), int(bucket.contested)])
+		print("  the ball was already inside somebody's reach: %d (%.2f%%), shared by more than one: %d" % [
+			int(bucket.locked),
+			100.0 * float(bucket.locked) / maxf(float(bucket.claims), 1.0),
+			int(bucket.locked_multi),
+		])
 		print("  the nearest voli did NOT take it: %d (%.2f%% of claims, %.2f%% of contested)" % [
 			int(bucket.overtaken),
 			100.0 * float(bucket.overtaken) / maxf(float(bucket.claims), 1.0),

@@ -32,6 +32,20 @@ static func court_distance_meters(from: Vector2, to: Vector2) -> float:
 ## `unassigned_reach_meters` lets a caller admit candidates with no zone for this
 ## contact at all. The guard used to reject them outright -- a null-zone leash
 ## doing exactly what the radius was stopped from doing one field down.
+## How far past their own reach a voli still owns the ball, in metres.
+##
+## One stride. A defender takes a step for a ball at the edge of their platform
+## and it is still unambiguously their ball; they do not take four. Sized
+## against `_base_reach_meters`, which runs about 1.2-1.4 m, so the immediate
+## envelope is roughly two metres across and a court holds several of them
+## without overlapping much.
+##
+## Unmeasured as a *threshold* -- nothing had published an immediate-control
+## rate before this existed -- but bounded by meaning rather than by taste: it
+## is a stride, and a stride is not a metre and a half.
+const IMMEDIATE_CONTROL_STEP_METERS: float = 0.45
+
+
 static func evaluate_arrival(
 	player: VolleyballPlayer,
 	zone: Resource,
@@ -121,6 +135,24 @@ static func evaluate_arrival(
 	## claimant than one inside theirs and only takes the ball when nobody better
 	## can. What it no longer does is stop them.
 	var reachable := distance <= physical_reach
+	## **Whose ball is this**, asked before *who can get to it*.
+	##
+	## `physical_reach` is base reach plus everything the body could cover in the
+	## flight, so it answers emergency pursuit: a libero with two seconds can
+	## reach most of the court, and that is true and should stay true. What it
+	## cannot express is that a ball arriving *at* somebody is already theirs.
+	##
+	## This is that envelope: what they can play from where they are standing,
+	## without a run. A ball inside it belongs to them, and `choose_claimant`
+	## treats that as a hard lock rather than another term in a weighted sum --
+	## because a weight can always be outbid, and being outbid for a ball
+	## arriving at your platform is the defect. Reachability decides whether
+	## responsibility succeeds; it should not create responsibility.
+	##
+	## The step allowance is one stride, not a sprint. A defender does move their
+	## feet for a ball at their edge, and a lock that only fired for a ball
+	## arriving exactly at the sternum would never fire.
+	var immediate_control := distance <= base_reach + IMMEDIATE_CONTROL_STEP_METERS
 	## Named for what it is. This is a *distance* -- how much further this
 	## player could have reached than the ball actually needed them to -- and it
 	## was called `arrival_margin`, which is the name the rest of the engine uses
@@ -158,6 +190,9 @@ static func evaluate_arrival(
 		"reach_margin_meters": reach_margin,
 		"edge_ratio": edge_ratio,
 		"claim_score": claim_score,
+		"immediate_control": immediate_control,
+		"immediate_control_reach_meters": base_reach
+			+ IMMEDIATE_CONTROL_STEP_METERS,
 	}
 
 
@@ -202,13 +237,34 @@ static func choose_claimant(
 		if not bool(arrival.get("reachable", false)):
 			continue
 		reachable_evaluations.append({"player": player, "arrival": arrival})
-		var score := float(arrival.get("claim_score", -1000.0))
+	## **The lock, applied before the score is consulted at all.**
+	##
+	## If the ball is arriving inside somebody's immediate envelope it is theirs,
+	## and the weighted claim cannot take it off them -- that is the whole
+	## structural change. The score still runs, but only among the volis who own
+	## the ball, so a faster teammate can no longer buy it with anticipation and
+	## reception rating from two metres further out.
+	##
+	## Several volis can own it at once -- two bodies a metre apart both have it
+	## inside their reach -- and then the score decides between *them*, which is
+	## the case it is actually good at. It is a restriction of the candidate set,
+	## not a bonus inside it.
+	var owners: Array[Dictionary] = []
+	for evaluation in reachable_evaluations:
+		if bool(Dictionary(evaluation.arrival).get("immediate_control", false)):
+			owners.append(evaluation)
+	var deciding: Array[Dictionary] = owners if not owners.is_empty() \
+		else reachable_evaluations
+	for evaluation in deciding:
+		var score := float(Dictionary(evaluation.arrival).get("claim_score", -1000.0))
 		if score > best_score:
 			best_score = score
 			best = {
-				"player": player, "arrival": arrival, "support_count": 0,
-				"seam_conflict": false, "claim_margin": 1.0,
+				"player": evaluation.player, "arrival": evaluation.arrival,
+				"support_count": 0, "seam_conflict": false, "claim_margin": 1.0,
 			}
+	best["immediate_owner_count"] = owners.size()
+	best["immediate_lock"] = not owners.is_empty()
 	if best.player == null:
 		return best
 	var support_count := 0
@@ -220,7 +276,11 @@ static func choose_claimant(
 	var second_score := -1000.0
 	var best_priority := -1
 	var second_priority := -2
-	for evaluation in reachable_evaluations:
+	## Among the volis who could actually have won it. With the lock fired the
+	## runner-up is another owner, not a teammate two metres out who was never
+	## in the running -- a seam is two people who both think it is theirs, and
+	## after the lock only owners think that.
+	for evaluation in deciding:
 		var evaluation_player := evaluation.player as VolleyballPlayer
 		var evaluation_arrival: Dictionary = evaluation.arrival
 		var evaluation_score := float(evaluation_arrival.get("claim_score", -1000.0))

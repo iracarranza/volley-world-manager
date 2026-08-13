@@ -1567,6 +1567,8 @@ func resolve(
 				"winner_distance_meters", -1.0
 			)),
 			"reachable_count": int(reception_claim.get("reachable_count", 0)),
+			"immediate_lock": bool(reception_claim.get("immediate_lock", false)),
+			"immediate_owner_count": int(reception_claim.get("immediate_owner_count", 0)),
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
@@ -4948,6 +4950,8 @@ func _resolve_opponent_transition(
 				"winner_distance_meters", -1.0
 			)),
 			"reachable_count": int(defense_claim.get("reachable_count", 0)),
+			"immediate_lock": bool(defense_claim.get("immediate_lock", false)),
+			"immediate_owner_count": int(defense_claim.get("immediate_owner_count", 0)),
 			"planner_floor_center": Vector2(floor_phase_positions.get(
 				defender.id, defender_start
 			)),
