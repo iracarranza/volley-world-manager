@@ -291,9 +291,13 @@ func configure(
 	body_type = str(physical_profile.get("body_type", "Vegi"))
 	_build_silhouette()
 	_apply_physical_profile(physical_profile)
-	identity_label.text = "%s · %.0f cm · %s" % [
-		display_name, height_cm, dominant_hand.left(1),
-	]
+	## Name and position. It used to read `name · 200 cm · R`, which spent both
+	## its fields on things the body already shows -- height in how tall the rig
+	## is drawn, handedness in which arm swings -- and never said who this voli
+	## is in the rotation. Position is the one thing the picture cannot tell you.
+	var position_code := str(physical_profile.get("position_code", ""))
+	identity_label.text = "%s · %s" % [display_name, position_code] \
+		if not position_code.is_empty() else display_name
 	identity_label.modulate = Color("f8f2d8")
 	identity_label.visible = false
 	apply_ui_palette(false)

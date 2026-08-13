@@ -3476,7 +3476,7 @@ func _resolve_opponent_transition(
 	)
 	var setter_move_time := _movement_time(
 		opponent_setter, setter_start, opponent_setter_position, "lateral",
-		opponent_detour,
+		opponent_detour["corner"] if opponent_detour != null else null,
 	)
 	## The same quantity the home setter is scored on: how much of the pass
 	## flight is left once they have reached the ball. A setter who arrives
@@ -3779,8 +3779,7 @@ func _resolve_opponent_transition(
 			)})
 	var opponent_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(opponent_set_event, opponent_setter_choice)
-	if opponent_detour != null and opponent_set_event != null:
-		opponent_set_event.metadata["navigation_waypoint"] = Vector2(opponent_detour)
+	_stamp_navigation(opponent_set_event, opponent_detour)
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
 	## Provisional: recomputed below once preparation has staged the hitter.
 	var hitter_arrival_margin: float = set_flight_time - float(attack_choice.travel_time)
@@ -6870,6 +6869,12 @@ func _physical_playback_profile(player: VolleyballPlayer) -> Dictionary:
 		## ceilings -- everything except the one place a player is actually
 		## looked at.
 		"body_type": player.body_type,
+		## For the nametag, which used to read `name · 200 cm · R`. Height and
+		## handedness are already visible -- one in how tall the body is drawn,
+		## the other in which arm swings -- so the tag was spending both its
+		## fields restating the picture and never saying who this is on the
+		## court. Position is the one thing a body cannot show you.
+		"position_code": player.primary_position,
 		"standing_reach_meters": player.standing_reach_cm() / 100.0,
 		"jumping_reach_meters": player.jumping_reach_cm() / 100.0,
 		## How fast this body can actually be moved across the floor.
@@ -8673,7 +8678,9 @@ func _recovery_debt(player_id: int, at_time: float) -> float:
 ## if the two sides are choosing different people to set. One of them was not
 ## choosing at all.
 ## Where this voli has to run to get round the bodies in their way, or `null`
-## when the line is clear.
+## when the line is clear. The corner comes back with the body that caused it
+## and how far short of clearance they were, so the bend can be drawn against
+## the thing it bends around instead of appearing from nowhere.
 ##
 ## **A collision is not a decision.** The first version of this charged a flat
 ## delay before the claim, so a badly obstructed setter simply lost the ball to
@@ -8707,6 +8714,13 @@ func _navigation_waypoint(
 		return null
 	var worst_shortfall := 0.0
 	var corner: Variant = null
+	## Who, and where they were standing. Not a reason to be narrated -- an
+	## obstruction should read as two bodies nearly touching and one of them
+	## going round, never as a caption saying so. It is here because playback
+	## cannot draw the near miss without knowing which body it was, and because
+	## a route that bends away from nothing is unfalsifiable.
+	var blame := -1
+	var blame_position := Vector2.ZERO
 	for other_id in bodies:
 		if int(other_id) == mover.id:
 			continue
@@ -8725,6 +8739,8 @@ func _navigation_waypoint(
 		if shortfall <= worst_shortfall:
 			continue
 		worst_shortfall = shortfall
+		blame = int(other_id)
+		blame_position = here
 		## Straight out from the obstruction through the point on the path
 		## nearest it, which is the shortest way past. Degenerate only when a body
 		## is exactly on the line, and then any side will do -- the path's own
@@ -8736,7 +8752,13 @@ func _navigation_waypoint(
 			direction.x * shortfall / CourtConstants.COURT_WIDTH_METERS,
 			direction.y * shortfall / CourtConstants.COURT_LENGTH_METERS,
 		)
-	return corner
+	if corner == null:
+		return null
+	return {
+		"corner": corner, "obstructed_by": blame,
+		"obstruction_position": blame_position,
+		"shortfall_meters": worst_shortfall,
+	}
 
 
 ## Puts the second-contact claim onto the event that resulted from it.
@@ -8767,8 +8789,28 @@ func _stamp_second_contact_claim(event: RallyEvent, choice: Dictionary) -> void:
 	]:
 		if choice.has(key):
 			event.metadata[key] = choice[key]
-	if choice.get("navigation_waypoint") != null:
-		event.metadata["navigation_waypoint"] = Vector2(choice["navigation_waypoint"])
+	_stamp_navigation(event, choice.get("navigation"))
+
+
+## The corner, the body it goes round, and where that body was standing.
+##
+## `obstructed_by` is diagnostic and drawable, not narratable: an obstruction
+## should read as two volis nearly touching and one of them going round, never
+## as a caption saying somebody was in the way. Playback needs the identity to
+## draw the near miss at all, and a route that bends away from nothing is
+## unfalsifiable without it.
+func _stamp_navigation(event: RallyEvent, navigation: Variant) -> void:
+	if event == null or navigation == null:
+		return
+	var data := Dictionary(navigation)
+	event.metadata["navigation_waypoint"] = Vector2(data["corner"])
+	event.metadata["obstructed_by"] = int(data.get("obstructed_by", -1))
+	event.metadata["obstruction_position"] = Vector2(
+		data.get("obstruction_position", Vector2.ZERO)
+	)
+	event.metadata["obstruction_shortfall_meters"] = float(
+		data.get("shortfall_meters", 0.0)
+	)
 
 
 func _spatial_setter_choice(
@@ -8801,7 +8843,8 @@ func _spatial_setter_choice(
 		## corner correctly, carrying speed through it rather than restarting.
 		var detour: Variant = _navigation_waypoint(candidate, start, target, starts)
 		var travel_time := _movement_time(
-			candidate, start, target, "transition", detour
+			candidate, start, target, "transition",
+			detour["corner"] if detour != null else null,
 		) + float(player_recovery.get(candidate.id, {}).get("delay", 0.0)) \
 			* _recovery_debt(candidate.id, rally_clock)
 		## **How confidently, not merely whether.**
@@ -8851,8 +8894,9 @@ func _spatial_setter_choice(
 				"reach_margin_meters": reach_margin,
 				"arrival_margin": available_time - travel_time,
 				## The corner they had to turn, so playback bends the run rather
-				## than drawing a straight line through somebody.
-				"navigation_waypoint": detour,
+				## than drawing a straight line through somebody -- and the body
+				## it goes round, so the bend is drawn against its cause.
+				"navigation": detour,
 				"reachable": bool(arrival.get("reachable", false)),
 			}
 		if bool(arrival.get("reachable", false)):

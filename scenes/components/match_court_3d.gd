@@ -282,6 +282,16 @@ func _plan_fraction(
 ## continuous motion and quantising a run would draw it stuttering.
 ##
 ## Static and pure so the suite can check the shape without a court to run it in.
+## How close two teammates may be drawn, centre to centre, in metres.
+##
+## The same figure `match_screen.MIN_BODY_SEPARATION_METERS` opens stacked plan
+## targets with, deliberately: one number for how much room a body takes up,
+## whether the crowding is at the end of a leg or in the middle of one. It is
+## comfortably wider than the 0.715 m the resolver treats as a torso, because
+## two volis brushing shoulders is legal and two volis inside each other is not.
+const BODY_CLEARANCE_METERS: float = 0.62
+const UNSTACK_PASSES: int = 2
+
 const STEP_QUANTISE_MAX_METERS: float = 2.6
 ## What share of each step is spent moving. The remainder is the body arriving
 ## and standing on it, which is the half that makes a step read as a step.
@@ -352,7 +362,12 @@ func _plan_sample(movement: Dictionary, fraction: float, fallback: Vector2) -> V
 
 
 func apply_movement_plan(
-	plan: Dictionary, progress: float, window_seconds: float = 0.0
+	plan: Dictionary,
+	progress: float,
+	window_seconds: float = 0.0,
+	## The voli about to play the ball. They are never pushed: their position is
+	## the contact point, and moving it draws the contact away from the ball.
+	immovable_id: int = -1,
 ) -> void:
 	## Everyone gets sampled, including the players who are not going anywhere.
 	##
@@ -370,17 +385,95 @@ func apply_movement_plan(
 		if plan.has(raw_player_id):
 			continue
 		set_player_position(int(raw_player_id), Vector2(live_positions[raw_player_id]))
+	var sampled := {}
 	for raw_player_id in plan:
 		var player_id := int(raw_player_id)
 		var movement: Dictionary = plan[raw_player_id]
 		var fallback: Vector2 = live_positions.get(player_id, Vector2.ZERO)
-		set_player_position(player_id, _plan_sample(
+		sampled[player_id] = _plan_sample(
 			movement,
 			_stepped(player_id, movement, _plan_fraction(
 				movement, progress, window_seconds
 			), window_seconds),
 			fallback,
-		))
+		)
+	_unstack(sampled, immovable_id)
+	for player_id in sampled:
+		set_player_position(int(player_id), Vector2(sampled[player_id]))
+
+
+## Push bodies out of each other, every frame.
+##
+## `match_screen._separate_plan` already opens stacked *targets*, and that is a
+## different problem from this one: it runs once when the plan is built and only
+## looks at where legs end. Two volis whose endpoints are metres apart still
+## walk straight through one another in the middle, which is what an outside
+## hitter crossing the setter's ground looks like -- the endpoints were never
+## the overlap.
+##
+## The mover's route is bent by `_navigation_waypoint` in the resolver, but that
+## reads the positions once at leg start and cannot know where a body will have
+## walked to by the time the mover gets there. This is the drawn half: the
+## resolver charges the detour, and this stops two rigs occupying one space
+## while it happens.
+##
+## Teammates only -- the net keeps the sides apart, and a voli across it is not
+## in the way. The voli about to touch the ball is immovable, because moving
+## them draws the contact happening somewhere the ball is not.
+func _unstack(sampled: Dictionary, immovable_id: int) -> void:
+	var here := {}
+	for raw_player_id in live_positions:
+		here[int(raw_player_id)] = _to_court_metres(
+			Vector2(live_positions[raw_player_id])
+		)
+	for raw_player_id in sampled:
+		here[int(raw_player_id)] = _to_court_metres(Vector2(sampled[raw_player_id]))
+	var ids: Array = here.keys()
+	if ids.size() < 2:
+		return
+	for _pass_index in range(UNSTACK_PASSES):
+		for a_index in range(ids.size()):
+			for b_index in range(a_index + 1, ids.size()):
+				var a := int(ids[a_index])
+				var b := int(ids[b_index])
+				if (a < 100) != (b < 100):
+					continue
+				var a_movable := sampled.has(a) and a != immovable_id
+				var b_movable := sampled.has(b) and b != immovable_id
+				if not a_movable and not b_movable:
+					continue
+				var offset: Vector2 = here[b] - here[a]
+				var gap := offset.length()
+				if gap >= BODY_CLEARANCE_METERS:
+					continue
+				## Derived from the ids when two bodies are exactly coincident, so
+				## a rally re-resolved from its seed opens the same stack the same
+				## way -- the replay gate would otherwise catch this as drift.
+				var axis := offset / gap if gap > 0.001 \
+					else Vector2(1.0, 0.0).rotated(float((a + b) % 8) * PI * 0.25)
+				var share := 0.5 if a_movable and b_movable else 1.0
+				var overlap := (BODY_CLEARANCE_METERS - gap) * share
+				if a_movable:
+					here[a] = here[a] - axis * overlap
+				if b_movable:
+					here[b] = here[b] + axis * overlap
+	for raw_player_id in sampled:
+		var player_id := int(raw_player_id)
+		if player_id == immovable_id:
+			continue
+		sampled[raw_player_id] = _from_court_metres(here[player_id])
+
+
+func _to_court_metres(court_position: Vector2) -> Vector2:
+	return Vector2(
+		court_position.x * court_width, court_position.y * court_length
+	)
+
+
+func _from_court_metres(metres: Vector2) -> Vector2:
+	return Vector2(
+		metres.x / maxf(court_width, 0.001), metres.y / maxf(court_length, 0.001)
+	)
 
 
 ## The leg's own fraction, quantised into whole steps when it is short enough to
