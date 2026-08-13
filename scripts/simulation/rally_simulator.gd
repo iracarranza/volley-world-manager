@@ -8,6 +8,19 @@ const CoverageModel := preload("res://scripts/simulation/coverage_calculator.gd"
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const DefensivePlanModel := preload("res://scripts/models/defensive_plan.gd")
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
+
+## The height band a second contact can be played in.
+##
+## Matched to the one serve reception already uses -- `0.15` to `1.40` in
+## `generate_reception_opportunities` -- rather than chosen afresh, because two
+## bands for "a ball a voli can get a platform under" would be two answers to
+## one question and the pair would drift.
+##
+## The floor is not zero: a ball at ankle height is on its way to the floor, and
+## the window this models is a body getting under it rather than a dive that
+## belongs to a different contact.
+const SECOND_CONTACT_MIN_HEIGHT_M: float = 0.15
+const SECOND_CONTACT_MAX_HEIGHT_M: float = 1.40
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Familiarity := preload("res://scripts/systems/familiarity_system.gd")
 const ShadowReceptionSystemModel := preload("res://scripts/simulation/shadow_reception_system.gd")
@@ -1643,8 +1656,27 @@ func resolve(
 		home_second_contact.candidates, defensive_plan,
 		lineup.active_setter_id(), receiver.id,
 	)
-	var set_contact: Vector2 = reception_pass.destination
-	var second_contact_window := float(pass_trajectory.get("duration", 0.68))
+	## **Where the ball can be played, not where it was going to land.**
+	##
+	## Both of these were the pass's endpoint and its whole duration, so every
+	## candidate for the second contact was asked one question: can you reach the
+	## place this ball finishes, in the time it takes to get there. Nobody was
+	## asked whether it passes *near* them on the way, which is the only question
+	## a shank ever offers -- a ball skimming a metre past a libero is playable in
+	## a tight window and was invisible, because that libero was being tested on a
+	## sprint to wherever it eventually came down.
+	##
+	## Serve reception has always done this properly and the machinery is shared:
+	## `generate_reception_opportunities` asks the trajectory for the first moment
+	## the ball sits inside a playable height band. This asks the same thing of
+	## the pass.
+	var playable := _playable_second_contact(pass_trajectory, rally_clock)
+	var set_contact: Vector2 = playable.get(
+		"position", reception_pass.destination
+	)
+	var second_contact_window := float(playable.get(
+		"window", float(pass_trajectory.get("duration", 0.68))
+	))
 	var setter_choice := _spatial_setter_choice(
 		home_second_contact.candidates, home_second_contact.starts,
 		defensive_plan, lineup.active_setter_id(), receiver.id, setter,
@@ -8631,6 +8663,35 @@ func _recovery_debt(player_id: int, at_time: float) -> float:
 ## home transition set against 0.878 for the opponent's, which is only possible
 ## if the two sides are choosing different people to set. One of them was not
 ## choosing at all.
+## The first moment a pass is playable, and where the ball is then.
+##
+## `descending_only` is **false**, which is the difference between this and a
+## serve reception. A serve is met coming down; a shank off the platform is
+## often still rising when it passes the only body near it, and asking only for
+## the descending half would skip exactly the balls this exists to catch.
+##
+## Falls back to the endpoint when nothing in the flight sits in the band, so a
+## clean pass to the setter resolves exactly as it did before -- this should
+## change shanks and leave good passes alone.
+func _playable_second_contact(
+	pass_trajectory: Dictionary, from_time: float
+) -> Dictionary:
+	if pass_trajectory.is_empty():
+		return {}
+	var trajectory := BallTrajectoryModel.from_dict(pass_trajectory)
+	var moment := trajectory.earliest_contact_time(
+		from_time, SECOND_CONTACT_MIN_HEIGHT_M, SECOND_CONTACT_MAX_HEIGHT_M,
+		24, false,
+	)
+	if moment < 0.0:
+		return {}
+	return {
+		"position": trajectory.position_at_time(moment),
+		"window": maxf(moment - from_time, 0.0),
+		"contact_time": moment,
+	}
+
+
 func _spatial_setter_choice(
 	candidates: Array[VolleyballPlayer],
 	starts: Dictionary,

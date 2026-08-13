@@ -114,6 +114,27 @@ func to_dict() -> Dictionary:
 	}
 
 
+## Back from `to_dict()`, so a consumer holding the published dictionary can ask
+## the trajectory questions instead of re-deriving them.
+##
+## Every field round-trips except `outgoing_velocity`, which `create` recomputes
+## from the control point and the flight time -- the same value by the same
+## formula, so the two agree by construction rather than by being copied.
+static func from_dict(data: Dictionary) -> BallTrajectory:
+	var start_time := float(data.get("start_time", 0.0))
+	return create(
+		str(data.get("trajectory_type", "pass")),
+		Vector2(data.get("start_position", Vector2.ZERO)),
+		Vector2(data.get("control_position", Vector2.ZERO)),
+		Vector2(data.get("end_position", Vector2.ZERO)),
+		start_time,
+		maxf(float(data.get("end_time", start_time)) - start_time, 0.01),
+		float(data.get("apex_height_meters", 1.0)),
+		float(data.get("start_height_meters", 1.0)),
+		float(data.get("end_height_meters", 1.0)),
+	)
+
+
 static func create(
 	kind: String,
 	start: Vector2,
