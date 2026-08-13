@@ -140,8 +140,32 @@ independent of 1–3.
 
 ## §6 Two things found in passing, not yet acted on
 
-- **Two ball legs out of 1,506 exceed 4 s, one of them 31 s.** Whatever produces
-  a 31-second flight is a real defect in its own right; the old ceiling of 2.60
+- **CORRECTED.** This section first read "two ball legs out of 1,506 exceed 4 s,
+  one of them 31 s", and the 31 has not survived. A wider sweep
+  (`tools/long_flight_probe.tscn`, 3,000 rallies and 13,298 legs) found the
+  longest flight at **4.43 s**, only two legs over 4 s, and nothing at all above
+  6 s. The original figure was also exactly `31.00`, which reads more like a
+  sentinel than a computed duration. A deterministic re-run on the original
+  seeds was started to settle it and timed out without reporting, so the
+  question is open: treat 31 s as unconfirmed, not as a known defect.
+
+  What the two real cases do show is an internal disagreement worth chasing.
+  Both are `trajectory_type = attack` on rallies ending in an attack error, and
+  in both, `duration`, `apex_rise_meters` and `launch_vertical_mps` contradict
+  each other under `ball_flight_model.gd`'s own equation
+  `t = (v + sqrt(v^2 + 2gh))/g` at `g = 9.8`, `h = 1.0`:
+
+  | | launch | duration vs model | apex rise vs model |
+  |---|---|---|---|
+  | seed 2961955578 | 18.41 m/s | 4.43 s vs 3.81 s (x1.16) | 12.04 m vs 17.30 m (x0.70) |
+  | seed 49077948 | 4.46 m/s | 4.26 s vs 1.10 s (**x3.88**) | 0.65 m vs 1.02 m (x0.64) |
+
+  A ball rising 0.65 m cannot stay up 4.26 s. But these three fields are passed
+  *into* `_trajectory_payload` from the attack resolver rather than derived
+  there, so they may come from different models by design. Observation, not
+  diagnosis.
+
+- The old playback ceiling of 2.60
   was hiding it from view, which is the other cost of clamping.
 - The `[0.55, 2.60]` contact clamp means the current playback has never once
   shown a contact at its simulated duration. Any prior visual judgement about

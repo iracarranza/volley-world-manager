@@ -19,8 +19,13 @@ extends RefCounted
 ##
 ## | | p05 | p50 | p95 | max | clamp rewrote |
 ## |---|---|---|---|---|---|
-## | ball legs, n=1506 | 0.03 | 1.06 | 1.51 | 31.00 | 20.7% |
+## | ball legs, n=1506 | 0.03 | 1.06 | 1.51 | 31.00* | 20.7% |
 ## | contacts, n=610 | 0.10 | 0.12 | 0.24 | 0.24 | **100.0%** |
+##
+## *That 31.00 is what this probe reported and has not reproduced. A sweep nine
+## times the size found the longest leg at 4.43s and nothing above 6. It is also
+## exactly round, which reads more like a sentinel than a duration. Left in the
+## table because it is what was measured, marked because it is not confirmed.
 ##
 ## The contact floor of 0.55 sits *above the maximum of its own distribution*.
 ## That is not a clamp, it is a constant with a `clampf` written round it, and
@@ -47,9 +52,13 @@ const MINIMUM_PHASE_SECONDS: float = 0.06
 ## of a ball leg is 1.51 seconds and the longest plausible is nearer three.
 ##
 ## **It reports rather than absorbs.** The old ceiling of 2.60 silently swallowed
-## two legs over four seconds -- one of them 31 -- which is how a defect that
-## large stayed invisible for as long as it did. Playback still has to remain
-## watchable, so the value is capped, but the cap says so.
+## every leg over four seconds, and a clamp that rewrites without saying so is
+## how anything unusual stays unseen. Playback still has to remain watchable, so
+## the value is capped, but the cap says so.
+##
+## Six is chosen with room to spare rather than tightly: 3,000 rallies and 13,298
+## legs put the longest real flight at 4.43 seconds, with two legs over four and
+## none over six.
 const IMPLAUSIBLE_SECONDS: float = 6.0
 
 
