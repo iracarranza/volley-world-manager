@@ -377,8 +377,10 @@ func _play_flight(
 		elapsed += get_process_delta_time() * playback_speed
 		var progress := clampf(elapsed / duration, 0.0, 1.0)
 		match_court_3d.set_ball_trajectory_sample(display_trajectory, progress)
+		## Null on the terminal ball -- there is no next contact to hold still.
 		match_court_3d.apply_movement_plan(
-			movement_plan, progress, duration, int(next_contact.actor_id)
+			movement_plan, progress, duration,
+			int(next_contact.actor_id) if next_contact != null else -1,
 		)
 		_apply_contact_poses(event, next_contact, after_next, progress, duration)
 		_sample_cognition(event, next_contact, progress, duration)
@@ -439,8 +441,10 @@ func _play_contact_pulse(
 			match_court_3d.set_ball_trajectory_sample(carry, progress)
 		## Before the poses, exactly as `_play_flight` orders it: a pose is drawn
 		## on a body that has already been placed for this frame.
+		## Null on the terminal ball -- there is no next contact to hold still.
 		match_court_3d.apply_movement_plan(
-			movement_plan, progress, duration, int(next_contact.actor_id)
+			movement_plan, progress, duration,
+			int(next_contact.actor_id) if next_contact != null else -1,
 		)
 		_sample_cognition(event, next_contact, progress, duration)
 		var direction := event.end_position - event.start_position

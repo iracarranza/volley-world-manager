@@ -1685,6 +1685,11 @@ func resolve(
 		home_second_contact.candidates, home_second_contact.starts,
 		defensive_plan, lineup.active_setter_id(), receiver.id, setter,
 		set_contact, second_contact_window,
+		## The serve's own flight. A setter releases toward their target when the
+		## ball is struck, not when the platform touches it -- so this is the run
+		## they have already made by the time the pass exists, and it is the
+		## first of the overlapping timelines `OUTSTANDING` §1 asks for.
+		float(serve_trajectory.get("duration", 0.0)),
 	)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
@@ -7956,13 +7961,28 @@ func _set_geometry(
 ## perfect one.
 ##
 ## The floor is a ball that barely clears the passer -- it still reaches a
-## setter's hands on nobody, which is exactly the point: a 1.05 m rise off a
-## 0.9 m platform apexes at 1.95 m, under every setter's standing reach in the
-## game, and the second contact has to be taken underhand. The ceiling is the
-## textbook high pass that hangs above the setter and lets the whole offence
-## organise underneath it.
-const PASS_APEX_RISE_MIN_METERS: float = 1.05
-const PASS_APEX_RISE_MAX_METERS: float = 2.90
+## setter's hands on nobody, which is exactly the point: a low rise off a 0.9 m
+## platform apexes under every setter's standing reach in the game, and the
+## second contact has to be taken underhand. The ceiling is the textbook high
+## pass that hangs above the setter and lets the whole offence organise
+## underneath it.
+##
+## **Raised, because the ceiling was under the setter's own jump.** The band was
+## 1.05-2.90 m and measured over 1,052 passes it produced apexes of 2.42-3.31 m
+## about a 2.89 m median. A setter's jump-set contact is
+## `lerp(standing_reach, jumping_reach, 0.58)`, which is about 2.83 m for a
+## 1.90 m body -- so the *median* pass peaked six centimetres above the point a
+## setter would meet it in the air, and the bottom of the band peaked below it.
+## There was no ball in the game high enough to be worth leaving the floor for,
+## which is both why the jump set could never be the standard and why the pass
+## read as too low to jump to.
+##
+## The new band apexes roughly 2.35-4.70 m about a 3.4 m median, which puts the
+## ordinary pass comfortably above a jump-set contact and the good one well
+## above it. The floor deliberately stays under the standing release: a bad pass
+## must still be a bad pass.
+const PASS_APEX_RISE_MIN_METERS: float = 1.45
+const PASS_APEX_RISE_MAX_METERS: float = 3.80
 ## Below this execution the platform is not controlling the ball, so it goes up
 ## rather than forward, by up to this much more.
 const SHANK_EXECUTION: float = 0.18
@@ -9001,6 +9021,22 @@ func _spatial_setter_choice(
 	preferred_setter: VolleyballPlayer,
 	target: Vector2,
 	available_time: float,
+	## **How long these volis have already been running when the pass is
+	## played.** Zero is the old behaviour and is a lie the engine told itself
+	## everywhere: every second contact was timed from a standing start at the
+	## instant the platform touched the ball, as though the setter had spent the
+	## whole serve flight watching.
+	##
+	## Measured before this existed, the setter's arrival margin ran a median
+	## -0.37 s with a p95 of -0.03 s -- 95% of setters arriving late to their own
+	## ball, which is not a hard game, it is a missing head start. It also made
+	## the jump set unreachable, since loading a hop needs margin nobody had.
+	##
+	## Spent as *distance already covered*, not as time added to the window. A
+	## setter did not get two seconds to react to a pass that had not happened;
+	## they got a head start toward the place the ball was always going, and the
+	## pass then tells them how much of the last adjustment they still owe.
+	head_start_seconds: float = 0.0,
 ) -> Dictionary:
 	var best := {"player": preferred_setter, "start": target, "travel_time": 4.0}
 	var best_score := -1000.0
@@ -9009,6 +9045,17 @@ func _spatial_setter_choice(
 		if candidate == null or candidate.id == first_contact_player_id:
 			continue
 		var start: Vector2 = starts.get(candidate.id, target)
+		## Where the run had already got to. A voli still on the floor spends
+		## their head start getting up rather than moving, which is what the
+		## recovery delay subtracted here says -- and it is why the same head
+		## start is worth nothing to somebody who has just dug the ball.
+		var running := maxf(
+			head_start_seconds
+				- float(player_recovery.get(candidate.id, {}).get("delay", 0.0)),
+			0.0,
+		)
+		if running > 0.0:
+			start = _reached_point(candidate, start, target, running, "transition")
 		## Getting up comes out of the same budget as getting there. A voli still
 		## on the floor is not a candidate to set the next ball, and this is what
 		## says so -- without it the emergency setter search would happily pick

@@ -35,6 +35,29 @@ from the contact stamp -- is done and verified.
   is what makes a setter chase during the pass and a hitter start their run
   before the set is released.
 
+  **The setter's half is done.** `_spatial_setter_choice` takes a
+  `head_start_seconds` and spends it as *distance already covered* rather than
+  as time added to the window -- a setter releases toward their target when the
+  serve is struck, not when the platform touches the ball. The first ball
+  passes the serve's own flight. Measured over 1,215 second contacts, the
+  arrival margin moved from a median **-0.37 s to +0.31 s**, which is 95% of
+  setters arriving late becoming most of them arriving early, and it is what
+  made the jump set reachable at all.
+
+  Still on this thread:
+
+  - **The transition set has no head start**, because its window is the
+    hardcoded 0.68 s the movement-agreement gate already names as a defect.
+    Fixing the constant and the head start together is one job, not two.
+  - **The hitter's approach** is the other half and is untouched.
+  - **Playback should spend the slack rather than stretch it.** A setter who
+    arrives early is drawn crossing the floor slowly enough to fill the whole
+    flight, because `_pace_plan` gives a leg the window rather than the
+    traversal. The movement-agreement gate reads that as SET at 0.8344 against
+    an allotted duration, and the honest fix is a leg that finishes early being
+    drawn finishing early with the voli standing and waiting -- which is what a
+    setter actually does.
+
 ## §2 The block
 
 Done: hang from the real leap, height from the real leap, apex from
@@ -55,6 +78,39 @@ Done: hang from the real leap, height from the real leap, apex from
   can seal *and* defend line. Rendering work over data that exists.
 - **`block_hands` is likewise undrawn.** `soft`/`kill`/`neutral`, computed per
   blocker from close fraction and contest margin.
+
+## §2b The second contact's posture
+
+Done: the pass is high enough to jump to, the jump set is the standard, pace
+comes from both the geometry and the leap, and delivery scatter is angular.
+
+Measured before and after, 1,200 rallies (`tools/pass_and_set_probe.tscn`):
+
+| | before | after |
+|---|---|---|
+| pass apex above the floor | 2.42-3.31 m, median 2.89 | **2.94-4.05 m, median 3.51** |
+| setter arrival margin | median -0.37 s, p95 -0.03 | **median +0.31 s, p95 +1.07** |
+| jump sets | **1 of 914** | **580 of 914** |
+| drift, short / mid / long | 0.34 / 0.26 / 0.40 m | **0.24 / 0.25 / 0.61 m** |
+
+The old pass band topped out *below* a setter's own jump-set contact -- a
+1.90 m setter meets the ball at about 2.83 m in the air and the median pass
+peaked at 2.89 m -- so there was no ball in the game worth leaving the floor
+for. That is why the jump set could never be the standard and why the pass read
+as too low to jump to.
+
+**Remaining:**
+
+- **The opponent and transition sets have no posture.** 437 of 1,351 sets in the
+  probe report `?`: both of those paths still release from a standing height
+  unconditionally. The same one-way asymmetry this file keeps closing a path at
+  a time.
+- **Poses for the two postures.** A jump set and a standing set are drawn
+  identically. Wanted with the dig poses in §3.
+- **`_set_pace_scale` is unmeasured.** `JUMP_SET_PACE_BONUS` 0.12 and
+  `STANDING_SET_ARM_SWING` 0.16 are starting values; nothing has published a
+  set's flight time against posture, so there is no distribution to cut them
+  from.
 
 ## §3 Poses
 

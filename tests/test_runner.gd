@@ -7021,8 +7021,23 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 		## SET's lower bound is a separate, older residual: the second contact
 		## is allotted a hardcoded 0.68 s window instead of a traversal the
 		## movement model derived, so setters are given more time than they need.
+		##
+		## **It widened on purpose, and the direction is the evidence.** The
+		## setter used to be timed from a standing start at the instant the
+		## platform touched the ball, as though they had watched the whole serve
+		## -- measured, that put their arrival margin at a median -0.37 s, 95% of
+		## setters arriving late to their own ball. They now carry the serve
+		## flight as a head start, the margin is a median +0.31 s, and the
+		## traversal fills less of the window because a setter who released early
+		## genuinely arrives early and waits. Measured at 0.8344 across 120
+		## seeds; the band contains it with headroom rather than sitting on it.
+		##
+		## This is a slack that playback should spend rather than a disagreement
+		## about pace: the honest follow-up is a leg that finishes early being
+		## drawn as finishing early, with the voli standing, instead of being
+		## stretched to fill the flight. Recorded in `OUTSTANDING` §1.
 		var upper := 1.12 if str(type_name) == "ATTACK" else 1.06
-		var lower := 0.92 if str(type_name) == "SET" else 0.95
+		var lower := 0.80 if str(type_name) == "SET" else 0.95
 		every_phase_agrees = every_phase_agrees \
 			and mean_ratio > lower and mean_ratio < upper
 	_check(
@@ -7038,7 +7053,13 @@ func _test_movement_timing_and_locomotion_diagnostics() -> void:
 			## Raised from 0.02 to 0.04 alongside the ATTACK band: the same 9%
 			## residual puts a few more attack samples past the 1.40 perceptible
 			## edge. Measured at 0.0255 when this was set.
-			and float(ratio.get("perceptible_rate", 1.0)) < 0.04,
+			##
+			## Then to 0.07 with the setter's head start, for the reason in the
+			## SET band above: a setter arriving early is more legs finishing
+			## before their window, and every one of those reads as perceptible
+			## to an instrument that only asks whether the two durations differ.
+			## Measured at 0.0579.
+			and float(ratio.get("perceptible_rate", 1.0)) < 0.07,
 		"Allotted duration and the movement model agree for every phase type",
 	)
 	## The residual is discretisation, not disagreement: this sweep measures the
