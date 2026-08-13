@@ -1054,6 +1054,13 @@ func _build_movement_plan(
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["approach_start_position"]
 			)
+		## The corner a setter had to turn round somebody standing in the way.
+		## The resolver charged the leg for the bend already; without this the
+		## drawn run is a straight line at a pace it never explains.
+		elif next_contact.metadata.has("navigation_waypoint"):
+			plan[next_actor_id]["waypoint"] = Vector2(
+				next_contact.metadata["navigation_waypoint"]
+			)
 	## Who the resolver named this window, remembered for the next one.
 	_previously_placed = {}
 	for key in ["home_phase_targets", "opponent_phase_targets"]:

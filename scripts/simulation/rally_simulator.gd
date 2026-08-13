@@ -1975,6 +1975,7 @@ func resolve(
 	(result.events[-1] as RallyEvent).metadata["rescue_height_meters"] = set_height_extra
 	(result.events[-1] as RallyEvent).metadata["height_difficulty"] = set_height_difficulty
 	var set_event := result.events[-1] as RallyEvent
+	_stamp_second_contact_claim(set_event, setter_choice)
 	if set_event != null and not home_transition_targets.is_empty():
 		set_event.metadata["home_phase_targets"] = home_transition_targets
 		set_event.metadata["home_phase_intents"] = home_transition_intents
@@ -3464,8 +3465,18 @@ func _resolve_opponent_transition(
 	var setter_start: Vector2 = opponent_live_positions.get(
 		opponent_setter.id, opponent_team.court_position(opponent_setter.id, "transition")
 	)
+	## The corner this setter has to turn, from the same chooser the home side
+	## uses. Only the detour is taken across, not the chooser's travel time: that
+	## is timed on the `transition` profile and this path has always used
+	## `lateral`, and swapping the profile here would be a second change wearing
+	## this one's name.
+	var opponent_detour: Variant = _navigation_waypoint(
+		opponent_setter, setter_start, opponent_setter_position,
+		opponent_second_contact.starts,
+	)
 	var setter_move_time := _movement_time(
-		opponent_setter, setter_start, opponent_setter_position, "lateral"
+		opponent_setter, setter_start, opponent_setter_position, "lateral",
+		opponent_detour,
 	)
 	## The same quantity the home setter is scored on: how much of the pass
 	## flight is left once they have reached the ball. A setter who arrives
@@ -3767,6 +3778,9 @@ func _resolve_opponent_transition(
 				opponent_set_contact_time
 			)})
 	var opponent_set_event := result.events[-1] as RallyEvent
+	_stamp_second_contact_claim(opponent_set_event, opponent_setter_choice)
+	if opponent_detour != null and opponent_set_event != null:
+		opponent_set_event.metadata["navigation_waypoint"] = Vector2(opponent_detour)
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
 	## Provisional: recomputed below once preparation has staged the hitter.
 	var hitter_arrival_margin: float = set_flight_time - float(attack_choice.travel_time)
@@ -4998,6 +5012,7 @@ func _resolve_home_continuation(
 				"set", set_contact, set_target, continuation_flight_time,
 				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
 			)})
+	_stamp_second_contact_claim(result.events[-1] as RallyEvent, setter_choice)
 	live_positions[setter.id] = set_contact
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
@@ -8678,17 +8693,24 @@ func _recovery_debt(player_id: int, at_time: float) -> float:
 ## than through. Worst obstruction only: a voli threading two bodies takes the
 ## wider berth, and stacking every detour would bend a path into a spiral for
 ## a court that has five other people on it.
+## `bodies` is the caller's own side, id to position. It is deliberately not
+## `live_positions`: that dictionary is the home side only and holds just the
+## players who have already moved this rally, so the opponent's setter was
+## being tested against bodies on the far half of the net -- never within
+## clearance, so the whole thing was inert over there. The second-contact
+## candidate `starts` are side-correct and cover all six, so they are what gets
+## passed in.
 func _navigation_waypoint(
-	mover: VolleyballPlayer, start: Vector2, target: Vector2
+	mover: VolleyballPlayer, start: Vector2, target: Vector2, bodies: Dictionary
 ) -> Variant:
 	if mover == null or start.is_equal_approx(target):
 		return null
 	var worst_shortfall := 0.0
 	var corner: Variant = null
-	for other_id in live_positions:
+	for other_id in bodies:
 		if int(other_id) == mover.id:
 			continue
-		var here := Vector2(live_positions[other_id])
+		var here := Vector2(bodies[other_id])
 		var closest := Geometry2D.get_closest_point_to_segment(here, start, target)
 		var offset := RallyKinematics.court_delta_meters(here, closest)
 		var gap := offset.length()
@@ -8715,6 +8737,38 @@ func _navigation_waypoint(
 			direction.y * shortfall / CourtConstants.COURT_LENGTH_METERS,
 		)
 	return corner
+
+
+## Puts the second-contact claim onto the event that resulted from it.
+##
+## `_spatial_setter_choice` computes the reach margin, the claim gap, the seam
+## and the corner the setter had to turn, and until this existed exactly one of
+## them -- the travel time -- left the function. The rest were computed and
+## dropped at the seam, which is the fault this file has now made four times.
+##
+## `navigation_waypoint` is the one with a drawn consequence: both playback
+## paths already stage a corner for a hitter's approach, and a setter running
+## round the passer who stepped in short is the same shape of leg.
+##
+## Skipped wholesale when the live setter replaced the chosen body, because
+## then every field describes somebody who did not take the ball.
+func _stamp_second_contact_claim(event: RallyEvent, choice: Dictionary) -> void:
+	if event == null or choice.is_empty():
+		return
+	var chosen := choice.get("player") as VolleyballPlayer
+	if chosen == null or int(event.actor_id) != chosen.id:
+		return
+	## `arrival_margin` is deliberately not on this list: every call site already
+	## stamps its own, computed after the live-setter override may have moved
+	## the contact window, and the chooser's is the pre-override figure.
+	for key in [
+		"reach_margin_meters", "claim_margin", "seam_conflict", "contested_by",
+		"claimant_count",
+	]:
+		if choice.has(key):
+			event.metadata[key] = choice[key]
+	if choice.get("navigation_waypoint") != null:
+		event.metadata["navigation_waypoint"] = Vector2(choice["navigation_waypoint"])
 
 
 func _spatial_setter_choice(
@@ -8745,7 +8799,7 @@ func _spatial_setter_choice(
 		## round them now and the cost is the bend, not a charge -- see
 		## `_navigation_waypoint`, and note that `_movement_time` already staged a
 		## corner correctly, carrying speed through it rather than restarting.
-		var detour: Variant = _navigation_waypoint(candidate, start, target)
+		var detour: Variant = _navigation_waypoint(candidate, start, target, starts)
 		var travel_time := _movement_time(
 			candidate, start, target, "transition", detour
 		) + float(player_recovery.get(candidate.id, {}).get("delay", 0.0)) \
@@ -8808,14 +8862,23 @@ func _spatial_setter_choice(
 	## concept, so a setter and a libero converging on the same ball were
 	## indistinguishable from a setter taking it alone.
 	claimants.sort_custom(func(a, b) -> bool: return float(a.score) > float(b.score))
+	## **A sentinel inside the range of real values is not a sentinel.** The
+	## no-rival case used to publish `claim_margin = 1.0`, and real gaps run up
+	## to 1.201 -- so the distribution the seam threshold acts on was mostly a
+	## stand-in that could not be told apart from a genuine wide gap. Measured
+	## over 1,520 second contacts: median 1.000, p05 1.000. More than half were
+	## the stand-in, which is why `SECOND_CONTACT_SEAM_MARGIN` fired zero times.
+	##
+	## Uncontested now publishes no gap at all. `claimant_count` says which case
+	## it was, so "nobody else could reach it" stays distinguishable from "one
+	## other could, and was well behind".
+	best["claimant_count"] = claimants.size()
+	best["seam_conflict"] = false
 	if claimants.size() >= 2:
 		var gap := float(claimants[0].score) - float(claimants[1].score)
 		best["claim_margin"] = gap
 		best["seam_conflict"] = gap < SECOND_CONTACT_SEAM_MARGIN
 		best["contested_by"] = int(claimants[1].id)
-	else:
-		best["claim_margin"] = 1.0
-		best["seam_conflict"] = false
 	return best
 
 

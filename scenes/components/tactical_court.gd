@@ -332,6 +332,13 @@ func animate_spatial_transition(
 			unit_movement_waypoints[movement_player_id] = Vector2(
 				next_contact_event.metadata["approach_start_position"]
 			)
+		## A setter who had to run round somebody. The resolver already timed the
+		## leg through this corner, so drawing the straight line was drawing a
+		## body through another body and calling it the same duration.
+		elif next_contact_event.metadata.has("navigation_waypoint"):
+			unit_movement_waypoints[movement_player_id] = Vector2(
+				next_contact_event.metadata["navigation_waypoint"]
+			)
 	for raw_player_id in unit_movement_targets:
 		var player_id := int(raw_player_id)
 		var start := _live_playback_position(player_id)

@@ -111,18 +111,63 @@ chasing it; judging them from a formation slot is the same confusion between a
 body and its assignment that `assigned_reach` was already caught making one
 field below.
 
+**Collisions are in, and they fire.** `_navigation_waypoint` returns the corner
+a voli has to turn round a body standing in their line, `_movement_time` times
+the staged route through it, and both playback paths draw the bend -- the 2D
+court through `unit_movement_waypoints`, the 3D court through the plan's
+`waypoint`, both of which already existed for a hitter's approach. A collision
+bends a run; it does not cancel one, and it is not a published reason.
+
+Measured over 1,500 rallies / 1,520 second contacts
+(`tools/obstruction_probe.tscn`):
+
+| | |
+|---|---|
+| obstructed second contacts | **710, 46.71%** |
+| detour off the straight line | median 0.199 m, mean 0.244 m, p95 0.638 m, max 0.722 m |
+
+**The rate is the open question.** Half of all second contacts having somebody
+in the way is a crowded court, not the design intent -- which was the setter who
+ran into the passer stepping in short. The bends themselves are small, so the
+time cost is minor either way; what is wrong is the frequency, and the two
+candidate causes are `OBSTRUCTION_CLEARANCE_M` (0.715, the widest torso, so a
+*brush* counts as an obstruction) and the fact that the obstructing bodies are
+sampled once at leg start and never move out of the way. Do not tune the
+clearance without deciding which.
+
 Still to do here:
 
 1. The interception attempt, in the shape above.
-2. **Collisions.** Nothing anywhere models one body impeding another's path --
-   the setter who *could* have reached it but ran into a hitter's approach or a
-   libero's dive. Not a movement-model change: `traversal_seconds` should stay
-   pure kinematics. It belongs after the claim, as a second pass asking whether
-   the winner's path crossed a committed body during the window, downgrading or
-   transferring the contact.
-3. `SECOND_CONTACT_SEAM_MARGIN` is 0.10 and **unmeasured**. Nothing has ever
-   published a second-contact claim gap, so there is no distribution to cut it
-   from. It is a starting value; the probe comes before the tuning.
+2. **The reach margin says the chosen setter cannot reach the ball.** Median
+   -0.902 m, mean -1.033 m, p95 +0.694 m -- so for most second contacts the
+   coverage model reports the body that took the ball as out of range. Either
+   the margin is measured with the wrong instrument or the claim is fiction,
+   and the evidence points at the instrument: `evaluate_arrival` charges a
+   0.18-0.56 s reaction delay out of a window that is only the pass flight,
+   and a setter releasing to the target does not react to the pass -- they
+   started on the serve. Removing that delay alone is worth roughly 1.5 m at
+   4 m/s, against a 0.9 m median shortfall. Measure before changing it.
+3. `SECOND_CONTACT_SEAM_MARGIN` is 0.10 and **fired zero times in 1,520
+   contacts** -- and now that it can be measured, it is a threshold outside its
+   own distribution, §0's exact shape.
+
+   Two things were hiding it. The sentinel: the no-rival case published
+   `claim_margin = 1.0` while real gaps run to 1.201, so a stand-in that was
+   indistinguishable from a genuine wide gap made up the *median* of the
+   published figures. That is gone -- uncontested publishes no gap and a
+   `claimant_count` instead. What was underneath:
+
+   | | |
+   |---|---|
+   | second contacts with any rival claimant | **40 of 1,520, 2.6%** |
+   | real claim gap | p05 0.142, median 0.861, mean 0.755, p95 1.143, max 1.201 |
+
+   0.10 sits below the 5th percentile of the distribution it cuts, so no gap
+   this engine produces can reach it. It is not a value that wants nudging:
+   the 2.6% contest rate is item 2 wearing a different face -- with most
+   candidates reported unreachable there is rarely a second claimant to have a
+   seam with. Fix the reach margin, re-measure, then cut the threshold from
+   whatever distribution survives.
 
 ## §5 Measurement debt
 
