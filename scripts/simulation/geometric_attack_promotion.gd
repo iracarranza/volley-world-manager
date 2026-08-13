@@ -293,6 +293,9 @@ static func block_wall(
 			## gates, and a renderer that had to branch on a feature flag to know
 			## when a body is in the air would be reading a switch for an answer
 			## about physics.
+			## What shape the wall took, derived from the close that already sets
+			## its width rather than rolled separately.
+			"arm_commitment": str(BlockJumpModelRef.arm_commitment(close)),
 			"timing_error_seconds": float(jump.timing_error_seconds),
 			"hang_seconds": float(jump.hang_seconds),
 			"monster_block_charge": SignatureMoveModelRef.charge(

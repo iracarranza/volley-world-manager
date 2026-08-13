@@ -668,6 +668,16 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 			"action_power",
 			event.metadata.get("attack_effectiveness", event.quality),
 		)), 0.0, 1.0)
+	## The wall's jump, carried whole rather than per actor: the court indexes it
+	## by player id because two blockers in one wall have two different jumps, and
+	## slicing it here would hand each body only its own and lose that.
+	##
+	## Added because the court was already reading this key and nothing put it
+	## here -- a plumb that arrives and changes nothing looks exactly like one
+	## that works, which is the failure the block-timing gate exists to catch and
+	## which had reappeared one layer further up.
+	if int(event.event_type) == RallyEventModel.EventType.BLOCK:
+		context["block_jump_timing"] = event.metadata.get("block_jump_timing", {})
 	var signature_actor := int(event.metadata.get("signature_actor_id", event.actor_id))
 	if signature_actor == actor_id:
 		var move := str(event.metadata.get("signature_move", ""))

@@ -69,6 +69,15 @@ var contact_platform_aim: Dictionary = {}
 ## fall rolls sideways, a moving/reaching fall slides forward, and a blow-away
 ## rolls backward. The simulation still owns the cost and severity.
 var contact_recovery: String = "platform"
+
+## How much of a wall this blocker got up: `two`, `one`, or `none`.
+##
+## Carried as state for the same reason `contact_posture` is -- the resolver
+## decided it and the court's job is to hand that verdict over, not to form a
+## second opinion from the positions. Derived upstream from the close fraction
+## that already sets the wall's width, so a half-formed wall is now half-formed
+## in the picture as well as in the contest.
+var block_arms: StringName = &"two"
 ## What this voli stands like when they are not playing the ball -- "defending",
 ## "blocking" or "watching". See `ReadyStance`, which owns both the joints and
 ## the choice between them.
@@ -1715,6 +1724,13 @@ const DEFAULT_SQUARE_UP_PHASE: float = -0.60
 ## the ball arrive at a surface that is already still.
 const PLATFORM_PHASE: float = -0.34
 const PLATFORM_SET_PHASE: float = -0.08
+
+## How far up an arm that did not make the wall still comes.
+##
+## Not zero: a blocker who only got one arm across is not standing with the other
+## by their side, they are travelling with it. Most of the way back to the gait
+## keeps it recognisably an arm in motion rather than a second wall.
+const TRAILING_ARM_REACH: float = 0.30
 ## And when the legs finish driving through it.
 ##
 ## **A pass is played with the legs.** The platform is set early and then held
@@ -2159,8 +2175,37 @@ func set_pose(
 			right_arm.position.y = shoulder_offset.y + girdle
 			var reach := float(wall.shoulder_degrees)
 			var spread := float(wall.hand_spread_degrees)
-			left_arm.rotation_degrees = Vector3(reach, 0.0, -spread)
-			right_arm.rotation_degrees = Vector3(reach, 0.0, spread)
+			## **Both arms only when both arms got there.**
+			##
+			## The wall's width has always narrowed with an unfinished close --
+			## `half_width_m` is the close fraction times a body's half width --
+			## and the drawing showed two arms locked out regardless, so a
+			## one-armed reach and a sealed double block were the same picture.
+			##
+			## The uncommitted arm falls back toward the angle the gait already
+			## put it at rather than having its reach scaled: `reach` is a
+			## shoulder angle in degrees, and a fraction of an angle is not
+			## a fraction of a movement. Interpolating to where the arm would
+			## otherwise be is the only version that means anything.
+			var trailing := lerpf(
+				float(gait.left_arm_degrees), reach, TRAILING_ARM_REACH
+			)
+			var lead_left := contact_direction.x < 0.0
+			var left_reach := reach
+			var right_reach := reach
+			match block_arms:
+				&"one":
+					## Reaching with the arm on the ball's side, which is the side
+					## they were still travelling toward when they ran out of time.
+					if lead_left:
+						right_reach = trailing
+					else:
+						left_reach = trailing
+				&"none":
+					left_reach = trailing
+					right_reach = trailing
+			left_arm.rotation_degrees = Vector3(left_reach, 0.0, -spread)
+			right_arm.rotation_degrees = Vector3(right_reach, 0.0, spread)
 			## Straight at the press, and deliberately so. A block that bends at
 			## the elbow is a block that gets driven back through the net, and
 			## keeping it near zero *there* is what makes a block read as a wall

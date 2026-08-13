@@ -469,6 +469,13 @@ func set_player_pose(
 	actor.contact_posture = contact_posture
 	actor.contact_recovery = contact_recovery
 	actor.contact_platform_aim = platform_aim
+	## How much of a wall this blocker got up, from the resolver rather than from
+	## the positions. `two` for anyone who is not blocking, which is what the rig
+	## does with it anyway -- the branch only runs inside the block pose.
+	actor.block_arms = StringName(str(
+		Dictionary(action_context.get("block_jump_timing", {}))
+			.get(player_id, {}).get("arms", "two")
+	))
 	actor.set_pose(
 		event_type, elevation, phase, direction, highlighted, action_context
 	)

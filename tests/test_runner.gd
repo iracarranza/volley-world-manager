@@ -8866,6 +8866,37 @@ func _test_a_blocker_lands_when_their_jump_ends() -> void:
 		"an error past the whole jump leaves the blocker grounded rather than negative",
 	)
 
+	## **How much of a wall came up, derived rather than rolled.**
+	##
+	## The width already narrows with an unfinished close -- `half_width_m` is the
+	## close times a body's half width -- so arm count is the shape that number
+	## always implied and nobody had named. The thresholds are the measured close
+	## quartiles recorded on `LATE_CLOSE_THRESHOLD` (p10 0.475, p25 0.785, p50
+	## 1.00), which is why these assertions are stated against that distribution.
+	_check(
+		BLOCK_JUMP_SCRIPT.arm_commitment(1.00) == &"two"
+			and BLOCK_JUMP_SCRIPT.arm_commitment(0.90) == &"two",
+		"a blocker who finished the close puts two arms up",
+	)
+	_check(
+		BLOCK_JUMP_SCRIPT.arm_commitment(0.60) == &"one",
+		"a blocker short of the close reaches with one",
+	)
+	_check(
+		BLOCK_JUMP_SCRIPT.arm_commitment(0.20) == &"none",
+		"a blocker still travelling has hands, not a wall",
+	)
+	## At least half the population has to land on two arms, or the common case is
+	## being drawn as the exception -- the median close is 1.00, so anything else
+	## would mean the thresholds had drifted off the distribution they were cut
+	## from.
+	_check(
+		BLOCK_JUMP_SCRIPT.arm_commitment(
+			BLOCK_JUMP_SCRIPT.CLOSE_FOR_TWO_ARMS
+		) == &"two" and BLOCK_JUMP_SCRIPT.CLOSE_FOR_TWO_ARMS <= 0.80,
+		"the two-arm cut sits at the measured quartile, so the median block is a wall",
+	)
+
 	## And a taller blocker is genuinely airborne longer, so the window is the
 	## jump's and not a constant wearing the jump's name.
 	var taller := _airborne_seconds(BLOCK_JUMP_SCRIPT.jump_timeline(4.00, 0.85))

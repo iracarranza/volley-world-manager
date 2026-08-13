@@ -285,3 +285,33 @@ static func resolve(
 		"timing_error_seconds": error,
 		"hang_seconds": hang,
 	}
+
+
+## How much of a wall this blocker actually got up.
+##
+## **Not a new roll, and deliberately not one.** The wall's width is already
+## `BLOCKER_HALF_WIDTH_METERS * width_scale * close` -- it narrows when a blocker
+## does not finish closing and when the intent asks them to funnel rather than
+## seal. Nobody had ever said what a narrowed width *looks like*, so the contest
+## priced a half-formed wall correctly while the drawing showed two arms locked
+## out either way. This names the shape the existing number already implies: a
+## blocker who could not finish the close reaches with one arm, because that is
+## what reaching while still travelling is.
+##
+## The thresholds are the measured close quartiles rather than chosen values.
+## `LATE_CLOSE_THRESHOLD` above records the live distribution -- p10 0.475, p25
+## 0.785, p50 1.00 -- so a quarter of blocks come up short of a full two-arm
+## wall and about a tenth are not a wall at all, which is the split the sport
+## has names for.
+const CLOSE_FOR_TWO_ARMS: float = 0.785
+const CLOSE_FOR_ONE_ARM: float = 0.475
+
+static func arm_commitment(close_fraction: float) -> StringName:
+	var close := clampf(close_fraction, 0.0, 1.0)
+	if close >= CLOSE_FOR_TWO_ARMS:
+		return &"two"
+	if close >= CLOSE_FOR_ONE_ARM:
+		return &"one"
+	## Up, but not blocking. A body still travelling laterally when the ball
+	## arrives has hands somewhere; it does not have a wall.
+	return &"none"

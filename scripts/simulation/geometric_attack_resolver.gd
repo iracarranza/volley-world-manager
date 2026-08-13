@@ -1050,5 +1050,7 @@ static func _wall_jump_timing(blockers: Array) -> Dictionary:
 			## jump. `resolve` makes that split on the close fraction rather than
 			## on a draw, and it is the sign the apex is offset by.
 			"late": str(blocker.get("arm_state", "extended")) == "rising",
+			## Two arms, one, or none -- the shape of the wall this body made.
+			"arms": str(blocker.get("arm_commitment", "two")),
 		}
 	return out
