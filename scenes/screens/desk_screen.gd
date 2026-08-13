@@ -61,13 +61,62 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 ## not know what a screen is.
 signal opened(what: String)
 
-## How far the far edge of the desk narrows, as a share of the near edge.
+## ## Everything is in centimetres, and there is one angle
+##
+## The first pass had three scales that never met. The desk was in shares of
+## itself, heights were in "units of about a centimetre" against a hand-picked
+## pixel rise, and the wall, the window, the lamp and the mug were drawn in raw
+## screen pixels with no projection at all -- so the window did not recede, the
+## lamp leaned the wrong way, and nothing in the room could be compared to
+## anything else. That is why the scale would not read: there was no scale.
+##
+## So there is one now. The desk is a real size, the room is a real distance
+## behind it, every object's footprint and height are in centimetres, and the
+## viewing angle is a single number that everything else is derived from:
+##
+##     px per cm of depth  = desk depth on screen / DESK_DEPTH_CM
+##     px per cm of height = px per cm of depth / tan(elevation)
+##
+## Stating the angle rather than the rise is what makes it checkable. The old
+## constants worked out to an elevation of about **64 degrees** while the header
+## claimed twenty-five -- nearly overhead, described as if from a chair, and no
+## number in the file disagreed with any other because none of them were in the
+## same units.
+const DESK_WIDTH_CM: float = 140.0
+const DESK_DEPTH_CM: float = 70.0
+## How far behind the desk the wall is, and how high the window sits on it.
+## **The desk is against the wall, and the window is cropped.**
+##
+## Both follow from the angle rather than being chosen. Once the elevation is
+## honest, a centimetre of *height* is worth more screen than a centimetre of
+## depth -- so a wall sixty centimetres behind the desk with a window at
+## windowsill height projects several hundred pixels above the top of the frame,
+## and the first pass at real units simply lost both off the top.
+##
+## The answer is not to fake the projection back down. It is that this is a shot
+## of somebody's desk pushed against a wall: eight centimetres of gap, a low sill,
+## and a window whose head runs off the top of the frame the way it does in any
+## photograph taken from a chair. What you can see is the bottom of the window,
+## which is all you ever see of a window you are sitting under.
+const WALL_BEHIND_CM: float = 8.0
+const WINDOW_SILL_CM: float = 13.0
+const WINDOW_HEIGHT_CM: float = 54.0
+const WINDOW_WIDTH_CM: float = 58.0
+const WINDOW_LEFT_CM: float = 5.0
+
+## Where the eye is, above the surface. Fifty-two degrees is somebody at a desk
+## with their chair pulled in: low enough that a book shows its own front cover
+## and a mug is a cylinder, high enough that the surface is still a surface and
+## the things on it can be told apart.
+const ELEVATION_DEGREES: float = 52.0
+## How far the far edge narrows. The only perspective in the projection, and the
+## one that matters -- a desk from a chair is a trapezoid and a rectangle reads as
+## a wall.
 const FAR_NARROWING: float = 0.80
-## Screen pixels per unit of height, and the lever that sets the viewing angle:
-## bigger is a lower chair. At 3.9 a five-unit book shows about twenty pixels of
-## its own front cover, which is a book you can see is shut.
-const RISE: float = 3.9
-const WALL_SHARE: float = 0.20
+## How much of the frame is above the desk's far edge. Larger than it was,
+## because the room needs somewhere to be: at 0.20 the wall was a strip and the
+## window had to be painted flat on it to fit at all.
+const WALL_SHARE: float = 0.32
 const LIP: float = 12.0
 
 ## ## What is on the desk
@@ -75,64 +124,74 @@ const LIP: float = 12.0
 ## `foot` is the footprint in desk space -- `x`/`y` are the far-left corner's
 ## `u`/`v`, `w`/`h` its extent across and back-to-front. `rest` is what it is lying
 ## on and `height` is how thick it is, both in `RISE`'s units.
+## ## What is on the desk
+##
+## `foot` is the footprint **in centimetres** on a 140x70 desk: `x`/`y` are the
+## far-left corner, `w`/`h` the extent across and back-to-front. `rest` and
+## `height` are centimetres too. Because the footprint is in real units, a mug
+## beside a journal comes out the right size without anybody choosing how big a
+## mug should look.
 const OBJECTS := [
 	{
-		"key": "encyclopedia", "label": "Encyclopedia",
-		"tip": "The encyclopedia", "foot": Rect2(0.035, 0.06, 0.150, 0.20),
-		"tilt": -5.0, "rest": 0.0, "height": 8.0,
+		"key": "encyclopedia", "label": "Encyclopedia", "tip": "The encyclopedia",
+		"foot": Rect2(7.0, 3.0, 21.0, 27.0), "tilt": -5.0,
+		"rest": 0.0, "height": 6.5,
 	},
 	{
 		"key": "lamp", "label": "", "tip": "",
-		"foot": Rect2(0.615, 0.02, 0.085, 0.10),
-		"tilt": 0.0, "rest": 0.0, "height": 42.0,
+		## Shorter and to the right of the window, because a lamp at forty
+		## centimetres crosses the whole frame at this angle -- which is true of a
+		## real lamp and makes for a worse photograph.
+		"foot": Rect2(96.0, 2.0, 13.0, 13.0), "tilt": 0.0,
+		"rest": 0.0, "height": 30.0,
 	},
 	{
-		"key": "phone", "label": "Telephone",
-		"tip": "The telephone", "foot": Rect2(0.795, 0.10, 0.145, 0.17),
-		"tilt": -4.0, "rest": 0.0, "height": 8.0,
+		"key": "phone", "label": "Telephone", "tip": "The telephone",
+		"foot": Rect2(111.0, 6.0, 22.0, 16.0), "tilt": -4.0,
+		"rest": 0.0, "height": 7.0,
 	},
 	{
-		"key": "journal", "label": "The journal",
-		"tip": "The journal", "foot": Rect2(0.430, 0.20, 0.270, 0.31),
-		"tilt": -2.0, "rest": 0.0, "height": 5.0,
+		"key": "journal", "label": "The journal", "tip": "The journal",
+		"foot": Rect2(60.0, 15.0, 38.0, 25.0), "tilt": -2.0,
+		"rest": 0.0, "height": 4.5,
 	},
 	{
-		"key": "machine", "label": "Answering machine",
-		"tip": "The answering machine", "foot": Rect2(0.790, 0.36, 0.155, 0.14),
-		"tilt": 3.0, "rest": 0.0, "height": 6.0,
+		"key": "machine", "label": "Answering machine", "tip": "The answering machine",
+		"foot": Rect2(110.0, 27.0, 24.0, 13.0), "tilt": 3.0,
+		"rest": 0.0, "height": 5.0,
 	},
 	{
-		"key": "scouting", "label": "Scouting board",
-		"tip": "The scouting board", "foot": Rect2(0.030, 0.34, 0.245, 0.40),
-		"tilt": 2.0, "rest": 0.0, "height": 2.5,
+		"key": "scouting", "label": "Scouting board", "tip": "The scouting board",
+		"foot": Rect2(3.0, 25.0, 35.0, 31.0), "tilt": 2.0,
+		"rest": 0.0, "height": 1.4,
 	},
 	{
 		## Lying across the journal's near edge and the board, which is what
 		## `rest` buys: it is above both, occludes both and shadows both, and none
 		## of that is drawn -- it follows from one number.
-		"key": "training", "label": "Training clipboard",
-		"tip": "The clipboard", "foot": Rect2(0.215, 0.30, 0.215, 0.34),
-		"tilt": 7.0, "rest": 2.5, "height": 4.0,
+		"key": "training", "label": "Training clipboard", "tip": "The clipboard",
+		"foot": Rect2(28.0, 21.0, 31.0, 27.0), "tilt": 7.0,
+		"rest": 1.4, "height": 2.4,
 	},
 	{
 		"key": "settings", "label": "", "tip": "Settings",
-		"foot": Rect2(0.815, 0.58, 0.075, 0.10),
-		"tilt": -8.0, "rest": 0.0, "height": 9.0,
+		"foot": Rect2(115.0, 45.0, 12.0, 10.0), "tilt": -8.0,
+		"rest": 0.0, "height": 7.5,
 	},
 	{
-		"key": "housing", "label": "Housing folder",
-		"tip": "The housing folder", "foot": Rect2(0.275, 0.52, 0.235, 0.32),
-		"tilt": -4.0, "rest": 0.0, "height": 3.0,
+		"key": "housing", "label": "Housing folder", "tip": "The housing folder",
+		"foot": Rect2(37.0, 39.0, 34.0, 25.0), "tilt": -4.0,
+		"rest": 0.0, "height": 1.8,
 	},
 	{
-		"key": "kitchen", "label": "Meal plan",
-		"tip": "The meal plan", "foot": Rect2(0.500, 0.60, 0.190, 0.28),
-		"tilt": 8.0, "rest": 0.0, "height": 3.5,
+		"key": "kitchen", "label": "Meal plan", "tip": "The meal plan",
+		"foot": Rect2(69.0, 45.0, 28.0, 22.0), "tilt": 8.0,
+		"rest": 0.0, "height": 2.2,
 	},
 	{
 		"key": "mug", "label": "", "tip": "",
-		"foot": Rect2(0.700, 0.28, 0.062, 0.075),
-		"tilt": 0.0, "rest": 0.0, "height": 11.0,
+		"foot": Rect2(99.0, 19.0, 9.0, 9.0), "tilt": 0.0,
+		"rest": 0.0, "height": 9.5,
 	},
 ]
 
@@ -262,12 +321,28 @@ class _Surface extends Control:
 		var top := size.y * WALL_SHARE
 		return Rect2(Vector2(0.0, top), Vector2(size.x, size.y - top - LIP))
 
-	func _to_screen(u: float, v: float, h: float) -> Vector2:
+	## Pixels per centimetre of height, derived from the elevation rather than
+	## chosen. The one place the angle turns into a number, so there is nothing to
+	## keep in step with it.
+	func _rise() -> float:
 		var desk := _desk()
+		return (desk.size.y / DESK_DEPTH_CM) / tan(deg_to_rad(ELEVATION_DEGREES))
+
+	## Centimetres on the desk to pixels on the screen.
+	##
+	## `v` is allowed to go **negative**, and that is what puts the room behind the
+	## desk in the same projection as the desk: the wall is simply at a large
+	## negative depth, so the narrowing extrapolates and the window is narrower
+	## than the desk's far edge -- which is what it looks like, and is why the
+	## window drawn in flat screen pixels never sat in the room.
+	func _to_screen(u_cm: float, v_cm: float, h_cm: float) -> Vector2:
+		var desk := _desk()
+		var v := v_cm / DESK_DEPTH_CM
 		var narrow := lerpf(FAR_NARROWING, 1.0, v)
 		return Vector2(
-			desk.position.x + desk.size.x * 0.5 + (u - 0.5) * desk.size.x * narrow,
-			desk.position.y + v * desk.size.y - h * RISE
+			desk.position.x + desk.size.x * 0.5
+				+ (u_cm / DESK_WIDTH_CM - 0.5) * desk.size.x * narrow,
+			desk.position.y + v * desk.size.y - h_cm * _rise()
 		)
 
 	## The four corners of a footprint at a height, turned about its own centre.
@@ -286,14 +361,17 @@ class _Surface extends Control:
 	##
 	## Every model below is built from this rather than from a screen rectangle,
 	## which is what keeps a detail *on* the object when the object moves or turns.
+	##
+	## The rotation is a plain `rotated` now: centimetre space is square, so a
+	## turn is a turn. It used to need an aspect correction applied and undone,
+	## because the footprint was in shares of a desk that is twice as wide as it is
+	## deep -- a unit across and a unit back were different lengths, and rotating in
+	## that space shears rather than turns.
 	func _at(entry: Dictionary, s: float, t: float, h: float) -> Vector2:
 		var foot: Rect2 = entry["foot"]
 		var centre := foot.position + foot.size * 0.5
-		var turn := deg_to_rad(float(entry["tilt"]))
-		var aspect := maxf(foot.size.y, 0.001) / maxf(foot.size.x, 0.001)
-		var local := Vector2((s - 0.5) * foot.size.x, (t - 0.5) * foot.size.y / aspect)
-		var turned := local.rotated(turn)
-		var at := centre + Vector2(turned.x, turned.y * aspect)
+		var local := Vector2((s - 0.5) * foot.size.x, (t - 0.5) * foot.size.y)
+		var at := centre + local.rotated(deg_to_rad(float(entry["tilt"])))
 		return _to_screen(at.x, at.y, h)
 
 	func _quad(
@@ -380,23 +458,18 @@ class _Surface extends Control:
 			Rect2(Vector2.ZERO, Vector2(size.x, desk.position.y)),
 			WALL_LIGHT if light else WALL_DARK, true
 		)
-		_draw_window(light, desk.position.y)
+		_draw_window(light)
 
 		## The desk top as the trapezoid it is, taken from the projection rather
 		## than drawn as a rect -- so the surface and the things standing on it
 		## cannot disagree about where the far edge went.
 		var wood := WOOD_LIGHT if light else WOOD_DARK
-		draw_colored_polygon(
-			PackedVector2Array([
-				_to_screen(0.0, 0.0, 0.0), _to_screen(1.0, 0.0, 0.0),
-				_to_screen(1.0, 1.0, 0.0), _to_screen(0.0, 1.0, 0.0),
-			]), wood
-		)
+		draw_colored_polygon(PackedVector2Array(_desk_corners()), wood)
 		_draw_grain(wood)
 		if not light:
 			_draw_lamplight()
-		var near_left := _to_screen(0.0, 1.0, 0.0)
-		var near_right := _to_screen(1.0, 1.0, 0.0)
+		var near_left := _to_screen(0.0, DESK_DEPTH_CM, 0.0)
+		var near_right := _to_screen(DESK_WIDTH_CM, DESK_DEPTH_CM, 0.0)
 		draw_colored_polygon(
 			PackedVector2Array([
 				near_left, near_right,
@@ -405,83 +478,116 @@ class _Surface extends Control:
 		)
 		draw_colored_polygon(
 			PackedVector2Array([
-				_to_screen(0.0, 0.0, 0.0), _to_screen(1.0, 0.0, 0.0),
-				_to_screen(1.0, 0.07, 0.0), _to_screen(0.0, 0.07, 0.0),
+				_to_screen(0.0, 0.0, 0.0), _to_screen(DESK_WIDTH_CM, 0.0, 0.0),
+				_to_screen(DESK_WIDTH_CM, 5.0, 0.0), _to_screen(0.0, 5.0, 0.0),
 			]), Color(0.0, 0.0, 0.0, 0.22)
 		)
+
+	func _desk_corners() -> Array:
+		return [
+			_to_screen(0.0, 0.0, 0.0), _to_screen(DESK_WIDTH_CM, 0.0, 0.0),
+			_to_screen(DESK_WIDTH_CM, DESK_DEPTH_CM, 0.0),
+			_to_screen(0.0, DESK_DEPTH_CM, 0.0),
+		]
 
 	## Boards running across the desk and narrowing with it. Grain runs one way,
 	## which is what stops a plank reading as stone -- and the boards follow the
 	## projection, so the perspective is in the surface and not only in what stands
 	## on it.
 	func _draw_grain(wood: Color) -> void:
-		for board in range(10):
-			var v := float(board) / 9.0
+		## Boards a hand's width across, which is what a desk is made of -- and in
+		## centimetres, so the count follows from the size rather than the size
+		## being chosen to suit a count.
+		var board_cm := 11.0
+		var v := board_cm
+		while v < DESK_DEPTH_CM:
 			draw_line(
-				_to_screen(0.0, v, 0.0), _to_screen(1.0, v, 0.0),
-				Color(wood.darkened(0.22), 0.5), 1.6
+				_to_screen(0.0, v, 0.0), _to_screen(DESK_WIDTH_CM, v, 0.0),
+				Color(wood.darkened(0.24), 0.5), 1.6
 			)
-		for streak in range(34):
+			v += board_cm
+		for streak in range(36):
 			var seed_value := ((streak + 5) * 2654435761) & 0x7FFFFFFF
-			var v := float(seed_value % 1000) / 1000.0
-			var u0 := float((seed_value / 1000) % 1000) / 1000.0
+			var at_v := float(seed_value % 1000) / 1000.0 * DESK_DEPTH_CM
+			var at_u := float((seed_value / 1000) % 1000) / 1000.0 * DESK_WIDTH_CM
 			draw_line(
-				_to_screen(u0, v, 0.0), _to_screen(minf(u0 + 0.16, 1.0), v, 0.0),
-				Color(wood.lightened(0.10), 0.26), 2.4
+				_to_screen(at_u, at_v, 0.0),
+				_to_screen(minf(at_u + 22.0, DESK_WIDTH_CM), at_v, 0.0),
+				Color(wood.lightened(0.10), 0.24), 2.4
 			)
 
-	func _draw_window(light: bool, wall_bottom: float) -> void:
-		var frame := Rect2(
-			Vector2(size.x * 0.08, wall_bottom * 0.14),
-			Vector2(size.x * 0.31, wall_bottom * 0.72)
-		)
+	## The window, **on the wall plane and in the same projection as everything
+	## else**.
+	##
+	## It was drawn as a screen rectangle on a screen rectangle, which is why it
+	## would not sit in the room: the desk receded and the wall did not, so there
+	## was no distance between them for the eye to read. Put at a negative depth it
+	## narrows past the desk's far edge by the same rule the desk narrows by, and
+	## the scale question answers itself -- the window is that far away because it
+	## is that far away.
+	func _wall_point(u_cm: float, h_cm: float) -> Vector2:
+		return _to_screen(u_cm, -WALL_BEHIND_CM, h_cm)
+
+	func _draw_window(light: bool) -> void:
+		var left := WINDOW_LEFT_CM
+		var right := WINDOW_LEFT_CM + WINDOW_WIDTH_CM
+		var sill := WINDOW_SILL_CM
+		var head := WINDOW_SILL_CM + WINDOW_HEIGHT_CM
 		var top_sky := SKY_DAY_TOP if light else SKY_NIGHT_TOP
 		var low_sky := SKY_DAY_LOW if light else SKY_NIGHT_LOW
 		for band in range(20):
 			var t := float(band) / 20.0
-			draw_rect(
-				Rect2(
-					frame.position + Vector2(0.0, frame.size.y * t),
-					Vector2(frame.size.x, frame.size.y / 20.0 + 1.0)
-				), top_sky.lerp(low_sky, t), true
+			var upper := lerpf(head, sill, t)
+			var lower := lerpf(head, sill, t + 1.0 / 20.0)
+			draw_colored_polygon(
+				PackedVector2Array([
+					_wall_point(left, upper), _wall_point(right, upper),
+					_wall_point(right, lower), _wall_point(left, lower),
+				]), top_sky.lerp(low_sky, t)
 			)
 		if light:
+			## Rooftops along the bottom of the glass, in centimetres of apparent
+			## height, so they sit on the sill rather than at a pixel offset from it.
 			var roof := Color(0.42, 0.44, 0.44, 0.5)
 			for index in range(5):
 				var seed_value := ((index + 2) * 2654435761) & 0x7FFFFFFF
-				var w := frame.size.x * (0.12 + float(seed_value % 100) / 900.0)
-				var h := frame.size.y * (0.14 + float((seed_value / 100) % 100) / 460.0)
-				draw_rect(
-					Rect2(
-						Vector2(
-							frame.position.x + frame.size.x * (0.03 + 0.2 * float(index)),
-							frame.position.y + frame.size.y - h
-						), Vector2(w, h)
-					), roof, true
+				var w := WINDOW_WIDTH_CM * (0.11 + float(seed_value % 100) / 900.0)
+				var tall := WINDOW_HEIGHT_CM * (0.12 + float((seed_value / 100) % 100) / 460.0)
+				var at := left + WINDOW_WIDTH_CM * (0.02 + 0.2 * float(index))
+				draw_colored_polygon(
+					PackedVector2Array([
+						_wall_point(at, sill + tall), _wall_point(at + w, sill + tall),
+						_wall_point(at + w, sill), _wall_point(at, sill),
+					]), roof
 				)
 		else:
 			for index in range(30):
 				var seed_value := ((index + 3) * 2654435761) & 0x7FFFFFFF
-				var at := frame.position + Vector2(
-					float(seed_value % 1000) / 1000.0 * frame.size.x,
-					float((seed_value / 1000) % 1000) / 1000.0 * frame.size.y
+				var at := _wall_point(
+					left + float(seed_value % 1000) / 1000.0 * WINDOW_WIDTH_CM,
+					sill + float((seed_value / 1000) % 1000) / 1000.0 * WINDOW_HEIGHT_CM
 				)
 				draw_rect(
 					Rect2(at, Vector2(2.0, 2.0)),
 					Color(1.0, 0.92, 0.70, 0.24 + float(seed_value % 60) / 150.0), true
 				)
 		var ink := Color(0.34, 0.31, 0.27) if light else Color(0.05, 0.05, 0.07)
-		draw_rect(frame, ink, false, 5.0)
-		draw_line(
-			Vector2(frame.position.x + frame.size.x * 0.5, frame.position.y),
-			Vector2(frame.position.x + frame.size.x * 0.5, frame.position.y + frame.size.y),
-			ink, 3.0
-		)
-		draw_rect(
-			Rect2(
-				frame.position + Vector2(-7.0, frame.size.y),
-				Vector2(frame.size.x + 14.0, 6.0)
-			), ink, true
+		var frame := PackedVector2Array([
+			_wall_point(left, head), _wall_point(right, head),
+			_wall_point(right, sill), _wall_point(left, sill),
+		])
+		draw_polyline(frame + PackedVector2Array([frame[0]]), ink, 5.0)
+		var middle := left + WINDOW_WIDTH_CM * 0.5
+		draw_line(_wall_point(middle, head), _wall_point(middle, sill), ink, 3.0)
+		## The sill, which projects a little into the room -- so it is the one part
+		## of the window with depth, and the thing that says the wall is a wall
+		## rather than a picture of one.
+		draw_colored_polygon(
+			PackedVector2Array([
+				_wall_point(left - 4.0, sill), _wall_point(right + 4.0, sill),
+				_to_screen(right + 4.0, -WALL_BEHIND_CM + 7.0, sill - 1.0),
+				_to_screen(left - 4.0, -WALL_BEHIND_CM + 7.0, sill - 1.0),
+			]), Color(ink.lightened(0.18), 1.0)
 		)
 
 	## The lamp's pool, painted on the wood *before* anything is put on it -- so the
@@ -492,7 +598,7 @@ class _Surface extends Control:
 		var foot: Rect2 = lamp["foot"]
 		var at := _to_screen(
 			foot.position.x + foot.size.x * 0.5,
-			foot.position.y + foot.size.y + 0.18, 0.0
+			foot.position.y + foot.size.y + 13.0, 0.0
 		)
 		for step in range(12):
 			var t := float(step) / 12.0
@@ -836,25 +942,41 @@ class _Surface extends Control:
 		draw_circle(centre, radius * 0.24, Color(steel.darkened(0.45), 1.0))
 		draw_circle(_at(entry, 0.32, 1.0, top_h * 0.62), 3.4, Color(0.10, 0.10, 0.11))
 
-	## An anglepoise: base, elbow, arm, shade, bulb.
+	## An anglepoise, built in centimetres and projected like everything else.
+	##
+	## The old one was a screen-space stick with the shade offset by a fixed pixel
+	## count, so it leaned the wrong way and did not agree with the desk about how
+	## far away it was. Every point here is a place in the room.
 	func _model_lamp(entry: Dictionary, top_h: float, light: bool) -> void:
 		var metal := _stock_of("lamp", light)
-		var base := _at(entry, 0.5, 0.8, 0.0)
-		var elbow := _at(entry, 0.5, 0.7, top_h * 0.62)
-		var head := _at(entry, 0.5, 0.25, top_h)
-		draw_line(base, elbow, Color(metal.darkened(0.12), 1.0), 5.0)
-		draw_line(elbow, head, Color(metal.darkened(0.12), 1.0), 5.0)
+		var foot: Rect2 = entry["foot"]
+		var mid_u := foot.position.x + foot.size.x * 0.5
+		var back_v := foot.position.y + foot.size.y * 0.35
+		## A weighted disc for a base, drawn as an ellipse the projection made.
+		draw_colored_polygon(
+			PackedVector2Array(_disc(mid_u, foot.position.y + foot.size.y * 0.5, 0.6, 7.0)),
+			Color(metal.darkened(0.24), 1.0)
+		)
+		var base := _to_screen(mid_u, back_v, 1.2)
+		var elbow := _to_screen(mid_u, back_v, top_h * 0.60)
+		## The arm reaches forward over the desk, which is what an anglepoise does
+		## and is also why the pool of light lands where it does.
+		var head := _to_screen(mid_u, back_v + 16.0, top_h)
+		draw_line(base, elbow, Color(metal.darkened(0.14), 1.0), 5.0)
+		draw_line(elbow, head, Color(metal.darkened(0.14), 1.0), 5.0)
 		draw_circle(elbow, 4.2, Color(metal.lightened(0.16), 1.0))
-		var mouth_left := head + Vector2(-21.0, 27.0)
-		var mouth_right := head + Vector2(21.0, 27.0)
+		## The shade: a cone whose mouth is a real circle on a plane below the head,
+		## so it is an ellipse of the right squash rather than a hand-drawn wedge.
+		var mouth_h := top_h - 9.0
+		var mouth := _disc(mid_u, back_v + 16.0, mouth_h, 9.0)
 		draw_colored_polygon(
 			PackedVector2Array([
-				head + Vector2(-7.0, -5.0), head + Vector2(7.0, -5.0),
-				mouth_right, mouth_left,
+				head + Vector2(-6.0, -4.0), head + Vector2(6.0, -4.0),
+				mouth[0], mouth[mouth.size() / 2],
 			]), metal
 		)
-		draw_line(mouth_left, mouth_right, Color(metal.darkened(0.32), 1.0), 2.0)
-		var bulb := (mouth_left + mouth_right) * 0.5
+		draw_colored_polygon(PackedVector2Array(mouth), Color(metal.darkened(0.34), 1.0))
+		var bulb := _to_screen(mid_u, back_v + 16.0, mouth_h - 1.0)
 		draw_circle(bulb, 6.0, Color(0.32, 0.34, 0.36) if light else LAMP_WARMTH)
 		if not light:
 			for step in range(4):
@@ -863,14 +985,45 @@ class _Surface extends Control:
 					Color(LAMP_WARMTH, 0.11 / float(step + 1))
 				)
 
-	## A mug, because a desk without one is a photograph of a desk.
+	## A circle on the desk, at a height, as the projection makes it -- an ellipse
+	## squashed by the viewing angle, which is what a round thing looks like from a
+	## chair and what neither the mug nor the lampshade were before.
+	func _disc(u_cm: float, v_cm: float, h_cm: float, radius_cm: float) -> Array:
+		var points: Array = []
+		for step in range(20):
+			var angle := TAU * float(step) / 20.0
+			points.append(_to_screen(
+				u_cm + cos(angle) * radius_cm, v_cm + sin(angle) * radius_cm, h_cm
+			))
+		return points
+
+	## A mug: a cylinder with a handle, which is what it is.
+	##
+	## It was a flat ring of fixed pixel radius seen from directly above, on a desk
+	## seen from a chair -- the one object in the room drawn from a different
+	## viewpoint, which is why it read as wrong rather than as small.
 	func _model_mug(entry: Dictionary, top_h: float, light: bool) -> void:
 		var china := _stock_of("mug", light)
-		var rim := _at(entry, 0.5, 0.5, top_h)
-		draw_arc(
-			rim + Vector2(11.0, 5.0), 7.0, -PI * 0.5, PI * 0.5, 12,
-			Color(china.darkened(0.20), 1.0), 3.4
+		var foot: Rect2 = entry["foot"]
+		var mid_u := foot.position.x + foot.size.x * 0.5
+		var mid_v := foot.position.y + foot.size.y * 0.5
+		var radius := foot.size.x * 0.5
+		## The handle first, so the body draws over where it joins.
+		var handle := _to_screen(mid_u + radius, mid_v, top_h * 0.55)
+		draw_arc(handle, 8.0, -PI * 0.55, PI * 0.55, 14, Color(china.darkened(0.22), 1.0), 3.6)
+		var rim := _disc(mid_u, mid_v, top_h, radius)
+		var base := _disc(mid_u, mid_v, 0.0, radius)
+		## The wall of the cylinder: the front half of the rim down to the front
+		## half of the base. Only the front, because the back of a mug is inside it.
+		var wall := PackedVector2Array()
+		for index in range(rim.size() / 2, rim.size()):
+			wall.append(rim[index])
+		for index in range(base.size() - 1, base.size() / 2 - 1, -1):
+			wall.append(base[index])
+		draw_colored_polygon(wall, Color(china.darkened(0.18), 1.0))
+		draw_colored_polygon(PackedVector2Array(rim), china)
+		## What is in it, and the last of it, which is not a mechanic.
+		draw_colored_polygon(
+			PackedVector2Array(_disc(mid_u, mid_v, top_h - 1.4, radius * 0.78)),
+			Color(0.30, 0.18, 0.11)
 		)
-		draw_circle(rim, 12.0, china)
-		draw_circle(rim, 9.4, Color(0.30, 0.18, 0.11))
-		draw_circle(rim + Vector2(2.0, -1.0), 4.0, Color(0.44, 0.28, 0.18, 0.65))

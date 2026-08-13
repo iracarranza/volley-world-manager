@@ -18,6 +18,7 @@ const AccommodationScreenScript := preload(
 )
 const KitchenScreenScript := preload("res://scenes/screens/kitchen_screen.gd")
 const EscMenuScript := preload("res://scenes/components/esc_menu.gd")
+const DeskScreenScript := preload("res://scenes/screens/desk_screen.gd")
 const EncyclopediaScreenScript := preload(
 	"res://scenes/screens/encyclopedia_screen.gd"
 )
@@ -43,6 +44,9 @@ var _lock_in_screen: LockInScreen = null
 var _accommodation_screen: AccommodationScreen = null
 var _kitchen_screen: KitchenScreen = null
 var _esc_menu: EscMenu = null
+## The desk: the home state a career starts on, and the one screen that owns
+## nothing -- it emits a key and `_desk_opened` maps it to a page.
+var _desk_screen: DeskScreen = null
 var _encyclopedia_screen: EncyclopediaScreen = null
 ## The theme currently up, kept because the style pass is a tree walk that
 ## happens once. A screen built after that walk was never in the tree for it, so
@@ -74,7 +78,7 @@ func _ready() -> void:
 	title_screen.theme_requested.connect(_apply_theme)
 	title_screen.exit_requested.connect(func() -> void: get_tree().quit())
 	new_career_screen.back_requested.connect(_show_title)
-	new_career_screen.career_created.connect(_show_journal)
+	new_career_screen.career_created.connect(_show_desk)
 	journal.title_requested.connect(_show_title)
 	## Not straight to the match. `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §2:
 	## a roster is only worth studying if committing to one is an act, and until
@@ -232,6 +236,7 @@ func _swap_to(screen: Control) -> void:
 		title_screen, new_career_screen, journal, match_center,
 		_training_screen, _scouting_screen, _schedule_screen, _lock_in_screen,
 		_encyclopedia_screen, _accommodation_screen, _kitchen_screen,
+		_desk_screen,
 	]:
 		if candidate != null:
 			candidate.visible = candidate == screen
@@ -259,6 +264,53 @@ func _load_career(save_id: String) -> void:
 func _show_journal() -> void:
 	journal.refresh()
 	_show_only(journal)
+
+
+## ## The desk
+##
+## The home state, and where a career now begins rather than the journal. Built
+## on demand like every other screen, and it is the one that owns *nothing*: it
+## emits a key and this maps it to a page.
+##
+## The map lives here rather than on the desk because the desk does not know what
+## a screen is -- it knows there is a journal on it. That separation is what lets
+## the desk be a picture of a room and still be navigation.
+func _ensure_desk_screen() -> void:
+	if _desk_screen != null:
+		return
+	_desk_screen = DeskScreenScript.new()
+	add_child(_desk_screen)
+	_desk_screen.opened.connect(_desk_opened)
+	UIStyleSystem.apply(_desk_screen, _theme_name == "light")
+
+
+func _show_desk() -> void:
+	_ensure_desk_screen()
+	_desk_screen.bind(CareerManager, get_node("/root/GameManager"))
+	_show_only(_desk_screen)
+
+
+func _desk_opened(what: String) -> void:
+	match what:
+		"journal":
+			_show_journal()
+		"training":
+			_show_training()
+		"scouting":
+			_show_scouting()
+		"housing":
+			_show_accommodation()
+		"kitchen":
+			_show_kitchen()
+		"encyclopedia":
+			_show_encyclopedia()
+		"settings", "phone", "machine":
+			## Settings opens the same overlay Escape does, because there is one
+			## place the game keeps the things that are not the game and a second
+			## one would drift. The phone and the machine have no screens yet and
+			## deliberately do nothing rather than opening a placeholder.
+			if what == "settings":
+				_open_menu()
 
 
 ## The gate in front of the match.
