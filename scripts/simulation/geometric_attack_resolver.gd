@@ -234,8 +234,22 @@ static func resolve_swing(
 	## --- what they believe is open ------------------------------------------
 	var reading := _rating(hitter, "court_vision") * 0.5 \
 		+ _rating(hitter, "decision_making") * 0.5
+	## **The wall as it was when the choice was made, not as it finished.**
+	##
+	## `blockers` carries the close already multiplied into every half width, so
+	## handing it straight to perception showed the hitter a block that had not
+	## formed yet -- they picked their shot against the future. The contest below
+	## still resolves against the finished wall; only the choosing sees the
+	## earlier one, which is the whole of the difference between beating a block
+	## and swinging into one that was still shutting.
+	##
+	## How much of the close they get to see is bought by the approach, not by
+	## their reading: a hitter who timed their run has the air time to keep
+	## looking, and one still adjusting their feet to reach the ball spends part
+	## of that window doing it.
+	var commitment_share := AttackReadModel.commitment_share(approach_quality)
 	var perceived_blockers := AttackReadModel.perceived_blockers(
-		blockers, reading, Array(draws.get("read", []))
+		blockers, reading, Array(draws.get("read", [])), commitment_share
 	)
 	var perceived_defenders := AttackReadModel.perceived_defenders(
 		defenders, reading, Array(draws.get("read_floor", []))
@@ -450,6 +464,10 @@ static func resolve_swing(
 		## nothing for the ones that were beaten, which are exactly the jumps whose
 		## timing is worth seeing.
 		"block_jump_timing": _wall_jump_timing(blockers),
+		## How formed the wall was when this hitter chose. Published because a
+		## swing beaten by a closing block and a swing beaten by a formed one are
+		## different events and read identically without it.
+		"commitment_share": commitment_share,
 		## Why the wall was beaten, carried up rather than left in `resolution`.
 		## Every consumer reads the flat keys; a diagnostic buried one level down is
 		## a diagnostic nobody asks for. Over the top is a reach problem and around

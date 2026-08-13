@@ -10487,6 +10487,60 @@ func _test_hitters_read_a_blurred_picture() -> void:
 	var defenders: Array = [Vector2(0.22, 0.20), Vector2(0.72, 0.24)]
 	var draws: Array = [1.0, -1.0, -1.0, 1.0]
 
+	## **The wall a hitter chooses against is the wall at the moment they chose.**
+	##
+	## `half_width_m` reaches perception with the close already multiplied in, so
+	## before this the hitter picked a shot against a block that had not formed
+	## yet -- reading the future of a close rather than the gap in front of them.
+	## The contest still resolves against the finished wall; only the choosing
+	## sees the earlier one, and the gap between the two is what makes a swing
+	## into a closing block a different event from a swing into a formed one.
+	##
+	## Bought by the approach rather than by reading, per the same distinction:
+	## how well a hitter interprets the wall is `reading` and is untouched here.
+	## How much of it they get to see before committing is air time, and air time
+	## is what a timed run-up buys.
+	var composed_share: float = ATTACK_READ_SCRIPT.commitment_share(1.0)
+	var rushed_share: float = ATTACK_READ_SCRIPT.commitment_share(0.0)
+	_check(
+		rushed_share < composed_share and composed_share <= 1.0
+			and rushed_share > 0.0,
+		"a timed approach sees more of the close than a rushed one (%.2f against %.2f)"
+			% [composed_share, rushed_share],
+	)
+	_check(
+		ATTACK_READ_SCRIPT.commitment_share(0.5)
+			> ATTACK_READ_SCRIPT.commitment_share(0.2),
+		"the window grows with the approach rather than switching at a threshold",
+	)
+	var composed_wall := ATTACK_READ_SCRIPT.perceived_blockers(
+		blockers, 0.98, draws, composed_share
+	)
+	var rushed_wall := ATTACK_READ_SCRIPT.perceived_blockers(
+		blockers, 0.98, draws, rushed_share
+	)
+	_check(
+		float(rushed_wall[0].half_width_m) < float(composed_wall[0].half_width_m),
+		"a rushed hitter chooses against a narrower, less formed wall",
+	)
+	## The perceived wall may never be *wider* than the one that actually formed,
+	## or the read would be handing the hitter a block that was never there.
+	_check(
+		float(composed_wall[0].half_width_m)
+			<= float(composed_wall[0].closed_half_width_m) + 0.0001,
+		"nobody reads more block than the wall ever had",
+	)
+	## And the truth survives beside the belief, because the contest needs it.
+	_check(
+		absf(float(rushed_wall[0].closed_half_width_m) - 0.45) < 0.0001,
+		"the finished wall is carried through untouched for the contest to use",
+	)
+	## Two blockers, both narrowed, because a wall closes as a wall.
+	_check(
+		float(rushed_wall[1].half_width_m) < float(composed_wall[1].half_width_m),
+		"every blocker in the wall is seen at the same moment",
+	)
+
 	var sharp := ATTACK_READ_SCRIPT.perceived_blockers(blockers, 0.98, draws)
 	var poor := ATTACK_READ_SCRIPT.perceived_blockers(blockers, 0.05, draws)
 	_check(

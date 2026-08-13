@@ -35,6 +35,34 @@ const BLOCKER_POSITION_ERROR_M: float = 0.55
 const BLOCKER_REACH_ERROR_M: float = 0.22
 const DEFENDER_POSITION_ERROR_M: float = 1.30
 
+## How much of the block's close a hitter gets to see before they must commit.
+##
+## **A read is worth what you have time to act on.** `reading` says how well
+## this hitter interprets the wall and is unchanged by any of this. What decides
+## whether the interpretation is any use is the window they have in the air, and
+## that window is bought by the approach: a hitter who timed their run arrives
+## with the whole of it to look, and one still adjusting their feet to reach the
+## ball at all spends part of it doing that instead.
+##
+## So a poor approach does not make a hitter read the wall *worse* -- it makes
+## them read it *earlier*, against a block that has not finished closing, and
+## then swing at a gap that is shutting. That is the difference between a hitter
+## who is beaten and one who is late, and the two look nothing alike.
+##
+## The bounds say a well-timed hitter chooses against a nearly formed wall and a
+## badly-timed one against a wall barely two thirds there. Not zero at the bottom
+## because a hitter in trouble is still looking at something.
+const COMMITMENT_SHARE_RUSHED: float = 0.62
+const COMMITMENT_SHARE_COMPOSED: float = 0.96
+
+
+## When this hitter had to choose, as a share of the wall's close.
+static func commitment_share(approach_quality: float) -> float:
+	return lerpf(
+		COMMITMENT_SHARE_RUSHED, COMMITMENT_SHARE_COMPOSED,
+		clampf(approach_quality, 0.0, 1.0),
+	)
+
 ## Openness past this is a free swing; nothing is gained by being further from
 ## a defender than a defender can travel in the time available anyway.
 const OPENNESS_SATURATION_M: float = 4.0
@@ -51,10 +79,14 @@ const BLOCK_OPENNESS_SATURATION_M: float = 0.70
 ## `reading` is their court vision and decision making, 0-1. `draws` are signed
 ## unit-scaled values supplied by the caller -- two per blocker, position then
 ## reach -- so seeded replay stays the simulator's business.
+## `commitment_share` is how much of the wall's close had happened by the moment
+## this hitter had to choose. One is the finished wall; a half means they picked
+## their shot against a block half way to where it ended up.
 static func perceived_blockers(
 	blockers: Array,
 	reading: float,
 	draws: Array,
+	commitment_share: float = 1.0,
 ) -> Array[Dictionary]:
 	var blur := 1.0 - clampf(reading, 0.0, 1.0)
 	var seen: Array[Dictionary] = []
@@ -74,10 +106,30 @@ static func perceived_blockers(
 					+ reach_draw * blur * BLOCKER_REACH_ERROR_M,
 				0.0,
 			),
-			## Not blurred. How much lane a pair of hands seals is a fact about
-			## the block's shape rather than something a hitter reads off it in
-			## the air, and blurring it would double-count the position error.
-			"half_width_m": float(actual.get("half_width_m", 0.45)),
+			## **Still not blurred, and now taken earlier instead.**
+			##
+			## The reasoning above was right and is kept: how much lane a pair of
+			## hands seals is a fact about the block's shape, not something a
+			## hitter guesses at, and blurring it would double-count the position
+			## error. What was wrong was *when* the fact was read.
+			##
+			## `half_width_m` arrives with the close already multiplied into it,
+			## so the hitter was being shown the wall as it finished -- picking a
+			## shot against a block that had not formed yet. A hitter cannot see
+			## the future of a close; they see a gap and swing at it, and whether
+			## it is still there when the ball arrives is the wall's business.
+			##
+			## Scaled rather than recomputed because the close enters the width
+			## linearly at the source, so the share is exactly the ratio. Linear
+			## in time as well, which is the assumption worth naming: a closing
+			## blocker is treated as covering lane at a steady rate across the
+			## set, and a real close is faster in the middle than at either end.
+			"half_width_m": float(actual.get("half_width_m", 0.45))
+				* clampf(commitment_share, 0.0, 1.0),
+			## What the wall actually got to, kept beside what was seen. The
+			## contest resolves against this; only the choice is made against the
+			## column above it.
+			"closed_half_width_m": float(actual.get("half_width_m", 0.45)),
 		})
 	return seen
 
