@@ -50,6 +50,22 @@ from the contact stamp -- is done and verified.
     hardcoded 0.68 s the movement-agreement gate already names as a defect.
     Fixing the constant and the head start together is one job, not two.
   - **The hitter's approach** is the other half and is untouched.
+  - **Removing the setter's precognition is blocked on short-leg timing.** The
+    head start currently advances every candidate toward `set_contact`, which
+    is the *resolved* pass destination -- a coordinate that does not exist when
+    the setter releases. They should run at the plan's `setter_release_target`
+    instead, and the one-line change is written and held in
+    `_spatial_setter_choice` with the reason on it.
+
+    Measured, passing the expected zone moves the movement-agreement gate from
+    SET 0.8344 to **0.7466** and the perceptible-leg rate from 0.0579 to
+    **0.1294**. That is the correct behaviour exposing a real instrument limit:
+    a setter already standing in their zone has a *short* remaining leg, and a
+    short leg is where the resolver's allotted duration and the stepped model
+    disagree most -- the standing start and the turn delay are a large share of
+    two tenths of a second and a small share of one and a half. Fix the
+    short-leg timing, then this becomes one word.
+
   - **Playback should spend the slack rather than stretch it.** A setter who
     arrives early is drawn crossing the floor slowly enough to fill the whole
     flight, because `_pace_plan` gives a leg the window rather than the

@@ -232,6 +232,32 @@ static func choose_claimant(
 			second_priority = int(zone.priority)
 	var claim_margin := best_score - second_score if second_score > -999.0 else 1.0
 	best.claim_margin = claim_margin
+	## **Who was actually closest, alongside who won.**
+	##
+	## The whole question the responsibility handoff asks -- does reachability
+	## create responsibility, or only decide whether it succeeds -- is answerable
+	## from data this function already computes and then throws away. A claimant
+	## who is routinely not the nearest body is reachability creating ownership;
+	## one who usually is means the soft score happens to agree with proximity
+	## and the defect is rarer than it looks.
+	##
+	## Published rather than asserted, because a claim about how often this
+	## happens should come from a count.
+	var nearest_id := -1
+	var nearest_distance := 1000.0
+	for evaluation in reachable_evaluations:
+		var candidate_distance := float(
+			Dictionary(evaluation.arrival).get("distance_meters", 1000.0)
+		)
+		if candidate_distance < nearest_distance:
+			nearest_distance = candidate_distance
+			nearest_id = int((evaluation.player as VolleyballPlayer).id)
+	best["nearest_id"] = nearest_id
+	best["nearest_distance_meters"] = nearest_distance
+	best["winner_distance_meters"] = float(
+		Dictionary(best.arrival).get("distance_meters", 1000.0)
+	)
+	best["reachable_count"] = reachable_evaluations.size()
 	best.seam_conflict = support_count > 0 and best_priority == second_priority \
 		and claim_margin < 0.10
 	return best

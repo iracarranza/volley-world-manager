@@ -1556,6 +1556,17 @@ func resolve(
 			"flight_time": serve_time, "arrival": arrival,
 			"support_count": support_count, "seam_conflict": seam_conflict,
 			"claim_margin": float(reception_claim.get("claim_margin", 1.0)),
+			## Who was nearest against who took it. See `choose_claimant`: this is
+			## the pair that says whether reachability is creating responsibility
+			## or only deciding whether it succeeds.
+			"nearest_id": int(reception_claim.get("nearest_id", -1)),
+			"nearest_distance_meters": float(reception_claim.get(
+				"nearest_distance_meters", -1.0
+			)),
+			"winner_distance_meters": float(reception_claim.get(
+				"winner_distance_meters", -1.0
+			)),
+			"reachable_count": int(reception_claim.get("reachable_count", 0)),
 			"movement_start": receiver_start,
 			"movement_target": receiver_reach,
 			"movement_duration": receiver_move_time,
@@ -1696,6 +1707,27 @@ func resolve(
 		## they have already made by the time the pass exists, and it is the
 		## first of the overlapping timelines `OUTSTANDING` §1 asks for.
 		float(serve_trajectory.get("duration", 0.0)),
+		## **Held, with the reason measured.** This should pass the plan's
+		## `setter_release_target` -- the zone the setter is supposed to set
+		## from, which exists before the serve is struck -- because running them
+		## at `set_contact` is running them at the resolved pass destination,
+		## a coordinate that does not exist yet. That is precognition and the
+		## handoff is right to call it out.
+		##
+		## Passing it turns the movement-agreement gate red, and the direction
+		## says why: SET falls from 0.8344 to 0.7466 and the perceptible-leg
+		## rate goes 0.0579 to 0.1294. A setter who has already reached their
+		## zone has a *short* remaining leg, and a short leg is where the
+		## resolver's allotted duration and the stepped movement model disagree
+		## most -- the fixed costs, the standing start and the turn, are a much
+		## larger share of two tenths of a second than of one and a half.
+		##
+		## So the correct change exposes a real instrument limit rather than
+		## causing a regression, and widening that band a second time to admit
+		## it would be the thing this repository keeps being told not to do.
+		## `OUTSTANDING` §1 carries it: the short-leg timing wants fixing first,
+		## and then this line becomes one word.
+		Vector2.ZERO,
 	)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
@@ -3723,10 +3755,22 @@ func _resolve_opponent_transition(
 		RallyKinematics.court_distance_meters(
 			opponent_setter_position, opponent_intended_contact
 		),
-		## The rescue height this side's chooser already decided on, read from
-		## the choice rather than from `opponent_set_height_extra`, which is
-		## derived from it forty lines below this point.
-		float(attack_choice.get("rescue_height_meters", 0.0)),
+		## **The whole climb, matching the other two paths.** This passed the
+		## rescue height alone, so an ordinary opponent set reported a rise of
+		## zero and paid nothing while an ordinary home set paid for its arc.
+		##
+		## The real arc is solved forty lines below, after the delivered point it
+		## would need as an input, so the climb is estimated here against the
+		## *intended* contact -- which is the right quantity anyway: a setter aims
+		## at a height and the scatter is what they get, not the other way round.
+		float(_set_arc(
+			opponent_setter, opponent_tempo, opponent_set_quality,
+			GeometricAttackPromotionModel.set_contact_height_meters(opponent_setter),
+			GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
+			RallyKinematics.court_distance_meters(
+				opponent_setter_position, opponent_intended_contact
+			),
+		).apex_height_meters) + float(attack_choice.get("rescue_height_meters", 0.0)),
 	)
 	## `_choose_opponent_attack` returns who swings, from where, and what shot --
 	## it has never returned a lane. Every reader of one therefore took the
@@ -4895,6 +4939,15 @@ func _resolve_opponent_transition(
 			_arrival_phrase(defense_arrival, defender_arrived, support_count),
 		], {"side": "home", "dig_terms": home_dig_terms,
 			"attack_type": attack_type,
+			## The same pair the reception publishes: nearest against winner.
+			"nearest_id": int(defense_claim.get("nearest_id", -1)),
+			"nearest_distance_meters": float(defense_claim.get(
+				"nearest_distance_meters", -1.0
+			)),
+			"winner_distance_meters": float(defense_claim.get(
+				"winner_distance_meters", -1.0
+			)),
+			"reachable_count": int(defense_claim.get("reachable_count", 0)),
 			"planner_floor_center": Vector2(floor_phase_positions.get(
 				defender.id, defender_start
 			)),
@@ -9194,6 +9247,21 @@ func _spatial_setter_choice(
 	## they got a head start toward the place the ball was always going, and the
 	## pass then tells them how much of the last adjustment they still owe.
 	head_start_seconds: float = 0.0,
+	## **Where the setter is running while the head start runs, which is not
+	## where the ball turns out to go.**
+	##
+	## The first cut advanced every candidate toward `target` -- the resolved
+	## pass destination -- during the serve flight, which is a coordinate that
+	## does not exist yet. A setter releasing on serve contact knows the serve's
+	## trajectory, the likely receiver and the zone they are supposed to set
+	## from; they do not know where the platform will actually put the ball.
+	## Running them at the answer is precognition, and it makes the head start a
+	## free arrival rather than a real one.
+	##
+	## `Vector2.ZERO` means "no expectation published", and then the head start
+	## is spent toward the target as before -- kept only so a caller that has not
+	## been given a zone is unchanged rather than silently frozen.
+	expected_area: Vector2 = Vector2.ZERO,
 ) -> Dictionary:
 	var best := {"player": preferred_setter, "start": target, "travel_time": 4.0}
 	var best_score := -1000.0
@@ -9213,7 +9281,14 @@ func _spatial_setter_choice(
 		)
 		var origin := start
 		if running > 0.0:
-			start = _reached_point(candidate, start, target, running, "transition")
+			## Toward the expectation, then the rest of the run is the correction
+			## the real ball demands -- which is what a setter's second stride
+			## actually is.
+			start = _reached_point(
+				candidate, start,
+				expected_area if expected_area != Vector2.ZERO else target,
+				running, "transition",
+			)
 		## Getting up comes out of the same budget as getting there. A voli still
 		## on the floor is not a candidate to set the next ball, and this is what
 		## says so -- without it the emergency setter search would happily pick
@@ -11819,9 +11894,19 @@ func _delivered_point(
 	## Zero means "no distance known", which keeps every caller that has not been
 	## given one on exactly the behaviour it had -- the reference ratio is 1.0.
 	distance_meters: float = 0.0,
-	## How far the ball climbs above the release. Zero is "not put up", which is
-	## what every caller that has not been told means.
-	rise_meters: float = 0.0,
+	## **How far the ball climbs above the release**, not its absolute apex and
+	## not only the rescue portion.
+	##
+	## Named in full because the first cut got it wrong on one path of three:
+	## home and transition passed `arc.apex_height_meters + rescue`, which is the
+	## whole climb, and the opponent passed the rescue alone -- so an ordinary
+	## opponent set had a rise of zero and paid no height penalty at all, while
+	## an ordinary home set paid for its entire arc. One number, three callers,
+	## two meanings, and the asymmetry ran the way this file's asymmetries always
+	## run. `_set_arc` returns `apex_height_meters` already relative to the
+	## release, which is what makes the sum correct and what made the omission
+	## invisible.
+	rise_above_release_meters: float = 0.0,
 ) -> Vector2:
 	var stdev_meters := lerpf(
 		worst_stdev_meters, best_stdev_meters, clampf(quality, 0.0, 1.0)
@@ -11832,9 +11917,10 @@ func _delivered_point(
 			1.0, reach, clampf(SET_DELIVERY_ANGULAR_SHARE, 0.0, 1.0)
 		)
 	## And every metre the ball is put up above an ordinary arc.
-	if rise_meters > DELIVERY_HEIGHT_REFERENCE_METERS:
-		stdev_meters *= 1.0 + (rise_meters - DELIVERY_HEIGHT_REFERENCE_METERS) \
-			* DELIVERY_HEIGHT_PENALTY_PER_METER
+	if rise_above_release_meters > DELIVERY_HEIGHT_REFERENCE_METERS:
+		stdev_meters *= 1.0 + (
+			rise_above_release_meters - DELIVERY_HEIGHT_REFERENCE_METERS
+		) * DELIVERY_HEIGHT_PENALTY_PER_METER
 	var limit := stdev_meters * EXECUTION_ERROR_DEVIATION_LIMIT
 	var offset_x := clampf(rng.randfn(0.0, stdev_meters), -limit, limit) \
 		/ CourtConstants.COURT_WIDTH_METERS
