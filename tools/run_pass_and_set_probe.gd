@@ -51,6 +51,7 @@ func _probe() -> void:
 	var release: Array[float] = []
 	var margins: Array[float] = []
 	var serve_apex: Array[float] = []
+	var serve_by_style := {}
 	var attack_apex: Array[float] = []
 	for index in range(RALLIES):
 		var result: Resource = game_manager.resolve_active_rally(
@@ -72,6 +73,17 @@ func _probe() -> void:
 					## is a flat ball; anything that reads like a lob here is
 					## either a sky ball or a defect.
 					serve_apex.append(rise)
+					## In or out. The arc solver falls back to a minimum-force
+					## solve when nothing the server has clears the tape, and a
+					## minimum-force solve is a lob -- so if the high tail is
+					## failed serves, this splits it out.
+					var style := "%s / %s" % [
+						str(event.metadata.get("serve_style", "?")),
+						"in" if bool(event.success) else "OUT",
+					]
+					var bucket: Array = serve_by_style.get(style, [])
+					bucket.append(rise)
+					serve_by_style[style] = bucket
 				RallyEvent.EventType.ATTACK:
 					attack_apex.append(rise)
 				RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DEFENSE:
@@ -134,6 +146,10 @@ func _probe() -> void:
 	])
 	print("--- how high the struck balls climb above the contact")
 	_report("serve rise (m)", serve_apex)
+	var style_keys: Array = serve_by_style.keys()
+	style_keys.sort()
+	for style in style_keys:
+		_report("  serve rise, %s" % style, serve_by_style[style])
 	_report("attack rise (m)", attack_apex)
 	print("--- the setter's budget")
 	_report("travel + release before the ball leaves the hands (s)", windows)
