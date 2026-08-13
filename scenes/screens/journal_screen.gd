@@ -26,6 +26,7 @@ const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
 const StaffReportsModel := preload("res://scripts/data/staff_reports.gd")
 const PasteRatioModel := preload("res://scripts/data/paste_ratio.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const SpikeBiomechanics := preload("res://scripts/data/spike_biomechanics.gd")
 const MenuCardScript := preload("res://scenes/components/menu_card.gd")
 const UIPaletteScript := preload("res://scripts/data/ui_palette.gd")
 const RuledPaperScript := preload("res://scenes/components/ruled_paper.gd")
@@ -260,7 +261,6 @@ var _advance_tween: Tween
 ## click has spent half the screen asking a question it could have answered.
 var _selected_staff_id: int = -1
 
-
 func _ready() -> void:
 	for button in [%HomeNav, %RosterNav, %TeamNav, %ClubNav, %TransfersNav,
 			%CompetitionNav, %SixnetNav]:
@@ -382,11 +382,9 @@ func _ready() -> void:
 	_navigate("Home")
 	_set_roster_list_expanded(false)
 
-
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and is_node_ready():
 		_apply_floating_panel_styles()
-
 
 ## Both floating panels sit over live content, so they need a background the
 ## content cannot show through. The theme's default `panel` box is translucent
@@ -404,7 +402,6 @@ func _apply_floating_panel_styles() -> void:
 		box.shadow_color = Color(0.0, 0.0, 0.0, 0.35 if not light_mode else 0.18)
 		box.shadow_size = 6
 		panel.add_theme_stylebox_override("panel", box)
-
 
 func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not (event is InputEventKey) or not event.pressed or event.echo:
@@ -463,7 +460,6 @@ func _input(event: InputEvent) -> void:
 			return
 	get_viewport().set_input_as_handled()
 
-
 func refresh() -> void:
 	if not CareerManager.has_career():
 		return
@@ -477,7 +473,6 @@ func refresh() -> void:
 	_refresh_transfers()
 	_refresh_competition()
 	_refresh_sixnet()
-
 
 ## The navigation menu lives in a floating overlay rather than a permanent
 ## 190px column, which is where the content area's extra width came from. It
@@ -528,7 +523,6 @@ func _build_tape() -> void:
 	_nav_tang = tang
 	_set_slot_height(NAV_SLOT_FALLBACK)
 
-
 ## Tell the case how big a band comes through it, and hang the tang in that gap.
 ##
 ## One figure, set once, read by three drawings. The slot, the tang and the tape
@@ -545,13 +539,11 @@ func _set_slot_height(slot_height: float) -> void:
 		_nav_tang.offset_top = margin
 		_nav_tang.offset_bottom = -margin
 
-
 func _toggle_nav_dropdown() -> void:
 	if _nav_dropdown_open:
 		_close_nav_dropdown()
 	else:
 		_open_nav_dropdown()
-
 
 ## The menu expands sideways into the empty half of the nav strip rather than
 ## unrolling downward over the content. That keeps its height pinned to the
@@ -655,7 +647,6 @@ func _open_nav_dropdown() -> void:
 	## off so the drawer looks like it is taking the space over.
 	_nav_tween.tween_property(nav_hint, "modulate:a", 0.0, 0.12)
 
-
 ## Where the tape's whole denominations fall: on the section buttons' own edges.
 ##
 ## Handed to the tape rather than derived inside it, because only the drawer
@@ -686,7 +677,6 @@ func _refresh_tape_marks() -> void:
 	_nav_tape.major_marks = marks
 	_nav_tape.queue_redraw()
 
-
 func _close_nav_dropdown() -> void:
 	if not _nav_dropdown_open:
 		return
@@ -714,11 +704,9 @@ func _close_nav_dropdown() -> void:
 		if _nav_tang != null:
 			_nav_tang.visible = true)
 
-
 func _click_catcher_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
 		_close_nav_dropdown()
-
 
 func _navigate(section_name: String) -> void:
 	## Order here is tab index, not menu order. `Club` was appended to the
@@ -742,8 +730,6 @@ func _navigate(section_name: String) -> void:
 	section_title.text = section_name
 	if section_name == "Club":
 		_refresh_club()
-
-
 
 ## The Club section: staff, accommodations, sponsorships.
 ##
@@ -774,12 +760,10 @@ const CLUB_UNBUILT := "[i]Not implemented. Shown to judge layout.[/i]"
 ## on a vague report and finding out. What replaces it is the scout's rating and
 ## their tenure, which is the same fact without the lesson attached.
 
-
 func _refresh_club() -> void:
 	_refresh_staff()
 	_refresh_accommodations()
 	_refresh_sponsorships()
-
 
 ## ## The staff hub, inside the journal rather than beside it
 ##
@@ -829,7 +813,6 @@ func _refresh_staff() -> void:
 	scroll.add_child(log_box)
 	_refresh_staff_cards()
 
-
 func _refresh_staff_cards() -> void:
 	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
 		else []
@@ -877,10 +860,8 @@ func _refresh_staff_cards() -> void:
 		cards.add_child(card)
 	_refresh_staff_log()
 
-
 func _staff_log() -> Label:
 	return staff_body.get_node("StaffLog/StaffDeskTitle")
-
 
 func _refresh_staff_log() -> void:
 	var box: VBoxContainer = staff_body.get_node(
@@ -908,7 +889,6 @@ func _refresh_staff_log() -> void:
 		return
 	for card in reports:
 		box.add_child(_staff_report_panel(Dictionary(card)))
-
 
 ## What this person has to say, derived rather than stored -- the same trick §16
 ## uses for a voli's preferences. A report is a *reading* of state that already
@@ -962,7 +942,6 @@ func _staff_reports(member: Resource) -> Array:
 			)
 	return []
 
-
 ## One report: the mechanic above, the person below.
 ##
 ## The utterance sits at the bottom bound beside their face and is read last --
@@ -997,7 +976,6 @@ func _staff_report_panel(card: Dictionary) -> Control:
 	speech.add_child(said)
 	return panel
 
-
 ## The frame a head will go in, with a letter in it until there is one.
 ##
 ## The inbox renders a voli's actual body into a `SubViewport`; staff have none,
@@ -1011,7 +989,6 @@ func _staff_monogram(who: String) -> Control:
 	mark.size_flags_vertical = Control.SIZE_SHRINK_END
 	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return mark
-
 
 class StaffMonogram extends Control:
 	var letter: String = "?"
@@ -1040,7 +1017,6 @@ class StaffMonogram extends Control:
 		if what == NOTIFICATION_THEME_CHANGED or what == NOTIFICATION_RESIZED:
 			queue_redraw()
 
-
 ## The four, in one line each, for the panel beside the team wheel.
 func _staff_brief() -> String:
 	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
@@ -1054,7 +1030,6 @@ func _staff_brief() -> String:
 			lines.append("%s  %d" % [str(member.role), int(member.rating)])
 	return "\n".join(lines)
 
-
 ## Five figures unbroken is a number nobody reads at a glance, and every one of
 ## these is being compared to another.
 func _grouped(amount: int) -> String:
@@ -1066,7 +1041,6 @@ func _grouped(amount: int) -> String:
 		out += digits[index]
 	return out
 
-
 ## How long they have been here, said the way somebody would say it.
 func _tenure(weeks: int) -> String:
 	if weeks <= 0:
@@ -1077,7 +1051,6 @@ func _tenure(weeks: int) -> String:
 		return "%d weeks here" % weeks
 	var years := weeks / 52
 	return "a year here" if years == 1 else "%d years here" % years
-
 
 func _refresh_accommodations() -> void:
 	meal_option.visible = false
@@ -1183,7 +1156,6 @@ func _refresh_accommodations() -> void:
 		"rather than a larger number.[/i]",
 	]))
 
-
 ## One collapsible block. Header button toggles the body, which starts closed
 ## unless this is the thing a reader most likely came for.
 ##
@@ -1225,7 +1197,6 @@ func _add_foldout(
 			action.visible = pressed
 		header.text = ("▾  " if pressed else "▸  ") + title)
 
-
 ## Sponsorships are not built, and this says so in one line.
 ##
 ## It used to carry two paragraphs explaining that an organisation approaches a
@@ -1237,7 +1208,6 @@ func _add_foldout(
 ## is the one thing this interface may never print.
 func _refresh_sponsorships() -> void:
 	sponsorship_summary.text = "[b]Sponsorships[/b]  %s" % CLUB_UNBUILT
-
 
 func _refresh_home() -> void:
 	var fixture := CareerManager.next_fixture()
@@ -1272,7 +1242,6 @@ func _refresh_home() -> void:
 	_refresh_news()
 	_refresh_inbox()
 
-
 ## The inbox, as cards that open into a reader.
 ##
 ## Built in code beside the news feed rather than authored in the scene, because
@@ -1290,7 +1259,6 @@ var inbox_options: VBoxContainer = null
 var inbox_portrait_viewport: SubViewport = null
 var inbox_portrait_actor: Node3D = null
 var inbox_selected: int = 0
-
 
 func _build_inbox() -> void:
 	var column := news_panel.get_parent() as BoxContainer
@@ -1434,11 +1402,9 @@ func _build_inbox() -> void:
 	inbox_utterance.set_meta("ui_style_exempt", true)
 	speech.add_child(inbox_utterance)
 
-
 func _open_inbox_event(index: int) -> void:
 	inbox_selected = index
 	_refresh_inbox()
-
 
 func _refresh_inbox() -> void:
 	if inbox_reader == null:
@@ -1546,8 +1512,6 @@ func _refresh_inbox() -> void:
 			ring_box.set_corner_radius_all(64)
 			ring_node.add_theme_stylebox_override("panel", ring_box)
 
-
-
 ## The panel flavor events will eventually feed. Until they exist it carries
 ## results that are already real -- completed fixtures and the reigning Sixnet
 ## champion -- rather than sitting empty, so the layout is exercised by live
@@ -1572,7 +1536,6 @@ func _refresh_news() -> void:
 	news_panel.text = "\n\n".join(entries) if not entries.is_empty() \
 		else "[color=#8294ad]No news yet. Match results and world events will appear here as the season plays out.[/color]"
 
-
 ## Live lineup completeness, shown where the edit happens rather than only
 ## later on the fixture tab. Benching a starter clears their rotation slot
 ## with no autofill -- deliberately, since silently promoting a bench player
@@ -1587,7 +1550,6 @@ func _refresh_roster_status() -> void:
 		roster_status_label.text = "; ".join(errors)
 		roster_status_label.add_theme_color_override("font_color", Color(0.95, 0.55, 0.35))
 
-
 func _refresh_roster() -> void:
 	_refresh_roster_status()
 	_populate_roster_list(roster_list)
@@ -1595,10 +1557,8 @@ func _refresh_roster() -> void:
 		roster_list.select(0)
 		_roster_selected(0)
 
-
 func _toggle_roster_list() -> void:
 	_set_roster_list_expanded(not _roster_list_expanded)
-
 
 func _set_roster_list_expanded(expanded: bool) -> void:
 	_roster_list_expanded = expanded
@@ -1621,7 +1581,6 @@ func _set_roster_list_expanded(expanded: bool) -> void:
 	)
 	_refresh_roster_profile_layout()
 
-
 ## Shared by the Roster tab and the individual-training tab, which show the
 ## same squad with the same summary line. One writer means the two lists can't
 ## drift apart as the line changes.
@@ -1640,7 +1599,6 @@ func _populate_roster_list(list: ItemList) -> void:
 			AttributeProfiles.grade(float(player.potential))])
 		list.set_item_metadata(list.item_count - 1, player.id)
 
-
 ## A `TabContainer` titles its tabs from the child node names, and node names
 ## cannot contain spaces -- so the Team section read "IndividualTraining" and
 ## "TeamTraining" on screen. The names are load-bearing (unique-name lookups and
@@ -1651,7 +1609,6 @@ const TEAM_SUB_TAB_TITLES := {
 	"IndividualTraining": "Individual Training",
 	"TeamTraining": "Team Training",
 }
-
 
 func _name_team_sub_tabs() -> void:
 	var tabs: TabContainer = get_node_or_null("%TeamSubTabs")
@@ -1664,7 +1621,6 @@ func _name_team_sub_tabs() -> void:
 		var title: String = str(TEAM_SUB_TAB_TITLES.get(str(control.name), ""))
 		if not title.is_empty():
 			tabs.set_tab_title(index, title)
-
 
 func _roster_selected(index: int) -> void:
 	var player := GameManager.player_by_id(int(roster_list.get_item_metadata(index)))
@@ -1689,7 +1645,6 @@ func _roster_selected(index: int) -> void:
 	]
 	_refresh_roster_actor(player)
 	_refresh_roster_profile_layout()
-
 
 ## The panel that said "Player model coming soon" for as long as it existed.
 ##
@@ -1763,14 +1718,12 @@ func _build_roster_viewport() -> void:
 
 	container.gui_input.connect(_roster_viewport_input)
 
-
 func _roster_viewport_input(event: InputEvent) -> void:
 	if roster_turntable == null:
 		return
 	if event is InputEventMouseMotion \
 			and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
 		roster_turntable.rotation.y += event.relative.x * ROSTER_SPIN_PER_PIXEL
-
 
 func _refresh_roster_actor(player) -> void:
 	if roster_actor == null:
@@ -1802,7 +1755,6 @@ func _refresh_roster_actor(player) -> void:
 	roster_actor.set_highlighted(false)
 	_pose_roster_actor(str(player.primary_position))
 
-
 ## What a voli is doing when you look them up.
 ##
 ## `primary_position` to the action that position exists for: the pins and the
@@ -1821,8 +1773,8 @@ func _refresh_roster_actor(player) -> void:
 ##
 ## **`phase` is the signed contact phase**, not a 0-to-1 progress bar. Zero is
 ## the instant of contact: the hand on the ball, the top of the block. Negative
-## is the approach and positive the follow-through, which is why the same number
-## is right for all four actions.
+## is the approach and positive the follow-through. The block, the set and the dig
+## are drawn at contact; the swing is not -- see `phase` on the two pin entries.
 ## `framing` is which camera the action needs, and it is keyed off **reach, not
 ## off whether the feet leave the floor**. A setter stands still and contacts
 ## overhead; a libero stands still and contacts at the knee. Framing those two
@@ -1831,11 +1783,13 @@ func _refresh_roster_actor(player) -> void:
 const POSITION_POSES := {
 	"Outside Hitter": {
 		"event": RallyEventModel.EventType.ATTACK,
-		"airborne": true, "framing": &"struck",
+		"airborne": false, "framing": &"coiled",
+		"phase": SpikeBiomechanics.PLANT_END,
 	},
 	"Opposite": {
 		"event": RallyEventModel.EventType.ATTACK,
-		"airborne": true, "framing": &"struck",
+		"airborne": false, "framing": &"coiled",
+		"phase": SpikeBiomechanics.PLANT_END,
 	},
 	"Middle Blocker": {
 		"event": RallyEventModel.EventType.BLOCK,
@@ -1847,7 +1801,23 @@ const POSITION_POSES := {
 	},
 	"Libero": {
 		"event": RallyEventModel.EventType.DEFENSE,
-		"airborne": false, "framing": &"low",
+		"airborne": false, "framing": &"sprawled",
+		## **Off the axis, because a libero on their axis is a drill.** A dig
+		## worth drawing is the one they had to leave their balance to reach, and
+		## the rig already distinguishes the two: `reaching` is documented in
+		## `player_actor_3d` as "a player who has given up their balance to get
+		## there", against a planted crouch which is not.
+		##
+		## The platform aim supplies the rest. A residual is the part of the reach
+		## the shoulders refused, and the rig pays for it by turning the trunk --
+		## which is what makes an off-axis contact read as a person rather than as
+		## a shrug, in that file's own words.
+
+		"posture": "reaching",
+		"platform_aim": {
+			"valid": true, "yaw_degrees": -34.0, "residual_degrees": 26.0,
+		},
+		"direction": Vector2(-0.78, -0.63),
 	},
 }
 
@@ -1870,9 +1840,13 @@ const ROSTER_CONTACT_DIRECTION := Vector2(0.0, -1.0)
 ##    is the thing that decides the framing; leaving the floor is only one way to
 ##    gain it.
 ##
-## So there are four, keyed by reach: `low` for a dig taken near the knee,
-## `overhead` for hands above the head with the feet down, `struck` for a swing
-## at the top of a jump, and `walled` for a block.
+## So they are keyed by what the pose occupies: `low` for a dig at the knee,
+## `overhead` for hands above the head with the feet down, `walled` for a block
+## at the top of a jump, `coiled` for a hitter still on the floor with the arms
+## swung back, and `sprawled` for a lunge that reaches sideways as far as it
+## reaches down. `struck` frames a swing at full extension and is unused while
+## the pins are drawn loading rather than striking; it is kept because that is
+## one table entry rather than a rewrite if the choice is revisited.
 ##
 ## A block and a spike both leave the floor and are still not the same framing: a
 ## block puts both arms straight up and a swing carries one arm out at an angle,
@@ -1886,9 +1860,10 @@ const ROSTER_FRAMINGS := {
 	&"overhead": Vector3(0.0, 1.52, -3.40),
 	&"struck": Vector3(-0.20, 2.10, -4.35),
 	&"walled": Vector3(0.0, 2.46, -5.00),
+	&"coiled": Vector3(0.0, 1.15, -3.72),
+	&"sprawled": Vector3(0.0, 0.98, -3.85),
 }
 const DEFAULT_FRAMING: StringName = &"low"
-
 
 func _pose_roster_actor(position_name: String) -> void:
 	var pose: Dictionary = POSITION_POSES.get(position_name, {})
@@ -1896,6 +1871,13 @@ func _pose_roster_actor(position_name: String) -> void:
 		StringName(pose.get("framing", DEFAULT_FRAMING)) if not pose.is_empty()
 			else DEFAULT_FRAMING
 	)
+	## **Reset every time, because the actor outlives the selection.** Posture and
+	## platform aim are state on the rig rather than arguments to `set_pose`, so a
+	## libero's lunge would still be on the body when the next voli was chosen --
+	## the setter would set from a collapsed stance and nothing in the call would
+	## say why.
+	roster_actor.contact_posture = str(pose.get("posture", "planted"))
+	roster_actor.contact_platform_aim = Dictionary(pose.get("platform_aim", {}))
 	if pose.is_empty():
 		## A position with no entry stands as it always did. A new position should
 		## look unfinished rather than be silently drawn as somebody else's job,
@@ -1903,8 +1885,9 @@ func _pose_roster_actor(position_name: String) -> void:
 		roster_actor.set_pose(-1, 0.0, 0.0, Vector2.ZERO, false)
 		return
 	roster_actor.set_pose(
-		int(pose["event"]), 1.0 if bool(pose["airborne"]) else 0.0, 0.0,
-		ROSTER_CONTACT_DIRECTION, true,
+		int(pose["event"]), 1.0 if bool(pose["airborne"]) else 0.0,
+		float(pose.get("phase", 0.0)),
+		Vector2(pose.get("direction", ROSTER_CONTACT_DIRECTION)), true,
 	)
 	## `set_pose` ends in `_turn_toward`, which writes `rotation.y` outright, and a
 	## block squares to the net rather than to the contact -- so the middle would
@@ -1915,12 +1898,10 @@ func _pose_roster_actor(position_name: String) -> void:
 	## for the same reason and says so.
 	roster_actor.rotation.y = 0.0
 
-
 func _frame_roster_camera(framing: StringName) -> void:
 	if roster_camera == null:
 		return
 	roster_camera.position = ROSTER_FRAMINGS[framing]
-
 
 ## Each visible category is a real column of real rows -- a name Label that
 ## expands and a value Label pinned right -- rather than BBCode markup inside one
@@ -1990,18 +1971,15 @@ func _build_attribute_columns() -> void:
 		_attribute_column_boxes.append(column)
 		_attribute_column_rows.append(rows)
 
-
 func _attribute_page_count() -> int:
 	var groups: Array = AttributeProfiles.CATEGORY_ATTRIBUTES.keys()
 	return maxi(ceili(float(groups.size()) / float(ATTRIBUTE_PAGE_SIZE)), 1)
-
 
 func _step_attribute_page(direction: int) -> void:
 	## Wrapping rather than clamping: with two pages, a disabled arrow at each
 	## end is more chrome than the carousel is worth.
 	_attribute_page = wrapi(_attribute_page + direction, 0, _attribute_page_count())
 	_refresh_roster_profile_layout()
-
 
 func _refresh_roster_profile_layout() -> void:
 	var player := GameManager.player_by_id(selected_roster_id)
@@ -2028,7 +2006,6 @@ func _refresh_roster_profile_layout() -> void:
 				scouting_confidence(player), scouting_scout_id()
 			)
 
-
 func _individual_training_selected(index: int) -> void:
 	var player := GameManager.player_by_id(
 		int(individual_training_roster_list.get_item_metadata(index)))
@@ -2037,13 +2014,11 @@ func _individual_training_selected(index: int) -> void:
 	selected_individual_training_id = player.id
 	_refresh_position_training(player)
 
-
 func _refresh_position_training(player: VolleyballPlayer) -> void:
 	var target := player.position_training_target if not player.position_training_target.is_empty() else "None"
 	for index in range(position_training_option.item_count):
 		if position_training_option.get_item_text(index) == target: position_training_option.select(index)
 	_position_training_preview(position_training_option.selected)
-
 
 func _position_training_preview(_index: int) -> void:
 	var player := GameManager.player_by_id(selected_individual_training_id)
@@ -2056,7 +2031,6 @@ func _position_training_preview(_index: int) -> void:
 	position_training_summary.text = "%s: %s (%d%%) · suitability %d%% · adaptability %d" % [target,
 		Familiarity.familiarity_label(familiarity), roundi(familiarity),
 		Familiarity.suitability(player, target), player.adaptability]
-
 
 func _assign_position_training() -> void:
 	var target := position_training_option.get_item_text(position_training_option.selected)
@@ -2079,7 +2053,6 @@ func _return_to_pool() -> void:
 	_set_status(error if not error.is_empty() else "Player returned to the testing pool.", not error.is_empty())
 	refresh()
 
-
 func _open_player_attribute_lab() -> void:
 	var player := GameManager.player_by_id(selected_roster_id)
 	if player == null:
@@ -2096,7 +2069,6 @@ func _open_player_attribute_lab() -> void:
 		true,
 	)
 
-
 func _open_team_attribute_lab() -> void:
 	_open_attribute_lab(
 		team_attribute_wheel,
@@ -2104,7 +2076,6 @@ func _open_team_attribute_lab() -> void:
 		"TEAM OVERVIEW | Aggregate of the selected starting six",
 		false,
 	)
-
 
 func _open_transfer_attribute_lab() -> void:
 	var player := _market_player(selected_transfer_id)
@@ -2120,7 +2091,6 @@ func _open_transfer_attribute_lab() -> void:
 		],
 		false,
 	)
-
 
 func _open_attribute_lab(
 	source: VolleyballPlayerAttributeWheel,
@@ -2144,7 +2114,6 @@ func _open_attribute_lab(
 	attribute_wheel_underlay.visible = true
 	attribute_wheel_popup.popup(popup_rect)
 
-
 func _copy_wheel_profile(
 	source: VolleyballPlayerAttributeWheel,
 	target: VolleyballPlayerAttributeWheel,
@@ -2152,7 +2121,6 @@ func _copy_wheel_profile(
 	target.set_profile(
 		source.profile, source.axis_tooltips, source.show_grades, source.potential_profile
 	)
-
 
 func _expanded_wheel_profile_selected(index: int) -> void:
 	if not attribute_wheel_popup.visible or not expanded_wheel_profile_option.visible:
@@ -2174,14 +2142,11 @@ func _expanded_wheel_profile_selected(index: int) -> void:
 	]
 	expanded_attribute_wheel.set_profile(profile, tooltips, true, potential_profile)
 
-
 func _close_attribute_lab() -> void:
 	attribute_wheel_popup.hide()
 
-
 func _attribute_lab_hidden() -> void:
 	_modal_hidden()
-
 
 func _open_player_dossier() -> void:
 	var player := GameManager.player_by_id(selected_roster_id)
@@ -2201,15 +2166,12 @@ func _open_player_dossier() -> void:
 		maxi(roundi(viewport_size.y) - 44, 520),
 	))
 
-
 func _close_player_dossier() -> void:
 	player_dossier_popup.hide()
-
 
 func _modal_hidden() -> void:
 	attribute_wheel_underlay.visible = \
 		attribute_wheel_popup.visible or player_dossier_popup.visible
-
 
 func _player_dossier_text(player: VolleyballPlayer) -> String:
 	var lineup_slot := GameManager.current_lineup().slot_for_player(player.id)
@@ -2269,7 +2231,6 @@ func _player_dossier_text(player: VolleyballPlayer) -> String:
 		status, volleyball, biography,
 	]
 
-
 ## Switching the view repaints both wheels, because the transfer market shows
 ## the same split and a toggle that only reached one of them would read as a
 ## roster setting rather than a way of looking at volis.
@@ -2285,7 +2246,6 @@ func _scouting_view_toggled(pressed: bool) -> void:
 				transfer_player_attribute_wheel, target,
 				scouting_confidence(target),
 			)
-
 
 func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 	## The ceilings are still real. What changed is whether the viewer is shown
@@ -2333,7 +2293,6 @@ func _refresh_player_wheel(player: VolleyballPlayer) -> void:
 		Scouting.confidence_summary(known).to_upper(),
 	]
 
-
 ## How well this club knows this voli.
 ##
 ## One function, so the wheel, the caption and anything added later cannot
@@ -2350,7 +2309,6 @@ func scouting_confidence(player: VolleyballPlayer) -> float:
 		Scouting.scout_rating(staff),
 	)
 
-
 ## Whose reading this is. Zero is the club's own view -- see
 ## `ScoutingSystem.scout_id_for`, which exists because the per-scout belief had
 ## no caller able to name a scout.
@@ -2358,7 +2316,6 @@ func scouting_scout_id() -> int:
 	var staff: Array = CareerManager.career.staff if CareerManager.career != null \
 		else []
 	return Scouting.scout_id_for(staff)
-
 
 ## Paint one wheel with whichever view is selected.
 ##
@@ -2386,7 +2343,6 @@ func _apply_scouted_profile(
 	wheel.set_profile(
 		observed, AttributeProfiles.PROFILE_TOOLTIPS, true, projected
 	)
-
 
 ## One category group's worth of rows, written into a pre-built column.
 ##
@@ -2495,14 +2451,12 @@ func _fill_attribute_column(
 		value_label.add_theme_color_override("font_color",
 			Color(AttributeProfiles.grade_color_hex(float(score), light_mode)))
 
-
 func _key_attributes(player: VolleyballPlayer) -> String:
 	match player.position_role:
 		"Setter": return "Setting %d · Vision %d · Decisions %d · Balance %d" % [player.set_accuracy, player.court_vision, player.decision_making, player.set_balance]
 		"Libero": return "Reception %d · Ball control %d · Anticipation %d · Stability %d" % [player.reception, player.ball_control, player.anticipation, player.reception_stability]
 		"Middle Blocker": return "Block timing %d · Jump %d · Lateral speed %d · Attack %d" % [player.block_timing, player.jump_reach, player.lateral_speed, player.attack_power]
 		_: return "Attack %d · Accuracy %d · Reception %d · Approach %d" % [player.attack_power, player.attack_accuracy, player.reception, player.approach_timing]
-
 
 func _refresh_team() -> void:
 	## Figures and names. The heading used to read `Harbor City VC Identity`,
@@ -2538,7 +2492,6 @@ func _refresh_team() -> void:
 		if training_option.get_item_text(index) == CareerManager.career.training_focus:
 			training_option.select(index)
 	_training_selected(training_option.selected)
-
 
 ## The starting six as one profile. Each axis is the lineup's mean category
 ## score, then pushed away from the lineup's own overall mean by
@@ -2579,7 +2532,6 @@ func _refresh_team_wheel() -> void:
 	team_attribute_wheel.set_profile(
 		AttributeProfiles.amplify_team_profile(totals), AttributeProfiles.PROFILE_TOOLTIPS, true)
 
-
 func _training_selected(index: int) -> void:
 	if index < 0:
 		return
@@ -2591,11 +2543,9 @@ func _training_selected(index: int) -> void:
 		roundi(float(activity.satisfaction) * 100.0),
 		roundi(float(activity.cohesion) * 100.0)]
 
-
 func _apply_training_focus() -> void:
 	var error := CareerManager.set_training_focus(training_option.get_item_text(training_option.selected))
 	_set_status(error if not error.is_empty() else "Weekly training focus saved.", not error.is_empty())
-
 
 func _refresh_transfers() -> void:
 	transfer_list.clear()
@@ -2609,7 +2559,6 @@ func _refresh_transfers() -> void:
 	else:
 		transfer_detail.text = "Nobody available."
 		sign_button.disabled = true
-
 
 func _transfer_selected(index: int) -> void:
 	selected_transfer_id = int(transfer_list.get_item_metadata(index))
@@ -2630,12 +2579,10 @@ func _transfer_selected(index: int) -> void:
 	sign_button.disabled = false
 	sign_button.text = "Sign"
 
-
 func _sign_transfer() -> void:
 	var error := CareerManager.sign_transfer(selected_transfer_id)
 	_set_status(error if not error.is_empty() else "Player signed to the active roster.", not error.is_empty())
 	refresh()
-
 
 func _refresh_competition() -> void:
 	fixture_list.clear()
@@ -2645,7 +2592,6 @@ func _refresh_competition() -> void:
 	if fixture_list.item_count > 0:
 		fixture_list.select(0)
 		_fixture_selected(0)
-
 
 ## Choose who the next match is against.
 ##
@@ -2686,7 +2632,6 @@ func _build_opponent_picker() -> void:
 	opponent_region_option.item_selected.connect(_opponent_region_chosen)
 	opponent_club_option.item_selected.connect(_opponent_club_chosen)
 
-
 ## Point the selected fixture at a club, and say so on the calendar.
 ##
 ## Writes the region, the club index *and* the name together. They are three
@@ -2715,7 +2660,6 @@ func _retarget_fixture(region_name: String, club_index: int) -> void:
 		int(fixture.week), str(fixture.opponent_name),
 	])
 
-
 ## Put the cursor back on a fixture after the list has been rebuilt.
 func _select_fixture_by_id(fixture_id: int) -> void:
 	for index in range(fixture_list.item_count):
@@ -2725,20 +2669,17 @@ func _select_fixture_by_id(fixture_id: int) -> void:
 		_fixture_selected(index)
 		return
 
-
 func _opponent_region_chosen(index: int) -> void:
 	var names := VolleyballRegions.opponent_names()
 	if index < 0 or index >= names.size():
 		return
 	_retarget_fixture(str(names[index]), 0)
 
-
 func _opponent_club_chosen(index: int) -> void:
 	var fixture := CareerManager.fixture_by_id(selected_fixture_id)
 	if fixture == null:
 		return
 	_retarget_fixture(str(fixture.opponent_region), index)
-
 
 ## Show the picker where the fixture actually stands, without firing it.
 ##
@@ -2771,7 +2712,6 @@ func _sync_opponent_picker(fixture: Resource) -> void:
 		maxi(opponent_club_option.item_count - 1, 0)
 	))
 
-
 func _fixture_selected(index: int) -> void:
 	selected_fixture_id = int(fixture_list.get_item_metadata(index))
 	var fixture := CareerManager.fixture_by_id(selected_fixture_id)
@@ -2790,7 +2730,6 @@ func _fixture_selected(index: int) -> void:
 	play_match_button.disabled = not fixture_ready
 	simulate_match_button.disabled = not fixture_ready
 
-
 func _play_fixture() -> void:
 	var error := CareerManager.prepare_fixture(selected_fixture_id)
 	if not error.is_empty():
@@ -2798,12 +2737,10 @@ func _play_fixture() -> void:
 		return
 	play_match_requested.emit()
 
-
 func _simulate_fixture() -> void:
 	var error := CareerManager.simulate_fixture(selected_fixture_id)
 	_set_status(error if not error.is_empty() else "Match simulated.", not error.is_empty())
 	refresh()
-
 
 ## Read-only world state -- no selection, no actions, just what's happening
 ## in the background league the player's own career sits alongside.
@@ -2841,7 +2778,6 @@ func _refresh_sixnet() -> void:
 		])
 	sixnet_summary.text = "\n".join(lines)
 
-
 func _sixnet_slot_line(
 	career: Resource, slot_id: String, standings: Dictionary, advanced: bool = false,
 ) -> String:
@@ -2856,7 +2792,6 @@ func _sixnet_slot_line(
 		slot_id.replace("_", " ").capitalize(), region_name, record_text, marker,
 	]
 
-
 func _sixnet_top_region() -> String:
 	var top_region := ""
 	var top_power := -1.0
@@ -2866,7 +2801,6 @@ func _sixnet_top_region() -> String:
 			top_power = power
 			top_region = region_name
 	return top_region
-
 
 ## The one thing that stops a week advancing today: a fixture that has come due
 ## and hasn't been played. `CareerManager.advance_week()` refuses in exactly that
@@ -2882,7 +2816,6 @@ func _blocking_fixture() -> Resource:
 	if int(fixture.week) > int(CareerManager.career.absolute_week):
 		return null
 	return fixture
-
 
 func _refresh_advance_action() -> void:
 	if not CareerManager.has_career():
@@ -2903,7 +2836,6 @@ func _refresh_advance_action() -> void:
 	advance_hint.text = "Week %d vs %s is due. Press Space again to open it." % [
 		int(fixture.week), fixture.opponent_name,
 	]
-
 
 func _reveal_advance() -> void:
 	if not CareerManager.has_career():
@@ -2934,7 +2866,6 @@ func _reveal_advance() -> void:
 	_advance_tween.tween_property(advance_panel, "position", resting, 0.16)
 	_advance_tween.tween_property(advance_panel, "modulate:a", 1.0, 0.16)
 
-
 func _hide_advance_reveal() -> void:
 	if not _advance_revealed:
 		return
@@ -2946,11 +2877,9 @@ func _hide_advance_reveal() -> void:
 	_advance_tween.tween_property(advance_panel, "modulate:a", 0.0, 0.12)
 	_advance_tween.tween_callback(func() -> void: advance_reveal.visible = false)
 
-
 func _advance_catcher_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
 		_hide_advance_reveal()
-
 
 func _confirm_advance() -> void:
 	_hide_advance_reveal()
@@ -2964,7 +2893,6 @@ func _confirm_advance() -> void:
 		not error.is_empty(),
 	)
 
-
 func _jump_to_fixture(fixture: Resource) -> void:
 	_navigate("Competition")
 	for index in range(fixture_list.item_count):
@@ -2976,11 +2904,9 @@ func _jump_to_fixture(fixture: Resource) -> void:
 		int(fixture.week), fixture.opponent_name,
 	], false)
 
-
 func _save() -> void:
 	var error := CareerManager.save_career()
 	_set_status(error if not error.is_empty() else "Career saved.", not error.is_empty())
-
 
 func _depth_chart_text() -> String:
 	var lines: Array[String] = []
@@ -2991,18 +2917,15 @@ func _depth_chart_text() -> String:
 		lines.append("%s: %s" % [role_name, " → ".join(names)])
 	return "\n".join(lines)
 
-
 func _player_name(player_id: int) -> String:
 	var player := GameManager.player_by_id(player_id)
 	return player.display_name if player != null else "Unassigned"
-
 
 func _market_player(player_id: int) -> VolleyballPlayer:
 	for resource in CareerManager.career.transfer_pool:
 		if int(resource.id) == player_id:
 			return resource as VolleyballPlayer
 	return null
-
 
 func _set_status(message: String, error: bool = false) -> void:
 	status_label.text = message
