@@ -50,6 +50,8 @@ func _probe() -> void:
 	var postures := {}
 	var release: Array[float] = []
 	var margins: Array[float] = []
+	var serve_apex: Array[float] = []
+	var attack_apex: Array[float] = []
 	for index in range(RALLIES):
 		var result: Resource = game_manager.resolve_active_rally(
 			hash("passprobe|%d" % index)
@@ -60,7 +62,18 @@ func _probe() -> void:
 			var event: Resource = raw
 			if event == null:
 				continue
+			var flight: Dictionary = event.metadata.get("outgoing_trajectory", {})
+			var rise := float(flight.get("apex_rise_meters", flight.get(
+				"apex_height_meters", 0.0
+			)))
 			match int(event.event_type):
+				RallyEvent.EventType.SERVE:
+					## How far the ball climbs above where it was struck. A serve
+					## is a flat ball; anything that reads like a lob here is
+					## either a sky ball or a defect.
+					serve_apex.append(rise)
+				RallyEvent.EventType.ATTACK:
+					attack_apex.append(rise)
 				RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DEFENSE:
 					var pass_apex := float(event.metadata.get("pass_apex_meters", 0.0))
 					if pass_apex <= 0.0:
@@ -119,6 +132,9 @@ func _probe() -> void:
 		SET_HANDS_HEIGHT_METERS, above_hands, passes,
 		100.0 * float(above_hands) / maxf(float(passes), 1.0),
 	])
+	print("--- how high the struck balls climb above the contact")
+	_report("serve rise (m)", serve_apex)
+	_report("attack rise (m)", attack_apex)
 	print("--- the setter's budget")
 	_report("travel + release before the ball leaves the hands (s)", windows)
 	print("--- posture")

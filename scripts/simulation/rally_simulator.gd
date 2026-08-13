@@ -569,6 +569,12 @@ const EXECUTION_ERROR_DEVIATION_LIMIT: float = 3.5
 ## was built. Stated in metres and converted per axis at the point of use,
 ## because the court is 9 m across and 18 m deep -- one normalized number would
 ## scatter a ball twice as far sideways as long.
+## What a transition second contact gets when the dug ball has no modelled
+## flight. The literal 0.68 this replaces was the only contact window in the
+## engine not derived from a ball; it survives as the fallback rather than being
+## deleted, because a dig genuinely may not have an arc yet.
+const DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS: float = 0.68
+
 const SET_DELIVERY_STDEV_WORST_M: float = 0.40
 const SET_DELIVERY_STDEV_BEST_M: float = 0.08
 const PASS_DELIVERY_STDEV_WORST_M: float = 0.50
@@ -1919,6 +1925,10 @@ func resolve(
 		## set. Measured from the intent rather than from the delivered point,
 		## which is the thing being computed.
 		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
+		## And how high they are putting it. A rescue ball bought with height is
+		## harder to place, which is the reason a side does not simply set
+		## everything to the ceiling.
+		float(ordinary_set_arc.apex_height_meters) + set_height_extra,
 	)
 	var set_angle := _set_launch_angle_degrees(
 		setter, assignment.tempo, float(result.set_quality)
@@ -1930,6 +1940,13 @@ func resolve(
 	var jump_set := _jump_set_decision(
 		setter, float(reception_pass.get("pass_apex_meters", 0.0)),
 		setter_arrival_margin,
+		## The whole run, not the scrap the head start left: a setter who covered
+		## six metres to get here is carrying speed into the plant whatever the
+		## last stride looked like.
+		RallyKinematics.court_distance_meters(
+			Vector2(setter_choice.get("origin", setter_start)), set_contact
+		),
+		float(setter_choice.get("total_travel_seconds", setter_move_time)),
 	)
 	var set_release_height := GeometricAttackPromotionModel \
 		.set_contact_height_meters(setter, bool(jump_set.jumping))
@@ -3445,6 +3462,7 @@ func _resolve_home_serve(
 		result, players, lineup, server, opponent_pass_destination,
 		opponent_team, defensive_plan, 1, reception_quality, true, receiver.id,
 		float(opponent_pass.get("set_contact_height_meters", NAN)),
+		float(opponent_pass.get("pass_apex_meters", 0.0)),
 	)
 
 
@@ -3487,6 +3505,15 @@ func _resolve_opponent_transition(
 	## dug ball on either side. The table stays as the fallback rather than
 	## being deleted, because a dig genuinely has no apex yet.
 	pass_contact_height_meters: float = NAN,
+	## How high the ball this setter is taking actually got. The same question
+	## the home side asks, and this side could not: without it the opponent
+	## setter had no way to know whether the ball was worth leaving the floor
+	## for, so every opponent set in the game was released standing.
+	##
+	## Zero means "no apex modelled", which is every dug ball on either side --
+	## the same honest gap `pass_contact_height_meters` above already carries --
+	## and a jump set is refused rather than guessed at.
+	pass_apex_meters: float = 0.0,
 ) -> Resource:
 	var transition_penalty := float(exchange_number - 1) * 0.035
 	## The pass destination is the setter's physical contact point. Keeping a
@@ -3650,7 +3677,57 @@ func _resolve_opponent_transition(
 	for internal_key in ["player", "start", "contact", "assignment"]:
 		opponent_option_evaluation.erase(internal_key)
 	var opponent_hitter := attack_choice.player as VolleyballPlayer
-	var opponent_contact: Vector2 = attack_choice.contact
+	## **This side's sets never missed.** The home set has scattered through
+	## `_delivered_point` since delivery was modelled; the opponent's took
+	## `attack_choice.contact` and landed on it exactly, every ball, so one
+	## offence lived with a setter and the other with a machine. The same
+	## asymmetry this file has now closed a dozen times, one path at a time.
+	##
+	## Applied before the reachability clamp below, deliberately: the setter
+	## misses first and the hitter then has to get to wherever the ball actually
+	## went, which is the order it happens in.
+	var opponent_intended_contact: Vector2 = attack_choice.contact
+	## **Per lane, not the general floor.** The first cut of this mirrored
+	## `HOME_SET_DELIVERY_MIN_Y` and dropped `lane_delivery_min_y`, which exists
+	## for exactly one reason: the pipe has an attack line to respect and the
+	## pins do not. Six of 170 opponent back-row swings were struck in front of
+	## the line -- the identical defect `court_constants.gd` records the home
+	## side having, whose own note says a zone edge is not a legality guarantee
+	## and the floor belongs on the delivered point.
+	##
+	## Mirrored about the net, so the home side's *minimum* y becomes this
+	## side's *maximum*: further from the net is a smaller y on their half.
+	## **Asked of the hitter's row, not the lane's name.** The first cut of this
+	## read `lane_at_x`, and a lane cannot tell you this: the pipe is
+	## distinguished by *depth*, so a centre-x ball reads as a quick whether it
+	## sits at the net or behind the line. The floor stayed inert and the same
+	## six of 170 back-row swings were struck in front of the line.
+	##
+	## The rule is about the body: a voli in a back-row slot must contact behind
+	## their attack line wherever the ball is. `lane_delivery_min_y` already
+	## encodes exactly that distance under the name "Pipe", which is the home
+	## side's only back-row lane, so it is asked for it directly rather than
+	## having the number restated here.
+	var opponent_hitter_slot := int(opponent_team.current_lineup().slot_for_player(
+		opponent_hitter.id
+	)) if opponent_team.current_lineup() != null else -1
+	var opponent_back_row := opponent_hitter_slot >= 1 \
+		and not CourtConstants.is_front_row_slot(opponent_hitter_slot)
+	var opponent_delivery_floor := CourtConstants.lane_delivery_min_y(
+		"Pipe" if opponent_back_row else "Left Pin", HOME_SET_DELIVERY_MIN_Y
+	)
+	var opponent_contact: Vector2 = _delivered_point(
+		opponent_intended_contact, opponent_set_quality,
+		SET_DELIVERY_STDEV_WORST_M, SET_DELIVERY_STDEV_BEST_M,
+		1.0 - HOME_SET_DELIVERY_MAX_Y, 1.0 - opponent_delivery_floor,
+		RallyKinematics.court_distance_meters(
+			opponent_setter_position, opponent_intended_contact
+		),
+		## The rescue height this side's chooser already decided on, read from
+		## the choice rather than from `opponent_set_height_extra`, which is
+		## derived from it forty lines below this point.
+		float(attack_choice.get("rescue_height_meters", 0.0)),
+	)
 	## `_choose_opponent_attack` returns who swings, from where, and what shot --
 	## it has never returned a lane. Every reader of one therefore took the
 	## `"Left Pin"` default, so the opponent's approach was prepared for the left
@@ -3762,16 +3839,30 @@ func _resolve_opponent_transition(
 			delivered_type = "Roll shot" if opponent_set_quality >= 0.30 \
 				else "Emergency tip"
 		attack_choice["attack_type"] = delivered_type
+	## The same posture question the home side asks. This side released standing
+	## on every ball in the game because nothing here ever passed `true`.
+	var opponent_jump_set := _jump_set_decision(
+		opponent_setter, pass_apex_meters, setter_arrival_margin,
+		RallyKinematics.court_distance_meters(
+			Vector2(opponent_setter_choice.get("origin", setter_start)),
+			opponent_setter_position,
+		),
+		float(opponent_setter_choice.get("total_travel_seconds", setter_move_time)),
+	)
+	var opponent_release_height := GeometricAttackPromotionModel \
+		.set_contact_height_meters(opponent_setter, bool(opponent_jump_set.jumping))
 	var set_arc := _set_arc(
 		opponent_setter, opponent_tempo, opponent_set_quality,
-		GeometricAttackPromotionModel.set_contact_height_meters(opponent_setter),
+		minf(opponent_release_height, maxf(pass_apex_meters, 0.01)) \
+			if pass_apex_meters > 0.0 else opponent_release_height,
 		GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
 		RallyKinematics.court_distance_meters(
 			opponent_setter_position, opponent_contact
 		),
 		opponent_set_height_extra,
 	)
-	var set_flight_time: float = float(set_arc.duration_seconds)
+	var set_flight_time: float = float(set_arc.duration_seconds) \
+		/ maxf(_set_pace_scale(opponent_setter, bool(opponent_jump_set.jumping)), 0.5)
 	## When the setter actually touches the ball.
 	##
 	## This set was stamped at bare `rally_clock` -- the moment of the pass that
@@ -3832,6 +3923,21 @@ func _resolve_opponent_transition(
 			)})
 	var opponent_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(opponent_set_event, opponent_setter_choice)
+	if opponent_set_event != null:
+		opponent_set_event.metadata["set_posture"] = "jump" \
+			if bool(opponent_jump_set.jumping) else "standing"
+		opponent_set_event.metadata["set_posture_reason"] = str(
+			opponent_jump_set.reason
+		)
+		opponent_set_event.metadata["set_release_height_meters"] = \
+			opponent_release_height
+		opponent_set_event.metadata["set_pace_scale"] = _set_pace_scale(
+			opponent_setter, bool(opponent_jump_set.jumping)
+		)
+		## Where they aimed, alongside where it went. The home set has published
+		## both since delivery was modelled and this side published neither,
+		## which is why nothing could measure an opponent setter's accuracy.
+		opponent_set_event.metadata["intended_target"] = opponent_intended_contact
 	_stamp_navigation(opponent_set_event, opponent_detour)
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
 	## Provisional: recomputed below once preparation has staged the hitter.
@@ -4842,6 +4948,13 @@ func _resolve_opponent_transition(
 	return _resolve_home_continuation(
 		result, players, lineup, defender, defense_pass_target,
 		opponent_team, defensive_plan, exchange_number, home_dig_control,
+		## No dig flight yet -- a dug ball has no modelled arc, so the second
+		## contact keeps the fallback window rather than being handed a zero.
+		0.0,
+		## The swing they just dug. The home side has been transitioning since
+		## the ball was struck, not since it came off the platform, which is the
+		## same head start the first ball takes from the serve.
+		float(opponent_attack_trajectory.get("duration", 0.0)),
 	)
 
 
@@ -4862,6 +4975,11 @@ func _resolve_home_continuation(
 	## which is why only the swing -- the contact that ends a rally -- had any
 	## measurable effect on who won it.
 	incoming_quality: float = 1.0,
+	## The dug ball's own flight, and how long the volis had been transitioning
+	## before it was played. Both default to the old behaviour so a caller that
+	## has not been given them is unchanged rather than silently worse.
+	dig_flight_seconds: float = 0.0,
+	transition_head_start_seconds: float = 0.0,
 ) -> Resource:
 	var cont_second_contact := _home_second_contact_candidates(players, lineup)
 	var setter := _second_contact_setter(
@@ -4871,11 +4989,23 @@ func _resolve_home_continuation(
 	# Preserve contact continuity: the transition set begins where the dig
 	# actually finishes instead of teleporting the ball to center court.
 	var set_contact := dig_position
-	var second_contact_window := 0.68
+	## **The hardcoded 0.68 the movement-agreement gate has been naming for
+	## months.** It is the one window in the engine that was not derived from a
+	## ball: the first-ball set takes the pass's own flight and this took a
+	## constant, so a setter chasing a dug ball that hung for a second and one
+	## chasing a flat one had exactly the same time. The constant stays as the
+	## fallback for a dig with no modelled flight, which is what the zero
+	## default above means.
+	var second_contact_window := dig_flight_seconds if dig_flight_seconds > 0.0 \
+		else DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS
 	var setter_choice := _spatial_setter_choice(
 		cont_second_contact.candidates, cont_second_contact.starts,
 		defensive_plan, lineup.active_setter_id(), defender.id, setter,
 		set_contact, second_contact_window,
+		## The opponent's attack flight. The home side has been transitioning out
+		## of defence since the swing was struck, not since the dig came off the
+		## platform -- the same head start the first ball gets from the serve.
+		transition_head_start_seconds,
 	)
 	setter = setter_choice.player as VolleyballPlayer
 	var setter_start: Vector2 = setter_choice.start
@@ -5008,15 +5138,33 @@ func _resolve_home_continuation(
 		),
 		HOME_SET_DELIVERY_MAX_Y,
 		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
+		float(ordinary_cont_arc.apex_height_meters) + cont_set_height_extra,
 	)
+	## A dug ball has no modelled apex, so `_jump_set_decision` is asked with the
+	## setter's own standing release: it can never say "under the hands" here,
+	## and the answer turns entirely on whether they got there in time. That is
+	## the right shape for a transition ball and it is stated rather than
+	## implied -- when a dig grows an arc, this line is where it arrives.
+	var cont_jump_set := _jump_set_decision(
+		setter,
+		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		setter_arrival_margin,
+		RallyKinematics.court_distance_meters(
+			Vector2(setter_choice.get("origin", setter_start)), set_contact
+		),
+		float(setter_choice.get("total_travel_seconds", setter_move_time)),
+	)
+	var cont_release_height := GeometricAttackPromotionModel \
+		.set_contact_height_meters(setter, bool(cont_jump_set.jumping))
 	var continuation_set_arc := _set_arc(
 		setter, assignment.tempo, set_quality,
-		GeometricAttackPromotionModel.set_contact_height_meters(setter),
+		cont_release_height,
 		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
 		RallyKinematics.court_distance_meters(set_contact, set_target),
 		cont_set_height_extra,
 	)
-	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds)
+	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds) \
+		/ maxf(_set_pace_scale(setter, bool(cont_jump_set.jumping)), 0.5)
 	var cont_release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
 	var cont_release_interval := _release_interval(cont_release_profile, set_quality)
 	## The transition set leaves the setter's hands once they have travelled to
@@ -5065,7 +5213,16 @@ func _resolve_home_continuation(
 				"set", set_contact, set_target, continuation_flight_time,
 				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
 			)})
-	_stamp_second_contact_claim(result.events[-1] as RallyEvent, setter_choice)
+	var cont_set_event := result.events[-1] as RallyEvent
+	_stamp_second_contact_claim(cont_set_event, setter_choice)
+	if cont_set_event != null:
+		cont_set_event.metadata["set_posture"] = "jump" \
+			if bool(cont_jump_set.jumping) else "standing"
+		cont_set_event.metadata["set_posture_reason"] = str(cont_jump_set.reason)
+		cont_set_event.metadata["set_release_height_meters"] = cont_release_height
+		cont_set_event.metadata["set_pace_scale"] = _set_pace_scale(
+			setter, bool(cont_jump_set.jumping)
+		)
 	live_positions[setter.id] = set_contact
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
@@ -9054,6 +9211,7 @@ func _spatial_setter_choice(
 				- float(player_recovery.get(candidate.id, {}).get("delay", 0.0)),
 			0.0,
 		)
+		var origin := start
 		if running > 0.0:
 			start = _reached_point(candidate, start, target, running, "transition")
 		## Getting up comes out of the same budget as getting there. A voli still
@@ -9115,6 +9273,13 @@ func _spatial_setter_choice(
 			best_score = score
 			best = {
 				"player": candidate, "start": start, "travel_time": travel_time,
+				## Where the run *began*, before the head start advanced it, and
+				## how long the whole run took. Anything asking "did this voli
+				## have to travel into the ball" needs both: the leg left after
+				## the head start is a scrap, and the average speed over a scrap
+				## is not the speed the body is carrying when it arrives.
+				"origin": origin,
+				"total_travel_seconds": travel_time + running,
 				## Published so a caller can tell a setter who arrived with time
 				## to spare from one who barely got there, which is the whole of
 				## what "confidently" means here and was not expressible before.
@@ -11621,6 +11786,28 @@ const SET_DELIVERY_REFERENCE_METERS: float = 3.63
 ## fixed share stays and this is what rides on distance.
 const SET_DELIVERY_ANGULAR_SHARE: float = 0.70
 
+## How high the ball climbs before accuracy starts paying for it, in metres
+## above the release, and how fast it pays.
+##
+## **A ball you put up is a ball you stop steering.** Distance was the only
+## thing scatter knew about, and height is the other half of the same geometry:
+## every extra metre of climb is more time in the air with nothing acting on the
+## ball but gravity and whatever the release got wrong, and the release error is
+## amplified over a longer arc rather than being carried straight to the target.
+##
+## The reference is roughly a normal set's climb, so an ordinary ball pays
+## nothing and this describes the tail: the rescue set put up to buy a hitter
+## time, the high outside ball, the emergency bump that goes to the ceiling.
+## Those are exactly the balls that should be harder to place, and the reason
+## a team does not simply set everything high.
+##
+## The slope is deliberately gentle. It is unmeasured -- nothing has published
+## accuracy against ball height, because until now nothing varied the height --
+## so this is a starting value, and `tools/pass_and_set_probe.tscn` prints the
+## distribution the tuning will need.
+const DELIVERY_HEIGHT_REFERENCE_METERS: float = 1.10
+const DELIVERY_HEIGHT_PENALTY_PER_METER: float = 0.22
+
 
 func _delivered_point(
 	intended: Vector2,
@@ -11632,6 +11819,9 @@ func _delivered_point(
 	## Zero means "no distance known", which keeps every caller that has not been
 	## given one on exactly the behaviour it had -- the reference ratio is 1.0.
 	distance_meters: float = 0.0,
+	## How far the ball climbs above the release. Zero is "not put up", which is
+	## what every caller that has not been told means.
+	rise_meters: float = 0.0,
 ) -> Vector2:
 	var stdev_meters := lerpf(
 		worst_stdev_meters, best_stdev_meters, clampf(quality, 0.0, 1.0)
@@ -11641,6 +11831,10 @@ func _delivered_point(
 		stdev_meters *= lerpf(
 			1.0, reach, clampf(SET_DELIVERY_ANGULAR_SHARE, 0.0, 1.0)
 		)
+	## And every metre the ball is put up above an ordinary arc.
+	if rise_meters > DELIVERY_HEIGHT_REFERENCE_METERS:
+		stdev_meters *= 1.0 + (rise_meters - DELIVERY_HEIGHT_REFERENCE_METERS) \
+			* DELIVERY_HEIGHT_PENALTY_PER_METER
 	var limit := stdev_meters * EXECUTION_ERROR_DEVIATION_LIMIT
 	var offset_x := clampf(rng.randfn(0.0, stdev_meters), -limit, limit) \
 		/ CourtConstants.COURT_WIDTH_METERS
@@ -13514,13 +13708,43 @@ func _set_apex_meters(
 ##   square and release from a moving platform.
 const JUMP_SET_LOAD_SECONDS: float = 0.34
 const JUMP_SET_COMPOSURE_FLOOR: float = 0.30
+## The fastest a setter can still be travelling and plant a stable jump, in
+## metres per second.
+##
+## About a brisk walk. Above it the body is being carried into the ball and the
+## hop becomes a forward leap, which is the thing a jump set is not -- the whole
+## value of leaving the floor is releasing from a platform that is not moving.
+##
+## Unmeasured, and named as such: nothing has published a setter's closing speed
+## at the moment of contact, so this is a starting value and the probe comes
+## before the tuning. It is deliberately generous rather than strict, because a
+## rule that refuses every jump is indistinguishable from not having one.
+const JUMP_SET_STABLE_APPROACH_MPS: float = 1.9
 
 
 func _jump_set_decision(
-	setter: VolleyballPlayer, pass_apex_meters: float, arrival_margin: float
+	setter: VolleyballPlayer,
+	pass_apex_meters: float,
+	arrival_margin: float,
+	## How far the setter still had to travel to the ball, in metres, and how
+	## long they had to do it in.
+	##
+	## **A jump you have to travel into is not a jump set, it is a lunge.** The
+	## first cut asked only whether there was time to load, which admits a setter
+	## sprinting into the ball and leaping forward off the last stride -- and a
+	## setter in that position may as well stay down, because the whole value of
+	## the hop is releasing from a stable platform above the hands. Time alone
+	## cannot express it: a long run finished early and a short run finished
+	## early look identical to a margin.
+	travel_meters: float = 0.0,
+	travel_seconds: float = 0.0,
 ) -> Dictionary:
 	if setter == null:
 		return {"jumping": false, "reason": "no setter"}
+	## What they are still carrying when they get there. A body arriving at speed
+	## plants forward; a body that arrived and stopped plants under itself.
+	var closing_speed := travel_meters / maxf(travel_seconds, 0.01) \
+		if travel_meters > 0.0 and travel_seconds > 0.0 else 0.0
 	var standing := GeometricAttackPromotionModel.set_contact_height_meters(setter)
 	var airborne := GeometricAttackPromotionModel.set_contact_height_meters(
 		setter, true
@@ -13538,6 +13762,15 @@ func _jump_set_decision(
 	if arrival_margin < JUMP_SET_LOAD_SECONDS:
 		return {
 			"jumping": false, "reason": "no time to load",
+			"standing_height": standing, "airborne_height": airborne,
+		}
+	## Still moving when the ball arrives. The margin can be generous and the
+	## approach still be wrong: a setter who covered six metres and got there
+	## with time to spare is travelling when they plant, and jumping off that is
+	## a leap forward rather than a set.
+	if closing_speed > JUMP_SET_STABLE_APPROACH_MPS:
+		return {
+			"jumping": false, "reason": "arriving too fast to plant",
 			"standing_height": standing, "airborne_height": airborne,
 		}
 	if poise < JUMP_SET_COMPOSURE_FLOOR:
