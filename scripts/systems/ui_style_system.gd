@@ -126,6 +126,21 @@ const MEDIUM_BOARD := &"board"
 ## than a border of any kind, and the one instrument allowed on it is a pencil.
 ## `UICreasedEdge` and `UICardStock` carry those two claims respectively.
 const MEDIUM_CARD := &"card"
+## Cork, with things pinned to it: the scouting board.
+##
+## `CLAUDE.md` has carried a `pinned` row in the medium table since the board was
+## built and `UIStyleSystem` had no such constant, so the board declared nothing
+## and fell through to `drawn` -- which is *exactly* the defect that had the
+## scouting screen reading as the planner before any of this started, arrived at
+## a second time by a different route.
+##
+## It is the only medium with **no surface of its own**. `UIPinnedSlip` paints
+## every scrap, so there is nothing here for a halftone to screen or a pen to
+## outline; what this branch does is take those away and leave the cork showing.
+## Controls keep a pen edge because somebody did write on the slips, and lose the
+## highlighter, because you do not go over a note pinned to a board -- you take
+## it down.
+const MEDIUM_PINNED := &"pinned"
 
 
 static func apply(
@@ -308,7 +323,11 @@ static func _screen_surface(
 	## `unscreened`, because "not screened" is a statement about ink and this is a
 	## statement about pulp -- the two happen to agree that the halftone is wrong
 	## here and agree about nothing else.
-	var unscreened := medium == MEDIUM_FORM or medium == MEDIUM_BOARD
+	## Cork is not a reproduction either, and for a third distinct reason: there is
+	## no sheet here at all. Named rather than folded in, per the rule that each
+	## medium states its own case.
+	var unscreened := medium == MEDIUM_FORM or medium == MEDIUM_BOARD \
+		or medium == MEDIUM_PINNED
 	if medium == MEDIUM_CARD:
 		control.material = UICardStock.material_for(
 			control.theme_type_variation, light_mode
@@ -523,6 +542,14 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 		_creased_edge(control, true)
 		return
 	_creased_edge(control, false)
+	## **A pinned surface has no edge**, because it is not a surface -- it is the
+	## cork showing between things that draw their own paper. A drawn box round a
+	## region of a cork board is a panel somebody nailed up.
+	if medium == MEDIUM_PINNED and control.theme_type_variation in STITCHED_TIERS:
+		if existing != null:
+			control.remove_child(existing)
+			existing.queue_free()
+		return
 	## **A board takes no highlighter.**
 	##
 	## `hover_highlight` sweeps a translucent highlighter band -- see
@@ -531,7 +558,8 @@ static func _ink_surface(control: Control, medium: StringName) -> void:
 	## already declines it because you do not highlight a sewn patch; melamine
 	## declines it for a different reason and both are stated rather than one
 	## being folded into the other.
-	var highlighted := medium != MEDIUM_SEWN and medium != MEDIUM_BOARD
+	var highlighted := medium != MEDIUM_SEWN and medium != MEDIUM_BOARD \
+		and medium != MEDIUM_PINNED
 	var sewn := medium == MEDIUM_SEWN \
 		and control.theme_type_variation in STITCHED_TIERS
 	## A board's divisions are drawn in marker, edge to edge. Not a border it was

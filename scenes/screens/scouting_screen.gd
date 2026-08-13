@@ -53,6 +53,7 @@ const AttributeProfiles := preload("res://scripts/systems/attribute_profile_syst
 const Clippings := preload("res://scripts/data/match_clippings.gd")
 const Larder := preload("res://scripts/data/region_larder.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
+const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 
 const MARK_NONE: int = 0
 const MARK_SIGN: int = 1
@@ -116,6 +117,10 @@ func _ready() -> void:
 
 
 func _build() -> void:
+	## Declared, at last. `CLAUDE.md` has described this board as `pinned` since it
+	## was built and the medium did not exist, so it inherited `drawn` -- the pen
+	## edge and the highlighter of a sheet of paper, on cork.
+	set_meta(UIStyleSystemScript.MEDIUM_META, UIStyleSystemScript.MEDIUM_PINNED)
 	var back_button := ScreenShell.action("Back")
 	back_button.pressed.connect(func() -> void: back_requested.emit())
 	## `BACKING_BOARD`: the same cork the training clipboard lies on, with the page
@@ -461,7 +466,9 @@ func _open(prospect_id: int) -> void:
 	var prospect = _prospect_by_id(prospect_id)
 	if prospect == null:
 		return
-	_panel.open(str(prospect.display_name), _origin_of(prospect))
+	## The club, not the region -- the region is four rows down under "Raised on"
+	## and a header that repeats a row below it is a header that says nothing.
+	_panel.open(str(prospect.display_name), _watched_of(prospect) + " watched")
 	_fill_report(prospect)
 
 
@@ -532,10 +539,12 @@ func _fill_report(prospect) -> void:
 	_report_row("Sharing", _sharing_of(prospect))
 	_report_row("Build", _build_of(prospect))
 
-	var marks := HBoxContainer.new()
-	marks.name = "ReportMarks"
-	marks.add_theme_constant_override("separation", 6)
-	_panel.body.add_child(marks)
+	## In the footer, not the body. The marks are the only controls here and they
+	## were the last rows of a scrolling report, which put them below the fold on
+	## every voli with a full one.
+	var marks := _panel.footer
+	for child in marks.get_children():
+		child.queue_free()
 	var current := _mark_for(_open_id)
 	for mark in MARK_ORDER:
 		var button := Button.new()

@@ -18,6 +18,19 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 signal closed
 
+## **These are the frame's size, and until now they were its minimum.**
+##
+## The frame was a `PanelContainer` with `custom_minimum_size` inside a
+## zero-margin `MarginContainer` -- and a `MarginContainer` fits its children to
+## its own rect minus the margins, ignoring size flags entirely. A minimum cannot
+## cap anything, so at any window bigger than 620x470 the "window on top of the
+## desk" was the whole screen, and had been since the file was written. Both
+## constants were unreachable, which is §0 in its usual dress.
+##
+## It mattered most on the scouting board, whose entire argument is that partial
+## reports are compared *against each other* -- and opening one covered every
+## other one. A profile is a card lifted off the board, so the board has to still
+## be there behind it.
 const FRAME_WIDTH: float = 620.0
 const FRAME_HEIGHT: float = 470.0
 ## What a panel takes when it is the whole subject rather than a list you dip
@@ -26,9 +39,12 @@ const FRAME_HEIGHT: float = 470.0
 const FILL_MARGIN: float = 48.0
 
 var body: VBoxContainer = null
+## Where controls go, pinned under the scrolling body.
+var footer: HBoxContainer = null
 var _title: Label = null
 var _flavour: Label = null
 var _frame: PanelContainer = null
+var _filling: bool = false
 
 
 static func build() -> DeskPopup:
@@ -43,14 +59,28 @@ static func build() -> DeskPopup:
 ## laid over the desk rather than as a screen the manager navigated to -- the
 ## difference between opening something and going somewhere.
 func fill_page() -> void:
-	_frame.custom_minimum_size = Vector2.ZERO
-	_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var holder := _frame.get_parent() as MarginContainer
-	if holder == null:
+	_filling = true
+	_layout_frame()
+
+
+## Where the frame sits. One function, called on every resize and on every open,
+## so the two modes cannot drift apart the way they did when one was a minimum
+## size and the other was a set of margins.
+func _layout_frame() -> void:
+	if _frame == null:
 		return
-	for side in ["left", "right", "top", "bottom"]:
-		holder.add_theme_constant_override("margin_%s" % side, int(FILL_MARGIN))
+	if _filling:
+		_frame.position = Vector2(FILL_MARGIN, FILL_MARGIN)
+		_frame.size = size - Vector2(FILL_MARGIN, FILL_MARGIN) * 2.0
+		return
+	## Capped as well as floored: on a small window the frame gives way rather
+	## than running off the edges, which a fixed size would do silently.
+	var wanted := Vector2(
+		minf(FRAME_WIDTH, size.x - FILL_MARGIN * 2.0),
+		minf(FRAME_HEIGHT, size.y - FILL_MARGIN * 2.0)
+	)
+	_frame.size = wanted
+	_frame.position = ((size - wanted) * 0.5).floor()
 
 
 func _compose() -> void:
@@ -67,19 +97,24 @@ func _compose() -> void:
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(scrim)
 
-	## A `MarginContainer` rather than a `CenterContainer`, because a centred
-	## child takes its minimum size and a filling one has to be told how much of
-	## the page to leave -- and `fill_page` needs both behaviours from one node.
-	var centre := MarginContainer.new()
-	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(centre)
+	## A plain `Control`, not a `Container`, and that is the fix.
+	##
+	## Any `Container` lays its children out for you, and every one of them either
+	## fits a child to the full rect or shrinks it to its minimum -- neither of
+	## which is "this size, centred, unless somebody asks for the page". Under a
+	## bare `Control` nothing is recomputed and `_layout_frame` owns the rect.
+	var holder := Control.new()
+	holder.name = "FrameHolder"
+	holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(holder)
+	holder.resized.connect(_layout_frame)
 
 	var frame := PanelContainer.new()
-	frame.custom_minimum_size = Vector2(FRAME_WIDTH, FRAME_HEIGHT)
 	frame.mouse_filter = Control.MOUSE_FILTER_STOP
-	centre.add_child(frame)
+	holder.add_child(frame)
 	_frame = frame
+	resized.connect(_layout_frame)
 
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 18)
@@ -123,11 +158,35 @@ func _compose() -> void:
 	body.add_theme_constant_override("separation", 4)
 	scroll.add_child(body)
 
+	## ## Actions do not scroll
+	##
+	## The body scrolls because a report is as long as it is. The controls that
+	## *change* something must not, and the scouting profile is what proved it: the
+	## three marks were the last rows of the body, so on any voli with a full
+	## report they sat below the fold -- the only three controls on the screen,
+	## invisible by default, under six rows of numbers that change nothing.
+	##
+	## A footer that is empty when nobody fills it, so a popup with no actions is
+	## not a popup with a blank strip at the bottom.
+	footer = HBoxContainer.new()
+	footer.name = "PopupFooter"
+	footer.add_theme_constant_override("separation", 6)
+	column.add_child(footer)
+
 
 func open(title: String, flavour: String) -> void:
 	_title.text = title
 	_flavour.text = flavour
+	## Back to a window unless this open asks for the page. `fill_page` used to
+	## mutate the frame permanently, so one screen taking the page left every
+	## later popup on that screen taking it too.
+	_filling = false
+	## Cleared on open rather than by each caller, so a screen that fills the
+	## footer once cannot leave its buttons on the next thing opened.
+	for child in footer.get_children():
+		child.queue_free()
 	visible = true
+	_layout_frame()
 	## Grab the keyboard so Escape reaches `_unhandled_key_input` before whatever
 	## had focus on the page underneath.
 	grab_focus()
