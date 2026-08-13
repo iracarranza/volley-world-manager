@@ -6,10 +6,11 @@ const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_leg
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.gd")
-## For the playback pacing constants only. Read rather than copied, so a gate
-## asserting "no flight outlasts what playback can draw" cannot drift away from
-## what playback actually draws.
-const MAIN_SCRIPT := preload("res://scenes/main/main.gd")
+## The pacing policy playback obeys. Read rather than copied, so a gate asserting
+## "no flight outlasts what playback can draw" cannot drift from what playback
+## actually draws. It lives outside `main.gd` precisely so this preload works --
+## the main screen cannot compile under `--script`, where autoloads do not exist.
+const PLAYBACK_PACING_SCRIPT := preload("res://scripts/simulation/playback_pacing.gd")
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
@@ -8763,10 +8764,16 @@ func _test_seeded_rally_resolution() -> void:
 ## it, which is the specific mistake `FAILURE_MODES.md` warns about under
 ## measuring with the wrong instrument.
 ##
-## The terminal check is the one with a real failure behind it: 15 of 240
-## rallies had their last stamped event land *before* the terminal ball finished
-## its flight, so playback could resolve the point with the ball still in the
-## air. That is the same boundary that once made the ball vanish at point-end.
+## The terminal check is the one with a real failure behind it, and the first
+## version of it asserted the wrong object. It required the resolver's last
+## stamp to reach the terminal landing, and failed 7 rallies in 160 -- correctly,
+## because the last contact genuinely happens before the ball lands and there is
+## no contact *at* the landing to stamp. The resolver was right and the gate was
+## measuring it with playback's ruler, which is §0 wearing a different hat.
+##
+## What must hold is that the seconds playback *allots* to the terminal ball
+## cover the flight it draws. That is `PlaybackPacing.terminal_ball_seconds`,
+## and it is asserted here directly.
 func _test_the_rally_clock_is_ordered_and_outlives_the_ball() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
@@ -8774,8 +8781,9 @@ func _test_the_rally_clock_is_ordered_and_outlives_the_ball() -> void:
 	var out_of_order := 0
 	var events_seen := 0
 	var rallies := 0
-	var ends_before_the_ball := 0
-	var worst_early := 0.0
+	var terminal_flights := 0
+	var terminal_flights_cut_short := 0
+	var worst_shortfall := 0.0
 	var implausible_flights := 0
 	var longest_flight := 0.0
 	for seed_value in range(7300, 7460):
@@ -8784,8 +8792,8 @@ func _test_the_rally_clock_is_ordered_and_outlives_the_ball() -> void:
 			continue
 		rallies += 1
 		var previous := -1.0
-		var last_stamp := 0.0
-		var last_landing := 0.0
+		var last_trajectory := {}
+		var last_contact_seconds := 0.0
 		for raw_event in result.events:
 			var event: Resource = raw_event
 			if event == null:
@@ -8798,22 +8806,31 @@ func _test_the_rally_clock_is_ordered_and_outlives_the_ball() -> void:
 			if stamp < previous - 0.0001:
 				out_of_order += 1
 			previous = stamp
-			last_stamp = maxf(last_stamp, stamp)
 			var trajectory: Dictionary = event.metadata.get("outgoing_trajectory", {})
 			if trajectory.is_empty():
 				continue
+			last_trajectory = trajectory
+			last_contact_seconds = float(event.metadata.get("event_duration", 0.0))
 			var flight := float(trajectory.get("duration", 0.0))
 			longest_flight = maxf(longest_flight, flight)
 			## The measured 95th percentile of a ball leg is 1.51s. Anything past
 			## six is not a volleyball flight, and the old playback ceiling of 2.60
 			## is exactly why two of them -- one lasting 31 seconds -- went unseen.
-			implausible_flights += int(flight > MAIN_SCRIPT.PLAYBACK_IMPLAUSIBLE_SECONDS)
-			last_landing = maxf(
-				last_landing, float(trajectory.get("end_time", stamp + flight))
+			implausible_flights += int(
+				flight > PLAYBACK_PACING_SCRIPT.IMPLAUSIBLE_SECONDS
 			)
-		if last_landing > last_stamp + 0.0001:
-			ends_before_the_ball += 1
-			worst_early = maxf(worst_early, last_landing - last_stamp)
+		## The last flight in the rally is the one drawn on its own contact's
+		## turn, with no following contact to hand it to.
+		if last_trajectory.is_empty():
+			continue
+		terminal_flights += 1
+		var allotted: float = PLAYBACK_PACING_SCRIPT.terminal_ball_seconds(
+			last_trajectory, false, last_contact_seconds
+		)
+		var needed := float(last_trajectory.get("duration", 0.0))
+		if allotted < needed - 0.0001:
+			terminal_flights_cut_short += 1
+			worst_shortfall = maxf(worst_shortfall, needed - allotted)
 
 	_check(
 		unstamped == 0,
@@ -8830,16 +8847,21 @@ func _test_the_rally_clock_is_ordered_and_outlives_the_ball() -> void:
 		implausible_flights == 0,
 		"no ball flight outlasts a volleyball rally (%d over %.1fs, longest %.2fs)"
 			% [
-				implausible_flights, MAIN_SCRIPT.PLAYBACK_IMPLAUSIBLE_SECONDS,
+				implausible_flights, PLAYBACK_PACING_SCRIPT.IMPLAUSIBLE_SECONDS,
 				longest_flight,
 			],
 	)
 	## The invariant the brief asks for: the logical result may be known early,
 	## but the physical rally cannot be over while the ball is still travelling.
 	_check(
-		ends_before_the_ball == 0,
-		"no rally's last contact precedes its own terminal landing (%d of %d, worst %.2fs)"
-			% [ends_before_the_ball, rallies, worst_early],
+		terminal_flights_cut_short == 0,
+		"playback allots the terminal ball its whole flight (%d of %d cut short, worst %.2fs)"
+			% [terminal_flights_cut_short, terminal_flights, worst_shortfall],
+	)
+	_check(
+		terminal_flights >= rallies / 2,
+		"most rallies end on a drawn flight, so the check above has something to check (%d of %d)"
+			% [terminal_flights, rallies],
 	)
 
 
