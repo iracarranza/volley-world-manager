@@ -200,8 +200,38 @@ opponent's offence -- and therefore the home floor defence, and therefore rally
 length -- barely runs at all in half the rotation cycle.
 
 That is the short-rally symptom's actual shape, and it is not a defensive
-problem. Do not buff digging. The next question is why a home attack's survival
-depends on the home rotation this strongly, which is the block's business.
+problem. Do not buff digging.
+
+**And it is not the block either.** Terminal outcomes per rotation, same 1,200
+rallies, taken from `result.terminal_outcome` rather than from any event count:
+
+| | R1 | R2 | R3 | R4 | R5 | R6 |
+|---|---|---|---|---|---|---|
+| **ace** | 70 | **131** | 3 | **0** | 76 | 1 |
+| kill | 73 | 34 | 132 | 40 | 25 | 70 |
+| blocked | 20 | 2 | 4 | 12 | 41 | 37 |
+| attack_error | 10 | 8 | 26 | 71 | 13 | 36 |
+| serve_error | 15 | 24 | 20 | 29 | 25 | 28 |
+
+**Aces run from 0 to 131 out of 200.** In R2 two rallies in three end on the
+serve, so nothing downstream of the first contact happens at all -- no home
+attack, no opponent swing, no floor defence. The 58-fold opponent-swing spread
+is a consequence of this, not a cause, and the block is a consequence too:
+`blocked` runs 2 to 41 and moves the same way.
+
+The home serve-receive fails catastrophically in some rotations and never in
+others, against the same opponent with the same seeds. That is the thing
+upstream of every other symptom in this section, and it is where the next work
+belongs.
+
+**One thing is unexplained and must not be built on.** Two independent counters
+-- by `actor_id` and by the resolver's own `side` metadata -- both report *zero*
+home ATTACK events in every rotation, in the same runs that record 132 kills.
+The home attack does carry `"side": "home"` (`rally_simulator.gd:2484`), so the
+metadata is there. Either the probe has a fault I have not found or the kill
+path terminates without emitting the swing, and the second would mean every
+measurement anyone has made of the home offence by counting events is wrong.
+Resolve this before trusting any event-count statistic about the home attack.
 
 **Next, in order:** the previous contacter yielding and clearing (then
 re-measure the 46.7% obstruction, do not tune the clearance first); ready stance

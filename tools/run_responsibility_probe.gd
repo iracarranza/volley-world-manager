@@ -58,9 +58,16 @@ func _probe() -> void:
 		var rotation := int(game_manager.selected_rotation)
 		var row: Dictionary = by_rotation.get(rotation, {
 			"rallies": 0, "opponent_swings": 0, "home_digs": 0, "home_receptions": 0,
-			"home_coverage": 0,
+			"home_coverage": 0, "outcomes": {}, "home_swings": 0, "lanes": {},
 		})
 		row.rallies += 1
+		## How the rally actually ended, per rotation. If a home attack's
+		## survival depends on the home rotation this strongly, the terminal
+		## outcome is where it has to show.
+		var outcome := str(result.terminal_outcome)
+		var outcomes: Dictionary = row.outcomes
+		outcomes[outcome] = int(outcomes.get(outcome, 0)) + 1
+		row.outcomes = outcomes
 		for raw_event in result.events:
 			var scan: Resource = raw_event
 			if scan == null:
@@ -151,6 +158,20 @@ func _probe() -> void:
 			float(row.home_digs) / maxf(float(row.opponent_swings), 1.0),
 			int(row.home_coverage),
 		])
+		var outcome_keys: Array = Dictionary(row.outcomes).keys()
+		outcome_keys.sort()
+		var outcome_line := ""
+		for key in outcome_keys:
+			outcome_line += "%s %d  " % [key, int(Dictionary(row.outcomes)[key])]
+		print("      home swings %3d   outcomes: %s" % [
+			int(row.home_swings), outcome_line,
+		])
+		var lane_keys: Array = Dictionary(row.lanes).keys()
+		lane_keys.sort()
+		var lane_line := ""
+		for key in lane_keys:
+			lane_line += "%s %d  " % [key, int(Dictionary(row.lanes)[key])]
+		print("      home lanes: %s" % lane_line)
 	var kinds: Array = by_kind.keys()
 	kinds.sort()
 	for kind in kinds:
