@@ -635,6 +635,7 @@ func complete_active_match() -> void:
 		if match_statistics != null:
 			fixture.home_statistics = match_statistics.home.duplicate(true)
 			fixture.opponent_statistics = match_statistics.opponent.duplicate(true)
+			fixture.player_statistics = match_statistics.players.duplicate(true)
 		career.reputation = clampi(int(career.reputation) + (
 			2 if fixture.home_sets > fixture.opponent_sets else -1
 		), 0, 100)

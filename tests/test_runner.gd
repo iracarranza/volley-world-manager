@@ -276,6 +276,7 @@ func _initialize() -> void:
 	_test_block_is_a_jump_not_a_shape()
 	_test_surface_screen_and_card_variation()
 	_test_the_folders_are_card()
+	_test_clippings_name_the_right_side()
 	_test_scouting_confidence_and_fog()
 	_test_attack_courses_are_relative_to_the_hitter()
 	_test_attack_power_is_a_choice()
@@ -14073,6 +14074,82 @@ func _midpoint_phase(
 		return float(row[key]) < midpoint if descending \
 			else float(row[key]) > midpoint
 	)
+
+
+## The clippings strip, and the field that made every cutting anonymous.
+func _test_clippings_name_the_right_side() -> void:
+	var Clippings := load("res://scripts/data/match_clippings.gd")
+
+	## **A side, on every player row.** `MatchStatistics` keys its player table by
+	## actor id alone and both teams land in it, so without a side there is no way
+	## to tell one of ours from one of theirs -- and an id is only unique within a
+	## side. Every cutting came out named "a visiting voli".
+	var by_id := {7: _named_stub(7, "Ours")}
+
+	## An even match is not news. This is the property the relative bands buy that
+	## an absolute threshold cannot: nobody is an outlier here at any scale.
+	var even := {
+		"5": {"attack": 9, "side": "home"},
+		"6": {"attack": 9, "side": "home"},
+		"7": {"attack": 8, "side": "home"},
+	}
+	_check(
+		Clippings._standout(_stub_fixture(even), by_id).is_empty(),
+		"a match where everybody did the same is not a story",
+	)
+
+	## And the same shape, scaled up tenfold, is still not news -- which is the
+	## whole point of a ratio rather than a count.
+	var big := {
+		"5": {"attack": 90, "side": "home"},
+		"6": {"attack": 90, "side": "home"},
+		"7": {"attack": 80, "side": "home"},
+	}
+	_check(
+		Clippings._standout(_stub_fixture(big), by_id).is_empty(),
+		"and is still not a story ten times bigger",
+	)
+
+	var lopsided := {
+		"5": {"attack": 4, "side": "home"},
+		"6": {"attack": 5, "side": "home"},
+		"7": {"attack": 14, "side": "home"},
+	}
+	var story: Dictionary = Clippings._standout(_stub_fixture(lopsided), by_id)
+	_check(not story.is_empty(), "somebody well clear of the rest is a story")
+	_check(
+		str(story.get("headline", "")).begins_with("Ours"),
+		"and a cutting about one of ours names them (%s)" % str(story.get("headline", "")),
+	)
+
+	## The same numbers on the other bench name the club instead, because the
+	## paper has no squad list for them either.
+	var theirs := {
+		"5": {"attack": 4, "side": "opponent"},
+		"6": {"attack": 5, "side": "opponent"},
+		"7": {"attack": 14, "side": "opponent"},
+	}
+	var away: Dictionary = Clippings._standout(_stub_fixture(theirs), by_id)
+	_check(
+		not away.is_empty() and not str(away.get("headline", "")).begins_with("Ours"),
+		"a cutting about the opposition does not borrow one of our names",
+	)
+
+
+func _stub_fixture(player_stats: Dictionary) -> Resource:
+	var fixture: Resource = load("res://scripts/models/fixture.gd").new()
+	fixture.week = 3
+	fixture.completed = true
+	fixture.opponent_name = "Port Azure VC"
+	fixture.player_statistics = player_stats
+	return fixture
+
+
+func _named_stub(id: int, display_name: String) -> VolleyballPlayer:
+	var player := VolleyballPlayer.new()
+	player.id = id
+	player.display_name = display_name
+	return player
 
 
 ## The fourth medium, and the three ways it has to differ from the other three.

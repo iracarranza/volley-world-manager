@@ -90,6 +90,18 @@ const PIN_COLOURS := [
 ## the board at once.
 @export var photographic: bool = false
 
+## Whether this scrap was **cut out of something**.
+##
+## The board's two kinds of thing are opposites and have to look it: a polaroid is
+## a person you are tracking, and a clipping is an event that arrived. So a
+## clipping is newsprint -- greyer, cooler, cheaper stock -- and it is *torn*
+## along its top and bottom rather than cut square, because nobody uses scissors.
+##
+## Same component rather than a second one, because both are paper on cork and the
+## family is the point; what separates them is the stock and the edge, which is
+## the medium rule applied one level down.
+@export var newsprint: bool = false
+
 ## The seed the tilt and the pin colour come from. Set from the item's name by
 ## whoever builds it.
 @export var slip_seed: int = 0
@@ -160,8 +172,16 @@ func _draw() -> void:
 	var paper := UIPalette.color(&"surface_raised", light)
 	if photographic:
 		paper = Color(1.0, 0.99, 0.96) if light else Color(0.92, 0.91, 0.87)
+	elif newsprint:
+		## Cheap stock: grey, slightly green, and never as bright as a print. Pulp
+		## with no clay in it goes grey rather than yellow, which is the one thing
+		## that stops newsprint reading as aged paper.
+		paper = Color(0.88, 0.87, 0.83) if light else Color(0.72, 0.72, 0.69)
 	_draw_shadow()
-	draw_rect(Rect2(Vector2.ZERO, size), paper, true)
+	if newsprint:
+		draw_colored_polygon(_torn_outline(), paper)
+	else:
+		draw_rect(Rect2(Vector2.ZERO, size), paper, true)
 	## No border. A pinned scrap has a shadow and an edge where the paper stops,
 	## and drawing a line round it would make it a card in a list again.
 	if photographic:
@@ -173,6 +193,31 @@ func _draw() -> void:
 			),
 			Color(UIPalette.color(&"surface_inset", light), 0.55), true
 		)
+
+
+## The ragged top and bottom of something torn out of a page.
+##
+## Deterministic off the slip's own seed and the step index, so a cutting is the
+## same cutting every time the board is opened -- a tear that re-randomises per
+## frame is a scrap dissolving.
+const TEAR_STEPS: int = 11
+const TEAR_DEPTH: float = 3.4
+
+
+func _torn_outline() -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for step in range(TEAR_STEPS + 1):
+		var t := float(step) / float(TEAR_STEPS)
+		points.append(Vector2(size.x * t, _jag(step)))
+	for step in range(TEAR_STEPS + 1):
+		var t := 1.0 - float(step) / float(TEAR_STEPS)
+		points.append(Vector2(size.x * t, size.y - _jag(step + 31)))
+	return points
+
+
+func _jag(step: int) -> float:
+	var noise := ((slip_seed + step * 2654435761) >> 8) & 0x3FF
+	return float(noise) / 1023.0 * TEAR_DEPTH
 
 
 ## Stacked translucent rects rather than a blur, which canvas drawing has no

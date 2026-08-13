@@ -332,8 +332,16 @@ class _Surface extends Control:
 				Color(0.0, 0.0, 0.0, (0.22 if hovered else 0.16) / float(step + 1)),
 				true
 			)
-		draw_rect(body, _material_of(key, light), true)
-		draw_rect(body, Color(_material_of(key, light).darkened(0.35), 0.8), false, 1.2)
+		var stock := _stock_of(key, light)
+		draw_rect(body, stock, true)
+		_draw_grain(key, body, stock)
+		## The page inside, showing past the object that holds it. Inset unevenly:
+		## paper in a folder does not sit centred, and the offset is what makes the
+		## leaf read as *inside* rather than as a second rectangle on top.
+		var ground := _ground_of(key, light)
+		if ground.a > 0.0:
+			draw_rect(_leaf(key, body), ground, true)
+		draw_rect(body, Color(stock.darkened(0.35), 0.8), false, 1.2)
 		_draw_face(key, body, light)
 		if font == null:
 			return
@@ -354,32 +362,167 @@ class _Surface extends Control:
 		if count > 0:
 			_draw_tally(body, count, light)
 
-	## What each object is made of, taken from the medium it actually uses so the
-	## desk cannot disagree with the screen it opens.
-	func _material_of(key: String, light: bool) -> Color:
+	## ## What each object is made of
+	##
+	## Two facts per object and they are different facts, which is why there are
+	## two tables rather than one:
+	##
+	## - **`stock`** is what the thing is physically -- the manila of a folder, the
+	##   cork of a board, the melamine of a whiteboard. It is the medium.
+	## - **`ground`** is the colour of the *page you land on* when you open it.
+	##
+	## They have to agree or the desk lies about where a click goes: an object
+	## that is buff on the desk and blue on the screen is two different objects
+	## with one name. So the stock is the material and the ground is drawn as the
+	## visible part of the page inside it -- the sheet on the clipboard, the pages
+	## in the journal, the leaf sticking out of the folder. Picking one up and
+	## opening it is continuous.
+	##
+	## Both are read off the same palette the screens use, so a theme change moves
+	## the desk with them and nothing here has a colour of its own to drift.
+	func _stock_of(key: String, light: bool) -> Color:
 		match key:
 			"journal":
-				return Color("d9c9a8") if light else Color("3b3324")
-			"training":
+				## Cloth. The journal is the one bound object on the desk.
+				return Color("9d5f4a") if light else Color("46281f")
+			"training", "scouting":
+				## Both cork, and this is the one place on the desk they are
+				## allowed to look alike -- because they *are* alike, and what
+				## separates them is the clamp and the pins drawn on top.
 				return Color("b07f4f") if light else Color("53392a")
-			"scouting":
-				return Color("a87f52") if light else Color("4c3826")
 			"housing":
+				## Manila, from `UIStyleSystem.CARD_STOCK_*` applied to the
+				## palette's own surface rather than typed in again.
 				return Color("d8be86") if light else Color("4a3d25")
 			"kitchen":
-				return Color("e8e2d2") if light else Color("55524a")
+				## The pad: tinted office stock, gummed at the top.
+				return Color("dcd8c4") if light else Color("4c4a41")
 			"encyclopedia":
-				return Color("7d5a72") if light else Color("3b2b37")
-			"phone":
-				return Color("2f3236") if light else Color("22262a")
+				return Color("7d5a72") if light else Color("40303c")
+			"phone", "machine":
+				return Color("2b2e33") if light else Color("1d2126")
 			_:
-				return Color("3a3d42") if light else Color("26292d")
+				return UIPalette.color(&"surface", light)
 
+	## Where the page sits inside the object, and it is **not** centred.
+	##
+	## A uniform inset made every object a frame round a rectangle, which is eight
+	## objects with one silhouette -- and it hid the materials, because the page
+	## covered the part of the stock the grain was drawn on. Each object shows its
+	## own material where that material actually shows: a clipboard is board round
+	## a sheet with a wide margin at the bottom, a folder is manila down the fold
+	## and along the bottom with the leaf sticking out of the top, a journal is a
+	## cloth binding at the spine and almost no margin elsewhere.
+	func _leaf(key: String, body: Rect2) -> Rect2:
+		match key:
+			"training":
+				## Board all round, and more of it below the clip.
+				return Rect2(
+					body.position + Vector2(14.0, 20.0),
+					body.size - Vector2(28.0, 46.0)
+				)
+			"housing":
+				## The fold is on the left, so the manila shows there and the leaf
+				## rides high and to the right, past the top edge of the folder.
+				return Rect2(
+					body.position + Vector2(22.0, -6.0),
+					body.size - Vector2(30.0, 26.0)
+				)
+			"journal":
+				## A bound book: the binding shows down the spine and as a thin
+				## edge everywhere else.
+				return Rect2(
+					body.position + Vector2(18.0, 7.0),
+					body.size - Vector2(25.0, 14.0)
+				)
+			"kitchen":
+				## A pad is gummed at the top, so the strip of board shows there
+				## and the sheet runs to the other three edges.
+				return Rect2(
+					body.position + Vector2(5.0, 18.0),
+					body.size - Vector2(10.0, 23.0)
+				)
+			_:
+				return Rect2(
+					body.position + Vector2(9.0, 13.0),
+					body.size - Vector2(18.0, 22.0)
+				)
+
+	## The page inside, which is the colour of the screen the object opens into.
+	func _ground_of(key: String, light: bool) -> Color:
+		match key:
+			"scouting":
+				## The board has no page: what you see when you open it is more
+				## cork. So it returns its own stock, and the object draws no leaf.
+				return Color(0, 0, 0, 0)
+			"phone", "machine":
+				return Color(0, 0, 0, 0)
+			"journal", "encyclopedia":
+				return UIPalette.color(&"surface_raised", light)
+			"housing":
+				return Color("efe0bd") if light else Color("6a5836")
+			"kitchen":
+				return Color("f6f3e8") if light else Color("6d6a60")
+			_:
+				return UIPalette.color(&"surface", light)
+
+	## Read against **what the label actually sits on**, which is the leaf wherever
+	## there is one.
+	##
+	## It used to be read against the object: the encyclopedia is a dark purple
+	## book, so its lettering was pale -- and once the page inside it started
+	## showing, the label was pale ink on a cream page and vanished entirely. The
+	## thing behind the words is the page, not the cover.
 	func _lettering_of(key: String, light: bool) -> Color:
-		if key in ["phone", "machine", "encyclopedia"]:
-			return Color(0.94, 0.93, 0.90)
-		return UIPalette.color(&"ink", light) if light \
-			else Color(0.90, 0.88, 0.83)
+		if _ground_of(key, light).a <= 0.0:
+			## No page: the label is written on the object itself, which for the
+			## phone and the machine is dark plastic and for the board is cork.
+			if key in ["phone", "machine"]:
+				return Color(0.94, 0.93, 0.90)
+			return UIPalette.color(&"ink", light) if light \
+				else Color(0.90, 0.88, 0.83)
+		return UIPalette.color(&"ink", true) if light else Color(0.16, 0.14, 0.11)
+
+	## The one texture mark that says which material this is.
+	##
+	## Not the full component -- `UICorkBoard` and `card_fibre.gdshader` draw these
+	## properly at screen size and would be wasted on a 200px thumbnail, where what
+	## survives is *one* characteristic. Cork is speckled, the journal is screened,
+	## manila has fibre in it, and the pad has a printed grid. Anything finer than
+	## that is invisible at this size and costs a draw call each.
+	func _draw_grain(key: String, body: Rect2, stock: Color) -> void:
+		var seed_value := int(key.hash() & 0x7FFFFFFF)
+		match key:
+			"training", "scouting":
+				## Cork: two scales, the coarse one only. The fine granule pitch is
+				## under a pixel here.
+				for index in range(int(body.get_area() / 900.0)):
+					seed_value = (seed_value * 1103515245 + 12345) & 0x7FFFFFFF
+					var at := body.position + Vector2(
+						float(seed_value % 1000) / 1000.0 * body.size.x,
+						float((seed_value / 1000) % 1000) / 1000.0 * body.size.y
+					)
+					draw_rect(Rect2(at, Vector2(2.0, 2.0)), Color(stock.darkened(0.3), 0.5), true)
+			"journal":
+				## The halftone, at the only pitch that reads this small.
+				var pitch := 4.0
+				var y := body.position.y + 2.0
+				while y < body.position.y + body.size.y - 2.0:
+					var x := body.position.x + 2.0 + (fmod(y, pitch * 2.0) * 0.5)
+					while x < body.position.x + body.size.x - 2.0:
+						draw_rect(Rect2(Vector2(x, y), Vector2(1.0, 1.0)), Color(stock.darkened(0.25), 0.45), true)
+						x += pitch
+					y += pitch
+			"housing":
+				## Fibre: short flecks lying flat, which is the whole of what manila
+				## is at any size.
+				for index in range(int(body.get_area() / 500.0)):
+					seed_value = (seed_value * 1103515245 + 12345) & 0x7FFFFFFF
+					var at := body.position + Vector2(
+						float(seed_value % 1000) / 1000.0 * body.size.x,
+						float((seed_value / 1000) % 1000) / 1000.0 * body.size.y
+					)
+					draw_rect(Rect2(at, Vector2(2.0, 1.0)), Color(stock.darkened(0.35), 0.35), true)
 
 	## The one mark each object carries that is not its name.
 	func _draw_face(key: String, body: Rect2, light: bool) -> void:
@@ -398,7 +541,7 @@ class _Surface extends Control:
 						body.position + Vector2(body.size.x * 0.5, -9.0),
 						Vector2(body.size.x * 0.34, 10.0)
 					),
-					_material_of(key, light), true
+					_stock_of(key, light), true
 				)
 			"phone":
 				_draw_handset(body)

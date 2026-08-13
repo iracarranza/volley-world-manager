@@ -25,6 +25,16 @@ func _shoot() -> void:
 		print("could not start a career: %s" % error)
 		return
 
+	## Play some, so the clippings strip has something true on it. A board shot
+	## before any match has been played proves the strip draws and nothing else.
+	for _week in range(4):
+		career_manager.advance_week()
+		for fixture in career_manager.career.fixtures:
+			if not bool(fixture.completed) \
+					and int(fixture.week) <= int(career_manager.career.absolute_week):
+				career_manager.simulate_fixture(int(fixture.id))
+				break
+
 	for light_mode in [false, true]:
 		var screen: Control = load("res://scenes/screens/scouting_screen.gd").new()
 		screen.theme = load("res://scenes/themes/light_theme.tres") if light_mode \
@@ -51,5 +61,14 @@ func _shoot() -> void:
 			"user://scouting_%s_report.png" % tag
 		)
 		print("saved scouting_%s_report" % tag)
+		screen._panel.close_panel()
+		screen._strip_open = true
+		screen._refresh_strip_size()
+		for _settle in range(4):
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png(
+			"user://scouting_%s_cuttings.png" % tag
+		)
+		print("saved scouting_%s_cuttings" % tag)
 		screen.queue_free()
 		await get_tree().process_frame

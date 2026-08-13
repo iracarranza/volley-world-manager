@@ -23,6 +23,19 @@ extends Resource
 @export var home_statistics: Dictionary = {}
 @export var opponent_statistics: Dictionary = {}
 
+## Who did what, keyed by voli id.
+##
+## `MatchStatistics` has kept this per rally since it was written and nothing has
+## ever stored it: the fixture took the two *side* totals and dropped the players
+## on the floor when the match ended. So the game knew, for the length of one
+## match, that somebody had a twenty-kill night, and then forgot -- which made
+## every season a table of scorelines with no people in it.
+##
+## Kept because the scouting board's clippings are reports of things that
+## happened to *somebody*, and a clipping derived from a scoreline can only ever
+## say who won.
+@export var player_statistics: Dictionary = {}
+
 ## Which club this fixture is actually against.
 ##
 ## `opponent_name` on its own was decoration. The three names a new career was
@@ -54,6 +67,7 @@ func to_dict() -> Dictionary:
 		"home_sets": home_sets, "opponent_sets": opponent_sets,
 		"home_statistics": home_statistics.duplicate(true),
 		"opponent_statistics": opponent_statistics.duplicate(true),
+		"player_statistics": player_statistics.duplicate(true),
 		"opponent_region": opponent_region,
 		"opponent_club_index": opponent_club_index}
 
@@ -71,6 +85,9 @@ static func from_dict(data: Dictionary) -> VolleyballFixture:
 	## a completed fixture whose detail is simply unknown rather than as a zeroed
 	## one -- an empty dictionary and a dictionary of noughts read very
 	## differently on a panel that prints them.
+	fixture.player_statistics = Dictionary(
+		data.get("player_statistics", {})
+	).duplicate(true)
 	fixture.home_statistics = Dictionary(data.get("home_statistics", {})).duplicate(true)
 	fixture.opponent_statistics = Dictionary(
 		data.get("opponent_statistics", {})

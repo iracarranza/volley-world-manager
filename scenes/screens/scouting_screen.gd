@@ -50,6 +50,8 @@ const ScreenShell := preload("res://scenes/components/screen_shell.gd")
 const SlipScript := preload("res://scenes/components/pinned_slip.gd")
 const PopupScript := preload("res://scenes/components/desk_popup.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
+const Clippings := preload("res://scripts/data/match_clippings.gd")
+const Larder := preload("res://scripts/data/region_larder.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 
 const MARK_NONE: int = 0
@@ -78,6 +80,15 @@ const MARK_PINS := {
 
 const CARD_SIZE := Vector2(178.0, 116.0)
 const NOTE_WIDTH: float = 210.0
+## The clippings strip, shut and open.
+##
+## Shut, it is a single row along the bottom -- enough to read a headline and see
+## that there are some. Open, it is a third of the board, because reading a
+## cutting is a thing you stop and do rather than something you take in at a
+## glance.
+const STRIP_SHUT: float = 96.0
+const STRIP_OPEN: float = 250.0
+const CLIPPING_SIZE := Vector2(190.0, 78.0)
 
 signal back_requested
 
@@ -88,6 +99,10 @@ var _shortlist: HFlowContainer = null
 var _notes: VBoxContainer = null
 var _panel: DeskPopup = null
 var _open_id: int = -1
+var _strip: HFlowContainer = null
+var _strip_scroll: ScrollContainer = null
+var _strip_button: Button = null
+var _strip_open: bool = false
 
 
 func bind(career_manager: Node, game_manager: Node) -> void:
@@ -143,8 +158,46 @@ func _build() -> void:
 	_notes.add_theme_constant_override("separation", 14)
 	_board.add_child(_notes)
 
+	## ## The clippings, along the bottom
+	##
+	## Along the bottom rather than in the column, because these are a *different
+	## kind of thing* from everything above them -- the column is what the board
+	## says about itself and the shortlist is who you are tracking, and a clipping
+	## is neither. It is what arrived. Giving it its own edge of the board is the
+	## cheapest way to say so without a header explaining it.
+	var strip_column := VBoxContainer.new()
+	strip_column.name = "Clippings"
+	strip_column.add_theme_constant_override("separation", 4)
+	shell.content.add_child(strip_column)
+	_strip_button = Button.new()
+	_strip_button.name = "ClippingsButton"
+	_strip_button.text = "Cuttings"
+	_strip_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_strip_button.pressed.connect(func() -> void:
+		_strip_open = not _strip_open
+		_refresh_strip_size()
+	)
+	strip_column.add_child(_strip_button)
+	_strip_scroll = ScrollContainer.new()
+	_strip_scroll.name = "ClippingsScroll"
+	_strip_scroll.custom_minimum_size = Vector2(0.0, STRIP_SHUT)
+	_strip_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	strip_column.add_child(_strip_scroll)
+	_strip = HFlowContainer.new()
+	_strip.name = "ClippingRow"
+	_strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_strip.add_theme_constant_override("h_separation", 14)
+	_strip.add_theme_constant_override("v_separation", 12)
+	_strip_scroll.add_child(_strip)
+
 	_panel = PopupScript.build()
 	add_child(_panel)
+
+
+func _refresh_strip_size() -> void:
+	_strip_scroll.custom_minimum_size = Vector2(
+		0.0, STRIP_OPEN if _strip_open else STRIP_SHUT
+	)
 
 
 func refresh() -> void:
@@ -163,6 +216,79 @@ func refresh() -> void:
 	for prospect in prospects:
 		_shortlist.add_child(_card_slip(prospect))
 	_refresh_notes(prospects)
+	_refresh_clippings()
+
+
+## ## What arrived
+##
+## Cuttings are not filtered to the shortlist, and that is the whole point: the
+## paper prints who played well, and whether you were watching them is your
+## problem. A clipping naming somebody with no polaroid is how `SCOUTING.md`'s
+## unsolicited discovery actually reaches a manager.
+func _refresh_clippings() -> void:
+	if _strip == null:
+		return
+	for child in _strip.get_children():
+		child.queue_free()
+	var career = _career_manager.career
+	var fixtures: Array = career.fixtures if career != null else []
+	var roster: Array = _game_manager.players if _game_manager != null else []
+	var cuttings := Clippings.recent(fixtures, roster)
+	_strip_button.text = "Cuttings — nothing yet" if cuttings.is_empty() \
+		else "Cuttings (%d)" % cuttings.size()
+	if cuttings.is_empty():
+		return
+	for clipping in cuttings:
+		_strip.add_child(_clipping_slip(Dictionary(clipping)))
+
+
+func _clipping_slip(clipping: Dictionary) -> Control:
+	var subject_id := int(clipping.get("subject_id", -1))
+	var face := Button.new()
+	face.name = "Cutting%d" % int(clipping.get("week", 0))
+	face.flat = true
+	face.custom_minimum_size = CLIPPING_SIZE
+	## A cutting about somebody you have a polaroid of opens their profile; one
+	## about a stranger opens nothing yet, and says so rather than pretending to
+	## be inert.
+	if subject_id >= 0 and _prospect_by_id(subject_id) != null:
+		face.pressed.connect(func() -> void: _open(subject_id))
+
+	var column := VBoxContainer.new()
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.add_theme_constant_override("separation", 1)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		column.add_theme_constant_override("margin_%s" % side, 10)
+	for side in ["top", "bottom"]:
+		column.add_theme_constant_override("margin_%s" % side, 9)
+	face.add_child(column)
+
+	var week := Label.new()
+	week.name = "CuttingEyebrow"
+	week.text = "week %d" % int(clipping.get("week", 0))
+	week.add_theme_font_size_override("font_size", 9)
+	week.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(week)
+	var headline := Label.new()
+	headline.name = "CuttingTitle"
+	headline.text = str(clipping.get("headline", ""))
+	headline.add_theme_font_size_override("font_size", 13)
+	headline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	headline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(headline)
+	var body := Label.new()
+	body.name = "CuttingSummary"
+	body.text = str(clipping.get("body", ""))
+	body.add_theme_font_size_override("font_size", 10)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(body)
+
+	var slip := SlipScript.wrap(face, str(clipping.get("headline", "")), false)
+	slip.newsprint = true
+	slip.custom_minimum_size = CLIPPING_SIZE
+	return slip
 
 
 ## Whoever the career is currently looking at. Falls back to the club's own
@@ -385,6 +511,27 @@ func _fill_report(prospect) -> void:
 		var value := float(summary[category])
 		_report_row(str(category), "%d — %s" % [roundi(value), _read_of(value)])
 
+	## ## How they live
+	##
+	## A profile that is only attributes is a spec sheet, and a manager signing
+	## somebody is also deciding where to put them and what to feed them. Every
+	## line here is a field that has existed on `VolleyballPlayer` since regions
+	## and the table were built, and none of them had ever been shown anywhere --
+	## which is why a manager could sign a voli and discover their palate weeks
+	## later, from a complaint.
+	##
+	## It sits under the report rather than above it because it is the second
+	## question. You find out whether they can play, and then you find out what it
+	## takes to keep them.
+	_panel.body.add_child(HSeparator.new())
+	var living := Label.new()
+	living.name = "LivingTitle"
+	living.text = "How they live"
+	_panel.body.add_child(living)
+	_report_row("Raised on", _palate_of(prospect))
+	_report_row("Sharing", _sharing_of(prospect))
+	_report_row("Build", _build_of(prospect))
+
 	var marks := HBoxContainer.new()
 	marks.name = "ReportMarks"
 	marks.add_theme_constant_override("separation", 6)
@@ -421,6 +568,66 @@ func _report_row(label_text: String, value_text: String) -> void:
 	value.text = value_text
 	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(value)
+
+
+## ## Living preferences, from fields that already exist
+##
+## Nothing here is a new number. Inventing a "sharing preference" attribute and
+## then guessing its bands is the §0 failure in its most tempting form -- a knob
+## that reads plausibly and cannot be checked against anything. So each of these
+## is a *reading* of a field the generator already fills, and the bands are the
+## ones that field already uses elsewhere.
+
+## What they grew up eating. `palate_regions` is what `FoodSupply` measures
+## comfort against, so this is literally the list the table is scored on -- and
+## the first place a manager can see it before signing rather than after.
+func _palate_of(prospect) -> String:
+	if not "palate_regions" in prospect:
+		return "nobody wrote it down"
+	var regions: Array = prospect.palate_regions
+	if regions.is_empty():
+		return "nobody wrote it down"
+	var pastes: Array[String] = []
+	for region in regions:
+		pastes.append(Larder.paste_name(str(region)).trim_suffix(" paste"))
+	return ", ".join(pastes)
+
+
+## Whether they will take a shared room.
+##
+## Read off `ego`, which is a real generated field on a 1-100 range with a
+## documented middle at 50 -- so the bands are thirds of its own stated range
+## rather than numbers picked to sound right. High ego wants a door that shuts;
+## low ego would rather not be on their own.
+##
+## Stated as a preference rather than as a number, per the rule that a profile
+## says what a scout would say. The manager can still put them anywhere.
+const EGO_WANTS_OWN_ROOM: int = 67
+const EGO_WANTS_COMPANY: int = 34
+
+
+func _sharing_of(prospect) -> String:
+	if not "ego" in prospect:
+		return "no opinion on record"
+	var ego := int(prospect.ego)
+	if ego >= EGO_WANTS_OWN_ROOM:
+		return "wants a room of their own"
+	if ego <= EGO_WANTS_COMPANY:
+		return "would rather not be on their own"
+	return "will share and not mention it"
+
+
+## What kind of body the housing has to accommodate. `body_type` is generated and
+## drives attribute deltas already; here it is the thing that decides whether a
+## standard bunk is going to be long enough.
+func _build_of(prospect) -> String:
+	if not "body_type" in prospect:
+		return ""
+	var build := str(prospect.body_type)
+	var height := int(prospect.height_cm) if "height_cm" in prospect else 0
+	if height <= 0:
+		return build
+	return "%s · %d cm" % [build, height]
 
 
 ## What a scout would say instead of the number.
