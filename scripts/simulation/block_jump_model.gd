@@ -133,6 +133,54 @@ static func hang_seconds(leap_meters: float) -> float:
 	return 2.0 * sqrt(maxf(leap_meters, 0.0) * 2.0 / GRAVITY_MPS2)
 
 
+## When this jump happens, in rally seconds, around the contact it was made for.
+##
+## **The renderers had no such thing, and that is the whole of why blockers
+## hang.** Playback drove a blocker's height off `playback_progress` -- a 0-to-1
+## fraction of whatever leg was being drawn -- so their hang time was however
+## long that leg lasted. Against a 1.2-second flight a blocker was airborne for
+## 1.2 seconds off a jump that physically lasts about 0.67. The uneven playback
+## clamps made that worse and were never the mechanism.
+##
+## A jump is `hang` seconds long and its apex is `error` seconds from the ball.
+## Which side of the ball the apex falls on is not a coin flip: a blocker who is
+## set and reading is early, because the hitter is the one who can hold or go
+## off-speed, and a blocker still travelling laterally goes up behind it. That is
+## the same split `resolve` makes, so `late` is its `arm_state == "rising"`.
+static func jump_timeline(
+	contact_time: float,
+	leap_meters: float,
+	error_seconds: float = 0.0,
+	late: bool = false,
+) -> Dictionary:
+	var hang := hang_seconds(leap_meters)
+	var peak := contact_time + (
+		absf(error_seconds) if late else -absf(error_seconds)
+	)
+	return {
+		"takeoff": peak - hang * 0.5,
+		"peak": peak,
+		"landing": peak + hang * 0.5,
+		"hang_seconds": hang,
+	}
+
+
+## How far off the floor this jump is at a moment, 0 at the feet and 1 at the
+## apex.
+##
+## The same parabola `resolve` reads for height at the ball, sampled by time
+## rather than by a timing error -- so the drawn body and the contested height
+## are two views of one jump instead of two models that happen to agree.
+static func elevation_at(moment: float, timeline: Dictionary) -> float:
+	var hang := float(timeline.get("hang_seconds", 0.0))
+	if hang <= 0.0001:
+		return 0.0
+	var offset := (moment - float(timeline["peak"])) / (hang * 0.5)
+	if absf(offset) >= 1.0:
+		return 0.0
+	return 1.0 - offset * offset
+
+
 ## The blocker's jump, as the contact needs to read it.
 ##
 ## `timing_rating`, `read_quality` and `close_fraction` are all 0-1. Returns the

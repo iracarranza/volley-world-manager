@@ -11,6 +11,7 @@ const TACTICAL_COURT_SCRIPT := preload("res://scenes/components/tactical_court.g
 ## actually draws. It lives outside `main.gd` precisely so this preload works --
 ## the main screen cannot compile under `--script`, where autoloads do not exist.
 const PLAYBACK_PACING_SCRIPT := preload("res://scripts/simulation/playback_pacing.gd")
+const BLOCK_JUMP_SCRIPT := preload("res://scripts/simulation/block_jump_model.gd")
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
@@ -259,6 +260,7 @@ func _initialize() -> void:
 	_test_seeded_rally_resolution()
 	_test_seeded_floor_defense_geometry()
 	_test_the_rally_clock_is_ordered_and_outlives_the_ball()
+	_test_a_blocker_lands_when_their_jump_ends()
 	_test_playback_movement_is_humanly_possible()
 	_test_body_type_distribution_is_flat()
 	_test_every_script_has_a_uid()
@@ -8744,6 +8746,85 @@ func _test_seeded_rally_resolution() -> void:
 	)
 	_check(not first.explanation.is_empty(), "rally result includes an explanation")
 
+
+## A blocker is off the floor for as long as their jump lasts, and not a moment
+## longer.
+##
+## The defect this guards is "blockers hang", and its mechanism was not in the
+## jump model at all: playback drove a blocker's height from `playback_progress`,
+## a 0-to-1 fraction of whichever leg was being drawn, so hang time was leg time.
+## A 1.2-second flight held a blocker up for 1.2 seconds off a jump that lasts
+## about 0.67, and a longer leg held them longer.
+##
+## So the check that matters is **independence**: sampled on the rally clock, the
+## airborne window has to come out the same length whatever surrounds it. A test
+## that only asserted "the jump is 0.67 s" would still have passed against the
+## old code on the one leg that happened to be 0.67 s long.
+func _test_a_blocker_lands_when_their_jump_ends() -> void:
+	## A 0.55 m leap hangs about 0.67 s, which `BlockJumpModel` states and which
+	## is plain ballistics: 2 * sqrt(2h/g).
+	var hang: float = BLOCK_JUMP_SCRIPT.hang_seconds(0.55)
+	_check(
+		absf(hang - 0.670) < 0.01,
+		"a 0.55 m block jump hangs about two thirds of a second (%.3f s)" % hang,
+	)
+	_check(
+		BLOCK_JUMP_SCRIPT.hang_seconds(0.80) > hang,
+		"a bigger leap hangs longer",
+	)
+
+	var timeline: Dictionary = BLOCK_JUMP_SCRIPT.jump_timeline(4.00, 0.55)
+	_check(
+		absf(float(timeline["peak"]) - 4.00) < 0.0001,
+		"the apex sits on the contact it was made for",
+	)
+	_check(
+		absf(float(timeline["landing"]) - float(timeline["takeoff"]) - hang) < 0.0001,
+		"takeoff to landing is exactly the hang",
+	)
+	_check(
+		BLOCK_JUMP_SCRIPT.elevation_at(float(timeline["peak"]), timeline) > 0.999
+			and BLOCK_JUMP_SCRIPT.elevation_at(float(timeline["takeoff"]), timeline) <= 0.0001
+			and BLOCK_JUMP_SCRIPT.elevation_at(float(timeline["landing"]), timeline) <= 0.0001,
+		"the blocker is on the floor at both ends and at full height in the middle",
+	)
+
+	## The independence check. Sample the same jump densely and measure how long
+	## it is off the floor; then do it again with the contact moved, which is what
+	## a differently paced leg does. Both have to agree with the ballistics.
+	var measured := _airborne_seconds(timeline)
+	_check(
+		absf(measured - hang) < 0.02,
+		"the drawn airborne window matches the jump (%.3f s against %.3f s)"
+			% [measured, hang],
+	)
+	var moved := _airborne_seconds(BLOCK_JUMP_SCRIPT.jump_timeline(11.30, 0.55))
+	_check(
+		absf(moved - measured) < 0.01,
+		"the same jump lasts the same time wherever the contact falls (%.3f s against %.3f s)"
+			% [moved, measured],
+	)
+	## And a taller blocker is genuinely airborne longer, so the window is the
+	## jump's and not a constant wearing the jump's name.
+	var taller := _airborne_seconds(BLOCK_JUMP_SCRIPT.jump_timeline(4.00, 0.85))
+	_check(
+		taller > measured + 0.05,
+		"a bigger leap is drawn airborne longer (%.3f s against %.3f s)"
+			% [taller, measured],
+	)
+
+
+## How long a jump reads as off the floor, by sampling it the way a frame would.
+func _airborne_seconds(timeline: Dictionary) -> float:
+	var step := 0.002
+	var airborne := 0
+	var moment: float = float(timeline["takeoff"]) - 0.40
+	var last: float = float(timeline["landing"]) + 0.40
+	while moment <= last:
+		if BLOCK_JUMP_SCRIPT.elevation_at(moment, timeline) > 0.0:
+			airborne += 1
+		moment += step
+	return float(airborne) * step
 
 ## Playback draws each contact's actor travelling to that contact over the
 ## previous ball's flight. Nothing previously constrained the two to be

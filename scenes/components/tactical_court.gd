@@ -6,6 +6,7 @@ const HitterPlacementModel := preload(
 )
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const BlockJumpModel := preload("res://scripts/simulation/block_jump_model.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const RotationLegalityModel := preload("res://scripts/simulation/rotation_legality.gd")
 
@@ -1740,6 +1741,12 @@ func _shadow_setter_candidate(candidates: Array, player_id: int) -> Dictionary:
 ## and blocks read as flat slides. The resolver already knows who left the floor
 ## and how well -- `jump_multiplier` for a hitter, the setter's own reach state
 ## for a jump set -- so the drawing layer reads that rather than inventing it.
+## What a full block jump draws as, against the 0.85 the flat version used. The
+## same number, so this change moves *when* a blocker is in the air and not how
+## high they appear at the top of it.
+const BLOCK_JUMP_DRAW_SCALE: float = 0.85
+
+
 func _contact_elevation(player_id: int, side: String) -> float:
 	if player_id < 0:
 		return 0.0
@@ -1747,12 +1754,71 @@ func _contact_elevation(player_id: int, side: String) -> float:
 	## contactor is already gathering and rising; during the contact itself they
 	## hang and come down. Reading only `playback_event` showed the lift for the
 	## contact frame alone, which is why it barely registered even at half speed.
+	##
+	## **A block is timed off the rally clock, not off the leg.** Everything else
+	## here still rides `playback_progress`, which is a fraction of whatever leg is
+	## being drawn -- so a jump lasted as long as that leg did. Against a 1.2 s
+	## flight a blocker was airborne for 1.2 s off a jump that physically lasts
+	## about 0.67, and against a longer one, longer still. That is the hang, and
+	## the uneven pacing clamps only made it more visible.
+	##
+	## `cognition_time` is the rally's own clock, already tweened across each leg
+	## for the cue stream, so the jump and the thoughts above it are sampled from
+	## one timeline rather than two.
+	var block_lift := _block_elevation(player_id, side)
+	if block_lift >= 0.0:
+		return block_lift
 	if pending_contact_event != null:
 		var rising := _event_elevation(pending_contact_event, player_id, side)
 		if rising > 0.0:
 			return rising * smoothstep(0.45, 1.0, playback_progress)
 	var landing := _event_elevation(playback_event, player_id, side)
 	return landing * (1.0 - smoothstep(0.55, 1.0, playback_progress))
+
+
+## This player's height off a block jump, or -1 when they are not blocking.
+##
+## Negative rather than zero for "not blocking", because zero is a real answer --
+## a blocker before takeoff and after landing is on the floor and has to stay
+## there rather than falling through to the progress-driven path.
+func _block_elevation(player_id: int, side: String) -> float:
+	for event in [pending_contact_event, playback_event]:
+		if event == null or int(event.event_type) != RallyEventModel.EventType.BLOCK:
+			continue
+		if str(event.metadata.get("side", "")) != side:
+			continue
+		if int(event.actor_id) != player_id 				and int(event.metadata.get("assist_id", -1)) != player_id:
+			continue
+		var leap := _leap_meters(player_id, side)
+		if leap <= 0.0:
+			continue
+		## **The apex is centred on the contact, and that is a known
+		## simplification.** `BlockJumpModel.resolve` computes exactly how far off
+		## the ball this blocker peaked, and the wall entry in
+		## `geometric_attack_promotion` keeps `arm_state` and `timing_quality` while
+		## dropping `timing_error_seconds` and `hang_seconds` -- a value computed
+		## and discarded at a seam, which is the fault this repository logs more
+		## than any other. Carrying them needs both block sources changed, so the
+		## offset is left at zero here rather than invented, and the hang below is
+		## the blocker's real leap rather than a constant.
+		return BlockJumpModel.elevation_at(
+			cognition_time,
+			BlockJumpModel.jump_timeline(
+				float(event.metadata.get("event_time", cognition_time)), leap
+			),
+		) * BLOCK_JUMP_DRAW_SCALE
+	return -1.0
+
+
+## How high this voli actually leaves the floor, in metres.
+func _leap_meters(player_id: int, side: String) -> float:
+	var table: Dictionary = players_by_id if side == "home" else opponent_players_by_id
+	var player = table.get(player_id)
+	if player == null:
+		return 0.0
+	return maxf(
+		(player.jumping_reach_cm() - player.standing_reach_cm()) / 100.0, 0.0
+	)
 
 
 ## Peak elevation this player reaches for a given event, ignoring timing.
