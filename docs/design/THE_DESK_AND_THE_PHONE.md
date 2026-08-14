@@ -315,3 +315,100 @@ visible rather than listing it.
 Everything else I would build as written, with the two guards above: the cork has
 to be structurally distinct from the clipboard's cork, and every shadowed quirk
 has to be measured somewhere the player never looks.
+
+
+---
+
+# Addendum: the phone is a two-way interface, and calls are ordinary
+
+Added after a later brief. The sections above design the phone as something that
+*happens to you*; this is the half where you pick it up.
+
+## The rule that changes the feel
+
+**Phone calls are not rare. *Important* phone calls are rare.**
+
+Ringing indicates a **synchronous** channel, not an important message. An
+ordinary week holds several calls and most of them are not decisions:
+
+> Scout: *"They aren't playing Savi tonight. Want me to stay?"*
+> Chef: *"We're nearly out of Xérvyan paste."*
+> Assistant: *"Still drilling short defence today?"*
+> Voli: *"Can I swap rooms with Nara?"*
+> Staff: *"We're taking break early for the snail racing finals. Coming?"*
+
+and occasionally:
+
+> Scout: *"Don't put this in writing. I think Uva wants out."*
+
+The uncertainty is the value. The player decides whether to interrupt what they
+were doing, and should sometimes be wrong. §9 above already argued this; the
+addition is that it applies to *volume*, not only to the ratio of important
+calls. Some calls should be actively not worth answering.
+
+## Outgoing
+
+```
+PHONE
+  CALL              staff · volis · scouts · other clubs · recruitment contacts
+  ANSWERING MACHINE saved and missed
+  RECENT            who you have been talking to
+```
+
+**Scout** — ask for progress, change the assignment, clarify a report, ask about
+one voli, change the criteria, ask what they personally think, call them home,
+sort out a mistake. Instead of a `[Clarify]` button on a report:
+
+> *"Are you sure this is the right Kovarik?"*
+
+**Coach / staff** — discuss training, change today's emphasis, ask about a voli,
+clarify a responsibility, ask what is actually being drilled, deal with an error.
+
+**Volis** — check in, discuss role, development, a living arrangement, a
+roommate, follow up on something said before. The phone is *another* channel, not
+a replacement for being in the room.
+
+**Recruitment** — arrange an interview, follow up, modify an offer, ask for a
+decision, answer a concern, contact another club. This is what joins the cork
+board to the phone without a new screen between them.
+
+## Phone against inbox
+
+| | inbox | phone |
+|---|---|---|
+| persistence | keeps | passes |
+| register | formal | conversational |
+| timing | whenever | now |
+| importance | legible | unknown until answered |
+| good for | reports, documents, decisions that keep | clarification, things happening this minute |
+
+The **answering machine** bridges them: a missed synchronous thing becomes
+something you can come back to, minus what live conversation would have given
+you. §8 above has the shape — live, the scout tells you what he suspects and
+asks whether to look into it; on tape, *"something strange is happening with
+Mendoza"* and you spend the follow-up yourself.
+
+## Against the live clock
+
+Ringing occupies real seconds, and pausing must freeze the remaining ring
+window rather than rewind it. Miss the call, then pause, and you may investigate
+what happened; you may not retroactively answer.
+
+This is also where the interruption contract lands: a call is `attention` or
+`interrupt` depending on the caller and the subject, and only `interrupt` stops
+a fast-forward. See `THE_DAY_AND_THE_CLOCK.md` §3.3 — design all four levels,
+drive two, ship no preferences screen.
+
+## And it is how staff failure reaches the player
+
+Not `SCOUT FAILURE EVENT [Resolve]`. The answering machine:
+
+> *"Boss? Call me when you get this. I think I may have gone to the wrong hall."*
+
+then a call back, then a conversation. `STAFF_AND_FALLIBILITY.md` §5.
+
+## Still sequenced after the day model
+
+Unchanged from §"What I would do, in order" above, and for the same reason: the
+cost of not answering is **a turn**, not a penalty, and there are no turns until
+the clock exists.

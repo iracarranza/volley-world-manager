@@ -8,6 +8,71 @@ Order within each section is rough implementation order, not priority.
 
 ---
 
+## The club-life arc: one order across five documents
+
+Four design documents landed together and each carries its own build order. This
+is the only place the **cross-document** sequence lives, because no one of them
+owns it and five copies of it would drift.
+
+- `DIEGETIC_MANAGEMENT.md` — the principles the rest assume
+- `THE_DAY_AND_THE_CLOCK.md` — time, the calendar, manager attention
+- `RECRUITMENT_AND_THE_OFFER.md` — signing as joining a household
+- `STAFF_AND_FALLIBILITY.md` — skill affects correctness, not magnitude
+- `THE_DESK_AND_THE_PHONE.md` (addendum) — outgoing calls, the machine
+
+### Closed in this arc
+
+**Comfort counted pastes rather than weighing them.** `2:1:3` and `1:1:1` read
+identically and a `TRACE_SHARE` of 0.08 counted for as much as half the block.
+Measured across 150 club/palate/chef configurations before changing it: 18
+verdicts flip, **nine each way**, largest move 0.107 — so the band needed no
+recalibration, and the real effect is on *how* short rather than *who* is short
+(a lone trace goes from 0.333 to 0.080, taking discomfort from 0.39 to 0.86).
+
+**Two readers were still measuring the larder.** `FoodSupply.served` documents
+the larder-versus-meal fix as done; it was done in `career_manager` and the
+chef's card and not in the journal's accommodation panel, which reported
+different comfort for the same voli in the same week than recovery did.
+
+**The offer sheet**, and `sign_transfer` displaced as the path onto a roster.
+
+**The marks read as marks again** — `would sign`, *Pinned as*, the action pushed
+away, the pin colour beside the word rather than in it.
+
+### Open, in order
+
+1. **The interview.** Wraps `offer_place`, charges manager time, and is the
+   *second manager appointment* — after which the shared activity contract can be
+   extracted from two working systems instead of invented.
+2. **The block cursor and the tick.** In memory, events derived from
+   `(week, day, block, subject, event_type)`, two interruption behaviours.
+3. **Compliance** — the personal schedule as an output, priced by the existing
+   `deviation_from` machinery rather than by a new subsystem.
+4. **`career.scouted_players`**, which is checked and does not exist, so the
+   board shows the market rather than what a scout found.
+5. **Beliefs with an owner** (`SCOUTING.md` #3). Unblocks scout failure, two
+   reports side by side, and the club's belief about an allergy — three systems,
+   one change.
+6. **A trait catalogue**, then allergies as its first `P` trait with reality and
+   belief as separate data from the first commit.
+7. **Chef failure as a kind**, derived rather than rolled.
+8. **Behaviour for the equipment table.** `SMALL_EQUIPMENT` and
+   `LARGE_EQUIPMENT` declare what they answer and cost, and nothing dispatches on
+   those strings. They want a *behaviour* consumer in free time, not a modifier.
+
+### Decided, so nobody has to relitigate it
+
+- **The block is the unit.** 36 × 40 minutes, already authoritative. Hours are
+  presentation and `clock_label` is the only conversion.
+- **Derived, never rolled**, for clock events as for everything else.
+- **No promise ledger.** The simulation is the record.
+- **Design four interruption levels, drive two, ship no preferences screen.**
+- **No generic `Activity` schema before two appointments exist.**
+- **A physical fact shows as a number; a judgment about a person shows as a
+  sentence.**
+
+---
+
 ## Session log: playback movement, the swing, the board, scouting
 
 Kept at the top because most of it is *closed*, and a backlog that only grows

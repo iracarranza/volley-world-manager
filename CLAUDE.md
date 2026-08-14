@@ -48,6 +48,10 @@ Then, by subject:
 
 | Working on | Read |
 |---|---|
+| **Anything about the interface at all** | `docs/design/DIEGETIC_MANAGEMENT.md` |
+| The clock, the day, the calendar, manager time | `docs/design/THE_DAY_AND_THE_CLOCK.md` |
+| Signing, offers, the interview | `docs/design/RECRUITMENT_AND_THE_OFFER.md` |
+| Staff, and how they get things wrong | `docs/design/STAFF_AND_FALLIBILITY.md` |
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
 | The title screen | `docs/design/TITLE_SCREEN.md` |
 | The match centre, the whiteboard | `docs/design/THE_TACTICAL_WHITEBOARD.md` |
@@ -60,6 +64,7 @@ Then, by subject:
 | Clubs, transfers, why the roster matters | `docs/design/CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` |
 | Traits and what they may touch | `docs/design/TRAITS.md` |
 | Scouts, uncertainty, what a report means | `docs/design/SCOUTING.md` |
+| The phone, incoming and outgoing | `docs/design/THE_DESK_AND_THE_PHONE.md` |
 | The team wheel, functional contribution | `docs/design/TEAM_ATTRIBUTE_WHEEL.md` |
 | Accommodations, food, lodging | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
 | Who the manager is | `docs/design/CHARACTER_CREATION.md` |

@@ -63,6 +63,19 @@ two mediocre scouts could not add up to a good one, and per-scout beliefs
 *improve* on it rather than breaking it. Two scouts stop being a bigger number
 and become two readings — which is the design goal, arrived at structurally.
 
+**Three other systems are waiting on this one change**, which is worth stating
+because it moves the item's priority above what its own section argues for:
+
+- **Scout failure.** *"You scouted the wrong Kovarik"* is unrepresentable while
+  there is one club belief per voli — there is no per-scout belief for the wrong
+  one to live in. `STAFF_AND_FALLIBILITY.md` §3. (Volis only acquired surnames
+  recently, so two confusably-named people are possible at all for the first
+  time.)
+- **The club's belief about an allergy**, which is a scouting belief with a
+  different subject and must not be built as a second system with the same
+  defect. `ACCOMMODATIONS_AND_CARE.md` §2.
+- **Two reports side by side**, which this section already names.
+
 ## The rest of the gaps, cheapest first
 
 ### Different information takes different observation — the cheapest item here
@@ -292,3 +305,58 @@ documented at `CATEGORY_ALIASES`, where the last thing to get it wrong was
 `.get(category, 50.0)` answered for the missing keys, so every prospect read
 *exactly* 50.0 on two of six categories, 264 of 264. The fallback is gone: a
 category that stops being returned now prints "missing".
+
+
+---
+
+# Addendum: the board, the marks, and what is actually pinned to it
+
+## The marks are annotations and must keep looking like it
+
+`MARK_SIGN` / `MARK_WATCH` / `MARK_PASS` are **pin colours on a slip** — a
+verdict a manager wrote down — not buttons that do anything. A brief once
+proposed replacing "Sign" with a real recruitment action; that would have
+deleted a working annotation, and the actual unilateral transaction was
+`sign_transfer` on the transfers tab, on a different screen.
+
+They stopped *reading* as annotations the moment a real action
+(`Offer a place`) joined them in the panel footer: four identical adjacent
+buttons, one of them a mark literally called *sign*, beside a button that signs.
+Fixed presentationally rather than structurally — the word became **would
+sign**, the group got the label **Pinned as**, the action was pushed to the far
+end, and the pin colour moved *beside* the chosen word as a nine-pixel head
+rather than tinting the lettering.
+
+That last one took two attempts and the lesson generalises: **`MARK_PINS` are
+colours chosen to read on cork, and a popup panel is not cork.** As 11px type on
+the Mikasa panel the green sat at about 3.1:1 against 6.1 for the amber and 4.1
+for the grey — so the most important of the three was the least legible. A value
+read off the wrong surface. `RECRUITMENT_AND_THE_OFFER.md` §5.
+
+## The board is currently showing the market
+
+`_prospects()` checks `career.scouted_players` first — and **that field does not
+exist on `career_state`**, so the check has always fallen through. It used to
+fall through to the club's own roster, which meant a manager could open a slip
+about somebody already asleep in their own Bunkhouse; it now falls through to
+the transfer pool, which is at least somebody signable.
+
+Neither is scouting. Until `scouted_players` is real, the board is a shop window
+with pins in it rather than the imperfect-knowledge workspace this document
+describes, and none of the freshness, specialisation or observation-cost work
+above has anywhere to show itself.
+
+**This belongs immediately after "give beliefs an owner"** in the order below: a
+belief needs an owner, and then it needs to be about somebody a scout actually
+went and looked at.
+
+## What the offer added to the panel
+
+The prospect panel now carries a third section, *If they came here* — the
+proposed room, the floor arithmetic, what the club's paste means to this voli,
+and what they would raise about it. It is scouting-adjacent rather than
+scouting: everything in it is a fact about **the club**, computed at open, with
+no uncertainty model over it. Documented in `RECRUITMENT_AND_THE_OFFER.md` §2.
+
+The panel takes the whole page for a recruit and stays a window for anybody
+else, because a report you can act on is a thing you sit down with.
