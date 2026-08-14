@@ -29,44 +29,49 @@ FAIL line.
 **Asks:** does reachability *create* responsibility or only decide whether it
 succeeds, and how crowded is the voli who takes the ball?
 
-**Reports, 1,200 rallies, all six rotations:**
-
-| RECEPTION | before the immediate-control lock | after |
-|---|---|---|
-| ball already inside somebody's reach | -- | 844 of 1,059 (79.7%) |
-| nearest voli did *not* take it | 194 (32.9% of contested) | **71 (12.0%)** |
-| how much further the winner was | median 0.70 m, max 1.14 | median 0.38 m, max 0.87 |
-
-Per rotation, 200 rallies each:
+**Reports, 200 paired rallies per rotation.** Every rotation receives the same
+seeds and the serve event stays byte-equivalent across the three runs, so a
+change in first contact is attributable to the receive assignment rather than to
+a different serve draw.
 
 | | R1 | R2 | R3 | R4 | R5 | R6 |
 |---|---|---|---|---|---|---|
-| ace | 70 | **131** | 3 | **0** | 76 | 1 |
-| kill | 73 | 34 | 132 | 40 | 25 | 70 |
-| blocked | 20 | 2 | 4 | 12 | 41 | 37 |
-| attack_error | 10 | 8 | 26 | 71 | 13 | 36 |
-| serve_error | 15 | 24 | 20 | 29 | 25 | 28 |
-| opponent swings | 13 | 1 | 16 | 58 | 26 | 35 |
-| floor digs | 9 | 1 | 15 | 45 | 21 | 28 |
-| digs per swing | 0.69 | 1.00 | 0.94 | 0.78 | 0.81 | 0.80 |
-| block coverage | 39 | 21 | 60 | 18 | 16 | 57 |
+| ace | 31 | 0 | 1 | 0 | 23 | 0 |
+| kill | 118 | 139 | 135 | 64 | 66 | 75 |
+| blocked | 5 | 3 | 4 | 2 | 26 | 35 |
+| attack_error | 16 | 25 | 24 | 67 | 28 | 39 |
+| serve_error | 17 | 17 | 17 | 17 | 17 | 17 |
+| home attacks | 156 | 188 | 191 | 201 | 178 | 215 |
+| opponent attacks | 15 | 18 | 23 | 66 | 48 | 49 |
+| reception | 152/183 | 183/183 | 182/183 | 183/183 | 160/183 | 183/183 |
+| median quality | 0.241 | 0.770 | 0.503 | 0.778 | 0.261 | 0.470 |
+| passer on the ball | Nora 3 | Luka 2 | Sven 7 | Luka 2 | Nora 3 | Sven 7 |
+| their composite | 0.512 | 0.962 | 0.702 | 0.962 | 0.512 | 0.702 |
 
-**What is trustworthy:** the outcome rows. They come from
-`result.terminal_outcome`, which the resolver authors directly and which no
-counter in the probe touches.
+**What is trustworthy:** all of it, now. Ownership is read only from the
+resolver-authored `metadata.side`, and an event without one is *counted and
+reported* rather than guessed at -- `missing side` reads 0 in every rotation
+above, which is what makes the rest of the row worth reading.
 
-**What is not:** anything split by side. See §Open question 1 -- the side split
-reports zero home ATTACK events in runs recording 132 kills, and both the
-`actor_id >= 100` heuristic and the resolver's own `side` metadata agree on that
-zero. Until that is explained, treat every home/opponent event count from this
-probe as unverified. The `home swings` and `home lanes` lines print for that
-reason and should be read as evidence of the discrepancy rather than as data.
+**What this replaced, and why it is worth keeping on the page.** The previous
+version of this table reported **aces running 0 to 131 by rotation** and **zero
+home ATTACK events in runs recording 132 kills**, and both figures were wrong in
+the instrument rather than in the game. Sides were split on `actor_id >= 100`,
+which is the vertical slice's id convention and not a generated career's, so
+every home swing fell outside the test and was counted as nothing. The handoff
+named that as a known limit *and then quoted the number anyway* -- which is the
+whole failure this document exists to prevent, committed in the document itself.
+
+The ace spread was a second fault, in the per-rotation receive selection, and
+the corrected table explains itself in its own rows: aces track **which passer
+the rotation puts on the ball**. R1 and R5 put Nora 3 there (composite 0.512,
+reception 57) and give up 31 and 23; R2 and R4 put Luka 2 there (0.962) and give
+up none. That is correct volleyball -- a rotation that hides your worst passer
+is better in serve receive -- and it is a far smaller and more legible spread
+than 0 to 131.
 
 **Known limits:**
 
-- Splitting sides by `actor_id >= 100` is the *vertical slice's* convention.
-  `create_career` generates volis with different ids, so the heuristic is
-  unsound against a generated roster and this probe uses one.
 - `DEFENSE` is two different events. `rally_simulator.gd:2978` emits it for a
   voli covering their own blocked hitter, which is a response to the opponent's
   *block*. The probe separates them on caption text, which is fragile.
@@ -332,25 +337,24 @@ clock the window ended on, so the sheet has to start there too.
 
 ## Open questions
 
-**1. Zero home ATTACK events against 132 kills.** Two independent counters --
-`actor_id` and the resolver's `side` metadata -- both report no home swings in
-any rotation, in runs whose terminal outcomes record 132 kills. The home attack
-does carry `"side": "home"` at `rally_simulator.gd:2484`. Either the probe has a
-fault nobody has found or the kill path terminates without emitting the swing.
+**~~1. Zero home ATTACK events against 132 kills.~~ Answered: the probe was
+wrong.** Sides were split on `actor_id >= 100`, which is the vertical slice's id
+convention and not a generated career's, so every home swing fell outside the
+test. Ownership now comes from the resolver's own `metadata.side` and an event
+without one is counted as `missing side` rather than guessed at. Home attacks
+read 156-215 per rotation with `missing side 0` throughout. No simulator defect;
+the kill path was emitting the swing all along.
 
-The second would invalidate every event-count statistic taken about the home
-offence, including several quoted on this branch. **Resolve before trusting any
-of them.** Cheapest test: dump the raw event-type sequence of a single R3 rally
-that ended in a kill.
+**~~2. Why aces run 0 to 131 by rotation.~~ Answered: per-rotation receive
+selection.** The corrected spread is 31/0/1/0/23/0, and it tracks which passer
+the rotation puts on the ball rather than anything downstream. See the table in
+§1.
 
-**2. Why aces run 0 to 131 by rotation.** The largest unexplained number on the
-branch. Same opponent, same seeds, only the home rotation differs; in R2 two
-rallies in three end on the serve. Everything downstream -- opponent swings,
-floor defence, rally length, the block -- moves with it. This is upstream of the
-handoff's short-rally symptom and of every remaining responsibility step.
-
-Blocked on question 1 for anything measured by counting events, though the
-`terminal_outcome` rows are sound on their own.
+Both of these were quoted on this branch as findings about the *game*. They were
+findings about the *instruments*, and in both cases the limit that caused them
+was already written into this document beside the number it invalidated. That is
+the failure mode §0 names, committed by the file whose job is to prevent it: a
+stated limit is not a caveat, it is a reason not to quote the figure.
 
 **3. Does the immediate-control lock matter?** It cut overtaking from 32.9% to
 12.0% of contested receptions, which is real. But the overtake was never large:
@@ -373,18 +377,18 @@ together, and neither coefficient should move until it is.
 
 ## Continuations, in dependency order
 
-1. **Answer open question 1.** Everything event-counted is blocked on it.
-2. **Answer open question 2** -- the ace spread. Upstream of the short-rally
-   symptom, the block, and the rest of the responsibility list.
-3. **Separate body centre from ball contact point.** Unblocks the net
+1. **Separate body centre from ball contact point.** Unblocks the net
    encroachment finding and matters for blocking, setting, wingspan and body
-   types.
-4. **The remaining responsibility steps** -- previous contacter yields and
+   types. Now the top of the list, because the two questions that used to
+   outrank it turned out to be instrument faults.
+2. **The remaining responsibility steps** -- previous contacter yields and
    clears, then ready stance as a directional state, then short-ball ownership.
-   All three sit inside a rally phase that half the rotation cycle barely
-   reaches, so they are worth less than their position on the list suggests
-   until question 2 is answered.
-5. **Give a dug ball a real trajectory.** Removes the transition set's fallback
+3. **Give a dug ball a real trajectory.** Removes the transition set's fallback
    window, its missing head start and its missing jump-set apex in one change.
-6. **Split `DEFENSE` into a dig and a coverage event type.** The conflation has
+4. **Split `DEFENSE` into a dig and a coverage event type.** The conflation has
    already produced one wrong conclusion on this branch and will produce more.
+5. **Lateral slip at the plant's ceiling.** `foot_plant_probe` reports the
+   correction pinned at its 26-degree cap on lateral and backpedal sprints,
+   where planted slip is 0.155-0.304 against 0.018-0.038 forward. A knob sitting
+   exactly on its clamp is the §0 shape; the question is whether the shuffle
+   wants its own leg solve rather than a wider cap.
