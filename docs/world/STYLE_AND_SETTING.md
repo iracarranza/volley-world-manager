@@ -382,15 +382,55 @@ and **Lo-ong Ralī** (whose `ğ` was a breve filed under a macron region).
 `Spëddigh`'s `Lïv` needed no fix: `ï` and `ë` are the same gesture, which the
 language-based reading could not see.
 
-### Given names are exempt, and that is the point
+### Given names are exempt; surnames are not
 
 The orthography belongs to the **map**. The people draw on real, attested naming
 traditions, and marking `Noé` or `Miloš` with the local gesture to tidy a roster
 is our world's habit of flattening other people's spelling into whichever
 alphabet is convenient — the same thing the demonym rule forbids, applied to a
-person instead of a place. The gate therefore checks region names, demonyms and
-club names for foreign marks, and checks only that every region *has* a tradition
-of its own and that no two share one.
+person instead of a place.
+
+A **family name is the other half of that, and it is the half that is invented.**
+It is place-derived, it belongs to a place on this map, and a place on this map
+has a gesture. So the asymmetry runs the whole naming system in one line:
+
+| | drawn from | marked? | why |
+|---|---|---|---|
+| given name | a real tradition, borrowed and left alone | no | a person is not a place |
+| family name | a place invented for this world | yes, its region's gesture | a place is a place |
+
+Nine surnames per region against eight given names, which are coprime on
+purpose. A founded club fields twelve volis and the roster used to read `Kiko 1`
+through `Kiko 12` — that is one person and a counter, not twelve people, and the
+counter was doing real work by keeping them distinct. `VolleyballRegions.person_name`
+does the same work with arithmetic instead of a suffix, and the gate counts what
+a full squad is actually called rather than asserting that 8 and 9 are coprime,
+because the tables are editable and the failure would be silent.
+
+Two regions say the family name **first** — Pāwa Hitō and Rhėn Tempaol — and
+`RegionLanguage.full_name` is the only place that is decided. The alternative was
+a display order computed wherever a name is drawn, and the failure that rules out
+is a Pāwan sorting under their given name while their own teammates sort under
+family. Composed once, at generation, there is only ever one string.
+
+What the lists are made of, region by region: landscape (Landavol), streets and
+gates (Zaitgaist), real Japanese landscape surnames whose long vowel already *is*
+the region's gesture (Pāwa Hitō), clan seats (Rhėn Tempaol), fortification
+(Blôc du Larg), shoreline (Bompaçao), cities (Xérvu), provinces from a colonial
+surname register (Ĭspayk), Welsh place-prefixes spelled with a wave because the
+roof belongs to someone else (Tãul ys Feynt), and nine nisbas of places the
+region did not come from (A'ace, which is the joke it deserves).
+
+Two of them are worth knowing about because they are where the rule bit:
+
+- **`Côte`, not Côté.** The natural French surname carries a roof *and* an
+  acute, and the acute is Xérvu's — so the obvious name for a French-shaped
+  region announced kinship with a region three seas away. The gate caught it on
+  its first run.
+- **Kutré Lyn is patronymic, not toponymic**, which is the one place the
+  place-derived rule bends, and it bends because the tradition is real and the
+  rule is ours. Its whole list had to be picked around `č`, which looks almost
+  identical to its own `ć` at roster size and belongs to nobody on this map.
 
 ### What can actually be drawn
 
@@ -406,6 +446,15 @@ and Short Stack draws no macron at all and one caron in eight, so `Pāwa Hitō`,
 `Ralī` and `Miloš` were hollow boxes on every card and tray in the game. They now
 go through `board_face.tres` and `board_hand.tres`, which carry the same fallback
 `body_font.tres` has had all along.
+
+The gate that was supposed to catch it named six glyphs — `ë ā ō é ã ç` — written
+down when six were all there were. Surnames took the real set to twenty-five, and
+a sampled instrument does not notice: it went on passing while `Ġ`, `ĕ`, `ĭ` and
+`ẽ` went unchecked. It now walks every region name, demonym, club, given name and
+surname, keeps whatever `RegionLanguage.GESTURES` claims, and asks the fonts about
+that. Measured across the three faces in the repository: Cherry Bomb One is
+missing none of them, Yatra One six, Short Stack seventeen — which is the fallback
+chain's whole job stated as a number.
 
 ## Tone
 

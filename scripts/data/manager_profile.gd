@@ -153,14 +153,15 @@ static func region_confidence(manager_region: String, voli_region: String) -> fl
 ## A name from the manager's own region's naming tradition.
 ##
 ## Offered rather than imposed: the generated name is in the field when you
-## arrive and you can type over it. `DEFINITIONS[region].names` already exists,
-## so this invents nothing.
+## arrive and you can type over it. The tables already exist, so this invents
+## nothing -- and it goes through the same composer every voli on every roster
+## does, because a manager typing over a suggestion should be typing over the
+## same shape of name they are about to be surrounded by.
 static func suggested_name(region: String, seed_value: int) -> String:
 	var definition: Dictionary = Regions.definition(region)
-	var names: Array = Array(definition.get("names", []))
-	if names.is_empty():
+	if Array(definition.get("names", [])).is_empty():
 		return "Manager"
-	return str(names[posmod(seed_value, names.size())])
+	return Regions.person_name(region, seed_value)
 
 
 ## The handedness the clipboard mirrors for.

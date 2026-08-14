@@ -855,7 +855,7 @@ func _create_career() -> void:
 		{
 			"name": manager_name,
 			## One region answers both questions today. `CHARACTER_CREATION.md`
-			## wants them to differ often -- a Landavoli managing in Taktikã is
+			## wants them to differ often -- a Landavolan managing in Taktikã is
 			## the position most managers in a real league are in -- and this is
 			## the seam a second picker would land on.
 			"region": selected_region,

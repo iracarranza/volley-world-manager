@@ -4,25 +4,94 @@ extends RefCounted
 const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 
 const DEFINITIONS := {
-	## Taglines name their own people, so each one contains a demonym that is
-	## still being settled -- these do not currently match `DEMONYMS` below, and
-	## the two need a sweep once the words are chosen.
-	"Landavol": {"tagline": "Landavoli training is intentionally broad, allowing their volis to specialize into anything -- or everything, if they want.",
-		"physical": 2, "technical": 2, "mental": 2, "names": ["Mila", "Luka", "Nora", "Ivo", "Toma", "Elin", "Sven", "Kaja"]},
-	"Spëddigh": {"tagline": "The close-knit and compact Spëddich give rise to quick transition attackers who push every play to be faster and tighter.",
-		"physical": 2, "technical": 3, "mental": 2, "names": ["Edda", "Siv", "Nils", "Veya", "Tekk", "Orri", "Fenn", "Lïv"]},
-	"Pāwa Hitō": {"tagline": "Conditioning halls mold the Hitōue into relentless attackers -- nightmarish power and quality deep into a rally.",
-		"physical": 4, "technical": 1, "mental": 1, "names": ["Aki", "Hana", "Ren", "Sora", "Yuna", "Kai", "Mio", "Taro"]},
-	"Blôc du Larg": {"tagline": "Larçgan culture prizes methodical court reading, perfecting its structure at the net above all else to keep complete control.",
-		"physical": 2, "technical": 2, "mental": 3, "names": ["Luc", "Mire", "Noé", "Ciel", "Aude", "Remy", "Léon", "Véra"]},
+	## ## Names
+	##
+	## `names` are given names and are **real, attested and unmarked**. `surnames`
+	## are invented, place-derived, and carry the region's gesture from
+	## `RegionLanguage`. That asymmetry is the whole naming system in two lines:
+	## the orthography belongs to the map, and a person is not a place.
+	##
+	## Nine surnames against eight given names, deliberately coprime -- a founded
+	## club fields twelve volis, and a roster with two Kiko Batangases on it is
+	## the same defect as the `"%s %d"` numbering this replaced, arrived at more
+	## slowly.
+	##
+	## Taglines name their own people with the region's `DEMONYMS` entry and are
+	## gated on it. They used to carry a second set of words invented separately
+	## -- Landavoli, Spëddich, Hitōue, Larçgan, Taktikiãn, Ispakyanos, A'ace'ni --
+	## and Larçgan is why that mattered rather than merely being untidy: it hung a
+	## cedilla on Blôc du Larg, which is Bompaçao's mark, in the one region whose
+	## relationship to Bompaçao is the map's single deliberate opposition.
+	"Landavol": {"tagline": "Landavolan training is intentionally broad, allowing their volis to specialize into anything -- or everything, if they want.",
+		"physical": 2, "technical": 2, "mental": 2,
+		"names": ["Mila", "Luka", "Nora", "Ivo", "Toma", "Elin", "Sven", "Kaja"],
+		## Bare, like the region. Landavol leans nowhere and its surnames are
+		## plain landscape: valley, ridge, stone, water, lime, east farm.
+		"surnames": ["Beladol", "Ravnik", "Stenmark", "Vodgrad", "Lindvik",
+			"Osterby", "Kamenar", "Solmar", "Tunsen"]},
+	"Spëddigh": {"tagline": "The close-knit and compact Spëddish give rise to quick transition attackers who push every play to be faster and tighter.",
+		"physical": 2, "technical": 3, "mental": 2,
+		"names": ["Edda", "Siv", "Nils", "Veya", "Tekk", "Orri", "Fenn", "Lïv"],
+		## Doubled consonants and a short vowel under two dots, which is the same
+		## thing the region does to a rally.
+		"surnames": ["Hällgrim", "Skäddur", "Nörvik", "Trëggen", "Vïdden",
+			"Bräkkstad", "Ëlfjord", "Snöhamn", "Kvëllby"]},
+	"Pāwa Hitō": {"tagline": "Conditioning halls mold Pāwan volis into relentless attackers -- nightmarish power and quality deep into a rally.",
+		"physical": 4, "technical": 1, "mental": 1,
+		"names": ["Aki", "Hana", "Ren", "Sora", "Yuna", "Kai", "Mio", "Taro"],
+		## Real surnames, and real ones happen to be the strongest case the whole
+		## scheme has: Japanese family names are overwhelmingly landscape -- Ōno
+		## is the big field, Ōtani the big valley, Kōno the river field. The
+		## long vowel they already carry *is* this region's gesture, so nothing
+		## had to be invented and nothing had to be bent.
+		"surnames": ["Ōno", "Ōtani", "Kōno", "Sōma", "Gotō", "Satō", "Kudō",
+			"Andō", "Tōdō"]},
+	"Blôc du Larg": {"tagline": "Largen culture prizes methodical court reading, perfecting its structure at the net above all else to keep complete control.",
+		"physical": 2, "technical": 2, "mental": 3,
+		"names": ["Luc", "Mire", "Noé", "Ciel", "Aude", "Remy", "Léon", "Véra"],
+		## Wall, rampart, keep, hillside. A region that believes in structure at
+		## the net is named for the things people built before nets existed.
+		##
+		## `Côte` and not Côté, which is the more natural surname and was the
+		## first one written here. It carries a roof *and* an acute, and the acute
+		## is Xérvu's -- so the obvious French name for a French-shaped region
+		## announces kinship with a region three seas away. The gate caught it on
+		## the first run, which is the entire argument for having one.
+		"surnames": ["Côte", "Châtel", "Fôret", "Rempârt", "Dumûr", "Vallêe",
+			"Lacrôix", "Montaîgne", "Bôisclair"]},
 	"Xérvu": {"tagline": "Ancient and new rhythms reverberate through Xérvyan courts -- a combination of individualism and deep respect for routine creates devastating, unpredictable serves.",
-		"physical": 2, "technical": 4, "mental": 1, "names": ["Kofi", "Amara", "Zola", "Kwame", "Aziza", "Tendai", "Njeri", "Baraka"]},
-	"Taktikã": {"tagline": "Taktikiãn volleyball demands cerebral players who strip the game down to its roots; emotion has no place in finding the optimal path.",
-		"physical": 1, "technical": 1, "mental": 4, "names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"]},
-	"Ĭspayk": {"tagline": "The cradle of the set-and-spike has lost its relevance to the modernization of the sport, but veteran and new Ispakyanos alike keep perfecting the bomberino's crushing bomba.",
-		"physical": 4, "technical": 2, "mental": 1, "names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"]},
-	"A'ace": {"tagline": "A'ace'ni volleyball may as well have been born yesterday, but the power of program funding defies history. The world's premier volis dictate their tactics season to season.",
-		"physical": 3, "technical": 2, "mental": 1, "names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"]},
+		"physical": 2, "technical": 4, "mental": 1,
+		"names": ["Kofi", "Amara", "Zola", "Kwame", "Aziza", "Tendai", "Njeri", "Baraka"],
+		## Cities and the families that carry their names. The acute is a tone
+		## mark here rather than a stress mark, which is what it is in Yoruba and
+		## Akan, and which is why it sits comfortably on a name meant to be sung
+		## rather than spelled.
+		"surnames": ["Ashánti", "Adéyemi", "Okónkwo", "Sékou", "Nyámbe",
+			"Kúmasi", "Bandiágara", "Sokóto", "Ilorín"]},
+	"Taktikã": {"tagline": "Taktikãn volleyball demands cerebral players who strip the game down to its roots; emotion has no place in finding the optimal path.",
+		"physical": 1, "technical": 1, "mental": 4,
+		"names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"],
+		## Real Aymara and Quechua surnames, which are clan-and-place names to
+		## begin with, taking the wave instead of the accent they usually carry.
+		"surnames": ["Quispẽ", "Mamanĩ", "Huamãn", "Condorĩ", "Ticõna",
+			"Choquẽ", "Apazã", "Yupanquĩ", "Cusĩ"]},
+	"Ĭspayk": {"tagline": "The cradle of the set-and-spike has lost its relevance to the modernization of the sport, but veteran and new Ĭspaykanos alike keep perfecting the bomberino's crushing bomba.",
+		"physical": 4, "technical": 2, "mental": 1,
+		"names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"],
+		## Provinces and towns, because a colonial surname register hands out
+		## place names and everybody keeps them. The region whose given names are
+		## all nicknames is the one whose family names are all administrative.
+		"surnames": ["Bătangas", "Cavĭte", "Bulăcan", "Marikĭna", "Pangasĭnan",
+			"Bĭnondo", "Antĭpolo", "Calămba", "Tarlăc"]},
+	"A'ace": {"tagline": "A'aceni volleyball may as well have been born yesterday, but the power of program funding defies history. The world's premier volis dictate their tactics season to season.",
+		"physical": 3, "technical": 2, "mental": 1,
+		"names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"],
+		## Every one is "of somewhere" -- the fort, the spring, the headland --
+		## which is the joke the region deserves: the place with no history of its
+		## own names its families after places, and the gap in the middle of each
+		## one is the same gap in the middle of A'ace.
+		"surnames": ["Al'Qasr", "Ras'ayn", "Bur'aida", "Sha'ab", "Da'wan",
+			"Nu'mani", "Ka'bi", "Sa'idi", "Ha'ili"]},
 
 	## Minor regions. Small programs that never contest the Sixnet, with
 	## ratings summing to 4-5 against the majors' 6-8 and a specialty of two or
@@ -37,27 +106,71 @@ const DEFINITIONS := {
 	## feints", Rhėn Tempaol is "one tempo", Lo-ong Ralī is "long rally",
 	## Bompaçao is "bump pass", and Kutré Lyn is "cut and line".
 	##
-	## A minor region shares its major neighbour's *spelling*, which is what
-	## makes them read as one written language rather than two names drawn from
-	## different hats. Kutré Lyn was "Kutre den Lyn" and carried Blôc du Larg's
+	## A minor region is kin to its major neighbour by *gesture* -- the same
+	## mark, a sibling mark from the same movement, or the one deliberate
+	## opposition. Kutré Lyn was "Kutre den Lyn" and carried Blôc du Larg's
 	## connector ("den" for "du") while sitting next to Xérvu, so it announced
 	## kinship with the wrong region; it now takes Xérvu's acute instead. Old
 	## saves resolve through `LEGACY_REGIONS`.
 	"Tãul ys Feynt": {"tagline": "Village halls where the ball is won by the shot the blocker didn't believe -- wrists over power, patience over height.",
-		"physical": 1, "technical": 3, "mental": 1, "names": ["Bryn", "Eilir", "Tewdr", "Anwen", "Maelo", "Ffion", "Gwern", "Rhosyn"]},
+		"physical": 1, "technical": 3, "mental": 1,
+		"names": ["Bryn", "Eilir", "Tewdr", "Anwen", "Maelo", "Ffion", "Gwern", "Rhosyn"],
+		## Church, fort, rivermouth, town, headland, ford -- the six words every
+		## place here starts with. The tradition these are drawn from spells its
+		## long vowels with a roof, and this region may not: the roof belongs to
+		## Blôc du Larg, three seas away, and a shared mark would claim a kinship
+		## that does not exist. The wave is the point of having an orthography.
+		"surnames": ["Tãulwen", "Glyndãr", "Penrhõs", "Llanfãr", "Caerlõn",
+			"Trefãn", "Aberdõn", "Bryngwãn", "Rhydfãn"]},
 	"Lo-ong Ralī": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
-		"physical": 2, "technical": 1, "mental": 2, "names": ["Dorje", "Pema", "Tenzin", "Tsering", "Norbu", "Lhamo", "Kunzang", "Yangchen"]},
+		"physical": 2, "technical": 1, "mental": 2,
+		"names": ["Dorje", "Pema", "Tenzin", "Tsering", "Norbu", "Lhamo", "Kunzang", "Yangchen"],
+		## Places, undisguised, because the tradition these are drawn from has no
+		## family names at all -- you are known by the house, and the house is
+		## known by the valley it stands in.
+		"surnames": ["Ngarī", "Tsāng", "Dīngri", "Lhūntse", "Gyāntse", "Nāgchu",
+			"Chāmdo", "Purāng", "Shīgatse"]},
 	"Bompaçao": {"tagline": "Concrete courts, no net posts worth the name, and a religion built around the first contact. If it's passable, it gets passed.",
-		"physical": 1, "technical": 3, "mental": 1, "names": ["Nilo", "Yaritza", "Elpidio", "Marisol", "Ozéias", "Caridad", "Tavo", "Idalia"]},
+		"physical": 1, "technical": 3, "mental": 1,
+		"names": ["Nilo", "Yaritza", "Elpidio", "Marisol", "Ozéias", "Caridad", "Tavo", "Idalia"],
+		## Beach, sand, edge-of-water, cleared ground. Caiçara is not invented:
+		## it is what the coast calls the people who live on it, and a region
+		## whose entire identity is the first contact off a concrete court should
+		## be named for the shoreline rather than for the metropole it opposes.
+		"surnames": ["Gonçalves", "Praiçal", "Maçado", "Furtaço", "Beiraçu",
+			"Caiçara", "Areiçao", "Roçado", "Terraço"]},
 	"Rhėn Tempaol": {"tagline": "Small halls where the set is already gone before the block has finished landing. Nobody here hits hard. Everybody here hits early.",
-		"physical": 2, "technical": 2, "mental": 1, "names": ["Soah", "Minjae", "Haerin", "Wonsik", "Yerin", "Doha", "Jiwoo", "Seong"]},
+		"physical": 2, "technical": 2, "mental": 1,
+		"names": ["Soah", "Minjae", "Haerin", "Wonsik", "Yerin", "Doha", "Jiwoo", "Seong"],
+		## Real, one syllable, and place-derived in the strictest sense of the
+		## scheme: each is a clan seat, and two families with the same surname
+		## from different seats are not related.
+		"surnames": ["Ġil", "Ġang", "Ġong", "Ġeum", "Sėol", "Chėon", "Yėom",
+			"Bėk", "Hėo"]},
 	"Kutré Lyn": {"tagline": "Technical schools that treat a hard swing as an admission of failure. The corner is always open if you can see it.",
-		"physical": 1, "technical": 3, "mental": 1, "names": ["Zorana", "Miloš", "Vesna", "Ilija", "Radmila", "Novak", "Danica", "Stevan"]},
+		"physical": 1, "technical": 3, "mental": 1,
+		"names": ["Zorana", "Miloš", "Vesna", "Ilija", "Radmila", "Novak", "Danica", "Stevan"],
+		## Mostly patronymic, which is the one place the place-derived rule bends
+		## -- and it bends because the tradition is real and the rule is ours. The
+		## last three are toponyms (behind the hill, of the hill, of the water)
+		## so the scheme is present rather than merely claimed. `ć` is the acute
+		## and `č` is the caron, and only one of those is Kutré Lyn's: the whole
+		## list had to be picked around a mark that looks almost identical at
+		## roster size and belongs to nobody here.
+		"surnames": ["Radić", "Perić", "Lukić", "Tomić", "Ilić", "Babić",
+			"Zagorić", "Brdarić", "Vodić"]},
 	## The one region whose name is not a volleyball phrase, because it is the
 	## one region with no technique of its own to name itself after. It borrows
 	## whatever just won instead -- see `SixnetLeague`'s zeitgeist rule.
 	"Zaitgaist": {"tagline": "A city-state you could walk across in a morning, landlocked inside Landavol, which has never developed a style and has played every style there is.",
-		"physical": 1, "technical": 1, "mental": 2, "names": ["Anselm", "Reike", "Vasholt", "Merrin", "Ottlin", "Sabet", "Frauke", "Delvin"]},
+		"physical": 1, "technical": 1, "mental": 2,
+		"names": ["Anselm", "Reike", "Vasholt", "Merrin", "Ottlin", "Sabet", "Frauke", "Delvin"],
+		## Bare, like Landavol, and named for streets and gates rather than for
+		## landscape because there is no landscape -- you can walk across the
+		## whole place before lunch. Two bare regions are told apart by sound,
+		## which is the one thing a gesture system cannot do and does not try to.
+		"surnames": ["Torwald", "Steinbrenn", "Althaus", "Marktweil",
+			"Ringmauer", "Kleinbek", "Hofstett", "Neuland", "Wendelgass"]},
 }
 
 ## The clubs each region sends out, so an opponent is somewhere rather than a
@@ -105,6 +218,37 @@ static func club_name(region_name: String, index: int = 0) -> String:
 	if clubs.is_empty():
 		return "%s VC" % resolved
 	return str(clubs[posmod(index, clubs.size())])
+
+
+## A whole person's name from this region, chosen by a number the caller has.
+##
+## **This replaced `"%s %d"`.** A founded club used to field Kiko 1 through Kiko
+## 12, which is not twelve people; it is one person and a counter, and every
+## screen that draws a roster drew it. The counter was doing real work -- it kept
+## the names distinct -- so the replacement has to do that work too rather than
+## merely look nicer.
+##
+## It does it by arithmetic instead of by a suffix. Eight given names and nine
+## surnames are coprime, so the pair repeats after seventy-two and a twelve-voli
+## roster is twelve distinct people. The gate measures that rather than trusting
+## it, because 8 and 9 being coprime is a fact about this table and the table is
+## editable.
+##
+## The order is the region's own. Two regions here name family-first, and the
+## composed string is the only place that is decided -- everything downstream
+## holds one name and sorts it, so nothing else has to know.
+static func person_name(region_name: String, index: int) -> String:
+	var resolved := canonical_name(region_name)
+	var definition := definition(resolved)
+	var given: Array = Array(definition.get("names", []))
+	var family: Array = Array(definition.get("surnames", []))
+	if given.is_empty():
+		return "Voli %d" % (index + 1)
+	var first := str(given[posmod(index, given.size())])
+	if family.is_empty():
+		return first
+	var last := str(family[posmod(index, family.size())])
+	return RegionLanguage.full_name(resolved, first, last)
 
 
 ## What you call a person or a thing *from* a region.

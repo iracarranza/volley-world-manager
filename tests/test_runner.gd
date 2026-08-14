@@ -385,25 +385,55 @@ func _test_ui_visual_system() -> void:
 	var body_font: Font = DARK_UI_THEME.default_font.get("base_font")
 	var body_fallbacks: Array = DARK_UI_THEME.default_font.get("fallbacks")
 	var heading_font := DARK_UI_THEME.get_font("font", "DisplayHeading")
-	var regional_glyphs := ["ë", "ā", "ō", "é", "ã", "ç"]
-	var body_has_regional_glyphs := true
-	var heading_has_regional_glyphs := true
+	## **Read off the data, not off a list somebody typed.**
+	##
+	## This was six glyphs -- `ë ā ō é ã ç` -- written down when six were all
+	## there were. Surnames took the real set to twenty-five, and a sampled
+	## instrument does not notice: it kept passing while `Ġ`, `ĕ`, `ĭ` and `ẽ`
+	## went unchecked, and a glyph no font carries draws as a hollow box on the
+	## roster rather than raising anything. `docs/FAILURE_MODES.md` §0 -- measure
+	## the distribution, do not restate the intent. Every marked letter that
+	## reaches a screen is in `RegionLanguage.GESTURES`, so walking the actual
+	## names and keeping the ones it claims is the whole instrument.
+	var language := preload("res://scripts/data/region_language.gd")
+	var regional_glyphs := {}
+	for region_name in REGIONS_SCRIPT.names():
+		var definition := Dictionary(REGIONS_SCRIPT.definition(region_name))
+		var written: Array = [str(region_name), REGIONS_SCRIPT.demonym(str(region_name))]
+		written.append_array(Array(REGIONS_SCRIPT.CLUB_NAMES.get(region_name, [])))
+		written.append_array(Array(definition.get("names", [])))
+		written.append_array(Array(definition.get("surnames", [])))
+		for word in written:
+			for glyph in str(word):
+				for gesture in language.GESTURES:
+					if glyph in str(language.GESTURES[gesture]):
+						regional_glyphs[glyph] = true
+	var body_missing: Array[String] = []
+	var heading_missing: Array[String] = []
 	for glyph in regional_glyphs:
-		var body_supports_glyph := body_font.has_char(glyph.unicode_at(0))
+		var code: int = str(glyph).unicode_at(0)
+		var body_supports_glyph := body_font.has_char(code)
 		for fallback_font in body_fallbacks:
-			if (fallback_font as Font).has_char(glyph.unicode_at(0)):
+			if (fallback_font as Font).has_char(code):
 				body_supports_glyph = true
 				break
-		body_has_regional_glyphs = body_has_regional_glyphs and body_supports_glyph
-		heading_has_regional_glyphs = heading_has_regional_glyphs \
-			and heading_font.has_char(glyph.unicode_at(0))
+		if not body_supports_glyph:
+			body_missing.append(str(glyph))
+		if not heading_font.has_char(code):
+			heading_missing.append(str(glyph))
 	_check(
-		body_has_regional_glyphs,
-		"Short Stack covers every accented glyph used by regional names",
+		regional_glyphs.size() >= 20,
+		"the glyph check reads the names rather than a sample (%d marks)"
+			% regional_glyphs.size(),
 	)
 	_check(
-		heading_has_regional_glyphs,
-		"Cherry Bomb One covers every accented glyph used by regional names",
+		body_missing.is_empty(),
+		"Short Stack, with its fallback, covers every mark a name uses (%s)"
+			% "".join(body_missing),
+	)
+	_check(
+		heading_missing.is_empty(),
+		"Cherry Bomb One covers every mark a name uses (%s)" % "".join(heading_missing),
 	)
 	var dark_primary := DARK_UI_THEME.get_stylebox("normal", "PrimaryAction") as StyleBoxFlat
 	var light_primary := LIGHT_UI_THEME.get_stylebox("normal", "PrimaryAction") as StyleBoxFlat
@@ -16394,10 +16424,18 @@ func _test_the_manager_is_somebody() -> void:
 	)
 
 	## A name from your own region's naming tradition, which already exists.
+	##
+	## Checked as *given plus family* rather than against the given-name list,
+	## because the suggestion now goes through the same composer a roster does.
+	## The old form of this check would have passed a manager called Veya on a
+	## squad of Veya Trëggens, which is the mismatch it existed to prevent.
 	var suggested := MANAGER_PROFILE_SCRIPT.suggested_name("Spëddigh", 3)
+	var suggested_parts := suggested.split(" ")
+	var tradition := Dictionary(VolleyballRegions.definition("Spëddigh"))
 	_check(
-		not suggested.is_empty()
-			and Array(VolleyballRegions.definition("Spëddigh")["names"]).has(suggested),
+		suggested_parts.size() == 2
+			and Array(tradition["names"]).has(suggested_parts[0])
+			and Array(tradition["surnames"]).has(suggested_parts[1]),
 		"and a name is offered from where you are from (%s)" % suggested,
 	)
 
@@ -16567,6 +16605,111 @@ func _test_region_language() -> void:
 		empty.is_empty() and shared.is_empty(),
 		"every region has a naming tradition of its own (empty: %s; shared: %s)"
 			% [empty, shared],
+	)
+
+	## 5. **Surnames are the other half of that, and they are the half that is
+	##    invented -- so they are the half the orthography applies to.**
+	##
+	##    A given name is a real word borrowed from a real tradition and left
+	##    alone. A family name here is made up, place-derived, and belongs to a
+	##    place on this map, which is exactly the thing that has a gesture. That
+	##    asymmetry is the naming system, and it only holds if the marked half is
+	##    actually checked.
+	var misspelled: Array[String] = []
+	for region_name in REGIONS_SCRIPT.names():
+		var family: Array = Array(
+			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("surnames", [])
+		)
+		if family.is_empty():
+			misspelled.append("%s has no surnames" % region_name)
+		for surname in family:
+			var strays: String = language.stray_marks(str(surname), region_name)
+			if not strays.is_empty():
+				misspelled.append("%s's %s has %s" % [region_name, surname, strays])
+	_check(
+		misspelled.is_empty(),
+		"every surname is written in its own region's hand (%s)"
+			% ", ".join(misspelled),
+	)
+
+	## 6. **A roster is twelve people, not one person and a counter.**
+	##
+	##    `player_generator` used to name a founded club `Kiko 1` through
+	##    `Kiko 12`. The counter was doing real work -- it kept the twelve
+	##    distinct -- so replacing it with a surname only helps if the surnames
+	##    keep them distinct too, which needs the two list lengths to be coprime.
+	##
+	##    Eight and nine are, today. That is a fact about a table somebody will
+	##    edit, and the failure mode if they do is silent and only visible on the
+	##    roster screen, so this counts the names a full squad actually gets
+	##    rather than asserting the arithmetic. `docs/FAILURE_MODES.md` §0: measure
+	##    the distribution, do not restate the intent.
+	const FOUNDED_ROSTER := 12
+	var collided: Array[String] = []
+	for region_name in REGIONS_SCRIPT.names():
+		var squad := {}
+		for index in FOUNDED_ROSTER:
+			squad[REGIONS_SCRIPT.person_name(str(region_name), index)] = true
+		if squad.size() < FOUNDED_ROSTER:
+			collided.append("%s fields %d" % [region_name, squad.size()])
+	_check(
+		collided.is_empty(),
+		"a founded club of %d is %d different people everywhere (%s)"
+			% [FOUNDED_ROSTER, FOUNDED_ROSTER, ", ".join(collided)],
+	)
+
+	## 7. **Two regions say the family name first, and the order is resolved once.**
+	##
+	##    Not a cosmetic check. The alternative to composing here was a display
+	##    order computed wherever a name is drawn, and the failure that rules out
+	##    is a Pāwan sorting under their given name while their own teammates sort
+	##    under family. Composed at generation, there is one string and nothing
+	##    downstream has an order to get wrong -- which is only true while the
+	##    composer is the thing that knows.
+	var ordered := language.full_name("Pāwa Hitō", "Aki", "Ōno")
+	var plain := language.full_name("Landavol", "Mila", "Ravnik")
+	_check(
+		ordered == "Ōno Aki" and plain == "Mila Ravnik"
+			and language.FAMILY_FIRST.size() == 2,
+		"a family-first region says the family name first (%s / %s)"
+			% [ordered, plain],
+	)
+
+	## 8. **A tagline names its own people with the demonym, not with a second
+	##    word invented beside it.**
+	##
+	##    Seven of the eight majors carried one: Landavoli, Spëddich, Hitōue,
+	##    Larçgan, Taktikiãn, Ispakyanos, A'ace'ni. The `DEFINITIONS` header has
+	##    said "these do not currently match `DEMONYMS` below" since the taglines
+	##    were written, which is a comment doing a check's job and losing.
+	##
+	##    Larçgan is why it was worth more than tidiness. It hung a cedilla on
+	##    Blôc du Larg -- Bompaçao's mark, in the one region whose relationship to
+	##    Bompaçao is this map's single deliberate opposition -- so the sentence
+	##    introducing Larg to a player quietly said it was Bompaçao's kin. The
+	##    stray-mark gate could not see it because it reads names, and this was
+	##    prose.
+	var unnamed: Array[String] = []
+	var borrowed: Array[String] = []
+	for region_name in REGIONS_SCRIPT.names():
+		var tagline := str(
+			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("tagline", "")
+		)
+		var own: String = REGIONS_SCRIPT.demonym(str(region_name))
+		## Only the majors are required to name their people at all -- a minor's
+		## tagline describes a hall rather than a nation, deliberately, because
+		## that is the size difference the two tiers are for.
+		if not region_name in REGIONS_SCRIPT.MINOR_REGIONS \
+				and not tagline.contains(own):
+			unnamed.append("%s never says %s" % [region_name, own])
+		for other in REGIONS_SCRIPT.names():
+			var word: String = REGIONS_SCRIPT.demonym(str(other))
+			if other != region_name and tagline.contains(word):
+				borrowed.append("%s says %s" % [region_name, word])
+	_check(
+		unnamed.is_empty() and borrowed.is_empty(),
+		"a tagline names its own people and nobody else's (missing: %s; borrowed: %s)"
+			% [unnamed, borrowed],
 	)
 
 

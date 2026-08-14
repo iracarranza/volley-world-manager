@@ -100,9 +100,14 @@ static func _origin(club_region: String, rng: RandomNumberGenerator) -> String:
 
 
 ## A name in that region's own tradition, from the table the roster already uses.
+##
+## Drawn at random rather than indexed, unlike a roster: staff are hired one at a
+## time and never form a list that has to be internally distinct, so the
+## coprimality `person_name` relies on buys nothing here and the seed already
+## keeps a hire reproducible.
 static func _name_from(region: String, rng: RandomNumberGenerator) -> String:
 	var definition: Dictionary = Regions.definition(region)
 	var names: Array = Array(definition.get("names", []))
 	if names.is_empty():
 		return "Staff"
-	return str(names[rng.randi() % names.size()])
+	return Regions.person_name(region, rng.randi())

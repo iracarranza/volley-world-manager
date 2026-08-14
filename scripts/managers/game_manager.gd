@@ -1197,8 +1197,6 @@ func set_opponent_region(region_name: String, club_index: int = 0) -> void:
 	var resolved := VolleyballRegions.canonical_name(region_name)
 	opponent_team.region = resolved
 	opponent_team.team_name = VolleyballRegions.club_name(resolved, club_index)
-	var definition := VolleyballRegions.definition(resolved)
-	var given_names: Array = definition.get("names", [])
 	for index in range(opponent_team.players.size()):
 		var player := opponent_team.players[index] as VolleyballPlayer
 		if player == null:
@@ -1208,8 +1206,7 @@ func set_opponent_region(region_name: String, club_index: int = 0) -> void:
 		## the region is the honest default until transfers move people.
 		player.home_region = resolved
 		player.club_region = resolved
-		if not given_names.is_empty():
-			player.display_name = str(given_names[index % given_names.size()])
+		player.display_name = VolleyballRegions.person_name(resolved, index)
 
 
 func _mirror_player(

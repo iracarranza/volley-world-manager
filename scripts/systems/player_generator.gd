@@ -245,8 +245,6 @@ static func generate_roster(
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var canonical_region := VolleyballRegions.canonical_name(region_name)
-	var region := VolleyballRegions.definition(region_name)
-	var names: Array = region.names
 	## **A founded club is small and young; an established one is neither.**
 	##
 	## This branched on `"Academy"`, which is a dead value -- the academy is the
@@ -266,7 +264,7 @@ static func generate_roster(
 		var position: Dictionary = POSITIONS[index % POSITIONS.size()]
 		var player := VolleyballPlayer.new()
 		player.id = index + 1
-		player.display_name = "%s %d" % [str(names[index % names.size()]), index + 1]
+		player.display_name = VolleyballRegions.person_name(canonical_region, index)
 		player.position_role = str(position.role)
 		player.position_code = str(position.code)
 		player.home_region = canonical_region

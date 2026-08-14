@@ -139,6 +139,21 @@ const REGION_GESTURE := {
 	"A'ace": &"gap",
 }
 
+## The regions that say the family name first.
+##
+## Both are drawn from traditions that really do, and the honest thing is to
+## follow them -- but the reason this is a table rather than a comment is that
+## the alternative was worse in a specific way. A per-region display order
+## computed at draw time means every roster column, every sorted list and every
+## fixture line has to know the convention, and the first screen that forgets is
+## the one that shows a Pāwan under G for their given name while their teammates
+## sort by family. Composing the string once, at generation, means there is only
+## ever one name and nothing downstream has an order to get wrong.
+const FAMILY_FIRST := {
+	"Pāwa Hitō": true,
+	"Rhėn Tempaol": true,
+}
+
 ## The half of a two-word region that gets spoken, and that the demonym is built
 ## from. Nobody says "Blôc du Larg" in a sentence about a person; they say Larg.
 const CONTRACTIONS := {
@@ -205,3 +220,13 @@ static func stray_marks(text: String, region_name: String) -> String:
 ## What a region's name shortens to when somebody says it out loud.
 static func contraction(region_name: String) -> String:
 	return str(CONTRACTIONS.get(region_name, region_name))
+
+
+## A given name and a family name in the order that region says them.
+##
+## Called once per voli, at generation, and never again -- see `FAMILY_FIRST` for
+## why the order is resolved here rather than at every place a name is drawn.
+static func full_name(region_name: String, given: String, family: String) -> String:
+	if bool(FAMILY_FIRST.get(region_name, false)):
+		return "%s %s" % [family, given]
+	return "%s %s" % [given, family]

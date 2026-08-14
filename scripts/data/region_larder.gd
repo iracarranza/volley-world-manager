@@ -44,7 +44,7 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## |---|---|
 ## | Landavol | *"intentionally broad… specialize into anything"* — a generalist table; a bit of everything, nothing extreme |
 ## | Spëddigh | *"close-knit and compact"* — preserved, cured, stored; food that keeps through a shared winter |
-## | Pāwa Hitō | *"conditioning halls mold the Hitōue"* — a table organised around fuelling work |
+## | Pāwa Hitō | *"conditioning halls mold Pāwan volis"* — a table organised around fuelling work |
 ## | Blôc du Larg | *"methodical… complete control"* — technique food; things that take a method |
 ## | Xérvu | *"ancient and new rhythms… individualism"* — heat, and two traditions on one plate |
 ## | Taktikã | *"strip the game down to its roots"* — the three that grow together and need nothing else |
