@@ -117,6 +117,13 @@ tangible, addressable without being an irritant -- and the presence of genuine
 allergies is what gives the complaint system stakes rather than making it
 flavour text.
 
+That ground truth is now specified: `ACCOMMODATIONS_AND_CARE.md` §2 splits an
+allergy into three data that may never share a field -- what is true, what the
+voli believes, and what the club believes -- and gives the consequence rule as
+**reality drives nourishment, belief drives morale.** The second half is where
+this section's *a wrong complaint is still a true feeling* stops being a stance
+and becomes a number.
+
 **Keep utterances rare.** The failure mode is Football Manager's: enough of them
 that they become noise to be dismissed. Once every few weeks, always about
 something real, and every one gets read.

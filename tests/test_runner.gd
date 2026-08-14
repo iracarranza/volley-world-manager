@@ -17948,6 +17948,63 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 			% float(FoodSupply.band_for(["Pāwa Hitō"])["floor"]),
 	)
 
+	## ## Comfort is weighted by the ratio, not by counting pastes
+	##
+	## `comfort_share` counted keys, so **2:1:3 and 1:1:1 were the same number**
+	## and a `TRACE_SHARE` smear counted for as much as half the block.
+	## `served()` had been returning the normalised ratio beside the map the
+	## whole time and nothing read it.
+	##
+	## The suite did not notice, which is the part worth a gate rather than a
+	## comment: every existing food check passed unchanged after the instrument
+	## was replaced, because none of them ever put two different ratios over the
+	## same three pastes. `FAILURE_MODES.md` §0.
+	var same_pastes := {"a": "Landavol", "b": "Xérvu", "c": "Pāwa Hitō"}
+	var heavy_on_home := {
+		"pastes": same_pastes,
+		"ratio": PASTE_RATIO_SCRIPT.normalised({"a": 6.0, "b": 1.0, "c": 1.0}),
+	}
+	var light_on_home := {
+		"pastes": same_pastes,
+		"ratio": PASTE_RATIO_SCRIPT.normalised({"a": 1.0, "b": 6.0, "c": 1.0}),
+	}
+	var heavy_share := FoodSupply.comfort_share(["Landavol"], heavy_on_home)
+	var light_share := FoodSupply.comfort_share(["Landavol"], light_on_home)
+	_check(
+		heavy_share > light_share + 0.5,
+		"the same three pastes in two proportions are two different meals (%.3f vs %.3f)"
+			% [heavy_share, light_share],
+	)
+
+	## And a trace is worth a trace. This is the reading that moves furthest:
+	## alone on a block of three it was 0.333 and is now its own share, which
+	## takes the voli's discomfort from 0.39 to 0.86 -- and discomfort is what
+	## reaches recovery.
+	var a_trace := {
+		"pastes": same_pastes,
+		"ratio": PASTE_RATIO_SCRIPT.normalised({
+			"a": PASTE_RATIO_SCRIPT.TRACE_SHARE, "b": 0.46, "c": 0.46,
+		}),
+	}
+	var trace_share := FoodSupply.comfort_share(["Landavol"], a_trace)
+	_check(
+		trace_share < 0.2
+			and FoodSupply.discomfort(["Landavol"], a_trace) > 0.6,
+		"a trace of the one paste they know is a trace (%.3f comfortable, %.2f short)"
+			% [trace_share, FoodSupply.discomfort(["Landavol"], a_trace)],
+	)
+
+	## **A larder is not a meal, and says so by having no ratio.** The fallback
+	## weights every paste equally, which is the honest reading of *we could
+	## serve any of these* and is arithmetically the instrument this replaced --
+	## a defined answer rather than a silent degradation.
+	var larder_only := {"pastes": same_pastes}
+	_check(
+		is_equal_approx(FoodSupply.comfort_share(["Landavol"], larder_only), 1.0 / 3.0),
+		"a table with no ratio weighs its pastes equally (%.3f)"
+			% FoodSupply.comfort_share(["Landavol"], larder_only),
+	)
+
 	## **The band widens with the set**, which is what makes a well-travelled
 	## voli easy to feed and worth something at signing that has nothing to do
 	## with their attributes.

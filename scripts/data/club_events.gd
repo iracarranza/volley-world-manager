@@ -210,13 +210,21 @@ static func _event(
 ## A gathering function rather than a new store: everything here is read off the
 ## team, the roster and `FoodSupply`, so the inbox cannot drift out of step with
 ## what the rest of the game believes.
+## `service` is what the chef actually put on the block, and comfort is measured
+## against it rather than against the larder -- the distinction `FoodSupply.served`
+## exists for. It is a parameter rather than something gathered here because
+## building it needs the chef's rating and their familiarity, neither of which
+## this function has and neither of which it should start carrying a second copy
+## of. Omitted, the larder stands in and every paste weighs the same, which is
+## the old reading and is flagged in `comfort_share`.
 static func gather(
 	team: Resource, players: Array, palate_clock: Dictionary,
-	club_region: String, week: int
+	club_region: String, week: int, service: Dictionary = {}
 ) -> Dictionary:
 	if team == null:
 		return {}
 	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
+	var eaten: Dictionary = service if not service.is_empty() else table
 	var volis: Array = []
 	for player in players:
 		volis.append({
@@ -224,7 +232,7 @@ static func gather(
 			"name": str(player.display_name),
 			"fatigue": float(player.fatigue),
 			"palate": FoodSupply.palate_of(palate_clock, int(player.id)),
-			"discomfort": FoodSupply.discomfort(player.palate_regions, table),
+			"discomfort": FoodSupply.discomfort(player.palate_regions, eaten),
 		})
 	return {
 		"small_equipment": team.housing_small_equipment,

@@ -322,6 +322,109 @@ Some real allergies go unreported. See unreliable self-report in
 `CLUB_LIFE.md`; the physio and scout earn their slots translating one into the
 other.
 
+### An allergy is three facts, not one
+
+The paragraph above has always implied this and never said it in a form that
+could be built. A recruitment brief proposed the other model -- *known need →
+promise → accommodation → compliance* -- and the difference is worth stating
+because the two produce different games. That one makes an allergy a preference
+checkbox with a compliance flag. This one makes it an **information problem**,
+which is where the scout, the physio, the interview, the kitchen and the week's
+observation all already intersect.
+
+So there are three separate data, and no two of them may ever be the same field:
+
+| | what it is | who sets it |
+|---|---|---|
+| **reality** | this voli's body does or does not react | generation |
+| **the voli's belief** | what they think, and report -- correct, wrong, absent, or *imprecise* | their own experience |
+| **the club's belief** | what you suspect, and how confidently | your staff, from evidence |
+
+Six situations fall out, and all six are worth having: real and reported
+correctly; real and never mentioned; real and misattributed; no allergy and a
+sincere complaint; a vague complaint good staff resolve; and a club that reaches
+the wrong conclusion with confidence.
+
+**Reality drives nourishment. Belief drives morale.** This is the whole
+consequence rule and it is two lines because `food_supply.gd` already says *one
+number per consequence*. A voli reacting to food they have not identified loses
+recovery; a voli who believes they are reacting loses morale, and so does one
+being carefully accommodated for something they do not have. That second half is
+what makes acting on a mistaken complaint worth doing -- `CLUB_LIFE.md`'s *a
+wrong complaint is still a true feeling*, given a number to live in.
+
+### The interview cannot verify one, and that is the good part
+
+At interview nobody has eaten anything. A recruit can report a belief; the club
+has no way to check it. So the decision is not *do we accommodate this* -- it is
+**do we build a kitchen accommodation around an unverified claim from somebody
+we have not signed.**
+
+This is also why the allergy needs no promise ledger. Nothing has to remember
+that the manager said "we can accommodate that", because the voli does not need
+a stored promise to notice whether the food stopped making them feel bad. The
+simulation is already the record.
+
+### Imprecise belief runs on the axes, which already exist
+
+`region_larder.gd` gives every region a flavour axis and **four axes are shared
+by two regions each** -- Spëddigh and Bompaçao are both sharp ferment, Xérvu and
+Kutré Lyn both numbing spice, Blôc du Larg and Rhėn Tempaol both bitter herb,
+Landavol and Zaitgaist both clean umami.
+
+So a voli who reports *"Xérvyan makes me sick"* while reacting to numbing spice
+is **right about the axis and wrong about the region**. The club drops Xérvu,
+keeps serving Kutré Lyn, and nothing improves. That is the "we fixed it and it
+did not work" case, produced by data already in the file, and it is the case
+where a physio is visibly worth their slot: the correction is one step sideways
+rather than a fresh investigation.
+
+### The thing to settle before any of it is built
+
+`weekly_recovery_share` collapses crowding, homesickness, food discomfort,
+palate fatigue, settling and block nutrition into **one product**. An unreported
+allergy entering that product is not hidden by design -- it is *arithmetically
+indistinguishable* from four things already in the sum. `discomfort_now` is
+already riding two paths into it, through `rest_multiplier` as eating among
+strangers and through `nourishment` as aversion.
+
+A physio who cannot separate the causes has nothing to be skilled at, and
+"good staff eventually diagnose it" degrades into a die roll wearing expertise.
+So the recovery breakdown has to carry **per-cause shares** and not only their
+product. That is a decision rather than much code, and it is far cheaper made
+alongside the trait infrastructure than retrofitted once an allergy is already
+summing into the blur. `FAILURE_MODES.md` §0 -- an instrument that cannot
+separate what it is measuring.
+
+### What it waits on
+
+Not this design. `player.traits` is an `Array[String]` that only ever receives
+`Ambidextrous` and `Functional Weak Hand`, both appended by
+`familiarity_system.gd`; there is no catalogue, no generation and nothing that
+queries a trait by kind. Building an allergy first would produce a second
+bespoke system beside the one `TRAITS.md` is eventually going to need.
+
+The order, therefore:
+
+1. **Comfort weighted by ratio** rather than by counting pastes -- below, and
+   independent of all of this.
+2. **The offer screen** showing the proposed room and the club's actual ratio.
+   After 1, because it displays the instrument 1 replaces.
+3. **A trait catalogue and generation**, keeping the two familiarity-derived
+   strings working rather than breaking them.
+4. **Allergy as the first real P trait**, reality and belief as separate data
+   from the first commit.
+5. **Complaint, investigation, translation** -- which is the same build as
+   `SCOUTING.md`'s *give beliefs an owner*, because "the club suspects X with
+   confidence" is a scouting belief with a different subject, and building it
+   twice means the second one inherits the defect the first just fixed.
+6. **Accommodation that changes exposure**, not a flag that records a promise.
+
+`inbox_events.gd`'s hardcoded `allergy_xervyan` card is the presentation layer
+arriving before the simulation, which is fine and worth keeping -- it already
+states the rule the model has to obey: *a voli does not know they have an
+allergy; they know they feel bad after dinner.*
+
 **Palate fatigue.** Holding a ratio constant decays its morale return toward
 zero and then past it. This is the mechanic that stops the system from being
 solved once. It should decay on the *specific ratio*, not the paste — so

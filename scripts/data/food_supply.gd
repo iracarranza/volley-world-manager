@@ -283,6 +283,32 @@ static func band_for(palate_regions: Array) -> Dictionary:
 ## Read off where each paste came from, which `table()` already records, so a
 ## voli is comfortable with a Pāwa Hitō paste whether it was made at home or
 ## arrived down a supply line. The food does not know how far it travelled.
+##
+## ## Weighted by the ratio, because a trace is not a third of a plate
+##
+## This counted pastes: two familiar out of three on the block was 0.667,
+## whatever the proportions were. `served()` has always returned a normalised
+## `ratio` beside the map and this function read only the map, so **2:1:3 and
+## 1:1:1 were the same number** and a `TRACE_SHARE` smear of 0.08 counted for
+## exactly as much as half the block.
+##
+## Measured across 150 club/palate/chef configurations before changing it: 18
+## verdicts flip, **nine each way**, and the largest single move is 0.107 -- so
+## the band's floor is not systematically wrong and nothing below needed
+## recalibrating. Every flip sits at a counted 0.500, a two-paste block where
+## counting cannot break the tie and the ratio can; what breaks it is the chef's
+## own drift, which is the right thing to be deciding it.
+##
+## The change is not really about who is short. It is about how short: a lone
+## trace of the one paste a voli knows reads 0.333 counted and 0.080 weighted,
+## which takes their discomfort from 0.39 to 0.86 and is the number that reaches
+## recovery. `FAILURE_MODES.md` §0 -- the right question, asked with an
+## instrument that could not see the answer.
+##
+## **A table with no ratio is a larder, not a meal**, and weighting its pastes
+## equally is the honest reading of *we could serve any of these* rather than a
+## silent degradation -- it is arithmetically the old instrument, kept for the
+## one caller that legitimately has no service yet.
 static func comfort_share(palate_regions: Array, table_now: Dictionary) -> float:
 	var pastes: Dictionary = table_now.get("pastes", {})
 	if pastes.is_empty():
@@ -290,11 +316,21 @@ static func comfort_share(palate_regions: Array, table_now: Dictionary) -> float
 	var known := {}
 	for region in palate_regions:
 		known[str(region)] = true
-	var comfortable := 0
+	var ratio: Dictionary = table_now.get("ratio", {})
+	var weighted := not ratio.is_empty()
+	var comfortable := 0.0
+	var total := 0.0
 	for item in pastes:
+		## A paste on the block with no share in the ratio is a paste that is not
+		## actually being served, so it weighs nothing. Defaulting it to 1.0
+		## instead would give a leftover key several times the weight of a real
+		## share, which is the kind of unit mismatch that reads as a tuning
+		## problem for a month.
+		var weight := float(ratio.get(str(item), 0.0)) if weighted else 1.0
+		total += weight
 		if known.has(str(pastes[item])):
-			comfortable += 1
-	return float(comfortable) / float(pastes.size())
+			comfortable += weight
+	return comfortable / maxf(total, 0.0001)
 
 
 ## How far outside their band they are, as a positive number, or zero inside it.

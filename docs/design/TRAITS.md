@@ -241,7 +241,7 @@ system.
 | unnaturally short / long arms | P | label on an outlier of generated limb proportion; feeds reach and block reach | wire |
 | unnaturally short / long legs | P | same, and it moves `stride_length_m`, which is already the approach fit's ideal | wire |
 | gets stretched rarely | P | injury/rehab; `REHAB_BLOCKS` exists in the day model | waits |
-| allergies | P | food and care | waits |
+| allergies | P | food and care; **three data, never one field** -- reality, the voli's belief, the club's belief. Reality drives nourishment, belief drives morale. `ACCOMMODATIONS_AND_CARE.md` §2 | waits on the catalogue |
 | gets winded easily | P | label on a `stamina` outlier — the number stays in `FatigueModel`, the label is what the manager reads | wire |
 | recovers stamina between sets and rallies | R | rally-fatigue accrual and `stamina_fatigue_scale` | wire |
 

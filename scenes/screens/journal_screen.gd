@@ -1110,7 +1110,13 @@ func _refresh_accommodations() -> void:
 		var palate := FoodSupplyModel.palate_of(
 			CareerManager.career.palate_clock, int(player.id)
 		)
-		var discomfort := FoodSupplyModel.discomfort(player.palate_regions, table)
+		## Against the block, not the larder. This read `table`, which is
+		## everything the club can reach -- the defect `FoodSupply.served`
+		## documents as fixed, still live here, so this panel and the recovery
+		## path reported different comfort for the same voli in the same week.
+		var discomfort := FoodSupplyModel.discomfort(
+			player.palate_regions, CareerManager._week_service(region, week)
+		)
 		var word := "settled"
 		if discomfort >= 0.35:
 			word = "nothing here is theirs"
