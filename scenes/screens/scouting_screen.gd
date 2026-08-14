@@ -63,8 +63,15 @@ const MARK_PASS: int = 3
 
 ## What a mark is called, everywhere it is named. One table, so the word pinned
 ## to the board and the word on the control that sets it cannot drift apart.
+##
+## **`would sign`, not `sign`.** Every word here is a verdict a manager wrote
+## down, and while signing was something that happened on a different screen the
+## imperative read as one. It stopped reading as one the moment a button that
+## actually signs appeared in the same row: *sign* beside *Offer a place* is two
+## commands, and only one of them does anything. Watch and seen enough were
+## already verdicts and did not have to move.
 const MARK_WORDS := {
-	MARK_SIGN: "sign", MARK_WATCH: "watch", MARK_PASS: "seen enough",
+	MARK_SIGN: "would sign", MARK_WATCH: "watch", MARK_PASS: "seen enough",
 }
 const MARK_ORDER := [MARK_SIGN, MARK_WATCH, MARK_PASS]
 
@@ -445,7 +452,7 @@ func _refresh_notes(prospects: Array) -> void:
 	))
 	_notes.add_child(_note_slip(
 		"Decided",
-		"%d to sign · %d worth watching · %d seen enough · %d untouched" % [
+		"%d would sign · %d worth watching · %d seen enough · %d untouched" % [
 			marked[MARK_SIGN], marked[MARK_WATCH],
 			marked[MARK_PASS], marked[MARK_NONE],
 		],
@@ -655,12 +662,29 @@ func _fill_report(prospect) -> void:
 			said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			_panel.body.add_child(said)
 
-	## In the footer, not the body. The marks are the only controls here and they
-	## were the last rows of a scrolling report, which put them below the fold on
-	## every voli with a full one.
+	## ## The marks are a label, and had stopped looking like one
+	##
+	## In the footer, not the body, because they were the last rows of a scrolling
+	## report and sat below the fold on every voli with a full one.
+	##
+	## **But a footer is where actions live**, and once a real one arrived beside
+	## them the row read as four commands in a line -- one of which was a mark
+	## literally called *sign*, next to a button that signs. A note to yourself and
+	## a transaction, identical and adjacent.
+	##
+	## Three things separate them, and none is a tooltip. The group is **named**,
+	## so the row says what kind of thing it is before you read the words in it.
+	## Each toggle carries its own **pin colour** from `MARK_PINS`, which is the
+	## board's only grammar for "somebody decided this" -- and is the same colour
+	## that will appear on the slip. And the action is pushed to the far end by an
+	## expanding spacer, so it is plainly not the fourth item in a set of three.
 	var marks := _panel.footer
 	for child in marks.get_children():
 		child.queue_free()
+	var pinned := Label.new()
+	pinned.name = "PinnedAs"
+	pinned.text = "Pinned as"
+	marks.add_child(pinned)
 	var current := _mark_for(_open_id)
 	for mark in MARK_ORDER:
 		var button := Button.new()
@@ -668,6 +692,29 @@ func _fill_report(prospect) -> void:
 		button.text = str(MARK_WORDS[mark])
 		button.toggle_mode = true
 		button.button_pressed = mark == current
+		## The pin goes **beside** the word, not into it, and only on the one that
+		## is in.
+		##
+		## Two mistakes on the way here, and the second is the instructive one.
+		## Tinting all three said "three coloured words" when what is true is "one
+		## pin is stuck in this card". Tinting only the chosen one fixed the
+		## meaning and left `3f7d52` as 11px type on the Mikasa panel at about
+		## 3.1:1 -- against 6.1 for the amber and 4.1 for the grey, so the most
+		## important of the three was the least readable.
+		##
+		## The real error underneath both: `MARK_PINS` are colours picked to read
+		## **on cork**, and this panel is not cork. Using them as type on a navy
+		## ground is a value read off the wrong surface. As a nine-pixel pin head
+		## the same colour is a UI component rather than text, clears the bar that
+		## actually applies to one, and is a pin -- which is what it always was.
+		if mark == current:
+			var head := ColorRect.new()
+			head.name = "Pin%d" % int(mark)
+			head.color = Color(MARK_PINS[mark])
+			head.custom_minimum_size = Vector2(9.0, 9.0)
+			head.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			marks.add_child(head)
 		var value := int(mark)
 		## Pressing the mark a card already carries takes it off, which is the only
 		## way back to unmarked without a fourth button called "nothing" -- and
@@ -679,6 +726,11 @@ func _fill_report(prospect) -> void:
 	## note to yourself and an offer is a thing you did, and collapsing the two
 	## would mean pinning a green pin to somebody signed them.
 	if _is_recruitable(_open_id):
+		var gap := Control.new()
+		gap.name = "MarksGap"
+		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		marks.add_child(gap)
 		var offer_button := Button.new()
 		offer_button.name = "OfferButton"
 		offer_button.text = "Offer a place"

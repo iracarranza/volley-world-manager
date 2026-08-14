@@ -65,6 +65,11 @@ func _shoot() -> void:
 			print("nobody on the board to open")
 			screen.queue_free()
 			continue
+		## Marked before opening, so the report shot shows a pin actually in the
+		## card rather than three unpressed toggles -- the pressed state is the
+		## only one that carries a pin colour now, and a probe that never presses
+		## one cannot see whether it reads.
+		career_manager.career.scouting_marks[int(board[0].id)] = 1
 		screen._open(int(board[0].id))
 		for _settle in range(4):
 			await get_tree().process_frame
