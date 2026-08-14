@@ -221,7 +221,7 @@ func seed_vertical_slice_data() -> void:
 		var plan: Resource = DefensivePlanScript.new()
 		plan.rotation_number = rotation_number
 		plan.plan_name = "Rotation %d Defense" % rotation_number
-		plan.ensure_defaults(rotations[rotation_number])
+		plan.ensure_defaults(rotations[rotation_number], players)
 		defensive_plans[rotation_number] = plan
 	_seed_opponent()
 	var prototype_format: Resource = MatchFormatScript.new()
@@ -356,7 +356,7 @@ func configure_managed_team(new_team: Resource, generated_players: Array[Volleyb
 		var plan: Resource = DefensivePlanScript.new()
 		plan.rotation_number = rotation_number
 		plan.plan_name = "Rotation %d Defense" % rotation_number
-		plan.ensure_defaults(rotations[rotation_number])
+		plan.ensure_defaults(rotations[rotation_number], players)
 		defensive_plans[rotation_number] = plan
 	_seed_opponent()
 	start_new_match(MatchFormatScript.new())
@@ -508,7 +508,7 @@ func configure_setting_system(system_name: String, second_setter_id: int = -1) -
 			lineup.designated_setter_ids.append(second_setter_id)
 		var plan: Resource = defensive_plans.get(rotation_number) as Resource
 		if plan != null:
-			plan.ensure_defaults(lineup)
+			plan.ensure_defaults(lineup, players)
 	rotation_changed.emit(selected_rotation)
 	return ""
 
@@ -744,7 +744,7 @@ func substitute_current_rotation(player_out_id: int, player_in_id: int) -> Strin
 			plan.set_defender_position(
 				player_in_id, CourtConstants.slot_position(int(change["slot"]))
 			)
-			plan.ensure_defaults(lineup)
+			plan.ensure_defaults(lineup, players)
 	match_state.home_substitutions_used += 1
 	match_state.substitution_pairs[player_out_id] = player_in_id
 	match_state.substitution_pairs[player_in_id] = player_out_id
@@ -1142,13 +1142,13 @@ func from_dict(data: Dictionary) -> void:
 	for plan_data in data.get("defensive_plans", []):
 		var plan: Resource = DefensivePlanScript.new()
 		plan.load_dict(plan_data)
-		plan.ensure_defaults(rotations[plan.rotation_number])
+		plan.ensure_defaults(rotations[plan.rotation_number], players)
 		defensive_plans[plan.rotation_number] = plan
 	for rotation_number in range(1, 7):
 		if rotation_number not in defensive_plans:
 			var fallback: Resource = DefensivePlanScript.new()
 			fallback.rotation_number = rotation_number
-			fallback.ensure_defaults(rotations[rotation_number])
+			fallback.ensure_defaults(rotations[rotation_number], players)
 			defensive_plans[rotation_number] = fallback
 
 

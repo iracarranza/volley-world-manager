@@ -171,6 +171,249 @@ static func prepare_for_attack(
 ## being converted into speed, not to make approaches fail.
 const APPROACH_RUNUP_SECONDS: float = 1.10
 
+## Tempo is the hitter's relationship to setter release, not a set-height menu.
+##
+## T0 is retained as the existing faster-than-first-tempo vocabulary: the
+## hitter is already airborne when the setter releases. T1 is takeoff at
+## release, T2 is release during the approach footwork, and T3 begins after the
+## ball leaves the setter's hands. The values are progress through the hitter's
+## own run-up at release; the run-up duration therefore remains individual.
+const TEMPO_RELEASE_PROGRESS: Array[float] = [1.0, 1.0, 0.48, 0.0]
+const TEMPO_RELATIONSHIPS: Array[String] = [
+	"airborne before release",
+	"takeoff with release",
+	"approach in time with release",
+	"approach after release",
+]
+## A true third-tempo approach waits until the set can be seen before starting.
+const THIRD_TEMPO_START_DELAY_SECONDS: float = 0.08
+## T0 separates itself from T1 by leaving the floor shortly before release.
+const ZERO_TEMPO_TAKEOFF_LEAD_SECONDS: float = 0.08
+## Time between the last ground impulse and hand contact. More explosive hitters
+## reach the ball sooner, but nobody takes off and contacts on the same frame.
+const TAKEOFF_TO_CONTACT_SLOW_SECONDS: float = 0.25
+const TAKEOFF_TO_CONTACT_FAST_SECONDS: float = 0.18
+## A setter miss is bounded in seconds around the hitter's expected window.
+const TEMPO_RECOGNITION_ERROR_POOR_SECONDS: float = 0.18
+const TEMPO_RECOGNITION_ERROR_ELITE_SECONDS: float = 0.025
+const TEMPO_MINIMUM_FLIGHT_SECONDS: float = 0.10
+const TEMPO_MAXIMUM_FLIGHT_SECONDS: float = 1.65
+const FIRST_TEMPO_RELEASE_PROGRESS: float = 0.92
+const SECOND_TEMPO_RELEASE_PROGRESS: float = 0.05
+
+
+## The approach rhythm this hitter is offering the setter.
+##
+## There is deliberately no setter argument. The hitter owns when their steps
+## happen; the setter's job is to recognize and meet that expectation in
+## `coordinate_tempo`, not to manufacture the hitter's cadence from a label.
+static func tempo_intent(
+	hitter: VolleyballPlayer,
+	tempo: int,
+	runup_seconds: float,
+) -> Dictionary:
+	var index := clampi(tempo, 0, 3)
+	var runup := clampf(runup_seconds, 0.0, APPROACH_RUNUP_SECONDS)
+	var explosiveness := clampf(
+		float(hitter.explosiveness) / 100.0 if hitter != null else 0.5,
+		0.0, 1.0,
+	)
+	var repeatability := clampf(
+		float(hitter.approach_timing) / 100.0 if hitter != null else 0.5,
+		0.0, 1.0,
+	)
+	var release_progress := TEMPO_RELEASE_PROGRESS[index]
+	var delay := THIRD_TEMPO_START_DELAY_SECONDS if index == 3 else 0.0
+	var takeoff_offset := (1.0 - release_progress) * runup + delay
+	if index == 0:
+		takeoff_offset = -ZERO_TEMPO_TAKEOFF_LEAD_SECONDS
+	var takeoff_to_contact := lerpf(
+		TAKEOFF_TO_CONTACT_SLOW_SECONDS,
+		TAKEOFF_TO_CONTACT_FAST_SECONDS,
+		explosiveness,
+	)
+	return {
+		"tempo": index,
+		"relationship": TEMPO_RELATIONSHIPS[index],
+		"hitter_led": true,
+		"runup_seconds": runup,
+		"release_progress": release_progress,
+		"approach_start_delay_seconds": delay,
+		"takeoff_offset_seconds": takeoff_offset,
+		"takeoff_to_contact_seconds": takeoff_to_contact,
+		"expected_flight_seconds": clampf(
+			takeoff_offset + takeoff_to_contact,
+			TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS,
+		),
+		"hitter_repeatability": repeatability,
+	}
+
+
+## How the setter meets an individual hitter's offered rhythm.
+##
+## `natural_flight_seconds` is the old set-height answer. It has agency only
+## when `tactic_strictness` is at the extreme end; ordinary systems ask the
+## setter to meet the hitter. `signed_error` is supplied by the rally's stable
+## seeded stream so this pure model remains replayable and directly testable.
+static func coordinate_tempo(
+	intent: Dictionary,
+	setter: VolleyballPlayer,
+	pair_familiarity: float,
+	tactic_strictness: float,
+	natural_flight_seconds: float,
+	set_quality: float,
+	signed_error: float,
+) -> Dictionary:
+	var setter_read := clampf((
+		float(setter.tempo_control) * 0.42
+			+ float(setter.court_vision) * 0.24
+			+ float(setter.hand_control) * 0.20
+			+ float(setter.decision_making) * 0.14
+	) / 100.0, 0.0, 1.0) if setter != null else 0.0
+	var familiarity := clampf(pair_familiarity, 0.0, 1.0)
+	var repeatability := clampf(float(intent.get(
+		"hitter_repeatability", 0.5
+	)), 0.0, 1.0)
+	var recognition := clampf(
+		setter_read * 0.64 + familiarity * 0.22 + repeatability * 0.14,
+		0.0, 1.0,
+	)
+	## Below 0.84 the tactic informs selection but does not seize the hitter's
+	## feet. Only an exceptionally rigid, rehearsed system imposes the authored
+	## set shape over the individual rhythm.
+	var imposition := smoothstep(0.84, 0.98, clampf(tactic_strictness, 0.0, 1.0))
+	var expected := float(intent.get("expected_flight_seconds", 0.6))
+	var target := lerpf(expected, natural_flight_seconds, imposition)
+	var error_band := lerpf(
+		TEMPO_RECOGNITION_ERROR_POOR_SECONDS,
+		TEMPO_RECOGNITION_ERROR_ELITE_SECONDS,
+		recognition,
+	) * lerpf(1.15, 0.72, clampf(set_quality, 0.0, 1.0))
+	var error := clampf(signed_error, -1.0, 1.0) * error_band
+	var delivered := clampf(
+		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+	)
+	var result := intent.duplicate(true)
+	result.merge({
+		"setter_recognition": recognition,
+		"pair_familiarity": familiarity,
+		"tactic_strictness": tactic_strictness,
+		"tactic_imposition": imposition,
+		"natural_flight_seconds": natural_flight_seconds,
+		"set_quality": set_quality,
+		"coordination_signed_error": clampf(signed_error, -1.0, 1.0),
+		"called_expected_flight_seconds": expected,
+		"target_flight_seconds": target,
+		"coordination_error_seconds": delivered - expected,
+		"delivered_flight_seconds": delivered,
+	}, true)
+	return result
+
+
+## Re-read the hitter at the instant the setter releases.
+##
+## A tactical T1 is an expectation, not permission to move the hitter's feet.
+## If that hitter has completed only half of their runway at release, the ball
+## they are offering is a T2. In an ordinary system the setter meets the time
+## remaining in *that* approach; only the extreme `tactic_imposition` band keeps
+## the authored set shape instead. The tactical call, the setter's recognised
+## relationship and the relationship that actually happened are all retained,
+## so a synchronization failure is observable without mislabelling a slow ball.
+static func recognize_release_progress(
+	coordinated: Dictionary,
+	release_progress: float,
+) -> Dictionary:
+	var result := coordinated.duplicate(true)
+	var progress := clampf(release_progress, 0.0, 1.0)
+	var called_tempo := clampi(int(result.get("tempo", 3)), 0, 3)
+	var actual_tempo := achieved_tempo(result, progress)
+	var runup := maxf(float(result.get("runup_seconds", 0.0)), 0.0)
+	var delay := THIRD_TEMPO_START_DELAY_SECONDS if actual_tempo == 3 else 0.0
+	var takeoff_offset := (1.0 - progress) * runup + delay
+	if actual_tempo == 0:
+		takeoff_offset = -ZERO_TEMPO_TAKEOFF_LEAD_SECONDS
+	var observed_expected := clampf(
+		takeoff_offset + float(result.get("takeoff_to_contact_seconds", 0.22)),
+		TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS,
+	)
+	var imposition := clampf(float(result.get("tactic_imposition", 0.0)), 0.0, 1.0)
+	var natural := float(result.get("natural_flight_seconds", observed_expected))
+	var target := lerpf(observed_expected, natural, imposition)
+	var recognition := clampf(float(result.get("setter_recognition", 0.0)), 0.0, 1.0)
+	var quality := clampf(float(result.get("set_quality", 0.5)), 0.0, 1.0)
+	var error_band := lerpf(
+		TEMPO_RECOGNITION_ERROR_POOR_SECONDS,
+		TEMPO_RECOGNITION_ERROR_ELITE_SECONDS,
+		recognition,
+	) * lerpf(1.15, 0.72, quality)
+	var error := clampf(float(result.get(
+		"coordination_signed_error", 0.0
+	)), -1.0, 1.0) * error_band
+	var delivered := clampf(
+		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+	)
+	result.merge({
+		"requested_tempo": called_tempo,
+		"requested_relationship": TEMPO_RELATIONSHIPS[called_tempo],
+		"observed_release_progress": progress,
+		"recognized_tempo": actual_tempo,
+		"recognized_relationship": TEMPO_RELATIONSHIPS[actual_tempo],
+		"approach_start_delay_seconds": delay,
+		"takeoff_offset_seconds": takeoff_offset,
+		"expected_flight_seconds": observed_expected,
+		"target_flight_seconds": target,
+		"coordination_error_seconds": delivered - observed_expected,
+		"delivered_flight_seconds": delivered,
+	}, true)
+	return result
+
+
+## How much of the intended pre-release footwork could actually happen after
+## the hitter finished their prior responsibility and reached the runway.
+static func achieved_release_progress(
+	intent: Dictionary,
+	preparation_window_seconds: float,
+	to_mark_seconds: float,
+) -> float:
+	var intended := clampf(float(intent.get("release_progress", 0.0)), 0.0, 1.0)
+	if intended <= 0.0:
+		return 0.0
+	var needed := float(intent.get("runup_seconds", 0.0)) * intended
+	if needed <= 0.0001:
+		return intended
+	var spare := maxf(preparation_window_seconds - to_mark_seconds, 0.0)
+	return intended * clampf(spare / needed, 0.0, 1.0)
+
+
+static func release_position(
+	approach_start: Vector2,
+	contact: Vector2,
+	release_progress: float,
+) -> Vector2:
+	return approach_start.lerp(contact, clampf(release_progress, 0.0, 1.0))
+
+
+## What relationship actually happened, kept separate from what was called.
+## A requested T1 whose hitter only completed half the runway before release is
+## visibly and physically T2; preserving both labels is how the rally can say
+## the tactic missed without redefining the tactic after the fact.
+static func achieved_tempo(intent: Dictionary, release_progress: float) -> int:
+	var progress := clampf(release_progress, 0.0, 1.0)
+	var requested := clampi(int(intent.get("tempo", 3)), 0, 3)
+	if requested == 0 and progress >= FIRST_TEMPO_RELEASE_PROGRESS:
+		return 0
+	if progress >= FIRST_TEMPO_RELEASE_PROGRESS:
+		return 1
+	if progress > SECOND_TEMPO_RELEASE_PROGRESS:
+		return 2
+	return 3
+
+
+static func achieved_relationship(
+	intent: Dictionary, release_progress: float
+) -> String:
+	return TEMPO_RELATIONSHIPS[achieved_tempo(intent, release_progress)]
+
 
 static func evaluate_takeoff(
 	actor: RallyPlayerState,

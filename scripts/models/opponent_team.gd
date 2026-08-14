@@ -158,11 +158,18 @@ func court_position(player_id: int, phase: String = "defense") -> Vector2:
 			## sides on one code path is what makes a tactical change legible:
 			## it lands identically on each half of the court.
 			if phase == "serve_receive":
+				var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+					CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+				]["passer_count"])
+				var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+					lineup, players, passer_count
+				)
 				var formation := CourtConstants.serve_receive_formation(
 					lineup.slot_for_player(lineup.active_setter_id()),
 					CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
 					-1,
 					true,
+					passer_slots,
 				)
 				if slot_number in formation:
 					return Vector2(formation[slot_number])

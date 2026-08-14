@@ -257,31 +257,33 @@ func set_player_position(player_id: int, position: Vector2) -> void:
 func _plan_fraction(
 	movement: Dictionary, progress: float, window_seconds: float
 ) -> float:
+	var delay_seconds := maxf(float(movement.get("delay_seconds", 0.0)), 0.0)
+	var elapsed := clampf(progress, 0.0, 1.0) * maxf(window_seconds, 0.0)
+	if delay_seconds > 0.0 and elapsed <= delay_seconds:
+		return 0.0
+	var active_elapsed := maxf(elapsed - delay_seconds, 0.0)
 	var leg_seconds := float(movement.get("seconds", 0.0))
-	if leg_seconds <= 0.0 or window_seconds <= 0.0:
+	if window_seconds <= 0.0:
 		return clampf(progress, 0.0, 1.0)
-	return clampf(progress * window_seconds / leg_seconds, 0.0, 1.0)
+	if leg_seconds <= 0.0:
+		return clampf(
+			active_elapsed / maxf(window_seconds - delay_seconds, 0.0001),
+			0.0, 1.0,
+		)
+	return clampf(active_elapsed / leg_seconds, 0.0, 1.0)
 
 
-## A body does not travel at a third of a metre per second. It steps.
+## Continuous progress for a planned leg.
 ##
-## `GaitBiomechanics` fades its whole leg motion out below `IDLE_SPEED_MPS`, and
-## playback paces every leg to fill at least its entire flight -- so a voli with
-## half a metre to cover in a one-second window is drawn translating at 0.4 m/s
-## with almost no legs under them. That is the reported gliding, and it is not a
-## gait problem: no gait can help a body that is being moved smoothly at a speed
-## no gait runs at.
+## This used to quantise short journeys into whole steps: move for 55% of a
+## slot, hold for the rest, then begin the next step. The rig already advances
+## its gait from distance travelled, so quantising the *body* as well produced
+## exactly the visible stop/start and single-frame pops it was intended to hide.
+## A player's feet may step; their centre of mass does not teleport between
+## footholds. Keep the public helper while callers migrate, but make it a
+## continuous ease whose velocity reaches zero cleanly at both seams.
 ##
-## The fix is to stop asking for that speed. A short leg is quantised into whole
-## steps: the body moves over the first part of each step and holds for the rest,
-## so half a metre becomes one visible step and a pause rather than a continuous
-## creep. `stride_cycle` advances with distance travelled, so the legs pulse with
-## it for free.
-##
-## Long legs are left alone. Above `STEP_QUANTISE_MAX_METERS` a body really is in
-## continuous motion and quantising a run would draw it stuttering.
-##
-## Static and pure so the suite can check the shape without a court to run it in.
+## Static and pure so the suite can hold continuity without a court to run it in.
 ## How close two teammates may be drawn, centre to centre, in metres.
 ##
 ## The same figure `match_screen.MIN_BODY_SEPARATION_METERS` opens stacked plan
@@ -319,28 +321,14 @@ const MIN_STEP_SECONDS: float = 0.20
 
 static func step_quantised_fraction(
 	fraction: float,
-	leg_metres: float,
-	stride_metres: float,
+	_leg_metres: float,
+	_stride_metres: float,
 	## How long the leg is being drawn over. Defaulted to something generous so
 	## the pure-function gate can ask about shape without describing a window.
-	window_seconds: float = 1.0,
+	_window_seconds: float = 1.0,
 ) -> float:
 	var t := clampf(fraction, 0.0, 1.0)
-	if leg_metres <= 0.0001 or leg_metres > STEP_QUANTISE_MAX_METERS:
-		return t
-	var steps := clampi(
-		roundi(leg_metres / maxf(stride_metres, 0.35)), 1, MAX_QUANTISED_STEPS
-	)
-	if window_seconds / float(steps) < MIN_STEP_SECONDS:
-		return t
-	var scaled := t * float(steps)
-	var index := floorf(scaled)
-	## The final step must land exactly on the target rather than a duty-cycle
-	## short of it, or every quantised leg stops before it arrives.
-	if index >= float(steps):
-		return 1.0
-	var within := scaled - index
-	return (index + smoothstep(0.0, STEP_DUTY, within)) / float(steps)
+	return smoothstep(0.0, 1.0, t)
 
 
 ## Where a leg is at a given fraction of itself, corner included.
@@ -397,7 +385,10 @@ func apply_movement_plan(
 			), window_seconds),
 			fallback,
 		)
-	_unstack(sampled, immovable_id)
+	## Target separation is solved once, when the movement plan is built. The
+	## former per-frame `_unstack` recomputed a shove axis from sampled positions;
+	## as two blockers crossed the overlap boundary that axis could flip, visibly
+	## swapping their order and making both bodies jitter.
 	for player_id in sampled:
 		set_player_position(int(player_id), Vector2(sampled[player_id]))
 

@@ -4,6 +4,8 @@ extends Resource
 const DefensiveAssignmentModel := preload("res://scripts/models/defensive_assignment.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 
+const SERVE_RECEIVE_DEFAULTS_VERSION: int = 2
+
 @export_range(1, 6) var rotation_number: int = 1
 @export var plan_name: String = "Base Defense"
 @export var block_strategy: String = "Read Block"
@@ -26,9 +28,24 @@ const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 @export var reception_zones: Dictionary = {}
 @export var floor_defense_zones: Dictionary = {}
 @export var setter_release_targets: Dictionary = {}
+## Default receive zones follow the lineup when it changes. Once the manager
+## edits one, that authored shape wins and `ensure_defaults` only fills holes.
+@export var serve_receive_customized: bool = false
+@export var serve_receive_defaults_version: int = SERVE_RECEIVE_DEFAULTS_VERSION
 
 
-func ensure_defaults(lineup: RotationLineup) -> void:
+func ensure_defaults(lineup: RotationLineup, players: Array = []) -> void:
+	if lineup == null:
+		return
+	## Saves written before roster-aware passing did not record whether the
+	## receive was authored. Exact legacy defaults are safe to migrate; anything
+	## that differs is treated as the manager's work and kept.
+	if serve_receive_defaults_version < 1:
+		serve_receive_customized = not _matches_legacy_receive_defaults(lineup)
+	if serve_receive_defaults_version < SERVE_RECEIVE_DEFAULTS_VERSION:
+		serve_receive_defaults_version = SERVE_RECEIVE_DEFAULTS_VERSION
+	if not serve_receive_customized:
+		reception_zones.clear()
 	for slot_number in range(1, 7):
 		var player_id := lineup.player_at_slot(slot_number)
 		if player_id not in defender_positions:
@@ -38,7 +55,7 @@ func ensure_defaults(lineup: RotationLineup) -> void:
 		if player_id not in reception_zones:
 			reception_zones[player_id] = _default_zone(
 				player_id, slot_number, DefensiveZoneModel.ZoneType.SERVE_RECEIVE,
-				lineup
+				lineup, players
 			)
 		if player_id not in floor_defense_zones:
 			floor_defense_zones[player_id] = _default_zone(
@@ -168,6 +185,8 @@ func to_dict() -> Dictionary:
 		"reception_zones": _zones_to_dict(reception_zones),
 		"floor_defense_zones": _zones_to_dict(floor_defense_zones),
 		"setter_release_targets": _positions_to_dict(setter_release_targets),
+		"serve_receive_customized": serve_receive_customized,
+		"serve_receive_defaults_version": serve_receive_defaults_version,
 	}
 
 
@@ -201,6 +220,10 @@ func load_dict(data: Dictionary) -> void:
 	reception_zones = _zones_from_dict(data.get("reception_zones", {}))
 	floor_defense_zones = _zones_from_dict(data.get("floor_defense_zones", {}))
 	setter_release_targets = _positions_from_dict(data.get("setter_release_targets", {}))
+	serve_receive_customized = bool(data.get("serve_receive_customized", false))
+	serve_receive_defaults_version = int(data.get(
+		"serve_receive_defaults_version", 0
+	))
 
 
 func _positions_to_dict(positions: Dictionary) -> Dictionary:
@@ -257,6 +280,9 @@ func set_zone(
 	zone.radius_meters = clampf(radius_meters, 0.5, 6.0)
 	zone.priority = clampi(priority, 0, 3)
 	zone.enabled = enabled
+	if zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
+		serve_receive_customized = true
+		serve_receive_defaults_version = SERVE_RECEIVE_DEFAULTS_VERSION
 
 
 func set_zone_center(player_id: int, zone_type: int, position: Vector2) -> void:
@@ -267,6 +293,9 @@ func set_zone_center(player_id: int, zone_type: int, position: Vector2) -> void:
 		clampf(position.x, 0.06, 0.94),
 		clampf(position.y, 0.53, 0.96),
 	)
+	if zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
+		serve_receive_customized = true
+		serve_receive_defaults_version = SERVE_RECEIVE_DEFAULTS_VERSION
 	if zone_type == DefensiveZoneModel.ZoneType.FLOOR_DEFENSE:
 		defender_positions[player_id] = zone.center
 
@@ -276,6 +305,7 @@ func _default_zone(
 	slot_number: int,
 	zone_type: int,
 	lineup: RotationLineup = null,
+	players: Array = [],
 ) -> Resource:
 	var zone: Resource = DefensiveZoneModel.new()
 	zone.player_id = player_id
@@ -284,11 +314,17 @@ func _default_zone(
 	var front_row := CourtConstants.is_front_row_slot(slot_number)
 	if zone_type == DefensiveZoneModel.ZoneType.SERVE_RECEIVE:
 		var setter_slot := -1
-		var libero_slot := -1
 		if lineup != null:
 			setter_slot = lineup.slot_for_player(lineup.active_setter_id())
+		var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+		]["passer_count"])
+		var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+			lineup, players, passer_count
+		) if lineup != null else [] as Array[int]
 		var formation := CourtConstants.serve_receive_formation(
-			setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, libero_slot
+			setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1,
+			false, passer_slots,
 		)
 		zone.center = Vector2(formation.get(
 			slot_number, CourtConstants.slot_position(slot_number)
@@ -297,21 +333,36 @@ func _default_zone(
 		## the whole point of the shield: previously a back-row setter was
 		## enrolled as a passer purely because they were not front row.
 		var is_setter := setter_slot >= 1 and slot_number == setter_slot
-		var passer_slots := CourtConstants.serve_receive_passer_slots(
-			setter_slot,
-			int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
-				CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
-			]["passer_count"]),
-			libero_slot,
-		)
 		zone.enabled = (not is_setter) and slot_number in passer_slots
 		zone.radius_meters = 3.2
-		zone.priority = 2 if slot_number in [5, 6] else 1
+		zone.priority = 2 if zone.enabled else 1
 	else:
 		zone.enabled = true
 		zone.radius_meters = 3.0 if not front_row else 2.2
 		zone.priority = 2 if not front_row else 1
 	return zone
+
+
+func _matches_legacy_receive_defaults(lineup: RotationLineup) -> bool:
+	if reception_zones.size() != 6:
+		return false
+	for slot_number in range(1, 7):
+		var player_id := int(lineup.player_at_slot(slot_number))
+		var actual: Resource = reception_zones.get(player_id) as Resource
+		var legacy: Resource = _default_zone(
+			player_id, slot_number, DefensiveZoneModel.ZoneType.SERVE_RECEIVE,
+			lineup, [],
+		)
+		if actual == null or legacy == null:
+			return false
+		if not Vector2(actual.center).is_equal_approx(Vector2(legacy.center)) \
+				or not is_equal_approx(
+					float(actual.radius_meters), float(legacy.radius_meters)
+				) \
+				or int(actual.priority) != int(legacy.priority) \
+				or bool(actual.enabled) != bool(legacy.enabled):
+			return false
+	return true
 
 
 func _zones_to_dict(zones: Dictionary) -> Dictionary:

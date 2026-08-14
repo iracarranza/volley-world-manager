@@ -96,7 +96,25 @@ const NET_SPEED_RELIEF_STEPS: int = 6
 ## How finely a roll shot is softened looking for the flattest arc that still
 ## clears. Eight resolves the pace range to about 7% of full swing, which is
 ## finer than the angle it is chasing responds to.
-const LOFT_FLATTENING_STEPS: int = 8
+const LOFT_FLATTENING_STEPS: int = 12
+## A roll clears the wall; it is not a lob.  The hitter may give up depth to
+## stay below this rise rather than send a near-vertical root toward the roof.
+## Relative to contact height so a short and a tall hitter produce the same
+## shot shape.
+const LOFT_MAX_APEX_RISE_METERS: float = 0.70
+## The body-clearance problem immediately under the tape.
+##
+## A contact close to the net is not merely an easier, shorter attack. The
+## hitter has less room to finish the arm, land without crossing, and keep the
+## torso and trailing hand out of the net. Geometry previously rewarded that
+## contact twice -- shorter path and a fuller block view -- without charging any
+## of the control required to avoid a net fault. The band is measured from the
+## contact to the net plane, in metres; skill and a settled approach mitigate
+## the spread but never erase the clearance demand entirely.
+const NET_BODY_CLEARANCE_FULL_DEMAND_METERS: float = 0.16
+const NET_BODY_CLEARANCE_SAFE_METERS: float = 0.62
+const NET_BODY_CLEARANCE_SPREAD_MIN: float = 0.32
+const NET_BODY_CLEARANCE_SPREAD_MAX: float = 1.10
 const NET_SPEED_RELIEF_FLOOR: float = 0.45
 ## The furthest a bearing error is allowed to stretch the path to the tape when
 ## a hitter is budgeting for it, as a multiple of the path they aimed on.
@@ -209,6 +227,7 @@ static func resolve_swing(
 	match_confidence: float,
 	flow_for_team: float,
 	draws: Dictionary,
+	attack_type: String = "",
 ) -> Dictionary:
 	if hitter == null:
 		return {"available": false, "reason": "no hitter"}
@@ -286,8 +305,11 @@ static func resolve_swing(
 	var aim_distance := lerpf(
 		float(best.near_meters), float(best.far_meters), aim_fraction
 	)
+	var shot_shape := _shot_shape(attack_type, float(draws.get(
+		"intent", AttackPowerModel.DRIVE_INTENT
+	)))
 	var chosen := AttackPowerModel.choose_power(
-		ceiling, float(draws.get("intent", AttackPowerModel.DRIVE_INTENT)),
+		ceiling, float(shot_shape.intent),
 		aim_distance, contact_height_meters,
 		AttackPowerModel.aggression_from(
 			float(hitter.aggression) / 100.0, team_decisiveness,
@@ -341,6 +363,33 @@ static func resolve_swing(
 		* AttackSwingModel.block_spread_multiplier(
 			blockers.size(), _wall_seal(blockers)
 		)
+	## The shot the hitter chose is a mechanical action, not just a caption. A
+	## controlled roll uses less of the arm and a larger contact surface; a tip
+	## is safer still. Before this term `_identity_hit_type()` selected those
+	## actions for a cautious side and the geometric resolver ignored the choice,
+	## so “Defensive” attacks were labelled safe while missing more often than
+	## full-commitment “Physical” swings.
+	swing_spread *= float(shot_shape.spread_multiplier)
+	var net_distance_meters := absf(
+		contact.y - CourtConstants.NET_Y
+	) * CourtConstants.COURT_LENGTH_METERS
+	var net_avoidance_demand := 1.0 - smoothstep(
+		NET_BODY_CLEARANCE_FULL_DEMAND_METERS,
+		NET_BODY_CLEARANCE_SAFE_METERS,
+		net_distance_meters,
+	)
+	var net_control := clampf(
+		_rating(hitter, "attack_accuracy") * 0.45
+			+ _rating(hitter, "approach_timing") * 0.25
+			+ approach_quality * 0.30,
+		0.0, 1.0,
+	)
+	var net_avoidance_multiplier := 1.0 + net_avoidance_demand * lerpf(
+		NET_BODY_CLEARANCE_SPREAD_MAX,
+		NET_BODY_CLEARANCE_SPREAD_MIN,
+		net_control,
+	)
+	swing_spread *= net_avoidance_multiplier
 
 	## --- the angle that puts that speed where it was aimed -------------------
 	##
@@ -351,6 +400,7 @@ static func resolve_swing(
 	## shadow on live rallies that was 24% of swings -- the resolution layer
 	## dutifully reported "net" for a choice the decision layer should never have
 	## offered. A hitter knows where the tape is.
+	var gravity_mps2 := BallFlightModel.DEFAULT_GRAVITY_MPS2
 	var launch := _feasible_launch(
 		contact, float(best.bearing_degrees), float(chosen.speed_mps),
 		contact_height_meters, aim_distance, float(best.far_meters),
@@ -362,6 +412,13 @@ static func resolve_swing(
 			_rating(hitter, "attack_accuracy"), swing_spread
 		),
 	)
+	if _apex_limited_launch_mode(str(launch.get("mode", ""))):
+		var intended_limit := _maximum_loft_angle(
+			float(launch.speed_mps), gravity_mps2
+		)
+		if float(launch.angle_degrees) > intended_limit:
+			launch["angle_degrees"] = intended_limit
+			launch["apex_limited"] = true
 	var intended_angle := float(launch.angle_degrees)
 	aim_distance = float(launch.aim_distance)
 	## Whatever pace the tape left them. Equal to the chosen speed on any swing
@@ -377,6 +434,17 @@ static func resolve_swing(
 		float(draws.get("vertical", 0.0)),
 		float(draws.get("power", 0.0)),
 	)
+	## The feasibility search budgets vertical error for clearing the tape, but an
+	## unbounded positive draw can still turn its roll into a near-vertical lob.
+	## Limit the ball actually struck as well as the intention; resolution then
+	## reads the new landing naturally (including long or out).
+	if _apex_limited_launch_mode(str(launch.get("mode", ""))):
+		var delivered_limit := _maximum_loft_angle(
+			float(delivered.speed_mps), gravity_mps2
+		)
+		if float(delivered.vertical_angle_degrees) > delivered_limit:
+			delivered["vertical_angle_degrees"] = delivered_limit
+			launch["apex_limited"] = true
 
 	## --- where it ended up ----------------------------------------------------
 	var resolved := AttackResolutionModel.resolve(
@@ -450,9 +518,15 @@ static func resolve_swing(
 		## margin cannot be read without it.
 		"launch_mode": str(launch.mode),
 		"launch_cleared": bool(launch.cleared),
+		"loft_apex_limited": bool(launch.get("apex_limited", false)),
+		"net_distance_meters": net_distance_meters,
+		"net_avoidance_demand": net_avoidance_demand,
+		"net_avoidance_spread_multiplier": net_avoidance_multiplier,
 		"delivered": delivered,
 		"resolution": resolved,
 		"signature_move": move,
+		"attack_type": attack_type,
+		"shot_spread_multiplier": float(shot_shape.spread_multiplier),
 		"landing": resolved.landing,
 		"flight": resolved.flight,
 		## **When the wall jumped**, taken off the actual blockers rather than off
@@ -497,6 +571,12 @@ static func resolve_swing(
 		"block_deflection_speed_mps": float(Dictionary(
 			resolved.get("deflection", {})
 		).get("speed_mps", 0.0)),
+		"block_deflection_vertical_angle_degrees": float(Dictionary(
+			resolved.get("deflection", {})
+		).get("vertical_angle_degrees", 0.0)),
+		"block_deflection_duration_seconds": float(Dictionary(
+			resolved.get("deflection", {})
+		).get("duration_seconds", 0.0)),
 		"block_deflection_playable": bool(Dictionary(
 			resolved.get("deflection", {})
 		).get("playable", false)),
@@ -946,13 +1026,25 @@ static func _quickest_clearing_loft(
 	steepest_angle: float,
 	gravity_mps2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2,
 ) -> Dictionary:
-	var best_angle := steepest_angle
-	var best_speed := from_speed
-	var best_ground_speed := from_speed * cos(deg_to_rad(steepest_angle))
-	for step in range(1, LOFT_FLATTENING_STEPS + 1):
+	## Preserve the intended landing.  Among roots that stay within the physical
+	## rise, horizontal pace (and therefore the shortest defensive window) wins.
+	## If no sampled root fits, return the lowest clearing one; the final launch
+	## guard above clips that pathological tail before the ball is resolved.
+	var lowest_clearing := {
+		"angle_degrees": steepest_angle,
+		"aim_distance": aim_distance,
+		"speed_mps": from_speed,
+		"mode": "lofted",
+		"cleared": true,
+	}
+	var lowest_rise := INF
+	var lowest_ground_speed := 0.0
+	var best := {}
+	var best_ground_speed := -INF
+	for speed_step in range(LOFT_FLATTENING_STEPS + 1):
 		var speed := lerpf(
 			from_speed, minf(to_speed, from_speed),
-			float(step) / float(LOFT_FLATTENING_STEPS),
+			float(speed_step) / float(LOFT_FLATTENING_STEPS),
 		)
 		var solved := BallFlightModel.solve_angle_for_range(
 			speed, aim_distance, contact_height_meters, gravity_mps2
@@ -960,20 +1052,62 @@ static func _quickest_clearing_loft(
 		if not bool(solved.get("lofted_found", false)):
 			continue
 		var angle := float(solved.lofted_angle_degrees)
-		var ground_speed := speed * cos(deg_to_rad(angle))
-		if ground_speed <= best_ground_speed:
-			continue
 		if _height_at_net(
 			speed, angle, contact_height_meters, ground_to_net, gravity_mps2
 		) < needed:
 			continue
-		best_angle = angle
-		best_speed = speed
-		best_ground_speed = ground_speed
-	return {
-		"angle_degrees": best_angle, "aim_distance": aim_distance,
-		"speed_mps": best_speed, "mode": "lofted", "cleared": true,
-	}
+		var flight := BallFlightModel.solve_flight(
+			speed, angle, contact_height_meters, gravity_mps2
+		)
+		var rise := maxf(
+			float(flight.apex_height_meters) - contact_height_meters, 0.0
+		)
+		var ground_speed := speed * cos(deg_to_rad(angle))
+		var candidate := {
+			"angle_degrees": angle,
+			"aim_distance": aim_distance,
+			"speed_mps": speed,
+			"mode": "lofted",
+			"cleared": true,
+		}
+		if rise < lowest_rise - 0.0001 \
+				or (is_equal_approx(rise, lowest_rise)
+					and ground_speed > lowest_ground_speed):
+			lowest_clearing = candidate
+			lowest_rise = rise
+			lowest_ground_speed = ground_speed
+		if rise <= LOFT_MAX_APEX_RISE_METERS \
+				and ground_speed > best_ground_speed:
+			best = candidate
+			best_ground_speed = ground_speed
+	return best if not best.is_empty() else lowest_clearing
+
+
+## Every branch that may choose an upward relief/fallback arc shares the same
+## physical ceiling. `forced` was the hole: a failed clearing search could keep
+## an 80-degree root, produce a 14.75 m apex, and evade a guard named only for
+## `lofted` even though it was the same ball.
+static func _apex_limited_launch_mode(mode: String) -> bool:
+	## `shortened` is the same physical concession as `lofted`: the hitter could
+	## not carry the intended depth, so they lift a shorter ball over the tape.
+	## Leaving it out of this list let that rare last-resort branch keep the raw
+	## high root (52 degrees in the probe), even though every ordinary roll was
+	## already bounded.  The result was a 5-6 m "spike" hiding under a different
+	## launch-mode label.
+	return mode in ["lofted", "shortened", "forced", "scraped"]
+
+
+## Highest launch angle whose vertical component rises no more than the roll
+## envelope.  Derived from v_y^2 / 2g = h, so the bound stays true at every pace.
+static func _maximum_loft_angle(
+	speed_mps: float,
+	gravity_mps2: float = BallFlightModel.DEFAULT_GRAVITY_MPS2,
+) -> float:
+	var speed := maxf(speed_mps, BallFlightModel.MIN_SPEED_MPS)
+	var vertical_limit := sqrt(
+		2.0 * maxf(gravity_mps2, 0.1) * LOFT_MAX_APEX_RISE_METERS
+	)
+	return rad_to_deg(asin(clampf(vertical_limit / speed, 0.0, 1.0)))
 
 
 static func _height_at_net(
@@ -1043,6 +1177,32 @@ static func _wall_seal(blockers: Array) -> float:
 ## wall; one is half a problem; none is an open net.
 static func _block_presence(blockers: Array) -> float:
 	return clampf(float(blockers.size()) * 0.5, 0.0, 1.0)
+
+
+## The mechanical meaning of the selected attack action. Unknown actions retain
+## the resolver's drawn intent so adding a label elsewhere cannot silently
+## change an attack; the shared live vocabularies are explicit here.
+static func _shot_shape(attack_type: String, drawn_intent: float) -> Dictionary:
+	match attack_type:
+		"Controlled roll", "Roll shot":
+			return {
+				"intent": AttackPowerModel.CONTROL_INTENT,
+				"spread_multiplier": 0.72,
+			}
+		"Emergency tip", "Short tip", "Tip":
+			return {
+				"intent": AttackPowerModel.OFF_SPEED_INTENT,
+				"spread_multiplier": 0.62,
+			}
+		"Power swing", "Tempo swing", "Quick attack", "Pipe attack":
+			return {
+				"intent": AttackPowerModel.DRIVE_INTENT,
+				"spread_multiplier": 1.0,
+			}
+	return {
+		"intent": drawn_intent,
+		"spread_multiplier": 1.0,
+	}
 
 
 static func _rating(player: VolleyballPlayer, attribute: String) -> float:

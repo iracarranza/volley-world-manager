@@ -4,6 +4,7 @@ extends Control
 signal close_requested
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const BlockJumpModelRef := preload("res://scripts/simulation/block_jump_model.gd")
 
 @onready var match_court_3d: MatchCourt3D = %MatchCourt3D
 @onready var caption_label: Label = %CaptionLabel
@@ -461,21 +462,14 @@ func _play_contact_pulse(
 		## Here the wall is already up. This window is the withdraw, so it starts
 		## where the hold ended, and both blockers come down together.
 		if event.event_type == RallyEventModel.EventType.BLOCK:
-			var phase := _block_withdraw_phase(progress, duration)
-			var lift := BlockBiomechanics.elevation_at(phase)
-			for blocker_id in [
-				int(event.actor_id), int(event.metadata.get("assist_id", -1)),
-			]:
-				if blocker_id < 0:
-					continue
-				match_court_3d.set_player_pose(
-					blocker_id, int(event.event_type),
-					_event_elevation(event, blocker_id) * lift,
-					phase, direction, true,
-					_contact_posture(event),
-					_contact_recovery(event),
-					_action_context(event, blocker_id),
-				)
+			_pose_block_wall(
+				Dictionary(event.metadata.get("block_jump_timing", {})),
+				_event_physical_time(event),
+				_window_physical_time(event, progress, duration),
+				direction,
+				_blocker_ids(event),
+				event,
+			)
 			await get_tree().process_frame
 			continue
 		var peak := _event_elevation(event, int(event.actor_id))
@@ -774,33 +768,24 @@ func _apply_contact_poses(
 	## the dig genuinely takes over.
 	var same_actor := next_contact != null and int(next_contact.actor_id) == event_actor
 	var draw_outgoing := not same_actor or outgoing_weight >= incoming_weight
-	if draw_outgoing:
-		## A block arrives here already partway through its own phase. The hold
-		## ran during the attack's flight, so this window -- the deflection's --
-		## is the withdraw and the landing, and starting it at 0 would replay the
-		## wall going up for a third time.
-		var outgoing_phase := progress
-		var outgoing_lift := outgoing_weight
-		if event.event_type == RallyEventModel.EventType.BLOCK:
-			outgoing_phase = _block_withdraw_phase(progress, window_seconds)
-			outgoing_lift = BlockBiomechanics.elevation_at(outgoing_phase)
+	var outgoing_is_block := event.event_type == RallyEventModel.EventType.BLOCK
+	if outgoing_is_block:
+		_pose_block_wall(
+			Dictionary(event.metadata.get("block_jump_timing", {})),
+			_event_physical_time(event),
+			_window_physical_time(event, progress, window_seconds),
+			event_direction,
+			_blocker_ids(event),
+			event,
+		)
+	elif draw_outgoing:
 		match_court_3d.set_player_pose(
 			event_actor, int(event.event_type),
-			event_peak * outgoing_lift, outgoing_phase, event_direction, true,
+			event_peak * outgoing_weight, progress, event_direction, true,
 			_contact_posture(event),
 			_contact_recovery(event),
 			_platform_aim(event),
 			_action_context(event, event_actor),
-		)
-	var event_assist := int(event.metadata.get("assist_id", -1))
-	if event_assist >= 0 and event.event_type == RallyEventModel.EventType.BLOCK:
-		var assist_phase := _block_withdraw_phase(progress, window_seconds)
-		match_court_3d.set_player_pose(
-			event_assist, int(event.event_type),
-			_event_elevation(event, event_assist)
-				* BlockBiomechanics.elevation_at(assist_phase),
-			assist_phase, event_direction, true,
-			"planted", "platform", _action_context(event, event_assist),
 		)
 	if next_contact == null:
 		return
@@ -818,7 +803,16 @@ func _apply_contact_poses(
 	## contact, and played again. Elevation was already continuous across that
 	## seam, so only the arms jumped.
 	var next_is_block := next_contact.event_type == RallyEventModel.EventType.BLOCK
-	if not same_actor or not draw_outgoing:
+	if next_is_block:
+		_pose_block_wall(
+			Dictionary(next_contact.metadata.get("block_jump_timing", {})),
+			_event_physical_time(next_contact),
+			_window_physical_time(event, progress, window_seconds),
+			next_direction,
+			_blocker_ids(next_contact),
+			next_contact,
+		)
+	elif not same_actor or not draw_outgoing:
 		## A block is the one contact whose pose does *not* wind up across the
 		## flight that reaches it.
 		##
@@ -850,80 +844,182 @@ func _apply_contact_poses(
 		## up, came down, and went up again. That is the block replaying itself.
 		##
 		## This window is the hold, so it ends where the hold ends.
-		var next_phase := _block_hold_phase(progress, window_seconds) \
-			if next_is_block else progress - 1.0
-		var next_lift := BlockBiomechanics.elevation_at(next_phase) \
-			if next_is_block else incoming_weight
+		var next_phase := progress - 1.0
+		var next_lift := incoming_weight
 		match_court_3d.set_player_pose(
 			next_actor, int(next_contact.event_type),
 			next_peak * next_lift, next_phase, next_direction, true,
 			_contact_posture(next_contact), _contact_recovery(next_contact),
 			_action_context(next_contact, next_actor),
 		)
-	var next_assist := int(next_contact.metadata.get("assist_id", -1))
-	if next_assist >= 0 and next_is_block:
-		## Through the same helper as the actor above. These were two call sites
-		## computing the same phase independently, and when the actor's mapping
-		## was corrected this one was not -- so the second blocker went on
-		## running the whole hold-and-withdraw during the attack's flight and
-		## then started again for the deflection, replaying the wall while the
-		## caption still read "block forms".
-		var assist_hold := _block_hold_phase(progress, window_seconds)
-		match_court_3d.set_player_pose(
-			next_assist, int(next_contact.event_type),
-			_event_elevation(next_contact, next_assist)
-				* BlockBiomechanics.elevation_at(assist_hold),
-			assist_hold, next_direction, true,
-			"planted", "platform", _action_context(next_contact, next_assist),
-		)
-	_apply_early_block(after_next, next_contact, progress)
-
-
-## How long a blocker takes to come down and absorb it, in seconds.
-##
-## A descent is governed by gravity, not by when the next contact happens. The
-## block's withdraw was mapped linearly onto its own flight window, so a
-## deflection that took a second and a half lowered the blocker over a second and
-## a half -- they sank rather than fell. Bounding it in real time means a long
-## window leaves them standing on the floor waiting, which is what actually
-## happens, and a short one still finishes the motion.
-const BLOCK_DESCENT_SECONDS: float = 0.42
-
-
-## Where the block's phase sits during the attack's flight -- the hold.
-##
-## One helper for both blockers. These were two call sites doing the same
-## arithmetic separately, and correcting one and not the other is exactly how
-## the second blocker ended up replaying the wall.
-## **Paced by the body, not by the ball.**
-##
-## This was `progress * HOLD_END`: the rise stretched across whatever the
-## attack's flight happened to last. On a fast swing that is about right; on a
-## slow roll shot it is a blocker taking a second and a half to leave the floor
-## and then standing up there. A jump is not a duration the ball gets to choose,
-## which is `BlockPhaseModel`'s whole argument, and the withdraw below has been
-## paced in real seconds all along -- only the rise was still on the ball's
-## clock.
-##
-## Clamped, so past the rise the blocker is at the top rather than still going
-## up. Coming *down* before the ball arrives is the rest of the fix and it needs
-## the hold window to be able to enter the withdraw, which is a restructure this
-## is not; the hover is shortened here rather than removed.
-func _block_hold_phase(progress: float, window_seconds: float) -> float:
-	var elapsed := progress * maxf(window_seconds, 0.0001)
-	var rise := clampf(
-		elapsed / (BlockPhaseModel.JUMP_SECONDS * BlockPhaseModel.RISE_SHARE),
-		0.0, 1.0,
+	_apply_early_block(
+		after_next, next_contact, event, progress, window_seconds
 	)
-	return rise * BlockBiomechanics.HOLD_END
+	_apply_unsuccessful_attack_block(event, next_contact, progress, window_seconds)
 
 
-## And where it sits during the block's own flight -- the withdraw and landing,
-## paced by `BLOCK_DESCENT_SECONDS` rather than by the length of the window.
-func _block_withdraw_phase(progress: float, window_seconds: float) -> float:
-	var elapsed := progress * maxf(window_seconds, 0.0001)
-	var descent := clampf(elapsed / BLOCK_DESCENT_SECONDS, 0.0, 1.0)
-	return lerpf(BlockBiomechanics.HOLD_END, 1.0, descent)
+## A block now has one physical clock across the set, attack and deflection
+## windows. The old helpers each mapped their local 0-1 window onto a different
+## part of the pose. Crossing a window boundary therefore restarted or snapped
+## the jump, and a long roll-shot flight stretched a 0.6-second jump into a
+## second or more of hovering. These helpers sample the resolver's per-blocker
+## timing on the rally clock instead.
+const BLOCK_LOAD_SECONDS: float = 0.18
+const BLOCK_MIN_DESCENT_SECONDS: float = 0.12
+const DEFAULT_BLOCK_HANG_SECONDS: float = 0.62
+
+
+func _event_physical_time(event: RallyEvent) -> float:
+	if event == null:
+		return 0.0
+	return float(event.metadata.get(
+		"physical_time", event.metadata.get("event_time", 0.0)
+	))
+
+
+func _window_physical_time(
+	event: RallyEvent, progress: float, window_seconds: float
+) -> float:
+	return _event_physical_time(event) \
+		+ clampf(progress, 0.0, 1.0) * maxf(window_seconds, 0.0)
+
+
+func _attack_net_time(attack_event: RallyEvent) -> float:
+	if attack_event == null:
+		return 0.0
+	var trajectory: Dictionary = attack_event.metadata.get(
+		"outgoing_trajectory", {}
+	)
+	if trajectory.is_empty():
+		return _event_physical_time(attack_event)
+	var start := Vector2(trajectory.get(
+		"start_position", attack_event.start_position
+	))
+	var finish := Vector2(trajectory.get(
+		"end_position", attack_event.end_position
+	))
+	var fraction := 0.0
+	if absf(finish.y - start.y) > 0.0001:
+		fraction = clampf(
+			(CourtConstants.NET_Y - start.y) / (finish.y - start.y),
+			0.0, 1.0,
+		)
+	return float(trajectory.get(
+		"start_time", _event_physical_time(attack_event)
+	)) + float(trajectory.get("duration", 0.0)) * fraction
+
+
+func _block_contact_time(
+	block_event: RallyEvent, attack_event: RallyEvent
+) -> float:
+	return _event_physical_time(block_event) if block_event != null \
+		else _attack_net_time(attack_event)
+
+
+static func _block_timing_entry(timing: Dictionary, blocker_id: int) -> Dictionary:
+	var raw: Variant = timing.get(blocker_id, timing.get(str(blocker_id), {}))
+	return Dictionary(raw) if raw is Dictionary else {}
+
+
+static func _block_timeline(entry: Dictionary, contact_time: float) -> Dictionary:
+	var hang := maxf(float(entry.get(
+		"hang_seconds", DEFAULT_BLOCK_HANG_SECONDS
+	)), 0.01)
+	## Invert `BlockJumpModel.hang_seconds`: h = g * hang^2 / 8.
+	var leap := BlockJumpModelRef.GRAVITY_MPS2 * hang * hang / 8.0
+	return BlockJumpModelRef.jump_timeline(
+		contact_time, leap,
+		absf(float(entry.get("timing_error_seconds", 0.0))),
+		bool(entry.get("late", false)),
+	)
+
+
+static func _block_peak_from_entry(entry: Dictionary) -> float:
+	var hang := maxf(float(entry.get(
+		"hang_seconds", DEFAULT_BLOCK_HANG_SECONDS
+	)), 0.01)
+	var leap := BlockJumpModelRef.GRAVITY_MPS2 * hang * hang / 8.0
+	return BlockJumpModelRef.draw_peak(leap)
+
+
+## Joint phase is monotonic even when the ball meets an early or late jumper.
+## Elevation remains the ballistic parabola below; this phase only sequences
+## load, press, hold and withdrawal on the rig.
+static func _block_pose_phase(
+	moment: float, timeline: Dictionary, contact_time: float
+) -> float:
+	var takeoff := float(timeline.get("takeoff", contact_time))
+	var peak := float(timeline.get("peak", contact_time))
+	var landing := float(timeline.get("landing", contact_time))
+	var load_start := takeoff - BLOCK_LOAD_SECONDS
+	if moment <= load_start:
+		return -1.0
+	if moment <= takeoff:
+		return lerpf(
+			-1.0, BlockBiomechanics.LOAD_END,
+			inverse_lerp(load_start, takeoff, moment),
+		)
+	if moment <= peak:
+		return lerpf(
+			BlockBiomechanics.LOAD_END, 0.0,
+			inverse_lerp(takeoff, peak, moment),
+		)
+	var latest_hold := maxf(peak, landing - BLOCK_MIN_DESCENT_SECONDS)
+	var hold_until := clampf(
+		maxf(peak + 0.06, contact_time + 0.02), peak, latest_hold
+	)
+	if moment <= hold_until and hold_until > peak + 0.0001:
+		return lerpf(
+			0.0, BlockBiomechanics.HOLD_END,
+			inverse_lerp(peak, hold_until, moment),
+		)
+	if moment <= landing and landing > hold_until + 0.0001:
+		return lerpf(
+			BlockBiomechanics.HOLD_END, BlockBiomechanics.LANDED_PHASE,
+			inverse_lerp(hold_until, landing, moment),
+		)
+	return 1.0
+
+
+func _blocker_ids(event: RallyEvent) -> Array[int]:
+	var ids: Array[int] = []
+	if event == null:
+		return ids
+	var timing: Dictionary = event.metadata.get("block_jump_timing", {})
+	for raw_id in timing:
+		var timing_id := int(raw_id)
+		if timing_id >= 0 and timing_id not in ids:
+			ids.append(timing_id)
+	for candidate in [
+		int(event.actor_id), int(event.metadata.get("assist_id", -1)),
+	]:
+		if candidate >= 0 and candidate not in ids:
+			ids.append(candidate)
+	return ids
+
+
+func _pose_block_wall(
+	timing: Dictionary,
+	contact_time: float,
+	moment: float,
+	direction: Vector2,
+	blocker_ids: Array[int],
+	context_event: RallyEvent = null,
+) -> void:
+	for blocker_id in blocker_ids:
+		if blocker_id < 0:
+			continue
+		var entry := _block_timing_entry(timing, blocker_id)
+		var timeline := _block_timeline(entry, contact_time)
+		var elevation := BlockJumpModelRef.elevation_at(moment, timeline)
+		var phase := _block_pose_phase(moment, timeline, contact_time)
+		var context := _action_context(context_event, blocker_id)
+		context["block_jump_timing"] = timing
+		match_court_3d.set_player_pose(
+			blocker_id, RallyEventModel.EventType.BLOCK,
+			_block_peak_from_entry(entry) * elevation,
+			phase, direction, true, "planted", "platform", {}, context,
+		)
 
 
 ## Put the wall up while the ball is still on its way to the hitter.
@@ -938,29 +1034,72 @@ func _block_withdraw_phase(progress: float, window_seconds: float) -> float:
 ## only the right anchor when the thing in between is what the block is timed
 ## against.
 func _apply_early_block(
-	after_next: RallyEvent, next_contact: RallyEvent, progress: float
+	after_next: RallyEvent,
+	next_contact: RallyEvent,
+	window_event: RallyEvent,
+	progress: float,
+	window_seconds: float,
 ) -> void:
-	if after_next == null or next_contact == null:
-		return
-	if after_next.event_type != RallyEventModel.EventType.BLOCK:
+	if next_contact == null:
 		return
 	if next_contact.event_type != RallyEventModel.EventType.ATTACK:
 		return
-	var phase := progress - 1.0
-	var lift := BlockBiomechanics.elevation_at(phase)
-	var direction := after_next.end_position - after_next.start_position
-	for blocker_id in [
-		int(after_next.actor_id),
-		int(after_next.metadata.get("assist_id", -1)),
-	]:
-		if blocker_id < 0:
-			continue
-		match_court_3d.set_player_pose(
-			blocker_id, RallyEventModel.EventType.BLOCK,
-			_event_elevation(after_next, blocker_id) * lift,
-			phase, direction, true,
-			"planted", "platform", _action_context(after_next, blocker_id),
-		)
+	## A wall commits from the set and jumps before it knows whether the hitter's
+	## ball will land in. The resolver has always published `block_jump_timing`
+	## on the ATTACK for that reason, but playback only looked two contacts ahead
+	## for a BLOCK event. A terminal attack error has no such event, so its wall
+	## stood flat-footed with apparent foreknowledge of the miss.
+	var block_event := after_next \
+		if after_next != null \
+		and after_next.event_type == RallyEventModel.EventType.BLOCK else null
+	var timing: Dictionary = next_contact.metadata.get("block_jump_timing", {})
+	if block_event == null and timing.is_empty():
+		return
+	var direction := block_event.end_position - block_event.start_position \
+		if block_event != null else next_contact.end_position - next_contact.start_position
+	var blocker_ids := _blocker_ids(block_event) if block_event != null \
+		else ([] as Array[int])
+	if blocker_ids.is_empty():
+		for raw_id in timing:
+			blocker_ids.append(int(raw_id))
+	_pose_block_wall(
+		timing,
+		_block_contact_time(block_event, next_contact),
+		_window_physical_time(window_event, progress, window_seconds),
+		direction, blocker_ids, block_event,
+	)
+
+
+## Keep a wall visible through a swing that ends as an attack error.
+##
+## The rise is drawn by `_apply_early_block` during the set flight. Once the
+## hitter contacts, an ordinary rally hands the pose to its BLOCK event. A miss
+## has no block contact, so this is the corresponding hold and gravity-paced
+## descent while the errant attack finishes its own flight.
+func _apply_unsuccessful_attack_block(
+	event: RallyEvent,
+	next_contact: RallyEvent,
+	progress: float,
+	window_seconds: float,
+) -> void:
+	if event == null or event.event_type != RallyEventModel.EventType.ATTACK:
+		return
+	if not bool(event.metadata.get("attack_missed", false)):
+		return
+	if next_contact != null and next_contact.event_type == RallyEventModel.EventType.BLOCK:
+		return
+	var timing: Dictionary = event.metadata.get("block_jump_timing", {})
+	if timing.is_empty():
+		return
+	var direction := event.end_position - event.start_position
+	var blocker_ids: Array[int] = []
+	for raw_id in timing:
+		blocker_ids.append(int(raw_id))
+	_pose_block_wall(
+		timing, _attack_net_time(event),
+		_window_physical_time(event, progress, window_seconds),
+		direction, blocker_ids,
+	)
 
 
 func _build_movement_plan(
@@ -975,6 +1114,20 @@ func _build_movement_plan(
 	## contact position. A player driven to the other one stands away from the
 	## ball they are supposedly playing.
 	var action_target := Vector2(next_contact.start_position)
+	## An attack's `start_position` is the ball. The hitter's centre belongs
+	## behind it by roughly half a metre; driving both to one coordinate is what
+	## made a legal tight set look like the hitter was clipping through the net.
+	if next_contact.metadata.has("body_contact_position"):
+		action_target = Vector2(next_contact.metadata["body_contact_position"])
+	## A failed first contact is a ball the defender did not reach. The resolver
+	## publishes the point their body reached separately; walking them all the way
+	## to the untouched ball visually converts a miss into a last-frame teleport.
+	if not bool(next_contact.success) \
+			and int(next_contact.event_type) in [
+				RallyEventModel.EventType.RECEPTION,
+				RallyEventModel.EventType.DEFENSE,
+			] and next_contact.metadata.has("movement_target"):
+		action_target = Vector2(next_contact.metadata["movement_target"])
 	## Nobody moves unless something actually says they move.
 	##
 	## This loop used to hand every player on the court a target, computed by
@@ -1087,6 +1240,10 @@ func _build_movement_plan(
 			plan[next_actor_id]["waypoint"] = Vector2(
 				next_contact.metadata["navigation_waypoint"]
 			)
+		if next_contact.metadata.has("movement_delay_seconds"):
+			plan[next_actor_id]["delay_seconds"] = maxf(float(
+				next_contact.metadata["movement_delay_seconds"]
+			), 0.0)
 	## Who the resolver named this window, remembered for the next one.
 	_previously_placed = {}
 	for key in ["home_phase_targets", "opponent_phase_targets"]:
@@ -1497,7 +1654,9 @@ func _committed_ground(next_contact: RallyEvent) -> Dictionary:
 				Dictionary(next_contact.metadata[key])[raw_player_id]
 			)
 	if int(next_contact.actor_id) >= 0:
-		ground[int(next_contact.actor_id)] = next_contact.start_position
+		ground[int(next_contact.actor_id)] = Vector2(next_contact.metadata.get(
+			"body_contact_position", next_contact.start_position
+		))
 	return ground
 
 
@@ -1624,7 +1783,12 @@ func _event_elevation(event: RallyEvent, player_id: int) -> float:
 				), 0.35, 1.0)
 		RallyEventModel.EventType.BLOCK:
 			if is_actor or int(event.metadata.get("assist_id", -1)) == player_id:
-				return 0.85
+				var timing: Dictionary = event.metadata.get(
+					"block_jump_timing", {}
+				)
+				return _block_peak_from_entry(
+					_block_timing_entry(timing, player_id)
+				)
 		RallyEventModel.EventType.SET:
 			if is_actor:
 				var capability: Dictionary = event.metadata.get("setter_capability", {})

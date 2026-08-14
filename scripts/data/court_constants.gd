@@ -81,15 +81,16 @@ const LANE_X := {
 ## net; the pipe is a back-row ball and sits behind the attack line.
 ##
 ## Every range is centred on the constant it replaced -- 0.54 m for the front
-## lanes, 4.00 m for the pipe -- so that with `ENABLE_HITTER_TIGHTNESS` off the
-## engine behaves exactly as it did. Zone centres that quietly moved the base
-## depth would make the flag one of two things changing behaviour, and then
-## nothing measured against it means anything.
+## lanes, 4.00 m for the pipe -- so that changing the near-net tail does not
+## also move the ordinary ball back into the forgiving, block-avoiding depth
+## this model was introduced to remove. A pin may ask for a ball 32 cm off the
+## tape and a quick 25 cm off it, but neither asks for the 18-25 cm tail that
+## puts the ball radius and the hitter's reaching hand effectively in the net.
 const LANE_ZONE := {
-	"Left Pin": {"x": Vector2(0.02, 0.24), "depth_m": Vector2(0.25, 0.83)},
-	"Front Quick": {"x": Vector2(0.28, 0.50), "depth_m": Vector2(0.19, 0.89)},
-	"Right Quick": {"x": Vector2(0.50, 0.72), "depth_m": Vector2(0.19, 0.89)},
-	"Right Pin": {"x": Vector2(0.76, 0.98), "depth_m": Vector2(0.25, 0.83)},
+	"Left Pin": {"x": Vector2(0.02, 0.24), "depth_m": Vector2(0.32, 0.76)},
+	"Front Quick": {"x": Vector2(0.28, 0.50), "depth_m": Vector2(0.25, 0.83)},
+	"Right Quick": {"x": Vector2(0.50, 0.72), "depth_m": Vector2(0.25, 0.83)},
+	"Right Pin": {"x": Vector2(0.76, 0.98), "depth_m": Vector2(0.32, 0.76)},
 	## Behind the three-metre line with room to spare, because delivery scatter
 	## reaches +/-1.4 m and a zone edge is not a legality guarantee while the
 	## delivery can cross it -- measured at 3 back-row swings in 124 struck in
@@ -362,6 +363,170 @@ static func serve_receive_passer_slots(
 	return chosen
 
 
+## Which players should form the default passing unit for this lineup.
+##
+## Rotation slots describe where a player must stand at serve contact; they do
+## not describe that player's job.  The slot-only fallback above is useful when
+## no roster is available, but using it for a real team routinely enrolled an
+## opposite or a middle while an outside hitter waited out of the pattern.  A
+## three-passer receive should begin with the roles trained to pass -- libero
+## and outsides -- and only recruit another position when the lineup does not
+## contain enough of them.  Attributes break ties and choose any required
+## replacement; they do not let a marginal rating difference hide a specialist.
+static func roster_serve_receive_passer_slots(
+	lineup: RotationLineup,
+	players: Array,
+	passer_count: int,
+) -> Array[int]:
+	if lineup == null or passer_count <= 0:
+		return []
+	var by_id := {}
+	for raw_player in players:
+		var player := raw_player as VolleyballPlayer
+		if player != null:
+			by_id[int(player.id)] = player
+	if by_id.is_empty():
+		return serve_receive_passer_slots(
+			lineup.slot_for_player(lineup.active_setter_id()), passer_count
+		)
+
+	var specialists: Array[Dictionary] = []
+	var replacements: Array[Dictionary] = []
+	var setter_id := int(lineup.active_setter_id())
+	for slot_number in range(1, 7):
+		var player_id := int(lineup.player_at_slot(slot_number))
+		if player_id < 0 or player_id == setter_id:
+			continue
+		var player := by_id.get(player_id) as VolleyballPlayer
+		if player == null:
+			continue
+		var row := {
+			"slot": slot_number,
+			"score": _serve_receive_player_score(player),
+		}
+		if str(player.position_role) in ["Libero", "Outside Hitter"]:
+			specialists.append(row)
+		else:
+			replacements.append(row)
+
+	var strongest_first := func(a: Dictionary, b: Dictionary) -> bool:
+		var score_a := float(a.get("score", 0.0))
+		var score_b := float(b.get("score", 0.0))
+		if not is_equal_approx(score_a, score_b):
+			return score_a > score_b
+		return int(a.get("slot", 7)) < int(b.get("slot", 7))
+	specialists.sort_custom(strongest_first)
+	replacements.sort_custom(strongest_first)
+
+	var chosen: Array[int] = []
+	for row in specialists:
+		if chosen.size() >= passer_count:
+			break
+		chosen.append(int(row.slot))
+	for row in replacements:
+		if chosen.size() >= passer_count:
+			break
+		chosen.append(int(row.slot))
+	return chosen
+
+
+## A stable player-lane ordering for audits and authored systems that explicitly
+## request one.
+##
+## This is deliberately not the live default. Holding Outside 1/libero/Outside 2
+## to the same left-middle-right lanes erased the rotation ace spread, but also
+## kept the receiving outside in the same deep corner after first contact and
+## suppressed a trusted hitter's attack availability. Production therefore uses
+## the same roster-selected passing unit with minimum-travel seam assignment;
+## this stable ordering remains as the paired counterfactual that exposed the
+## trade-off. Ids are only a deterministic fallback for generic position codes.
+static func roster_serve_receive_seam_slots(
+	lineup: RotationLineup,
+	players: Array,
+	passer_count: int,
+) -> Array[int]:
+	var selected := roster_serve_receive_passer_slots(lineup, players, passer_count)
+	if selected.size() <= 1:
+		return selected
+	var by_id := {}
+	for raw_player in players:
+		var player := raw_player as VolleyballPlayer
+		if player != null:
+			by_id[int(player.id)] = player
+	if by_id.is_empty():
+		return selected
+	var outsides: Array[Dictionary] = []
+	var liberos: Array[Dictionary] = []
+	var replacements: Array[Dictionary] = []
+	for slot_number in selected:
+		var player := by_id.get(lineup.player_at_slot(slot_number)) as VolleyballPlayer
+		if player == null:
+			continue
+		var row := {
+			"slot": slot_number,
+			"id": int(player.id),
+			"code": str(player.position_code),
+			"score": _serve_receive_player_score(player),
+		}
+		if player.position_role == "Outside Hitter":
+			outsides.append(row)
+		elif player.position_role == "Libero":
+			liberos.append(row)
+		else:
+			replacements.append(row)
+	outsides.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var code_a := str(a.code)
+		var code_b := str(b.code)
+		if code_a != code_b:
+			return code_a < code_b
+		return int(a.id) < int(b.id)
+	)
+	liberos.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.id) < int(b.id)
+	)
+	replacements.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var score_a := float(a.score)
+		var score_b := float(b.score)
+		if not is_equal_approx(score_a, score_b):
+			return score_a > score_b
+		return int(a.id) < int(b.id)
+	)
+
+	var ordered: Array[int] = []
+	## Three-passer receive is the live default: outside/libero/outside. A
+	## missing specialist is filled below without changing anybody else's lane.
+	if not outsides.is_empty():
+		ordered.append(int(outsides[0].slot))
+	if not liberos.is_empty():
+		ordered.append(int(liberos[0].slot))
+	elif not replacements.is_empty():
+		ordered.append(int(replacements[0].slot))
+	if outsides.size() >= 2:
+		ordered.append(int(outsides[1].slot))
+	for group in [outsides, liberos, replacements]:
+		for row in group:
+			var slot_number := int(row.slot)
+			if slot_number not in ordered:
+				ordered.append(slot_number)
+	for slot_number in selected:
+		if slot_number not in ordered:
+			ordered.append(slot_number)
+	var result: Array[int] = []
+	for slot_number in ordered:
+		if result.size() >= passer_count:
+			break
+		result.append(slot_number)
+	return result
+
+
+static func _serve_receive_player_score(player: VolleyballPlayer) -> float:
+	if player == null:
+		return 0.0
+	return float(player.reception) * 0.65 \
+		+ float(player.ball_control) * 0.20 \
+		+ float(player.composure) * 0.15
+
+
 ## Where the setter waits for the serve. They are shielded in both rows: a
 ## front-row setter stands at the net so the serve passes them, and a back-row
 ## setter hides directly behind their rotational front-row partner.
@@ -451,6 +616,8 @@ static func serve_receive_formation(
 	formation_name: String = DEFAULT_SERVE_RECEIVE_FORMATION,
 	libero_slot: int = -1,
 	opponent_side: bool = false,
+	passer_slots_override: Array[int] = [],
+	fixed_seam_order: bool = false,
 ) -> Dictionary:
 	var preset: Dictionary = SERVE_RECEIVE_FORMATIONS.get(
 		formation_name, SERVE_RECEIVE_FORMATIONS[DEFAULT_SERVE_RECEIVE_FORMATION]
@@ -458,9 +625,11 @@ static func serve_receive_formation(
 	var lanes: Array = preset["lanes"]
 	var depth := float(preset["depth"])
 	var lift := float(preset["outside_depth_lift"])
-	var passer_slots := serve_receive_passer_slots(
-		setter_slot, int(preset["passer_count"]), libero_slot
-	)
+	var passer_slots: Array[int] = passer_slots_override.duplicate() \
+		if not passer_slots_override.is_empty() \
+		else serve_receive_passer_slots(
+			setter_slot, int(preset["passer_count"]), libero_slot
+		)
 
 	## Build the seam positions. Lift is normalised against the widest seam in
 	## this preset, so the outermost passers receive the full lift and the
@@ -484,7 +653,12 @@ static func serve_receive_formation(
 	## front-left passer sent to the deep middle while the back-middle passer ran
 	## to the right seam. With at most five passers an exhaustive search is cheap
 	## and always optimal.
-	var assignment := _best_seam_assignment(passer_slots, seams)
+	var assignment: Array[int] = []
+	if fixed_seam_order:
+		for index in range(mini(passer_slots.size(), seams.size())):
+			assignment.append(passer_slots[index])
+	else:
+		assignment = _best_seam_assignment(passer_slots, seams)
 
 	var formation := {}
 	for lane_index in range(assignment.size()):

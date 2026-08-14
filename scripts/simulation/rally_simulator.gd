@@ -104,6 +104,9 @@ const RallyKinematicsModel := preload(
 const HitterPlacementModel := preload(
 	"res://scripts/simulation/hitter_placement_model.gd"
 )
+const SetPathReadModelRef := preload(
+	"res://scripts/simulation/set_path_read_model.gd"
+)
 ## How many attack exchanges a rally may contain. Measured, and it is a backstop
 ## rather than a rule.
 ##
@@ -373,6 +376,16 @@ const BLOCK_FUNNEL_MARGIN: float = 0.12
 const SERVE_ERROR_CEILING: float = 0.52
 const SERVE_BASE_DEMAND: float = 0.42
 const SERVE_RISK_DEMAND: float = 0.58
+## The lowest controlled first contact that can keep a rally alive.
+##
+## This was 0.18 at both reception sites. On 1,200 paired serves, with the same
+## serve byte-for-byte in every rotation, that hard edge turned two rotations of
+## a weak outside into 55 and 45 aces while the other four produced 0, 1, 0 and
+## 1. Replaying the recorded terms at 0.10 gives 31 and 23 without changing the
+## receiving unit or erasing the weak passer: a poor contact reaches the setter
+## as a poor ball and the offence must resolve it downstream instead of declaring
+## every ball below 18% dead at first touch.
+const RECEPTION_PLAYABLE_FLOOR: float = 0.10
 
 ## How much of a transition set the arriving ball can take away, and how much
 ## of a bad ball a commanding setter buys back. Recovery is what makes a
@@ -588,11 +601,22 @@ const PASS_DELIVERY_STDEV_BEST_M: float = 0.10
 ## overpass), and emitting a position rather than a table entry is exactly what
 ## makes it *detectable*, but there is no rally branch that plays one out yet.
 ## Until there is, the delivery is held on its own side rather than silently
-## teleporting the rally.
-const HOME_SET_DELIVERY_MIN_Y: float = 0.51
+## teleporting the rally. The former 0.51 floor was only 18 cm from the tape --
+## close enough that a regulation-size ball plus a reaching hand visually read
+## as clipping it. 0.515 is 27 cm, and changes only this error tail; the intended
+## front-row target remains centred at 54 cm.
+const HOME_SET_DELIVERY_MIN_Y: float = 0.515
 const HOME_SET_DELIVERY_MAX_Y: float = 0.80
 const OPPONENT_PASS_DELIVERY_MIN_Y: float = 0.20
 const OPPONENT_PASS_DELIVERY_MAX_Y: float = 0.49
+
+## A set the hitter never contacts does not become a zero-quality spike. It
+## continues past the hands and falls on the attacking side. These values shape
+## only that short visible fall; the terminal outcome is still an attack error.
+const MISSED_SET_DROP_SECONDS: float = 0.34
+const MISSED_SET_DROP_DEPTH_METERS: float = 0.85
+const MISSED_SET_DROP_LATERAL_METERS: float = 0.24
+const MISSED_SET_DROP_VERTICAL_MPS: float = -2.4
 
 ## What a defender brings to a dig, as a fraction of an ideal one. Sums to 1.0
 ## so the result can be compared with an attack quality that is also a fraction
@@ -1223,7 +1247,7 @@ func resolve(
 	var serve_error := rng.randf() < serve_error_chance
 	var serve_landing := _serve_landing_point(
 		str(serve_decision.target), opponent_server, players, lineup, true,
-		_receive_formation_positions(lineup, false), opponent_serve_origin,
+		_receive_formation_positions(lineup, players, false), opponent_serve_origin,
 		serve_decision,
 	)
 	## Gate E: the same serve through the shared ballistics, in shadow.
@@ -1450,11 +1474,15 @@ func resolve(
 	## dangerous serve possible subtracted 0.31 while every reception was handed
 	## 0.30 back unconditionally. Reception quality never fell below 0.387 against
 	## an ace threshold of 0.18, which is why the engine produced no aces at all.
+	var reception_body_penalty := CoverageModel.reception_body_penalty(
+		receiver, arrival, serve_quality
+	)
+	var reception_noise := rng.randf_range(-0.14, 0.14)
 	result.reception_quality = clampf(reception_base - serve_quality * 0.48 \
 		- opponent_risk_pressure \
-		- CoverageModel.reception_body_penalty(receiver, arrival, serve_quality) \
+		- reception_body_penalty \
 		+ arrival_bonus + support_bonus - seam_penalty \
-		+ rng.randf_range(-0.14, 0.14),
+		+ reception_noise,
 		0.0, 1.0)
 	if using_live_reception:
 		result.reception_quality = clampf(float(selected_live_reception.get(
@@ -1463,7 +1491,7 @@ func resolve(
 	if not receiver_arrived:
 		result.reception_quality = minf(result.reception_quality, 0.12)
 	var reception_success: bool = receiver_arrived \
-		and float(result.reception_quality) >= 0.18
+		and float(result.reception_quality) >= RECEPTION_PLAYABLE_FLOOR
 	var receiver_start: Vector2 = live_positions.get(receiver.id, serve_landing)
 	var receiver_move_time := _movement_time(
 		receiver, receiver_start, serve_landing, "lateral"
@@ -1563,7 +1591,7 @@ func resolve(
 			## first contact of a rally, so that leg does not exist. Measured
 			## after the fact: 400 serves of 400 had no preceding flight.
 			"home_phase_targets": _receive_formation_map(
-				lineup, false, home_receive_intents
+				lineup, players, false, home_receive_intents
 			),
 			"home_phase_intents": home_receive_intents,
 			"opponent_phase_targets": opponent_serve_transition,
@@ -1575,6 +1603,26 @@ func resolve(
 			"planner_zone_priority": int(receiver_zone.priority) \
 				if receiver_zone != null else 0,
 			"flight_time": serve_time, "arrival": arrival,
+			## Every additive reception-quality term, before clamping. A terminal
+			## outcome can locate attrition at first contact; these terms explain
+			## which input caused it without reproducing the formula in a probe.
+			"reception_terms": {
+				"base": reception_base,
+				"serve_pressure": -serve_quality * 0.48,
+				"risk_pressure": -opponent_risk_pressure,
+				"body_penalty": -reception_body_penalty,
+				"arrival_bonus": arrival_bonus,
+				"support_bonus": support_bonus,
+				"seam_penalty": -seam_penalty,
+				"execution_noise": reception_noise,
+				"unclamped_quality": reception_base - serve_quality * 0.48
+					- opponent_risk_pressure - reception_body_penalty
+					+ arrival_bonus + support_bonus - seam_penalty
+					+ reception_noise,
+				"final_quality": result.reception_quality,
+				"success_threshold": RECEPTION_PLAYABLE_FLOOR,
+				"receiver_arrived": receiver_arrived,
+			},
 			"support_count": support_count, "seam_conflict": seam_conflict,
 			"claim_margin": float(reception_claim.get("claim_margin", 1.0)),
 			## Who was nearest against who took it. See `choose_claimant`: this is
@@ -1828,7 +1876,7 @@ func resolve(
 				setter, float(result.reception_quality), current_match_flow,
 			)
 	var hitter := _player_by_id(players, assignment.player_id) if assignment != null else null
-	if hitter == null or hitter.id == setter.id:
+	if hitter == null or hitter.id == setter.id or not _can_enter_attack(hitter):
 		hitter = _fallback_hitter(
 			players, lineup, setter.id, float(result.reception_quality),
 			setter, current_match_flow,
@@ -1929,6 +1977,9 @@ func resolve(
 	var intended_set_target := HitterPlacementModel.preferred_point(
 		hitter, assignment.lane, rally_seed, swing_index
 	)
+	var intended_hitter_body := SetPathReadModelRef.body_position(
+		hitter, intended_set_target, true
+	)
 	swing_index += 1
 	var set_target := intended_set_target
 	var set_geometry := _set_geometry(
@@ -1944,7 +1995,7 @@ func resolve(
 		RallyKinematics.court_distance_meters(set_contact, intended_set_target),
 	)
 	var set_height_extra := _set_rescue_height_meters(
-		_movement_time(hitter, hitter_choice_start, intended_set_target, "transition"),
+		_movement_time(hitter, hitter_choice_start, intended_hitter_body, "transition"),
 		float(ordinary_set_arc.duration_seconds),
 	)
 	var set_height_difficulty := _set_height_difficulty(setter, set_height_extra)
@@ -2025,8 +2076,20 @@ func resolve(
 	## Pace, not shape. The flatter parabola a higher contact allows already
 	## falls out of `_set_arc`; this is the kinetic half the geometry cannot
 	## give, and it shortens the flight rather than changing where the ball goes.
-	var set_flight_time: float = float(set_arc.duration_seconds) \
+	var natural_set_flight: float = float(set_arc.duration_seconds) \
 		/ maxf(_set_pace_scale(setter, bool(jump_set.jumping)), 0.5)
+	var home_tempo_timing := _hitter_led_set_timing(
+		setter, hitter, assignment.tempo, assignment.lane,
+		intended_set_target, false,
+		natural_set_flight, float(result.set_quality), home_principles,
+		_pair_fraction(setter.id, hitter.id), team_tactical_familiarity,
+		"home-first-%d" % swing_index,
+	)
+	var set_flight_time := float(home_tempo_timing.delivered_flight_seconds)
+	set_arc = _retimed_set_arc(
+		set_arc, set_flight_time, set_release_height,
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+	)
 	var release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
 	var release_interval := _release_interval(release_profile, float(result.set_quality))
 	## The instant the ball leaves the setter's hands. The set flight, the SET
@@ -2110,6 +2173,11 @@ func resolve(
 		## facing from a ball that has already left.
 		set_event.metadata["back_set"] = bool(set_geometry.back_set)
 		set_event.metadata["behind_meters"] = float(set_geometry.behind_meters)
+		set_event.metadata["tempo_coordination"] = home_tempo_timing.duplicate(true)
+		set_event.metadata["tempo_relationship"] = str(
+			home_tempo_timing.relationship
+		)
+		set_event.metadata["requested_tempo"] = int(assignment.tempo)
 	if set_event != null and not home_transition_targets.is_empty():
 		set_event.metadata["home_phase_targets"] = home_transition_targets
 		set_event.metadata["home_phase_intents"] = home_transition_intents
@@ -2124,8 +2192,6 @@ func resolve(
 		"setter_center_position", set_contact
 	)) if using_live_setter else set_contact
 	rally_clock = set_contact_time
-	if assignment.tempo <= 1:
-		result.key_factors.append(_factor("fast_tempo"))
 
 	var hitter_start: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
@@ -2136,17 +2202,29 @@ func resolve(
 	## faced.
 	var hitter_standing_at := hitter_start
 	var hitter_move_time := _movement_time(
-		hitter, hitter_start, set_target, "transition"
+		hitter, hitter_start, intended_hitter_body, "transition"
 	)
 	var hitter_arrival_margin := float(set_flight_time) - hitter_move_time
 	var approach_preparation: Dictionary = {}
 	var resolved_approach: Dictionary = {}
 	var prepared_actor: RallyPlayerState = null
 	var hitter_entry_velocity := Vector2.ZERO
+	var hitter_full_approach_start := hitter_start
+	var hitter_release_progress := 0.0
+	var hitter_body_contact := intended_hitter_body
+	var set_path_read: Dictionary = {}
+	var set_path_contact: Dictionary = {}
+	var hitter_movement_delay := float(home_tempo_timing.get(
+		"approach_start_delay_seconds", 0.0
+	))
 	if using_live_attack:
 		hitter_start = Vector2(selected_live_attack.get(
 			"source_position", hitter_start
 		))
+		hitter_release_progress = clampf(float(selected_live_attack.get(
+			"achieved_release_progress",
+			home_tempo_timing.get("release_progress", 0.0),
+		)), 0.0, 1.0)
 		hitter_move_time = maxf(float(selected_live_attack.get(
 			"contact_time", rally_clock + set_flight_time
 		)) - rally_clock, 0.0)
@@ -2176,7 +2254,9 @@ func resolve(
 				"lane": assignment.lane,
 				"tempo": assignment.tempo,
 				"priority": assignment.priority,
-				"target": set_target,
+				## Before release this hitter knows the spot they requested, not
+				## the setter's eventual delivery error.
+				"target": intended_hitter_body,
 			}
 			approach_preparation = ApproachMechanicsModel.prepare_for_attack(
 				attack_state, hitter_actor, assignment_data, receiver.id, rally_clock
@@ -2184,70 +2264,163 @@ func resolve(
 			prepared_actor = approach_preparation.get("actor") as RallyPlayerState
 			approach_preparation.erase("actor")
 			if prepared_actor != null:
-				## Preparation relocates where this phase's run-up begins: the
-				## travel to the staging mark already happened while the hitter
-				## was released. The journey now drawn and timed is
-				## staged mark -> approach start -> contact, so both the duration
-				## and the arrival margin have to be recomputed. Leaving them
-				## stale pairs a staged start with the unstaged duration, and
-				## playback draws the short leg at the long leg's pace.
-				hitter_start = prepared_actor.position
-				hitter_entry_velocity = prepared_actor.velocity
-				var hitter_leg := _travel(
-					hitter, hitter_start, set_target, "transition",
-					Vector2(approach_preparation.get(
-						"approach_start_position",
-						_approach_start_position(
-							set_target, hitter_start, false, assignment.tempo
-						)
-					)),
-					prepared_actor.velocity,
+				## The hitter owns the tempo. Preparation first gets them to the
+				## runway; any time left before setter release is spent on the share
+				## of the approach T1/T2 require. T3 deliberately spends none.
+				hitter_full_approach_start = prepared_actor.position
+				var ideal_mark := Vector2(approach_preparation.get(
+					"approach_target_position", hitter_full_approach_start
+				))
+				var to_mark_seconds := _movement_time(
+					hitter, hitter_standing_at, ideal_mark, "transition"
 				)
-				hitter_move_time = float(hitter_leg.seconds)
-				live_velocities[hitter.id] = hitter_leg.exit_velocity
-				## Plus the part of the pre-set window the hitter was already running
-				## in. The blocker has always been credited with its own share of the
-				## same window; see `HITTER_PRESET_SHARE`.
-				hitter_arrival_margin = float(set_flight_time) \
-					+ _hitter_preset_credit(approach_preparation) \
-					- hitter_move_time
-	var intended_contact_before_clamp := set_target
-	## The clamp's budget, not just the set's flight.
-	##
-	## This is where tempo was being priced backwards. `_reachable_contact` drags
-	## the contact back toward the hitter whenever their travel exceeds the budget,
-	## and the budget was the set flight alone -- so a quicker set clamped harder,
-	## the contact ended further off the net, and `CLAMPED_CONTACT_SEVERITY` billed
-	## the swing for it. Kill rate came out monotone in tempo shift, 0.3239 for the
-	## identity that speeds sets up against 0.3774 for the one that slows them down.
-	##
-	## A quick hitter is not travelling during the set. They left on the pass and
-	## are already at the net when the setter touches it, which is the whole reason
-	## a first-tempo ball beats a block. Crediting the release window here is what
-	## makes that true of the model rather than only of the sport.
-	var hitter_contact_budget := float(set_flight_time) \
-		+ _hitter_preset_credit(approach_preparation)
-	set_target = _reachable_contact(
-		hitter_start, set_target, hitter_move_time, hitter_contact_budget
+				hitter_release_progress = ApproachMechanicsModel \
+					.achieved_release_progress(
+						home_tempo_timing,
+						float(approach_preparation.get(
+							"preparation_time_seconds", 0.0
+						)),
+						to_mark_seconds,
+					)
+	## Release belongs to the hitter. Once their actual footwork is known, the
+	## setter recognises the time remaining in that individual approach and meets
+	## it. The authored tempo survives as `requested_tempo`; it no longer causes a
+	## ball whose hitter has not started to be labelled T2.
+	home_tempo_timing = ApproachMechanicsModel.recognize_release_progress(
+		home_tempo_timing, hitter_release_progress
 	)
-	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
-	var contact_displacement := _clamp_displacement_meters(
-		intended_contact_before_clamp, set_target
+	var home_effective_tempo := ApproachMechanicsModel.achieved_tempo(
+		home_tempo_timing, hitter_release_progress
 	)
+	if not using_live_attack:
+		set_flight_time = float(home_tempo_timing.delivered_flight_seconds)
+		set_arc = _retimed_set_arc(
+			set_arc, set_flight_time, set_release_height,
+			GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+		)
+	else:
+		home_tempo_timing["delivered_flight_seconds"] = set_flight_time
+	hitter_movement_delay = float(home_tempo_timing.get(
+		"approach_start_delay_seconds", 0.0
+	))
+	set_path_read = SetPathReadModelRef.evaluate(
+		hitter, intended_set_target, set_target, set_flight_time,
+		float(result.set_quality), _pair_fraction(setter.id, hitter.id),
+		rally_seed, "home-first-%d" % swing_index, true,
+	)
+	var perceived_hitter_body := Vector2(set_path_read.get(
+		"perceived_body_position", intended_hitter_body
+	))
+	var ideal_hitter_body := Vector2(set_path_read.get(
+		"ideal_body_position",
+		SetPathReadModelRef.body_position(hitter, set_target, true),
+	))
+	var contact_displacement := 0.0
+	if not using_live_attack:
+		if prepared_actor != null:
+			resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
+				prepared_actor, perceived_hitter_body,
+				float(home_tempo_timing.get(
+					"runup_seconds", set_flight_time
+				)),
+			)
+			hitter_start = ApproachMechanicsModel.release_position(
+				hitter_full_approach_start, perceived_hitter_body,
+				hitter_release_progress,
+			)
+			var approach_direction := (
+				perceived_hitter_body - hitter_full_approach_start
+			).normalized()
+			var carried_speed := float(resolved_approach.get(
+				"approach_speed_mps", 0.0
+			)) * sqrt(hitter_release_progress)
+			hitter_entry_velocity = approach_direction * carried_speed \
+				if approach_direction.length_squared() > 0.0001 \
+				else prepared_actor.velocity
+			prepared_actor.apply_position(hitter_start, hitter_entry_velocity)
+		var planned_hitter_leg := _travel(
+			hitter, hitter_start, perceived_hitter_body, "transition", null,
+			hitter_entry_velocity,
+		)
+		var planned_hitter_move_time := float(planned_hitter_leg.seconds)
+		var hitter_contact_budget := maxf(
+			float(set_flight_time) - hitter_movement_delay
+				- float(home_tempo_timing.get(
+					"takeoff_to_contact_seconds", 0.0
+				)),
+			0.0,
+		)
+		hitter_body_contact = _reachable_contact(
+			hitter_start, perceived_hitter_body,
+			planned_hitter_move_time, hitter_contact_budget,
+		)
+		hitter_arrival_margin = hitter_contact_budget \
+			- planned_hitter_move_time
+		contact_displacement = _clamp_displacement_meters(
+			perceived_hitter_body, hitter_body_contact
+		)
+		var actual_hitter_leg := _travel(
+			hitter, hitter_start, hitter_body_contact, "transition", null,
+			hitter_entry_velocity,
+		)
+		hitter_move_time = float(actual_hitter_leg.seconds)
+		live_velocities[hitter.id] = actual_hitter_leg.exit_velocity
+		if prepared_actor != null:
+			resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
+				prepared_actor, hitter_body_contact, set_flight_time
+			)
+	else:
+		hitter_body_contact = Vector2(selected_live_attack.get(
+			"hitter_center_position", ideal_hitter_body
+		))
+	set_path_contact = SetPathReadModelRef.assess_contact(
+		hitter, hitter_body_contact, ideal_hitter_body
+	)
+	var set_path_quality_multiplier := float(set_path_contact.get(
+		"quality_multiplier", 1.0
+	))
+	var set_path_whiff := bool(set_path_contact.get("whiffed", false))
+	home_tempo_timing["achieved_release_progress"] = hitter_release_progress
+	home_tempo_timing["release_position"] = hitter_start
+	home_tempo_timing["full_approach_start"] = hitter_full_approach_start
+	home_tempo_timing["achieved_tempo"] = home_effective_tempo
+	home_tempo_timing["achieved_relationship"] = \
+		ApproachMechanicsModel.achieved_relationship(
+			home_tempo_timing, hitter_release_progress
+		)
+	if home_effective_tempo <= 1:
+		result.key_factors.append(_factor("fast_tempo"))
+	## The set is a ball, not a favour the reachability clamp does for a late
+	## hitter. It remains where the setter delivered it. The body stops where its
+	## own budget and path read put it, and the gap is paid at contact above.
 	_retarget_set_event(
 		set_event, set_target, "set", float(set_flight_time),
-		float(set_trajectory.get(
-			"apex_rise_meters", float(set_arc.apex_height_meters)
-		)),
+		float(set_arc.apex_height_meters),
 		set_contact_time,
 	)
+	if set_event != null:
+		set_trajectory = Dictionary(
+			set_event.metadata.get("outgoing_trajectory", set_trajectory)
+		)
+		set_event.detail = ("T%d set for %s · %d%% accuracy." % [
+			home_effective_tempo, hitter.display_name,
+			roundi(float(result.set_quality) * 100.0),
+		]) + (" Called T%d; the setter matched the hitter's T%d rhythm." % [
+			assignment.tempo, home_effective_tempo,
+		] if int(assignment.tempo) != home_effective_tempo else "") \
+			+ (" Emergency second-contact assignment activated."
+				if emergency_setter else "") \
+			+ (" Arrived %.2fs before contact." % setter_arrival_margin
+				if setter_arrival_margin >= 0.0 else
+				" Arrived %.2fs late; set control was reduced."
+					% absf(setter_arrival_margin))
 	## Read the run-up against the contact that will actually be struck. The
 	## takeoff evaluation used to run inside the preparation branch above,
 	## against the target the set aimed at; a clamped contact would then have
 	## been scored on a runway nobody ran.
-	if prepared_actor != null:
+	if prepared_actor != null and resolved_approach.is_empty():
 		resolved_approach = ApproachMechanicsModel.evaluate_takeoff(
-			prepared_actor, set_target, float(set_flight_time)
+			prepared_actor, hitter_body_contact, float(set_flight_time)
 		)
 	## Same staging leg as the setter's: the hitter should already be at
 	## hitter_start (their staged approach mark) by the time this set's flight
@@ -2256,6 +2429,30 @@ func resolve(
 	if set_event_for_staging != null:
 		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
 		set_event_for_staging.metadata["staged_next_position"] = hitter_start
+		var phase_targets: Dictionary = set_event_for_staging.metadata.get(
+			"home_phase_targets", {}
+		)
+		phase_targets[hitter.id] = hitter_start
+		set_event_for_staging.metadata["home_phase_targets"] = phase_targets
+		var phase_intents: Dictionary = set_event_for_staging.metadata.get(
+			"home_phase_intents", {}
+		)
+		phase_intents[hitter.id] = {
+			"intent": &"preparing_attack", "progress": hitter_release_progress,
+		}
+		set_event_for_staging.metadata["home_phase_intents"] = phase_intents
+		set_event_for_staging.metadata["tempo_coordination"] = \
+			home_tempo_timing.duplicate(true)
+		set_event_for_staging.metadata["tempo_relationship"] = str(
+			home_tempo_timing.achieved_relationship
+		)
+		set_event_for_staging.metadata["achieved_tempo"] = int(
+			home_tempo_timing.achieved_tempo
+		)
+		set_event_for_staging.metadata["set_path_read"] = \
+			set_path_read.duplicate(true)
+		set_event_for_staging.metadata["hitter_body_target"] = \
+			perceived_hitter_body
 	var approach_fit := _approach_execution_fit(hitter, resolved_approach)
 	## The block this swing is actually hit into. Attack quality had no opposing
 	## term at all: it summed roughly 1.5 of positive coefficients against
@@ -2264,7 +2461,7 @@ func resolve(
 	## into a sealed block is the risk that was missing, and the block's
 	## formation is knowable before the contest is settled.
 	var opponent_block_formation := _form_opponent_block(
-		opponent_team, set_target.x, assignment.tempo,
+		opponent_team, set_target.x, home_effective_tempo,
 		float(result.set_quality), set_contact.x, set_flight_time,
 		second_contact_window + release_interval, hitter, set_height_extra,
 	)
@@ -2274,7 +2471,7 @@ func resolve(
 	## of the contest, on one side of the net only. Folding it into the
 	## formation's quality leaves exactly one place a block outcome is decided.
 	var block_adaptation := _opponent_block_adaptation_bonus(
-		opponent_team, assignment.lane, assignment.tempo
+		opponent_team, assignment.lane, home_effective_tempo
 	)
 	if block_adaptation > 0.0:
 		opponent_block_formation["quality"] = clampf(
@@ -2347,6 +2544,15 @@ func resolve(
 				- contact_displacement * CLAMPED_CONTACT_SEVERITY,
 			0.0, 1.0,
 		)
+	## A read error is neither another setter-accuracy penalty nor a relocation of
+	## the ball. It is the quality of the contact the hitter can make from the
+	## body position they actually reached. A whiff therefore zeroes the swing;
+	## a strained or off-axis contact continuously taxes it.
+	result.attack_quality = clampf(
+		float(result.attack_quality)
+			* set_path_quality_multiplier,
+		0.0, 1.0,
+	)
 	var opponent_defenders: Array[Vector2] = []
 	for defender_resource in opponent_team.on_court_players():
 		var defender: VolleyballPlayer = defender_resource as VolleyballPlayer
@@ -2365,10 +2571,12 @@ func resolve(
 			## swings pass the fit and this one passed the raw run-up, so the
 			## same physical approach entered the resolver on two different
 			## scales depending on which contact it was.
-			_approach_execution_fit(hitter, resolved_approach),
+			_approach_execution_fit(hitter, resolved_approach)
+				* set_path_quality_multiplier,
 			float(home_principles.decisiveness), 0.0,
 			str(opponent_plan_for_wall.block_intent) \
 				if opponent_plan_for_wall != null else "Balanced",
+			hit_type,
 		),
 		"home",
 	)
@@ -2382,10 +2590,12 @@ func resolve(
 	var attack_choice := _choose_attack_target(
 		hitter, set_target, hit_type, opponent_defenders,
 	)
+	if set_path_whiff:
+		using_live_attack = false
 	if using_live_attack:
 		result.attack_quality = clampf(float(selected_live_attack.get(
 			"quality", result.attack_quality
-		)), 0.0, 1.0)
+		)) * set_path_quality_multiplier, 0.0, 1.0)
 		hit_type = str(selected_live_attack.get(
 			"selected_action", hit_type
 		)).replace("_", " ").capitalize()
@@ -2406,7 +2616,7 @@ func resolve(
 	identity_effects["attack_selection"]["effectiveness"] = attack_effectiveness
 	var attack_target: Vector2 = attack_choice.target
 	var intended_attack_target := attack_target
-	var attack_missed := _attack_missed(
+	var attack_missed := set_path_whiff or _attack_missed(
 		float(result.attack_quality), float(home_principles.decisiveness), hitter
 	)
 	if not geometric.is_empty():
@@ -2416,7 +2626,7 @@ func resolve(
 		## nothing left for `_errant_attack_target` to invent. The lane's target
 		## stays as `intended_attack_target`, which is what the record and the
 		## opponent's read are actually about.
-		attack_missed = bool(geometric.attack_missed)
+		attack_missed = set_path_whiff or bool(geometric.attack_missed)
 		attack_target = Vector2(geometric.target)
 	elif attack_missed:
 		attack_target = _errant_attack_target(
@@ -2426,12 +2636,17 @@ func resolve(
 		## contact. Once the official quality rules it an error, its persistent
 		## endpoint cannot override the visible miss.
 		using_live_attack = false
-	var approach_start := Vector2(approach_preparation.get(
-		"approach_start_position",
-		_approach_start_position(
-			set_target, hitter_start, false, assignment.tempo
-		)
-	))
+	if set_path_whiff:
+		## No arm touched this ball. Keep it on the hitter's side and let it fall
+		## past the mistimed takeoff instead of drawing a nominal spike into the
+		## opponent court. The geometric wall timing is retained in metadata below:
+		## blockers still react and jump to a swing cue that never arrives.
+		attack_target = _missed_set_drop_target(set_target, true)
+		using_live_attack = false
+	## The portion before setter release was already run during the pass. The
+	## incoming set therefore begins at the release position, not back at the
+	## original runway mark (which made a nominal T2 visibly start after release).
+	var approach_start := hitter_start
 ## The same compromise the opponent makes. A hitter handed an unplayable set
 	## rolls it over rather than swinging at it, and until now only one side of the
 	## net could do that.
@@ -2462,6 +2677,11 @@ func resolve(
 		rally_clock + set_flight_time,
 		float(attack_arc.get("vertical_speed_mps", NAN)),
 	)
+	if set_path_whiff:
+		attack_flight = MISSED_SET_DROP_SECONDS
+		attack_trajectory = _missed_set_drop_trajectory(
+			set_target, attack_target, rally_clock + set_flight_time
+		)
 	if using_live_attack:
 		attack_trajectory = Dictionary(selected_live_attack.get(
 			"attack_trajectory", attack_trajectory
@@ -2478,23 +2698,45 @@ func resolve(
 			shadow_summary["live_attack_integration"] = \
 				live_attack_integration.duplicate(true)
 			shadow_reception_trace.summary = shadow_summary
+	var attack_detail := "Missed the delivered set entirely." if set_path_whiff \
+		else "%s from %s at T%d · %d%% contact quality." % [
+			hit_type, assignment.lane, home_effective_tempo,
+			roundi(float(result.attack_quality) * 100.0),
+		]
+	attack_detail += " Arrived %.2fs before the ball." % hitter_arrival_margin \
+		if hitter_arrival_margin >= 0.0 else \
+		" Arrived %.2fs late and lost the approach window." \
+			% absf(hitter_arrival_margin)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
 		set_target, attack_target, result.attack_quality >= 0.25,
 		result.attack_quality, "%s: %s" % [hitter.display_name, hit_type],
-		("%s from %s at T%d · %d%% contact quality." % [
-			hit_type, assignment.lane, assignment.tempo,
-			roundi(float(result.attack_quality) * 100.0),
-		]) + (" Arrived %.2fs before the ball." % hitter_arrival_margin
-			if hitter_arrival_margin >= 0.0 else
-			" Arrived %.2fs late and lost the approach window." % absf(hitter_arrival_margin)),
-		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
+		attack_detail,
+		{"side": "home", "lane": assignment.lane, "tempo": home_effective_tempo,
+			"requested_tempo": int(assignment.tempo),
+			"tempo_relationship": str(home_tempo_timing.achieved_relationship),
+			"requested_tempo_relationship": str(home_tempo_timing.relationship),
+			"achieved_tempo": int(home_tempo_timing.achieved_tempo),
+			"tempo_coordination": home_tempo_timing.duplicate(true),
 			## Step 2 of the tempo chain: what the set's flight gave this hitter
 			## against what they needed. Published, not spent -- see
 			## `_approach_budget`.
 			"approach_budget": _approach_budget(
-				hitter, hitter_standing_at, approach_preparation, set_target,
-				float(set_flight_time), int(assignment.tempo),
+				hitter, hitter_standing_at, approach_preparation,
+				perceived_hitter_body,
+				float(set_flight_time), home_effective_tempo,
 			),
+			## Ball and body are separate coordinates. The ball remains at the
+			## delivered set; movement and playback take the hitter to this point.
+			"body_contact_position": hitter_body_contact,
+			"ideal_body_contact_position": ideal_hitter_body,
+			"perceived_body_contact_position": perceived_hitter_body,
+			"set_path_read": set_path_read.duplicate(true),
+			"set_path_contact": set_path_contact.duplicate(true),
+			"set_path_outcome": str(set_path_contact.get("outcome", "clean")),
+			"set_path_error_meters": float(set_path_contact.get(
+				"error_meters", 0.0
+			)),
+			"set_path_whiff": set_path_whiff,
 			"attack_type": hit_type, "attack_direction": attack_choice.direction,
 			"intended_type": intended_hit_type,
 			"swing_downgraded": swing_downgraded,
@@ -2522,6 +2764,9 @@ func resolve(
 			"block_deflection_landing": geometric.get("block_deflection_landing", null),
 			"block_deflection_speed_mps": float(geometric.get("block_deflection_speed_mps", 0.0)),
 			"block_deflection_playable": bool(geometric.get("block_deflection_playable", false)),
+			"loft_apex_limited": bool(geometric.get("loft_apex_limited", false)),
+			"net_distance_meters": float(geometric.get("net_distance_meters", 0.0)),
+			"net_avoidance_demand": float(geometric.get("net_avoidance_demand", 0.0)),
 			## How much of a wall this swing actually faced. `block_wall` drops any
 			## blocker whose close fraction is under `WALL_JOIN_CLOSE`, so the size
 			## of the wall is decided there and nowhere else -- and the resolver
@@ -2557,6 +2802,8 @@ func resolve(
 			),
 			"movement_start": hitter_start,
 			"approach_start_position": approach_start,
+			"full_approach_start_position": hitter_full_approach_start,
+			"movement_delay_seconds": hitter_movement_delay,
 			"approach_target_position": Vector2(approach_preparation.get(
 				"approach_target_position", approach_start
 			)),
@@ -2589,8 +2836,8 @@ func resolve(
 		live_attack_event.metadata["persistent_state_update"] = \
 			live_attack_integration.duplicate(true)
 	live_positions[hitter.id] = Vector2(live_attack_integration.get(
-		"hitter_center_position", set_target
-	)) if using_live_attack else set_target
+		"hitter_center_position", hitter_body_contact
+	)) if using_live_attack else hitter_body_contact
 	rally_clock += float(set_flight_time)
 	if attack_missed:
 		return _finish(result, "attack_error", false, hitter.id, {
@@ -2695,24 +2942,14 @@ func resolve(
 		## hands were rather than about two quality scalars.
 		block_outcome = str(geometric.block_outcome)
 	var blocked := block_outcome == "stuff"
-	## What this swing taught the hitter about where they were standing.
-	##
-	## Read off the terminal outcome rather than off `attack_quality`, because
-	## `attack_quality >= 0.25` is a threshold on the same axis the reward would
-	## be bucketing -- the circular measurement that made a clean cliff appear in
-	## the attack-error table earlier in this branch. A kill is a kill and a stuff
-	## or an error is not, and both are decided somewhere else.
-	## Only swings that ended the rally teach anything. A ball that was dug is
-	## neither a spot that worked nor one that did not -- counting it as a failure
-	## would punish every hitter for the defence merely doing its job, and most
-	## swings are dug.
-	var killed := bool(geometric.get("hitter_point", false))
-	var lost := blocked or bool(geometric.get("attack_missed", false))
-	if killed or lost:
-		HitterPlacementModel.learn(hitter, assignment.lane, set_target, killed)
-	# A positional partial block is the same continuation class as the older
-	# "recycle" result: the home attack-coverage unit must play the deflection.
-	var recycled := block_outcome in ["recycle", "touch", "funnel"]
+	var hitter_point := bool(geometric.get("hitter_point", false))
+	## A recycle comes back onto the hitter's half and belongs to attack coverage.
+	## A geometric touch does the opposite: fingertips take pace off and send it
+	## behind the wall, where the *blocking* side's floor defence plays it. These
+	## were grouped together here even though `BlockDeflectionModel` gives them
+	## opposite sides of the net; a failed home "coverage" attempt could therefore
+	## award the opponent a stuff while the drawn ball landed in opponent court.
+	var recycled := block_outcome == "recycle"
 	var recycle_target := _attack_coverage_target(
 		set_target, block_strength, geometric
 	) if recycled else Vector2(set_target.x, 0.50)
@@ -2727,7 +2964,8 @@ func resolve(
 	## teleporting onto whoever dug it. Re-slicing is correct only when the
 	## block actually intercepts; otherwise the shot keeps its full arc and
 	## chains straight into the defence.
-	var block_contacts_ball := blocked or recycled
+	var block_contacts_ball := blocked or recycled \
+		or block_outcome in ["touch", "tool"]
 	if block_contacts_ball:
 		## Same shot as attack_trajectory above, re-sliced to where it actually
 		## crosses the net rather than where it was originally headed -- same
@@ -2807,6 +3045,12 @@ func resolve(
 	var post_block_target := recycle_target if recycled else attack_target
 	if blocked:
 		post_block_target = Vector2(set_target.x, 0.57)
+	## Every geometric contact already owns its post-hand landing. Use it for the
+	## event as well as the outgoing trajectory so the drawn ball, the next
+	## defender and the resolver all begin from the same side of the net.
+	if block_contacts_ball and not geometric.is_empty() \
+			and geometric.get("block_deflection_landing", null) != null:
+		post_block_target = Vector2(geometric.target)
 	## A ball that went out off the hands is not a recycled ball, and its
 	## endpoint is the one the geometry already produced -- outside the court,
 	## which is exactly why it is the hitter's point.
@@ -2830,7 +3074,53 @@ func resolve(
 		),
 		geometric.get("block_deflection_landing", null),
 		float(geometric.get("block_deflection_speed_mps", 0.0)),
+		float(geometric.get("block_deflection_vertical_angle_degrees", 0.0)),
+		float(geometric.get("block_deflection_duration_seconds", 0.0)),
+		bool(geometric.get("block_deflection_playable", false)),
 	) if block_contacts_ball else {}
+	## The trajectory builder applies the last physical effects (including spin),
+	## so its endpoint supersedes every provisional target used to construct it.
+	if block_contacts_ball and not opponent_block_trajectory.is_empty():
+		post_block_target = _trajectory_endpoint(
+			opponent_block_trajectory, post_block_target
+		)
+		if recycled:
+			recycle_target = post_block_target
+		elif block_outcome == "touch":
+			attack_target = post_block_target
+	## Last touch decides the point.  Sidespin is applied at the contact above,
+	## after the geometric resolver's `stuff`/`touch` label was chosen.  If that
+	## final, displayed endpoint is outside, the blocker's hands sent it there and
+	## the attacking side wins regardless of the earlier label.
+	if block_contacts_ball and _block_deflection_lands_out(opponent_block_trajectory):
+		hitter_point = true
+		block_outcome = "tool"
+		blocked = false
+		recycled = false
+		post_block_target = _trajectory_endpoint(
+			opponent_block_trajectory, post_block_target
+		)
+	## "Stuff" describes a ball pressed back onto the hitter's side. If the
+	## completed trajectory instead rises behind the opponent wall, its geometry
+	## is a playable touch and opponent floor defence owns the next contact.
+	elif blocked and _block_deflection_lands_on_blocking_side(
+		opponent_block_trajectory, "opponent"
+	):
+		block_outcome = "touch"
+		blocked = false
+		recycled = false
+		post_block_target = _trajectory_endpoint(
+			opponent_block_trajectory, post_block_target
+		)
+		attack_target = post_block_target
+	## What this swing taught the hitter about where they were standing.  Wait
+	## until the final deflection is known: an apparent stuff kicked out off the
+	## hands is a successful placement, not a loss to teach them away from.
+	var lost := blocked or bool(geometric.get("attack_missed", false))
+	if hitter_point or lost:
+		HitterPlacementModel.learn(
+			hitter, assignment.lane, set_target, hitter_point
+		)
 	var opponent_block_segments: Array[Dictionary] = block_resolution.coverage_segments
 	var opponent_blocker_id := opponent_blocker.id if opponent_blocker != null else -1
 	var opponent_blocker_name := opponent_blocker.display_name \
@@ -2839,7 +3129,7 @@ func resolve(
 	var home_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK, opponent_blocker_id,
 		opponent_blocker_name,
-		Vector2(set_target.x, 0.47), post_block_target, block_outcome != "miss",
+		Vector2(set_target.x, 0.47), post_block_target, block_contacts_ball,
 		block_strength, "Block forms at %s" % assignment.lane,
 		"%d%% close speed; the blockers seal the chosen lane.%s" % [
 			roundi(block_strength * 100.0),
@@ -2850,7 +3140,11 @@ func resolve(
 			## contact this flight ends at.
 			"home_phase_targets": _cover_phase_map(
 				players, lineup, defensive_plan, hitter.id,
-				set_target, attack_flight, false, home_cover_intents,
+				set_target,
+				float(Dictionary(attack_event.metadata.get(
+					"outgoing_trajectory", {}
+				)).get("duration", attack_flight)),
+				false, home_cover_intents,
 			),
 			"home_phase_intents": home_cover_intents,
 			"adaptation_bonus": adaptation_bonus, "outcome": block_outcome,
@@ -2920,7 +3214,7 @@ func resolve(
 	## touched the block could only be stuffed or recycled, so a hitter using the
 	## block was scored as a hitter who had been stopped by it. This claims the
 	## point before the recycle branch can take the ball back into home coverage.
-	if not geometric.is_empty() and bool(geometric.hitter_point):
+	if hitter_point:
 		## The other side chases the ball off their own hands before the point is
 		## written down. See `_tool_pursuit_map`: they touched it, they have
 		## touches left, and it is not out until it lands.
@@ -2929,7 +3223,7 @@ func resolve(
 			var tool_targets := _tool_pursuit_map(
 				opponent_team.on_court_players(),
 				opponent_team.current_lineup(),
-				Vector2(geometric.target),
+				post_block_target,
 				float(opponent_block_trajectory.get("duration", 0.30)),
 				[
 					opponent_blocker.id if opponent_blocker != null else -1,
@@ -3033,26 +3327,22 @@ func resolve(
 	## it four times as often. Decomposed, this is most of a `reach_margin` of
 	## +0.333 m for the home defender against -0.094 m here, on identical
 	## rosters, which in turn carries the dig rate gap of 0.320 to 0.142.
-	var opponent_defense_time := attack_flight
-	if block_outcome == "touch":
-		## **The deflection's own flight, not a constant.**
-		##
-		## A touched ball bought the defender a flat 0.24 s whatever hit the block
-		## and whoever blocked it. That was defensible while every deflection was
-		## solved to the same speed; it is not now that pace comes off the swing
-		## and the blocker's hands take a share out of it. Measured: making the
-		## drawn deflection real moved the dig rate 0.491 to 0.490 -- nothing --
-		## because the number the defence actually spends was still the constant.
-		## A value computed and dropped before anything can use it, one more time.
-		opponent_defense_time += maxf(float(
-			opponent_block_trajectory.get("duration", 0.24)
-		), BLOCK_DEFLECTION_MIN_SECONDS)
-	elif block_outcome == "funnel":
-		opponent_defense_time += 0.06
+	var visible_home_attack: Dictionary = attack_event.metadata.get(
+		"outgoing_trajectory", attack_trajectory
+	)
+	## Once hands redirect the ball, the defender's post-touch chase owns only
+	## that new flight. Crediting the hitter-to-block leg again let the resolver
+	## call a 2.5 m chase reachable and playback then had to draw it in 0.22 s.
+	var opponent_defense_time := maxf(float(
+		opponent_block_trajectory.get("duration", 0.0)
+	), BLOCK_DEFLECTION_MIN_SECONDS) \
+		if not opponent_block_trajectory.is_empty() else float(
+			visible_home_attack.get("duration", attack_flight)
+		)
 	var opponent_defense := _choose_opponent_defender(
 		opponent_team, attack_target, opponent_defense_time,
 		opponent_block_trajectory if not opponent_block_trajectory.is_empty()
-			else attack_trajectory,
+			else visible_home_attack,
 		attack_spin,
 	)
 	var opponent_defender := opponent_defense.player as VolleyballPlayer
@@ -3124,19 +3414,23 @@ func resolve(
 	## libero receiving a serve paid for it.
 	var opponent_dig_recovery := _dig_recovery(
 		opponent_defender, opponent_dig_terms, attack_effectiveness,
-		attack_trajectory, float(opponent_defense.distance_meters),
+		opponent_block_trajectory if not opponent_block_trajectory.is_empty()
+			else visible_home_attack,
+		float(opponent_defense.distance_meters),
 	)
 	var opponent_pass_target := attack_target + Vector2(0.04, -0.03)
 	## When the ball actually reaches the defender, which is the end of the
 	## swing's own arc. The transition that follows builds its second-contact
 	## window from `rally_clock`, so the clock has to arrive here too -- left at
 	## the set's contact time it would place the next set *before* this dig.
-	var opponent_dig_time := float(attack_trajectory.get(
-		"end_time", rally_clock + attack_flight
+	var opponent_arriving_trajectory := opponent_block_trajectory \
+		if not opponent_block_trajectory.is_empty() else visible_home_attack
+	var opponent_dig_time := float(opponent_arriving_trajectory.get(
+		"end_time", rally_clock + opponent_defense_time
 	))
 	var opponent_defender_reach := _reached_point(
 		opponent_defender, Vector2(opponent_defense.start), attack_target,
-		attack_flight, "lateral",
+		opponent_defense_time, "lateral",
 		float(opponent_defense.get("read_error_meters", 0.0)),
 	)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
@@ -3158,6 +3452,7 @@ func resolve(
 			"arrival": Dictionary(opponent_defense.get("arrival", {})),
 			"claimed": bool(opponent_defense.get("claimed", false)),
 			"flight_time": opponent_defense_time,
+			"incoming_trajectory": opponent_arriving_trajectory,
 			## The shape this dig was claimed out of. The home dig event has
 			## carried `home_phase_targets` all along and this one carried
 			## nothing, so the two sides' defensive shapes could not be compared
@@ -3244,11 +3539,16 @@ func _resolve_home_serve(
 	var error_chance := _serve_error_chance(server, serve_risk)
 	var serve_error := rng.randf() < error_chance
 	var opponent_landing := _serve_landing_point(
-		str(serve_decision.target), server, [], null, false,
+		str(serve_decision.target), server,
+		opponent_team.players if opponent_team != null else [],
+		opponent_team.current_lineup() if opponent_team != null else null,
+		false,
 		## The receiving side, which this call did not previously have in any
 		## form -- it passed an empty roster and a null lineup, so a home serve
 		## was aimed at one of four fixed dots with no idea who was under them.
-		_receive_formation_positions(opponent_team.current_lineup(), true),
+		_receive_formation_positions(
+			opponent_team.current_lineup(), opponent_team.players, true
+		),
 		CourtConstants.serve_origin(0.82, true),
 		serve_decision,
 	)
@@ -3368,23 +3668,29 @@ func _resolve_home_serve(
 		if RallyFeatureFlagsModel.ENABLE_UNIFIED_RECEPTION_SKILL \
 		else _rating(receiver, "reception") * 0.58 \
 			+ _rating(receiver, "ball_control") * 0.24
+	var opponent_body_penalty := CoverageModel.reception_body_penalty(
+		receiver, opponent_arrival, serve_quality
+	)
+	var opponent_arrival_bonus := clampf(
+		float(opponent_arrival.get("reach_margin_meters", -1.0)) * 0.07,
+		-0.16, 0.12,
+	)
+	var opponent_reception_noise := rng.randf_range(-0.12, 0.12)
 	var reception_quality := clampf(
 		opponent_reception_base
 		- serve_quality * 0.44
 		- serve_risk_pressure
-		- CoverageModel.reception_body_penalty(receiver, opponent_arrival, serve_quality)
-		+ clampf(
-			float(opponent_arrival.get("reach_margin_meters", -1.0)) * 0.07,
-			-0.16, 0.12,
-		)
+		- opponent_body_penalty
+		+ opponent_arrival_bonus
 		+ opponent_support_term
-		+ serve_receive_bonus + rng.randf_range(-0.12, 0.12),
+		+ serve_receive_bonus + opponent_reception_noise,
 		0.0, 1.0,
 	)
 	if not receiver_arrived:
 		reception_quality = minf(reception_quality, 0.12)
 	result.reception_quality = reception_quality
-	var reception_success := receiver_arrived and reception_quality >= 0.18
+	var reception_success := receiver_arrived \
+		and reception_quality >= RECEPTION_PLAYABLE_FLOOR
 	var opponent_receiver_reach := _reached_point(
 		receiver, receiver_start, opponent_landing, serve_time, "lateral"
 	)
@@ -3430,12 +3736,31 @@ func _resolve_home_serve(
 			## reason as the home one above.
 			"opponent_phase_targets": _receive_formation_map(
 				opponent_team.current_lineup() if opponent_team != null else null,
+				opponent_team.players if opponent_team != null else [],
 				true, opponent_receive_intents,
 			),
 			"opponent_phase_intents": opponent_receive_intents,
 			"home_phase_targets": home_serve_transition,
 			"home_phase_intents": home_serve_intents,
 			"flight_time": serve_time, "arrival": opponent_arrival,
+			"reception_terms": {
+				"base": opponent_reception_base,
+				"serve_pressure": -serve_quality * 0.44,
+				"risk_pressure": -serve_risk_pressure,
+				"body_penalty": -opponent_body_penalty,
+				"arrival_bonus": opponent_arrival_bonus,
+				"support_bonus": opponent_support_term,
+				"adaptation_bonus": serve_receive_bonus,
+				"execution_noise": opponent_reception_noise,
+				"unclamped_quality": opponent_reception_base
+					- serve_quality * 0.44 - serve_risk_pressure
+					- opponent_body_penalty + opponent_arrival_bonus
+					+ opponent_support_term + serve_receive_bonus
+					+ opponent_reception_noise,
+				"final_quality": reception_quality,
+				"success_threshold": RECEPTION_PLAYABLE_FLOOR,
+				"receiver_arrived": receiver_arrived,
+			},
 			"support_count": support_count, "adaptation_bonus": serve_receive_bonus,
 			"serve_risk_pressure": serve_risk_pressure,
 			"movement_start": receiver_start,
@@ -3755,6 +4080,11 @@ func _resolve_opponent_transition(
 	## misses first and the hitter then has to get to wherever the ball actually
 	## went, which is the order it happens in.
 	var opponent_intended_contact: Vector2 = attack_choice.contact
+	var opponent_intended_body := SetPathReadModelRef.body_position(
+		opponent_hitter, opponent_intended_contact, false
+	)
+	var opponent_pair_familiarity := PairFamiliarityModel.BASELINE \
+		/ PairFamiliarityModel.CEILING
 	## **Per lane, not the general floor.** The first cut of this mirrored
 	## `HOME_SET_DELIVERY_MIN_Y` and dropped `lane_delivery_min_y`, which exists
 	## for exactly one reason: the pipe has an attack line to respect and the
@@ -3941,8 +4271,20 @@ func _resolve_opponent_transition(
 		),
 		opponent_set_height_extra,
 	)
-	var set_flight_time: float = float(set_arc.duration_seconds) \
+	var opponent_natural_set_flight: float = float(set_arc.duration_seconds) \
 		/ maxf(_set_pace_scale(opponent_setter, bool(opponent_jump_set.jumping)), 0.5)
+	var opponent_tempo_timing := _hitter_led_set_timing(
+		opponent_setter, opponent_hitter, opponent_tempo, opponent_lane,
+		opponent_intended_contact, true, opponent_natural_set_flight,
+		opponent_set_quality, opponent_principles,
+		opponent_pair_familiarity,
+		0.35, "opponent-%d" % exchange_number,
+	)
+	var set_flight_time := float(opponent_tempo_timing.delivered_flight_seconds)
+	set_arc = _retimed_set_arc(
+		set_arc, set_flight_time, opponent_release_height,
+		GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
+	)
 	## When the setter actually touches the ball.
 	##
 	## This set was stamped at bare `rally_clock` -- the moment of the pass that
@@ -4020,12 +4362,37 @@ func _resolve_opponent_transition(
 		opponent_set_event.metadata["behind_meters"] = float(
 			resolved_set_geometry.behind_meters
 		)
+		opponent_set_event.metadata["tempo_coordination"] = \
+			opponent_tempo_timing.duplicate(true)
+		opponent_set_event.metadata["tempo_relationship"] = str(
+			opponent_tempo_timing.relationship
+		)
+		opponent_set_event.metadata["requested_tempo"] = opponent_tempo
 		## Where they aimed, alongside where it went. The home set has published
 		## both since delivery was modelled and this side published neither,
 		## which is why nothing could measure an opponent setter's accuracy.
 		opponent_set_event.metadata["intended_target"] = opponent_intended_contact
 	_stamp_navigation(opponent_set_event, opponent_detour)
 	opponent_live_positions[opponent_setter.id] = opponent_setter_position
+	## This metadata is consumed while the incoming pass travels to the setter.
+	## It may therefore contain a called/predicted commitment, but never the
+	## hitter and lane selected later by the resolver.
+	var pre_release_home_block := _pre_release_home_block_stage(
+		players, lineup, defensive_plan, opponent_team
+	)
+	var pre_release_home_targets: Dictionary = pre_release_home_block.get(
+		"targets", {}
+	)
+	if opponent_set_event != null:
+		opponent_set_event.metadata["home_phase_targets"] = \
+			pre_release_home_targets.duplicate(true)
+		opponent_set_event.metadata["home_block_pre_release"] = Dictionary(
+			pre_release_home_block.get("prediction", {})
+		).duplicate(true)
+	for raw_player_id in pre_release_home_targets:
+		live_positions[int(raw_player_id)] = Vector2(
+			pre_release_home_targets[raw_player_id]
+		)
 	## Provisional: recomputed below once preparation has staged the hitter.
 	var hitter_arrival_margin: float = set_flight_time - float(attack_choice.travel_time)
 	## The wall this swing is hit into, formed before it is scored -- the same
@@ -4058,76 +4425,8 @@ func _resolve_opponent_transition(
 	## express, and it needs no new store because familiarity already persists on
 	## the player. The team-level half -- a home equivalent of `observe_rally`
 	## and `scouting_confidence` -- does need one, and is not built here.
-	var home_block_read_tags: Array[String] = [
-		"attack:%s" % str(attack_choice.get("attack_type", "Attack"))
-			.to_lower().replace(" ", "_"),
-		"lane:%s" % opponent_lane.to_lower().replace(" ", "_"),
-	]
+	var home_block_read_tags: Array[String] = []
 	var home_block_adaptation := 0.0
-	var reading_blocker := home_block_formation.get("primary") as VolleyballPlayer
-	if reading_blocker != null:
-		home_block_adaptation = maxf(
-			Familiarity.read_modifier(reading_blocker, home_block_read_tags), 0.0
-		)
-		Familiarity.record_exposure(reading_blocker, home_block_read_tags)
-	if home_block_adaptation > 0.0:
-		home_block_formation["quality"] = clampf(
-			float(home_block_formation.get("quality", 0.0)) + home_block_adaptation,
-			0.05, 0.98,
-		)
-	home_block_formation["adaptation_bonus"] = home_block_adaptation
-	## Put the home wall where the home wall is.
-	##
-	## `_blocker_net_x` reads `live_positions` first and falls back to the
-	## blocking team's `court_position` -- but the home side is not an
-	## `OpponentTeam`, so this call site passes `null` and the fallback is the
-	## literal 0.5 at the end of that function. Home blockers who had not
-	## happened to be written into `live_positions` earlier in the rally were
-	## therefore all standing at mid-net, so a swing to either pin met nobody:
-	## 0 stuffs and 1 deflection across 300 rallies with the geometric attack
-	## open. It is also why two home blockers render on top of each other --
-	## they were literally at the same coordinate.
-	##
-	## The positions already existed; they were computed after the swing, for
-	## the block event's metadata, and never fed back to the model that needed
-	## them. `_block_wall_positions` gives the pair a shoulder offset, so staging
-	## both fixes the geometry and the picture at once.
-	var home_wall_x := _wall_stage_x(
-		opponent_hitter, opponent_contact, opponent_lane, false,
-		float(home_block_formation.get("read_quality", 0.0)),
-		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
-	)
-	var home_wall_positions := _block_wall_positions(home_wall_x, false)
-	var staged_home_primary := home_block_formation.get("primary") as VolleyballPlayer
-	var staged_home_assist := home_block_formation.get("assist") as VolleyballPlayer
-	## Staged on the opponent's set as well as in `live_positions`, so the wall
-	## forms during the set's flight instead of appearing at the net. Same
-	## omission as the setter above, made in the same session: the model was
-	## given the position and the viewer was given a jump.
-	var home_block_stage := {}
-	if staged_home_primary != null:
-		live_positions[staged_home_primary.id] = Vector2(
-			home_wall_positions.primary_position
-		)
-		home_block_stage[staged_home_primary.id] = Vector2(
-			home_wall_positions.primary_position
-		)
-	if staged_home_assist != null:
-		live_positions[staged_home_assist.id] = Vector2(
-			home_wall_positions.assist_position
-		)
-		home_block_stage[staged_home_assist.id] = Vector2(
-			home_wall_positions.assist_position
-		)
-	if not home_block_stage.is_empty():
-		var set_event_for_wall := result.events[-1] as RallyEvent
-		if set_event_for_wall != null:
-			var existing: Dictionary = set_event_for_wall.metadata.get(
-				"home_phase_targets", {}
-			)
-			for raw_id in home_block_stage:
-				existing[raw_id] = home_block_stage[raw_id]
-			set_event_for_wall.metadata["home_phase_targets"] = existing
 	var home_block_pressure := float(
 		home_block_formation.get("primary_close", 0.0)
 	) * BLOCK_PRIMARY_PRESSURE + float(
@@ -4170,9 +4469,10 @@ func _resolve_opponent_transition(
 	var opponent_hitter_actor := opponent_state.player_state(
 		&"opponent", opponent_hitter.id
 	)
+	var opponent_standing_at := Vector2(attack_choice.start)
 	if opponent_hitter_actor != null:
 		opponent_hitter_actor.apply_position(
-			Vector2(attack_choice.start),
+			opponent_standing_at,
 			opponent_live_velocities.get(opponent_hitter.id, Vector2.ZERO),
 		)
 	var opponent_preparation := ApproachMechanicsModel.prepare_for_attack(
@@ -4181,80 +4481,190 @@ func _resolve_opponent_transition(
 			"player_id": opponent_hitter.id,
 			"lane": opponent_lane,
 			"tempo": opponent_tempo,
-			"target": opponent_contact,
+			## Before release the hitter owns their requested spot. The delivered
+			## miss is not authoritative movement information yet.
+			"target": opponent_intended_body,
 		},
-		opponent_setter.id, opponent_set_contact_time + set_flight_time, &"opponent",
+		opponent_setter.id, opponent_set_contact_time, &"opponent",
 	)
 	var opponent_prepared := opponent_preparation.get("actor") as RallyPlayerState
 	opponent_preparation.erase("actor")
 	var opponent_approach_start := _approach_start_position(
-		opponent_contact, Vector2(attack_choice.start), true
+		opponent_intended_body, Vector2(attack_choice.start), true
 	)
+	var opponent_full_approach_start := opponent_approach_start
+	var opponent_release_progress := 0.0
+	var opponent_entry_velocity := Vector2.ZERO
+	var opponent_movement_delay := float(opponent_tempo_timing.get(
+		"approach_start_delay_seconds", 0.0
+	))
+	var opponent_approach: Dictionary = {}
 	if opponent_prepared != null:
-		opponent_approach_start = opponent_prepared.position
-	## Recompute over the route the hitter actually runs. `attack_choice` timed
-	## the trip from where the hitter stood before preparation relocated them to
-	## their approach mark, so reporting the staged start with the unstaged
-	## duration describes them covering a short leg at a long leg's pace. This is
-	## the same defect the movement-fluidity work fixed on the home side, and it
-	## only surfaced here once block pressure made continuations common enough to
-	## shift the ATTACK phase's timing ratio to 1.083.
+		opponent_full_approach_start = opponent_prepared.position
+		var opponent_ideal_mark := Vector2(opponent_preparation.get(
+			"approach_target_position", opponent_full_approach_start
+		))
+		var opponent_to_mark := _movement_time(
+			opponent_hitter, opponent_standing_at, opponent_ideal_mark, "transition"
+		)
+		opponent_release_progress = ApproachMechanicsModel \
+			.achieved_release_progress(
+				opponent_tempo_timing,
+				float(opponent_preparation.get("preparation_time_seconds", 0.0)),
+				opponent_to_mark,
+			)
+	## Reclassify from the footwork that actually existed at release, then let
+	## the setter meet the remaining time in that hitter's approach. This keeps a
+	## visibly late-starting ball from retaining a tactical T2 label and clock.
+	opponent_tempo_timing = ApproachMechanicsModel.recognize_release_progress(
+		opponent_tempo_timing, opponent_release_progress
+	)
+	var opponent_effective_tempo := ApproachMechanicsModel.achieved_tempo(
+		opponent_tempo_timing, opponent_release_progress
+	)
+	set_flight_time = float(opponent_tempo_timing.delivered_flight_seconds)
+	set_arc = _retimed_set_arc(
+		set_arc, set_flight_time, opponent_release_height,
+		GeometricAttackPromotionModel.contact_height_meters(opponent_hitter, 1.0),
+	)
+	opponent_movement_delay = float(opponent_tempo_timing.get(
+		"approach_start_delay_seconds", 0.0
+	))
+	var opponent_set_path_read := SetPathReadModelRef.evaluate(
+		opponent_hitter, opponent_intended_contact, opponent_contact,
+		set_flight_time, opponent_set_quality, opponent_pair_familiarity,
+		rally_seed, "opponent-%d" % exchange_number, false,
+	)
+	var opponent_perceived_body := Vector2(opponent_set_path_read.get(
+		"perceived_body_position", opponent_intended_body
+	))
+	var opponent_ideal_body := Vector2(opponent_set_path_read.get(
+		"ideal_body_position",
+		SetPathReadModelRef.body_position(opponent_hitter, opponent_contact, false),
+	))
+	if opponent_prepared != null:
+		opponent_approach = ApproachMechanicsModel.evaluate_takeoff(
+			opponent_prepared, opponent_perceived_body,
+			float(opponent_tempo_timing.get("runup_seconds", set_flight_time)),
+		)
+		opponent_approach_start = ApproachMechanicsModel.release_position(
+			opponent_full_approach_start, opponent_perceived_body,
+			opponent_release_progress,
+		)
+		var opponent_direction := (
+			opponent_perceived_body - opponent_full_approach_start
+		).normalized()
+		var opponent_carried_speed := float(opponent_approach.get(
+			"approach_speed_mps", 0.0
+		)) * sqrt(opponent_release_progress)
+		opponent_entry_velocity = opponent_direction * opponent_carried_speed \
+			if opponent_direction.length_squared() > 0.0001 \
+			else opponent_prepared.velocity
+		opponent_prepared.apply_position(
+			opponent_approach_start, opponent_entry_velocity
+		)
+	opponent_tempo_timing["achieved_release_progress"] = opponent_release_progress
+	opponent_tempo_timing["release_position"] = opponent_approach_start
+	opponent_tempo_timing["full_approach_start"] = opponent_full_approach_start
+	opponent_tempo_timing["achieved_tempo"] = opponent_effective_tempo
+	opponent_tempo_timing["achieved_relationship"] = \
+		ApproachMechanicsModel.achieved_relationship(
+			opponent_tempo_timing, opponent_release_progress
+		)
+	## The ball stays where the setter delivered it. The hitter commits to the
+	## path they perceived and travels only as far as the clock permits.
+	var opponent_planned_leg := _travel(
+		opponent_hitter, opponent_approach_start, opponent_perceived_body,
+		"transition", null, opponent_entry_velocity,
+	)
+	var opponent_planned_move_time := float(opponent_planned_leg.seconds)
+	var opponent_contact_budget := maxf(
+		set_flight_time - opponent_movement_delay
+			- float(opponent_tempo_timing.get(
+				"takeoff_to_contact_seconds", 0.0
+			)),
+		0.0,
+	)
+	var opponent_body_contact := _reachable_contact(
+		opponent_approach_start, opponent_perceived_body,
+		opponent_planned_move_time,
+		opponent_contact_budget,
+	)
+	hitter_arrival_margin = opponent_contact_budget - opponent_planned_move_time
+	var opponent_contact_displacement := _clamp_displacement_meters(
+		opponent_perceived_body, opponent_body_contact
+	)
 	var opponent_leg := _travel(
-		opponent_hitter, opponent_approach_start, opponent_contact, "transition",
-		null,
-		opponent_prepared.velocity if opponent_prepared != null else Vector2.ZERO,
+		opponent_hitter, opponent_approach_start, opponent_body_contact,
+		"transition", null, opponent_entry_velocity,
 	)
 	var opponent_move_time := float(opponent_leg.seconds)
 	opponent_live_velocities[opponent_hitter.id] = opponent_leg.exit_velocity
-	hitter_arrival_margin = set_flight_time - opponent_move_time
-	var opponent_contact_before_clamp := opponent_contact
-	opponent_contact = _reachable_contact(
-		opponent_approach_start, opponent_contact, opponent_move_time,
-		set_flight_time,
+	var opponent_set_path_contact := SetPathReadModelRef.assess_contact(
+		opponent_hitter, opponent_body_contact, opponent_ideal_body
 	)
-	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
-	var opponent_contact_displacement := _clamp_displacement_meters(
-		opponent_contact_before_clamp, opponent_contact
+	var opponent_path_quality_multiplier := float(
+		opponent_set_path_contact.get("quality_multiplier", 1.0)
 	)
-	## And so does the lane.
-	##
-	## `opponent_lane` was read off the contact the set *aimed* at, three hundred
-	## lines above. The clamp then moves that contact, and everything the lane
-	## decides was left pointing at the old one: the wall is restaged below against
-	## the new contact but the old lane, familiarity accrues to a lane the hitter
-	## did not swing from, and `_geometric_swing` resolves the ball along the old
-	## lane's natural course.
-	##
-	## Measured at 36% of opponent swings (`tools/run_lane_drift_probe.gd`), and
-	## not scattered: 40 of the 43 are one migration, Right Quick to Right Pin. A
-	## middle who cannot reach the quick gets dragged back down their own approach,
-	## which runs outward, and arrives at the pin still labelled a quick.
-	##
-	## Same clamp and same shape as the stale arrival margin above -- see
-	## FAILURE_MODES.md 15. Flagged separately because it is a different
-	## consequence with a different blast radius: this one moves the wall and the
-	## ball's course, not the hitter's billing.
-	if RallyFeatureFlagsModel.ENABLE_CLAMPED_CONTACT_LANE:
-		opponent_lane = CourtConstants.lane_at_x(opponent_contact.x)
-	## And the wall moves with it.
-	##
-	## The wall above was staged against the contact the set was *aimed* at.
-	## `_reachable_contact` then moves that contact to wherever the hitter can
-	## actually get, and nothing re-read it -- so the resolver contested a wall
-	## built for a point the ball no longer came from, while the 2D court and the
-	## 3D view drew a third position recomputed from the final contact. Three
-	## readings of one fact, none of them reconciled.
-	##
-	## The staged position above stays what it is: it is where the blockers
-	## committed during the set's flight, and playback should show them heading
-	## there. This is the adjustment they make once the hitter commits, which is
-	## what a blocker does and what the resolver has to contest.
-	home_wall_x = _wall_stage_x(
+	var opponent_set_path_whiff := bool(
+		opponent_set_path_contact.get("whiffed", false)
+	)
+	if opponent_prepared != null:
+		opponent_approach = ApproachMechanicsModel.evaluate_takeoff(
+			opponent_prepared, opponent_body_contact, set_flight_time
+		)
+	## Release is the first point where the resolved lane may drive the wall.
+	## Re-form from the pre-release prediction, using the achieved tempo and the
+	## set clock the setter actually delivered. The ATTACK event below publishes
+	## this target, so playback begins the close after the set cue rather than
+	## during the incoming pass.
+	home_block_formation = _form_home_block(
+		players, lineup, defensive_plan, opponent_contact.x,
+		opponent_effective_tempo, opponent_set_quality,
+		opponent_setter_position.x, set_flight_time,
+		opponent_second_contact_window + opponent_release_interval,
+		opponent_hitter, opponent_set_height_extra,
+	)
+	home_block_read_tags = [
+		"attack:%s" % str(attack_choice.get("attack_type", "Attack"))
+			.to_lower().replace(" ", "_"),
+		"lane:%s" % opponent_lane.to_lower().replace(" ", "_"),
+	]
+	var reading_blocker := home_block_formation.get("primary") as VolleyballPlayer
+	if reading_blocker != null:
+		home_block_adaptation = maxf(
+			Familiarity.read_modifier(reading_blocker, home_block_read_tags), 0.0
+		)
+		Familiarity.record_exposure(reading_blocker, home_block_read_tags)
+	if home_block_adaptation > 0.0:
+		home_block_formation["quality"] = clampf(
+			float(home_block_formation.get("quality", 0.0)) + home_block_adaptation,
+			0.05, 0.98,
+		)
+	home_block_formation["adaptation_bonus"] = home_block_adaptation
+	home_block_pressure = float(
+		home_block_formation.get("primary_close", 0.0)
+	) * BLOCK_PRIMARY_PRESSURE + float(
+		home_block_formation.get("assist_close", 0.0)
+	) * BLOCK_ASSIST_PRESSURE
+	opponent_tempo_demand = float(
+		3 - clampi(opponent_effective_tempo, 0, 3)
+	) * 0.055 * lerpf(
+		1.0, 1.0 - ARM_SPEED_TEMPO_RELIEF,
+		_rating(opponent_hitter, "arm_speed"),
+	) * lerpf(1.0, 0.65, _rating(opponent_setter, "tempo_control"))
+	var home_wall_x := _wall_stage_x(
 		opponent_hitter, opponent_contact, opponent_lane, false,
 		float(home_block_formation.get("read_quality", 0.0)),
 		str(defensive_plan.block_intent) if defensive_plan != null else "Balanced",
 	)
-	home_wall_positions = _block_wall_positions(home_wall_x, false)
+	var home_wall_positions := _block_wall_positions(home_wall_x, false)
+	var staged_home_primary := home_block_formation.get(
+		"primary"
+	) as VolleyballPlayer
+	var staged_home_assist := home_block_formation.get(
+		"assist"
+	) as VolleyballPlayer
 	if staged_home_primary != null:
 		live_positions[staged_home_primary.id] = Vector2(
 			home_wall_positions.primary_position
@@ -4272,9 +4682,33 @@ func _resolve_opponent_transition(
 		opponent_set_event, opponent_contact, "opponent_set", set_flight_time,
 		float(set_arc.apex_height_meters), opponent_set_contact_time,
 	)
-	var opponent_approach := ApproachMechanicsModel.evaluate_takeoff(
-		opponent_prepared, opponent_contact, set_flight_time
-	) if opponent_prepared != null else {}
+	if opponent_set_event != null:
+		opponent_set_event.metadata["set_flight_time"] = set_flight_time
+		opponent_set_event.metadata["flight_time"] = set_flight_time
+		opponent_set_event.metadata["set_path_read"] = \
+			opponent_set_path_read.duplicate(true)
+		opponent_set_event.metadata["hitter_body_target"] = \
+			opponent_perceived_body
+		opponent_set_event.metadata["tempo_coordination"] = \
+			opponent_tempo_timing.duplicate(true)
+		opponent_set_event.metadata["tempo_relationship"] = str(
+			opponent_tempo_timing.achieved_relationship
+		)
+		opponent_set_event.metadata["achieved_tempo"] = opponent_effective_tempo
+		opponent_set_event.detail = (
+			"T%d set for %s · %d%% accuracy." % [
+				opponent_effective_tempo, opponent_hitter.display_name,
+				roundi(opponent_set_quality * 100.0),
+			]
+		) + (
+			" Called T%d; the setter matched the hitter's T%d rhythm." % [
+				opponent_tempo, opponent_effective_tempo,
+			] if opponent_tempo != opponent_effective_tempo else ""
+		)
+	if opponent_prepared != null:
+		opponent_approach = ApproachMechanicsModel.evaluate_takeoff(
+			opponent_prepared, opponent_contact, set_flight_time
+		)
 	var opponent_attack_actions: Array[String] = \
 		ApproachMechanicsModel.available_attack_families(
 			opponent_hitter, opponent_approach, hitter_arrival_margin
@@ -4282,21 +4716,22 @@ func _resolve_opponent_transition(
 	## A run-up that never happened cannot lend its quality to the swing. This
 	## is the same coupling Gate 43 gave the home side, and it now feeds the
 	## same execution model rather than a bolt-on adjustment.
-	if not opponent_approach.is_empty():
-		opponent_attack = clampf(
-			_attack_execution(
-				opponent_hitter, opponent_set_quality,
-				_approach_execution_fit(opponent_hitter, opponent_approach),
-				hitter_arrival_margin, opponent_tempo_demand, home_block_pressure,
-				## The same familiarity the home swing gets. Omitting it here was
-				## worth nine kills to one once the attack started winning.
-				Familiarity.attack_geometry(opponent_hitter, opponent_lane)
-				+ (Familiarity.execution_modifier(opponent_hitter) - 1.0) * 0.14
-				+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
-				opponent_set_height_extra,
-			) + opponent_attack_noise,
-			0.0, 1.0,
-		)
+	var opponent_approach_fit := _approach_execution_fit(
+		opponent_hitter, opponent_approach
+	) if not opponent_approach.is_empty() else 0.5
+	opponent_attack = clampf(
+		_attack_execution(
+			opponent_hitter, opponent_set_quality, opponent_approach_fit,
+			hitter_arrival_margin, opponent_tempo_demand, home_block_pressure,
+			## The same familiarity the home swing gets. Omitting it here was
+			## worth nine kills to one once the attack started winning.
+			Familiarity.attack_geometry(opponent_hitter, opponent_lane)
+			+ (Familiarity.execution_modifier(opponent_hitter) - 1.0) * 0.14
+			+ (float(opponent_approach.get("jump_multiplier", 1.0)) - 1.0) * 0.18,
+			opponent_set_height_extra,
+		) + opponent_attack_noise,
+		0.0, 1.0,
+	)
 	## Capability shapes this swing too. Unifying the execution model left the
 	## opponent as the only one of the three swings paying neither a tempo demand
 	## nor an overreach penalty, and on the flat fixture that showed up as
@@ -4338,6 +4773,9 @@ func _resolve_opponent_transition(
 				- opponent_contact_displacement * CLAMPED_CONTACT_SEVERITY,
 			0.0, 1.0,
 		)
+	opponent_attack = clampf(
+		opponent_attack * opponent_path_quality_multiplier, 0.0, 1.0
+	)
 	## The same geometric swing the home first ball resolves in shadow, on the
 	## other side of the net. Recording both sides is the point: the symmetry
 	## gate measures a six-point home tilt today, and one shared resolver is the
@@ -4350,8 +4788,10 @@ func _resolve_opponent_transition(
 			_home_block_fallbacks(players, lineup), live_positions,
 			home_defenders, false,
 			float(opponent_approach.get("jump_multiplier", 1.0)),
-			_approach_execution_fit(opponent_hitter, opponent_approach)
-				if not opponent_approach.is_empty() else 0.5,
+			(
+				_approach_execution_fit(opponent_hitter, opponent_approach)
+				if not opponent_approach.is_empty() else 0.5
+			) * opponent_path_quality_multiplier,
 			## Their swing, their temperament. This read
 			## `home_principles.decisiveness` once, so a decisive home identity
 			## made the *opponent* swing harder at gaps they had not chosen to
@@ -4362,20 +4802,53 @@ func _resolve_opponent_transition(
 			float(opponent_principles.decisiveness), 0.0,
 			str(defensive_plan.block_intent) if defensive_plan != null \
 				else "Balanced",
+			str(attack_choice.attack_type),
 		),
 		"opponent",
 	)
 	if shadow_reception_trace != null:
 		shadow_reception_trace.summary["geometric_attack_opponent"] = opponent_record
 	var geometric := _geometric_promotion(opponent_record)
+	var opponent_attack_missed := opponent_set_path_whiff or (
+		bool(geometric.get("attack_missed", false))
+		if not geometric.is_empty() else
+		_attack_missed(
+			opponent_attack, float(opponent_principles.decisiveness), opponent_hitter
+		)
+	)
 	if not geometric.is_empty():
 		home_target = Vector2(geometric.target)
+	if opponent_set_path_whiff:
+		home_target = _missed_set_drop_target(opponent_contact, false)
 
 	## Let playback walk the hitter to their approach mark during the set,
 	## instead of teleporting them into a swing when the attack event begins.
 	if opponent_set_event != null:
 		opponent_set_event.metadata["staged_next_actor_id"] = opponent_hitter.id
 		opponent_set_event.metadata["staged_next_position"] = opponent_approach_start
+		var opponent_phase_targets: Dictionary = opponent_set_event.metadata.get(
+			"opponent_phase_targets", {}
+		)
+		opponent_phase_targets[opponent_hitter.id] = opponent_approach_start
+		opponent_set_event.metadata["opponent_phase_targets"] = \
+			opponent_phase_targets
+		var opponent_phase_intents: Dictionary = opponent_set_event.metadata.get(
+			"opponent_phase_intents", {}
+		)
+		opponent_phase_intents[opponent_hitter.id] = {
+			"intent": &"preparing_attack",
+			"progress": opponent_release_progress,
+		}
+		opponent_set_event.metadata["opponent_phase_intents"] = \
+			opponent_phase_intents
+		opponent_set_event.metadata["tempo_coordination"] = \
+			opponent_tempo_timing.duplicate(true)
+		opponent_set_event.metadata["tempo_relationship"] = str(
+			opponent_tempo_timing.achieved_relationship
+		)
+		opponent_set_event.metadata["achieved_tempo"] = int(
+			opponent_tempo_timing.achieved_tempo
+		)
 
 	## The swing's shape is solved only now, so the run-up that just adjusted
 	## `opponent_attack` also shapes the arc it produces.
@@ -4420,15 +4893,36 @@ func _resolve_opponent_transition(
 		opponent_set_contact_time + set_flight_time,
 		float(opponent_attack_arc.get("vertical_speed_mps", NAN)),
 	)
-	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
-		opponent_hitter.display_name,
-		opponent_contact, home_target, true, opponent_attack,
-		"Opponent transition swing · exchange %d" % exchange_number,
+	if opponent_set_path_whiff:
+		opponent_attack_trajectory = _missed_set_drop_trajectory(
+			opponent_contact, home_target,
+			opponent_set_contact_time + set_flight_time,
+		)
+	var opponent_attack_detail := "Missed the delivered set entirely." \
+		if opponent_set_path_whiff else \
 		"Contact 3 of 3 · %s toward %s at %d%% quality." % [
 			str(attack_choice.attack_type), str(attack_choice.direction),
 			roundi(opponent_attack * 100.0),
+		]
+	_add_event(result, RallyEventModel.EventType.ATTACK, opponent_hitter.id,
+		opponent_hitter.display_name,
+		opponent_contact, home_target,
+		not opponent_attack_missed and opponent_attack >= 0.25, opponent_attack,
+		"T%d opponent transition swing · exchange %d" % [
+			opponent_effective_tempo, exchange_number,
 		],
+		opponent_attack_detail,
 		{"side": "opponent", "lane_x": opponent_contact.x,
+			"tempo": opponent_effective_tempo,
+			"requested_tempo": opponent_tempo,
+			"tempo_relationship": str(
+				opponent_tempo_timing.achieved_relationship
+			),
+			"requested_tempo_relationship": str(
+				opponent_tempo_timing.relationship
+			),
+			"achieved_tempo": int(opponent_tempo_timing.achieved_tempo),
+			"tempo_coordination": opponent_tempo_timing.duplicate(true),
 			## Beside `lane_x`, which is the contact this swing was actually struck
 			## from, so the two can be compared. The home ATTACK event has always
 			## stamped its lane; this one never did.
@@ -4441,6 +4935,18 @@ func _resolve_opponent_transition(
 				opponent_team, opponent_hitter
 			),
 			"set_flight_seconds": set_flight_time,
+			"body_contact_position": opponent_body_contact,
+			"ideal_body_contact_position": opponent_ideal_body,
+			"perceived_body_contact_position": opponent_perceived_body,
+			"set_path_read": opponent_set_path_read.duplicate(true),
+			"set_path_contact": opponent_set_path_contact.duplicate(true),
+			"set_path_outcome": str(opponent_set_path_contact.get(
+				"outcome", "clean"
+			)),
+			"set_path_error_meters": float(opponent_set_path_contact.get(
+				"error_meters", 0.0
+			)),
+			"set_path_whiff": opponent_set_path_whiff,
 			"attack_type": attack_choice.attack_type,
 			## Both downgrades, separately. `intended_type` is what the position and
 			## the set called for, `chosen_type` what the set-quality gate left, and
@@ -4459,6 +4965,8 @@ func _resolve_opponent_transition(
 			"arrival_margin": hitter_arrival_margin,
 			"movement_start": opponent_approach_start,
 			"approach_start_position": opponent_approach_start,
+			"full_approach_start_position": opponent_full_approach_start,
+			"movement_delay_seconds": opponent_movement_delay,
 			"approach_target_position": Vector2(opponent_preparation.get(
 				"approach_target_position", opponent_approach_start
 			)),
@@ -4516,7 +5024,7 @@ func _resolve_opponent_transition(
 			),
 			"block_edge_gap_meters": geometric.get("block_edge_gap_meters", null),
 			"geometric_out_reason": str(geometric.get("out_reason", "")),
-			"attack_missed": bool(geometric.get("attack_missed", false)),
+			"attack_missed": opponent_attack_missed,
 			"transition_preparation": opponent_preparation.duplicate(true),
 			"resolved_approach": opponent_approach.duplicate(true),
 			"available_attack_actions": opponent_attack_actions.duplicate(),
@@ -4531,18 +5039,17 @@ func _resolve_opponent_transition(
 			"event_time": opponent_set_contact_time + set_flight_time,
 			"launch_angle_degrees": opponent_attack_angle,
 			"movement_duration": opponent_move_time,
-			"movement_entry_velocity": opponent_prepared.velocity \
-				if opponent_prepared != null else Vector2.ZERO,
+			"movement_entry_velocity": opponent_entry_velocity,
 			"outgoing_trajectory": opponent_attack_trajectory})
 	var opponent_attack_event := result.events[-1] as RallyEvent
-	opponent_live_positions[opponent_hitter.id] = opponent_contact
+	opponent_live_positions[opponent_hitter.id] = opponent_body_contact
 	## The opponent could not miss a swing. Not "rarely" -- there was no branch
 	## for it anywhere on this path, so every transition ball the opponent hit
 	## either beat the block or was dug, and a home hitter who errs at the
 	## sport's rate was being compared against an opponent who never errs at
 	## all. That is the asymmetry the symmetry gate was written to find, and it
 	## closes here because both sides now miss through the same ballistics.
-	if not geometric.is_empty() and bool(geometric.attack_missed):
+	if opponent_attack_missed:
 		return _finish(result, "opponent_attack_error", true, opponent_hitter.id, {
 			"hitter": opponent_hitter.display_name,
 		})
@@ -4557,6 +5064,7 @@ func _resolve_opponent_transition(
 	var block_outcome := str(block_result.outcome)
 	if not geometric.is_empty():
 		block_outcome = str(geometric.block_outcome)
+	var opponent_hitter_point := bool(geometric.get("hitter_point", false))
 	if blocker != null:
 		live_positions[blocker.id] = Vector2(opponent_contact.x, 0.54)
 	if assisting_blocker != null:
@@ -4571,7 +5079,9 @@ func _resolve_opponent_transition(
 		if block_outcome == "stuff" else deflection_target
 	## Same contract as the two home-attack block paths: only a block that
 	## actually touches the ball shortens the shot or deflects it.
-	var home_block_contacts := block_outcome != "miss"
+	var home_block_contacts := block_outcome in [
+		"stuff", "touch", "tool", "recycle"
+	]
 	if home_block_contacts and opponent_attack_event != null:
 		var opponent_flight: Dictionary = opponent_attack_event.metadata.get(
 			"outgoing_trajectory", {}
@@ -4617,7 +5127,30 @@ func _resolve_opponent_transition(
 		),
 		geometric.get("block_deflection_landing", null),
 		float(geometric.get("block_deflection_speed_mps", 0.0)),
+		float(geometric.get("block_deflection_vertical_angle_degrees", 0.0)),
+		float(geometric.get("block_deflection_duration_seconds", 0.0)),
+		bool(geometric.get("block_deflection_playable", false)),
 	) if home_block_contacts else {}
+	if home_block_contacts and not home_block_trajectory.is_empty():
+		home_block_target = _trajectory_endpoint(
+			home_block_trajectory, home_block_target
+		)
+		deflection_target = home_block_target
+	if home_block_contacts and _block_deflection_lands_out(home_block_trajectory):
+		opponent_hitter_point = true
+		block_outcome = "tool"
+		home_block_target = _trajectory_endpoint(
+			home_block_trajectory, home_block_target
+		)
+		deflection_target = home_block_target
+	elif block_outcome == "stuff" and _block_deflection_lands_on_blocking_side(
+		home_block_trajectory, "home"
+	):
+		block_outcome = "touch"
+		home_block_target = _trajectory_endpoint(
+			home_block_trajectory, home_block_target
+		)
+		deflection_target = home_block_target
 	var assist_text := ""
 	if assisting_blocker != null:
 		assist_text = " %s assisted at %d%% close." % [
@@ -4645,8 +5178,8 @@ func _resolve_opponent_transition(
 	narration["blocker"] = blocker_name
 	var opponent_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK, blocker_id, blocker_name,
-		Vector2(opponent_contact.x, 0.53), Vector2(opponent_contact.x, 0.50),
-		block_outcome != "miss", home_block,
+		Vector2(opponent_contact.x, 0.53), home_block_target,
+		home_block_contacts, home_block,
 		"%s · %s" % [blocker_name, block_outcome.capitalize()],
 		"Primary close %d%%; block quality %d%%.%s" % [
 			roundi(float(block_result.primary_close) * 100.0),
@@ -4660,7 +5193,14 @@ func _resolve_opponent_transition(
 				_opponent_defensive_plan(opponent_team),
 				opponent_hitter.id if opponent_hitter != null else -1,
 				opponent_contact,
-				float(opponent_attack_trajectory.get("duration", 0.30)),
+				float(Dictionary(opponent_attack_event.metadata.get(
+					"outgoing_trajectory", {}
+				)).get(
+					"duration",
+					float(opponent_attack_trajectory.get("duration", 0.30)),
+				)) if opponent_attack_event != null else float(
+					opponent_attack_trajectory.get("duration", 0.30)
+				),
 				true, opponent_cover_intents,
 			),
 			"opponent_phase_intents": opponent_cover_intents,
@@ -4725,13 +5265,13 @@ func _resolve_opponent_transition(
 	## them and out, or placed off them on purpose. Claimed before the touch and
 	## funnel branches, which would otherwise hand the ball back to a home
 	## defender who is not going to get it.
-	if not geometric.is_empty() and bool(geometric.hitter_point):
+	if opponent_hitter_point:
 		## Mirrored from the home first-ball path. Our hands sent it out, so it is
 		## our touch and our chase.
 		if home_block_contacts:
 			var home_tool_intents := {}
 			var home_tool_targets := _tool_pursuit_map(
-				players, lineup, Vector2(geometric.target),
+				players, lineup, home_block_target,
 				float(home_block_trajectory.get("duration", 0.30)),
 				[blocker_id, int(block_result.get("assist_id", -1))],
 				false, home_tool_intents,
@@ -4751,6 +5291,83 @@ func _resolve_opponent_transition(
 			"hitter": original_hitter.display_name,
 			"blocker": blocker_name,
 		})
+	if block_outcome == "recycle":
+		## A rebound onto the opponent's own court belongs to their attack
+		## coverage, not to our floor defence. The old fall-through assigned the
+		## endpoint on their half to a home digger, which is the same side/last-
+		## touch mismatch that originally mis-scored the reported soft block.
+		var opponent_coverage_plan := _opponent_defensive_plan(opponent_team)
+		var coverage_result := _resolve_attack_coverage(
+			opponent_team.on_court_players(), opponent_team.current_lineup(),
+			opponent_coverage_plan, opponent_hitter, home_block_target,
+			home_block, true,
+		)
+		var coverer := coverage_result.get("player") as VolleyballPlayer
+		var coverage_success := bool(coverage_result.get("success", false))
+		var coverage_quality := float(coverage_result.get("quality", 0.0))
+		var coverer_start: Vector2 = opponent_live_positions.get(
+			coverer.id, home_block_target
+		) if coverer != null else home_block_target
+		var coverage_time := float(home_block_trajectory.get("duration", 0.24))
+		var coverer_move_time := _movement_time(
+			coverer, coverer_start, home_block_target, "lateral"
+		) if coverer != null else 4.0
+		var coverer_reach := _reached_point(
+			coverer, coverer_start, home_block_target, coverage_time, "lateral"
+		) if coverer != null else home_block_target
+		if coverer != null:
+			opponent_live_positions[coverer.id] = coverer_reach
+		var coverage_pass_target := home_block_target + Vector2(0.04, 0.05)
+		var coverage_contact_time := float(home_block_trajectory.get(
+			"end_time", rally_clock + coverage_time
+		))
+		_add_event(
+			result, RallyEventModel.EventType.DEFENSE,
+			coverer.id if coverer != null else -1,
+			coverer.display_name if coverer != null else "Opponent attack coverage",
+			home_block_target, coverage_pass_target,
+			coverage_success, coverage_quality,
+			"%s covers the block rebound" % (
+				coverer.display_name if coverer != null else "Nobody"
+			),
+			"%d%% control on opponent attack coverage." % roundi(
+				coverage_quality * 100.0
+			),
+			{
+				"side": "opponent", "coverage": "attack",
+				"blocked_hitter_id": opponent_hitter.id,
+				"movement_start": coverer_start,
+				"movement_target": coverer_reach,
+				"movement_duration": coverer_move_time,
+				"incoming_trajectory": home_block_trajectory,
+				"event_time": coverage_contact_time,
+			},
+		)
+		rally_clock = maxf(rally_clock, coverage_contact_time)
+		if not coverage_success:
+			return _finish(result, "counter_block", true, blocker_id, {
+				"hitter": original_hitter.display_name,
+				"blocker": blocker_name,
+			})
+		result.key_factors.append(_factor("attack_recycled"))
+		if exchange_number >= MAX_EXCHANGES:
+			var opponent_safety_win := coverage_quality \
+				+ rng.randf_range(-0.18, 0.18) > 0.60
+			return _finish(
+				result,
+				"long_rally_loss" if opponent_safety_win else "long_rally_win",
+				not opponent_safety_win,
+				coverer.id if coverer != null else -1,
+				{"hitter": original_hitter.display_name},
+			)
+		return _resolve_opponent_transition(
+			result, players, lineup, opponent_hitter, coverage_pass_target,
+			opponent_team, defensive_plan, exchange_number + 1,
+			coverage_quality * lerpf(
+				1.0, BLOCK_DEFLECTION_CARRY, clampf(home_block, 0.0, 1.0)
+			),
+			false, coverer.id if coverer != null else -1,
+		)
 	if block_outcome == "touch":
 		result.key_factors.append(_factor("block_touch"))
 		opponent_attack = maxf(opponent_attack - 0.10 - home_block * 0.05, 0.12)
@@ -4758,7 +5375,11 @@ func _resolve_opponent_transition(
 	elif block_outcome == "funnel":
 		result.key_factors.append(_factor("block_funnel"))
 		opponent_attack = maxf(opponent_attack - 0.035, 0.12)
-		home_target = deflection_target
+		## A funnel is a wall shaping the hitter's course without touching the
+		## ball. The geometric target is already that shaped course; replacing it
+		## with a made-up deflection point creates a contact that never happened.
+		if geometric.is_empty():
+			home_target = deflection_target
 	var attack_type := _opponent_attack_type(home_target)
 	## **The dig's flight budget is the flight that was drawn.**
 	##
@@ -4823,34 +5444,15 @@ func _resolve_opponent_transition(
 	## off the swing. What remains of the gap is an offence difference -- home
 	## swings come out at 0.484 and opponent swings at 0.332 -- which is a
 	## different claim and is what tasks #62 to #64 are still for.
-	var attack_time := float(opponent_attack_trajectory.get("duration", 0.5))
-	if block_outcome in ["touch", "funnel"]:
-		## Off the hands the ball is going somewhere else, so the remaining
-		## flight is genuinely a new solve -- on the hitter's swing, not the
-		## defence's classifier.
-		## Same record, same reason as the arc above: in hand, not looked up.
-		attack_time = float(_swing_arc(
-			opponent_record,
-			RallyKinematics.court_distance_meters(opponent_contact, home_target),
-			GeometricAttackPromotionModel.contact_height_meters(
-				opponent_hitter, 1.0
-			),
-		).duration_seconds)
-	if block_outcome == "touch":
-		## **The deflection's own flight, not a constant.**
-		##
-		## A touched ball bought the defender a flat 0.24 s whatever hit the block
-		## and whoever blocked it. That was defensible while every deflection was
-		## solved to the same speed; it is not now that pace comes off the swing
-		## and the blocker's hands take a share out of it. Measured: making the
-		## drawn deflection real moved the dig rate 0.491 to 0.490 -- nothing --
-		## because the number the defence actually spends was still the constant.
-		## A value computed and dropped before anything can use it, one more time.
-		attack_time += maxf(float(
-			home_block_trajectory.get("duration", 0.24)
-		), BLOCK_DEFLECTION_MIN_SECONDS)
-	elif block_outcome == "funnel":
-		attack_time += 0.06
+	var visible_opponent_attack: Dictionary = opponent_attack_event.metadata.get(
+		"outgoing_trajectory", opponent_attack_trajectory
+	) if opponent_attack_event != null else opponent_attack_trajectory
+	var attack_time := maxf(float(
+		home_block_trajectory.get("duration", 0.0)
+	), BLOCK_DEFLECTION_MIN_SECONDS) \
+		if not home_block_trajectory.is_empty() else float(
+			visible_opponent_attack.get("duration", 0.5)
+		)
 	var defense_claim: Dictionary = CoverageModel.choose_claimant(
 		_lineup_players(players, lineup),
 		_zones_at_phase_positions(
@@ -4939,7 +5541,9 @@ func _resolve_opponent_transition(
 	## A defender who never arrived did not scramble it either.
 	var home_dig_control := float(home_dig.control) if defender_arrived else 0.0
 	var home_dig_recovery := _dig_recovery(
-		defender, home_dig_terms, opponent_attack, opponent_attack_trajectory,
+		defender, home_dig_terms, opponent_attack,
+		home_block_trajectory if not home_block_trajectory.is_empty()
+			else visible_opponent_attack,
 		CoverageModel.court_distance_meters(
 			live_positions.get(
 				defender.id,
@@ -4962,7 +5566,9 @@ func _resolve_opponent_transition(
 	var defense_pass_target := home_target + Vector2(0.03, -0.04)
 	## See the mirrored site on the home swing: the continuation's second-contact
 	## window is measured from `rally_clock`, so the clock has to reach the dig.
-	var home_dig_time := float(opponent_attack_trajectory.get(
+	var home_arriving_trajectory := home_block_trajectory \
+		if not home_block_trajectory.is_empty() else visible_opponent_attack
+	var home_dig_time := float(home_arriving_trajectory.get(
 		"end_time", rally_clock + attack_time
 	))
 	rally_clock = maxf(rally_clock, home_dig_time)
@@ -5012,6 +5618,7 @@ func _resolve_opponent_transition(
 			"home_phase_intents": home_defense_intents,
 			"responsibility_fit": responsibility_fit,
 			"flight_time": attack_time, "arrival": defense_arrival,
+			"incoming_trajectory": home_arriving_trajectory,
 			"claimed": home_claimed,
 			"support_count": support_count,
 			"movement_start": defender_start,
@@ -5183,6 +5790,9 @@ func _resolve_home_continuation(
 	var intended_set_target := HitterPlacementModel.preferred_point(
 		hitter, assignment.lane, rally_seed, swing_index
 	)
+	var continuation_intended_body := SetPathReadModelRef.body_position(
+		hitter, intended_set_target, true
+	)
 	swing_index += 1
 	var cont_release_target: Vector2 = defensive_plan.setter_release_target(
 		lineup.active_setter_id()
@@ -5201,7 +5811,8 @@ func _resolve_home_continuation(
 	)
 	var cont_set_height_extra := _set_rescue_height_meters(
 		_movement_time(
-			hitter, cont_hitter_choice_start, intended_set_target, "transition"
+			hitter, cont_hitter_choice_start, continuation_intended_body,
+			"transition"
 		),
 		float(ordinary_cont_arc.duration_seconds),
 	)
@@ -5263,8 +5874,23 @@ func _resolve_home_continuation(
 		RallyKinematics.court_distance_meters(set_contact, set_target),
 		cont_set_height_extra,
 	)
-	var continuation_flight_time: float = float(continuation_set_arc.duration_seconds) \
+	var continuation_natural_flight: float = float(
+		continuation_set_arc.duration_seconds
+	) \
 		/ maxf(_set_pace_scale(setter, bool(cont_jump_set.jumping)), 0.5)
+	var cont_tempo_timing := _hitter_led_set_timing(
+		setter, hitter, int(assignment.tempo), str(assignment.lane),
+		intended_set_target, false, continuation_natural_flight, set_quality,
+		home_principles, _pair_fraction(setter.id, hitter.id),
+		team_tactical_familiarity, "home-continuation-%d" % exchange_number,
+	)
+	var continuation_flight_time := float(
+		cont_tempo_timing.delivered_flight_seconds
+	)
+	continuation_set_arc = _retimed_set_arc(
+		continuation_set_arc, continuation_flight_time, cont_release_height,
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+	)
 	var cont_release_profile := setter.system_fit(VolleyballPlayer.SYSTEM_FIT_SET_RELEASE)
 	var cont_release_interval := _release_interval(cont_release_profile, set_quality)
 	## The transition set leaves the setter's hands once they have travelled to
@@ -5306,6 +5932,9 @@ func _resolve_home_continuation(
 			"arrival_margin": setter_arrival_margin,
 			"flight_time": continuation_flight_time,
 			"release_interval": cont_release_interval,
+			"tempo_coordination": cont_tempo_timing.duplicate(true),
+			"tempo_relationship": str(cont_tempo_timing.relationship),
+			"requested_tempo": int(assignment.tempo),
 			"intended_target": intended_set_target,
 			"deadline": cont_set_contact_time,
 			"event_time": cont_set_contact_time,
@@ -5328,9 +5957,10 @@ func _resolve_home_continuation(
 			setter, bool(cont_jump_set.jumping)
 		)
 	live_positions[setter.id] = set_contact
-	var hitter_start: Vector2 = live_positions.get(
+	var hitter_standing_at: Vector2 = live_positions.get(
 		hitter.id, CourtConstants.slot_position(lineup.slot_for_player(hitter.id))
 	)
+	var hitter_start := hitter_standing_at
 	var transition_state := RallyStateBuilderModel.build(
 		players, lineup, defensive_plan, opponent_team, null, true,
 		rng.seed + exchange_number * 1009,
@@ -5349,7 +5979,7 @@ func _resolve_home_continuation(
 	var continuation_assignment := {
 		"player_id": hitter.id, "lane": assignment.lane,
 		"tempo": assignment.tempo, "priority": assignment.priority,
-		"target": set_target,
+		"target": continuation_intended_body,
 	}
 	var transition_preparation := ApproachMechanicsModel.prepare_for_attack(
 		transition_state, hitter_actor, continuation_assignment, defender.id,
@@ -5357,34 +5987,181 @@ func _resolve_home_continuation(
 	)
 	var prepared_hitter := transition_preparation.get("actor") as RallyPlayerState
 	transition_preparation.erase("actor")
+	var continuation_full_approach_start := hitter_start
+	var continuation_release_progress := 0.0
+	var continuation_movement_delay := float(cont_tempo_timing.get(
+		"approach_start_delay_seconds", 0.0
+	))
+	var continuation_entry_velocity := Vector2.ZERO
+	var continuation_approach: Dictionary = {}
 	if prepared_hitter != null:
-		hitter_start = prepared_hitter.position
+		continuation_full_approach_start = prepared_hitter.position
+		var continuation_ideal_mark := Vector2(transition_preparation.get(
+			"approach_target_position", continuation_full_approach_start
+		))
+		var continuation_to_mark := _movement_time(
+			hitter, hitter_standing_at, continuation_ideal_mark, "transition"
+		)
+		continuation_release_progress = ApproachMechanicsModel \
+			.achieved_release_progress(
+				cont_tempo_timing,
+				float(transition_preparation.get(
+					"preparation_time_seconds", 0.0
+				)),
+				continuation_to_mark,
+			)
+	cont_tempo_timing = ApproachMechanicsModel.recognize_release_progress(
+		cont_tempo_timing, continuation_release_progress
+	)
+	var continuation_effective_tempo := ApproachMechanicsModel.achieved_tempo(
+		cont_tempo_timing, continuation_release_progress
+	)
+	continuation_flight_time = float(
+		cont_tempo_timing.delivered_flight_seconds
+	)
+	continuation_set_arc = _retimed_set_arc(
+		continuation_set_arc, continuation_flight_time, cont_release_height,
+		GeometricAttackPromotionModel.contact_height_meters(hitter, 1.0),
+	)
+	continuation_movement_delay = float(cont_tempo_timing.get(
+		"approach_start_delay_seconds", 0.0
+	))
+	var continuation_set_path_read := SetPathReadModelRef.evaluate(
+		hitter, intended_set_target, set_target, continuation_flight_time,
+		set_quality, _pair_fraction(setter.id, hitter.id), rally_seed,
+		"home-continuation-%d" % exchange_number, true,
+	)
+	var continuation_perceived_body := Vector2(
+		continuation_set_path_read.get(
+			"perceived_body_position", continuation_intended_body
+		)
+	)
+	var continuation_ideal_body := Vector2(
+		continuation_set_path_read.get(
+			"ideal_body_position",
+			SetPathReadModelRef.body_position(hitter, set_target, true),
+		)
+	)
+	if prepared_hitter != null:
+		continuation_approach = ApproachMechanicsModel.evaluate_takeoff(
+			prepared_hitter, continuation_perceived_body,
+			float(cont_tempo_timing.get(
+				"runup_seconds", continuation_flight_time
+			)),
+		)
+		hitter_start = ApproachMechanicsModel.release_position(
+			continuation_full_approach_start, continuation_perceived_body,
+			continuation_release_progress,
+		)
+		var continuation_direction := (
+			continuation_perceived_body - continuation_full_approach_start
+		).normalized()
+		var continuation_carried_speed := float(continuation_approach.get(
+			"approach_speed_mps", 0.0
+		)) * sqrt(continuation_release_progress)
+		continuation_entry_velocity = continuation_direction \
+			* continuation_carried_speed \
+			if continuation_direction.length_squared() > 0.0001 \
+			else prepared_hitter.velocity
+		prepared_hitter.apply_position(hitter_start, continuation_entry_velocity)
+	cont_tempo_timing["achieved_release_progress"] = continuation_release_progress
+	cont_tempo_timing["release_position"] = hitter_start
+	cont_tempo_timing["full_approach_start"] = \
+		continuation_full_approach_start
+	cont_tempo_timing["achieved_tempo"] = continuation_effective_tempo
+	cont_tempo_timing["achieved_relationship"] = \
+		ApproachMechanicsModel.achieved_relationship(
+			cont_tempo_timing, continuation_release_progress
+		)
+	var continuation_planned_leg := _travel(
+		hitter, hitter_start, continuation_perceived_body, "transition", null,
+		continuation_entry_velocity,
+	)
+	var continuation_planned_move_time := float(
+		continuation_planned_leg.seconds
+	)
+	var continuation_contact_budget := maxf(
+		continuation_flight_time - continuation_movement_delay
+			- float(cont_tempo_timing.get(
+				"takeoff_to_contact_seconds", 0.0
+			)),
+		0.0,
+	)
+	var continuation_body_contact := _reachable_contact(
+		hitter_start, continuation_perceived_body,
+		continuation_planned_move_time, continuation_contact_budget,
+	)
+	var hitter_arrival_margin := continuation_contact_budget \
+		- continuation_planned_move_time
+	var continuation_displacement := _clamp_displacement_meters(
+		continuation_perceived_body, continuation_body_contact
+	)
 	var continuation_leg := _travel(
-		hitter, hitter_start, set_target, "transition", null,
-		prepared_hitter.velocity if prepared_hitter != null else Vector2.ZERO,
+		hitter, hitter_start, continuation_body_contact, "transition", null,
+		continuation_entry_velocity,
 	)
 	var hitter_move_time := float(continuation_leg.seconds)
 	live_velocities[hitter.id] = continuation_leg.exit_velocity
-	var hitter_arrival_margin := continuation_flight_time - hitter_move_time
-	var continuation_contact_before_clamp := set_target
-	set_target = _reachable_contact(
-		hitter_start, set_target, hitter_move_time, continuation_flight_time
+	var continuation_set_path_contact := SetPathReadModelRef.assess_contact(
+		hitter, continuation_body_contact, continuation_ideal_body
 	)
-	hitter_arrival_margin = _clamped_arrival_margin(hitter_arrival_margin)
-	var continuation_displacement := _clamp_displacement_meters(
-		continuation_contact_before_clamp, set_target
+	var continuation_path_quality_multiplier := float(
+		continuation_set_path_contact.get("quality_multiplier", 1.0)
+	)
+	var continuation_set_path_whiff := bool(
+		continuation_set_path_contact.get("whiffed", false)
 	)
 	var set_event_for_staging := result.events[-1] as RallyEvent
 	_retarget_set_event(
 		set_event_for_staging, set_target, "set", continuation_flight_time,
 		float(continuation_set_arc.apex_height_meters), cont_set_contact_time,
 	)
+	if prepared_hitter != null:
+		continuation_approach = ApproachMechanicsModel.evaluate_takeoff(
+			prepared_hitter, continuation_body_contact,
+			continuation_flight_time
+		)
 	if set_event_for_staging != null:
+		set_event_for_staging.metadata["flight_time"] = continuation_flight_time
+		set_event_for_staging.metadata["set_flight_time"] = \
+			continuation_flight_time
+		set_event_for_staging.metadata["set_path_read"] = \
+			continuation_set_path_read.duplicate(true)
+		set_event_for_staging.metadata["hitter_body_target"] = \
+			continuation_perceived_body
 		set_event_for_staging.metadata["staged_next_actor_id"] = hitter.id
 		set_event_for_staging.metadata["staged_next_position"] = hitter_start
-	var continuation_approach := ApproachMechanicsModel.evaluate_takeoff(
-		prepared_hitter, set_target, continuation_flight_time
-	) if prepared_hitter != null else {}
+		var continuation_phase_targets: Dictionary = \
+			set_event_for_staging.metadata.get("home_phase_targets", {})
+		continuation_phase_targets[hitter.id] = hitter_start
+		set_event_for_staging.metadata["home_phase_targets"] = \
+			continuation_phase_targets
+		var continuation_phase_intents: Dictionary = \
+			set_event_for_staging.metadata.get("home_phase_intents", {})
+		continuation_phase_intents[hitter.id] = {
+			"intent": &"preparing_attack",
+			"progress": continuation_release_progress,
+		}
+		set_event_for_staging.metadata["home_phase_intents"] = \
+			continuation_phase_intents
+		set_event_for_staging.metadata["tempo_coordination"] = \
+			cont_tempo_timing.duplicate(true)
+		set_event_for_staging.metadata["tempo_relationship"] = str(
+			cont_tempo_timing.achieved_relationship
+		)
+		set_event_for_staging.metadata["achieved_tempo"] = int(
+			cont_tempo_timing.achieved_tempo
+		)
+		set_event_for_staging.detail = (
+			"T%d set for %s after %s's dig · %d%% accuracy." % [
+				continuation_effective_tempo, hitter.display_name,
+				defender.display_name, roundi(set_quality * 100.0),
+			]
+		) + (
+			" Called T%d; the setter matched the hitter's T%d rhythm." % [
+				int(assignment.tempo), continuation_effective_tempo,
+			] if int(assignment.tempo) != continuation_effective_tempo else ""
+		)
 	var continuation_actions := ApproachMechanicsModel.available_attack_families(
 		hitter, continuation_approach, hitter_arrival_margin
 	)
@@ -5398,7 +6175,7 @@ func _resolve_home_continuation(
 	## first-ball path already does, and it means one wall does both jobs instead
 	## of a wall that only ever arrives too late to matter.
 	var cont_formation := _form_opponent_block(
-		opponent_team, set_target.x, assignment.tempo, set_quality,
+		opponent_team, set_target.x, continuation_effective_tempo, set_quality,
 		set_contact.x, continuation_flight_time,
 		second_contact_window + cont_release_interval, hitter,
 		cont_set_height_extra,
@@ -5427,12 +6204,7 @@ func _resolve_home_continuation(
 		) + _execution_error(hitter, "attack_accuracy", ATTACK_EXECUTION_NOISE),
 		0.0, 1.0,
 	)
-	var continuation_approach_start := Vector2(transition_preparation.get(
-		"approach_start_position",
-		_approach_start_position(
-			set_target, hitter_start, false, assignment.tempo
-		)
-	))
+	var continuation_approach_start := hitter_start
 	## Same rule as the first-ball swing: capability shapes the outcome, it does
 	## not remove the option.
 	var continuation_hit_type := _hit_type(assignment, hitter)
@@ -5461,6 +6233,9 @@ func _resolve_home_continuation(
 			attack_quality - continuation_displacement * CLAMPED_CONTACT_SEVERITY,
 			0.0, 1.0,
 		)
+	attack_quality = clampf(
+		attack_quality * continuation_path_quality_multiplier, 0.0, 1.0
+	)
 	## The same wall that pressured the swing, now contested against it. Forming
 	## it twice would let the block that hurried the hitter and the block that
 	## touched the ball be two different blocks.
@@ -5510,10 +6285,12 @@ func _resolve_home_continuation(
 			_opponent_block_fallbacks(opponent_team), opponent_live_positions,
 			continuation_defenders, true,
 			float(continuation_approach.get("jump_multiplier", 1.0)),
-			_approach_execution_fit(hitter, continuation_approach),
+			_approach_execution_fit(hitter, continuation_approach)
+				* continuation_path_quality_multiplier,
 			float(home_principles.decisiveness), 0.0,
 			str(cont_wall_plan.block_intent) if cont_wall_plan != null \
 				else "Balanced",
+			continuation_hit_type,
 		),
 		"transition",
 	)
@@ -5521,14 +6298,17 @@ func _resolve_home_continuation(
 		shadow_reception_trace.summary["geometric_attack_transition"] = transition_record
 	var geometric := _geometric_promotion(transition_record)
 	var intended_attack_target := attack_target
-	var attack_missed := _attack_missed(
+	var attack_missed := continuation_set_path_whiff or _attack_missed(
 		attack_quality, float(home_principles.decisiveness), hitter
 	)
 	if not geometric.is_empty():
-		attack_missed = bool(geometric.attack_missed)
+		attack_missed = continuation_set_path_whiff \
+			or bool(geometric.attack_missed)
 		attack_target = Vector2(geometric.target)
 	elif attack_missed:
 		attack_target = _errant_attack_target(intended_attack_target, attack_quality)
+	if continuation_set_path_whiff:
+		attack_target = _missed_set_drop_target(set_target, true)
 	## One shot shape, used both for the full flight and -- if a block touches
 	## it -- for the re-sliced leg to the net, so the two describe the same ball.
 	var continuation_attack_angle := _attack_launch_angle_degrees(
@@ -5554,11 +6334,43 @@ func _resolve_home_continuation(
 		cont_set_contact_time + continuation_flight_time,
 		float(continuation_attack_arc.get("vertical_speed_mps", NAN)),
 	)
+	if continuation_set_path_whiff:
+		continuation_attack_flight = MISSED_SET_DROP_SECONDS
+		continuation_attack_trajectory = _missed_set_drop_trajectory(
+			set_target, attack_target,
+			cont_set_contact_time + continuation_flight_time,
+		)
+	var continuation_attack_detail := "Missed the delivered set entirely." \
+		if continuation_set_path_whiff else \
+		"Contact 3 of 3 · %d%% attack quality." % roundi(
+			attack_quality * 100.0
+		)
 	_add_event(result, RallyEventModel.EventType.ATTACK, hitter.id, hitter.display_name,
-		set_target, attack_target, attack_quality >= 0.25, attack_quality,
-		"T3 outside swing · exchange %d" % exchange_number,
-		"Contact 3 of 3 · %d%% attack quality." % roundi(attack_quality * 100.0),
-		{"side": "home", "lane": assignment.lane, "tempo": assignment.tempo,
+		set_target, attack_target,
+		not attack_missed and attack_quality >= 0.25, attack_quality,
+		"T%d %s swing · exchange %d" % [
+			continuation_effective_tempo, str(assignment.lane), exchange_number,
+		],
+		continuation_attack_detail,
+		{"side": "home", "lane": assignment.lane,
+			"tempo": continuation_effective_tempo,
+			"requested_tempo": int(assignment.tempo),
+			"tempo_relationship": str(cont_tempo_timing.achieved_relationship),
+			"requested_tempo_relationship": str(cont_tempo_timing.relationship),
+			"achieved_tempo": int(cont_tempo_timing.achieved_tempo),
+			"tempo_coordination": cont_tempo_timing.duplicate(true),
+			"body_contact_position": continuation_body_contact,
+			"ideal_body_contact_position": continuation_ideal_body,
+			"perceived_body_contact_position": continuation_perceived_body,
+			"set_path_read": continuation_set_path_read.duplicate(true),
+			"set_path_contact": continuation_set_path_contact.duplicate(true),
+			"set_path_outcome": str(continuation_set_path_contact.get(
+				"outcome", "clean"
+			)),
+			"set_path_error_meters": float(continuation_set_path_contact.get(
+				"error_meters", 0.0
+			)),
+			"set_path_whiff": continuation_set_path_whiff,
 			"attack_type": continuation_hit_type,
 			"intended_type": continuation_intended_type,
 			"swing_downgraded": continuation_downgraded,
@@ -5610,6 +6422,8 @@ func _resolve_home_continuation(
 			"attack_missed": attack_missed,
 			"movement_start": hitter_start,
 			"approach_start_position": continuation_approach_start,
+			"full_approach_start_position": continuation_full_approach_start,
+			"movement_delay_seconds": continuation_movement_delay,
 			"approach_target_position": Vector2(transition_preparation.get(
 				"approach_target_position", continuation_approach_start
 			)),
@@ -5630,14 +6444,13 @@ func _resolve_home_continuation(
 			"jump_multiplier": float(continuation_approach.get("jump_multiplier", 1.0)),
 			"lateral_control": float(continuation_approach.get("lateral_control", 0.0)),
 			"movement_duration": hitter_move_time,
-			"movement_entry_velocity": prepared_hitter.velocity \
-				if prepared_hitter != null else Vector2.ZERO,
+			"movement_entry_velocity": continuation_entry_velocity,
 			"arrival_margin": hitter_arrival_margin,
 			"set_flight_time": continuation_flight_time,
 			"flight_time": continuation_attack_flight,
 			"event_time": cont_set_contact_time + continuation_flight_time,
 			"outgoing_trajectory": continuation_attack_trajectory})
-	live_positions[hitter.id] = set_target
+	live_positions[hitter.id] = continuation_body_contact
 	## The continuation now owns a real timeline instead of stamping every
 	## contact with the dig's clock: set contact, then the set flight, then the
 	## attack. Later contacts read `rally_clock` and inherit it.
@@ -5657,13 +6470,14 @@ func _resolve_home_continuation(
 	if not geometric.is_empty():
 		block_outcome = str(geometric.block_outcome)
 	var blocked := block_outcome == "stuff"
+	var continuation_hitter_point := bool(geometric.get("hitter_point", false))
 	## Same contract as the main attack path: a block only shortens the shot if
 	## it actually touches it, and an untouched ball carries no deflection leg.
 	## Without this the continuation attack flew its full arc *and* the block
 	## emitted an overlapping path from the net, so the ball was described in
 	## two places at once.
 	var cont_block_contacts := blocked \
-		or block_outcome in ["recycle", "touch", "funnel"]
+		or block_outcome in ["recycle", "touch", "tool"]
 	## Same blocker staging as the first-ball path: form the wall during the
 	## set's flight rather than during the attack-to-block segment, which can be
 	## a seventh of a second.
@@ -5699,6 +6513,7 @@ func _resolve_home_continuation(
 	var cont_net_contact := Vector2(set_target.x, 0.50)
 	var block_event_end := Vector2(set_target.x, 0.50) if not blocked \
 		else Vector2(set_target.x, 0.47)
+	var continuation_visible_attack_trajectory := continuation_attack_trajectory
 	if cont_block_contacts:
 		var cont_attack_event: Resource = result.events[-1]
 		var cont_to_block_arc := _truncated_arc(
@@ -5714,6 +6529,9 @@ func _resolve_home_continuation(
 			float(cont_to_block_arc.get("vertical_speed_mps", NAN)),
 			float(cont_to_block_arc.get("swing_duration_seconds", NAN)),
 		)
+		continuation_visible_attack_trajectory = Dictionary(
+			cont_attack_event.metadata["outgoing_trajectory"]
+		)
 	var block_event_detail := "Primary close %d%%; block quality %d%%." % [
 		roundi(primary_close * 100.0), roundi(block_quality * 100.0),
 	]
@@ -5721,13 +6539,58 @@ func _resolve_home_continuation(
 		block_event_detail += " %s assisted at %d%% close." % [
 			assisting_blocker.display_name, roundi(assist_close * 100.0)
 		]
+	var cont_block_trajectory := _block_deflection_trajectory(
+		cont_net_contact, block_event_end, blocked, 0.42,
+		_swing_reaches_net(continuation_attack_trajectory, rally_clock),
+		float(continuation_attack_arc.get("required_speed_mps", 0.0)),
+		opponent_blocker,
+		str(block_result.get("block_hands", "neutral")),
+		## The continuation carries no spin state or familiarity of its own.
+		{}, 0.0,
+		geometric.get("block_deflection_landing", null),
+		float(geometric.get("block_deflection_speed_mps", 0.0)),
+		float(geometric.get("block_deflection_vertical_angle_degrees", 0.0)),
+		float(geometric.get("block_deflection_duration_seconds", 0.0)),
+		bool(geometric.get("block_deflection_playable", false)),
+	) if cont_block_contacts else {}
+	if cont_block_contacts and not cont_block_trajectory.is_empty():
+		block_event_end = _trajectory_endpoint(
+			cont_block_trajectory, block_event_end
+		)
+		if block_outcome == "touch":
+			attack_target = block_event_end
+	if cont_block_contacts and _block_deflection_lands_out(cont_block_trajectory):
+		continuation_hitter_point = true
+		block_outcome = "tool"
+		blocked = false
+		block_event_end = _trajectory_endpoint(
+			cont_block_trajectory, block_event_end
+		)
+	elif blocked and _block_deflection_lands_on_blocking_side(
+		cont_block_trajectory, "opponent"
+	):
+		block_outcome = "touch"
+		blocked = false
+		block_event_end = _trajectory_endpoint(
+			cont_block_trajectory, block_event_end
+		)
+		attack_target = block_event_end
+	var continuation_cover_intents := {}
 	_add_event(result, RallyEventModel.EventType.BLOCK,
 		opponent_blocker.id if opponent_blocker != null else -1,
 		opponent_blocker.display_name if opponent_blocker != null else "Open block",
 		Vector2(set_target.x, 0.47),
-		block_event_end, blocked, block_quality,
+		block_event_end, cont_block_contacts, block_quality,
 		"Opponent block · exchange %d" % exchange_number,
 		block_event_detail, {"side": "opponent", "outcome": block_outcome,
+			"home_phase_targets": _cover_phase_map(
+				players, lineup, defensive_plan, hitter.id, set_target,
+				float(continuation_visible_attack_trajectory.get(
+					"duration", continuation_attack_flight
+				)),
+				false, continuation_cover_intents,
+			),
+			"home_phase_intents": continuation_cover_intents,
 			"signature_move": str(geometric.get("signature_move", "")),
 			"signature_succeeded": bool(geometric.get("signature_succeeded", false)),
 			"signature_charge": float(geometric.get("signature_charge", 0.0)),
@@ -5766,26 +6629,16 @@ func _resolve_home_continuation(
 		"coverage_segments": block_result.coverage_segments,
 		"setter_pull": block_result.setter_pull,
 		"read_quality": block_result.read_quality,
-		"event_time": _swing_reaches_net(continuation_attack_trajectory, rally_clock),
+		"event_time": _swing_reaches_net(
+			continuation_visible_attack_trajectory, rally_clock
+		),
 		## The swing this block is contesting. The continuation block was the one
 		## contact in the engine with no incoming arc at all, so playback had to
 		## infer where the ball came from and the stamp above had nothing to derive
 		## itself from.
-		"incoming_trajectory": continuation_attack_trajectory,
-		"outgoing_trajectory": _block_deflection_trajectory(
-			cont_net_contact, block_event_end, blocked, 0.42,
-			_swing_reaches_net(continuation_attack_trajectory, rally_clock),
-			float(continuation_attack_arc.get("required_speed_mps", 0.0)),
-			opponent_blocker,
-			str(block_result.get("block_hands", "neutral")),
-			## The continuation carries no spin state or familiarity of its own,
-			## so both defaults stand and the deflection is passed positionally
-			## past them.
-			{}, 0.0,
-			geometric.get("block_deflection_landing", null),
-			float(geometric.get("block_deflection_speed_mps", 0.0)),
-		) if cont_block_contacts else {}})
-	if not geometric.is_empty() and bool(geometric.hitter_point):
+		"incoming_trajectory": continuation_visible_attack_trajectory,
+		"outgoing_trajectory": cont_block_trajectory})
+	if continuation_hitter_point:
 		## And on the continuation, where the same three outcomes end the same way.
 		## Three paths reach a hitter's point at the net and leaving one of them
 		## without a chase is how the dig asymmetry survived three passes.
@@ -5795,7 +6648,7 @@ func _resolve_home_continuation(
 			var cont_tool_targets := _tool_pursuit_map(
 				opponent_team.on_court_players(),
 				opponent_team.current_lineup(),
-				Vector2(geometric.target),
+				block_event_end,
 				## Read back off the block event this path just wrote rather than
 				## from a local: the continuation builds its deflection inline in
 				## the metadata and never names it, and re-deriving it here would
@@ -5826,6 +6679,79 @@ func _resolve_home_continuation(
 		}, "kill_default")
 	if blocked:
 		return _finish(result, "blocked", false, hitter.id, {"hitter": hitter.display_name})
+	if block_outcome == "recycle":
+		## The same attack-coverage continuation as first ball. This path used to
+		## fall through into opponent floor defence, so a ball visibly returned
+		## to the home court was credited to the team that had just blocked it.
+		var coverage_result := _resolve_attack_coverage(
+			players, lineup, defensive_plan, hitter, block_event_end, block_quality
+		)
+		var coverer := coverage_result.get("player") as VolleyballPlayer
+		var coverage_success := bool(coverage_result.get("success", false))
+		var coverage_quality := float(coverage_result.get("quality", 0.0))
+		var coverer_start: Vector2 = live_positions.get(
+			coverer.id, block_event_end
+		) if coverer != null else block_event_end
+		var coverage_time := float(cont_block_trajectory.get("duration", 0.24))
+		var coverer_move_time := _movement_time(
+			coverer, coverer_start, block_event_end, "lateral"
+		) if coverer != null else 4.0
+		var coverer_reach := _reached_point(
+			coverer, coverer_start, block_event_end, coverage_time, "lateral"
+		) if coverer != null else block_event_end
+		if coverer != null:
+			live_positions[coverer.id] = coverer_reach
+		var coverage_pass_target := block_event_end + Vector2(0.04, -0.05)
+		var coverage_contact_time := float(cont_block_trajectory.get(
+			"end_time", rally_clock + coverage_time
+		))
+		_add_event(
+			result, RallyEventModel.EventType.DEFENSE,
+			coverer.id if coverer != null else -1,
+			coverer.display_name if coverer != null else "Attack coverage",
+			block_event_end, coverage_pass_target,
+			coverage_success, coverage_quality,
+			"%s covers the block rebound" % (
+				coverer.display_name if coverer != null else "Nobody"
+			),
+			"%d%% recycle control in exchange %d." % [
+				roundi(coverage_quality * 100.0), exchange_number,
+			],
+			{
+				"side": "home", "coverage": "attack",
+				"blocked_hitter_id": hitter.id,
+				"movement_start": coverer_start,
+				"movement_target": coverer_reach,
+				"movement_duration": coverer_move_time,
+				"incoming_trajectory": cont_block_trajectory,
+				"event_time": coverage_contact_time,
+			},
+		)
+		rally_clock = maxf(rally_clock, coverage_contact_time)
+		if not coverage_success:
+			return _finish(result, "blocked", false, hitter.id, {
+				"hitter": hitter.display_name,
+			})
+		result.key_factors.append(_factor("attack_recycled"))
+		if exchange_number >= MAX_EXCHANGES:
+			var home_safety_win := coverage_quality \
+				+ rng.randf_range(-0.18, 0.18) > 0.60
+			return _finish(
+				result,
+				"long_rally_win" if home_safety_win else "long_rally_loss",
+				home_safety_win,
+				coverer.id if coverer != null else -1,
+				{"hitter": hitter.display_name},
+			)
+		return _resolve_home_continuation(
+			result, players, lineup, coverer, coverage_pass_target,
+			opponent_team, defensive_plan, exchange_number + 1,
+			coverage_quality * lerpf(
+				1.0, BLOCK_DEFLECTION_CARRY, clampf(block_quality, 0.0, 1.0)
+			),
+			coverage_time,
+			float(continuation_visible_attack_trajectory.get("duration", 0.0)),
+		)
 	## A transition dig is the same act as any other; the defender is simply
 	## already in the rally rather than reading a first-ball swing. It was not
 	## treated as one: this path took the roster's best digger regardless of
@@ -5837,14 +6763,20 @@ func _resolve_home_continuation(
 	## opponent swing and the opponent dig off the home first ball -- and this one
 	## did not, so the same block touch bought the home defence 0.24 s and bought
 	## this defence nothing. Three sites, one rule.
-	var cont_defense_time := continuation_attack_flight
-	if block_outcome == "touch":
-		cont_defense_time += 0.24
-	elif block_outcome == "funnel":
-		cont_defense_time += 0.06
+	var cont_defense_time := maxf(float(
+		cont_block_trajectory.get("duration", 0.0)
+	), BLOCK_DEFLECTION_MIN_SECONDS) \
+		if not cont_block_trajectory.is_empty() else float(
+			continuation_visible_attack_trajectory.get(
+				"duration", continuation_attack_flight
+			)
+		)
+	var continuation_arriving_trajectory := cont_block_trajectory \
+		if not cont_block_trajectory.is_empty() \
+		else continuation_visible_attack_trajectory
 	var cont_defense := _choose_opponent_defender(
 		opponent_team, attack_target, cont_defense_time,
-		continuation_attack_trajectory, continuation_attack_spin,
+		continuation_arriving_trajectory, continuation_attack_spin,
 	)
 	var opponent_defender := cont_defense.player as VolleyballPlayer
 	## What this defender knows, and what their body costs them.
@@ -5907,7 +6839,7 @@ func _resolve_home_continuation(
 	var cont_dig_control := float(cont_dig.control)
 	var cont_dig_recovery := _dig_recovery(
 		opponent_defender, cont_dig_terms, attack_quality,
-		continuation_attack_trajectory, float(cont_defense.distance_meters),
+		continuation_arriving_trajectory, float(cont_defense.distance_meters),
 	)
 	## This branch carried no spatial metadata at all, so playback fell back to
 	## the contact point and walked the digger there from wherever they stood,
@@ -5919,13 +6851,13 @@ func _resolve_home_continuation(
 	) if opponent_defender != null else attack_target
 	var transition_defender_reach := _reached_point(
 		opponent_defender, transition_defender_start, attack_target,
-		continuation_attack_flight, "lateral",
+		cont_defense_time, "lateral",
 		float(cont_defense.get("read_error_meters", 0.0)),
 	)
 	if opponent_defender != null:
 		opponent_live_positions[opponent_defender.id] = transition_defender_reach
-	var cont_dig_time := float(continuation_attack_trajectory.get(
-		"end_time", rally_clock + continuation_attack_flight
+	var cont_dig_time := float(continuation_arriving_trajectory.get(
+		"end_time", rally_clock + cont_defense_time
 	))
 	rally_clock = maxf(rally_clock, cont_dig_time)
 	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
@@ -5934,6 +6866,7 @@ func _resolve_home_continuation(
 		"Opponent dig · exchange %d" % exchange_number,
 		"Contact 1 of 3 · %d%% control." % roundi(cont_dig_control * 100.0),
 		{"side": "opponent",
+			"incoming_trajectory": continuation_arriving_trajectory,
 			"movement_start": transition_defender_start,
 			"movement_target": transition_defender_reach,
 			## The dig happens when the swing reaches the floor, which the
@@ -6450,6 +7383,78 @@ func _approach_budget(
 	}
 
 
+## One setter trying to meet one hitter's approach rhythm.
+##
+## The play's tempo remains the expected relationship; the hitter's actual
+## runway supplies its duration. Team structure only takes agency at the extreme
+## rigid end, while setter skill and pair familiarity decide how closely the
+## release meets what this hitter normally does.
+func _hitter_led_set_timing(
+	setter: VolleyballPlayer,
+	hitter: VolleyballPlayer,
+	tempo: int,
+	lane: String,
+	set_target: Vector2,
+	opponent_side: bool,
+	natural_flight_seconds: float,
+	set_quality: float,
+	principles: Resource,
+	pair_read: float,
+	system_familiarity: float,
+	salt: String,
+) -> Dictionary:
+	var body_target := SetPathReadModelRef.body_position(
+		hitter, set_target, not opponent_side
+	)
+	var approach_start := ApproachMechanicsModel.approach_start_position(
+		body_target, lane, &"opponent" if opponent_side else &"home",
+		null, ApproachMechanicsModel.APPROACH_DEPTH, tempo,
+	)
+	var runup := _movement_time(
+		hitter, approach_start, body_target, "transition"
+	)
+	var intent := ApproachMechanicsModel.tempo_intent(hitter, tempo, runup)
+	intent["ideal_approach_start"] = approach_start
+	intent["expected_ball_contact"] = set_target
+	intent["expected_body_contact"] = body_target
+	var variation := float(principles.tempo_variation) \
+		if principles != null else 0.5
+	var strictness := clampf(
+		(1.0 - variation) * 0.55
+			+ clampf(system_familiarity, 0.0, 1.0) * 0.30
+			+ _rating(setter, "tactical_discipline") * 0.15,
+		0.0, 1.0,
+	)
+	var stable := float(posmod(hash("%d|tempo|%d|%d|%s" % [
+		rally_seed, setter.id if setter != null else -1,
+		hitter.id if hitter != null else -1, salt,
+	]), 2001)) / 1000.0 - 1.0
+	return ApproachMechanicsModel.coordinate_tempo(
+		intent, setter, pair_read, strictness,
+		natural_flight_seconds, set_quality, stable,
+	)
+
+
+## Reconcile the set's published shape with the hitter-led clock. Presentation
+## derives height from the two contacts and duration, so retaining the old apex
+## after changing time would describe a second, impossible parabola.
+static func _retimed_set_arc(
+	arc: Dictionary,
+	duration_seconds: float,
+	release_height_meters: float,
+	hitter_contact_height_meters: float,
+) -> Dictionary:
+	var retimed := arc.duplicate(true)
+	var duration := maxf(duration_seconds, BallFlightModel.MIN_FLIGHT_DURATION)
+	var apex := BallFlightModel.apex_between(
+		release_height_meters, hitter_contact_height_meters, duration
+	)
+	retimed["duration_seconds"] = duration
+	retimed["apex_absolute_meters"] = apex
+	retimed["apex_height_meters"] = maxf(apex - release_height_meters, 0.0)
+	return retimed
+
+
 func _errant_attack_target(intended: Vector2, attack_quality: float) -> Vector2:
 	var lane_x := clampf(intended.x, ATTACK_COURT_MIN.x, ATTACK_COURT_MAX.x)
 	var wide_overshoot := ATTACK_ERROR_OVERSHOOT_METERS / CourtConstants.COURT_WIDTH_METERS
@@ -6473,6 +7478,38 @@ func _errant_attack_target(intended: Vector2, attack_quality: float) -> Vector2:
 	if to_left <= to_right:
 		return Vector2(-wide_overshoot, intended.y)
 	return Vector2(1.0 + wide_overshoot, intended.y)
+
+
+## Where an untouched set lands. It keeps travelling behind the hitter on the
+## attacking side rather than being redrawn as a strike over the tape.
+func _missed_set_drop_target(
+	ball_contact: Vector2, attacking_negative_y: bool
+) -> Vector2:
+	var side_direction := 1.0 if attacking_negative_y else -1.0
+	var lateral_sign := -1.0 if posmod(
+		hash("%d|missed-set|%.4f" % [rally_seed, ball_contact.x]), 2
+	) == 0 else 1.0
+	var target := ball_contact + Vector2(
+		lateral_sign * MISSED_SET_DROP_LATERAL_METERS
+			/ CourtConstants.COURT_WIDTH_METERS,
+		side_direction * MISSED_SET_DROP_DEPTH_METERS
+			/ CourtConstants.COURT_LENGTH_METERS,
+	)
+	target.x = clampf(target.x, 0.02, 0.98)
+	if attacking_negative_y:
+		target.y = clampf(target.y, CourtConstants.NET_Y + 0.01, 0.98)
+	else:
+		target.y = clampf(target.y, 0.02, CourtConstants.NET_Y - 0.01)
+	return target
+
+
+func _missed_set_drop_trajectory(
+	ball_contact: Vector2, landing: Vector2, start_time: float
+) -> Dictionary:
+	return _ball_trajectory(
+		"missed_set", ball_contact, landing, MISSED_SET_DROP_SECONDS, 0.0,
+		start_time, MISSED_SET_DROP_VERTICAL_MPS,
+	)
 
 ## The same three numbers for a serve, and the same reasoning behind them.
 ##
@@ -6938,7 +7975,7 @@ func _choose_opponent_attack(
 	var every_option: Array[Dictionary] = []
 	for resource in candidates:
 		var candidate: VolleyballPlayer = resource as VolleyballPlayer
-		if candidate == null:
+		if candidate == null or not _can_enter_attack(candidate):
 			continue
 		var quick_demand := 0.13 if str(candidate.position_code).begins_with("M") else 0.0
 		var candidate_start: Vector2 = opponent_live_positions.get(
@@ -6988,6 +8025,26 @@ func _choose_opponent_attack(
 		every_option.append(option)
 		if lateness <= 0.0:
 			reachable.append(option)
+	## An entire side being on the floor is an emergency rather than an indexing
+	## error. It should be practically unreachable in ordinary play; retain the
+	## old best-hitter fallback only for that terminally depleted case.
+	if every_option.is_empty():
+		var emergency := opponent_team.best_hitter() as VolleyballPlayer
+		var emergency_start: Vector2 = opponent_live_positions.get(
+			emergency.id, opponent_team.court_position(emergency.id, "transition")
+		)
+		var emergency_contact := _opponent_attack_contact(opponent_team, emergency)
+		every_option.append({
+			"player": emergency,
+			"start": emergency_start,
+			"contact": emergency_contact,
+			"travel_time": _movement_time(
+				emergency, emergency_start, emergency_contact, "transition"
+			),
+			"lateness": 0.0,
+			"score": -1.0,
+			"recovery_emergency": true,
+		})
 	var chosen: Dictionary = every_option[0]
 	for option in every_option:
 		if float(option.score) > float(chosen.score):
@@ -7423,7 +8480,7 @@ func _opponent_defensive_plan(opponent_team: Resource) -> Resource:
 	if lineup == null:
 		return null
 	opponent_plan = DefensivePlanModel.new()
-	opponent_plan.ensure_defaults(lineup)
+	opponent_plan.ensure_defaults(lineup, opponent_team.players)
 	## Deliberately no floor preset on top.
 	##
 	## `ensure_defaults` seeds `defender_positions` from
@@ -7599,6 +8656,119 @@ func _wall_stage_x(
 	)
 
 
+## What the home wall is allowed to know before the opposing setter releases.
+##
+## Playback plans an interval from the metadata on the *next* contact. That
+## means `home_phase_targets` attached to an opponent SET are consumed while
+## the pass is still travelling to the setter. Publishing the resolved hitter
+## lane there lets the wall move to an answer the rally has not shown yet.
+##
+## A called commit is different: it is a prediction made from the rotation and
+## the instruction. Commit Middle names its lane outright. Commit Pin chooses
+## the strongest front-row pin in the visible opponent rotation. A read block
+## simply establishes each blocker's own net base. None of these branches is
+## handed the selected hitter, delivered set target, or eventual attack lane.
+func _pre_release_home_block_stage(
+	players: Array[VolleyballPlayer],
+	lineup: RotationLineup,
+	defensive_plan: Resource,
+	opponent_team: Resource,
+) -> Dictionary:
+	if lineup == null:
+		return {"targets": {}, "prediction": {"source": "no_lineup"}}
+	var blockers: Array[Dictionary] = []
+	for player_id in lineup.front_row_player_ids():
+		var blocker := _player_by_id(players, player_id)
+		var assignment: Resource = defensive_plan.assignment_for(player_id) \
+			if defensive_plan != null else null
+		if blocker == null or (assignment != null \
+				and not bool(assignment.block_participation)):
+			continue
+		var slot_number := lineup.slot_for_player(player_id)
+		blockers.append({
+			"player_id": player_id,
+			"base_x": CourtConstants.slot_position(slot_number).x,
+		})
+	var strategy := str(defensive_plan.block_strategy) \
+		if defensive_plan != null else "Read Block"
+	var committed := false
+	var predicted_x := 0.5
+	var predicted_player_id := -1
+	var source := "read_base"
+	if strategy == "Commit Middle":
+		committed = true
+		predicted_x = 0.5
+		source = "called_commit_middle"
+	elif strategy == "Commit Pin" and opponent_team != null:
+		var opponent_lineup: Resource = opponent_team.current_lineup()
+		var best_pin: VolleyballPlayer = null
+		var best_pin_score := -INF
+		if opponent_lineup != null:
+			for opponent_id in opponent_lineup.front_row_player_ids():
+				var candidate := opponent_team.player_by_id(opponent_id) \
+					as VolleyballPlayer
+				if candidate == null or str(candidate.position_code).begins_with("M"):
+					continue
+				var score := _power_rating(candidate, "attack_power") * 0.50 \
+					+ _rating(candidate, "attack_accuracy") * 0.30 \
+					+ _rating(candidate, "approach_timing") * 0.20
+				if score > best_pin_score:
+					best_pin_score = score
+					best_pin = candidate
+		if best_pin != null:
+			committed = true
+			predicted_player_id = best_pin.id
+			predicted_x = _opponent_attack_contact(
+				opponent_team, best_pin
+			).x
+			source = "called_commit_pin_rotation_read"
+	var targets := {}
+	var wall_positions := _block_wall_positions(predicted_x, false)
+	var primary_id := -1
+	var assist_id := -1
+	if committed:
+		var primary_distance := INF
+		for blocker_data in blockers:
+			var distance := absf(float(blocker_data.base_x) - predicted_x)
+			if distance < primary_distance:
+				primary_distance = distance
+				primary_id = int(blocker_data.player_id)
+		var assist_distance := INF
+		for blocker_data in blockers:
+			var blocker_id := int(blocker_data.player_id)
+			if blocker_id == primary_id:
+				continue
+			var distance := absf(float(blocker_data.base_x) - predicted_x)
+			if distance < assist_distance:
+				assist_distance = distance
+				assist_id = blocker_id
+	for blocker_data in blockers:
+		var blocker_id := int(blocker_data.player_id)
+		var target_x := float(blocker_data.base_x)
+		if committed and blocker_id == primary_id:
+			target_x = float(Vector2(wall_positions.primary_position).x)
+		elif committed and blocker_id == assist_id:
+			target_x = float(Vector2(wall_positions.assist_position).x)
+		targets[blocker_id] = Vector2(
+			clampf(target_x, 0.05, 0.95),
+			CourtConstants.NET_Y + BLOCK_NET_DEPTH,
+		)
+	return {
+		"targets": targets,
+		"prediction": {
+			"strategy": strategy,
+			"committed": committed,
+			"source": source,
+			"predicted_x": predicted_x if committed else null,
+			"predicted_lane": CourtConstants.lane_at_x(predicted_x) \
+				if committed else "",
+			"predicted_player_id": predicted_player_id,
+			"uses_resolved_hitter": false,
+			"uses_resolved_lane": false,
+		},
+	}
+
+
 ## The two positions a block wall occupies, pressed to the net on the blocking
 ## team's own side. The assist closes inward from the middle of the court, so
 ## the wall extends toward centre rather than off the sideline.
@@ -7671,6 +8841,40 @@ static func _release_interval(profile: SystemFitProfile, set_quality: float) -> 
 	)
 
 
+## The endpoint the court will draw for this flight.
+static func _trajectory_endpoint(
+	trajectory: Dictionary, fallback: Vector2 = Vector2(0.5, 0.5)
+) -> Vector2:
+	return Vector2(trajectory.get("end_position", fallback))
+
+
+## Once the block is the last contact, the painted lines decide ownership.  In
+## particular this is evaluated after sidespin kicks the trajectory, so a ball
+## initially classified as a stuff cannot remain a blocker's point after their
+## hands visibly send it outside.
+static func _block_deflection_lands_out(trajectory: Dictionary) -> bool:
+	return not trajectory.is_empty() \
+		and not CourtConstants.is_normalized(_trajectory_endpoint(trajectory))
+
+
+## Did the ball come down behind the wall rather than back on the hitter?
+## Touches are playable there; stuffs are not. Kept side-explicit because this
+## exact rule previously existed on only one of the two mirrored attack paths.
+static func _block_deflection_lands_on_blocking_side(
+	trajectory: Dictionary, blocking_side: String
+) -> bool:
+	if trajectory.is_empty():
+		return false
+	var endpoint := _trajectory_endpoint(trajectory)
+	if not CourtConstants.is_normalized(endpoint):
+		return false
+	if blocking_side == "home":
+		return endpoint.y > CourtConstants.NET_Y
+	if blocking_side == "opponent":
+		return endpoint.y < CourtConstants.NET_Y
+	return false
+
+
 ## A ball coming off the block, timed by geometry rather than a constant.
 ##
 ## The three deflection segments each carried a hardcoded 0.18-0.30 s. A stuff
@@ -7739,6 +8943,9 @@ func _block_deflection_trajectory(
 	## always had rather than being handed a zero.
 	deflection_landing: Variant = null,
 	deflection_speed_mps: float = 0.0,
+	deflection_vertical_angle_degrees: float = 0.0,
+	deflection_duration_seconds: float = 0.0,
+	deflection_playable: bool = false,
 ) -> Dictionary:
 	var deflected := deflection_landing != null and (deflection_landing is Vector2) \
 		and deflection_speed_mps > 0.01
@@ -7755,27 +8962,40 @@ func _block_deflection_trajectory(
 				-0.08, 1.08),
 			to_point.y,
 		)
+	var distance := RallyKinematics.court_distance_meters(from_point, to_point)
+	## Off a blocker's hands, which are above the tape, not off the floor.
+	var contact_height := maxf(apex_hint, CourtConstants.NET_HEIGHT_METERS)
+	## A promoted deflection owns one physical launch. Use it for every contact
+	## kind, including a stuff: the downward vertical component is what makes a
+	## stuff drop immediately instead of drawing a small upward hump first.
+	if deflected:
+		var physical_arc := RallyKinematics.struck_arc_from_speed(
+			distance, deflection_speed_mps,
+			deflection_vertical_angle_degrees, contact_height,
+		)
+		var physical_duration := deflection_duration_seconds \
+			if deflection_duration_seconds > 0.0 \
+			else float(physical_arc.duration_seconds)
+		return _ball_trajectory(
+			"block_deflection", from_point, to_point,
+			maxf(
+				physical_duration,
+				BLOCK_DEFLECTION_MIN_SECONDS,
+			),
+			float(physical_arc.apex_height_meters), start_time,
+			## A playable endpoint is another player's hands. Its height and this
+			## duration determine the visible arc; carrying a floor-flight launch
+			## component would make presentation satisfy two incompatible paths
+			## and create the familiar fly-up/teleport-down rebound.
+			NAN if deflection_playable else float(physical_arc.get(
+				"vertical_speed_mps", NAN
+			)),
+		)
 	if stuffed:
-		if deflected:
-			## Distance over pace. The model already forced the ball downward and
-			## kept most of its speed -- which is what makes a stuff a stuff --
-			## so the time it takes is not a separate decision to be made here.
-			return _ball_trajectory(
-				"block_deflection", from_point, to_point,
-				maxf(
-					RallyKinematics.court_distance_meters(from_point, to_point)
-						/ deflection_speed_mps,
-					BLOCK_DEFLECTION_MIN_SECONDS,
-				),
-				apex_hint, start_time,
-			)
 		return _ball_trajectory(
 			"block_deflection", from_point, to_point,
 			BLOCK_STUFF_FLIGHT_SECONDS, apex_hint, start_time
 		)
-	var distance := RallyKinematics.court_distance_meters(from_point, to_point)
-	## Off a blocker's hands, which are above the tape, not off the floor.
-	var contact_height := maxf(apex_hint, CourtConstants.NET_HEIGHT_METERS)
 	if incoming_speed_mps <= 0.0:
 		## No swing speed to read -- the legacy solve, which at least always has
 		## an answer.
@@ -7905,15 +9125,15 @@ static func _clamped_arrival_margin(margin_before_clamp: float) -> float:
 	return maxf(margin_before_clamp, 0.0)
 
 
-## Land the set where the swing now happens.
+## Land and time the set where the swing now happens.
 ##
 ## The set event is emitted before the hitter's route is known, so a clamped
 ## contact would otherwise leave the ball drawn to one point and struck at
-## another. The flight time is deliberately *not* re-solved: a setter delivering
-## short of the lane lofts the ball rather than releasing it earlier, so the
-## hang time every later contact is timed from stays exactly as it was and only
-## the landing point moves. Re-solving would also be circular -- a shorter ball
-## flies for less time, which shortens the runway that produced the clamp.
+## another. Tempo recognition can also revise the flight after seeing how far
+## through the hitter's approach release actually occurred, so this must rebuild
+## the trajectory even when the endpoint did not move. Returning early on an
+## equal endpoint left the event carrying the pre-recognition duration while the
+## attack was timed from the revised one: one set, two clocks.
 func _retarget_set_event(
 	set_event: RallyEvent,
 	contact: Vector2,
@@ -7922,7 +9142,7 @@ func _retarget_set_event(
 	apex_height: float,
 	release_time: float,
 ) -> void:
-	if set_event == null or set_event.end_position.is_equal_approx(contact):
+	if set_event == null:
 		return
 	set_event.end_position = contact
 	set_event.metadata["outgoing_trajectory"] = _ball_trajectory(
@@ -9017,6 +10237,19 @@ func _recovery_debt(player_id: int, at_time: float) -> float:
 	return clampf((float(record.get("ready_at", 0.0)) - at_time) / delay, 0.0, 1.0)
 
 
+## A player who is still in a contact-recovery state cannot begin an attack
+## approach.  The recovery was already charged to second-contact and defensive
+## claim clocks; hitter selection was the hole, which let the same receiver be
+## drawn on a knee or blown backwards and then instantly become the selected
+## attacker.  Selection reads the state at the decision cue, so a player who is
+## up before a later exchange naturally returns to the pool.
+func _can_enter_attack(player: VolleyballPlayer, at_time: float = NAN) -> bool:
+	if player == null:
+		return false
+	var decision_time := rally_clock if is_nan(at_time) else at_time
+	return _recovery_debt(player.id, decision_time) <= 0.0
+
+
 ## Who is physically taking this second contact, and from where.
 ##
 ## The candidate list, their starting positions and the designated setter's id
@@ -9685,17 +10918,25 @@ func _home_block_deflection_target(
 
 
 func _resolve_attack_coverage(
-	players: Array[VolleyballPlayer],
+	players: Array,
 	lineup: RotationLineup,
 	defensive_plan: Resource,
 	blocked_hitter: VolleyballPlayer,
 	target: Vector2,
 	block_quality: float,
+	opponent_side: bool = false,
 ) -> Dictionary:
 	var best: VolleyballPlayer
 	var best_score := -1000.0
+	var by_id := {}
+	for raw_player in players:
+		var listed := raw_player as VolleyballPlayer
+		if listed != null:
+			by_id[listed.id] = listed
 	for slot_number in range(1, 7):
-		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
+		var candidate := by_id.get(
+			int(lineup.player_at_slot(slot_number)), null
+		) as VolleyballPlayer
 		if candidate == null or candidate.id == blocked_hitter.id:
 			continue
 		var assignment: Resource = defensive_plan.assignment_for(candidate.id) \
@@ -9703,9 +10944,13 @@ func _resolve_attack_coverage(
 		var responsibility := str(assignment.attack_coverage_responsibility) \
 			if assignment != null else "Cover nearest attacker"
 		var start := CourtConstants.slot_position(slot_number)
-		if defensive_plan != null:
+		if opponent_side:
+			start.y = 1.0 - start.y
+		elif defensive_plan != null:
 			start = defensive_plan.defender_position(candidate.id, start)
-		start = live_positions.get(candidate.id, start)
+		start = (
+			opponent_live_positions if opponent_side else live_positions
+		).get(candidate.id, start)
 		var proximity := 1.0 - clampf(
 			CoverageModel.court_distance_meters(start, target) / 9.0, 0.0, 1.0
 		)
@@ -10383,12 +11628,18 @@ func _choose_assignment(
 		return null
 	if follow_play and setter == null:
 		var primary := play.assignment_for_player(play.primary_hitter_id)
-		if primary != null and primary.player_id != excluded_player_id:
+		var primary_player := _player_by_id(players, primary.player_id) \
+			if primary != null else null
+		if primary != null and not primary.is_decoy \
+				and primary.player_id != excluded_player_id \
+				and _can_enter_attack(primary_player):
 			return primary
 	var candidates: Array[HitterAssignment] = []
 	for assignment in play.assignments:
-		if assignment.player_id != excluded_player_id \
-				and _player_by_id(players, assignment.player_id) != null \
+		var assigned_player := _player_by_id(players, assignment.player_id)
+		if not assignment.is_decoy \
+				and assignment.player_id != excluded_player_id \
+				and _can_enter_attack(assigned_player) \
 				and lineup.slot_for_player(assignment.player_id) >= 0:
 			candidates.append(assignment)
 	if candidates.is_empty():
@@ -10687,6 +11938,7 @@ func _fallback_hitter(
 		for slot_number in range(1, 7):
 			var contender := _player_by_id(players, lineup.player_at_slot(slot_number))
 			if contender == null or contender.id == excluded_player_id \
+					or not _can_enter_attack(contender) \
 					or contender.position_role == "Libero" \
 					or not lineup.is_attack_eligible(contender.id):
 				continue
@@ -10795,6 +12047,7 @@ func _fallback_hitter(
 	for slot_number in range(1, 7):
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
 		if candidate != null and candidate.id != excluded_player_id \
+				and _can_enter_attack(candidate) \
 				and candidate.position_role == "Outside Hitter" \
 				and CourtConstants.is_front_row_slot(slot_number):
 			outside_candidates.append(candidate)
@@ -10812,11 +12065,13 @@ func _fallback_hitter(
 		return nearest
 	for player_id in lineup.front_row_player_ids():
 		var player := _player_by_id(players, player_id)
-		if player != null and player.id != excluded_player_id:
+		if player != null and player.id != excluded_player_id \
+				and _can_enter_attack(player):
 			return player
 	for slot_number in range(1, 7):
 		var player := _player_by_id(players, lineup.player_at_slot(slot_number))
 		if player != null and player.id != excluded_player_id \
+				and _can_enter_attack(player) \
 				and lineup.is_attack_eligible(player.id) \
 				and player.position_role != "Libero":
 			return player
@@ -11333,6 +12588,7 @@ func _geometric_swing(
 	decisiveness: float,
 	flow_for_team: float,
 	block_intent: String = "Balanced",
+	attack_type: String = "",
 ) -> Dictionary:
 	if hitter == null:
 		return {}
@@ -11353,6 +12609,7 @@ func _geometric_swing(
 		GeometricAttackPromotionModel.draws(
 			geometric_rng, wall.size(), defenders.size()
 		),
+		attack_type,
 	)
 	## The two inputs a sweep cannot supply for itself. Gate D contacted at full
 	## jumping reach because it had no approach to ask; a rally does, and whether
@@ -11480,6 +12737,9 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"chosen_power_fraction": float(
 			Dictionary(swing.get("power", {})).get("chosen_fraction", 0.0)
 		),
+		"shot_spread_multiplier": float(swing.get(
+			"shot_spread_multiplier", 1.0
+		)),
 		"contact_height_meters": float(swing.get("contact_height_meters", 0.0)),
 		"jump_multiplier": float(swing.get("jump_multiplier", 1.0)),
 		## Whether the resolver found an angle that gets over the tape, and which
@@ -11495,6 +12755,7 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		## the record because this projection is all promotion sees -- the third
 		## time a key has been dropped at exactly this line.
 		"wall_reach_heights": swing.get("wall_reach_heights", []),
+		"block_jump_timing": swing.get("block_jump_timing", {}),
 		"vertical_angle_degrees": float(delivered.get("vertical_angle_degrees", 0.0)),
 		"block_kind": str(
 			Dictionary(swing.get("resolution", {}).get("block", {})).get("kind", "")
@@ -11511,7 +12772,19 @@ func _geometric_swing_record(swing: Dictionary, side: String) -> Dictionary:
 		"block_contact_kind": str(swing.get("block_contact_kind", "")),
 		"block_deflection_landing": swing.get("block_deflection_landing", null),
 		"block_deflection_speed_mps": float(swing.get("block_deflection_speed_mps", 0.0)),
+		"block_deflection_vertical_angle_degrees": float(swing.get(
+			"block_deflection_vertical_angle_degrees", 0.0
+		)),
+		"block_deflection_duration_seconds": float(swing.get(
+			"block_deflection_duration_seconds", 0.0
+		)),
 		"block_deflection_playable": bool(swing.get("block_deflection_playable", false)),
+		"loft_apex_limited": bool(swing.get("loft_apex_limited", false)),
+		"net_distance_meters": float(swing.get("net_distance_meters", 0.0)),
+		"net_avoidance_demand": float(swing.get("net_avoidance_demand", 0.0)),
+		"net_avoidance_spread_multiplier": float(swing.get(
+			"net_avoidance_spread_multiplier", 1.0
+		)),
 		"net_height_over_block_meters": float(
 			swing.get("net_height_over_block_meters", 0.0)
 		),
@@ -11562,15 +12835,19 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		return {}
 	var outcome := str(record.get("outcome", "in"))
 	var terminal := str(record.get("terminal_outcome", ""))
-	## Only three of the eight outcomes involve the wall touching the ball, and
-	## `tool` and `high_hands` are two of them -- the hands are what sent the
-	## ball out. They read as a touch so the block still deflects on screen; the
-	## hitter's point is claimed before the recycle branch can see them.
+	## Preserve a tool as a tool.  Collapsing it to `touch` made the event record
+	## say the wall had kept alive a ball whose trajectory visibly ended outside,
+	## even though the terminal result happened to award the hitter correctly.
+	## `block_crush` stays a contact too, but it goes through rather than out.
 	var block_outcome := "miss"
 	if outcome in ["stuff", "monster_block"]:
 		block_outcome = "stuff"
-	elif outcome in ["touch", "tool", "high_hands"]:
+	elif outcome == "recycle":
+		block_outcome = "recycle"
+	elif outcome in ["touch", "block_crush"]:
 		block_outcome = "touch"
+	elif outcome in ["tool", "high_hands"]:
+		block_outcome = "tool"
 	elif outcome == "in" and _was_funnelled(record):
 		block_outcome = "funnel"
 	return {
@@ -11583,6 +12860,9 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		"speed_mps": float(record.get("speed_mps", 0.0)),
 		"launch_angle_degrees": float(record.get("vertical_angle_degrees", 0.0)),
 		"chosen_power_fraction": float(record.get("chosen_power_fraction", 0.0)),
+		"shot_spread_multiplier": float(record.get(
+			"shot_spread_multiplier", 1.0
+		)),
 		"out_reason": str(record.get("out_reason", "")),
 		## The resolver's own verdict on whether this swing could clear the tape,
 		## and which branch of its search answered. Carried the whole way to the
@@ -11602,7 +12882,19 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		"block_contact_kind": str(record.get("block_contact_kind", "")),
 		"block_deflection_landing": record.get("block_deflection_landing", null),
 		"block_deflection_speed_mps": float(record.get("block_deflection_speed_mps", 0.0)),
+		"block_deflection_vertical_angle_degrees": float(record.get(
+			"block_deflection_vertical_angle_degrees", 0.0
+		)),
+		"block_deflection_duration_seconds": float(record.get(
+			"block_deflection_duration_seconds", 0.0
+		)),
 		"block_deflection_playable": bool(record.get("block_deflection_playable", false)),
+		"loft_apex_limited": bool(record.get("loft_apex_limited", false)),
+		"net_distance_meters": float(record.get("net_distance_meters", 0.0)),
+		"net_avoidance_demand": float(record.get("net_avoidance_demand", 0.0)),
+		"net_avoidance_spread_multiplier": float(record.get(
+			"net_avoidance_spread_multiplier", 1.0
+		)),
 		## How many blockers were in the wall this swing met.
 		##
 		## `block_wall` drops any blocker whose close fraction is below
@@ -11613,6 +12905,7 @@ func _geometric_promotion(record: Dictionary) -> Dictionary:
 		## for as long.
 		"wall_size": int(record.get("wall_size", 0)),
 		"wall_reach_heights": record.get("wall_reach_heights", []),
+		"block_jump_timing": record.get("block_jump_timing", {}),
 		"net_height_over_block_meters": float(
 			record.get("net_height_over_block_meters", 0.0)
 		),
@@ -12685,6 +13978,7 @@ func _front_row_middle(
 			continue
 		var candidate := _player_by_id(players, lineup.player_at_slot(slot_number))
 		if candidate != null and candidate.id != excluded_player_id \
+				and _can_enter_attack(candidate) \
 				and candidate.position_role == "Middle Blocker" \
 				and lineup.is_attack_eligible(candidate.id):
 			return candidate
@@ -13208,6 +14502,7 @@ func _serve_carry_meters(server: VolleyballPlayer) -> float:
 ## serve nobody receives.
 func _receive_formation_positions(
 	lineup: RotationLineup,
+	players: Array,
 	opponent_side: bool,
 ) -> Array[Vector2]:
 	var positions: Array[Vector2] = []
@@ -13216,15 +14511,15 @@ func _receive_formation_positions(
 	var setter_slot := lineup.slot_for_player(lineup.active_setter_id())
 	if setter_slot < 1:
 		return positions
+	var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+		CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+	]["passer_count"])
+	var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+		lineup, players, passer_count
+	)
 	var formation := CourtConstants.serve_receive_formation(
 		setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1,
-		opponent_side,
-	)
-	var passer_slots := CourtConstants.serve_receive_passer_slots(
-		setter_slot,
-		int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
-			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
-		]["passer_count"]),
+		opponent_side, passer_slots,
 	)
 	for slot_number in passer_slots:
 		if formation.has(slot_number):
@@ -13245,6 +14540,7 @@ func _receive_formation_positions(
 ## Nothing here is invented. It is the same call, kept whole.
 func _receive_formation_map(
 	lineup: RotationLineup,
+	players: Array,
 	opponent_side: bool,
 	## Filled with `{player_id: {intent, progress}}` when supplied.
 	##
@@ -13264,16 +14560,15 @@ func _receive_formation_map(
 	var setter_slot := lineup.slot_for_player(lineup.active_setter_id())
 	if setter_slot < 1:
 		return targets
+	var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+		CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+	]["passer_count"])
+	var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+		lineup, players, passer_count
+	)
 	var formation := CourtConstants.serve_receive_formation(
 		setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1,
-		opponent_side,
-	)
-	var passer_slots := CourtConstants.serve_receive_passer_slots(
-		setter_slot,
-		int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
-			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
-		]["passer_count"]),
-		-1,
+		opponent_side, passer_slots,
 	)
 	for slot_number in formation:
 		var slot := int(slot_number)
@@ -13772,21 +15067,37 @@ func _weak_passer_target(
 	lineup: RotationLineup,
 	landing_on_home_side: bool,
 ) -> Vector2:
-	if landing_on_home_side and lineup != null:
-		var weakest: VolleyballPlayer = null
-		var weakest_slot := 5
-		for slot_number in [5, 6, 1]:
-			var candidate: VolleyballPlayer
-			for player_resource in home_players:
-				var player := player_resource as VolleyballPlayer
-				if player.id == lineup.player_at_slot(slot_number):
-					candidate = player
+	if lineup != null and not home_players.is_empty():
+		var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+		]["passer_count"])
+		var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+			lineup, home_players, passer_count
+		)
+		var formation := CourtConstants.serve_receive_formation(
+			lineup.slot_for_player(lineup.active_setter_id()),
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
+			-1, not landing_on_home_side, passer_slots,
+		)
+		var weakest_slot := -1
+		var weakest_score := INF
+		for slot_number in passer_slots:
+			var candidate: VolleyballPlayer = null
+			var candidate_id := int(lineup.player_at_slot(slot_number))
+			for raw_player in home_players:
+				var roster_player := raw_player as VolleyballPlayer
+				if roster_player != null and roster_player.id == candidate_id:
+					candidate = roster_player
 					break
-			if candidate != null and (weakest == null or candidate.reception < weakest.reception):
-				weakest = candidate
+			if candidate == null:
+				continue
+			var score := _reception_skill(candidate)
+			if score < weakest_score:
+				weakest_score = score
 				weakest_slot = slot_number
-		return CourtConstants.slot_position(weakest_slot)
-	return Vector2(0.78, 0.16)
+		if weakest_slot >= 1 and formation.has(weakest_slot):
+			return Vector2(formation[weakest_slot])
+	return Vector2(0.22, 0.84) if landing_on_home_side else Vector2(0.78, 0.16)
 
 
 ## Intended shot shape for a serve: how lofted the launch is, by style. This is
@@ -14165,24 +15476,31 @@ func _nearest_zone_player(
 func _opponent_reception_coverage(opponent_team: Resource) -> Dictionary:
 	var passers: Array[VolleyballPlayer] = []
 	var zones := {}
-	var outside_index := 0
-	for player_resource in opponent_team.on_court_players():
-		var player := player_resource as VolleyballPlayer
-		if player.position_role not in ["Outside Hitter", "Libero"]:
+	if opponent_team == null or opponent_team.current_lineup() == null:
+		return {"players": passers, "zones": zones}
+	var lineup: RotationLineup = opponent_team.current_lineup()
+	var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+		CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+	]["passer_count"])
+	var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+		lineup, opponent_team.players, passer_count
+	)
+	var formation := CourtConstants.serve_receive_formation(
+		lineup.slot_for_player(lineup.active_setter_id()),
+		CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION, -1, true, passer_slots,
+	)
+	for slot_number in passer_slots:
+		var player := opponent_team.player_at_slot(slot_number) as VolleyballPlayer
+		if player == null:
 			continue
 		var zone: Resource = DefensiveZoneModel.new()
 		zone.player_id = player.id
 		zone.zone_type = DefensiveZoneModel.ZoneType.SERVE_RECEIVE
 		zone.radius_meters = 3.2
 		zone.priority = 2
-		if player.position_role == "Libero":
-			zone.center = Vector2(0.50, 0.13)
-			## The libero's skill already influences the claim. A blanket priority
-			## advantage made them cross the full court ahead of a nearby outside.
-			zone.radius_meters = 2.7
-		else:
-			zone.center = Vector2(0.20 if outside_index == 0 else 0.80, 0.16)
-			outside_index += 1
+		zone.center = Vector2(formation.get(
+			slot_number, opponent_team.court_position(player.id, "serve_receive")
+		))
 		passers.append(player)
 		zones[player.id] = zone
 	return {"players": passers, "zones": zones}

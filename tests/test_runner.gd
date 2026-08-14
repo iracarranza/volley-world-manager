@@ -120,6 +120,9 @@ const ATTACK_SWING_SCRIPT := preload(
 const ATTACK_RESOLUTION_SCRIPT := preload(
 	"res://scripts/simulation/attack_resolution_model.gd"
 )
+const BLOCK_DEFLECTION_SCRIPT := preload(
+	"res://scripts/simulation/block_deflection_model.gd"
+)
 const SIGNATURE_MOVE_SCRIPT := preload(
 	"res://scripts/simulation/signature_move_model.gd"
 )
@@ -136,6 +139,9 @@ const GEOMETRIC_PROMOTION_SCRIPT := preload(
 )
 const APPROACH_MECHANICS_SCRIPT := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
+)
+const SET_PATH_READ_SCRIPT := preload(
+	"res://scripts/simulation/set_path_read_model.gd"
 )
 const SHADOW_BLOCK_SCRIPT := preload(
 	"res://scripts/simulation/shadow_block_system.gd"
@@ -170,6 +176,7 @@ func _initialize() -> void:
 	_test_court_coordinates()
 	_test_rotation_legality()
 	_test_serve_receive_overlap_bounds()
+	_test_roster_serve_receive_roles_and_lanes()
 	_test_ball_trajectory_geometry()
 	_test_rally_state_foundations()
 	_test_ball_read_foundations()
@@ -198,6 +205,7 @@ func _initialize() -> void:
 	_test_gate_thirty_seven_to_forty_one_attack_boundary()
 	_test_gate_forty_two_development_live_attack()
 	_test_transition_preparation_and_approach_mechanics()
+	_test_set_path_read_and_body_contact()
 	_test_gate_forty_four_shadow_block_hypotheses()
 	_test_gate_forty_five_block_coordination()
 	_test_gate_forty_six_blocker_calibration()
@@ -275,7 +283,7 @@ func _initialize() -> void:
 	_test_an_opponent_has_a_region()
 	_test_manageable_and_playable_regions_are_different_questions()
 	_test_scouting_channels_and_owners()
-	_test_short_legs_are_walked_in_whole_steps()
+	_test_planned_movement_is_continuous()
 	_test_spike_biomechanics_sequence()
 	_test_every_rally_publishes_a_resting_posture()
 	_test_recovery_bands_are_ordered()
@@ -874,6 +882,7 @@ func _test_gate_d_measures_the_swing_the_game_plays() -> void:
 func _test_playback_geometry_is_drawable() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
+	var simulator := RallySimulator.new()
 	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(manager.players, 900006)
 	EXECUTION_SCALE_SCRIPT.apply_generated_attributes(
 		manager.opponent_team.players, 900006
@@ -885,6 +894,14 @@ func _test_playback_geometry_is_drawable() -> void:
 	var narrowest := 99.0
 	var serves := 0
 	var detached_serves := 0
+	var out_block_contacts := 0
+	var wrong_out_block_winners := 0
+	var wrongly_named_out_block_contacts := 0
+	var split_out_block_endpoints := 0
+	var playable_block_touches := 0
+	var misrouted_block_touches := 0
+	var split_block_endpoints := 0
+	var stuff_on_blocker_side := 0
 	for serving_home in [true, false]:
 		manager.match_state.serving_home = serving_home
 		for seed_value in range(5000, 5090):
@@ -893,7 +910,8 @@ func _test_playback_geometry_is_drawable() -> void:
 				continue
 			var starts: Dictionary = result.initial_home_positions.duplicate()
 			starts.merge(result.initial_opponent_positions)
-			for raw_event in result.events:
+			for event_index in range(result.events.size()):
+				var raw_event: Resource = result.events[event_index]
 				var event := raw_event as RallyEvent
 				if event == null:
 					continue
@@ -910,6 +928,49 @@ func _test_playback_geometry_is_drawable() -> void:
 					continue
 				if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK:
 					continue
+				var outgoing: Dictionary = event.metadata.get(
+					"outgoing_trajectory", {}
+				)
+				if bool(event.success) and not outgoing.is_empty():
+					var endpoint := Vector2(outgoing.get(
+						"end_position", event.end_position
+					))
+					if not Vector2(event.end_position).is_equal_approx(endpoint):
+						split_block_endpoints += 1
+					if not CourtConstants.is_normalized(endpoint):
+						out_block_contacts += 1
+						var block_side := str(event.metadata.get("side", ""))
+						var expected_home_winner := block_side == "opponent"
+						if block_side not in ["home", "opponent"] \
+								or bool(result.home_team_won) != expected_home_winner:
+							wrong_out_block_winners += 1
+						if str(event.metadata.get("outcome", "")) != "tool":
+							wrongly_named_out_block_contacts += 1
+						if not Vector2(event.end_position).is_equal_approx(endpoint):
+							split_out_block_endpoints += 1
+					var block_side := str(event.metadata.get("side", ""))
+					var block_outcome := str(event.metadata.get("outcome", ""))
+					var lands_behind_wall := simulator._block_deflection_lands_on_blocking_side(
+						outgoing, block_side
+					) if block_side in ["home", "opponent"] else false
+					if block_outcome == "stuff" and lands_behind_wall:
+						stuff_on_blocker_side += 1
+					if block_outcome == "touch" and lands_behind_wall:
+						playable_block_touches += 1
+						var next_contact: RallyEvent = null
+						for next_index in range(event_index + 1, result.events.size()):
+							var candidate := result.events[next_index] as RallyEvent
+							if candidate == null or candidate.event_type in [
+								RALLY_EVENT_SCRIPT.EventType.SET_DECISION,
+								RALLY_EVENT_SCRIPT.EventType.POINT,
+							]:
+								continue
+							next_contact = candidate
+							break
+						if next_contact == null \
+								or next_contact.event_type != RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+								or str(next_contact.metadata.get("side", "")) != block_side:
+							misrouted_block_touches += 1
 				var incoming: Dictionary = event.metadata.get(
 					"incoming_trajectory", {}
 				)
@@ -962,7 +1023,6 @@ func _test_playback_geometry_is_drawable() -> void:
 	## as well as sampled. A formed double block with an assist is rare enough on the
 	## vertical slice -- three in 180 rallies -- that the sampled arm alone would be
 	## asserting almost nothing.
-	var simulator := RallySimulator.new()
 	var wall: Dictionary = simulator._block_wall_positions(0.30, false)
 	var wall_gap := RALLY_KINEMATICS_SCRIPT.court_delta_meters(
 		Vector2(wall.primary_position), Vector2(wall.assist_position)
@@ -989,6 +1049,48 @@ func _test_playback_geometry_is_drawable() -> void:
 		detached_serves == 0,
 		"the server stands where the ball is struck (%d of %d off it)"
 			% [detached_serves, serves],
+	)
+	_check(
+		out_block_contacts > 0
+			and wrong_out_block_winners == 0
+			and wrongly_named_out_block_contacts == 0
+			and split_out_block_endpoints == 0,
+		"a block deflection landing out is visibly a tool and belongs to the attacker (%d contacts, %d wrong winners, %d wrong labels, %d split endpoints)"
+			% [
+				out_block_contacts, wrong_out_block_winners,
+				wrongly_named_out_block_contacts, split_out_block_endpoints,
+			],
+	)
+	_check(
+		playable_block_touches > 0
+			and misrouted_block_touches == 0
+			and split_block_endpoints == 0
+			and stuff_on_blocker_side == 0,
+		"a soft block landing behind the wall is played by the blocking side, not scored as attack coverage (%d touches, %d misrouted, %d split endpoints, %d false stuffs)"
+			% [
+				playable_block_touches, misrouted_block_touches,
+				split_block_endpoints, stuff_on_blocker_side,
+			],
+	)
+	_check(
+		simulator._block_deflection_lands_out({
+			"end_position": Vector2(1.001, 0.40),
+		}) and not simulator._block_deflection_lands_out({
+			"end_position": Vector2(1.0, 0.40),
+		}),
+		"the painted line is in and the first point beyond it is out after a block",
+	)
+	_check(
+		simulator._block_deflection_lands_on_blocking_side({
+			"end_position": Vector2(0.40, 0.40),
+		}, "opponent")
+			and simulator._block_deflection_lands_on_blocking_side({
+				"end_position": Vector2(0.40, 0.60),
+			}, "home")
+			and not simulator._block_deflection_lands_on_blocking_side({
+				"end_position": Vector2(0.40, 0.60),
+			}, "opponent"),
+		"post-block ownership mirrors exactly across the net",
 	)
 
 
@@ -1132,15 +1234,7 @@ func _test_no_attack_is_struck_illegally() -> void:
 	)
 
 
-## Tempo has to cost time, or it is a label.
-##
-## Link 1 and 2 of `docs/design/TEMPO_AND_APPROACH.md`: tempo sets the set's launch
-## angle, and the angle sets the flight. Both already existed -- what did not exist
-## was anything holding them together, so a future tuning pass could flatten the
-## angle table and nothing would notice that third tempo had stopped being slow.
-##
-## Measured over 936 attacks, the flight runs 0.376 s at first tempo, 0.554 s at
-## second and 0.806 s at third. This pins the ordering, not those figures.
+## Tempo has to describe the hitter-set relationship, or it is a height label.
 func _test_tempo_buys_flight_time() -> void:
 	var simulator := RallySimulator.new()
 	simulator.rng = RandomNumberGenerator.new()
@@ -1163,9 +1257,82 @@ func _test_tempo_buys_flight_time() -> void:
 		durations.append(total / 40.0)
 	_check(
 		durations[1] > durations[0] + 0.05 and durations[2] > durations[1] + 0.05,
-		"a slower tempo buys the hitter more flight time (%.3f / %.3f / %.3f s)" % [
+		"the legacy set shapes remain ordered while hitter timing owns the clock (%.3f / %.3f / %.3f s)" % [
 			durations[0], durations[1], durations[2],
 		],
+	)
+	var rhythm_hitter := VolleyballPlayer.new()
+	rhythm_hitter.approach_timing = 82
+	rhythm_hitter.explosiveness = 70
+	var t1 := ApproachMechanicsSystem.tempo_intent(rhythm_hitter, 1, 0.80)
+	var t2 := ApproachMechanicsSystem.tempo_intent(rhythm_hitter, 2, 0.80)
+	var t3 := ApproachMechanicsSystem.tempo_intent(rhythm_hitter, 3, 0.80)
+	_check(
+		is_equal_approx(float(t1.release_progress), 1.0)
+			and is_equal_approx(float(t1.takeoff_offset_seconds), 0.0),
+		"T1 releases as the hitter takes off",
+	)
+	_check(
+		float(t2.release_progress) > 0.0 and float(t2.release_progress) < 1.0
+			and float(t2.takeoff_offset_seconds) > 0.0,
+		"T2 releases during the hitter's approach footwork",
+	)
+	_check(
+		is_equal_approx(float(t3.release_progress), 0.0)
+			and float(t3.approach_start_delay_seconds) > 0.0,
+		"T3 begins the hitter's approach after setter release",
+	)
+	_check(
+		float(t1.expected_flight_seconds) < float(t2.expected_flight_seconds)
+			and float(t2.expected_flight_seconds) < float(t3.expected_flight_seconds),
+		"one hitter's T1/T2/T3 contact windows are ordered by their own run-up",
+	)
+	var compact_rhythm := ApproachMechanicsSystem.tempo_intent(
+		rhythm_hitter, 2, 0.55
+	)
+	var long_rhythm := ApproachMechanicsSystem.tempo_intent(
+		rhythm_hitter, 2, 0.95
+	)
+	_check(
+		float(long_rhythm.expected_flight_seconds)
+			> float(compact_rhythm.expected_flight_seconds) + 0.15,
+		"the setter's expected T2 pace follows the individual hitter's runway",
+	)
+	_check(
+		ApproachMechanicsSystem.achieved_tempo(t2, float(t2.release_progress)) == 2
+			and ApproachMechanicsSystem.achieved_tempo(t3, 0.0) == 3
+			and ApproachMechanicsSystem.achieved_tempo(t1, 0.45) == 2,
+		"achieved tempo reports the release relationship that happened, separately from the call",
+	)
+	var weak_setter := VolleyballPlayer.new()
+	weak_setter.tempo_control = 30
+	weak_setter.court_vision = 30
+	weak_setter.hand_control = 30
+	weak_setter.decision_making = 30
+	var elite_setter := VolleyballPlayer.new()
+	elite_setter.tempo_control = 92
+	elite_setter.court_vision = 92
+	elite_setter.hand_control = 92
+	elite_setter.decision_making = 92
+	var weak_meeting := ApproachMechanicsSystem.coordinate_tempo(
+		t2, weak_setter, 0.20, 0.50, 1.20, 0.55, 1.0
+	)
+	var elite_meeting := ApproachMechanicsSystem.coordinate_tempo(
+		t2, elite_setter, 0.90, 0.50, 1.20, 0.90, 1.0
+	)
+	_check(
+		absf(float(elite_meeting.coordination_error_seconds))
+			< absf(float(weak_meeting.coordination_error_seconds)),
+		"setter recognition and pair familiarity meet the hitter's rhythm more closely",
+	)
+	var rigid_meeting := ApproachMechanicsSystem.coordinate_tempo(
+		t2, elite_setter, 0.90, 1.0, 1.20, 0.90, 0.0
+	)
+	_check(
+		float(rigid_meeting.tactic_imposition) > 0.9
+			and float(rigid_meeting.target_flight_seconds)
+				> float(elite_meeting.target_flight_seconds),
+		"only an extremely strict tactic imposes authored set shape over hitter rhythm",
 	)
 	## And the fallback assignment is the reason no harness has ever measured the
 	## fast end of that range: with no called play its tempo is a constant, so every
@@ -1380,6 +1547,38 @@ func _test_reception_recovery_bands() -> void:
 		float(floored.quality) < float(upright.quality)
 			and is_equal_approx(float(upright.recovery), 1.0),
 		"a defender who is still getting up digs worse than the same one upright",
+	)
+
+	## Recovery also removes the body from the next attack menu. Previously this
+	## state affected defence and second contact but hitter selection ignored it,
+	## so playback could show a receiver on a knee becoming the spiker without a
+	## getting-up interval.
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var lineup: RotationLineup = manager.current_lineup()
+	var setter := manager.player_by_id(lineup.active_setter_id())
+	var recovering_hitter: VolleyballPlayer = null
+	for player_id in lineup.front_row_player_ids():
+		var candidate := manager.player_by_id(player_id)
+		if candidate != null and candidate.id != setter.id \
+				and candidate.position_role != "Libero":
+			recovering_hitter = candidate
+			break
+	simulator.rally_clock = 20.0
+	simulator.player_recovery = {
+		recovering_hitter.id: {
+			"state": "knee", "ready_at": 20.8, "delay": 0.8,
+		},
+	}
+	var selected_hitter := simulator._fallback_hitter(
+		manager.players, lineup, setter.id, 0.72, setter, 0.0
+	)
+	_check(
+		recovering_hitter != null
+			and not simulator._can_enter_attack(recovering_hitter)
+			and selected_hitter != null
+			and selected_hitter.id != recovering_hitter.id,
+		"a player still in a knee/blown recovery cannot be selected to attack",
 	)
 
 
@@ -3570,6 +3769,132 @@ func _test_serve_receive_overlap_bounds() -> void:
 	)
 
 
+func _test_roster_serve_receive_roles_and_lanes() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var stable_passing_unit: Array[int] = []
+	var all_specialists := true
+	var every_plan_matches := true
+	var differs_from_slot_defaults := false
+	var weak_target_tracks_passing_unit := true
+	var minimum_travel_never_worse := true
+	var minimum_travel_strictly_better := false
+	var stable_counterfactual_ordered := true
+	for rotation in range(1, 7):
+		manager.select_rotation(rotation)
+		var lineup: RotationLineup = manager.current_lineup()
+		var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+		]["passer_count"])
+		var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+			lineup, manager.players, passer_count
+		)
+		var passing_unit: Array[int] = []
+		for slot in passer_slots:
+			var player_id := int(lineup.player_at_slot(slot))
+			var player := manager.player_by_id(player_id)
+			passing_unit.append(player_id)
+			all_specialists = all_specialists and player != null \
+				and player.position_role in ["Outside Hitter", "Libero"]
+		passing_unit.sort()
+		if stable_passing_unit.is_empty():
+			stable_passing_unit = passing_unit
+		else:
+			every_plan_matches = every_plan_matches \
+				and passing_unit == stable_passing_unit
+		var setter_slot := lineup.slot_for_player(lineup.active_setter_id())
+		var formation := CourtConstants.serve_receive_formation(
+			setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
+			-1, false, passer_slots,
+		)
+		var stable_slots := CourtConstants.roster_serve_receive_seam_slots(
+			lineup, manager.players, passer_count
+		)
+		var stable_formation := CourtConstants.serve_receive_formation(
+			setter_slot, CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
+			-1, false, stable_slots, true,
+		)
+		var stable_ids: Array[int] = []
+		for slot in stable_slots:
+			stable_ids.append(int(lineup.player_at_slot(slot)))
+		stable_counterfactual_ordered = stable_counterfactual_ordered \
+			and stable_ids == [2, 6, 5]
+		var production_travel := 0.0
+		var stable_travel := 0.0
+		for slot in passer_slots:
+			var origin := CourtConstants.slot_position(slot)
+			var production_target := Vector2(formation[slot])
+			var stable_target := Vector2(stable_formation[slot])
+			production_travel += Vector2(
+				(production_target.x - origin.x) * CourtConstants.COURT_WIDTH_METERS,
+				(production_target.y - origin.y) * CourtConstants.COURT_LENGTH_METERS,
+			).length()
+			stable_travel += Vector2(
+				(stable_target.x - origin.x) * CourtConstants.COURT_WIDTH_METERS,
+				(stable_target.y - origin.y) * CourtConstants.COURT_LENGTH_METERS,
+			).length()
+		minimum_travel_never_worse = minimum_travel_never_worse \
+			and production_travel <= stable_travel + 0.001
+		minimum_travel_strictly_better = minimum_travel_strictly_better \
+			or production_travel < stable_travel - 0.10
+		var plan: Resource = manager.current_defensive_plan()
+		for slot in range(1, 7):
+			var player_id := int(lineup.player_at_slot(slot))
+			var zone: Resource = plan.reception_zones.get(player_id) as Resource
+			every_plan_matches = every_plan_matches and zone != null \
+				and bool(zone.enabled) == (slot in passer_slots) \
+			and Vector2(zone.center).is_equal_approx(Vector2(formation[slot]))
+		var weakest_slot := -1
+		var weakest_score := INF
+		for slot in passer_slots:
+			var passer := manager.player_by_id(int(lineup.player_at_slot(slot)))
+			var score := float(passer.reception) * 0.65 \
+				+ float(passer.ball_control) * 0.20 \
+				+ float(passer.composure) * 0.15
+			if score < weakest_score:
+				weakest_score = score
+				weakest_slot = slot
+		weak_target_tracks_passing_unit = weak_target_tracks_passing_unit \
+			and weakest_slot >= 1 \
+			and RallySimulator.new()._weak_passer_target(
+				manager.players, lineup, true
+			).is_equal_approx(Vector2(formation[weakest_slot]))
+		var slot_defaults := CourtConstants.serve_receive_passer_slots(
+			setter_slot, passer_count, -1
+		)
+		var slot_default_ids: Array[int] = []
+		for slot in slot_defaults:
+			slot_default_ids.append(int(lineup.player_at_slot(slot)))
+		slot_default_ids.sort()
+		if slot_default_ids != passing_unit:
+			differs_from_slot_defaults = true
+	_check(
+		all_specialists and stable_passing_unit == [2, 5, 6],
+		"default serve receive selects the same two outsides and libero in every rotation",
+	)
+	_check(
+		every_plan_matches,
+		"all six defensive plans use the roster-selected minimum-travel formation",
+	)
+	_check(
+		minimum_travel_never_worse and minimum_travel_strictly_better,
+		"production keeps the passing unit while avoiding the fixed-lane travel tax",
+	)
+	_check(
+		stable_counterfactual_ordered,
+		"the stable outside-libero-outside lane shape remains available as an audit counterfactual",
+	)
+	_check(
+		differs_from_slot_defaults,
+		"roster-aware serve receive is not inferred from anonymous back-row slots",
+	)
+	_check(
+		weak_target_tracks_passing_unit,
+		"Weak Passer serves target the weakest assigned passer's actual seam",
+	)
+	manager.free()
+
+
 func _test_ball_trajectory_geometry() -> void:
 	var trajectory: Resource = BALL_TRAJECTORY_SCRIPT.create(
 		"test", Vector2(0.1, 0.2), Vector2(0.5, 0.1),
@@ -5376,6 +5701,103 @@ func _test_transition_preparation_and_approach_mechanics() -> void:
 	)
 
 
+func _test_set_path_read_and_body_contact() -> void:
+	## Tighten only the lower tail. The front-row target still centres on 54 cm,
+	## so this guard catches either regression: putting ordinary attacks back far
+	## enough to recover the old block-avoiding angles, or letting the requested
+	## / delivered ball sit inside a ball-and-hand width of the tape.
+	var front_depths_hold := true
+	for lane in ["Left Pin", "Front Quick", "Right Quick", "Right Pin"]:
+		var depth: Vector2 = CourtConstants.lane_depth_range_meters(lane)
+		var minimum := 0.32 if "Pin" in lane else 0.25
+		if depth.x < minimum - 0.0001 \
+				or absf((depth.x + depth.y) * 0.5 - 0.54) > 0.0001:
+			front_depths_hold = false
+	var delivered_floor_m := (
+		RallySimulator.HOME_SET_DELIVERY_MIN_Y - CourtConstants.NET_Y
+	) * CourtConstants.COURT_LENGTH_METERS
+	_check(
+		front_depths_hold
+			and delivered_floor_m >= 0.27 - 0.0001
+			and delivered_floor_m < 0.35,
+		"Front-row set depth removes the net-clipping tail without moving its 54 cm centre",
+	)
+
+	var hitter := VolleyballPlayer.new()
+	hitter.id = 9902
+	hitter.height_cm = 192.0
+	hitter.wingspan_cm = 201.0
+	hitter.court_vision = 94
+	hitter.anticipation = 92
+	hitter.approach_timing = 93
+	hitter.composure = 88
+	hitter.attack_accuracy = 91
+	hitter.ball_control = 89
+	hitter.improvisation = 87
+	var intended := Vector2(0.16, 0.535)
+	var delivered := Vector2(0.20, 0.565)
+	var home_body: Vector2 = SET_PATH_READ_SCRIPT.body_position(
+		hitter, delivered, true
+	)
+	var opponent_body: Vector2 = SET_PATH_READ_SCRIPT.body_position(
+		hitter, Vector2(delivered.x, 1.0 - delivered.y), false
+	)
+	var home_gap := RALLY_KINEMATICS_SCRIPT.court_distance_meters(
+		home_body, delivered
+	)
+	_check(
+		home_body.y > delivered.y
+			and opponent_body.y < 1.0 - delivered.y
+			and home_gap >= SET_PATH_READ_SCRIPT.BODY_BEHIND_CONTACT_MIN_METERS
+			and home_gap <= SET_PATH_READ_SCRIPT.BODY_BEHIND_CONTACT_MAX_METERS,
+		"A hitter's body is behind the ball on either side instead of occupying a tight set",
+	)
+
+	var good_read: Dictionary = SET_PATH_READ_SCRIPT.evaluate(
+		hitter, intended, delivered, 0.95, 0.84, 0.72,
+		551001, "set-path-test", true,
+	)
+	var repeated_read: Dictionary = SET_PATH_READ_SCRIPT.evaluate(
+		hitter, intended, delivered, 0.95, 0.84, 0.72,
+		551001, "set-path-test", true,
+	)
+	hitter.court_vision = 32
+	hitter.anticipation = 29
+	hitter.approach_timing = 35
+	hitter.composure = 40
+	var poor_read: Dictionary = SET_PATH_READ_SCRIPT.evaluate(
+		hitter, intended, delivered, 0.24, 0.38, 0.10,
+		551001, "set-path-test", true,
+	)
+	_check(
+		good_read == repeated_read
+			and not bool(good_read.get("uses_delivered_truth", true))
+			and float(good_read.read_quality) > float(poor_read.read_quality)
+			and float(good_read.residual_error_band_meters)
+				< float(poor_read.residual_error_band_meters),
+		"Set-path reads are deterministic and reward time, recognition, and pair familiarity",
+	)
+
+	var ideal_body := Vector2(good_read.ideal_body_position)
+	var clean_contact: Dictionary = SET_PATH_READ_SCRIPT.assess_contact(
+		hitter, ideal_body, ideal_body
+	)
+	var missed_body := ideal_body + Vector2(
+		1.10 / CourtConstants.COURT_WIDTH_METERS, 0.0
+	)
+	var missed_contact: Dictionary = SET_PATH_READ_SCRIPT.assess_contact(
+		hitter, missed_body, ideal_body
+	)
+	_check(
+		str(clean_contact.outcome) == "clean"
+			and is_equal_approx(float(clean_contact.quality_multiplier), 1.0)
+			and str(missed_contact.outcome) == "whiff"
+			and bool(missed_contact.whiffed)
+			and is_equal_approx(float(missed_contact.quality_multiplier), 0.0),
+		"A correctly read set is clean while a body outside the contact envelope can miss it entirely",
+	)
+
+
 func _synthetic_block_flight(destination_x: float = 0.50) -> BallFlight:
 	var signature := BallContactSignature.create(
 		&"set", 8.0, 0.0, 0.0, 0.0, 0.0, 0.82,
@@ -6925,7 +7347,11 @@ func _test_set_release_interval_consumption() -> void:
 	chain_manager.seed_vertical_slice_data()
 	var continuations_seen := 0
 	var chain_breaks := 0
-	for seed_value in range(9000, 9200):
+	## Continuations are an outcome, not one event per seed. Set-path errors and
+	## the corrected block routing legitimately change how often they occur, so
+	## collect the twenty examples this assertion needs instead of assuming a
+	## fixed 200-seed window still contains them.
+	for seed_value in range(9000, 10000):
 		var result: Resource = chain_manager.resolve_active_rally(seed_value)
 		var continuation_set: Resource = null
 		var continuation_attack: Resource = null
@@ -6950,6 +7376,8 @@ func _test_set_release_interval_consumption() -> void:
 		if absf(float(attack_flight.get("start_time", 0.0))
 				- float(set_flight.get("end_time", -1.0))) > 0.001:
 			chain_breaks += 1
+		if continuations_seen >= 20:
+			break
 	_check(
 		continuations_seen >= 20 and chain_breaks == 0,
 		"continuation set and transition attack trajectories meet at one contact time",
@@ -7364,8 +7792,11 @@ func _test_3d_playback_contract() -> void:
 	)
 	_check(
 		screen._event_elevation(attack, 1) > 0.8
-			and screen._event_elevation(block, 101) == 0.85
-			and screen._event_elevation(block, 102) == 0.85,
+			and screen._event_elevation(block, 101) >= 0.66
+			and is_equal_approx(
+				screen._event_elevation(block, 101),
+				screen._event_elevation(block, 102),
+			),
 		"3D contact poses consume resolved attack and assisting-blocker elevation",
 	)
 
@@ -7405,18 +7836,42 @@ func _test_3d_playback_contract() -> void:
 			% screen.playback_leg_overspeed.size(),
 	)
 
-	## The wall goes up once. A block that stopped the ball dead has no outgoing
-	## trajectory -- 79.3% of all blocks, measured -- so it is drawn by the
-	## contact-pulse path, which restarted the phase at 0 and played a whole
-	## second jump. The withdraw has to begin where the hold ended.
-	var withdraw_start := screen._block_withdraw_phase(0.0, 0.5)
-	var withdraw_end := screen._block_withdraw_phase(1.0, 1.0)
-	var withdraw_middle := screen._block_withdraw_phase(0.5, 0.5)
+	## The wall has one rally-clock jump, independent of which playback window is
+	## currently sampling it. The old window-relative phase restarted the rig at
+	## contact, twitched a blocker upward in midair, then held them there until
+	## the next event. Phase and elevation must now progress monotonically through
+	## one resolver-authored ballistic timeline and be landed afterwards.
+	var block_contact_time: float = 10.0
+	var block_timeline: Dictionary = screen._block_timeline({
+		"hang_seconds": 0.72,
+		"timing_error_seconds": 0.10,
+		"late": true,
+	}, block_contact_time)
+	var block_moments: Array[float] = [
+		float(block_timeline.takeoff) - 0.08,
+		float(block_timeline.takeoff),
+		float(block_timeline.peak),
+		block_contact_time,
+		float(block_timeline.landing),
+		float(block_timeline.landing) + 0.20,
+	]
+	block_moments.sort()
+	var previous_block_phase: float = -2.0
+	var monotonic_block_phase := true
+	for moment in block_moments:
+		var sampled_phase: float = screen._block_pose_phase(
+			moment, block_timeline, block_contact_time
+		)
+		if sampled_phase + 0.0001 < previous_block_phase:
+			monotonic_block_phase = false
+		previous_block_phase = sampled_phase
 	_check(
-		is_equal_approx(withdraw_start, BlockBiomechanics.HOLD_END)
-			and withdraw_middle >= withdraw_start
-			and is_equal_approx(withdraw_end, 1.0),
-		"a block's withdraw starts where its hold ended, so the wall never re-forms",
+		monotonic_block_phase
+			and is_equal_approx(previous_block_phase, 1.0)
+			and BLOCK_JUMP_SCRIPT.elevation_at(
+				float(block_timeline.landing) + 0.20, block_timeline
+			) == 0.0,
+		"block playback samples one monotonic, ballistic jump and lands after it",
 	)
 	screen.free()
 
@@ -7828,7 +8283,10 @@ func _test_post_block_trajectory_chain() -> void:
 				continue
 			pairs += 1
 			var outcome := str(block.metadata.get("outcome", ""))
-			var touched := outcome != "miss"
+			## Funnel is a shaped-but-untouched swing: the wall closes the
+			## hitter's course without the ball meeting hands. Only actual-contact
+			## outcomes own a deflection trajectory.
+			var touched := outcome in ["stuff", "touch", "tool", "recycle"]
 			var flight_start: Vector2 = attack_flight["start_position"]
 			var flight_end: Vector2 = attack_flight["end_position"]
 			## An untouched attack keeps its full arc. Truncating it to the net
@@ -9810,14 +10268,59 @@ func _test_geometric_resolver_composes_one_swing() -> void:
 	)
 	_check(
 		bool(swing.available)
-			and str(swing.outcome) in ["in", "out", "net", "stuff", "touch",
-				"tool", "block_crush", "high_hands"],
+			and str(swing.outcome) in [
+				"in", "out", "net", "stuff", "touch", "recycle", "tool",
+				"block_crush", "high_hands",
+			],
 		"one call turns a hitter and a picture into a resolved swing",
 	)
 	_check(
 		float(Dictionary(swing.flight).duration_seconds) > 0.0
 			and not is_nan((swing.landing as Vector2).x),
 		"the resolved swing carries a real flight and a real landing",
+	)
+
+	## A lofted attack is a controlled roll over the wall, not a lob.  Pin the
+	## physical envelope at several speeds: the limit is derived from the launch
+	## velocity, so every solved flight must rise by the same bounded amount.
+	var loft_envelope_holds := true
+	var highest_loft_rise := 0.0
+	for speed in [3.0, 8.0, 14.0, 24.0]:
+		var loft_angle: float = GEOMETRIC_ATTACK_SCRIPT._maximum_loft_angle(speed)
+		var loft_flight: Dictionary = BallFlightModel.solve_flight(
+			speed, loft_angle, height
+		)
+		var rise := float(loft_flight.apex_height_meters) - height
+		highest_loft_rise = maxf(highest_loft_rise, rise)
+		loft_envelope_holds = loft_envelope_holds \
+			and rise <= GEOMETRIC_ATTACK_SCRIPT.LOFT_MAX_APEX_RISE_METERS + 0.001
+	_check(
+		loft_envelope_holds,
+		"roll-shot launch geometry stays below its %.2f m rise envelope (max %.3f m)"
+			% [
+				GEOMETRIC_ATTACK_SCRIPT.LOFT_MAX_APEX_RISE_METERS,
+				highest_loft_rise,
+			],
+	)
+
+	## Extremely tight contacts charge the control needed to keep the hitter's
+	## body and trailing hand clear of the net. The same clean draw is used on
+	## both balls; this checks the published demand rather than asking a random
+	## outcome to stand in for it.
+	var tight_swing: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+		hitter, Vector2(0.12, 0.505), height, "Left Pin", [], defenders, true,
+		0.85, 0.5, 0.2, 0.1, still,
+	)
+	var safe_swing: Dictionary = GEOMETRIC_ATTACK_SCRIPT.resolve_swing(
+		hitter, Vector2(0.12, 0.545), height, "Left Pin", [], defenders, true,
+		0.85, 0.5, 0.2, 0.1, still,
+	)
+	_check(
+		float(tight_swing.net_avoidance_demand) > 0.90
+			and float(safe_swing.net_avoidance_demand) < 0.10
+			and float(tight_swing.net_avoidance_spread_multiplier)
+				> float(safe_swing.net_avoidance_spread_multiplier),
+		"a contact under the tape's body-clearance band is more demanding than a safe one",
 	)
 
 	## Deterministic: the same draws replay the same ball.
@@ -9905,6 +10408,11 @@ func _test_geometric_resolver_composes_one_swing() -> void:
 		"both sides can miss a swing (%d home, %d opponent in 240 rallies)" % [
 			home_errors, opponent_errors,
 		],
+	)
+	_check(
+		GEOMETRIC_ATTACK_SCRIPT._apex_limited_launch_mode("shortened")
+			and not GEOMETRIC_ATTACK_SCRIPT._apex_limited_launch_mode("driven"),
+		"a shortened last-resort ball shares the roll-shot apex limit",
 	)
 
 
@@ -10149,11 +10657,11 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 		"a broken approach costs the leap and never the standing reach",
 	)
 
-	## The outcome vocabulary the rally continues with. `in` and `touch` are the
-	## two that keep a rally alive; everything else ends it, and three of them end
-	## it in the hitter's favour.
+	## The outcome vocabulary the rally continues with. `in`, `touch`, and
+	## `recycle` keep a rally alive; everything else ends it, and three of them
+	## end it in the hitter's favour.
 	var mapping := {
-		"in": ["", false], "touch": ["", false],
+		"in": ["", false], "touch": ["", false], "recycle": ["", false],
 		"net": ["attack_error", false], "out": ["attack_error", false],
 		"stuff": ["blocked", false],
 		"tool": ["kill", true], "block_crush": ["kill", true],
@@ -10401,6 +10909,20 @@ func _test_attack_resolves_from_geometry() -> void:
 			and (netted.landing as Vector2).y > CourtConstants.NET_Y,
 		"a ball below the tape is netted and drops on the hitter's own side",
 	)
+	## A near-whiff can come down before it reaches the tape. It remains a net
+	## error, but its actual few-centimetre flight must not be stretched to the
+	## net and rendered as a several-second, roof-high arc.
+	var short: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+		contact, HEIGHT, 0.0, -20.0, 0.1, [], true
+	)
+	_check(
+		str(short.outcome) == "net" and str(short.out_reason) == "short"
+			and (short.landing as Vector2).y > CourtConstants.NET_Y
+			and RALLY_KINEMATICS_SCRIPT.court_delta_meters(
+				contact, Vector2(short.landing)
+			).length() < 0.10,
+		"a mishit that dies before the tape keeps its physical short landing",
+	)
 	## The net test exists at all only because the ball now flies rather than
 	## being placed: with a chosen landing and a back-solved arc, no ball could
 	## fail to clear it.
@@ -10443,6 +10965,28 @@ func _test_attack_resolves_from_geometry() -> void:
 	_check(
 		str(over_the_top.outcome) == "in",
 		"the same swing over a shorter block is not blocked at all",
+	)
+
+	## Mid-hand contact returns playably to the attacking court. It is neither a
+	## fingertip touch behind the wall nor a terminal press, and that distinction
+	## is what makes attack coverage a reachable rally state.
+	var recycled_contact: Dictionary = ATTACK_RESOLUTION_SCRIPT._block_contact(
+		crossing, 3.00,
+		[{"net_x": crossing, "reach_height_m": 3.14, "half_width_m": 0.45}],
+	)
+	var recycled_flight: Dictionary = BLOCK_DEFLECTION_SCRIPT.deflect(
+		str(recycled_contact.get("kind", "")), crossing, 24.0, true, 3.00
+	)
+	var fingertip_flight: Dictionary = BLOCK_DEFLECTION_SCRIPT.deflect(
+		"touch", crossing, 24.0, true, 3.00
+	)
+	_check(
+		str(recycled_contact.get("kind", "")) == "recycle"
+			and bool(recycled_flight.get("playable", false))
+			and Vector2(recycled_flight.landing).y > CourtConstants.NET_Y
+			and Vector2(fingertip_flight.landing).y < CourtConstants.NET_Y
+			and float(recycled_flight.duration_seconds) > 0.0,
+		"a central non-stuff rebound returns to attack coverage while fingertips continue behind the wall",
 	)
 
 	## Off the outside hand: the hitter's point, not the blocker's.
@@ -13518,20 +14062,18 @@ func _test_scouting_channels_and_owners() -> void:
 	)
 
 
-func _test_short_legs_are_walked_in_whole_steps() -> void:
+func _test_planned_movement_is_continuous() -> void:
 	const STRIDE := 0.85
-	## A long leg is a run and is left continuous -- stuttering a sprint is worse
-	## than sliding a step.
+	## Long and short legs use the same continuous centre-of-mass curve. The
+	## actor's gait supplies the stepping; positional quantisation made the whole
+	## player stop and pop between footholds.
 	var long_metres := MatchCourt3D.STEP_QUANTISE_MAX_METERS + 1.0
 	_check(
 		is_equal_approx(
 			MatchCourt3D.step_quantised_fraction(0.5, long_metres, STRIDE), 0.5
 		),
-		"a leg too long to walk is not quantised",
+		"a long leg remains centred at half time",
 	)
-	## A short one holds still for part of every step. Sampled across the leg,
-	## some interval must show no progress at all -- that pause is the whole
-	## point, and a linear ramp would have none.
 	var held := 0
 	var monotone := true
 	var previous := MatchCourt3D.step_quantised_fraction(0.0, 1.7, STRIDE)
@@ -13539,46 +14081,35 @@ func _test_short_legs_are_walked_in_whole_steps() -> void:
 		var here := MatchCourt3D.step_quantised_fraction(
 			float(step) / 100.0, 1.7, STRIDE
 		)
-		if absf(here - previous) < 0.0005:
+		## Smoothstep deliberately eases into and out of the leg, so the first
+		## centimetres are small without being a hold. Only an actually unchanged
+		## centre-of-mass sample is stop/start quantisation.
+		if absf(here - previous) < 0.000001:
 			held += 1
 		if here < previous - 0.0001:
 			monotone = false
 		previous = here
-	_check(monotone, "a quantised leg never walks backwards")
-	_check(held >= 20, "a walked leg stands still between steps (%d of 100)" % held)
-	## And a window too short to pay for a step does not get one. Packing a whole
-	## step into a window of hundredths puts the entire displacement on one frame,
-	## which is the pop quantising exists to remove -- measured at 13-25 m/s
-	## across seven of twelve volis before this guard existed.
-	var cramped := 0
-	for step in range(1, 101):
-		var t := float(step) / 100.0
-		if not is_equal_approx(
-			MatchCourt3D.step_quantised_fraction(t, 1.7, STRIDE, 0.09), t
-		):
-			cramped += 1
+	_check(monotone, "a smoothed leg never walks backwards")
+	_check(held == 0, "a smoothed leg has no stop-start holds (%d of 100)" % held)
+	## Window length and stride still drive pace and gait elsewhere, but cannot
+	## introduce a discontinuity into the body's route.
 	_check(
-		cramped == 0,
-		"a window too short for a step is drawn continuously instead",
+		is_equal_approx(
+			MatchCourt3D.step_quantised_fraction(0.3, 1.7, STRIDE, 0.09),
+			MatchCourt3D.step_quantised_fraction(0.3, 1.7, STRIDE, 1.0),
+		),
+		"a short playback window does not quantise body position",
 	)
-	## And it still arrives. A duty cycle that stopped short would leave every
-	## walking voli a step behind wherever they were sent.
 	_check(
 		is_equal_approx(MatchCourt3D.step_quantised_fraction(1.0, 1.7, STRIDE), 1.0),
-		"a walked leg finishes where it was sent",
+		"a smoothed leg finishes where it was sent",
 	)
-	## And it is a property of the body, not a constant: the same 2.4 m covered
-	## by a long stride and a short one is not the same number of steps, so the
-	## two do not sit at the same place halfway through.
-	## Sampled at 0.3 rather than 0.5 on purpose: a half is a step boundary for
-	## both two steps and four, so the one fraction where every stride length
-	## agrees is exactly the one this check must not use.
 	_check(
-		not is_equal_approx(
+		is_equal_approx(
 			MatchCourt3D.step_quantised_fraction(0.3, 2.4, 1.15),
 			MatchCourt3D.step_quantised_fraction(0.3, 2.4, 0.62),
 		),
-		"stride length changes how a walk is stepped",
+		"stride length changes gait, not the body's continuous route",
 	)
 
 

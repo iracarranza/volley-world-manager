@@ -50,6 +50,12 @@ const BlockJumpModel := preload("res://scripts/simulation/block_jump_model.gd")
 ## every block into an edge contact and tools stopped being rare.
 const TOOL_EDGE_MARGIN_METERS: float = 0.08
 const STUFF_DEPTH_METERS: float = 0.21
+## The band between a fingertip touch and a terminal press. A ball meeting the
+## lower half of a central hand can be redirected back onto the hitter's court
+## without being driven straight down; that is the coverable rebound which the
+## rally calls a recycle. Expressed as a share of the timing-adjusted stuff
+## threshold so an early/late hand moves both boundaries together.
+const RECYCLE_DEPTH_SHARE: float = 0.52
 ## How the two geometric thresholds bend with the blocker's jump timing.
 ##
 ## `STUFF_DEPTH_METERS` is how far below the hands a ball has to cross before the
@@ -133,8 +139,15 @@ static func resolve(
 	result["landing"] = AttackCourseModel.landing_point(
 		contact, bearing_degrees, float(flight.range_meters), attacking_negative_y
 	)
-	if float(flight.range_meters) < ground_to_net \
-			or height_at_net < CourtConstants.NET_HEIGHT_METERS:
+	## A mishit that comes down before the tape never reaches the tape.  It is an
+	## attack error, but relocating it to the net makes a 0.1 m/s ball cover
+	## several metres and gives playback a multi-second, roof-high parabola.  Its
+	## already-solved landing is the only honest endpoint.
+	if float(flight.range_meters) < ground_to_net:
+		result["outcome"] = "net"
+		result["out_reason"] = "short"
+		return result
+	if height_at_net < CourtConstants.NET_HEIGHT_METERS:
 		result["outcome"] = "net"
 		result["out_reason"] = "net"
 		## A ball stopped by the tape drops on the side it was struck from, not
@@ -171,7 +184,7 @@ static func resolve(
 		## belongs here, once, with the contact that caused it.
 		var deflection := BlockDeflectionModel.deflect(
 			str(contacted.get("kind", "touch")), crossing_x, speed_mps,
-			attacking_negative_y,
+			attacking_negative_y, height_at_net,
 		)
 		result["landing"] = deflection["landing"]
 		result["deflection"] = deflection
@@ -308,6 +321,10 @@ static func _block_contact(
 			kind = "tool"
 		elif depth_below > stuff_depth:
 			kind = "stuff"
+		elif depth_below > stuff_depth * RECYCLE_DEPTH_SHARE:
+			## Solid enough to turn the ball back, not deep enough for the hands
+			## to press it to the floor. The attacking side may cover this ball.
+			kind = "recycle"
 		if edge_gap > best_gap:
 			best_gap = edge_gap
 			contact = {

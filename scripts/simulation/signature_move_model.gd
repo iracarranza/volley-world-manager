@@ -206,7 +206,7 @@ static func resolve_monster_block(
 	monster_charge: float,
 	blocker_id: int = -1,
 ) -> Dictionary:
-	var contacted := block_kind in ["touch", "tool", "stuff"]
+	var contacted := block_kind in ["touch", "recycle", "tool", "stuff"]
 	var ready := contacted and is_available(monster_charge)
 	## The ordinary block-timing feature flag is allowed to hide `arm_state`
 	## from its own outcome bands, but it does not erase the canonical timing

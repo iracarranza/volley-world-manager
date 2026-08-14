@@ -51,9 +51,10 @@ const MEMORY_RETENTION: float = 0.93
 ## metres. A habit, not a relocation -- and it keeps the bias inside the lane
 ## without the clamp being the thing that decides placement.
 const MEMORY_LIMIT_METERS: float = 1.10
-## No set is tighter than this. A ball closer to the tape than a hand is not a
-## set a hitter asks for, it is one the setter lost.
-const TIGHTNESS_FLOOR_METERS: float = 0.18
+## No set is tighter than this. This is a last invariant beneath the lane-owned
+## ranges, not another target: a ball closer to the tape is a setter miss, not a
+## spot the hitter requested. The delivered-point model owns those misses.
+const TIGHTNESS_FLOOR_METERS: float = 0.25
 
 
 ## The point this hitter wants, in normalised court coordinates.
@@ -126,6 +127,10 @@ static func _depth(
 	swing_index: int,
 ) -> float:
 	var range_m := CourtConstants.lane_depth_range_meters(lane)
+	## Keep the physical floor live even if a future lane edit accidentally puts
+	## its lower edge through the tape. Pipe depth is naturally far beyond it.
+	range_m.x = maxf(range_m.x, TIGHTNESS_FLOOR_METERS)
+	range_m.y = maxf(range_m.y, range_m.x)
 	var centre_m := (range_m.x + range_m.y) * 0.5
 	if not FeatureFlags.ENABLE_HITTER_TIGHTNESS:
 		return CourtConstants.NET_Y + centre_m / CourtConstants.COURT_LENGTH_METERS

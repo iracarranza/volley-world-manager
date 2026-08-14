@@ -561,6 +561,7 @@ static func _intent(roll: float) -> float:
 ##   stuff       the block put it down
 ##   monster_block a charged, near-perfect block put it down
 ##   touch       hands slowed it; it stays alive and the rally continues
+##   recycle     hands returned it playably to the attacking side
 ##   tool        off the outside hand and out: the hitter's point
 ##   block_crush through the hands: the hitter's point
 ##   high_hands  placed off the hands and out: the hitter's point
@@ -580,7 +581,7 @@ static func continuation(swing: Dictionary) -> Dictionary:
 			attack_missed = true
 		"stuff", "monster_block":
 			terminal = "blocked"
-		"touch":
+		"touch", "recycle":
 			pass
 		"tool", "block_crush", "high_hands":
 			terminal = "kill"
@@ -594,7 +595,9 @@ static func continuation(swing: Dictionary) -> Dictionary:
 		"is_terminal": terminal != "",
 		"hitter_point": hitter_point,
 		"attack_missed": attack_missed,
-		"blocked": outcome in ["stuff", "monster_block", "touch", "tool"],
+		"blocked": outcome in [
+			"stuff", "monster_block", "touch", "recycle", "tool"
+		],
 		"landing": Vector2(swing.get("landing", Vector2(0.5, 0.25))),
 		"out_reason": str(resolution.get("out_reason", "")),
 		"quality": quality_for(outcome, swing),
@@ -631,6 +634,8 @@ static func quality_for(outcome: String, swing: Dictionary) -> float:
 			return clampf(0.30 + struck * 0.55, 0.0, 1.0)
 		"touch":
 			return clampf(0.22 + struck * 0.38, 0.0, 1.0)
+		"recycle":
+			return clampf(0.18 + struck * 0.34, 0.0, 1.0)
 		"stuff":
 			return clampf(struck * 0.28, 0.0, 1.0)
 	## Out or into the net. The swing still happened, and how cleanly it was
