@@ -10,7 +10,7 @@ rather than a dashboard.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-14 on `079375e`: **1,838 checks
+Current branch baseline, verified 2026-08-14 on `3c19482`: **1,848 checks
 pass**. Treat any test failure as a regression.
 
 The count itself is not the signal and should not be read as one -- sampling
