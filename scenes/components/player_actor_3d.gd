@@ -2096,8 +2096,24 @@ func set_pose(
 			## with their hands stopped where the ball had been. The legs were never
 			## touched at all, which left a setter standing straight-legged while
 			## their arms did the work -- and a set is a push from the floor.
+			## Which of the three second-contact actions this is. The simulator
+			## decides it in `_jump_set_decision` and stamps `set_posture` and
+			## `set_posture_reason` on the event; before this the rig drew all
+			## three identically, so a setter who could not get off the floor and
+			## one who jumped looked the same, and a ball taken off the platform
+			## looked like a ball taken above the head.
+			##
+			## `under the hands` is the reason, not the posture, because the
+			## posture only says they stayed down -- it cannot say *why*, and the
+			## why is what decides whether the forearms or the fingers play it.
+			var set_posture := SetBiomechanicsScript.POSTURE_STANDING
+			if str(action_context.get("set_posture", "")) == "jump":
+				set_posture = SetBiomechanicsScript.POSTURE_JUMP
+			elif str(action_context.get("set_posture_reason", "")) \
+					== "under the hands":
+				set_posture = SetBiomechanicsScript.POSTURE_UNDERHAND
 			var push := SetBiomechanicsScript.resolve(
-				phase, -1.0 if dominant_hand == "Left" else 1.0
+				phase, -1.0 if dominant_hand == "Left" else 1.0, set_posture
 			)
 			body_pivot.rotation.x = float(push.torso_pitch_radians)
 			## Only the rise. The dip comes free from the knee fold below, which

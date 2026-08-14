@@ -122,11 +122,71 @@ static func window(phase: float, from_phase: float, to_phase: float) -> float:
 	return smoothstep(from_phase, to_phase, phase)
 
 
+## The three ways a second ball leaves the hands, and what separates them.
+##
+## `standing` is the push this module was written for: the legs load, drive, and
+## the heels come off the floor. The other two are not variations of it.
+##
+## `jump` takes the floor away. A setter in the air cannot push off anything, so
+## the legs stop being the engine and become ballast -- they fold *under* the
+## body and stay folded, the split closes because there is no stance to take,
+## and every newton the ball receives has to come from the shoulders and the
+## hands. That is why the arm travel is larger here and the leg travel is
+## nearly nothing: the same ball, out of a body with one fewer joint working.
+##
+## `underhand` is the ball that never got to hand height. The forearms take it,
+## the arms stay long and low and swing as one piece from the shoulders, and the
+## finish is a *point*: the whole body extends up behind the ball because the
+## only way to put a low ball high is to stand up into it. Its signal already
+## exists -- `_jump_set_decision` publishes `under the hands` as the reason a
+## setter stayed down, 136 times in 1,342 sets.
+const POSTURE_STANDING := &"standing"
+const POSTURE_JUMP := &"jump"
+const POSTURE_UNDERHAND := &"underhand"
+
+## How high the body actually goes on a jump set, in metres before body scaling.
+##
+## A set jump is not a spike jump. A setter leaves the floor to meet the ball
+## sooner and flatter, not to get as high as they can -- so this is well under
+## `BlockJumpModel`'s leaps and is deliberately not derived from them.
+const JUMP_RISE_METRES: float = 0.34
+## The knees fold and stay folded. There is no drive in the air, so the legs
+## hold one shape from take-off to landing rather than passing through it.
+const JUMP_TUCK_KNEE_DEGREES: float = -58.0
+## Everything the legs stop contributing has to come from somewhere. A jump
+## setter's hands travel further and finish higher for the same ball.
+const JUMP_SHOULDER_BONUS_DEGREES: float = 14.0
+
+## The underhand set. Long arms, low contact, and a finish that goes straight up.
+const UNDERHAND_SHOULDER_READY_DEGREES: float = -46.0
+const UNDERHAND_SHOULDER_CONTACT_DEGREES: float = -14.0
+## **The point.** The follow-through carries past the ball and finishes with the
+## platform aimed at the ceiling, which is the whole read of an underhand set:
+## a bump goes where the arms end up, so a ball meant to go up needs arms that
+## end up pointing there.
+const UNDERHAND_SHOULDER_FINISH_DEGREES: float = 62.0
+## Straight. A platform is two forearms locked into one surface, and a bent
+## elbow is the thing that makes a bump go sideways.
+const UNDERHAND_ELBOW_DEGREES: float = 3.0
+## Deeper than a standing set and it stays deep longer: the legs are what lift a
+## low ball, and they extend *through* the contact rather than before it.
+const UNDERHAND_KNEE_LOAD_DEGREES: float = -62.0
+const UNDERHAND_RISE_METRES: float = 0.17
+
+
 ## Every joint of a set at one instant.
 ##
 ## `hand` is +1 for a right-hander and -1 for a left-hander and mirrors only the
 ## foot split. A set is a symmetric action; nothing else in it has a handedness.
-static func resolve(phase: float, hand: float = 1.0) -> Dictionary:
+##
+## `posture` selects between the three actions above. It defaults to standing so
+## every existing caller is unchanged, and the simulator already publishes the
+## value on the SET event as `set_posture`.
+static func resolve(
+	phase: float, hand: float = 1.0, posture: StringName = POSTURE_STANDING
+) -> Dictionary:
+	if posture == POSTURE_UNDERHAND:
+		return _underhand(phase, hand)
 	var p := clampf(phase, -1.0, 1.0)
 	var gather := window(p, GATHER_START, GATHER_END)
 	## Runs *through* contact rather than up to it. This is the correction the
@@ -169,6 +229,32 @@ static func resolve(phase: float, hand: float = 1.0) -> Dictionary:
 	var rise := lerpf(0.0, EXTEND_RISE_METRES, drive)
 	rise = lerpf(rise, 0.0, recover)
 
+	## Off the floor, the legs stop working and the arms take over.
+	##
+	## Applied as a *replacement* for the leg terms rather than a blend with
+	## them: a folded leg that is still tracking `drive` is a setter pedalling in
+	## mid-air, which is what happens if this is written as a lerp toward a tuck.
+	if posture == POSTURE_JUMP:
+		var airborne := window(p, GATHER_END - 0.10, EXTEND_END + 0.18)
+		var leave := window(p, GATHER_END - 0.10, 0.0)
+		knee = lerpf(KNEE_GATHER_DEGREES, JUMP_TUCK_KNEE_DEGREES, leave)
+		## A parabola, not a ramp: up to the contact and down out of it, so the
+		## setter is at their peak when the ball leaves and is already coming
+		## down through the follow-through.
+		rise = JUMP_RISE_METRES * sin(clampf(airborne, 0.0, 1.0) * PI)
+		shoulder += JUMP_SHOULDER_BONUS_DEGREES * push
+		return {
+			"shoulder_degrees": shoulder,
+			"elbow_degrees": elbow,
+			"flare_degrees": flare,
+			"torso_pitch_radians": torso,
+			"knee_degrees": knee,
+			## No split. A stance is something you take on the floor; in the air
+			## the feet come together under the body.
+			"hip_split_degrees": lerpf(HIP_SPLIT_DEGREES * hand, 0.0, leave),
+			"rise_metres": rise,
+			"posture": POSTURE_JUMP,
+		}
 	return {
 		"shoulder_degrees": shoulder,
 		"elbow_degrees": elbow,
@@ -177,4 +263,59 @@ static func resolve(phase: float, hand: float = 1.0) -> Dictionary:
 		"knee_degrees": knee,
 		"hip_split_degrees": HIP_SPLIT_DEGREES * hand,
 		"rise_metres": rise,
+		"posture": POSTURE_STANDING,
+	}
+
+
+## The ball that never got to hand height.
+##
+## Written as its own solve rather than as more windows inside the push, because
+## it shares almost nothing with an overhead set: the arms start *below* the
+## hips instead of above the head, the elbows never bend, and the finish is the
+## expressive part rather than the recovery. Threading three postures through one
+## chain of lerps is how a module ends up with joints that belong to no action.
+static func _underhand(phase: float, hand: float) -> Dictionary:
+	var p := clampf(phase, -1.0, 1.0)
+	var gather := window(p, GATHER_START, GATHER_END)
+	var strike := window(p, GATHER_END, 0.0)
+	## Past the ball. The follow-through is most of what this pose is for, so it
+	## gets the widest window of the three phases.
+	var finish := window(p, 0.0, EXTEND_END + 0.22)
+	var recover := window(p, EXTEND_END + 0.22, RECOVER_END)
+
+	var shoulder := lerpf(
+		UNDERHAND_SHOULDER_READY_DEGREES,
+		UNDERHAND_SHOULDER_READY_DEGREES - 8.0, gather
+	)
+	shoulder = lerpf(shoulder, UNDERHAND_SHOULDER_CONTACT_DEGREES, strike)
+	shoulder = lerpf(shoulder, UNDERHAND_SHOULDER_FINISH_DEGREES, finish)
+	shoulder = lerpf(shoulder, UNDERHAND_SHOULDER_READY_DEGREES, recover)
+
+	## The legs lift the ball and they start before the arms, exactly as they do
+	## in the standing push -- but they finish *later*, because the extension is
+	## the thing that sends a low ball high.
+	var drive := window(p, GATHER_END - 0.08, EXTEND_END + 0.14)
+	var knee := lerpf(KNEE_READY_DEGREES, UNDERHAND_KNEE_LOAD_DEGREES, gather)
+	knee = lerpf(knee, KNEE_EXTEND_DEGREES, drive)
+	knee = lerpf(knee, KNEE_READY_DEGREES, recover)
+
+	var rise := lerpf(0.0, UNDERHAND_RISE_METRES, drive)
+	rise = lerpf(rise, 0.0, recover)
+
+	## Folded over the ball at the gather and standing tall through the finish.
+	var torso := lerpf(TORSO_REST_RADIANS, -0.26, gather)
+	torso = lerpf(torso, 0.10, finish)
+	torso = lerpf(torso, TORSO_REST_RADIANS, recover)
+
+	return {
+		"shoulder_degrees": shoulder,
+		"elbow_degrees": UNDERHAND_ELBOW_DEGREES,
+		## The arms are locked together into one surface, so there is no flare
+		## until the platform breaks on the recovery.
+		"flare_degrees": lerpf(0.0, FLARE_RECOVER_DEGREES, recover),
+		"torso_pitch_radians": torso,
+		"knee_degrees": knee,
+		"hip_split_degrees": HIP_SPLIT_DEGREES * 0.5 * hand,
+		"rise_metres": rise,
+		"posture": POSTURE_UNDERHAND,
 	}

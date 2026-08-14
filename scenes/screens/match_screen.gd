@@ -686,6 +686,20 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 	## which had reappeared one layer further up.
 	if int(event.event_type) == RallyEventModel.EventType.BLOCK:
 		context["block_jump_timing"] = event.metadata.get("block_jump_timing", {})
+	## Which of the three second-contact actions the rig should draw. Both keys,
+	## because the posture says whether they left the floor and only the reason
+	## says whether a grounded set was taken above the head or off the forearms.
+	##
+	## The plumb the block's jump timing needed one commit and did not get is the
+	## warning here: `block_jump_timing` was published by the resolver, read by
+	## the court, and never put in this dictionary, so it changed nothing while
+	## looking connected. `tools/set_posture_shot.tscn` is what says this one
+	## arrived.
+	if int(event.event_type) == RallyEventModel.EventType.SET:
+		context["set_posture"] = str(event.metadata.get("set_posture", ""))
+		context["set_posture_reason"] = str(
+			event.metadata.get("set_posture_reason", "")
+		)
 	var signature_actor := int(event.metadata.get("signature_actor_id", event.actor_id))
 	if signature_actor == actor_id:
 		var move := str(event.metadata.get("signature_move", ""))
