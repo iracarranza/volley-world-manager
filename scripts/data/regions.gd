@@ -422,13 +422,9 @@ static func tradition_resistance(region_name: String) -> float:
 ## `CLUB_NAMES` and a full identity in `DEFINITIONS`. A list used as the answer
 ## to two questions is right for at most one of them.
 static func manageable_names() -> Array[String]:
-	var majors: Array[String] = SIXNET_PARTICIPANTS.duplicate()
-	majors.sort()
-	var minors: Array[String] = MINOR_REGIONS.duplicate()
-	minors.sort()
 	var result: Array[String] = []
-	result.append_array(majors)
-	result.append_array(minors)
+	result.append_array(major_names())
+	result.append_array(minor_names())
 	return result
 
 
@@ -440,6 +436,47 @@ static func manageable_names() -> Array[String]:
 ## are candidates for an academy that is yours.
 static func is_major(region_name: String) -> bool:
 	return canonical_name(region_name) in SIXNET_PARTICIPANTS
+
+
+## ## Asking the tier before the region
+##
+## Fourteen tiles in one grid made the tier a *suffix* -- a "· minor" appended to
+## six of the names -- which is the wrong shape for the choice being made. The
+## difference between a major region and a minor one is the largest single fact
+## about a save: how many clubs there are, whether founding is on the table,
+## whether your best volis are watched by academies that are not yours. That is a
+## question, and a question answered by reading a badge on a tile is a question
+## the interface declined to ask.
+##
+## So the tier is asked first and the region second, and these two lists are what
+## the second question is drawn from. Sorted, because a picker with a stable
+## order is a picker somebody can learn.
+const TIER_MAJOR := &"major"
+const TIER_MINOR := &"minor"
+
+
+static func major_names() -> Array[String]:
+	var majors: Array[String] = SIXNET_PARTICIPANTS.duplicate()
+	majors.sort()
+	return majors
+
+
+static func minor_names() -> Array[String]:
+	var minors: Array[String] = MINOR_REGIONS.duplicate()
+	minors.sort()
+	return minors
+
+
+## The regions of one tier. Unknown tiers give the majors rather than nothing:
+## an empty second step is a dead end, and a save file is not a trusted source.
+static func names_in_tier(tier: StringName) -> Array[String]:
+	return minor_names() if tier == TIER_MINOR else major_names()
+
+
+## Which tier a region belongs to, so a picker restoring a saved choice can open
+## on the right page instead of resetting it.
+static func tier_of(region_name: String) -> StringName:
+	return TIER_MAJOR if is_major(region_name) else TIER_MINOR
 
 
 ## Regions that field a club you could be drawn against.

@@ -29,6 +29,19 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 ## Which hand holds the clipboard. The backlog's mirrored-clipboard entry has
 ## been waiting on a manager who has one.
 @export_enum("right", "left") var manager_hand: String = "right"
+## **And what the manager looks like**, which is a voli like any other.
+##
+## Body type, produce variety, colourway, coat, face, height and the two limb
+## proportions, as `ManagerProfile.DEFAULT_APPEARANCE` describes them. Stored as
+## one dictionary rather than as nine exports because it is one answer to one
+## question and because every field in it is sanitised together on the way back
+## in -- a save carrying a produce a later build dropped should open as a voli,
+## not as nine separate migrations.
+##
+## `manager_hand` above stays where it is. It is not appearance: it decides which
+## way the clipboard is mirrored, and a thing with a consequence does not belong
+## in the bag of things without one.
+@export var manager_appearance: Dictionary = {}
 ## What the club leases, and whether it owns it. Replaces Established/Founded at
 ## save generation, per ACCOMMODATIONS_AND_CARE §15: every club has new volis and
 ## old ones, and nobody starts by coaching a region's academy. A lease is a
@@ -152,6 +165,7 @@ func to_dict() -> Dictionary:
 		"region": region, "identity": identity, "absolute_week": absolute_week,
 		"manager_name": manager_name, "manager_region": manager_region,
 		"manager_background": manager_background, "manager_hand": manager_hand,
+		"manager_appearance": manager_appearance.duplicate(true),
 		"housing_structure": housing_structure,
 		"palate_clock": palate_clock.duplicate(true),
 		"staff_familiarity": staff_familiarity.duplicate(true),
@@ -191,6 +205,11 @@ static func from_dict(data: Dictionary) -> VolleyballCareerState:
 	state.manager_region = str(data.get("manager_region", state.region))
 	state.manager_background = str(data.get("manager_background", "played"))
 	state.manager_hand = str(data.get("manager_hand", "right"))
+	## Sanitised on the way in rather than trusted, for the reason above the
+	## field: this is the one place an old save's body meets a newer table.
+	state.manager_appearance = ManagerProfile.sanitise_appearance(
+		Dictionary(data.get("manager_appearance", {}))
+	)
 	state.housing_structure = str(data.get("housing_structure", "Bunkhouse"))
 	state.palate_clock = Dictionary(data.get("palate_clock", {})).duplicate(true)
 	state.staff_familiarity = Dictionary(

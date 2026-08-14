@@ -209,7 +209,33 @@ side of vertical over a 0.9 m span -- sweeps about 1.1 m per stance. See
 
 ---
 
-## 7. Inherited probes, and what they are worth
+## 7. `character_creation_shot` -- did the choice reach the body
+
+**Asks:** when the career builder is told to make a particular voli, does the
+rig draw that voli?
+
+Chooses four bodies that differ on every axis at once, reads the silhouette back
+out of `PlayerActor3D` after each, and compares it against what was asked for --
+body type, expression, skin, height recovered from the scale the rig chose, and
+the coat counted against the same body wearing none. Then creates the career and
+reads the manager back off `CareerState`.
+
+**Reports:** 4 of 4 drawn, 0 identical bodies, major 8 regions / minor 6, and
+the body stored on the career.
+
+**What this found:** the first version counted coat marks by filtering `extras`
+on `color_key == "literal"`, which is not a key on those parts, and reported
+every working coat as NOT REACHED. A count is only a measurement next to the
+count it is being compared with -- so it now subtracts the same body wearing
+nothing.
+
+**Known limits:** it drives the screen's own methods rather than clicking, so it
+proves the model and the wiring and says nothing about whether a button is
+reachable with a mouse. The layout is checked by looking at the four PNGs.
+
+---
+
+## 8. Inherited probes, and what they are worth
 
 - **`block_rate_probe`** -- stuff / involvement / touch. Baseline 2.56% /
   79.59% / 38.66%. The career is unseeded, so the roster differs between runs

@@ -419,13 +419,29 @@ static var type_expression: float = 0.45
 
 ## The full description of one player's body: meshes, attachment points,
 ## colours and cosmetic parts.
-static func silhouette(body_type: String, player_id: int) -> Dictionary:
+##
+## `choices` is how a body stops being a consequence of an id.
+##
+## Every axis below -- the produce a Vegi grows as, the colourway, the coat --
+## was a hash of the player id, which is exactly right for the forty volis the
+## world generates and exactly wrong for the one the player makes. A generated
+## voli should be a surprise; a chosen one should be a choice. The hash stays as
+## the default for every caller that names nothing, so a roster is unchanged and
+## only the character creator passes anything here.
+##
+## Unrecognised values fall back to the hash rather than to a fixed body,
+## because a save carrying a produce that a later version removed should look
+## like *a* voli rather than like the first one in a list.
+static func silhouette(
+	body_type: String, player_id: int, choices: Dictionary = {}
+) -> Dictionary:
 	var resolved := body_type if is_modelled(body_type) else FALLBACK_TYPE
 	var authored: Dictionary
+	var produce_key := chosen_produce(player_id, choices)
 	## Which colourway this voli wears. Keyed by produce for a Vegi and by type
 	## for everyone else, so a palette is a property of the *shape* rather than
 	## of the species -- a Tomato's colours have nothing to say about a Stalk's.
-	var palette_key := produce_for(player_id) if resolved == "Vegi" else resolved
+	var palette_key := produce_key if resolved == "Vegi" else resolved
 	match resolved:
 		"Feli":
 			authored = _feli()
@@ -438,8 +454,8 @@ static func silhouette(body_type: String, player_id: int) -> Dictionary:
 		"Simi":
 			authored = _simi()
 		_:
-			authored = _vegi(produce_for(player_id))
-	var palette := palette_for(palette_key, player_id)
+			authored = _vegi(produce_key)
+	var palette := chosen_palette(palette_key, player_id, choices)
 	if not palette.is_empty():
 		authored["skin"] = palette.skin
 		authored["crown"] = palette.crown
@@ -447,7 +463,67 @@ static func silhouette(body_type: String, player_id: int) -> Dictionary:
 	## a skin and the skin is not known until the line above. Marking a body first
 	## and recolouring it after would give every voli of a produce the same stripes
 	## in the same ink whatever they were wearing.
-	return _add_neck(_toward_universal(_add_markings(authored, resolved, player_id)))
+	return _add_neck(_toward_universal(_add_markings(
+		authored, resolved, player_id, chosen_marking(resolved, player_id, choices)
+	)))
+
+
+## The three chosen-or-hashed axes, each written once so the picker and the rig
+## cannot disagree about what a choice means.
+##
+## Named rather than inlined into `silhouette` because the character creator has
+## to ask the same questions to build its option lists: "which produce is this
+## body wearing right now" is the same question whether it is being drawn or
+## being offered.
+static func chosen_produce(player_id: int, choices: Dictionary) -> String:
+	var named := str(choices.get("produce", ""))
+	return named if named in PRODUCE else produce_for(player_id)
+
+
+static func chosen_palette(
+	body_key: String, player_id: int, choices: Dictionary
+) -> Dictionary:
+	var options: Array = PALETTES.get(body_key, [])
+	var index := int(choices.get("palette_index", -1))
+	if options.is_empty() or index < 0 or index >= options.size():
+		return palette_for(body_key, player_id)
+	return Dictionary(options[index])
+
+
+static func chosen_marking(
+	body_key: String, player_id: int, choices: Dictionary
+) -> String:
+	var named := str(choices.get("marking", ""))
+	return named if named in marking_options(body_key) \
+		else marking_for(body_key, player_id)
+
+
+## The distinct coats a body can wear, in a stable order.
+##
+## `MARKINGS` is weighted by repetition, which is the right shape for drawing
+## one at random and the wrong shape for a menu -- offered as-is it would list
+## "none" three times. Deduplicated here rather than there, because the
+## weighting is load-bearing for every voli the world generates and only the
+## picker wants it flattened.
+static func marking_options(body_key: String) -> Array[String]:
+	var seen: Array[String] = []
+	for marking in Array(MARKINGS.get(body_key, MARKINGS["Vegi"])):
+		if not seen.has(str(marking)):
+			seen.append(str(marking))
+	return seen
+
+
+## How many colourways this body has, so a picker can index them without
+## reaching into the table.
+static func palette_count(body_key: String) -> int:
+	return Array(PALETTES.get(body_key, [])).size()
+
+
+## Which palette table a body type reads, which is the produce for a Vegi and
+## the type itself for everybody else.
+static func palette_key(body_type: String, produce_name: String) -> String:
+	var resolved := body_type if is_modelled(body_type) else FALLBACK_TYPE
+	return produce_name if resolved == "Vegi" else resolved
 
 
 ## What a voli is marked with, and how often.
@@ -562,9 +638,10 @@ static func _mark(
 ## Deterministic from the id, so a voli's coat is a property of that voli and not
 ## of when they happened to be drawn.
 static func _add_markings(
-	spec: Dictionary, body_key: String, player_id: int
+	spec: Dictionary, body_key: String, player_id: int, marking: String = ""
 ) -> Dictionary:
-	var marking := marking_for(body_key, player_id)
+	if marking.is_empty():
+		marking = marking_for(body_key, player_id)
 	if marking == "none":
 		return spec
 	var skin: Color = spec.get("skin", Color("c8332c"))

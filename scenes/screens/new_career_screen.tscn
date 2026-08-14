@@ -131,7 +131,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
-text = "QUESTION 1 OF 4"
+text = "QUESTION 1 OF 5"
 
 [node name="CancelButton" type="Button" parent="Layout/MainMargin/Main/Topbar" unique_id=863861019]
 unique_name_in_owner = true
@@ -164,8 +164,41 @@ theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 20
 
+[node name="VoliStep" type="HBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="PreviewFrame" type="PanelContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep"]
+custom_minimum_size = Vector2(244, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("PreviewPanel")
+
+[node name="VoliPreview" type="SubViewportContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep/PreviewFrame"]
+unique_name_in_owner = true
+layout_mode = 2
+stretch = true
+
+[node name="PreviewViewport" type="SubViewport" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep/PreviewFrame/VoliPreview"]
+unique_name_in_owner = true
+handle_input_locally = false
+size = Vector2i(244, 470)
+render_target_update_mode = 4
+
+[node name="VoliScroll" type="ScrollContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep"]
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_scroll_mode = 0
+
+[node name="VoliControls" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep/VoliScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
 [node name="RegionStep" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin" unique_id=1618827067]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 14
 
@@ -173,6 +206,17 @@ theme_override_constants/separation = 14
 layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
 text = "SELECT A VOLLEYBALL CULTURE"
+
+[node name="TierRow" type="HBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/RegionStep"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TierHint" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/RegionStep"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.74, 0.84, 1)
+autowrap_mode = 2
 
 [node name="RegionGrid" type="GridContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/RegionStep" unique_id=1676705757]
 unique_name_in_owner = true

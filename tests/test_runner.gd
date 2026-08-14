@@ -30,6 +30,7 @@ const ACCOMMODATION_SCREEN_SCRIPT := preload(
 	"res://scenes/screens/accommodation_screen.gd"
 )
 const MANAGER_PROFILE_SCRIPT := preload("res://scripts/data/manager_profile.gd")
+const FACE_EXPRESSIONS_SCRIPT := preload("res://scripts/data/face_expressions.gd")
 const PLAYER_GENERATOR_SCRIPT := preload("res://scripts/systems/player_generator.gd")
 const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.gd")
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
@@ -15736,6 +15737,158 @@ func _test_the_manager_is_somebody() -> void:
 	_check(
 		absf(FOOD_SUPPLY_SCRIPT.palate_of(reloaded.palate_clock, 7) - 0.42) < 0.001,
 		"a voli who has eaten the same paste for weeks is still tired of it",
+	)
+
+	_test_manager_body()
+
+
+## ## The manager is a voli
+##
+## `CHARACTER_CREATION.md`, which used to say "not a portrait editor" and no
+## longer does. The argument that bullet made was that a second character
+## pipeline is expensive; there is no second pipeline, and every axis the creator
+## offers -- body type, produce variety, colourway, coat, face -- was already
+## authored and already being chosen by a hash of a player id.
+##
+## Four things have to hold, and the last is the one this repository keeps
+## getting wrong.
+func _test_manager_body() -> void:
+	var body_types := preload("res://scripts/data/body_type_models.gd")
+
+	## 1. A named choice beats the hash. Two ids that would hash to different
+	##    bodies must draw the same body when both are told what to be -- which
+	##    is the whole claim, and it is not observable from one id.
+	var first: Dictionary = body_types.silhouette("Vegi", 11, {
+		"produce": "Pepper", "palette_index": 3, "marking": "blaze",
+	})
+	var second: Dictionary = body_types.silhouette("Vegi", 9182, {
+		"produce": "Pepper", "palette_index": 3, "marking": "blaze",
+	})
+	_check(
+		Color(first.skin).is_equal_approx(Color(second.skin))
+			and str(first.get("produce", "")) == str(second.get("produce", ""))
+			and Array(first.get("extras", [])).size()
+				== Array(second.get("extras", [])).size(),
+		"a chosen body is the same body whoever is wearing it",
+	)
+
+	## 2. And every offered colourway is a *different* colour. A picker whose
+	##    entries all draw the same skin is a picker that is not connected, and
+	##    it looks identical to one that is.
+	var skins: Array[String] = []
+	for index in range(body_types.palette_count("Pepper")):
+		skins.append(Color(body_types.silhouette(
+			"Vegi", 3, {"produce": "Pepper", "palette_index": index}
+		).skin).to_html(false))
+	var distinct := {}
+	for skin in skins:
+		distinct[skin] = true
+	_check(
+		skins.size() >= 3 and distinct.size() == skins.size(),
+		"every colourway on offer draws a different body",
+	)
+
+	## 3. A stale save opens as a voli. One unrecognised field falls back on its
+	##    own axis and takes nothing else with it.
+	var salvaged := MANAGER_PROFILE_SCRIPT.sanitise_appearance({
+		"body_type": "Kaiju", "produce": "Rutabaga", "palette_index": 99,
+		"marking": "plaid", "expression": "smug", "height_cm": 400.0,
+		"arm_ratio": 9.0, "leg_ratio": -3.0, "hand": "left",
+	})
+	_check(
+		body_types.is_modelled(str(salvaged.body_type))
+			and str(salvaged.produce) in body_types.PRODUCE
+			and str(salvaged.marking) == "none"
+			and FACE_EXPRESSIONS_SCRIPT.has(str(salvaged.expression))
+			and float(salvaged.height_cm) <= MANAGER_PROFILE_SCRIPT.HEIGHT_CM.y
+			and str(salvaged.hand) == "left",
+		"a body written by another build opens as a body, and keeps what it can",
+	)
+
+	## 4. **Every slider can reach its own stated range**, which is §0 of
+	##    `FAILURE_MODES.md` and the reason this check exists at all.
+	##
+	##    `PlayerActor3D` clamps `arm_length_scale` to 0.78-1.24 and
+	##    `leg_length_scale` to 0.86-1.16, and it does it silently. A slider whose
+	##    ends both land on the same clamp is a control that does nothing and
+	##    looks exactly like one that works. Measured through the rig rather than
+	##    by restating its arithmetic here, because restating the formula is how
+	##    a check ends up agreeing with a bug.
+	var actor: Node3D = preload(
+		"res://scenes/components/player_actor_3d.tscn"
+	).instantiate()
+	get_root().add_child(actor)
+	var ends := {}
+	for axis in ["height_cm", "arm_ratio", "leg_ratio"]:
+		var bounds: Vector2 = MANAGER_PROFILE_SCRIPT.HEIGHT_CM if axis == "height_cm" \
+			else (MANAGER_PROFILE_SCRIPT.ARM_RATIO if axis == "arm_ratio" \
+				else MANAGER_PROFILE_SCRIPT.LEG_RATIO)
+		var drawn: Array[float] = []
+		for value in [bounds.x, bounds.y]:
+			var body := MANAGER_PROFILE_SCRIPT.DEFAULT_APPEARANCE.duplicate(true)
+			body[axis] = value
+			actor.configure(
+				0, true, "", "Right",
+				MANAGER_PROFILE_SCRIPT.appearance_profile(body),
+			)
+			drawn.append(float(
+				actor.body_height_scale if axis == "height_cm" else (
+					actor.arm_length_scale if axis == "arm_ratio"
+					else actor.leg_length_scale
+				)
+			))
+		ends[axis] = drawn
+	actor.queue_free()
+	var reaches := true
+	for axis in ends:
+		var drawn: Array = ends[axis]
+		if absf(float(drawn[1]) - float(drawn[0])) < 0.05:
+			reaches = false
+	_check(
+		reaches,
+		"each body slider draws a visibly different body at each of its ends",
+	)
+
+	## And the body survives a save, which is where the whole thing is going.
+	var carrier := CAREER_STATE_SCRIPT.new()
+	carrier.manager_appearance = MANAGER_PROFILE_SCRIPT.sanitise_appearance({
+		"body_type": "Simi", "marking": "patch", "expression": "cross",
+		"height_cm": 201.0, "arm_ratio": 1.19, "hand": "left",
+	})
+	var reopened: Resource = CAREER_STATE_SCRIPT.from_dict(carrier.to_dict())
+	_check(
+		str(reopened.manager_appearance.body_type) == "Simi"
+			and str(reopened.manager_appearance.marking) == "patch"
+			and str(reopened.manager_appearance.expression) == "cross"
+			and absf(float(reopened.manager_appearance.height_cm) - 201.0) < 0.01,
+		"the manager's body survives a save",
+	)
+
+	## ## Major or minor, then which one
+	##
+	## The tier was a suffix on six of fourteen tiles. Splitting it into its own
+	## question is only honest if the two pages between them are the whole world
+	## and never the same region twice.
+	var majors := REGIONS_SCRIPT.major_names()
+	var minors := REGIONS_SCRIPT.minor_names()
+	var overlap := false
+	for name in majors:
+		if name in minors:
+			overlap = true
+	var partitions := majors.size() + minors.size() \
+		== REGIONS_SCRIPT.manageable_names().size()
+	var tiers_agree := true
+	for name in majors:
+		if REGIONS_SCRIPT.tier_of(name) != REGIONS_SCRIPT.TIER_MAJOR:
+			tiers_agree = false
+	for name in minors:
+		if REGIONS_SCRIPT.tier_of(name) != REGIONS_SCRIPT.TIER_MINOR:
+			tiers_agree = false
+	_check(
+		not overlap and partitions and tiers_agree
+			and not majors.is_empty() and not minors.is_empty()
+			and REGIONS_SCRIPT.names_in_tier(REGIONS_SCRIPT.TIER_MINOR) == minors,
+		"the two tiers between them are every manageable region, and neither is empty",
 	)
 
 

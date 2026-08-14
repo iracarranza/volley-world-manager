@@ -92,6 +92,11 @@ func create_career(
 	organization_type: String,
 	identity: String,
 	custom_principles: Dictionary = {},
+	## Who the manager is: name, home region, background, hand and body. Optional
+	## so every existing caller -- the suite's fixtures, the probes -- keeps
+	## working and gets the defaults, which is what they had before there was a
+	## manager at all.
+	manager: Dictionary = {},
 ) -> String:
 	if career_name.strip_edges().is_empty() or organization_name.strip_edges().is_empty():
 		return "Career and organization names are required."
@@ -102,6 +107,20 @@ func create_career(
 	state.region = region
 	state.organization_type = organization_type
 	state.identity = identity
+	## The manager's own region defaults to the club's, which is the common case
+	## and never the interesting one. `CHARACTER_CREATION.md` wants the two to
+	## differ often; the creator asks for one region today and this is the seam
+	## where a second question would land.
+	state.manager_name = str(manager.get("name", "")).strip_edges()
+	state.manager_region = VolleyballRegions.canonical_name(
+		str(manager.get("region", region))
+	)
+	state.manager_background = str(manager.get("background", "played"))
+	state.manager_hand = "left" if str(manager.get("hand", "right")) == "left" \
+		else "right"
+	state.manager_appearance = ManagerProfile.sanitise_appearance(
+		Dictionary(manager.get("appearance", {}))
+	)
 	## **The save's opening position is where you are, not what you are called.**
 	##
 	## This was `6/65,000` for an academy and `10/120,000` for a club -- two

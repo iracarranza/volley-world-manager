@@ -94,6 +94,9 @@ var ready_stance: String = "defending"
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
 ## than being derived from state that does not exist.
 var expression: String = FaceExpressionsScript.NEUTRAL
+## Produce, colourway and coat, when somebody chose them rather than the id
+## deciding. Empty means the hash, which is every generated voli.
+var appearance: Dictionary = {}
 ## Where the actor is currently facing, kept between frames so a change of
 ## heading can be turned into rather than snapped to.
 var facing_yaw: float = 0.0
@@ -346,6 +349,20 @@ func configure(
 	is_home_team = home_team
 	dominant_hand = "Left" if p_dominant_hand == "Left" else "Right"
 	body_type = str(physical_profile.get("body_type", "Vegi"))
+	## **A chosen body, where there was only a derived one.**
+	##
+	## Produce, colourway and coat were hashes of `player_id`, which is right for
+	## the volis the world generates and wrong for the one the player makes.
+	## Carried on the physical profile rather than as five more arguments,
+	## because that dictionary is already the channel for "what this body is" and
+	## every caller that names nothing keeps the hash it had.
+	appearance = Dictionary(physical_profile.get("appearance", {}))
+	## Before the build, not after it. `_build_silhouette` draws the face, so
+	## setting the expression afterwards would build nine boxes twice on every
+	## voli on the court to change the second set.
+	var chosen_face := str(physical_profile.get("expression", ""))
+	if FaceExpressionsScript.has(chosen_face):
+		expression = chosen_face
 	_build_silhouette()
 	_apply_physical_profile(physical_profile)
 	## Name and position. It used to read `name · 200 cm · R`, which spent both
@@ -2631,7 +2648,7 @@ func _ensure_node_bindings() -> void:
 ## an aubergine without a branch anywhere in the animation code.
 func _build_silhouette() -> void:
 	_ensure_node_bindings()
-	silhouette = BodyTypeModelsScript.silhouette(body_type, player_id)
+	silhouette = BodyTypeModelsScript.silhouette(body_type, player_id, appearance)
 	produce = str(silhouette.get("produce", ""))
 	shoulder_offset = silhouette.get("shoulder", Vector2(0.40, 1.52))
 	hip_offset = silhouette.get("hip", Vector2(0.16, 0.48))
