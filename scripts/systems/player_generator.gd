@@ -27,7 +27,7 @@ const POSITIONS: Array[Dictionary] = [
 ## a slightly smaller-than-average profile reinforces that this specialty
 ## isn't won by size. Landavol stays at zero across the board: the one region
 ## with no physical lean at all, matching it now having no attribute
-## specialty either (see REGION_SPECIALTY below). Ispayk now carries the
+## specialty either (see REGION_SPECIALTY below). Ĭspayk now carries the
 ## largest frame bias: its bomba tradition is built around terminal power.
 ##
 ## **Pāwa Hitō is large, and was not.** It sat at 0/-1/0 on the reasoning that
@@ -37,39 +37,39 @@ const POSITIONS: Array[Dictionary] = [
 ## left. Their attribute list carries no attacking attribute at all now, so the
 ## frame is where the threat has to live, alongside `fatigue_resistance`.
 ##
-## Bloc du Larg rises for the same kind of reason and by a different route: its
-## specialty list gave up `jump_reach` so that Ispayk could own air presence
+## Blôc du Larg rises for the same kind of reason and by a different route: its
+## specialty list gave up `jump_reach` so that Ĭspayk could own air presence
 ## outright, which means Largen size must be stated here or nowhere.
 ##
 ## A'ace leans slightly positive across all three: assembled, well-resourced
 ## athletes rather than a developed body type of its own.
 const REGION_HEIGHT_BIAS := {
-	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Bloc du Larg": 3.0, "Landavol": 0.0,
-	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 4.0, "A'ace": 1.0,
-	"Tu'ul ys Feynt": -3.0,
-	"Lo-onğ Ralī": -5.0,
-	"Bompaşao": -2.0,
-	"Rhen Tempaol": -1.0,
+	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Blôc du Larg": 3.0, "Landavol": 0.0,
+	"Xérvu": 1.0, "Taktikã": -1.0, "Ĭspayk": 4.0, "A'ace": 1.0,
+	"Tãul ys Feynt": -3.0,
+	"Lo-ong Ralī": -5.0,
+	"Bompaçao": -2.0,
+	"Rhėn Tempaol": -1.0,
 	"Kutré Lyn": 0.0,
 	"Zaitgaist": 0.0,
 }
 const REGION_MASS_BIAS := {
-	"Pāwa Hitō": 4.0, "Spëddigh": -3.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
-	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": 5.0, "A'ace": 1.0,
-	"Tu'ul ys Feynt": -4.0,
-	"Lo-onğ Ralī": -5.0,
-	"Bompaşao": -1.0,
-	"Rhen Tempaol": -3.0,
+	"Pāwa Hitō": 4.0, "Spëddigh": -3.0, "Blôc du Larg": 2.0, "Landavol": 0.0,
+	"Xérvu": 0.0, "Taktikã": -1.0, "Ĭspayk": 5.0, "A'ace": 1.0,
+	"Tãul ys Feynt": -4.0,
+	"Lo-ong Ralī": -5.0,
+	"Bompaçao": -1.0,
+	"Rhėn Tempaol": -3.0,
 	"Kutré Lyn": -2.0,
 	"Zaitgaist": 0.0,
 }
 const REGION_WINGSPAN_BIAS := {
-	"Pāwa Hitō": 2.0, "Spëddigh": -2.0, "Bloc du Larg": 4.0, "Landavol": 0.0,
-	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 3.0, "A'ace": 1.0,
-	"Tu'ul ys Feynt": -2.0,
-	"Lo-onğ Ralī": -3.0,
-	"Bompaşao": 0.0,
-	"Rhen Tempaol": -1.0,
+	"Pāwa Hitō": 2.0, "Spëddigh": -2.0, "Blôc du Larg": 4.0, "Landavol": 0.0,
+	"Xérvu": 2.0, "Taktikã": 0.0, "Ĭspayk": 3.0, "A'ace": 1.0,
+	"Tãul ys Feynt": -2.0,
+	"Lo-ong Ralī": -3.0,
+	"Bompaçao": 0.0,
+	"Rhėn Tempaol": -1.0,
 	"Kutré Lyn": 0.0,
 	"Zaitgaist": 0.0,
 }
@@ -78,10 +78,10 @@ const REGION_WINGSPAN_BIAS := {
 ##
 ## Serving and the abstract mental/tactical attributes used to be scattered
 ## across other regions with no home of their own (Pāwa Hitō carried
-## serve_power as one bonus among five; Bloc du Larg and Landavol both leaned
+## serve_power as one bonus among five; Blôc du Larg and Landavol both leaned
 ## mental with overlapping attributes). Xérvu and Taktikã now own those
 ## identities outright, which is also why Pāwa Hitō drops serve_power and
-## Bloc du Larg drops tactical_discipline -- each specialty lives in exactly
+## Blôc du Larg drops tactical_discipline -- each specialty lives in exactly
 ## one region rather than being diluted across several.
 ##
 ## Landavol has no specialty at all: it is deliberately the generic, no-lean
@@ -89,7 +89,7 @@ const REGION_WINGSPAN_BIAS := {
 ##
 ## Pāwa Hitō sustains repeated transition attacks; Spëddigh spends effort and
 ## tempo to keep every phase moving; Taktikã develops players whose execution
-## changes little with emotional match flow; Ispayk develops the large, fast
+## changes little with emotional match flow; Ĭspayk develops the large, fast
 ## arm and terminal contact behind its bomba tradition. A'ace deliberately gets
 ## only three attributes spanning three different categories (attack_power,
 ## serve_power, block_timing) rather than one deep specialty: it represents
@@ -105,7 +105,7 @@ const REGION_SPECIALTY := {
 	## else labours, and from a frame that was raised to match the fiction.
 	##
 	## `approach_timing` and `attack_accuracy` were dropped from here rather than
-	## from Ispayk: those are a spike being *perfected*, which is Ispayk's whole
+	## from Ĭspayk: those are a spike being *perfected*, which is Ĭspayk's whole
 	## claim, and having them in both was the single worst overlap in the table --
 	## the two regions the design most needed to separate shared two attributes.
 	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness"],
@@ -124,26 +124,26 @@ const REGION_SPECIALTY := {
 	## `lateral_speed` and `explosiveness`, which are Spëddigh's and Pāwa Hitō's,
 	## so the region built on coverage was expressed in two other regions'
 	## vocabulary. Size is now carried by the physique bias instead of by
-	## `jump_reach` -- a different channel from Ispayk's air presence, which is
+	## `jump_reach` -- a different channel from Ĭspayk's air presence, which is
 	## what lets both regions be tall without being the same claim -- and the
 	## attributes say the thing the fiction actually says: they touch what you
 	## hit, and what gets past the wall is still dug.
-	"Bloc du Larg": ["block_timing", "reception_stability", "dig_control",
+	"Blôc du Larg": ["block_timing", "reception_stability", "dig_control",
 		"ball_control"],
 	"Landavol": [],
 	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
 		"serve_aggression", "serve_variation"],
 	"Taktikã": ["decision_making", "composure", "tactical_discipline",
 		"adaptability", "unpredictability"],
-	## **One polished swing, fed as often as possible.** Ispayk is not Pāwa Hitō
+	## **One polished swing, fed as often as possible.** Ĭspayk is not Pāwa Hitō
 	## with a bigger frame: Pāwa's claim is *repetition* -- the sixth attack of a
-	## rally as good as the first -- and Ispayk's is a single terminal contact so
+	## rally as good as the first -- and Ĭspayk's is a single terminal contact so
 	## well drilled that it goes through a block rather than around one. The
 	## bomba is a technique, not an engine.
 	##
 	## So `shot_variety` goes, and it is the point of the change rather than a
 	## trim: a side that can hit six different shots is not predictable, and being
-	## predictable is what Ispayk is supposed to *cost*. What replaces it is more
+	## predictable is what Ĭspayk is supposed to *cost*. What replaces it is more
 	## of the same swing -- `approach_timing` and `attack_accuracy` are the
 	## polish, `attack_power` and `arm_speed` the terminal contact. A defence that
 	## has seen it enough times knows exactly where it is going, which is what
@@ -152,7 +152,7 @@ const REGION_SPECIALTY := {
 	## `block_timing` is dropped for a different reason: it sat in three regions
 	## at once, so the blocking tradition, the bomba tradition and the bought
 	## squad all claimed it and none of them owned it.
-	"Ispayk": ["attack_power", "arm_speed", "jump_reach", "approach_timing",
+	"Ĭspayk": ["attack_power", "arm_speed", "jump_reach", "approach_timing",
 		"attack_accuracy"],
 	## **Bought terminal ability, and nothing that makes a team of it.**
 	##
@@ -178,17 +178,17 @@ const REGION_SPECIALTY := {
 	## core passing technique (Spëddigh owns balance and pace resistance but
 	## never reception itself), and `attack_accuracy`, claimed by nobody at all
 	## despite being primary for three of the five roles.
-	"Tu'ul ys Feynt": ["feinting", "tooling", "finesse"],
+	"Tãul ys Feynt": ["feinting", "tooling", "finesse"],
 	## The long-rally tradition, which was worse at digging than the blocking
 	## tradition. `dig_control` is only 0.22 of dig capability and
 	## `reception_stability` enters a dig solely through the body penalty, so two
 	## of its three attributes barely reached the floor. `anticipation` is 0.30
-	## and is the one Bloc du Larg gives up, which takes this region from 0.22 of
-	## the dig model to 0.52 without poaching `reception` -- Bompaşao's claim,
+	## and is the one Blôc du Larg gives up, which takes this region from 0.22 of
+	## the dig model to 0.52 without poaching `reception` -- Bompaçao's claim,
 	## and the only attribute that outweighs it.
-	"Lo-onğ Ralī": ["stamina", "dig_control", "anticipation"],
-	"Bompaşao": ["reception", "reception_balance", "ball_control"],
-	"Rhen Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
+	"Lo-ong Ralī": ["stamina", "dig_control", "anticipation"],
+	"Bompaçao": ["reception", "reception_balance", "ball_control"],
+	"Rhėn Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
 	"Kutré Lyn": ["attack_accuracy", "shot_variety", "court_vision"],
 	## Zaitgaist has no tradition of its own. Its specialty comes entirely from
 	## `region_overlay`, rewritten each season to mirror whoever last won the
@@ -544,7 +544,7 @@ static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
 ## distinct. Weighting body type regionally on top of that would immediately
 ## read as "people from here are built like that", which is the one reading
 ## this must never support. A flat draw keeps morphology orthogonal to origin,
-## so a Tu'ul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
+## so a Tãul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
 ## traditions and the *tradition* is what differs.
 const BODY_TYPES: Array[String] = ["Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
 
@@ -607,19 +607,19 @@ static func assign_body_type(player: VolleyballPlayer, rng: RandomNumberGenerato
 ## in `ABILITY_ATTRIBUTES` -- it is a temperament, so it has no ceiling, does not
 ## train, and must not feed a category rating. See the note on the field.
 ##
-## The regional leans follow the identities the world already has: Ispayk swings
+## The regional leans follow the identities the world already has: Ĭspayk swings
 ## first and asks later, Taktikã is the region built on not being moved, and
 ## Xérvu's whole game is a high-risk serve that either wins the set or loses it.
 const REGION_EGO_BIAS := {
-	"Ispayk": 14.0, "Xérvu": 9.0, "Pāwa Hitō": 5.0, "A'ace": 6.0,
-	"Spëddigh": 2.0, "Landavol": 0.0, "Bloc du Larg": -6.0, "Taktikã": -15.0,
+	"Ĭspayk": 14.0, "Xérvu": 9.0, "Pāwa Hitō": 5.0, "A'ace": 6.0,
+	"Spëddigh": 2.0, "Landavol": 0.0, "Blôc du Larg": -6.0, "Taktikã": -15.0,
 	## Minor regions, listed rather than defaulted so a reader can see that the
 	## silence is deliberate. The deception traditions back themselves; the
 	## endurance and passing traditions are built on not needing to.
-	"Tu'ul ys Feynt": 7.0,
-	"Lo-onğ Ralī": -9.0,
-	"Bompaşao": -7.0,
-	"Rhen Tempaol": 3.0,
+	"Tãul ys Feynt": 7.0,
+	"Lo-ong Ralī": -9.0,
+	"Bompaçao": -7.0,
+	"Rhėn Tempaol": 3.0,
 	"Kutré Lyn": 1.0,
 	"Zaitgaist": 0.0,
 }
@@ -699,17 +699,17 @@ static func assign_ego(
 ##
 ## Shares the shape of the ego biases and deliberately not their values: the two
 ## used to be one number and separating them is worthless if the biases keep
-## them correlated. Ispayk leads both, because swinging first and backing
+## them correlated. Ĭspayk leads both, because swinging first and backing
 ## yourself genuinely are the same tradition -- but Taktikã is the region built
-## on not being moved, which is high ego and *low* aggression, and Bloc du Larg
+## on not being moved, which is high ego and *low* aggression, and Blôc du Larg
 ## defends rather than closes, which is the reverse of its ego lean.
 const REGION_AGGRESSION_BIAS := {
-	"Ispayk": 15.0, "Xérvu": 11.0, "Pāwa Hitō": 7.0, "A'ace": 4.0,
-	"Spëddigh": 3.0, "Landavol": 0.0, "Bloc du Larg": -4.0, "Taktikã": -9.0,
-	"Tu'ul ys Feynt": -3.0,
-	"Lo-onğ Ralī": -11.0,
-	"Bompaşao": -8.0,
-	"Rhen Tempaol": 6.0,
+	"Ĭspayk": 15.0, "Xérvu": 11.0, "Pāwa Hitō": 7.0, "A'ace": 4.0,
+	"Spëddigh": 3.0, "Landavol": 0.0, "Blôc du Larg": -4.0, "Taktikã": -9.0,
+	"Tãul ys Feynt": -3.0,
+	"Lo-ong Ralī": -11.0,
+	"Bompaçao": -8.0,
+	"Rhėn Tempaol": 6.0,
 	"Kutré Lyn": 2.0,
 	"Zaitgaist": 0.0,
 }
@@ -992,8 +992,8 @@ static func _band_size(band: String) -> int:
 ## short on power, "small" would stop being either region's problem and start
 ## being the league's baseline.
 ##
-## The result is a web of counters rather than a ladder. Ispayk cannot adapt and
-## Taktikã is built on adapting. Xérvu cannot pass and Bloc du Larg exists to
+## The result is a web of counters rather than a ladder. Ĭspayk cannot adapt and
+## Taktikã is built on adapting. Xérvu cannot pass and Blôc du Larg exists to
 ## make you pass. Bloc cannot improvise and Spëddigh is nothing but improvisation
 ## of tempo. Landavol is the only region with no weakness, which is the same
 ## statement as having no specialty and is what makes it the reference.
@@ -1005,7 +1005,7 @@ const REGION_CEILING_PENALTY := {
 	"Pāwa Hitō": {"feinting": -11, "set_disguise": -9},
 	## A structured side is a side that struggles when the structure breaks, and
 	## a wall built on staying home does not learn to serve people off it.
-	"Bloc du Larg": {"improvisation": -11, "serve_power": -9},
+	"Blôc du Larg": {"improvisation": -11, "serve_power": -9},
 	## Six specialty attributes on serving, and a tradition that treats the first
 	## contact as somebody else's problem.
 	"Xérvu": {"reception": -11, "dig_control": -9},
@@ -1015,7 +1015,7 @@ const REGION_CEILING_PENALTY := {
 	## **The cost of the perfect swing is that it is the only swing.** Predictable
 	## by construction and unable to change once read, which is exactly the
 	## matchup Taktikã is built to win.
-	"Ispayk": {"shot_variety": -12, "adaptability": -10},
+	"Ĭspayk": {"shot_variety": -12, "adaptability": -10},
 	## Bought terminal ability with no shared idea of how to play.
 	"A'ace": {
 		"tactical_discipline": -12, "decision_making": -12, "court_vision": -9,

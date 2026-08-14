@@ -362,11 +362,11 @@ The strongest version of that trade shape, and it needs no new data:
 
 | grows it | sells it |
 | --- | --- |
-| Rhen Tempaol | Spëddigh |
-| Lo-onğ Ralī | Pāwa Hitō |
-| Bompaşao | Bloc du Larg |
+| Rhėn Tempaol | Spëddigh |
+| Lo-ong Ralī | Pāwa Hitō |
+| Bompaçao | Blôc du Larg |
 | Kutré Lyn | Xérvu |
-| Tu'ul ys Feynt | Taktikã |
+| Tãul ys Feynt | Taktikã |
 | Zaitgaist | Landavol |
 
 Six and six, one each, already in `scripts/data/regions.gd`. The paste sold as
@@ -375,7 +375,7 @@ suits it and is sold from wherever the road goes.
 
 **There are six minor regions, not eight.** The eight is the *majors* -- the
 Sixnet participants. Only the six **core** regions sit in `REGION_ADJACENCY`;
-Ispayk and A'ace are deliberately outside the geography system entirely, because
+Ĭspayk and A'ace are deliberately outside the geography system entirely, because
 their identity comes from history and money rather than from a local tradition
 that could spread. So they have no minor neighbour, and the rule above leaves
 them with no paste.
@@ -388,11 +388,11 @@ already the region's story:**
   a flavour. It buys its pantry the way it bought its roster, which means the most
   expensive table in the world sits in the richest region, and an A'aceni club is
   the one place where import cost is not a solvable problem.
-- **Ispayk grows its own, and sells it on.** Volcanic archipelago in the storm
+- **Ĭspayk grows its own, and sells it on.** Volcanic archipelago in the storm
   track, which is famously the most fertile ground there is. It is the only major
   that needs no minor neighbour -- and it exports most of what it grows, exactly
   as it exports the players it raises and cannot keep. Cheap flavour at home,
-  Ispaykano paste on every shelf in the world, and a program that stays poor
+  Ĭspaykano paste on every shelf in the world, and a program that stays poor
   anyway.
 
 Three different relationships to flavour across eight majors, from one structural
@@ -1281,7 +1281,7 @@ one is importing somebody else's idea of how to live.
 | **Longhouse** | Spëddigh | *"close-knit and compact"* — the phrase is already a description of how they live |
 | **Farmhouse** | Landavol | *"intentionally broad… specialize into anything"* — a generalist culture that grows what it eats |
 | **The Quarters** | Pāwa Hitō | *"conditioning halls mold the Hitōue"* — you live where you train, and the hall is the address |
-| **The Block** | Bloc du Larg | *"methodical… perfecting its structure"*, and the name is already the building |
+| **The Block** | Blôc du Larg | *"methodical… perfecting its structure"*, and the name is already the building |
 | **The Row** | Xérvu | *"individualism and deep respect for routine"* — separate quarters, kept the same way every day |
 | **The Commons** | Taktikã | *"cerebral… strip the game down to its roots"* — a shared room, but it is a **working** room, not a warm one |
 | **Bunkhouse** | everywhere | which is why it is nobody's identity |
@@ -1552,7 +1552,7 @@ have one, and a club playing abroad is stuck. Regional practice as an
 put up by somebody else at some point — and a club takes a lease on one. What is
 available in a region skews heavily toward that region's practice, because that
 is what got built there, but it is stock rather than law: cities have mixed
-buildings, somebody's Longhouse went up in Bloc du Larg forty years ago and is
+buildings, somebody's Longhouse went up in Blôc du Larg forty years ago and is
 still standing, and a club can lease it.
 
 So regional practice survives as **what is easy to find and cheap to rent**,

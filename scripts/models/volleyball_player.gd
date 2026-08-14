@@ -199,7 +199,7 @@ var body_type: String = "Vegi"
 ## deliberately separate: talent is *born* roughly evenly across the world but
 ## *accumulates* wherever the money is, and collapsing the two would erase the
 ## most interesting thing about a player's biography. A'ace's squads are full
-## of stars it did not produce; Ispayk raises players it cannot keep.
+## of stars it did not produce; Ĭspayk raises players it cannot keep.
 ##
 ## Blank for hand-authored fixture players that predate the world population;
 ## every generated player carries both.

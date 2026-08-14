@@ -192,7 +192,7 @@ miss:
   shifts horizontally as values change. In a dense simulation UI this reads as
   cheap more than almost anything else.
 - **Full coverage of the region name glyphs.** `Spëddigh`, `Pāwa Hitō`,
-  `Xérvu`, `Taktikã`, `Braç Sindao` and `Tu'ul ys Feynt` need diaereses,
+  `Xérvu`, `Taktikã`, `Braç Sindao` and `Tãul ys Feynt` need diaereses,
   macrons, acute accents, tildes and cedillas present in both faces, or region
   names fall back mid-string and look broken.
 

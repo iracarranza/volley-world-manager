@@ -61,7 +61,7 @@ const STRUCTURES := {
 		"why": "you live where you train, and nothing about living there is not volleyball",
 	},
 	"Block": {
-		"floor": 6.0, "rooms": 20, "region": "Bloc du Larg",
+		"floor": 6.0, "rooms": 20, "region": "Blôc du Larg",
 		"common": true, "rent": 1.5, "organization": "Established",
 		"why": "houses everyone including the youth, and they still never meet",
 	},

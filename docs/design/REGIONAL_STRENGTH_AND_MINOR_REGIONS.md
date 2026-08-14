@@ -14,18 +14,18 @@ run **62.4 to 77.4**, and individual worlds reach 58.8 at the bottom:
 
 | region | mean | worst world | best world |
 | --- | ---: | ---: | ---: |
-| Ispayk | 77.4 | 76.3 | 79.5 |
+| Ĭspayk | 77.4 | 76.3 | 79.5 |
 | Taktikã | 76.2 | 73.2 | 79.1 |
 | Spëddigh | 76.1 | 73.7 | 80.3 |
 | Landavol | 75.5 | 71.6 | 78.6 |
 | Xérvu | 75.3 | 74.1 | 77.8 |
-| Bloc du Larg | 75.2 | 71.9 | 77.2 |
+| Blôc du Larg | 75.2 | 71.9 | 77.2 |
 | Pāwa Hitō | 74.4 | 70.5 | 79.3 |
 | A'ace | 70.7 | 68.7 | 72.8 |
-| Rhen Tempaol | 70.1 | 67.6 | 73.5 |
-| Tu'ul ys Feynt | 68.9 | 67.6 | 71.5 |
-| Lo-onğ Ralī | 68.2 | 65.2 | 71.8 |
-| Bompaşao | 67.4 | 62.5 | 70.0 |
+| Rhėn Tempaol | 70.1 | 67.6 | 73.5 |
+| Tãul ys Feynt | 68.9 | 67.6 | 71.5 |
+| Lo-ong Ralī | 68.2 | 65.2 | 71.8 |
+| Bompaçao | 67.4 | 62.5 | 70.0 |
 | Kutré Lyn | 66.6 | 62.8 | 68.3 |
 | Zaitgaist | 62.4 | 58.8 | 65.7 |
 
@@ -145,19 +145,19 @@ rather than `DEFINITIONS`, so minor regions are excluded from bracket logic with
 **no changes to the league engine**.
 
 ```gdscript
-const MINOR_REGIONS: Array[String] = ["Tu'ul ys Feynt", ...]
+const MINOR_REGIONS: Array[String] = ["Tãul ys Feynt", ...]
 
-## Drift scope becomes core + minor. Ispayk and A'ace stay out: per the
+## Drift scope becomes core + minor. Ĭspayk and A'ace stay out: per the
 ## existing comment in regions.gd they have no development tradition to
 ## spread or absorb -- their identity is history and money, not geography.
 const DEVELOPMENT_REGIONS: Array[String] = CORE_REGIONS + MINOR_REGIONS
 ```
 
 Naming convention for this tier: **the name encodes the specialty**
-("Tu'ul ys Feynt" → feinting). Worked example:
+("Tãul ys Feynt" → feinting). Worked example:
 
 ```gdscript
-"Tu'ul ys Feynt": {
+"Tãul ys Feynt": {
     "tagline": "Village halls where the ball is won by the shot the blocker
                 didn't believe -- wrists over power, patience over height.",
     "physical": 1, "technical": 3, "mental": 1,     # sum 5 vs the core 6-8
@@ -195,7 +195,7 @@ Fix, decided:
 
 ```gdscript
 const REGION_TRADITION_RESISTANCE := {
-    "Tu'ul ys Feynt": 1.0,      # needs double the usual gap to be absorbed
+    "Tãul ys Feynt": 1.0,      # needs double the usual gap to be absorbed
 }   # majors absent -> 0.0 -> behaviour unchanged
 
 var threshold := DOMINANCE_THRESHOLD * (1.0 + resistance)
@@ -298,9 +298,9 @@ companion deciding **what they look like**:
 const REGION_TIER_AFFINITY := {
     "Pāwa Hitō":    {"generational": 1.9, "elite": 1.6, "standout": 1.3,
                      "solid": 0.9, "squad": 0.8, "fringe": 1.1},
-    "Bloc du Larg": {"generational": 0.5, "elite": 0.8, "standout": 1.1,
+    "Blôc du Larg": {"generational": 0.5, "elite": 0.8, "standout": 1.1,
                      "solid": 1.4, "squad": 1.3, "fringe": 0.7},
-    "Tu'ul ys Feynt": {"generational": 0.3, "elite": 0.6, "standout": 1.0,
+    "Tãul ys Feynt": {"generational": 0.3, "elite": 0.6, "standout": 1.0,
                      "solid": 1.2, "squad": 1.2, "fringe": 1.1},
 }   # regions absent default to 1.0 across the board -- unchanged behaviour
 ```
@@ -322,7 +322,7 @@ This validates against fiction that is **already written**:
 
 - Pāwa Hitō — *"showcase academies favor explosive approaches and attacking
   ambition"* → star-producing, high variance, thin depth
-- Bloc du Larg — *"methodical halls teach net control, court reading and patient
+- Blôc du Larg — *"methodical halls teach net control, court reading and patient
   structure"* → depth-producing, low variance
 
 The taglines describe these archetypes; generation just doesn't implement them.
@@ -450,7 +450,7 @@ This gives two distinct readings:
 - **current prime** — form-sensitive, what the region can field right now
 - **peak prime** — the ceiling it has ever reached, i.e. its golden era
 
-Feeds the news panel ("a Tu'ul ys Feynt generation peaks"), a world-rankings
+Feeds the news panel ("a Tãul ys Feynt generation peaks"), a world-rankings
 screen, and scouting. `region_strength` itself uses current prime; peak is
 narrative and UI.
 
@@ -598,9 +598,9 @@ and `REGION_POSITION_AFFINITY` do not exist yet.
 
 | region | specialty | connected major | resistance | distinguishing trait |
 | --- | --- | --- | ---: | --- |
-| **Tu'ul ys Feynt** | deception | Taktikã | 1.0 | competent everywhere, elite nowhere |
+| **Tãul ys Feynt** | deception | Taktikã | 1.0 | competent everywhere, elite nowhere |
 | **Anhal Ridge** | endurance defence | Pāwa Hitō | 1.4 | world-class liberos, nothing tall |
-| **Braç Sindao** | the platform | Bloc du Larg | 0.8 | likeliest to mount a Sixnet challenge |
+| **Braç Sindao** | the platform | Blôc du Larg | 0.8 | likeliest to mount a Sixnet challenge |
 | **Rhen Tempaal** | first tempo | Spëddigh | 0.9 | the only middle-heavy region here |
 | **Corvel Anse** | placement | Xérvu | 0.7 | strongest prime, weakest depth |
 | **Geistadt** | *none — borrowed* | Landavol (enclave) | 0.0 | ignores adjacency; mirrors the champion |
@@ -611,7 +611,7 @@ reads as a spectrum rather than a list because of those endpoints.
 
 ---
 
-## Tu'ul ys Feynt — *deception*
+## Tãul ys Feynt — *deception*
 
 > Village halls where the ball is won by the shot the blocker didn't believe —
 > wrists over power, patience over height.
@@ -702,12 +702,12 @@ importing height.
 | Body bias | height −2.0 · mass −1.0 · wingspan 0.0 |
 | Birth weight / pull | 0.30 / 0.60 |
 | Tradition resistance | 0.8 |
-| Connected major | **Bloc du Larg** |
+| Connected major | **Blôc du Larg** |
 
 **Inspiration.** Cuban and Puerto Rican barrio courts crossed with Japanese
 high-school receive drilling — thousands of reps at the one skill.
 
-**Why Bloc du Larg.** A passing tradition beside the methodical structure region
+**Why Blôc du Larg.** A passing tradition beside the methodical structure region
 is the natural pairing, and it fills the `reception` gap noted above. Lower
 resistance than the others: this is a coastal, well-travelled tradition rather
 than an isolated one, so it should be genuinely absorbable.
@@ -872,9 +872,9 @@ worse Landavol nobody visits:
 ## Adjacency and one deliberate omission
 
 ```gdscript
-"Taktikã":      [..., "Tu'ul ys Feynt"],
+"Taktikã":      [..., "Tãul ys Feynt"],
 "Pāwa Hitō":    [..., "Anhal Ridge"],
-"Bloc du Larg": [..., "Braç Sindao"],
+"Blôc du Larg": [..., "Braç Sindao"],
 "Spëddigh":     [..., "Rhen Tempaal"],
 "Xérvu":        [..., "Corvel Anse"],
 "Landavol":     [..., "Geistadt"],        ## geographic only -- see below

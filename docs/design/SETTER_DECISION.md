@@ -168,8 +168,8 @@ punish a committed block stops being worth the concentration.
 `block_defense_relationship` chooses *where* the block goes (Balanced / Defend
 Line / Defend Cross), never *what it is for*. The two philosophies the game wants
 -- seal the lane and end rallies, versus take a touch and let the floor play it
--- are the same axis the regional identities already sit on: Bloc du Larg's
-`block_timing` + `jump_reach` is the terminal block, Lo-onğ Ralī's `anticipation`
+-- are the same axis the regional identities already sit on: Blôc du Larg's
+`block_timing` + `jump_reach` is the terminal block, Lo-ong Ralī's `anticipation`
 + `dig_control` + `stamina` is the facilitating one. Neither is selectable today.
 
 **Scouting gets a real signal.** Familiarity currently records exposure that

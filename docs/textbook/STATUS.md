@@ -241,9 +241,9 @@ This page is the quickest defense against confusing source-code existence with a
   for; only the secondary tier is generator-specific.
 - Region specialty lists give each region focused +8 attribute leans. Pāwa Hitō
   sustains repeated transition attacks, Spëddigh applies work rate and tempo
-  pressure, Taktikã develops composed system players, and Ispayk owns the
+  pressure, Taktikã develops composed system players, and Ĭspayk owns the
   large-framed bomba identity. Region physique biases shift height, mass, and
-  wingspan before individual variation, with Ispayk now measurably larger than
+  wingspan before individual variation, with Ĭspayk now measurably larger than
   Landavol while Pāwa remains near average size.
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had

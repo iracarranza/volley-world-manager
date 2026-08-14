@@ -1595,7 +1595,7 @@ func _test_minor_region_behaviour() -> void:
 	## constant and every test above would still pass.
 	var strengths := {
 		"Taktikã": 90.0,           ## dominant neighbor
-		"Tu'ul ys Feynt": 40.0,    ## resistance 1.0
+		"Tãul ys Feynt": 40.0,    ## resistance 1.0
 		"Zaitgaist": 40.0,         ## resistance 0.0
 		"Landavol": 40.0,
 	}
@@ -1604,7 +1604,7 @@ func _test_minor_region_behaviour() -> void:
 	resisted.region_strength = strengths.duplicate()
 	resisted.sixnet_champion_region = ""
 	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(resisted)
-	var tuul: Dictionary = resisted.region_overlay.get("Tu'ul ys Feynt", {})
+	var tuul: Dictionary = resisted.region_overlay.get("Tãul ys Feynt", {})
 	var gap := 90.0 - 40.0
 	var plain_threshold: float = SIXNET_LEAGUE_SCRIPT.DOMINANCE_THRESHOLD
 	var resisted_threshold := plain_threshold * (1.0 + 1.0)
@@ -1740,7 +1740,7 @@ func _test_minor_region_behaviour() -> void:
 	## `region_strength()` punish a region with no middles.
 	var libero_share := {}
 	var middle_share := {}
-	for region_name in ["Lo-onğ Ralī", "Landavol", "Rhen Tempaol"]:
+	for region_name in ["Lo-ong Ralī", "Landavol", "Rhėn Tempaol"]:
 		var total := 0
 		var liberos := 0
 		var middles := 0
@@ -1756,36 +1756,36 @@ func _test_minor_region_behaviour() -> void:
 		libero_share[region_name] = float(liberos) / maxf(float(total), 1.0)
 		middle_share[region_name] = float(middles) / maxf(float(total), 1.0)
 	_check(
-		float(libero_share["Lo-onğ Ralī"]) > float(libero_share["Landavol"]) * 1.5
-			and float(middle_share["Lo-onğ Ralī"]) < float(middle_share["Landavol"]) * 0.6
-			and float(middle_share["Rhen Tempaol"]) > float(middle_share["Landavol"]),
+		float(libero_share["Lo-ong Ralī"]) > float(libero_share["Landavol"]) * 1.5
+			and float(middle_share["Lo-ong Ralī"]) < float(middle_share["Landavol"]) * 0.6
+			and float(middle_share["Rhėn Tempaol"]) > float(middle_share["Landavol"]),
 		"positional affinity reshapes what each region produces, not just how much",
 	)
 	_check(REGIONS_SCRIPT.canonical_name("Europe") == "Landavol",
 		"legacy real-world region saves migrate to a fictional setting")
 	_check(
-		REGIONS_SCRIPT.canonical_name("Southeast Asia") == "Ispayk"
+		REGIONS_SCRIPT.canonical_name("Southeast Asia") == "Ĭspayk"
 			and REGIONS_SCRIPT.canonical_name("South America") == "Taktikã",
 		"legacy region labels migrate to the fictional region that actually matches them",
 	)
 	## Sixnet-league eligibility: exactly the six core regions, symmetric
-	## adjacency, and Ispayk/A'ace never appearing on either side of it.
+	## adjacency, and Ĭspayk/A'ace never appearing on either side of it.
 	_check(
 		REGIONS_SCRIPT.CORE_REGIONS.size() == 6
-			and not REGIONS_SCRIPT.CORE_REGIONS.has("Ispayk")
+			and not REGIONS_SCRIPT.CORE_REGIONS.has("Ĭspayk")
 			and not REGIONS_SCRIPT.CORE_REGIONS.has("A'ace"),
-		"Sixnet-eligible core regions exclude Ispayk and A'ace",
+		"Sixnet-eligible core regions exclude Ĭspayk and A'ace",
 	)
 	var adjacency_symmetric := true
 	for region_name in REGIONS_SCRIPT.REGION_ADJACENCY:
-		if str(region_name) == "Ispayk" or str(region_name) == "A'ace":
+		if str(region_name) == "Ĭspayk" or str(region_name) == "A'ace":
 			adjacency_symmetric = false
 		for neighbor in REGIONS_SCRIPT.REGION_ADJACENCY[region_name]:
 			if not Array(REGIONS_SCRIPT.REGION_ADJACENCY.get(neighbor, [])).has(region_name):
 				adjacency_symmetric = false
 	_check(
 		adjacency_symmetric,
-		"region adjacency is symmetric and excludes Ispayk/A'ace",
+		"region adjacency is symmetric and excludes Ĭspayk/A'ace",
 	)
 	var second_year: Dictionary = CALENDAR_RULES_SCRIPT.state_for_week(49)
 	_check(int(second_year.year) == 2 and int(second_year.week_of_year) == 1,
@@ -2499,13 +2499,13 @@ func _test_sixnet_league() -> void:
 	)
 	_check(
 		career.region_strength.size() == 8 and career.sixnet_form.size() == 8
-			and career.region_strength.has("Ispayk") and career.sixnet_form.has("A'ace"),
+			and career.region_strength.has("Ĭspayk") and career.sixnet_form.has("A'ace"),
 		"all eight Sixnet participants receive separate strength and form ratings",
 	)
 	_check(
 		str(career.sixnet_slots.get(SIXNET_LEAGUE_SCRIPT.AACE_FIXED_SLOT, "")) == "A'ace"
-			and str(career.sixnet_slots.get(SIXNET_LEAGUE_SCRIPT.ISPAYK_FIXED_SLOT, "")) == "Ispayk",
-		"A'ace starts in the upper bracket and Ispayk in the lower, whatever their measured power",
+			and str(career.sixnet_slots.get(SIXNET_LEAGUE_SCRIPT.ISPAYK_FIXED_SLOT, "")) == "Ĭspayk",
+		"A'ace starts in the upper bracket and Ĭspayk in the lower, whatever their measured power",
 	)
 	var slot_occupants := {}
 	var duplicate_occupant := false
@@ -2649,10 +2649,10 @@ func _test_sixnet_league() -> void:
 	## toward it; a region with low power and no strong neighbor intensifies
 	## its own specialty instead. Never both at once.
 	##
-	## Landavol (neighbors Bloc du Larg=90, Spëddigh=25): Bloc du Larg is 40
+	## Landavol (neighbors Blôc du Larg=90, Spëddigh=25): Blôc du Larg is 40
 	## above Landavol's own 50 -- past DOMINANCE_THRESHOLD -- so Landavol
 	## should blend toward it.
-	## Taktikã (neighbors Spëddigh=23, Xérvu=23, Tu'ul ys Feynt=18): no
+	## Taktikã (neighbors Spëddigh=23, Xérvu=23, Tãul ys Feynt=18): no
 	## neighbor is dominant -- the two majors sit 3 above Taktikã's own 20 and
 	## the minor sits below it -- while Taktikã's own power is under
 	## ISOLATION_THRESHOLD, so it should intensify instead.
@@ -2665,9 +2665,9 @@ func _test_sixnet_league() -> void:
 	drift_career.career_name = "Drift Test Academy"
 	drift_career.region_strength = {
 		"Landavol": 50.0, "Spëddigh": 23.0, "Pāwa Hitō": 25.0,
-		"Bloc du Larg": 90.0, "Xérvu": 23.0, "Taktikã": 20.0,
-		"Tu'ul ys Feynt": 18.0, "Lo-onğ Ralī": 16.0, "Bompaşao": 19.0,
-		"Rhen Tempaol": 18.0, "Kutré Lyn": 17.0, "Zaitgaist": 12.0,
+		"Blôc du Larg": 90.0, "Xérvu": 23.0, "Taktikã": 20.0,
+		"Tãul ys Feynt": 18.0, "Lo-ong Ralī": 16.0, "Bompaçao": 19.0,
+		"Rhėn Tempaol": 18.0, "Kutré Lyn": 17.0, "Zaitgaist": 12.0,
 	}
 	drift_career.sixnet_form = drift_career.region_strength.duplicate(true)
 	SIXNET_LEAGUE_SCRIPT.apply_influence_drift(drift_career)
@@ -2800,13 +2800,13 @@ func _test_fatigue_recovers_between_fixtures() -> void:
 ## selecting different risks and tempos. The resulting first matches must not
 ## replay the same outcome sequence.
 func _test_team_identity_changes_match_outcomes() -> void:
-	var regional := VolleyballRegions.preferred_principles("Ispayk")
-	var aligned_state := VolleyballRegions.starting_identity_state("Ispayk", regional)
+	var regional := VolleyballRegions.preferred_principles("Ĭspayk")
+	var aligned_state := VolleyballRegions.starting_identity_state("Ĭspayk", regional)
 	var opposed_values: Dictionary = {}
 	for axis_name in TeamPrinciples.AXIS_KEYS:
 		opposed_values[axis_name] = 1.0 - float(regional.get(axis_name))
 	var opposed := TeamPrinciples.custom("Countercurrent", opposed_values)
-	var opposed_state := VolleyballRegions.starting_identity_state("Ispayk", opposed)
+	var opposed_state := VolleyballRegions.starting_identity_state("Ĭspayk", opposed)
 	_check(
 		float(aligned_state.alignment) > float(opposed_state.alignment)
 			and float(aligned_state.familiarity) > float(opposed_state.familiarity)
@@ -3418,7 +3418,7 @@ func _test_world_population() -> void:
 	## -- comparing that noisy figure against anything produces a test that
 	## passes or fails on the draw rather than on the mechanism. Pooling and
 	## comparing against a stable world-wide denominator tests the actual
-	## claim. Measured across eight seeds, Ispayk's veteran share runs 25-32%
+	## claim. Measured across eight seeds, Ĭspayk's veteran share runs 25-32%
 	## against a 23.1% world baseline, and A'ace's 7-20%.
 	var pooled := {
 		"total": 0, "old": 0, "top": 0,
@@ -3434,18 +3434,18 @@ func _test_world_population() -> void:
 			+ int(view.by_band.get("twilight", 0))
 		pooled.aace_club += int(view.by_club.get("A'ace", 0))
 		pooled.aace_born += int(view.by_region.get("A'ace", 0))
-		pooled.ispayk_club += int(view.by_club.get("Ispayk", 0))
-		pooled.ispayk_born += int(view.by_region.get("Ispayk", 0))
+		pooled.ispayk_club += int(view.by_club.get("Ĭspayk", 0))
+		pooled.ispayk_born += int(view.by_region.get("Ĭspayk", 0))
 		pooled.aace_old += int(view.by_club_band.get("A'ace|veteran", 0)) \
 			+ int(view.by_club_band.get("A'ace|twilight", 0))
-		pooled.ispayk_old += int(view.by_club_band.get("Ispayk|veteran", 0)) \
-			+ int(view.by_club_band.get("Ispayk|twilight", 0))
+		pooled.ispayk_old += int(view.by_club_band.get("Ĭspayk|veteran", 0)) \
+			+ int(view.by_club_band.get("Ĭspayk|twilight", 0))
 		for tier_key in expected_tier_totals:
 			pooled.top += int(view.by_tier.get(tier_key, 0))
 			pooled.aace_club_top += int(view.by_club_tier.get("A'ace|%s" % tier_key, 0))
 			pooled.aace_born_top += int(view.by_region_tier.get("A'ace|%s" % tier_key, 0))
-			pooled.ispayk_club_top += int(view.by_club_tier.get("Ispayk|%s" % tier_key, 0))
-			pooled.ispayk_born_top += int(view.by_region_tier.get("Ispayk|%s" % tier_key, 0))
+			pooled.ispayk_club_top += int(view.by_club_tier.get("Ĭspayk|%s" % tier_key, 0))
+			pooled.ispayk_born_top += int(view.by_region_tier.get("Ĭspayk|%s" % tier_key, 0))
 	var world_top_share := float(pooled.top) / float(maxi(int(pooled.total), 1))
 	var world_old_share := float(pooled.old) / float(maxi(int(pooled.total), 1))
 
@@ -3478,16 +3478,16 @@ func _test_world_population() -> void:
 		"A'ace's squads are bigger than its own output, because it signs from everywhere",
 	)
 
-	## Ispayk is the mirror image: prolific, and unable to hold what it makes.
+	## Ĭspayk is the mirror image: prolific, and unable to hold what it makes.
 	_check(
 		float(pooled.ispayk_club_top) / float(maxi(int(pooled.ispayk_club), 1))
 			< float(pooled.ispayk_born_top) / float(maxi(int(pooled.ispayk_born), 1)),
-		"Ispayk loses a share of the talent it raises rather than keeping it",
+		"Ĭspayk loses a share of the talent it raises rather than keeping it",
 	)
 	_check(
 		float(pooled.ispayk_old) / float(maxi(int(pooled.ispayk_club), 1)) > world_old_share
 			and float(pooled.aace_old) / float(maxi(int(pooled.aace_club), 1)) < world_old_share,
-		"aging players filter down to Ispayk and away from A'ace, which fields players at their peak",
+		"aging players filter down to Ĭspayk and away from A'ace, which fields players at their peak",
 	)
 
 	## Current ability is never allotted -- it falls out of age. The same
@@ -11643,7 +11643,7 @@ func _test_attack_power_is_a_choice() -> void:
 	var generated := VolleyballPlayer.new()
 	generated.id = 7
 	generated.position_role = "Opposite"
-	PLAYER_GENERATOR_SCRIPT.assign_ego(generated, stream, "Ispayk")
+	PLAYER_GENERATOR_SCRIPT.assign_ego(generated, stream, "Ĭspayk")
 	_check(
 		stream.state == untouched and generated.ego >= 1 and generated.ego <= 100,
 		"assigning ego consumes nothing from the shared generation stream",
@@ -13143,7 +13143,7 @@ func _test_attribute_first_generation() -> void:
 			and speddigh_pressure / speddigh_count > landavol_pressure / landavol_count_2 + 20.0,
 		"attribute generation: Xérvu serving, Taktikã composure and Spëddigh pressure lead Landavol",
 	)
-	## 2c. Ispayk now owns the large-frame bomba identity. A'ace still spans a
+	## 2c. Ĭspayk now owns the large-frame bomba identity. A'ace still spans a
 	## few glamour attributes instead of one deep developmental specialty.
 	var ispayk_bomba := 0.0
 	var ispayk_height := 0.0
@@ -13156,7 +13156,7 @@ func _test_attribute_first_generation() -> void:
 	var landavol_count_3 := 0
 	for seed_offset in range(4):
 		var ispayk_roster: Array[VolleyballPlayer] = PLAYER_GENERATOR_SCRIPT.generate_roster(
-			"Ispayk", "Club", 88250 + seed_offset * 1009
+			"Ĭspayk", "Club", 88250 + seed_offset * 1009
 		)
 		for player in ispayk_roster:
 			ispayk_bomba += player.attack_power + player.arm_speed + player.jump_reach \
@@ -13183,7 +13183,7 @@ func _test_attribute_first_generation() -> void:
 			and ispayk_bomba / ispayk_count > landavol_bomba / landavol_count_3 + 20.0
 			and ispayk_height / ispayk_count > landavol_height / landavol_count_3 + 2.0
 			and aace_glamour / aace_count > landavol_glamour / landavol_count_3 + 15.0,
-		"attribute generation: Ispayk leads in bomba power and size while A'ace leads glamour attributes",
+		"attribute generation: Ĭspayk leads in bomba power and size while A'ace leads glamour attributes",
 	)
 	## 2d. The Sixnet influence-drift override seam: an empty overlay (the
 	## default every existing caller uses) must be byte-identical to omitting
@@ -16454,6 +16454,120 @@ func _test_the_manager_is_somebody() -> void:
 
 	_test_manager_body()
 	_test_stance_transitions()
+	_test_region_language()
+
+
+## ## A region's name is a shape, and the shape has to be checkable
+##
+## `STYLE_AND_SETTING.md` asked a minor region to share its major neighbour's
+## spelling, and nothing enforced it -- which is how `Kutre den Lyn` shipped
+## carrying Blôc du Larg's connector while sitting beside Xérvu. The rule was
+## audited by hand, once, after release.
+##
+## It also could not be enforced as written, because it compared *languages*.
+## `ç` is French and `ş` is Turkish and they are the same gesture: a tail below
+## the letter. `RegionLanguage` sorts marks by the movement that draws them, and
+## these are the four things that movement now has to survive.
+func _test_region_language() -> void:
+	var language := preload("res://scripts/data/region_language.gd")
+
+	## 1. **Every region signs in its own hand.** A mark that belongs to another
+	##    region's gesture is the Kutre den Lyn failure exactly, and it is
+	##    invisible unless something walks the characters.
+	var foreign: Array[String] = []
+	for region_name in REGIONS_SCRIPT.names():
+		var strays: String = language.stray_marks(region_name, region_name)
+		if not strays.is_empty():
+			foreign.append("%s has %s" % [region_name, strays])
+		var word: String = REGIONS_SCRIPT.demonym(region_name)
+		var demonym_strays: String = language.stray_marks(word, region_name)
+		if not demonym_strays.is_empty():
+			foreign.append("%s's demonym %s has %s" % [
+				region_name, word, demonym_strays,
+			])
+		for club in Array(REGIONS_SCRIPT.CLUB_NAMES.get(region_name, [])):
+			var club_strays: String = language.stray_marks(str(club), region_name)
+			if not club_strays.is_empty():
+				foreign.append("%s's club %s has %s" % [
+					region_name, club, club_strays,
+				])
+	_check(
+		foreign.is_empty(),
+		"every region name, demonym and club is written in that region's own hand (%s)"
+			% ", ".join(foreign),
+	)
+
+	## 2. **A minor region is never a stranger to its neighbour.** Same gesture,
+	##    a sibling in the same family, or a deliberate opposition -- and nothing
+	##    else. `REGION_ADJACENCY` gives every minor exactly one neighbour, so
+	##    this is six comparisons and there is no excuse for not making them.
+	var strangers: Array[String] = []
+	var opposed := 0
+	for minor in REGIONS_SCRIPT.MINOR_REGIONS:
+		for neighbour in Array(REGIONS_SCRIPT.REGION_ADJACENCY.get(minor, [])):
+			var relation: StringName = language.kinship(minor, str(neighbour))
+			if relation == &"stranger":
+				strangers.append("%s vs %s" % [minor, neighbour])
+			opposed += int(relation == &"opposed")
+	_check(
+		strangers.is_empty(),
+		"every minor region is kin to its neighbour by gesture, family or opposition (%s)"
+			% ", ".join(strangers),
+	)
+
+	## 2b. And opposition stays rare. It is a *stronger* statement than kinship
+	##     -- these two places know each other and have chosen to look unlike --
+	##     so it is worth exactly as much as it is scarce. One pair uses it; a
+	##     table where half the map opposes half the map says nothing at all.
+	_check(
+		opposed == 1 and language.OPPOSES.size() == 2,
+		"opposition is used once and stays worth using (%d pairs)" % opposed,
+	)
+
+	## 3. **A demonym is built from the half of the name that gets spoken.**
+	##    Nobody says "Blôc du Larg" about a person; they say Larg, hence Largen.
+	var malformed: Array[String] = []
+	for region_name in language.CONTRACTIONS:
+		var short: String = language.contraction(str(region_name))
+		var word: String = REGIONS_SCRIPT.demonym(str(region_name))
+		if not word.begins_with(short):
+			malformed.append("%s -> %s, not from %s" % [region_name, word, short])
+	_check(
+		malformed.is_empty(),
+		"a two-word region's demonym comes from its spoken half (%s)"
+			% ", ".join(malformed),
+	)
+
+	## 4. **Given names are exempt, and that is the point rather than an
+	##    oversight.**
+	##
+	##    The orthography belongs to the *map*. The people draw on real, attested
+	##    naming traditions, and marking `Noé` or `Miloš` with the local gesture
+	##    to make the roster tidy is our world's habit of flattening other
+	##    people's spelling into whichever alphabet is convenient -- the exact
+	##    thing the demonym rule already forbids, applied to individuals instead
+	##    of to a place. So what is checked here is that every region has a
+	##    tradition of its own and that no two share it.
+	var claimed := {}
+	var shared: Array[String] = []
+	var empty: Array[String] = []
+	for region_name in REGIONS_SCRIPT.names():
+		var given: Array = Array(
+			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("names", [])
+		)
+		if given.is_empty():
+			empty.append(region_name)
+		for name in given:
+			if claimed.has(name):
+				shared.append("%s in %s and %s" % [
+					name, claimed[name], region_name,
+				])
+			claimed[name] = region_name
+	_check(
+		empty.is_empty() and shared.is_empty(),
+		"every region has a naming tradition of its own (empty: %s; shared: %s)"
+			% [empty, shared],
+	)
 
 
 ## ## Getting into a stance, and getting up off the floor
@@ -17278,7 +17392,7 @@ func _test_the_club_already_has_staff() -> void:
 	var scraping := 0
 	for entry in STAFF_GENERATOR_SCRIPT.for_club("Landavol", "Established", 77):
 		comfortable += int(entry.rating)
-	for entry in STAFF_GENERATOR_SCRIPT.for_club("Tu'ul ys Feynt", "Founded", 77):
+	for entry in STAFF_GENERATOR_SCRIPT.for_club("Tãul ys Feynt", "Founded", 77):
 		scraping += int(entry.rating)
 	_check(
 		comfortable > scraping,
@@ -17631,7 +17745,7 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 		FoodSupply.line_cost("Landavol", "Landavol") == 0.0,
 		"a club's own region is free",
 	)
-	var near := FoodSupply.line_cost("Landavol", "Bloc du Larg")
+	var near := FoodSupply.line_cost("Landavol", "Blôc du Larg")
 	var far := FoodSupply.line_cost("Landavol", "Pāwa Hitō")
 	_check(
 		far > near and near > 0.0,
@@ -17640,14 +17754,14 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 	)
 	_check(
 		FoodSupply.line_reliability("Landavol", "Pāwa Hitō")
-			< FoodSupply.line_reliability("Landavol", "Bloc du Larg"),
+			< FoodSupply.line_reliability("Landavol", "Blôc du Larg"),
 		"and further is more easily interrupted, which is the events' material",
 	)
 	## Distance is read off one graph, not two. A second distance table would be
 	## a second geography and they would drift.
 	_check(
 		RegionLarder.distance("Landavol", "Landavol") == 0
-			and RegionLarder.distance("Landavol", "Bloc du Larg") == 1
+			and RegionLarder.distance("Landavol", "Blôc du Larg") == 1
 			and RegionLarder.distance("Landavol", "Pāwa Hitō") > 1,
 		"adjacency steps come off REGION_ADJACENCY (%d to Pāwa Hitō)"
 			% RegionLarder.distance("Landavol", "Pāwa Hitō"),
@@ -17746,7 +17860,7 @@ func _test_food_is_a_flow_with_a_geography() -> void:
 	## season a supply problem rather than a famine.
 	var lean_found := false
 	for week in range(1, 53):
-		var produce: Dictionary = RegionLarder.produces("Bloc du Larg", week)
+		var produce: Dictionary = RegionLarder.produces("Blôc du Larg", week)
 		if bool(produce["lean"]):
 			lean_found = true
 			_check(

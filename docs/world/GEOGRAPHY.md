@@ -50,7 +50,7 @@ gyms you can walk between. Cold, wet, bright in summer.
 volcanic archipelago. Terraced hillsides, black sand, deep water close to shore.
 Everything is uphill, which is a conditioning culture stated as terrain.
 
-**Bloc du Larg** -- *"Methodical halls, net control, patient structure."* A broad
+**Blôc du Larg** -- *"Methodical halls, net control, patient structure."* A broad
 shallow coastal shelf with enormous tides -- sea walls, causeways that appear and
 vanish, working flats. *Larg* is the offing, the water past the shallows. A place
 where the ground itself rewards reading the situation and waiting is not the same
@@ -68,7 +68,7 @@ built on reading ahead comes from a horizon you can actually see to.
 
 ### The two flagship-holders
 
-**Ispayk** -- *"Once a Sixnet flagship, cash-strapped, clawing back."* A volcanic
+**Ĭspayk** -- *"Once a Sixnet flagship, cash-strapped, clawing back."* A volcanic
 archipelago further out than Pāwa Hitō's, in the storm track. Built, flattened,
 rebuilt; every hall is somebody's third hall. The pride and the poverty are the
 same fact.
@@ -79,19 +79,19 @@ is why nothing there has a name older than the money.
 
 ### The six minor regions
 
-**Tu'ul ys Feynt** (Taktikã's) -- slate valleys, high rainfall, village halls with
+**Tãul ys Feynt** (Taktikã's) -- slate valleys, high rainfall, village halls with
 low ceilings. Low ceilings are why nobody learned to hit over a block and
 everybody learned to hit around one.
 
-**Lo-onğ Ralī** (Pāwa Hitō's) -- the thin-air plateau behind the archipelago's
+**Lo-ong Ralī** (Pāwa Hitō's) -- the thin-air plateau behind the archipelago's
 mountains, three days from anywhere. Already stated in its tagline; the geology is
 what makes the travel time real.
 
-**Bompaşao** (Bloc du Larg's) -- a hot river delta. Silt, sprawl, concrete, and
+**Bompaçao** (Blôc du Larg's) -- a hot river delta. Silt, sprawl, concrete, and
 water everywhere, which is why the courts are hard and improvised and the first
 contact is a religion.
 
-**Rhen Tempaol** (Spëddigh's, but see §2) -- a temperate island in Pāwa Hitō's
+**Rhėn Tempaol** (Spëddigh's, but see §2) -- a temperate island in Pāwa Hitō's
 seas. Small, dense, wet.
 
 **Kutré Lyn** (Xérvu's) -- limestone karst below the escarpment. Gorges, sinkholes,
@@ -105,7 +105,7 @@ arrived this year.
 
 ## 2. Colonies
 
-**Rhen Tempaol is the worked case, and it explains something already in the
+**Rhėn Tempaol is the worked case, and it explains something already in the
 data.** Its people carry a naming tradition adjacent to Pāwa Hitō's, and it sits
 in Pāwa Hitō's seas -- yet `REGION_ADJACENCY` links it to Spëddigh, halfway
 around the ball. That looked like an inconsistency. It is a colony.
@@ -115,12 +115,12 @@ Spëddigh administers it. So:
 - **The place name is spelled the administrator's way.** This is how colonial
   orthography actually behaves: the map gets written in the governing power's
   alphabet while everyone living there goes on saying it their own way. Which
-  means Rhen Tempaol should become **Rhën Tempaol**, taking Spëddigh's umlaut,
+  means Rhėn Tempaol should become **Rhën Tempaol**, taking Spëddigh's umlaut,
   and that simultaneously fixes the spelling-kinship gap flagged in
   `STYLE_AND_SETTING.md`.
 - **The people's naming tradition is untouched.** Volis raised there are named
   from their own tradition, because that is theirs and always was.
-- **The demonym stays civic.** A Tempaoli is anyone from Rhen Tempaol. The
+- **The demonym stays civic.** A Tempaoli is anyone from Rhėn Tempaol. The
   administrative fact does not get to reassign anybody.
 
 ### What a colony is allowed to be here
@@ -153,7 +153,7 @@ Geography gives the grouping a rule.
 neighbour, and one panel of sea or a flagship-holder. Fourteen inhabited regions
 across eighteen panels leaves exactly the slack a map needs.
 
-Rhen Tempaol is the useful exception and should be drawn as one: it sits in **Pāwa
+Rhėn Tempaol is the useful exception and should be drawn as one: it sits in **Pāwa
 Hitō's group**, because that is where it is, while the adjacency table links it to
 Spëddigh, because that is who runs it. A player who notices that discrepancy on
 the map has discovered the colony without being told, which is the same principle
@@ -163,7 +163,7 @@ is what you find.
 ## 3b. Six minors, eight majors
 
 The counts are not a matched pair and should not be forced into one. Six minor
-regions sit in `REGION_ADJACENCY`, one beside each **core** region. Ispayk and
+regions sit in `REGION_ADJACENCY`, one beside each **core** region. Ĭspayk and
 A'ace are Sixnet participants but stand outside the geography system entirely --
 their identity comes from history and money rather than from a local tradition
 that could spread to a neighbour.
@@ -171,19 +171,19 @@ that could spread to a neighbour.
 Giving them a minor each would be the tidy move and the wrong one. It would put
 fourteen regions into a symmetry the world does not have, and it would quietly
 undo the thing that makes those two distinct: they are the regions that are *not*
-of anywhere. A'ace stands on ground it made. Ispayk stands on ground that keeps
+of anywhere. A'ace stands on ground it made. Ĭspayk stands on ground that keeps
 being remade under it. Neither has a hinterland in the sense the core regions do.
 
 `ACCOMMODATIONS_AND_CARE.md` turns that asymmetry into three different
 relationships to flavour rather than a gap to be patched -- six majors sell what a
-neighbour grows, Ispayk's volcanic soil grows its own and exports most of it, and
+neighbour grows, Ĭspayk's volcanic soil grows its own and exports most of it, and
 A'ace grows nothing at all and buys everything.
 
 ## 4. Open
 
-- Whether Rhen Tempaol's rename to Rhën Tempaol happens now or with a wider
-  minor-region spelling pass (Tu'ul ys Feynt still shares nothing with Taktikã,
-  Bompaşao's ş sits where Bloc du Larg's French would put ç).
+- Whether Rhėn Tempaol's rename to Rhën Tempaol happens now or with a wider
+  minor-region spelling pass (Tãul ys Feynt still shares nothing with Taktikã,
+  Bompaçao's ş sits where Blôc du Larg's French would put ç).
 - Whether any *other* region is a colony, or whether one is the right number.
   One is legible; three is a theme, and a theme is heavier than this is meant
   to be.

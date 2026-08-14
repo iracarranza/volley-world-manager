@@ -13,7 +13,14 @@ extends Control
 ## marks that are just the shape of the game get blue, and keeping those apart is
 ## most of what stops a whiteboard becoming a heat map.
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
-const BoardFace := preload("res://Yatra_One/YatraOne-Regular.ttf")
+## The board's display face, **through a fallback rather than raw**.
+##
+## Short Stack draws no macron at all and one caron in eight, and Yatra One is
+## little better -- so `Pāwa Hitō`, `Ralī` and `Miloš` came out as hollow boxes
+## on every card and tray that preloaded the `.ttf` directly. `body_font.tres`
+## has had Cherry Bomb One behind it for exactly this reason; these two are the
+## same arrangement for the faces that had been reaching past it.
+const BoardFace := preload("res://scenes/themes/board_face.tres")
 
 ## Where each rotation slot stands, in unit court coordinates with the net along
 ## the top. Slots 4, 3 and 2 are the front row left to right; 5, 6 and 1 are the

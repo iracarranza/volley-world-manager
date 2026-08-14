@@ -45,7 +45,7 @@ const Regions := preload("res://scripts/data/regions.gd")
 ## | Landavol | *"intentionally broad… specialize into anything"* — a generalist table; a bit of everything, nothing extreme |
 ## | Spëddigh | *"close-knit and compact"* — preserved, cured, stored; food that keeps through a shared winter |
 ## | Pāwa Hitō | *"conditioning halls mold the Hitōue"* — a table organised around fuelling work |
-## | Bloc du Larg | *"methodical… complete control"* — technique food; things that take a method |
+## | Blôc du Larg | *"methodical… complete control"* — technique food; things that take a method |
 ## | Xérvu | *"ancient and new rhythms… individualism"* — heat, and two traditions on one plate |
 ## | Taktikã | *"strip the game down to its roots"* — the three that grow together and need nothing else |
 ## Three each, not two.
@@ -70,13 +70,13 @@ const LARDERS := {
 	## no lean season. It costs them variety instead.
 	"Spëddigh": {"axis": "sharp ferment", "lean_seasons": []},
 	"Pāwa Hitō": {"axis": "fatty savoury", "lean_seasons": ["autumn"]},
-	"Bloc du Larg": {"axis": "bitter herb", "lean_seasons": ["winter", "spring"]},
+	"Blôc du Larg": {"axis": "bitter herb", "lean_seasons": ["winter", "spring"]},
 	"Xérvu": {"axis": "numbing spice", "lean_seasons": ["summer"]},
 	"Taktikã": {"axis": "smoky char", "lean_seasons": ["spring"]},
-	"Tu'ul ys Feynt": {"axis": "sour citrus", "lean_seasons": ["winter"]},
-	"Lo-onğ Ralī": {"axis": "heavy sweet", "lean_seasons": ["summer"]},
-	"Bompaşao": {"axis": "sharp ferment", "lean_seasons": ["autumn"]},
-	"Rhen Tempaol": {"axis": "bitter herb", "lean_seasons": ["winter"]},
+	"Tãul ys Feynt": {"axis": "sour citrus", "lean_seasons": ["winter"]},
+	"Lo-ong Ralī": {"axis": "heavy sweet", "lean_seasons": ["summer"]},
+	"Bompaçao": {"axis": "sharp ferment", "lean_seasons": ["autumn"]},
+	"Rhėn Tempaol": {"axis": "bitter herb", "lean_seasons": ["winter"]},
 	"Kutré Lyn": {"axis": "numbing spice", "lean_seasons": ["spring"]},
 	"Zaitgaist": {"axis": "clean umami", "lean_seasons": ["autumn"]},
 }
@@ -84,12 +84,12 @@ const LARDERS := {
 
 ## The two regions that make nothing, and it is the same fact about both.
 ##
-## `regions.gd` already says Ispayk and A'ace are excluded from the development
+## `regions.gd` already says Ĭspayk and A'ace are excluded from the development
 ## system because *"their identity comes from history and money, not
 ## geography"*. A paste is geography. So neither has one, and both eat imported
 ## -- which is not a penalty but a description: A'ace buys the best of
-## everywhere, Ispayk imports on credit it earned decades ago.
-const IMPORTING_REGIONS: Array[String] = ["Ispayk", "A'ace"]
+## everywhere, Ĭspayk imports on credit it earned decades ago.
+const IMPORTING_REGIONS: Array[String] = ["Ĭspayk", "A'ace"]
 
 const WEEKS_PER_SEASON: int = 13
 const SEASONS: Array[String] = ["spring", "summer", "autumn", "winter"]
@@ -214,7 +214,7 @@ static func distance(from_region: String, to_region: String) -> int:
 ## The block is painted with these, so a paste has to be a colour before it can be
 ## a share -- and the colour has to say *what it tastes of*, because that is the
 ## only property of a paste a cook can see. Two regions on the same axis are near
-## neighbours here on purpose: a Bompaşaon ferment and a Spëddigh ferment are both
+## neighbours here on purpose: a Bompaçaon ferment and a Spëddigh ferment are both
 ## pale and sour-looking, and telling them apart is the label's job, not the
 ## colour's.
 ##

@@ -40,7 +40,7 @@ the readable form is a flattened panel pattern, like a shoe upper or a sail plan
 ## 3. The fourteen inhabited regions
 
 Eight **majors** contest the Sixnet's bracket. Six **minors** raise players, run
-no academy worth managing, and each sit beside one core region. Ispayk and A'ace
+no academy worth managing, and each sit beside one core region. Ĭspayk and A'ace
 are majors that stand outside the geography entirely.
 
 ### Majors
@@ -50,24 +50,24 @@ are majors that stand outside the geography entirely.
 | Landavol | Landavolan | braided river plains, roads everywhere | nothing in particular, and that is its identity |
 | Spëddigh | Spëddish | glacial fjords, no room to sprawl | tempo pressure, rapid transition |
 | Pāwa Hitō | Pāwan | steep volcanic archipelago | conditioning, relentless transition attack |
-| Bloc du Larg | Largen | broad tidal shelf, enormous tides | net control, patient structure |
+| Blôc du Larg | Largen | broad tidal shelf, enormous tides | net control, patient structure |
 | Xérvu | Xérvyan | high dry plateau above an escarpment | serving, toss discipline, first strike |
 | Taktikã | Taktikãn | cold altiplano and salt flats | composed intelligence, reading ahead |
-| Ispayk | Ispaykano | volcanic islands in the storm track | the set-and-spike; a fallen flagship |
+| Ĭspayk | Ĭspaykano | volcanic islands in the storm track | the set-and-spike; a fallen flagship |
 | A'ace | A'aceni | desert coast, largely reclaimed | nothing yet; it buys what it needs |
 
 ### Minors
 
 | region | demonym | beside | land |
 | --- | --- | --- | --- |
-| Tu'ul ys Feynt | Feyntish | Taktikã | slate valleys, low ceilings |
-| Lo-onğ Ralī | Ralīn | Pāwa Hitō | thin-air plateau, three days from anywhere |
-| Bompaşao | Bompaşan | Bloc du Larg | hot river delta, concrete courts |
-| Rhen Tempaol | Tempaoli | Spëddigh *(colony; see below)* | temperate island in Pāwa Hitō's seas |
+| Tãul ys Feynt | Feyntish | Taktikã | slate valleys, low ceilings |
+| Lo-ong Ralī | Ralīn | Pāwa Hitō | thin-air plateau, three days from anywhere |
+| Bompaçao | Bompaçan | Blôc du Larg | hot river delta, concrete courts |
+| Rhėn Tempaol | Tempaoli | Spëddigh *(colony; see below)* | temperate island in Pāwa Hitō's seas |
 | Kutré Lyn | Kutrén | Xérvu | limestone karst, corners everywhere |
 | Zaitgaist | Zaitgaister | Landavol | walkable enclave city, no hinterland |
 
-**Rhen Tempaol is a colony**, which is why it sits in Pāwa Hitō's seas while the
+**Rhėn Tempaol is a colony**, which is why it sits in Pāwa Hitō's seas while the
 adjacency table links it to Spëddigh. That is the only political relationship in
 the setting, it is administrative rather than moral, and it exists so the map can
 have two layers. See `GEOGRAPHY.md` §2.
@@ -105,7 +105,7 @@ ball wearing whatever a region put on it.
 
 Growing and making are two different maps over the same panels: land grows
 flavour, capital builds factories, and they do not coincide. Each core region
-sells a paste its minor neighbour grows. Ispayk grows its own and exports most of
+sells a paste its minor neighbour grows. Ĭspayk grows its own and exports most of
 it. A'ace grows nothing and imports everything.
 
 ## 6. How things are named
@@ -163,7 +163,7 @@ well-meaning future work. Each of these was decided against on purpose.
   `SixnetLeague.UPPER_SLOT_IDS` / `LOWER_SLOT_IDS` /
   `QUALIFIER_ADVANCE_COUNT = 2`.)
 
-  Ispayk and A'ace each hold a *starting* slot, both at the bottom of their
+  Ĭspayk and A'ace each hold a *starting* slot, both at the bottom of their
   bracket — `lower_4` for the fallen flagship, `upper_4` for the one that bought
   its way to the top table — and from their first season on they promote and
   relegate like anybody else. "Always starts" is a starting condition, not a pin.

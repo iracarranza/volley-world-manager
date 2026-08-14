@@ -99,7 +99,7 @@ func _initialize() -> void:
 	## And whether the regional curve reaches the same quantity. Landavol is 1.00
 	## by definition, so the comparison is against it.
 	print("regional fatigue_resistance, and what it is worth over this match")
-	for region in ["Pāwa Hitō", "Lo-onğ Ralī", "Landavol", "Spëddigh"]:
+	for region in ["Pāwa Hitō", "Lo-ong Ralī", "Landavol", "Spëddigh"]:
 		var resistance := VolleyballRegions.fatigue_resistance(region)
 		var scaled := median * resistance
 		print("  %-14s x%.2f  ->  median voli would sit at %.3f (%s)" % [

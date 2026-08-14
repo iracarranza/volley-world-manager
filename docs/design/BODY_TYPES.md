@@ -48,7 +48,7 @@ and positional skews in
 feel distinct. If body type were also regionally weighted, it would immediately
 read as a proxy for ethnicity — "people from here are built like that" — which
 is the one reading this feature must never support. A flat distribution makes
-body type orthogonal to origin: a Tu'ul ys Feynt Ursi and a Pāwa Hitō Ursi are
+body type orthogonal to origin: a Tãul ys Feynt Ursi and a Pāwa Hitō Ursi are
 the same body in different traditions, and the *tradition* is what differs.
 
 It is also culturally invisible in-world. No scouting text, news copy, region

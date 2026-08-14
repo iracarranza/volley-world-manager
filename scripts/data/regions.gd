@@ -13,13 +13,13 @@ const DEFINITIONS := {
 		"physical": 2, "technical": 3, "mental": 2, "names": ["Edda", "Siv", "Nils", "Veya", "Tekk", "Orri", "Fenn", "Lïv"]},
 	"Pāwa Hitō": {"tagline": "Conditioning halls mold the Hitōue into relentless attackers -- nightmarish power and quality deep into a rally.",
 		"physical": 4, "technical": 1, "mental": 1, "names": ["Aki", "Hana", "Ren", "Sora", "Yuna", "Kai", "Mio", "Taro"]},
-	"Bloc du Larg": {"tagline": "Larçgan culture prizes methodical court reading, perfecting its structure at the net above all else to keep complete control.",
+	"Blôc du Larg": {"tagline": "Larçgan culture prizes methodical court reading, perfecting its structure at the net above all else to keep complete control.",
 		"physical": 2, "technical": 2, "mental": 3, "names": ["Luc", "Mire", "Noé", "Ciel", "Aude", "Remy", "Léon", "Véra"]},
 	"Xérvu": {"tagline": "Ancient and new rhythms reverberate through Xérvyan courts -- a combination of individualism and deep respect for routine creates devastating, unpredictable serves.",
 		"physical": 2, "technical": 4, "mental": 1, "names": ["Kofi", "Amara", "Zola", "Kwame", "Aziza", "Tendai", "Njeri", "Baraka"]},
 	"Taktikã": {"tagline": "Taktikiãn volleyball demands cerebral players who strip the game down to its roots; emotion has no place in finding the optimal path.",
 		"physical": 1, "technical": 1, "mental": 4, "names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"]},
-	"Ispayk": {"tagline": "The cradle of the set-and-spike has lost its relevance to the modernization of the sport, but veteran and new Ispakyanos alike keep perfecting the bomberino's crushing bomba.",
+	"Ĭspayk": {"tagline": "The cradle of the set-and-spike has lost its relevance to the modernization of the sport, but veteran and new Ispakyanos alike keep perfecting the bomberino's crushing bomba.",
 		"physical": 4, "technical": 2, "mental": 1, "names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"]},
 	"A'ace": {"tagline": "A'ace'ni volleyball may as well have been born yesterday, but the power of program funding defies history. The world's premier volis dictate their tactics season to season.",
 		"physical": 3, "technical": 2, "mental": 1, "names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"]},
@@ -33,23 +33,23 @@ const DEFINITIONS := {
 	##
 	## Names follow the same device as the majors (see
 	## `docs/world/STYLE_AND_SETTING.md`): a volleyball phrase reworded oddly
-	## and dressed in unfamiliar spelling -- Tu'ul ys Feynt is "tools and
-	## feints", Rhen Tempaol is "one tempo", Lo-onğ Ralī is "long rally",
-	## Bompaşao is "bump pass", and Kutré Lyn is "cut and line".
+	## and dressed in unfamiliar spelling -- Tãul ys Feynt is "tools and
+	## feints", Rhėn Tempaol is "one tempo", Lo-ong Ralī is "long rally",
+	## Bompaçao is "bump pass", and Kutré Lyn is "cut and line".
 	##
 	## A minor region shares its major neighbour's *spelling*, which is what
 	## makes them read as one written language rather than two names drawn from
-	## different hats. Kutré Lyn was "Kutre den Lyn" and carried Bloc du Larg's
+	## different hats. Kutré Lyn was "Kutre den Lyn" and carried Blôc du Larg's
 	## connector ("den" for "du") while sitting next to Xérvu, so it announced
 	## kinship with the wrong region; it now takes Xérvu's acute instead. Old
 	## saves resolve through `LEGACY_REGIONS`.
-	"Tu'ul ys Feynt": {"tagline": "Village halls where the ball is won by the shot the blocker didn't believe -- wrists over power, patience over height.",
+	"Tãul ys Feynt": {"tagline": "Village halls where the ball is won by the shot the blocker didn't believe -- wrists over power, patience over height.",
 		"physical": 1, "technical": 3, "mental": 1, "names": ["Bryn", "Eilir", "Tewdr", "Anwen", "Maelo", "Ffion", "Gwern", "Rhosyn"]},
-	"Lo-onğ Ralī": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
+	"Lo-ong Ralī": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
 		"physical": 2, "technical": 1, "mental": 2, "names": ["Dorje", "Pema", "Tenzin", "Tsering", "Norbu", "Lhamo", "Kunzang", "Yangchen"]},
-	"Bompaşao": {"tagline": "Concrete courts, no net posts worth the name, and a religion built around the first contact. If it's passable, it gets passed.",
+	"Bompaçao": {"tagline": "Concrete courts, no net posts worth the name, and a religion built around the first contact. If it's passable, it gets passed.",
 		"physical": 1, "technical": 3, "mental": 1, "names": ["Nilo", "Yaritza", "Elpidio", "Marisol", "Ozéias", "Caridad", "Tavo", "Idalia"]},
-	"Rhen Tempaol": {"tagline": "Small halls where the set is already gone before the block has finished landing. Nobody here hits hard. Everybody here hits early.",
+	"Rhėn Tempaol": {"tagline": "Small halls where the set is already gone before the block has finished landing. Nobody here hits hard. Everybody here hits early.",
 		"physical": 2, "technical": 2, "mental": 1, "names": ["Soah", "Minjae", "Haerin", "Wonsik", "Yerin", "Doha", "Jiwoo", "Seong"]},
 	"Kutré Lyn": {"tagline": "Technical schools that treat a hard swing as an admission of failure. The corner is always open if you can see it.",
 		"physical": 1, "technical": 3, "mental": 1, "names": ["Zorana", "Miloš", "Vesna", "Ilija", "Radmila", "Novak", "Danica", "Stevan"]},
@@ -80,15 +80,15 @@ const CLUB_NAMES := {
 	"Landavol": ["Sidaut VK", "Doblok Volei"],
 	"Spëddigh": ["Kwikkset IF", "Rüsh Lïn"],
 	"Pāwa Hitō": ["Kīru Shotto", "Hādo Supaiku"],
-	"Bloc du Larg": ["Mur Complet", "Touche du Filet"],
-	"Xérvu": ["Ásu Sérva", "Flöté Wän"],
+	"Blôc du Larg": ["Mur Complet", "Touche du Filet"],
+	"Xérvu": ["Ásu Sérva", "Flóté Wán"],
 	"Taktikã": ["Leturã Alta", "Nõ Errõ"],
-	"Ispayk": ["Los Bomba", "Sét i Spayk"],
+	"Ĭspayk": ["Los Bomba", "Sĕt i Spayk"],
 	"A'ace": ["Al-Kil'a", "Sirv'aan"],
-	"Tu'ul ys Feynt": ["Gwrist ys Bryn"],
-	"Lo-onğ Ralī": ["Ralī Chöd"],
-	"Bompaşao": ["Primeira Bola"],
-	"Rhen Tempaol": ["Tempaol Han"],
+	"Tãul ys Feynt": ["Gwrist ys Bryn"],
+	"Lo-ong Ralī": ["Ralī Chōd"],
+	"Bompaçao": ["Primeira Bola"],
+	"Rhėn Tempaol": ["Tempaol Han"],
 	"Kutré Lyn": ["Kutré Kórner"],
 	"Zaitgaist": ["Zaitgaist VK"],
 }
@@ -126,7 +126,7 @@ static func club_name(region_name: String, index: int = 0) -> String:
 ## mark is the region's signature and it is the only thing making the name look
 ## like a written language at all.
 ##
-## Two-word regions contract to whichever half is actually spoken: "Bloc du Larg"
+## Two-word regions contract to whichever half is actually spoken: "Blôc du Larg"
 ## is *Larg* in a sentence, so Largen.
 ##
 ## Nothing derives from the people's naming tradition. That tradition tells you
@@ -135,15 +135,15 @@ const DEMONYMS := {
 	"Landavol": "Landavolan",
 	"Spëddigh": "Spëddish",
 	"Pāwa Hitō": "Pāwan",
-	"Bloc du Larg": "Largen",
+	"Blôc du Larg": "Largen",
 	"Xérvu": "Xérvyan",
 	"Taktikã": "Taktikãn",
-	"Ispayk": "Ispaykano",
+	"Ĭspayk": "Ĭspaykano",
 	"A'ace": "A'aceni",
-	"Tu'ul ys Feynt": "Feyntish",
-	"Lo-onğ Ralī": "Ralīn",
-	"Bompaşao": "Bompaşan",
-	"Rhen Tempaol": "Tempaoli",
+	"Tãul ys Feynt": "Feyntish",
+	"Lo-ong Ralī": "Ralīn",
+	"Bompaçao": "Bompaçan",
+	"Rhėn Tempaol": "Tempaoli",
 	"Kutré Lyn": "Kutrén",
 	"Zaitgaist": "Zaitgaister",
 }
@@ -153,32 +153,42 @@ const DEMONYMS := {
 ## player's `home_region`, so dropping the entry silently reassigns those volis
 ## to Landavol via `canonical_name`'s fallback.
 const LEGACY_REGIONS := {
-	"East Asia": "Pāwa Hitō", "Southeast Asia": "Ispayk",
+	"East Asia": "Pāwa Hitō", "Southeast Asia": "Ĭspayk",
 	"Europe": "Landavol", "North America": "Pāwa Hitō",
 	"South America": "Taktikã",
 	"Kutre den Lyn": "Kutré Lyn",
+	## The shape sweep. Every one of these is the same failure Kutre den Lyn was
+	## -- a name written in somebody else's hand -- found by asking what gesture
+	## draws the mark rather than which language it came from. See
+	## `RegionLanguage`.
+	"Bloc du Larg": "Blôc du Larg",
+	"Tu'ul ys Feynt": "Tãul ys Feynt",
+	"Bompaşao": "Bompaçao",
+	"Rhen Tempaol": "Rhėn Tempaol",
+	"Lo-onğ Ralī": "Lo-ong Ralī",
+	"Ispayk": "Ĭspayk",
 }
 
 ## The six regions with their own development identity -- REGION_ADJACENCY
-## and influence drift are scoped to exactly this list. Ispayk and A'ace are
+## and influence drift are scoped to exactly this list. Ĭspayk and A'ace are
 ## deliberately excluded from *that* system (they don't have a development
 ## tradition to spread or absorb; their identity comes from history and
 ## money, not geography), even though both now play in the Sixnet bracket
 ## itself -- see `SIXNET_PARTICIPANTS`.
 const CORE_REGIONS: Array[String] = [
-	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Blôc du Larg", "Xérvu", "Taktikã",
 ]
 
 ## Every region that actually competes in the Sixnet's 8 bracket slots.
-## Ispayk and A'ace hold a fixed starting slot each (see
-## `SixnetLeague.ISPAYK_FIXED_SLOT`/`AACE_FIXED_SLOT`) -- lower for Ispayk
+## Ĭspayk and A'ace hold a fixed starting slot each (see
+## `SixnetLeague.ISPAYK_FIXED_SLOT`/`AACE_FIXED_SLOT`) -- lower for Ĭspayk
 ## (fallen flagship, clawing back), upper for A'ace (bought its way straight
 ## to the top) -- but afterward are subject to the same promotion/relegation
 ## as everyone else; "always starts" is a starting condition, not a
 ## permanent pin. The remaining 6 slots go to `CORE_REGIONS`, one each.
 const SIXNET_PARTICIPANTS: Array[String] = [
-	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
-	"Ispayk", "A'ace",
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Blôc du Larg", "Xérvu", "Taktikã",
+	"Ĭspayk", "A'ace",
 ]
 
 ## The style a region's players grow up reading every week. New managers may
@@ -213,7 +223,7 @@ const REGIONAL_PRINCIPLES := {
 		"emotional_expression": 0.62, "serve_aggression": 0.55,
 		"transition_commitment": 0.94, "block_commitment": 0.58,
 	},
-	"Bloc du Larg": {
+	"Blôc du Larg": {
 		"decisiveness": 0.26, "pin_focus": 0.32, "tempo_variation": 0.30,
 		"emotional_expression": 0.22, "serve_aggression": 0.30,
 		"transition_commitment": 0.35, "block_commitment": 0.72,
@@ -228,7 +238,7 @@ const REGIONAL_PRINCIPLES := {
 		"emotional_expression": 0.12, "serve_aggression": 0.45,
 		"transition_commitment": 0.50, "block_commitment": 0.52,
 	},
-	"Ispayk": {
+	"Ĭspayk": {
 		"decisiveness": 0.90, "pin_focus": 0.88, "tempo_variation": 0.28,
 		"emotional_expression": 0.78, "serve_aggression": 0.72,
 		"transition_commitment": 0.62, "block_commitment": 0.78,
@@ -278,17 +288,17 @@ const REGIONAL_CURVES := {
 	"Spëddigh": {"fatigue_resistance": 1.18, "read_rate": 1.05},
 	## The flattest curve in the world, and the reason to fear a long match.
 	"Pāwa Hitō": {"fatigue_resistance": 0.55, "read_rate": 0.90},
-	"Bloc du Larg": {"fatigue_resistance": 0.88, "read_rate": 1.15},
+	"Blôc du Larg": {"fatigue_resistance": 0.88, "read_rate": 1.15},
 	"Xérvu": {"fatigue_resistance": 1.10, "read_rate": 0.95},
 	## Reads the game faster than anybody, and pays for it in the legs.
 	"Taktikã": {"fatigue_resistance": 1.12, "read_rate": 1.55},
-	"Ispayk": {"fatigue_resistance": 1.05, "read_rate": 0.80},
+	"Ĭspayk": {"fatigue_resistance": 1.05, "read_rate": 0.80},
 	## Assembled squads that never learned to read together.
 	"A'ace": {"fatigue_resistance": 0.95, "read_rate": 0.72},
-	"Tu'ul ys Feynt": {"fatigue_resistance": 1.05, "read_rate": 1.20},
-	"Lo-onğ Ralī": {"fatigue_resistance": 0.50, "read_rate": 1.00},
-	"Bompaşao": {"fatigue_resistance": 0.90, "read_rate": 1.10},
-	"Rhen Tempaol": {"fatigue_resistance": 1.10, "read_rate": 1.05},
+	"Tãul ys Feynt": {"fatigue_resistance": 1.05, "read_rate": 1.20},
+	"Lo-ong Ralī": {"fatigue_resistance": 0.50, "read_rate": 1.00},
+	"Bompaçao": {"fatigue_resistance": 0.90, "read_rate": 1.10},
+	"Rhėn Tempaol": {"fatigue_resistance": 1.10, "read_rate": 1.05},
 	"Kutré Lyn": {"fatigue_resistance": 1.00, "read_rate": 1.10},
 	"Zaitgaist": {"fatigue_resistance": 1.00, "read_rate": 1.00},
 }
@@ -314,16 +324,16 @@ static func read_rate(region_name: String) -> float:
 ## culture (see `docs/world/STYLE_AND_SETTING.md`); this is a made-up world
 ## map, symmetric by construction (every entry appears on both sides).
 const REGION_ADJACENCY := {
-	"Landavol": ["Bloc du Larg", "Spëddigh", "Zaitgaist"],
-	"Spëddigh": ["Landavol", "Taktikã", "Rhen Tempaol"],
-	"Pāwa Hitō": ["Xérvu", "Lo-onğ Ralī"],
-	"Bloc du Larg": ["Landavol", "Xérvu", "Bompaşao"],
-	"Xérvu": ["Bloc du Larg", "Pāwa Hitō", "Taktikã", "Kutré Lyn"],
-	"Taktikã": ["Spëddigh", "Xérvu", "Tu'ul ys Feynt"],
-	"Tu'ul ys Feynt": ["Taktikã"],
-	"Lo-onğ Ralī": ["Pāwa Hitō"],
-	"Bompaşao": ["Bloc du Larg"],
-	"Rhen Tempaol": ["Spëddigh"],
+	"Landavol": ["Blôc du Larg", "Spëddigh", "Zaitgaist"],
+	"Spëddigh": ["Landavol", "Taktikã", "Rhėn Tempaol"],
+	"Pāwa Hitō": ["Xérvu", "Lo-ong Ralī"],
+	"Blôc du Larg": ["Landavol", "Xérvu", "Bompaçao"],
+	"Xérvu": ["Blôc du Larg", "Pāwa Hitō", "Taktikã", "Kutré Lyn"],
+	"Taktikã": ["Spëddigh", "Xérvu", "Tãul ys Feynt"],
+	"Tãul ys Feynt": ["Taktikã"],
+	"Lo-ong Ralī": ["Pāwa Hitō"],
+	"Bompaçao": ["Blôc du Larg"],
+	"Rhėn Tempaol": ["Spëddigh"],
 	"Kutré Lyn": ["Xérvu"],
 	## Geography only. Zaitgaist is genuinely an enclave inside Landavol, but
 	## drift skips it before the adjacency branches ever run -- it tracks the
@@ -337,16 +347,16 @@ const REGION_ADJACENCY := {
 ## every loop that means "regions in the bracket" keeps using
 ## SIXNET_PARTICIPANTS, which is why adding these needs no league changes.
 const MINOR_REGIONS: Array[String] = [
-	"Tu'ul ys Feynt", "Lo-onğ Ralī", "Bompaşao", "Rhen Tempaol",
+	"Tãul ys Feynt", "Lo-ong Ralī", "Bompaçao", "Rhėn Tempaol",
 	"Kutré Lyn", "Zaitgaist",
 ]
 
-## Influence drift covers core plus minor. Ispayk and A'ace stay out: their
+## Influence drift covers core plus minor. Ĭspayk and A'ace stay out: their
 ## identities come from history and money rather than a local training
 ## tradition that could spread or be absorbed.
 const DEVELOPMENT_REGIONS: Array[String] = [
-	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
-	"Tu'ul ys Feynt", "Lo-onğ Ralī", "Bompaşao", "Rhen Tempaol",
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Blôc du Larg", "Xérvu", "Taktikã",
+	"Tãul ys Feynt", "Lo-ong Ralī", "Bompaçao", "Rhėn Tempaol",
 	"Kutré Lyn", "Zaitgaist",
 ]
 
@@ -357,9 +367,9 @@ const DEVELOPMENT_REGIONS: Array[String] = [
 ## Conflating the two is how the tier ends up existing in data and nowhere in
 ## the actual world.
 const INHABITED_REGIONS: Array[String] = [
-	"Landavol", "Spëddigh", "Pāwa Hitō", "Bloc du Larg", "Xérvu", "Taktikã",
-	"Ispayk", "A'ace",
-	"Tu'ul ys Feynt", "Lo-onğ Ralī", "Bompaşao", "Rhen Tempaol",
+	"Landavol", "Spëddigh", "Pāwa Hitō", "Blôc du Larg", "Xérvu", "Taktikã",
+	"Ĭspayk", "A'ace",
+	"Tãul ys Feynt", "Lo-ong Ralī", "Bompaçao", "Rhėn Tempaol",
 	"Kutré Lyn", "Zaitgaist",
 ]
 
@@ -373,15 +383,15 @@ const INHABITED_REGIONS: Array[String] = [
 ## rather than a certainty -- a small tradition can still die, which is a
 ## better story than one that cannot.
 ##
-## The spread is deliberate. Lo-onğ Ralī is an isolated mountain tradition and
+## The spread is deliberate. Lo-ong Ralī is an isolated mountain tradition and
 ## the hardest to reach; Kutré Lyn is well-connected inland and could plausibly
 ## be swallowed outright; Zaitgaist has nothing to resist with, which is the
 ## point of it. Regions absent here resist normally.
 const REGION_TRADITION_RESISTANCE := {
-	"Lo-onğ Ralī": 1.4,
-	"Tu'ul ys Feynt": 1.0,
-	"Rhen Tempaol": 0.9,
-	"Bompaşao": 0.8,
+	"Lo-ong Ralī": 1.4,
+	"Tãul ys Feynt": 1.0,
+	"Rhėn Tempaol": 0.9,
+	"Bompaçao": 0.8,
 	"Kutré Lyn": 0.7,
 	"Zaitgaist": 0.0,
 }

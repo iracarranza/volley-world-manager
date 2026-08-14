@@ -162,7 +162,7 @@ Not a rating. A reason to look twice:
 > extreme — they might make a strange middle and fill the hole in my roster."
 >
 > "This voli can attack without an approach? I have been struggling to keep
-> hitters in rhythm against Ispayk; maybe they are the answer."
+> hitters in rhythm against Ĭspayk; maybe they are the answer."
 
 Both of those are **unconventional fit** — an unusual combination of attributes,
 tendencies, capabilities and morphology, and a manager deciding how it could fit

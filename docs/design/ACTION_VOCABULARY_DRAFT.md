@@ -269,7 +269,7 @@ unpredictable, the other relentless.
 A related observation worth recording: the regions carry identity in **two
 different systems**, and this is fine as long as it is deliberate. Xérvu
 (serve_aggression 0.92) and Taktikã (emotional_expression 0.12) are principles
-regions and are cleanly implemented. Ispayk is an *attribute* region -- its
+regions and are cleanly implemented. Ĭspayk is an *attribute* region -- its
 power lives in the generator. Pāwa's stated identity, sustained high-stamina
 attacking, is also an attribute story; stamina and work rate are not identity
 axes at all. The fix above gives it a principles axis to own, but its real

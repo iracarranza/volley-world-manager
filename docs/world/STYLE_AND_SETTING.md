@@ -50,7 +50,7 @@ arc is measured by how far it is from Sixnet contention.
 
 **The six flagship slots aren't permanent.** They're contested, not owned --
 a legendary program can fall out of them, and a well-resourced newcomer can
-buy or work its way in. This is deliberate, established texture (see Ispayk
+buy or work its way in. This is deliberate, established texture (see Ĭspayk
 and A'ace below), not an incidental detail: it means "region" and "current
 Sixnet flagship" are two different things, and the roster of eight playable
 regions doesn't need to shrink or grow in lockstep with who currently holds
@@ -65,9 +65,9 @@ sixnet_league.gd`), and it runs in two stages:
   through -- **six teams**, which is what makes the name honest. Eight
   regions compete for the Sixnet; six contest it.
 
-A'ace and Ispayk each take a *fixed starting* slot, both at the **bottom**
+A'ace and Ĭspayk each take a *fixed starting* slot, both at the **bottom**
 of their bracket: A'ace is the least established team at a top table it
-bought its way onto, and Ispayk is rock bottom of everything, where a fallen
+bought its way onto, and Ĭspayk is rock bottom of everything, where a fallen
 flagship begins its climb back. Neither is pinned there -- from their first
 season on they promote and relegate like anybody else, and each stage judges
 its own teams (last in the championship goes down, the qualifier winner comes
@@ -82,7 +82,7 @@ adjacency, not tied to any region's real-world naming tradition), also
 drives a slow influence drift: a dominant region's development traditions
 partially spread into a weaker neighbor, while an isolated region with no
 dominant neighbor nearby instead intensifies its own specialty rather than
-being absorbed. That drift covers the six core regions only -- Ispayk and
+being absorbed. That drift covers the six core regions only -- Ĭspayk and
 A'ace compete in the bracket but sit outside the geography, since their
 identities come from history and money rather than from a local
 development tradition that could spread.
@@ -122,9 +122,9 @@ feel like it has a past:
   champions -- birth carries no talent or age bias at all, only how prolific
   a region is. Talent then *accumulates* wherever the money is. A'ace fields
   far more scoutable talent than the world average while raising no more than
-  anyone else; Ispayk raises plenty and cannot hold on to it. Ageing players
+  anyone else; Ĭspayk raises plenty and cannot hold on to it. Ageing players
   filter the other way, down to the programs still glad to have them, which
-  is why Ispayk fills with veterans and A'ace fields players at their peak.
+  is why Ĭspayk fills with veterans and A'ace fields players at their peak.
   Nobody wrote those stories into the data; they fall out of the weighting.
 
 Every region is guaranteed prospects worth scouting, so no save produces a
@@ -164,7 +164,7 @@ Rivalries between academies are sporting and stylistic, not political --
 playful, longstanding, the kind of thing broadcasters replay highlight reels
 over, not anything modeled on real-world conflict:
 
-- **Pāwa Hitō vs. Bloc du Larg**: the marquee rivalry, power-and-pace against
+- **Pāwa Hitō vs. Blôc du Larg**: the marquee rivalry, power-and-pace against
   patient structure -- the sport's version of a shootout offense against a
   lockdown defense.
 - **Spëddigh** plays the disruptor: smaller budgets, faster systems, a
@@ -176,14 +176,14 @@ over, not anything modeled on real-world conflict:
 - **Landavol**, with no specialty, is chronically underestimated by scouts --
   and is where the circuit's most complete late bloomers tend to come from,
   since nobody trains them into one narrow box early.
-- **Ispayk vs. A'ace**: the circuit's other marquee rivalry, and its most
-  pointed -- old glory against new money. Ispayk invented the set-and-spike
+- **Ĭspayk vs. A'ace**: the circuit's other marquee rivalry, and its most
+  pointed -- old glory against new money. Ĭspayk invented the set-and-spike
   and once held a flagship slot; it's since fallen out of Sixnet contention
   and now competes on reputation, craft, and a threadbare budget, with a
   crushing signature spike (a **bomba**, and the hitter who lands one a
   **bomberino**) as the one thing that still travels. A'ace has existed for a
   fraction of the time and already threatens to buy its way into the slot
-  Ispayk lost -- imported star talent across a few glamour positions,
+  Ĭspayk lost -- imported star talent across a few glamour positions,
   essentially no homegrown tradition yet. Neither side is played as the
   villain; it's a genuine, ongoing "does history or money deserve the last
   flagship spot" argument the broadcasters never get tired of.
@@ -267,23 +267,23 @@ whatever else gets invented later) are light-touch by design:
 ## Naming conventions already established
 
 Regions (`scripts/data/regions.gd`) follow a specific pattern, already applied
-to eight regions (Pāwa Hitō, Spëddigh, Bloc du Larg, Landavol, Xérvu, Taktikã,
-Ispayk, A'ace):
+to eight regions (Pāwa Hitō, Spëddigh, Blôc du Larg, Landavol, Xérvu, Taktikã,
+Ĭspayk, A'ace):
 
 - The **region name** is an English volleyball-related pun (Power Hitter,
   Speed Dig, Block [the] Large, Land of Volleyball, Serve, Tactic[a], Spike,
   Ace) respelled with foreign-looking diacritics or letters. It should look
   like a different written language at a glance without borrowing real
   grammar, prefixes, or suffixes from any actual language -- light cosmetic
-  reskinning of English, not a translation. Ispayk is the one case that
+  reskinning of English, not a translation. Ĭspayk is the one case that
   borrows a real spelling *feature* rather than pure decoration -- the
   epenthetic-i that Filipino English speakers themselves use affectionately
   (iskul, istrart) -- but it's still a spelling quirk, not borrowed grammar.
 - The **people** from a region draw on a real, specific naming tradition
   matched to the region's flavor (Japanese for Pāwa Hitō, Nordic/Icelandic for
-  Spëddigh, French for Bloc du Larg, a generic Northern/Central European blend
+  Spëddigh, French for Blôc du Larg, a generic Northern/Central European blend
   for Landavol, West/Southern/East African for Xérvu, Quechua/Aymara/Mapuche
-  for Taktikã, Filipino for Ispayk, Gulf Arab for A'ace) -- real, respectful,
+  for Taktikã, Filipino for Ĭspayk, Gulf Arab for A'ace) -- real, respectful,
   attested given names, not invented gibberish. This is where genuine cultural
   representation actually shows up to the player, more than the place-name
   pun does.
@@ -320,49 +320,92 @@ nothing about ancestry, or every transfer quietly implies one.
 
 | region | demonym | | region | demonym |
 | --- | --- | --- | --- | --- |
-| Landavol | Landavolan | | Tu'ul ys Feynt | Feyntish |
-| Spëddigh | Spëddish | | Lo-onğ Ralī | Ralīn |
-| Pāwa Hitō | Pāwan | | Bompaşao | Bompaşan |
-| Bloc du Larg | Largen | | Rhen Tempaol | Tempaoli |
+| Landavol | Landavolan | | Tãul ys Feynt | Feyntish |
+| Spëddigh | Spëddish | | Lo-ong Ralī | Ralīn |
+| Pāwa Hitō | Pāwan | | Bompaçao | Bompaçan |
+| Blôc du Larg | Largen | | Rhėn Tempaol | Tempaoli |
 | Xérvu | Xérvyan | | Kutré Lyn | Kutrén |
 | Taktikã | Taktikãn | | Zaitgaist | Zaitgaister |
-| Ispayk | Ispaykano | | | |
+| Ĭspayk | Ĭspaykano | | | |
 | A'ace | A'aceni | | | |
 
-### Open: minor regions should share their major neighbour's spelling
+### The shape system: a region signs its name with a gesture
 
-A minor region sits next to exactly one core region in `REGION_ADJACENCY`, and
-the pair should read as **the same written language** -- that is what makes a
-neighbour a neighbour rather than a name drawn from a different hat. The rule is
-not currently applied, and auditing the six pairs:
+The rule used to read *"a minor region should share its major neighbour's
+spelling"*, sat under a heading that said **Open**, and was audited by hand. That
+is how `Kutre den Lyn` shipped carrying Blôc du Larg's connector while sitting
+beside Xérvu — announcing kinship with the wrong region, caught after release.
 
-| minor | neighbour | neighbour's mark | shares it? |
-| --- | --- | --- | --- |
-| Lo-onğ Ralī | Pāwa Hitō | macron (ā, ō) | **yes** -- Ralī |
-| Zaitgaist | Landavol | none | **yes**, by absence |
-| Bompaşao | Bloc du Larg | none, French connector | near -- ş is Turkish where ç would be French |
-| Rhen Tempaol | Spëddigh | umlaut (ë) | no |
-| Tu'ul ys Feynt | Taktikã | tilde (ã) | no |
-| Kutré Lyn | Xérvu | acute (é) | **yes**, since the rename below |
+**It also could not be enforced as written, because it compared languages.** `ç`
+is French and `ş` is Turkish, so Bompaşao beside a French neighbour read as a
+mismatch; and Blôc du Larg carried no mark at all, so the literal reading said
+Bompaşao should be bare, which nobody wanted. A rule that cannot answer its own
+audit table is not a rule.
 
-**Kutre den Lyn failed it outright and has been renamed to Kutré Lyn.** It
-borrowed Bloc du Larg's connector shape ("den" for "du") while sitting next to
-Xérvu, so it announced kinship with the wrong region, and the *r* that was meant
-to carry phonetic character did not do it. The new name keeps "cut and line",
-drops the misdirecting connector and takes Xérvu's acute. Demonym: **Kutrén**.
-`LEGACY_REGIONS` maps the old string so existing saves resolve.
+`ç` and `ş` **are the same thing**: a tail hung below the letter. They come from
+unrelated languages and a player neither knows nor cares, because what a player
+perceives is the *shape*. So the unit is the **gesture** — the movement that
+draws the mark — and `scripts/data/region_language.gd` holds it as data with
+four suite checks over it.
 
-Rhen Tempaol's gap has an explanation rather than a fix pending: it is a colony
-of Spëddigh sitting in Pāwa Hitō's seas, so the spelling it *should* take is the
-administrator's. See `GEOGRAPHY.md`.
+**Three relations, and only three.** *Same gesture* (Xérvu and Kutré Lyn share
+the acute). *Same family* — different marks, one movement (Spëddigh's two dots
+above, Rhėn Tempaol's one). *Opposed* — the same mark mirrored across the letter,
+used **once**: Blôc du Larg's roof above and Bompaçao's hook below are a
+metropole and a coastal colony that defines itself against it, and the opposition
+says what kinship would have said wrongly. Anything else is a stranger, and a
+minor region may not be a stranger to its own neighbour.
 
-The diacritic-pun trick itself is specifically a **region**-naming device --
-it doesn't need to be forced onto everything else. Other flavor (the Sixnet
-Championship is the first example) can use its own invented-but-plainly-named
-style, the way real sports mix straightforward league names with regional
-club identities. Extend the region convention specifically when something is
-genuinely region-flavored; invent normally otherwise. No batch effort needed
--- name things as a feature actually introduces them.
+**The shape says something about the volleyball**, which is the whole reason a
+made-up orthography is worth having rather than decorative:
+
+| region | gesture | what the shape is |
+| --- | --- | --- |
+| Landavol · Zaitgaist | *bare* | no lean by design; never developed a style |
+| Spëddigh | two dots **¨** | quick, tight, doubled — like its consonants |
+| ⌞ Rhėn Tempaol | one dot **˙** | a colony's half-inheritance of two |
+| Pāwa Hitō | a bar **¯** | held, sustained, deep into the rally |
+| ⌞ Lo-ong Ralī | a bar **¯** | the same endurance at altitude |
+| Blôc du Larg | a roof **ˆ** | the wall at the net |
+| ⌞ Bompaçao | a hook below **¸** | getting *under* the ball; the first contact |
+| Xérvu | a stroke **´** | the serve |
+| ⌞ Kutré Lyn | a stroke **´** | the same hand, finer |
+| Taktikã | a wave **~** | the read |
+| ⌞ Tãul ys Feynt | a wave **~** | reading, with less to read with |
+| Ĭspayk | a cup **˘** | on the epenthetic i itself — the mark *is* the pun |
+| A'ace | a gap **ʼ** | a hole where a history should be |
+
+Renamed by this sweep, all with `LEGACY_REGIONS` entries: **Blôc du Larg**,
+**Bompaçao**, **Rhėn Tempaol**, **Tãul ys Feynt** (which also dropped an
+apostrophe that collided with A'ace, a region it does not border), **Ĭspayk**,
+and **Lo-ong Ralī** (whose `ğ` was a breve filed under a macron region).
+`Spëddigh`'s `Lïv` needed no fix: `ï` and `ë` are the same gesture, which the
+language-based reading could not see.
+
+### Given names are exempt, and that is the point
+
+The orthography belongs to the **map**. The people draw on real, attested naming
+traditions, and marking `Noé` or `Miloš` with the local gesture to tidy a roster
+is our world's habit of flattening other people's spelling into whichever
+alphabet is convenient — the same thing the demonym rule forbids, applied to a
+person instead of a place. The gate therefore checks region names, demonyms and
+club names for foreign marks, and checks only that every region *has* a tradition
+of its own and that no two share one.
+
+### What can actually be drawn
+
+The palette is bounded by **Cherry Bomb One**, the heading face and the fallback
+under `body_font.tres`, which covers eleven complete families. Deliberately
+absent: the underdot (`ḍḥṇṛṣṭ`, 2 of 8), the stroke-through (`đħłøŧ`, 5 of 7) and
+the letterform substitutions (`þðŋ`, 3 of 5). A mark that renders as a hollow box
+is worse than no mark.
+
+This was not theoretical. `voli_card.gd`, `board_tray.gd`, `board_court.gd` and
+`lock_in_screen.gd` all `preload()`-ed the raw `.ttf` and so got **no fallback** —
+and Short Stack draws no macron at all and one caron in eight, so `Pāwa Hitō`,
+`Ralī` and `Miloš` were hollow boxes on every card and tray in the game. They now
+go through `board_face.tres` and `board_hand.tres`, which carry the same fallback
+`body_font.tres` has had all along.
 
 ## Tone
 
@@ -391,7 +434,7 @@ depends on an answer, don't guess:
   only, so a region's rise or fall over a career is state the game holds and
   never shows.
 - Now that flagship slots are established as contested rather than fixed
-  (see Ispayk/A'ace), does the player's own academy ever get a shot at
+  (see Ĭspayk/A'ace), does the player's own academy ever get a shot at
   Sixnet contention as a mechanic, or does that stay aspirational flavor?
 - World players develop purely as a function of age -- nobody fails to reach
   their ceiling through injury, poor coaching or bad luck, and nobody exceeds
@@ -403,5 +446,5 @@ depends on an answer, don't guess:
 - Retirement is the only exit. Injuries, loss of form and players simply
   falling out of the game are unmodelled.
 - Spëddigh and Landavol don't have a named signature rival yet (Pāwa
-  Hitō/Bloc du Larg and Ispayk/A'ace do) -- worth inventing one each, or is
+  Hitō/Blôc du Larg and Ĭspayk/A'ace do) -- worth inventing one each, or is
   an uneven spread fine?

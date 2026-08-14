@@ -42,8 +42,15 @@ extends MarginContainer
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
-const BoardFace := preload("res://Yatra_One/YatraOne-Regular.ttf")
-const BoardHand := preload("res://Short_Stack/ShortStack-Regular.ttf")
+## The board's display face, **through a fallback rather than raw**.
+##
+## Short Stack draws no macron at all and one caron in eight, and Yatra One is
+## little better -- so `Pāwa Hitō`, `Ralī` and `Miloš` came out as hollow boxes
+## on every card and tray that preloaded the `.ttf` directly. `body_font.tres`
+## has had Cherry Bomb One behind it for exactly this reason; these two are the
+## same arrangement for the faces that had been reaching past it.
+const BoardFace := preload("res://scenes/themes/board_face.tres")
+const BoardHand := preload("res://scenes/themes/board_hand.tres")
 
 ## 262px in the draft, and the reason the grades are three-letter tags.
 const CARD_WIDTH: float = 262.0

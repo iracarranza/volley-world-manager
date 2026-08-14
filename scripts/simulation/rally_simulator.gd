@@ -751,7 +751,7 @@ const LIVE_COMMITMENT_LOW: float = 0.44
 ## Tempo is an integer 0-3, so a continuous input cannot become a fractional
 ## shift; it becomes a *probability* of the shift. The number is the largest
 ## deviation from neutral the regional table actually contains -- blended
-## commitment runs 0.30 (Bloc du Larg) to 0.84 (Pāwa Hitō) around a neutral
+## commitment runs 0.30 (Blôc du Larg) to 0.84 (Pāwa Hitō) around a neutral
 ## 0.50 -- so the two extremes act on every eligible set, Landavol at 0.50 acts
 ## on none, and everyone in between is graded rather than sorted.
 const COMMITMENT_FULL_PULL: float = 0.34
@@ -11740,7 +11740,7 @@ func _apply_identity_tempo(
 ## was home-only, so an opponent ran the same tempo the whole match whatever
 ## their bench believed. Of the twenty-four principle reads in this resolver,
 ## twenty-two were `home_principles` -- an opponent Spëddigh played exactly like
-## an opponent Bloc du Larg, which makes a regional identity a decoration on the
+## an opponent Blôc du Larg, which makes a regional identity a decoration on the
 ## team you happen to manage.
 ##
 ## Lower tempo is quicker: 0 is the first-tempo ball, 3 the high one.

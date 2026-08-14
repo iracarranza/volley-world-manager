@@ -20,15 +20,15 @@ region          kill    dig    ace  svErr  stuff cont/r   tempo  quick
 Landavol       0.466  0.595  0.072  0.081  0.147   5.14    2.21  0.316
 Spëddigh       0.448  0.594  0.072  0.081  0.143   5.15    1.88  0.379
 Pāwa Hitō      0.484  0.598  0.072  0.081  0.143   5.11    1.86  0.359
-Bloc du Larg   0.475  0.605  0.072  0.078  0.148   5.27    2.35  0.262
+Blôc du Larg   0.475  0.605  0.072  0.078  0.148   5.27    2.35  0.262
 Xérvu          0.452  0.578  0.103  0.097  0.156   4.98    1.91  0.357
 Taktikã        0.472  0.609  0.072  0.081  0.150   5.18    2.18  0.329
-Ispayk         0.474  0.600  0.075  0.087  0.133   5.05    1.86  0.360
+Ĭspayk         0.474  0.600  0.075  0.087  0.133   5.05    1.86  0.360
 A'ace          0.465  0.604  0.072  0.084  0.136   5.08    1.86  0.389
 ```
 
-Nearest-neighbour distance, each column scaled by its own spread: Ispayk/A'ace
-0.431, Landavol/Taktikã 0.541, Pāwa/Ispayk 0.648, Spëddigh/A'ace 0.716, Bloc
+Nearest-neighbour distance, each column scaled by its own spread: Ĭspayk/A'ace
+0.431, Landavol/Taktikã 0.541, Pāwa/Ĭspayk 0.648, Spëddigh/A'ace 0.716, Bloc
 0.735, **Xérvu 1.632**.
 
 Xérvu is four times more separated than anyone else, and the reason is
@@ -38,9 +38,9 @@ structural rather than a matter of tuning.
 
 | axis | reads | shape | owned by |
 |---|---|---|---|
-| `decisiveness` | 9 home, 1 opp | magnitude + one threshold | Ispayk .90 |
+| `decisiveness` | 9 home, 1 opp | magnitude + one threshold | Ĭspayk .90 |
 | `serve_aggression` | 4 home | magnitude ×0.70, ×0.14, ×0.10 | Xérvu .92 |
-| `pin_focus` | 4 home | magnitude `lerpf(0.35, 1.65, …)` | Ispayk .88 |
+| `pin_focus` | 4 home | magnitude `lerpf(0.35, 1.65, …)` | Ĭspayk .88 |
 | `block_commitment` | 2 home, 1 opp | magnitude `(x−0.5)×0.18` | Bloc .72 |
 | `emotional_expression` | 1 home | magnitude, confidence volatility only | Taktikã .12 |
 | `tempo_variation` | 2 home | **threshold** `≥ 0.48` → seeded ±1 | Spëddigh .90 |
@@ -54,7 +54,7 @@ already renders that difference"; its own game says otherwise.
 Two further findings from the same pass:
 
 - **22 of 24 principle reads are `home_principles`.** An opponent Xérvu serves
-  exactly like an opponent Bloc du Larg. Regional identity is a property of the
+  exactly like an opponent Blôc du Larg. Regional identity is a property of the
   player's team only.
 - **The ace rate is 0.072 for six of eight regions**, identical to three
   decimals. Serve identity is a Xérvu feature, not a system.
@@ -67,7 +67,7 @@ a constant read per rally. Nothing about a region can *develop* within a match.
 
 That is the wrong shape for the fiction. The taglines describe trajectories:
 Taktikã "strip the game down to its roots" — a process; Pāwa Hitō are
-"nightmarish deep into a rally" — a time claim; Bloc du Larg "keep complete
+"nightmarish deep into a rally" — a time claim; Blôc du Larg "keep complete
 control" — a claim about what happens when control is tested repeatedly.
 
 ## What already exists to build on
@@ -120,7 +120,7 @@ A small set of per-region *rates*, applied to state that already accumulates:
   be feared that is not a rating.
 - **`adaptation_rate`** — the home-side counterpart of the opponent's existing
   adaptation strengths, governing how fast a side re-aims its block and floor
-  defence at the pattern it has been shown. Bloc du Larg's "methodical court
+  defence at the pattern it has been shown. Blôc du Larg's "methodical court
   reading" is this, and it is currently spelled as one block constant.
 - **`composure_decay`** — how much the accumulated confidence and flow state
   swings under pressure. Already half-present as `emotional_expression`'s
@@ -179,7 +179,7 @@ sits. Draws are hashed rather than taken from `rng`, because adding to the
 random stream would move every seeded fixture for reasons unrelated to identity.
 
 Measured, nearest-neighbour separation before → after: minimum across the league
-0.431 → **0.567**, Spëddigh 0.716 → **0.897**, Ispayk 0.431 → 0.834. The probe
+0.431 → **0.567**, Spëddigh 0.716 → **0.897**, Ĭspayk 0.431 → 0.834. The probe
 also gained a `tempo_sd` column, because the first version reported only the
 mean — and the mean of a distribution whose *width* is the whole identity is the
 §0 error committed with the instrument instead of the model. Spëddigh now holds
@@ -192,7 +192,7 @@ one function for both sides, and the opponent's serve risk takes the same
 `(serve_aggression − 0.5) × 0.70` the home side has always taken. It previously
 read only `_rating(opponent_server, "serve_aggression")` — a roster attribute,
 and the vertical slice's roster is mirrored, so **the opponent's serve-error rate
-was provably identical for every region**. It now runs 0.093 (Bloc du Larg, 0.30)
+was provably identical for every region**. It now runs 0.093 (Blôc du Larg, 0.30)
 to 0.133 (Xérvu, 0.92).
 
 Still home-only: `pin_focus` on lane choice and `emotional_expression` on

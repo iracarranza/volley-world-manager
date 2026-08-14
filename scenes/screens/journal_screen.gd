@@ -1133,9 +1133,9 @@ func _refresh_accommodations() -> void:
 	_add_foldout("Paste stores", false, "\n".join([
 		"    Sharp ferment    [color=#7fbf6a]plentiful[/color]   Zaitgaist ▸ Landavol · local",
 		"    Smoky char       [color=#7fbf6a]plentiful[/color]   Zaitgaist ▸ Landavol · local",
-		"    Bitter herb      [color=#c9a227]low[/color]         Bompaşao ▸ Bloc du Larg · 1.1x",
-		"    Clean umami      [color=#c9a227]low[/color]         Lo-onğ Ralī ▸ Pāwa Hitō · 1.4x",
-		"    Heavy sweet      [color=#b5563f]none[/color]        Tu'ul ys Feynt ▸ Taktikã · 1.9x",
+		"    Bitter herb      [color=#c9a227]low[/color]         Bompaçao ▸ Blôc du Larg · 1.1x",
+		"    Clean umami      [color=#c9a227]low[/color]         Lo-ong Ralī ▸ Pāwa Hitō · 1.4x",
+		"    Heavy sweet      [color=#b5563f]none[/color]        Tãul ys Feynt ▸ Taktikã · 1.9x",
 		"",
 		"[i]Grown on the left, sold on the right. Pastes are grown and blocks are",
 		"made, and those are not the same map -- flavour comes from where the land",

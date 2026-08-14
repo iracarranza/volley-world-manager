@@ -83,7 +83,7 @@ const CLOSE_FRACTIONS: Array[float] = [1.0, 0.6, 0.2]
 ## It was pinned to "Pāwa Hitō", so every calibration sweep in the engine drew
 ## its rosters from one tradition -- and a tradition is not cosmetic here:
 ## `REGION_SPECIALTY` grants a flat +8 on each region's named attributes, so a
-## Bloc du Larg roster genuinely blocks better and a Landavol roster carries no
+## Blôc du Larg roster genuinely blocks better and a Landavol roster carries no
 ## bonus at all by design. Sweeping one region measures how much a *seed* moves
 ## an outcome; sweeping regions measures how much a known attribute delta moves
 ## it, which is the question worth asking.

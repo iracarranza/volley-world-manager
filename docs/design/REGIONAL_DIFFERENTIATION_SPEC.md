@@ -43,13 +43,13 @@ exist.
 | Landavol | *(none — deliberate)* |
 | Spëddigh | work_rate, acceleration, lateral_speed, tempo_control, reception_balance |
 | Pāwa Hitō | stamina, transition_speed, explosiveness, approach_timing, attack_accuracy |
-| Bloc du Larg | block_timing, jump_reach, court_vision, tactical_discipline |
+| Blôc du Larg | block_timing, jump_reach, court_vision, tactical_discipline |
 | Xérvu | serve_power, serve_technique, serve_placement, serve_consistency, serve_aggression, serve_variation |
 | Taktikã | decision_making, composure, tactical_discipline, adaptability, unpredictability |
-| Ispayk | attack_power, arm_speed, jump_reach, block_timing, shot_variety |
+| Ĭspayk | attack_power, arm_speed, jump_reach, block_timing, shot_variety |
 | A'ace | attack_power, serve_power, block_timing *(three, spanning three categories — bought stars, not a tradition)* |
 
-**LIVE**, but see the Ispayk/A'ace warning in Part 3.
+**LIVE**, but see the Ĭspayk/A'ace warning in Part 3.
 
 ### C3. Physique bias · `REGION_HEIGHT/MASS/WINGSPAN_BIAS`
 
@@ -57,8 +57,8 @@ Centimetres and kilograms added before individual variation. **LIVE.**
 
 | region | height | mass | wingspan |
 |---|---|---|---|
-| Ispayk | +4 | +5 | +3 |
-| Bloc du Larg | +1 | +1 | +2 |
+| Ĭspayk | +4 | +5 | +3 |
+| Blôc du Larg | +1 | +1 | +2 |
 | Xérvu | +1 | 0 | +2 |
 | A'ace | +1 | +1 | +1 |
 | Landavol | 0 | 0 | 0 |
@@ -68,8 +68,8 @@ Centimetres and kilograms added before individual variation. **LIVE.**
 
 ### C4. Ego bias · `REGION_EGO_BIAS`
 
-**LIVE.** Ispayk +14, Xérvu +9, A'ace +6, Pāwa +5, Spëddigh +2, Landavol 0,
-Bloc du Larg −6, **Taktikã −15**. Ego feeds the attack-power commitment
+**LIVE.** Ĭspayk +14, Xérvu +9, A'ace +6, Pāwa +5, Spëddigh +2, Landavol 0,
+Blôc du Larg −6, **Taktikã −15**. Ego feeds the attack-power commitment
 alongside `decisiveness`, so this is a second, per-player route into the same
 decision — and it is currently Taktikã's largest single mechanical footprint.
 
@@ -129,7 +129,7 @@ Each is named in a tagline and has no implementation.
 |---|---|---|---|
 | `fatigue_resistance` | Pāwa Hitō's flat curve | — | **BUILT**, see Part 5 |
 | `read_rate` | Taktikã finding your pattern | — | **BUILT**, see Part 5 |
-| `home_adaptation` | Bloc du Larg re-aiming the block | opponent-only equivalents exist | **UNBUILT** — substrate half |
+| `home_adaptation` | Blôc du Larg re-aiming the block | opponent-only equivalents exist | **UNBUILT** — substrate half |
 | `composure_decay` | who cracks in set five | `match_confidence`, `flow` | **UNBUILT** |
 | regional body-type bias | who a region *looks* like | `assign_body_type` is `rng.randi_range` over all types, region-blind | **UNBUILT** |
 | regional serve-style bias | Xérvu's float tradition | `primary_serve_style` is derived from attributes, never from region | **UNBUILT** |
@@ -141,7 +141,7 @@ Each is named in a tagline and has no implementation.
 ## Part 3 — The eight identities, and which will not survive
 
 Measured separation (`run_regional_identity_probe.gd`, nearest neighbour in
-units of league spread): Xérvu 1.768, Spëddigh 0.897, Ispayk 0.834, Bloc du Larg
+units of league spread): Xérvu 1.768, Spëddigh 0.897, Ĭspayk 0.834, Blôc du Larg
 0.766, A'ace 0.664, Pāwa Hitō 0.664, Taktikã 0.567, Landavol 0.567.
 
 ### ✅ Xérvu — sound
@@ -150,7 +150,7 @@ Owns `serve_aggression` outright, and it is the best-wired axis in the game.
 Six specialty attributes all serving. Nothing else in the league competes for
 this space. **Lock as is.**
 
-### ✅ Bloc du Larg — sound in disposition, thin in identity
+### ✅ Blôc du Larg — sound in disposition, thin in identity
 
 `block_commitment` 0.72 is live on both sides; low everything else produces the
 slowest tempo and longest rallies in the league, which reads correctly. But its
@@ -167,13 +167,13 @@ Highest tempo spread in the league (0.993) and a fast mean. Before
 ### ✅ Pāwa Hitō — resolved in Part 5 (was INEFFECTIVE)
 
 `transition_commitment` 0.94 now produces the fastest mean tempo (1.86), which
-is real but is *the same currency Ispayk and Spëddigh trade in*. Its actual
+is real but is *the same currency Ĭspayk and Spëddigh trade in*. Its actual
 brief — "quality never declines, effectiveness surges as others burn out" — is a
 **time claim**, and no time-scale channel is attached to it. Its specialty list
 already leads with `stamina`, so the substrate is one multiplier away.
 
 **Cannot be locked until `fatigue_resistance` exists.** Everything else about
-Pāwa is a weaker Ispayk.
+Pāwa is a weaker Ĭspayk.
 
 ### ⚠️ Taktikã — INEFFECTIVE in its current state
 
@@ -203,12 +203,12 @@ easily — bought squads with no shared tradition — and the natural home is
 `starting_identity_state` already computes `familiarity` and `cohesion` from
 alignment distance. **Lock only once A'ace pays for its breadth somewhere.**
 
-### ✅ Ispayk — re-cut in Part 5; the overlap it caused is resolved
+### ✅ Ĭspayk — re-cut in Part 5; the overlap it caused is resolved
 
 `decisiveness` 0.90 and `pin_focus` 0.88 are the two best-wired axes after
 serve, `+14` ego, and the largest frame in the league. It is the strongest
 identity in the game by some distance, and its specialty list overlaps A'ace on
-`attack_power` and `block_timing` and Bloc du Larg on `block_timing` and
+`attack_power` and `block_timing` and Blôc du Larg on `block_timing` and
 `jump_reach`. **Lock the identity, but its overlap is the reason A'ace and Pāwa
 read as dilute versions of it.**
 
@@ -235,19 +235,19 @@ rather than an extreme.**
 3. **Give Taktikã axes it owns** — `read_discipline`, `risk_aversion`. Without
    these it is Landavol with a quiet bench.
 4. **Give A'ace a cost** in cohesion/familiarity.
-5. **Build `home_adaptation`.** Completes Bloc du Larg's stated identity.
+5. **Build `home_adaptation`.** Completes Blôc du Larg's stated identity.
 6. **Mirror `pin_focus` and `emotional_expression` to the opponent.** Needs the
    opponent a weighted lane choice and a confidence track.
 7. **Decide what `physical`/`technical`/`mental` are for** — wire them to
    something (development speed? scouting display? academy quality?) or delete
    them. Twenty-four numbers with no reader is the exact shape of a value
    nobody set.
-8. **Resolve the Ispayk overlap** before academies land, since C2 is where
+8. **Resolve the Ĭspayk overlap** before academies land, since C2 is where
    regional talent will actually be felt and three regions currently share
    `attack_power`/`block_timing`.
 
 Only after 1–4 can Pāwa Hitō, Taktikã and A'ace be locked. Xérvu, Spëddigh,
-Ispayk and Landavol can be locked now. Bloc du Larg can be locked in
+Ĭspayk and Landavol can be locked now. Blôc du Larg can be locked in
 disposition, with its adaptation identity pending 5.
 
 ---
@@ -324,16 +324,16 @@ different from a short one.
 
 ### The three re-cuts
 
-**Bloc du Larg** — from analysis to reach. `court_vision` and
+**Blôc du Larg** — from analysis to reach. `court_vision` and
 `tactical_discipline` out, `lateral_speed`, `explosiveness` and
 `reception_stability` in. The wall is not a side that out-thinks you; it is long
 enough and quick enough off the floor to touch the shot it guessed *wrong*
 about. Whatever adaptation the region shows is then a consequence of touching
 more balls rather than a separate talent for reading them.
 
-**Ispayk** — from a broad attacking region to one polished terminal swing.
+**Ĭspayk** — from a broad attacking region to one polished terminal swing.
 `shot_variety` removed *as the point of the change*: a side that can hit six
-different shots is not predictable, and predictability is what Ispayk is
+different shots is not predictable, and predictability is what Ĭspayk is
 supposed to cost. `approach_timing` and `attack_accuracy` are the polish;
 `block_timing` dropped because it sat in three regions at once.
 
@@ -390,10 +390,10 @@ A'ace does not develop, it buys, and what it buys is whatever ends points.
 | **Landavol** | *none* | *none — 1.00/1.00* | *none* | 0/0/0 |
 | **Spëddigh** | `work_rate` | `tempo_variation` 0.90 | `attack_power` −10, `block_timing` −8 | −2/−3/−2 |
 | **Pāwa Hitō** | `stamina` | **`fatigue_resistance` 0.55** | `feinting` −11, `set_disguise` −9 | +3/+4/+2 |
-| **Bloc du Larg** | `block_timing` | `block_commitment` 0.72 | `improvisation` −11, `serve_power` −9 | +3/+2/+4 |
+| **Blôc du Larg** | `block_timing` | `block_commitment` 0.72 | `improvisation` −11, `serve_power` −9 | +3/+2/+4 |
 | **Xérvu** | `serve_technique` | `serve_aggression` 0.92 | `reception` −11, `dig_control` −9 | +1/0/+2 |
 | **Taktikã** | `decision_making` | **`read_rate` 1.55** | `explosiveness` −12, `jump_reach` −10 | −1/−1/0 |
-| **Ispayk** | `attack_power` | `decisiveness` 0.90 | `shot_variety` −12, `adaptability` −10 | +4/+5/+3 |
+| **Ĭspayk** | `attack_power` | `decisiveness` 0.90 | `shot_variety` −12, `adaptability` −10 | +4/+5/+3 |
 | **A'ace** | `leadership` | recruitment (pull 3.40, selective) | `tactical_discipline`/`decision_making` −12, `court_vision` −9 | +1/+1/+1 |
 
 ### The three clarifications this pass implemented
@@ -404,14 +404,14 @@ attacking attribute at all* — the damage is a consequence of a large frame
 `fatigue_resistance` 0.55 has outlasted. They beat down tired defenders; they do
 not out-hit fresh ones.
 
-**Ispayk is one perfected swing.** `attack_power`, `arm_speed`, `jump_reach`,
+**Ĭspayk is one perfected swing.** `attack_power`, `arm_speed`, `jump_reach`,
 `approach_timing`, `attack_accuracy` — going toe-to-toe in the air, and owning
 air presence outright now that Bloc's size moved to the frame instead.
 `shot_variety` is not merely absent but *penalised*, because predictability is
 the price of the perfect swing.
 
 **The three-way tie at the net is resolved by channel, not by deletion.** Bloc
-and Ispayk are both tall, and they say so differently: Ispayk through
+and Ĭspayk are both tall, and they say so differently: Ĭspayk through
 `jump_reach` (an attribute, contested in the air), Bloc through wingspan +4 (a
 frame, occupying space). A'ace holds both peaks and pays for them in decisions.
 
@@ -420,11 +420,11 @@ frame, occupying space). A'ace holds both peaks and pays for them in decisions.
 Weaknesses were chosen so no two regions share one, and so each is the inverse
 of that region's own strength:
 
-- **Ispayk cannot adapt; Taktikã is built on adapting.** The clearest matchup in
+- **Ĭspayk cannot adapt; Taktikã is built on adapting.** The clearest matchup in
   the league, and it is the one the fiction names.
-- **Xérvu cannot pass; Bloc du Larg exists to make you pass.**
+- **Xérvu cannot pass; Blôc du Larg exists to make you pass.**
 - **Bloc cannot improvise; Spëddigh is nothing but improvisation of tempo.**
-- **Taktikã cannot win a physical contest; Pāwa Hitō and Ispayk are the
+- **Taktikã cannot win a physical contest; Pāwa Hitō and Ĭspayk are the
   physical contest.**
 - **Spëddigh cannot hurt you at the net; A'ace is bought terminal ability.**
 - **A'ace cannot make decisions; Taktikã sells nothing else.**

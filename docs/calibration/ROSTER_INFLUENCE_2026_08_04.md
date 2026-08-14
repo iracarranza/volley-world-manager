@@ -21,9 +21,9 @@ per cell, for a noise floor near 0.012.
 | region | stuff @8 | stuff @16 | dig @8 | dig @16 | kill share @8 | @16 |
 |---|---|---|---|---|---|---|
 | Landavol (baseline) | 0.090 | 0.090 | 0.276 | 0.276 | 0.479 | 0.479 |
-| Bloc du Larg | 0.121 | 0.140 | 0.334 | 0.376 | 0.528 | 0.554 |
-| Ispayk | 0.100 | 0.120 | 0.289 | 0.299 | 0.498 | 0.514 |
-| Lo-onğ Ralī | 0.090 | 0.090 | 0.297 | 0.314 | 0.492 | 0.497 |
+| Blôc du Larg | 0.121 | 0.140 | 0.334 | 0.376 | 0.528 | 0.554 |
+| Ĭspayk | 0.100 | 0.120 | 0.289 | 0.299 | 0.498 | 0.514 |
+| Lo-ong Ralī | 0.090 | 0.090 | 0.297 | 0.314 | 0.492 | 0.497 |
 | Xérvu (serving) | 0.096 | 0.102 | 0.262 | 0.293 | 0.471 | 0.497 |
 
 **The response is near-linear.** Doubling the bonus gives about 1.7x the effect
@@ -52,15 +52,15 @@ they were given are not the attributes the models weight.
 
 **The digging region is worse at digging than the blocking region.**
 `_defense_execution` weights `reception` and `anticipation` heavily and
-`dig_control` lightly. Lo-onğ Ralī's specialty is `stamina`, `dig_control`,
+`dig_control` lightly. Lo-ong Ralī's specialty is `stamina`, `dig_control`,
 `reception_stability` -- one lightly weighted attribute and two that barely enter
-a dig. It gains 3.8 points of dig rate at a bonus of 16. Bloc du Larg, whose
+a dig. It gains 3.8 points of dig rate at a bonus of 16. Blôc du Larg, whose
 `anticipation` sits at a heavy weight, gains 10.0.
 
 **And the blocking region is really a general defensive region**, for the same
 reason: its dig gain exceeds its stuff gain.
 
-One part of this is correct and worth preserving. Bloc du Larg and Ispayk carry
+One part of this is correct and worth preserving. Blôc du Larg and Ĭspayk carry
 identical `block_timing` and differ by two points of stuff rate, because
 `_blocker_read_quality` reads `anticipation` and `court_vision`. A coherent
 blocking tradition beating a bonus that merely contains a blocking attribute is
@@ -72,7 +72,7 @@ touches only content, and keeps the region names meaningful. Moving the *weights
 to match the attributes is defensible on its own terms -- an attribute called
 `dig_control` arguably should dominate a dig -- but it rebalances every dig in
 the engine and reopens calibration that several gates have just settled. Either
-wants its own sweep: under the current weights, Bompaşao's `reception`,
+wants its own sweep: under the current weights, Bompaçao's `reception`,
 `reception_balance`, `ball_control` package would likely become the strongest
 defensive region in the game, and nobody designed it to be.
 
@@ -83,38 +83,38 @@ defensive region in the game, and nobody designed it to be.
 capability, 0.34 of a blocker's read, 0.10 of their contact -- and the blocking
 tradition held it while the digging tradition did not. One swap each way:
 
-- **Bloc du Larg** `block_timing, ball_control, court_vision, anticipation`
+- **Blôc du Larg** `block_timing, ball_control, court_vision, anticipation`
   -> `block_timing, jump_reach, court_vision, tactical_discipline`
-- **Lo-onğ Ralī** `stamina, dig_control, reception_stability`
+- **Lo-ong Ralī** `stamina, dig_control, reception_stability`
   -> `stamina, dig_control, anticipation`
 
 | region | stuff before | after | dig before | after |
 |---|---|---|---|---|
-| Bloc du Larg | 0.140 | 0.144 | 0.376 | 0.307 |
-| Lo-onğ Ralī | 0.090 | 0.119 | 0.314 | 0.383 |
+| Blôc du Larg | 0.140 | 0.144 | 0.376 | 0.307 |
+| Lo-ong Ralī | 0.090 | 0.119 | 0.314 | 0.383 |
 
-Bloc du Larg's advantage over baseline is now +5.4 stuff and +3.1 dig, where it
-was +5.0 and +10.0. Lo-onğ Ralī's is +10.7 dig, where it was +3.8. The blocking
+Blôc du Larg's advantage over baseline is now +5.4 stuff and +3.1 dig, where it
+was +5.0 and +10.0. Lo-ong Ralī's is +10.7 dig, where it was +3.8. The blocking
 region blocks, the digging region digs, and neither does the other's job better
 than they do.
 
-Dropping `anticipation` did not cost Bloc du Larg any blocking: `jump_reach` at
+Dropping `anticipation` did not cost Blôc du Larg any blocking: `jump_reach` at
 0.29 of contact skill and `tactical_discipline` at 0.20 of the read more than
 covered it. Two constraints were kept rather than broken -- `reception` is the
-heaviest dig attribute and the obvious thing to hand Lo-onğ Ralī, but it is
-Bompaşao's claim and the minor tier exists to fill gaps no major region takes;
+heaviest dig attribute and the obvious thing to hand Lo-ong Ralī, but it is
+Bompaçao's claim and the minor tier exists to fill gaps no major region takes;
 and minor regions get three attributes, so this is a swap and not an addition.
 
 ## Two things this leaves open
 
-**`anticipation` still leaks, in the other direction now.** Lo-onğ Ralī gains
+**`anticipation` still leaks, in the other direction now.** Lo-ong Ralī gains
 2.9 points of stuff rate it has no business gaining, because the attribute sits
-in the blocker's read as well as the dig. That is a third of Bloc du Larg's
+in the blocker's read as well as the dig. That is a third of Blôc du Larg's
 advantage rather than three times it, so the ordering is right and the leak is
 tolerable -- but the clean fix is splitting the attribute, not moving it again.
 
-**Defensive identity now out-earns attacking identity.** Lo-onğ Ralī takes 55.0%
-of attack exchanges against Ispayk's 51.4%, so a digging tradition wins more
+**Defensive identity now out-earns attacking identity.** Lo-ong Ralī takes 55.0%
+of attack exchanges against Ĭspayk's 51.4%, so a digging tradition wins more
 rallies than an attacking one. Digging well extends rallies and extended rallies
 are won, which is not wrong in itself, but it means a career would reward
 defensive rosters over offensive ones. Nothing here measured whether that

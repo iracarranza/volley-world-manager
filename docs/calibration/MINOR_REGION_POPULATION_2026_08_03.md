@@ -18,10 +18,10 @@ the current 4,000.**
 
 | region | raised | pro-age (21-34) | S/OH/MB/OP/L | seven? | squad of 14? |
 | --- | ---: | ---: | --- | --- | --- |
-| Tu'ul ys Feynt | 123 | 70 | 15/30/4/9/12 | yes | yes |
-| Lo-onğ Ralī | 111 | 59 | 9/20/4/4/22 | yes | yes |
-| Bompaşao | 126 | 75 | 11/29/11/4/20 | yes | yes |
-| Rhen Tempaol | 137 | 74 | 14/23/27/6/4 | yes | yes |
+| Tãul ys Feynt | 123 | 70 | 15/30/4/9/12 | yes | yes |
+| Lo-ong Ralī | 111 | 59 | 9/20/4/4/22 | yes | yes |
+| Bompaçao | 126 | 75 | 11/29/11/4/20 | yes | yes |
+| Rhėn Tempaol | 137 | 74 | 14/23/27/6/4 | yes | yes |
 | Kutré Lyn | 103 | 60 | 12/30/9/6/3 | yes | yes |
 | Zaitgaist | 66 | 37 | 5/12/12/3/5 | yes | yes |
 
@@ -29,8 +29,8 @@ The cohort-spread reasoning was wrong because it divided by all 31 ages. Only
 the pro band matters at any given moment, and 37-75 players is comfortably
 enough for positional coverage.
 
-Note the positional skew is visible in the raw counts and behaving: Lo-onğ Ralī
-has 22 liberos against 4 middles, Rhen Tempaol 27 middles against 4 liberos.
+Note the positional skew is visible in the raw counts and behaving: Lo-ong Ralī
+has 22 liberos against 4 middles, Rhėn Tempaol 27 middles against 4 liberos.
 
 ## Visibility is also already fine
 

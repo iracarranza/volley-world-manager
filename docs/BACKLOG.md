@@ -1559,7 +1559,7 @@ rather than *good* about them.
 Consequences of being outside `ABILITY_ATTRIBUTES`: no ceiling, no training, no
 category, and no contribution to current ability or potential. That is intended.
 
-Generated with regional and positional leans — Ispayk 64.9 down to Taktikã
+Generated with regional and positional leans — Ĭspayk 64.9 down to Taktikã
 36.8, Opposite 59.6 down to Libero 42.8, on a deliberately wide σ = 16 because
 the extremes are the interesting players rather than the broken ones.
 
@@ -6453,7 +6453,7 @@ work and needs the resolver, not playback.
 **`docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`.** `tools/run_regional_identity_probe.gd`
 runs 640 rallies per region on identical seeds, rosters and opponent. Xérvu is
 four times more separated from its nearest neighbour (1.632) than the tightest
-pair (Ispayk/A'ace, 0.431), and the cause is that three of the seven axes reach
+pair (Ĭspayk/A'ace, 0.431), and the cause is that three of the seven axes reach
 the resolver as threshold crossings with no magnitude — Spëddigh's 0.90 tempo
 variation and Landavol's 0.50 both clear the 0.48 floor and get the identical
 coin flip. `regions.gd`'s claim that "the sim already renders that difference" is
