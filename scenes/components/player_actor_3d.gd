@@ -6,6 +6,7 @@ const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
 const FaceExpressionsScript := preload("res://scripts/data/face_expressions.gd")
+const StanceTransitionScript := preload("res://scripts/data/stance_transition.gd")
 const GaitBiomechanicsScript := preload("res://scripts/data/gait_biomechanics.gd")
 const BlockBiomechanicsScript := preload("res://scripts/data/block_biomechanics.gd")
 const LandingBiomechanicsScript := preload(
@@ -89,7 +90,28 @@ var block_arms: StringName = &"two"
 ##
 ## Defaulted to the crouch every body used to wear, so a portfolio plate or a
 ## unit test that names nothing is unchanged.
-var ready_stance: String = "defending"
+var ready_stance: String = "defending":
+	set(value):
+		## **A stance change is a movement, not an assignment.**
+		##
+		## `match_court_3d` writes this and `set_pose` read it fresh on the next
+		## frame, so a middle dropping off the net went from hands-up at the tape
+		## to a defender's crouch between two frames -- knees from -12 to -60 and
+		## the arms from overhead to behind the hips, in 16 milliseconds. Nothing
+		## tweened it because nothing held the previous one.
+		##
+		## The blend starts from wherever the body *currently* is rather than
+		## from the stance being left, so a change of mind partway through a
+		## change of stance continues from the pose on screen instead of
+		## restarting from one nobody is in.
+		if value == ready_stance:
+			return
+		_stance_from = _stance_joints(false)
+		ready_stance = value
+		_stance_duration = StanceTransitionScript.seconds_between(
+			_stance_from, ReadyStance.joints(value)
+		)
+		_stance_remaining = _stance_duration
 ## Which of the five faces the actor is wearing. Purely presentational today --
 ## nothing in the simulator sets it yet -- so it stays a plain assignment rather
 ## than being derived from state that does not exist.
@@ -121,6 +143,19 @@ var _plant_active: Array[bool] = [false, false]
 ## measure the same rig with and without it -- a claim about how much planting
 ## improved the slip is worthless if the two numbers came from two builds.
 var foot_plant_enabled: bool = true
+## The stance being eased out of, and how much of the ease is left.
+var _stance_from: Dictionary = {}
+var _stance_remaining: float = 0.0
+var _stance_duration: float = 0.0
+## The floor recovery that outlives the contact window. `_floor_joints` is the
+## pose the body was left in on the last frame playback drew this voli as the
+## contact actor; everything else is what that recovery was.
+var _floor_joints: Dictionary = {}
+var _floor_recovery: String = "platform"
+var _floor_posture: String = "planted"
+var _floor_direction: Vector2 = Vector2.ZERO
+var _floor_remaining: float = 0.0
+var _floor_duration: float = 0.0
 ## Which way this voli is travelling relative to the way they are facing, in
 ## radians: 0 straight ahead, PI a backpedal, plus or minus a right angle a
 ## lateral shuffle.
@@ -1343,6 +1378,43 @@ static func recovery_motion(
 ) -> Dictionary:
 	var recovery := clampf(progress, 0.0, 1.0)
 	var down := smoothstep(0.0, 0.34, recovery)
+	## **Down, and then back up.**
+	##
+	## `down` is the descent and nothing else, and for a long time nothing else
+	## existed -- so a half-kneel went down in the first third and stayed there
+	## for the remaining two, and `pose_recover_knee` was six frames of a body
+	## kneeling. A recovery that never recovers is a pose with a clock attached
+	## to it.
+	##
+	## `stand_up` is the counterpart, and it is **per state** rather than shared,
+	## because the three states are not equally far from their feet. A kneel has
+	## one leg already under the body and needs a push; being blown away starts
+	## flat on your back and has to gather the legs before the trunk can come up
+	## at all, so it begins later *and* takes the whole remaining span. The rolling
+	## receive keeps `rise` below, which is the same idea under an older name.
+	##
+	## Both finish at 1, which is what makes the handover to the standing pose
+	## seamless: the overlay's last frame and the gait's first are the same body.
+	var stand_up := 0.0
+	match recovery_state:
+		"knee":
+			stand_up = smoothstep(0.58, 1.0, recovery)
+		"blown_away":
+			stand_up = smoothstep(0.46, 1.0, recovery)
+	## **Being hit by a ball is fast; getting up from it is not.**
+	##
+	## The impact borrowed `roll` and `travel`, which are the rolling receive's
+	## terms and run to 0.88 and 0.82 -- so the body was still going down while it
+	## was already standing up, and the two curves crossed near 0.62 with the
+	## fall never completing at all. A defender driven off a ball is on the floor
+	## in the first third of the recovery and spends the rest of it getting back
+	## to their feet, which is exactly why the simulator prices this state at 1.35
+	## seconds against a kneel's 0.55.
+	var impact := smoothstep(0.06, 0.42, recovery)
+	## When the legs come back under an impact. Before the trunk, because that is
+	## the order it happens in: you pull your knees in, find the floor, and only
+	## then is there anything to push against.
+	var legs_down := smoothstep(0.44, 0.82, recovery)
 	var travel := smoothstep(0.08, 0.82, recovery)
 	var roll := smoothstep(0.18, 0.88, recovery)
 	## **When the legs come in.** Late, and deliberately after the roll has
@@ -1390,7 +1462,19 @@ static func recovery_motion(
 	var offset := Vector3.ZERO
 	match recovery_state:
 		"knee":
-			pitch = deg_to_rad(-14.0) * down
+			## **Folded over the down knee**, not standing with a leg back.
+			##
+			## This was -14 degrees, which is a lean. Somebody who has lost their
+			## balance and put a knee down is *catching* themselves: the trunk
+			## folds over the knee that is taking the weight, and the fold is most
+			## of what tells a kneel from a lunge. Unwound by `stand_up` so the
+			## body comes back up the way it went down.
+			##
+			## Added to the dig posture's own fold rather than replacing it, which
+			## is why this is smaller than it looks: -34 on top of a planted dig
+			## put the head near the floor and `_settle_to_floor` then rested the
+			## figure on its shoulder.
+			pitch = deg_to_rad(-21.0) * down * (1.0 - stand_up)
 		"fall":
 			if posture in ["moving", "reaching"]:
 				mode = "slide_forward"
@@ -1409,13 +1493,28 @@ static func recovery_motion(
 				## the turn is carrying the body instead of the floor.
 				offset.x = 0.42 * side * lateral_line
 		"blown_away":
+			## **And then they get up**, which they did not.
+			##
+			## Being driven off a ball was drawn as a fall with no floor after it:
+			## the body pitched 106 degrees onto its back and the clock ran out
+			## there. It is the longest of the three recoveries -- the simulator
+			## already prices it at 1.35 seconds against a kneel's 0.55 -- and it
+			## was the only one with nothing on the other side of the impact.
+			##
+			## Unwound rather than re-choreographed: coming up off your back is
+			## the fall in reverse plus a fold at the end, and the fold is the
+			## part where you sit up over your own knees before standing.
 			mode = "roll_backward"
-			pitch = deg_to_rad(106.0) * roll
-			body_roll = deg_to_rad(13.0) * side * down
-			offset.z = 0.42 * travel
+			pitch = deg_to_rad(106.0) * impact * (1.0 - stand_up) \
+				- deg_to_rad(22.0) * stand_up * (1.0 - stand_up) * 4.0
+			body_roll = deg_to_rad(13.0) * side * impact * (1.0 - stand_up)
+			offset.z = 0.42 * impact * (1.0 - stand_up)
 	return {
 		"mode": mode,
 		"down": down,
+		"impact": impact,
+		"stand_up": stand_up,
+		"legs_down": legs_down,
 		"travel": travel,
 		"roll": roll,
 		"gather": gather,
@@ -1442,12 +1541,22 @@ static func recovery_motion(
 ##
 ## Each state is drawn as a *body*, not as a tint or a marker. A special move
 ## that needs an icon to be understood has not been drawn.
+## `recovery` and `posture` default to the ivars, which is what every in-window
+## caller wants. The overlay that runs *after* the window passes them explicitly:
+## by then this voli is no longer the contact actor and the ivars belong to
+## whatever contact playback moved on to.
 func _apply_recovery_state(
 	progress: float = 1.0,
 	contact_direction: Vector2 = Vector2.ZERO,
+	recovery_name: String = "",
+	posture_name: String = "",
 ) -> void:
 	var recovery := clampf(progress, 0.0, 1.0)
-	if contact_recovery == "platform" or recovery <= 0.0001:
+	var state := recovery_name if not recovery_name.is_empty() \
+		else contact_recovery
+	var posture := posture_name if not posture_name.is_empty() \
+		else contact_posture
+	if state == "platform" or recovery <= 0.0001:
 		return
 	## Where the feet are *now*, before this state folds them. The posture already
 	## put them on the floor, crouch and all, so this is the height the body has
@@ -1460,11 +1569,10 @@ func _apply_recovery_state(
 	## rather than on it.
 	var contact_hips := _hip_offset_from_actor()
 	var motion := recovery_motion(
-		contact_recovery, contact_posture, recovery,
-		contact_direction, dominant_hand,
+		state, posture, recovery, contact_direction, dominant_hand,
 	)
 	var down := float(motion.down)
-	match contact_recovery:
+	match state:
 		"knee":
 			## A half-kneel: one shin folded flat behind, the other leg braced in
 			## front. Asymmetry is the whole read -- two knees down is kneeling,
@@ -1475,18 +1583,36 @@ func _apply_recovery_state(
 			## pose where one reaches further leaves the other hanging in the air
 			## once the body is planted, which is what "kneeling in mid-air"
 			## actually was.
+			## **Deeper, because the knee is what is holding them up.**
+			##
+			## The first numbers were a thigh 12 degrees behind vertical over a
+			## shin folded to -100, which puts the shank 22 degrees *above*
+			## horizontal -- a raised foot with a straightish leg under it. Drawn,
+			## it reads as somebody picking a foot up rather than as somebody
+			## whose knee is on the floor taking their weight, which is what a
+			## half-kneel is.
+			##
+			## So the down leg's thigh comes forward of vertical and the shin
+			## folds hard back and up, which makes the **knee** unambiguously the
+			## lowest part of the body -- and `_settle_to_floor` then rests the
+			## whole figure on it rather than on a shoe. The braced leg takes the
+			## thigh to horizontal with the shin vertical under it, so the front
+			## foot is planted flat instead of reaching forward.
+			var kneel := down * (1.0 - float(motion.stand_up))
 			body_pivot.rotation.x += float(motion.pitch_radians)
 			left_leg.rotation_degrees.x = lerpf(
-				left_leg.rotation_degrees.x, -12.0, down
+				left_leg.rotation_degrees.x, 2.0, kneel
 			)
 			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -100.0, down
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x,
+				-128.0, kneel
 			)
 			right_leg.rotation_degrees.x = lerpf(
-				right_leg.rotation_degrees.x, 75.0, down
+				right_leg.rotation_degrees.x, 84.0, kneel
 			)
 			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -43.0, down
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x,
+				-80.0, kneel
 			)
 		"fall":
 			## One severity, three honest directions. Off-axis contacts have already
@@ -1620,31 +1746,41 @@ func _apply_recovery_state(
 			body_pivot.rotation.x += float(motion.pitch_radians)
 			body_pivot.rotation.z += float(motion.roll_radians)
 			body_pivot.position += Vector3(motion.offset)
+			## Every impact term is scaled by what is left of the fall, so the
+			## whole pose unwinds instead of being held until the clock stops.
+			var struck := float(motion.impact) * (1.0 - float(motion.stand_up))
 			left_arm.rotation_degrees = left_arm.rotation_degrees.lerp(
-				Vector3(-138.0, 0.0, -34.0), down
+				Vector3(-138.0, 0.0, -34.0), struck
 			)
 			right_arm.rotation_degrees = right_arm.rotation_degrees.lerp(
-				Vector3(-146.0, 0.0, 30.0), down
+				Vector3(-146.0, 0.0, 30.0), struck
 			)
 			_set_elbow(left_arm, lerpf(
-				(left_arm.get_node("Elbow") as Node3D).rotation_degrees.x, 52.0, down
+				(left_arm.get_node("Elbow") as Node3D).rotation_degrees.x, 52.0, struck
 			))
 			_set_elbow(right_arm, lerpf(
-				(right_arm.get_node("Elbow") as Node3D).rotation_degrees.x, 44.0, down
+				(right_arm.get_node("Elbow") as Node3D).rotation_degrees.x, 44.0, struck
 			))
 			## Past horizontal, so the feet finish *above* the hip and the body
 			## plants on its back rather than on a shoe.
+			## The legs come down before the trunk comes up, which is the order it
+			## happens in: you gather your knees, find the floor with your feet,
+			## and only then is there anything to push against. `legs_down` runs
+			## ahead of `stand_up` for exactly that reason.
+			var kicked := float(motion.impact) * (1.0 - float(motion.legs_down))
 			left_leg.rotation_degrees.x = lerpf(
-				left_leg.rotation_degrees.x, 110.0, down
+				left_leg.rotation_degrees.x, 110.0, kicked
 			)
 			right_leg.rotation_degrees.x = lerpf(
-				right_leg.rotation_degrees.x, 95.0, down
+				right_leg.rotation_degrees.x, 95.0, kicked
 			)
 			(left_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x, -60.0, down
+				(left_leg.get_node("Knee") as Node3D).rotation_degrees.x,
+				-60.0, kicked
 			)
 			(right_leg.get_node("Knee") as Node3D).rotation_degrees.x = lerpf(
-				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x, -50.0, down
+				(right_leg.get_node("Knee") as Node3D).rotation_degrees.x,
+				-50.0, kicked
 			)
 			## Eyes still up the line the ball came from, because they are being
 			## pushed away from it rather than turning from it.
@@ -1903,6 +2039,74 @@ func _track_landing(event_type: int, elevation: float) -> void:
 		_landing_remaining = maxf(_landing_remaining - get_process_delta_time(), 0.0)
 
 
+## The stance in effect this instant, partway between the last one and the one
+## asked for.
+##
+## `tick` is false when the setter asks -- it wants to know where the body is,
+## not to advance it -- and true from `set_pose`, which is called once per frame
+## per actor and is therefore the honest place for the clock to run.
+func _stance_joints(tick: bool) -> Dictionary:
+	var target := ReadyStance.joints(ready_stance)
+	if _stance_remaining <= 0.0 or _stance_from.is_empty():
+		return target
+	if tick:
+		_stance_remaining = maxf(
+			_stance_remaining - get_process_delta_time(), 0.0
+		)
+	return StanceTransitionScript.blend(
+		_stance_from, target,
+		1.0 - _stance_remaining / maxf(_stance_duration, 0.0001),
+	)
+
+
+## Remember a floor recovery for as long as it takes to finish it.
+##
+## Refreshed on every frame this voli is drawn as the contact actor, so what
+## survives the end of the window is the last state it was in -- the same shape
+## `_track_landing` uses, and for the same reason.
+##
+## `platform` recoveries cost nothing: a defender who stayed on their feet has
+## nothing to get up from, and arming a clock for them would put every dig in
+## the game through a transition that does not exist.
+func _track_floor_recovery(
+	event_type: int, phase: float, is_contact_actor: bool
+) -> void:
+	var floor_action := event_type == RallyEventModel.EventType.RECEPTION \
+		or event_type == RallyEventModel.EventType.DEFENSE
+	if is_contact_actor and floor_action and contact_recovery != "platform":
+		_floor_recovery = contact_recovery
+		_floor_posture = contact_posture
+		_floor_duration = StanceTransitionScript.floor_seconds(contact_recovery)
+		## What is left of the getting-up, in seconds. Handing over at clock 0.6
+		## leaves 40 per cent of the duration, and `_apply_floor_recovery`
+		## recovers 0.6 from it -- so the overlay resumes the recovery rather
+		## than restarting it.
+		_floor_remaining = _floor_duration * (1.0 - _recovery_clock(phase))
+		_floor_joints = _capture_joints()
+		return
+	if not is_contact_actor and _floor_remaining > 0.0:
+		_floor_remaining = maxf(
+			_floor_remaining - get_process_delta_time(), 0.0
+		)
+
+
+## Finish getting up, after the window that started it has closed.
+##
+## Two things at once, in the order the in-window version does them: the limbs
+## ease out of the pose the floor left them in and toward whatever the gait and
+## the stance now say, and the recovery's own trunk motion continues over the
+## top. Reversing that order would have the roll rotating a body that had
+## already stood up.
+func _apply_floor_recovery() -> void:
+	var progress := 1.0 - _floor_remaining / maxf(_floor_duration, 0.0001)
+	_blend_joints_toward(
+		_floor_joints, 1.0 - StanceTransitionScript.settle(progress)
+	)
+	_apply_recovery_state(
+		progress, _floor_direction, _floor_recovery, _floor_posture
+	)
+
+
 ## Which landing an event leaves behind. A jump serve lands like a serve, a
 ## spike like a spike, and a block like a block; everything else that somehow
 ## got airborne gets the neutral absorb.
@@ -2064,7 +2268,7 @@ func set_pose(
 	## dig.
 	var gait := GaitBiomechanicsScript.resolve(
 		stride_cycle, ground_speed_mps, travel_heading_offset,
-		ReadyStance.joints(ready_stance),
+		_stance_joints(true),
 	)
 	gait_blend = float(gait.gait_blend)
 	locomotion_bob = float(gait.bob_meters)
@@ -2152,6 +2356,19 @@ func set_pose(
 	## who is playing the ball right now is doing that instead.
 	if not is_contact_actor and _landing_remaining > 0.0:
 		_apply_landing()
+	## **And getting up off the floor, which nothing did.**
+	##
+	## The recovery runs on `_recovery_clock`, which is a *phase* -- so it only
+	## advances while playback is still drawing this voli as the contact actor,
+	## and the moment that window closes the body snaps to standing from
+	## wherever it had got to. Photographed at 0.86 the roll is upright with the
+	## arms still out; the half-kneel never came up at all.
+	##
+	## Carried on a clock in seconds for exactly the reason the landing is: the
+	## thing that has to survive is the part that happens *after* the action, and
+	## a phase cannot outlive its own window.
+	if not is_contact_actor and _floor_remaining > 0.0:
+		_apply_floor_recovery()
 	## What the gait alone would have folded the supporting knee to, kept so the
 	## grounding below can tell a pose's crouch apart from a stride's.
 	var gait_knee := maxf(
@@ -2457,6 +2674,8 @@ func set_pose(
 	## Last, after whichever branch ran, so every pose that crouches does it with
 	## its feet on the ground rather than above it.
 	_ground_the_feet(elevation, gait_knee)
+	## After the grounding, because the pose this hands over is the finished one.
+	_track_floor_recovery(event_type, phase, is_contact_actor)
 
 
 ## Whether this rig is being lit or being *printed*.

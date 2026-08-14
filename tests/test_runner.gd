@@ -2,6 +2,7 @@ extends SceneTree
 
 const GAME_MANAGER_SCRIPT := preload("res://scripts/managers/game_manager.gd")
 const RALLY_EVENT_SCRIPT := preload("res://scripts/models/rally_event.gd")
+const READY_STANCE_SCRIPT := preload("res://scripts/data/ready_stance.gd")
 const ROTATION_LEGALITY_SCRIPT := preload("res://scripts/simulation/rotation_legality.gd")
 const BALL_TRAJECTORY_SCRIPT := preload("res://scripts/models/ball_trajectory.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
@@ -7195,8 +7196,19 @@ func _test_3d_playback_contract() -> void:
 	var forward := PlayerActor3D.recovery_motion(
 		"fall", "moving", 0.82, Vector2.UP
 	)
+	## **Sampled at the impact, not at 0.82.**
+	##
+	## This read 0.82 like the two above it, which was right while being blown
+	## away was a fall that ended lying down -- the pose was still held there
+	## because nothing came after it. It does not any more: `stand_up` has the
+	## body most of the way to its feet by 0.82, so the old sample was measuring
+	## the get-up and calling it the fall. The impact is what this check is
+	## about, and the impact is around the middle.
 	var backward := PlayerActor3D.recovery_motion(
-		"blown_away", "planted", 0.82, Vector2.UP
+		"blown_away", "planted", 0.45, Vector2.UP
+	)
+	var back_upright := PlayerActor3D.recovery_motion(
+		"blown_away", "planted", 1.0, Vector2.UP
 	)
 	_check(
 		str(sideways.mode) == "roll_sideways"
@@ -7214,6 +7226,15 @@ func _test_3d_playback_contract() -> void:
 			and float(backward.pitch_radians) > 1.0
 			and Vector3(backward.offset).z > 0.25,
 		"a defender blown off the ball rolls backward rather than holding a fall",
+	)
+	## And then stands up, which is the half that did not exist. Both ends
+	## checked together, because a fall with no recovery and a recovery with no
+	## fall are both wrong and either one alone passes half of this.
+	_check(
+		absf(float(back_upright.pitch_radians)) < 0.05
+			and absf(Vector3(back_upright.offset).z) < 0.05,
+		"and is back on their feet by the end of it (%.2f rad, %.2f m)"
+			% [back_upright.pitch_radians, Vector3(back_upright.offset).z],
 	)
 
 	var trajectory := {
@@ -15740,6 +15761,152 @@ func _test_the_manager_is_somebody() -> void:
 	)
 
 	_test_manager_body()
+	_test_stance_transitions()
+
+
+## ## Getting into a stance, and getting up off the floor
+##
+## Two things changed a body instantly and both are the same thing seen twice: a
+## stance was one assignment, and a floor recovery ran on a *phase* that stopped
+## advancing the moment playback stopped drawing that voli as the contact actor.
+func _test_stance_transitions() -> void:
+	var stance := preload("res://scripts/data/stance_transition.gd")
+	var watching: Dictionary = READY_STANCE_SCRIPT.joints("watching")
+	var defending: Dictionary = READY_STANCE_SCRIPT.joints("defending")
+	var blocking: Dictionary = READY_STANCE_SCRIPT.joints("blocking")
+
+	## 1. **Dropping in is faster than unwinding out.** The asymmetry is the one
+	##    claim the duration model makes beyond "further is longer", and a scale
+	##    applied to the wrong side of the comparison would look like a working
+	##    transition.
+	var into_crouch := stance.seconds_between(watching, defending)
+	var out_of_crouch := stance.seconds_between(defending, watching)
+	_check(
+		into_crouch < out_of_crouch,
+		"a voli drops into a ready stance faster than they come out of one (%.3fs against %.3fs)"
+			% [into_crouch, out_of_crouch],
+	)
+
+	## 2. **Every pair lands inside the band, and none of them lands on an end.**
+	##    A duration model whose every answer is the clamp is a constant wearing
+	##    an equation -- §0 of `FAILURE_MODES.md` in its usual form.
+	var pinned := 0
+	var pairs := 0
+	for from_name in ["watching", "defending", "blocking"]:
+		for to_name in ["watching", "defending", "blocking"]:
+			if from_name == to_name:
+				continue
+			pairs += 1
+			var seconds: float = stance.seconds_between(
+				READY_STANCE_SCRIPT.joints(from_name),
+				READY_STANCE_SCRIPT.joints(to_name),
+			)
+			if seconds <= stance.STANCE_MIN_SECONDS + 0.0001 \
+					or seconds >= stance.STANCE_MAX_SECONDS - 0.0001:
+				pinned += 1
+	_check(
+		pairs == 6 and pinned < pairs,
+		"stance durations come from the distance rather than from the clamp (%d of %d pinned)"
+			% [pinned, pairs],
+	)
+
+	## 3. The blend is the two stances at its ends, which is what lets a caller
+	##    hand the result straight to the gait.
+	var start: Dictionary = stance.blend(watching, blocking, 0.0)
+	var finish: Dictionary = stance.blend(watching, blocking, 1.0)
+	var ends_hold := true
+	for key in stance.STANCE_KEYS:
+		if absf(float(start[key]) - float(watching[key])) > 0.001:
+			ends_hold = false
+		if absf(float(finish[key]) - float(blocking[key])) > 0.001:
+			ends_hold = false
+	_check(ends_hold, "a stance blend is each stance at its own end")
+
+	## 4. **Every state that goes down comes back up**, and none of them did.
+	##
+	##    `recovery_motion` had `down` and no counterpart, so a voli who went to
+	##    one knee stayed there for the rest of the recovery -- six frames of a
+	##    body kneeling in `pose_recover_knee` -- and being blown away was drawn
+	##    as a fall with nothing on the other side of it. Checked at three points
+	##    per state rather than one, because a term that never rises and a term
+	##    that rises too early are both wrong and only the pair separates them.
+	var rises := true
+	var report: Array[String] = []
+	for state in ["knee", "blown_away"]:
+		var early: float = float(PlayerActor3D.recovery_motion(
+			state, "planted", 0.30
+		).stand_up)
+		var late: float = float(PlayerActor3D.recovery_motion(
+			state, "planted", 0.80
+		).stand_up)
+		var done: float = float(PlayerActor3D.recovery_motion(
+			state, "planted", 1.0
+		).stand_up)
+		report.append("%s %.2f/%.2f/%.2f" % [state, early, late, done])
+		if early > 0.01 or late <= 0.01 or done < 0.99:
+			rises = false
+	_check(
+		rises,
+		"a voli on the floor stands up again by the end of the recovery (%s)"
+			% ", ".join(report),
+	)
+
+	## 4b. **And the drawn recovery lasts as long as the priced one.**
+	##
+	##     `RECOVERY_DELAY_SECONDS` is what each state costs a defender before
+	##     they are a defender again; `FLOOR_SECONDS` is how long the body takes
+	##     to get up. Two numbers for one fact, in two files, because a pose
+	##     module must not reach into the simulator -- so this is what stops them
+	##     drifting. A body that stands up before the rally says it did is the
+	##     defect, and it would be invisible in both files separately.
+	var priced_matches := true
+	for state in stance.FLOOR_SECONDS:
+		if not absf(
+			float(stance.FLOOR_SECONDS[state])
+				- float(RallySimulator.RECOVERY_DELAY_SECONDS.get(state, -1.0))
+		) < 0.0001:
+			priced_matches = false
+	_check(
+		priced_matches
+			and stance.FLOOR_SECONDS.size() == 3
+			and not stance.FLOOR_SECONDS.has("platform"),
+		"getting up takes as long as the rally charges for it",
+	)
+
+	## 5. **And the getting-up outlives the window that started it.**
+	##
+	##    The overlay has to *resume* the recovery rather than restart it, so the
+	##    clock it is armed with is what is left of the duration at the phase the
+	##    window ended on. Restarting reads as a body going back down, which is
+	##    what the first version of the preview sheet showed.
+	var actor: Node3D = preload(
+		"res://scenes/components/player_actor_3d.tscn"
+	).instantiate()
+	get_root().add_child(actor)
+	actor.configure(1, true, "Voli", "Right", {"body_type": "Feli"})
+	actor.contact_recovery = "fall"
+	actor.contact_posture = "off-axis"
+	var handover := 0.5
+	actor.set_pose(
+		RALLY_EVENT_SCRIPT.EventType.DEFENSE, 0.0,
+		PlayerActor3D.RECOVERY_END_PHASE * handover, Vector2(0.7, -0.7), true,
+	)
+	var armed: float = float(actor._floor_remaining) \
+		/ maxf(float(actor._floor_duration), 0.0001)
+	## And it runs out: posed off-ball for longer than the recovery lasts, the
+	## overlay must expire rather than hold the body down forever.
+	for _frame in range(240):
+		actor._floor_remaining = maxf(float(actor._floor_remaining) - 0.02, 0.0)
+		actor.set_pose(
+			RALLY_EVENT_SCRIPT.EventType.SERVE, 0.0, 0.0, Vector2(0.0, -1.0), false
+		)
+	var settled: float = float(actor._floor_remaining)
+	actor.queue_free()
+	_check(
+		absf(armed - (1.0 - handover)) < 0.02 and settled <= 0.0001,
+		"getting up resumes where the contact window left off and then ends (%.2f left, %.3f after)"
+			% [armed, settled],
+	)
 
 
 ## ## The manager is a voli

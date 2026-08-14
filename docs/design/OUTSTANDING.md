@@ -262,6 +262,44 @@ symptom.
   than built out of it. `tools/run_set_posture_shot.gd` now prints the joints at
   contact for all three postures both ways, which is what caught it.
 
+### Two things a body could not do: change stance, and get up
+
+Both were the same defect and neither had a picture, because neither had any
+frames. `ready_stance` was read fresh every frame, so a middle dropping off the
+net went from hands-up at the tape to a defender's crouch between two of them.
+And a floor recovery ran on `_recovery_clock`, which is a **phase** -- it stops
+advancing the instant playback stops drawing that voli as the contact actor, so
+the body snapped upright from wherever it had got to.
+
+`StanceTransition` is the one mechanism for both, at two scales: 140-420 ms to
+change what you are ready for, 0.55-1.35 s to get off the floor. Durations for
+stance changes come from the **distance between the two joint sets** rather than
+from a table, so a fourth stance gets a sensible one without anybody choosing
+it; the floor durations are copied from `RECOVERY_DELAY_SECONDS`, which already
+prices the same fact, with a suite check holding the two equal.
+
+Three things the sheets found once the poses could be looked at:
+
+- **The half-kneel never rose.** `down` was `smoothstep(0, 0.34, recovery)` with
+  no counterpart, so `pose_recover_knee` was six frames of a body kneeling.
+- **Being blown away had nothing after it.** The longest recovery in the game --
+  the simulator prices it at 1.35 s against a kneel's 0.55 -- was drawn as a
+  fall that ended lying down.
+- **The kneel was not a kneel.** A thigh 12 degrees behind vertical over a shin
+  folded to -100 puts the shank 22 degrees *above* horizontal: a raised foot on
+  a straightish leg, which reads as picking a foot up rather than as a knee
+  taking weight. The thigh now comes forward of vertical and the shin folds to
+  -128, which makes the **knee** the lowest point of the body so
+  `_settle_to_floor` rests the figure on it.
+
+The trunk fold that goes with it is smaller than it looks (-21 degrees) because
+it is *added* to the dig posture's own fold. The first attempt at -34 put the
+head near the floor and the figure settled onto its shoulder.
+
+`tools/preview/transition_preview.tscn` is the instrument, and it forces both
+clocks the way `gait_preview` forces a landing -- these run in seconds and a
+still sheet has no seconds in it.
+
 ### The stance foot skates, and the plant cannot close it alone
 
 `tools/foot_plant_probe.tscn` measures what the drawn shoe does while it is on

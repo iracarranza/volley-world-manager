@@ -235,7 +235,34 @@ reachable with a mouse. The layout is checked by looking at the four PNGs.
 
 ---
 
-## 8. Inherited probes, and what they are worth
+## 8. `second_contact_preview` and `transition_preview` -- the poses, looked at
+
+Two sheets rather than two probes: they render rows of the rig through a phase
+or a clock and prove nothing numerically. They are here because half the defects
+on this branch were only visible as pictures.
+
+`second_contact_preview` covers the three set postures, the backwards arch, and
+the three floor recoveries through the phase. `transition_preview` covers the
+stance changes and the getting-up, and **forces both clocks** the way
+`gait_preview` forces a landing -- they run in seconds, and a still sheet has no
+seconds in it.
+
+**What they found:** the half-kneel never rose; being blown away had nothing
+after the impact; the kneel put the shank 22 degrees above horizontal, which
+reads as picking a foot up rather than as a knee taking weight; and the
+backwards-set arch stood at a fifth of itself on the frame the ball left the
+hands.
+
+**Known limits:** a sheet is an argument you can disagree with, not a
+measurement. The numeric counterparts are `run_set_posture_shot` for the
+postures and the suite's stance-transition checks for the clocks. One mistake
+already made here: stepping the floor overlay from 0 re-runs the fall from the
+beginning and reads as a body going *down* -- the overlay resumes at whatever
+clock the window ended on, so the sheet has to start there too.
+
+---
+
+## 9. Inherited probes, and what they are worth
 
 - **`block_rate_probe`** -- stuff / involvement / touch. Baseline 2.56% /
   79.59% / 38.66%. The career is unseeded, so the roster differs between runs
