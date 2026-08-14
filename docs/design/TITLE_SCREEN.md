@@ -200,6 +200,30 @@ That ordering is now load-bearing, so it is asserted in the suite rather than
 left as a comment, including the case that matters: a save written before the
 timestamp existed reads as 0 and must sort to the *back*.
 
+## 7b. What New Career hands over
+
+Only the handoff belongs here; the first-week design is
+`DIEGETIC_MANAGEMENT.md` §9a and the schedule half is
+`THE_DAY_AND_THE_CLOCK.md` §12.
+
+The one thing this screen owes them: **New Career must finish on a club that
+already works.** Whatever the builder asks — region, tier, organisation type,
+principles, the manager's own body — everything it does *not* ask has a sensible
+default already in place by the time the desk appears: a roster, rooms assigned,
+a food mixture, staff, tactics, a schedule, a fixture coming, some equipment.
+
+Two consequences for this screen specifically:
+
+- **The builder must not grow into a configuration wizard.** Every additional
+  mandatory step is a system the player is forced to have an opinion about
+  before they have met anybody. The rule from §9a — *depth available
+  immediately, very little depth mandatory immediately* — is enforced here or
+  nowhere, because this is the only screen positioned to demand things.
+- **The first thing after it is a day, not a menu.** The handoff lands on the
+  desk with the club's own schedule already running, which is what makes the
+  first lesson *the club functions when I am not clicking things* rather than
+  *here is your first task*.
+
 ## 8. Open
 
 - The original writeup's other title-screen requirements, lost to compaction.

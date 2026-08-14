@@ -1,5 +1,11 @@
 # Outstanding design work
 
+**The standard this work is against is `VOLLEYBALL_FIDELITY.md`**, which is the
+project's current primary track: the difference between rules-correct volleyball
+and six athletes convincingly solving volleyball problems together, the
+canonical side-out to make convincing first, and the rubric a viewer applies
+with the captions switched off. Everything below is a specific case of it.
+
 What is designed, agreed or diagnosed but not built, as of this branch. Ordered
 by what unblocks what, not by size.
 

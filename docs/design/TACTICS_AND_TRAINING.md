@@ -866,3 +866,60 @@ the strip names one gap, mark it for the session, leave.
 Only the journal wears the scrapbook / cross-stitch treatment. The other objects
 are different media and want different ones -- see
 `UI_VISUAL_SYSTEM_CONSTRAINTS.md`.
+
+
+---
+
+# Where a tactic sits, and how it gets certified
+
+Two additions that belong on this page rather than on the identity or fidelity
+pages, because both are about *the instruction the manager gives*.
+
+## A tactic is the middle of a stack, not the top of one
+
+`TeamPrinciples` — the seven axes this clipboard declares — is **layer 3** of a
+seven-layer model: club culture, team philosophy, **tactical principles**,
+individual personality, athletic reality, match behaviour, external reputation.
+See `TEAM_IDENTITY_AND_PHILOSOPHY.md`.
+
+What that means for this screen: a preset name here is currently doing two jobs.
+*Development* is both a coaching stance (layer 1–2) and a tempo setting (layer
+3), and those are different things that happen to share a word. Nothing needs
+renaming today; the point is that when the philosophy layer is built, **the
+sentence separates from the seven numbers** and this screen keeps the numbers.
+
+**Tactical gravity, not buffs.** A philosophy biases which options are
+prioritised, which mistakes are tolerated, what players expect of each other and
+what training keeps returning to. It never touches an attribute or a success
+rate, and **reality is allowed to overrule it** — a team that believes in fast
+multi-option offence still gets a terrible pass, and a terrible pass still
+forces a high outside ball. That is the situation outranking the belief, not the
+belief failing.
+
+## Every meaningful instruction needs a controlled test
+
+An instruction is not certified because a hidden quality coefficient moved. It
+is certified when **changing only that instruction produces a visible, measured
+change in volleyball behaviour** in the predicted direction.
+
+The pattern:
+
+> change one instruction → predict the consequence in volleyball terms →
+> measure whether it happened → and check the *cost* showed up too
+
+Worked expectations:
+
+| instruction | should visibly produce | and the cost |
+|---|---|---|
+| **protect the weak receiver** | that voli takes fewer balls; teammates cover more court | seam and movement costs move somewhere else; attack availability may change |
+| **faster offence** | approaches start earlier; less read-and-close time for the block | higher setter timing demand; a poor pass removes more options; timing errors rise |
+| **commit block vs read** | middle and pin responsibilities visibly change | floor defence changes which space it expects to be uncovered |
+| **short-ball responsibility** | a defender prepares shorter; tip defence improves | deep coverage moves elsewhere |
+
+Each of those has a **tradeoff written into it on purpose**. An instruction that
+improves something and costs nothing is not a tactic, it is a difficulty
+setting, and the A/B test is the thing that catches that before it ships.
+
+This is the tactical case of the general standard in `VOLLEYBALL_FIDELITY.md`:
+if the only way to see that an instruction is active is to read the UI label
+that set it, it is not yet simulation.

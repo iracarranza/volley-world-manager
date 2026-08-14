@@ -188,6 +188,56 @@ over, not anything modeled on real-world conflict:
   villain; it's a genuine, ongoing "does history or money deserve the last
   flagship spot" argument the broadcasters never get tired of.
 
+### The caricature has to have a cause
+
+The section above already narrativizes clubs into characters — the disruptor,
+the chess players, the underestimated. That is the register this world wants,
+and it needs one rule to keep it from becoming decoration.
+
+> **A nickname must describe something the simulation actually does.**
+
+The world is allowed to exaggerate the story. The simulation still has to
+produce a plausible volleyball mechanism underneath it.
+
+| what is true in the rally | what the world calls it |
+|---|---|
+| disciplined block-and-defence organisation | *the wall that walks* |
+| fast multi-option offence | *the six-headed attack* |
+| exceptional continuation play | *the team that won't die* |
+
+The exaggeration is the framing, never the substance. A club nicknamed *the
+wall that walks* whose blocking is ordinary is lore stapled to a team; one whose
+blockers genuinely read and close early has earned the phrase, and a
+volleyball-literate viewer would arrive at something like it unprompted. That is
+the same standard `docs/design/VOLLEYBALL_FIDELITY.md` applies to the rally and
+`TEAM_IDENTITY_AND_PHILOSOPHY.md` §6 applies to identity: **if it is only
+legible from the label, it is not simulation yet.**
+
+This is also the bridge the setting needs between four things that could easily
+pull apart — realistic-ish sport, a creature world, caricatured regional
+culture, and sports-anime narrative readability. The caricature is how the world
+*talks* about a mechanism that is really there.
+
+### Identity outside the match
+
+A club's sporting idea should leave the court and become material: chants,
+supporter language, uniforms, architecture, training rituals, food traditions,
+sayings, rival mockery, club legends, inherited tactical diagrams, recruiting
+stereotypes, media nicknames.
+
+**None of it free-floating.** Each should be downstream of something —
+
+- the **region**, and its larder, its housing structure, its gesture;
+- the club's **history**, including what it used to be and is not any more;
+- its **actual behaviour**, per the rule above;
+- **specific people** who have been there.
+
+Ĭspayk is the worked example already in this document: the *bomba* and the
+*bomberino* are a vocabulary, and they exist because that club really did invent
+the set-and-spike and really does still have that one thing that travels. The
+words are downstream of a history and a mechanism. A supporter chant invented
+because a club needed one would not be.
+
 ## What the manager actually does
 
 Beyond roster and on-court performance, the job is absorbing the texture of

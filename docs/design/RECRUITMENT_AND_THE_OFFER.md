@@ -273,6 +273,10 @@ A rich one should still be able to be a terrible fit.
 
 ## 8. Order
 
+*Within this system.* `docs/BACKLOG.md` has volleyball fidelity as the
+project's primary track and the interview as the one off-court item still open;
+everything after item 1 below is held.
+
 1. **The interview**, wrapping `offer_place`, charging manager time.
 2. **`scouted_players`** — so the board is scouting rather than a market.
 3. **Beliefs with an owner** — `SCOUTING.md` #3.

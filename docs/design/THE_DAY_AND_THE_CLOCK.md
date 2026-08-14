@@ -10,6 +10,11 @@ Status: **the plan exists, the clock does not.** `DailySchedule` and
 what to build and, more usefully, the four decisions to get right before
 building it.
 
+**Not the current build priority.** `docs/BACKLOG.md` puts volleyball fidelity
+first and holds the clock. The order in §11 is the order *within this system*
+for whenever it is picked up — it is not a claim about what to build next, and
+§11 is the section most likely to be misread as one.
+
 ---
 
 ## 0. The problem this is against
@@ -341,7 +346,53 @@ clock's speed. See `RALLY_PHYSICAL_TIME.md`.
 
 ---
 
-## 12. What the player should never have to do
+## 12. The first save
+
+Nobody's first Tuesday is built from scratch.
+
+> **Never present a new player with 36 blank blocks and ask them to construct a
+> day.**
+
+A new save opens on a **working schedule** — `DailySchedule.default_blocks()`
+already exists for this and its own comment says why: *"deliberately a legal day
+rather than an empty one. A manager opening the screen for the first time should
+be looking at something that works, so the warnings they see later are ones they
+caused."*
+
+That is the whole onboarding argument, already implemented for one day. What it
+wants is the same at week scale, via day templates (§5).
+
+**Routine templates are the onboarding. Deviations are the lesson.** The player
+does not learn the schedule by being taught its rules; they learn it by moving
+one block and reading what the panel says it costs. So the only thing the first
+day has to establish is:
+
+> you can change any future block.
+
+### What the first day should demonstrate
+
+- routine runs on its own — no mandatory stop at any phase
+- the player may watch or skip, and neither is prompted
+- free time is real simulation space, not a gap (§8)
+- an ordinary day can be **inhabited or skipped**
+
+And both of these must be first-class:
+
+> *"I want to spend five real minutes watching this ordinary Tuesday."*
+> *"Nothing here matters to me. Take me to tomorrow."*
+
+**Neither is the more correct way to play.** A clock that punishes the second
+becomes a chore; a clock that makes the first pointless wastes the simulation.
+This is the same rule §13 states negatively, and it is worth stating positively
+once because it is the reason the skip filters in §2.1 exist at all.
+
+The wider first-save philosophy — a club that already functions, the dual
+reading of one save, the first week's shape — is in `DIEGETIC_MANAGEMENT.md`
+§9a.
+
+---
+
+## 13. What the player should never have to do
 
 Manually start a scheduled phase. Approve a meal. Click *begin training*. Click
 *begin free time*. Rebuild a normal week. Handle every ambient event. React in

@@ -31,6 +31,98 @@ into a meter; waiting for a match to reach "real gameplay".
 
 ---
 
+## 0a. Management with presence
+
+The target is not *Football Manager, but cozy*. It is a **deep simulator whose
+management is experienced at human scale** — the player runs a complicated
+institution without feeling detached from it.
+
+Six things together, and the combination is the point rather than any one of
+them:
+
+| | |
+|---|---|
+| **simulation depth** | the variables genuinely interact |
+| **materiality** | changes show up in places, objects and behaviour |
+| **character** | the things being managed become recognisable individuals |
+| **routine** | the player inhabits the job instead of teleporting between decisions |
+| **playfulness** | not every interaction exists to optimise an output |
+| **role fantasy** | the interface keeps saying *I am this club's manager* |
+
+### The trade we are refusing
+
+Cozy management games often buy their accessibility by **reducing simulation
+depth**. VWM must not.
+
+Instead: keep an unusually deep model and make its causes and consequences
+understandable through people, places, behaviour, physical interfaces and
+recurring routine.
+
+> The simulator player can inspect the causal model.
+> The cozy player can understand much of the same model by watching what
+> happens.
+> **They are not playing two different games.**
+
+`CLUB_LIFE.md` §0 has the other half of this argument — the two audiences do not
+conflict on *depth*, they conflict on *failure*, and the resolution there
+(failure is legible and gentle; cozy systems must be expressive rather than
+optimal) is what makes one system serve both.
+
+---
+
+## 0b. The reference family
+
+A lens, not a feature list. What each is useful for *studying*:
+
+| | useful for |
+|---|---|
+| **Football Manager** | deep sporting simulation and tactical/player causality — and the monotony we are explicitly not inheriting: inspect → advance → advance → match |
+| **Kairosoft sports** (Tennis Club Story, Basketball Club Story) | sports-management concepts compressed into charming, visible progression. Borrow the legibility and the charm, **not** the stat-upgrade abstraction |
+| **Moonlighter** | alternating loops keep one activity from eating the whole game |
+| **Dave the Diver** | loop variety attached to the same place, cast and world |
+| **Software Inc.** | people plus workplace plus organisation, at real systemic depth |
+| **Stardew Valley** | routine, familiarity, attachment to an inhabited place |
+| **Potionomics / Recettear** | business decisions become interpersonal and expressive rather than only economic |
+| **Travellers Rest / Bear & Breakfast** | the managed institution is also a physical place |
+| **Sticky Business / A Little to the Left / Cooking Mama** | mundane organisation is pleasurable when the interaction itself is tangible |
+| **Mii Plaza** | simple generated characters become memorable through repeated, recognisable identity |
+
+The shared lesson, and the only thing to take from the list as a whole:
+
+> **Managing something should feel like being somewhere and knowing the things
+> you manage.**
+
+---
+
+## 0c. Two loops, not one
+
+The anti-monotony structure is not one large management loop that occasionally
+reaches a match. It oscillates:
+
+```
+        CLUB LIFE                         VOLLEYBALL
+  people · training · housing   ↕   matches · tactical problems
+  food · recruitment · staff        performance · execution
+  planning · relationships
+  routine                       ↕
+```
+
+A match should produce **management questions**. Management should change what
+the next match **means**.
+
+Worked example:
+
+> A match exposes an opposite being hunted in reception. The manager can train
+> them, protect them tactically, recruit around them, or change the system —
+> and meanwhile that voli is also a person in the club with a roommate and a
+> palate and an opinion. The next match tests whichever answer was chosen.
+
+Avoid the rhythm where management is a long stretch of screens punctuated by a
+match. The two sides should keep handing work to each other, which is also why
+the calendar (§7) matters more than a fixture list would.
+
+---
+
 ## 1. The interaction rule
 
 > **Physicalize decisions. Automate maintenance.**
@@ -169,6 +261,88 @@ happen. Answer people. Work physical interfaces. Make real choices all week.
 phase by hand.
 
 Depth available without becoming mandatory friction.
+
+---
+
+## 9a. The first save
+
+Where the whole argument above either lands or does not. The schedule-specific
+half is in `THE_DAY_AND_THE_CLOCK.md` §12; the New Career → first day handoff is
+in `TITLE_SCREEN.md`. This is the philosophy.
+
+### The club already works
+
+> **A first-time player must not be required to configure every system before
+> being allowed to play.**
+
+A new save arrives with sensible but **imperfect** defaults already in place:
+a roster, room assignments, a food mixture, staff, basic tactics, a weekly and
+daily schedule, an upcoming fixture, some equipment.
+
+The player begins from a **functioning institution**, not from a blank form.
+Imperfect matters as much as functioning — a club with nothing wrong with it
+gives the player nothing to be for.
+
+> Depth available immediately. Very little depth *mandatory* immediately.
+
+### Same save, two first impressions
+
+The same starting club, read two ways, with no mode switch and no difficulty
+setting.
+
+| a cozy-leaning player first notices | a simulator-leaning player first notices |
+|---|---|
+| names, faces, bodies | weak serve receive |
+| roommates, rooms, objects | roster construction, rotation |
+| phone calls, meals, routines | attributes, tactical principles |
+| who spends time with whom | training, scouting, the schedule |
+| **"these people actually live here"** | **"this roster has problems I can solve"** |
+
+**Do not solve this with a Cozy Mode and a Simulator Mode.** The systems are the
+same systems; only the entry point differs. The convergence being aimed at is a
+single realisation that arrives from either side:
+
+> **"These particular people *are* the system I am trying to solve."**
+
+### The first day is observational
+
+No tutorial choreography — no *open the food screen, now open housing, now open
+scouting*. The existing schedule runs and the first lesson is:
+
+> **the club functions when I am not clicking things.**
+
+A cozy player might learn who wakes late, who eats with whom, who uses which
+object. A simulator player might attend training, find the tactical problem,
+delegate a session, or change tomorrow. Both are correct and neither is
+prompted.
+
+Teach through curiosity, consequence and need. Not through a syllabus.
+
+### By day three, and by the end of week one
+
+Several volis should be recognisable **without the roster list**, and their
+identities should be arriving from both directions at once:
+
+> *the libero who keeps calling home* · *the opposite I don't trust in
+> reception* · *those two are roommates* · *the setter I'm trying to make more
+> aggressive*
+
+The first meaningful match should come early. The opening arc:
+
+```
+meet the club → notice problems → make small changes → watch people live
+   and train → MATCH → see what those changes did
+```
+
+and the match reads at two depths as well — consequences, fatigue and reactions
+on one side; tactical evidence, patterns and analysis on the other. Same event.
+
+By the end of week one the player should understand the **shape** of VWM
+without having met every mechanic. So week one must **not** be made to contain
+everything: no mandatory allergy, staff catastrophe, housing crisis, transfer
+saga or rare-trait showcase. Those are what make weeks two, ten and forty
+distinct from each other, and spending them on the tutorial spends them for
+good.
 
 ---
 

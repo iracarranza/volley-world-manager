@@ -52,6 +52,8 @@ Then, by subject:
 | The clock, the day, the calendar, manager time | `docs/design/THE_DAY_AND_THE_CLOCK.md` |
 | Signing, offers, the interview | `docs/design/RECRUITMENT_AND_THE_OFFER.md` |
 | Staff, and how they get things wrong | `docs/design/STAFF_AND_FALLIBILITY.md` |
+| **Anything in the rally, and whether it looks like volleyball** | `docs/design/VOLLEYBALL_FIDELITY.md` |
+| Club culture, philosophy, what a team believes | `docs/design/TEAM_IDENTITY_AND_PHILOSOPHY.md` |
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
 | The title screen | `docs/design/TITLE_SCREEN.md` |
 | The match centre, the whiteboard | `docs/design/THE_TACTICAL_WHITEBOARD.md` |

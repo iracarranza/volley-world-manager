@@ -8,6 +8,63 @@ Order within each section is rough implementation order, not priority.
 
 ---
 
+## Project focus: volleyball fidelity first
+
+**Read this before reading any other order in this file.** Several documents
+carry a dependency order for their own system. None of them is a claim about
+what to build next, and one of them — the club-life arc immediately below — was
+written before this decision and reads like one.
+
+### The hierarchy
+
+| | |
+|---|---|
+| **primary** | **the volleyball fidelity pass** — `docs/design/VOLLEYBALL_FIDELITY.md` |
+| **secondary** | **the interview**, in front of the existing `offer_place` flow |
+| **held** | everything in the list below |
+
+**Why the interview is the one off-court track that stays open.** It is bounded:
+the offer already exists, it integrates systems that are already built rather
+than opening a new one, and it is the *second manager appointment* — which is
+the thing that lets the shared activity contract be extracted from two working
+systems instead of invented. It does not start a subsystem.
+
+### Held — do not expand without a blocking reason
+
+- the live clock implementation
+- the phone expansion
+- staff failure expansion
+- a manager trait catalogue
+- allergy implementation
+- more accommodation objects or structures
+- more food breadth
+- more world-generation breadth
+- **new tactical options before the current ones are validated**
+
+**This is a focus decision, not a deletion.** Every design in those documents
+stays valid and none of it is being reconsidered. They are waiting while the
+sporting core becomes trustworthy.
+
+### The reason, stated once
+
+The project has many conceptually credible surrounding systems and they are
+designed further than they are built. The risk is not that they are wrong; it is
+that the rally engine can be **rules-correct volleyball** without yet being **six
+athletes convincingly solving volleyball problems together** — and everything
+else is downstream of the second thing being true.
+
+The milestone:
+
+> **"I can watch a normal rally and argue about the volleyball decision instead
+> of arguing about whether the athlete could physically have been there."**
+
+That is a much stronger criterion than more events, more animations, more
+tactical buttons or more systems. Measurements and the current technical state
+stay in `docs/review/PROBE_HANDOFF.md`; the standard and the rubric are in
+`VOLLEYBALL_FIDELITY.md`.
+
+---
+
 ## The club-life arc: one order across five documents
 
 Four design documents landed together and each carries its own build order. This
@@ -39,7 +96,11 @@ different comfort for the same voli in the same week than recovery did.
 **The marks read as marks again** — `would sign`, *Pinned as*, the action pushed
 away, the pin colour beside the word rather than in it.
 
-### Open, in order
+### Open, in order — *within this arc*
+
+**Not the project order.** See the focus hierarchy above: only item 1 is live,
+and the rest are held. This list says what depends on what, not what to do next.
+
 
 1. **The interview.** Wraps `offer_place`, charges manager time, and is the
    *second manager appointment* — after which the shared activity contract can be

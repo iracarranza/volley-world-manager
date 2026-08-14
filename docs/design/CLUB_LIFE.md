@@ -215,6 +215,49 @@ more weight on the utterance system than it would otherwise carry -- and makes
 than a preference. If the utterances are noise, this whole model is invisible and
 the systems read as spreadsheets.
 
+## 1c. The team's philosophy is a social object
+
+§1b's conflict engine is **one finite thing and more than one legitimate claim
+on it**. There is a second source that is not a resource at all: a shared belief
+that everybody in the building has a different relationship to.
+
+**Personality interprets a philosophy. It never matches one.** The rule to avoid
+absolutely:
+
+```
+aggressive voli + aggressive philosophy = good fit
+aggressive voli + patient philosophy    = bad fit
+```
+
+That is a scalar in costume, and it produces the flattest possible squad — one
+where the correct roster is the one whose personalities all point the same way.
+**Do not build a numeric culture-fit or philosophy-fit meter.**
+
+Ask instead *how does this person read it?* Philosophy: **One More Ball**.
+
+| | reads it as |
+|---|---|
+| ambitious | *every extra contact is another chance for me to win it* |
+| egotistical attacker | *they keep it alive so I can finish* |
+| experimental | *surviving buys time to try something* |
+| conservative | *don't force it — hold the structure* |
+| impatient | *why are we waiting for them to make the mistake?* |
+
+All five **register** against the philosophy. None is a mismatch. Two very
+different people can embody the same belief for opposite reasons, and one of them
+being annoyed about it is not a fit problem — it is a person.
+
+This is exactly §1b's shape from a different direction. Nobody is behaving
+badly, there is no villain, and both readings are defensible; what differs is
+that the contested thing is a **meaning** rather than a resource. The
+disagreements it produces are the same kind the cozy player can sit with and the
+same kind the simulation player can trace to a cause.
+
+It also gives the squad something to talk about that is not a grievance, which
+§1b's substrate argument otherwise leaves thin. `TEAM_IDENTITY_AND_PHILOSOPHY.md`
+carries the full model — including the layer above this, where what the club
+*says* it believes and what it has actually *become* are allowed to disagree.
+
 ## 2. Staff
 
 Four roles, two tiers. Each owns exactly one resource, which is what stops the

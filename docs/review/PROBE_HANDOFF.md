@@ -377,6 +377,14 @@ together, and neither coefficient should move until it is.
 
 ## Continuations, in dependency order
 
+**These are now the project's primary track.** `docs/design/VOLLEYBALL_FIDELITY.md`
+carries the standard they serve — the two levels of "volleyball", the canonical
+side-out to prove first, the viewer's rubric, and the milestone — and
+`docs/BACKLOG.md` carries the focus hierarchy that holds the off-court work
+while this proceeds. The measurements stay here; nothing below is restated
+there.
+
+
 1. **Separate body centre from ball contact point.** Unblocks the net
    encroachment finding and matters for blocking, setting, wingspan and body
    types. Now the top of the list, because the two questions that used to

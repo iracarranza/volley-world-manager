@@ -203,6 +203,10 @@ people are possible at all for the first time.)
 
 ## 9. Order
 
+*Within this system.* Staff failure is **held** under `docs/BACKLOG.md`'s focus
+hierarchy. This is the order for whenever it is picked up, not a claim about
+what to build next.
+
 1. **Beliefs with an owner** — `SCOUTING.md` #3. Unblocks scout failure, two
    reports side by side, and the club-belief third of the allergy split.
 2. **Chef failure as a kind**, derived from `(week, staff_id, task, subject)`,
