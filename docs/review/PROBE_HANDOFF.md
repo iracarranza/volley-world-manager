@@ -17,9 +17,10 @@ Everything runs from the repository root with the cached binary:
 xvfb-run -a godot --path . res://tools/<name>.tscn
 ```
 
-Suite baseline on this branch: **1,829 checks pass.** The count is not a
-regression signal -- sampling tests emit a variable number of checks and it has
-read 1,180 through 1,792 across near-identical trees. Read the FAIL line.
+Suite baseline on this branch: **1,838 checks pass**, measured on `079375e`.
+The count is not a regression signal -- sampling tests emit a variable number of
+checks and it has read 1,180 through 1,838 across near-identical trees. Read the
+FAIL line.
 
 ---
 

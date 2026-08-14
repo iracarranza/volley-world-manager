@@ -10,8 +10,15 @@ rather than a dashboard.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-10: **1,048 checks pass**. Treat any
-test failure as a regression.
+Current branch baseline, verified 2026-08-14 on `079375e`: **1,838 checks
+pass**. Treat any test failure as a regression.
+
+The count itself is not the signal and should not be read as one -- sampling
+tests emit a variable number of checks, and this line sat at 1,048 for four days
+while the real figure climbed past 1,800, which is the failure mode a stale
+baseline has: it is quoted, believed, and never rechecked. **Read the FAIL
+line.** A number here is only worth the commit it was measured on, which is why
+one is now named.
 
 The slowest gate in the suite is `_test_world_aging`, which runs twenty seasons
 of the world and counts what survives. It is the only check that will notice a
