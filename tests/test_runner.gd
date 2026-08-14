@@ -16493,6 +16493,7 @@ func _test_the_manager_is_somebody() -> void:
 	_test_manager_body()
 	_test_stance_transitions()
 	_test_region_language()
+	_test_recruit_offer()
 
 
 ## ## A region's name is a shape, and the shape has to be checkable
@@ -16710,6 +16711,119 @@ func _test_region_language() -> void:
 		unnamed.is_empty() and borrowed.is_empty(),
 		"a tagline names its own people and nobody else's (missing: %s; borrowed: %s)"
 			% [unnamed, borrowed],
+	)
+
+
+## ## Signing somebody is asking them into a household
+##
+## `sign_transfer` moved a voli onto the roster in one click: no fee, no
+## conversation, no consent, and no check that there was a bed. `RecruitOffer`
+## computes what joining would actually be, from tables that already exist, and
+## these are the things that computation has to keep true.
+func _test_recruit_offer() -> void:
+	var offer := preload("res://scripts/data/recruit_offer.gd")
+	var food := preload("res://scripts/data/food_supply.gd")
+
+	## 1. **The floor arithmetic is the housing folder's, not a second copy.**
+	##    A Bunkhouse room is 5.0 floor; two occupants at 2.0 each and one small
+	##    item at 1.0 fills it exactly. That is the sum a manager can do in their
+	##    head, which is the whole reason this half of the sheet is numbers.
+	var full := offer.proposed_room("Bunkhouse", 2, 1, ["kettle"], [])
+	_check(
+		is_equal_approx(float(full["capacity"]), 5.0)
+			and int(full["occupants"]) == 2
+			and is_equal_approx(float(full["used"]), 5.0)
+			and is_equal_approx(float(full["left"]), 0.0)
+			and int(full["sharing_with"]) == 1,
+		"a second voli into a Bunkhouse room with a kettle fills it exactly (%.0f of %.0f)"
+			% [float(full["used"]), float(full["capacity"])],
+	)
+
+	## 2. **A room that does not fit says so as a negative, not as zero.**
+	##    Clamping would report a full room and an overfull one identically, and
+	##    the overfull one is the interesting case -- it is the offer a manager
+	##    should hesitate over.
+	var squeezed := offer.proposed_room("Longhouse", 3, 2, ["kettle"], [])
+	_check(
+		float(squeezed["left"]) < 0.0 and float(squeezed["crowds"]) > 0.0,
+		"a third voli into a Longhouse room is short and crowds it (%.0f over, %.2f crowding)"
+			% [-float(squeezed["left"]), float(squeezed["crowds"])],
+	)
+
+	## 3. **Rooms fill in order, and the mates are that room's.** The newcomer
+	##    takes the next seat, so a squad of five at two per room puts them in
+	##    room three beside the fifth voli -- not beside the first two, which is
+	##    what naming the first `per_room` players would have done.
+	var squad: Array = []
+	for index in 5:
+		var body := VolleyballPlayer.new()
+		body.id = index + 1
+		body.display_name = "Voli %d" % (index + 1)
+		squad.append(body)
+	var third := offer.proposed_room("Bunkhouse", 2, squad.size(), [], [])
+	var mates := offer.room_mates(squad, 2, squad.size())
+	_check(
+		int(third["room"]) == 3 and mates.size() == 1 and str(mates[0]) == "Voli 5",
+		"the sixth voli shares room 3 with the fifth (room %d, with %s)"
+			% [int(third["room"]), ", ".join(mates)],
+	)
+
+	## 4. **The table is a sentence, and it is the band's sentence.**
+	##
+	##    Not three thresholds picked here. A word that disagrees with the
+	##    discomfort the voli's recovery is actually charged is worse than no word
+	##    at all, so the bands are `FoodSupply`'s own -- which means this check
+	##    fails if somebody retunes the band and forgets the prose.
+	var theirs := {
+		"pastes": {"a": "Landavol", "b": "Landavol"},
+		"ratio": PASTE_RATIO_SCRIPT.normalised({"a": 1.0, "b": 1.0}),
+	}
+	var strangers := {
+		"pastes": {"a": "Xérvu", "b": "Pāwa Hitō"},
+		"ratio": PASTE_RATIO_SCRIPT.normalised({"a": 1.0, "b": 1.0}),
+	}
+	var thin := {
+		"pastes": {"a": "Landavol", "b": "Xérvu", "c": "Pāwa Hitō"},
+		"ratio": PASTE_RATIO_SCRIPT.normalised({"a": 0.1, "b": 0.45, "c": 0.45}),
+	}
+	var at_home := offer.table_word(["Landavol"], theirs)
+	var nothing := offer.table_word(["Landavol"], strangers)
+	var scarce := offer.table_word(["Landavol"], thin)
+	_check(
+		at_home != nothing and nothing != scarce and scarce != at_home
+			and food.comfort_share(["Landavol"], thin)
+				< float(food.band_for(["Landavol"])["floor"]),
+		"the table reads three different ways and the middle one is genuinely short (%s / %s / %s)"
+			% [at_home, scarce, nothing],
+	)
+
+	## 5. **Concerns are what is true here, and are usually nothing.**
+	##
+	##    A list that always has four items is a form. This voli is local, eating
+	##    what they know, in a room with space -- so they have nothing to raise,
+	##    and the sheet has to be able to say that rather than inventing a line to
+	##    fill the panel.
+	var settled := VolleyballPlayer.new()
+	settled.display_name = "Mila Beladol"
+	settled.home_region = "Landavol"
+	settled.palate_regions = ["Landavol"]
+	var roomy := offer.proposed_room("Bunkhouse", 2, 0, [], [])
+	var quiet := offer.concerns(settled, "Bunkhouse", roomy, theirs, "Landavol")
+	## Their own room is worth remarking on, and it is the only thing that is.
+	_check(
+		quiet.size() <= 1,
+		"a local voli eating what they know raises nothing much (%s)" % ", ".join(quiet),
+	)
+
+	var stranger := VolleyballPlayer.new()
+	stranger.display_name = "Ōno Aki"
+	stranger.home_region = "Pāwa Hitō"
+	stranger.palate_regions = ["Pāwa Hitō"]
+	var spoken := offer.concerns(stranger, "Row", squeezed, strangers, "Landavol")
+	_check(
+		spoken.size() >= 3,
+		"a stranger in a crowded Row eating none of their own food has things to ask (%s)"
+			% ", ".join(spoken),
 	)
 
 

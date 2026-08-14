@@ -52,6 +52,7 @@ const PopupScript := preload("res://scenes/components/desk_popup.gd")
 const AttributeProfiles := preload("res://scripts/systems/attribute_profile_system.gd")
 const Clippings := preload("res://scripts/data/match_clippings.gd")
 const Larder := preload("res://scripts/data/region_larder.gd")
+const RecruitOfferModel := preload("res://scripts/data/recruit_offer.gd")
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
 const UIStyleSystemScript := preload("res://scripts/systems/ui_style_system.gd")
 
@@ -105,6 +106,8 @@ var _strip_scroll: ScrollContainer = null
 var _strip_button: Button = null
 var _strip_tape: _Tape = null
 var _strip_open: bool = false
+## The last offer's outcome, pinned to the notes column until the next one.
+var _last_word: String = ""
 
 
 func bind(career_manager: Node, game_manager: Node) -> void:
@@ -320,15 +323,35 @@ func _clipping_slip(clipping: Dictionary) -> Control:
 ## Whoever the career is currently looking at. Falls back to the club's own
 ## roster so the board has something true on it before a scouting pipeline
 ## exists -- the arrangement is the thing being proven here.
+## Who is on the board.
+##
+## **The transfer pool before the roster**, which was the wrong way round and
+## mattered the moment the board grew an offer: a manager could open a slip and
+## be offered a place to somebody already sleeping in their own Bunkhouse. The
+## roster stays as the last fallback so a save with an empty market still has a
+## board to look at rather than a blank cork square.
 func _prospects() -> Array:
 	var career = _career_manager.career
 	if career != null and "scouted_players" in career:
 		var scouted: Array = career.scouted_players
 		if not scouted.is_empty():
 			return scouted
+	if career != null and not Array(career.transfer_pool).is_empty():
+		return Array(career.transfer_pool)
 	if _game_manager == null:
 		return []
 	return _game_manager.players
+
+
+## Whether this slip is somebody the club could actually offer a place to.
+func _is_recruitable(prospect_id: int) -> bool:
+	var career = _career_manager.career
+	if career == null:
+		return false
+	for candidate in career.transfer_pool:
+		if int(candidate.id) == prospect_id:
+			return true
+	return false
 
 
 ## One voli, as the thing a scout pinned up about them.
@@ -428,6 +451,13 @@ func _refresh_notes(prospects: Array) -> void:
 		],
 		"decided"
 	))
+	## The last thing that happened, pinned rather than announced. A toast would
+	## be the game telling you; a slip is you having written it down, which is the
+	## only register this board has. It survives `refresh()` because it is held on
+	## the screen rather than rebuilt from the prospects -- an offer is not a fact
+	## about who is on the board.
+	if not _last_word.is_empty():
+		_notes.add_child(_note_slip("Signed", _last_word, "signed"))
 	_notes.add_child(_note_slip(
 		"Where they are from",
 		_regions_of(prospects),
@@ -490,6 +520,20 @@ func _open(prospect_id: int) -> void:
 	## The club, not the region -- the region is four rows down under "Raised on"
 	## and a header that repeats a row below it is a header that says nothing.
 	_panel.open(str(prospect.display_name), _watched_of(prospect) + " watched")
+	## **A recruit takes the page; somebody already here stays a window.**
+	##
+	## The window is 470 tall and a report plus a living section plus an offer is
+	## about 560, so the offer terms opened *below the fold* -- which is exactly
+	## the failure the marks were moved into the footer to escape, reintroduced
+	## one section further down. Rendered before it was noticed, which is the
+	## argument for rendering.
+	##
+	## `fill_page` rather than a taller `FRAME_HEIGHT`: raising the constant
+	## widens every popup on the desk to fix one of them, and the difference here
+	## is real rather than incidental. A report is a thing you read; a report you
+	## can act on is a thing you sit down with.
+	if _is_recruitable(prospect_id):
+		_panel.fill_page()
 	_fill_report(prospect)
 
 
@@ -523,7 +567,10 @@ func _fill_report(prospect) -> void:
 	var summary: Dictionary = AttributeProfiles.summary_profile(prospect)
 	_report_row("Rated", str(roundi(float(summary.get("Overall", 50.0)))))
 	_report_row("Asking", _salary_of(prospect))
-	_report_row("Watched", _watched_of(prospect))
+	## No `Watched` row: the panel's own subtitle is `_watched_of` plus the word
+	## "watched", so this printed the same fact twelve pixels below itself. It
+	## went unnoticed until the report grew an offer and every line had to earn
+	## its place.
 	var traits := _traits_of(prospect)
 	if not traits.is_empty():
 		_report_row("Noted", traits)
@@ -560,6 +607,54 @@ func _fill_report(prospect) -> void:
 	_report_row("Sharing", _sharing_of(prospect))
 	_report_row("Build", _build_of(prospect))
 
+	## ## And what it would actually be
+	##
+	## The half the report cannot answer, because it is not about them: which room
+	## they would go into, who is already in it, what floor is left once they are,
+	## and whether the club's own paste is anything they know.
+	##
+	## **The floor is numbers and the food is a sentence**, deliberately. A room's
+	## capacity is a physical fact a manager could count themselves and being coy
+	## about it is hiding arithmetic; what a voli makes of the table is a judgment
+	## about a person and 0.43 is not what that sounds like.
+	if _is_recruitable(_open_id):
+		_panel.body.add_child(HSeparator.new())
+		var joining := Label.new()
+		joining.name = "JoiningTitle"
+		joining.text = "If they came here"
+		_panel.body.add_child(joining)
+		var offer := _offer_terms()
+		var room: Dictionary = offer.get("room", {})
+		var mates: Array = Array(offer.get("mates", []))
+		_report_row("Room", "%s %d, %s" % [
+			str(_game_manager.team.housing_structure), int(room.get("room", 1)),
+			"theirs alone" if bool(room.get("fresh", false))
+				else "with %s" % ", ".join(mates) if not mates.is_empty()
+				else "sharing with %d" % int(room.get("sharing_with", 0)),
+		])
+		## **Four rows of arithmetic compressed into one**, and not to be tidy.
+		## Rendered, capacity/used/left each on their own line pushed the concerns
+		## below the fold -- so the panel showed the sums and hid the sentences,
+		## which is the wrong half to lose when the button underneath signs
+		## somebody. The numbers are all still here; they are one line because
+		## they are one thought.
+		var left := float(room.get("left", 0.0))
+		_report_row("Floor", "%.0f, %d in it uses %.0f, %s" % [
+			float(room.get("capacity", 5.0)), int(room.get("occupants", 1)),
+			float(room.get("used", 0.0)),
+			"%.0f left" % left if left >= 0.0 else "%.0f short" % absf(left),
+		])
+		_report_row("The table", str(offer.get("table", "")))
+		## Their words last, and unlabelled. A quotation in the value column of a
+		## key/value row reads as a field called "Concern" with a person's voice
+		## in it; on its own line it reads as somebody asking.
+		for concern in Array(offer.get("concerns", [])):
+			var said := Label.new()
+			said.name = "Concern"
+			said.text = str(concern)
+			said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_panel.body.add_child(said)
+
 	## In the footer, not the body. The marks are the only controls here and they
 	## were the last rows of a scrolling report, which put them below the fold on
 	## every voli with a full one.
@@ -579,6 +674,76 @@ func _fill_report(prospect) -> void:
 		## nothing is the absence of a mark, not a mark somebody made.
 		button.pressed.connect(func() -> void: _set_mark(_open_id, value))
 		marks.add_child(button)
+
+	## The offer sits beside the marks rather than replacing them. A mark is a
+	## note to yourself and an offer is a thing you did, and collapsing the two
+	## would mean pinning a green pin to somebody signed them.
+	if _is_recruitable(_open_id):
+		var offer_button := Button.new()
+		offer_button.name = "OfferButton"
+		offer_button.text = "Offer a place"
+		offer_button.pressed.connect(_make_offer)
+		marks.add_child(offer_button)
+
+
+## What joining would be, for whoever is open.
+func _offer_terms() -> Dictionary:
+	var prospect = _open_prospect()
+	var team = _game_manager.team
+	if prospect == null or team == null:
+		return {}
+	var squad: Array = _game_manager.players
+	var room := RecruitOfferModel.proposed_room(
+		str(team.housing_structure), int(team.housing_occupants_per_room),
+		squad.size(), team.housing_small_equipment, team.housing_large_equipment,
+	)
+	var region := str(_career_manager.career.region)
+	var service: Dictionary = _career_manager._week_service(
+		region, int(_career_manager.career.absolute_week)
+	)
+	return {
+		"room": room,
+		"mates": RecruitOfferModel.room_mates(
+			squad, int(team.housing_occupants_per_room), squad.size()
+		),
+		"table": RecruitOfferModel.table_word(
+			Array(prospect.palate_regions) if "palate_regions" in prospect else [],
+			service,
+		),
+		"concerns": RecruitOfferModel.concerns(
+			prospect, str(team.housing_structure), room, service, region
+		),
+	}
+
+
+func _open_prospect():
+	for prospect in _prospects():
+		if int(prospect.id) == _open_id:
+			return prospect
+	return null
+
+
+## Sign them, and say what they were signed into.
+##
+## Everything the transaction does lives on `CareerManager.offer_place`; this
+## reports what came back. When the interview arrives it goes in front of that
+## call rather than in front of this button.
+func _make_offer() -> void:
+	var outcome: Dictionary = _career_manager.offer_place(_open_id)
+	if not str(outcome.get("error", "")).is_empty():
+		_last_word = str(outcome["error"])
+		refresh()
+		return
+	var room: Dictionary = outcome.get("room", {})
+	_last_word = ("%s signs. %s %d, %s -- %s." % [
+		str(outcome.get("name", "They")),
+		str(_game_manager.team.housing_structure), int(room.get("room", 1)),
+		"a room to themselves" if bool(room.get("fresh", false))
+			else "sharing with %d" % int(room.get("sharing_with", 0)),
+		str(outcome.get("table", "")),
+	])
+	_open_id = -1
+	refresh()
 
 
 func _report_row(label_text: String, value_text: String) -> void:

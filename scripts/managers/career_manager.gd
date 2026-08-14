@@ -3,6 +3,7 @@ extends Node
 const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
 const Accommodation := preload("res://scripts/data/accommodation.gd")
 const FoodSupply := preload("res://scripts/data/food_supply.gd")
+const RecruitOffer := preload("res://scripts/data/recruit_offer.gd")
 const FoodBlock := preload("res://scripts/data/food_block.gd")
 const PasteRatioModel := preload("res://scripts/data/paste_ratio.gd")
 const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
@@ -741,6 +742,50 @@ func _apply_player_match_outcomes(won: bool) -> void:
 			manager.team.pair_familiarity, _played_together
 		)
 
+
+
+## Offer a place to a voli, and say what was offered.
+##
+## ## Why this is a function and not a button
+##
+## The board's route onto the roster used to be `sign_transfer` reached from the
+## transfers tab: one click, free, and the voli had no say and no bed checked.
+## Recruiting somebody here is asking them to join a household as well as a side,
+## so the thing that happens has to name the household.
+##
+## It returns the terms rather than storing them. Nothing reads a stored offer
+## yet, and a record nothing reads is `FAILURE_MODES.md` §0 at schema altitude --
+## so the room and the table are computed for the sentence the manager is told,
+## which is a read, and recomputed whenever anybody asks again.
+##
+## **This is the seam.** When the interview exists it wraps this call and charges
+## the manager's time for it; when a voli gets a say, the refusal happens here.
+## Neither needs the screen rebuilt, which is the whole reason the transaction is
+## one named function instead of a handler on a panel.
+func offer_place(player_id: int) -> Dictionary:
+	if career == null:
+		return {"error": "No active career."}
+	var team: Resource = _game_manager().team
+	var squad: Array = _game_manager().players
+	var room := RecruitOffer.proposed_room(
+		str(team.housing_structure), int(team.housing_occupants_per_room),
+		squad.size(), team.housing_small_equipment, team.housing_large_equipment,
+	)
+	var error := sign_transfer(player_id)
+	if not error.is_empty():
+		return {"error": error}
+	var signed := _game_manager().player_by_id(player_id) as VolleyballPlayer
+	var service: Dictionary = _week_service(
+		str(career.region), int(career.absolute_week)
+	)
+	return {
+		"error": "",
+		"name": str(signed.display_name) if signed != null else "",
+		"room": room,
+		"table": RecruitOffer.table_word(
+			Array(signed.palate_regions) if signed != null else [], service
+		),
+	}
 
 
 func sign_transfer(player_id: int) -> String:

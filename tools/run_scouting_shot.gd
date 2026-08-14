@@ -54,7 +54,18 @@ func _shoot() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("user://scouting_%s.png" % tag)
 		print("saved scouting_%s" % tag)
-		screen._open(int(players[0].id))
+		## **Opened off the board's own list rather than off the roster.** This
+		## shot used to open `players[0]`, which is somebody already asleep in the
+		## club's own Bunkhouse -- so the panel drew a report and never the half
+		## that says what joining would be, because you cannot offer a place to
+		## somebody who has one. The board prefers the transfer pool now and the
+		## probe has to ask the board.
+		var board: Array = screen._prospects()
+		if board.is_empty():
+			print("nobody on the board to open")
+			screen.queue_free()
+			continue
+		screen._open(int(board[0].id))
 		for _settle in range(4):
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png(
