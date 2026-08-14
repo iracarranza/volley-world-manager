@@ -2104,6 +2104,12 @@ func resolve(
 		set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			setter, bool(jump_set.jumping)
 		)
+		## Whether the ball went behind the setter. Orthogonal to the posture --
+		## a back set can be jumped, stood or bumped -- and published beside it so
+		## playback can draw the arch without re-deriving which way the setter was
+		## facing from a ball that has already left.
+		set_event.metadata["back_set"] = bool(set_geometry.back_set)
+		set_event.metadata["behind_meters"] = float(set_geometry.behind_meters)
 	if set_event != null and not home_transition_targets.is_empty():
 		set_event.metadata["home_phase_targets"] = home_transition_targets
 		set_event.metadata["home_phase_intents"] = home_transition_intents
@@ -3626,7 +3632,7 @@ func _resolve_opponent_transition(
 	var setter_arrival_margin := DEFAULT_SECOND_CONTACT_SECONDS - setter_move_time
 	var set_geometry := _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
-		Vector2(0.50, 0.48), Vector2(0.50, 0.48)
+		Vector2(0.50, 0.48), Vector2(0.50, 0.48), 1.0,
 	)
 	## The other side's off-ball five, while their pass is in the air. Attached to
 	## the SET event below for the same reason the home map is -- a leg's targets
@@ -3834,7 +3840,7 @@ func _resolve_opponent_transition(
 	var home_target: Vector2 = attack_choice.target
 	set_geometry = _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
-		opponent_contact, Vector2(0.50, 0.48)
+		opponent_contact, Vector2(0.50, 0.48), 1.0,
 	)
 	## The authoritative value, once the real hitter and contact point are known.
 	## This is the one that feeds the swing, and it kept the retired formula
@@ -3857,7 +3863,7 @@ func _resolve_opponent_transition(
 	## the opponent a set.
 	var resolved_set_geometry := _set_geometry(
 		opponent_setter, setter_start, opponent_setter_position,
-		opponent_contact, _opponent_setter_release_target(opponent_team),
+		opponent_contact, _opponent_setter_release_target(opponent_team), 1.0,
 	)
 	var opponent_set_height_extra := float(attack_choice.get(
 		"rescue_height_meters", 0.0
@@ -4007,6 +4013,12 @@ func _resolve_opponent_transition(
 			opponent_release_height
 		opponent_set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			opponent_setter, bool(opponent_jump_set.jumping)
+		)
+		opponent_set_event.metadata["back_set"] = bool(
+			resolved_set_geometry.back_set
+		)
+		opponent_set_event.metadata["behind_meters"] = float(
+			resolved_set_geometry.behind_meters
 		)
 		## Where they aimed, alongside where it went. The home set has published
 		## both since delivery was modelled and this side published neither,
@@ -5307,6 +5319,10 @@ func _resolve_home_continuation(
 		cont_set_event.metadata["set_posture"] = "jump" \
 			if bool(cont_jump_set.jumping) else "standing"
 		cont_set_event.metadata["set_posture_reason"] = str(cont_jump_set.reason)
+		cont_set_event.metadata["back_set"] = bool(cont_set_geometry.back_set)
+		cont_set_event.metadata["behind_meters"] = float(
+			cont_set_geometry.behind_meters
+		)
 		cont_set_event.metadata["set_release_height_meters"] = cont_release_height
 		cont_set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			setter, bool(cont_jump_set.jumping)
@@ -8151,12 +8167,30 @@ func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -
 	return Vector2(release_target.x, clampf(release_target.y + safety_offset, 0.55, 0.70))
 
 
+## How far along the net a delivery has to travel the wrong way before it is a
+## back set rather than a front set squared slightly off.
+##
+## Half a metre, which is inside a setter's own shoulder width and well below the
+## gap between the release seat and either antenna -- so the flag reports the
+## side of the body the ball left on, not the noise in where the setter happened
+## to stand.
+const BACK_SET_MIN_METERS: float = 0.50
+
+
 func _set_geometry(
 	setter: VolleyballPlayer,
 	setter_start: Vector2,
 	contact: Vector2,
 	target: Vector2,
 	release_target: Vector2,
+	## Which way along the net this setter squares up, as the sign of x.
+	##
+	## A setter faces their outside hitter and delivers everything else relative
+	## to that -- so "behind the setter" is a fact about the body, not about the
+	## court, and it cannot be read off the target alone. Home's outside is the
+	## Left Pin at low x, hence the default; the opponent attacks the other way
+	## down the same axis, so their own left is high x and they pass +1.
+	square_up_sign: float = -1.0,
 ) -> Dictionary:
 	var set_vector := Vector2((target.x - contact.x) * 9.0, (target.y - contact.y) * 18.0)
 	var arrival_vector := Vector2(
@@ -8190,11 +8224,17 @@ func _set_geometry(
 		+ tight_risk,
 		0.0, 0.28,
 	)
+	## Which side of the setter's own body the ball left on. Signed so that
+	## positive is *behind* them whichever way they square up, which is what makes
+	## this one flag work for both sides of the net.
+	var behind_meters := (target.x - contact.x) * 9.0 * -square_up_sign
 	return {
 		"distance_meters": distance_meters,
 		"angle_degrees": angle_degrees,
 		"release_distance_meters": release_distance,
 		"body_orientation_fit": orientation_fit,
+		"behind_meters": behind_meters,
+		"back_set": behind_meters > BACK_SET_MIN_METERS,
 		"set_balance": balance,
 		"set_stability": stability,
 		"net_distance_meters": net_distance_meters,

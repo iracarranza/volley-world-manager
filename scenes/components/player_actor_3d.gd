@@ -107,6 +107,17 @@ var look_yaw: float = 0.0
 var look_pitch: float = 0.0
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
+## Where each foot was set down, in world space, and whether it is down at all.
+## Index 0 is the left leg and 1 the right, matching `_PLANT_LEFT`/`_PLANT_RIGHT`.
+##
+## Only meaningful while the corresponding entry of `_plant_active` is true; a
+## foot that has left the floor has no anchor rather than a stale one.
+var _plant_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _plant_active: Array[bool] = [false, false]
+## Whether the stance foot is held. Public and settable only so a probe can
+## measure the same rig with and without it -- a claim about how much planting
+## improved the slip is worthless if the two numbers came from two builds.
+var foot_plant_enabled: bool = true
 ## Which way this voli is travelling relative to the way they are facing, in
 ## radians: 0 straight ahead, PI a backpedal, plus or minus a right angle a
 ## lateral shuffle.
@@ -152,6 +163,52 @@ const THIGH_SHARE: float = 0.54
 ## leaving it out put a reaching dig's feet 12 percent wider than the stance it
 ## was asked for.
 const SHOE_FORWARD_OFFSET: float = 0.06
+
+## The pitch the shoe mesh is authored at in `player_actor_3d.tscn`.
+##
+## Stated here because the ankle adds to it: the mesh is modelled lying down and
+## stood up by this rotation, so writing an ankle angle straight into
+## `rotation_degrees.x` would lay the shoe flat on the floor rather than
+## articulating it. Duplicating a scene value in code is a thing this repository
+## has been burned by, so if the scene changes this is the line that has to
+## change with it.
+const SHOE_BASE_PITCH_DEGREES: float = 90.0
+
+## Above this, a placement is the court re-seating a body rather than the body
+## travelling. Comfortably above a sprint -- see the note in
+## `set_tactical_position`.
+const TELEPORT_SPEED_MPS: float = 12.0
+const TELEPORT_METERS: float = 1.5
+
+## ## Planting the stance foot
+##
+## **The precondition was already met and nobody had noticed.** A gait driven by
+## time needs its feet solved against the ground, because cadence and ground
+## speed are independent and drift apart within a step. This one is driven by
+## *distance*: `stride_cycle` advances by `travelled / stride_length_m`, so the
+## phase of the foot and the displacement of the body are the same number twice
+## and the stance foot already sweeps backwards at roughly body speed. `stride`
+## being a per-voli attribute is what closes it -- a voli with a long stride
+## covers more ground per cycle *and* is told to, so the two agree per body
+## rather than on average.
+##
+## What is left is the residual: "roughly" is not "exactly", because the hip
+## amplitude and the leg length decide how far the foot actually travels in a
+## stance and nothing reconciles that with the stride length the cadence was
+## divided by. The residual is small, which is why this is a bounded correction
+## on one axis rather than a two-link IK solve. A full solve would also have to
+## fight every pose overlay in this file for control of the same joints, and
+## those overlays are the ones that make a dig read as a dig.
+##
+## Applied to the hip and given back at the ankle, so the shin swings under a
+## foot that stays where it was put and the sole stays flat while it does.
+const PLANT_CORRECTION_LIMIT_DEGREES: float = 14.0
+## Under 1 on purpose: this runs as a feedback loop against the pose it produced
+## last frame, and a gain of 1 on a loop with a frame of lag rings.
+const PLANT_CORRECTION_GAIN: float = 0.55
+
+const _PLANT_LEFT: int = 0
+const _PLANT_RIGHT: int = 1
 
 ## How much of the torso's height the shorts cover.
 ##
@@ -450,6 +507,44 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		## freezing mid-stride.
 		var frame_time := maxf(get_process_delta_time(), 0.0001)
 		var instant_speed := travelled / frame_time
+		## **A re-anchor is not a step.**
+		##
+		## `travelled` is raw displacement between two placements, and not every
+		## placement is motion: seeking the timeline, starting a rally and the
+		## court re-seating everyone between exchanges all move a body several
+		## metres in one frame. Fed to the gait as travel, that spins
+		## `stride_cycle` by the whole jump -- ten strides in a frame -- and hands
+		## the smoother a speed no human reaches.
+		##
+		## It has been invisible because the cycle is periodic and a random phase
+		## looks like any other phase. It stops being invisible the moment a foot
+		## is planted, because then the cycle carries a world position with it and
+		## a jumped phase is a foot that teleports out from under the body.
+		##
+		## **Two conditions, because either alone is wrong.**
+		##
+		## A speed bound on its own says nothing when the frame is short: at 240
+		## frames a second a genuine sprint and a re-anchor are both "fast", and a
+		## probe driving the rig as fast as it can hits that immediately. A
+		## distance bound on its own drifts with frame rate: a metre in a frame is
+		## a teleport at 60 and a slow jog at 4.
+		##
+		## Together they are unambiguous. 12 m/s is well past a sprint, 1.5 m is
+		## far more than anything covers in a frame at any rate this game runs at,
+		## and a placement that clears both is the court putting somebody down
+		## rather than somebody running.
+		if instant_speed > TELEPORT_SPEED_MPS \
+				and travelled > TELEPORT_METERS:
+			_plant_active[_PLANT_LEFT] = false
+			_plant_active[_PLANT_RIGHT] = false
+			ground_speed_mps = 0.0
+			has_world_position = true
+			tactical_position = position
+			## Still moved. Skipping this is a body that never arrives where it
+			## was put and reads the same jump again on the next frame, forever --
+			## which is what the first version of this guard did.
+			self.position = world_position
+			return
 		var smoothing := 0.45 if instant_speed > ground_speed_mps else 0.18
 		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
 		if travelled > 0.0001:
@@ -1851,6 +1946,70 @@ func _set_elbow(arm: Node3D, bend_degrees: float) -> void:
 		elbow.rotation_degrees = Vector3(bend_degrees, 0.0, 0.0)
 
 
+## The ankle, written onto the shoe mesh's own transform.
+##
+## The leg's counterpart to `_set_elbow`, and the reason the rig needs no new
+## node for a foot: `Knee/Shoe` is a `MeshInstance3D`, a `MeshInstance3D` is a
+## `Node3D`, and its transform was already in the scene holding a constant. What
+## was missing was somebody writing to it.
+##
+## Null-tolerant on the same principle as `_set_elbow`: a silhouette variant
+## that has no shoe should lose its ankle, not crash.
+func _set_ankle(leg: Node3D, ankle_degrees: float) -> void:
+	var shoe := leg.get_node_or_null("Knee/Shoe") as Node3D
+	if shoe != null:
+		shoe.rotation_degrees.x = SHOE_BASE_PITCH_DEGREES + ankle_degrees
+
+
+## How far this leg's hip has to give back, in degrees, to leave the foot where
+## it was set down. Zero when the foot is in the air, on the frame it lands, or
+## when there is no shoe to read.
+##
+## Measured *after* the gait has been written, because the question is where the
+## gait put the foot -- asking before would be asking about last frame's pose.
+## Only the fore-aft component is corrected: sideways slip on a shuffle is a
+## second problem with a second cause, and one axis solved is worth more than two
+## axes half-solved.
+func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> float:
+	var shoe := leg.get_node_or_null("Knee/Shoe") as Node3D
+	## A plant is a claim about world space, and an actor outside the tree has
+	## none -- `global_position` on a detached node returns identity and warns.
+	## Posing a detached rig is legitimate (the suite does it, and so does every
+	## preview sheet), so this is a case to sit out rather than to complain about.
+	if shoe == null or not in_stance or not is_inside_tree():
+		_plant_active[side] = false
+		return 0.0
+	var foot := shoe.global_position
+	if not _plant_active[side]:
+		## Touchdown. The anchor is wherever the gait just put this foot, so the
+		## correction starts from zero and the plant never snaps the leg to a
+		## position it did not choose.
+		_plant_active[side] = true
+		_plant_anchor[side] = foot
+		return 0.0
+	## Both in the body's own frame, because the body turns and a world-space
+	## delta would read a turn as a slip.
+	##
+	## Forward is -Z: a positive hip pitch swings the thigh about +X, which carries
+	## a leg hanging at -Y toward -Z, and the gait calls that same sign "thigh
+	## forward". So the forward displacement the foot still owes is the negated
+	## difference in Z.
+	var slip := -(to_local(_plant_anchor[side]).z - to_local(foot).z)
+	var span := (
+		leg_bone_lengths.x + leg_bone_lengths.y
+	) * leg_length_scale * body_height_scale
+	if span < 0.05:
+		return 0.0
+	## The chevron's own derivative, linearised: a metre of foot travel costs
+	## `1 / span` radians of hip. Clamped because a correction large enough to
+	## matter is a sign the anchor is stale, and holding a wrong foot down is
+	## worse than letting a right one slide.
+	return clampf(
+		rad_to_deg(slip / span) * PLANT_CORRECTION_GAIN,
+		-PLANT_CORRECTION_LIMIT_DEGREES, PLANT_CORRECTION_LIMIT_DEGREES,
+	)
+
+
 ## Pose this voli for one instant of one contact.
 ##
 ## **`phase` is signed, and contact is at 0.** It runs -1 at the start of the
@@ -1919,6 +2078,48 @@ func set_pose(
 	(right_leg.get_node("Knee") as Node3D).rotation_degrees = Vector3(
 		float(gait.right_knee_degrees), 0.0, 0.0
 	)
+	## **The ankle, which the rig has always had and never used.**
+	##
+	## `Shoe` is a `MeshInstance3D` under `Knee` carrying a constant `(90, 0, 0)`
+	## from the scene, so a foot rotated with whatever the leg above it was
+	## doing: the sole tipped through the floor at midstance and pointed at the
+	## sky through swing. Adding a joint was never necessary -- a
+	## `MeshInstance3D` is a `Node3D` and this transform was already there,
+	## holding still.
+	##
+	## `SHOE_BASE_PITCH_DEGREES` is that scene value and the gait's angle is
+	## added to it rather than replacing it, so the mesh keeps the orientation it
+	## was modelled in and only the ankle moves.
+	var left_ankle := float(gait.get("left_ankle_degrees", 0.0))
+	var right_ankle := float(gait.get("right_ankle_degrees", 0.0))
+	_set_ankle(left_leg, left_ankle)
+	_set_ankle(right_leg, right_ankle)
+	## **And then the foot stays where it was put.**
+	##
+	## Read after the gait is written and applied on top of it, so the stride is
+	## still the thing driving the leg and this only spends the difference between
+	## where the cycle put the foot and where the ground is. Each correction is
+	## added at the hip and subtracted at the ankle, which is what keeps the sole
+	## flat while the shin swings over it -- the same cancellation the gait does
+	## for the stance phase, extended to cover the correction.
+	##
+	## Scaled by `gait_blend`: standing still there is no stride to correct, and a
+	## stationary voli's feet are already where they were put.
+	var plant := clampf(gait_blend, 0.0, 1.0) if foot_plant_enabled else 0.0
+	if plant > 0.001:
+		var left_plant := _plant_correction(
+			left_leg, _PLANT_LEFT, bool(gait.get("left_in_stance", false))
+		) * plant
+		var right_plant := _plant_correction(
+			right_leg, _PLANT_RIGHT, bool(gait.get("right_in_stance", false))
+		) * plant
+		left_leg.rotation_degrees.x += left_plant
+		right_leg.rotation_degrees.x += right_plant
+		_set_ankle(left_leg, left_ankle - left_plant)
+		_set_ankle(right_leg, right_ankle - right_plant)
+	else:
+		_plant_active[_PLANT_LEFT] = false
+		_plant_active[_PLANT_RIGHT] = false
 	## The head keeps its own heading through a pose change. Everything else here
 	## is reset each frame; the look is not, because it is a decision about what
 	## the voli is watching rather than a property of the action they are in.
@@ -2113,7 +2314,8 @@ func set_pose(
 					== "under the hands":
 				set_posture = SetBiomechanicsScript.POSTURE_UNDERHAND
 			var push := SetBiomechanicsScript.resolve(
-				phase, -1.0 if dominant_hand == "Left" else 1.0, set_posture
+				phase, -1.0 if dominant_hand == "Left" else 1.0, set_posture,
+				bool(action_context.get("back_set", false)),
 			)
 			body_pivot.rotation.x = float(push.torso_pitch_radians)
 			## Only the rise. The dip comes free from the knee fold below, which

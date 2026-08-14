@@ -172,7 +172,44 @@ apart.
 
 ---
 
-## 6. Inherited probes, and what they are worth
+## 6. `foot_plant_probe` -- does the stance foot stay put
+
+**Asks:** while a foot is on the floor, how much of the body's travel does it
+copy? Summed over each contiguous stance phase and divided by the body travel
+over the same frames. 0 is planted, 1 is a foot moving with the hips.
+
+Runs the same actor twice per speed with `foot_plant_enabled` off and on, so the
+improvement is measured rather than claimed.
+
+| speed | plant off | plant on | stance phases |
+|---|---|---|---|
+| 1.1 m/s | 0.343 | **0.203** | 20 |
+| 2.8 m/s | 0.943 | **0.460** | 25 |
+| 5.2 m/s | 2.464 | **1.974** | 45 |
+
+**What this found:** the drawn foot sweeps roughly **2.7x further than the ground
+travels**, because `stride_cycle` divides by `stride_length_m` (0.55-1.15 m per
+*cycle*, so ~0.4 m per step) while the leg geometry -- 39 degrees of hip either
+side of vertical over a 0.9 m span -- sweeps about 1.1 m per stance. See
+`OUTSTANDING.md` §3.
+
+**Known limits:**
+
+- The first version divided per-frame foot displacement by per-frame body
+  displacement and reported a max of 150 off a walk. Headless, the denominator
+  is whatever the loop took, and two small numbers divided is not a measurement.
+  The aggregate replaced it for that reason.
+- The frame count had to go up before the walk row meant anything. At 180
+  frames a walk gave four stance phases and a median that moved from 0.82 to
+  2.33 between runs -- a slower gait covers less ground per frame, so it needs
+  *more* frames for the same number of steps. 900 gives twenty and a stable
+  figure.
+- Only the fore-aft axis is corrected and only that axis is measured against a
+  straight-line walk. A shuffle's lateral slip is untouched and unmeasured.
+
+---
+
+## 7. Inherited probes, and what they are worth
 
 - **`block_rate_probe`** -- stuff / involvement / touch. Baseline 2.56% /
   79.59% / 38.66%. The career is unseeded, so the roster differs between runs

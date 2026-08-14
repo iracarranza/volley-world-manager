@@ -245,10 +245,53 @@ symptom.
 
 ## §3 Poses
 
-- **Dig poses.** An underhand set with a pointed follow-through that goes
-  straight up out of the legs, and an overhead bump sending the ball backwards
-  with the follow-through up and over the head. Wanted **after** the
-  second-contact work in §4, because those are the contacts the poses are for.
+- ~~**Dig poses.**~~ Both landed. `SetBiomechanics.POSTURE_UNDERHAND` is the
+  pointed follow-through out of the legs, and setting backwards is an overlay
+  (`_arch`) rather than a fourth posture, because a jumping back set and a
+  standing back set differ exactly as their front counterparts do. Its selection
+  signal is `back_set` on the SET event, from `_set_geometry`: which side of the
+  setter's own body the ball left on, measured against the pin they square up
+  to. **387 of 1,366 second contacts (28.3%) go behind the setter**, and the
+  0.50 m threshold sits well inside the distribution it cuts -- p05 -5.48,
+  median -2.43, p95 +4.53, range -7.70 to +7.02.
+
+  One thing found while building it and worth repeating: the arch was first
+  opened on `GATHER_END..EXTEND_END`, which put it at **0.20 of itself on the
+  frame the ball leaves the hands**. A setter arches to get under a ball they
+  mean to send behind them, so the shape is finished before the contact rather
+  than built out of it. `tools/run_set_posture_shot.gd` now prints the joints at
+  contact for all three postures both ways, which is what caught it.
+
+### The stance foot skates, and the plant cannot close it alone
+
+`tools/foot_plant_probe.tscn` measures what the drawn shoe does while it is on
+the floor, summed over each stance phase and divided by the body travel over the
+same frames -- 0 is a planted foot, 1 is a foot moving with the hips.
+
+| speed | plant off | plant on | stance phases |
+|---|---|---|---|
+| 1.1 m/s | 0.343 | **0.203** | 20 |
+| 2.8 m/s | 0.943 | **0.460** | 25 |
+| 5.2 m/s | 2.464 | **1.974** | 45 |
+
+Planting helps everywhere and closes nothing. The reason is upstream of it and
+is arithmetic: `stride_cycle` advances by `travelled / stride_length_m` with
+`stride_length_m` at 0.55-1.15 m for a **whole cycle**, which is two steps -- so
+the model is told the body covers about 0.4 m per step. The legs disagree. At a
+run the hip swings 39 degrees either side of vertical over a leg span near 0.9 m,
+which sweeps the foot roughly 1.1 m per stance. The foot therefore travels about
+2.7x further than the ground it is supposed to be pushing against, and that
+ratio is what the table above is measuring.
+
+A 14-degree correction cannot absorb a 2.7x error and should not be widened
+until it can -- that would hide the cause in the symptom, which is §0 of
+`FAILURE_MODES.md` in its usual form. The fix is to decide what `stride_length_m`
+means and make one place own it: it is currently both the cadence divisor here
+and a factor of `maximum_speed` in `RallyMovementSystem.movement_profile`, where
+`speed = stride x cadence x mass`. Either the divisor is a *step* and wants
+doubling, or the gait's hip amplitude is what should be derived from the
+attribute rather than the cadence. **Both change every drawn gait in the game**,
+which is why this is written down instead of done.
 - **Verify the cocked elbow in match playback.** `ELBOW_COCK_DEGREES` is -98
   and reads correctly in the roster once the pose is turned to three-quarter.
   The match camera moves, so it may show the fold unaided -- worth judging

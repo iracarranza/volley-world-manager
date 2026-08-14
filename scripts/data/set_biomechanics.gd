@@ -173,6 +173,35 @@ const UNDERHAND_ELBOW_DEGREES: float = 3.0
 const UNDERHAND_KNEE_LOAD_DEGREES: float = -62.0
 const UNDERHAND_RISE_METRES: float = 0.17
 
+## ## Setting backwards
+##
+## A back set is the same three postures done to a ball the setter is not facing,
+## and it was drawn identically to a front set because playback faces the rig at
+## wherever the ball went -- so every setter on this branch has been squaring up
+## to the target and pushing, including the ones delivering behind their own
+## head. That is the one second-contact shape a viewer can name on sight, and it
+## was the one shape the model could not make.
+##
+## It is an overlay rather than a fourth posture, because it is not a fourth
+## action: a jumping back set and a standing back set differ exactly as a jumping
+## front set and a standing one do. What changes in all three is the same three
+## things, and they are the three a spectator actually reads:
+##
+##   * the trunk **arches**, chest to the ceiling, rather than travelling forward
+##   * the hands carry back **over** the head instead of finishing out in front
+##   * the stance stops driving forward -- weight goes onto the back foot, so the
+##     split closes and reverses rather than pushing through
+##
+## Applied on the delivery window and released on the recovery, so a setter
+## arches into the ball and comes back down out of it rather than standing bent
+## backwards for the rest of the rally.
+const BACK_SET_SHOULDER_CARRY_DEGREES: float = 26.0
+const BACK_SET_TORSO_ARCH_RADIANS: float = 0.22
+## Negative on purpose. A front set finishes over the lead foot; a back set
+## finishes over the trailing one, and a scale that only shrank the split would
+## draw the difference as "less of a stance" rather than as the other stance.
+const BACK_SET_HIP_SPLIT_SCALE: float = -0.40
+
 
 ## Every joint of a set at one instant.
 ##
@@ -182,11 +211,17 @@ const UNDERHAND_RISE_METRES: float = 0.17
 ## `posture` selects between the three actions above. It defaults to standing so
 ## every existing caller is unchanged, and the simulator already publishes the
 ## value on the SET event as `set_posture`.
+##
+## `back_set` is orthogonal to `posture` and is applied to all three -- see the
+## note above `BACK_SET_SHOULDER_CARRY_DEGREES`.
 static func resolve(
-	phase: float, hand: float = 1.0, posture: StringName = POSTURE_STANDING
+	phase: float,
+	hand: float = 1.0,
+	posture: StringName = POSTURE_STANDING,
+	back_set: bool = false,
 ) -> Dictionary:
 	if posture == POSTURE_UNDERHAND:
-		return _underhand(phase, hand)
+		return _arch(_underhand(phase, hand), _arch_weight(phase), back_set)
 	var p := clampf(phase, -1.0, 1.0)
 	var gather := window(p, GATHER_START, GATHER_END)
 	## Runs *through* contact rather than up to it. This is the correction the
@@ -243,7 +278,7 @@ static func resolve(
 		## down through the follow-through.
 		rise = JUMP_RISE_METRES * sin(clampf(airborne, 0.0, 1.0) * PI)
 		shoulder += JUMP_SHOULDER_BONUS_DEGREES * push
-		return {
+		return _arch({
 			"shoulder_degrees": shoulder,
 			"elbow_degrees": elbow,
 			"flare_degrees": flare,
@@ -254,8 +289,8 @@ static func resolve(
 			"hip_split_degrees": lerpf(HIP_SPLIT_DEGREES * hand, 0.0, leave),
 			"rise_metres": rise,
 			"posture": POSTURE_JUMP,
-		}
-	return {
+		}, _arch_weight(phase), back_set)
+	return _arch({
 		"shoulder_degrees": shoulder,
 		"elbow_degrees": elbow,
 		"flare_degrees": flare,
@@ -264,7 +299,44 @@ static func resolve(
 		"hip_split_degrees": HIP_SPLIT_DEGREES * hand,
 		"rise_metres": rise,
 		"posture": POSTURE_STANDING,
-	}
+	}, _arch_weight(phase), back_set)
+
+
+## How much of the backwards arch is in effect at this instant.
+##
+## Complete **at contact** and released on the recovery.
+##
+## Keyed to the gather rather than to the push, which is the correction this
+## comment exists for: opened on `GATHER_END..EXTEND_END` the arch stood at 0.20
+## of itself on the frame the ball left the hands, so the pose a viewer actually
+## sees was a fifth of the pose that was written. A setter arches to get *under*
+## a ball they intend to send behind them -- the shape is finished before the
+## contact, not built out of it.
+static func _arch_weight(phase: float) -> float:
+	var p := clampf(phase, -1.0, 1.0)
+	return window(p, GATHER_START, 0.0) \
+		* (1.0 - window(p, EXTEND_END, RECOVER_END))
+
+
+## Bend a front set backwards.
+##
+## Written as a mutation of a finished solve rather than as a branch inside each
+## one, because the alternative is three near-identical chains of lerps and this
+## file already has three. `back_set` is always published, false included, so a
+## consumer reading the key cannot silently get `null` from the postures that
+## were never asked.
+static func _arch(
+	joints: Dictionary, weight: float, back_set: bool
+) -> Dictionary:
+	var applied := weight if back_set else 0.0
+	joints["shoulder_degrees"] = float(joints.shoulder_degrees) \
+		+ BACK_SET_SHOULDER_CARRY_DEGREES * applied
+	joints["torso_pitch_radians"] = float(joints.torso_pitch_radians) \
+		+ BACK_SET_TORSO_ARCH_RADIANS * applied
+	joints["hip_split_degrees"] = float(joints.hip_split_degrees) \
+		* lerpf(1.0, BACK_SET_HIP_SPLIT_SCALE, applied)
+	joints["back_set"] = back_set
+	return joints
 
 
 ## The ball that never got to hand height.

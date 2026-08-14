@@ -108,6 +108,15 @@ const RUN_ELBOW_DEGREES: float = 82.0
 const WALK_TORSO_RADIANS: float = -0.025
 const RUN_TORSO_RADIANS: float = -0.16
 
+## How much of the leg's angle the ankle gives back during swing.
+##
+## In stance the sole is held flat -- the ankle cancels hip and knee exactly,
+## because a planted foot does not rotate with the leg above it. In swing there
+## is nothing to hold it against, so it relaxes toward the shin and the toe
+## drops. Full relaxation would point the toe straight down like a dancer;
+## a little over half is a walker.
+const SWING_ANKLE_RELAX: float = 0.55
+
 ## How far the hips travel vertically over the stride, in metres.
 const WALK_BOB_METERS: float = 0.028
 const RUN_BOB_METERS: float = 0.082
@@ -298,6 +307,18 @@ static func resolve(
 		"right_knee_degrees": lerpf(floor_knee, right.y, gait_blend),
 		"left_hip_degrees": lerpf(floor_hip, left.x, gait_blend),
 		"left_knee_degrees": lerpf(floor_knee, left.y, gait_blend),
+		## The ankles fade out with the rest of the gait: a voli standing still
+		## has their feet flat because the sole and the floor are already
+		## parallel, and blending toward zero is what says so.
+		"right_ankle_degrees": lerpf(0.0, right.z, gait_blend),
+		"left_ankle_degrees": lerpf(0.0, left.z, gait_blend),
+		## Which foot is down. `fposmod(cycle, 1.0) < stance_share` for the right
+		## and the half-stride offset for the left -- recomputed here rather than
+		## carried through the Vector3, because a bool in a float is the kind of
+		## packing that ends up being read as a number.
+		"right_in_stance": fposmod(cycle, 1.0) < stance_share,
+		"left_in_stance": fposmod(cycle + 0.5, 1.0) < stance_share,
+		"stance_share": stance_share,
 		## Negated against the same side's hip: that is the counter-swing. Both
 		## arms rest at the same carriage, which is what makes the stance a stance
 		## rather than a stride caught mid-swing.
@@ -336,7 +357,7 @@ static func _leg(
 	hip_amplitude: float,
 	stance_knee: float,
 	swing_knee: float,
-) -> Vector2:
+) -> Vector3:
 	var share := clampf(stance_share, 0.05, 0.95)
 	var in_stance := leg_phase < share
 	## Remapped so stance always fills the first half and swing the second,
@@ -360,7 +381,27 @@ static func _leg(
 		knee = swing_knee * sin(
 			pow(smoothstep(0.0, 1.0, progress), SWING_PEAK_SKEW) * PI
 		)
-	return Vector2(hip, knee)
+	## **Which foot is on the floor**, returned rather than discarded.
+	##
+	## This was computed on the first line of this function and thrown away with
+	## the rest of the local scope, so nothing outside could tell a planted foot
+	## from a swinging one -- and a foot that cannot be told apart is a foot that
+	## cannot be planted. It is the whole precondition for procedural placement
+	## and it has been sitting here since the model was written.
+	##
+	## Packed into the existing return rather than given a dictionary: this
+	## function is called twice per voli per frame and the two callers both want
+	## three floats.
+	##
+	## The ankle comes with it. A shoe that keeps its constant rotation while the
+	## shin swings is a foot that points wherever the leg happens to aim, and the
+	## thing that reads as a foot is the sole staying parallel to the floor
+	## through stance. Cancelling hip and knee does exactly that, and in swing it
+	## relaxes toward the shin so the toe drops the way a real one does.
+	var ankle := -(hip + knee)
+	if not in_stance:
+		ankle *= SWING_ANKLE_RELAX
+	return Vector3(hip, knee, ankle)
 
 
 ## What to call this speed, so a diagnostic can say "run" instead of printing a

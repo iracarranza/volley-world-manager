@@ -48,6 +48,12 @@ func _probe() -> void:
 	var drift_by_distance := {"short (<3m)": [], "mid (3-6m)": [], "long (>6m)": []}
 	var distances: Array[float] = []
 	var postures := {}
+	## How many second contacts went behind the setter, and how far behind. Both,
+	## rather than only the flag: a count on its own cannot tell "back sets are
+	## rare" from "the threshold sits outside its own distribution", which is the
+	## mistake this branch keeps making.
+	var back_sets := 0
+	var behind: Array[float] = []
 	var release: Array[float] = []
 	var margins: Array[float] = []
 	var serve_apex: Array[float] = []
@@ -109,6 +115,11 @@ func _probe() -> void:
 						str(event.metadata.get("set_posture_reason", "?")),
 					]
 					postures[posture] = int(postures.get(posture, 0)) + 1
+					if event.metadata.has("behind_meters"):
+						behind.append(float(event.metadata["behind_meters"]))
+						back_sets += int(bool(
+							event.metadata.get("back_set", false)
+						))
 					if event.metadata.has("arrival_margin"):
 						margins.append(float(event.metadata["arrival_margin"]))
 					if event.metadata.has("set_release_height_meters"):
@@ -158,6 +169,12 @@ func _probe() -> void:
 	posture_keys.sort()
 	for key in posture_keys:
 		print("  %-34s %d" % [key, int(postures[key])])
+	print("=== behind the setter, in metres along the net")
+	print("  back sets: %d of %d (%.1f%%)" % [
+		back_sets, behind.size(),
+		100.0 * float(back_sets) / maxf(float(behind.size()), 1.0),
+	])
+	_report("behind the setter", behind)
 	_report("release height (m)", release)
 	## What the jump-set decision is actually gated on. If this sits below
 	## JUMP_SET_LOAD_SECONDS for most of the population then the posture is

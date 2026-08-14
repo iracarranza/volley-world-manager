@@ -700,6 +700,10 @@ func _action_context(event: RallyEvent, actor_id: int) -> Dictionary:
 		context["set_posture_reason"] = str(
 			event.metadata.get("set_posture_reason", "")
 		)
+		## Which side of the setter the ball left on. Playback cannot recover
+		## this on its own: it faces the rig at wherever the ball went, so from
+		## here a back set and a front set are the same picture.
+		context["back_set"] = bool(event.metadata.get("back_set", false))
 	var signature_actor := int(event.metadata.get("signature_actor_id", event.actor_id))
 	if signature_actor == actor_id:
 		var move := str(event.metadata.get("signature_move", ""))
