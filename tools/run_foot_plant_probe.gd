@@ -30,11 +30,18 @@ const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 
 const SPEEDS: Array[float] = [1.1, 2.8, 5.2]
+const DIRECTIONS: Array[Dictionary] = [
+	{"name": "forward", "world": Vector3(0.0, 0.0, -1.0)},
+	{"name": "lateral", "world": Vector3(1.0, 0.0, 0.0)},
+	{"name": "backpedal", "world": Vector3(0.0, 0.0, 1.0)},
+]
 ## Long enough for a stable median at every speed above. 180 gave four stance
 ## phases at a walk and a median that moved from 0.82 to 2.33 between runs, which
 ## is not a measurement -- a walk covers less ground per frame, so it needs more
 ## frames for the same number of steps, not fewer.
 const FRAMES: int = 900
+var _last_max_pitch_correction: float = 0.0
+var _last_max_roll_correction: float = 0.0
 ## **Driven at the frame rate the engine is actually running at**, not at a fixed
 ## step. The actor derives its own speed from displacement over
 ## `get_process_delta_time()`, so a step chosen independently of that clock draws
@@ -45,30 +52,59 @@ const FRAMES: int = 900
 
 func _ready() -> void:
 	await get_tree().process_frame
+	var selected_direction := ""
+	var selected_speed := -1.0
+	var frame_count := FRAMES
+	## A full direction matrix is deliberately long. These selectors keep the
+	## same drawn-process measurement useful while tuning one failure instead of
+	## replacing it with a shorter, differently-clocked micro-probe.
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--direction="):
+			selected_direction = argument.trim_prefix("--direction=")
+		elif argument.begins_with("--speed="):
+			selected_speed = argument.trim_prefix("--speed=").to_float()
+		elif argument.begins_with("--frames="):
+			frame_count = maxi(argument.trim_prefix("--frames=").to_int(), 60)
 	print("=== stance-foot slip, as a fraction of body travel over the stance")
-	print("%8s %8s %8s %8s %8s %8s" % [
-		"speed", "plant", "steps", "median", "p95", "max",
+	print("%10s %8s %8s %8s %8s %8s %8s %8s %8s" % [
+		"direction", "speed", "plant", "steps", "median", "p95", "max",
+		"hip_d", "roll_d",
 	])
-	for speed in SPEEDS:
-		for planted in [false, true]:
-			var slips := await _walk(speed, planted)
-			slips.sort()
-			if slips.is_empty():
-				print("%8.1f %8s  no stance phases -- the gait never put a foot down"
-					% [speed, "on" if planted else "off"])
+	for direction in DIRECTIONS:
+		if not selected_direction.is_empty() \
+				and str(direction.name) != selected_direction:
+			continue
+		for speed in SPEEDS:
+			if selected_speed >= 0.0 \
+					and not is_equal_approx(speed, selected_speed):
 				continue
-			print("%8.1f %8s %8d %8.3f %8.3f %8.3f" % [
-				speed, "on" if planted else "off", slips.size(),
-				slips[slips.size() / 2],
-				slips[mini(int(float(slips.size()) * 0.95), slips.size() - 1)],
-				slips[-1],
-			])
+			for planted in [false, true]:
+				var slips := await _walk(
+					speed, planted, Vector3(direction.world), frame_count
+				)
+				slips.sort()
+				if slips.is_empty():
+					print("%10s %8.1f %8s  no stance phases -- the gait never put a foot down"
+						% [direction.name, speed, "on" if planted else "off"])
+					continue
+				print("%10s %8.1f %8s %8d %8.3f %8.3f %8.3f %8.1f %8.1f" % [
+					direction.name, speed, "on" if planted else "off", slips.size(),
+					slips[slips.size() / 2],
+					slips[mini(int(float(slips.size()) * 0.95), slips.size() - 1)],
+					slips[-1],
+					_last_max_pitch_correction, _last_max_roll_correction,
+				])
 	print("--- 0.000 is a planted foot; 1.000 is a foot travelling with the hips")
 	get_tree().quit()
 
 
 ## Walk one actor in a straight line and watch its shoes.
-func _walk(speed_mps: float, planted: bool) -> Array[float]:
+func _walk(
+	speed_mps: float,
+	planted: bool,
+	world_direction: Vector3,
+	frame_count: int = FRAMES,
+) -> Array[float]:
 	var stage := Node3D.new()
 	get_tree().root.add_child(stage)
 	var actor: Node3D = ACTOR.instantiate()
@@ -83,15 +119,17 @@ func _walk(speed_mps: float, planted: bool) -> Array[float]:
 	## running totals for the stance phase currently underway.
 	var previous := {}
 	var travelled := 0.0
+	var max_pitch_correction := 0.0
+	var max_roll_correction := 0.0
 	## One frame to settle: the first placement is an arrival rather than a step,
 	## and the actor treats it as one.
 	actor.set_tactical_position(Vector2.ZERO, Vector3.ZERO)
 	await get_tree().process_frame
-	for _frame in range(FRAMES):
+	for _frame in range(frame_count):
 		var step := speed_mps * maxf(get_process_delta_time(), 0.0001)
 		travelled += step
 		actor.set_tactical_position(
-			Vector2.ZERO, Vector3(0.0, 0.0, -travelled)
+			Vector2.ZERO, world_direction * travelled
 		)
 		## The branch every off-ball voli is in, which is the branch the plant
 		## lives in. Posing through `set_pose` rather than reading the gait
@@ -103,6 +141,14 @@ func _walk(speed_mps: float, planted: bool) -> Array[float]:
 		var gait := GaitBiomechanics.resolve(
 			actor.stride_cycle, actor.ground_speed_mps, actor.travel_heading_offset
 		)
+		max_pitch_correction = maxf(max_pitch_correction, maxf(
+			absf(actor.left_leg.rotation_degrees.x - float(gait.left_hip_degrees)),
+			absf(actor.right_leg.rotation_degrees.x - float(gait.right_hip_degrees)),
+		))
+		max_roll_correction = maxf(max_roll_correction, maxf(
+			absf(actor.left_leg.rotation_degrees.z + float(gait.abduction_degrees)),
+			absf(actor.right_leg.rotation_degrees.z - float(gait.abduction_degrees)),
+		))
 		for side in ["Left", "Right"]:
 			var shoe := actor.get_node_or_null(
 				"BodyPivot/%sLeg/Knee/Shoe" % side
@@ -136,4 +182,6 @@ func _walk(speed_mps: float, planted: bool) -> Array[float]:
 		await get_tree().process_frame
 	stage.queue_free()
 	await get_tree().process_frame
+	_last_max_pitch_correction = max_pitch_correction
+	_last_max_roll_correction = max_roll_correction
 	return slips

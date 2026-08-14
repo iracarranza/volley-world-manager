@@ -10,6 +10,13 @@ const CourtConstants := preload("res://scripts/data/court_constants.gd")
 const BODY_BEHIND_CONTACT_WINGSPAN_SHARE: float = 0.28
 const BODY_BEHIND_CONTACT_MIN_METERS: float = 0.42
 const BODY_BEHIND_CONTACT_MAX_METERS: float = 0.66
+## A swing is contacted above the striking shoulder, not on the body's centre
+## line. Keeping x identical put the ball between the hands and could make a
+## dominant-hand swing visibly meet the off hand. This is the lateral shoulder /
+## reach share the body gives the ball, bounded for extreme wingspans.
+const BODY_BESIDE_CONTACT_WINGSPAN_SHARE: float = 0.105
+const BODY_BESIDE_CONTACT_MIN_METERS: float = 0.16
+const BODY_BESIDE_CONTACT_MAX_METERS: float = 0.26
 
 ## Residual path-reading error after the hitter has observed the release. These
 ## are metres on the court, not normalized coordinates. The setter's actual
@@ -46,8 +53,18 @@ static func body_position(
 		BODY_BEHIND_CONTACT_MIN_METERS, BODY_BEHIND_CONTACT_MAX_METERS,
 	)
 	var direction := 1.0 if attacking_negative_y else -1.0
+	var lateral_reach := clampf(
+		wingspan_m * BODY_BESIDE_CONTACT_WINGSPAN_SHARE,
+		BODY_BESIDE_CONTACT_MIN_METERS, BODY_BESIDE_CONTACT_MAX_METERS,
+	)
+	## Local right points toward +x for a home hitter facing -y and toward -x
+	## for an opponent hitter facing +y. A left hand mirrors it.
+	var local_right_world_x := 1.0 if attacking_negative_y else -1.0
+	var striking_side := -1.0 \
+		if hitter != null and str(hitter.dominant_hand) == "Left" else 1.0
 	var body := Vector2(
-		ball_contact.x,
+		ball_contact.x - local_right_world_x * striking_side \
+			* lateral_reach / CourtConstants.COURT_WIDTH_METERS,
 		ball_contact.y + direction * behind / CourtConstants.COURT_LENGTH_METERS,
 	)
 	## A legal ball can be extremely tight; a torso cannot occupy the tape.

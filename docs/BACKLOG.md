@@ -142,23 +142,23 @@ Ordered roughly by how much each one changes what a viewer believes.
    not. Different renderer, different path; 3D measures clean at one 0.22 m step
    in eight rallies.
 10. **A tactical-planner freeze** when setting a defensive radius for the libero.
-    Not reproduced headlessly. Two provable defects on that path were hardened --
-    a popup placement whose `clampf` bounds invert when the panel is wider than
-    the court view, and a section title indexed by an `OptionButton` selection of
-    -1 -- and neither is confirmed as the cause.
+	Not reproduced headlessly. Two provable defects on that path were hardened --
+	a popup placement whose `clampf` bounds invert when the panel is wider than
+	the court view, and a section title indexed by an `OptionButton` selection of
+	-1 -- and neither is confirmed as the cause.
 
 11. **Done, and it was two faults.** ~~A defender takes two or three sets of
-    small steps into a dig~~ -- the count was windows, not steps, and entry 12
-    removed the windows. The pose half is landed too: `reach_margin_meters`
-    reached event metadata on one path only, 50 of 464 floor contacts, so the
-    `reaching` pose looked unreachable when its *input* was missing on nine
-    contacts in ten. Coverage is 447 of 464 now. With the number visible the
-    real fault showed: `reaching` fires on a **negative** margin, a ball outside
-    the range, which is a ball nobody got -- 26.0% of contacts, matching the
-    share of margins below zero to a tenth. Full stretch, 0 to 0.5 m and 7.4% of
-    contacts, is drawn reaching now, widened in playback rather than in the
-    classifier because `posture` feeds `_contact_recovery_state` and moving the
-    resolver's band would move outcomes to fix a drawing.
+	small steps into a dig~~ -- the count was windows, not steps, and entry 12
+	removed the windows. The pose half is landed too: `reach_margin_meters`
+	reached event metadata on one path only, 50 of 464 floor contacts, so the
+	`reaching` pose looked unreachable when its *input* was missing on nine
+	contacts in ten. Coverage is 447 of 464 now. With the number visible the
+	real fault showed: `reaching` fires on a **negative** margin, a ball outside
+	the range, which is a ball nobody got -- 26.0% of contacts, matching the
+	share of margins below zero to a tenth. Full stretch, 0 to 0.5 m and 7.4% of
+	contacts, is drawn reaching now, widened in playback rather than in the
+	classifier because `posture` feeds `_contact_recovery_state` and moving the
+	resolver's band would move outcomes to fix a drawing.
 
     **Still open from this:** the turn, entry 13, which was never about steps.
 
@@ -180,51 +180,51 @@ Ordered roughly by how much each one changes what a viewer believes.
     it is a reach** -- one plant and an extension -- and the rig already draws
     it:
     `posture` has a `reaching` branch with its own platform yaw, roll and stance
-    width. It is simply never selected. The simulator's own comment records the
-    measurement: `reaching` fires on **0.0% of receptions** and `off-axis` on
-    2.5% of digs, which is why `PlatformAim.posture_for` exists at all as a
-    second, purely geometric opinion. So this is the §0 shape again -- a pose
-    built, measured as unreachable, and left in place with a knob that cannot
-    select it.
+	width. It is simply never selected. The simulator's own comment records the
+	measurement: `reaching` fires on **0.0% of receptions** and `off-axis` on
+	2.5% of digs, which is why `PlatformAim.posture_for` exists at all as a
+	second, purely geometric opinion. So this is the §0 shape again -- a pose
+	built, measured as unreachable, and left in place with a knob that cannot
+	select it.
 
-    The far cause is why there is *time* for two or three adjustments at all. See
-    the next entry: the defender is not moving quickly, the window is too long.
+	The far cause is why there is *time* for two or three adjustments at all. See
+	the next entry: the defender is not moving quickly, the window is too long.
 
 12. **Done.** ~~The ball freezes on the floor~~ -- measured at 58.8 s over 200
-    rallies, 6.0% of playback, and *every second of it* was a BLOCK the ball
-    flew past. One culprit, not a distribution. It was a double-count: the
-    attack's flight is drawn for its physics duration and already carries the
-    ball to its landing, and the failed block's window then redrew the same
-    interval with the ball parked there. A window is flight then aftermath and
-    only the second part is the event's to draw. After: 0.0 s -- not reduced,
-    gone, because the overlap was total. The trap was the defence's approach,
-    which was being drawn in the very window now charged to zero; the flight
-    aims its movement plan at the first contact that actually played the ball.
+	rallies, 6.0% of playback, and *every second of it* was a BLOCK the ball
+	flew past. One culprit, not a distribution. It was a double-count: the
+	attack's flight is drawn for its physics duration and already carries the
+	ball to its landing, and the failed block's window then redrew the same
+	interval with the ball parked there. A window is flight then aftermath and
+	only the second part is the event's to draw. After: 0.0 s -- not reduced,
+	gone, because the overlap was total. The trap was the defence's approach,
+	which was being drawn in the very window now charged to zero; the flight
+	aims its movement plan at the first contact that actually played the ball.
 
-    The original entry:
+	The original entry:
 
-    The ball freezes on the floor, and it is the same defect as the frozen
-    window from the top of this list wearing different clothes. A drawn leg's
-    duration is the interval between two events, but the ball's flight to its
-    landing takes whatever physics says it takes. When the flight is the shorter
-    of the two -- a ball nobody reached, a failed dig, the end of a rally -- the
-    ball arrives and then sits there for the remainder while the bodies keep
-    moving around it.
+	The ball freezes on the floor, and it is the same defect as the frozen
+	window from the top of this list wearing different clothes. A drawn leg's
+	duration is the interval between two events, but the ball's flight to its
+	landing takes whatever physics says it takes. When the flight is the shorter
+	of the two -- a ball nobody reached, a failed dig, the end of a rally -- the
+	ball arrives and then sits there for the remainder while the bodies keep
+	moving around it.
 
-    The fix is not to stretch the flight. It is that **the window has two parts**:
-    the flight, whose length comes from `BallFlightModel`, and the aftermath,
-    whose length is what is left over and in which the ball is dead and the
-    bodies are settling. Playback currently draws one part and calls it the whole
-    window. Everything that looks like "the voli had suspiciously long to do
-    that" is downstream of this.
+	The fix is not to stretch the flight. It is that **the window has two parts**:
+	the flight, whose length comes from `BallFlightModel`, and the aftermath,
+	whose length is what is left over and in which the ball is dead and the
+	bodies are settling. Playback currently draws one part and calls it the whole
+	window. Everything that looks like "the voli had suspiciously long to do
+	that" is downstream of this.
 
 13a. **A failed dig is drawn as a contact that failed.** The caption reads
-    *"Wonsik cannot reach the short court attack after moving 1.2m"* -- a ball
-    nobody touched -- while playback draws the platform pose. A viewer cannot
-    tell whether the defender missed the ball or shanked it, and those are
-    different events. The pose selector reads `contact_posture`, which every
-    contact carries whether or not it was made; nothing asks `event.success`
-    first. Related to entry 11's finding that `reaching` is reserved for
+	*"Wonsik cannot reach the short court attack after moving 1.2m"* -- a ball
+	nobody touched -- while playback draws the platform pose. A viewer cannot
+	tell whether the defender missed the ball or shanked it, and those are
+	different events. The pose selector reads `contact_posture`, which every
+	contact carries whether or not it was made; nothing asks `event.success`
+	first. Related to entry 11's finding that `reaching` is reserved for
     negative margins, which are exactly these unreachable balls.
 
 13b. **A defender contacts a short-court ball without moving, and the ball
@@ -240,18 +240,18 @@ Ordered roughly by how much each one changes what a viewer believes.
     other half is the principle behind the report and it is a better rule than
     the one playback has: **the rally is over when the ball is down, not when
     the event list runs out.** Today the last leg is a fixed 0.38 s outro; it
-    should be the ball's own remaining flight, and if nobody is moving that is
-    fine, because the ball is the thing being watched.
+	should be the ball's own remaining flight, and if nobody is moving that is
+	fine, because the ball is the thing being watched.
 
-    What it needs that does not exist: the ball's *live* height at the end of a
+	What it needs that does not exist: the ball's *live* height at the end of a
     leg. Every drawn flight knows its endpoints, but nothing asks whether the
-    last one finished on the floor or in somebody's hands, so there is no way
-    today to tell a rally that has landed from one that is still falling.
-    Measured once, and the instrument was wrong. `run_final_ball_probe.gd` says
-    the rally's final contact carries a flight on **0.0% of 400 rallies** --
+	last one finished on the floor or in somebody's hands, so there is no way
+	today to tell a rally that has landed from one that is still falling.
+	Measured once, and the instrument was wrong. `run_final_ball_probe.gd` says
+	the rally's final contact carries a flight on **0.0% of 400 rallies** --
     universal, so every rally does end on a window whose length is the outro
-    rather than the ball's. But "the last event has no flight" is not "the ball
-    is in the air": on a kill the attack's flight already ran to the floor and
+	rather than the ball's. But "the last event has no flight" is not "the ball
+	is in the air": on a kill the attack's flight already ran to the floor and
     the trailing failed dig is a correct beat over a dead ball. The probe cannot
     separate those.
 
@@ -286,19 +286,19 @@ Ordered roughly by how much each one changes what a viewer believes.
     So this is a simulation feature, not a drawing one, and it is bigger than it
     looks from the outside. It needs three decisions that do not exist: whether a
     landing outside the court is reachable *at all* by the defender nearest it,
-    who goes (the chase is one player's, and the cover behind them changes), and
-    what a ball played from off-court does next -- it has to come back over the
-    net from a position no lane or set target is defined for. Each of those moves
-    rally outcomes, so each wants measuring rather than asserting.
+	who goes (the chase is one player's, and the cover behind them changes), and
+	what a ball played from off-court does next -- it has to come back over the
+	net from a position no lane or set target is defined for. Each of those moves
+	rally outcomes, so each wants measuring rather than asserting.
 
-    Its dependency on 13f is now satisfied: the outro lasts as long as the ball
-    is up, so a chase would have time to be drawn in.
+	Its dependency on 13f is now satisfied: the outro lasts as long as the ball
+	is up, so a chase would have time to be drawn in.
 
 13d. **A net touch by a player.** Not the ball clipping the tape -- a body or a
-    hand touching the net, which is a fault and one of the few in the sport a
-    viewer can see happen. Nothing in the engine models where a player's hands
-    are relative to the tape after a jump, so this needs the blocker's and
-    hitter's extension in world space, which the rig has and the simulation does
+	hand touching the net, which is a fault and one of the few in the sport a
+	viewer can see happen. Nothing in the engine models where a player's hands
+	are relative to the tape after a jump, so this needs the blocker's and
+	hitter's extension in world space, which the rig has and the simulation does
     not. Worth doing after collision, which needs the same bodies-in-space
     question answered.
 
@@ -307,8 +307,8 @@ Ordered roughly by how much each one changes what a viewer believes.
     off-axis over 447 contacts) and still not legible, which makes it an
     amplitude and silhouette problem rather than a rarity one. Plus expressive
     gestures: a hand raised to call for the ball, setters and middles pointing
-    at targets, and the blocker's idle hands-up, which is the one to build
-    first because it covers two players for most of every rally.
+	at targets, and the blocker's idle hands-up, which is the one to build
+	first because it covers two players for most of every rally.
 
 13c. **A blocker hangs in the air.** The block's descent is drawn over a window
     that outlasts the jump. Distinct from the block-timing work already landed:
@@ -339,11 +339,11 @@ Ordered roughly by how much each one changes what a viewer believes.
     passed over.
 
     The staging itself is correct and should stay: `_transition_phase_map` puts
-    all three front-row volis on their marks during the set's flight, which is
-    what a real offence does. What is missing is the window after.
+	all three front-row volis on their marks during the set's flight, which is
+	what a real offence does. What is missing is the window after.
 
-    **Not fixable from playback, and the near miss is worth writing down.** The
-    tempting one-liner is to drop `_apply_base_positions`' rule that the side
+	**Not fixable from playback, and the near miss is worth writing down.** The
+	tempting one-liner is to drop `_apply_base_positions`' rule that the side
     about to play the ball is busy, so these volis reset like everybody else.
     That rule is load-bearing: it and the one-window memory beside it are what
     closed the 131-reversal thrash measured earlier in this same document, and
@@ -353,30 +353,30 @@ Ordered roughly by how much each one changes what a viewer believes.
     voli and a blocker-in-waiting position for the rest.
 
 15. **Reception geometry is centred on the body, not on the platform.** The serve
-    is drawn entering the receiver's head and the dig then resolves as an
-    off-axis contact to the left -- so the ball's arrival point and the
-    receiver's own contact point are two different places, and a viewer sees the
-    ball go through a torso. Positioning and reach should be measured from where
-    the platform is, not from where the sternum is. `PlatformAim` already knows
-    the platform's yaw and residual, so the offset is derivable and simply is
+	is drawn entering the receiver's head and the dig then resolves as an
+	off-axis contact to the left -- so the ball's arrival point and the
+	receiver's own contact point are two different places, and a viewer sees the
+	ball go through a torso. Positioning and reach should be measured from where
+	the platform is, not from where the sternum is. `PlatformAim` already knows
+	the platform's yaw and residual, so the offset is derivable and simply is
     not applied to placement.
 
     **Measured, not yet built, and the measurement is the reason to be careful.**
     `run_platform_offset_probe.gd` poses a real actor in a real planted dig and
-    reads where the forearms land, rather than recomputing the pose's three
-    nested bases out of band. Across the six modelled silhouettes at 1.72, 1.88
-    and 2.06 m the platform sits **0.82 to 1.03 m ahead of the body origin, mean
-    0.88, spread 20 cm**.
+	reads where the forearms land, rather than recomputing the pose's three
+	nested bases out of band. Across the six modelled silhouettes at 1.72, 1.88
+	and 2.06 m the platform sits **0.82 to 1.03 m ahead of the body origin, mean
+	0.88, spread 20 cm**.
 
-    Two things follow. The spread is 23% of the mean, so this has to be derived
-    per voli rather than shipped as one constant -- a single number would be
-    wrong by a fifth of itself at both ends. And the correction is most of a
-    metre, which is large enough that it moves the drawn court noticeably and
-    wants eyes on it before it lands; a placement change that size, written at
-    the end of a context and validated only by a static gate, is how a body ends
-    up standing behind the ball instead of in front of it. The mechanism is a
-    one-liner once the direction is settled: the body goes beyond the contact
-    point along the incoming ball's own heading, which is the one direction
+	Two things follow. The spread is 23% of the mean, so this has to be derived
+	per voli rather than shipped as one constant -- a single number would be
+	wrong by a fifth of itself at both ends. And the correction is most of a
+	metre, which is large enough that it moves the drawn court noticeably and
+	wants eyes on it before it lands; a placement change that size, written at
+	the end of a context and validated only by a static gate, is how a body ends
+	up standing behind the ball instead of in front of it. The mechanism is a
+	one-liner once the direction is settled: the body goes beyond the contact
+	point along the incoming ball's own heading, which is the one direction
     already published on the event.
 
 16. **Blockers are treated as able to cover a short attack while airborne.**
@@ -392,16 +392,16 @@ Ordered roughly by how much each one changes what a viewer believes.
 
 18. **Done, with 4 and 5.** ~~The middle turns around entirely and watches the
     play.~~ The diagnosis in this entry was right: `_watch_the_ball` aimed every
-    body on the court at the ball's sampled position, every frame, with nothing
-    above it. The rule that a blocker never turns their back on the net already
-    existed in `set_pose` -- but only for the one voli playback had chosen to
-    draw as the contact, and a middle waiting at the tape is by definition not
-    that voli.
+	body on the court at the ball's sampled position, every frame, with nothing
+	above it. The rule that a blocker never turns their back on the net already
+	existed in `set_pose` -- but only for the one voli playback had chosen to
+	draw as the contact, and a middle waiting at the tape is by definition not
+	that voli.
 
-    The job that outranks looking turned out to be the stance from entry 5, so
-    the precedence lives in `ReadyStance.faces_the_net` next to the stance that
-    implies it rather than as a second rule somewhere else. The head is
-    deliberately excluded: `look_toward` clamps to the neck's own limit, so a
+	The job that outranks looking turned out to be the stance from entry 5, so
+	the precedence lives in `ReadyStance.faces_the_net` next to the stance that
+	implies it rather than as a second rule somewhere else. The head is
+	deliberately excluded: `look_toward` clamps to the neck's own limit, so a
     middle facing the net still tracks the ball over their shoulder and loses
     sight of it when it goes behind them -- which is what a middle actually
     does, and is what makes the rule affordable.
@@ -415,15 +415,15 @@ Ordered roughly by how much each one changes what a viewer believes.
 20. **Two back-row volis never move at all.** The opposite failure to 19 and the
     same cause: a voli with no published target holds position exactly. They
     should cheat a step or two toward where the play is going without abandoning
-    their zone. `_build_movement_plan`'s comment already anticipates this --
+	their zone. `_build_movement_plan`'s comment already anticipates this --
     "if serve-receive movement turns out to matter, the fix is for the resolver
-    to publish it, not for playback to make it up" -- and this is that turning
-    out to matter.
+	to publish it, not for playback to make it up" -- and this is that turning
+	out to matter.
 
 21. **Diagnosed, and this entry was wrong twice.** ~~Cogniticons are still the
-    old glyphs; the eye / sword / shield vocabulary is not what is drawn.~~
-    Both halves of that are false, and I wrote both -- first conflating this
-    with entry 7's size fix, then recording the vocabulary as never built.
+	old glyphs; the eye / sword / shield vocabulary is not what is drawn.~~
+	Both halves of that are false, and I wrote both -- first conflating this
+	with entry 7's size fix, then recording the vocabulary as never built.
 
     The vocabulary **is** built. `cognition_billboard_3d.gd` carries nine
     `INTENT_GLYPHS`: shields for the four ways of dealing with their ball,
@@ -458,56 +458,56 @@ Ordered roughly by how much each one changes what a viewer believes.
     | `blocking` | 40 | 0.0% | 0.00 | 0.0% |
 
     Four intents carry a real spread; a fill on them would read. `setting` and
-    `blocking` are flat zero -- which confirms the doc's own table, where those
-    two are the ones whose sources (`_spatial_setter_choice`, the block's close
+	`blocking` are flat zero -- which confirms the doc's own table, where those
+	two are the ones whose sources (`_spatial_setter_choice`, the block's close
     terms) are listed as not yet wired.
 
     ~~Note also that `approaching` never appears.~~ **Withdrawn, and it is the
-    session's seventh wrong instrument.** That probe reads
-    `home_phase_intents` / `opponent_phase_intents` off events -- one source of
-    cues, not the stream. Asked at the screen instead, `approaching` is drawn
-    on 260 frames. The probe measured publication *by the phase maps* and was
-    read as publication *at all*.
+	session's seventh wrong instrument.** That probe reads
+	`home_phase_intents` / `opponent_phase_intents` off events -- one source of
+	cues, not the stream. Asked at the screen instead, `approaching` is drawn
+	on 260 frames. The probe measured publication *by the phase maps* and was
+	read as publication *at all*.
 
-    **And the vocabulary is on screen, which settles the entry's own premise.**
-    `run_cogniticon_screen_probe.gd` reads `text` and `visible` off each voli's
-    billboard node every frame -- the node, not the intent, for the reason
-    `measure_offball_travel.gd` gives. Eight rallies, 30,708 voli-frames, 46.8%
-    of them carrying a mark:
+	**And the vocabulary is on screen, which settles the entry's own premise.**
+	`run_cogniticon_screen_probe.gd` reads `text` and `visible` off each voli's
+	billboard node every frame -- the node, not the intent, for the reason
+	`measure_offball_travel.gd` gives. Eight rallies, 30,708 voli-frames, 46.8%
+	of them carrying a mark:
 
-    | drawn | share of visible marks |
-    |---|---|
-    | `watching` -- a bare dot | **49.2%** |
-    | `defending` shield | 13.7% |
-    | badge tier `◆` | 11.7% |
-    | `covering` shield | 8.9% |
-    | `receiving` | 3.5% |
-    | `preparing_attack` | 3.0% |
-    | badge tier `◦` | 2.5% |
-    | `setting` | 2.1% |
-    | `approaching` | 1.8% |
-    | remaining badge glyphs | 3.6% |
+	| drawn | share of visible marks |
+	|---|---|
+	| `watching` -- a bare dot | **49.2%** |
+	| `defending` shield | 13.7% |
+	| badge tier `◆` | 11.7% |
+	| `covering` shield | 8.9% |
+	| `receiving` | 3.5% |
+	| `preparing_attack` | 3.0% |
+	| badge tier `◦` | 2.5% |
+	| `setting` | 2.1% |
+	| `approaching` | 1.8% |
+	| remaining badge glyphs | 3.6% |
 
-    **82.3% of what is drawn is the shield-and-blade vocabulary.** So it is
-    built *and* reaching the screen, and both of this entry's earlier
+	**82.3% of what is drawn is the shield-and-blade vocabulary.** So it is
+	built *and* reaching the screen, and both of this entry's earlier
     diagnoses were wrong.
 
     The defect it was pointing at is real and is this: **half of every mark on
-    court is the dot**, and the next most common thing is the badge tier's
-    diamond. The distinctive shields and blades are about a third of what a
-    viewer sees, and none of them ever change, because `progress` is still not
-    read. A court of dots and diamonds that hold still is indistinguishable
-    from a placeholder whatever the vocabulary behind it.
+	court is the dot**, and the next most common thing is the badge tier's
+	diamond. The distinctive shields and blades are about a third of what a
+	viewer sees, and none of them ever change, because `progress` is still not
+	read. A court of dots and diamonds that hold still is indistinguishable
+	from a placeholder whatever the vocabulary behind it.
 
-    The dot is defensible and the doc argues for it -- without a mark, "no
-    opinion" reads as "not implemented". At 49.2% it is nonetheless the
-    dominant visual and the least informative one, so the question is whether
-    `watching` should be drawn at all when twelve volis carry it at once, or
-    drawn quieter than it is.
+	The dot is defensible and the doc argues for it -- without a mark, "no
+	opinion" reads as "not implemented". At 49.2% it is nonetheless the
+	dominant visual and the least informative one, so the question is whether
+	`watching` should be drawn at all when twelve volis carry it at once, or
+	drawn quieter than it is.
 
-    Not built here because the fill itself is not a text change -- a vertical
-    fill on a font glyph needs two clipped layers or a shader, and that wants
-    eyes rather than a static gate.
+	Not built here because the fill itself is not a text change -- a vertical
+	fill on a font glyph needs two clipped layers or a shader, and that wants
+	eyes rather than a static gate.
 
 ### Still open from earlier passes, audited
 
@@ -2219,8 +2219,8 @@ drawing further conclusions from what debug displays.
 `tools/run_shot_downgrade_probe.gd`, 150 rallies x 2 serving sides:
 
   attack types produced
-    home      High-ball swing=169  Tempo swing=11   Controlled roll=5
-    opponent  Roll shot=103        Emergency tip=14  Power swing=3
+	home      High-ball swing=169  Tempo swing=11   Controlled roll=5
+	opponent  Roll shot=103        Emergency tip=14  Power swing=3
 
 96% of home attacks are swings. 97% of opponent attacks are rolls or tips --
 three power swings in a hundred and twenty.
@@ -4162,12 +4162,12 @@ Its t-squared term is -4A and a real flight's is -g*T^2/2, so **the two differ b
 exactly one coefficient**, and the honest measure is what gravity the drawn ball
 appeared to fall under. Over 1090 drawn flights:
 
-    contact pair              n   was, x g   worst x g   off by m   worst m
-    Set -> Attack           227       3.92       43.60       0.89      1.48
-    Reception -> Set        175       2.64        4.45       2.41      3.55
-    Defense -> Set           52      47.91      438.74       2.96      3.43
-    Serve -> Reception      204       2.11        2.38       1.25      1.31
-    Attack -> Block         181       1.71       19.49       0.26      0.97
+	contact pair              n   was, x g   worst x g   off by m   worst m
+	Set -> Attack           227       3.92       43.60       0.89      1.48
+	Reception -> Set        175       2.64        4.45       2.41      3.55
+	Defense -> Set           52      47.91      438.74       2.96      3.43
+	Serve -> Reception      204       2.11        2.38       1.25      1.31
+	Attack -> Block         181       1.71       19.49       0.26      0.97
 
 A ball under forty-eight times gravity, thrown forty-eight times too hard upward,
 holds its height and then plummets. The drawn ball sat up to **3.55 m** away from
@@ -4244,12 +4244,12 @@ The apex band was already there as `lerpf(1.1, 2.8, execution)`, passed to the
 trajectory, thrown away by the drawing and read by nothing. It is now an absolute
 apex and the hang time falls out of gravity:
 
-    reception quality     n     apex m     hang s
-    0.0-0.2              81       1.47       0.63
-    0.2-0.4              89       2.67       0.94
-    0.4-0.6              80       2.75       0.83
-    0.6-0.8              57       3.39       1.11
-    0.8-1.0              12       3.55       1.25
+	reception quality     n     apex m     hang s
+	0.0-0.2              81       1.47       0.63
+	0.2-0.4              89       2.67       0.94
+	0.4-0.6              80       2.75       0.83
+	0.6-0.8              57       3.39       1.11
+	0.8-1.0              12       3.55       1.25
 
 **The underhand set is reachable now, and was not before.** The setter takes the
 ball as high as they can reach *and as high as it got*, so a pass that never rises
@@ -4305,8 +4305,8 @@ struck at 26 m/s. The new times are right -- 0.65 s for a quick to 1.47 s for a
 high ball against 0.23 s to 0.69 s -- and that is the problem, because the run-up
 is paid for out of the set's flight time:
 
-    home attack quality >= 0.25    0.794 -> 1.000
-    opponent swings                   97 -> 8
+	home attack quality >= 0.25    0.794 -> 1.000
+	opponent swings                   97 -> 8
 
 Every approach constant in the engine was fitted against set flights a third as
 long as a set really is.
@@ -4359,12 +4359,12 @@ engine's history is one side of the net being modelled and the other not.
 
 The baseline was healthier than this file had been claiming. Not 0.85-0.91 kill:
 
-    contacts per rally   5.44   above 6.0
-    kill rate            0.542  0.45 - 0.50
-    dig rate             0.341  0.35 - 0.55
-    stuff rate           0.065  0.08 - 0.14
-    ace rate             0.083  0.05 - 0.09
-    serve error rate     0.154  0.12 - 0.20
+	contacts per rally   5.44   above 6.0
+	kill rate            0.542  0.45 - 0.50
+	dig rate             0.341  0.35 - 0.55
+	stuff rate           0.065  0.08 - 0.14
+	ace rate             0.083  0.05 - 0.09
+	serve error rate     0.154  0.12 - 0.20
 
 Serving is **in range on both of its own axes** and needs no buff.
 
@@ -4372,8 +4372,8 @@ Serving is **in range on both of its own axes** and needs no buff.
 
 Splitting the dig rate by side found it immediately:
 
-    home dig rate       0.929
-    opponent dig rate   0.180
+	home dig rate       0.929
+	opponent dig rate   0.180
 
 Five to one, on identical code, with identical attributes. The home defence
 timed the incoming swing through `_attack_launch_angle_degrees` -- a *defensive*
@@ -4393,14 +4393,14 @@ Three changes that cannot land separately, measured over 700 rallies:
 2. **The home defence times the ball off the swing**, unconditionally.
 3. **`DIG_SOLO_SHARE` 0.62 -> 0.90 and `DIG_ATTACKER_ADVANTAGE` 0.20 -> 0.07.**
 
-                        before    after   target
-    kill rate            0.542    0.481   0.45 - 0.50
-    dig rate             0.341    0.478   0.35 - 0.55
-    stuff rate           0.065    0.112   0.08 - 0.14
-    home kill rate       0.724    0.531
-    opponent kill rate   0.276    0.415
-    swing balance        0.681    0.767   near 1.00
-    contacts per rally   5.44     5.57    above 6.0
+						before    after   target
+	kill rate            0.542    0.481   0.45 - 0.50
+	dig rate             0.341    0.478   0.35 - 0.55
+	stuff rate           0.065    0.112   0.08 - 0.14
+	home kill rate       0.724    0.531
+	opponent kill rate   0.276    0.415
+	swing balance        0.681    0.767   near 1.00
+	contacts per rally   5.44     5.57    above 6.0
 
 The three headline rates are inside their bands for the first time. The
 side-to-side kill gap goes from 0.448 to 0.116.
@@ -4516,10 +4516,10 @@ because both ends of every drawn segment were still right.
 Dumping the drawn height of real attacks at deciles, which no probe had done --
 the earlier instruments reported aggregates:
 
-    seed 7002  T=0.88s  dist=6.7m  next=Block
-       h:  3.30 3.60 3.83 3.99 4.07 4.07 3.99 3.84 3.61 3.31 2.93
-    seed 7006  T=0.49s  dist=9.2m  next=floor
-       h:  3.28 3.07 2.84 2.58 2.30 1.99 1.66 1.31 0.94 0.54 0.12
+	seed 7002  T=0.88s  dist=6.7m  next=Block
+	   h:  3.30 3.60 3.83 3.99 4.07 4.07 3.99 3.84 3.61 3.31 2.93
+	seed 7006  T=0.49s  dist=9.2m  next=floor
+	   h:  3.28 3.07 2.84 2.58 2.30 1.99 1.66 1.31 0.94 0.54 0.12
 
 An untouched spike descends exactly as it should. **A spike met by a block is
 drawn lobbing upward over it.**
@@ -4720,8 +4720,8 @@ entries above, and the reason the count sat unactionable for a pass.
 
 ### The signature in the worst cases
 
-    Attack -> Block   0.56 m at the tape, 0.22 s, 3.40 m -> 0.12 m
-    Attack -> Block   0.66 m at the tape, 0.19 s, 2.88 m -> 0.12 m
+	Attack -> Block   0.56 m at the tape, 0.22 s, 3.40 m -> 0.12 m
+	Attack -> Block   0.66 m at the tape, 0.19 s, 2.88 m -> 0.12 m
 
 Every one ends at 0.12 m, which is the floor clamp in `display_trajectory`. The
 carried launch drives the ball into the ground before it reaches the block, so
@@ -4763,9 +4763,9 @@ time, and the fourth instance of that pattern in this file today.
 
 With the budget reading the deflection's own flight:
 
-    dig rate            0.490 -> 0.500
-    contacts per rally  5.719 -> 5.763
-    stuff rate          0.136 -> 0.134
+	dig rate            0.490 -> 0.500
+	contacts per rally  5.719 -> 5.763
+	stuff rate          0.136 -> 0.134
 
 Small, and in the right direction on every axis. The point is not the size, it is
 that the blocker's hands and the hitter's power now reach the defender's decision
@@ -4817,8 +4817,8 @@ block is the fourth contact that needs it and the only one that never asked.
 **Every block in the sample comes out pressing: 224 of 224.** Two measurements
 say why, and both are the §0 defect.
 
-    primary_close   p10 1.00  p25 1.00  p50 1.00  p75 1.00  p90 1.00  min 1.00
-    blocker judgment    p10 0.55   p50 0.67   p90 0.73
+	primary_close   p10 1.00  p25 1.00  p50 1.00  p75 1.00  p90 1.00  min 1.00
+	blocker judgment    p10 0.55   p50 0.67   p90 0.73
 
 1. **`primary_close` is saturated at 1.00**, at every percentile including the
    minimum, on every block that reaches an event. So "how much of the travel did
@@ -4862,15 +4862,15 @@ The measurement the last entry asked for, taken before anything was changed.
 `tools/run_set_split_probe.gd` decomposes `_set_terms` the way the offence probe
 decomposed the swing, split the same four ways.
 
-    term                    home/pass   home/dig   opp/pass   opp/dig
-    quality                     0.723      0.239      0.232     0.087
-    capability                  0.855      0.713      0.595     0.593
-    usable                      0.851      0.837      0.643     0.823
-    capability_penalty          0.000      0.087      0.302     0.189
-    geometry_difficulty         0.046      0.154      0.077     0.157
-    arrival                     0.014     -0.088      0.011    -0.142
-    release_distance_meters     0.501      3.593      0.853     4.339
-    sets                          290        147        265        82
+	term                    home/pass   home/dig   opp/pass   opp/dig
+	quality                     0.723      0.239      0.232     0.087
+	capability                  0.855      0.713      0.595     0.593
+	usable                      0.851      0.837      0.643     0.823
+	capability_penalty          0.000      0.087      0.302     0.189
+	geometry_difficulty         0.046      0.154      0.077     0.157
+	arrival                     0.014     -0.088      0.011    -0.142
+	release_distance_meters     0.501      3.593      0.853     4.339
+	sets                          290        147        265        82
 
 ### The hypothesis was wrong, and wrong in an instructive way
 
@@ -4906,12 +4906,12 @@ fired where the retired table still fed it.
 Threading `opponent_pass.set_contact_height_meters` through
 `_resolve_opponent_transition`:
 
-    opponent/pass          before    after
-    contact height (m)      2.532    2.225
-    reach: standing         0.177    1.000
-    reach: beyond_reach     0.377    0.000
-    capability_penalty      0.302    0.000
-    set quality             0.232    0.395
+	opponent/pass          before    after
+	contact height (m)      2.532    2.225
+	reach: standing         0.177    1.000
+	reach: beyond_reach     0.377    0.000
+	capability_penalty      0.302    0.000
+	set quality             0.232    0.395
 
 The two dig paths keep the table, deliberately: a dug ball has no apex model yet,
 so there is no real height to read. That is the remaining half and it is
@@ -4923,8 +4923,8 @@ symmetric -- 11.5% and 6.0% `beyond_reach`, both sides, both from the table.
 across 347 sets. An exactly constant number is never a model; it is a value
 nobody set.
 
-    home:      14 of 328 ability attributes never specified   (4%)
-    opponent: 245 of 287 ability attributes never specified  (85%)
+	home:      14 of 328 ability attributes never specified   (4%)
+	opponent: 245 of 287 ability attributes never specified  (85%)
 
 Port Azure VC is a sketch. Ari has five attributes, Oren has two, Vale has three;
 everything else on that side -- `tempo_control`, `hand_control`, `composure`,
@@ -5005,20 +5005,20 @@ emit an event, or a travel model that is simply too generous.
 
 `tools/run_block_close_probe.gd`, 800 rallies, both serving sides, split by tempo:
 
-    term                     tempo 0   tempo 1   tempo 2   tempo 3
-    primary_close              1.000     0.999     1.000     1.000
-    assist_close               0.937     0.781     0.978     0.999
-    primary_lane_delta_m       1.036     0.625     0.852     0.497
-    assist_lane_delta_m        1.844     2.946     2.342     3.353
-    primary_required_s         0.617     0.290     0.389     0.217
-    assist_required_s          0.939     1.299     1.053     1.521
-    usable_s (both)            0.963     1.264     1.556     1.753
-    set_flight_s               0.714     0.987     1.214     1.471
-    preset_credited_s          0.717     0.655     0.704     0.730
-    assist_closed_fully        0.647     0.651     0.926     0.988
-    swings                        17       195       366       173
+	term                     tempo 0   tempo 1   tempo 2   tempo 3
+	primary_close              1.000     0.999     1.000     1.000
+	assist_close               0.937     0.781     0.978     0.999
+	primary_lane_delta_m       1.036     0.625     0.852     0.497
+	assist_lane_delta_m        1.844     2.946     2.342     3.353
+	primary_required_s         0.617     0.290     0.389     0.217
+	assist_required_s          0.939     1.299     1.053     1.521
+	usable_s (both)            0.963     1.264     1.556     1.753
+	set_flight_s               0.714     0.987     1.214     1.471
+	preset_credited_s          0.717     0.655     0.704     0.730
+	assist_closed_fully        0.647     0.651     0.926     0.988
+	swings                        17       195       366       173
 
-    attacks 843, of which 751 carried a block formation (89.1%)
+	attacks 843, of which 751 carried a block formation (89.1%)
 
 ### 1. The saturation is a tautology, not a defect
 
@@ -5486,10 +5486,10 @@ Three candidate causes were on the table for `reaching` firing on 0.0% of
 receptions -- a global range nerf, a platform-specific nerf, or receivers
 micro-positioning too well. It is the third, and it is a single line.
 
-    func _reached_point(mover, start, target, available_time, mode) -> Vector2:
-        ...
-        if _movement_time(mover, start, target, mode) <= available_time:
-            return target
+	func _reached_point(mover, start, target, available_time, mode) -> Vector2:
+		...
+		if _movement_time(mover, start, target, mode) <= available_time:
+			return target
 
 **A receiver with any spare time at all arrives dead on the landing point.** Not
 near it -- on it. And the measured reach margin says 90% of receptions have at
@@ -5546,10 +5546,10 @@ seeds` went red after the reach-acceleration fix. Diagnosed rather than adjusted
 
 ### It is a real inversion, not noise
 
-    48 samples   attack error   defensive 0.0843  physical 0.0806   INVERTED
-                 kill rate      defensive 0.5796  physical 0.6086   ok
-    96 samples   attack error   defensive 0.0828  physical 0.0791   INVERTED
-                 kill rate      defensive 0.5808  physical 0.5948   ok
+	48 samples   attack error   defensive 0.0843  physical 0.0806   INVERTED
+				 kill rate      defensive 0.5796  physical 0.6086   ok
+	96 samples   attack error   defensive 0.0828  physical 0.0791   INVERTED
+				 kill rate      defensive 0.5808  physical 0.5948   ok
 
 The gap is -0.0037 and -0.0036 across a doubled sample. The kill-rate half still
 holds; the error half is stably wrong.
@@ -5569,11 +5569,11 @@ holds; the error half is stably wrong.
 Measured with `tools/run_identity_shot_probe.gd`, 200 rallies per identity, with
 the resolver confirmed to be reading `decisiveness = 0.18`:
 
-    Defensive   _identity_hit_type returned:
-                High-ball swing 129, Pipe attack 27, Quick attack 29
-    Physical    Power swing 43, Tempo swing 48, Pipe 27, Quick 29, High-ball 38
+	Defensive   _identity_hit_type returned:
+				High-ball swing 129, Pipe attack 27, Quick attack 29
+	Physical    Power swing 43, Tempo swing 48, Pipe 27, Quick 29, High-ball 38
 
-    safe shots (roll/tip):  Defensive 0.0%   Physical 0.0%
+	safe shots (roll/tip):  Defensive 0.0%   Physical 0.0%
 
 **Zero.** The identity is applied, the upper branch fires -- Physical converts 43
 tempo swings into power swings -- and the lower branch never does. So a Defensive
@@ -5688,10 +5688,10 @@ Reported from playback: "spike goes through the net and blocker".
 was written to say which of three candidate mechanisms it was. Fixed; kept
 because the wrong diagnosis is more instructive than the right one.
 
-    height at the tape, metres (net is 2.43)
-    leg                 n     mean     min    below tape
-    Attack -> Block   205     2.59    0.74        43        <- before
-    Attack -> Block   250     3.14    2.36         6        <- after
+	height at the tape, metres (net is 2.43)
+	leg                 n     mean     min    below tape
+	Attack -> Block   205     2.59    0.74        43        <- before
+	Attack -> Block   250     3.14    2.36         6        <- after
 
 ### The diagnosis that was wrong
 
@@ -5701,8 +5701,8 @@ hands -- every one of the worst five ended at 0.12 m, which is the floor
 constant. Plausible, and wrong. Splitting the same 205 legs by whether the block
 actually touched the ball settles it in one table:
 
-    re-sliced at the block (it touched)    91 legs,  2 under the tape
-    left whole (the block missed)         114 legs, 41 under the tape
+	re-sliced at the block (it touched)    91 legs,  2 under the tape
+	left whole (the block missed)         114 legs, 41 under the tape
 
 `_truncated_arc` was doing its job. The legs that end in a blocker's hands were
 already fine; the ones going under the tape are the swing's *own* flight, drawn
@@ -5852,10 +5852,10 @@ samples or a stronger channel, not a nudged ceiling.
 
 ### Balance, for the record
 
-    contacts per rally    6.657 -> 6.553
-    kill rate             0.374 -> 0.352
-    dig rate              0.593 -> 0.608
-    stuff rate            0.121 -> 0.125
+	contacts per rally    6.657 -> 6.553
+	kill rate             0.374 -> 0.352
+	dig rate              0.593 -> 0.608
+	stuff rate            0.121 -> 0.125
 
 Wider swings are dug more, so this deepens the same gap the launch fix opened.
 Kill 0.352 against a 0.45-0.50 band is now the largest single thing out of
@@ -5872,12 +5872,12 @@ clear asymmetry.
 
 `tools/run_attack_scaling_probe.gd`, re-run after the pace and dig work:
 
-    quality      n   error   stuff  tch>dug tch>kill  cln>dug cln>kill anytouch
-    0.20-0.30    24   0.083   0.208   0.000    0.167    0.333    0.208    0.375
-    0.30-0.40    92   0.130   0.098   0.065    0.098    0.250    0.359    0.261
-    0.40-0.50   174   0.057   0.052   0.109    0.115    0.270    0.397    0.276
-    0.50-0.60   155   0.084   0.052   0.103    0.090    0.135    0.535    0.245
-    0.60-0.70    20   0.100   0.050   0.050    0.100    0.200    0.500    0.200
+	quality      n   error   stuff  tch>dug tch>kill  cln>dug cln>kill anytouch
+	0.20-0.30    24   0.083   0.208   0.000    0.167    0.333    0.208    0.375
+	0.30-0.40    92   0.130   0.098   0.065    0.098    0.250    0.359    0.261
+	0.40-0.50   174   0.057   0.052   0.109    0.115    0.270    0.397    0.276
+	0.50-0.60   155   0.084   0.052   0.103    0.090    0.135    0.535    0.245
+	0.60-0.70    20   0.100   0.050   0.050    0.100    0.200    0.500    0.200
 
 Kill rate climbs 0.375 -> 0.625 across the range, so good attacks *are* rewarded
 and the cliff the old table showed is gone. But look at the `n` column rather
@@ -5886,8 +5886,8 @@ a hump centred on 0.45-0.55 with almost nothing above it.
 
 Against that, from `tools/run_dig_contest_probe.gd`:
 
-    attack effectiveness   p10 0.369  p50 0.490  p90 0.774
-    defence quality        p10 0.127  p50 0.691  p90 0.952
+	attack effectiveness   p10 0.369  p50 0.490  p90 0.774
+	defence quality        p10 0.127  p50 0.691  p90 0.952
 
 The defender's own range is **0.83 wide** between the tenth and ninetieth
 percentile; the attacker's is **0.41**. Twice as wide, and the defence reaches
@@ -5944,9 +5944,9 @@ aimed landing point and stops. There is no leg after the final contact, so:
   * and the "bounce off nobody" is most likely the **DEFENSE-to-SET seam**
     already on this list. The home dig publishes no `outgoing_trajectory` at
     all, so there is no leg from the defender to the setter -- the ball
-    finishes the attack's arc at the floor and the next drawn leg starts
-    wherever the set begins. A teleport between two legs reads exactly like a
-    bounce.
+	finishes the attack's arc at the floor and the next drawn leg starts
+	wherever the set begins. A teleport between two legs reads exactly like a
+	bounce.
 
 The timing half is separate and also real: `terminate_at_next_contact` returns
 early for a contact whose `success` is false, so the *ball* correctly ignores a
@@ -6018,17 +6018,17 @@ geometry, a silhouette with a colourway. `BODY_TYPES` in `player_generator.gd`
 and reporting on the second is exactly the mistake an encyclopedia exists to
 stop a player making.
 
-    type   height  mass  wingspan   attribute trades
-    Vegi      0     0       0       none -- the no-lean body
-    Avi      -4    -7      +6       jump_reach, block_timing / reception_stability
-    Cani      0    +2       0       stamina, transition_speed, attack_power /
-                                    jump_reach, hand_control
-    Feli     -3    -4       0       explosiveness, lateral_speed, dig_control,
-                                    set_disguise / stamina, tactical_discipline
-    Ursi     +1   +11      +1       reception_stability, attack_power, composure /
-                                    acceleration, lateral_speed, jump_reach
-    Simi     -6    -5      +2       hand_control, ball_control, finesse, tooling /
-                                    attack_power, jump_reach
+	type   height  mass  wingspan   attribute trades
+	Vegi      0     0       0       none -- the no-lean body
+	Avi      -4    -7      +6       jump_reach, block_timing / reception_stability
+	Cani      0    +2       0       stamina, transition_speed, attack_power /
+									jump_reach, hand_control
+	Feli     -3    -4       0       explosiveness, lateral_speed, dig_control,
+									set_disguise / stamina, tactical_discipline
+	Ursi     +1   +11      +1       reception_stability, attack_power, composure /
+									acceleration, lateral_speed, jump_reach
+	Simi     -6    -5      +2       hand_control, ball_control, finesse, tooling /
+									attack_power, jump_reach
 
 ---
 
@@ -6081,17 +6081,17 @@ nothing consumes.
 
 **Then measuring the classifier itself showed there was nothing to fix.**
 
-    posture        reception          defense
-    planted        322  44.6%         174  28.6%
-    reaching         0   0.0%         236  38.8%
-    off-axis       214  29.6%          41   6.7%
-    moving         186  25.8%         103  16.9%
+	posture        reception          defense
+	planted        322  44.6%         174  28.6%
+	reaching         0   0.0%         236  38.8%
+	off-axis       214  29.6%          41   6.7%
+	moving         186  25.8%         103  16.9%
 
 `reaching` is alive and carrying 38.8% of digs. It is absent from *receptions*
 specifically, and the reason is not arrival accuracy:
 
-    reach_margin_meters   reception   p10  1.338   p50  2.225   p90  2.967
-                          defense     p10 -0.361   p50  0.000   p90  2.726
+	reach_margin_meters   reception   p10  1.338   p50  2.225   p90  2.967
+						  defense     p10 -0.361   p50  0.000   p90  2.726
 
 **The tightest tenth of receptions still has 1.3 m of spare reach.** Nobody
 passing a serve in this game is anywhere near stretched, so no amount of wobble
@@ -6166,13 +6166,13 @@ and a serve gives them enough time to solve it every time.
 `BallReadSystem.estimate` produces a player-specific *estimate* of a flight
 rather than the flight itself, on exactly the axes the report names:
 
-    spatial_error_meters = lerp(1.75, 0.08, information_quality)
-                         * lerp(0.75, 1.35, novelty)
+	spatial_error_meters = lerp(1.75, 0.08, information_quality)
+						 * lerp(0.75, 1.35, novelty)
 
-    information_quality  = reading * 0.56
-                         + familiarity * 0.24
-                         + observation_progress * 0.20
-                         - novelty * 0.24
+	information_quality  = reading * 0.56
+						 + familiarity * 0.24
+						 + observation_progress * 0.20
+						 - novelty * 0.24
 
 and `novelty` is `BallContactSignature.baseline_novelty()`, which weights
 **topspin at 0.17, sidespin at 0.18 and flight instability at 0.16** -- so a
@@ -6216,12 +6216,12 @@ both serve receptions, the home floor defence, and the opponent's floor defence
 on the swing and the transition. Defenders now go to where they *think* the ball
 is going and play whatever actually arrives.
 
-    metric              before   after    band
-    kill rate            0.394   0.452    0.45 - 0.50
-    dig rate             0.611   0.508    0.35 - 0.55
-    stuff rate           0.113   0.114    0.08 - 0.14
-    contacts per rally   6.274   5.806    above 6.0
-    ace rate             0.026   0.043    0.05 - 0.09
+	metric              before   after    band
+	kill rate            0.394   0.452    0.45 - 0.50
+	dig rate             0.611   0.508    0.35 - 0.55
+	stuff rate           0.113   0.114    0.08 - 0.14
+	contacts per rally   6.274   5.806    above 6.0
+	ace rate             0.026   0.043    0.05 - 0.09
 
 **Kill and dig are in band at the same time for the first time on this branch**,
 and neither was moved by a constant -- the number that was missing was a whole
@@ -6278,11 +6278,11 @@ wrong place.
 Home digs 0.609, the opponent 0.383. Split `_defense_terms` into its factors and
 the gap attributes cleanly:
 
-    side       n    dug    cap timing postur  suppt  oppty  margin  rdErr
-    home     149  0.523  0.786  0.521  0.013  0.028  0.661    0.40  0.298
-             faced pressure 0.482 at 13.8 m/s
-    opponent  92  0.359  0.755  0.433  0.045  0.019  0.580    0.03  0.548
-             faced pressure 0.596 at 16.3 m/s
+	side       n    dug    cap timing postur  suppt  oppty  margin  rdErr
+	home     149  0.523  0.786  0.521  0.013  0.028  0.661    0.40  0.298
+			 faced pressure 0.482 at 13.8 m/s
+	opponent  92  0.359  0.755  0.433  0.045  0.019  0.580    0.03  0.548
+			 faced pressure 0.596 at 16.3 m/s
 
 Capability is near-identical -- 0.786 against 0.755 -- so this is not a roster
 difference, which the mirrored slice would not permit anyway. Everything that

@@ -78,7 +78,10 @@ Also asked here: **your name**, offered from the region's naming tradition once
 that is chosen, and **your coaching principles** — the seven axes that used to
 be step three. Philosophy before geography changes what the third question
 means: choosing a region *after* saying what you believe makes the alignment
-number a consequence you walk into rather than a default you were handed.
+number a consequence you walk into rather than a default you were handed. The
+principles page therefore shows no regional fit or cohesion. Selecting a region
+on the following page prompts you to confirm its alignment, familiarity and
+starting cohesion before continuing.
 
 ### 1. Where you are from
 

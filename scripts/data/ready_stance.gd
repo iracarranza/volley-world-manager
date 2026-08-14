@@ -5,8 +5,9 @@ extends RefCounted
 ##
 ## The rig had exactly one answer to that, and it was a passer's. `player_actor_3d.gd`
 ## returns after the gait for anybody who is not the drawn contact actor, and the
-## gait interpolates out of a single floor stance -- knees at -60, hips back,
-## arms carried behind, feet outside the shoulders. That is a defender waiting
+## gait used to interpolate every joint directly out of a single floor stance --
+## knees at -60, hips back, arms carried behind, feet outside the shoulders.
+## That is a defender waiting
 ## for a ball, and it was being worn by all twelve bodies on the court.
 ##
 ## Two separate reports are that one fact seen from opposite sides:
@@ -41,9 +42,11 @@ extends RefCounted
 ## `GaitBiomechanics` must not know what a block is. The two are a locomotion
 ## model and a jump, and the comment in `BlockBiomechanics` about sharing a
 ## convention rather than a dependency applies here in the same direction. So
-## the gait takes the stance it interpolates out of as an argument, and the
-## arbitration -- which body wears which -- lives here, where both may be named
-## without either depending on the other.
+## the gait takes the idle stance as an argument, and the arbitration -- which
+## body wears which -- lives here, where both may be named without either
+## depending on the other. Locomotion releases the leg portion through upright
+## standing before the walk/run cycle takes it over; upper-body carriage can
+## still interpolate directly from the job-specific stance.
 
 ## The defender's crouch. Wide, low, loaded: the stance the whole court was
 ## wearing, and still the right one for anybody who may have to play this ball.

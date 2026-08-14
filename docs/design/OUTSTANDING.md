@@ -300,36 +300,40 @@ head near the floor and the figure settled onto its shoulder.
 clocks the way `gait_preview` forces a landing -- these run in seconds and a
 still sheet has no seconds in it.
 
-### The stance foot skates, and the plant cannot close it alone
+### ~~The stance foot skates, and the plant cannot close it alone~~ Resolved
 
 `tools/foot_plant_probe.tscn` measures what the drawn shoe does while it is on
 the floor, summed over each stance phase and divided by the body travel over the
 same frames -- 0 is a planted foot, 1 is a foot moving with the hips.
 
-| speed | plant off | plant on | stance phases |
-|---|---|---|---|
-| 1.1 m/s | 0.343 | **0.203** | 20 |
-| 2.8 m/s | 0.943 | **0.460** | 25 |
-| 5.2 m/s | 2.464 | **1.974** | 45 |
+| direction | speed | plant off | plant on | stance phases |
+|---|---:|---:|---:|---:|
+| forward | 1.1 m/s | 0.180 | **0.018** | 23 |
+| forward | 2.8 m/s | 0.317 | **0.030** | 27 |
+| forward | 5.2 m/s | 0.434 | **0.038** | 27 |
+| lateral | 1.1 m/s | 1.164 | **0.154** | 37 |
+| lateral | 2.8 m/s | 1.946 | **0.219** | 94 |
+| lateral | 5.2 m/s | 2.113 | **0.236** | 89 |
+| backpedal | 1.1 m/s | 0.319 | **0.032** | 37 |
+| backpedal | 2.8 m/s | 0.536 | **0.056** | 43 |
+| backpedal | 5.2 m/s | 3.187 | **0.265** | 178 |
 
-Planting helps everywhere and closes nothing. The reason is upstream of it and
-is arithmetic: `stride_cycle` advances by `travelled / stride_length_m` with
-`stride_length_m` at 0.55-1.15 m for a **whole cycle**, which is two steps -- so
-the model is told the body covers about 0.4 m per step. The legs disagree. At a
-run the hip swings 39 degrees either side of vertical over a leg span near 0.9 m,
-which sweeps the foot roughly 1.1 m per stance. The foot therefore travels about
-2.7x further than the ground it is supposed to be pushing against, and that
-ratio is what the table above is measuring.
+The arithmetic question is settled: `stride_length_m` is a step, and a gait
+cycle is two steps. Playback clocks the cycle from the step the rendered leg
+geometry can cover at its current speed and heading rather than forcing a fixed
+approach-stride value through a walk, shuffle and sprint. The stance shoe path is
+linearised, and a bounded numerical correction pays the residual in both pitch
+and roll against the actual drawn rig.
 
-A 14-degree correction cannot absorb a 2.7x error and should not be widened
-until it can -- that would hide the cause in the symptom, which is §0 of
-`FAILURE_MODES.md` in its usual form. The fix is to decide what `stride_length_m`
-means and make one place own it: it is currently both the cadence divisor here
-and a factor of `maximum_speed` in `RallyMovementSystem.movement_profile`, where
-`speed = stride x cadence x mass`. Either the divisor is a *step* and wants
-doubling, or the gait's hip amplitude is what should be derived from the
-attribute rather than the cadence. **Both change every drawn gait in the game**,
-which is why this is written down instead of done.
+The ready pose is no longer used as the walking leg's origin. Movement releases
+the tactical crouch through upright standing first -- an initial hip-led weight
+shift -- before the cyclic leg takes over. Travel heading now accumulates one
+centimetre across frames before resolving, so slow backpedalling does not become
+a forward gait merely because a high-refresh frame covers less than 1 cm.
+
+The remaining p95 tail is lateral/backpedal sprinting (0.522 / 0.444). The
+median is bounded and the correction already reaches its 26-degree limit there;
+widening it further would trade residual shoe slip for a visibly dislocated hip.
 - **Verify the cocked elbow in match playback.** `ELBOW_COCK_DEGREES` is -98
   and reads correctly in the roster once the pose is turned to three-quarter.
   The match camera moves, so it may show the fold unaided -- worth judging

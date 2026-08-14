@@ -16,6 +16,9 @@ const BLOCK_JUMP_SCRIPT := preload("res://scripts/simulation/block_jump_model.gd
 const WORKSHEET_SCRIPT := preload("res://scenes/components/worksheet.gd")
 const VOLI_STICKER_SCRIPT := preload("res://scenes/components/voli_sticker.gd")
 const MATCH_SCREEN_3D_SCENE := preload("res://scenes/screens/match_screen.tscn")
+const PLAYER_ACTOR_3D_SCENE := preload(
+	"res://scenes/components/player_actor_3d.tscn"
+)
 const CAREER_MANAGER_SCRIPT := preload("res://scripts/managers/career_manager.gd")
 const FATIGUE_MODEL_SCRIPT := preload("res://scripts/simulation/fatigue_model.gd")
 const ACCOMMODATION_SCRIPT := preload("res://scripts/data/accommodation.gd")
@@ -5734,6 +5737,7 @@ func _test_set_path_read_and_body_contact() -> void:
 	hitter.attack_accuracy = 91
 	hitter.ball_control = 89
 	hitter.improvisation = 87
+	hitter.dominant_hand = "Right"
 	var intended := Vector2(0.16, 0.535)
 	var delivered := Vector2(0.20, 0.565)
 	var home_body: Vector2 = SET_PATH_READ_SCRIPT.body_position(
@@ -5742,15 +5746,26 @@ func _test_set_path_read_and_body_contact() -> void:
 	var opponent_body: Vector2 = SET_PATH_READ_SCRIPT.body_position(
 		hitter, Vector2(delivered.x, 1.0 - delivered.y), false
 	)
-	var home_gap := RALLY_KINEMATICS_SCRIPT.court_distance_meters(
-		home_body, delivered
+	hitter.dominant_hand = "Left"
+	var left_hand_body: Vector2 = SET_PATH_READ_SCRIPT.body_position(
+		hitter, delivered, true
 	)
+	hitter.dominant_hand = "Right"
+	var home_depth := absf(home_body.y - delivered.y) \
+		* CourtConstants.COURT_LENGTH_METERS
+	var home_lateral := absf(home_body.x - delivered.x) \
+		* CourtConstants.COURT_WIDTH_METERS
 	_check(
 		home_body.y > delivered.y
 			and opponent_body.y < 1.0 - delivered.y
-			and home_gap >= SET_PATH_READ_SCRIPT.BODY_BEHIND_CONTACT_MIN_METERS
-			and home_gap <= SET_PATH_READ_SCRIPT.BODY_BEHIND_CONTACT_MAX_METERS,
-		"A hitter's body is behind the ball on either side instead of occupying a tight set",
+			and home_depth >= SET_PATH_READ_SCRIPT.BODY_BEHIND_CONTACT_MIN_METERS
+			and home_depth <= SET_PATH_READ_SCRIPT.BODY_BEHIND_CONTACT_MAX_METERS
+			and home_lateral >= SET_PATH_READ_SCRIPT.BODY_BESIDE_CONTACT_MIN_METERS
+			and home_lateral <= SET_PATH_READ_SCRIPT.BODY_BESIDE_CONTACT_MAX_METERS
+			and home_body.x < delivered.x
+			and left_hand_body.x > delivered.x
+			and opponent_body.x > delivered.x,
+		"A hitter stands behind the ball with it over the correct striking shoulder",
 	)
 
 	var good_read: Dictionary = SET_PATH_READ_SCRIPT.evaluate(
@@ -7595,12 +7610,51 @@ func _test_3d_playback_contract() -> void:
 	var right_start := right_actor.position
 	left_actor.set_tactical_position(Vector2(0.31, 0.72), left_start + Vector3(0.30, 0.0, 0.0))
 	right_actor.set_tactical_position(Vector2(0.71, 0.82), right_start + Vector3(0.30, 0.0, 0.0))
+	var left_leg_span := (
+		left_actor.leg_bone_lengths.x + left_actor.leg_bone_lengths.y
+	) * left_actor.leg_length_scale * left_actor.body_height_scale
+	var right_leg_span := (
+		right_actor.leg_bone_lengths.x + right_actor.leg_bone_lengths.y
+	) * right_actor.leg_length_scale * right_actor.body_height_scale
+	var left_drawn_step := GaitBiomechanics.geometric_step_meters(
+		left_leg_span, left_actor.ground_speed_mps, left_actor.travel_heading_offset
+	)
+	var right_drawn_step := GaitBiomechanics.geometric_step_meters(
+		right_leg_span, right_actor.ground_speed_mps, right_actor.travel_heading_offset
+	)
 	_check(
 		left_actor.body_height_scale > right_actor.body_height_scale
 			and left_actor.arm_length_scale > right_actor.arm_length_scale
-			and left_actor.stride_cycle < right_actor.stride_cycle,
-		"3D actors represent height, relative arm reach and distance-based stride length",
+			and left_actor.stride_cycle < right_actor.stride_cycle
+			and is_equal_approx(
+				left_actor.stride_cycle,
+				0.30 / (left_drawn_step * PlayerActor3D.STEPS_PER_GAIT_CYCLE),
+			)
+			and is_equal_approx(
+				right_actor.stride_cycle,
+				0.30 / (right_drawn_step * PlayerActor3D.STEPS_PER_GAIT_CYCLE),
+			),
+		"3D actors represent height, relative arm reach and geometry-clocked stride",
 	)
+	## Heading evidence accumulates across high-refresh frames. Four 3 mm steps
+	## are each below the noise floor but together are an unambiguous backpedal;
+	## treating the threshold per frame made this gait depend on monitor refresh.
+	var heading_actor := PLAYER_ACTOR_3D_SCENE.instantiate() as PlayerActor3D
+	get_root().add_child(heading_actor)
+	heading_actor.configure(
+		9911, true, "Heading Probe", "Right",
+		{"height_cm": 190.0, "wingspan_cm": 194.0, "body_type": "Feli"},
+	)
+	heading_actor.set_tactical_position(Vector2.ZERO, Vector3.ZERO)
+	for frame_index in range(1, 5):
+		heading_actor.set_tactical_position(
+			Vector2.ZERO, Vector3(0.0, 0.0, float(frame_index) * 0.003)
+		)
+	_check(
+		absf(heading_actor.travel_heading_offset) > 0.25,
+		"sub-centimetre frames accumulate into a refresh-independent travel heading",
+	)
+	heading_actor.free()
 	left_actor.set_pose(
 		RALLY_EVENT_SCRIPT.EventType.ATTACK, 1.0, 0.5, Vector2.UP, true
 	)
@@ -7823,17 +7877,99 @@ func _test_3d_playback_contract() -> void:
 		"a planned leg is paced at the player's own top speed, not the ball's flight (%.2f m/s)"
 			% assist_drawn,
 	)
-	## ...with exactly one exception, and it is recorded rather than hidden. The
-	## player about to touch the ball keeps the ball's window, because drawing the
-	## contact happening away from the ball is the worse lie -- but the resolver
-	## and the drawn position disagreeing by that much is a real defect and has to
-	## stay countable.
+	## The contact actor obeys that bound too. The old exception accelerated this
+	## blocker (and, much more visibly, a T1 hitter) to force contact at the end of
+	## the ball window. The discrepancy remains countable, but never becomes body
+	## speed.
+	var contact_seconds := float(paced_plan.get(101, {}).get("seconds", 0.0))
+	var contact_metres := screen._leg_metres(paced_plan.get(101, {}))
+	var contact_drawn := contact_metres * clampf(
+		paced_window / maxf(contact_seconds, 0.0001), 0.0, 1.0
+	) / paced_window
 	_check(
-		not paced_plan.get(101, {}).has("seconds")
+		contact_seconds > paced_window
+			and contact_drawn <= 3.05
 			and screen.playback_leg_overspeed.size() == 1
 			and int(screen.playback_leg_overspeed[0]["player_id"]) == 101,
-		"the contact leg keeps the ball's window and its overspeed is recorded (%d entries)"
-			% screen.playback_leg_overspeed.size(),
+		"the contact leg keeps human pace while its resolver mismatch remains recorded",
+	)
+
+	## Resolver-authored contact and phase positions survive the cosmetic unstack.
+	## Moving either one after the ball path is fixed is how contacts became
+	## visibly off-hand or detached from the player who made them.
+	var separation_plan := {
+		1: {
+			"start": Vector2(0.40, 0.80),
+			"target": Vector2(0.50, 0.80),
+			"protected": true,
+		},
+		2: {
+			"start": Vector2(0.60, 0.80),
+			"target": Vector2(0.50, 0.80),
+			"protected": false,
+		},
+	}
+	screen._separate_plan(separation_plan, -1)
+	_check(
+		Vector2(separation_plan[1].target).is_equal_approx(Vector2(0.50, 0.80))
+			and not Vector2(separation_plan[2].target).is_equal_approx(
+				Vector2(0.50, 0.80)
+			),
+		"cosmetic unstacking moves the bystander rather than resolver-authored ground",
+	)
+
+	## Tempo begins from the hitter's actual pose at setter release. A first-
+	## tempo hitter is already planted and takes off; they do not replay an entire
+	## approach inside the two tenths before contact.
+	var first_tempo := RALLY_EVENT_SCRIPT.new()
+	first_tempo.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	first_tempo.metadata = {"tempo_coordination": {
+		"achieved_release_progress": 1.0,
+		"takeoff_offset_seconds": 0.0,
+		"delivered_flight_seconds": 0.22,
+	}}
+	var second_tempo := RALLY_EVENT_SCRIPT.new()
+	second_tempo.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	second_tempo.metadata = {"tempo_coordination": {
+		"achieved_release_progress": 0.48,
+		"takeoff_offset_seconds": 0.56,
+		"delivered_flight_seconds": 0.78,
+	}}
+	var third_tempo := RALLY_EVENT_SCRIPT.new()
+	third_tempo.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	third_tempo.metadata = {"tempo_coordination": {
+		"achieved_release_progress": 0.0,
+		"takeoff_offset_seconds": 1.18,
+		"delivered_flight_seconds": 1.40,
+	}}
+	var second_start := screen._incoming_pose_phase(second_tempo, 0.0)
+	var third_takeoff := screen._attack_takeoff_fraction(third_tempo)
+	_check(
+		is_equal_approx(
+			screen._incoming_pose_phase(first_tempo, 0.0),
+			SpikeBiomechanics.PLANT_END,
+		)
+			and second_start > -1.0
+			and second_start < SpikeBiomechanics.PLANT_END
+			and is_equal_approx(
+				screen._incoming_pose_phase(third_tempo, 0.0), -1.0
+			)
+			and is_equal_approx(
+				screen._incoming_pose_phase(third_tempo, third_takeoff),
+				SpikeBiomechanics.PLANT_END,
+			)
+			and is_equal_approx(
+				screen._incoming_pose_phase(first_tempo, 1.0), 0.0
+			),
+		"T1, T2 and T3 playback begin at their authored release relationship",
+	)
+	var legacy_attack := RALLY_EVENT_SCRIPT.new()
+	legacy_attack.event_type = RALLY_EVENT_SCRIPT.EventType.ATTACK
+	_check(
+		is_equal_approx(
+			screen._incoming_pose_phase(legacy_attack, 0.25), -0.75
+		),
+		"an attack record without tempo metadata keeps its full-window wind-up",
 	)
 
 	## The wall has one rally-clock jump, independent of which playback window is
@@ -9612,9 +9748,14 @@ func _test_playback_movement_is_humanly_possible() -> void:
 			if not next_contact.metadata.has("movement_start"):
 				continue
 			attacks += 1
+			## An attack's start position is the ball. The body now stands behind it
+			## and beside it so contact occurs over the striking shoulder; movement
+			## is authored to that body coordinate, not through the ball's centre.
+			var body_contact := Vector2(next_contact.metadata.get(
+				"body_contact_position", next_contact.start_position
+			))
 			var travelled := RallyKinematics.court_distance_meters(
-				Vector2(next_contact.metadata["movement_start"]),
-				next_contact.start_position,
+				Vector2(next_contact.metadata["movement_start"]), body_contact,
 			)
 			var flight := maxf(float(trajectory.get("duration", 0.0)), 0.0001)
 			if travelled / flight > worst_speed:
@@ -10644,6 +10785,26 @@ func _test_geometric_attack_promotion_translates_a_rally() -> void:
 			and float(half_wall[0].half_width_m)
 				< promotion.BLOCKER_HALF_WIDTH_METERS * 0.75,
 		"a blocker who never closed is not in the wall, and a partial close seals less net",
+	)
+	var failed_close := {
+		"primary": tall,
+		"assist": null,
+		"assist_attempt": short,
+		"primary_close": 0.20,
+		"assist_close": 0.0,
+		"assist_close_attempted": 0.18,
+		"read_quality": 0.55,
+	}
+	var absent_wall: Array = promotion.block_wall(
+		failed_close, {}, {1: Vector2(0.4, 0.5), 2: Vector2(0.6, 0.5)}
+	)
+	var attempted_jumps: Dictionary = promotion.block_jump_timing(failed_close)
+	_check(
+		absent_wall.is_empty()
+			and attempted_jumps.has(tall.id)
+			and attempted_jumps.has(short.id)
+			and float(attempted_jumps[tall.id].hang_seconds) > 0.0,
+		"a late block attempt keeps its jump timing even when no hands form the wall",
 	)
 
 	## The run-up is what a jump multiplier is for. It scales the leap alone, so

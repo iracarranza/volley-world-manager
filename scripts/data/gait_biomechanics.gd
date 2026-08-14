@@ -32,11 +32,13 @@ extends RefCounted
 ##
 ## ## Phase convention
 ##
-## `cycle` is in **strides**, and its fractional part is the position within one.
-## A stride is both legs: the right foot strikes at 0.0 and the left at 0.5.
-## Callers advance it by distance travelled over stride length, so the gait is
-## driven by ground covered rather than by wall-clock -- a player who stops mid
-## step stops mid step instead of continuing to pedal.
+## `cycle` is a **full two-step gait cycle**, and its fractional part is the
+## position within one. The right foot strikes at 0.0, the left at 0.5, and the
+## right strikes again at 1.0. Callers advance it by distance travelled over two
+## stored step lengths: `VolleyballPlayer.stride_length_m` is metres per step,
+## despite its historical name. The gait is therefore driven by ground covered
+## rather than by wall-clock -- a player who stops mid-step stops mid-step
+## instead of continuing to pedal.
 ##
 ## Pure and deterministic, like `SpikeBiomechanics`, for the same reason: pose
 ## work that cannot be checked without eyes on a screen does not get checked.
@@ -52,6 +54,18 @@ const RUN_SPEED_MPS: float = 4.4
 
 ## Below this the actor is standing, and the cycle should not advance at all.
 const IDLE_SPEED_MPS: float = 0.25
+
+## By this speed the feet have left the job-specific ready stance and the leg
+## cycle is being drawn from an upright standing leg. Below it, the first part
+## of a move is a weight shift: the hips travel while the wide ready base yields,
+## before either foot begins to read as a walking step.
+##
+## This is intentionally below `WALK_SPEED_MPS`. A slow defender can initiate
+## out of their crouch, but once they are visibly walking their foot placement
+## must not inherit that crouch's knee and hip angles -- the ground clock is the
+## geometry of a standing/walking/running leg, not of whichever tactical stance
+## happened to precede it.
+const READY_RELEASE_SPEED_MPS: float = 0.75
 
 ## What fraction of the stride each foot spends on the ground.
 ##
@@ -227,33 +241,16 @@ static func resolve(
 	var floor_elbow := float(stance.get("elbow_degrees", READY_ELBOW_DEGREES))
 	var floor_torso := float(stance.get("torso_radians", READY_TORSO_RADIANS))
 	var speed := maxf(speed_mps, 0.0)
-	## Decomposed rather than branched on, so a defender opening from a shuffle
-	## into a backpedal passes through the blend instead of snapping between two
-	## clips.
-	var backward := clampf(-cos(travel_heading_radians), 0.0, 1.0)
-	var sideways := clampf(absf(sin(travel_heading_radians)), 0.0, 1.0)
-	var run_blend := smoothstep(WALK_SPEED_MPS, RUN_SPEED_MPS, speed)
-	## Separate from `run_blend`: this is how much gait there is at all, and it
-	## goes to zero when standing so a stationary player's legs are straight
-	## rather than frozen mid-stride.
-	var gait_blend := smoothstep(IDLE_SPEED_MPS, WALK_SPEED_MPS, speed)
-	var stance_share := lerpf(WALK_STANCE_SHARE, RUN_STANCE_SHARE, run_blend)
-	## Shorter steps going backwards, and barely any thigh swing going sideways.
-	var stride_scale := lerpf(1.0, BACKPEDAL_HIP_SCALE, backward) \
-		* lerpf(1.0, SHUFFLE_HIP_SCALE, sideways)
-	## And deeper knees in both, which is the same fact from the other side: a
-	## body that cannot lengthen its stride stays low instead.
-	var knee_scale := lerpf(1.0, BACKPEDAL_KNEE_SCALE, backward) \
-		* lerpf(1.0, SHUFFLE_KNEE_SCALE, sideways)
-	var hip_amplitude := lerpf(
-		WALK_HIP_DEGREES, RUN_HIP_DEGREES, run_blend
-	) * stride_scale
-	var stance_knee := lerpf(
-		WALK_STANCE_KNEE_DEGREES, RUN_STANCE_KNEE_DEGREES, run_blend
-	) * knee_scale
-	var swing_knee := lerpf(
-		WALK_SWING_KNEE_DEGREES, RUN_SWING_KNEE_DEGREES, run_blend
-	) * knee_scale
+	var shape := _movement_shape(speed, travel_heading_radians)
+	var backward := float(shape.backward)
+	var sideways := float(shape.sideways)
+	var run_blend := float(shape.run_blend)
+	var gait_blend := float(shape.gait_blend)
+	var ready_blend := float(shape.ready_blend)
+	var stance_share := float(shape.stance_share)
+	var hip_amplitude := float(shape.hip_amplitude_degrees)
+	var stance_knee := float(shape.stance_knee_degrees)
+	var swing_knee := float(shape.swing_knee_degrees)
 
 	var right := _leg(
 		fposmod(cycle, 1.0), stance_share, hip_amplitude, stance_knee, swing_knee
@@ -271,7 +268,7 @@ static func resolve(
 	## hip's, because the ratio between them is not constant across gaits: a
 	## runner's arms work proportionally harder than a walker's.
 	var arm_amplitude := lerpf(WALK_ARM_DEGREES, RUN_ARM_DEGREES, run_blend)
-	var arm_scale := arm_amplitude / maxf(hip_amplitude, 0.001)
+	var arm_scale := arm_amplitude / maxf(absf(hip_amplitude), 0.001)
 
 	## Two rises and two falls per stride in both gaits. Only the *phase* differs,
 	## and it differs by exactly half a cycle -- the walk is highest over the
@@ -303,10 +300,14 @@ static func resolve(
 		"gait_blend": gait_blend,
 		"backpedal_blend": backward,
 		"shuffle_blend": sideways,
-		"right_hip_degrees": lerpf(floor_hip, right.x, gait_blend),
-		"right_knee_degrees": lerpf(floor_knee, right.y, gait_blend),
-		"left_hip_degrees": lerpf(floor_hip, left.x, gait_blend),
-		"left_knee_degrees": lerpf(floor_knee, left.y, gait_blend),
+		## The ready stance and the locomotion cycle are two layers, with upright
+		## standing as the zero between them. Interpolating directly from the
+		## crouch into the gait made a slow step's shoe follow the crouch while its
+		## ground clock followed an upright leg -- most visibly in backpedaling.
+		"right_hip_degrees": floor_hip * ready_blend + right.x * gait_blend,
+		"right_knee_degrees": floor_knee * ready_blend + right.y * gait_blend,
+		"left_hip_degrees": floor_hip * ready_blend + left.x * gait_blend,
+		"left_knee_degrees": floor_knee * ready_blend + left.y * gait_blend,
 		## The ankles fade out with the rest of the gait: a voli standing still
 		## has their feet flat because the sole and the floor are already
 		## parallel, and blending toward zero is what says so.
@@ -319,6 +320,7 @@ static func resolve(
 		"right_in_stance": fposmod(cycle, 1.0) < stance_share,
 		"left_in_stance": fposmod(cycle + 0.5, 1.0) < stance_share,
 		"stance_share": stance_share,
+		"ready_blend": ready_blend,
 		## Negated against the same side's hip: that is the counter-swing. Both
 		## arms rest at the same carriage, which is what makes the stance a stance
 		## rather than a stride caught mid-swing.
@@ -337,13 +339,92 @@ static func resolve(
 		## Feet outside the shoulders when set, closing as the stride takes over --
 		## you cannot run with your legs abducted, and a shuffle keeps some of it
 		## because a shuffle never brings the feet together either.
-		"abduction_degrees": lerpf(
-			floor_abduction,
-			floor_abduction * SHUFFLE_STANCE_SHARE * sideways,
-			gait_blend,
-		),
+		"abduction_degrees": floor_abduction * ready_blend \
+			+ floor_abduction * SHUFFLE_STANCE_SHARE * sideways * gait_blend,
 		## Nothing bobs standing still, so this one really does go to zero.
 		"bob_meters": bob * gait_blend * lerpf(1.0, SHUFFLE_BOB_SCALE, sideways),
+	}
+
+
+## The step length the drawn leg geometry actually describes.
+##
+## At foot strike the straight leg reaches `+hip_amplitude`; at toe-off it
+## trails by the same angle. Across that stance the foot therefore sweeps
+## `2 * leg_span * sin(amplitude)` beneath the hip. The body covers two steps
+## per full cycle and this foot is down for `stance_share` of it, so the step
+## that keeps the sole still is `leg_span * sin(amplitude) / stance_share`.
+##
+## Playback used the player's approach-step attribute directly at every speed.
+## That forced a 20-degree walking leg and a 39-degree sprinting leg through the
+## same ground distance, so one skated forward and the other backward. The
+## player's stride still enters through their rig's leg span; this function
+## reconciles that physique with the gait they are visibly performing.
+static func geometric_step_meters(
+	leg_span_meters: float,
+	speed_mps: float,
+	travel_heading_radians: float = 0.0,
+) -> float:
+	var shape := _movement_shape(speed_mps, travel_heading_radians)
+	## The leg cycle grows out of upright standing as the gait comes in. The
+	## ground step has to grow by the same share or a slow gait is clocked as if
+	## it were already swinging through its full walking arc.
+	var amplitude := absf(float(shape.hip_amplitude_degrees)) \
+		* float(shape.gait_blend)
+	var stance_share := maxf(float(shape.stance_share), 0.05)
+	return maxf(
+		maxf(leg_span_meters, 0.05) * sin(deg_to_rad(amplitude)) / stance_share,
+		0.18,
+	)
+
+
+## Speed and direction terms shared by the joint pose and its ground clock.
+## Keeping them together is load-bearing: a shuffle whose hips are shortened
+## but whose cycle still uses the forward-run step length is another skating
+## gait under a different name.
+static func _movement_shape(
+	speed_mps: float, travel_heading_radians: float
+) -> Dictionary:
+	var speed := maxf(speed_mps, 0.0)
+	## Decomposed rather than branched on, so a defender opening from a shuffle
+	## into a backpedal passes through the blend instead of snapping between two
+	## clips.
+	var backward := clampf(-cos(travel_heading_radians), 0.0, 1.0)
+	var sideways := clampf(absf(sin(travel_heading_radians)), 0.0, 1.0)
+	var run_blend := smoothstep(WALK_SPEED_MPS, RUN_SPEED_MPS, speed)
+	## Separate from `run_blend`: this is how much gait there is at all.
+	var gait_blend := smoothstep(IDLE_SPEED_MPS, WALK_SPEED_MPS, speed)
+	## Release the tactical stance before a walk is fully established. This gap
+	## is the initial hip-led weight shift; the cyclic leg motion itself remains
+	## governed by `gait_blend` and begins from upright zero.
+	var ready_blend := 1.0 - smoothstep(
+		IDLE_SPEED_MPS, READY_RELEASE_SPEED_MPS, speed
+	)
+	var stance_share := lerpf(WALK_STANCE_SHARE, RUN_STANCE_SHARE, run_blend)
+	var stride_scale := lerpf(1.0, BACKPEDAL_HIP_SCALE, backward) \
+		* lerpf(1.0, SHUFFLE_HIP_SCALE, sideways)
+	## A backpedal is not a forward gait with shorter steps. The stance foot has
+	## to sweep toward the toes while the body travels toward the heels, so the
+	## hip curve reverses. Blending the sign through oblique travel also avoids a
+	## phase snap as a defender opens from a shuffle into a backpedal.
+	var travel_sign := lerpf(1.0, -1.0, backward)
+	var knee_scale := lerpf(1.0, BACKPEDAL_KNEE_SCALE, backward) \
+		* lerpf(1.0, SHUFFLE_KNEE_SCALE, sideways)
+	return {
+		"backward": backward,
+		"sideways": sideways,
+		"run_blend": run_blend,
+		"gait_blend": gait_blend,
+		"ready_blend": ready_blend,
+		"stance_share": stance_share,
+		"hip_amplitude_degrees": lerpf(
+			WALK_HIP_DEGREES, RUN_HIP_DEGREES, run_blend
+		) * stride_scale * travel_sign,
+		"stance_knee_degrees": lerpf(
+			WALK_STANCE_KNEE_DEGREES, RUN_STANCE_KNEE_DEGREES, run_blend
+		) * knee_scale,
+		"swing_knee_degrees": lerpf(
+			WALK_SWING_KNEE_DEGREES, RUN_SWING_KNEE_DEGREES, run_blend
+		) * knee_scale,
 	}
 
 
@@ -360,15 +441,26 @@ static func _leg(
 ) -> Vector3:
 	var share := clampf(stance_share, 0.05, 0.95)
 	var in_stance := leg_phase < share
-	## Remapped so stance always fills the first half and swing the second,
-	## whatever share of the stride each actually takes. Without this the hip
-	## would have to be two different curves for the two gaits; with it, one
-	## cosine covers both and the asymmetry lives entirely in the remapping.
+	## Remapped so swing always fills the second half whatever share of the stride
+	## stance actually takes.
 	var normalized := 0.5 * leg_phase / share if in_stance \
 		else 0.5 + 0.5 * (leg_phase - share) / (1.0 - share)
-	## +amplitude at strike (thigh forward, reaching), through -amplitude at
-	## toe-off (thigh trailing), and back.
-	var hip := hip_amplitude * cos(normalized * TAU)
+	## During stance the *shoe*, not the hip angle, sweeps linearly beneath the
+	## body. A cosine hip curve comes almost to rest at strike and toe-off and
+	## races through midstance, so even when its total step length is exact the
+	## foot alternately sticks and skates. Inverting sine makes the straight-leg
+	## horizontal reach linear from +amplitude to -amplitude. The airborne return
+	## keeps the smoother cosine because there is no ground constraint to satisfy.
+	var hip := 0.0
+	if in_stance:
+		var reach := lerpf(
+			sin(deg_to_rad(hip_amplitude)),
+			-sin(deg_to_rad(hip_amplitude)),
+			leg_phase / share,
+		)
+		hip = rad_to_deg(asin(clampf(reach, -0.999, 0.999)))
+	else:
+		hip = hip_amplitude * cos(normalized * TAU)
 	var knee := 0.0
 	if in_stance:
 		## The yield, deepest at midstance and gone at both ends -- the foot

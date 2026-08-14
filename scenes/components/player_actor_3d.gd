@@ -132,6 +132,14 @@ var look_yaw: float = 0.0
 var look_pitch: float = 0.0
 var stride_cycle: float = 0.0
 var gait_blend: float = 0.0
+## `VolleyballPlayer.stride_length_m` is metres per *step*: the locomotion
+## identity is explicitly `metres per step x steps per second`, and approach
+## distance multiplies the same value by a step count. `GaitBiomechanics.cycle`
+## is a full right-left cycle. Advancing that cycle once per stored step doubled
+## visible cadence and made the stance foot sweep roughly twice as far as the
+## body. Two steps return to the same foot, so this conversion belongs at the
+## sole playback seam rather than in either source model.
+const STEPS_PER_GAIT_CYCLE: float = 2.0
 ## Where each foot was set down, in world space, and whether it is down at all.
 ## Index 0 is the left leg and 1 the right, matching `_PLANT_LEFT`/`_PLANT_RIGHT`.
 ##
@@ -167,6 +175,11 @@ var _floor_duration: float = 0.0
 ## the line rotated to face the sideline. Smoothed for the same reason the speed
 ## is: one frame of displacement is too noisy to pick a gait from.
 var travel_heading_offset: float = 0.0
+## Tiny frame displacements are accumulated until they contain one reliable
+## centimetre of travel. Testing each frame against that centimetre made heading
+## frame-rate dependent: a 1.1 m/s backpedal updates at 60 Hz and never updates
+## at 144 Hz, so the body travelled backward with a forward gait.
+var _heading_travel_accumulator: Vector3 = Vector3.ZERO
 var locomotion_bob: float = 0.0
 var has_world_position: bool = false
 ## How fast this voli is currently travelling, in metres per second, smoothed.
@@ -220,30 +233,27 @@ const TELEPORT_METERS: float = 1.5
 
 ## ## Planting the stance foot
 ##
-## **The precondition was already met and nobody had noticed.** A gait driven by
-## time needs its feet solved against the ground, because cadence and ground
-## speed are independent and drift apart within a step. This one is driven by
-## *distance*: `stride_cycle` advances by `travelled / stride_length_m`, so the
-## phase of the foot and the displacement of the body are the same number twice
-## and the stance foot already sweeps backwards at roughly body speed. `stride`
-## being a per-voli attribute is what closes it -- a voli with a long stride
-## covers more ground per cycle *and* is told to, so the two agree per body
-## rather than on average.
+## The gait is distance-driven: `stride_cycle` advances by travelled distance
+## divided by the step the drawn leg geometry can actually cover at this speed.
+## A stored stride is one step, while this curve is a complete right-left cycle,
+## so every cycle covers two of those geometry-derived steps. That keeps the
+## visible turnover tied to the body crossing the floor instead of to frame time.
 ##
-## What is left is the residual: "roughly" is not "exactly", because the hip
-## amplitude and the leg length decide how far the foot actually travels in a
-## stance and nothing reconciles that with the stride length the cadence was
-## divided by. The residual is small, which is why this is a bounded correction
-## on one axis rather than a two-link IK solve. A full solve would also have to
-## fight every pose overlay in this file for control of the same joints, and
-## those overlays are the ones that make a dig read as a dig.
+## Hip and knee arcs are still only an approximation of a planted kinematic
+## chain, particularly in shuffles. A bounded planar correction pays the
+## remaining fore-aft and lateral slip without replacing the contact overlays
+## that make a dig, set, or attack legible.
 ##
 ## Applied to the hip and given back at the ankle, so the shin swings under a
 ## foot that stays where it was put and the sole stays flat while it does.
-const PLANT_CORRECTION_LIMIT_DEGREES: float = 14.0
-## Under 1 on purpose: this runs as a feedback loop against the pose it produced
-## last frame, and a gain of 1 on a loop with a frame of lag rings.
-const PLANT_CORRECTION_GAIN: float = 0.55
+const PLANT_CORRECTION_LIMIT_DEGREES: float = 26.0
+## The gait is rewritten from its base curve every frame before this correction
+## is measured, so this is not an accumulated one-frame-late controller: a low
+## gain simply leaves the same share of foot slip unpaid on every frame. Keep a
+## little headroom for the one-degree local Jacobian, but spend most of the
+## measured residual.
+const PLANT_CORRECTION_GAIN: float = 0.90
+const PLANT_JACOBIAN_SAMPLE_DEGREES: float = 1.0
 
 const _PLANT_LEFT: int = 0
 const _PLANT_RIGHT: int = 1
@@ -318,9 +328,9 @@ var _turn_step_phase: float = 0.0
 
 ## How far a player has to actually move before their travel sets their heading.
 ##
-## A centimetre. Below that, the displacement between two frames is mostly
-## rounding and its *direction* is noise -- which is what had players spinning on
-## the spot while nominally standing still.
+## A centimetre accumulated across however many frames it takes. Below that,
+## displacement direction is mostly rounding noise; applying the threshold to
+## each frame made the answer change with refresh rate.
 const TRAVEL_HEADING_FLOOR_METERS: float = 0.01
 ## How far off their facing a voli will travel before they give up and turn to
 ## run. Inside it they are shuffling or backpedalling with their eyes where they
@@ -545,10 +555,14 @@ func apply_ui_palette(light_mode: bool) -> void:
 func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 	_ensure_node_bindings()
 	if has_world_position:
+		var world_delta := world_position - self.position
 		var travelled := Vector2(
-			world_position.x - self.position.x,
-			world_position.z - self.position.z,
+			world_delta.x, world_delta.z,
 		).length()
+		if travelled > 0.0001:
+			_heading_travel_accumulator += world_delta
+		else:
+			_heading_travel_accumulator = Vector3.ZERO
 		## Speed, smoothed, before anything reads it.
 		##
 		## A single frame's displacement is far too noisy to drive a gait -- one
@@ -590,6 +604,7 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			_plant_active[_PLANT_LEFT] = false
 			_plant_active[_PLANT_RIGHT] = false
 			ground_speed_mps = 0.0
+			_heading_travel_accumulator = Vector3.ZERO
 			has_world_position = true
 			tactical_position = position
 			## Still moved. Skipping this is a body that never arrives where it
@@ -599,9 +614,6 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			return
 		var smoothing := 0.45 if instant_speed > ground_speed_mps else 0.18
 		ground_speed_mps = lerpf(ground_speed_mps, instant_speed, smoothing)
-		if travelled > 0.0001:
-			stride_cycle += travelled / maxf(stride_length_m, 0.30)
-
 		## Face where you are going -- but only when you are going somewhere.
 		##
 		## The threshold used to be the same 0.1 mm that advances the stride, and
@@ -612,9 +624,12 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 		## bug: a player rotating while running is not a style, it is the facing
 		## system being driven by numerical dust.
 		##
-		## A centimetre of travel is well under a single frame of real running
-		## and far above the noise floor.
-		if travelled > TRAVEL_HEADING_FLOOR_METERS:
+		## Accumulation keeps that centimetre above the noise floor without making
+		## slow movement at a high refresh rate directionless.
+		var heading_distance := Vector2(
+			_heading_travel_accumulator.x, _heading_travel_accumulator.z
+		).length()
+		if heading_distance > TRAVEL_HEADING_FLOOR_METERS:
 			## Before any of this existed, facing came only from a contact
 			## direction and only the contact actor was posed -- so every other
 			## player translated without ever turning, and a setter walking back
@@ -626,9 +641,10 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 			## still wins, which is correct: someone playing the ball faces the
 			## ball, not their footwork.
 			var travel_yaw := atan2(
-				-(world_position.x - self.position.x),
-				-(world_position.z - self.position.z),
+				-_heading_travel_accumulator.x,
+				-_heading_travel_accumulator.z,
 			)
+			_heading_travel_accumulator = Vector3.ZERO
 			## Measured before the turn below, because afterwards the two agree
 			## by construction and the answer is always "forwards".
 			travel_heading_offset = lerp_angle(
@@ -662,6 +678,19 @@ func set_tactical_position(position: Vector2, world_position: Vector3) -> void:
 				facing_yaw, travel_yaw, ground_speed_mps, travel_heading_offset
 			):
 				_turn_toward(travel_yaw)
+		## Clock the step after reading this leg's heading. Doing it before the
+		## heading update gave an abrupt shuffle/backpedal one frame of forward-
+		## gait distance while its joints were already drawing the new direction.
+		if travelled > 0.0001:
+			var leg_span := (
+				leg_bone_lengths.x + leg_bone_lengths.y
+			) * leg_length_scale * body_height_scale
+			var drawn_step := GaitBiomechanicsScript.geometric_step_meters(
+				leg_span, ground_speed_mps, travel_heading_offset
+			)
+			stride_cycle += travelled / maxf(
+				drawn_step * STEPS_PER_GAIT_CYCLE, 0.36
+			)
 	has_world_position = true
 	tactical_position = position
 	self.position = world_position
@@ -2176,22 +2205,25 @@ func _set_elbow(arm: Node3D, bend_degrees: float) -> void:
 ##
 ## Null-tolerant on the same principle as `_set_elbow`: a silhouette variant
 ## that has no shoe should lose its ankle, not crash.
-func _set_ankle(leg: Node3D, ankle_degrees: float) -> void:
+func _set_ankle(
+	leg: Node3D, ankle_degrees: float, roll_correction_degrees: float = 0.0
+) -> void:
 	var shoe := leg.get_node_or_null("Knee/Shoe") as Node3D
 	if shoe != null:
 		shoe.rotation_degrees.x = SHOE_BASE_PITCH_DEGREES + ankle_degrees
+		shoe.rotation_degrees.z = roll_correction_degrees
 
 
-## How far this leg's hip has to give back, in degrees, to leave the foot where
-## it was set down. Zero when the foot is in the air, on the frame it lands, or
-## when there is no shoe to read.
+## How far this leg's hip has to give back, in pitch and roll degrees, to leave
+## the foot where it was set down. Zero when the foot is in the air, on the frame
+## it lands, or when there is no shoe to read.
 ##
 ## Measured *after* the gait has been written, because the question is where the
 ## gait put the foot -- asking before would be asking about last frame's pose.
-## Only the fore-aft component is corrected: sideways slip on a shuffle is a
-## second problem with a second cause, and one axis solved is worth more than two
-## axes half-solved.
-func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> float:
+## Both components in the floor plane are corrected. Pitch pays fore-aft slip;
+## roll pays lateral slip during a shuffle, and its inverse at the shoe keeps the
+## sole from banking with the hip.
+func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> Vector2:
 	var shoe := leg.get_node_or_null("Knee/Shoe") as Node3D
 	## A plant is a claim about world space, and an actor outside the tree has
 	## none -- `global_position` on a detached node returns identity and warns.
@@ -2199,7 +2231,7 @@ func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> float:
 	## preview sheet), so this is a case to sit out rather than to complain about.
 	if shoe == null or not in_stance or not is_inside_tree():
 		_plant_active[side] = false
-		return 0.0
+		return Vector2.ZERO
 	var foot := shoe.global_position
 	if not _plant_active[side]:
 		## Touchdown. The anchor is wherever the gait just put this foot, so the
@@ -2207,27 +2239,55 @@ func _plant_correction(leg: Node3D, side: int, in_stance: bool) -> float:
 		## position it did not choose.
 		_plant_active[side] = true
 		_plant_anchor[side] = foot
-		return 0.0
-	## Both in the body's own frame, because the body turns and a world-space
+		return Vector2.ZERO
+	## Both in the actor's own frame, because the body turns and a world-space
 	## delta would read a turn as a slip.
-	##
-	## Forward is -Z: a positive hip pitch swings the thigh about +X, which carries
-	## a leg hanging at -Y toward -Z, and the gait calls that same sign "thigh
-	## forward". So the forward displacement the foot still owes is the negated
-	## difference in Z.
-	var slip := -(to_local(_plant_anchor[side]).z - to_local(foot).z)
-	var span := (
-		leg_bone_lengths.x + leg_bone_lengths.y
-	) * leg_length_scale * body_height_scale
-	if span < 0.05:
-		return 0.0
-	## The chevron's own derivative, linearised: a metre of foot travel costs
-	## `1 / span` radians of hip. Clamped because a correction large enough to
-	## matter is a sign the anchor is stale, and holding a wrong foot down is
-	## worse than letting a right one slide.
-	return clampf(
-		rad_to_deg(slip / span) * PLANT_CORRECTION_GAIN,
-		-PLANT_CORRECTION_LIMIT_DEGREES, PLANT_CORRECTION_LIMIT_DEGREES,
+	var anchored := to_local(_plant_anchor[side])
+	var current := to_local(foot)
+	var wanted := Vector2(anchored.x - current.x, anchored.z - current.z)
+
+	## Measure this particular drawn leg rather than assuming its axes. The old
+	## `slip / leg_span` approximation was correct for an upright forward gait and
+	## wrong after the body leaned, turned, shuffled, or backpedaled -- precisely
+	## the poses foot planting exists to support. One degree about each hip axis
+	## gives a two-column local Jacobian from joint degrees to shoe movement.
+	var base_rotation := leg.rotation_degrees
+	leg.rotation_degrees.x = base_rotation.x + PLANT_JACOBIAN_SAMPLE_DEGREES
+	var pitch_sample := to_local(shoe.global_position)
+	leg.rotation_degrees = base_rotation
+	leg.rotation_degrees.z = base_rotation.z + PLANT_JACOBIAN_SAMPLE_DEGREES
+	var roll_sample := to_local(shoe.global_position)
+	leg.rotation_degrees = base_rotation
+	var pitch_axis := Vector2(
+		pitch_sample.x - current.x, pitch_sample.z - current.z
+	)
+	var roll_axis := Vector2(
+		roll_sample.x - current.x, roll_sample.z - current.z
+	)
+	var determinant := pitch_axis.x * roll_axis.y \
+		- roll_axis.x * pitch_axis.y
+	if absf(determinant) < 0.0000001:
+		return Vector2.ZERO
+	var pitch_samples := (
+		wanted.x * roll_axis.y - roll_axis.x * wanted.y
+	) / determinant
+	var roll_samples := (
+		pitch_axis.x * wanted.y - wanted.x * pitch_axis.y
+	) / determinant
+	## Clamped because a correction large enough to matter is a sign the anchor
+	## is stale, and holding a wrong foot down is worse than letting a right one
+	## slide. The inverse rotation written at the shoe below keeps its sole level.
+	return Vector2(
+		clampf(
+			pitch_samples * PLANT_JACOBIAN_SAMPLE_DEGREES
+				* PLANT_CORRECTION_GAIN,
+			-PLANT_CORRECTION_LIMIT_DEGREES, PLANT_CORRECTION_LIMIT_DEGREES,
+		),
+		clampf(
+			roll_samples * PLANT_JACOBIAN_SAMPLE_DEGREES
+				* PLANT_CORRECTION_GAIN,
+			-PLANT_CORRECTION_LIMIT_DEGREES, PLANT_CORRECTION_LIMIT_DEGREES,
+		),
 	)
 
 
@@ -2265,7 +2325,9 @@ func set_pose(
 	## fixed 32-degree amplitude with the knees explicitly zeroed on the next
 	## line, so every voli on the court walked at exactly one speed with legs
 	## that never bent, whether they were strolling to a seat or sprinting for a
-	## dig.
+	## dig. Its leg cycle is rooted at upright standing; the named ready stance
+	## releases first as an initial hip-led weight shift, so a crouched defender's
+	## shoe geometry is not mistaken for a walking step.
 	var gait := GaitBiomechanicsScript.resolve(
 		stride_cycle, ground_speed_mps, travel_heading_offset,
 		_stance_joints(true),
@@ -2324,9 +2386,13 @@ func set_pose(
 	## flat while the shin swings over it -- the same cancellation the gait does
 	## for the stance phase, extended to cover the correction.
 	##
-	## Scaled by `gait_blend`: standing still there is no stride to correct, and a
-	## stationary voli's feet are already where they were put.
-	var plant := clampf(gait_blend, 0.0, 1.0) if foot_plant_enabled else 0.0
+	## The first hip-led weight shift is allowed to happen inside the ready base;
+	## once a leg cycle is legible, however, a planted foot is a world-space
+	## constraint rather than a percentage. Scaling it directly by `gait_blend`
+	## left a slow backpedal paying only three quarters of every correction and
+	## visibly skating for the unpaid quarter on every frame.
+	var plant := smoothstep(0.08, 0.35, gait_blend) \
+		if foot_plant_enabled else 0.0
 	if plant > 0.001:
 		var left_plant := _plant_correction(
 			left_leg, _PLANT_LEFT, bool(gait.get("left_in_stance", false))
@@ -2334,10 +2400,12 @@ func set_pose(
 		var right_plant := _plant_correction(
 			right_leg, _PLANT_RIGHT, bool(gait.get("right_in_stance", false))
 		) * plant
-		left_leg.rotation_degrees.x += left_plant
-		right_leg.rotation_degrees.x += right_plant
-		_set_ankle(left_leg, left_ankle - left_plant)
-		_set_ankle(right_leg, right_ankle - right_plant)
+		left_leg.rotation_degrees.x += left_plant.x
+		right_leg.rotation_degrees.x += right_plant.x
+		left_leg.rotation_degrees.z += left_plant.y
+		right_leg.rotation_degrees.z += right_plant.y
+		_set_ankle(left_leg, left_ankle - left_plant.x, -left_plant.y)
+		_set_ankle(right_leg, right_ankle - right_plant.x, -right_plant.y)
 	else:
 		_plant_active[_PLANT_LEFT] = false
 		_plant_active[_PLANT_RIGHT] = false

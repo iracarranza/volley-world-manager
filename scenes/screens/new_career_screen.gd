@@ -60,6 +60,7 @@ const BODY_BLURBS := {
 ## throughout.
 const PREVIEW_SWING_DEGREES: float = 34.0
 const PREVIEW_SWING_SECONDS: float = 7.0
+const PREVIEW_FRONT_YAW_DEGREES: float = 180.0
 
 @onready var CareerManager: CareerManagerScript = get_node("/root/CareerManager")
 @onready var step_rail: VBoxContainer = %StepRail
@@ -139,7 +140,8 @@ func _process(delta: float) -> void:
 	if _preview_pivot == null or not step_panels[0].visible:
 		return
 	_preview_clock = fmod(_preview_clock + delta, PREVIEW_SWING_SECONDS)
-	_preview_pivot.rotation_degrees.y = PREVIEW_SWING_DEGREES * sin(
+	_preview_pivot.rotation_degrees.y = PREVIEW_FRONT_YAW_DEGREES \
+		+ PREVIEW_SWING_DEGREES * sin(
 		TAU * _preview_clock / PREVIEW_SWING_SECONDS
 	)
 
@@ -410,6 +412,10 @@ func _build_preview_world() -> void:
 
 	_preview_pivot = Node3D.new()
 	_preview_pivot.name = "Turntable"
+	## PlayerActor3D faces -Z on court while this camera looks in from +Z. Turn
+	## the body toward the person creating it before applying the small showroom
+	## swing in `_process`.
+	_preview_pivot.rotation_degrees.y = PREVIEW_FRONT_YAW_DEGREES
 	world.add_child(_preview_pivot)
 	_preview_actor = PlayerActorScene.instantiate()
 	_preview_pivot.add_child(_preview_actor)
@@ -689,12 +695,12 @@ func _show_step() -> void:
 			question_hint.text = "A voli like any other. None of this changes what your team can do -- it is what the rest of the game is looking at when it talks to you."
 		1:
 			question_title.text = "What should your team believe?"
-			question_hint.text = "Choose a shortcut, then challenge any principle. Departure from local tradition lowers starting cohesion and familiarity."
-			_refresh_alignment_preview()
+			question_hint.text = "Choose a shortcut, then challenge any principle. Geography comes next; first say what you believe on its own terms."
 		2:
 			question_title.text = "Where does your volleyball begin?"
-			question_hint.text = "First the kind of place, then the place."
+			question_hint.text = "First the kind of place, then the place. Review what that choice means for the principles you already chose."
 			tier_hint.text = VolleyballRegions.definition(selected_region).tagline
+			_refresh_alignment_preview()
 		3:
 			question_title.text = "What are you taking responsibility for?"
 			question_hint.text = "A club is judged immediately. Founding one gets you nothing you did not build."
@@ -704,7 +710,7 @@ func _show_step() -> void:
 			_refresh_review()
 	previous_button.text = "Back to title" if current_step == 0 else "Previous"
 	next_button.text = "Create career" if current_step == step_panels.size() - 1 \
-		else "Continue"
+		else ("Confirm region" if current_step == 2 else "Continue")
 
 
 func _select_tier(tier: StringName) -> void:
@@ -714,6 +720,7 @@ func _select_tier(tier: StringName) -> void:
 	## agrees with the grid under it.
 	_select_button_with_metadata(tier_row, str(tier))
 	_fill_region_grid()
+	_refresh_alignment_preview()
 
 
 func _select_region(region_name: String) -> void:
@@ -723,6 +730,7 @@ func _select_region(region_name: String) -> void:
 	if manager_name_tracks_region:
 		_suggest_manager_name()
 	tier_hint.text = VolleyballRegions.definition(selected_region).tagline
+	_refresh_alignment_preview()
 
 
 ## A name from the region you just said you were from.
@@ -754,14 +762,12 @@ func _preset_selected(index: int) -> void:
 	else:
 		identity_tracks_region = false
 		_set_principles(TeamPrinciplesModel.for_identity(choice), true)
-	_refresh_alignment_preview()
 
 
 func _tag_selected(axis_name: String, value: float) -> void:
 	selected_values[axis_name] = value
 	identity_tracks_region = false
 	preset_option.select(preset_option.item_count - 1)
-	_refresh_alignment_preview()
 
 
 func _set_principles(principles: TeamPrinciples, update_name: bool) -> void:
@@ -786,7 +792,8 @@ func _sync_tag_buttons() -> void:
 func _refresh_alignment_preview() -> void:
 	var principles := TeamPrinciplesModel.custom(_identity_name(), selected_values)
 	var state := VolleyballRegions.starting_identity_state(selected_region, principles)
-	%AlignmentPreview.text = "REGIONAL ALIGNMENT  %d%%    STARTING FAMILIARITY  %d%%    COHESION  %d%%" % [
+	%AlignmentPreview.text = "CONFIRM %s\nYour principles begin at %d%% regional alignment · %d%% tactical familiarity · %d%% squad cohesion.\nContinue to accept this starting relationship." % [
+		selected_region.to_upper(),
 		roundi(float(state.alignment) * 100.0),
 		roundi(float(state.familiarity) * 100.0),
 		roundi(float(state.cohesion) * 100.0),

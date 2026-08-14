@@ -243,14 +243,7 @@ static func block_wall(
 		## may already have come down from. `reach_effort` stays the intent's
 		## contribution -- sealing asks for a taller wall, funnelling a lower one --
 		## and the jump model supplies the rest.
-		var jump := BlockJumpModelRef.resolve(
-			maxf(
-				(blocker.jumping_reach_cm() - blocker.standing_reach_cm()) / 100.0,
-				0.0,
-			),
-			clampf(float(blocker.block_timing) / 100.0, 0.0, 1.0),
-			read_quality, close,
-		)
+		var jump := _resolved_block_jump(blocker, read_quality, close)
 		var timed_reach := blocker.standing_reach_cm() / 100.0 \
 			+ maxf(
 				(blocker.jumping_reach_cm() - blocker.standing_reach_cm()) / 100.0,
@@ -312,6 +305,56 @@ static func block_wall(
 			"close": close,
 		})
 	return wall
+
+
+## When every assigned blocker jumped, independent of whether their hands made
+## the geometric wall. `block_wall` quite correctly excludes a body that never
+## closed far enough to obstruct the ball; playback incorrectly treated that as
+## evidence that the body never left the floor. A blocker commits before knowing
+## whether the eventual swing lands in, so an attack error must retain this map.
+static func block_jump_timing(formation: Dictionary) -> Dictionary:
+	var timing := {}
+	var read_quality := clampf(float(formation.get("read_quality", 0.5)), 0.0, 1.0)
+	var attempts: Array[Dictionary] = [
+		{
+			"blocker": formation.get("primary"),
+			"close": float(formation.get("primary_close", 0.0)),
+		},
+		{
+			"blocker": formation.get("assist_attempt", formation.get("assist")),
+			"close": float(formation.get(
+				"assist_close_attempted", formation.get("assist_close", 0.0)
+			)),
+		},
+	]
+	for attempt in attempts:
+		var blocker := attempt.blocker as VolleyballPlayer
+		if blocker == null or timing.has(blocker.id):
+			continue
+		var close := float(attempt.close)
+		var jump := _resolved_block_jump(blocker, read_quality, close)
+		timing[blocker.id] = {
+			"timing_error_seconds": float(jump.timing_error_seconds),
+			"hang_seconds": float(jump.hang_seconds),
+			"late": str(jump.arm_state) == "rising",
+			"arms": str(BlockJumpModelRef.arm_commitment(close)),
+		}
+	return timing
+
+
+static func _resolved_block_jump(
+	blocker: VolleyballPlayer,
+	read_quality: float,
+	close: float,
+) -> Dictionary:
+	return BlockJumpModelRef.resolve(
+		maxf(
+			(blocker.jumping_reach_cm() - blocker.standing_reach_cm()) / 100.0,
+			0.0,
+		),
+		clampf(float(blocker.block_timing) / 100.0, 0.0, 1.0),
+		read_quality, close,
+	)
 
 
 ## How high a body meets the ball, in metres, for each way of meeting it.

@@ -844,8 +844,10 @@ func _apply_contact_poses(
 		## up, came down, and went up again. That is the block replaying itself.
 		##
 		## This window is the hold, so it ends where the hold ends.
-		var next_phase := progress - 1.0
-		var next_lift := incoming_weight
+		var next_phase := _incoming_pose_phase(next_contact, progress)
+		var next_lift := _incoming_attack_lift(next_contact, progress) \
+			if next_contact.event_type == RallyEventModel.EventType.ATTACK \
+			else incoming_weight
 		match_court_3d.set_player_pose(
 			next_actor, int(next_contact.event_type),
 			next_peak * next_lift, next_phase, next_direction, true,
@@ -856,6 +858,65 @@ func _apply_contact_poses(
 		after_next, next_contact, event, progress, window_seconds
 	)
 	_apply_unsuccessful_attack_block(event, next_contact, progress, window_seconds)
+
+
+## Where the attack's takeoff falls inside the incoming set flight.
+##
+## This is the tempo definition expressed as a playback fraction. T1 has zero
+## offset (takeoff with setter release), T2 spends part of the flight finishing
+## its approach, and T3 does not begin that approach until after release.
+static func _attack_takeoff_fraction(event: RallyEvent) -> float:
+	if event == null or event.event_type != RallyEventModel.EventType.ATTACK:
+		return 1.0
+	var timing: Dictionary = event.metadata.get("tempo_coordination", {})
+	var flight := maxf(float(timing.get(
+		"delivered_flight_seconds",
+		Dictionary(event.metadata.get("incoming_trajectory", {})).get(
+			"duration", 0.0
+		),
+	)), 0.0001)
+	return clampf(
+		maxf(float(timing.get("takeoff_offset_seconds", flight)), 0.0) / flight,
+		0.0, 0.98,
+	)
+
+
+## Signed contact-pose phase for the player receiving this flight.
+##
+## Playback previously ran every hitter from -1 to 0 during the set, even when
+## `achieved_release_progress` said the runway was already complete. That made a
+## first-tempo hitter repeat and accelerate a whole approach just to reach the
+## authored contact. The release progress chooses the starting approach pose;
+## the timing model's takeoff instant then hands it to `SpikeBiomechanics`.
+static func _incoming_pose_phase(event: RallyEvent, progress: float) -> float:
+	var p := clampf(progress, 0.0, 1.0)
+	if event == null or event.event_type != RallyEventModel.EventType.ATTACK:
+		return p - 1.0
+	var timing: Dictionary = event.metadata.get("tempo_coordination", {})
+	## Old/imported event records may predate tempo coordination. Preserve their
+	## original full-window wind-up instead of manufacturing a takeoff at 98%.
+	if timing.is_empty():
+		return p - 1.0
+	var release_progress := clampf(float(timing.get(
+		"achieved_release_progress", timing.get("observed_release_progress", 0.0)
+	)), 0.0, 1.0)
+	var start_phase := lerpf(-1.0, SpikeBiomechanics.PLANT_END, release_progress)
+	var takeoff := _attack_takeoff_fraction(event)
+	if takeoff > 0.0001 and p < takeoff:
+		return lerpf(start_phase, SpikeBiomechanics.PLANT_END, p / takeoff)
+	return lerpf(
+		SpikeBiomechanics.PLANT_END, 0.0,
+		inverse_lerp(takeoff, 1.0, p),
+	)
+
+
+static func _incoming_attack_lift(event: RallyEvent, progress: float) -> float:
+	if event == null or Dictionary(event.metadata.get(
+		"tempo_coordination", {}
+	)).is_empty():
+		return smoothstep(0.48, 1.0, clampf(progress, 0.0, 1.0))
+	var takeoff := _attack_takeoff_fraction(event)
+	return smoothstep(takeoff, 1.0, clampf(progress, 0.0, 1.0))
 
 
 ## A block now has one physical clock across the set, attack and deflection
@@ -1172,12 +1233,13 @@ func _build_movement_plan(
 	if event_actor_id >= 0 and event.metadata.has("movement_target") \
 			and match_court_3d.live_positions.has(event_actor_id):
 		_set_plan_target(
-			plan, event_actor_id, Vector2(event.metadata["movement_target"])
+			plan, event_actor_id, Vector2(event.metadata["movement_target"]), true
 		)
 	var staged_id := int(event.metadata.get("staged_next_actor_id", -1))
 	if staged_id >= 0:
 		_set_plan_target(
-			plan, staged_id, Vector2(event.metadata.get("staged_next_position", action_target))
+			plan, staged_id,
+			Vector2(event.metadata.get("staged_next_position", action_target)), true
 		)
 	var next_actor_id := int(next_contact.actor_id)
 	if next_actor_id >= 0:
@@ -1191,7 +1253,7 @@ func _build_movement_plan(
 			str(player_handedness.get(next_actor_id, "Right")),
 			Dictionary(player_physical_profiles.get(next_actor_id, {})),
 		)
-		_set_plan_target(plan, next_actor_id, action_target)
+		_set_plan_target(plan, next_actor_id, action_target, true)
 		## Start the drawn journey where the simulator timed it from, not
 		## wherever the previous leg happened to leave this actor standing. The
 		## two disagreed most sharply for a blocker who then dug their own
@@ -1244,6 +1306,15 @@ func _build_movement_plan(
 			plan[next_actor_id]["delay_seconds"] = maxf(float(
 				next_contact.metadata["movement_delay_seconds"]
 			), 0.0)
+		if next_contact.metadata.has("movement_duration"):
+			plan[next_actor_id]["seconds"] = maxf(float(
+				next_contact.metadata["movement_duration"]
+			), 0.0)
+		if next_contact.event_type == RallyEventModel.EventType.ATTACK \
+				and next_contact.metadata.has("approach_speed_mps"):
+			plan[next_actor_id]["speed_mps"] = maxf(float(
+				next_contact.metadata["approach_speed_mps"]
+			), 0.01)
 	## Who the resolver named this window, remembered for the next one.
 	_previously_placed = {}
 	for key in ["home_phase_targets", "opponent_phase_targets"]:
@@ -1352,8 +1423,10 @@ func _separate_plan(plan: Dictionary, contact_actor_id: int) -> void:
 				## by the net and a voli on the far side is not in the way.
 				if (a < 100) != (b < 100):
 					continue
-				var a_movable := plan.has(a) and a != contact_actor_id
-				var b_movable := plan.has(b) and b != contact_actor_id
+				var a_movable := plan.has(a) and a != contact_actor_id \
+					and not bool(plan[a].get("protected", false))
+				var b_movable := plan.has(b) and b != contact_actor_id \
+					and not bool(plan[b].get("protected", false))
 				if not a_movable and not b_movable:
 					continue
 				var offset: Vector2 = here[b] - here[a]
@@ -1409,12 +1482,11 @@ func _from_metres(metres: Vector2) -> Vector2:
 ## too long for its window simply is not finished when the window ends. The next
 ## plan starts from where the body got to, so the walk continues.
 ##
-## The one exception is the leg belonging to the player about to play the ball.
-## Pacing that one would draw the contact happening away from the ball, which is
-## a worse lie than a fast walk -- the resolver has already decided this player
-## makes this touch. It keeps the ball's window and the overspeed is recorded in
-## `playback_leg_overspeed` rather than absorbed, because the real cause is
-## playback's own accumulated drift and it should stay countable.
+## The contact actor is not an exception. Forcing that body to the ball inside a
+## short set window is exactly how a T1 approach was time-warped. The resolver
+## already publishes a reachable body contact and movement duration; playback
+## honours those clocks and records any remaining disagreement instead of
+## changing the player's speed to conceal it.
 const PLAUSIBLE_TOP_SPEED_MPS: float = 7.0
 
 
@@ -1442,8 +1514,13 @@ func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) 
 		var metres := _leg_metres(movement)
 		if metres <= 0.0001:
 			continue
-		var speed := _transition_speed(player_id)
-		var needed := metres / window_seconds
+		var speed := maxf(float(movement.get(
+			"speed_mps", _transition_speed(player_id)
+		)), 0.01)
+		var active_window := maxf(
+			window_seconds - float(movement.get("delay_seconds", 0.0)), 0.0001
+		)
+		var needed := metres / active_window
 		if player_id == contact_actor_id:
 			if needed > PLAUSIBLE_TOP_SPEED_MPS:
 				playback_leg_overspeed.append({
@@ -1458,8 +1535,11 @@ func _pace_plan(plan: Dictionary, window_seconds: float, contact_actor_id: int) 
 					## a blocker following a ball off their own hands.
 					"event_type": _pacing_event_type,
 				})
-			continue
-		movement["seconds"] = maxf(window_seconds, metres / maxf(speed, 0.01))
+		var authored_seconds := maxf(float(movement.get("seconds", 0.0)), 0.0)
+		movement["seconds"] = maxf(
+			metres / speed,
+			authored_seconds if authored_seconds > 0.0 else active_window,
+		)
 
 
 ## The length of the drawn journey in metres, corner included.
@@ -1761,14 +1841,28 @@ static func _metres(from_position: Vector2, to_position: Vector2) -> float:
 
 func _apply_explicit_targets(plan: Dictionary, targets: Dictionary) -> void:
 	for raw_player_id in targets:
-		_set_plan_target(plan, int(raw_player_id), Vector2(targets[raw_player_id]))
+		## Resolver-authored ground is evidence, not a suggestion for playback's
+		## overlap cosmetic to move. In particular this protects a T1 hitter's
+		## release mark in the window before the set.
+		_set_plan_target(
+			plan, int(raw_player_id), Vector2(targets[raw_player_id]), true
+		)
 
 
-func _set_plan_target(plan: Dictionary, player_id: int, target: Vector2) -> void:
+func _set_plan_target(
+	plan: Dictionary,
+	player_id: int,
+	target: Vector2,
+	protected: bool = false,
+) -> void:
 	if not match_court_3d.live_positions.has(player_id):
 		return
 	var start := Vector2(match_court_3d.live_positions[player_id])
-	plan[player_id] = {"start": start, "target": target}
+	var was_protected := bool(plan.get(player_id, {}).get("protected", false))
+	plan[player_id] = {
+		"start": start, "target": target,
+		"protected": protected or was_protected,
+	}
 
 
 func _event_elevation(event: RallyEvent, player_id: int) -> float:

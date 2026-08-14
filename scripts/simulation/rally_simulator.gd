@@ -7049,6 +7049,7 @@ func _form_opponent_block(
 			assist = candidate
 			assist_close = close_fraction
 			assist_net_x = float(candidate_terms.get("closed_net_x", 0.5))
+	var assist_attempt: VolleyballPlayer = assist
 	var assist_close_attempted := assist_close
 	if assist_close < 0.34:
 		assist = null
@@ -7065,6 +7066,7 @@ func _form_opponent_block(
 	return {
 		"primary": primary,
 		"assist": assist,
+		"assist_attempt": assist_attempt,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
 		## The reached positions, so the geometric wall stands where the blockers
@@ -12244,6 +12246,7 @@ func _form_home_block(
 			assist = candidate
 			assist_close = close_fraction
 			assist_net_x = float(candidate_terms.get("closed_net_x", 0.5))
+	var assist_attempt: VolleyballPlayer = assist
 	var assist_close_attempted := assist_close
 	if assist_close < 0.34:
 		assist = null
@@ -12260,6 +12263,7 @@ func _form_home_block(
 	return {
 		"primary": primary,
 		"assist": assist,
+		"assist_attempt": assist_attempt,
 		"primary_close": primary_close,
 		"assist_close": assist_close,
 		## The reached positions, so the geometric wall stands where the blockers
@@ -12611,6 +12615,11 @@ func _geometric_swing(
 		),
 		attack_type,
 	)
+	## Collision geometry contains only hands that reached the wall. Playback
+	## needs every jump attempt, including a late closer and the wall reacting to
+	## a swing that ultimately misses. Keep those two facts deliberately separate.
+	swing["block_jump_timing"] = \
+		GeometricAttackPromotionModel.block_jump_timing(formation)
 	## The two inputs a sweep cannot supply for itself. Gate D contacted at full
 	## jumping reach because it had no approach to ask; a rally does, and whether
 	## that difference explains the net rate is the first question the shadow was

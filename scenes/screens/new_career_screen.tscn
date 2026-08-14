@@ -226,6 +226,15 @@ theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
 columns = 4
 
+[node name="AlignmentPreview" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/RegionStep" unique_id=250971622]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 72)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
 [node name="TypeStep" type="VBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin" unique_id=1191372472]
 unique_name_in_owner = true
 visible = false
@@ -280,14 +289,6 @@ size_flags_vertical = 3
 theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 4
 columns = 4
-
-[node name="AlignmentPreview" type="Label" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/IdentityStep" unique_id=250971622]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 38)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.96, 0.79, 0.25, 1)
-horizontal_alignment = 1
-vertical_alignment = 1
 
 [node name="NamesStep" type="HBoxContainer" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin" unique_id=438973408]
 unique_name_in_owner = true

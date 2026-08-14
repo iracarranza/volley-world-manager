@@ -17,7 +17,7 @@ Everything runs from the repository root with the cached binary:
 xvfb-run -a godot --path . res://tools/<name>.tscn
 ```
 
-Suite baseline on this branch: **1,792 checks pass.** The count is not a
+Suite baseline on this branch: **1,829 checks pass.** The count is not a
 regression signal -- sampling tests emit a variable number of checks and it has
 read 1,180 through 1,792 across near-identical trees. Read the FAIL line.
 
@@ -181,17 +181,29 @@ over the same frames. 0 is planted, 1 is a foot moving with the hips.
 Runs the same actor twice per speed with `foot_plant_enabled` off and on, so the
 improvement is measured rather than claimed.
 
-| speed | plant off | plant on | stance phases |
-|---|---|---|---|
-| 1.1 m/s | 0.343 | **0.203** | 20 |
-| 2.8 m/s | 0.943 | **0.460** | 25 |
-| 5.2 m/s | 2.464 | **1.974** | 45 |
+| direction | speed | plant off | plant on | stance phases |
+|---|---:|---:|---:|---:|
+| forward | 1.1 | 0.180 | **0.018** | 23 |
+| forward | 2.8 | 0.317 | **0.030** | 27 |
+| forward | 5.2 | 0.434 | **0.038** | 27 |
+| lateral | 1.1 | 1.164 | **0.154** | 37 |
+| lateral | 2.8 | 1.946 | **0.219** | 94 |
+| lateral | 5.2 | 2.113 | **0.236** | 89 |
+| backpedal | 1.1 | 0.319 | **0.032** | 37 |
+| backpedal | 2.8 | 0.536 | **0.056** | 43 |
+| backpedal | 5.2 | 3.187 | **0.265** | 178 |
 
-**What this found:** the drawn foot sweeps roughly **2.7x further than the ground
-travels**, because `stride_cycle` divides by `stride_length_m` (0.55-1.15 m per
-*cycle*, so ~0.4 m per step) while the leg geometry -- 39 degrees of hip either
-side of vertical over a 0.9 m span -- sweeps about 1.1 m per stance. See
-`OUTSTANDING.md` §3.
+**What this found:** `stride_length_m` is metres per step while the pose curve
+is a right-left two-step cycle. Playback had advanced one full cycle per stored
+step and used the same step at every speed and direction. The corrected clock is
+derived from rendered leg span, speed and heading; the ready stance releases
+through upright standing before locomotion; and the actual rig supplies a local
+pitch/roll Jacobian for the bounded plant correction.
+
+The slow-backpedal failure was separate and refresh-rate dependent. Direction
+was ignored until one *frame* travelled 1 cm, so 1.1 m/s had a heading at 60 Hz
+and no heading at high refresh rates. Accumulating that centimetre across frames
+dropped the planted median from 1.118 to 0.032.
 
 **Known limits:**
 
@@ -204,8 +216,10 @@ side of vertical over a 0.9 m span -- sweeps about 1.1 m per stance. See
   2.33 between runs -- a slower gait covers less ground per frame, so it needs
   *more* frames for the same number of steps. 900 gives twenty and a stable
   figure.
-- Only the fore-aft axis is corrected and only that axis is measured against a
-  straight-line walk. A shuffle's lateral slip is untouched and unmeasured.
+- The correction is capped at 26 degrees. At 5.2 m/s, lateral/backpedal p95 is
+  still 0.522 / 0.444; widening the cap would visibly contort the hip.
+- Use `--direction=`, `--speed=` and `--frames=` after the scene path to isolate
+  one row without replacing this rendered-process measurement with a micro-test.
 
 ---
 
@@ -221,7 +235,9 @@ the coat counted against the same body wearing none. Then creates the career and
 reads the manager back off `CareerState`.
 
 **Reports:** 4 of 4 drawn, 0 identical bodies, major 8 regions / minor 6, and
-the body stored on the career.
+the body stored on the career. The rendered sheet also verifies that the model
+faces the camera and that alignment/familiarity/cohesion appears on Origin as a
+`CONFIRM <REGION>` prompt rather than on Philosophy.
 
 **What this found:** the first version counted coat marks by filtering `extras`
 on `color_key == "literal"`, which is not a key on those parts, and reported
@@ -231,11 +247,41 @@ nothing.
 
 **Known limits:** it drives the screen's own methods rather than clicking, so it
 proves the model and the wiring and says nothing about whether a button is
-reachable with a mouse. The layout is checked by looking at the four PNGs.
+reachable with a mouse. PNG capture requires a rendered Godot window; the dummy
+headless renderer still checks data flow but returns a null viewport texture.
 
 ---
 
-## 8. `second_contact_preview` and `transition_preview` -- the poses, looked at
+## 8. `rally_resolution_probe` -- does the verdict match the visible rally
+
+**Asks:** are roll-shot arcs plausible, does a block touch that lands out award
+the correct side, does a playable touch route to defence, and does a committed
+wall still publish its jump when the attack misses?
+
+**Reports, 1,200 rallies / 1,453 attacks:**
+
+- roll shots: 130; displayed apex max **3.65 m**, maximum rise **0.74 m**
+- out after block contact: **226; 0 wrong winners**
+- playable touches behind the block: **155; 0 routing/event failures**
+- missed attacks into a wall: **241; 0 missing jump-timing maps**
+- first-to-second contacts: **1,453; 0 consecutive-actor failures**
+- block-to-defence pairs: 155; **0 implausible movement** (max 7.39 m/s)
+- tempo metadata/relationship failures: **0**
+- hitter set-path metadata/trajectory failures: **0**
+
+**What this found:** collision geometry and an attempted jump are not the same
+set of bodies. `block_wall` must continue to exclude hands that never arrived,
+but playback timing now comes from the formation's primary and attempted assist
+before that filter. A wall therefore commits during the set even if the attack
+later lands out or misses entirely.
+
+**Known limits:** the roll-shot figures include the hitter's contact height; a
+3.65 m apex is only 0.74 m above the hand. Judge rise and launch mode before
+judging the absolute floor height.
+
+---
+
+## 9. `second_contact_preview` and `transition_preview` -- the poses, looked at
 
 Two sheets rather than two probes: they render rows of the rig through a phase
 or a clock and prove nothing numerically. They are here because half the defects
@@ -262,7 +308,7 @@ clock the window ended on, so the sheet has to start there too.
 
 ---
 
-## 9. Inherited probes, and what they are worth
+## 10. Inherited probes, and what they are worth
 
 - **`block_rate_probe`** -- stuff / involvement / touch. Baseline 2.56% /
   79.59% / 38.66%. The career is unseeded, so the roster differs between runs
