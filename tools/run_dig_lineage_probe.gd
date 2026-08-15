@@ -23,6 +23,11 @@ const FIRST_SEED: int = 20000
 
 func _initialize() -> void:
 	var rows: Array[Dictionary] = []
+	## Part E control: the same two fields off a RECEPTION, to test whether the
+	## clustered set-contact height is a dig problem or a shared consequence of
+	## `min(apex, setter contact height)` in both models.
+	var reception_apex: Array = []
+	var reception_set_height: Array = []
 	var first_dig_attempts := 0
 	var first_dig_up := 0
 	var attempts := 0
@@ -43,6 +48,12 @@ func _initialize() -> void:
 			var seen_first := false
 			for index in range(result.events.size()):
 				var event: Resource = result.events[index]
+				if int(event.event_type) == RallyEventScript.EventType.RECEPTION \
+						and bool(event.success):
+					reception_apex.append(float(event.metadata.get(
+						"pass_apex_meters", 0.0)))
+					reception_set_height.append(float(event.metadata.get(
+						"set_contact_height_meters", 0.0)))
 				if int(event.event_type) != RallyEventScript.EventType.DIG:
 					continue
 				attempts += 1
@@ -67,6 +78,8 @@ func _initialize() -> void:
 					"outgoing_trajectory", {}
 				)
 				var row := {
+					"seed": seed_value,
+					"serving_home": serving_home,
 					"side": str(event.metadata.get("side", "")),
 					"control": float(event.quality),
 					"posture": str(event.metadata.get("contact_posture", "")),
@@ -97,6 +110,7 @@ func _initialize() -> void:
 					))
 					if bool(set_event.metadata.get("emergency_setter", false)):
 						emergency += 1
+						row["emergency"] = true
 					if str(set_event.metadata.get("set_posture", "")) == "jump":
 						jump_sets += 1
 					if _same_ball(outgoing, set_event.metadata.get(
@@ -110,6 +124,11 @@ func _initialize() -> void:
 		manager.free()
 	_report(rows, attempts, successes, reached_set, lineage_ok, lineage_broken,
 		emergency, jump_sets, first_dig_attempts, first_dig_up)
+	print("")
+	print("=== reception control (Part E) ===")
+	_percentiles(reception_apex, "reception apex (m)")
+	_percentiles(reception_set_height, "reception set height (m)")
+	print("  distinct reception set heights %d" % _distinct(reception_set_height))
 	quit()
 
 
@@ -192,6 +211,32 @@ func _report(
 	var apexes: Array = by.call("apex")
 	print("  distinct durations        %d" % _distinct(durations))
 	print("  distinct apexes           %d" % _distinct(apexes))
+	print("")
+	print("=== representative seeds ===")
+	_exemplar(rows, "clean dig -> designated setter",
+		func(r): return float(r.get("spoil", 1.0)) < 0.10 \
+			and not bool(r.get("emergency", false)))
+	_exemplar(rows, "poor but successful -> setter moves",
+		func(r): return float(r.get("spoil", 0.0)) > 0.45 \
+			and float(r.get("setter_move", 0.0)) > 0.20)
+	_exemplar(rows, "successful dig -> emergency setter",
+		func(r): return bool(r.get("emergency", false)))
+	_exemplar(rows, "reaching / off-axis dig",
+		func(r): return str(r.get("posture", "")) in ["reaching", "off-axis"])
+	_exemplar(rows, "later-exchange transition dig",
+		func(r): return str(r.get("side", "")) == "opponent" \
+			and float(r.get("spoil", 0.0)) > 0.30)
+
+
+func _exemplar(rows: Array, label: String, test: Callable) -> void:
+	for row in rows:
+		if test.call(row):
+			print("  %-34s seed %d (serving_home=%s) spoil %.3f posture %s err %.2fm" % [
+				label, int(row.get("seed", -1)), str(row.get("serving_home", true)),
+				float(row.get("spoil", 0.0)), str(row.get("posture", "")),
+				float(row.get("target_error", 0.0))])
+			return
+	print("  %-34s (none found)" % label)
 
 
 func _distinct(values: Array) -> int:
