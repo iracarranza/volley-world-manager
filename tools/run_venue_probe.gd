@@ -21,6 +21,29 @@ extends Node
 ##   xvfb-run -a godot --path . res://tools/venue_probe.tscn
 
 const COURT := preload("res://scenes/components/match_court_3d.tscn")
+const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
+
+## The home kit each region wears, from the kit pass. Dark or near-white and
+## nothing between, because a kit is seen against a terracotta floor and a
+## midtone disappears into it.
+const KITS := {
+	"landavol": Color("35393A"), "pawa": Color("26355C"),
+	"speddigh": Color("1F4E6B"), "bloc": Color("414055"),
+	"xervu": Color("3A2415"), "taktika": Color("1E2124"),
+	"aace": Color("0B0F14"), "ispayk": Color("0C4F52"),
+}
+
+## The visitors, in a change strip. Every home kit above is dark, so the away
+## side has to be the light one or two dark teams share a floor and nobody can
+## tell who touched the ball.
+const AWAY_KIT := Color("E4E0D6")
+
+## Six a side, in a legal rotation: three front at the attack line, three back.
+const SLOTS: Array = [
+	Vector3(-3.0, 0.0, 2.9), Vector3(0.0, 0.0, 2.6), Vector3(3.0, 0.0, 2.9),
+	Vector3(-3.2, 0.0, 6.8), Vector3(0.0, 0.0, 7.2), Vector3(3.2, 0.0, 6.8),
+]
+const BODIES: Array = ["Feli", "Avi", "Feli", "Avi", "Feli", "Avi"]
 
 ## Court metrics, taken from the court scene rather than restated: the net is at
 ## the origin, the posts sit at ±4.72, and the floor is 18 x 9.
@@ -313,6 +336,7 @@ func _shoot(venue: Dictionary) -> void:
 	_roof_lights(str(venue.get("id", "")))
 	_fixtures(str(venue.get("id", "")))
 	_floor_for(str(venue.get("id", "")))
+	_volis(str(venue.get("id", "")))
 	var build: Callable = venue.get("build", func(): pass)
 	build.call()
 	await get_tree().process_frame
@@ -320,6 +344,8 @@ func _shoot(venue: Dictionary) -> void:
 	var path := "user://venue_%s.png" % str(venue.get("id", "x"))
 	get_tree().root.get_texture().get_image().save_png(path)
 	print("saved %s  (%s)" % [ProjectSettings.globalize_path(path), venue.get("label", "")])
+	if _open_air:
+		await _establishing(str(venue.get("id", "x")))
 	_court.queue_free()
 	await get_tree().process_frame
 
@@ -422,6 +448,31 @@ func _terrace() -> void:
 		Vector3(0.0, -1.6, 0.0), Color(0.29, 0.24, 0.21), 0.0, 0.98
 	)
 	terrace.name = "Terrace"
+	## Lower terraces stepping away down the hillside, then the water. Without
+	## these the court is a slab in a blue void, which is not the same thing as
+	## being high up -- height only reads when something else is visibly below.
+	for i in range(5):
+		var step := _box(
+			Vector3(FREE_ZONE_SIDE * 2.0 + 40.0 + float(i) * 26.0, 3.4,
+				FREE_ZONE_END * 2.0 + 34.0 + float(i) * 22.0),
+			Vector3(-float(i) * 16.0, -4.4 - float(i) * 3.6, 0.0),
+			Color(0.26, 0.21, 0.18).lightened(float(i) * 0.06), 0.0, 0.98
+		)
+		step.name = "Hillside%d" % i
+	var sea := _box(
+		Vector3(900.0, 0.6, 900.0), Vector3(-190.0, -26.0, 0.0),
+		Color(0.16, 0.34, 0.46), 0.0, 0.28
+	)
+	sea.name = "Sea"
+	## A coastline: two headlands running out into it, so the water reads as a
+	## shore seen from above rather than as a blue floor.
+	for i in range(2):
+		var headland := _box(
+			Vector3(46.0, 7.0, 120.0 + float(i) * 90.0),
+			Vector3(-120.0 - float(i) * 60.0, -23.5, -150.0 + float(i) * 320.0),
+			Color(0.22, 0.20, 0.19), 0.0, 0.98
+		)
+		headland.name = "Headland%d" % i
 
 
 ## Walls and a roof, and neither of them casts.
@@ -544,6 +595,28 @@ func _fixtures(id: String) -> void:
 		)
 		zone.name = "WarmUp%d" % int(end)
 	var hung := float(CENTRE_HUNG.get(id, 0.0))
+	if hung <= 0.0 and _open_air:
+		## **An open-air board needs something to stand on.** There is no end wall
+		## on a terrace, so the first version hung in mid-air behind the court --
+		## a scoreboard floating over a mountainside.
+		for sx in [-1.0, 1.0]:
+			var leg := _box(
+				Vector3(0.35, 6.4, 0.35),
+				Vector3(sx * 2.6, 3.2, -(FREE_ZONE_END + 4.2)),
+				Color(0.34, 0.30, 0.27), 0.0, 0.9
+			)
+			leg.name = "BoardLeg%d" % int(sx)
+		var frame := _box(
+			Vector3(6.0, 2.4, 0.3), Vector3(0.0, 7.0, -(FREE_ZONE_END + 4.2)),
+			Color(0.16, 0.17, 0.19), 0.0, 0.9
+		)
+		frame.name = "GantryBoard"
+		var face := _box(
+			Vector3(4.6, 1.4, 0.12), Vector3(0.0, 7.0, -(FREE_ZONE_END + 4.05)),
+			Color(0.95, 0.78, 0.30), 0.0, 1.0, 1.5
+		)
+		face.name = "GantryBoardFace"
+		return
 	if hung <= 0.0:
 		## The ordinary case: a board on the end wall, above the end stand.
 		var board := _box(
@@ -574,6 +647,107 @@ func _fixtures(id: String) -> void:
 			Color(0.96, 0.80, 0.34), 0.0, 1.0, 2.2 * hung
 		)
 		panel.name = "HungFace%d" % face
+
+
+## Twelve volis, so a hall is judged with people standing in it.
+##
+## A room drawn empty is judged on its architecture; a room with bodies in it is
+## judged on whether you can see them, which is the only question a venue has to
+## answer. It is also the first time the kit palette and the court palette are in
+## the same frame -- the two were designed a day apart against different grounds.
+func _volis(id: String) -> void:
+	var home: Color = Color(KITS.get(id, KITS["landavol"]))
+	for side in [1.0, -1.0]:
+		var kit := home if side > 0.0 else AWAY_KIT
+		for i in range(SLOTS.size()):
+			var slot: Vector3 = SLOTS[i]
+			var actor := ACTOR.instantiate()
+			_court.add_child(actor)
+			actor.position = Vector3(slot.x * side, 0.0, slot.z * side)
+			## Both sides face the net, which is the only orientation that reads
+			## as volleyball rather than as a queue.
+			actor.rotation.y = 0.0 if side > 0.0 else PI
+			actor.configure(
+				int(side) * 100 + i, side > 0.0, "",
+				"Right", {"body_type": str(BODIES[i])}
+			)
+			_wear(actor, kit)
+			## A still frame is not a live match: the name plate and the cogniticon
+			## are readouts for a rally in progress, and in a photograph they are
+			## twelve floating rectangles.
+			_hide_readouts(actor)
+
+
+## A second frame for an open-air venue, from far enough out to see what it
+## stands on.
+##
+## **The match camera cannot show this and no amount of terrain will fix that.**
+## Broadcast sits 9 m up looking slightly down at a court 19 m away, so the
+## terrace edge occludes everything below it -- you cannot see a drop from a
+## camera framed on the floor you are standing on. Height is not a property of
+## the court; it is a property of the approach to it, and it needs a shot that
+## includes the ground falling away.
+func _establishing(id: String) -> void:
+	var camera := _court.get_node_or_null("Camera3D") as Camera3D
+	if camera == null:
+		return
+	camera.position = Vector3(74.0, 46.0, 44.0)
+	camera.fov = 52.0
+	## Aimed below and beyond the court, not at it: the subject of this frame is
+	## the hillside, and the court is the thing perched on top of it.
+	camera.look_at(Vector3(-34.0, -9.0, -6.0), Vector3.UP)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var path := "user://venue_%s_wide.png" % id
+	get_tree().root.get_texture().get_image().save_png(path)
+	print("saved %s  (establishing)" % ProjectSettings.globalize_path(path))
+
+
+## Hide the readouts -- the name plate and the focus ring, which belong to a live
+## rally rather than to a photograph.
+##
+## **The flat panels on each voli are not readouts and must stay.** They are
+## *cosmetics*: coats and markings the rig builds at runtime, each carrying a
+## `color_key` meta of `kit`, `crown` or `skin`. Twice I read them as floating
+## debug quads and tried to delete a voli's clothes.
+func _hide_readouts(node: Node) -> void:
+	for child in node.get_children():
+		if child is Label3D or child is Sprite3D:
+			(child as Node3D).visible = false
+		elif str(child.name) in ["FocusRing", "SignatureSurge3D"]:
+			(child as Node3D).visible = false
+		_hide_readouts(child)
+
+
+## Paint the kit on after `configure`, which sets team colour from `UIPalette`
+## -- the same two theme colours for every club in the world. Shorts follow the
+## shirt darkened, which is the relationship the rig already uses.
+func _wear(actor: Node, kit: Color) -> void:
+	for path in ["BodyPivot/Torso", "BodyPivot/Shorts"]:
+		var mesh := actor.get_node_or_null(path) as MeshInstance3D
+		if mesh == null:
+			continue
+		_paint(mesh, kit if path.ends_with("Torso") else kit.darkened(0.38))
+	## **The kit is not only the shirt.** A coat or a marking keyed `kit` takes
+	## the team colour too, and painting the torso alone left every cosmetic in
+	## `UIPalette`'s teal and coral -- so a Xérvyan side wore brown with teal
+	## panels on its back. The rig already records which parts are kit; this
+	## reads that meta rather than guessing from node names.
+	_paint_cosmetics(actor, kit)
+
+
+func _paint_cosmetics(node: Node, kit: Color) -> void:
+	for child in node.get_children():
+		if child is MeshInstance3D and str(child.get_meta("color_key", "")) == "kit":
+			_paint(child as MeshInstance3D, kit)
+		_paint_cosmetics(child, kit)
+
+
+func _paint(mesh: MeshInstance3D, colour: Color) -> void:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = colour
+	material.roughness = 0.82
+	mesh.material_override = material
 
 
 ## The court floor this region actually plays on.
