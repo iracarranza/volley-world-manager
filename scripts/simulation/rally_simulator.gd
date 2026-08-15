@@ -3433,6 +3433,21 @@ func resolve(
 		opponent_defense_time, "lateral",
 		float(opponent_defense.get("read_error_meters", 0.0)),
 	)
+	## The ball that leaves this dig, resolved once, here. Only a successful dig
+	## has an outgoing flight -- a defender who never controlled it did not pass
+	## anything, and stamping a trajectory on a miss is exactly the event-truth
+	## corruption that would make a beaten dig indistinguishable from a poor one.
+	var opponent_dig_pass := {}
+	if dug:
+		opponent_dig_pass = _dig_pass_result(
+			opponent_defender, attack_target, opponent_pass_target,
+			opponent_dig_control,
+			Dictionary(opponent_defense.get("arrival", {})),
+			last_dig_posture, opponent_arriving_trajectory,
+			float(opponent_defense.distance_meters),
+			opponent_team.setter() as VolleyballPlayer, opponent_dig_time,
+		)
+		opponent_pass_target = Vector2(opponent_dig_pass.destination)
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
@@ -3475,7 +3490,20 @@ func resolve(
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
 			"recovering_count": _recovering_count(rally_clock),
-			"adaptation_bonus": floor_defense_bonus})
+			"adaptation_bonus": floor_defense_bonus,
+			## Published by the dig itself, so the ball the setter is resolved
+			## against and the ball that gets drawn are the same object.
+			"outgoing_trajectory": opponent_dig_pass.get("trajectory", {}),
+			"pass_apex_meters": opponent_dig_pass.get("pass_apex_meters", 0.0),
+			"pass_contact_height_meters": opponent_dig_pass.get(
+				"pass_contact_height_meters", 0.0
+			),
+			"set_contact_height_meters": opponent_dig_pass.get(
+				"set_contact_height_meters", 0.0
+			),
+			"pass_duration_seconds": opponent_dig_pass.get("duration", 0.0),
+			"target_error_meters": opponent_dig_pass.get("target_error_meters", 0.0),
+			"pass_spoil": opponent_dig_pass.get("spoil", 0.0)})
 	_note_recovery(opponent_defender, opponent_dig_recovery, opponent_dig_time)
 	## Where they actually ended up, not where the ball was. A defender who was
 	## beaten to it starts the next phase short of it, which is the position the
@@ -3488,6 +3516,9 @@ func resolve(
 			result, players, lineup, hitter, opponent_pass_target,
 			opponent_team, defensive_plan, 1, opponent_dig_control, false,
 			opponent_defender.id,
+			float(opponent_dig_pass.get("set_contact_height_meters", NAN)),
+			float(opponent_dig_pass.get("pass_apex_meters", 0.0)),
+			Dictionary(opponent_dig_pass.get("trajectory", {})),
 		)
 	result.key_factors.append(_factor("attack_control"))
 	return _finish(result, "kill", true, hitter.id, {
@@ -3907,8 +3938,22 @@ func _resolve_opponent_transition(
 	## the same honest gap `pass_contact_height_meters` above already carries --
 	## and a jump set is refused rather than guessed at.
 	pass_apex_meters: float = 0.0,
+	## **The actual ball, not a description of one.** Everything above is a
+	## summary the caller extracted; this is the flight the feeding contact
+	## published, and the setter is now reached against its own duration rather
+	## than against `DEFAULT_SECOND_CONTACT_SECONDS`. Empty for the feeds that
+	## still have no physical model -- see the fallback note at the window below.
+	incoming_pass_trajectory: Dictionary = {},
 ) -> Resource:
 	var transition_penalty := float(exchange_number - 1) * 0.035
+	## **How long the setter actually has.** This was the literal 0.68 that
+	## `DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS` names, applied to every
+	## continuation regardless of what the ball did -- so a floated dig and a
+	## flat one gave the setter the same budget to reach the same point, and no
+	## dig could ever make a setter late. A dug ball now states its own duration.
+	var second_contact_window := float(incoming_pass_trajectory.get(
+		"duration", DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS
+	))
 	## The pass destination is the setter's physical contact point. Keeping a
 	## separate display-only setter coordinate made the ball originate away from
 	## the marker and introduced a visible snap at every opponent set.
@@ -3929,7 +3974,7 @@ func _resolve_opponent_transition(
 		opponent_second_contact.candidates, opponent_second_contact.starts,
 		opponent_plan_for_setter, int(opponent_team.setter_id),
 		first_contact_player_id, opponent_setter,
-		opponent_setter_position, DEFAULT_SECOND_CONTACT_SECONDS,
+		opponent_setter_position, second_contact_window,
 	)
 	if opponent_setter_choice.player != null:
 		opponent_setter = opponent_setter_choice.player as VolleyballPlayer
@@ -4353,6 +4398,12 @@ func _resolve_opponent_transition(
 		)
 		opponent_set_event.metadata["set_release_height_meters"] = \
 			opponent_release_height
+		## **The ball this set was resolved against.** Stamped so the chain from
+		## a dig to its set can be proven by identity rather than by two
+		## endpoints happening to be close. Empty for feeds that publish no
+		## physical flight, which is what makes the remaining gaps countable.
+		opponent_set_event.metadata["incoming_pass_trajectory"] = \
+			incoming_pass_trajectory
 		opponent_set_event.metadata["set_pace_scale"] = _set_pace_scale(
 			opponent_setter, bool(opponent_jump_set.jumping)
 		)
@@ -5578,6 +5629,15 @@ func _resolve_opponent_transition(
 		var defence_player := entry as VolleyballPlayer
 		if defence_player != null:
 			home_by_id_for_defense[defence_player.id] = defence_player
+	var home_dig_pass := {}
+	if defense_success:
+		home_dig_pass = _dig_pass_result(
+			defender, home_target, defense_pass_target, home_dig_control,
+			defense_arrival, str(last_dig_posture), opponent_attack_trajectory,
+			float(defense_arrival.get("distance_meters", 0.0)),
+			_player_by_id(players, lineup.active_setter_id()), rally_clock,
+		)
+		defense_pass_target = Vector2(home_dig_pass.destination)
 	_add_event(result, RallyEventModel.EventType.DIG, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
 		home_dig_control, "%s defends" % defender.display_name,
@@ -5631,6 +5691,19 @@ func _resolve_opponent_transition(
 			"incoming_force": last_dig_force,
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
+			## The ball this dig actually put up. Published here rather than
+			## invented later, so the setter and the drawing share one object.
+			"outgoing_trajectory": home_dig_pass.get("trajectory", {}),
+			"pass_apex_meters": home_dig_pass.get("pass_apex_meters", 0.0),
+			"pass_contact_height_meters": home_dig_pass.get(
+				"pass_contact_height_meters", 0.0
+			),
+			"set_contact_height_meters": home_dig_pass.get(
+				"set_contact_height_meters", 0.0
+			),
+			"pass_duration_seconds": home_dig_pass.get("duration", 0.0),
+			"target_error_meters": home_dig_pass.get("target_error_meters", 0.0),
+			"pass_spoil": home_dig_pass.get("spoil", 0.0),
 			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": home_dig_time})
@@ -5655,13 +5728,14 @@ func _resolve_opponent_transition(
 	return _resolve_home_continuation(
 		result, players, lineup, defender, defense_pass_target,
 		opponent_team, defensive_plan, exchange_number, home_dig_control,
-		## No dig flight yet -- a dug ball has no modelled arc, so the second
-		## contact keeps the fallback window rather than being handed a zero.
-		0.0,
+		## The dig's own flight, which this parameter has been waiting for. It
+		## was 0.0 with a note saying a dug ball had no modelled arc; it has one.
+		float(home_dig_pass.get("duration", 0.0)),
 		## The swing they just dug. The home side has been transitioning since
 		## the ball was struck, not since it came off the platform, which is the
 		## same head start the first ball takes from the serve.
 		float(opponent_attack_trajectory.get("duration", 0.0)),
+		Dictionary(home_dig_pass.get("trajectory", {})),
 	)
 
 
@@ -5687,6 +5761,12 @@ func _resolve_home_continuation(
 	## has not been given them is unchanged rather than silently worse.
 	dig_flight_seconds: float = 0.0,
 	transition_head_start_seconds: float = 0.0,
+	## The dug ball itself, for the same reason the opponent path takes one: a
+	## set has to be resolved against a flight, not against a duration lifted out
+	## of one. **Last in the list deliberately** -- two callers pass this
+	## function positionally, and inserting it in the middle silently handed one
+	## of them a float where a trajectory belongs.
+	incoming_pass_trajectory: Dictionary = {},
 ) -> Resource:
 	var cont_second_contact := _home_second_contact_candidates(players, lineup)
 	var setter := _second_contact_setter(
@@ -5942,6 +6022,11 @@ func _resolve_home_continuation(
 				"set", set_contact, set_target, continuation_flight_time,
 				float(continuation_set_arc.apex_height_meters), cont_set_contact_time
 			)})
+	## Lineage, as on the opponent side: the flight this set was resolved
+	## against, so a probe can prove the chain instead of comparing endpoints.
+	if not result.events.is_empty():
+		result.events[-1].metadata["incoming_pass_trajectory"] = \
+			incoming_pass_trajectory
 	var cont_set_event := result.events[-1] as RallyEvent
 	_stamp_second_contact_claim(cont_set_event, setter_choice)
 	if cont_set_event != null:
@@ -6860,9 +6945,21 @@ func _resolve_home_continuation(
 		"end_time", rally_clock + cont_defense_time
 	))
 	rally_clock = maxf(rally_clock, cont_dig_time)
+	var cont_desired_target := attack_target + Vector2(0.04, -0.03)
+	var cont_dig_pass := {}
+	if dug:
+		cont_dig_pass = _dig_pass_result(
+			opponent_defender, attack_target, cont_desired_target,
+			cont_dig_control, {}, str(last_dig_posture),
+			continuation_arriving_trajectory,
+			transition_defender_start.distance_to(transition_defender_reach)
+				* CourtConstants.COURT_WIDTH_METERS,
+			opponent_team.setter() as VolleyballPlayer, cont_dig_time,
+		)
+		cont_desired_target = Vector2(cont_dig_pass.destination)
 	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
-		attack_target + Vector2(0.04, -0.03), dug, cont_dig_control,
+		cont_desired_target, dug, cont_dig_control,
 		"Opponent dig · exchange %d" % exchange_number,
 		"Contact 1 of 3 · %d%% control." % roundi(cont_dig_control * 100.0),
 		{"side": "opponent",
@@ -6876,6 +6973,19 @@ func _resolve_home_continuation(
 			"incoming_force": last_dig_force,
 			"incoming_speed_mps": last_dig_speed,
 			"contact_posture": last_dig_posture,
+			## The ball this dig actually put up. Published here rather than
+			## invented later, so the setter and the drawing share one object.
+			"outgoing_trajectory": cont_dig_pass.get("trajectory", {}),
+			"pass_apex_meters": cont_dig_pass.get("pass_apex_meters", 0.0),
+			"pass_contact_height_meters": cont_dig_pass.get(
+				"pass_contact_height_meters", 0.0
+			),
+			"set_contact_height_meters": cont_dig_pass.get(
+				"set_contact_height_meters", 0.0
+			),
+			"pass_duration_seconds": cont_dig_pass.get("duration", 0.0),
+			"target_error_meters": cont_dig_pass.get("target_error_meters", 0.0),
+			"pass_spoil": cont_dig_pass.get("spoil", 0.0),
 			"reach_margin_meters": last_dig_reach_margin,
 			"recovering_count": _recovering_count(rally_clock),
 			"event_time": cont_dig_time})
@@ -6887,9 +6997,12 @@ func _resolve_home_continuation(
 			"play": "Default T3 Outside",
 		}, "kill_default")
 	return _resolve_opponent_transition(
-		result, players, lineup, hitter, attack_target,
+		result, players, lineup, hitter, cont_desired_target,
 		opponent_team, defensive_plan, exchange_number + 1, cont_dig_control,
 		false, opponent_defender.id,
+		float(cont_dig_pass.get("set_contact_height_meters", NAN)),
+		float(cont_dig_pass.get("pass_apex_meters", 0.0)),
+		Dictionary(cont_dig_pass.get("trajectory", {})),
 	)
 
 
@@ -9512,6 +9625,118 @@ const SHANK_EXECUTION: float = 0.18
 const SHANK_EXTRA_RISE_METERS: float = 1.60
 
 
+## The ball that physically leaves a successful floor dig.
+##
+## **Before this, a dug ball had no flight.** The dig event carried a destination
+## and nothing else -- no apex, no duration, no contact height -- and the two
+## transition resolvers filled the hole with constants: a 0.68 s second-contact
+## window for setter reachability, and a table-drawn contact height. Both were
+## labelled as gaps in place; `_resolve_opponent_transition` still says
+## "NAN when the feeding contact has no height model, which today is every dug
+## ball on either side". This is that model. The display trajectory that
+## `_ensure_event_trajectories` used to invent afterwards was never the ball the
+## setter had been resolved against, so the drawn flight and the simulated one
+## were two different balls that happened to share an endpoint.
+##
+## **Reuses the reception primitives, not the reception helper.**
+## `_reception_pass_result` computes exactly this physics -- contact height,
+## apex, set-contact height, `BallFlightModel.duration_for_apex` -- but takes a
+## serve origin and a serve force and is calibrated against reception platform
+## feasibility. A dig is not a reception: it is played off a swing, from a
+## posture, at a reach margin, and often while falling. So the primitives are
+## shared and the geometry is its own.
+##
+## **No new random draw.** Everything below is derived from what the dig already
+## resolved: its control, its posture, its reach margin, how far the defender
+## travelled and how fast the ball was coming. The dig contest has already
+## consumed its randomness; a second roll here would make the same dig produce
+## two different balls.
+func _dig_pass_result(
+	digger: VolleyballPlayer,
+	contact_position: Vector2,
+	desired_target: Vector2,
+	dig_control: float,
+	arrival: Dictionary,
+	posture: String,
+	incoming_trajectory: Dictionary,
+	movement_distance_meters: float,
+	setter: VolleyballPlayer,
+	contact_time: float,
+) -> Dictionary:
+	var control := clampf(dig_control, 0.0, 1.0)
+	## **What the dig could not absorb goes somewhere.** Three things spoil a
+	## platform, and the dig already measured all of them: arriving late (a
+	## negative reach margin means reaching, not planted), being off-axis, and
+	## having crossed ground to get there. They are combined rather than picked
+	## between because a scrambling dig is usually all three at once.
+	var reach_margin := float(arrival.get("reach_margin_meters", 0.0))
+	var stretched := clampf((0.25 - reach_margin) / 0.85, 0.0, 1.0)
+	var posture_penalty := 0.0
+	match posture:
+		"off-axis": posture_penalty = 0.35
+		"reaching": posture_penalty = 0.55
+		"emergency", "fall": posture_penalty = 0.80
+	var travel := clampf(movement_distance_meters / 3.2, 0.0, 1.0)
+	var spoil := clampf(
+		(1.0 - control) * 0.55 + stretched * 0.20
+		+ posture_penalty * 0.17 + travel * 0.08,
+		0.0, 1.0,
+	)
+	## **Drift is a direction, not a radius.** A spoiled platform sends the ball
+	## on along the line it was already travelling -- off the arms rather than
+	## off the target -- so the error is biased downrange of the incoming ball
+	## instead of scattered around the setter. That is what makes a bad dig go
+	## over the net or into the antenna rather than randomly sideways.
+	var incoming_direction := Vector2.ZERO
+	## `start_position`, which is what `BallTrajectory.to_dict()` publishes. The
+	## first draft read "start", found nothing, and fell back to the contact
+	## point -- so the incoming direction was zero and every dig, however
+	## spoiled, landed exactly on its target. The probe caught it as a
+	## destination error of 0.000 at the median.
+	var incoming_start := Vector2(
+		incoming_trajectory.get("start_position", contact_position)
+	)
+	if incoming_start.distance_to(contact_position) > 0.01:
+		incoming_direction = (contact_position - incoming_start).normalized()
+	var desired_vector := desired_target - contact_position
+	var lateral := Vector2(-incoming_direction.y, incoming_direction.x)
+	var destination := desired_target \
+		+ incoming_direction * spoil * 0.20 \
+		+ lateral * (spoil * 0.11 * (1.0 if int(digger.id) % 2 == 0 else -1.0))
+	destination.x = clampf(destination.x, 0.04, 0.96)
+	destination.y = clampf(destination.y, 0.04, 0.96)
+	## Height, from the same two model calls a reception makes. A clean dig is
+	## played up to a setter; a spoiled one stays flat, which is what takes the
+	## options away rather than a penalty applied to them later.
+	var pass_contact_height := GeometricAttackPromotionModel \
+		.pass_contact_height_meters(digger)
+	var pass_apex := pass_contact_height + lerpf(1.35, 3.05, 1.0 - spoil)
+	var set_contact_height := minf(
+		pass_apex,
+		GeometricAttackPromotionModel.set_contact_height_meters(setter) \
+			if setter != null else pass_apex,
+	)
+	var flight_time := BallFlightModel.duration_for_apex(
+		pass_contact_height, set_contact_height, pass_apex
+	)
+	var trajectory := _ball_trajectory(
+		"dig", contact_position, destination, flight_time,
+		maxf(pass_apex - pass_contact_height, 0.0), contact_time,
+	)
+	return {
+		"trajectory": trajectory,
+		"destination": destination,
+		"duration": flight_time,
+		"pass_apex_meters": pass_apex,
+		"pass_contact_height_meters": pass_contact_height,
+		"set_contact_height_meters": set_contact_height,
+		"target_error_meters": destination.distance_to(desired_target)
+			* CourtConstants.COURT_WIDTH_METERS,
+		"spoil": spoil,
+		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
+	}
+
+
 func _reception_pass_result(
 	receiver: VolleyballPlayer,
 	start_position: Vector2,
@@ -11300,6 +11525,13 @@ func _ensure_event_trajectories(result: Resource) -> void:
 				RallyEventModel.EventType.SET: flight_time = 0.72
 				RallyEventModel.EventType.ATTACK: flight_time = 0.42
 				RallyEventModel.EventType.BLOCK: flight_time = 0.24
+				## **A successful floor dig no longer arrives here.** It publishes
+				## its own `outgoing_trajectory` at the contact, so the `continue`
+				## at the top of this loop already skipped it. What reaches this
+				## arm is a *failed* dig -- a ball nobody controlled -- and the
+				## flight drawn for it is display only, which is correct: there is
+				## no physical pass to model because no pass happened.
+				##
 				## **Coverage has to be listed or it silently loses its ball.**
 				## The default arm below is `continue`, not a fallback -- an
 				## unlisted type gets no `outgoing_trajectory` at all and the ball
