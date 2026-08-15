@@ -692,21 +692,26 @@ func _show_step() -> void:
 	match current_step:
 		0:
 			question_title.text = "Who are you?"
-			question_hint.text = "A voli like any other. None of this changes what your team can do -- it is what the rest of the game is looking at when it talks to you."
+			question_hint.text = "None of this changes what your team can do."
 		1:
 			question_title.text = "What should your team believe?"
-			question_hint.text = "Choose a shortcut, then challenge any principle. Geography comes next; first say what you believe on its own terms."
+			question_hint.text = "Choose a shortcut, then change any principle. Geography comes next."
 		2:
 			question_title.text = "Where does your volleyball begin?"
-			question_hint.text = "First the kind of place, then the place. Review what that choice means for the principles you already chose."
+			question_hint.text = "First the kind of place, then the place."
 			tier_hint.text = VolleyballRegions.definition(selected_region).tagline
 			_refresh_alignment_preview()
 		3:
 			question_title.text = "What are you taking responsibility for?"
-			question_hint.text = "A club is judged immediately. Founding one gets you nothing you did not build."
+			question_hint.text = "Founded starts you with twelve, aged 16 to 20. Established hands you ten that somebody else picked."
 		4:
 			question_title.text = "Put a name on the project."
-			question_hint.text = "This is the signature attached to every result that follows."
+			## Empty on purpose. Naming a club is a text field and there is
+			## nothing factual to add under it; what stood here announced the
+			## choice's significance, which is the interface telling the player
+			## how to feel about a thing it should just be taking. `QuestionHint`
+			## reserves 42px whatever it holds, so the panel below does not move.
+			question_hint.text = ""
 			_refresh_review()
 	previous_button.text = "Back to title" if current_step == 0 else "Previous"
 	next_button.text = "Create career" if current_step == step_panels.size() - 1 \

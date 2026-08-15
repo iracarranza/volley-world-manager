@@ -614,11 +614,16 @@ func _fill_report(prospect) -> void:
 	_report_row("Sharing", _sharing_of(prospect))
 	_report_row("Build", _build_of(prospect))
 
-	## ## And what it would actually be
+	## ## The offer
 	##
 	## The half the report cannot answer, because it is not about them: which room
 	## they would go into, who is already in it, what floor is left once they are,
 	## and whether the club's own paste is anything they know.
+	##
+	## **Headed `Offer`, not `If they came here`.** A heading may name what is
+	## under it and may not name the reader's relationship to it -- the second
+	## does the player's imagining for them, which is the interface speaking in an
+	## authorial voice about a thing it should merely be showing.
 	##
 	## **The floor is numbers and the food is a sentence**, deliberately. A room's
 	## capacity is a physical fact a manager could count themselves and being coy
@@ -628,7 +633,7 @@ func _fill_report(prospect) -> void:
 		_panel.body.add_child(HSeparator.new())
 		var joining := Label.new()
 		joining.name = "JoiningTitle"
-		joining.text = "If they came here"
+		joining.text = "Offer"
 		_panel.body.add_child(joining)
 		var offer := _offer_terms()
 		var room: Dictionary = offer.get("room", {})
@@ -787,12 +792,15 @@ func _make_offer() -> void:
 		refresh()
 		return
 	var room: Dictionary = outcome.get("room", {})
-	_last_word = ("%s signs. %s %d, %s -- %s." % [
+	## What happened, and nothing about what it means. The table line the sheet
+	## already gave is not repeated here: a note that restates the panel above it
+	## is the interface making sure you noticed, which is a tone this object does
+	## not have.
+	_last_word = ("%s signs. %s %d, %s." % [
 		str(outcome.get("name", "They")),
 		str(_game_manager.team.housing_structure), int(room.get("room", 1)),
 		"a room to themselves" if bool(room.get("fresh", false))
 			else "sharing with %d" % int(room.get("sharing_with", 0)),
-		str(outcome.get("table", "")),
 	])
 	_open_id = -1
 	refresh()
