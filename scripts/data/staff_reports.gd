@@ -142,7 +142,11 @@ static func _service_line(block: String, serving: int, slots: int) -> String:
 	if serving < slots:
 		return "I have room for more than you are giving me."
 	if FoodBlock.resets_palate(block):
-		return "Quiet week. Nobody will remember it, which is the point."
+		## *...which is the point* was the design explaining a palate reset through
+		## a chef's mouth. Attribution makes a judgement legal, not an authorial
+		## aside: this chef knows the week was dull, and does not know why the
+		## mechanic wants it to be.
+		return "Quiet week. Nothing anybody is going to talk about."
 	if FoodBlock.takes_paste(block) < 0.5:
 		return "Whatever I put on this, it tastes of the block."
 	return "The %s is carrying it well." % block

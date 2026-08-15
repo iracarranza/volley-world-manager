@@ -22,21 +22,39 @@ const DEFINITIONS := {
 	## and Larçgan is why that mattered rather than merely being untidy: it hung a
 	## cedilla on Blôc du Larg, which is Bompaçao's mark, in the one region whose
 	## relationship to Bompaçao is the map's single deliberate opposition.
-	"Landavol": {"tagline": "Landavolan training is intentionally broad, allowing their volis to specialize into anything -- or everything, if they want.",
+	## **The taglines say what a region does, not how good it is at it.**
+	##
+	## Five of these eight carried an adjective the frame had no standing to use
+	## -- *nightmarish* power, *devastating* serves, a *crushing* bomba, the
+	## *world's premier* volis, structure *perfected* into *complete control*.
+	## Three of the five render on the match screen as the opponent's line, which
+	## made the frame tell a manager how to feel about a side before the first
+	## serve, and one of them is a superlative the standings model would then have
+	## to honour. `DIEGETIC_MANAGEMENT.md` §11 is the rule; these were the strings
+	## that broke it in the most visible place the game has, since the region
+	## picker is also the first screen of a new save.
+	##
+	## Each now states a practice and its cost, and each is answerable against a
+	## number in this file: the axis the region owns in `REGIONAL_PRINCIPLES`, its
+	## rate in `REGIONAL_CURVES`, or its list in `REGION_SPECIALTY`. Where a
+	## sentence claims an extreme -- serves hardest, changes tempo most, learns
+	## fastest -- that region genuinely holds the extreme in the table, and the
+	## sentence names the price beside it.
+	"Landavol": {"tagline": "Landavolan halls teach every skill and favour none of them. Their volis start where the world averages and go wherever they are coached; their fourth set looks like their first.",
 		"physical": 2, "technical": 2, "mental": 2,
 		"names": ["Mila", "Luka", "Nora", "Ivo", "Toma", "Elin", "Sven", "Kaja"],
 		## Bare, like the region. Landavol leans nowhere and its surnames are
 		## plain landscape: valley, ridge, stone, water, lime, east farm.
 		"surnames": ["Beladol", "Ravnik", "Stenmark", "Vodgrad", "Lindvik",
 			"Osterby", "Kamenar", "Solmar", "Tunsen"]},
-	"Spëddigh": {"tagline": "The close-knit and compact Spëddish give rise to quick transition attackers who push every play to be faster and tighter.",
+	"Spëddigh": {"tagline": "Spëddish halls are small and so are the people in them. No side in the world changes tempo more often, and none spends its legs faster doing it.",
 		"physical": 2, "technical": 3, "mental": 2,
 		"names": ["Edda", "Siv", "Nils", "Veya", "Tekk", "Orri", "Fenn", "Lïv"],
 		## Doubled consonants and a short vowel under two dots, which is the same
 		## thing the region does to a rally.
 		"surnames": ["Hällgrim", "Skäddur", "Nörvik", "Trëggen", "Vïdden",
 			"Bräkkstad", "Ëlfjord", "Snöhamn", "Kvëllby"]},
-	"Pāwa Hitō": {"tagline": "Conditioning halls mold Pāwan volis into relentless attackers -- nightmarish power and quality deep into a rally.",
+	"Pāwa Hitō": {"tagline": "Pāwan conditioning halls train one thing: the sixth swing of a rally arriving like the first. They commit to every transition, and they are still committing when the legs across the net have gone.",
 		"physical": 4, "technical": 1, "mental": 1,
 		"names": ["Aki", "Hana", "Ren", "Sora", "Yuna", "Kai", "Mio", "Taro"],
 		## Real surnames, and real ones happen to be the strongest case the whole
@@ -46,7 +64,7 @@ const DEFINITIONS := {
 		## had to be invented and nothing had to be bent.
 		"surnames": ["Ōno", "Ōtani", "Kōno", "Sōma", "Gotō", "Satō", "Kudō",
 			"Andō", "Tōdō"]},
-	"Blôc du Larg": {"tagline": "Largen culture prizes methodical court reading, perfecting its structure at the net above all else to keep complete control.",
+	"Blôc du Larg": {"tagline": "Largen sides serve safe, decide late, and put a long block in front of everything. What gets past the wall is dug by the floor standing behind it.",
 		"physical": 2, "technical": 2, "mental": 3,
 		"names": ["Luc", "Mire", "Noé", "Ciel", "Aude", "Remy", "Léon", "Véra"],
 		## Wall, rampart, keep, hillside. A region that believes in structure at
@@ -59,7 +77,7 @@ const DEFINITIONS := {
 		## the first run, which is the entire argument for having one.
 		"surnames": ["Côte", "Châtel", "Fôret", "Rempârt", "Dumûr", "Vallêe",
 			"Lacrôix", "Montaîgne", "Bôisclair"]},
-	"Xérvu": {"tagline": "Ancient and new rhythms reverberate through Xérvyan courts -- a combination of individualism and deep respect for routine creates devastating, unpredictable serves.",
+	"Xérvu": {"tagline": "Six kinds of serve are taught on Xérvyan courts and no kind of safety. They serve harder than anyone alive and hand back more points doing it.",
 		"physical": 2, "technical": 4, "mental": 1,
 		"names": ["Kofi", "Amara", "Zola", "Kwame", "Aziza", "Tendai", "Njeri", "Baraka"],
 		## Cities and the families that carry their names. The acute is a tone
@@ -68,14 +86,14 @@ const DEFINITIONS := {
 		## rather than spelled.
 		"surnames": ["Ashánti", "Adéyemi", "Okónkwo", "Sékou", "Nyámbe",
 			"Kúmasi", "Bandiágara", "Sokóto", "Ilorín"]},
-	"Taktikã": {"tagline": "Taktikãn volleyball demands cerebral players who strip the game down to its roots; emotion has no place in finding the optimal path.",
+	"Taktikã": {"tagline": "Taktikãn coaching treats a rally as a problem with one right answer, and a face as information you should not give away. They learn your hitters faster than anyone in the world.",
 		"physical": 1, "technical": 1, "mental": 4,
 		"names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"],
 		## Real Aymara and Quechua surnames, which are clan-and-place names to
 		## begin with, taking the wave instead of the accent they usually carry.
 		"surnames": ["Quispẽ", "Mamanĩ", "Huamãn", "Condorĩ", "Ticõna",
 			"Choquẽ", "Apazã", "Yupanquĩ", "Cusĩ"]},
-	"Ĭspayk": {"tagline": "The cradle of the set-and-spike has lost its relevance to the modernization of the sport, but veteran and new Ĭspaykanos alike keep perfecting the bomberino's crushing bomba.",
+	"Ĭspayk": {"tagline": "Ĭspaykano gyms invented the set-and-spike and never stopped running it. The bomba goes to the pin, the decision is made early, and nobody is watching to see what you changed.",
 		"physical": 4, "technical": 2, "mental": 1,
 		"names": ["Kiko", "Mika", "Jun", "Rico", "Bea", "Nico", "Liza", "Ana"],
 		## Provinces and towns, because a colonial surname register hands out
@@ -83,7 +101,7 @@ const DEFINITIONS := {
 		## all nicknames is the one whose family names are all administrative.
 		"surnames": ["Bătangas", "Cavĭte", "Bulăcan", "Marikĭna", "Pangasĭnan",
 			"Bĭnondo", "Antĭpolo", "Calămba", "Tarlăc"]},
-	"A'ace": {"tagline": "A'aceni volleyball may as well have been born yesterday, but the power of program funding defies history. The world's premier volis dictate their tactics season to season.",
+	"A'ace": {"tagline": "A'aceni programmes are new, funded, and answer to no tradition. They buy a style each season and play it exactly as written, whatever you show them.",
 		"physical": 3, "technical": 2, "mental": 1,
 		"names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"],
 		## Every one is "of somewhere" -- the fort, the spring, the headland --
@@ -112,7 +130,14 @@ const DEFINITIONS := {
 	## connector ("den" for "du") while sitting next to Xérvu, so it announced
 	## kinship with the wrong region; it now takes Xérvu's acute instead. Old
 	## saves resolve through `LEGACY_REGIONS`.
-	"Tãul ys Feynt": {"tagline": "Village halls where the ball is won by the shot the blocker didn't believe -- wrists over power, patience over height.",
+	## **Feynt and Kutré Lyn were one claim in two taglines.** Both read as *we do
+	## not hit hard, we place it*, which is the defect `REGIONAL_PRINCIPLES` fixed
+	## between Spëddigh and Pāwa Hitō written out in prose instead of numbers: two
+	## regions cannot be distinct when one contains the other. The attributes were
+	## never the same -- `feinting`/`tooling` is a blocker being made to be wrong,
+	## `attack_accuracy`/`shot_variety`/`court_vision` is a blocker being right and
+	## it not mattering -- so the sentences now say which of the two they are.
+	"Tãul ys Feynt": {"tagline": "Village halls where the block is a surface to use rather than a wall to beat. Wrists over power, and the shot the blocker was made to believe in.",
 		"physical": 1, "technical": 3, "mental": 1,
 		"names": ["Bryn", "Eilir", "Tewdr", "Anwen", "Maelo", "Ffion", "Gwern", "Rhosyn"],
 		## Church, fort, rivermouth, town, headland, ford -- the six words every
@@ -122,7 +147,11 @@ const DEFINITIONS := {
 		## that does not exist. The wave is the point of having an orthography.
 		"surnames": ["Tãulwen", "Glyndãr", "Penrhõs", "Llanfãr", "Caerlõn",
 			"Trefãn", "Aberdõn", "Bryngwãn", "Rhydfãn"]},
-	"Lo-ong Ralī": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when someone's legs go, and nobody's legs go.",
+	## `fatigue_resistance` is a *rate*, so "nobody's legs go" was an absolute over
+	## a distribution -- the shape of claim §0 of `FAILURE_MODES.md` is about. 0.50
+	## is the flattest curve in the world and still not immunity, and "generally"
+	## is the difference.
+	"Lo-ong Ralī": {"tagline": "Thin-air gyms three days' travel from anywhere. Rallies here end when somebody's legs go, and it is generally not theirs.",
 		"physical": 2, "technical": 1, "mental": 2,
 		"names": ["Dorje", "Pema", "Tenzin", "Tsering", "Norbu", "Lhamo", "Kunzang", "Yangchen"],
 		## Places, undisguised, because the tradition these are drawn from has no
@@ -147,7 +176,7 @@ const DEFINITIONS := {
 		## from different seats are not related.
 		"surnames": ["Ġil", "Ġang", "Ġong", "Ġeum", "Sėol", "Chėon", "Yėom",
 			"Bėk", "Hėo"]},
-	"Kutré Lyn": {"tagline": "Technical schools that treat a hard swing as an admission of failure. The corner is always open if you can see it.",
+	"Kutré Lyn": {"tagline": "Technical schools that treat a hard swing as an admission of failure. A Kutrén hitter has four shots off the same approach and has already seen which corner is open.",
 		"physical": 1, "technical": 3, "mental": 1,
 		"names": ["Zorana", "Miloš", "Vesna", "Ilija", "Radmila", "Novak", "Danica", "Stevan"],
 		## Mostly patronymic, which is the one place the place-derived rule bends

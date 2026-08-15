@@ -16713,6 +16713,43 @@ func _test_region_language() -> void:
 			% [unnamed, borrowed],
 	)
 
+	## 9. **A tagline states a practice; it does not rate it.**
+	##
+	##    Five of the eight majors carried an adjective the frame had no standing
+	##    to use -- *nightmarish* power, *devastating* serves, a *crushing* bomba,
+	##    the *world's premier* volis, and structure *perfected* into *complete
+	##    control*. `DIEGETIC_MANAGEMENT.md` §11 is the rule they broke, and the
+	##    surface makes it worse than a style note: `main.gd` renders the
+	##    opponent's tagline on the match screen, so the frame was telling a
+	##    manager how to feel about a side before the first serve, and the region
+	##    picker is the first screen of a new save.
+	##
+	##    A word list is a blunt instrument and deliberately so. The failure this
+	##    catches is not subtle prose -- it is reaching for an intensifier because
+	##    the sentence has not said anything yet, which is the state every one of
+	##    those five was written in. What replaced them is checkable instead:
+	##    where a tagline now claims an extreme, the region holds that extreme in
+	##    `REGIONAL_PRINCIPLES` or `REGIONAL_CURVES`.
+	var rated: Array[String] = []
+	## Not banned: *hard*, *early*, *safe*, *long* -- those describe the action,
+	## not its worth. Every word here rates the region for the reader instead.
+	var verdicts: Array[String] = [
+		"nightmarish", "devastating", "crushing", "relentless", "premier",
+		"unstoppable", "ferocious", "brutal", "legendary", "feared",
+		"perfecting", "perfected", "complete control", "the world's best",
+	]
+	for region_name in REGIONS_SCRIPT.names():
+		var line: String = str(
+			Dictionary(REGIONS_SCRIPT.definition(region_name)).get("tagline", "")
+		).to_lower()
+		for word in verdicts:
+			if line.contains(word):
+				rated.append("%s: %s" % [region_name, word])
+	_check(
+		rated.is_empty(),
+		"a tagline says what a region does, not how good it is at it (%s)" % [rated],
+	)
+
 
 ## ## Signing somebody is asking them into a household
 ##

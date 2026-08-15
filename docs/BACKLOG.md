@@ -778,6 +778,40 @@ UI work only — `Regions.playable_names()` returns `SIXNET_PARTICIPANTS` and
 would need to widen, plus whatever competition structure a non-Sixnet career
 plays in (which is the same question as challenge relegation, above).
 
+### 3a. A minor region has no tactical principles, and is told it has
+
+Found while auditing the taglines. `REGIONAL_PRINCIPLES` holds eight entries,
+all majors. `preferred_principles()` falls back to `REGIONAL_PRINCIPLES.Landavol`
+for anything missing — so all six minor regions play the balanced reference set,
+and the fallback is silent.
+
+It is worse than silent, because the same function labels the result
+`"%s Tradition" % resolved_name`. A Kutré Lyn club is handed a principle set
+named **Kutrén Tradition** that is byte-identical to Landavol's. The label
+asserts a tradition the numbers do not contain, which is `FAILURE_MODES.md` §0
+in its exact shape: a knob that cannot reach its own stated range.
+
+**This does not make the minor taglines dishonest**, and that is worth stating
+because it was the first conclusion and it was wrong. Every minor tagline
+describes what its *volis* are like, not how the side is coached, and all six are
+backed by `REGION_SPECIALTY` — feinting/tooling/finesse for Feynt,
+reception/ball_control for Bompaçao, stamina plus the world's flattest
+`fatigue_resistance` for Lo-ong Ralī. Generation carries the tier's identity;
+tactics do not.
+
+The open question is therefore a design one, not a bug fix: **should a minor
+region have its own seven numbers at all?** Two defensible answers. That small
+programmes have volis with a specialty and no distinctive team system is a real
+thing in sport and costs nothing to keep. That a region with a named tradition
+should play like it is what `REGIONAL_IDENTITY_OVER_A_MATCH.md` asks for
+everywhere else. `REGIONAL_STRENGTH_AND_MINOR_REGIONS.md` specifies the tier's
+strength, specialty, body bias, birth weights, pull and tradition resistance —
+and says nothing about principles, so this was never decided rather than being
+decided and unbuilt.
+
+Whichever way it goes, the label is wrong today: a fallback should not name
+itself after the region it is standing in for.
+
 ## 4. Career dashboard — the part of the rework that regressed out
 
 The nav dropdown, Home news panel, Team sub-tabs and the aggregated lineup
@@ -802,9 +836,29 @@ trigger, no copy.
 
 ## 6. Staff
 
-`StaffPlaceholder` is a reserved panel on the Team overview. There is no
-staff system: no hiring, no coaching effects, no staff model. Confirmed as
-placeholder-only scope at the time; still open.
+**This entry was stale and is rewritten.** A staff system exists:
+`staff_member.gd`, `StaffGenerator`, `staff_reports.gd`, and the Club ▸ Staff
+tab in the journal, which is four cards down the left and the selected person's
+reports in full on the right. Reports are derived rather than stored, so a chef's
+letter and the kitchen page cannot disagree.
+
+Two things remain open, and they are the same thing seen twice.
+
+- **The assistant coach owns nothing.** `ROLE_RESOURCE` says they own *training
+  throughput*; no system reads it, and `_staff_reports()` matches chef, scout and
+  physio only, so the assistant coach falls through to `return []`. Their card
+  reads **Nothing this week** in every week of every save. The journal already
+  works around it — `_refresh_staff_cards()` deliberately opens on somebody with
+  something to say, because opening on the first person in the list greeted every
+  manager with an empty desk while three people had reports waiting. That
+  workaround is correct and should stay; it is also evidence, since a workaround
+  for one permanently-empty card is cheaper to write than the mechanic and was.
+- **Hiring does not exist.** The actions row under the cards is where it goes.
+
+The sequencing question is which comes first. Training throughput has no meaning
+until the day and the training appointment are real (§ *Make the day real*), so
+the assistant coach may be blocked on that rather than on staff work — worth
+checking before anyone writes a fourth report generator.
 
 ## 6a. Title screen, rendered in full — before the training work
 

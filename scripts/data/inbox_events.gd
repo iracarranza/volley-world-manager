@@ -78,13 +78,18 @@ const SAMPLE_EVENTS: Array = [
 			+ "club. They will pay while the terms hold: five consecutive "
 			+ "fixtures played, starting or not.",
 		"options": [
+			## A cost states the price, not what the price will mean. *They will
+			## remember that you did* is the interface promising its own memory,
+			## which is a promise of drama standing in for drama -- and if the club
+			## does record it, the journal will carry the line and no cost label
+			## needs to say so in advance.
 			{
 				"label": "Let them take it",
-				"cost": "Their minutes become a commitment you did not make.",
+				"cost": "Their next five fixtures are spoken for.",
 			},
 			{
 				"label": "Turn it down for them",
-				"cost": "Free, and they will remember that you did.",
+				"cost": "Nothing now. The offer was theirs and you answered it.",
 			},
 		],
 	},
@@ -95,9 +100,13 @@ const SAMPLE_EVENTS: Array = [
 		"speaker_slot": 5,
 		"expression": "cross",
 		"utterance": "our physio stretched my arms out too long",
-		"report": "%s is unhappy after a session. In this world that is not "
-			+ "necessarily a figure of speech -- arm length is a real property "
-			+ "and the silhouette reads from it.",
+		## The first version of this report spent its second sentence explaining
+		## the data model to the player -- *arm length is a real property and the
+		## silhouette reads from it* -- which is a commit message wearing a staff
+		## report's clothes. A report states what happened and what is disputed;
+		## why the property exists is never the club's business.
+		"report": "%s is unhappy after a session. The physio's account of what "
+			+ "was done and theirs do not match.",
 		"options": [
 			{
 				"label": "Take it seriously",
