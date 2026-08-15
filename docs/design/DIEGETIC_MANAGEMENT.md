@@ -449,3 +449,55 @@ When something could be a number or an interaction, ask which of these it is:
 
 > Physicalize decisions. Automate maintenance. Make routine inexpensive. Make
 > deviations meaningful. Preserve the player's diagnosis.
+
+---
+
+## 11. What the interface may say
+
+§10.4 asks whether a thing is a fact or a judgement. This is the sentence-level
+version of the same question, and it is written down here because it had been
+enforced twice from memory and violated in shipped strings both times.
+
+> **The interface may state what is known, recorded, observed, scheduled,
+> promised, or said by a named person. It may not tell the player what to
+> conclude, what it means, or what significance it will have later.**
+
+Five levels of text, and the object decides which it may carry:
+
+| | | who may say it |
+|---|---|---|
+| 1 | **direct fact** | anything — *block 21 · 14:00* |
+| 2 | **derived fact** | anything — *3 left of 5* |
+| 3 | **weighted composite** | a named person, attributed |
+| 4 | **judgement** | a named person, attributed, and wrong sometimes |
+| 5 | **recommendation** | a named person, and never the frame |
+
+The journal gets 1 and 2, because it is the manager's own record and a record
+does not have opinions. Staff may voice 3 to 5 — that is what staff are *for*,
+and `STAFF_AND_FALLIBILITY.md` is the reason a wrong one is content rather than
+a bug.
+
+**Corollary, for headings.** A heading may name what is under it, never the
+reader's relationship to it. `Offer`, not `If she came here`. `Brief`, not `The
+brief, in your hand`. The second form is the interface admiring its own framing,
+and it reads as the game explaining why it is clever.
+
+Four failures worth recognising by name, all of them found in real strings:
+
+- **Consequence-flagging** — *"She will remember which one you said."* The
+  interface announcing its own memory is a promise of drama in place of drama.
+- **Laundered opinion** — *"Your assistant thinks he is not interested, and has
+  been wrong before."* The judgement is fine; the hedging on the assistant's
+  behalf is the frame speaking. *Assistant: unlikely to accept a club this
+  size* is level 4 and legal.
+- **Cost framing** — *"This visit costs"* against a schedule block. The block is
+  the fact. *Costs* is the conclusion.
+- **Teasing** — *"The physio has an opinion about three of them."* Compare
+  *Physio · 3 notes*, which is the same information and none of the nudge.
+
+The strings that carried these were fixed in `new_career_screen.gd` and
+`scouting_screen.gd`; the rule is the general form, and it applies to every
+label, hint, heading and note added after them.
+
+Drafts of the unbuilt screens, each drawn against this rule, are in
+`mockups/interface_drafts.html`.
