@@ -50,6 +50,27 @@ const FREE_ZONE_END := 17.0
 const NEAR_RAKE_TOP := 2.2
 const FAR_RAKE_TOP := 6.0
 
+## What each hall is lit by, now that it has a roof to hang it from.
+##
+## Until now the key was a directional sun with the roof told not to cast, which
+## is a stand-in and was labelled as one. A covered hall is lit by fixtures, and
+## the fixtures are a characterisation in their own right: how many, how warm,
+## how evenly, and how many still work.
+##
+## `count` is per side of the net. `spread` is how far out along the court they
+## run, `warm` is the colour, `energy` per fixture, and `fail` is how many of
+## them are dead -- which only Ĭspayk uses, because a hall past its best keeps
+## its lamps until they go and then keeps them a while longer.
+const ROOF_LIGHTS := {
+	"landavol": {"count": 3, "warm": Color(1.0, 0.97, 0.92), "energy": 9.0, "fail": 0},
+	"speddigh": {"count": 3, "warm": Color(0.86, 0.94, 1.0), "energy": 7.0, "fail": 0},
+	"bloc": {"count": 2, "warm": Color(1.0, 0.96, 0.88), "energy": 4.0, "fail": 0},
+	"xervu": {"count": 3, "warm": Color(1.0, 0.88, 0.68), "energy": 8.0, "fail": 0},
+	"taktika": {"count": 4, "warm": Color(0.94, 0.98, 1.0), "energy": 8.0, "fail": 0},
+	"aace": {"count": 4, "warm": Color(0.97, 0.99, 1.0), "energy": 10.0, "fail": 0},
+	"ispayk": {"count": 3, "warm": Color(1.0, 0.86, 0.62), "energy": 7.5, "fail": 2},
+}
+
 ## Where the scoreline lives, which is a wealth statement before it is a fixture.
 ##
 ## Most halls bolt a board to the end wall. A centre-hung cube over the net costs
@@ -72,6 +93,7 @@ var _env: Environment
 var _key: DirectionalLight3D
 var _fill: OmniLight3D
 var _extras: Node3D
+var _open_air := false
 
 
 func _ready() -> void:
@@ -90,17 +112,18 @@ func _venues() -> Array:
 			"build": func(): pass,
 		},
 		{
-			"id": "pawa", "label": "Pawa Hito - altitude, thin hard light",
+			"id": "pawa", "label": "Pawa Hito - a terrace, and the sky", "open_air": true,
 			## Thin air scatters less, so the light is harder and the shadows are
 			## blacker rather than the room being brighter. Height is drawn by what
 			## the light does, not by a mountain in the background.
 			"build": func():
-				_key.rotation_degrees = Vector3(-66.0, -48.0, 0.0)
-				_key.light_energy = 2.6
-				_key.light_color = Color(1.0, 0.99, 0.95)
-				_fill.light_energy = 0.8
-				_env.ambient_light_color = Color(0.30, 0.42, 0.62)
-				_env.ambient_light_energy = 0.22
+				_key.rotation_degrees = Vector3(-58.0, -42.0, 0.0)
+				_key.light_energy = 3.2
+				_key.light_color = Color(1.0, 0.99, 0.94)
+				_fill.light_energy = 0.0
+				_env.background_color = Color(0.36, 0.55, 0.78)
+				_env.ambient_light_color = Color(0.52, 0.66, 0.86)
+				_env.ambient_light_energy = 0.85
 				_env.fog_enabled = true
 				_env.fog_light_color = Color(0.62, 0.70, 0.80)
 				_env.fog_density = 0.004
@@ -285,7 +308,9 @@ func _shoot(venue: Dictionary) -> void:
 	_extras = Node3D.new()
 	_extras.name = "VenueExtras"
 	_court.add_child(_extras)
+	_open_air = bool(venue.get("open_air", false))
 	_arena()
+	_roof_lights(str(venue.get("id", "")))
 	_fixtures(str(venue.get("id", "")))
 	_floor_for(str(venue.get("id", "")))
 	var build: Callable = venue.get("build", func(): pass)
@@ -338,7 +363,11 @@ func _arena() -> void:
 			)
 			step.name = "End%d_%d" % [int(end), i]
 	## The columns that hold the roof, at the corners of the building and well
-	## outside anything anybody plays in.
+	## outside anything anybody plays in. An open terrace has no roof, so it has
+	## no columns -- four posts holding up the sky is worse than none.
+	if _open_air:
+		_terrace()
+		return
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
 			var column := _box(
@@ -354,6 +383,54 @@ func _arena() -> void:
 	## are the surfaces every venue's own light then plays on: Blôc's windows cut
 	## into one, Ĭspayk's banners hang down another.
 	var wall_h := 14.0
+	_walls(wall_h)
+	var deck := _box(
+		Vector3(3.2, 0.45, FREE_ZONE_END * 2.0 + 6.0),
+		Vector3(-(FREE_ZONE_SIDE + 5.4), 7.8, 0.0),
+		Color(0.26, 0.27, 0.30), 0.0, 0.9
+	)
+	deck.name = "Mezzanine"
+
+
+## Pāwa Hitō plays outside.
+##
+## `GEOGRAPHY.md` has the region as terraced volcanic hillside where everything
+## is uphill, so a court there is cut into a terrace rather than roofed over. It
+## is also the answer to the venue that would not read: thin hard light and a
+## black shadow are subtle indoors, competing with a lit room, and obvious under
+## an open sky where nothing else is lighting the floor. The problem was never
+## that the effect was too weak -- it was in the wrong building.
+func _terrace() -> void:
+	for sx in [-1.0, 1.0]:
+		var rail := _box(
+			Vector3(0.5, 1.15, FREE_ZONE_END * 2.0 + 12.0),
+			Vector3(sx * (FREE_ZONE_SIDE + 6.4), 0.6, 0.0),
+			Color(0.36, 0.31, 0.27), 0.0, 0.95
+		)
+		rail.name = "Parapet%d" % int(sx)
+	for sz in [-1.0, 1.0]:
+		var rail := _box(
+			Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, 1.15, 0.5),
+			Vector3(0.0, 0.6, sz * (FREE_ZONE_END + 6.2)),
+			Color(0.36, 0.31, 0.27), 0.0, 0.95
+		)
+		rail.name = "ParapetEnd%d" % int(sz)
+	## The ground it stands on, so the court reads as cut into something rather
+	## than floating in a blue void.
+	var terrace := _box(
+		Vector3(FREE_ZONE_SIDE * 2.0 + 26.0, 3.0, FREE_ZONE_END * 2.0 + 24.0),
+		Vector3(0.0, -1.6, 0.0), Color(0.29, 0.24, 0.21), 0.0, 0.98
+	)
+	terrace.name = "Terrace"
+
+
+## Walls and a roof, and neither of them casts.
+##
+## Enclosing the hall put a lid over a directional key, and a sun does not reach
+## into a closed building -- six of eight venues went black the moment the roof
+## appeared. With real fixtures overhead the key is only standing in for a
+## lantern, so the shell stays out of its way.
+func _walls(wall_h: float) -> void:
 	for sz in [-1.0, 1.0]:
 		var wall := _box(
 			Vector3(0.4, wall_h, FREE_ZONE_END * 2.0 + 12.0),
@@ -361,6 +438,7 @@ func _arena() -> void:
 			Color(0.23, 0.24, 0.27), 0.0, 0.92
 		)
 		wall.name = "WallLong%d" % int(sz)
+		wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for sx in [-1.0, 1.0]:
 		var wall := _box(
 			Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, wall_h, 0.4),
@@ -368,30 +446,61 @@ func _arena() -> void:
 			Color(0.21, 0.22, 0.25), 0.0, 0.92
 		)
 		wall.name = "WallEnd%d" % int(sx)
+		wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var roof := _box(
 		Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, 0.5, FREE_ZONE_END * 2.0 + 12.0),
 		Vector3(0.0, wall_h, 0.0),
 		Color(0.17, 0.18, 0.21), 0.0, 0.95
 	)
 	roof.name = "Roof"
-	## **The roof does not cast.** Enclosing the hall put a lid over a directional
-	## key light, and a sun does not reach into a closed building -- six of the
-	## eight venues went black the moment the roof appeared. That is the lighting
-	## model telling the truth: a covered hall is lit by its own fixtures, and the
-	## key here is standing in for a roof lantern until those exist. Blôc is the
-	## one venue already honest about it, because its light genuinely arrives
-	## through the windows in the far wall.
 	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for wall in _extras.get_children():
-		if str(wall.name).begins_with("Wall"):
-			(wall as GeometryInstance3D).cast_shadow = \
-				GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var deck := _box(
-		Vector3(3.2, 0.45, FREE_ZONE_END * 2.0 + 6.0),
-		Vector3(-(FREE_ZONE_SIDE + 5.4), 7.8, 0.0),
-		Color(0.26, 0.27, 0.30), 0.0, 0.9
-	)
-	deck.name = "Mezzanine"
+
+
+## Hang the hall's lamps, and stop pretending a sun gets in.
+##
+## An open-air venue gets none: it is lit by the sky, which is the whole point of
+## being outside. Everywhere else the directional key drops to a fraction of its
+## old energy -- it stands in for a roof lantern now rather than for the sun --
+## and the fixtures do the work.
+func _roof_lights(id: String) -> void:
+	if _open_air:
+		return
+	var spec: Dictionary = ROOF_LIGHTS.get(id, ROOF_LIGHTS["landavol"])
+	var count := int(spec.get("count", 3))
+	var failed := int(spec.get("fail", 0))
+	var placed := 0
+	for side in [-1.0, 1.0]:
+		for i in range(count):
+			placed += 1
+			var housing := _box(
+				Vector3(2.6, 0.3, 1.4),
+				Vector3(0.0, 12.4, side * (2.6 + float(i) * 5.2)),
+				Color(0.20, 0.21, 0.24), 0.0, 0.85
+			)
+			housing.name = "Housing%d_%d" % [int(side), i]
+			housing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			## A dead lamp is dark housing, not a missing one -- the fitting is
+			## still bolted to the roof.
+			if placed <= failed:
+				continue
+			var lamp := OmniLight3D.new()
+			lamp.name = "RoofLight%d_%d" % [int(side), i]
+			lamp.position = Vector3(0.0, 12.0, side * (2.6 + float(i) * 5.2))
+			lamp.light_color = Color(spec.get("warm", Color.WHITE))
+			lamp.light_energy = float(spec.get("energy", 8.0))
+			lamp.omni_range = 22.0
+			lamp.shadow_enabled = false
+			_extras.add_child(lamp)
+			var lens := _box(
+				Vector3(2.2, 0.08, 1.0),
+				Vector3(0.0, 12.22, side * (2.6 + float(i) * 5.2)),
+				Color(spec.get("warm", Color.WHITE)), 0.0, 1.0, 1.6
+			)
+			lens.name = "Lens%d_%d" % [int(side), i]
+			lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	## The key is no longer the light in the room; it is what comes through a
+	## lantern or a high window, so it drops back and lets the fixtures lead.
+	_key.light_energy *= 0.45
 
 
 ## The things every professional court has and none of these had: somewhere for
