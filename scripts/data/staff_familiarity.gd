@@ -3,7 +3,7 @@ extends RefCounted
 
 ## What a staff member has got good at, one thing at a time.
 ##
-## The chef says *"I improved my use of Landavolan paste"* and that sentence has
+## The chef says *"I improved my use of Landavoli paste"* and that sentence has
 ## to be true of something. This is the something: a number per staff member per
 ## **subject** — a paste for the chef, a region for the scout, a body for the
 ## physio — that climbs by doing the thing and decays by not.

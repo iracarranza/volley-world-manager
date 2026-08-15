@@ -14,7 +14,7 @@ extends RefCounted
 ## The **report** names the mechanic and its figures, because that is the
 ## decision being informed. The **utterance** is what they actually said, and it
 ## is shorter, vaguer and warmer. A chef does not know they are running at 0.91
-## of a week's paste; they know the Landavolan is going further than it did.
+## of a week's paste; they know the Landavoli is going further than it did.
 ##
 ## Inherited rather than reinvented, so a card from the kitchen and a card from
 ## the inbox read as the same world.
@@ -40,7 +40,7 @@ const Regions := preload("res://scripts/data/regions.gd")
 static func flavour_word(region: String) -> String:
 	## Read from `DEMONYMS`, not from `definition()` -- the definition dictionary
 	## has no demonym key, so the first version silently fell through to its
-	## default and the chef said *Landavol paste* where they meant *Landavolan*.
+	## default and the chef said *Landavol paste* where they meant *Landavoli*.
 	## A `.get()` with the right answer as its fallback is the quietest way to
 	## get a wrong one.
 	return str(Regions.DEMONYMS.get(region, region))

@@ -832,15 +832,15 @@ func _test_career_calendar_generation_training_and_saves() -> void:
 		"every inhabited region has its own demonym (missing: %s)" % [missing_demonyms],
 	)
 	## The fallback must not quietly hand back Landavol's word. Naming an
-	## unrecognised place's food Landavolan is a wrong answer stated confidently;
+	## unrecognised place's food Landavoli is a wrong answer stated confidently;
 	## echoing the input is at least visibly unresolved.
 	_check(
 		REGIONS_SCRIPT.demonym("Xérvu") == "Xérvyan" \
-			and REGIONS_SCRIPT.demonym("Nowhere At All") != "Landavolan",
+			and REGIONS_SCRIPT.demonym("Nowhere At All") != "Landavoli",
 		"demonym lookup resolves known regions and does not fall back to Landavol",
 	)
 	## A rename that loses its LEGACY_REGIONS entry does not error -- every voli
-	## carrying the old string just quietly becomes Landavolan, because
+	## carrying the old string just quietly becomes Landavoli, because
 	## `canonical_name` falls back rather than failing. That is invisible in a
 	## save and unrecoverable once it is written, so it gets a gate.
 	var legacy_resolves := true
@@ -16564,7 +16564,7 @@ func _test_region_language() -> void:
 	)
 
 	## 3. **A demonym is built from the half of the name that gets spoken.**
-	##    Nobody says "Blôc du Larg" about a person; they say Larg, hence Largen.
+	##    Nobody says "Blôc du Larg" about a person; they say Larg, hence Largôis.
 	var malformed: Array[String] = []
 	for region_name in language.CONTRACTIONS:
 		var short: String = language.contraction(str(region_name))
@@ -16663,7 +16663,7 @@ func _test_region_language() -> void:
 	##
 	##    Not a cosmetic check. The alternative to composing here was a display
 	##    order computed wherever a name is drawn, and the failure that rules out
-	##    is a Pāwan sorting under their given name while their own teammates sort
+	##    is a Hitōuen sorting under their given name while their own teammates sort
 	##    under family. Composed at generation, there is one string and nothing
 	##    downstream has an order to get wrong -- which is only true while the
 	##    composer is the thing that knows.
@@ -17894,7 +17894,7 @@ func _test_a_region_makes_pastes_and_not_a_grocery_list() -> void:
 		## authored names are a sketch of an *axis* and "the point is coverage,
 		## not these exact names", so the axis is a property and the name comes
 		## off the map. It is also the only naming that lets a chef say
-		## "I improved my use of Landavolan paste" without the manager having to
+		## "I improved my use of Landavoli paste" without the manager having to
 		## remember that pale onion is a Landavol thing.
 		_check(
 			str(larder.get("axis", "")).length() > 0,

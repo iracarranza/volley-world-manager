@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## §2: *"Pastes are mixed into a base meal at a chosen ratio."* Not a set — a
 ## **mix**. The first build treated the week as a list of two to four pastes and
-## that lost the decision: half Landavolan and a trace of Xérvyan is a different
+## that lost the decision: half Landavoli and a trace of Xérvyan is a different
 ## week from an even split of the two, and the difference is most of what the
 ## table is for.
 ##

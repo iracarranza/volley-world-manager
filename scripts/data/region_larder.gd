@@ -21,7 +21,7 @@ extends RefCounted
 ## carrier under it has nothing left to do.
 ##
 ## So a region produces **one paste and nothing else**, and it is named after the
-## region: Landavolan paste, Spëddigh paste, Xérvyan paste. That is the second
+## region: Landavoli paste, Spëddigh paste, Xérvyan paste. That is the second
 ## correction. The first pass gave each region two or three *ingredients* --
 ## `pale onion`, `sour cream`, `smoked groundnut` -- which is the grocery list
 ## again wearing a smaller hat. §2 is explicit that the authored names are a
@@ -29,7 +29,7 @@ extends RefCounted
 ## so the axis stays as a property and the name comes off the map.
 ##
 ## Which is also the only naming that lets a chef say the sentence the whole
-## staff correspondence is built on -- *"I improved my use of Landavolan paste"*
+## staff correspondence is built on -- *"I improved my use of Landavoli paste"*
 ## -- without the manager having to remember that pale onion is a Landavol thing.
 ##
 ## ## Every entry is authored from the region's own tagline
@@ -42,12 +42,21 @@ const Regions := preload("res://scripts/data/regions.gd")
 
 ## | region | why this larder |
 ## |---|---|
-## | Landavol | *"intentionally broad… specialize into anything"* — a generalist table; a bit of everything, nothing extreme |
-## | Spëddigh | *"close-knit and compact"* — preserved, cured, stored; food that keeps through a shared winter |
-## | Pāwa Hitō | *"conditioning halls mold Pāwan volis"* — a table organised around fuelling work |
-## | Blôc du Larg | *"methodical… complete control"* — technique food; things that take a method |
-## | Xérvu | *"ancient and new rhythms… individualism"* — heat, and two traditions on one plate |
-## | Taktikã | *"strip the game down to its roots"* — the three that grow together and need nothing else |
+## The taglines were rewritten once, to stop them rating their regions rather
+## than describing them, and these quotes were re-cut against the new wording.
+## **No larder changed** -- which is the useful part of the exercise: a table
+## authored from *conditioning halls* still reads correctly against *conditioning
+## halls train one thing*, so the food was keyed to what the region does and not
+## to the adjective that used to sit beside it.
+##
+## | region | why this larder |
+## |---|---|
+## | Landavol | *"teach every skill and favour none of them"* — a generalist table; a bit of everything, nothing extreme |
+## | Spëddigh | *"halls are small and so are the people in them"* — preserved, cured, stored; food that keeps through a shared winter |
+## | Pāwa Hitō | *"conditioning halls train one thing"* — a table organised around fuelling work |
+## | Blôc du Larg | *"serve safe, decide late… a long block"* — technique food; things that take a method |
+## | Xérvu | *"six kinds of serve… and no kind of safety"* — heat, and two traditions on one plate |
+## | Taktikã | *"a rally as a problem with one right answer"* — the three that grow together and need nothing else |
 ## Three each, not two.
 ##
 ## With the staples gone the paste list *is* the region's whole table, and two
@@ -125,7 +134,7 @@ static func axis_of(region: String) -> String:
 ## The event the design asks for: a paste can come in hardier or leaner, richer
 ## or thinner, and that is a reason to change what you feed a squad **against**
 ## your chef's proficiency and your volis' preferences. A club with a chef who
-## knows Landavolan paste and a squad that likes it still has to decide what to
+## knows Landavoli paste and a squad that likes it still has to decide what to
 ## do about a year when the Xérvyan is unusually nourishing.
 ##
 ## Derived from the region and the season rather than rolled, for the reason the

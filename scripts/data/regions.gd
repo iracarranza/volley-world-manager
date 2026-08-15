@@ -17,11 +17,16 @@ const DEFINITIONS := {
 	## slowly.
 	##
 	## Taglines name their own people with the region's `DEMONYMS` entry and are
-	## gated on it. They used to carry a second set of words invented separately
-	## -- Landavoli, Spëddich, Hitōue, Larçgan, Taktikiãn, Ispakyanos, A'ace'ni --
-	## and Larçgan is why that mattered rather than merely being untidy: it hung a
-	## cedilla on Blôc du Larg, which is Bompaçao's mark, in the one region whose
-	## relationship to Bompaçao is the map's single deliberate opposition.
+	## gated on it. They used to carry a *second* set of words invented separately
+	## -- one table for prose and another for everything else -- which is how
+	## Larçgan survived as long as it did: it hung a cedilla on Blôc du Larg,
+	## which is Bompaçao's mark, in the one region whose relationship to Bompaçao
+	## is the map's single deliberate opposition, and no gate read prose.
+	##
+	## The words themselves were mostly right and the duplication was the defect.
+	## `DEMONYMS` has since been reformed to the native shapes those taglines were
+	## reaching for -- Landavoli, Spëddich, Hitōuen -- so there is one table again,
+	## and it is the one under gate. Larçgan did not come back; see `DEMONYMS`.
 	## **The taglines say what a region does, not how good it is at it.**
 	##
 	## Five of these eight carried an adjective the frame had no standing to use
@@ -40,21 +45,21 @@ const DEFINITIONS := {
 	## sentence claims an extreme -- serves hardest, changes tempo most, learns
 	## fastest -- that region genuinely holds the extreme in the table, and the
 	## sentence names the price beside it.
-	"Landavol": {"tagline": "Landavolan halls teach every skill and favour none of them. Their volis start where the world averages and go wherever they are coached; their fourth set looks like their first.",
+	"Landavol": {"tagline": "Landavoli halls teach every skill and favour none of them. Their volis start where the world averages and go wherever they are coached; their fourth set looks like their first.",
 		"physical": 2, "technical": 2, "mental": 2,
 		"names": ["Mila", "Luka", "Nora", "Ivo", "Toma", "Elin", "Sven", "Kaja"],
 		## Bare, like the region. Landavol leans nowhere and its surnames are
 		## plain landscape: valley, ridge, stone, water, lime, east farm.
 		"surnames": ["Beladol", "Ravnik", "Stenmark", "Vodgrad", "Lindvik",
 			"Osterby", "Kamenar", "Solmar", "Tunsen"]},
-	"Spëddigh": {"tagline": "Spëddish halls are small and so are the people in them. No side in the world changes tempo more often, and none spends its legs faster doing it.",
+	"Spëddigh": {"tagline": "Spëddich halls are small and so are the people in them. No side in the world changes tempo more often, and none spends its legs faster doing it.",
 		"physical": 2, "technical": 3, "mental": 2,
 		"names": ["Edda", "Siv", "Nils", "Veya", "Tekk", "Orri", "Fenn", "Lïv"],
 		## Doubled consonants and a short vowel under two dots, which is the same
 		## thing the region does to a rally.
 		"surnames": ["Hällgrim", "Skäddur", "Nörvik", "Trëggen", "Vïdden",
 			"Bräkkstad", "Ëlfjord", "Snöhamn", "Kvëllby"]},
-	"Pāwa Hitō": {"tagline": "Pāwan conditioning halls train one thing: the sixth swing of a rally arriving like the first. They commit to every transition, and they are still committing when the legs across the net have gone.",
+	"Pāwa Hitō": {"tagline": "Hitōuen conditioning halls train one thing: the sixth swing of a rally arriving like the first. They commit to every transition, and they are still committing when the legs across the net have gone.",
 		"physical": 4, "technical": 1, "mental": 1,
 		"names": ["Aki", "Hana", "Ren", "Sora", "Yuna", "Kai", "Mio", "Taro"],
 		## Real surnames, and real ones happen to be the strongest case the whole
@@ -64,7 +69,7 @@ const DEFINITIONS := {
 		## had to be invented and nothing had to be bent.
 		"surnames": ["Ōno", "Ōtani", "Kōno", "Sōma", "Gotō", "Satō", "Kudō",
 			"Andō", "Tōdō"]},
-	"Blôc du Larg": {"tagline": "Largen sides serve safe, decide late, and put a long block in front of everything. What gets past the wall is dug by the floor standing behind it.",
+	"Blôc du Larg": {"tagline": "Largôis sides serve safe, decide late, and put a long block in front of everything. What gets past the wall is dug by the floor standing behind it.",
 		"physical": 2, "technical": 2, "mental": 3,
 		"names": ["Luc", "Mire", "Noé", "Ciel", "Aude", "Remy", "Léon", "Véra"],
 		## Wall, rampart, keep, hillside. A region that believes in structure at
@@ -86,7 +91,7 @@ const DEFINITIONS := {
 		## rather than spelled.
 		"surnames": ["Ashánti", "Adéyemi", "Okónkwo", "Sékou", "Nyámbe",
 			"Kúmasi", "Bandiágara", "Sokóto", "Ilorín"]},
-	"Taktikã": {"tagline": "Taktikãn coaching treats a rally as a problem with one right answer, and a face as information you should not give away. They learn your hitters faster than anyone in the world.",
+	"Taktikã": {"tagline": "Taktikãni coaching treats a rally as a problem with one right answer, and a face as information you should not give away. They learn your hitters faster than anyone in the world.",
 		"physical": 1, "technical": 1, "mental": 4,
 		"names": ["Inti", "Aylen", "Kuyen", "Amaru", "Wayra", "Nayra", "Chaska", "Illari"],
 		## Real Aymara and Quechua surnames, which are clan-and-place names to
@@ -101,7 +106,7 @@ const DEFINITIONS := {
 		## all nicknames is the one whose family names are all administrative.
 		"surnames": ["Bătangas", "Cavĭte", "Bulăcan", "Marikĭna", "Pangasĭnan",
 			"Bĭnondo", "Antĭpolo", "Calămba", "Tarlăc"]},
-	"A'ace": {"tagline": "A'aceni programmes are new, funded, and answer to no tradition. They buy a style each season and play it exactly as written, whatever you show them.",
+	"A'ace": {"tagline": "A'ace'ni programmes are new, funded, and answer to no tradition. They buy a style each season and play it exactly as written, whatever you show them.",
 		"physical": 3, "technical": 2, "mental": 1,
 		"names": ["Omar", "Layla", "Yusuf", "Amal", "Faisal", "Noor", "Rashid", "Huda"],
 		## Every one is "of somewhere" -- the fort, the spring, the headland --
@@ -292,7 +297,7 @@ static func person_name(region_name: String, index: int) -> String:
 ## from somewhere else, and a voli who moves does not stop being one.
 ##
 ## **Diacritics are preserved.** A demonym is the same word in the same written
-## language as the place, so Xérvu gives Xérvyan and Taktikã gives Taktikãn. An
+## language as the place, so Xérvu gives Xérvyan and Taktikã gives Taktikãni. An
 ## earlier version dropped marks that "would not survive being said out loud",
 ## which is our world's habit of flattening other people's spelling into the
 ## alphabet that happens to be convenient, and it is the wrong instinct here: the
@@ -300,23 +305,49 @@ static func person_name(region_name: String, index: int) -> String:
 ## like a written language at all.
 ##
 ## Two-word regions contract to whichever half is actually spoken: "Blôc du Larg"
-## is *Larg* in a sentence, so Largen.
+## is *Larg* in a sentence, and "Pāwa Hitō" is *Hitō*.
 ##
-## Nothing derives from the people's naming tradition. That tradition tells you
-## what a voli is called; the demonym tells you where they are from.
+## **The word is formed the way that region's own language forms it, not the way
+## English would.** This is the second correction to this table and it undoes half
+## of the first. The set it replaces -- Landavol**an**, Spëdd**ish**, Larg**en**,
+## Feynt**ish** -- is one language's three suffixes applied to fourteen places,
+## which makes every people on the map sound like it was named by the same
+## outsider, and that outsider is us. A tradition that spells with a roof says
+## *Largôis*; one that
+## counts people in Welsh says *Feyntwyr*; a Tibetan-shaped one says *Ralīpa*,
+## which is the place plus *the person of it*.
+##
+## This does **not** relax the civic rule above. Every word here is still built
+## from the *place name* and still says nothing about ancestry: Hitōuen is anyone
+## from Pāwa Hitō, including one whose family came from somewhere else. What
+## changed is only whose grammar does the building.
+##
+## **It also does not relax the gesture rule**, which is the reason one obvious
+## candidate is absent. The natural French demonym for Blôc du Larg is *Larçgan*,
+## which this table carried once: it hangs a cedilla on the one region whose
+## relationship to Bompaçao -- the cedilla's owner -- is the map's single
+## deliberate opposition. Largôis takes the circumflex that is actually Larg's.
+##
+## No entry carries another region's mark, and that is the rule. Carrying *its
+## own* is not, because two regions cannot: Tãul ys Feynt and Rhėn Tempaol both
+## put their mark on the half nobody says, so Feyntwyr and Tempaolin come out
+## bare. That is the honest outcome rather than a hole -- the spoken-half rule
+## (see `RegionLanguage.CONTRACTIONS`, which the suite checks) outranks
+## decoration, and a mark bent onto Feynt to satisfy a pattern would be a
+## signature nobody writes.
 const DEMONYMS := {
-	"Landavol": "Landavolan",
-	"Spëddigh": "Spëddish",
-	"Pāwa Hitō": "Pāwan",
-	"Blôc du Larg": "Largen",
+	"Landavol": "Landavoli",
+	"Spëddigh": "Spëddich",
+	"Pāwa Hitō": "Hitōuen",
+	"Blôc du Larg": "Largôis",
 	"Xérvu": "Xérvyan",
-	"Taktikã": "Taktikãn",
+	"Taktikã": "Taktikãni",
 	"Ĭspayk": "Ĭspaykano",
-	"A'ace": "A'aceni",
-	"Tãul ys Feynt": "Feyntish",
-	"Lo-ong Ralī": "Ralīn",
-	"Bompaçao": "Bompaçan",
-	"Rhėn Tempaol": "Tempaoli",
+	"A'ace": "A'ace'ni",
+	"Tãul ys Feynt": "Feyntwyr",
+	"Lo-ong Ralī": "Ralīpa",
+	"Bompaçao": "Bompaçano",
+	"Rhėn Tempaol": "Tempaolin",
 	"Kutré Lyn": "Kutrén",
 	"Zaitgaist": "Zaitgaister",
 }
@@ -449,7 +480,7 @@ const REGIONAL_PRINCIPLES := {
 ##   `read_rate`           multiplies how fast this region's volis learn a
 ##                         hitter's spin, tendencies and read tags within a
 ##                         match. Taktikã's brief, and the only thing that would
-##                         make a Taktikãn side genuinely worse to play against in
+##                         make a Taktikãni side genuinely worse to play against in
 ##                         set four than in set one.
 ##
 ## Deliberately two rather than four. `adaptation_rate` and `composure_decay` are
@@ -706,11 +737,11 @@ static func canonical_name(region_name: String) -> String:
 
 ## "Xérvyan", for a voli, a paste or a plate of food. Unknown regions fall back
 ## to the region name itself rather than to Landavol's demonym, because calling
-## an unrecognised place's food Landavolan is a wrong answer stated confidently.
+## an unrecognised place's food Landavoli is a wrong answer stated confidently.
 ## Deliberately not routed through `canonical_name`, which resolves anything it
 ## does not recognise to Landavol. That is right for picking a region to play in
 ## and wrong for naming one: it would report an unknown place's food as
-## Landavolan, which is a wrong answer stated confidently. Legacy names still
+## Landavoli, which is a wrong answer stated confidently. Legacy names still
 ## resolve; everything else echoes back visibly unresolved.
 static func demonym(region_name: String) -> String:
 	if region_name in DEMONYMS:

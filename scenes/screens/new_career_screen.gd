@@ -381,6 +381,20 @@ func _slider_caption(key: String, value: float) -> String:
 ## Built in code rather than in the scene because it is three nodes and a camera
 ## and none of them wants authoring: what the scene has to own is the
 ## `SubViewport`, which it does.
+## **`own_world_3d` is set on the SubViewport in the scene, and this stage does
+## not work without it.** It defaults to `false`, which means a SubViewport
+## renders its *parent's* World3D rather than one of its own -- so everything
+## below went into the root window's world, shared with every other 3D view in
+## the game. The turntable is at the origin and carries no position; the match
+## court's net is at `(0, 2.00, 0)`. The manager therefore stood under the middle
+## of the net, in the match centre, turning, for as long as `_process` kept
+## spinning them -- and the camera and key light below were in there too,
+## competing with the court's own.
+##
+## Every SubViewport built in code already sets it (`voli_sticker.gd`, the inbox
+## portrait, the roster tray). Both of the ones authored in a `.tscn` had missed
+## it, which is the tell: in code the property is a line you have to write, and
+## in the inspector it is a default you never see.
 func _build_preview_world() -> void:
 	var world := Node3D.new()
 	world.name = "PreviewWorld"
@@ -860,7 +874,7 @@ func _create_career() -> void:
 		{
 			"name": manager_name,
 			## One region answers both questions today. `CHARACTER_CREATION.md`
-			## wants them to differ often -- a Landavolan managing in Taktikã is
+			## wants them to differ often -- a Landavoli managing in Taktikã is
 			## the position most managers in a real league are in -- and this is
 			## the seam a second picker would land on.
 			"region": selected_region,

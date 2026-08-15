@@ -234,7 +234,7 @@ func seed_vertical_slice_data() -> void:
 func _seed_opponent() -> void:
 	opponent_team = OpponentTeamScript.new()
 	opponent_team.team_name = "Port Azure VC"
-	## Port Azure is Landavolan, which is exactly as neutral as it was before.
+	## Port Azure is Landavoli, which is exactly as neutral as it was before.
 	##
 	## `REGIONAL_PRINCIPLES.Landavol` and `PRESETS.Balanced` are the same seven
 	## 0.50s -- asserted in the suite, not assumed here -- so the mirrored roster
@@ -915,7 +915,7 @@ const STAMINA_FATIGUE_SCALE_MAX: float = 1.4
 ##
 ## **Read from `home_region`, not `club_region`, and that is the design.** This is
 ## what a voli's body learned growing up in the halls they grew up in, and it
-## does not stop being true when they transfer -- so signing a Pāwan buys their
+## does not stop being true when they transfer -- so signing a Hitōuen buys their
 ## curve, and a club's endurance becomes the aggregate of who it raised and who
 ## it bought. That is exactly the shape regional academies will need, and it means
 ## the mechanic is already correct on the day they arrive rather than needing to

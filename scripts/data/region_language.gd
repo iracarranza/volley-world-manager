@@ -146,7 +146,7 @@ const REGION_GESTURE := {
 ## the alternative was worse in a specific way. A per-region display order
 ## computed at draw time means every roster column, every sorted list and every
 ## fixture line has to know the convention, and the first screen that forgets is
-## the one that shows a Pāwan under G for their given name while their teammates
+## the one that shows a Hitōuen under G for their given name while their teammates
 ## sort by family. Composing the string once, at generation, means there is only
 ## ever one name and nothing downstream has an order to get wrong.
 const FAMILY_FIRST := {
@@ -161,7 +161,12 @@ const CONTRACTIONS := {
 	"Tãul ys Feynt": "Feynt",
 	"Rhėn Tempaol": "Tempaol",
 	"Lo-ong Ralī": "Ralī",
-	"Pāwa Hitō": "Pāwa",
+	## **Hitō, not Pāwa.** Every other two-word region here shortens to the half
+	## that identifies it rather than the half that describes it -- Larg, Feynt,
+	## Tempaol, Ralī -- and *Pāwa* is the describing half: it is the loanword for
+	## power, doing the same job "Lo-ong" does for Ralī. Shortening to it made
+	## Pāwa Hitō the one region named after its adjective.
+	"Pāwa Hitō": "Hitō",
 	"Kutré Lyn": "Kutré",
 }
 

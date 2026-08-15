@@ -21,7 +21,7 @@ const StaffMember := preload("res://scripts/models/staff_member.gd")
 ## See `ManagerProfile` and `docs/design/CHARACTER_CREATION.md`.
 ##
 ## `manager_region` is where *you* are from, which is frequently not where you
-## manage -- a Landavolan in Taktikã is a specific and interesting position, and
+## manage -- a Landavoli in Taktikã is a specific and interesting position, and
 ## it is the position most managers in a real league are in.
 @export var manager_name: String = ""
 @export var manager_region: String = "Landavol"

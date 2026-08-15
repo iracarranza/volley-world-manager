@@ -71,7 +71,7 @@ static func execution_modifier(player: VolleyballPlayer) -> float:
 ## How much this voli takes from having seen a ball once.
 ##
 ## `adaptability` is the individual half and has always been here. The regional
-## half is the tradition that taught them to watch: a Taktikãn is not a better
+## half is the tradition that taught them to watch: a Taktikãni is not a better
 ## athlete for having seen the same set three times, they are a better *reader*,
 ## and that is the only mechanism in the game that makes a side genuinely harder
 ## to play against in the fourth set than in the first.

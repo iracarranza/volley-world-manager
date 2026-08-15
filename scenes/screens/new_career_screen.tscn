@@ -182,6 +182,7 @@ stretch = true
 [node name="PreviewViewport" type="SubViewport" parent="Layout/MainMargin/Main/QuestionPanel/QuestionMargin/VoliStep/PreviewFrame/VoliPreview"]
 unique_name_in_owner = true
 handle_input_locally = false
+own_world_3d = true
 size = Vector2i(244, 470)
 render_target_update_mode = 4
 

@@ -39,7 +39,7 @@ const POSITIONS: Array[Dictionary] = [
 ##
 ## Blôc du Larg rises for the same kind of reason and by a different route: its
 ## specialty list gave up `jump_reach` so that Ĭspayk could own air presence
-## outright, which means Largen size must be stated here or nowhere.
+## outright, which means Largôis size must be stated here or nowhere.
 ##
 ## A'ace leans slightly positive across all three: assembled, well-resourced
 ## athletes rather than a developed body type of its own.
@@ -114,7 +114,7 @@ const REGION_SPECIALTY := {
 	##
 	## `court_vision` and `tactical_discipline` spelled this region as *analysis*
 	## -- a side that studies you and adjusts -- and that was never what the wall
-	## is for. A Largen block does not need to guess right, because it is long
+	## is for. A Largôis block does not need to guess right, because it is long
 	## enough and quick enough to get a hand on the shot it guessed wrong about.
 	## `anticipation` stays removed for a separate reason: it is 0.30 of dig
 	## capability and 0.34 of a blocker's read, so holding it made the blocking
@@ -789,7 +789,7 @@ const TERTIARY_TIER_PENALTY: int = -8
 ## a per-item constant makes unequal totals whenever the count varies.** It was
 ## 16 *per attribute*, so a region with six specialties carried 96 ceiling points
 ## and one with three carried 48 -- and re-cutting Pāwa Hitō from five attributes
-## to three quietly removed 32 points from every Pāwan ever generated. Twenty
+## to three quietly removed 32 points from every Hitōuen ever generated. Twenty
 ## seasons later the world held eight elite players against a budget of seven,
 ## because one voli somewhere else had moved up to fill the gap.
 ##
