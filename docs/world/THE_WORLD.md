@@ -47,23 +47,23 @@ are majors that stand outside the geography entirely.
 
 | region | demonym | land | teaches |
 | --- | --- | --- | --- |
-| Landavol | Landavolan | braided river plains, roads everywhere | nothing in particular, and that is its identity |
+| Landavol | Landavoli | braided river plains, roads everywhere | nothing in particular, and that is its identity |
 | Spëddigh | Spëddish | glacial fjords, no room to sprawl | tempo pressure, rapid transition |
-| Pāwa Hitō | Pāwan | steep volcanic archipelago | conditioning, relentless transition attack |
-| Blôc du Larg | Largen | broad tidal shelf, enormous tides | net control, patient structure |
+| Pāwa Hitō | Hitōuen | steep volcanic archipelago | conditioning, relentless transition attack |
+| Blôc du Larg | Largôis | broad tidal shelf, enormous tides | net control, patient structure |
 | Xérvu | Xérvyan | high dry plateau above an escarpment | serving, toss discipline, first strike |
-| Taktikã | Taktikãn | cold altiplano and salt flats | composed intelligence, reading ahead |
+| Taktikã | Taktikãni | cold altiplano and salt flats | composed intelligence, reading ahead |
 | Ĭspayk | Ĭspaykano | volcanic islands in the storm track | the set-and-spike; a fallen flagship |
-| A'ace | A'aceni | desert coast, largely reclaimed | nothing yet; it buys what it needs |
+| A'ace | A'ace'ni | desert coast, largely reclaimed | nothing yet; it buys what it needs |
 
 ### Minors
 
 | region | demonym | beside | land |
 | --- | --- | --- | --- |
-| Tãul ys Feynt | Feyntish | Taktikã | slate valleys, low ceilings |
-| Lo-ong Ralī | Ralīn | Pāwa Hitō | thin-air plateau, three days from anywhere |
-| Bompaçao | Bompaçan | Blôc du Larg | hot river delta, concrete courts |
-| Rhėn Tempaol | Tempaoli | Spëddigh *(colony; see below)* | temperate island in Pāwa Hitō's seas |
+| Tãul ys Feynt | Feyntwyr | Taktikã | slate valleys, low ceilings |
+| Lo-ong Ralī | Ralīpa | Pāwa Hitō | thin-air plateau, three days from anywhere |
+| Bompaçao | Bompaçano | Blôc du Larg | hot river delta, concrete courts |
+| Rhėn Tempaol | Tempaolin | Spëddigh *(colony; see below)* | temperate island in Pāwa Hitō's seas |
 | Kutré Lyn | Kutrén | Xérvu | limestone karst, corners everywhere |
 | Zaitgaist | Zaitgaister | Landavol | walkable enclave city, no hinterland |
 
@@ -74,6 +74,14 @@ have two layers. See `GEOGRAPHY.md` §2.
 
 **A demonym is civic, never ethnic.** A Xérvyan is anyone from Xérvu. Volis move
 between regions constantly, and the word for *from there* has to survive that.
+
+**And it is formed in that region's own grammar, not in English.** The table above
+once read Landavolan, Pāwan, Largen, Feyntish -- one language's three suffixes
+applied to fourteen places, which made every people on the map sound as though the
+same outsider had named them. Feyntwyr counts people the way that tradition counts
+them; Ralīpa is the place plus *the person of it*. Civic did not change; whose
+grammar does the building did. `regions.gd` `DEMONYMS` is the authority and the
+suite gates it.
 
 ## 4. Volis
 

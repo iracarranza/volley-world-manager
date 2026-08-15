@@ -120,7 +120,7 @@ Spëddigh administers it. So:
   `STYLE_AND_SETTING.md`.
 - **The people's naming tradition is untouched.** Volis raised there are named
   from their own tradition, because that is theirs and always was.
-- **The demonym stays civic.** A Tempaoli is anyone from Rhėn Tempaol. The
+- **The demonym stays civic.** A Tempaolin is anyone from Rhėn Tempaol. The
   administrative fact does not get to reassign anybody.
 
 ### What a colony is allowed to be here
@@ -181,9 +181,13 @@ A'ace grows nothing at all and buys everything.
 
 ## 4. Open
 
-- Whether Rhėn Tempaol's rename to Rhën Tempaol happens now or with a wider
-  minor-region spelling pass (Tãul ys Feynt still shares nothing with Taktikã,
-  Bompaçao's ş sits where Blôc du Larg's French would put ç).
+- ~~Whether Rhėn Tempaol's rename to Rhën Tempaol happens now.~~ **Closed, and
+  the rename is not needed.** `RegionLanguage` groups marks into *families* by the
+  movement that draws them, so Rhėn Tempaol's overdot and Spëddigh's diaeresis are
+  already kin -- both are dots -- and the suite gates that every minor is kin to
+  its neighbour. The two examples this line gave have also both resolved: Tãul ys
+  Feynt and Taktikã now share the tilde outright, and Bompaçao carries ç rather
+  than the ş this line describes.
 - Whether any *other* region is a colony, or whether one is the right number.
   One is legible; three is a theme, and a theme is heavier than this is meant
   to be.
