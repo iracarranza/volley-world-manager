@@ -6,8 +6,9 @@ thing becomes an interaction or stays a number.
 
 This is a principles document. The systems are elsewhere:
 `THE_DAY_AND_THE_CLOCK.md`, `RECRUITMENT_AND_THE_OFFER.md`,
-`STAFF_AND_FALLIBILITY.md`, `ACCOMMODATIONS_AND_CARE.md`,
-`THE_DESK_AND_THE_PHONE.md`.
+`STAFF_AND_FALLIBILITY.md`, `CONTRACTORS_AND_SERVICES.md`,
+`ACCOMMODATIONS_AND_CARE.md`, `HOUSING_WORKSPACE_AND_ARCHITECTURE.md`,
+`ABSTRACTION_AND_MANIFESTATION.md`, `THE_DESK_AND_THE_PHONE.md`.
 
 ---
 
@@ -202,6 +203,37 @@ landed beside them they stopped reading as annotations, and the fix was three
 presentational changes rather than a redesign — see
 `RECRUITMENT_AND_THE_OFFER.md` §5.
 
+### 4.2 Record, workspace, presence
+
+A useful boundary now exists across the desk.
+
+The **journal is chronology**. It answers:
+
+> **What happened?**
+
+Other objects own the active state of their subject:
+
+| object | answers |
+|---|---|
+| **planner** | what is going to happen, and when? |
+| **scouting board** | who might we sign, and what do we know? |
+| **tactical workspace** | how are we trying to play? |
+| **housing folder** | where/how are we living, and what should change? |
+| **phone** | who needs me now? |
+| **encyclopedia** | what is this thing/place/category? |
+
+A journal entry may point to another workspace without becoming that workspace.
+*Architect proposal received* belongs in today's record; the proposal itself
+belongs in the housing folder. *Scout report received* is history; the current
+prospect belongs on the scouting board.
+
+There is a second boundary as well: the desk works with **representations** of
+things. Sometimes the manager can be physically present for the thing itself —
+attend a drill, attend a match, visit the current home, meet a recruit. Presence
+is not an overworld and does not replace the workspace.
+
+See `ABSTRACTION_AND_MANIFESTATION.md` for the 2D/3D form of this distinction.
+
 ---
 
 ## 5. The kitchen is the weakest interaction over the strongest simulation
@@ -224,6 +256,12 @@ show that something happened but **why** — responsibility, cognition, body
 position, tactical legibility, cause and effect. A viewer that animates outcomes
 is a replay; one that explains them is the argument for having a simulation this
 detailed at all.
+
+`ABSTRACTION_AND_MANIFESTATION.md` now makes the general rule explicit: the 2D
+view is the manager's compressed, actionable representation; the 3D court view is
+an observational manifestation used to understand what that representation
+became. The same relation should govern drills and housing without making those
+interfaces look alike.
 
 ---
 
