@@ -8,7 +8,8 @@ This is a principles document. The systems are elsewhere:
 `THE_DAY_AND_THE_CLOCK.md`, `RECRUITMENT_AND_THE_OFFER.md`,
 `STAFF_AND_FALLIBILITY.md`, `CONTRACTORS_AND_SERVICES.md`,
 `ACCOMMODATIONS_AND_CARE.md`, `HOUSING_WORKSPACE_AND_ARCHITECTURE.md`,
-`ABSTRACTION_AND_MANIFESTATION.md`, `THE_DESK_AND_THE_PHONE.md`.
+`ABSTRACTION_AND_MANIFESTATION.md`, `THE_JOURNAL_AND_KNOWLEDGE.md`,
+`THE_DESK_AND_THE_PHONE.md`.
 
 ---
 
@@ -189,7 +190,7 @@ why they are not duplicates, one table with more columns is the safer object.
 
 | object | core question | verbs | role |
 |---|---|---|---|
-| **journal** — the club | what happened, and what have I kept? | read, review, annotate | chronology and record. Do **not** default new systems into it because it has tabs |
+| **journal** — the manager's working book | what do I currently know about these people, this club and this season? | read, compare, review, annotate, tab | organized working knowledge and durable record. Dense is allowed; omniscient diagnosis is not — see `THE_JOURNAL_AND_KNOWLEDGE.md` |
 | **planner** — the day | what happens next? | paint, resize, copy | the schedule. Already a painted strip; keep it |
 | **scouting board** — cork | who might we sign, and what do we know? | pin, mark, arrange, compare | accumulated uncertain knowledge. Not the signing interface |
 | **tactical whiteboard** | how are we trying to play? | arrange, draw, assign | sporting intent. The match centre answers whether it happened |
@@ -201,8 +202,9 @@ why they are not duplicates, one table with more columns is the safer object.
 
 ### 4.1 Two standing corrections
 
-**Don't force new systems into the journal.** It has tabs, so everything fits,
-which is exactly why it is the wrong default.
+**Don't force new systems into the journal.** It has sections and can display a
+lot, so almost anything can be made to fit. That is exactly why volume of data
+is not enough reason for the journal to own an interaction.
 
 **The board's marks are annotations.** `MARK_SIGN` / `MARK_WATCH` / `MARK_PASS`
 are verdicts pinned to a card, not buttons that do things. When a real action
@@ -210,35 +212,48 @@ landed beside them they stopped reading as annotations, and the fix was three
 presentational changes rather than a redesign — see
 `RECRUITMENT_AND_THE_OFFER.md` §5.
 
-### 4.2 Record, workspace, presence
+### 4.2 Reference, workspace, presence
 
-The table's `role` column carries one boundary worth stating on its own: the
-**journal is chronology** and every other object owns the **active state** of its
-subject.
+The journal is the **organized knowledge/reference layer**. Specialist desk
+objects own the **work** that changes a domain. Presence shows the thing itself.
 
-A journal entry may point to a workspace without becoming that workspace.
-*Architect proposal received* belongs in today's record; the proposal itself
-belongs in the housing folder. *Scout report received* is history; the current
-prospect belongs on the board.
+That means factual overlap is legitimate:
 
-**The journal's own final scope is not settled**, and this section deliberately
-does not settle it. It has historically carried roster, club and competition
-information alongside the record, and as systems graduate into workspaces the
-question of what should remain — and whether the journal is the club's database
-or the manager's personal accumulated career memory — is open. Only the boundary
-above is fixed.
+> Journal: `Room 3 — roommate Iri`  
+> Housing: move Pāla, change equipment, inspect the home.
 
-And when something *does* graduate, the test is a managerial one rather than a
-data one:
+> Journal: `Training emphasis — receive`  
+> Training: construct, assign and demonstrate the session.
 
-> **A system leaves the record when it gains a distinct managerial verb — not
-> because its data got complicated.**
+> Journal: current competition, fixture and result.  
+> Match Centre: inspect the match deeply and intervene.
 
-Read-and-reference information can stay inside a record-like object no matter how
-much of it there is. Something the manager manipulates in a way nothing else
-manipulates has earned a workspace. Getting this backwards rebuilds the
-conventional Roster / Staff / Facilities / Competitions / Continue menu one
-justified screen at a time, which is the shape §0 exists to avoid.
+The rule is:
+
+> **Reference may overlap a specialist workspace. Specialist verbs should not.**
+
+A section does not necessarily leave the journal when a system graduates. Its
+specialist actions do.
+
+This preserves a useful manager loop: the journal can compile information about
+a whole voli, roster, staff or season without becoming the place where every
+system is operated.
+
+Chronology remains one legitimate journal function — inbox/correspondence,
+results and history belong in a durable record — but **chronology is not the
+journal's whole identity**.
+
+The journal also must not become the game's analytical narrator. It may show
+what is known, including direct and appropriately derived facts; it should not
+assert which person is the problem, why several systems combine into one cause,
+or what action the manager should take. Those judgments belong to the player or
+a named, fallible person. See `THE_JOURNAL_AND_KNOWLEDGE.md` §§4–6 and §11.
+
+When something gains a distinct managerial verb, give that verb a workspace
+rather than manufacturing a generic screen merely because the data is complex.
+Getting this backwards rebuilds the conventional Roster / Staff / Facilities /
+Competitions / Continue menu one justified screen at a time, which is the shape
+§0 exists to avoid.
 
 **Presence is the third layer.** The desk works with *representations*; sometimes
 the manager can be present for the thing itself — attend a drill, attend a match,
@@ -260,6 +275,12 @@ subjects, arriving indefinitely, compared against one another.
 Housing is not a folder because leases are paperwork. It is a folder because
 **every paper in it belongs to one live matter** — this home, or the one open
 question about changing it.
+
+The journal is handmade because it is the manager's **persistent working record**:
+structured enough to manage from, but increasingly marked by what this particular
+manager knows, tabs, annotates, keeps and chooses to remember. The craft layer
+must improve or personalize the working book rather than replace its information
+architecture.
 
 That difference is why the same material has been reassigned three times in this
 project's history, and it is the test to apply before the fourth.
@@ -421,8 +442,10 @@ When something could be a number or an interaction, ask which of these it is:
 1. Would a manager do it **once and mean it**, or **repeatedly and resent it**?
 2. Can it be shown as **somebody doing something** instead of a modifier?
 3. Does it deviate from routine? Deviation earns presentation.
-4. Is it a **physical fact** (show the number) or a **judgment about a person**
-   (say the sentence)? — see `RECRUITMENT_AND_THE_OFFER.md` §2.1.
+4. Is it a **physical/direct fact** (show the evidence) or a **judgment** (give it
+   to the player or a named fallible person)?
+5. Does the manager actually **know** this, or is the interface about to leak
+   hidden simulation truth? — see `THE_JOURNAL_AND_KNOWLEDGE.md`.
 
 > Physicalize decisions. Automate maintenance. Make routine inexpensive. Make
-> deviations meaningful.
+> deviations meaningful. Preserve the player's diagnosis.
