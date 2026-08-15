@@ -95,7 +95,7 @@ away.
 | The scouting board -- cork, pinned | `scenes/screens/scouting_screen.gd` |
 | The planner -- the daily schedule | `scenes/screens/schedule_screen.gd` |
 | Match centre | `scenes/screens/match_screen.gd` |
-| The housing folder -- where the squad lives | `scenes/screens/accommodation_screen.gd` |
+| The housing folder -- the current home, and the one open question about changing it | `scenes/screens/accommodation_screen.gd` |
 | The kitchen -- the block and the paste on it | `scenes/screens/kitchen_screen.gd` |
 | The desk -- the home state, not a menu | `scenes/screens/desk_screen.gd` |
 | The phone -- a call cutting in | `scenes/components/call_intrusion.gd` |
