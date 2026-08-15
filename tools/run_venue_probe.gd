@@ -23,52 +23,19 @@ extends Node
 const COURT := preload("res://scenes/components/match_court_3d.tscn")
 const ACTOR := preload("res://scenes/components/player_actor_3d.tscn")
 
-## The home kit each region wears, from the kit pass. Dark or near-white and
-## nothing between, because a kit is seen against a terracotta floor and a
-## midtone disappears into it.
-const KITS := {
-	"landavol": Color("35393A"), "pawa": Color("26355C"),
-	"speddigh": Color("1F4E6B"), "bloc": Color("414055"),
-	"xervu": Color("3A2415"), "taktika": Color("1E2124"),
-	"aace": Color("0B0F14"), "ispayk": Color("0C4F52"),
-}
-
-## The visitors, in a change strip. Every home kit above is dark, so the away
-## side has to be the light one or two dark teams share a floor and nobody can
-## tell who touched the ball.
-const AWAY_KIT := Color("E4E0D6")
-
-## **Construction, not colour.** The kits are all dark by necessity -- a midtone
-## disappears into a terracotta floor -- and making them louder to tell them
-## apart would undo the contrast work that got them readable in the first place.
-## So the difference is *how a kit is built*: panels, seams, bands and their
-## spacing, which survive grayscale because they are value structure rather than
-## hue. A viewer should be able to name the side from a black-and-white frame.
+## Which region each venue id belongs to.
 ##
-## `trim` is how far the marks sit from the kit in value -- lighter for most,
-## since a dark kit can only be marked by something paler.
-const KIT_BUILD := {
-	## The template every other kit is a deviation from. Not an absence of
-	## design: a placket and a collar, cleanly made, so it reads as the canonical
-	## strip rather than as one nobody finished.
-	"landavol": {"pattern": "reference", "trim": 0.34},
-	## Compressed and repeated -- short marks, many of them, close together. The
-	## same thing the region does to a rally.
-	"speddigh": {"pattern": "ticks", "trim": 0.40},
-	## Broad athletic panels running with the body, so the shape reads as motion
-	## even standing still.
-	"pawa": {"pattern": "panels", "trim": 0.30},
-	## Vertical divisions, structural and evenly spaced: the kit is built like the
-	## thing the region believes in.
-	"bloc": {"pattern": "columns", "trim": 0.36},
-	## Irregular, rhythmic accents -- uneven spacing that still keeps a beat.
-	"xervu": {"pattern": "rhythm", "trim": 0.46},
-	## Precise geometric seams. Thin, exact, and nothing decorative.
-	"taktika": {"pattern": "seams", "trim": 0.30},
-	## Immaculate and technical, and covered in the people who paid for it.
-	"aace": {"pattern": "sponsored", "trim": 0.42},
-	## The old strip, one broad chest band, essentially unchanged for decades.
-	"ispayk": {"pattern": "heritage", "trim": 0.38},
+## **The kit tables used to live here, and that was the bug.** This file drew
+## the strips, reviewed them and then kept them -- so the palette and the
+## construction language existed only in a render, and every match in the game
+## went on wearing `UIPalette`'s two colours. They now live in
+## `scripts/data/regional_kits.gd` and the actor wears them itself; the probe
+## passes a region and gets the same shirt a match does, which is the only way a
+## render is evidence of anything.
+const VENUE_REGION := {
+	"landavol": "Landavol", "speddigh": "Spëddigh", "pawa": "Pāwa Hitō",
+	"bloc": "Blôc du Larg", "xervu": "Xérvu", "taktika": "Taktikã",
+	"aace": "A'ace", "ispayk": "Ĭspayk",
 }
 
 ## Six a side, in a legal rotation: three front at the attack line, three back.
@@ -865,9 +832,8 @@ func _fixtures(id: String) -> void:
 ## answer. It is also the first time the kit palette and the court palette are in
 ## the same frame -- the two were designed a day apart against different grounds.
 func _volis(id: String) -> void:
-	var home: Color = Color(KITS.get(id, KITS["landavol"]))
+	var region := str(VENUE_REGION.get(id, ""))
 	for side in [1.0, -1.0]:
-		var kit := home if side > 0.0 else AWAY_KIT
 		for i in range(SLOTS.size()):
 			var slot: Vector3 = SLOTS[i]
 			var actor := ACTOR.instantiate()
@@ -876,34 +842,43 @@ func _volis(id: String) -> void:
 			## Both sides face the net, which is the only orientation that reads
 			## as volleyball rather than as a queue.
 			actor.rotation.y = 0.0 if side > 0.0 else PI
+			## The home side wears the region; the away side gets the change
+			## strip from the same rule a match uses, rather than from a constant
+			## this file used to keep for itself.
 			actor.configure(
-				int(side) * 100 + i, side > 0.0, "",
-				"Right", {"body_type": str(BODIES[i])}
+				int(side) * 100 + i, side > 0.0, "", "Right",
+				{"body_type": str(BODIES[i]), "club_region": region}
 			)
-			_wear(actor, kit)
-			_build_kit(actor, id if side > 0.0 else "", kit)
+			actor.apply_ui_palette(false)
 			## A still frame is not a live match: the name plate and the cogniticon
 			## are readouts for a rally in progress, and in a photograph they are
 			## twelve floating rectangles.
 			_hide_readouts(actor)
 
 
+## A closeup at play level, because a venue is finally judged on whether a body
+## reads in it -- kit against floor, and a shadow that says where they stand.
+## The court camera, with its horizon opened and its seat chosen.
+##
+## **`far` is 80 m in `match_court_3d.tscn`, and that is correct for the scene it
+## is in** -- an indoor hall has nothing 80 m away and the plane is free
+## performance. It is wrong for the one venue that plays outdoors, and it cost
+## four passes of Pāwa backdrop work: sea, islands and headlands were all built,
+## all lit, and all clipped before they were drawn.
+func _venue_camera() -> Camera3D:
+	var camera := _court.get_node_or_null("Camera3D") as Camera3D
+	if camera != null:
+		camera.far = 1400.0
+	return camera
+
+
 ## Aim the broadcast seat, which until now was whatever the scene shipped with.
 ##
-## **This is where the Pāwa backdrop actually died, four passes running.** Each
-## pass moved sea, islands and headlands around and re-rendered, and each time
-## the frame came back empty -- because the far plane was only ever raised inside
-## `_closeup`, and the *broadcast* capture ran against a freshly instantiated
-## court still carrying the scene's 80 m. Every measurement of "is the backdrop
-## visible" was taken through a camera that could not see 80 m, and the answer
-## was recorded as a fact about the geometry.
-##
-## The pitch is the second half of it, and it is not a bug. Indoors the camera
-## looks down at the floor 19 m away, which puts the top edge of the frame
-## almost exactly on the horizon -- correct for a hall, where there is nothing
-## above the horizon to see. An open-air venue is the one case where there is,
-## so its camera lifts and levels off until a band of ridge and sky is in shot.
-## A broadcaster on a cliff top would frame it that way for the same reason.
+## Indoors the camera looks down at the floor 19 m away, which puts the top edge
+## of the frame almost exactly on the horizon -- correct for a hall, where there
+## is nothing above the horizon to see. An open-air venue is the one case where
+## there is, so its camera lifts and levels off until a band of ridge and sky is
+## in shot. A broadcaster on a cliff top would frame it the same way.
 func _frame_broadcast() -> void:
 	var camera := _venue_camera()
 	if camera == null:
@@ -918,24 +893,6 @@ func _frame_broadcast() -> void:
 		camera.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)
 
 
-## The court camera, with its horizon opened.
-##
-## **`far` is 80 m in `match_court_3d.tscn`, and that is correct for the scene it
-## is in** -- an indoor hall has nothing 80 m away and the plane is free
-## performance. It is wrong for the one venue that plays outdoors, and it cost
-## four passes of Pāwa backdrop work: sea, islands and headlands were all built,
-## all lit, and all clipped before they were drawn. Set in one place because the
-## probe moves this camera three times and setting it at two of them would have
-## produced the same bug with a smaller footprint.
-func _venue_camera() -> Camera3D:
-	var camera := _court.get_node_or_null("Camera3D") as Camera3D
-	if camera != null:
-		camera.far = 1400.0
-	return camera
-
-
-## A closeup at play level, because a venue is finally judged on whether a body
-## reads in it -- kit against floor, and a shadow that says where they stand.
 func _closeup(id: String) -> void:
 	var camera := _venue_camera()
 	if camera == null:
@@ -984,88 +941,6 @@ func _establishing(id: String) -> void:
 	var path := "user://venue_%s_wide.png" % id
 	get_tree().root.get_texture().get_image().save_png(path)
 	print("saved %s  (establishing)" % ProjectSettings.globalize_path(path))
-
-
-## Put the region's construction on the shirt.
-##
-## Marks are children of the torso so they move with it, sitting a few
-## millimetres proud of the chest. Away sides get nothing for now -- the cream
-## change strip is deliberately universal, and the brief is to keep it that way
-## until each region's construction can be carried in dark trim on it.
-func _build_kit(actor: Node, id: String, kit: Color) -> void:
-	if id.is_empty():
-		return
-	var torso := actor.get_node_or_null("BodyPivot/Torso") as MeshInstance3D
-	if torso == null:
-		return
-	var spec: Dictionary = KIT_BUILD.get(id, KIT_BUILD["landavol"])
-	var trim: Color = kit.lightened(float(spec.get("trim", 0.35)))
-	var pattern := str(spec.get("pattern", "reference"))
-	## Torso-local, in metres: the chest is roughly 0.42 across and 0.5 tall.
-	var marks: Array = []
-	match pattern:
-		"reference":
-			marks = [[Vector3(0.035, 0.34, 0.01), Vector3(0.0, 0.02, 0.115)],
-				[Vector3(0.30, 0.035, 0.01), Vector3(0.0, 0.20, 0.108)]]
-		"ticks":
-			for row in range(4):
-				for col in [-1.0, 1.0]:
-					marks.append([Vector3(0.10, 0.026, 0.01),
-						Vector3(col * 0.10, 0.16 - float(row) * 0.085, 0.112)])
-		"panels":
-			marks = [[Vector3(0.15, 0.46, 0.012), Vector3(-0.12, 0.0, 0.112)],
-				[Vector3(0.15, 0.46, 0.012), Vector3(0.12, 0.0, 0.112)]]
-		"columns":
-			for col in range(3):
-				marks.append([Vector3(0.045, 0.50, 0.011),
-					Vector3(-0.13 + float(col) * 0.13, 0.0, 0.112)])
-		"rhythm":
-			var beat := [0.20, 0.09, 0.15, 0.05, 0.13]
-			var y := 0.22
-			for i in range(beat.size()):
-				marks.append([Vector3(0.26, 0.03, 0.011), Vector3(0.0, y, 0.112)])
-				y -= float(beat[i])
-		"seams":
-			marks = [[Vector3(0.34, 0.014, 0.01), Vector3(0.0, 0.12, 0.112)],
-				[Vector3(0.34, 0.014, 0.01), Vector3(0.0, -0.10, 0.112)],
-				[Vector3(0.014, 0.44, 0.01), Vector3(0.0, 0.0, 0.112)]]
-		"sponsored":
-			marks = [[Vector3(0.30, 0.075, 0.012), Vector3(0.0, 0.17, 0.112)],
-				[Vector3(0.12, 0.055, 0.012), Vector3(-0.10, 0.02, 0.112)],
-				[Vector3(0.12, 0.055, 0.012), Vector3(0.10, 0.02, 0.112)],
-				[Vector3(0.24, 0.045, 0.012), Vector3(0.0, -0.13, 0.112)]]
-		"heritage":
-			marks = [[Vector3(0.40, 0.13, 0.013), Vector3(0.0, 0.09, 0.112)]]
-	## **Both sides of the shirt.** These sat at z = +0.112 only, which is the
-	## chest -- and the closeup camera stands behind the home side, so the one
-	## frame built to judge the construction language was showing twelve unmarked
-	## backs. A kit carries its panels and seams round the body; so does this.
-	for mark in marks:
-		for face in [1.0, -1.0]:
-			var size: Vector3 = mark[0]
-			var at: Vector3 = mark[1]
-			var mesh := BoxMesh.new()
-			mesh.size = size
-			var node := MeshInstance3D.new()
-			node.mesh = mesh
-			node.position = Vector3(at.x * face, at.y, at.z * face)
-			var material := StandardMaterial3D.new()
-			material.albedo_color = trim
-			material.roughness = 0.8
-			node.material_override = material
-			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			torso.add_child(node)
-
-
-## Hide the readouts -- the name plate and the focus ring, which belong to a live
-## rally rather than to a photograph.
-##
-## **The flat panels on each voli are not readouts and must stay.** They are
-## `WingLeft` and `WingRight` -- 0.75 x 0.35 plates parented to the arms of every
-## `Avi` body, which is why exactly half the twelve have them and why they are
-## skin-coloured rather than kit-coloured. Three separate passes have read them
-## as floating debug quads or as a kit bug and gone looking for the code that
-## draws them; there isn't any, they are the voli.
 func _hide_readouts(node: Node) -> void:
 	for child in node.get_children():
 		if child is Label3D or child is Sprite3D:
@@ -1073,35 +948,6 @@ func _hide_readouts(node: Node) -> void:
 		elif str(child.name) in ["FocusRing", "SignatureSurge3D"]:
 			(child as Node3D).visible = false
 		_hide_readouts(child)
-
-
-## Paint the kit on after `configure`, which sets team colour from `UIPalette`
-## -- the same two theme colours for every club in the world. Shorts follow the
-## shirt darkened, which is the relationship the rig already uses.
-func _wear(actor: Node, kit: Color) -> void:
-	for path in ["BodyPivot/Torso", "BodyPivot/Shorts"]:
-		var mesh := actor.get_node_or_null(path) as MeshInstance3D
-		if mesh == null:
-			continue
-		_paint(mesh, kit if path.ends_with("Torso") else kit.darkened(0.38))
-	## **This currently matches nothing, and the claim it used to carry was
-	## false.** It was written to fix cosmetics stuck in `UIPalette`'s teal and
-	## coral, and said it had -- but the rig only ever emits `color_key` of
-	## `skin`, `crown` or `literal`, so the `kit` branch has never once fired. The
-	## cosmetics a voli actually has are ears, muzzle, tail, neck and an Avi's
-	## wings, and every one of them is anatomy: skin-coloured is correct and a
-	## kit colour would be wrong. Kept as the hook for the first cosmetic that is
-	## genuinely clothing, and no longer pretending to have done anything.
-	_paint_cosmetics(actor, kit)
-
-
-func _paint_cosmetics(node: Node, kit: Color) -> void:
-	for child in node.get_children():
-		if child is MeshInstance3D and str(child.get_meta("color_key", "")) == "kit":
-			_paint(child as MeshInstance3D, kit)
-		_paint_cosmetics(child, kit)
-
-
 func _paint(mesh: MeshInstance3D, colour: Color) -> void:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = colour

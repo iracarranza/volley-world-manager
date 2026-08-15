@@ -8223,19 +8223,35 @@ func _playback_physical_profiles(
 	opponent_team: Resource,
 ) -> Dictionary:
 	var profiles := {}
+	## **One region for the whole side, resolved once.** A kit belongs to a club,
+	## and reading each player's own `club_region` would dress a squad whose data
+	## has drifted -- a half-applied transfer, a generated voli nobody assigned --
+	## in a different shirt per body. `side_region` takes the mode, so one
+	## outlier cannot split a team.
+	##
+	## Only the home side carries one. The opposition wears the universal change
+	## strip by direction, and plumbing a region here that nothing reads would be
+	## a knob with no range, which this file has enough of already.
+	var home_region := RegionalKits.side_region(players)
 	for player in players:
-		profiles[player.id] = _physical_playback_profile(player)
+		profiles[player.id] = _physical_playback_profile(player, home_region)
 	if opponent_team != null:
 		for player_resource in opponent_team.on_court_players():
 			var player := player_resource as VolleyballPlayer
 			if player != null:
-				profiles[player.id] = _physical_playback_profile(player)
+				profiles[player.id] = _physical_playback_profile(player, "")
 	return profiles
 
 
-func _physical_playback_profile(player: VolleyballPlayer) -> Dictionary:
+func _physical_playback_profile(
+	player: VolleyballPlayer, club_region: String = ""
+) -> Dictionary:
 	return {
 		"height_cm": player.height_cm,
+		## Which club's strip this voli is drawn in. Empty for the opposition and
+		## for every caller that has no club, which keeps the palette colours
+		## those were drawn against.
+		"club_region": club_region,
 		"wingspan_cm": player.wingspan_cm,
 		"stride_length_m": player.stride_length_m,
 		## What this player is. Generation has assigned a body type since it

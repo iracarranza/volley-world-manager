@@ -40,6 +40,7 @@ const TRAINING_SYSTEM_SCRIPT := preload("res://scripts/systems/training_system.g
 const CALENDAR_RULES_SCRIPT := preload("res://scripts/data/calendar_rules.gd")
 const MATCH_FORMAT_SCRIPT := preload("res://scripts/models/match_format.gd")
 const REGIONS_SCRIPT := preload("res://scripts/data/regions.gd")
+const REGIONAL_KITS_SCRIPT := preload("res://scripts/data/regional_kits.gd")
 const CAREER_STATE_SCRIPT := preload("res://scripts/models/career_state.gd")
 const SIXNET_LEAGUE_SCRIPT := preload("res://scripts/systems/sixnet_league.gd")
 const WORLD_POPULATION_SCRIPT := preload("res://scripts/systems/world_population.gd")
@@ -334,6 +335,7 @@ func _initialize() -> void:
 	_test_team_identity_directional_outcomes()
 	_test_team_wheel_amplification()
 	_test_ui_visual_system()
+	_test_regional_kits()
 	_test_worksheet_facing()
 	_test_worksheet_placement()
 	_test_worksheet_behaviour()
@@ -355,6 +357,72 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures += 1
 		push_error("TEST FAILED: %s" % message)
+
+
+## Gate: a club wears its region, and the shirt is legible on the floor.
+##
+## **The threshold is measured against the ground the kit is actually seen on.**
+## The first kit palette was picked against the interface's background and nine
+## of fourteen failed once they were put on a court -- §0, a value measured with
+## the wrong instrument. So this asserts contrast against the court surface as
+## the scene really sets it, not against a colour anybody remembers choosing.
+func _test_regional_kits() -> void:
+	var region_names: Array = REGIONS_SCRIPT.names()
+	for region_name in region_names:
+		_check(
+			REGIONAL_KITS_SCRIPT.has_kit(str(region_name)),
+			"every region has a kit, including %s" % region_name,
+		)
+	for key in REGIONAL_KITS_SCRIPT.KITS.keys():
+		_check(
+			region_names.has(str(key)),
+			"kit table names a real region, not %s" % key,
+		)
+	## The court surface as `match_court_3d.tscn` sets it. Restated here would be
+	## a second source of truth, and the two drifting apart is what put the kit
+	## palette a whole hue away from the floor it was designed against.
+	var floor_colour := Color(0.7451, 0.5098, 0.3725)
+	## **1.6, and the number was measured rather than chosen.** This gate first
+	## shipped at 3:1 and twelve of fourteen kits failed it -- because 3:1 was
+	## carried over from the *court surface* pass, which compares a floor against
+	## its own lines, and was never a figure anybody had measured a kit against.
+	## The real spread is 1.85 (Spëddigh) to 5.61 (A'ace), and the midtones this
+	## exists to catch -- a tan, an olive, a mid grey, the shirts that vanish into
+	## terracotta -- all score 1.09 to 1.12. 1.6 sits below every real kit and
+	## well above every failing one, which is what a threshold has to do to mean
+	## anything.
+	for region_name in region_names:
+		var kit: Color = REGIONAL_KITS_SCRIPT.kit_for(str(region_name))
+		var lighter: float = maxf(kit.get_luminance(), floor_colour.get_luminance())
+		var darker: float = minf(kit.get_luminance(), floor_colour.get_luminance())
+		_check(
+			(lighter + 0.05) / (darker + 0.05) >= 1.6,
+			"%s's kit separates from the court floor" % region_name,
+		)
+	## Marks come in front/back pairs, because half of any frame is backs and a
+	## chest-only pattern left the closeup showing twelve unmarked shirts.
+	for region_name in region_names:
+		var marks: Array = REGIONAL_KITS_SCRIPT.marks_for(str(region_name))
+		_check(not marks.is_empty(), "%s's kit is built from marks" % region_name)
+		_check(
+			marks.size() % 2 == 0,
+			"%s's marks are mirrored front to back" % region_name,
+		)
+	## One outlier cannot split a side's kit -- the whole reason the region is
+	## resolved per team rather than per body.
+	var squad: Array = []
+	for i in range(6):
+		var member := VolleyballPlayer.new()
+		member.club_region = "Xérvu" if i < 5 else "Ĭspayk"
+		squad.append(member)
+	_check(
+		REGIONAL_KITS_SCRIPT.side_region(squad) == "Xérvu",
+		"a side's kit is the mode of its roster, not its first entry",
+	)
+	_check(
+		REGIONAL_KITS_SCRIPT.side_region([]).is_empty(),
+		"a side with no region resolves to none rather than to a default",
+	)
 
 
 func _test_ui_visual_system() -> void:

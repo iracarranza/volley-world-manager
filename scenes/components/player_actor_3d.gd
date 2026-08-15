@@ -2,6 +2,7 @@ class_name PlayerActor3D
 extends Node3D
 
 const UIPalette := preload("res://scripts/data/ui_palette.gd")
+const RegionalKitsScript := preload("res://scripts/data/regional_kits.gd")
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 const BodyTypeModelsScript := preload("res://scripts/data/body_type_models.gd")
@@ -32,6 +33,12 @@ const SetBiomechanicsScript := preload("res://scripts/data/set_biomechanics.gd")
 
 var player_id: int = -1
 var is_home_team: bool = true
+## Which region's clubs this voli plays for, and therefore what they wear.
+##
+## Empty means "no region known", which is every probe, preview and portrait in
+## the repository -- they keep the `UIPalette` colours they were drawn against.
+## Only a match knows this, because only a match has two clubs in it.
+var club_region: String = ""
 var tactical_position: Vector2 = Vector2.ZERO
 var dominant_hand: String = "Right"
 var height_cm: float = 188.0
@@ -402,6 +409,12 @@ func configure(
 	## because that dictionary is already the channel for "what this body is" and
 	## every caller that names nothing keeps the hash it had.
 	appearance = Dictionary(physical_profile.get("appearance", {}))
+	## Rides the same dictionary as `appearance`, which is also not physical.
+	## What this parameter has always really carried is "everything the view
+	## needs to draw this voli that the id cannot tell it", and a club's strip is
+	## exactly that. The alternative was a sixth positional argument on a call
+	## made from twenty places, nineteen of which have no region to pass.
+	club_region = str(physical_profile.get("club_region", ""))
 	## Before the build, not after it. `_build_silhouette` draws the face, so
 	## setting the expression afterwards would build nine boxes twice on every
 	## voli on the court to change the second set.
@@ -498,9 +511,22 @@ func apply_ui_palette(light_mode: bool) -> void:
 	## `UIPalette` is a table and not a state -- see the note on the billboard.
 	if cognition_billboard != null:
 		cognition_billboard.light_mode = light_mode
+	## **A club's strip, where there used to be one of two colours for the whole
+	## world.** `UIPalette` is keyed on `is_home_team` and nothing else, so every
+	## club in every region wore the same teal or the same coral -- fourteen
+	## regional identities, and a match showed none of them. A region overrides
+	## it; no region keeps it, which is what every probe, preview and portrait in
+	## the repository relies on.
+	##
+	## The kit does not follow the theme. `Mikasa` and `Molten` are the *desk's*
+	## two moods and a club does not change shirt between them; the strips were
+	## measured against the floor, not against the interface.
 	var team_color := UIPalette.color(
 		&"accent_alt" if is_home_team else &"danger", light_mode
 	)
+	if not club_region.is_empty():
+		team_color = RegionalKitsScript.kit_for(club_region) if is_home_team \
+			else RegionalKitsScript.away_kit()
 	var accent_color := UIPalette.color(
 		&"accent" if is_home_team else &"ink", light_mode
 	)
@@ -512,6 +538,7 @@ func apply_ui_palette(light_mode: bool) -> void:
 	var wears_kit := str(silhouette.get("torso_material", "kit")) == "kit"
 	_apply_material_color(torso, team_color if wears_kit else skin_color)
 	_apply_material_color(shorts, team_color.darkened(0.38))
+	_build_kit_marks(wears_kit)
 	_apply_material_color(head, skin_color)
 	for arm in [left_arm, right_arm]:
 		## Two bones, as the legs have been since the knee.
@@ -2758,6 +2785,50 @@ func set_pose(
 ## A flag rather than a second rig, because it is the same voli with the same kit
 ## and the same body type; only the lighting is a lie.
 @export var flat_shading: bool = false
+
+
+## The construction marks on this voli's shirt -- panels, seams, ticks, a band.
+##
+## **Value structure, because colour could not carry it.** Every regional kit is
+## dark by necessity, so telling two sides apart by hue would mean making the
+## kits louder and losing the contrast against the floor that was the point. How
+## a shirt is *built* survives both grayscale and distance.
+##
+## Rebuilt rather than tinted, because a voli can be repainted at any time --
+## theme change, kit change -- and a mark left over from a previous region is a
+## Xérvyan rhythm on a Taktikãni shirt. Cheap: eight boxes at the very most, on
+## a rig that already builds forty.
+##
+## A body whose torso is not kit -- a Vegi, whose produce *is* the body -- wears
+## none. Marking those is drawing a placket on an aubergine.
+func _build_kit_marks(wears_kit: bool) -> void:
+	for existing in _kit_marks():
+		existing.queue_free()
+	if club_region.is_empty() or not wears_kit or torso == null:
+		return
+	var trim := RegionalKitsScript.trim_colour(club_region) if is_home_team \
+		else RegionalKitsScript.away_kit().darkened(0.42)
+	for mark in RegionalKitsScript.marks_for(club_region):
+		var mesh := BoxMesh.new()
+		mesh.size = mark[0]
+		var node := MeshInstance3D.new()
+		node.mesh = mesh
+		node.position = mark[1]
+		node.set_meta("kit_mark", true)
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		torso.add_child(node)
+		_apply_material_color(node, trim)
+
+
+func _kit_marks() -> Array[MeshInstance3D]:
+	var found: Array[MeshInstance3D] = []
+	if torso == null:
+		return found
+	for child in torso.get_children():
+		var mesh_node := child as MeshInstance3D
+		if mesh_node != null and mesh_node.has_meta("kit_mark"):
+			found.append(mesh_node)
+	return found
 
 
 func _apply_material_color(
