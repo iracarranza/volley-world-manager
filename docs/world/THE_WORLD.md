@@ -60,10 +60,10 @@ are majors that stand outside the geography entirely.
 
 | region | demonym | beside | land |
 | --- | --- | --- | --- |
-| Tãul ys Feynt | Feyntwyr | Taktikã | slate valleys, low ceilings |
+| Tãul ys Feynt | Tãulwyr | Taktikã | slate valleys, low ceilings |
 | Lo-ong Ralī | Ralīpa | Pāwa Hitō | thin-air plateau, three days from anywhere |
 | Bompaçao | Bompaçano | Blôc du Larg | hot river delta, concrete courts |
-| Rhėn Tempaol | Tempaolin | Spëddigh *(colony; see below)* | temperate island in Pāwa Hitō's seas |
+| Rhėn Tempaol | Rhėni | Spëddigh *(colony; see below)* | temperate island in Pāwa Hitō's seas |
 | Kutré Lyn | Kutrén | Xérvu | limestone karst, corners everywhere |
 | Zaitgaist | Zaitgaister | Landavol | walkable enclave city, no hinterland |
 

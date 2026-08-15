@@ -158,8 +158,18 @@ const FAMILY_FIRST := {
 ## from. Nobody says "Blôc du Larg" in a sentence about a person; they say Larg.
 const CONTRACTIONS := {
 	"Blôc du Larg": "Larg",
-	"Tãul ys Feynt": "Feynt",
-	"Rhėn Tempaol": "Tempaol",
+	## **Tãul, not Feynt** -- the same call as Rhėn and Hitō, and the last of the
+	## three. Feynt is the describing half (the feint); Tãul identifies the place
+	## and carries the tilde, so Tãulwyr keeps a signature Feyntwyr came out
+	## without. With this the table has one rule rather than a rule and two
+	## exceptions: a two-word region shortens to the half that *names* it.
+	"Tãul ys Feynt": "Tãul",
+	## **Rhėn, not Tempaol.** The same call as Pāwa Hitō above, and accepting the
+	## gate here while overriding it there was the inconsistency: *Tempaol* is the
+	## describing half -- the tempo -- and *Rhėn* is the one that identifies the
+	## place. It is also the half carrying the region's overdot, so a demonym built
+	## from it keeps the region's own signature instead of coming out bare.
+	"Rhėn Tempaol": "Rhėn",
 	"Lo-ong Ralī": "Ralī",
 	## **Hitō, not Pāwa.** Every other two-word region here shortens to the half
 	## that identifies it rather than the half that describes it -- Larg, Feynt,

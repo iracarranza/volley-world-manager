@@ -26,7 +26,37 @@ const COURT := preload("res://scenes/components/match_court_3d.tscn")
 ## the origin, the posts sit at ±4.72, and the floor is 18 x 9.
 const HALF_LENGTH := 9.0
 const HALF_WIDTH := 4.5
-const POST_X := 4.72
+
+## Where the building starts. **Nothing structural may stand inside this.** The
+## first pass put Blôc's pillars at z = -6.6, which is inside the free zone -- on
+## the court, in play, where a voli chasing a ball would run into them. A pillar
+## holds up a hall; it does not stand on the sand.
+const FREE_ZONE_Z := 8.2
+const FREE_ZONE_X := 12.6
+
+## The camera's broadcast preset is (12.5, 8.2, 10.8), which is *inside* the
+## near stand and above it -- exactly where a real broadcast camera sits. So the
+## near rake may exist as long as it stays under that sightline; it is the far
+## side that carries height.
+const NEAR_RAKE_TOP := 2.2
+const FAR_RAKE_TOP := 6.0
+
+## Where the scoreline lives, which is a wealth statement before it is a fixture.
+##
+## Most halls bolt a board to the end wall. A centre-hung cube over the net costs
+## a roof strong enough to carry it and the money to buy it, so it is not a
+## default -- it is three specific venues saying three different things: A'ace
+## bought one last season, Blôc's hall was built to carry one, and Ĭspayk's is
+## the one they hung when they could still afford to, now half-lit.
+const CENTRE_HUNG := {"aace": 1.0, "bloc": 0.85, "ispayk": 0.28}
+
+## Which floor each venue plays on, from the surface pass. Five majors keep the
+## default -- a league where every floor is a statement has no statement left.
+const FLOORS := {
+	"taktika": {"albedo": Color(0.36, 0.44, 0.47), "rough": 0.62},
+	"aace": {"albedo": Color(0.88, 0.75, 0.54), "rough": 0.18},
+	"ispayk": {"albedo": Color(0.25, 0.49, 0.39), "rough": 0.88},
+}
 
 var _court: Node3D
 var _env: Environment
@@ -109,13 +139,24 @@ func _venues() -> Array:
 				_env.glow_enabled = true
 				_env.glow_intensity = 1.6
 				_env.glow_bloom = 0.55
-				for i in range(4):
+				## Polished columns along the far wall, behind the far stand -- the
+				## hall's own structure catching the sun, which is what makes the
+				## block hard to read. Not on the court.
+				for i in range(5):
 					var pillar := _box(
-						Vector3(0.42, 7.0, 0.42),
-						Vector3(-6.0 + float(i) * 4.0, 3.5, -6.6),
-						Color(0.94, 0.92, 0.86), 0.92, 0.10, 0.55
+						Vector3(1.0, 12.0, 1.0),
+						Vector3(-12.0 + float(i) * 6.0, 6.0, -(FREE_ZONE_Z + 5.2)),
+						Color(0.95, 0.93, 0.88), 0.94, 0.08, 0.7
 					)
-					pillar.name = "Pillar%d" % i,
+					pillar.name = "Pillar%d" % i
+				## And the windows they stand between.
+				for i in range(4):
+					var window := _box(
+						Vector3(4.4, 7.0, 0.2),
+						Vector3(-9.0 + float(i) * 6.0, 6.4, -(FREE_ZONE_Z + 5.8)),
+						Color(1.0, 0.97, 0.86), 0.0, 0.2, 2.4
+					)
+					window.name = "Window%d" % i,
 		},
 		{
 			"id": "xervu", "label": "Xervu - the end line answers the serve",
@@ -173,20 +214,21 @@ func _venues() -> Array:
 					Color(0.20, 0.85, 0.95), Color(0.95, 0.30, 0.55),
 					Color(0.30, 0.95, 0.55), Color(0.98, 0.78, 0.20),
 				]
-				for i in range(4):
+				## Screens on the mezzanine fascia, and camera pods slung under it.
+				## The room is instrumented from the deck, not from the floor.
+				for i in range(5):
 					var screen := _box(
-						Vector3(3.6, 1.5, 0.10),
-						Vector3(-6.6 + float(i) * 4.4, 3.2, -(HALF_WIDTH + 3.4)),
-						Color(tints[i]), 0.0, 1.0, 2.1
+						Vector3(5.0, 2.2, 0.14),
+						Vector3(-12.0 + float(i) * 6.0, 6.6, -(FREE_ZONE_Z + 3.7)),
+						Color(tints[i % 4]), 0.0, 1.0, 2.3
 					)
 					screen.name = "Screen%d" % i
-				for end in [-1.0, 1.0]:
-					var board := _box(
-						Vector3(0.10, 1.3, 5.2),
-						Vector3(end * (HALF_LENGTH + 2.6), 2.6, -1.2),
-						Color(tints[int(end) + 1]), 0.0, 1.0, 1.8
+					var pod := _box(
+						Vector3(0.5, 0.5, 0.9),
+						Vector3(-12.0 + float(i) * 6.0, 7.4, -(FREE_ZONE_Z + 3.1)),
+						Color(0.86, 0.92, 0.98), 0.7, 0.25, 0.6
 					)
-					board.name = "Board%d" % int(end),
+					pod.name = "Pod%d" % i,
 		},
 		{
 			"id": "ispayk", "label": "Ispayk - hallowed, and past it",
@@ -205,11 +247,13 @@ func _venues() -> Array:
 				_env.fog_light_color = Color(0.52, 0.44, 0.34)
 				_env.fog_density = 0.012
 				_env.fog_sky_affect = 0.0
-				for i in range(5):
+				## Hung down the far wall above the stand, the way a hall keeps its
+				## history: high, dusty and slightly too many.
+				for i in range(7):
 					var banner := _box(
-						Vector3(1.2, 3.8, 0.06),
-						Vector3(-7.0 + float(i) * 3.5, 5.0, -(HALF_WIDTH + 2.4)),
-						Color(0.55, 0.20, 0.18), 0.0, 0.9, 0.30
+						Vector3(1.3, 4.2, 0.06),
+						Vector3(-13.5 + float(i) * 4.5, 7.2, -(FREE_ZONE_Z + 5.5)),
+						Color(0.55, 0.20, 0.18), 0.0, 0.9, 0.22
 					)
 					banner.name = "Banner%d" % i,
 		},
@@ -232,6 +276,9 @@ func _shoot(venue: Dictionary) -> void:
 	_extras = Node3D.new()
 	_extras.name = "VenueExtras"
 	_court.add_child(_extras)
+	_arena()
+	_fixtures(str(venue.get("id", "")))
+	_floor_for(str(venue.get("id", "")))
 	var build: Callable = venue.get("build", func(): pass)
 	build.call()
 	await get_tree().process_frame
@@ -241,6 +288,188 @@ func _shoot(venue: Dictionary) -> void:
 	print("saved %s  (%s)" % [ProjectSettings.globalize_path(path), venue.get("label", "")])
 	_court.queue_free()
 	await get_tree().process_frame
+
+
+## The building every venue shares: a raked bowl outside the free zone, the
+## columns that hold the roof up, and a mezzanine over the far side.
+##
+## This exists because the first pass dressed the *court* -- pillars and screens
+## standing in the playing area -- when what these venues are about is the room
+## around it. Stands, columns and a mezzanine are where a crowd, a roof and a
+## sponsor's camera actually go, and putting them outside the free zone is not a
+## detail: it is the difference between a hall and an obstacle course.
+func _arena() -> void:
+	var concrete := Color(0.30, 0.31, 0.34)
+	var seat := Color(0.24, 0.27, 0.32)
+	## Long sides. Each step rises and retreats, so the rake reads as seating
+	## rather than as a wall -- and the near side stops under the camera.
+	for side in [-1.0, 1.0]:
+		## Typed explicitly: `side` comes from an untyped array literal, so `:=` on a
+		## comparison against it has nothing to infer from and the whole script fails
+		## to parse -- silently, as an idle process that renders nothing.
+		var far: bool = side < 0.0
+		var steps: int = 6 if far else 3
+		var top: float = FAR_RAKE_TOP if far else NEAR_RAKE_TOP
+		for i in range(steps):
+			var t := float(i) / float(steps - 1)
+			var step := _box(
+				Vector3(FREE_ZONE_X * 2.0 + 4.0, 0.5, 1.3),
+				Vector3(0.0, 0.35 + t * top, side * (FREE_ZONE_Z + 0.9 + float(i) * 1.25)),
+				seat if i % 2 == 0 else concrete, 0.0, 0.95
+			)
+			step.name = "Rake%d_%d" % [int(side), i]
+	## Ends, lower and shallower: an end stand behind the service zone.
+	for end in [-1.0, 1.0]:
+		for i in range(4):
+			var t := float(i) / 3.0
+			var step := _box(
+				Vector3(1.4, 0.5, FREE_ZONE_Z * 2.0 + 6.0),
+				Vector3(end * (FREE_ZONE_X + 1.0 + float(i) * 1.35), 0.35 + t * 3.2, 0.0),
+				seat if i % 2 == 0 else concrete, 0.0, 0.95
+			)
+			step.name = "End%d_%d" % [int(end), i]
+	## The columns that hold the roof, at the corners of the building and well
+	## outside anything anybody plays in.
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var column := _box(
+				Vector3(0.8, 13.0, 0.8),
+				Vector3(sx * (FREE_ZONE_X + 4.6), 6.5, sz * (FREE_ZONE_Z + 5.6)),
+				Color(0.42, 0.43, 0.45), 0.0, 0.85
+			)
+			column.name = "Column%d_%d" % [int(sx), int(sz)]
+	## A mezzanine over the far rake -- the deck a camera or a sponsor hangs off.
+	## **The hall has to be enclosed.** Without walls and a roof the seating reads
+	## as open scaffolding, and the end board hangs in mid-air because there is
+	## nothing behind it -- which is what the first two passes looked like. These
+	## are the surfaces every venue's own light then plays on: Blôc's windows cut
+	## into one, Ĭspayk's banners hang down another.
+	var wall_h := 14.0
+	for sz in [-1.0, 1.0]:
+		var wall := _box(
+			Vector3(FREE_ZONE_X * 2.0 + 12.0, wall_h, 0.4),
+			Vector3(0.0, wall_h * 0.5, sz * (FREE_ZONE_Z + 6.4)),
+			Color(0.23, 0.24, 0.27), 0.0, 0.92
+		)
+		wall.name = "WallLong%d" % int(sz)
+	for sx in [-1.0, 1.0]:
+		var wall := _box(
+			Vector3(0.4, wall_h, FREE_ZONE_Z * 2.0 + 13.0),
+			Vector3(sx * (FREE_ZONE_X + 6.2), wall_h * 0.5, 0.0),
+			Color(0.21, 0.22, 0.25), 0.0, 0.92
+		)
+		wall.name = "WallEnd%d" % int(sx)
+	var roof := _box(
+		Vector3(FREE_ZONE_X * 2.0 + 12.0, 0.5, FREE_ZONE_Z * 2.0 + 13.0),
+		Vector3(0.0, wall_h, 0.0),
+		Color(0.17, 0.18, 0.21), 0.0, 0.95
+	)
+	roof.name = "Roof"
+	## **The roof does not cast.** Enclosing the hall put a lid over a directional
+	## key light, and a sun does not reach into a closed building -- six of the
+	## eight venues went black the moment the roof appeared. That is the lighting
+	## model telling the truth: a covered hall is lit by its own fixtures, and the
+	## key here is standing in for a roof lantern until those exist. Blôc is the
+	## one venue already honest about it, because its light genuinely arrives
+	## through the windows in the far wall.
+	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for wall in _extras.get_children():
+		if str(wall.name).begins_with("Wall"):
+			(wall as GeometryInstance3D).cast_shadow = \
+				GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var deck := _box(
+		Vector3(FREE_ZONE_X * 2.0 + 6.0, 0.45, 3.2),
+		Vector3(0.0, 7.8, -(FREE_ZONE_Z + 5.4)),
+		Color(0.26, 0.27, 0.30), 0.0, 0.9
+	)
+	deck.name = "Mezzanine"
+
+
+## The things every professional court has and none of these had: somewhere for
+## the fourteen people not on court to sit, somewhere to warm up, and a scoreline.
+##
+## Benches and the scorer's table go on the far sideline, outside the free zone
+## and in front of the rake -- which is where they are in a real hall, and also
+## the only side that does not stand between the broadcast camera and the match.
+##
+## A venue may opt out. **Bompaçao is the case this is built for**: a concrete
+## slab with no net posts worth the name does not have a scorer's table, and
+## giving it one to be consistent would delete the thing its tagline is about.
+## Nothing in the majors opts out yet.
+func _fixtures(id: String) -> void:
+	var bench_z := -(FREE_ZONE_Z + 0.5)
+	## Two benches flanking the officials, the way the sideline is actually laid
+	## out -- reserves on each side of the table rather than in one long row.
+	for side in [-1.0, 1.0]:
+		var bench := _box(
+			Vector3(6.4, 0.45, 0.9), Vector3(side * 5.6, 0.45, bench_z),
+			Color(0.22, 0.25, 0.30), 0.0, 0.9
+		)
+		bench.name = "Bench%d" % int(side)
+		var back := _box(
+			Vector3(6.4, 0.7, 0.12), Vector3(side * 5.6, 0.9, bench_z - 0.42),
+			Color(0.18, 0.21, 0.26), 0.0, 0.9
+		)
+		back.name = "BenchBack%d" % int(side)
+	var table := _box(
+		Vector3(3.0, 0.75, 1.0), Vector3(0.0, 0.42, bench_z),
+		Color(0.30, 0.28, 0.24), 0.0, 0.85
+	)
+	table.name = "ScorerTable"
+	## Warm-up zones behind each end, outside the free zone, painted rather than
+	## built -- they are a marking on the floor, not furniture.
+	for end in [-1.0, 1.0]:
+		var zone := _box(
+			Vector3(2.4, 0.02, 5.6),
+			Vector3(end * (HALF_LENGTH + 1.7), 0.012, 0.0),
+			Color(0.34, 0.30, 0.26), 0.0, 1.0
+		)
+		zone.name = "WarmUp%d" % int(end)
+	var hung := float(CENTRE_HUNG.get(id, 0.0))
+	if hung <= 0.0:
+		## The ordinary case: a board on the end wall, above the end stand.
+		var board := _box(
+			Vector3(0.25, 2.2, 5.4),
+			Vector3(-(FREE_ZONE_X + 5.4), 5.4, 0.0),
+			Color(0.10, 0.13, 0.16), 0.0, 0.9
+		)
+		board.name = "WallScoreboard"
+		var lit := _box(
+			Vector3(0.10, 1.3, 4.2),
+			Vector3(-(FREE_ZONE_X + 5.25), 5.4, 0.0),
+			Color(0.95, 0.78, 0.30), 0.0, 1.0, 1.5
+		)
+		lit.name = "WallScoreboardFace"
+		return
+	## A cube over the net, four faces, hung from the roof it needs.
+	var rig := _box(
+		Vector3(0.18, 2.4, 0.18), Vector3(0.0, 11.0, 0.0),
+		Color(0.30, 0.31, 0.34), 0.0, 0.8
+	)
+	rig.name = "ScoreboardRig"
+	for face in range(4):
+		var along_x: bool = face % 2 == 0
+		var offset: float = 1.65 if face < 2 else -1.65
+		var panel := _box(
+			Vector3(0.14 if not along_x else 3.2, 2.0, 3.2 if not along_x else 0.14),
+			Vector3(offset if not along_x else 0.0, 9.4, 0.0 if not along_x else offset),
+			Color(0.96, 0.80, 0.34), 0.0, 1.0, 2.2 * hung
+		)
+		panel.name = "HungFace%d" % face
+
+
+## The court floor this region actually plays on.
+func _floor_for(id: String) -> void:
+	var spec: Dictionary = FLOORS.get(id, {})
+	if spec.is_empty():
+		return
+	var floor_mesh := _court.get_node_or_null("CourtSurface") as MeshInstance3D
+	if floor_mesh == null:
+		return
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(spec["albedo"])
+	material.roughness = float(spec["rough"])
+	floor_mesh.material_override = material
 
 
 ## One emissive or plain box, parented under the venue's own node so it goes away

@@ -120,7 +120,7 @@ Spëddigh administers it. So:
   `STYLE_AND_SETTING.md`.
 - **The people's naming tradition is untouched.** Volis raised there are named
   from their own tradition, because that is theirs and always was.
-- **The demonym stays civic.** A Tempaolin is anyone from Rhėn Tempaol. The
+- **The demonym stays civic.** A Rhėni is anyone from Rhėn Tempaol. The
   administrative fact does not get to reassign anybody.
 
 ### What a colony is allowed to be here

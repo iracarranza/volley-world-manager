@@ -329,12 +329,13 @@ static func person_name(region_name: String, index: int) -> String:
 ## deliberate opposition. Largôis takes the circumflex that is actually Larg's.
 ##
 ## No entry carries another region's mark, and that is the rule. Carrying *its
-## own* is not, because two regions cannot: Tãul ys Feynt and Rhėn Tempaol both
-## put their mark on the half nobody says, so Feyntwyr and Tempaolin come out
-## bare. That is the honest outcome rather than a hole -- the spoken-half rule
-## (see `RegionLanguage.CONTRACTIONS`, which the suite checks) outranks
-## decoration, and a mark bent onto Feynt to satisfy a pattern would be a
-## signature nobody writes.
+## own* now holds for all fourteen, and it holds because the *contractions* were
+## fixed rather than the words. Three two-word regions were shortening to the
+## half that describes them instead of the half that names them -- Pāwa (power),
+## Tempaol (tempo), Feynt (the feint) -- which produced Pāwan, Tempaolin and
+## Feyntwyr, two of them stripped of their own mark. Moving each contraction to
+## the naming half gives Hitōuen, Rhėni and Tãulwyr, every one carrying the
+## region's signature, under one rule instead of a rule and two exceptions.
 const DEMONYMS := {
 	"Landavol": "Landavoli",
 	"Spëddigh": "Spëddich",
@@ -344,10 +345,10 @@ const DEMONYMS := {
 	"Taktikã": "Taktikãni",
 	"Ĭspayk": "Ĭspaykano",
 	"A'ace": "A'ace'ni",
-	"Tãul ys Feynt": "Feyntwyr",
+	"Tãul ys Feynt": "Tãulwyr",
 	"Lo-ong Ralī": "Ralīpa",
 	"Bompaçao": "Bompaçano",
-	"Rhėn Tempaol": "Tempaolin",
+	"Rhėn Tempaol": "Rhėni",
 	"Kutré Lyn": "Kutrén",
 	"Zaitgaist": "Zaitgaister",
 }
