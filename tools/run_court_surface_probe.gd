@@ -28,7 +28,8 @@ const COURT := preload("res://scenes/components/match_court_3d.tscn")
 const SURFACES: Array = [
 	{
 		"id": "landavol", "label": "Landavol - the default",
-		"albedo": Color(0.72, 0.40, 0.20), "rough": 0.76, "grain": 0.0, "cut": 0.0,
+		## Solved to render as ui_palette court_surface #cf8659 at exposure 0.42.
+		"albedo": Color(0.7451, 0.5098, 0.3725), "rough": 0.76, "grain": 0.0, "cut": 0.0,
 	},
 	{
 		"id": "bompacao", "label": "Bompacao - concrete slab",

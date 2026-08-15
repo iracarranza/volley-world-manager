@@ -12,7 +12,11 @@ material = SubResource("ArenaMaterial")
 size = Vector2(34, 28)
 
 [sub_resource type="StandardMaterial3D" id="CourtMaterial"]
-albedo_color = Color(0.72, 0.40, 0.20, 1)
+; Solved, not picked: this albedo renders as ui_palette's court_surface #cf8659
+; at tonemap_exposure 0.42. The old #b86633 was authored by hand and never
+; reconciled with the palette, so the two disagreed before lighting was involved.
+; Re-derive with tools/court_albedo_solve.tscn if the lighting changes.
+albedo_color = Color(0.7451, 0.5098, 0.3725, 1)
 roughness = 0.76
 
 [sub_resource type="PlaneMesh" id="CourtMesh"]
@@ -59,6 +63,10 @@ ambient_light_source = 3
 ambient_light_color = Color(0.45, 0.53, 0.68, 1)
 ambient_light_energy = 0.72
 tonemap_mode = 2
+; 0.42 is the brightest stop at which no pale floor clips. At 0.60 maple and
+; board both hit 255 and at 0.50 maple still does, which made three different
+; regional surfaces render as one white. Measured by tools/court_albedo_solve.
+tonemap_exposure = 0.42
 
 [node name="MatchCourt3D" type="Node3D"]
 script = ExtResource("1_court")
