@@ -31,8 +31,17 @@ const HALF_WIDTH := 4.5
 ## first pass put Blôc's pillars at z = -6.6, which is inside the free zone -- on
 ## the court, in play, where a voli chasing a ball would run into them. A pillar
 ## holds up a hall; it does not stand on the sand.
-const FREE_ZONE_Z := 8.2
-const FREE_ZONE_X := 12.6
+## **The axes were swapped, and it put the seating on the end line.** The net
+## spans x = ±4.72, so the court is 9 m wide along X and 18 m long along Z. The
+## first build ran the long-side rakes along Z at 8.2 -- which is 0.8 m past an
+## end line that sits at z = 9, so the stand stood exactly where a server takes
+## their run-up. Nobody could have jump served in any of these halls.
+##
+## FIVB competition free zone, and the end figure is the one that matters: 5 m
+## from the sidelines, 8 m behind the end lines, because the run-up is what the
+## end zone is *for*.
+const FREE_ZONE_SIDE := 9.5
+const FREE_ZONE_END := 17.0
 
 ## The camera's broadcast preset is (12.5, 8.2, 10.8), which is *inside* the
 ## near stand and above it -- exactly where a real broadcast camera sits. So the
@@ -145,15 +154,15 @@ func _venues() -> Array:
 				for i in range(5):
 					var pillar := _box(
 						Vector3(1.0, 12.0, 1.0),
-						Vector3(-12.0 + float(i) * 6.0, 6.0, -(FREE_ZONE_Z + 5.2)),
+						Vector3(-(FREE_ZONE_SIDE + 5.2), 6.0, -14.0 + float(i) * 7.0),
 						Color(0.95, 0.93, 0.88), 0.94, 0.08, 0.7
 					)
 					pillar.name = "Pillar%d" % i
 				## And the windows they stand between.
 				for i in range(4):
 					var window := _box(
-						Vector3(4.4, 7.0, 0.2),
-						Vector3(-9.0 + float(i) * 6.0, 6.4, -(FREE_ZONE_Z + 5.8)),
+						Vector3(0.2, 7.0, 4.4),
+						Vector3(-(FREE_ZONE_SIDE + 5.8), 6.4, -10.5 + float(i) * 7.0),
 						Color(1.0, 0.97, 0.86), 0.0, 0.2, 2.4
 					)
 					window.name = "Window%d" % i,
@@ -218,14 +227,14 @@ func _venues() -> Array:
 				## The room is instrumented from the deck, not from the floor.
 				for i in range(5):
 					var screen := _box(
-						Vector3(5.0, 2.2, 0.14),
-						Vector3(-12.0 + float(i) * 6.0, 6.6, -(FREE_ZONE_Z + 3.7)),
+						Vector3(0.14, 2.2, 5.0),
+						Vector3(-(FREE_ZONE_SIDE + 3.7), 6.6, -14.0 + float(i) * 7.0),
 						Color(tints[i % 4]), 0.0, 1.0, 2.3
 					)
 					screen.name = "Screen%d" % i
 					var pod := _box(
 						Vector3(0.5, 0.5, 0.9),
-						Vector3(-12.0 + float(i) * 6.0, 7.4, -(FREE_ZONE_Z + 3.1)),
+						Vector3(-(FREE_ZONE_SIDE + 3.1), 7.4, -14.0 + float(i) * 7.0),
 						Color(0.86, 0.92, 0.98), 0.7, 0.25, 0.6
 					)
 					pod.name = "Pod%d" % i,
@@ -251,8 +260,8 @@ func _venues() -> Array:
 				## history: high, dusty and slightly too many.
 				for i in range(7):
 					var banner := _box(
-						Vector3(1.3, 4.2, 0.06),
-						Vector3(-13.5 + float(i) * 4.5, 7.2, -(FREE_ZONE_Z + 5.5)),
+						Vector3(0.06, 4.2, 1.3),
+						Vector3(-(FREE_ZONE_SIDE + 5.5), 7.2, -15.0 + float(i) * 5.0),
 						Color(0.55, 0.20, 0.18), 0.0, 0.9, 0.22
 					)
 					banner.name = "Banner%d" % i,
@@ -313,8 +322,8 @@ func _arena() -> void:
 		for i in range(steps):
 			var t := float(i) / float(steps - 1)
 			var step := _box(
-				Vector3(FREE_ZONE_X * 2.0 + 4.0, 0.5, 1.3),
-				Vector3(0.0, 0.35 + t * top, side * (FREE_ZONE_Z + 0.9 + float(i) * 1.25)),
+				Vector3(1.3, 0.5, FREE_ZONE_END * 2.0 + 4.0),
+				Vector3(side * (FREE_ZONE_SIDE + 0.9 + float(i) * 1.25), 0.35 + t * top, 0.0),
 				seat if i % 2 == 0 else concrete, 0.0, 0.95
 			)
 			step.name = "Rake%d_%d" % [int(side), i]
@@ -323,8 +332,8 @@ func _arena() -> void:
 		for i in range(4):
 			var t := float(i) / 3.0
 			var step := _box(
-				Vector3(1.4, 0.5, FREE_ZONE_Z * 2.0 + 6.0),
-				Vector3(end * (FREE_ZONE_X + 1.0 + float(i) * 1.35), 0.35 + t * 3.2, 0.0),
+				Vector3(FREE_ZONE_SIDE * 2.0 + 6.0, 0.5, 1.4),
+				Vector3(0.0, 0.35 + t * 3.2, end * (FREE_ZONE_END + 1.0 + float(i) * 1.35)),
 				seat if i % 2 == 0 else concrete, 0.0, 0.95
 			)
 			step.name = "End%d_%d" % [int(end), i]
@@ -334,7 +343,7 @@ func _arena() -> void:
 		for sz in [-1.0, 1.0]:
 			var column := _box(
 				Vector3(0.8, 13.0, 0.8),
-				Vector3(sx * (FREE_ZONE_X + 4.6), 6.5, sz * (FREE_ZONE_Z + 5.6)),
+				Vector3(sx * (FREE_ZONE_SIDE + 4.6), 6.5, sz * (FREE_ZONE_END + 5.6)),
 				Color(0.42, 0.43, 0.45), 0.0, 0.85
 			)
 			column.name = "Column%d_%d" % [int(sx), int(sz)]
@@ -347,20 +356,20 @@ func _arena() -> void:
 	var wall_h := 14.0
 	for sz in [-1.0, 1.0]:
 		var wall := _box(
-			Vector3(FREE_ZONE_X * 2.0 + 12.0, wall_h, 0.4),
-			Vector3(0.0, wall_h * 0.5, sz * (FREE_ZONE_Z + 6.4)),
+			Vector3(0.4, wall_h, FREE_ZONE_END * 2.0 + 12.0),
+			Vector3(sz * (FREE_ZONE_SIDE + 6.4), wall_h * 0.5, 0.0),
 			Color(0.23, 0.24, 0.27), 0.0, 0.92
 		)
 		wall.name = "WallLong%d" % int(sz)
 	for sx in [-1.0, 1.0]:
 		var wall := _box(
-			Vector3(0.4, wall_h, FREE_ZONE_Z * 2.0 + 13.0),
-			Vector3(sx * (FREE_ZONE_X + 6.2), wall_h * 0.5, 0.0),
+			Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, wall_h, 0.4),
+			Vector3(0.0, wall_h * 0.5, sx * (FREE_ZONE_END + 6.2)),
 			Color(0.21, 0.22, 0.25), 0.0, 0.92
 		)
 		wall.name = "WallEnd%d" % int(sx)
 	var roof := _box(
-		Vector3(FREE_ZONE_X * 2.0 + 12.0, 0.5, FREE_ZONE_Z * 2.0 + 13.0),
+		Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, 0.5, FREE_ZONE_END * 2.0 + 12.0),
 		Vector3(0.0, wall_h, 0.0),
 		Color(0.17, 0.18, 0.21), 0.0, 0.95
 	)
@@ -378,8 +387,8 @@ func _arena() -> void:
 			(wall as GeometryInstance3D).cast_shadow = \
 				GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var deck := _box(
-		Vector3(FREE_ZONE_X * 2.0 + 6.0, 0.45, 3.2),
-		Vector3(0.0, 7.8, -(FREE_ZONE_Z + 5.4)),
+		Vector3(3.2, 0.45, FREE_ZONE_END * 2.0 + 6.0),
+		Vector3(-(FREE_ZONE_SIDE + 5.4), 7.8, 0.0),
 		Color(0.26, 0.27, 0.30), 0.0, 0.9
 	)
 	deck.name = "Mezzanine"
@@ -397,22 +406,22 @@ func _arena() -> void:
 ## giving it one to be consistent would delete the thing its tagline is about.
 ## Nothing in the majors opts out yet.
 func _fixtures(id: String) -> void:
-	var bench_z := -(FREE_ZONE_Z + 0.5)
+	var bench_x := -(FREE_ZONE_SIDE + 0.5)
 	## Two benches flanking the officials, the way the sideline is actually laid
 	## out -- reserves on each side of the table rather than in one long row.
 	for side in [-1.0, 1.0]:
 		var bench := _box(
-			Vector3(6.4, 0.45, 0.9), Vector3(side * 5.6, 0.45, bench_z),
+			Vector3(0.9, 0.45, 6.4), Vector3(bench_x, 0.45, side * 5.6),
 			Color(0.22, 0.25, 0.30), 0.0, 0.9
 		)
 		bench.name = "Bench%d" % int(side)
 		var back := _box(
-			Vector3(6.4, 0.7, 0.12), Vector3(side * 5.6, 0.9, bench_z - 0.42),
+			Vector3(0.12, 0.7, 6.4), Vector3(bench_x - 0.42, 0.9, side * 5.6),
 			Color(0.18, 0.21, 0.26), 0.0, 0.9
 		)
 		back.name = "BenchBack%d" % int(side)
 	var table := _box(
-		Vector3(3.0, 0.75, 1.0), Vector3(0.0, 0.42, bench_z),
+		Vector3(1.0, 0.75, 3.0), Vector3(bench_x, 0.42, 0.0),
 		Color(0.30, 0.28, 0.24), 0.0, 0.85
 	)
 	table.name = "ScorerTable"
@@ -420,8 +429,8 @@ func _fixtures(id: String) -> void:
 	## built -- they are a marking on the floor, not furniture.
 	for end in [-1.0, 1.0]:
 		var zone := _box(
-			Vector3(2.4, 0.02, 5.6),
-			Vector3(end * (HALF_LENGTH + 1.7), 0.012, 0.0),
+			Vector3(5.6, 0.02, 2.4),
+			Vector3(0.0, 0.012, end * (HALF_LENGTH + 4.6)),
 			Color(0.34, 0.30, 0.26), 0.0, 1.0
 		)
 		zone.name = "WarmUp%d" % int(end)
@@ -429,14 +438,14 @@ func _fixtures(id: String) -> void:
 	if hung <= 0.0:
 		## The ordinary case: a board on the end wall, above the end stand.
 		var board := _box(
-			Vector3(0.25, 2.2, 5.4),
-			Vector3(-(FREE_ZONE_X + 5.4), 5.4, 0.0),
+			Vector3(5.4, 2.2, 0.25),
+			Vector3(0.0, 5.4, -(FREE_ZONE_END + 5.4)),
 			Color(0.10, 0.13, 0.16), 0.0, 0.9
 		)
 		board.name = "WallScoreboard"
 		var lit := _box(
-			Vector3(0.10, 1.3, 4.2),
-			Vector3(-(FREE_ZONE_X + 5.25), 5.4, 0.0),
+			Vector3(4.2, 1.3, 0.10),
+			Vector3(0.0, 5.4, -(FREE_ZONE_END + 5.25)),
 			Color(0.95, 0.78, 0.30), 0.0, 1.0, 1.5
 		)
 		lit.name = "WallScoreboardFace"

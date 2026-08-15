@@ -18,10 +18,26 @@ var home_player_ids: Dictionary = {}
 var camera_preset: int = 0
 var light_mode_enabled: bool = false
 
+## Where the match is watched from.
+##
+## **All three were framed for a court standing in the dark, and two of them
+## stand inside the building.** The court is 9 m wide along X and 18 m long along
+## Z; FIVB competition wants 5 m of free zone off each sideline and 8 m behind
+## each end line, because the end zone is what a jump serve runs up through. That
+## puts the playing area at x ±9.5, z ±17 -- and the old broadcast seat at
+## (12.5, 8.2, 10.8) was inside it on Z, while "End line" at z 15.8 sat two
+## metres short of the end zone's edge, in the server's run-up.
+##
+## The rule now: **a camera stands outside the free zone or in the seating, never
+## on the floor a voli can be on.**
+##
+## Broadcast is side-on from beyond the near sideline, high enough to look over
+## a 2.2 m near rake -- which is where a broadcast camera sits in a real hall,
+## in the stand rather than beside the court.
 const CAMERA_PRESETS: Array[Dictionary] = [
-	{"name": "Broadcast", "position": Vector3(12.5, 8.2, 10.8), "fov": 48.0},
-	{"name": "End line", "position": Vector3(0.0, 7.1, 15.8), "fov": 46.0},
-	{"name": "High tactical", "position": Vector3(0.0, 15.2, 9.4), "fov": 43.0},
+	{"name": "Broadcast", "position": Vector3(15.5, 9.0, 9.5), "fov": 46.0},
+	{"name": "End line", "position": Vector3(0.0, 8.0, 24.5), "fov": 44.0},
+	{"name": "High tactical", "position": Vector3(0.0, 26.0, 0.2), "fov": 42.0},
 ]
 
 
