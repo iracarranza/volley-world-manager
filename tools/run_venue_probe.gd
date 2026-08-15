@@ -344,6 +344,7 @@ func _shoot(venue: Dictionary) -> void:
 	var path := "user://venue_%s.png" % str(venue.get("id", "x"))
 	get_tree().root.get_texture().get_image().save_png(path)
 	print("saved %s  (%s)" % [ProjectSettings.globalize_path(path), venue.get("label", "")])
+	await _closeup(str(venue.get("id", "x")))
 	if _open_air:
 		await _establishing(str(venue.get("id", "x")))
 	_court.queue_free()
@@ -464,6 +465,29 @@ func _terrace() -> void:
 		Color(0.16, 0.34, 0.46), 0.0, 0.28
 	)
 	sea.name = "Sea"
+	## **Peaks, because the drop is not a frame of reference.** A court on a
+	## terrace with sky beyond it reads as a court in space: nothing in frame has
+	## a known size, so nothing says how high up this is. Land *above* the horizon
+	## fixes what land below cannot -- a ridge is visible from any camera,
+	## including the match one, and a viewer knows roughly how big a mountain is.
+	for i in range(6):
+		var peak := _box(
+			Vector3(64.0 + float(i % 3) * 30.0, 78.0 + float(i % 4) * 34.0,
+				64.0 + float(i % 2) * 26.0),
+			Vector3(150.0 + float(i % 3) * 74.0, 6.0 + float(i % 4) * 12.0,
+				-250.0 + float(i) * 92.0),
+			Color(0.30, 0.33, 0.40).lightened(float(i) * 0.05), 0.0, 1.0
+		)
+		peak.name = "Peak%d" % i
+		peak.rotation.y = 0.6 + float(i) * 0.4
+	## And the shoulder this court is cut into, running up behind the near stand,
+	## so the terrace is part of a hillside rather than a table in the air.
+	var shoulder := _box(
+		Vector3(70.0, 46.0, 150.0),
+		Vector3(FREE_ZONE_SIDE + 44.0, 17.0, -20.0),
+		Color(0.27, 0.23, 0.20), 0.0, 0.99
+	)
+	shoulder.name = "Shoulder"
 	## A coastline: two headlands running out into it, so the water reads as a
 	## shore seen from above rather than as a blue floor.
 	for i in range(2):
@@ -678,6 +702,28 @@ func _volis(id: String) -> void:
 			_hide_readouts(actor)
 
 
+## A closeup at play level, because a venue is finally judged on whether a body
+## reads in it -- kit against floor, and a shadow that says where they stand.
+func _closeup(id: String) -> void:
+	var camera := _court.get_node_or_null("Camera3D") as Camera3D
+	if camera == null:
+		return
+	camera.position = Vector3(11.5, 3.4, 7.2)
+	camera.fov = 44.0
+	camera.look_at(Vector3(-0.5, 1.5, 1.0), Vector3.UP)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var path := "user://venue_%s_close.png" % id
+	get_tree().root.get_texture().get_image().save_png(path)
+	print("saved %s  (closeup)" % ProjectSettings.globalize_path(path))
+	## Put the camera back, so an establishing shot starts from a known place
+	## rather than from wherever the last frame left it.
+	camera.position = Vector3(15.5, 9.0, 9.5)
+	camera.fov = 46.0
+	camera.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)
+	await get_tree().process_frame
+
+
 ## A second frame for an open-air venue, from far enough out to see what it
 ## stands on.
 ##
@@ -691,11 +737,16 @@ func _establishing(id: String) -> void:
 	var camera := _court.get_node_or_null("Camera3D") as Camera3D
 	if camera == null:
 		return
-	camera.position = Vector3(74.0, 46.0, 44.0)
-	camera.fov = 52.0
+	## Framed rather than guessed: at 48 degrees an 18 m court fills about 40%
+	## of frame height from 55 m, so the camera stands off the side at that
+	## distance -- inland and its ridge to one side of frame, the drop and the
+	## water to the other, court between them. Two earlier attempts put the
+	## camera inside the hillside and then 140 m away looking at sky.
+	camera.position = Vector3(-4.0, 21.0, 57.0)
+	camera.fov = 48.0
 	## Aimed below and beyond the court, not at it: the subject of this frame is
 	## the hillside, and the court is the thing perched on top of it.
-	camera.look_at(Vector3(-34.0, -9.0, -6.0), Vector3.UP)
+	camera.look_at(Vector3(2.0, -2.0, 0.0), Vector3.UP)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var path := "user://venue_%s_wide.png" % id
