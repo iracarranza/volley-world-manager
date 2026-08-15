@@ -38,6 +38,39 @@ const KITS := {
 ## tell who touched the ball.
 const AWAY_KIT := Color("E4E0D6")
 
+## **Construction, not colour.** The kits are all dark by necessity -- a midtone
+## disappears into a terracotta floor -- and making them louder to tell them
+## apart would undo the contrast work that got them readable in the first place.
+## So the difference is *how a kit is built*: panels, seams, bands and their
+## spacing, which survive grayscale because they are value structure rather than
+## hue. A viewer should be able to name the side from a black-and-white frame.
+##
+## `trim` is how far the marks sit from the kit in value -- lighter for most,
+## since a dark kit can only be marked by something paler.
+const KIT_BUILD := {
+	## The template every other kit is a deviation from. Not an absence of
+	## design: a placket and a collar, cleanly made, so it reads as the canonical
+	## strip rather than as one nobody finished.
+	"landavol": {"pattern": "reference", "trim": 0.34},
+	## Compressed and repeated -- short marks, many of them, close together. The
+	## same thing the region does to a rally.
+	"speddigh": {"pattern": "ticks", "trim": 0.40},
+	## Broad athletic panels running with the body, so the shape reads as motion
+	## even standing still.
+	"pawa": {"pattern": "panels", "trim": 0.30},
+	## Vertical divisions, structural and evenly spaced: the kit is built like the
+	## thing the region believes in.
+	"bloc": {"pattern": "columns", "trim": 0.36},
+	## Irregular, rhythmic accents -- uneven spacing that still keeps a beat.
+	"xervu": {"pattern": "rhythm", "trim": 0.46},
+	## Precise geometric seams. Thin, exact, and nothing decorative.
+	"taktika": {"pattern": "seams", "trim": 0.30},
+	## Immaculate and technical, and covered in the people who paid for it.
+	"aace": {"pattern": "sponsored", "trim": 0.42},
+	## The old strip, one broad chest band, essentially unchanged for decades.
+	"ispayk": {"pattern": "heritage", "trim": 0.38},
+}
+
 ## Six a side, in a legal rotation: three front at the attack line, three back.
 const SLOTS: Array = [
 	Vector3(-3.0, 0.0, 2.9), Vector3(0.0, 0.0, 2.6), Vector3(3.0, 0.0, 2.9),
@@ -117,6 +150,12 @@ var _key: DirectionalLight3D
 var _fill: OmniLight3D
 var _extras: Node3D
 var _open_air := false
+var _tight := false
+## Set by `_arena()` and read by `_roof_lights()`, because a lamp bolted to the
+## roof has to know where the roof is. It was a literal 12.4 under a literal
+## 14.0 and the two were never connected, so the first small hall put its lamps
+## through its own ceiling.
+var _roof_h := 14.0
 
 
 func _ready() -> void:
@@ -131,8 +170,29 @@ func _ready() -> void:
 func _venues() -> Array:
 	return [
 		{
-			"id": "landavol", "label": "Landavol - the reference room",
-			"build": func(): pass,
+			"id": "landavol", "label": "Landavol - the canonical room",
+			## **Baseline is not blankness.** Landavol should read as the strip
+			## every other hall is a deviation from -- built properly, evenly lit,
+			## nothing added and nothing missing -- rather than as the one that has
+			## not been decorated yet. So it gets the things a well-made ordinary
+			## hall has: an exposed roof truss, a run of matching banners, and
+			## light that falls the same everywhere.
+			"build": func():
+				_env.ambient_light_energy = 0.62
+				for i in range(7):
+					var truss := _box(
+						Vector3(FREE_ZONE_SIDE * 2.0 + 12.0, 0.35, 0.35),
+						Vector3(0.0, 13.2, -18.0 + float(i) * 6.0),
+						Color(0.34, 0.35, 0.38), 0.0, 0.85
+					)
+					truss.name = "Truss%d" % i
+				for i in range(6):
+					var banner := _box(
+						Vector3(0.06, 2.4, 1.1),
+						Vector3(-(FREE_ZONE_SIDE + 6.1), 7.4, -13.0 + float(i) * 5.2),
+						Color(0.62, 0.60, 0.54), 0.0, 0.9
+					)
+					banner.name = "Banner%d" % i,
 		},
 		{
 			"id": "pawa", "label": "Pawa Hito - a terrace, and the sky", "open_air": true,
@@ -148,10 +208,21 @@ func _venues() -> Array:
 				_env.fog_enabled = true
 				_env.fog_light_color = Color(0.62, 0.70, 0.80)
 				_env.fog_density = 0.004
-				_env.fog_sky_affect = 0.0,
+				_env.fog_sky_affect = 0.0
+				## **The haze was set for a backdrop and the subject moved behind
+				## it.** `_sky()` fades everything out by 520 m, and the water
+				## only starts at 140 -- so sea, islands and stone all arrived at
+				## the same pale grey and the frame had no horizon in it at all.
+				## Pushed back so the near half of the view keeps its colour and
+				## only the far peaks go soft, which is the job aerial perspective
+				## was brought in to do.
+				_env.fog_depth_begin = 110.0
+				_env.fog_depth_end = 780.0
+				_env.fog_aerial_perspective = 0.45,
 		},
 		{
-			"id": "speddigh", "label": "Speddigh - cold ectoplasmic mist",
+			"id": "speddigh", "label": "Speddigh - a small hall, and cold air",
+			"tight": true,
 			## The mist is the room. Dense, cold, and sitting low so a voli standing
 			## still is in it to the knee while the ball above is clear.
 			"build": func():
@@ -163,7 +234,7 @@ func _venues() -> Array:
 				_env.ambient_light_energy = 0.95
 				_env.fog_enabled = true
 				_env.fog_light_color = Color(0.74, 0.86, 0.94)
-				_env.fog_density = 0.006
+				_env.fog_density = 0.004
 				_env.fog_sky_affect = 0.0
 				for layer in range(3):
 					var sheet := _box(
@@ -330,6 +401,7 @@ func _shoot(venue: Dictionary) -> void:
 	_extras.name = "VenueExtras"
 	_court.add_child(_extras)
 	_open_air = bool(venue.get("open_air", false))
+	_tight = bool(venue.get("tight", false))
 	_arena()
 	_roof_lights(str(venue.get("id", "")))
 	_fixtures(str(venue.get("id", "")))
@@ -337,6 +409,7 @@ func _shoot(venue: Dictionary) -> void:
 	_volis(str(venue.get("id", "")))
 	var build: Callable = venue.get("build", func(): pass)
 	build.call()
+	_frame_broadcast()
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var path := "user://venue_%s.png" % str(venue.get("id", "x"))
@@ -360,6 +433,18 @@ func _shoot(venue: Dictionary) -> void:
 func _arena() -> void:
 	var concrete := Color(0.30, 0.31, 0.34)
 	var seat := Color(0.24, 0.27, 0.32)
+	## **A small hall is short and low, not narrow.** The first attempt at
+	## Spëddigh dropped the roof to 8.6 m and pulled every wall in 4.2 m, and the
+	## frame came back as an empty grey gradient: the broadcast camera's eye is at
+	## y = 9.0 and x = 15.5, so an 8.6 m roof renders *from above*, and a side wall
+	## at x = 11.7 puts the camera outside its own building. §0 again -- a knob
+	## that cannot reach its own stated range, and fails silently when it tries.
+	##
+	## The camera fixes the two dimensions it stands in. Compactness therefore has
+	## to come from the ones it does not: a lid low enough to see is low, the ends
+	## come in, and the stands behind the service zone shrink with them.
+	_roof_h = 11.5 if _tight else 14.0
+	var end_inset: float = 2.6 if _tight else 0.0
 	## Long sides. Each step rises and retreats, so the rake reads as seating
 	## rather than as a wall -- and the near side stops under the camera.
 	for side in [-1.0, 1.0]:
@@ -367,20 +452,30 @@ func _arena() -> void:
 		## comparison against it has nothing to infer from and the whole script fails
 		## to parse -- silently, as an idle process that renders nothing.
 		var far: bool = side < 0.0
-		var steps: int = 6 if far else 3
-		var top: float = FAR_RAKE_TOP if far else NEAR_RAKE_TOP
+		## **An open terrace does not wall off its own view.** Pāwa's altitude kept
+		## failing from the broadcast seat and the islands were only half the
+		## reason: a 6 m far rake sits exactly across the sightline, so whatever
+		## was beyond it could not have been seen at any distance. A cliff-top
+		## court has a low rail on the seaward side, because the drop is the thing
+		## people came for. Two steps and a metre, and the horizon is in frame.
+		var open_far: bool = far and _open_air
+		var steps: int = 2 if open_far else (6 if far else 3)
+		var top: float = 1.0 if open_far else (FAR_RAKE_TOP if far else NEAR_RAKE_TOP)
 		for i in range(steps):
 			var t := float(i) / float(steps - 1)
 			var step := _box(
-				Vector3(1.3, 0.5, FREE_ZONE_END * 2.0 + 4.0),
+				Vector3(1.3, 0.5, FREE_ZONE_END * 2.0 + 4.0 - end_inset * 2.0),
 				Vector3(side * (FREE_ZONE_SIDE + 0.9 + float(i) * 1.25), 0.35 + t * top, 0.0),
 				seat if i % 2 == 0 else concrete, 0.0, 0.95
 			)
 			step.name = "Rake%d_%d" % [int(side), i]
-	## Ends, lower and shallower: an end stand behind the service zone.
+	## Ends, lower and shallower: an end stand behind the service zone. A tight
+	## hall gets two rows rather than four, because four would stand through the
+	## end wall that just came in 2.6 m.
+	var end_steps: int = 2 if _tight else 4
 	for end in [-1.0, 1.0]:
-		for i in range(4):
-			var t := float(i) / 3.0
+		for i in range(end_steps):
+			var t := float(i) / float(end_steps - 1)
 			var step := _box(
 				Vector3(FREE_ZONE_SIDE * 2.0 + 6.0, 0.5, 1.4),
 				Vector3(0.0, 0.35 + t * 3.2, end * (FREE_ZONE_END + 1.0 + float(i) * 1.35)),
@@ -396,8 +491,9 @@ func _arena() -> void:
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
 			var column := _box(
-				Vector3(0.8, 13.0, 0.8),
-				Vector3(sx * (FREE_ZONE_SIDE + 4.6), 6.5, sz * (FREE_ZONE_END + 5.6)),
+				Vector3(0.8, _roof_h - 1.0, 0.8),
+				Vector3(sx * (FREE_ZONE_SIDE + 4.6), (_roof_h - 1.0) * 0.5,
+					sz * (FREE_ZONE_END + 5.6 - end_inset)),
 				Color(0.42, 0.43, 0.45), 0.0, 0.85
 			)
 			column.name = "Column%d_%d" % [int(sx), int(sz)]
@@ -407,11 +503,14 @@ func _arena() -> void:
 	## nothing behind it -- which is what the first two passes looked like. These
 	## are the surfaces every venue's own light then plays on: Blôc's windows cut
 	## into one, Ĭspayk's banners hang down another.
-	var wall_h := 14.0
-	_walls(wall_h)
+	## **A hall's size is a culture, not a dimension.** Spëddigh's mist was
+	## reading as climate when the region's identity is compactness and tempo --
+	## towns wedged between water and rock with nowhere to sprawl. So its hall is
+	## genuinely small, within what the camera allows: see the note at the top.
+	_walls(_roof_h, end_inset)
 	var deck := _box(
-		Vector3(3.2, 0.45, FREE_ZONE_END * 2.0 + 6.0),
-		Vector3(-(FREE_ZONE_SIDE + 5.4), 7.8, 0.0),
+		Vector3(3.2, 0.45, FREE_ZONE_END * 2.0 + 6.0 - end_inset * 2.0),
+		Vector3(-(FREE_ZONE_SIDE + 5.4), _roof_h - 6.2, 0.0),
 		Color(0.26, 0.27, 0.30), 0.0, 0.9
 	)
 	deck.name = "Mezzanine"
@@ -494,16 +593,21 @@ func _terrace() -> void:
 	## Lower terraces stepping away down the hillside, then the water. Without
 	## these the court is a slab in a blue void, which is not the same thing as
 	## being high up -- height only reads when something else is visibly below.
+	## **These were what hid the sea.** Each step was widened as it went down, so
+	## by the fifth the apron reached x = -158 -- and a ray from the broadcast
+	## camera grazing the parapet does not fall to the water until x = -130. The
+	## hillside was standing in front of the thing it was there to give scale to.
+	## Volcanic terracing drops; it does not fan out. Narrow steps, stepping
+	## seaward and down, finished by x = -72, which puts water in the sightline.
 	for i in range(5):
 		var step := _box(
-			Vector3(FREE_ZONE_SIDE * 2.0 + 40.0 + float(i) * 26.0, 3.4,
-				FREE_ZONE_END * 2.0 + 34.0 + float(i) * 22.0),
-			Vector3(-float(i) * 16.0, -4.4 - float(i) * 3.6, 0.0),
+			Vector3(30.0, 3.4, FREE_ZONE_END * 2.0 + 30.0 - float(i) * 4.0),
+			Vector3(-24.0 - float(i) * 11.0, -5.0 - float(i) * 4.8, 0.0),
 			Color(0.26, 0.21, 0.18).lightened(float(i) * 0.06), 0.0, 0.98
 		)
 		step.name = "Hillside%d" % i
 	var sea := _box(
-		Vector3(900.0, 0.6, 900.0), Vector3(-190.0, -26.0, 0.0),
+		Vector3(900.0, 0.6, 900.0), Vector3(-120.0, -26.0, 0.0),
 		Color(0.16, 0.34, 0.46), 0.0, 0.28
 	)
 	sea.name = "Sea"
@@ -512,16 +616,49 @@ func _terrace() -> void:
 	## a known size, so nothing says how high up this is. Land *above* the horizon
 	## fixes what land below cannot -- a ridge is visible from any camera,
 	## including the match one, and a viewer knows roughly how big a mountain is.
+	##
+	## **And they have to be on the side the camera faces.** These sat at
+	## x = +150 and beyond, which is *behind* the broadcast seat -- so the one
+	## thing in this venue that could survive the sightline was pointed away from
+	## the only frame that mattered. Moved across, spread along the coast, and
+	## tall enough that their tops clear the horizon rather than the parapet.
 	for i in range(6):
 		var peak := _box(
 			Vector3(64.0 + float(i % 3) * 30.0, 78.0 + float(i % 4) * 34.0,
 				64.0 + float(i % 2) * 26.0),
-			Vector3(150.0 + float(i % 3) * 74.0, 6.0 + float(i % 4) * 12.0,
-				-250.0 + float(i) * 92.0),
+			Vector3(-470.0 - float(i % 3) * 130.0, 4.0 + float(i % 4) * 16.0,
+				-460.0 + float(i) * 180.0),
 			Color(0.30, 0.33, 0.40).lightened(float(i) * 0.05), 0.0, 1.0
 		)
 		peak.name = "Peak%d" % i
 		peak.rotation.y = 0.6 + float(i) * 0.4
+	## **Islands across the water, on the open side.** The inland ridge is behind
+	## the broadcast camera and does nothing for the frame a match is actually
+	## watched in -- which is why altitude still did not read. An archipelago has
+	## other islands in view, and put across the drop they sit above the open far
+	## side exactly where the camera is already looking. Height reads because
+	## their bases are hidden below the horizon and only their tops show.
+	## **Islands across the water, and the reason four passes of them were
+	## invisible.** They were moved to 70 m, 120 m and 200 m in turn and none of
+	## it ever reached a pixel, which was read each time as an occlusion problem
+	## and answered with more geometry. It was not: `match_court_3d.tscn` sets the
+	## camera's `far` to **80 m**, so the sea at 140 m, the islands and the peaks
+	## were all being clipped by the frustum before anything could occlude them.
+	## The one island that ever showed up sat at 72 m -- inside the plane, which
+	## is the whole reason it looked like a cliff face rather than an island.
+	## §0 exactly: the knob could not reach its own stated range, and every
+	## measurement taken through it was of the wrong thing. `_venue_camera()`
+	## opens the plane now.
+	for i in range(4):
+		var island := _box(
+			Vector3(52.0 + float(i % 3) * 30.0, 26.0 + float(i % 3) * 14.0,
+				46.0 + float(i % 2) * 28.0),
+			Vector3(-290.0 - float(i % 2) * 90.0, -14.0 + float(i % 3) * 4.0,
+				-150.0 + float(i) * 128.0),
+			Color(0.26, 0.31, 0.40).lightened(float(i) * 0.06), 0.0, 1.0
+		)
+		island.name = "Island%d" % i
+		island.rotation.y = 0.3 + float(i) * 0.5
 	## And the shoulder this court is cut into, running up behind the near stand,
 	## so the terrace is part of a hillside rather than a table in the air.
 	var shoulder := _box(
@@ -547,10 +684,13 @@ func _terrace() -> void:
 ## into a closed building -- six of eight venues went black the moment the roof
 ## appeared. With real fixtures overhead the key is only standing in for a
 ## lantern, so the shell stays out of its way.
-func _walls(wall_h: float) -> void:
+func _walls(wall_h: float, end_inset: float) -> void:
+	## The long walls never move. They sit at x = ±15.9 and the broadcast camera
+	## stands at x = 15.5, so a side wall pulled in by any amount at all puts the
+	## camera outside the building and the frame goes empty.
 	for sz in [-1.0, 1.0]:
 		var wall := _box(
-			Vector3(0.4, wall_h, FREE_ZONE_END * 2.0 + 12.0),
+			Vector3(0.4, wall_h, FREE_ZONE_END * 2.0 + 12.0 - end_inset * 2.0),
 			Vector3(sz * (FREE_ZONE_SIDE + 6.4), wall_h * 0.5, 0.0),
 			Color(0.23, 0.24, 0.27), 0.0, 0.92
 		)
@@ -559,13 +699,13 @@ func _walls(wall_h: float) -> void:
 	for sx in [-1.0, 1.0]:
 		var wall := _box(
 			Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, wall_h, 0.4),
-			Vector3(0.0, wall_h * 0.5, sx * (FREE_ZONE_END + 6.2)),
+			Vector3(0.0, wall_h * 0.5, sx * (FREE_ZONE_END + 6.2 - end_inset)),
 			Color(0.21, 0.22, 0.25), 0.0, 0.92
 		)
 		wall.name = "WallEnd%d" % int(sx)
 		wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var roof := _box(
-		Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, 0.5, FREE_ZONE_END * 2.0 + 12.0),
+		Vector3(FREE_ZONE_SIDE * 2.0 + 13.0, 0.5, FREE_ZONE_END * 2.0 + 12.0 - end_inset * 2.0),
 		Vector3(0.0, wall_h, 0.0),
 		Color(0.17, 0.18, 0.21), 0.0, 0.95
 	)
@@ -586,12 +726,15 @@ func _roof_lights(id: String) -> void:
 	var count := int(spec.get("count", 3))
 	var failed := int(spec.get("fail", 0))
 	var placed := 0
+	## Hung below the roof rather than at a fixed 12.4, which was under the
+	## default 14.0 lid and above every lower one.
+	var hang := _roof_h - 1.6
 	for side in [-1.0, 1.0]:
 		for i in range(count):
 			placed += 1
 			var housing := _box(
 				Vector3(2.6, 0.3, 1.4),
-				Vector3(0.0, 12.4, side * (2.6 + float(i) * 5.2)),
+				Vector3(0.0, hang, side * (2.6 + float(i) * 5.2)),
 				Color(0.20, 0.21, 0.24), 0.0, 0.85
 			)
 			housing.name = "Housing%d_%d" % [int(side), i]
@@ -602,7 +745,7 @@ func _roof_lights(id: String) -> void:
 				continue
 			var lamp := OmniLight3D.new()
 			lamp.name = "RoofLight%d_%d" % [int(side), i]
-			lamp.position = Vector3(0.0, 12.0, side * (2.6 + float(i) * 5.2))
+			lamp.position = Vector3(0.0, hang - 0.4, side * (2.6 + float(i) * 5.2))
 			lamp.light_color = Color(spec.get("warm", Color.WHITE))
 			lamp.light_energy = float(spec.get("energy", 8.0))
 			lamp.omni_range = 22.0
@@ -610,7 +753,7 @@ func _roof_lights(id: String) -> void:
 			_extras.add_child(lamp)
 			var lens := _box(
 				Vector3(2.2, 0.08, 1.0),
-				Vector3(0.0, 12.22, side * (2.6 + float(i) * 5.2)),
+				Vector3(0.0, hang - 0.18, side * (2.6 + float(i) * 5.2)),
 				Color(spec.get("warm", Color.WHITE)), 0.0, 1.0, 1.6
 			)
 			lens.name = "Lens%d_%d" % [int(side), i]
@@ -738,16 +881,63 @@ func _volis(id: String) -> void:
 				"Right", {"body_type": str(BODIES[i])}
 			)
 			_wear(actor, kit)
+			_build_kit(actor, id if side > 0.0 else "", kit)
 			## A still frame is not a live match: the name plate and the cogniticon
 			## are readouts for a rally in progress, and in a photograph they are
 			## twelve floating rectangles.
 			_hide_readouts(actor)
 
 
+## Aim the broadcast seat, which until now was whatever the scene shipped with.
+##
+## **This is where the Pāwa backdrop actually died, four passes running.** Each
+## pass moved sea, islands and headlands around and re-rendered, and each time
+## the frame came back empty -- because the far plane was only ever raised inside
+## `_closeup`, and the *broadcast* capture ran against a freshly instantiated
+## court still carrying the scene's 80 m. Every measurement of "is the backdrop
+## visible" was taken through a camera that could not see 80 m, and the answer
+## was recorded as a fact about the geometry.
+##
+## The pitch is the second half of it, and it is not a bug. Indoors the camera
+## looks down at the floor 19 m away, which puts the top edge of the frame
+## almost exactly on the horizon -- correct for a hall, where there is nothing
+## above the horizon to see. An open-air venue is the one case where there is,
+## so its camera lifts and levels off until a band of ridge and sky is in shot.
+## A broadcaster on a cliff top would frame it that way for the same reason.
+func _frame_broadcast() -> void:
+	var camera := _venue_camera()
+	if camera == null:
+		return
+	if _open_air:
+		camera.position = Vector3(16.5, 8.4, 10.4)
+		camera.fov = 50.0
+		camera.look_at(Vector3(-1.5, 4.0, 0.0), Vector3.UP)
+	else:
+		camera.position = Vector3(15.5, 9.0, 9.5)
+		camera.fov = 46.0
+		camera.look_at(Vector3(0.0, 0.85, 0.0), Vector3.UP)
+
+
+## The court camera, with its horizon opened.
+##
+## **`far` is 80 m in `match_court_3d.tscn`, and that is correct for the scene it
+## is in** -- an indoor hall has nothing 80 m away and the plane is free
+## performance. It is wrong for the one venue that plays outdoors, and it cost
+## four passes of Pāwa backdrop work: sea, islands and headlands were all built,
+## all lit, and all clipped before they were drawn. Set in one place because the
+## probe moves this camera three times and setting it at two of them would have
+## produced the same bug with a smaller footprint.
+func _venue_camera() -> Camera3D:
+	var camera := _court.get_node_or_null("Camera3D") as Camera3D
+	if camera != null:
+		camera.far = 1400.0
+	return camera
+
+
 ## A closeup at play level, because a venue is finally judged on whether a body
 ## reads in it -- kit against floor, and a shadow that says where they stand.
 func _closeup(id: String) -> void:
-	var camera := _court.get_node_or_null("Camera3D") as Camera3D
+	var camera := _venue_camera()
 	if camera == null:
 		return
 	camera.position = Vector3(11.5, 3.4, 7.2)
@@ -776,7 +966,7 @@ func _closeup(id: String) -> void:
 ## the court; it is a property of the approach to it, and it needs a shot that
 ## includes the ground falling away.
 func _establishing(id: String) -> void:
-	var camera := _court.get_node_or_null("Camera3D") as Camera3D
+	var camera := _venue_camera()
 	if camera == null:
 		return
 	## Framed rather than guessed: at 48 degrees an 18 m court fills about 40%
@@ -796,13 +986,86 @@ func _establishing(id: String) -> void:
 	print("saved %s  (establishing)" % ProjectSettings.globalize_path(path))
 
 
+## Put the region's construction on the shirt.
+##
+## Marks are children of the torso so they move with it, sitting a few
+## millimetres proud of the chest. Away sides get nothing for now -- the cream
+## change strip is deliberately universal, and the brief is to keep it that way
+## until each region's construction can be carried in dark trim on it.
+func _build_kit(actor: Node, id: String, kit: Color) -> void:
+	if id.is_empty():
+		return
+	var torso := actor.get_node_or_null("BodyPivot/Torso") as MeshInstance3D
+	if torso == null:
+		return
+	var spec: Dictionary = KIT_BUILD.get(id, KIT_BUILD["landavol"])
+	var trim: Color = kit.lightened(float(spec.get("trim", 0.35)))
+	var pattern := str(spec.get("pattern", "reference"))
+	## Torso-local, in metres: the chest is roughly 0.42 across and 0.5 tall.
+	var marks: Array = []
+	match pattern:
+		"reference":
+			marks = [[Vector3(0.035, 0.34, 0.01), Vector3(0.0, 0.02, 0.115)],
+				[Vector3(0.30, 0.035, 0.01), Vector3(0.0, 0.20, 0.108)]]
+		"ticks":
+			for row in range(4):
+				for col in [-1.0, 1.0]:
+					marks.append([Vector3(0.10, 0.026, 0.01),
+						Vector3(col * 0.10, 0.16 - float(row) * 0.085, 0.112)])
+		"panels":
+			marks = [[Vector3(0.15, 0.46, 0.012), Vector3(-0.12, 0.0, 0.112)],
+				[Vector3(0.15, 0.46, 0.012), Vector3(0.12, 0.0, 0.112)]]
+		"columns":
+			for col in range(3):
+				marks.append([Vector3(0.045, 0.50, 0.011),
+					Vector3(-0.13 + float(col) * 0.13, 0.0, 0.112)])
+		"rhythm":
+			var beat := [0.20, 0.09, 0.15, 0.05, 0.13]
+			var y := 0.22
+			for i in range(beat.size()):
+				marks.append([Vector3(0.26, 0.03, 0.011), Vector3(0.0, y, 0.112)])
+				y -= float(beat[i])
+		"seams":
+			marks = [[Vector3(0.34, 0.014, 0.01), Vector3(0.0, 0.12, 0.112)],
+				[Vector3(0.34, 0.014, 0.01), Vector3(0.0, -0.10, 0.112)],
+				[Vector3(0.014, 0.44, 0.01), Vector3(0.0, 0.0, 0.112)]]
+		"sponsored":
+			marks = [[Vector3(0.30, 0.075, 0.012), Vector3(0.0, 0.17, 0.112)],
+				[Vector3(0.12, 0.055, 0.012), Vector3(-0.10, 0.02, 0.112)],
+				[Vector3(0.12, 0.055, 0.012), Vector3(0.10, 0.02, 0.112)],
+				[Vector3(0.24, 0.045, 0.012), Vector3(0.0, -0.13, 0.112)]]
+		"heritage":
+			marks = [[Vector3(0.40, 0.13, 0.013), Vector3(0.0, 0.09, 0.112)]]
+	## **Both sides of the shirt.** These sat at z = +0.112 only, which is the
+	## chest -- and the closeup camera stands behind the home side, so the one
+	## frame built to judge the construction language was showing twelve unmarked
+	## backs. A kit carries its panels and seams round the body; so does this.
+	for mark in marks:
+		for face in [1.0, -1.0]:
+			var size: Vector3 = mark[0]
+			var at: Vector3 = mark[1]
+			var mesh := BoxMesh.new()
+			mesh.size = size
+			var node := MeshInstance3D.new()
+			node.mesh = mesh
+			node.position = Vector3(at.x * face, at.y, at.z * face)
+			var material := StandardMaterial3D.new()
+			material.albedo_color = trim
+			material.roughness = 0.8
+			node.material_override = material
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			torso.add_child(node)
+
+
 ## Hide the readouts -- the name plate and the focus ring, which belong to a live
 ## rally rather than to a photograph.
 ##
 ## **The flat panels on each voli are not readouts and must stay.** They are
-## *cosmetics*: coats and markings the rig builds at runtime, each carrying a
-## `color_key` meta of `kit`, `crown` or `skin`. Twice I read them as floating
-## debug quads and tried to delete a voli's clothes.
+## `WingLeft` and `WingRight` -- 0.75 x 0.35 plates parented to the arms of every
+## `Avi` body, which is why exactly half the twelve have them and why they are
+## skin-coloured rather than kit-coloured. Three separate passes have read them
+## as floating debug quads or as a kit bug and gone looking for the code that
+## draws them; there isn't any, they are the voli.
 func _hide_readouts(node: Node) -> void:
 	for child in node.get_children():
 		if child is Label3D or child is Sprite3D:
@@ -821,11 +1084,14 @@ func _wear(actor: Node, kit: Color) -> void:
 		if mesh == null:
 			continue
 		_paint(mesh, kit if path.ends_with("Torso") else kit.darkened(0.38))
-	## **The kit is not only the shirt.** A coat or a marking keyed `kit` takes
-	## the team colour too, and painting the torso alone left every cosmetic in
-	## `UIPalette`'s teal and coral -- so a Xérvyan side wore brown with teal
-	## panels on its back. The rig already records which parts are kit; this
-	## reads that meta rather than guessing from node names.
+	## **This currently matches nothing, and the claim it used to carry was
+	## false.** It was written to fix cosmetics stuck in `UIPalette`'s teal and
+	## coral, and said it had -- but the rig only ever emits `color_key` of
+	## `skin`, `crown` or `literal`, so the `kit` branch has never once fired. The
+	## cosmetics a voli actually has are ears, muzzle, tail, neck and an Avi's
+	## wings, and every one of them is anatomy: skin-coloured is correct and a
+	## kit colour would be wrong. Kept as the hook for the first cosmetic that is
+	## genuinely clothing, and no longer pretending to have done anything.
 	_paint_cosmetics(actor, kit)
 
 

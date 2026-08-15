@@ -59,21 +59,35 @@ xvfb-run -a godot --path . res://tools/venue_probe.tscn
 Each region has two: `<region>.jpg` from the broadcast seat, and
 `<region>_close.jpg` at play level near the net, which is where a venue is
 actually judged — kit against floor, and a shadow that says where somebody
-stands. `pawa_wide.jpg` is the third frame Pāwa Hitō needs and no other venue
-does, for a reason worth keeping: **the match camera cannot show what a court
-stands on.** It sits 9 m up looking slightly down at a court 19 m away, so a
-terrace edge occludes everything below it. Height is not a property of the
-court; it is a property of the approach to it.
+stands. `pawa_wide.jpg` is a third frame for Pāwa Hitō, showing the approach
+rather than the court.
+
+**The claim that used to be here was wrong, and it is worth saying how.** It
+read: *the match camera cannot show what a court stands on* — that a terrace
+edge occludes everything below it, so height is a property of the approach and
+not of the court. That was written after four passes of sea, headlands and
+islands failed to appear in the broadcast frame, and it was a conclusion drawn
+from a broken instrument. `match_court_3d.tscn` sets the camera's `far` to
+**80 m**, and the probe only ever raised it inside the closeup, so every
+backdrop test was run through a camera that could not see past 80 m. The sea
+starts at 140. Nothing was being occluded; it was being clipped. Once the far
+plane was opened on the broadcast camera too, sky, water, islands and ridge all
+appeared in the same frame at the first attempt.
 
 The volis are twelve per court, home in the region's kit and away in a light
 change strip. These are the first frames where the kit palette and the court
 palette appear together — they were designed a day apart against different
 grounds, and the exposure fix moved every rendered colour after both.
 
-**Still short, and not for want of geometry.** Pāwa Hitō does not read as high
-up. Three passes of terraces, headlands and sea changed nothing, because land
-*below* a court cannot fix it: nothing in those frames had a size anybody
-already knows. A ridge above the horizon and a procedural sky get closer — a
-viewer knows roughly how big a mountain is, and a horizon is the line that says
-where the ground stops. What would finish it is an authored backdrop rather than
-blocks. That is art, not geometry.
+The volis are twelve per court, home in the region's kit and away in a light
+change strip. Each region's kit now carries a **construction language** as well
+as a colour — placket, ticks, panels, columns, uneven bands, seams, sponsor
+blocks, one heritage band — marked front and back, so a side is nameable from a
+grayscale frame without making any kit louder.
+
+**Pāwa Hitō is mid-tune and shipped that way.** The backdrop is in frame for the
+first time, but the islands and headland are still over-scaled and read as
+slabs, and the open-air camera framing (lifted and levelled, since it is the one
+venue with something above the horizon worth seeing) has not been balanced
+against the court. Scale, haze and framing are the next pass. The other seven
+venues are unaffected — they keep the original broadcast seat exactly.
