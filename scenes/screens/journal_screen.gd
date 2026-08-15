@@ -1811,7 +1811,7 @@ const POSITION_POSES := {
 		"airborne": false, "framing": &"overhead",
 	},
 	"Libero": {
-		"event": RallyEventModel.EventType.DEFENSE,
+		"event": RallyEventModel.EventType.DIG,
 		"airborne": false, "framing": &"sprawled",
 		## **Off the axis, because a libero on their axis is a drill.** A dig
 		## worth drawing is the one they had to leave their balance to reach, and

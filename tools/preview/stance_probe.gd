@@ -45,7 +45,7 @@ func _ready() -> void:
 		for phase in PHASES:
 			actor.contact_posture = posture
 			actor.set_pose(
-				RallyEventModel.EventType.DEFENSE, 0.0, phase,
+				RallyEventModel.EventType.DIG, 0.0, phase,
 				Vector2(0.0, 1.0), true
 			)
 			await get_tree().process_frame

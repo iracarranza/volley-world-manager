@@ -136,7 +136,7 @@ func _shoot_recovery(
 		actor.contact_recovery = recovery
 		actor.contact_posture = posture
 		actor.set_pose(
-			RallyEventModel.EventType.DEFENSE, 0.0, phase,
+			RallyEventModel.EventType.DIG, 0.0, phase,
 			Vector2(0.7, -0.7), true,
 		)
 	await _capture(stage, shot_name)

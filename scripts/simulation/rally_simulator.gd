@@ -3275,7 +3275,7 @@ func resolve(
 		if coverer != null:
 			live_positions[coverer.id] = coverer_reach
 		var coverage_pass_target := recycle_target + Vector2(0.04, -0.05)
-		_add_event(result, RallyEventModel.EventType.DEFENSE,
+		_add_event(result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Attack coverage",
 			recycle_target, coverage_pass_target,
@@ -3433,7 +3433,7 @@ func resolve(
 		opponent_defense_time, "lateral",
 		float(opponent_defense.get("read_error_meters", 0.0)),
 	)
-	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
+	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name,
 		attack_target, opponent_pass_target, dug,
 		opponent_dig_control, "Defensive contact",
@@ -5322,7 +5322,7 @@ func _resolve_opponent_transition(
 			"end_time", rally_clock + coverage_time
 		))
 		_add_event(
-			result, RallyEventModel.EventType.DEFENSE,
+			result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Opponent attack coverage",
 			home_block_target, coverage_pass_target,
@@ -5578,7 +5578,7 @@ func _resolve_opponent_transition(
 		var defence_player := entry as VolleyballPlayer
 		if defence_player != null:
 			home_by_id_for_defense[defence_player.id] = defence_player
-	_add_event(result, RallyEventModel.EventType.DEFENSE, defender.id, defender.display_name,
+	_add_event(result, RallyEventModel.EventType.DIG, defender.id, defender.display_name,
 		home_target, defense_pass_target, defense_success,
 		home_dig_control, "%s defends" % defender.display_name,
 		"%d%% defensive contact against a %d%% attack. %s %s" % [
@@ -6706,7 +6706,7 @@ func _resolve_home_continuation(
 			"end_time", rally_clock + coverage_time
 		))
 		_add_event(
-			result, RallyEventModel.EventType.DEFENSE,
+			result, RallyEventModel.EventType.ATTACK_COVERAGE,
 			coverer.id if coverer != null else -1,
 			coverer.display_name if coverer != null else "Attack coverage",
 			block_event_end, coverage_pass_target,
@@ -6860,7 +6860,7 @@ func _resolve_home_continuation(
 		"end_time", rally_clock + cont_defense_time
 	))
 	rally_clock = maxf(rally_clock, cont_dig_time)
-	_add_event(result, RallyEventModel.EventType.DEFENSE, opponent_defender.id,
+	_add_event(result, RallyEventModel.EventType.DIG, opponent_defender.id,
 		opponent_defender.display_name, attack_target,
 		attack_target + Vector2(0.04, -0.03), dug, cont_dig_control,
 		"Opponent dig · exchange %d" % exchange_number,
@@ -11242,7 +11242,11 @@ func _finalize_rally_timeline(result: Resource) -> void:
 		var trajectory_duration := float(trajectory_data.get("duration", 0.0))
 		var default_duration := 0.12
 		match int(event.event_type):
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			## Both defensive contacts, because this is about how long a body
+			## takes over a ball it is digging up off the floor, and coverage is
+			## that too -- just at a metre rather than at six.
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, \
+			RallyEventModel.EventType.ATTACK_COVERAGE:
 				default_duration = 0.34
 			RallyEventModel.EventType.SET:
 				default_duration = 0.28
@@ -11296,11 +11300,19 @@ func _ensure_event_trajectories(result: Resource) -> void:
 				RallyEventModel.EventType.SET: flight_time = 0.72
 				RallyEventModel.EventType.ATTACK: flight_time = 0.42
 				RallyEventModel.EventType.BLOCK: flight_time = 0.24
-				RallyEventModel.EventType.DEFENSE: flight_time = 0.58
+				## **Coverage has to be listed or it silently loses its ball.**
+				## The default arm below is `continue`, not a fallback -- an
+				## unlisted type gets no `outgoing_trajectory` at all and the ball
+				## teleports out of the contact. Splitting the enum without this
+				## line would have deleted the flight from every one of the 38
+				## coverage contacts in 700 rallies.
+				RallyEventModel.EventType.DIG, \
+				RallyEventModel.EventType.ATTACK_COVERAGE: flight_time = 0.58
 				_: continue
 		var apex := 0.5
 		match int(event.event_type):
-			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+			RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, \
+			RallyEventModel.EventType.ATTACK_COVERAGE:
 				apex = 1.8
 			RallyEventModel.EventType.SET:
 				apex = 2.4

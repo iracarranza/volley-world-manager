@@ -153,7 +153,8 @@ static func _sweep(
 					RallyEventModel.EventType.SET,
 					RallyEventModel.EventType.ATTACK,
 					RallyEventModel.EventType.BLOCK,
-					RallyEventModel.EventType.DEFENSE,
+					RallyEventModel.EventType.DIG,
+					RallyEventModel.EventType.ATTACK_COVERAGE,
 				]:
 					contacts += 1
 				if int(event.event_type) == RallyEventModel.EventType.SERVE:

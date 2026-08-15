@@ -88,7 +88,7 @@ const ACTIONS := {
 		"metres": 3.9,
 	},
 	"receive": {
-		"event": RallyEventModel.EventType.DEFENSE,
+		"event": RallyEventModel.EventType.DIG,
 		"angles": [Vector2(90.0, -6.0), Vector2(142.0, -26.0)],
 		## The platform starts forming at -0.34 and is set by -0.08; the legs
 		## drive from -0.14 and finish at +0.34, so the strip has to reach past the

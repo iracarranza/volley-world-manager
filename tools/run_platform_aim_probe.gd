@@ -116,7 +116,7 @@ func _collect(
 	for index in range(events.size()):
 		var event: Resource = events[index]
 		if int(event.event_type) != RallyEventScript.EventType.RECEPTION \
-				and int(event.event_type) != RallyEventScript.EventType.DEFENSE:
+				and int(event.event_type) not in [RallyEventScript.EventType.DIG, RallyEventScript.EventType.ATTACK_COVERAGE]:
 			continue
 		var raw_incoming: Dictionary = event.metadata.get("incoming_trajectory", {})
 		var raw_outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})

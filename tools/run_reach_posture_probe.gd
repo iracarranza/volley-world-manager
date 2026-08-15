@@ -30,7 +30,7 @@ func _initialize() -> void:
 			continue
 		for event in result.events:
 			var type := int(event.event_type)
-			if type != Events.EventType.DEFENSE \
+			if type != Events.EventType.DIG \
 					and type != Events.EventType.RECEPTION:
 				continue
 			if not event.metadata.has("reach_margin_meters"):

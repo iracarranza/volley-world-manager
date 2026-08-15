@@ -57,7 +57,7 @@ func _initialize() -> void:
 				match int(event.event_type):
 					RallyEventScript.EventType.RECEPTION:
 						kind = "reception"
-					RallyEventScript.EventType.DEFENSE:
+					RallyEventScript.EventType.DIG:
 						kind = "defense"
 					_:
 						continue

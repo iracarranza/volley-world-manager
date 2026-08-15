@@ -52,7 +52,7 @@ const TURNTABLE_ROWS := [
 		"elevation": 0.85, "phase": 0.0, "pitch": -14.0,
 	},
 	{
-		"name": "floor", "event": RallyEventModel.EventType.DEFENSE,
+		"name": "floor", "event": RallyEventModel.EventType.DIG,
 		"elevation": 0.0, "phase": -0.08, "pitch": -14.0,
 	},
 ]

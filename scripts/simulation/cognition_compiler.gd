@@ -152,7 +152,10 @@ static func _actor_intent(event_type: int) -> StringName:
 			return &"approaching"
 		RallyEventModel.EventType.BLOCK:
 			return &"blocking"
-		RallyEventModel.EventType.DEFENSE:
+		## A coverer is playing a ball up off the floor under pressure, which is
+		## the posture this names. That they are on the attacking side is a fact
+		## about the rally, not about what their body is doing.
+		RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			return &"defending"
 	return &"watching"
 
@@ -803,8 +806,15 @@ static func _compile_sightlines(
 		attack_event, _next_contact(events, attack_event), raw,
 		result.player_physical_profiles,
 	)
+	## **Floor dig only, and it used to be able to find the wrong contact.** This
+	## is the occlusion test -- whether the defender could see the swing past the
+	## blocker's hands -- and it needs the voli watching from *behind the block*.
+	## Attack coverage stands on the hitter's side with no wall between them and
+	## the ball, so a coverage contact arriving first would have been used as the
+	## observer for a sightline that does not exist. The comment above already
+	## said "the contact this finds is the dig itself"; now the type says it too.
 	var defence := _next_of_type(
-		events, set_index, RallyEventModel.EventType.DEFENSE
+		events, set_index, RallyEventModel.EventType.DIG
 	)
 	if defence == null:
 		return

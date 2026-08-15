@@ -336,6 +336,7 @@ func _initialize() -> void:
 	_test_team_wheel_amplification()
 	_test_ui_visual_system()
 	_test_regional_kits()
+	_test_dig_and_coverage_are_separate()
 	_test_worksheet_facing()
 	_test_worksheet_placement()
 	_test_worksheet_behaviour()
@@ -366,6 +367,67 @@ func _check(condition: bool, message: String) -> void:
 ## of fourteen failed once they were put on a court -- §0, a value measured with
 ## the wrong instrument. So this asserts contrast against the court surface as
 ## the scene really sets it, not against a colour anybody remembers choosing.
+## Gate: attack coverage can never enter the floor-dig denominator.
+##
+## **The bug this closes was a name, not a formula.** A floor dig and attack
+## coverage were both emitted as `DEFENSE` from six sites, so every consumer
+## asking for one got both. The balance probe reported a dig rate of 0.493 when
+## the floor-dig rate was 0.445, because coverage came up 38 times out of 38 and
+## was being averaged in -- a target band of 0.35-0.55 looked met from the middle
+## when it was being met from the bottom third.
+##
+## Asserted on the counts rather than on the rate, because a rate can be right
+## for the wrong reason: if coverage ever leaks back in, the denominator moves
+## first and this notices before any band does.
+func _test_dig_and_coverage_are_separate() -> void:
+	var manager: Object = GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var digs := 0
+	var coverage := 0
+	var coverage_all_succeeded := true
+	for seed_value in range(20000, 20180):
+		var result: Resource = manager.resolve_active_rally(seed_value)
+		if result == null:
+			continue
+		for event_resource in result.events:
+			var event: Resource = event_resource
+			var kind := int(event.event_type)
+			if kind == RALLY_EVENT_SCRIPT.EventType.DIG:
+				digs += 1
+				## The discriminator that used to decide this lives on beside the
+				## type. It must never disagree with it -- two sources of truth
+				## for one fact is how they drifted apart in the first place.
+				_check(
+					str(event.metadata.get("coverage", "")) != "attack",
+					"a DIG event never carries the attack-coverage marker",
+				)
+			elif kind == RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
+				coverage += 1
+				_check(
+					str(event.metadata.get("coverage", "")) == "attack",
+					"an ATTACK_COVERAGE event still carries its marker",
+				)
+				if not bool(event.success):
+					coverage_all_succeeded = false
+				## Coverage has to keep its ball. The trajectory fallback in
+				## `_ensure_event_trajectories` ends in `continue`, not a default,
+				## so an unlisted type is given no outgoing flight at all and the
+				## ball teleports out of the contact.
+				_check(
+					event.metadata.has("outgoing_trajectory"),
+					"attack coverage still gets an outgoing trajectory",
+				)
+	manager.free()
+	_check(digs > 0, "the sample contains floor digs")
+	_check(coverage > 0, "the sample contains attack coverage")
+	## Not a tuning assertion -- a statement that these are different populations
+	## and that mixing them is what made the dig rate read high.
+	_check(
+		coverage_all_succeeded,
+		"attack coverage still succeeds at a rate no floor dig approaches",
+	)
+
+
 func _test_regional_kits() -> void:
 	var region_names: Array = REGIONS_SCRIPT.names()
 	for region_name in region_names:
@@ -710,7 +772,7 @@ func _test_spatial_opponent_and_replay_analysis() -> void:
 						and event.metadata.has("movement_duration")
 						and event.metadata.has("arrival_margin")
 					)
-			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+			elif event.event_type == RALLY_EVENT_SCRIPT.EventType.DIG \
 					and str(event.metadata.get("side", "")) == "opponent":
 				## A defender's margin is a reach, in metres, and says so.
 				spatial_defense_observed = spatial_defense_observed or (
@@ -1069,7 +1131,7 @@ func _test_playback_geometry_is_drawable() -> void:
 							next_contact = candidate
 							break
 						if next_contact == null \
-								or next_contact.event_type != RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+								or next_contact.event_type != RALLY_EVENT_SCRIPT.EventType.DIG \
 								or str(next_contact.metadata.get("side", "")) != block_side:
 							misrouted_block_touches += 1
 				var incoming: Dictionary = event.metadata.get(
@@ -8987,7 +9049,7 @@ func _test_setter_capability_gates() -> void:
 						pending_height[side] = float(event.metadata.get(
 							"set_contact_height_meters", 0.0
 						))
-					RALLY_EVENT_SCRIPT.EventType.DEFENSE:
+					RALLY_EVENT_SCRIPT.EventType.DIG, RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
 						pending_height.erase(side)
 					RALLY_EVENT_SCRIPT.EventType.SET:
 						if not pending_height.has(side):
@@ -9799,7 +9861,8 @@ func _test_playback_movement_is_humanly_possible() -> void:
 			if event == null:
 				continue
 			if event.event_type in [
-				RALLY_EVENT_SCRIPT.EventType.DEFENSE,
+				RALLY_EVENT_SCRIPT.EventType.DIG,
+				RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE,
 				RALLY_EVENT_SCRIPT.EventType.RECEPTION,
 			] and event.metadata.has("movement_target"):
 				## Beaten means they could not reach it, which is a distance:
@@ -10218,7 +10281,7 @@ func _home_defense_event(
 	var found: Resource = null
 	for event_resource in result.events:
 		var event: Resource = event_resource
-		if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+		if int(event.event_type) != RALLY_EVENT_SCRIPT.EventType.DIG \
 				or str(event.metadata.get("side", "")) != "home":
 			continue
 		if deep_only:
@@ -10258,7 +10321,7 @@ func _test_seeded_floor_defense_geometry() -> void:
 		var candidate_defense: Resource = null
 		for event_resource in candidate_result.events:
 			var event: Resource = event_resource
-			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
+			if int(event.event_type) == RALLY_EVENT_SCRIPT.EventType.DIG \
 					and str(event.metadata.get("side", "")) == "home" \
 					and Vector2(event.metadata.get(
 						"planner_floor_center", Vector2.ZERO
@@ -12891,8 +12954,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
-					and str(event.metadata.get("coverage", "")) == "attack":
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
 				attack_coverage_observed = true
 			if event.event_type != RALLY_EVENT_SCRIPT.EventType.BLOCK \
 					or str(event.metadata.get("side", "")) != "home":
@@ -12919,8 +12981,7 @@ func _test_block_closing_and_touch_distribution() -> void:
 		var result: Resource = manager.resolve_active_rally(seed_value)
 		for event_resource in result.events:
 			var event: Resource = event_resource
-			if event.event_type == RALLY_EVENT_SCRIPT.EventType.DEFENSE \
-					and str(event.metadata.get("coverage", "")) == "attack":
+			if event.event_type == RALLY_EVENT_SCRIPT.EventType.ATTACK_COVERAGE:
 				attack_coverage_observed = true
 	_check(home_block_events > 20, "block distribution test observes enough home contests")
 	_check(non_middle_primary, "nearest pin players can lead blocks instead of the middle")
@@ -17056,7 +17117,7 @@ func _test_stance_transitions() -> void:
 	actor.contact_posture = "off-axis"
 	var handover := 0.5
 	actor.set_pose(
-		RALLY_EVENT_SCRIPT.EventType.DEFENSE, 0.0,
+		RALLY_EVENT_SCRIPT.EventType.DIG, 0.0,
 		PlayerActor3D.RECOVERY_END_PHASE * handover, Vector2(0.7, -0.7), true,
 	)
 	var armed: float = float(actor._floor_remaining) \

@@ -152,7 +152,8 @@ func _count_result(
 			RallyEvent.EventType.SERVE,
 			RallyEvent.EventType.RECEPTION,
 			RallyEvent.EventType.ATTACK,
-			RallyEvent.EventType.DEFENSE,
+			RallyEvent.EventType.DIG,
+			RallyEvent.EventType.ATTACK_COVERAGE,
 		]:
 			continue
 		var side := str(event.metadata.get("side", ""))
@@ -183,16 +184,20 @@ func _count_result(
 				else:
 					opponent_attacks += 1
 					row["opponent_attacks"] = int(row["opponent_attacks"]) + 1
-			RallyEvent.EventType.DEFENSE:
+			## This probe was already the only consumer that told the two apart,
+			## and it did it by reading metadata off a shared type. The split
+			## moves that distinction into the type itself; the counters are
+			## unchanged, so its numbers are directly comparable across the change.
+			RallyEvent.EventType.ATTACK_COVERAGE:
 				if side == "home":
-					if str(event.metadata.get("coverage", "")) == "attack":
-						row["coverage_attempts"] = int(row["coverage_attempts"]) + 1
-						row["coverage_success"] = int(row["coverage_success"]) \
-							+ int(bool(event.success))
-					else:
-						row["floor_attempts"] = int(row["floor_attempts"]) + 1
-						row["floor_success"] = int(row["floor_success"]) \
-							+ int(bool(event.success))
+					row["coverage_attempts"] = int(row["coverage_attempts"]) + 1
+					row["coverage_success"] = int(row["coverage_success"]) \
+						+ int(bool(event.success))
+			RallyEvent.EventType.DIG:
+				if side == "home":
+					row["floor_attempts"] = int(row["floor_attempts"]) + 1
+					row["floor_success"] = int(row["floor_success"]) \
+						+ int(bool(event.success))
 		if collect_ownership and side == "home" \
 				and event.metadata.has("nearest_id"):
 			_count_ownership(ownership, event)
@@ -280,8 +285,11 @@ func _count_reception_terms(row: Dictionary, event: Resource) -> int:
 
 
 func _count_ownership(ownership: Dictionary, event: Resource) -> void:
+	## Reached only for events carrying `nearest_id`, which is a claim contest --
+	## reception and floor dig. Attack coverage is an assigned shape, not a
+	## claim, and never sets it.
 	var kind := "RECEPTION" \
-		if int(event.event_type) == RallyEvent.EventType.RECEPTION else "DEFENSE"
+		if int(event.event_type) == RallyEvent.EventType.RECEPTION else "DIG"
 	var bucket: Dictionary = ownership.get(kind, {
 		"claims": 0,
 		"contested": 0,

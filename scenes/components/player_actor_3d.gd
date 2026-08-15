@@ -2014,7 +2014,9 @@ func _ground_the_feet(elevation: float, baseline_knee: float) -> void:
 ## `contact_direction` happens to point anyway, so their value is nominal.
 const SQUARE_UP_PHASE := {
 	RallyEventModel.EventType.RECEPTION: -0.85,
-	RallyEventModel.EventType.DEFENSE: -0.85,
+	## Both defensive contacts turn to face the ball the same way.
+	RallyEventModel.EventType.DIG: -0.85,
+	RallyEventModel.EventType.ATTACK_COVERAGE: -0.85,
 	RallyEventModel.EventType.SET: -0.70,
 	RallyEventModel.EventType.SERVE: -0.90,
 	RallyEventModel.EventType.BLOCK: -1.0,
@@ -2128,7 +2130,8 @@ func _track_floor_recovery(
 	event_type: int, phase: float, is_contact_actor: bool
 ) -> void:
 	var floor_action := event_type == RallyEventModel.EventType.RECEPTION \
-		or event_type == RallyEventModel.EventType.DEFENSE
+		or event_type == RallyEventModel.EventType.DIG \
+		or event_type == RallyEventModel.EventType.ATTACK_COVERAGE
 	if is_contact_actor and floor_action and contact_recovery != "platform":
 		_floor_recovery = contact_recovery
 		_floor_posture = contact_posture
@@ -2568,7 +2571,7 @@ func set_pose(
 			_set_elbow(striking_arm, float(toss.striking_elbow_degrees))
 			guide_arm.rotation_degrees.x = float(toss.guide_shoulder_degrees)
 			_set_elbow(guide_arm, float(toss.guide_elbow_degrees))
-		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DEFENSE:
+		RallyEventModel.EventType.RECEPTION, RallyEventModel.EventType.DIG, RallyEventModel.EventType.ATTACK_COVERAGE:
 			## A dig is drawn by bending, not by squashing.
 			##
 			## This used to scale the whole actor on one axis -- head, produce

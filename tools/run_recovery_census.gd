@@ -57,7 +57,7 @@ func _initialize() -> void:
 					var label := ""
 					if kind == RallyEventScript.EventType.RECEPTION:
 						label = "reception"
-					elif kind == RallyEventScript.EventType.DEFENSE:
+					elif kind == RallyEventScript.EventType.DIG:
 						label = "dig"
 					else:
 						continue

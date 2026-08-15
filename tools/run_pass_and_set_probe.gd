@@ -92,7 +92,7 @@ func _probe() -> void:
 					serve_by_style[style] = bucket
 				RallyEvent.EventType.ATTACK:
 					attack_apex.append(rise)
-				RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DEFENSE:
+				RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DIG:
 					var pass_apex := float(event.metadata.get("pass_apex_meters", 0.0))
 					if pass_apex <= 0.0:
 						continue

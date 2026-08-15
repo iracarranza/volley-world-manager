@@ -72,7 +72,7 @@ func _ready() -> void:
 				"body_type": TYPES[index],
 				"standing_reach_meters": 2.48, "jumping_reach_meters": 3.20,
 			})
-			actor.set_pose(RallyEventModel.EventType.DEFENSE, 0.0, -0.08,
+			actor.set_pose(RallyEventModel.EventType.DIG, 0.0, -0.08,
 				Vector2(0.0, 1.0), true)
 			actor.rotation_degrees = Vector3(0.0, 158.0, 0.0)
 			if not bool(options.shorts):

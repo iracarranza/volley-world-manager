@@ -44,7 +44,7 @@ func _initialize() -> void:
 
 	var E := load("res://scripts/models/rally_event.gd")
 	var contacts := [E.EventType.SERVE, E.EventType.RECEPTION, E.EventType.SET,
-		E.EventType.ATTACK, E.EventType.BLOCK, E.EventType.DEFENSE]
+		E.EventType.ATTACK, E.EventType.BLOCK, E.EventType.DIG]
 	var chain: Array = []
 	for e in r.events:
 		if int(e.event_type) in contacts: chain.append(e)

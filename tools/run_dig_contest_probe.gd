@@ -167,7 +167,7 @@ func _collect(result: Resource, rows: Array[Dictionary]) -> void:
 	var events: Array = result.events
 	for index in range(events.size()):
 		var event: Resource = events[index]
-		if int(event.event_type) != RallyEventScript.EventType.DEFENSE:
+		if int(event.event_type) != RallyEventScript.EventType.DIG:
 			continue
 		var terms: Dictionary = event.metadata.get("dig_terms", {})
 		if terms.is_empty() or not terms.has("contested_against"):

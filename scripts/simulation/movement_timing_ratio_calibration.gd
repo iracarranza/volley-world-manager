@@ -27,7 +27,8 @@ const ShadowMovementModel := preload("res://scripts/simulation/shadow_movement_s
 static func _destination_is_start_position(event_type: int) -> bool:
 	return event_type in [
 		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.SET,
-		RallyEvent.EventType.ATTACK, RallyEvent.EventType.DEFENSE,
+		RallyEvent.EventType.ATTACK, RallyEvent.EventType.DIG,
+		RallyEvent.EventType.ATTACK_COVERAGE,
 	]
 ## Ratios outside this band would be plainly visible as slow motion or
 ## fast-forward during a phase.
@@ -107,7 +108,8 @@ static func _has_movement(event: RallyEvent) -> bool:
 
 static func _mode_for(event_type: int) -> RallyPlayerState.MovementMode:
 	match event_type:
-		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DEFENSE:
+		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.DIG, \
+		RallyEvent.EventType.ATTACK_COVERAGE:
 			return RallyPlayerState.MovementMode.LATERAL
 		RallyEvent.EventType.ATTACK:
 			return RallyPlayerState.MovementMode.APPROACH

@@ -114,7 +114,7 @@ func _classify(result: Resource, buckets: Dictionary) -> void:
 					break
 				if block_outcome in ["touch", "funnel"]:
 					touched = true
-			if later_type == RallyEventModel.EventType.DEFENSE:
+			if later_type == RallyEventModel.EventType.DIG:
 				dug = bool(later.success)
 				break
 		var outcome := "stuffed"

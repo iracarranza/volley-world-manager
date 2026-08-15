@@ -153,7 +153,7 @@ func _collect(result: Resource, sides: Dictionary) -> void:
 		match int(event.event_type):
 			RallyEventScript.EventType.RECEPTION:
 				fed_by = "pass"
-			RallyEventScript.EventType.DEFENSE:
+			RallyEventScript.EventType.DIG:
 				fed_by = "dig"
 			RallyEventScript.EventType.SET:
 				var metadata: Dictionary = event.metadata
