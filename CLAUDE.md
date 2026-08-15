@@ -12,7 +12,7 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-14 on `66947fa`: **1,857 checks
+Current branch baseline, verified 2026-08-15 on `58fd72a`: **1,858 checks
 pass**. Treat any test failure as a regression.
 
 The count itself is not the signal and should not be read as one -- sampling
