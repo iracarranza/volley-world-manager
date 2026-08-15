@@ -7,6 +7,10 @@ for none.** `PasteRatio.drift_for(chef_rating, familiarity)` and
 `StaffFamiliarity` are built and are already the right shape. Nothing yet fails
 in a way a manager would call a mistake.
 
+This document assumes the person is **inside the club**. Whether a job should be
+permanent staff, a bounded contractor, or an automated service is a separate
+design question; see `CONTRACTORS_AND_SERVICES.md`.
+
 ---
 
 ## 0. The rule
@@ -162,6 +166,14 @@ it, **good staff buy back the manager's time** — the actual scarce resource
 And a wealthy club should not have no problems — it should have staff, housing,
 equipment and organisational familiarity that make **complex situations
 manageable**. The problems do not vanish; they become handleable.
+
+Permanent staff are not automatically the correct way to buy every capability.
+`CONTRACTORS_AND_SERVICES.md` makes the complementary distinction: staff are
+valuable specifically where **continuity, judgment and institutional memory**
+are part of the work. A contractor may be better at one bounded specialist job;
+a service may be more reliable at one simple routine. Hiring somebody becomes
+interesting when bringing them *inside the club* changes the kind of work they
+can do.
 
 ---
 
