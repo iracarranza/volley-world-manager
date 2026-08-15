@@ -1,7 +1,12 @@
 class_name TacticalCourt
 extends Control
 
+const HitterPlacementModel := preload(
+	"res://scripts/simulation/hitter_placement_model.gd"
+)
+
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const BlockJumpModel := preload("res://scripts/simulation/block_jump_model.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const RotationLegalityModel := preload("res://scripts/simulation/rotation_legality.gd")
 
@@ -82,9 +87,18 @@ const VISUAL_PLAYER_PATHS: int = 2
 const VISUAL_TACTICAL_GUIDES: int = 4
 const VISUAL_COVERAGE_ZONES: int = 8
 const VISUAL_CONTACT_OVERLAYS: int = 16
+## What each voli is attending to, deciding and feeling. On by default: the
+## board is a coaching instrument and this is the layer that says *why* a player
+## went where they went, which no other overlay carries.
+const VISUAL_COGNITION: int = 32
+## A badge is a note in the margin, so it is smaller than the marker it annotates
+## -- a home marker is drawn at radius 20 -- and it hangs clear of the slot label
+## already printed under every voli.
+const COGNITION_BADGE_RADIUS: float = 6.5
+const COGNITION_BADGE_LIFT: float = 26.0
 const VISUAL_ALL: int = VISUAL_BALL_PATH | VISUAL_PLAYER_PATHS \
 	| VISUAL_TACTICAL_GUIDES | VISUAL_COVERAGE_ZONES \
-	| VISUAL_CONTACT_OVERLAYS
+	| VISUAL_CONTACT_OVERLAYS | VISUAL_COGNITION
 ## Generous window for integrating a traversal. The result is renormalised to
 ## the phase, so this only has to be long enough for a player to finish; it
 ## never sets how fast the drawing runs.
@@ -96,6 +110,10 @@ var opponent_team: Resource
 var opponent_players_by_id: Dictionary = {}
 var show_opponents: bool = false
 var assignments: Array[HitterAssignment] = []
+## A fixed seed for the board's preview of where hitters want the ball. The
+## tactical view is not a rally, so it shows each hitter's settled spot rather
+## than a particular swing's jitter.
+const LANE_PREVIEW_SEED: int = 0
 var primary_hitter_id: int = -1
 var secondary_hitter_id: int = -1
 var selected_player_id: int = -1
@@ -113,6 +131,24 @@ var defensive_mode: bool = false
 var defensive_plan: Resource
 var defensive_zone_type: int = DefensiveZoneModel.ZoneType.FLOOR_DEFENSE
 var defensive_phase: int = 0
+## The smallest this court can usefully be drawn, in each orientation.
+##
+## It has to follow the orientation, and it did not: the scene declared a flat
+## `custom_minimum_size` of 400x500 -- portrait, matching the portrait default of
+## the flag below -- while every host that actually instantiates it calls
+## `set_landscape_orientation(true)` and parents it to an `AspectRatioContainer`
+## with `ratio = 2.0`. A container cannot shrink a child below its minimum, so
+## the court stayed 400x500 and the container centred the overflow: it laid out
+## at y = -155, a third of it above the panel, with the lane labels cut off
+## mid-word. It looked correct only in the workspace popup, which happened to be
+## wide enough to hide the problem.
+##
+## Both ratios are 2:1 the same way the container is, so the two declarations
+## agree instead of fighting. A full court is 9m by 18m and `_court_rect` keeps a
+## 34px margin, so the landscape minimum is a 372px-wide court plus its margins.
+const MINIMUM_PORTRAIT := Vector2(220.0, 440.0)
+const MINIMUM_LANDSCAPE := Vector2(440.0, 220.0)
+
 var landscape_orientation: bool = false
 var live_player_positions: Dictionary = {}
 var opponent_live_player_positions: Dictionary = {}
@@ -134,6 +170,18 @@ var movement_paths: Dictionary = {}
 var shadow_reception_trace: Dictionary = {}
 var shadow_overlay_layers: int = SHADOW_LAYER_DEFAULT
 var visualization_layers: int = VISUAL_ALL
+
+## The cognition stream carried by the rally being replayed, and where playback
+## currently sits on the rally's own physical clock.
+##
+## The clock is separate from `playback_progress` on purpose. That value is a
+## 0-1 ratio through whichever movement phase is running -- a UI beat -- and the
+## handoff is explicit that cues sample physical time instead, because a cue's
+## interval was computed against the resolver's seconds and a phase-relative
+## sampler would stretch a thought to fit an animation.
+var cognition_cues: Array = []
+var cognition_time: float = 0.0
+var cognition_tween: Tween
 
 
 func _ready() -> void:
@@ -220,6 +268,7 @@ func set_visualization_layers(layers: int) -> void:
 
 func set_landscape_orientation(enabled: bool) -> void:
 	landscape_orientation = enabled
+	custom_minimum_size = MINIMUM_LANDSCAPE if enabled else MINIMUM_PORTRAIT
 	queue_redraw()
 
 
@@ -282,6 +331,13 @@ func animate_spatial_transition(
 				and next_contact_event.metadata.has("approach_start_position"):
 			unit_movement_waypoints[movement_player_id] = Vector2(
 				next_contact_event.metadata["approach_start_position"]
+			)
+		## A setter who had to run round somebody. The resolver already timed the
+		## leg through this corner, so drawing the straight line was drawing a
+		## body through another body and calling it the same duration.
+		elif next_contact_event.metadata.has("navigation_waypoint"):
+			unit_movement_waypoints[movement_player_id] = Vector2(
+				next_contact_event.metadata["navigation_waypoint"]
 			)
 	for raw_player_id in unit_movement_targets:
 		var player_id := int(raw_player_id)
@@ -1052,16 +1108,35 @@ func _draw() -> void:
 	_draw_opponents()
 	_draw_players()
 	_draw_rally_playback()
+	if bool(visualization_layers & VISUAL_COGNITION):
+		_draw_cognition_badges()
 
 
+## Lanes as the stretches of net they are, rather than five dots.
+##
+## These were drawn at `lane_target`, which was the whole of what a lane meant
+## when the setter aimed at a constant. A lane is a region a hitter works inside
+## now, so the guide draws the region and marks its centre -- otherwise the board
+## shows a target the game no longer aims at.
 func _draw_lane_guides() -> void:
 	for lane_name in CourtConstants.LANES:
-		var target := _court_to_local(CourtConstants.lane_target(lane_name))
+		var span: Vector2 = CourtConstants.lane_range(lane_name)
+		var depth: float = CourtConstants.lane_target(lane_name).y
+		var left := _court_to_local(Vector2(span.x, depth))
+		var right := _court_to_local(Vector2(span.y, depth))
 		var guide_color: Color = palette["line"]
+		guide_color.a = 0.28
+		draw_line(left, right, guide_color, 3.0)
+		## The ends of the region, so a lane reads as bounded rather than as a
+		## line that happens to stop.
+		var tick := Vector2(0.0, 5.0)
+		draw_line(left - tick, left + tick, guide_color, 2.0)
+		draw_line(right - tick, right + tick, guide_color, 2.0)
+		var centre := (left + right) * 0.5
 		guide_color.a = 0.45
-		draw_circle(target, 5.0, guide_color)
+		draw_circle(centre, 3.0, guide_color)
 		draw_string(
-			ThemeDB.fallback_font, target + Vector2(-28, -10), lane_name,
+			ThemeDB.fallback_font, centre + Vector2(-28, -10), lane_name,
 			HORIZONTAL_ALIGNMENT_CENTER, 56, 11, _with_alpha(palette["text"], 0.68),
 		)
 
@@ -1069,7 +1144,12 @@ func _draw_lane_guides() -> void:
 func _draw_assignments() -> void:
 	for assignment in assignments:
 		var start := _court_to_local(assignment.start_position)
-		var target := _court_to_local(CourtConstants.lane_target(assignment.lane))
+		## Where this hitter actually wants it, which is what the setter is aiming
+		## at -- not the middle of their lane.
+		var target := _court_to_local(HitterPlacementModel.preferred_point(
+			players_by_id.get(assignment.player_id) as VolleyballPlayer,
+			str(assignment.lane), LANE_PREVIEW_SEED, 0
+		))
 		var path_color: Color = palette["path"]
 		if assignment.player_id == secondary_hitter_id:
 			path_color = palette["secondary_path"]
@@ -1675,12 +1755,77 @@ func _contact_elevation(player_id: int, side: String) -> float:
 	## contactor is already gathering and rising; during the contact itself they
 	## hang and come down. Reading only `playback_event` showed the lift for the
 	## contact frame alone, which is why it barely registered even at half speed.
+	##
+	## **A block is timed off the rally clock, not off the leg.** Everything else
+	## here still rides `playback_progress`, which is a fraction of whatever leg is
+	## being drawn -- so a jump lasted as long as that leg did. Against a 1.2 s
+	## flight a blocker was airborne for 1.2 s off a jump that physically lasts
+	## about 0.67, and against a longer one, longer still. That is the hang, and
+	## the uneven pacing clamps only made it more visible.
+	##
+	## `cognition_time` is the rally's own clock, already tweened across each leg
+	## for the cue stream, so the jump and the thoughts above it are sampled from
+	## one timeline rather than two.
+	var block_lift := _block_elevation(player_id, side)
+	if block_lift >= 0.0:
+		return block_lift
 	if pending_contact_event != null:
 		var rising := _event_elevation(pending_contact_event, player_id, side)
 		if rising > 0.0:
 			return rising * smoothstep(0.45, 1.0, playback_progress)
 	var landing := _event_elevation(playback_event, player_id, side)
 	return landing * (1.0 - smoothstep(0.55, 1.0, playback_progress))
+
+
+## This player's height off a block jump, or -1 when they are not blocking.
+##
+## Negative rather than zero for "not blocking", because zero is a real answer --
+## a blocker before takeoff and after landing is on the floor and has to stay
+## there rather than falling through to the progress-driven path.
+func _block_elevation(player_id: int, side: String) -> float:
+	for event in [pending_contact_event, playback_event]:
+		if event == null or int(event.event_type) != RallyEventModel.EventType.BLOCK:
+			continue
+		if str(event.metadata.get("side", "")) != side:
+			continue
+		if int(event.actor_id) != player_id 				and int(event.metadata.get("assist_id", -1)) != player_id:
+			continue
+		var leap := _leap_meters(player_id, side)
+		if leap <= 0.0:
+			continue
+		## **The apex sits where this blocker actually put it**, which is what
+		## makes `block_timing` visible rather than merely consequential.
+		##
+		## Centred on the contact -- as it was until the timing reached here -- a
+		## blocker who went up early and a blocker who went up late are drawn
+		## identically, peaking perfectly on the ball. The attribute decided the
+		## contest and showed nothing.
+		##
+		## Per blocker, not per event, because a middle who jumped early beside a
+		## pin who jumped late is the picture a wall's timing actually makes.
+		var timing: Dictionary = Dictionary(
+			event.metadata.get("block_jump_timing", {})
+		).get(player_id, {})
+		return BlockJumpModel.elevation_at(
+			cognition_time,
+			BlockJumpModel.jump_timeline(
+				float(event.metadata.get("event_time", cognition_time)), leap,
+				float(timing.get("timing_error_seconds", 0.0)),
+				bool(timing.get("late", false)),
+			),
+		) * BlockJumpModel.draw_peak(leap)
+	return -1.0
+
+
+## How high this voli actually leaves the floor, in metres.
+func _leap_meters(player_id: int, side: String) -> float:
+	var table: Dictionary = players_by_id if side == "home" else opponent_players_by_id
+	var player = table.get(player_id)
+	if player == null:
+		return 0.0
+	return maxf(
+		(player.jumping_reach_cm() - player.standing_reach_cm()) / 100.0, 0.0
+	)
 
 
 ## Peak elevation this player reaches for a given event, ignoring timing.
@@ -2204,3 +2349,262 @@ func _perspective_adjusted_progress(nominal_progress: float, current_height: flo
 	var speed_multiplier: float = lerpf(1.15, 0.75, height_ratio)
 	var adjusted_progress: float = nominal_progress * speed_multiplier
 	return clampf(adjusted_progress, 0.0, 1.0)
+
+
+## The cognition stream for the rally about to be replayed.
+##
+## Taken from the resolved result rather than recomputed, so a replay shows the
+## thoughts the rally was resolved with and not the ones the current roster,
+## confidence or scouting state would produce now.
+func set_cognition_stream(cues: Array) -> void:
+	cognition_cues = cues
+	cognition_time = 0.0
+	queue_redraw()
+
+
+## Moves the rally's own clock across one event's playback window.
+##
+## `duration` is wall-clock seconds -- already divided by the playback speed --
+## while `from_time` and `to_time` are the resolver's seconds. Separating them
+## is what lets 0.5x and 2x show the same thoughts at the same points of the
+## rally instead of at the same points of the animation.
+func advance_cognition_time(
+	from_time: float, to_time: float, duration: float
+) -> void:
+	if cognition_tween != null and cognition_tween.is_valid():
+		cognition_tween.kill()
+	cognition_time = from_time
+	if duration <= 0.0 or to_time <= from_time:
+		cognition_time = maxf(to_time, from_time)
+		queue_redraw()
+		return
+	cognition_tween = create_tween()
+	cognition_tween.tween_method(
+		_set_cognition_time, from_time, to_time, duration
+	)
+
+
+func _set_cognition_time(value: float) -> void:
+	cognition_time = value
+	queue_redraw()
+
+
+## Playback ended, or a lineup changed under it. Leaving a badge on screen after
+## the rally it belonged to is the same class of defect as a stale movement
+## trail, which this file already clears for the same reason.
+func clear_cognition() -> void:
+	if cognition_tween != null and cognition_tween.is_valid():
+		cognition_tween.kill()
+	cognition_cues = []
+	cognition_time = 0.0
+	queue_redraw()
+
+
+## One badge above one head, for whichever players have a cue running now.
+##
+## The board is a coaching instrument, so it uses the unfiltered sampler and
+## shows private thought -- a setter weighing options nobody in the gym could
+## see. The 3D presentation is a camera in a room and uses the spectator
+## sampler instead. That difference is the only one between the two renderers,
+## and it is a difference of audience rather than of meaning.
+func _draw_cognition_badges() -> void:
+	if cognition_cues.is_empty():
+		return
+	var active: Dictionary = CognitionTimeline.active_by_player(
+		cognition_cues, cognition_time
+	)
+	for raw_player_id in active:
+		var player_id := int(raw_player_id)
+		var cue: Resource = active[player_id]
+		if not CognitionBadge.is_worth_drawing(cue):
+			continue
+		var anchor: Variant = _cognition_anchor(player_id)
+		if anchor == null:
+			continue
+		var center := Vector2(anchor)
+		var toward := _cognition_attention_offset(cue, center)
+		_draw_cognition_badge(
+			center + Vector2(0.0, -COGNITION_BADGE_LIFT), cue, toward
+		)
+
+
+## Where a badge hangs, in local coordinates, or null when the player is not on
+## this court -- an opponent on a home-only view, or a substituted voli.
+func _cognition_anchor(player_id: int) -> Variant:
+	if lineup != null and lineup.slot_for_player(player_id) >= 0:
+		return _court_to_local(
+			_player_court_position(player_id, lineup.slot_for_player(player_id))
+		)
+	if opponent_team != null and show_opponents \
+			and opponent_players_by_id.has(player_id):
+		return _court_to_local(opponent_live_player_positions.get(
+			player_id, opponent_team.court_position(player_id, "defense")
+		))
+	return null
+
+
+## Screen-space direction from the badge to whatever the cue is attending to.
+##
+## A cue naming a player is resolved against that player's live position, so a
+## setter's eyes follow a hitter who is still moving. Attention to the ball is
+## left flat rather than pointed at a guess: the ball's drawn position during a
+## movement phase is not the position the cue was computed against, and a pupil
+## that lies is worse than a pupil that rests.
+func _cognition_attention_offset(cue: Resource, from: Vector2) -> Vector2:
+	match str(cue.attention_kind):
+		"hitter", "setter", "teammate":
+			var target: Variant = _cognition_anchor(int(cue.attention_player_id))
+			if target == null:
+				return Vector2.ZERO
+			return (Vector2(target) - from)
+		"position":
+			return _court_to_local(Vector2(cue.attention_position)) - from
+	return Vector2.ZERO
+
+
+## How far under the state badge the ambient ring sits. Same rule as the
+## billboard's: present on twelve volis at once, and never the thing that draws
+## the eye.
+const COGNITION_AMBIENT_ALPHA: float = 0.5
+const COGNITION_AMBIENT_SCALE: float = 0.72
+
+
+func _draw_cognition_badge(
+	center: Vector2, cue: Resource, toward: Vector2
+) -> void:
+	var reading: Dictionary = CognitionBadge.describe(cue, toward)
+	if reading.is_empty():
+		return
+	## The ambient tier is a ring, not a badge.
+	##
+	## The coach's board draws the same meanings as the gym camera and is free to
+	## choose different geometry for them, so where the billboard sets an intent
+	## glyph this draws a thin arc: a shield family opens downward, a blade family
+	## upward, the pivot closes. It carries `progress` as the arc's sweep, which
+	## is the filling blade in a form a 2D board can draw without a second font.
+	##
+	## Without this branch every ambient cue -- one per voli per flight -- came
+	## back through the state vocabulary as a full COMMITTED diamond with an eye,
+	## on twelve volis at once.
+	if bool(reading.get("is_ambient", false)):
+		var strength: float = cue.glyph_strength(cognition_time)
+		if strength <= 0.01:
+			return
+		var family := str(reading.get("family", "hands"))
+		var ambient: Color = Color(reading.color)
+		ambient.a *= COGNITION_AMBIENT_ALPHA * strength
+		var sweep := lerpf(PI * 0.35, TAU * 0.92, float(reading.get("progress", 0.0)))
+		var from := -PI * 0.5 - sweep * 0.5
+		if family == "shield":
+			from = PI * 0.5 - sweep * 0.5
+		draw_arc(
+			center, COGNITION_BADGE_RADIUS * COGNITION_AMBIENT_SCALE,
+			from, from + sweep, 14, ambient, 1.6, true
+		)
+		return
+	## Was 11.0, which is over half a 20 px player marker -- the badge read as
+	## the voli rather than as a note about them. A marginal mark should be
+	## smaller than the thing it annotates.
+	var radius := COGNITION_BADGE_RADIUS
+	var color: Color = Color(reading.color)
+	_draw_cognition_outline(center, radius, str(reading.shape), color)
+	## The eye: a lens whose height is the openness, so a narrow scan and a wide
+	## recognition are different shapes rather than different colours.
+	var openness := float(reading.eye_openness)
+	var lens_height := maxf(radius * openness, 1.2)
+	draw_rect(
+		Rect2(center - Vector2(radius * 0.62, lens_height * 0.5),
+			Vector2(radius * 1.24, lens_height)),
+		Color(color, 0.22),
+	)
+	if openness > 0.2:
+		var pupil := Vector2(reading.pupil) * radius
+		draw_circle(
+			center + Vector2(pupil.x, clampf(pupil.y, -lens_height * 0.3, lens_height * 0.3)),
+			maxf(lens_height * 0.34, 1.6), color,
+		)
+	else:
+		## Closed: a line, which reads as "cannot see" even in a screenshot with
+		## no colour at all.
+		draw_line(
+			center - Vector2(radius * 0.6, 0.0),
+			center + Vector2(radius * 0.6, 0.0), color, 2.0,
+		)
+	var punctuation := str(reading.punctuation)
+	if not punctuation.is_empty():
+		draw_string(
+			ThemeDB.fallback_font, center + Vector2(radius * 0.9, -radius * 0.4),
+			punctuation, HORIZONTAL_ALIGNMENT_LEFT, 26, 11, color,
+		)
+	var trend := int(reading.trend_direction)
+	if trend != 0:
+		var tip := center + Vector2(-radius * 1.25, -radius * 0.55 * float(trend))
+		draw_line(
+			center + Vector2(-radius * 1.25, radius * 0.45 * float(trend)),
+			tip, color, 2.0,
+		)
+	## The state, named.
+	##
+	## The eye, the outline and the colour together say *how* a voli is thinking
+	## and never say *what about*, and reported plainly: "it is unclear what each
+	## one means". A shape vocabulary a reader has to be taught is a legend, and a
+	## board that needs a legend has failed. This is a coaching instrument, so the
+	## word goes on the mark.
+	##
+	## At most a few badges are live at once -- ball-tracking is filtered out
+	## before anything is drawn -- so this stays a label rather than becoming
+	## clutter.
+	var label := str(CognitionBadge.STATE_LABELS.get(str(cue.state), ""))
+	if not label.is_empty():
+		draw_string(
+			ThemeDB.fallback_font, center + Vector2(-24.0, radius + 10.0),
+			label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, color,
+		)
+
+
+## The outline, which carries the state independently of the colour.
+func _draw_cognition_outline(
+	center: Vector2, radius: float, shape: String, color: Color
+) -> void:
+	match shape:
+		"wedge":
+			## A call: a speech-bubble tail, because it is the one cue another
+			## player is meant to hear.
+			draw_circle(center, radius, Color(color, 0.16))
+			draw_arc(center, radius, 0.0, TAU, 28, color, 2.0)
+			draw_colored_polygon(
+				PackedVector2Array([
+					center + Vector2(-radius * 0.45, radius * 0.85),
+					center + Vector2(radius * 0.10, radius * 0.85),
+					center + Vector2(-radius * 0.15, radius * 1.55),
+				]), color,
+			)
+		"diamond":
+			var points := PackedVector2Array([
+				center + Vector2(0.0, -radius),
+				center + Vector2(radius, 0.0),
+				center + Vector2(0.0, radius),
+				center + Vector2(-radius, 0.0),
+			])
+			draw_colored_polygon(points, Color(color, 0.16))
+			draw_polyline(
+				PackedVector2Array(Array(points) + [points[0]]), color, 2.0
+			)
+		"dashed_ring":
+			for segment in range(8):
+				var from_angle := TAU * float(segment) / 8.0
+				draw_arc(
+					center, radius, from_angle, from_angle + TAU / 16.0, 4, color, 2.0
+				)
+		"burst":
+			draw_circle(center, radius, Color(color, 0.16))
+			for spike in range(8):
+				var angle := TAU * float(spike) / 8.0
+				draw_line(
+					center + Vector2(cos(angle), sin(angle)) * radius,
+					center + Vector2(cos(angle), sin(angle)) * radius * 1.42,
+					color, 2.0,
+				)
+		_:
+			draw_circle(center, radius, Color(color, 0.16))
+			draw_arc(center, radius, 0.0, TAU, 28, color, 2.0)

@@ -1,9 +1,12 @@
 class_name ApproachMechanicsSystem
 extends RefCounted
 
+const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
+const RallyPlayerState := preload("res://scripts/models/rally_player_state.gd")
 const RallyKinematicsModel := preload("res://scripts/simulation/rally_kinematics.gd")
 const RallyMovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
+const CourtConstants := preload("res://scripts/data/court_constants.gd")
 
 ## What a run-up has to deliver before a hitter can swing at full power, and
 ## before the whole shot menu is open to them. Named because the requirement
@@ -113,11 +116,17 @@ static func prepare_for_attack(
 	)
 	var target := Vector2(assignment.get("target", Vector2(0.5, 0.53)))
 	var start := approach_start_position(
-		target, str(assignment.get("lane", "Left Pin")), side
+		target, str(assignment.get("lane", "Left Pin")), side, null,
+		APPROACH_DEPTH, int(assignment.get("tempo", 3)),
 	)
 	var preparation_time := maxf(set_contact_time - release_time, 0.0)
+	## Run *through* the approach mark, not to it. This is the leg that ends
+	## where the run-up begins, so stopping dead on arrival makes every hitter
+	## re-accelerate from rest into their own swing -- which is exactly what was
+	## happening, and why 83% of attack contacts were placed beyond reach.
 	var projection := RallyMovementModel.project_toward(
-		actor, start, preparation_time, RallyPlayerState.MovementMode.TRANSITION
+		actor, start, preparation_time, RallyPlayerState.MovementMode.TRANSITION,
+		true,
 	)
 	var prepared := projection.get("actor") as RallyPlayerState
 	if prepared != null:
@@ -152,6 +161,260 @@ static func prepare_for_attack(
 
 ## Resolves the run-up that is physically possible from the actor's current
 ## state. This profile is consumed by the contact envelope and action menu.
+## The longest run-up anybody actually takes, in seconds.
+##
+## Three to four steps. Measured against the model's own numbers rather than
+## picked: `LEGACY_APPROACH_CEILING_MPS` and the acceleration band above put a
+## hitter at full approach speed inside a second, and a system-fit approach
+## distance is two to three and a half metres, so a second covers the runway with
+## something to spare. Generous on purpose -- the cap is there to stop hang time
+## being converted into speed, not to make approaches fail.
+const APPROACH_RUNUP_SECONDS: float = 1.10
+
+## Tempo is the hitter's relationship to setter release, not a set-height menu.
+##
+## T0 is retained as the existing faster-than-first-tempo vocabulary: the
+## hitter is already airborne when the setter releases. T1 is takeoff at
+## release, T2 is release during the approach footwork, and T3 begins after the
+## ball leaves the setter's hands. The values are progress through the hitter's
+## own run-up at release; the run-up duration therefore remains individual.
+const TEMPO_RELEASE_PROGRESS: Array[float] = [1.0, 1.0, 0.48, 0.0]
+const TEMPO_RELATIONSHIPS: Array[String] = [
+	"airborne before release",
+	"takeoff with release",
+	"approach in time with release",
+	"approach after release",
+]
+## A true third-tempo approach waits until the set can be seen before starting.
+const THIRD_TEMPO_START_DELAY_SECONDS: float = 0.08
+## T0 separates itself from T1 by leaving the floor shortly before release.
+const ZERO_TEMPO_TAKEOFF_LEAD_SECONDS: float = 0.08
+## Time between the last ground impulse and hand contact. More explosive hitters
+## reach the ball sooner, but nobody takes off and contacts on the same frame.
+const TAKEOFF_TO_CONTACT_SLOW_SECONDS: float = 0.25
+const TAKEOFF_TO_CONTACT_FAST_SECONDS: float = 0.18
+## A setter miss is bounded in seconds around the hitter's expected window.
+const TEMPO_RECOGNITION_ERROR_POOR_SECONDS: float = 0.18
+const TEMPO_RECOGNITION_ERROR_ELITE_SECONDS: float = 0.025
+const TEMPO_MINIMUM_FLIGHT_SECONDS: float = 0.10
+const TEMPO_MAXIMUM_FLIGHT_SECONDS: float = 1.65
+const FIRST_TEMPO_RELEASE_PROGRESS: float = 0.92
+const SECOND_TEMPO_RELEASE_PROGRESS: float = 0.05
+
+
+## The approach rhythm this hitter is offering the setter.
+##
+## There is deliberately no setter argument. The hitter owns when their steps
+## happen; the setter's job is to recognize and meet that expectation in
+## `coordinate_tempo`, not to manufacture the hitter's cadence from a label.
+static func tempo_intent(
+	hitter: VolleyballPlayer,
+	tempo: int,
+	runup_seconds: float,
+) -> Dictionary:
+	var index := clampi(tempo, 0, 3)
+	var runup := clampf(runup_seconds, 0.0, APPROACH_RUNUP_SECONDS)
+	var explosiveness := clampf(
+		float(hitter.explosiveness) / 100.0 if hitter != null else 0.5,
+		0.0, 1.0,
+	)
+	var repeatability := clampf(
+		float(hitter.approach_timing) / 100.0 if hitter != null else 0.5,
+		0.0, 1.0,
+	)
+	var release_progress := TEMPO_RELEASE_PROGRESS[index]
+	var delay := THIRD_TEMPO_START_DELAY_SECONDS if index == 3 else 0.0
+	var takeoff_offset := (1.0 - release_progress) * runup + delay
+	if index == 0:
+		takeoff_offset = -ZERO_TEMPO_TAKEOFF_LEAD_SECONDS
+	var takeoff_to_contact := lerpf(
+		TAKEOFF_TO_CONTACT_SLOW_SECONDS,
+		TAKEOFF_TO_CONTACT_FAST_SECONDS,
+		explosiveness,
+	)
+	return {
+		"tempo": index,
+		"relationship": TEMPO_RELATIONSHIPS[index],
+		"hitter_led": true,
+		"runup_seconds": runup,
+		"release_progress": release_progress,
+		"approach_start_delay_seconds": delay,
+		"takeoff_offset_seconds": takeoff_offset,
+		"takeoff_to_contact_seconds": takeoff_to_contact,
+		"expected_flight_seconds": clampf(
+			takeoff_offset + takeoff_to_contact,
+			TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS,
+		),
+		"hitter_repeatability": repeatability,
+	}
+
+
+## How the setter meets an individual hitter's offered rhythm.
+##
+## `natural_flight_seconds` is the old set-height answer. It has agency only
+## when `tactic_strictness` is at the extreme end; ordinary systems ask the
+## setter to meet the hitter. `signed_error` is supplied by the rally's stable
+## seeded stream so this pure model remains replayable and directly testable.
+static func coordinate_tempo(
+	intent: Dictionary,
+	setter: VolleyballPlayer,
+	pair_familiarity: float,
+	tactic_strictness: float,
+	natural_flight_seconds: float,
+	set_quality: float,
+	signed_error: float,
+) -> Dictionary:
+	var setter_read := clampf((
+		float(setter.tempo_control) * 0.42
+			+ float(setter.court_vision) * 0.24
+			+ float(setter.hand_control) * 0.20
+			+ float(setter.decision_making) * 0.14
+	) / 100.0, 0.0, 1.0) if setter != null else 0.0
+	var familiarity := clampf(pair_familiarity, 0.0, 1.0)
+	var repeatability := clampf(float(intent.get(
+		"hitter_repeatability", 0.5
+	)), 0.0, 1.0)
+	var recognition := clampf(
+		setter_read * 0.64 + familiarity * 0.22 + repeatability * 0.14,
+		0.0, 1.0,
+	)
+	## Below 0.84 the tactic informs selection but does not seize the hitter's
+	## feet. Only an exceptionally rigid, rehearsed system imposes the authored
+	## set shape over the individual rhythm.
+	var imposition := smoothstep(0.84, 0.98, clampf(tactic_strictness, 0.0, 1.0))
+	var expected := float(intent.get("expected_flight_seconds", 0.6))
+	var target := lerpf(expected, natural_flight_seconds, imposition)
+	var error_band := lerpf(
+		TEMPO_RECOGNITION_ERROR_POOR_SECONDS,
+		TEMPO_RECOGNITION_ERROR_ELITE_SECONDS,
+		recognition,
+	) * lerpf(1.15, 0.72, clampf(set_quality, 0.0, 1.0))
+	var error := clampf(signed_error, -1.0, 1.0) * error_band
+	var delivered := clampf(
+		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+	)
+	var result := intent.duplicate(true)
+	result.merge({
+		"setter_recognition": recognition,
+		"pair_familiarity": familiarity,
+		"tactic_strictness": tactic_strictness,
+		"tactic_imposition": imposition,
+		"natural_flight_seconds": natural_flight_seconds,
+		"set_quality": set_quality,
+		"coordination_signed_error": clampf(signed_error, -1.0, 1.0),
+		"called_expected_flight_seconds": expected,
+		"target_flight_seconds": target,
+		"coordination_error_seconds": delivered - expected,
+		"delivered_flight_seconds": delivered,
+	}, true)
+	return result
+
+
+## Re-read the hitter at the instant the setter releases.
+##
+## A tactical T1 is an expectation, not permission to move the hitter's feet.
+## If that hitter has completed only half of their runway at release, the ball
+## they are offering is a T2. In an ordinary system the setter meets the time
+## remaining in *that* approach; only the extreme `tactic_imposition` band keeps
+## the authored set shape instead. The tactical call, the setter's recognised
+## relationship and the relationship that actually happened are all retained,
+## so a synchronization failure is observable without mislabelling a slow ball.
+static func recognize_release_progress(
+	coordinated: Dictionary,
+	release_progress: float,
+) -> Dictionary:
+	var result := coordinated.duplicate(true)
+	var progress := clampf(release_progress, 0.0, 1.0)
+	var called_tempo := clampi(int(result.get("tempo", 3)), 0, 3)
+	var actual_tempo := achieved_tempo(result, progress)
+	var runup := maxf(float(result.get("runup_seconds", 0.0)), 0.0)
+	var delay := THIRD_TEMPO_START_DELAY_SECONDS if actual_tempo == 3 else 0.0
+	var takeoff_offset := (1.0 - progress) * runup + delay
+	if actual_tempo == 0:
+		takeoff_offset = -ZERO_TEMPO_TAKEOFF_LEAD_SECONDS
+	var observed_expected := clampf(
+		takeoff_offset + float(result.get("takeoff_to_contact_seconds", 0.22)),
+		TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS,
+	)
+	var imposition := clampf(float(result.get("tactic_imposition", 0.0)), 0.0, 1.0)
+	var natural := float(result.get("natural_flight_seconds", observed_expected))
+	var target := lerpf(observed_expected, natural, imposition)
+	var recognition := clampf(float(result.get("setter_recognition", 0.0)), 0.0, 1.0)
+	var quality := clampf(float(result.get("set_quality", 0.5)), 0.0, 1.0)
+	var error_band := lerpf(
+		TEMPO_RECOGNITION_ERROR_POOR_SECONDS,
+		TEMPO_RECOGNITION_ERROR_ELITE_SECONDS,
+		recognition,
+	) * lerpf(1.15, 0.72, quality)
+	var error := clampf(float(result.get(
+		"coordination_signed_error", 0.0
+	)), -1.0, 1.0) * error_band
+	var delivered := clampf(
+		target + error, TEMPO_MINIMUM_FLIGHT_SECONDS, TEMPO_MAXIMUM_FLIGHT_SECONDS
+	)
+	result.merge({
+		"requested_tempo": called_tempo,
+		"requested_relationship": TEMPO_RELATIONSHIPS[called_tempo],
+		"observed_release_progress": progress,
+		"recognized_tempo": actual_tempo,
+		"recognized_relationship": TEMPO_RELATIONSHIPS[actual_tempo],
+		"approach_start_delay_seconds": delay,
+		"takeoff_offset_seconds": takeoff_offset,
+		"expected_flight_seconds": observed_expected,
+		"target_flight_seconds": target,
+		"coordination_error_seconds": delivered - observed_expected,
+		"delivered_flight_seconds": delivered,
+	}, true)
+	return result
+
+
+## How much of the intended pre-release footwork could actually happen after
+## the hitter finished their prior responsibility and reached the runway.
+static func achieved_release_progress(
+	intent: Dictionary,
+	preparation_window_seconds: float,
+	to_mark_seconds: float,
+) -> float:
+	var intended := clampf(float(intent.get("release_progress", 0.0)), 0.0, 1.0)
+	if intended <= 0.0:
+		return 0.0
+	var needed := float(intent.get("runup_seconds", 0.0)) * intended
+	if needed <= 0.0001:
+		return intended
+	var spare := maxf(preparation_window_seconds - to_mark_seconds, 0.0)
+	return intended * clampf(spare / needed, 0.0, 1.0)
+
+
+static func release_position(
+	approach_start: Vector2,
+	contact: Vector2,
+	release_progress: float,
+) -> Vector2:
+	return approach_start.lerp(contact, clampf(release_progress, 0.0, 1.0))
+
+
+## What relationship actually happened, kept separate from what was called.
+## A requested T1 whose hitter only completed half the runway before release is
+## visibly and physically T2; preserving both labels is how the rally can say
+## the tactic missed without redefining the tactic after the fact.
+static func achieved_tempo(intent: Dictionary, release_progress: float) -> int:
+	var progress := clampf(release_progress, 0.0, 1.0)
+	var requested := clampi(int(intent.get("tempo", 3)), 0, 3)
+	if requested == 0 and progress >= FIRST_TEMPO_RELEASE_PROGRESS:
+		return 0
+	if progress >= FIRST_TEMPO_RELEASE_PROGRESS:
+		return 1
+	if progress > SECOND_TEMPO_RELEASE_PROGRESS:
+		return 2
+	return 3
+
+
+static func achieved_relationship(
+	intent: Dictionary, release_progress: float
+) -> String:
+	return TEMPO_RELATIONSHIPS[achieved_tempo(intent, release_progress)]
+
+
 static func evaluate_takeoff(
 	actor: RallyPlayerState,
 	target: Vector2,
@@ -168,16 +431,43 @@ static func evaluate_takeoff(
 		float(actor.player.lateral_speed), lateral_share * 0.65
 	) / 100.0
 	var fatigue_factor := LocomotionModel.fatigue_factor(actor.player)
-	var maximum_speed := LocomotionModel.legacy_maximum_speed(
-		actor.player, speed_rating, LocomotionModel.LEGACY_APPROACH_CEILING_MPS
-	)
+	## One model or the other, never a blend. See
+	## `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL` -- the legacy ceiling here
+	## disagrees with the stride model that times this same player's traversal,
+	## and not by a constant factor.
+	var maximum_speed := LocomotionModel.maximum_speed(
+		actor.player, RallyPlayerState.MovementMode.APPROACH
+	) if FeatureFlags.ENABLE_UNIFIED_SPEED_MODEL \
+		else LocomotionModel.legacy_maximum_speed(
+			actor.player, speed_rating, LocomotionModel.LEGACY_APPROACH_CEILING_MPS
+		)
 	var acceleration := lerpf(2.2, 6.8, float(actor.player.acceleration) / 100.0) \
 		* fatigue_factor
 	var alignment := 1.0
 	if actor.facing.length_squared() > 0.001 and direction.length_squared() > 0.001:
 		alignment = clampf((actor.facing.normalized().dot(direction) + 1.0) * 0.5, 0.0, 1.0)
 	var turn_delay := lerpf(0.20, 0.02, alignment)
-	var run_time := maxf(available_time - turn_delay, 0.0)
+	## **A hitter does not run for the whole flight. They wait, then approach.**
+	##
+	## `run_time` was the entire available time, so every extra second of hang
+	## time bought another second of running and `runway_completion` -- capacity
+	## over distance -- saturated at 1.0 for everybody. That was harmless while a
+	## set was solved as a ground-to-ground lob and hung for 0.23 s to 0.69 s. It
+	## stopped being harmless the moment sets were timed by how high they were put
+	## up: real hang times run 0.65 s to 1.47 s, so the run-up became roughly
+	## three times easier, and three separate gates went quiet at once -- extreme
+	## hitter displacement stopped costing position *or* quality, and transition
+	## speed stopped changing when a hitter arrived, because everyone arrived.
+	##
+	## A three or four step approach is about a second, whatever the set does.
+	## Beyond that a hitter is standing at the back of their runway watching the
+	## ball, which is what waiting looks like and is not a source of speed. So the
+	## window is capped and the surplus is spent standing still -- which is also
+	## the honest reading of what a high ball buys an offence: not a faster
+	## approach, but the certainty of getting to take one.
+	var run_time := minf(
+		maxf(available_time - turn_delay, 0.0), APPROACH_RUNUP_SECONDS
+	)
 	var start_speed := maxf(actor.velocity.dot(direction), 0.0)
 	var ending_speed := minf(start_speed + acceleration * run_time, maximum_speed)
 	var capacity := (start_speed + ending_speed) * 0.5 * run_time
@@ -258,25 +548,141 @@ static func evaluate_takeoff(
 ## from behind it, and "behind" is +y for the home side and -y for the opponent.
 ## Taking the home offset for an opponent would place their approach mark across
 ## the net, inside home territory.
+## Where a hitter starts their run-up, and therefore how diagonally they arrive.
+##
+## Single source of truth. `rally_simulator.gd` carried a second derivation of
+## this and the two disagreed in *sign*: this one sent `Left Pin` to
+## `target.x + 0.07`, which is *inward* of the contact, so pins ran inside-out.
+## The simulator's copy sent them outward. This one is what
+## `prepare_for_attack()` calls, so inside-out is what the engine actually did --
+## backwards from the sport, where an outside hitter starts wide and runs in.
+##
+## The lateral offset is now derived from an explicit **angle** rather than
+## stated as a fixed distance, so that changing the run-up's depth cannot
+## silently change its direction. The old ±0.07 against a 0.11 depth was about
+## seventeen degrees, pointed the wrong way; a real outside approach is around
+## thirty, pointed outward.
+##
+## This direction is load-bearing beyond appearance. `evaluate_takeoff()` reads
+## it: `lateral_share` blends transition speed toward lateral speed, alignment
+## drives the turn delay, and carried momentum only counts along it. A hitter's
+## available swing is centred on it too.
+const APPROACH_ANGLE_MIDDLE_DEGREES: float = 8.0
+const APPROACH_ANGLE_PIN_DEGREES: float = 30.0
+## How long a run-up is, as a share of court length, at the slowest tempo.
+##
+## The angle already knew the difference between a middle and a pin -- 8 degrees
+## against 30 -- but the *runway* was this one number for everybody, and tempo
+## was not an argument at all. So a middle running a first-tempo quick backed off
+## 2.52 m exactly like an outside hitter running a tempo-3 high ball, could not
+## cover it inside the set's flight, and had the contact dragged back through
+## their own approach: Front Quick aimed at 0.54 m off the net and delivered a
+## median of 1.92 m.
+##
+## A quick is a two-step approach and a high ball is a four-step one. `_lane` sat
+## unused in this function's signature for exactly this reason -- the shape was
+## anticipated and never wired -- and tempo is the honest driver rather than
+## lane, because it is what makes a shoot to the pin a different run from a high
+## ball to the same place.
+const APPROACH_DEPTH: float = 0.11
+## The share of the full runway each tempo gets, indexed by tempo 0 to 3.
+##
+## A quick is a two-to-three step approach and a high ball is a four-step one --
+## about 2.2 m against 3.3 m, a ratio near 0.67 -- so the fast end of this scale
+## belongs in that neighbourhood and not lower. Swept against the kill-rate
+## reference band of 0.38-0.60, over 300 rallies a step:
+##
+##   scale                       n    net    stuff  err    kill
+##   0.42 / 0.55 / 0.78 / 1.0   164  0.061  0.043  0.134  0.646
+##   0.58 / 0.70 / 0.86 / 1.0   169  0.065  0.047  0.154  0.544
+##   0.72 / 0.82 / 0.92 / 1.0   181  0.055  0.033  0.149  0.459
+##
+## All three hold attack error and stuff inside their bands; the first puts kill
+## above its band outright. The third is chosen because 0.72 is the ratio the
+## footwork implies, and it lands mid-band as a consequence rather than as the
+## reason -- 0.42 would be a one-metre run-up, which is not an approach.
+const APPROACH_DEPTH_BY_TEMPO: Array[float] = [0.72, 0.82, 0.92, 1.0]
+
+
+## The runway this tempo affords, as a share of court length.
+static func approach_depth_for_tempo(tempo: int) -> float:
+	return APPROACH_DEPTH * float(
+		APPROACH_DEPTH_BY_TEMPO[clampi(tempo, 0, APPROACH_DEPTH_BY_TEMPO.size() - 1)]
+	)
+
+## How far off perpendicular a run-up may end up.
+##
+## The angle chosen up front is only a *starting* offset; the route blend can
+## flatten it arbitrarily, and nothing checked the result. A real approach comes
+## in between about 15 and 45 degrees off the net's perpendicular -- past that it
+## stops being an approach and becomes a shuffle along the tape, which is what a
+## tempo-2 outside was drawn doing.
+const MAX_APPROACH_ANGLE_DEGREES: float = 42.0
+## Wide enough to begin outside the sideline, because that is where an outside
+## hitter's approach actually begins. Holding them on court capped the angle at
+## exactly the pins that need it most.
+const APPROACH_START_MIN_X: float = -0.10
+const APPROACH_START_MAX_X: float = 1.10
+## How much of the hitter's current position survives, so a player out of
+## position is not teleported across the court to draw a textbook run-up.
+## Applied to the base rather than to the finished offset -- folding it over the
+## sum shrank every textbook approach by 22% even for a hitter already standing
+## in the right place, which was never the point.
+const APPROACH_ROUTE_BLEND: float = 0.78
+
+
 static func approach_start_position(
 	target: Vector2,
-	lane: String,
+	_lane: String = "",
 	side: StringName = &"home",
+	current_position: Variant = null,
+	depth: float = APPROACH_DEPTH,
+	tempo: int = -1,
 ) -> Vector2:
-	var lateral_offset := 0.0
-	if lane == "Left Pin":
-		lateral_offset = 0.07
-	elif lane == "Right Pin":
-		lateral_offset = -0.07
-	if side == &"opponent":
-		return Vector2(
-			clampf(target.x + lateral_offset, 0.06, 0.94),
-			clampf(target.y - 0.11, 0.04, 0.46),
-		)
-	return Vector2(
-		clampf(target.x + lateral_offset, 0.06, 0.94),
-		clampf(target.y + 0.11, 0.54, 0.96),
+	## Tempo shortens the runway when the caller knows it. Left optional rather
+	## than required so a caller with no tempo to hand keeps the full run-up,
+	## which is the behaviour this function had for every caller before.
+	if tempo >= 0:
+		depth = approach_depth_for_tempo(tempo)
+	var pin_distance := absf(target.x - 0.50)
+	var wideness := clampf(pin_distance / 0.38, 0.0, 1.0)
+	var angle := lerpf(
+		APPROACH_ANGLE_MIDDLE_DEGREES, APPROACH_ANGLE_PIN_DEGREES, wideness
 	)
+	var forward_meters := absf(depth) * CourtConstants.COURT_LENGTH_METERS
+	var lateral_meters := forward_meters * tan(deg_to_rad(angle))
+	var outward := signf(target.x - 0.50) * lateral_meters \
+		/ CourtConstants.COURT_WIDTH_METERS
+	var base_x := target.x
+	if current_position is Vector2:
+		base_x = lerpf(
+			(current_position as Vector2).x, target.x, APPROACH_ROUTE_BLEND
+		)
+	var start_x := clampf(
+		base_x + outward, APPROACH_START_MIN_X, APPROACH_START_MAX_X
+	)
+	## Run *into* the net, not along it.
+	##
+	## `APPROACH_ROUTE_BLEND` pulls the start toward wherever the hitter happens
+	## to be standing, so a voli who is wide of their lane gets a start that is
+	## barely ahead of the contact and mostly beside it. The angle computed above
+	## is then thrown away: the runway solved for the right *distance* and the
+	## wrong *direction*, and a tempo-2 outside came out running parallel to the
+	## tape and arriving sideways.
+	##
+	## The lateral leg is not negotiable -- they do have to get to the pin -- so
+	## the depth is what gives. Lengthening the runway until the angle is legal
+	## keeps both the destination and the shape of the approach, and it costs the
+	## hitter time, which is the honest price of being out of position.
+	if FeatureFlags.ENABLE_PERPENDICULAR_APPROACH:
+		var lateral_run := absf(target.x - start_x) * CourtConstants.COURT_WIDTH_METERS
+		var forward_run := maxf(forward_meters, 0.01)
+		if lateral_run / forward_run > tan(deg_to_rad(MAX_APPROACH_ANGLE_DEGREES)):
+			forward_meters = lateral_run / tan(deg_to_rad(MAX_APPROACH_ANGLE_DEGREES))
+			depth = forward_meters / CourtConstants.COURT_LENGTH_METERS
+	if side == &"opponent":
+		return Vector2(start_x, clampf(target.y - depth, 0.04, 0.46))
+	return Vector2(start_x, clampf(target.y + depth, 0.54, 0.96))
 
 
 ## The families this hitter can execute cleanly off this approach. A family is
@@ -315,35 +721,64 @@ static func attack_family_deficit(
 	arrival_margin: float,
 	family: String,
 ) -> float:
+	var terms := attack_family_deficit_terms(
+		player, profile, arrival_margin, family
+	)
+	return float(terms.get("total", 0.0))
+
+
+## The same shortfall, itemised.
+##
+## Kept as the single implementation with `attack_family_deficit()` reading its
+## total, rather than a parallel diagnostic that recomputes the sum -- a second
+## copy of this arithmetic would be free to drift from the one the game plays,
+## and then a probe could report a term the swing never paid.
+##
+## Worth having because the total on its own is unattributable. The opponent
+## backed off 71% of swings against the home side's 2%, and nothing published
+## could say whether that was ratings, the run-up, or arriving late -- three
+## fixes in entirely different files.
+static func attack_family_deficit_terms(
+	player: VolleyballPlayer,
+	profile: Dictionary,
+	arrival_margin: float,
+	family: String,
+) -> Dictionary:
+	var terms := {
+		"rating": 0.0, "lateral_control": 0.0, "runup_quality": 0.0,
+		"arrival_margin": 0.0, "power_access": 0.0, "total": 0.0,
+	}
 	if player == null:
-		return 0.0
+		return terms
 	var requirement: Dictionary = ATTACK_FAMILY_REQUIREMENTS.get(family, {})
 	if requirement.is_empty():
-		return 0.0
-	var deficit := 0.0
+		return terms
 	if requirement.has("rating"):
-		deficit += maxf(
+		terms["rating"] = maxf(
 			float(requirement["rating_floor"])
 			- float(player.get(str(requirement["rating"]))),
 			0.0,
 		) / 100.0
 	if requirement.has("lateral_control"):
-		deficit += maxf(
+		terms["lateral_control"] = maxf(
 			float(requirement["lateral_control"])
 			- float(profile.get("lateral_control", 0.0)), 0.0
 		)
 	if requirement.has("runup_quality"):
-		deficit += maxf(
+		terms["runup_quality"] = maxf(
 			float(requirement["runup_quality"])
 			- float(profile.get("runup_quality", 0.0)), 0.0
 		)
 	if requirement.has("arrival_margin"):
-		deficit += maxf(
+		terms["arrival_margin"] = maxf(
 			float(requirement["arrival_margin"]) - arrival_margin, 0.0
 		) / ARRIVAL_DEFICIT_SCALE
 	if bool(requirement.get("power_access", false)):
-		deficit += _power_access_deficit(profile)
-	return deficit
+		terms["power_access"] = _power_access_deficit(profile)
+	terms["total"] = float(terms["rating"]) + float(terms["lateral_control"]) \
+		+ float(terms["runup_quality"]) + float(terms["arrival_margin"]) \
+		+ float(terms["power_access"])
+	return terms
 
 
 ## The run-up shortfall behind a failed `power_access`. The profile reports the

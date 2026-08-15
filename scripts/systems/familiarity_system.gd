@@ -14,6 +14,8 @@ static func initialize_player(player: VolleyballPlayer, rng: RandomNumberGenerat
 	player.primary_position = player.position_role
 	player.natural_positions = [player.position_role]
 	player.position_familiarity.clear()
+	## A palate starts where they grew up and grows from there. See `FoodSupply`.
+	player.palate_regions = [player.home_region] as Array[String]
 	for position_name in POSITIONS:
 		player.position_familiarity[position_name] = 92 if position_name == player.position_role else roundi(18.0 + 35.0 * similarity(player.position_role, position_name))
 	if rng != null:
@@ -66,8 +68,20 @@ static func familiarity_label(value: float) -> String:
 static func execution_modifier(player: VolleyballPlayer) -> float:
 	return 0.82 + float(player.position_familiarity.get(player.position_role, 0.0)) / 100.0 * 0.18
 
+## How much this voli takes from having seen a ball once.
+##
+## `adaptability` is the individual half and has always been here. The regional
+## half is the tradition that taught them to watch: a Taktikãni is not a better
+## athlete for having seen the same set three times, they are a better *reader*,
+## and that is the only mechanism in the game that makes a side genuinely harder
+## to play against in the fourth set than in the first.
+##
+## Read from `home_region` for the same reason `stamina_fatigue_scale` is -- this
+## is a habit of attention formed growing up, and it travels with the voli rather
+## than with the badge on their shirt.
 static func record_exposure(player: VolleyballPlayer, tags: Array[String], amount: float = 1.0) -> void:
-	var modifier := 0.65 + player.adaptability / 100.0 * 0.90
+	var modifier := (0.65 + player.adaptability / 100.0 * 0.90) \
+		* VolleyballRegions.read_rate(player.home_region)
 	for tag in tags: player.situation_experience[tag] = float(player.situation_experience.get(tag, 0.0)) + amount * modifier
 
 static func familiarity(player: VolleyballPlayer, tags: Array[String]) -> float:
@@ -89,3 +103,47 @@ static func read_modifier(player: VolleyballPlayer, tags: Array[String], scoutin
 	var mental := (player.anticipation * 0.35 + player.court_vision * 0.25 \
 		+ player.tactical_discipline * 0.20 + player.adaptability * 0.20) / 100.0
 	return clampf((known * 0.55 + scouting * 0.25 + mental * 0.20) - 0.50, -0.10, 0.10)
+
+
+## ## Seeding a squad's pair table from how long they have been together
+##
+## `PairFamiliarity` starts every pair at its baseline, which is right for two
+## volis who genuinely just met and wrong for a roster that has been training
+## together for years. A fresh career would open with one flat number for every
+## pair, and a connection drawn between six identical numbers says nothing at
+## all -- it would take most of a season before the quantity had anything to
+## report.
+##
+## There is no tenure field on a voli, and inventing one for this would be a new
+## model to feed and persist. What the roster does carry is **age**, and a
+## squad's shared history is bounded by its youngest member's career: two
+## thirty-year-olds at an established club have plausibly overlapped for years,
+## and anyone in the room with a twenty-year-old has known them for at most a
+## few seasons.
+##
+## So the seed is the *younger* voli's plausible years at a club, which is
+## crude and honest, and stated as such rather than dressed up: it is a starting
+## position that gets overwritten by the first season of real matches.
+const PAIR_SEED_FIRST_SEASON_AGE: float = 19.0
+const PAIR_SEED_PER_SEASON: float = 4.5
+const PAIR_SEED_CEILING: float = 62.0
+
+
+static func seed_pair_familiarity(players: Array, table: Dictionary) -> void:
+	for first in players:
+		for second in players:
+			if int(first.id) >= int(second.id):
+				continue
+			var shared := minf(
+				float(first.age) - PAIR_SEED_FIRST_SEASON_AGE,
+				float(second.age) - PAIR_SEED_FIRST_SEASON_AGE,
+			)
+			var seeded := PairFamiliarity.BASELINE \
+				+ maxf(shared, 0.0) * PAIR_SEED_PER_SEASON
+			## Capped below the ceiling a played season can reach, so a squad
+			## that has actually played together always outranks one that is
+			## merely old. The seed is a floor on a relationship, not a
+			## substitute for one.
+			table[PairFamiliarity.key(int(first.id), int(second.id))] = minf(
+				seeded, PAIR_SEED_CEILING
+			)

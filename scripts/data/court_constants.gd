@@ -5,14 +5,50 @@ extends RefCounted
 ## opponent baseline (0.0) to the home baseline (1.0). The net is at Y = 0.5.
 
 const NET_Y: float = 0.5
+## Not the end line, despite the name: the end lines are Y = 0.0 and Y = 1.0
+## (see the frame described above, and `_court_to_local`, which maps that range
+## onto the drawn court). This is the deepest position a player is placed at,
+## inset from the line, and it is read as such everywhere it is used.
 const HOME_BASELINE_Y: float = 0.96
 ## Full-court dimensions, used to convert normalised offsets into real distances.
 const COURT_WIDTH_METERS: float = 9.0
 const COURT_LENGTH_METERS: float = 18.0
+## Height of the tape. Nothing consulted this before ball flight was solved from
+## a contact height -- with the landing point chosen first and the arc
+## back-solved to reach it, no ball could fail to clear the net, so there was
+## nothing to consult it with.
+const NET_HEIGHT_METERS: float = 2.43
 ## Each half court is 9 m deep. The attack line is 3 m from the net, leaving a
 ## 3 m front zone and 6 m back zone (a 1:2 depth ratio).
 const HOME_ATTACK_LINE_Y: float = 0.653333
 const OPPONENT_ATTACK_LINE_Y: float = 0.346667
+
+## The serve is struck from the service zone, which is behind the end line.
+##
+## Both origins used to be `Vector2` literals repeated at six call sites, and
+## both sat 1.44 m *inside* their own baseline -- the server standing in their
+## own back zone, on the court, which is a fault before it is anything else. It
+## also shortened every serve by the depth of the service zone, so serve flight
+## time, the receiver's reading angle and the reception's difficulty were all
+## measured from a contact point that cannot occur.
+##
+## A metre back from the line is an ordinary standing-serve contact point. It is
+## deliberately modest: the tactical board reserves a 34 px margin outside the
+## court rect, which at typical board sizes is about one metre, so the server
+## stays visible rather than being drawn into the panel edge. Run-up depth for
+## jump serves is a separate thing to model, not a bigger number here.
+const SERVE_DEPTH_BEHIND_BASELINE_METERS: float = 1.0
+
+
+## Where a serve is struck from, given the server's lateral position.
+##
+## `x` stays a caller's choice because the two sides do not currently agree on
+## it -- home serves from 0.82 and the opponent from 0.80, a drift that survived
+## precisely because each side had its own literal. Unifying it would move both
+## sides' serve angles, which is a calibration change and not this one.
+static func serve_origin(x: float, home_side: bool) -> Vector2:
+	var depth := SERVE_DEPTH_BEHIND_BASELINE_METERS / COURT_LENGTH_METERS
+	return Vector2(x, 1.0 + depth if home_side else -depth)
 
 const LANES: Array[String] = [
 	"Left Pin", "Front Quick", "Right Quick", "Right Pin", "Pipe",
@@ -25,6 +61,95 @@ const LANE_X := {
 	"Right Pin": 0.88,
 	"Pipe": 0.50,
 }
+
+## The region of court each lane actually covers -- along the net and off it.
+##
+## `LANE_X` is one point per lane and was being used as though it were the lane
+## itself: `lane_target` returned it, the setter aimed at it, and the only reason
+## two attacks ever landed in different places was execution scatter around a
+## constant. Measured over 300 rallies that produced four bands about 1.5 m wide
+## with dead net between them, and a 3.1 m stretch where no ball was ever struck.
+##
+## Depth belongs here for the same reason x does. Holding one shared depth
+## constant for every lane meant the pipe's four metres and a pin's half metre
+## were the same field, so the only way to summarise contact depth was to pool
+## lanes that have nothing to do with each other -- which is exactly what made
+## the first tightness sweep unreadable. A zone owns both of its axes.
+##
+## `depth_m` is metres from the tape on the hitter's own side. Quicks live tight
+## because that is what makes them quick; the pins have room to be set off the
+## net; the pipe is a back-row ball and sits behind the attack line.
+##
+## Every range is centred on the constant it replaced -- 0.54 m for the front
+## lanes, 4.00 m for the pipe -- so that changing the near-net tail does not
+## also move the ordinary ball back into the forgiving, block-avoiding depth
+## this model was introduced to remove. A pin may ask for a ball 32 cm off the
+## tape and a quick 25 cm off it, but neither asks for the 18-25 cm tail that
+## puts the ball radius and the hitter's reaching hand effectively in the net.
+const LANE_ZONE := {
+	"Left Pin": {"x": Vector2(0.02, 0.24), "depth_m": Vector2(0.32, 0.76)},
+	"Front Quick": {"x": Vector2(0.28, 0.50), "depth_m": Vector2(0.25, 0.83)},
+	"Right Quick": {"x": Vector2(0.50, 0.72), "depth_m": Vector2(0.25, 0.83)},
+	"Right Pin": {"x": Vector2(0.76, 0.98), "depth_m": Vector2(0.32, 0.76)},
+	## Behind the three-metre line with room to spare, because delivery scatter
+	## reaches +/-1.4 m and a zone edge is not a legality guarantee while the
+	## delivery can cross it -- measured at 3 back-row swings in 124 struck in
+	## front of the line from a zone starting at 3.20 m.
+	"Pipe": {"x": Vector2(0.35, 0.65), "depth_m": Vector2(3.40, 4.60)},
+}
+
+
+static func lane_range(lane_name: String) -> Vector2:
+	return Vector2(LANE_ZONE.get(lane_name, {}).get("x", Vector2(0.40, 0.60)))
+
+
+## How far off the net this lane may be set, in metres, as a min/max pair.
+## The nearest a set to this lane may be *delivered*, as normalised y on the
+## hitter's own half.
+##
+## A zone edge is not a legality guarantee. Delivery scatter reaches about
+## +/-1.4 m, so a back-row zone starting behind the three-metre line still puts
+## balls in front of it -- measured at 3 back-row swings in 124 from a zone
+## starting at 3.20 m, and 2 in 119 from one starting at 3.40 m. Moving the zone
+## back again only trades legality for a pipe nobody would set. The floor belongs
+## on the delivered point, where the rule actually applies.
+##
+## Front-row lanes keep the general floor: they have no attack line to respect.
+static func lane_delivery_min_y(lane_name: String, general_min_y: float) -> float:
+	if lane_name != "Pipe":
+		return general_min_y
+	return maxf(
+		general_min_y,
+		NET_Y + (ATTACK_LINE_METERS + BACK_ROW_TAKEOFF_MARGIN_METERS)
+			/ COURT_LENGTH_METERS,
+	)
+
+
+## Where the attack line sits, and how much room behind it a back-row set is
+## placed so the hitter takes off legally rather than exactly on the line.
+const ATTACK_LINE_METERS: float = 3.0
+const BACK_ROW_TAKEOFF_MARGIN_METERS: float = 0.35
+
+
+static func lane_depth_range_meters(lane_name: String) -> Vector2:
+	return Vector2(
+		LANE_ZONE.get(lane_name, {}).get("depth_m", Vector2(0.30, 0.90))
+	)
+
+
+## The middle of a lane's region, which is what a caller wanting one
+## representative point should get.
+static func lane_target(lane_name: String) -> Vector2:
+	var span := lane_range(lane_name)
+	var depth := lane_depth_range_meters(lane_name)
+	return Vector2(
+		(span.x + span.y) * 0.5,
+		NET_Y + (depth.x + depth.y) * 0.5 / COURT_LENGTH_METERS,
+	)
+
+
+
+
 
 const TEMPOS: Array[int] = [0, 1, 2, 3]
 
@@ -60,7 +185,16 @@ const SERVE_RECEIVE_STAGING_POSITIONS := {
 
 ## A shielded setter stands close to the net so the serve travels past them to
 ## the passers. They are never a primary receiver, in either row.
-const SETTER_SHIELD_Y: float = 0.63
+##
+## 0.63 was not close to the net. The net is at 0.50, the front-row slots sit at
+## 0.56-0.57, and `HOME_ATTACK_LINE_Y` is 0.6533 -- so the old value put a
+## front-row setter *behind* their own front row, essentially on the attack
+## line. A back-row setter, placed at their partner's depth plus 0.09, landed at
+## roughly 0.655. The two rows were 0.025 apart, about 45 cm on an 18 m court:
+## the front/back branch below was structurally right and produced two
+## positions nobody could tell apart, which is why a front-row setter read as
+## starting in the back row.
+const SETTER_SHIELD_Y: float = 0.545
 
 const BACK_ROW_SLOTS: Array[int] = [1, 5, 6]
 
@@ -149,10 +283,30 @@ static func slot_position(slot_number: int) -> Vector2:
 	return ROTATION_SLOT_POSITIONS.get(slot_number, UNRESOLVED_SLOT_POSITION)
 
 
-static func lane_target(lane_name: String) -> Vector2:
-	var lane_x := float(LANE_X.get(lane_name, 0.5))
-	var target_y := 0.66 if lane_name == "Pipe" else 0.53
-	return Vector2(lane_x, target_y)
+
+## Which lane a contact at this x belongs to.
+##
+## The inverse of `lane_target`, and it exists because one side of the net was
+## reading a lane it never had. `_choose_opponent_attack` returns a hitter, a
+## contact point and a shot -- it has never returned a lane -- so every caller
+## asking it for one got the `"Left Pin"` default, and every opponent swing in
+## the game was resolved as a left-pin swing no matter where the hitter was
+## standing. Nothing noticed while the lane only labelled an event; it started
+## to matter the moment the lane began deciding the ball's natural course.
+static func lane_at_x(contact_x: float) -> String:
+	var nearest := "Front Quick"
+	var best := INF
+	for lane_name in LANES:
+		## The pipe is a back-row lane, not a place on the net. Choosing it from
+		## an x alone would put a front-row hitter on a pipe every time they
+		## contacted near the middle.
+		if lane_name == "Pipe":
+			continue
+		var distance := absf(float(LANE_X[lane_name]) - contact_x)
+		if distance < best:
+			best = distance
+			nearest = lane_name
+	return nearest
 
 
 static func is_normalized(point: Vector2) -> bool:
@@ -209,6 +363,170 @@ static func serve_receive_passer_slots(
 	return chosen
 
 
+## Which players should form the default passing unit for this lineup.
+##
+## Rotation slots describe where a player must stand at serve contact; they do
+## not describe that player's job.  The slot-only fallback above is useful when
+## no roster is available, but using it for a real team routinely enrolled an
+## opposite or a middle while an outside hitter waited out of the pattern.  A
+## three-passer receive should begin with the roles trained to pass -- libero
+## and outsides -- and only recruit another position when the lineup does not
+## contain enough of them.  Attributes break ties and choose any required
+## replacement; they do not let a marginal rating difference hide a specialist.
+static func roster_serve_receive_passer_slots(
+	lineup: RotationLineup,
+	players: Array,
+	passer_count: int,
+) -> Array[int]:
+	if lineup == null or passer_count <= 0:
+		return []
+	var by_id := {}
+	for raw_player in players:
+		var player := raw_player as VolleyballPlayer
+		if player != null:
+			by_id[int(player.id)] = player
+	if by_id.is_empty():
+		return serve_receive_passer_slots(
+			lineup.slot_for_player(lineup.active_setter_id()), passer_count
+		)
+
+	var specialists: Array[Dictionary] = []
+	var replacements: Array[Dictionary] = []
+	var setter_id := int(lineup.active_setter_id())
+	for slot_number in range(1, 7):
+		var player_id := int(lineup.player_at_slot(slot_number))
+		if player_id < 0 or player_id == setter_id:
+			continue
+		var player := by_id.get(player_id) as VolleyballPlayer
+		if player == null:
+			continue
+		var row := {
+			"slot": slot_number,
+			"score": _serve_receive_player_score(player),
+		}
+		if str(player.position_role) in ["Libero", "Outside Hitter"]:
+			specialists.append(row)
+		else:
+			replacements.append(row)
+
+	var strongest_first := func(a: Dictionary, b: Dictionary) -> bool:
+		var score_a := float(a.get("score", 0.0))
+		var score_b := float(b.get("score", 0.0))
+		if not is_equal_approx(score_a, score_b):
+			return score_a > score_b
+		return int(a.get("slot", 7)) < int(b.get("slot", 7))
+	specialists.sort_custom(strongest_first)
+	replacements.sort_custom(strongest_first)
+
+	var chosen: Array[int] = []
+	for row in specialists:
+		if chosen.size() >= passer_count:
+			break
+		chosen.append(int(row.slot))
+	for row in replacements:
+		if chosen.size() >= passer_count:
+			break
+		chosen.append(int(row.slot))
+	return chosen
+
+
+## A stable player-lane ordering for audits and authored systems that explicitly
+## request one.
+##
+## This is deliberately not the live default. Holding Outside 1/libero/Outside 2
+## to the same left-middle-right lanes erased the rotation ace spread, but also
+## kept the receiving outside in the same deep corner after first contact and
+## suppressed a trusted hitter's attack availability. Production therefore uses
+## the same roster-selected passing unit with minimum-travel seam assignment;
+## this stable ordering remains as the paired counterfactual that exposed the
+## trade-off. Ids are only a deterministic fallback for generic position codes.
+static func roster_serve_receive_seam_slots(
+	lineup: RotationLineup,
+	players: Array,
+	passer_count: int,
+) -> Array[int]:
+	var selected := roster_serve_receive_passer_slots(lineup, players, passer_count)
+	if selected.size() <= 1:
+		return selected
+	var by_id := {}
+	for raw_player in players:
+		var player := raw_player as VolleyballPlayer
+		if player != null:
+			by_id[int(player.id)] = player
+	if by_id.is_empty():
+		return selected
+	var outsides: Array[Dictionary] = []
+	var liberos: Array[Dictionary] = []
+	var replacements: Array[Dictionary] = []
+	for slot_number in selected:
+		var player := by_id.get(lineup.player_at_slot(slot_number)) as VolleyballPlayer
+		if player == null:
+			continue
+		var row := {
+			"slot": slot_number,
+			"id": int(player.id),
+			"code": str(player.position_code),
+			"score": _serve_receive_player_score(player),
+		}
+		if player.position_role == "Outside Hitter":
+			outsides.append(row)
+		elif player.position_role == "Libero":
+			liberos.append(row)
+		else:
+			replacements.append(row)
+	outsides.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var code_a := str(a.code)
+		var code_b := str(b.code)
+		if code_a != code_b:
+			return code_a < code_b
+		return int(a.id) < int(b.id)
+	)
+	liberos.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.id) < int(b.id)
+	)
+	replacements.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var score_a := float(a.score)
+		var score_b := float(b.score)
+		if not is_equal_approx(score_a, score_b):
+			return score_a > score_b
+		return int(a.id) < int(b.id)
+	)
+
+	var ordered: Array[int] = []
+	## Three-passer receive is the live default: outside/libero/outside. A
+	## missing specialist is filled below without changing anybody else's lane.
+	if not outsides.is_empty():
+		ordered.append(int(outsides[0].slot))
+	if not liberos.is_empty():
+		ordered.append(int(liberos[0].slot))
+	elif not replacements.is_empty():
+		ordered.append(int(replacements[0].slot))
+	if outsides.size() >= 2:
+		ordered.append(int(outsides[1].slot))
+	for group in [outsides, liberos, replacements]:
+		for row in group:
+			var slot_number := int(row.slot)
+			if slot_number not in ordered:
+				ordered.append(slot_number)
+	for slot_number in selected:
+		if slot_number not in ordered:
+			ordered.append(slot_number)
+	var result: Array[int] = []
+	for slot_number in ordered:
+		if result.size() >= passer_count:
+			break
+		result.append(slot_number)
+	return result
+
+
+static func _serve_receive_player_score(player: VolleyballPlayer) -> float:
+	if player == null:
+		return 0.0
+	return float(player.reception) * 0.65 \
+		+ float(player.ball_control) * 0.20 \
+		+ float(player.composure) * 0.15
+
+
 ## Where the setter waits for the serve. They are shielded in both rows: a
 ## front-row setter stands at the net so the serve passes them, and a back-row
 ## setter hides directly behind their rotational front-row partner.
@@ -219,8 +537,17 @@ static func setter_serve_receive_position(setter_slot: int) -> Vector2:
 	var partner_slot := int(BACK_FRONT_SLOT_PAIRS.get(setter_slot, 2))
 	var partner := slot_position(partner_slot)
 	## Stay behind the partner (larger Y is deeper on the home side) so the
-	## overlap rule holds at serve contact while the partner screens the setter.
-	return Vector2(clampf(partner.x, 0.10, 0.90), clampf(partner.y + 0.09, 0.53, 0.94))
+	## overlap rule holds at serve contact while the partner screens the setter,
+	## and behind the attack line as well -- a back-row setter who starts level
+	## with it has no release to run, and is indistinguishable from a front-row
+	## one. The journey to the net after the serve is struck is the difference
+	## between the two rows, so the starting depth has to leave room for it.
+	return Vector2(
+		clampf(partner.x, 0.10, 0.90),
+		clampf(
+			maxf(partner.y + 0.09, HOME_ATTACK_LINE_Y + 0.03), 0.53, 0.94
+		),
+	)
 
 
 ## Exhaustive minimum-travel matching of passer slots to seams. Returns the slot
@@ -289,6 +616,8 @@ static func serve_receive_formation(
 	formation_name: String = DEFAULT_SERVE_RECEIVE_FORMATION,
 	libero_slot: int = -1,
 	opponent_side: bool = false,
+	passer_slots_override: Array[int] = [],
+	fixed_seam_order: bool = false,
 ) -> Dictionary:
 	var preset: Dictionary = SERVE_RECEIVE_FORMATIONS.get(
 		formation_name, SERVE_RECEIVE_FORMATIONS[DEFAULT_SERVE_RECEIVE_FORMATION]
@@ -296,9 +625,11 @@ static func serve_receive_formation(
 	var lanes: Array = preset["lanes"]
 	var depth := float(preset["depth"])
 	var lift := float(preset["outside_depth_lift"])
-	var passer_slots := serve_receive_passer_slots(
-		setter_slot, int(preset["passer_count"]), libero_slot
-	)
+	var passer_slots: Array[int] = passer_slots_override.duplicate() \
+		if not passer_slots_override.is_empty() \
+		else serve_receive_passer_slots(
+			setter_slot, int(preset["passer_count"]), libero_slot
+		)
 
 	## Build the seam positions. Lift is normalised against the widest seam in
 	## this preset, so the outermost passers receive the full lift and the
@@ -322,7 +653,12 @@ static func serve_receive_formation(
 	## front-left passer sent to the deep middle while the back-middle passer ran
 	## to the right seam. With at most five passers an exhaustive search is cheap
 	## and always optimal.
-	var assignment := _best_seam_assignment(passer_slots, seams)
+	var assignment: Array[int] = []
+	if fixed_seam_order:
+		for index in range(mini(passer_slots.size(), seams.size())):
+			assignment.append(passer_slots[index])
+	else:
+		assignment = _best_seam_assignment(passer_slots, seams)
 
 	var formation := {}
 	for lane_index in range(assignment.size()):

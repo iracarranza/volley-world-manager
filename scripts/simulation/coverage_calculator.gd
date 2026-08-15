@@ -1,6 +1,10 @@
 class_name CoverageCalculator
 extends RefCounted
 
+const FeatureFlags := preload("res://scripts/simulation/rally_feature_flags.gd")
+const RallyPlayerState := preload("res://scripts/models/rally_player_state.gd")
+const MovementModel := preload("res://scripts/simulation/rally_movement_system.gd")
+
 ## Court geometry and normalised-to-metres conversion both live elsewhere:
 ## `CourtConstants` owns the dimensions and `RallyKinematics` owns the
 ## conversion. This file used to carry its own copy of each -- a third set of
@@ -14,36 +18,154 @@ static func court_distance_meters(from: Vector2, to: Vector2) -> float:
 	return RallyKinematics.court_distance_meters(from, to)
 
 
+## `origin` is where this body actually is. Omit it and the zone's centre is
+## used, which is where a voli stands in a serve-receive formation and is why
+## the two were ever the same thing.
+##
+## **They are not the same thing anywhere else.** Mid-rally nobody is at their
+## zone centre: the passer just played the ball, the setter has been chasing it,
+## the pins are starting approaches. Measuring reach from the formation position
+## would ask whether a voli could have got there *from where they were supposed
+## to be standing*, which is the same confusion between a body and its
+## assignment that `assigned_reach` below was already caught making.
+##
+## `unassigned_reach_meters` lets a caller admit candidates with no zone for this
+## contact at all. The guard used to reject them outright -- a null-zone leash
+## doing exactly what the radius was stopped from doing one field down.
+## How far past their own reach a voli still owns the ball, in metres.
+##
+## One stride. A defender takes a step for a ball at the edge of their platform
+## and it is still unambiguously their ball; they do not take four. Sized
+## against `_base_reach_meters`, which runs about 1.2-1.4 m, so the immediate
+## envelope is roughly two metres across and a court holds several of them
+## without overlapping much.
+##
+## Unmeasured as a *threshold* -- nothing had published an immediate-control
+## rate before this existed -- but bounded by meaning rather than by taste: it
+## is a stride, and a stride is not a metre and a half.
+const IMMEDIATE_CONTROL_STEP_METERS: float = 0.45
+
+
 static func evaluate_arrival(
 	player: VolleyballPlayer,
 	zone: Resource,
 	landing_point: Vector2,
 	ball_time_seconds: float,
 	contact_skill: String,
+	origin: Variant = null,
+	unassigned_reach_meters: float = -1.0,
 ) -> Dictionary:
-	if player == null or zone == null or not bool(zone.enabled):
+	if player == null:
 		return {"reachable": false, "claim_score": -1000.0}
-	var distance := court_distance_meters(zone.center, landing_point)
+	var assigned := zone != null and bool(zone.enabled)
+	if not assigned and unassigned_reach_meters < 0.0:
+		return {"reachable": false, "claim_score": -1000.0}
+	var from_point: Vector2 = Vector2(origin) if origin != null 		else (Vector2(zone.center) if assigned else landing_point)
+	var distance := court_distance_meters(from_point, landing_point)
 	var anticipation := float(player.anticipation) / 100.0
 	var reaction_delay := lerpf(0.56, 0.18, anticipation)
 	var available_time := maxf(ball_time_seconds - reaction_delay, 0.0)
 	var speed_rating := float(player.lateral_speed) / 100.0
 	var acceleration_rating := float(player.acceleration) / 100.0
-	var movement_speed := LocomotionModel.legacy_maximum_speed(
-		player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
-	)
+	## See `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL`. The legacy ceiling runs
+	## defenders up to 43% faster laterally than the stride model allows, which
+	## inflates every reach this function reports.
+	var movement_speed := LocomotionModel.maximum_speed(
+		player, RallyPlayerState.MovementMode.LATERAL
+	) if FeatureFlags.ENABLE_UNIFIED_SPEED_MODEL \
+		else LocomotionModel.legacy_maximum_speed(
+			player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
+		)
 	var acceleration_factor := lerpf(0.62, 1.0, acceleration_rating)
-	var travel_distance := movement_speed * available_time * acceleration_factor
+	## **How far a body actually covers in the window, accelerating from a stance.**
+	##
+	## This was `movement_speed * available_time * acceleration_factor` -- top
+	## speed from the instant the ball is struck, held to contact, discounted by a
+	## factor measured at 0.94. Decomposed over 722 receptions:
+	##
+	##     ball_time        1.245 s      reaction_delay   0.271 s
+	##     movement_speed   3.943 m/s    acceleration_factor 0.939
+	##     travel_distance  3.576 m      base_reach       1.245 m
+	##     physical_reach   4.814 m      distance to ball 1.239 m
+	##     reach margin     3.719 m
+	##
+	## A receiver was credited with covering **3.6 metres in 0.97 seconds** from a
+	## standing start, so every ball was reachable with three metres to spare and
+	## the `reaching` posture -- which needs the margin below zero -- could never
+	## fire. That is not a threshold that wants moving; it is a distance that was
+	## never real.
+	##
+	## `_blocker_close_terms` records this exact defect being fixed for the block:
+	## *"This used to be `maximum_speed * movement_time`: the blocker left the
+	## ready stance already at top speed, never decelerated, and was credited with
+	## shuffling until the instant of contact. Every close in the game resolved at
+	## exactly 1.0 as a result."* The block was repaired; the reception kept the
+	## formula. Same words, same consequence, one file over.
+	##
+	## `acceleration_factor` stays and is no longer load-bearing -- the ramp is
+	## modelled now rather than approximated by a multiplier -- but it is still
+	## published, because the balance work reads it and a term vanishing from a
+	## report is worse than a term that has become small.
+	var travel_distance: float = MovementModel.reachable_distance(
+		available_time,
+		movement_speed,
+		lerpf(2.2, 6.8, acceleration_rating),
+	)
 	var base_reach := _base_reach_meters(player, contact_skill)
 	var physical_reach := base_reach + travel_distance
-	var assigned_reach := float(zone.radius_meters)
-	var reachable := distance <= minf(physical_reach, assigned_reach)
-	var arrival_margin := physical_reach - distance
+	var assigned_reach := float(zone.radius_meters) if assigned 		else unassigned_reach_meters
+	## Legs, not paperwork.
+	##
+	## This was `distance <= minf(physical_reach, assigned_reach)`, so a zone
+	## radius could declare a ball unreachable that the player had the time and
+	## the speed to get to. A zone is a responsibility -- who is *supposed* to
+	## take this -- and it was being enforced as a leash on where a body may go.
+	##
+	## The signature of the bug is what happens when you add time. Mapping the
+	## receiving half at 1.2 s and 1.8 s of serve flight, the entire short row
+	## just behind the attack line goes from unreachable to
+	## reachable-but-refused, and never to reachable: more flight time moves
+	## `physical_reach` and does nothing at all, because `assigned_reach` is the
+	## binding term and it does not know the ball is in the air. That is why a
+	## short serve had no answer, and it is the wrong reason for a defence to
+	## fail -- the sport's answer to a short serve is that somebody runs in.
+	##
+	## The assignment still decides *who*: `zone_margin` below already carries it
+	## into `claim_score`, so a passer reaching outside their zone is a worse
+	## claimant than one inside theirs and only takes the ball when nobody better
+	## can. What it no longer does is stop them.
+	var reachable := distance <= physical_reach
+	## **Whose ball is this**, asked before *who can get to it*.
+	##
+	## `physical_reach` is base reach plus everything the body could cover in the
+	## flight, so it answers emergency pursuit: a libero with two seconds can
+	## reach most of the court, and that is true and should stay true. What it
+	## cannot express is that a ball arriving *at* somebody is already theirs.
+	##
+	## This is that envelope: what they can play from where they are standing,
+	## without a run. A ball inside it belongs to them, and `choose_claimant`
+	## treats that as a hard lock rather than another term in a weighted sum --
+	## because a weight can always be outbid, and being outbid for a ball
+	## arriving at your platform is the defect. Reachability decides whether
+	## responsibility succeeds; it should not create responsibility.
+	##
+	## The step allowance is one stride, not a sprint. A defender does move their
+	## feet for a ball at their edge, and a lock that only fired for a ball
+	## arriving exactly at the sternum would never fire.
+	var immediate_control := distance <= base_reach + IMMEDIATE_CONTROL_STEP_METERS
+	## Named for what it is. This is a *distance* -- how much further this
+	## player could have reached than the ball actually needed them to -- and it
+	## was called `arrival_margin`, which is the name the rest of the engine uses
+	## for a time. Two quantities in different units under one name is an
+	## invitation, and it was taken: a promoted reception fed its seconds into
+	## the slot this metres value occupies, and every consumer scaled it as if
+	## nothing had changed.
+	var reach_margin := physical_reach - distance
 	var zone_margin := assigned_reach - distance
 	var edge_ratio := distance / maxf(assigned_reach, 0.1)
 	var skill_rating := float(player.get(contact_skill)) / 100.0
-	var claim_score := float(zone.priority) * 0.24 \
-		+ clampf(arrival_margin / 3.0, -0.5, 0.5) * 0.34 \
+	var claim_score := (float(zone.priority) if assigned else 0.0) * 0.24 \
+		+ clampf(reach_margin / 3.0, -0.5, 0.5) * 0.34 \
 		+ clampf(zone_margin / 3.0, -0.5, 0.5) * 0.16 \
 		+ anticipation * 0.14 + skill_rating * 0.12
 	return {
@@ -51,11 +173,27 @@ static func evaluate_arrival(
 		"distance_meters": distance,
 		"reaction_delay": reaction_delay,
 		"available_time": available_time,
+		## The four terms `physical_reach` is built from, published rather than
+		## summed away. `reach_margin_meters` is the sole input to the dig's
+		## `timing` factor and it runs 1.058 m for the home defence against
+		## 0.242 m for the opponent's -- a gap that carries the whole dig
+		## asymmetry and has survived every change made to the attack it defends.
+		## A total cannot be attributed, and these five terms want five different
+		## fixes in five different files.
+		"ball_time_seconds": ball_time_seconds,
+		"base_reach_meters": base_reach,
+		"movement_speed_mps": movement_speed,
+		"acceleration_factor": acceleration_factor,
+		"travel_distance_meters": travel_distance,
 		"physical_reach_meters": physical_reach,
 		"assigned_reach_meters": assigned_reach,
-		"arrival_margin": arrival_margin,
+		"reach_margin_meters": reach_margin,
 		"edge_ratio": edge_ratio,
 		"claim_score": claim_score,
+		"origin_position": from_point,
+		"immediate_control": immediate_control,
+		"immediate_control_reach_meters": base_reach
+			+ IMMEDIATE_CONTROL_STEP_METERS,
 	}
 
 
@@ -65,6 +203,19 @@ static func choose_claimant(
 	landing_point: Vector2,
 	ball_time_seconds: float,
 	contact_skill: String,
+	## Seconds each player owes before they can move, keyed by id. A voli getting
+	## up off the floor has genuinely less of this flight left to reach the ball
+	## in, and this is the only honest place to say so -- the alternative was
+	## discounting their dig after the fact, which lets someone lying down claim a
+	## ball and then merely play it badly.
+	time_penalties: Dictionary = {},
+	## Where each body actually is, keyed by id. Omit it and every voli is judged
+	## from their zone centre, which is true in a serve-receive formation and true
+	## nowhere else.
+	origins: Dictionary = {},
+	## Reach credited to a voli with no zone for this contact. Negative keeps the
+	## old behaviour of excluding them outright.
+	unassigned_reach_meters: float = -1.0,
 ) -> Dictionary:
 	var best := {
 		"player": null, "arrival": {}, "support_count": 0,
@@ -75,18 +226,73 @@ static func choose_claimant(
 	for player in players:
 		var zone: Resource = zones.get(player.id) as Resource
 		var arrival := evaluate_arrival(
-			player, zone, landing_point, ball_time_seconds, contact_skill
+			player, zone, landing_point,
+			maxf(
+				ball_time_seconds - float(time_penalties.get(player.id, 0.0)),
+				0.02,
+			),
+			contact_skill,
+			origins.get(player.id),
+			unassigned_reach_meters,
 		)
 		if not bool(arrival.get("reachable", false)):
 			continue
 		reachable_evaluations.append({"player": player, "arrival": arrival})
-		var score := float(arrival.get("claim_score", -1000.0))
+	## **The lock, applied before the score is consulted at all.**
+	##
+	## If the ball is arriving inside somebody's immediate envelope it is theirs,
+	## and the weighted claim cannot take it off them -- that is the whole
+	## structural change. The score still runs, but only among the volis who own
+	## the ball, so a faster teammate can no longer buy it with anticipation and
+	## reception rating from two metres further out.
+	##
+	## Several volis can own it at once -- two bodies a metre apart both have it
+	## inside their reach -- and then the score decides between *them*, which is
+	## the case it is actually good at. It is a restriction of the candidate set,
+	## not a bonus inside it.
+	var owners: Array[Dictionary] = []
+	for evaluation in reachable_evaluations:
+		if bool(Dictionary(evaluation.arrival).get("immediate_control", false)):
+			owners.append(evaluation)
+	var deciding: Array[Dictionary] = owners if not owners.is_empty() \
+		else reachable_evaluations
+	for evaluation in deciding:
+		var score := float(Dictionary(evaluation.arrival).get("claim_score", -1000.0))
 		if score > best_score:
 			best_score = score
 			best = {
-				"player": player, "arrival": arrival, "support_count": 0,
-				"seam_conflict": false, "claim_margin": 1.0,
+				"player": evaluation.player, "arrival": evaluation.arrival,
+				"support_count": 0, "seam_conflict": false, "claim_margin": 1.0,
 			}
+	best["immediate_owner_count"] = owners.size()
+	best["immediate_lock"] = not owners.is_empty()
+	## **How close the nearest other body is to the one taking the ball.**
+	##
+	## `support_count` counts teammates and knows nothing about where they are,
+	## so a voli five metres away and one thirty centimetres away are the same
+	## number -- and the consumer turned that count into a *bonus*. Two bodies
+	## in one space were being scored as double coverage, which is the opposite
+	## of what they are.
+	##
+	## This is the spacing the consumer actually needs. Measured from the
+	## origins `evaluate_arrival` judged each voli from, so it is where the
+	## bodies are rather than where their zones are drawn.
+	var crowding := 1000.0
+	if best.player != null:
+		var winner_origin := Vector2(
+			Dictionary(best.arrival).get("origin_position", landing_point)
+		)
+		for evaluation in reachable_evaluations:
+			if int((evaluation.player as VolleyballPlayer).id) \
+					== int((best.player as VolleyballPlayer).id):
+				continue
+			crowding = minf(crowding, court_distance_meters(
+				winner_origin,
+				Vector2(Dictionary(evaluation.arrival).get(
+					"origin_position", landing_point
+				)),
+			))
+	best["nearest_teammate_meters"] = crowding
 	if best.player == null:
 		return best
 	var support_count := 0
@@ -98,7 +304,11 @@ static func choose_claimant(
 	var second_score := -1000.0
 	var best_priority := -1
 	var second_priority := -2
-	for evaluation in reachable_evaluations:
+	## Among the volis who could actually have won it. With the lock fired the
+	## runner-up is another owner, not a teammate two metres out who was never
+	## in the running -- a seam is two people who both think it is theirs, and
+	## after the lock only owners think that.
+	for evaluation in deciding:
 		var evaluation_player := evaluation.player as VolleyballPlayer
 		var evaluation_arrival: Dictionary = evaluation.arrival
 		var evaluation_score := float(evaluation_arrival.get("claim_score", -1000.0))
@@ -110,9 +320,62 @@ static func choose_claimant(
 			second_priority = int(zone.priority)
 	var claim_margin := best_score - second_score if second_score > -999.0 else 1.0
 	best.claim_margin = claim_margin
+	## **Who was actually closest, alongside who won.**
+	##
+	## The whole question the responsibility handoff asks -- does reachability
+	## create responsibility, or only decide whether it succeeds -- is answerable
+	## from data this function already computes and then throws away. A claimant
+	## who is routinely not the nearest body is reachability creating ownership;
+	## one who usually is means the soft score happens to agree with proximity
+	## and the defect is rarer than it looks.
+	##
+	## Published rather than asserted, because a claim about how often this
+	## happens should come from a count.
+	var nearest_id := -1
+	var nearest_distance := 1000.0
+	for evaluation in reachable_evaluations:
+		var candidate_distance := float(
+			Dictionary(evaluation.arrival).get("distance_meters", 1000.0)
+		)
+		if candidate_distance < nearest_distance:
+			nearest_distance = candidate_distance
+			nearest_id = int((evaluation.player as VolleyballPlayer).id)
+	best["nearest_id"] = nearest_id
+	best["nearest_distance_meters"] = nearest_distance
+	best["winner_distance_meters"] = float(
+		Dictionary(best.arrival).get("distance_meters", 1000.0)
+	)
+	best["reachable_count"] = reachable_evaluations.size()
 	best.seam_conflict = support_count > 0 and best_priority == second_priority \
 		and claim_margin < 0.10
 	return best
+
+
+## The same distance, from a time.
+##
+## A continuous system measures how many seconds a receiver had to spare, and
+## the quality terms downstream are all fitted against metres of reach. This is
+## the one conversion between them, using the movement speed `evaluate_arrival`
+## itself uses to turn available time into covered ground, so a promoted contact
+## and an unpromoted one are scored on one scale instead of two.
+static func reach_margin_from_seconds(
+	player: VolleyballPlayer,
+	seconds: float,
+) -> float:
+	if player == null:
+		return 0.0
+	var speed_rating := float(player.lateral_speed) / 100.0
+	## See `RallyFeatureFlags.ENABLE_UNIFIED_SPEED_MODEL`. The legacy ceiling runs
+	## defenders up to 43% faster laterally than the stride model allows, which
+	## inflates every reach this function reports.
+	var movement_speed := LocomotionModel.maximum_speed(
+		player, RallyPlayerState.MovementMode.LATERAL
+	) if FeatureFlags.ENABLE_UNIFIED_SPEED_MODEL \
+		else LocomotionModel.legacy_maximum_speed(
+			player, speed_rating, LocomotionModel.LEGACY_COVERAGE_CEILING_MPS
+		)
+	var acceleration_factor := lerpf(0.62, 1.0, float(player.acceleration) / 100.0)
+	return seconds * movement_speed * acceleration_factor
 
 
 static func reception_body_penalty(

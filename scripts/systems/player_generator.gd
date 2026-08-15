@@ -27,40 +27,50 @@ const POSITIONS: Array[Dictionary] = [
 ## a slightly smaller-than-average profile reinforces that this specialty
 ## isn't won by size. Landavol stays at zero across the board: the one region
 ## with no physical lean at all, matching it now having no attribute
-## specialty either (see REGION_SPECIALTY below). Ispayk now carries the
+## specialty either (see REGION_SPECIALTY below). Ĭspayk now carries the
 ## largest frame bias: its bomba tradition is built around terminal power.
-## Pāwa Hitō is closer to average size because its physical distinction is
-## repeated effort and transition quality rather than mass. A'ace leans slightly positive across all
-## three: assembled, well-resourced athletes rather than a developed body
-## type of its own.
+##
+## **Pāwa Hitō is large, and was not.** It sat at 0/-1/0 on the reasoning that
+## its distinction was repeated effort rather than mass -- but the design is
+## explicit that these are big volis with big batteries, and that the damage
+## they do is a *consequence* of size arriving at a defence that has nothing
+## left. Their attribute list carries no attacking attribute at all now, so the
+## frame is where the threat has to live, alongside `fatigue_resistance`.
+##
+## Blôc du Larg rises for the same kind of reason and by a different route: its
+## specialty list gave up `jump_reach` so that Ĭspayk could own air presence
+## outright, which means Largôis size must be stated here or nowhere.
+##
+## A'ace leans slightly positive across all three: assembled, well-resourced
+## athletes rather than a developed body type of its own.
 const REGION_HEIGHT_BIAS := {
-	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
-	"Xérvu": 1.0, "Taktikã": -1.0, "Ispayk": 4.0, "A'ace": 1.0,
-	"Tu'ul ys Feynt": -3.0,
-	"Lo-onğ Ralī": -5.0,
-	"Bompaşao": -2.0,
-	"Rhen Tempaol": -1.0,
-	"Kutre den Lyn": 0.0,
+	"Pāwa Hitō": 3.0, "Spëddigh": -2.0, "Blôc du Larg": 3.0, "Landavol": 0.0,
+	"Xérvu": 1.0, "Taktikã": -1.0, "Ĭspayk": 4.0, "A'ace": 1.0,
+	"Tãul ys Feynt": -3.0,
+	"Lo-ong Ralī": -5.0,
+	"Bompaçao": -2.0,
+	"Rhėn Tempaol": -1.0,
+	"Kutré Lyn": 0.0,
 	"Zaitgaist": 0.0,
 }
 const REGION_MASS_BIAS := {
-	"Pāwa Hitō": -1.0, "Spëddigh": -3.0, "Bloc du Larg": 1.0, "Landavol": 0.0,
-	"Xérvu": 0.0, "Taktikã": -1.0, "Ispayk": 5.0, "A'ace": 1.0,
-	"Tu'ul ys Feynt": -4.0,
-	"Lo-onğ Ralī": -5.0,
-	"Bompaşao": -1.0,
-	"Rhen Tempaol": -3.0,
-	"Kutre den Lyn": -2.0,
+	"Pāwa Hitō": 4.0, "Spëddigh": -3.0, "Blôc du Larg": 2.0, "Landavol": 0.0,
+	"Xérvu": 0.0, "Taktikã": -1.0, "Ĭspayk": 5.0, "A'ace": 1.0,
+	"Tãul ys Feynt": -4.0,
+	"Lo-ong Ralī": -5.0,
+	"Bompaçao": -1.0,
+	"Rhėn Tempaol": -3.0,
+	"Kutré Lyn": -2.0,
 	"Zaitgaist": 0.0,
 }
 const REGION_WINGSPAN_BIAS := {
-	"Pāwa Hitō": 0.0, "Spëddigh": -2.0, "Bloc du Larg": 2.0, "Landavol": 0.0,
-	"Xérvu": 2.0, "Taktikã": 0.0, "Ispayk": 3.0, "A'ace": 1.0,
-	"Tu'ul ys Feynt": -2.0,
-	"Lo-onğ Ralī": -3.0,
-	"Bompaşao": 0.0,
-	"Rhen Tempaol": -1.0,
-	"Kutre den Lyn": 0.0,
+	"Pāwa Hitō": 2.0, "Spëddigh": -2.0, "Blôc du Larg": 4.0, "Landavol": 0.0,
+	"Xérvu": 2.0, "Taktikã": 0.0, "Ĭspayk": 3.0, "A'ace": 1.0,
+	"Tãul ys Feynt": -2.0,
+	"Lo-ong Ralī": -3.0,
+	"Bompaçao": 0.0,
+	"Rhėn Tempaol": -1.0,
+	"Kutré Lyn": 0.0,
 	"Zaitgaist": 0.0,
 }
 
@@ -68,10 +78,10 @@ const REGION_WINGSPAN_BIAS := {
 ##
 ## Serving and the abstract mental/tactical attributes used to be scattered
 ## across other regions with no home of their own (Pāwa Hitō carried
-## serve_power as one bonus among five; Bloc du Larg and Landavol both leaned
+## serve_power as one bonus among five; Blôc du Larg and Landavol both leaned
 ## mental with overlapping attributes). Xérvu and Taktikã now own those
 ## identities outright, which is also why Pāwa Hitō drops serve_power and
-## Bloc du Larg drops tactical_discipline -- each specialty lives in exactly
+## Blôc du Larg drops tactical_discipline -- each specialty lives in exactly
 ## one region rather than being diluted across several.
 ##
 ## Landavol has no specialty at all: it is deliberately the generic, no-lean
@@ -79,7 +89,7 @@ const REGION_WINGSPAN_BIAS := {
 ##
 ## Pāwa Hitō sustains repeated transition attacks; Spëddigh spends effort and
 ## tempo to keep every phase moving; Taktikã develops players whose execution
-## changes little with emotional match flow; Ispayk develops the large, fast
+## changes little with emotional match flow; Ĭspayk develops the large, fast
 ## arm and terminal contact behind its bomba tradition. A'ace deliberately gets
 ## only three attributes spanning three different categories (attack_power,
 ## serve_power, block_timing) rather than one deep specialty: it represents
@@ -87,16 +97,80 @@ const REGION_WINGSPAN_BIAS := {
 ## not a systemic developmental identity the way every other region's
 ## specialty represents an actual local training tradition.
 const REGION_SPECIALTY := {
-	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness", "approach_timing", "attack_accuracy"],
+	## **A battery, not a swing.** Pāwa Hitō's power is a *consequence* and the
+	## list is deliberately short to say so: they are large volis who are still
+	## going in the fifth set, and the damage they do is done to defenders who are
+	## not. Nothing here is an attacking attribute, because the attacking comes
+	## from `fatigue_resistance` 0.55 holding them at full output while everybody
+	## else labours, and from a frame that was raised to match the fiction.
+	##
+	## `approach_timing` and `attack_accuracy` were dropped from here rather than
+	## from Ĭspayk: those are a spike being *perfected*, which is Ĭspayk's whole
+	## claim, and having them in both was the single worst overlap in the table --
+	## the two regions the design most needed to separate shared two attributes.
+	"Pāwa Hitō": ["stamina", "transition_speed", "explosiveness"],
 	"Spëddigh": ["work_rate", "acceleration", "lateral_speed", "tempo_control", "reception_balance"],
-	"Bloc du Larg": ["block_timing", "ball_control", "court_vision", "anticipation"],
+	## **A wall and the floor behind it, not a side that out-thinks you.**
+	##
+	## `court_vision` and `tactical_discipline` spelled this region as *analysis*
+	## -- a side that studies you and adjusts -- and that was never what the wall
+	## is for. A Largôis block does not need to guess right, because it is long
+	## enough and quick enough to get a hand on the shot it guessed wrong about.
+	## `anticipation` stays removed for a separate reason: it is 0.30 of dig
+	## capability and 0.34 of a blocker's read, so holding it made the blocking
+	## tradition the best digging tradition too.
+	##
+	## The cut before this one reached for
+	## `lateral_speed` and `explosiveness`, which are Spëddigh's and Pāwa Hitō's,
+	## so the region built on coverage was expressed in two other regions'
+	## vocabulary. Size is now carried by the physique bias instead of by
+	## `jump_reach` -- a different channel from Ĭspayk's air presence, which is
+	## what lets both regions be tall without being the same claim -- and the
+	## attributes say the thing the fiction actually says: they touch what you
+	## hit, and what gets past the wall is still dug.
+	"Blôc du Larg": ["block_timing", "reception_stability", "dig_control",
+		"ball_control"],
 	"Landavol": [],
 	"Xérvu": ["serve_power", "serve_technique", "serve_placement", "serve_consistency",
 		"serve_aggression", "serve_variation"],
 	"Taktikã": ["decision_making", "composure", "tactical_discipline",
 		"adaptability", "unpredictability"],
-	"Ispayk": ["attack_power", "arm_speed", "jump_reach", "block_timing", "shot_variety"],
-	"A'ace": ["attack_power", "serve_power", "block_timing"],
+	## **One polished swing, fed as often as possible.** Ĭspayk is not Pāwa Hitō
+	## with a bigger frame: Pāwa's claim is *repetition* -- the sixth attack of a
+	## rally as good as the first -- and Ĭspayk's is a single terminal contact so
+	## well drilled that it goes through a block rather than around one. The
+	## bomba is a technique, not an engine.
+	##
+	## So `shot_variety` goes, and it is the point of the change rather than a
+	## trim: a side that can hit six different shots is not predictable, and being
+	## predictable is what Ĭspayk is supposed to *cost*. What replaces it is more
+	## of the same swing -- `approach_timing` and `attack_accuracy` are the
+	## polish, `attack_power` and `arm_speed` the terminal contact. A defence that
+	## has seen it enough times knows exactly where it is going, which is what
+	## makes the region beatable by the traditions built on reading.
+	##
+	## `block_timing` is dropped for a different reason: it sat in three regions
+	## at once, so the blocking tradition, the bomba tradition and the bought
+	## squad all claimed it and none of them owned it.
+	"Ĭspayk": ["attack_power", "arm_speed", "jump_reach", "approach_timing",
+		"attack_accuracy"],
+	## **Bought terminal ability, and nothing that makes a team of it.**
+	##
+	## A'ace does not develop volis, it assembles them, and what it shops for is
+	## exactly what shows on a highlight: somebody who ends points, wants the
+	## ball, and is already good now. `attack_power` and `block_timing` are the
+	## two point-ending contacts in the sport and both stay. `leadership` joins
+	## them because A'ace recruits for it as openly as for the swing -- a squad of
+	## strangers is bought a captain rather than growing one.
+	##
+	## What it cannot buy is a shared idea of how to play, and that is priced as a
+	## real cost rather than a smaller bonus: see `REGION_TACTICAL_PENALTY`, which
+	## takes `tactical_discipline`, `decision_making` and `court_vision` off
+	## anybody A'ace raised. The fiction is a region with no historical volleyball
+	## presence, so its own academies teach the swing and not the game -- and a
+	## strong team that is not coached into strong decisions does not find the
+	## situations its terminal players are bought for.
+	"A'ace": ["attack_power", "block_timing", "leadership"],
 
 	## Minor regions: two or three attributes, not four to six. The tier's
 	## whole proposition is a narrow, deep tradition rather than a broad one,
@@ -104,11 +178,18 @@ const REGION_SPECIALTY := {
 	## core passing technique (Spëddigh owns balance and pace resistance but
 	## never reception itself), and `attack_accuracy`, claimed by nobody at all
 	## despite being primary for three of the five roles.
-	"Tu'ul ys Feynt": ["feinting", "tooling", "finesse"],
-	"Lo-onğ Ralī": ["stamina", "dig_control", "reception_stability"],
-	"Bompaşao": ["reception", "reception_balance", "ball_control"],
-	"Rhen Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
-	"Kutre den Lyn": ["attack_accuracy", "shot_variety", "court_vision"],
+	"Tãul ys Feynt": ["feinting", "tooling", "finesse"],
+	## The long-rally tradition, which was worse at digging than the blocking
+	## tradition. `dig_control` is only 0.22 of dig capability and
+	## `reception_stability` enters a dig solely through the body penalty, so two
+	## of its three attributes barely reached the floor. `anticipation` is 0.30
+	## and is the one Blôc du Larg gives up, which takes this region from 0.22 of
+	## the dig model to 0.52 without poaching `reception` -- Bompaçao's claim,
+	## and the only attribute that outweighs it.
+	"Lo-ong Ralī": ["stamina", "dig_control", "anticipation"],
+	"Bompaçao": ["reception", "reception_balance", "ball_control"],
+	"Rhėn Tempaol": ["approach_timing", "arm_speed", "transition_speed"],
+	"Kutré Lyn": ["attack_accuracy", "shot_variety", "court_vision"],
 	## Zaitgaist has no tradition of its own. Its specialty comes entirely from
 	## `region_overlay`, rewritten each season to mirror whoever last won the
 	## Sixnet -- see `SixnetLeague.apply_influence_drift()`.
@@ -126,14 +207,13 @@ const ROLE_SECONDARY := {
 			"serve_technique", "serve_consistency", "serve_placement", "ball_control"],
 	"Outside Hitter": ["feinting", "court_vision", "composure", "serve_technique",
 			"serve_consistency", "explosiveness", "jump_reach", "block_timing",
-			"lateral_speed", "reception_stability", "leadership"],
+			"lateral_speed", "reception_stability"],
 	"Middle Blocker": ["attack_accuracy", "tooling", "feinting", "shot_variety",
-			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed",
-			"leadership"],
+			"ball_control", "serve_technique", "stamina", "transition_speed", "arm_speed"],
 	"Opposite": ["feinting", "finesse", "serve_technique", "serve_aggression",
-			"serve_variation", "explosiveness", "arm_speed", "work_rate", "leadership"],
+			"serve_variation", "explosiveness", "arm_speed", "work_rate"],
 	"Libero": ["court_vision", "adaptability", "composure", "transition_speed",
-			"stamina", "tactical_discipline", "acceleration", "leadership"],
+			"stamina", "tactical_discipline", "acceleration"],
 }
 
 ## Height variation band per role, in centimetres.
@@ -165,16 +245,26 @@ static func generate_roster(
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var canonical_region := VolleyballRegions.canonical_name(region_name)
-	var region := VolleyballRegions.definition(region_name)
-	var names: Array = region.names
-	var roster_size := 12 if organization_type == "Academy" else 10
-	var academy := organization_type == "Academy"
+	## **A founded club is small and young; an established one is neither.**
+	##
+	## This branched on `"Academy"`, which is a dead value -- the academy is the
+	## region's selection body and nobody manages one. What the branch was
+	## actually describing survives the rename intact: the option that gave you
+	## twelve younger volis with more headroom is the club you started yourself,
+	## which is who signs for a side with no history. An established club hands
+	## you a squad somebody else picked.
+	##
+	## The old value is still read so a save written before the recut regenerates
+	## the roster it had rather than a different one.
+	var founded := organization_type == "Founded" or organization_type == "Academy"
+	var roster_size := 12 if founded else 10
+	var academy := founded
 	var result: Array[VolleyballPlayer] = []
 	for index in range(roster_size):
 		var position: Dictionary = POSITIONS[index % POSITIONS.size()]
 		var player := VolleyballPlayer.new()
 		player.id = index + 1
-		player.display_name = "%s %d" % [str(names[index % names.size()]), index + 1]
+		player.display_name = VolleyballRegions.person_name(canonical_region, index)
 		player.position_role = str(position.role)
 		player.position_code = str(position.code)
 		player.home_region = canonical_region
@@ -182,6 +272,9 @@ static func generate_roster(
 		player.age = rng.randi_range(16, 20) if academy else rng.randi_range(21, 31)
 		player.professional_experience = 0 if academy else maxi(player.age - 20, 1)
 		assign_body_type(player, rng)
+		assign_ego(player, rng, canonical_region)
+		assign_aggression(player, rng, canonical_region)
+		assign_leadership(player, rng, canonical_region)
 		_apply_body_variation(player, rng, canonical_region, overlay)
 		player.stride_length_m = player.default_stride_length_m()
 		## Sets every attribute and derives `potential` from the ceilings it built.
@@ -271,6 +364,9 @@ static func _build_prospect(
 	player.age = age
 	player.professional_experience = maxi(age - 20, 0)
 	assign_body_type(player, rng)
+	assign_ego(player, rng, canonical_region)
+	assign_aggression(player, rng, canonical_region)
+	assign_leadership(player, rng, canonical_region)
 	_apply_body_variation(player, rng, canonical_region, overlay)
 	player.stride_length_m = player.default_stride_length_m()
 	_apply_attributes(player, canonical_region, rng, age <= 20, overlay, talent)
@@ -329,7 +425,7 @@ const PHYSICAL_ATTRIBUTES: Array[String] = [
 const MENTAL_ATTRIBUTES: Array[String] = [
 	"court_vision", "anticipation", "decision_making", "composure",
 	"tactical_discipline", "improvisation", "adaptability", "unpredictability",
-	"work_rate", "leadership",
+	"work_rate",
 ]
 
 ## Age at which physical qualities stop improving and begin to fade.
@@ -446,16 +542,20 @@ static func _talent_level(rng: RandomNumberGenerator, academy: bool) -> int:
 ## distinct. Weighting body type regionally on top of that would immediately
 ## read as "people from here are built like that", which is the one reading
 ## this must never support. A flat draw keeps morphology orthogonal to origin,
-## so a Tu'ul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
+## so a Tãul ys Feynt Ursi and a Pāwa Hitō Ursi are the same body in different
 ## traditions and the *tradition* is what differs.
-const BODY_TYPES: Array[String] = ["Homi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
+const BODY_TYPES: Array[String] = ["Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi"]
 
 ## Body-metric deltas, applied after the regional bias so the two compose.
 const BODY_TYPE_METRICS := {
 	## Stride is deliberately absent. It is derived from post-variation height
 	## and pinned by a regression check, so morphology reaches locomotion
 	## through height and mass rather than by offsetting stride directly.
-	"Homi": {"height": 0.0, "mass": 0.0, "wingspan": 0.0},
+	## Vegi is the no-lean body, the way Landavol is the no-lean region: it
+	## exists so "unremarkable" has a home instead of every type needing an
+	## identity. It replaced Homi outright -- a plain human body in a world of
+	## animals and produce was the one type that was not *anything*.
+	"Vegi": {"height": 0.0, "mass": 0.0, "wingspan": 0.0},
 	"Avi": {"height": -4.0, "mass": -7.0, "wingspan": 6.0},
 	"Cani": {"height": 0.0, "mass": 2.0, "wingspan": 0.0},
 	"Feli": {"height": -3.0, "mass": -4.0, "wingspan": 0.0},
@@ -481,7 +581,7 @@ const BODY_TYPE_METRICS := {
 ## measurably tires faster inside a single match. First-set terror, fifth-set
 ## liability, with no new mechanism.
 const BODY_TYPE_ATTRIBUTES := {
-	"Homi": {},
+	"Vegi": {},
 	"Avi": {"jump_reach": 4.0, "block_timing": 2.0, "reception_stability": -6.0},
 	"Cani": {"stamina": 3.5, "transition_speed": 3.0, "attack_power": 2.0,
 		"jump_reach": -4.5, "hand_control": -4.0},
@@ -496,6 +596,149 @@ const BODY_TYPE_ATTRIBUTES := {
 
 static func assign_body_type(player: VolleyballPlayer, rng: RandomNumberGenerator) -> void:
 	player.body_type = BODY_TYPES[rng.randi_range(0, BODY_TYPES.size() - 1)]
+
+
+## How much a region's players back themselves, and how much a role attracts
+## players who do.
+##
+## Generated here rather than through `_apply_attributes` because `ego` is not
+## in `ABILITY_ATTRIBUTES` -- it is a temperament, so it has no ceiling, does not
+## train, and must not feed a category rating. See the note on the field.
+##
+## The regional leans follow the identities the world already has: Ĭspayk swings
+## first and asks later, Taktikã is the region built on not being moved, and
+## Xérvu's whole game is a high-risk serve that either wins the set or loses it.
+const REGION_EGO_BIAS := {
+	"Ĭspayk": 14.0, "Xérvu": 9.0, "Pāwa Hitō": 5.0, "A'ace": 6.0,
+	"Spëddigh": 2.0, "Landavol": 0.0, "Blôc du Larg": -6.0, "Taktikã": -15.0,
+	## Minor regions, listed rather than defaulted so a reader can see that the
+	## silence is deliberate. The deception traditions back themselves; the
+	## endurance and passing traditions are built on not needing to.
+	"Tãul ys Feynt": 7.0,
+	"Lo-ong Ralī": -9.0,
+	"Bompaçao": -7.0,
+	"Rhėn Tempaol": 3.0,
+	"Kutré Lyn": 1.0,
+	"Zaitgaist": 0.0,
+}
+
+## Terminal roles attract players who want the ball; the roles that keep a rally
+## alive attract players who would rather it went somewhere else.
+const POSITION_EGO_BIAS := {
+	"Opposite": 9.0, "Outside Hitter": 5.0, "Middle Blocker": 0.0,
+	"Setter": -4.0, "Libero": -8.0,
+}
+
+
+## How much the rest of the side plays up around this player.
+##
+## Generated here rather than through `_apply_attributes` because leadership
+## left `ABILITY_ATTRIBUTES` -- it acts on teammates rather than on this
+## player's own contacts, so it must not feed a capability rating. Without an
+## explicit assignment every player would silently sit at the default 50.
+##
+## Roles that organise the court from within it carry more of it; the roles
+## judged on terminal contacts carry less. Deliberately a milder spread than
+## ego, because a squad of twelve wildly varying leaders reads as noise rather
+## than as a captaincy question.
+const POSITION_LEADERSHIP_BIAS := {
+	"Setter": 8.0, "Libero": 5.0, "Middle Blocker": 0.0,
+	"Outside Hitter": -1.0, "Opposite": -3.0,
+}
+
+
+static func assign_leadership(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+	region_name: String,
+) -> void:
+	## Its own stream, for the same reason ego has one: drawing from the shared
+	## generation rng advances it for every attribute after, so adding this
+	## silently rerolls the world.
+	var leadership_rng := RandomNumberGenerator.new()
+	leadership_rng.seed = hash("%d|leadership|%d|%s" % [
+		rng.seed, player.id, region_name,
+	])
+	player.leadership = clampi(roundi(
+		leadership_rng.randfn(50.0, 12.0)
+		+ float(POSITION_LEADERSHIP_BIAS.get(player.position_role, 0.0))
+		+ float(player.age - 24) * 0.6
+	), 1, 100)
+
+
+static func assign_ego(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+	region_name: String,
+) -> void:
+	## Drawn from its own stream rather than the shared generation one.
+	##
+	## Taking a number from `rng` here advances it for everything generated
+	## afterwards, so adding this attribute silently rerolled every player in the
+	## world -- two balance fixtures failed on a change that touches no
+	## simulation code at all. Deriving a private seed keeps ego independent, so
+	## it can be added, removed or retuned without perturbing a single other
+	## attribute. `rng.seed` is the seed it was configured with, not its running
+	## state, so this stays stable no matter when it is called.
+	var ego_rng := RandomNumberGenerator.new()
+	ego_rng.seed = hash("%d|ego|%d|%s" % [rng.seed, player.id, region_name])
+	## Wide on purpose. Ego is the one axis where the extremes are the
+	## interesting players rather than the broken ones, so it should not cluster
+	## the way a skill does.
+	var base := ego_rng.randfn(50.0, 16.0)
+	player.ego = clampi(roundi(
+		base
+		+ float(REGION_EGO_BIAS.get(region_name, 0.0))
+		+ float(POSITION_EGO_BIAS.get(player.position_role, 0.0))
+	), 1, 100)
+
+
+## How committed a region's and a role's players are to ending the rally.
+##
+## Shares the shape of the ego biases and deliberately not their values: the two
+## used to be one number and separating them is worthless if the biases keep
+## them correlated. Ĭspayk leads both, because swinging first and backing
+## yourself genuinely are the same tradition -- but Taktikã is the region built
+## on not being moved, which is high ego and *low* aggression, and Blôc du Larg
+## defends rather than closes, which is the reverse of its ego lean.
+const REGION_AGGRESSION_BIAS := {
+	"Ĭspayk": 15.0, "Xérvu": 11.0, "Pāwa Hitō": 7.0, "A'ace": 4.0,
+	"Spëddigh": 3.0, "Landavol": 0.0, "Blôc du Larg": -4.0, "Taktikã": -9.0,
+	"Tãul ys Feynt": -3.0,
+	"Lo-ong Ralī": -11.0,
+	"Bompaçao": -8.0,
+	"Rhėn Tempaol": 6.0,
+	"Kutré Lyn": 2.0,
+	"Zaitgaist": 0.0,
+}
+
+## Terminal roles want the terminal ball. Steeper than the ego lean, because
+## wanting to end the rally is much more nearly the job description of an
+## opposite than backing yourself is.
+const POSITION_AGGRESSION_BIAS := {
+	"Opposite": 12.0, "Outside Hitter": 6.0, "Middle Blocker": 2.0,
+	"Setter": -7.0, "Libero": -13.0,
+}
+
+
+static func assign_aggression(
+	player: VolleyballPlayer,
+	rng: RandomNumberGenerator,
+	region_name: String,
+) -> void:
+	## Its own stream, for the reason spelled out on `assign_ego`: taking a draw
+	## from the shared generation rng advances it for every attribute after, so
+	## adding an attribute silently rerolls the whole world. `_test_world_aging`
+	## is the check that would notice, twenty seasons later.
+	var aggression_rng := RandomNumberGenerator.new()
+	aggression_rng.seed = hash("%d|aggression|%d|%s" % [
+		rng.seed, player.id, region_name,
+	])
+	player.aggression = clampi(roundi(
+		aggression_rng.randfn(50.0, 15.0)
+		+ float(REGION_AGGRESSION_BIAS.get(region_name, 0.0))
+		+ float(POSITION_AGGRESSION_BIAS.get(player.position_role, 0.0))
+	), 1, 100)
 
 
 static func body_type_attribute_delta(body_type: String, property_name: String) -> float:
@@ -539,7 +782,243 @@ static func _apply_body_variation(
 const PRIMARY_TIER_BONUS: int = 15
 const SECONDARY_TIER_BONUS: int = 5
 const TERTIARY_TIER_PENALTY: int = -8
-const SPECIALTY_BONUS: int = 8
+## What a region's whole specialty is worth, spread across however many
+## attributes it names.
+##
+## **The same mistake, a third time, and this is where it gets stated as a rule:
+## a per-item constant makes unequal totals whenever the count varies.** It was
+## 16 *per attribute*, so a region with six specialties carried 96 ceiling points
+## and one with three carried 48 -- and re-cutting Pāwa Hitō from five attributes
+## to three quietly removed 32 points from every Hitōuen ever generated. Twenty
+## seasons later the world held eight elite players against a budget of seven,
+## because one voli somewhere else had moved up to fill the gap.
+##
+## The same error had already been found twice in the same afternoon, in
+## `REGION_CEILING_PENALTY` (weaknesses subtracting rather than reshaping) and in
+## the rating bands (7, 13 and 21 attributes taking the same per-attribute step).
+## Three tables, one bug: **a tradition distributes a fixed budget; only the
+## shape of the distribution varies.**
+##
+## 80 is five times the old 16, which is the count most regions already had, so
+## the regions that were not re-cut are untouched. The ones that were get sharper
+## rather than smaller -- A'ace's three bought attributes are now worth 26.7 each,
+## which is exactly right for a club that buys three stars instead of teaching
+## six things, and Xérvu's six are worth 13.3 each, which is what a broad
+## tradition should feel like.
+const SPECIALTY_BUDGET: float = 80.0
+## Retained for `region_overlay`'s `specialty_bonus_delta`, which adjusts the
+## per-attribute figure a drifting region receives.
+const SPECIALTY_BONUS: int = 16
+
+## What a region's `physical` / `technical` / `mental` ratings actually do.
+##
+## **They did nothing at all.** Eight regions carry three of them each and, before
+## this, not one of the twenty-four values was read anywhere in the codebase --
+## not by the simulator, not by generation, not by the interface. They are the
+## most visible statement of what a region is (`docs/world/` describes regions
+## by them) and they were fiction attached to nothing, which is `FAILURE_MODES.md`
+## §0's own shape: a value nobody set, or in this case a value nobody read.
+##
+## What they mean is a region's *breadth of emphasis*, so what they should do is
+## broad and small, sitting underneath `REGION_SPECIALTY`'s sharp +16 rather than
+## competing with it. A rating of 2 is the world average and does nothing; each
+## point away from it is worth `RATING_CEILING_STEP` on every attribute in that
+## band. Pāwa Hitō at physical 4 raises every physical attribute a little, which
+## is not the same claim as its five named specialties and is exactly the claim
+## the number makes.
+##
+## Bands rather than the six display categories, because the ratings are three:
+## `technical` covers the craft categories and `mental` the reading ones, which
+## is how the taglines already use the words.
+## **Per rating point across the whole band, not per attribute.**
+##
+## This was 2.6 *per attribute*, and that is the §0 failure again: the three
+## bands are wildly different sizes -- `physical` is 7 attributes, `mental` 13
+## and `technical` 21 -- so one rating point of technique did three times the
+## work of one rating point of physique. Summed over every ability attribute the
+## net ceiling change per region ran from **-52 for Pāwa Hitō to +75 for Xérvu**,
+## which is not an emphasis, it is a talent handicap dressed as one. The world's
+## twenty-season talent budget noticed before I did.
+##
+## Normalising by band size makes a rating point mean the same thing wherever it
+## is spent: a region that emphasises technique spreads that emphasis over
+## twenty-one attributes and each one moves less, which is the honest reading of
+## what "emphasis" is. What survives is only the residual from each region's
+## ratings summing to 7 rather than the neutral 6 -- about half a point per
+## attribute, and a deliberate statement rather than an accident.
+const RATING_BAND_STEP: float = 18.0
+const RATING_NEUTRAL: float = 2.0
+const RATING_BANDS := {
+	"physical": ["Physical"],
+	"technical": ["Attacking", "Setting & Ball Control", "Serving"],
+	"mental": ["Mental & Tactical", "Defensive"],
+}
+
+
+## What a region's specialty attributes gain back to pay for its weakness.
+##
+## **A tradition shapes a voli; it does not make them worse.** Adding
+## `REGION_CEILING_PENALTY` without this drained the world's talent budget, and
+## the suite caught it in one check: `potential` is derived from the ceilings
+## themselves, weighted by the *position's* primary attributes, so a penalty
+## landing on an attribute that is primary for a role -- Taktikã's
+## `explosiveness` and `jump_reach` on a hitter, say -- cost that voli real
+## potential, and after twenty seasons the top tiers had fewer players in them
+## than the world is supposed to hold. That is not what a weakness means. It
+## means Taktikã produces a different *kind* of elite hitter, not fewer of them.
+##
+## So every region's ceiling adjustment is net zero: whatever the weakness takes
+## is handed back across the attributes the region actually teaches. The
+## precedent is `BODY_TYPE_ATTRIBUTES`, which has summed to zero per body type
+## since it was written, and for the same reason -- a body is a shape, not a
+## grade, and so is a tradition.
+##
+## Derived rather than tabulated so the two tables cannot drift apart: edit a
+## penalty and the compensation follows it.
+static func _penalty_compensation(
+	region_name: String, specialty_list: Array
+) -> float:
+	if specialty_list.is_empty():
+		return 0.0
+	var penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
+	if penalty.is_empty():
+		return 0.0
+	var total := 0.0
+	for attribute in penalty:
+		total += float(penalty[attribute])
+	return -total / float(specialty_list.size())
+
+
+## Which of the three ratings governs this attribute, or an empty string.
+##
+## Built once on first use rather than declared, so the mapping cannot drift out
+## of step with `AttributeProfiles.CATEGORY_ATTRIBUTES` -- the failure this file
+## has already had with `BODY_TYPES` against `PRODUCE_BODIES`.
+static var _rating_for_attribute: Dictionary = {}
+
+
+static func rating_band_for(property_name: String) -> String:
+	if _rating_for_attribute.is_empty():
+		for rating_name in RATING_BANDS:
+			for category in RATING_BANDS[rating_name]:
+				for attribute in AttributeProfiles.CATEGORY_ATTRIBUTES.get(
+					category, []
+				):
+					_rating_for_attribute[str(attribute)] = str(rating_name)
+	return str(_rating_for_attribute.get(property_name, ""))
+
+
+## What this region's ratings are worth to this attribute's ceiling.
+static func region_rating_bonus(
+	region_name: String, property_name: String
+) -> float:
+	var band := rating_band_for(property_name)
+	if band.is_empty():
+		return 0.0
+	var definition := VolleyballRegions.definition(region_name)
+	## **Measured against the region's own mean, not a global neutral.**
+	##
+	## The ratings do not sum to the same total everywhere -- some regions come to
+	## 6 and some to 7 -- so subtracting a fixed 2.0 left the sum-7 regions a flat
+	## +18 ceiling points ahead of the sum-6 ones. That residual was small, and
+	## small was still enough: it moved exactly one voli across the generational
+	## boundary and the world finished twenty seasons with eight elite players
+	## against a budget of seven.
+	##
+	## These numbers describe *relative emphasis within a tradition* -- 4/1/1 says
+	## Pāwa Hitō cares about physique more than technique -- and a statement about
+	## proportion should not also be a statement about quality. Anchoring on the
+	## region's own mean makes every region net exactly zero, whatever its ratings
+	## sum to, so emphasis reshapes a voli and never grades them. The same
+	## principle as `_penalty_compensation`, applied to the other table.
+	var mean := (
+		float(definition.get("physical", RATING_NEUTRAL))
+		+ float(definition.get("technical", RATING_NEUTRAL))
+		+ float(definition.get("mental", RATING_NEUTRAL))
+	) / 3.0
+	return (float(definition.get(band, mean)) - mean) \
+		* RATING_BAND_STEP / maxf(float(_band_size(band)), 1.0)
+
+
+## How many ability attributes a rating band covers.
+##
+## Counted from `AttributeProfiles.CATEGORY_ATTRIBUTES` rather than written down,
+## because a hand-kept size is a number that goes stale the first time an
+## attribute is added to a category -- and the whole reason this function exists
+## is that band sizes were not being accounted for at all.
+static var _band_sizes: Dictionary = {}
+
+
+static func _band_size(band: String) -> int:
+	if _band_sizes.is_empty():
+		for rating_name in RATING_BANDS:
+			var total := 0
+			for category in RATING_BANDS[rating_name]:
+				total += Array(AttributeProfiles.CATEGORY_ATTRIBUTES.get(
+					category, []
+				)).size()
+			_band_sizes[str(rating_name)] = total
+	return int(_band_sizes.get(band, 1))
+
+
+## Attributes a region's own upbringing leaves *short*, and by how much.
+##
+## **The first table in this file that takes something away**, and it exists
+## because an identity built only from bonuses cannot describe a tradition with a
+## hole in it. A'ace is the case that forced it: a region with no historical
+## volleyball presence, buying terminal ability from everywhere and teaching the
+## swing without the game. Expressed as three fewer bonuses that would read as a
+## slightly duller version of everybody else; expressed as a penalty it reads as
+## what it is -- volis who can end a point and cannot find the situation that
+## needs ending.
+##
+## Applied to the *ceiling*, not the current value, so it is a limit on what
+## A'ace's own academies can produce rather than a debuff on the individual. A
+## voli A'ace signs from Taktikã keeps Taktikã's ceilings, which is the whole
+## mechanism of the region: it is only its home-grown players who are short.
+## **Every region gives something up, and no two give up the same thing.**
+##
+## Seven of the eight had no weakness at all: their only cost was not having a
+## bonus somewhere, which makes "specialty" a synonym for "better" and turns the
+## league into a power ranking instead of a set of matchups. A tradition is
+## defined as much by what it never taught as by what it drills.
+##
+## Two rules held while choosing these. Each weakness is the *inverse of the
+## region's own strength*, so it reads as a consequence of the training rather
+## than as a handicap bolted on. And no two regions share a weakness, for the
+## same reason no two should share a peak -- if Spëddigh and Taktikã were both
+## short on power, "small" would stop being either region's problem and start
+## being the league's baseline.
+##
+## The result is a web of counters rather than a ladder. Ĭspayk cannot adapt and
+## Taktikã is built on adapting. Xérvu cannot pass and Blôc du Larg exists to
+## make you pass. Bloc cannot improvise and Spëddigh is nothing but improvisation
+## of tempo. Landavol is the only region with no weakness, which is the same
+## statement as having no specialty and is what makes it the reference.
+const REGION_CEILING_PENALTY := {
+	## Quick and light, and it costs them at the net in both directions.
+	"Spëddigh": {"attack_power": -10, "block_timing": -8},
+	## They go through you. They have never needed to go around you, so the
+	## deception attributes were never taught.
+	"Pāwa Hitō": {"feinting": -11, "set_disguise": -9},
+	## A structured side is a side that struggles when the structure breaks, and
+	## a wall built on staying home does not learn to serve people off it.
+	"Blôc du Larg": {"improvisation": -11, "serve_power": -9},
+	## Six specialty attributes on serving, and a tradition that treats the first
+	## contact as somebody else's problem.
+	"Xérvu": {"reception": -11, "dig_control": -9},
+	## The one region that will not win a physical contest, which is the point of
+	## it -- and the reason its reading has to be worth something.
+	"Taktikã": {"explosiveness": -12, "jump_reach": -10},
+	## **The cost of the perfect swing is that it is the only swing.** Predictable
+	## by construction and unable to change once read, which is exactly the
+	## matchup Taktikã is built to win.
+	"Ĭspayk": {"shot_variety": -12, "adaptability": -10},
+	## Bought terminal ability with no shared idea of how to play.
+	"A'ace": {
+		"tactical_discipline": -12, "decision_making": -12, "court_vision": -9,
+	},
+}
 
 
 static func _tier_bonus(
@@ -595,9 +1074,16 @@ static func _apply_attributes(
 	## never takes away what it already had.
 	var specialty_list: Array = Array(REGION_SPECIALTY.get(region_name, [])) \
 		+ Array(overlay.get("specialty_add", []))
-	var specialty_bonus := SPECIALTY_BONUS + int(overlay.get("specialty_bonus_delta", 0.0))
+	## The budget divided by however many attributes are sharing it, so a region's
+	## total never changes when its list is re-cut -- only the sharpness does.
+	var specialty_bonus := int(round(
+		SPECIALTY_BUDGET / maxf(float(specialty_list.size()), 1.0)
+	)) + int(overlay.get("specialty_bonus_delta", 0.0)) if not specialty_list.is_empty() \
+		else 0
 	var talent := talent_override if talent_override >= 0.0 else float(_talent_level(rng, academy))
 
+	var ceiling_penalty: Dictionary = REGION_CEILING_PENALTY.get(region_name, {})
+	var specialty_compensation := _penalty_compensation(region_name, specialty_list)
 	var ceilings := {}
 	for property_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
 		ceilings[property_name] = clampf(
@@ -605,6 +1091,9 @@ static func _apply_attributes(
 			+ float(_tier_bonus(
 				property_name, primary_list, secondary_list, specialty_list, specialty_bonus
 			))
+			+ float(ceiling_penalty.get(property_name, 0))
+			+ (specialty_compensation if property_name in specialty_list else 0.0)
+			+ region_rating_bonus(region_name, property_name)
 			+ _innate_deviation(rng),
 			1.0, 99.0,
 		)
@@ -612,6 +1101,38 @@ static func _apply_attributes(
 	## Potential is what those ceilings are worth, scored exactly as current
 	## ability will be scored.
 	player.potential = _weighted_score(ceilings, primary_list)
+
+	## **A region decides a voli's shape; it must not decide their grade.**
+	##
+	## When a caller asks for a specific potential -- and the world's yearly
+	## intake always does, drawing one from the tier it is short of -- that number
+	## is a *budget decision* about how much talent the world contains, not a
+	## suggestion. It was being treated as a suggestion: `talent_override` set the
+	## baseline and then every regional table moved the ceilings on top of it, so
+	## the achieved potential drifted off the requested one by however much that
+	## region's specialty, penalty and rating tables happened to sum to. A
+	## prospect requested as elite could arrive generational.
+	##
+	## Over twenty seasons that is a leak with a direction, and the world-aging
+	## gate caught it: eight elite players against a budget of seven. It survived
+	## three separate fixes that each corrected a real imbalance in those tables
+	## -- weaknesses that subtracted rather than reshaped, rating bands of
+	## unequal size, a specialty bonus that was per-attribute rather than a
+	## budget -- because none of them addressed the actual defect, which is that
+	## *any* regional shaping at all was allowed to move the total.
+	##
+	## Scaling the ceilings so the derived potential lands on the requested one
+	## fixes the class rather than the three instances: whatever a region's tables
+	## sum to now, and whatever they are edited to later, a voli asked for a given
+	## potential arrives with it. The shape survives the scaling because every
+	## ceiling moves by the same ratio.
+	if talent_override >= 0.0 and player.potential > 0:
+		var correction := talent_override / float(player.potential)
+		for property_name in ceilings:
+			ceilings[property_name] = clampf(
+				float(ceilings[property_name]) * correction, 1.0, 99.0
+			)
+		player.potential = _weighted_score(ceilings, primary_list)
 
 	## Kept individually, not only as the aggregate above -- a potential
 	## attribute wheel reads this rather than approximating a shape from one

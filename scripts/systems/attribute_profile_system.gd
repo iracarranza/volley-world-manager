@@ -14,7 +14,55 @@ const PROFILE_TOOLTIPS := {
 	"Setting / Control": "Set accuracy, balance, stability, tempo, disguise, hand control and unpredictability.",
 	"Physical": "Acceleration, lateral and transition speed, explosiveness, jump capacity, sustained engine and reach.",
 	"Serving": "Power, technique, placement, consistency, aggression, variation and repertoire.",
-	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline, creativity and leadership.",
+	"Mental / Tactical": "Court vision, anticipation, decisions, composure, discipline and creativity.",
+}
+
+## Player-facing descriptions for every raw ability shown in the roster profile.
+## Keeping these beside `CATEGORY_ATTRIBUTES` makes tooltip coverage part of the
+## same attribute contract as category membership instead of a screen-local list
+## that can silently miss newly-added attributes.
+const ATTRIBUTE_TOOLTIPS := {
+	"acceleration": "How quickly the player reaches useful movement speed.",
+	"lateral_speed": "Maximum side-to-side speed in blocking and floor defense.",
+	"transition_speed": "Speed changing phases and moving into an attacking approach.",
+	"jump_reach": "Leap capacity used with height and wingspan to determine contact reach.",
+	"explosiveness": "How quickly the player can access their available jump and power.",
+	"stamina": "Physical capacity to sustain repeated actions through a match.",
+	"work_rate": "Willingness to repeatedly spend effort on pursuit, coverage, and transition.",
+	"arm_speed": "How quickly the hitting arm reaches contact, especially on fast sets.",
+	"serve_power": "The maximum pace the player can put on a serve.",
+	"serve_technique": "Contact quality that converts available serve power into usable pace and spin.",
+	"serve_placement": "How tightly and specifically the player can define a serve target.",
+	"serve_consistency": "Ability to repeat one serve location and change targets without losing control.",
+	"serve_aggression": "How readily the player attempts point-ending pace or line pressure instead of a containing serve.",
+	"serve_variation": "How often and how credibly the player changes target, depth, pace, and serve shape.",
+	"reception": "Platform technique and directional control on serve reception.",
+	"reception_balance": "Maintaining reception quality while moving, reaching, or contacting off-center.",
+	"reception_stability": "Resistance to platform breakdown against high incoming pace.",
+	"set_accuracy": "Delivering the ball to the intended attacking contact window.",
+	"set_balance": "Maintaining setting quality while moving or reaching.",
+	"set_stability": "Maintaining a clean set against difficult incoming pace and spin.",
+	"tempo_control": "Controlling release timing and the hitter's contact rhythm.",
+	"set_disguise": "Hiding the intended target and release direction from the block.",
+	"hand_control": "Fine manipulation of height, spin, and touch on overhead contacts.",
+	"unpredictability": "Varying target and tempo across a match without becoming readable.",
+	"attack_power": "Force transferred through the ball at attacking contact.",
+	"attack_accuracy": "Precision hitting the intended target while keeping the ball in play.",
+	"approach_timing": "Arriving balanced in the hitter's contact window relative to the set.",
+	"tooling": "Deliberately using the blocker's hands to score or create a favorable deflection.",
+	"feinting": "Selling a full attack before changing to a soft or redirected contact.",
+	"finesse": "Technical control of attack placement, depth, angle, and touch.",
+	"shot_variety": "Breadth of technically credible attack solutions available at contact.",
+	"block_timing": "Matching jump and hand penetration to the attacker's contact.",
+	"ball_control": "Cushioning a received or defended ball so it remains playable.",
+	"dig_control": "Directing a successful floor-defense contact toward a useful target.",
+	"court_vision": "Spatial awareness of teammates, opponents, and open court.",
+	"anticipation": "Predicting a specific opponent action before contact.",
+	"decision_making": "Choosing the right option under time pressure.",
+	"composure": "Maintaining judgment and execution under pressure or after mistakes.",
+	"tactical_discipline": "Following assignments and systems instead of abandoning them prematurely.",
+	"improvisation": "Creating an effective solution when the planned action breaks down.",
+	"adaptability": "Learning unfamiliar roles and adjusting technique to changing situations.",
 }
 
 const AXIS_CONTRIBUTORS := {
@@ -23,7 +71,7 @@ const AXIS_CONTRIBUTORS := {
 	"Setting / Control": "set_accuracy; set_balance; set_stability; tempo_control; set_disguise; hand_control; unpredictability",
 	"Physical": "acceleration; lateral_speed; transition_speed; explosiveness; jump_reach; stamina; work_rate; height_cm; wingspan_cm",
 	"Serving": "serve_power; serve_technique; serve_placement; serve_consistency; serve_aggression; serve_variation; serve-style proficiencies",
-	"Mental / Tactical": "court_vision; anticipation; decision_making; composure; tactical_discipline; improvisation; adaptability; leadership",
+	"Mental / Tactical": "court_vision; anticipation; decision_making; composure; tactical_discipline; improvisation; adaptability",
 	"Overall": "Attacking; Defensive; Setting / Control; Physical; Serving; Mental / Tactical",
 	"Power": "attack_power; mass_kg; explosiveness; transition_speed; arm_speed; approach_timing",
 	"Accuracy": "attack_accuracy",
@@ -66,14 +114,13 @@ const AXIS_CONTRIBUTORS := {
 	"Composure": "composure",
 	"Tactical Discipline": "tactical_discipline",
 	"Creativity": "improvisation; adaptability",
-	"Leadership": "leadership",
 }
 
 ## The one place every raw ability attribute is assigned to a category. Every
 ## screen that needs to group `VolleyballPlayer.ABILITY_ATTRIBUTES` -- the
 ## wheel's detailed view and the raw attribute-profile text -- reads this
 ## rather than keeping its own list. Two independent copies used to exist
-## (this file's wheel categories and `career_dashboard.gd`'s `ATTRIBUTE_GROUPS`)
+## (this file's wheel categories and `journal_screen.gd`'s `ATTRIBUTE_GROUPS`)
 ## with different category names and no attribute-accuracy in either, which is
 ## exactly the kind of thing that drifts silently: adding an attribute meant
 ## updating two lists by hand, and nothing enforced that both were updated.
@@ -109,7 +156,7 @@ const CATEGORY_ATTRIBUTES := {
 	],
 	"Mental & Tactical": [
 		"court_vision", "anticipation", "decision_making", "composure",
-		"tactical_discipline", "improvisation", "adaptability", "leadership",
+		"tactical_discipline", "improvisation", "adaptability",
 	],
 }
 
@@ -192,8 +239,8 @@ static func grade_tier(score: float) -> String:
 	return "D"
 
 
-static func grade_color_hex(score: float) -> String:
-	return UIPalette.grade_color_hex(grade_tier(score))
+static func grade_color_hex(score: float, light_mode: bool = false) -> String:
+	return UIPalette.grade_color_hex(grade_tier(score), light_mode)
 
 
 static func axis_tooltip(axis_name: String, description: String = "") -> String:
@@ -312,8 +359,7 @@ static func detailed_profile(
 				"Tactical Discipline": raw.call("tactical_discipline"),
 				"Creativity": _weighted(
 					[raw.call("improvisation"), raw.call("adaptability")], [0.50, 0.50]
-				),
-				"Leadership": raw.call("leadership")}
+				)}
 		_:
 			## "Power" replaces attack_power/arm_speed with the composite that
 			## actually reflects usable hitting power -- several physical
@@ -357,6 +403,42 @@ static func summary_profile(player: VolleyballPlayer, use_ceilings: bool = false
 	}
 	categories["Overall"] = category_score(categories)
 	return categories
+
+
+## The same six categories are spelled two ways, and this is the bridge.
+##
+## `CATEGORY_ATTRIBUTES` keys them `"Setting & Ball Control"` and
+## `"Mental & Tactical"`; `summary_profile`, the tooltips and the column titles
+## use `"Setting / Control"` and `"Mental / Tactical"`. Both spellings are load
+## bearing -- the first names a group of attributes, the second is what a reader
+## sees -- and nothing had ever needed to cross between them, so nothing did.
+##
+## `ScoutingSystem.KNOWABILITY` was the first thing that needed to. It keyed its
+## category entries off `CATEGORY_ATTRIBUTES` while its only caller passes
+## `summary_profile` keys, so "Mental / Tactical" -- the one category
+## deliberately made harder to observe -- silently fell through to the default
+## and the whole entry did nothing. A gate asserted the *function* ordered its
+## channels correctly and passed, because it passed the keys the table used
+## rather than the keys the game does.
+##
+## One function, both directions, so a third spelling cannot appear without
+## somebody having to add it here.
+const CATEGORY_ALIASES := {
+	"Setting / Control": "Setting & Ball Control",
+	"Mental / Tactical": "Mental & Tactical",
+}
+
+
+static func canonical_category(name: String) -> String:
+	return str(CATEGORY_ALIASES.get(name, name))
+
+
+## And the display spelling, for anything writing a heading.
+static func display_category(name: String) -> String:
+	for shown in CATEGORY_ALIASES:
+		if str(CATEGORY_ALIASES[shown]) == name:
+			return str(shown)
+	return name
 
 
 static func category_score(profile: Dictionary) -> int:
@@ -417,3 +499,97 @@ static func _weighted(values: Array, weights: Array) -> int:
 	for index in range(mini(values.size(), weights.size())):
 		total += float(values[index]) * float(weights[index])
 	return clampi(roundi(total), 1, 100)
+
+
+## ## The graded scale, measured rather than assumed
+##
+## `grade` above is **one absolute scale**, and it is shared by every reading in
+## the game: a voli's overall ability, their potential, a category score, and --
+## on the lock-in board -- the mean of six volis in one category. Three claims
+## are folded into that, and `tools/run_grade_band_probe.gd` measured all three
+## over 2,400 volis and 240 rosters:
+##
+## **A team mean is not a person's score.** Averaging six collapses the spread to
+## between 0.34 and 0.55 of the individual one. On the shared scale a *chosen*
+## six -- the roster's best, which is what a manager puts on court -- grades:
+##
+## | | S | A | B | C | D |
+## |---|---|---|---|---|---|
+## | one voli | 0.3% | 2.9% | 43.7% | 33.9% | 19.2% |
+## | chosen six | **0.0%** | **0.2%** | **76.5%** | 23.3% | **0.1%** |
+##
+## Two letters carry 99.8% of everything the board can print, and three of the
+## five are unreachable. That is §0 exactly: a knob that cannot reach its own
+## stated range, failing silently, because a B is a perfectly plausible-looking
+## answer every single time.
+##
+## **And the six categories are not on one scale as each other.** Median
+## Attacking is 68 against Mental / Tactical's 60, so a shared cut makes every
+## squad look tactically weak and physically fine -- which is a property of the
+## generator, not of the squad.
+##
+## So the bands are **per category and per scale**, cut at the measured p10 /
+## p30 / p75 / p95 of the distribution each one actually acts on. That lands
+## 10% D, 20% C, 45% B, 20% A, 5% S: S stays a genuine outlier and D stays
+## reachable.
+##
+## ### The debt this pays, and the one it does not
+##
+## The whiteboard draft measured this against **random** sixes and flagged its
+## own debt: a managed lineup is a chosen six and sits higher, so bands read off
+## random sixes grade real teams generously. `TEAM_BANDS` is read off the chosen
+## six for that reason -- random-six p50 Attacking is 67.7 against a chosen
+## six's 75.5, which is most of a grade.
+##
+## What is still owed: "chosen" here is the roster's best by Overall. A manager
+## picking for a system, or around a fatigued setter, picks differently. These
+## want re-measuring against lineups the game has actually seen played once
+## enough of them exist to measure.
+const GRADE_BAND_CATEGORIES: Array[String] = [
+	"Attacking", "Defensive", "Setting / Control",
+	"Physical", "Serving", "Mental / Tactical",
+]
+
+## One voli, one category. Read off 2,400 generated club volis.
+const VOLI_BANDS := {
+	"Attacking": [48.0, 59.0, 79.0, 89.0],
+	"Defensive": [48.0, 59.0, 77.0, 87.0],
+	"Setting / Control": [40.0, 51.0, 72.0, 88.0],
+	"Physical": [46.0, 57.0, 75.0, 84.0],
+	"Serving": [44.0, 55.0, 74.0, 86.0],
+	"Mental / Tactical": [40.0, 51.0, 71.0, 85.0],
+}
+
+## The mean of six, one category. Read off 240 chosen sixes.
+const TEAM_BANDS := {
+	"Attacking": [68.0, 72.5, 78.5, 82.7],
+	"Defensive": [65.8, 69.8, 77.7, 84.0],
+	"Setting / Control": [61.0, 66.2, 73.2, 78.3],
+	"Physical": [61.5, 67.0, 74.0, 80.5],
+	"Serving": [62.5, 66.7, 75.0, 86.0],
+	"Mental / Tactical": [59.3, 63.7, 71.7, 80.2],
+}
+
+
+## The grade this score earns *in this category*, against this scale.
+##
+## Returns the same five letters `grade_tier` does, so anything already keyed on
+## a tier -- `UIPalette.GRADE_COLORS`, the board's marks -- works unchanged.
+static func category_grade(
+	category: String, score: float, team_scale: bool = false
+) -> String:
+	var table: Dictionary = TEAM_BANDS if team_scale else VOLI_BANDS
+	var bands = table.get(category, null)
+	if bands == null:
+		## An unmeasured category falls back to the absolute scale rather than
+		## to a guess. Wrong is better than wrong *and* invented.
+		return grade_tier(score)
+	if score >= float(bands[3]):
+		return "S"
+	if score >= float(bands[2]):
+		return "A"
+	if score >= float(bands[1]):
+		return "B"
+	if score >= float(bands[0]):
+		return "C"
+	return "D"

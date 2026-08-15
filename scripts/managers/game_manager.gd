@@ -36,42 +36,150 @@ func seed_vertical_slice_data() -> void:
 	players.append(_make_player(1, "Mira", "Setter", "S", {
 		"set_accuracy": 86, "set_balance": 82, "set_stability": 84,
 		"court_vision": 90, "decision_making": 84,
+		## The brain of the squad: reads and runs the offence, serves for
+		## placement rather than pace, and is not a terminal attacker.
+		"tempo_control": 88, "hand_control": 86, "set_disguise": 79,
+		"composure": 82, "tactical_discipline": 85, "leadership": 88,
+		"adaptability": 76, "unpredictability": 74, "ego": 44,
+		"serve_accuracy": 74, "serve_power": 58, "shot_variety": 46,
+		"finesse": 72, "feinting": 66, "tooling": 40, "dig_control": 68,
+		"acceleration": 74, "work_rate": 80, "arm_speed": 55,
+		"attack_power": 42, "attack_accuracy": 55, "approach_timing": 62,
+		"block_timing": 58, "lateral_speed": 76, "transition_speed": 78,
+		"stamina": 80, "ball_control": 84, "anticipation": 80,
+		"reception": 62, "age": 27, "professional_experience": 6,
+		"potential": 74,
 		"improvisation": 78, "height_cm": 185.0, "mass_kg": 77.0,
 		"wingspan_cm": 188.0, "explosiveness": 73,
 	}))
 	players.append(_make_player(2, "Tala", "Outside Hitter", "OH1", {
 		"reception": 78, "attack_accuracy": 76, "approach_timing": 80,
+		## The dependable six-rotation outside. Good at everything, best at
+		## nothing, which is what makes the lane distribution a real question.
+		"serve_accuracy": 76, "serve_power": 72, "shot_variety": 74,
+		"finesse": 70, "feinting": 68, "tooling": 66, "composure": 76,
+		"tactical_discipline": 72, "leadership": 68, "adaptability": 74,
+		"unpredictability": 62, "ego": 58, "hand_control": 66,
+		"tempo_control": 62, "set_disguise": 40, "dig_control": 74,
+		"acceleration": 78, "work_rate": 82, "arm_speed": 74,
+		"attack_power": 74, "block_timing": 68, "lateral_speed": 76,
+		"transition_speed": 74, "stamina": 80, "ball_control": 76,
+		"court_vision": 70, "anticipation": 74, "decision_making": 72,
+		"improvisation": 66, "set_accuracy": 42, "set_balance": 46,
+		"set_stability": 44, "age": 25, "professional_experience": 4,
+		"potential": 79,
 		"height_cm": 191.0, "mass_kg": 84.0, "wingspan_cm": 197.0,
 		"explosiveness": 82, "reception_balance": 82, "reception_stability": 76,
 	}))
 	players.append(_make_player(3, "Boro", "Middle Blocker", "M1", {
 		"jump_reach": 88, "block_timing": 84, "approach_timing": 79,
+		## Runs the quick, so the tempo attributes have to be there -- a middle
+		## who cannot read tempo is a middle who never gets set.
+		"tempo_control": 76, "serve_accuracy": 58, "serve_power": 66,
+		"shot_variety": 52, "tooling": 70, "feinting": 48, "finesse": 44,
+		"composure": 68, "tactical_discipline": 74, "leadership": 60,
+		"adaptability": 62, "unpredictability": 48, "ego": 52,
+		"hand_control": 52, "set_disguise": 30, "dig_control": 46,
+		"acceleration": 80, "work_rate": 76, "arm_speed": 78,
+		"attack_power": 80, "attack_accuracy": 66, "lateral_speed": 62,
+		"transition_speed": 58, "stamina": 70, "ball_control": 52,
+		"court_vision": 58, "anticipation": 66, "decision_making": 62,
+		"improvisation": 48, "set_accuracy": 30, "set_balance": 38,
+		"set_stability": 34, "age": 26, "professional_experience": 5,
+		"potential": 72,
 		"height_cm": 205.0, "mass_kg": 98.0, "wingspan_cm": 214.0,
 		"explosiveness": 91,
 	}))
 	players.append(_make_player(4, "Sena", "Opposite", "OP", {
 		"attack_power": 91, "jump_reach": 86, "lateral_speed": 38,
+		## The bomber, and priced like one: enormous serve and swing, thin
+		## control and discipline. The one player who should be serving big.
+		"serve_power": 90, "serve_accuracy": 62, "arm_speed": 88,
+		"shot_variety": 66, "tooling": 74, "feinting": 54, "finesse": 48,
+		"composure": 58, "tactical_discipline": 52, "leadership": 46,
+		"adaptability": 48, "unpredictability": 70, "ego": 84,
+		"hand_control": 50, "tempo_control": 54, "set_disguise": 28,
+		"dig_control": 40, "acceleration": 62, "work_rate": 66,
+		"attack_accuracy": 70, "approach_timing": 76, "block_timing": 72,
+		"transition_speed": 60, "stamina": 68, "ball_control": 54,
+		"court_vision": 60, "anticipation": 58, "decision_making": 56,
+		"improvisation": 62, "set_accuracy": 32, "set_balance": 40,
+		"set_stability": 36, "age": 28, "professional_experience": 8,
+		"potential": 68,
 		"height_cm": 199.0, "mass_kg": 99.0, "wingspan_cm": 207.0,
 		"explosiveness": 86,
 	}))
 	players.append(_make_player(5, "Ivo", "Outside Hitter", "OH2", {
 		"transition_speed": 82, "attack_accuracy": 73, "court_vision": 76,
+		## The crafty one. Wide repertoire and high adaptability, so shot
+		## variety and feinting have somebody to belong to.
+		"serve_accuracy": 70, "serve_power": 68, "shot_variety": 78,
+		"finesse": 74, "feinting": 76, "tooling": 62, "composure": 70,
+		"tactical_discipline": 76, "leadership": 58, "adaptability": 80,
+		"unpredictability": 72, "ego": 54, "hand_control": 64,
+		"tempo_control": 66, "set_disguise": 36, "dig_control": 70,
+		"acceleration": 84, "work_rate": 78, "arm_speed": 70,
+		"attack_power": 72, "approach_timing": 74, "block_timing": 64,
+		"lateral_speed": 80, "stamina": 76, "ball_control": 78,
+		"anticipation": 76, "decision_making": 78, "improvisation": 80,
+		"set_accuracy": 48, "set_balance": 52, "set_stability": 50,
+		"age": 24, "professional_experience": 3, "potential": 81,
 		"height_cm": 195.0, "mass_kg": 90.0, "wingspan_cm": 200.0,
 		"explosiveness": 76, "reception_balance": 72, "reception_stability": 80,
 	}))
 	players.append(_make_player(6, "Nemi", "Libero", "L", {
 		"reception": 92, "ball_control": 90, "anticipation": 88,
 		"attack_power": 20, "height_cm": 176.0, "mass_kg": 69.0,
+		## Floor defence made of one person. Everything that touches a dug ball
+		## is high; everything that terminates one is not.
+		"dig_control": 92, "composure": 86, "tactical_discipline": 84,
+		"leadership": 72, "adaptability": 82, "unpredictability": 44,
+		"ego": 38, "hand_control": 78, "tempo_control": 58,
+		"serve_accuracy": 66, "serve_power": 40, "shot_variety": 30,
+		"finesse": 66, "feinting": 34, "tooling": 22, "set_disguise": 44,
+		"acceleration": 90, "work_rate": 88, "arm_speed": 48,
+		"lateral_speed": 92, "transition_speed": 88, "stamina": 90,
+		"court_vision": 84, "decision_making": 82, "improvisation": 74,
+		"approach_timing": 40, "block_timing": 30, "attack_accuracy": 40,
+		"set_accuracy": 60, "set_balance": 70, "set_stability": 68,
+		"age": 29, "professional_experience": 9, "potential": 66,
 		"wingspan_cm": 180.0, "explosiveness": 75,
 		"reception_balance": 94, "reception_stability": 95,
 	}))
 	players.append(_make_player(7, "Kiri", "Middle Blocker", "M2", {
 		"jump_reach": 84, "block_timing": 79, "transition_speed": 74,
+		## The second middle, deliberately a step behind Boro on every axis
+		## that decides who gets set.
+		"tempo_control": 70, "serve_accuracy": 54, "serve_power": 60,
+		"shot_variety": 48, "tooling": 64, "feinting": 42, "finesse": 40,
+		"composure": 62, "tactical_discipline": 66, "leadership": 50,
+		"adaptability": 58, "unpredictability": 42, "ego": 48,
+		"hand_control": 48, "set_disguise": 26, "dig_control": 44,
+		"acceleration": 76, "work_rate": 72, "arm_speed": 72,
+		"attack_power": 72, "attack_accuracy": 60, "lateral_speed": 58,
+		"stamina": 66, "ball_control": 48, "court_vision": 54,
+		"anticipation": 60, "decision_making": 58, "improvisation": 44,
+		"set_accuracy": 28, "set_balance": 36, "set_stability": 32,
+		"age": 23, "professional_experience": 2, "potential": 77,
 		"height_cm": 201.0, "mass_kg": 92.0, "wingspan_cm": 208.0,
 		"explosiveness": 82,
 	}))
 	players.append(_make_player(8, "Rui", "Outside Hitter", "OH3", {
 		"reception": 70, "attack_accuracy": 68, "stamina": 76,
+		## The young one: adaptable and willing, not yet composed. The squad
+		## needs somebody with room to grow for development to read as growth.
+		"serve_accuracy": 60, "serve_power": 64, "shot_variety": 58,
+		"finesse": 56, "feinting": 50, "tooling": 52, "composure": 54,
+		"tactical_discipline": 58, "leadership": 42, "adaptability": 70,
+		"unpredictability": 66, "ego": 62, "hand_control": 54,
+		"tempo_control": 56, "set_disguise": 32, "dig_control": 62,
+		"acceleration": 72, "work_rate": 74, "arm_speed": 66,
+		"attack_power": 66, "approach_timing": 68, "block_timing": 60,
+		"lateral_speed": 72, "transition_speed": 70, "ball_control": 68,
+		"court_vision": 64, "anticipation": 66, "decision_making": 60,
+		"improvisation": 62, "set_accuracy": 40, "set_balance": 44,
+		"set_stability": 42, "age": 20, "professional_experience": 1,
+		"potential": 88,
 		"height_cm": 190.0, "mass_kg": 83.0, "wingspan_cm": 194.0,
 		"explosiveness": 74,
 	}))
@@ -98,6 +206,11 @@ func seed_vertical_slice_data() -> void:
 			lineup.assign_slot(slot_number, player_id)
 		rotations[rotation_number] = lineup
 	selected_rotation = 1
+	## Seed what the squad already knows about each other. A fresh career would
+	## otherwise open with one identical number for every pair, and a connection
+	## drawn between six identical numbers reports nothing for most of a season.
+	if team != null:
+		Familiarity.seed_pair_familiarity(players, team.pair_familiarity)
 	saved_plays.clear()
 	called_play_id = -1
 	active_play_ids_by_rotation.clear()
@@ -108,7 +221,7 @@ func seed_vertical_slice_data() -> void:
 		var plan: Resource = DefensivePlanScript.new()
 		plan.rotation_number = rotation_number
 		plan.plan_name = "Rotation %d Defense" % rotation_number
-		plan.ensure_defaults(rotations[rotation_number])
+		plan.ensure_defaults(rotations[rotation_number], players)
 		defensive_plans[rotation_number] = plan
 	_seed_opponent()
 	var prototype_format: Resource = MatchFormatScript.new()
@@ -121,34 +234,61 @@ func seed_vertical_slice_data() -> void:
 func _seed_opponent() -> void:
 	opponent_team = OpponentTeamScript.new()
 	opponent_team.team_name = "Port Azure VC"
+	## Port Azure is Landavoli, which is exactly as neutral as it was before.
+	##
+	## `REGIONAL_PRINCIPLES.Landavol` and `PRESETS.Balanced` are the same seven
+	## 0.50s -- asserted in the suite, not assumed here -- so the mirrored roster
+	## remains a mirrored *side*, and every symmetry reading this slice exists to
+	## take is untouched. What it buys is that the opponent now has a region to
+	## be changed, which is the whole of playing somebody else.
+	opponent_team.region = "Landavol"
 	opponent_team.setter_id = 101
 	opponent_team.scouting_confidence = 0.56
 	opponent_team.tendencies = {
 		"preferred_lane": "Left Pin", "tempo": 1, "serve_target": "Zone 5",
 	}
+	## **Port Azure is the home squad, position for position.**
+	##
+	## It used to be a sketch: five attributes on its setter, two on a middle,
+	## three on an outside, and everything else left on `VolleyballPlayer`'s class
+	## default of 50. Counted, **245 of its 287 ability attributes had never been
+	## specified** against 14 of the home squad's 328 -- so every attribute this
+	## engine has learned to read since that fixture was written read 50 for one
+	## of the two teams. `SetterCapabilitySystem.command()` came out at exactly
+	## 0.500 for that side across 347 sets, which is how it was found: an exactly
+	## constant number is never a model, it is a value nobody set.
+	##
+	## That made every side-versus-side reading in this repository a measurement
+	## of the roster before it was a measurement of the simulation. Kill, dig,
+	## stuff and swing-balance have all been compared across the net for a year
+	## against an opponent that was mostly blank.
+	##
+	## Mirroring the home squad fixes that completely: the two teams are now
+	## identical, so **any residual gap between the sides is engine asymmetry by
+	## definition**. That is the control this vertical slice never had, and it is
+	## worth more than the flavour the sketch was carrying -- Port Azure's
+	## signature numbers (Oren's 86 block timing, Pax's 88 power) were expressive
+	## but they were noise sitting on top of 85% silence.
+	##
+	## Derived rather than transcribed. A hand-written mirror would drift the
+	## first time a home attribute changed and nothing would say so; copying at
+	## construction cannot. When Port Azure becomes a club with a character of its
+	## own, that is a design act layered on top of this, not a return to blanks.
+	var opponent_blueprints := [
+		[101, "Ari", "Setter", "S", 1],
+		[102, "Vale", "Outside Hitter", "OH1", 2],
+		[103, "Oren", "Middle Blocker", "M1", 3],
+		[104, "Pax", "Opposite", "OP", 4],
+		[105, "Lio", "Outside Hitter", "OH2", 5],
+		[106, "Emi", "Libero", "L", 6],
+		[107, "Noa", "Middle Blocker", "M2", 7],
+	]
 	var opponent_players: Array[Resource] = []
-	opponent_players.append(_make_player(101, "Ari", "Setter", "S", {
-			"set_accuracy": 78, "set_balance": 75, "set_stability": 77,
-			"court_vision": 82, "decision_making": 76,
-		}))
-	opponent_players.append(_make_player(102, "Vale", "Outside Hitter", "OH1", {
-			"attack_power": 84, "attack_accuracy": 76, "serve_power": 81,
-		}))
-	opponent_players.append(_make_player(103, "Oren", "Middle Blocker", "M1", {
-			"block_timing": 86, "jump_reach": 89,
-		}))
-	opponent_players.append(_make_player(104, "Pax", "Opposite", "OP", {
-			"attack_power": 88, "attack_accuracy": 71,
-		}))
-	opponent_players.append(_make_player(105, "Lio", "Outside Hitter", "OH2", {
-			"reception": 75, "anticipation": 74,
-		}))
-	opponent_players.append(_make_player(106, "Emi", "Libero", "L", {
-			"reception": 88, "anticipation": 85, "ball_control": 87,
-	}))
-	opponent_players.append(_make_player(107, "Noa", "Middle Blocker", "M2", {
-		"block_timing": 80, "jump_reach": 84, "approach_timing": 77,
-	}))
+	for blueprint in opponent_blueprints:
+		opponent_players.append(_mirror_player(
+			int(blueprint[0]), str(blueprint[1]), str(blueprint[2]),
+			str(blueprint[3]), _player_by_id(int(blueprint[4])),
+		))
 	opponent_team.players = opponent_players
 	var opponent_base_ids: Array[int] = [101, 102, 103, 104, 105, 107]
 	for rotation_number in range(1, 7):
@@ -216,7 +356,7 @@ func configure_managed_team(new_team: Resource, generated_players: Array[Volleyb
 		var plan: Resource = DefensivePlanScript.new()
 		plan.rotation_number = rotation_number
 		plan.plan_name = "Rotation %d Defense" % rotation_number
-		plan.ensure_defaults(rotations[rotation_number])
+		plan.ensure_defaults(rotations[rotation_number], players)
 		defensive_plans[rotation_number] = plan
 	_seed_opponent()
 	start_new_match(MatchFormatScript.new())
@@ -268,6 +408,15 @@ func _make_player(
 		)
 	if not overrides.has("serve_variation"):
 		player.serve_variation = player.serve_accuracy
+	## The vertical slice's `ego` figures were authored when one number meant
+	## both temperaments, and every one of them was chosen as *aggression* --
+	## Kova at 84 is the opposite who swings through the block, not the player
+	## hardest to talk out of a read. Mirroring rather than defaulting to 50
+	## keeps these twelve volis hitting exactly as they did; their ego is then
+	## the same number meaning the new thing, which is a starting point and not
+	## a claim.
+	if not overrides.has("aggression"):
+		player.aggression = player.ego
 	AttributeProfiles.assign_serve_style(player)
 	Familiarity.initialize_player(player)
 	return player
@@ -359,7 +508,7 @@ func configure_setting_system(system_name: String, second_setter_id: int = -1) -
 			lineup.designated_setter_ids.append(second_setter_id)
 		var plan: Resource = defensive_plans.get(rotation_number) as Resource
 		if plan != null:
-			plan.ensure_defaults(lineup)
+			plan.ensure_defaults(lineup, players)
 	rotation_changed.emit(selected_rotation)
 	return ""
 
@@ -471,11 +620,21 @@ func resolve_active_rally(
 	development_continuous_reception: bool = false,
 ) -> Resource:
 	var simulator: RefCounted = RallySimulatorScript.new()
+	## Handed in before the resolve, not looked up inside it. The resolver stays
+	## a function of what it was given, which is what makes a rally replayable
+	## from a seed.
+	simulator.pair_familiarity = team.pair_familiarity if team != null else {}
+	if team != null:
+		simulator.team_cohesion = float(team.cohesion)
+		simulator.team_tactical_familiarity = float(team.tactical_familiarity)
 	return simulator.resolve(
 		players, current_lineup(), called_play(), opponent_team,
 		current_defensive_plan(), bool(match_state.serving_home), seed_value,
 		development_continuous_reception,
 		team.principles if team != null else null,
+		team.team_name if team != null else "",
+		match_state.serve_context() if match_state != null else {},
+		float(match_state.match_flow) if match_state != null else 0.0,
 	)
 
 
@@ -483,6 +642,7 @@ func record_rally(result: Resource) -> Dictionary:
 	if match_state == null:
 		match_state = MatchStateScript.new()
 	var update: Dictionary = match_state.record_rally(result)
+	_record_serve_familiarity(result)
 	if opponent_team != null:
 		opponent_team.observe_rally(result)
 	_apply_rally_dynamics(result, update)
@@ -491,6 +651,24 @@ func record_rally(result: Resource) -> Dictionary:
 	if bool(update.get("opponent_rotated", false)) and opponent_team != null:
 		opponent_team.select_rotation(int(match_state.opponent_rotation))
 	return update
+
+
+func _record_serve_familiarity(result: Resource) -> void:
+	if result == null:
+		return
+	for raw_event in result.events:
+		var event := raw_event as RallyEvent
+		if event == null or event.event_type != RallyEvent.EventType.SERVE:
+			continue
+		var side := str(event.metadata.get("side", ""))
+		var server_id := int(event.metadata.get("server_id", event.actor_id))
+		var server: VolleyballPlayer = player_by_id(server_id) if side == "home" \
+			else opponent_team.player_by_id(server_id) as VolleyballPlayer
+		if server != null:
+			Familiarity.record_exposure(server, [
+				"serve_target:%s" % str(event.metadata.get("target", "unknown")),
+			])
+		return
 
 
 func call_timeout() -> String:
@@ -566,7 +744,7 @@ func substitute_current_rotation(player_out_id: int, player_in_id: int) -> Strin
 			plan.set_defender_position(
 				player_in_id, CourtConstants.slot_position(int(change["slot"]))
 			)
-			plan.ensure_defaults(lineup)
+			plan.ensure_defaults(lineup, players)
 	match_state.home_substitutions_used += 1
 	match_state.substitution_pairs[player_out_id] = player_in_id
 	match_state.substitution_pairs[player_in_id] = player_out_id
@@ -708,7 +886,17 @@ func unregister_player(player_id: int) -> String:
 ## exhaustion. The former 0.008 base alone charged 0.56 before decisive work,
 ## pushing low-stamina lineups toward 1.0 and recreating the attack-error cliff
 ## inside a single fixture even after between-match recovery was repaired.
-const RALLY_FATIGUE_BASE: float = 0.0035
+## What being on court costs before anybody does anything.
+##
+## **Cut from 0.0035 because it is no longer carrying the whole model.** It used
+## to be the entire cost of a rally, identical for a middle who jumped six times
+## and a libero who did not leave their feet, which made conditioning a function
+## of the lineup sheet. The jumps, sprints and metres are now itemised by the
+## resolver and charged separately, so this is only the residue: standing,
+## watching, shuffling a step. Re-anchored so a full five-set match still lands a
+## worked starter in the `spent` stage and a median one in `laboured`, which is
+## the distribution `tools/run_fatigue_stage_probe.gd` measures.
+const RALLY_FATIGUE_BASE: float = 0.0012
 const RALLY_FATIGUE_DECISIVE: float = 0.006
 
 ## How far stamina moves that cost. `stamina` is trained by the Strength & Jump
@@ -722,10 +910,24 @@ const STAMINA_FATIGUE_SCALE_MIN: float = 0.6
 const STAMINA_FATIGUE_SCALE_MAX: float = 1.4
 
 
+## And how far the tradition that raised them moves it, on top of their own
+## conditioning.
+##
+## **Read from `home_region`, not `club_region`, and that is the design.** This is
+## what a voli's body learned growing up in the halls they grew up in, and it
+## does not stop being true when they transfer -- so signing a Hitōuen buys their
+## curve, and a club's endurance becomes the aggregate of who it raised and who
+## it bought. That is exactly the shape regional academies will need, and it means
+## the mechanic is already correct on the day they arrive rather than needing to
+## be re-pointed.
+##
+## Empty resolves to Landavol at 1.0, so every hand-authored fixture player is
+## untouched and the baseline every calibration was measured against holds.
 static func stamina_fatigue_scale(player: VolleyballPlayer) -> float:
 	if player == null:
 		return 1.0
-	return lerpf(STAMINA_FATIGUE_SCALE_MAX, STAMINA_FATIGUE_SCALE_MIN,
+	return VolleyballRegions.fatigue_resistance(player.home_region) * lerpf(
+		STAMINA_FATIGUE_SCALE_MAX, STAMINA_FATIGUE_SCALE_MIN,
 		clampf(float(player.stamina) / 100.0, 0.0, 1.0))
 
 
@@ -744,9 +946,25 @@ func _apply_rally_dynamics(result: Resource, update: Dictionary) -> void:
 				opponent_on_court.append(opponent_player)
 
 	for player in home_on_court + opponent_on_court:
+		## **The rally's base cost, now much smaller, plus what they actually
+		## did.** The base is no longer the model -- it is the standing, watching,
+		## shuffling into position that every player on court does and that the
+		## resolver does not itemise. The work itself arrives below, per player,
+		## from the jumps and the metres the rally actually contains.
 		player.fatigue = minf(
 			player.fatigue + rally_fatigue_cost(player, RALLY_FATIGUE_BASE), 1.0
 		)
+		var exertion := float(result.exertion_fatigue.get(player.id, 0.0))
+		if exertion > 0.0:
+			player.fatigue = minf(
+				player.fatigue + rally_fatigue_cost(player, exertion), 1.0
+			)
+		## And what the floor cost them on top of the rally itself. A libero who
+		## hits the deck three times in a rally has worked harder than one who
+		## stayed on their feet, and the base cost cannot tell them apart.
+		var floor_cost := float(result.recovery_fatigue.get(player.id, 0.0))
+		if floor_cost > 0.0:
+			player.fatigue = minf(player.fatigue + floor_cost, 1.0)
 
 	var decisive := player_by_id(int(result.decisive_actor_id))
 	if decisive == null and opponent_team != null:
@@ -806,7 +1024,11 @@ func _apply_confidence_shift(
 	decisive_actor_id: int,
 	volatility: float = 1.0,
 ) -> void:
-	var magnitude := (0.035 + absf(float(match_state.last_flow_shift)) * 0.14) \
+	## 0.28 rather than 0.14 because halving the flow impact band also halved the
+	## shifts this reads. Doubling the coefficient keeps confidence moving exactly
+	## as far as it did before, so lengthening flow's memory changes flow and
+	## nothing else.
+	var magnitude := (0.035 + absf(float(match_state.last_flow_shift)) * 0.28) \
 		* volatility
 	for player in side_players:
 		var sensitivity := lerpf(1.25, 0.60, float(player.composure) / 100.0)
@@ -920,13 +1142,13 @@ func from_dict(data: Dictionary) -> void:
 	for plan_data in data.get("defensive_plans", []):
 		var plan: Resource = DefensivePlanScript.new()
 		plan.load_dict(plan_data)
-		plan.ensure_defaults(rotations[plan.rotation_number])
+		plan.ensure_defaults(rotations[plan.rotation_number], players)
 		defensive_plans[plan.rotation_number] = plan
 	for rotation_number in range(1, 7):
 		if rotation_number not in defensive_plans:
 			var fallback: Resource = DefensivePlanScript.new()
 			fallback.rotation_number = rotation_number
-			fallback.ensure_defaults(rotations[rotation_number])
+			fallback.ensure_defaults(rotations[rotation_number], players)
 			defensive_plans[rotation_number] = fallback
 
 
@@ -936,3 +1158,80 @@ func _defensive_plans_to_data() -> Array[Dictionary]:
 		if rotation_number in defensive_plans:
 			result.append(defensive_plans[rotation_number].to_dict())
 	return result
+
+
+## One opponent voli built as a copy of the home voli in the same position.
+##
+## Every ability attribute plus the body, because reach decides blocking and
+## height decides reach -- a mirror that copied technique and not measurements
+## would be a control in name only. Identity stays theirs: id, name and position
+## code are the club's, everything that decides a rally is the same on both
+## sides of the net.
+##
+## Handedness is deliberately included. It is the one presentation field that
+## also changes geometry, and leaving it at a default would have quietly made
+## every Port Azure attacker right-handed against a home squad that may not be.
+## Play somebody else: re-region the opponent in place.
+##
+## **Everything physical stays mirrored and only the identity moves.** That is
+## the whole design of this function and it is worth being explicit about,
+## because the obvious implementation — generate a fresh regional roster — would
+## destroy the one control this project has. Port Azure is a position-for-
+## position copy of the home squad, which is what makes any residual gap between
+## the two sides engine asymmetry by definition; a Xérvyan roster with Xérvyan
+## attributes would confound identity with talent on the first rally, and no
+## measurement taken afterward could separate them.
+##
+## So a Xérvu opponent is the same seven bodies with the same seven-hundred
+## attributes, wearing Xérvu's name, called by Xérvyan names, playing by Xérvu's
+## principles. Any difference a player sees across the net *is* the region. When
+## academies exist and each region raises its own volis, that is a deliberate
+## second act — regional talent layered on top of regional identity — and it
+## should be added knowing it spends this control.
+##
+## Names are indexed rather than drawn at random so the same fixture always
+## fields the same eleven people.
+func set_opponent_region(region_name: String, club_index: int = 0) -> void:
+	if opponent_team == null:
+		return
+	var resolved := VolleyballRegions.canonical_name(region_name)
+	opponent_team.region = resolved
+	opponent_team.team_name = VolleyballRegions.club_name(resolved, club_index)
+	for index in range(opponent_team.players.size()):
+		var player := opponent_team.players[index] as VolleyballPlayer
+		if player == null:
+			continue
+		## `home_region` is where a voli was raised and `club_region` where they
+		## play now. A club's own squad is overwhelmingly local, and both being
+		## the region is the honest default until transfers move people.
+		player.home_region = resolved
+		player.club_region = resolved
+		player.display_name = VolleyballRegions.person_name(resolved, index)
+
+
+func _mirror_player(
+	player_id: int,
+	player_name: String,
+	role_name: String,
+	position_code: String,
+	source: VolleyballPlayer,
+) -> VolleyballPlayer:
+	var overrides := {}
+	if source != null:
+		for attribute_name in VolleyballPlayer.ABILITY_ATTRIBUTES:
+			overrides[attribute_name] = source.get(attribute_name)
+		for measurement in [
+			"height_cm", "mass_kg", "wingspan_cm",
+			"age", "professional_experience", "potential", "dominant_hand",
+		]:
+			overrides[measurement] = source.get(measurement)
+	return _make_player(player_id, player_name, role_name, position_code, overrides)
+
+
+## The home voli with this id, during seeding, before any lineup exists.
+func _player_by_id(player_id: int) -> VolleyballPlayer:
+	for candidate in players:
+		var player: VolleyballPlayer = candidate as VolleyballPlayer
+		if player != null and player.id == player_id:
+			return player
+	return null

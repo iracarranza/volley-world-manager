@@ -9,6 +9,54 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var identity: String = "Balanced"
 @export var principles: Resource = TeamPrinciplesModel.for_identity("Balanced")
 @export_range(0.0, 1.0) var tactical_familiarity: float = 0.35
+## What each pair of volis knows about each other, keyed `"lowId:highId"`.
+##
+## The squad already had one familiarity number for the whole team and one per
+## voli per slot, and nothing at all between two people -- which left the sport's
+## most important relationship, a setter and a hitter who have run the same quick
+## two hundred times, unrepresentable. See `PairFamiliarity`.
+@export var pair_familiarity: Dictionary = {}
+## Where the squad lives, and what is in the rooms. See `Accommodation`.
+##
+## A structure name, whether the club owns it or leases it, and the equipment
+## installed -- squad-wide for now, because §11's rule is that a room is a
+## loadout and per-room assignment is a screen that does not exist yet.
+@export var housing_structure: String = "Bunkhouse"
+@export var housing_owned: bool = false
+@export var housing_small_equipment: Array[String] = []
+@export var housing_large_equipment: Array[String] = []
+@export var housing_occupants_per_room: int = 2
+## Weeks left before the squad has settled where they are. See `Accommodation`.
+##
+## Set when a lease changes and counted down weekly. §16: moving hurts, and the
+## cost that is not money is that nobody knows where anything is for a fortnight.
+@export var housing_settling_weeks: int = 0
+## Which regions the club runs food lines to, beyond its own. See `FoodSupply`.
+@export var supply_lines: Array[String] = []
+## The base of the week. See `FoodBlock` -- manufactured, universal, and the
+## layer §1 authored that the code did not have until the food screen.
+@export var food_block: String = "Blan'deral"
+## The mix the chef is told to aim for, as `{paste: share}`. Empty means the
+## chef rotates on their own. See `PasteRatio` -- a preset is a *target*, and
+## only a manager in the kitchen gets it exactly.
+@export var paste_preset: Dictionary = {}
+## Mixes worth keeping, named by the manager. A preset can only be saved from a
+## week that was actually cooked, so the list is a record of things this club has
+## really eaten rather than a recipe book somebody typed.
+@export var paste_presets: Dictionary = {}
+
+## This week's painted block, as `PastePaint.to_dict`.
+##
+## Saved because it is an *instruction*, not a readout. A manager who painted
+## three quarters of the block Xérvyan and closed the game has told the kitchen
+## something, and a block that came back bare on Monday would have thrown it
+## away -- along with the paste it cost, which the store has already been charged
+## for.
+##
+## Empty means nobody painted this week, which is a different state from a bare
+## block somebody scraped clean: the first lets the chef rotate, the second is a
+## deliberate week of unpasted meals.
+@export var paste_canvas: Dictionary = {}
 ## Trust and emotional connection. Familiarity governs knowing the system;
 ## cohesion governs how strongly confidence and recovery spread through it.
 @export_range(0.0, 1.0) var cohesion: float = 0.50
@@ -20,7 +68,21 @@ const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 @export var libero_ids: Array[int] = []
 @export var depth_chart: Dictionary = {}
 @export var starting_player_ids: Array[int] = []
+## The club's day, and the volis who keep their own.
+##
+## A personal schedule is a copy of the club's that somebody has changed, so the
+## interesting quantity is the difference rather than the schedule -- see
+## `DailyScheduleSystem.evaluate_roster`.
+@export var daily_schedule: DailySchedule = DailySchedule.new()
+@export var personal_schedules: Dictionary = {}
 @export_range(6, 18) var roster_limit: int = 14
+
+## What the manager drew on the clipboard. See `TacticSheet`.
+##
+## On the team rather than on the career because it is a property of *this
+## squad*: the shape they play, who closes the line, which zone is being drilled.
+## A manager who moves clubs takes their ideas and leaves the sheet.
+@export var tactic_sheet: TacticSheet = TacticSheet.new()
 
 
 func add_player(player_id: int) -> String:
@@ -103,12 +165,35 @@ func to_dict() -> Dictionary:
 		"identity": identity,
 		"principles": principles.to_dict() if principles != null else {},
 		"tactical_familiarity": tactical_familiarity,
+		"pair_familiarity": pair_familiarity.duplicate(true),
+		"housing_structure": housing_structure,
+		"housing_owned": housing_owned,
+		"housing_small_equipment": Array(housing_small_equipment).duplicate(),
+		"housing_large_equipment": Array(housing_large_equipment).duplicate(),
+		"housing_occupants_per_room": housing_occupants_per_room,
+		"housing_settling_weeks": housing_settling_weeks,
+		"supply_lines": Array(supply_lines).duplicate(),
+		"food_block": food_block,
+		"paste_preset": paste_preset.duplicate(true),
+		"paste_presets": paste_presets.duplicate(true),
+		"paste_canvas": paste_canvas.duplicate(true),
 		"cohesion": cohesion,
 		"regional_alignment": regional_alignment,
 		"player_ids": player_ids.duplicate(), "captain_id": captain_id,
 		"libero_ids": libero_ids.duplicate(), "depth_chart": depth_chart.duplicate(true),
 		"starting_player_ids": starting_player_ids.duplicate(),
+		"daily_schedule": daily_schedule.to_dict() if daily_schedule != null else {},
+		"personal_schedules": _personal_schedule_data(),
 		"roster_limit": roster_limit}
+
+
+func _personal_schedule_data() -> Dictionary:
+	var rows := {}
+	for player_id in personal_schedules:
+		var schedule: DailySchedule = personal_schedules[player_id] as DailySchedule
+		if schedule != null:
+			rows[str(player_id)] = schedule.to_dict()
+	return rows
 
 
 static func from_dict(data: Dictionary) -> VolleyballTeam:
@@ -122,12 +207,36 @@ static func from_dict(data: Dictionary) -> VolleyballTeam:
 	)
 	team.identity = str(team.principles.preset_name)
 	team.tactical_familiarity = clampf(float(data.get("tactical_familiarity", 0.35)), 0.0, 1.0)
+	team.pair_familiarity = Dictionary(data.get("pair_familiarity", {})).duplicate(true)
+	team.housing_structure = str(data.get("housing_structure", "Bunkhouse"))
+	team.housing_owned = bool(data.get("housing_owned", false))
+	team.housing_occupants_per_room = int(data.get("housing_occupants_per_room", 2))
+	team.housing_settling_weeks = int(data.get("housing_settling_weeks", 0))
+	team.housing_small_equipment.clear()
+	for item in Array(data.get("housing_small_equipment", [])):
+		team.housing_small_equipment.append(str(item))
+	team.housing_large_equipment.clear()
+	for item in Array(data.get("housing_large_equipment", [])):
+		team.housing_large_equipment.append(str(item))
+	team.supply_lines.clear()
+	for region in Array(data.get("supply_lines", [])):
+		team.supply_lines.append(str(region))
+	team.food_block = str(data.get("food_block", "Blan'deral"))
+	team.paste_preset = Dictionary(data.get("paste_preset", {})).duplicate(true)
+	team.paste_presets = Dictionary(data.get("paste_presets", {})).duplicate(true)
+	team.paste_canvas = Dictionary(data.get("paste_canvas", {})).duplicate(true)
 	team.cohesion = clampf(float(data.get("cohesion", 0.50)), 0.0, 1.0)
 	team.regional_alignment = clampf(
 		float(data.get("regional_alignment", 0.50)), 0.0, 1.0
 	)
 	for raw_id in data.get("player_ids", []):
 		team.player_ids.append(int(raw_id))
+	if data.has("daily_schedule") and not Dictionary(data.daily_schedule).is_empty():
+		team.daily_schedule = DailySchedule.from_dict(Dictionary(data.daily_schedule))
+	for raw_key in Dictionary(data.get("personal_schedules", {})):
+		team.personal_schedules[int(raw_key)] = DailySchedule.from_dict(
+			Dictionary(data.personal_schedules[raw_key])
+		)
 	team.captain_id = int(data.get("captain_id", -1))
 	for raw_id in data.get("libero_ids", []):
 		team.libero_ids.append(int(raw_id))

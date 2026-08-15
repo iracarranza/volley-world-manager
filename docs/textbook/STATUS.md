@@ -1,6 +1,6 @@
 # Current Implementation Status
 
-Last reviewed: 2026-08-02
+Last reviewed: 2026-08-06
 
 Fresh developers and coding models should begin with
 [FRESH_AGENT_HANDOFF.md](FRESH_AGENT_HANDOFF.md). It is the authoritative
@@ -241,9 +241,9 @@ This page is the quickest defense against confusing source-code existence with a
   for; only the secondary tier is generator-specific.
 - Region specialty lists give each region focused +8 attribute leans. Pāwa Hitō
   sustains repeated transition attacks, Spëddigh applies work rate and tempo
-  pressure, Taktikã develops composed system players, and Ispayk owns the
+  pressure, Taktikã develops composed system players, and Ĭspayk owns the
   large-framed bomba identity. Region physique biases shift height, mass, and
-  wingspan before individual variation, with Ispayk now measurably larger than
+  wingspan before individual variation, with Ĭspayk now measurably larger than
   Landavol while Pāwa remains near average size.
 - `stride_length_m` is recalculated from the player's actual post-variation
   height, eliminating the stale-stride defect the locomotion calibration had
@@ -483,6 +483,39 @@ player-specific perceived destination and arrival time. Its current familiarity
 input is a temporary normalized value; learned signature clusters and live-rally
 integration have not been implemented.
 
+## Presentation system
+
+The interface is drawn rather than styled: see
+[docs/design/UI_VISUAL_SYSTEM.md](../design/UI_VISUAL_SYSTEM.md) for the whole
+account, and treat that page as the source of truth over anything here.
+
+- `scripts/systems/ui_style_system.gd` assigns every `Control` a
+  `theme_type_variation` from its widget kind, name and structure, then hangs
+  the drawn treatments off it. There is exactly one place that decides what a
+  surface is.
+- Surfaces are sewn (`Stroke.STITCH`), controls are written with a broad nib
+  (`Stroke.INK`) and marked with a highlighter under the pointer. Both live in
+  `scenes/components/ink_outline.gd`.
+- The section menu is a tape measure (`scenes/components/tape_measure.gd`):
+  the navigation button *is* the case, the drawer is the band, and the section
+  buttons sit on it with the graduations landing on their edges.
+- Scrolling regions are slips of paper threaded under the page
+  (`scenes/components/paper_window.gd`) -- three hand-cut slits, a shadow that
+  deepens on whichever side is hiding more, and a pull tab. The real
+  `ScrollBar` still handles all input; the theme strips it to nothing.
+- Tab rows are index tabs cut into a divider
+  (`scenes/components/paper_tabs.gd`). Position relevance on the roster's
+  attribute band is a gold foil sticker
+  (`scenes/components/star_sticker.gd`), kept on a separate channel from the
+  grade colour.
+- `scripts/data/ui_palette.gd` is the single source of truth for colour, with
+  the `.tres` themes duplicated from it under a synchronisation check. Grade
+  colours need one table per theme; button tiers draw no fill, so their font
+  colours must be legible against the page rather than against a stylebox. Both
+  rules are enforced by the suite.
+- `tools/preview/ink_shot.tscn` renders seven dashboard views in either theme
+  (`-- --light`) to `user://`. It is the fast loop for any presentation change.
+
 ## 3D replay presentation
 
 Match Center exposes an explicit View 3D replay for the last completed rally.
@@ -566,7 +599,10 @@ its current status are in the
 
 ## Validation baseline
 
-The current foundation validation reports 476 passing checks (424 as of Gate
+The full suite reports **925 checks at `819a9b8`**, one failing
+(`defensive attack lowers both error risk and terminal pressure across six
+career seeds` -- pre-existing, tempo priced backwards). The foundation
+validation subset reports 476 passing checks (424 as of Gate
 51, plus four for `set_release_interval` consumption, four for attribute-first
 generation, six added when reviewing that work, and seven for stride-and-cadence
 locomotion: speed being a genuine product with distinct per-mode ranges, an

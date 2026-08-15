@@ -2,6 +2,7 @@ class_name OpponentTeam
 extends Resource
 
 const RallyEventModel := preload("res://scripts/models/rally_event.gd")
+const TeamPrinciplesModel := preload("res://scripts/models/team_principles.gd")
 
 @export var team_name: String = "Port Azure VC"
 @export var players: Array[Resource] = []
@@ -9,6 +10,36 @@ const RallyEventModel := preload("res://scripts/models/rally_event.gd")
 @export_range(1, 6) var current_rotation: int = 1
 @export var rotations: Dictionary = {}
 @export_range(0.0, 1.0) var scouting_confidence: float = 0.42
+## What this side believes about volleyball, from the same table the home team
+## picks from.
+##
+## The home side has had a `TeamPrinciples` -- seven axes -- since identities
+## existed, and this side had a three-key `tendencies` dictionary and a literal
+## 0.5 wherever the engine wanted a principle. That is not a quieter opponent,
+## it is a differently-shaped one, and it is why every symmetry instrument in
+## this project has had to pin individual scalars by hand to stop reading a
+## coaching choice as an engine fault. A gate can only control the confounds
+## somebody thought of; giving both sides the same type removes the whole class.
+##
+## Deliberately the existing presets and nothing new. Regional identities are
+## worth having and belong on top of a base that is already known to be even.
+@export_enum(
+	"Balanced", "Technical", "Physical", "Defensive", "Fast Tempo", "Development"
+) var identity: String = "Balanced"
+
+## Where this club is from, and — when set — where its principles come from.
+##
+## **Empty means "use the preset", and that is not a placeholder.** A club with no
+## region falls back to `identity`, which is what every saved career and every
+## calibration fixture already carries, so nothing that exists today changes
+## shape. What makes the migration safe rather than merely careful is arithmetic:
+## `REGIONAL_PRINCIPLES.Landavol` and `PRESETS.Balanced` are the same seven
+## numbers, all 0.50, so a Landavol opponent and a Balanced one are the same
+## side. The vertical slice's mirrored roster is this repository's only control
+## for engine asymmetry — every side-versus-side reading in it depends on the two
+## teams being identical — and giving that opponent a region has to be provably
+## free. It is.
+@export var region: String = ""
 @export var tendencies: Dictionary = {
 	"preferred_lane": "Left Pin",
 	"tempo": 2,
@@ -76,6 +107,28 @@ func setter() -> Resource:
 	return player_by_id(setter_id)
 
 
+## This side's principles, resolved the same way the home team's are.
+##
+## A region wins over a preset when it is set, because a region *is* the more
+## specific statement — `VolleyballRegions.preferred_principles` returns the same
+## seven axes through the same `TeamPrinciples`, so nothing downstream can tell
+## which door they came through, which is the property that makes this
+## substitution safe to make everywhere at once.
+func principles() -> Resource:
+	if not region.is_empty():
+		return VolleyballRegions.preferred_principles(region)
+	return TeamPrinciplesModel.for_identity(identity)
+
+
+## What to call this side's identity in front of a player.
+##
+## The region if it has one, because "Xérvu" tells somebody more than "Balanced"
+## does and is the answer to the question a player actually asks when a fixture
+## names a club they have never heard of.
+func identity_label() -> String:
+	return region if not region.is_empty() else identity
+
+
 func best_server() -> Resource:
 	return _best_by_sum(["serve_power", "serve_technique", "serve_placement",
 		"serve_consistency"])
@@ -105,11 +158,18 @@ func court_position(player_id: int, phase: String = "defense") -> Vector2:
 			## sides on one code path is what makes a tactical change legible:
 			## it lands identically on each half of the court.
 			if phase == "serve_receive":
+				var passer_count := int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+					CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+				]["passer_count"])
+				var passer_slots := CourtConstants.roster_serve_receive_passer_slots(
+					lineup, players, passer_count
+				)
 				var formation := CourtConstants.serve_receive_formation(
 					lineup.slot_for_player(lineup.active_setter_id()),
 					CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
 					-1,
 					true,
+					passer_slots,
 				)
 				if slot_number in formation:
 					return Vector2(formation[slot_number])

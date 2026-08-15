@@ -16,11 +16,58 @@ extends Resource
 ## snapshot instead of whichever tactical-planner view happens to be open.
 @export var initial_home_positions: Dictionary = {}
 @export var initial_opponent_positions: Dictionary = {}
+## Where each side stands when the ball is on the *other* side of the net --
+## the floor-defence posture, as opposed to the serve-receive formation above.
+##
+## Both come from opinions the simulator already holds and already uses:
+## `DefensivePlan.defender_position` for the home side, and the opponent team's
+## own `court_position(id, "defense")`. Until now they shaped only the first
+## frame of a rally. Playback had no notion of a position to *return* to, so
+## once the serve was away every player either had an explicit target for the
+## phase or stood exactly where the last contact left them -- which is most of
+## why a rally looked lifeless once the invented drift was removed.
+##
+## Carried on the result rather than fetched live, for the same reason the
+## initial snapshot is: a replay must not depend on whichever plan happens to be
+## open in the tactical view later.
+@export var home_base_positions: Dictionary = {}
+@export var opponent_base_positions: Dictionary = {}
 ## Presentation identity captured with the rally so replay does not depend on
 ## whichever roster is active later (or mirror every attacker onto one arm).
 @export var player_handedness: Dictionary = {}
 ## Height, wingspan and stride captured at resolution time. Presentation uses
 ## these values for body proportions and gait without consulting live rosters.
 @export var player_physical_profiles: Dictionary = {}
+## What each player's trips to the floor cost them in condition, keyed by id.
+##
+## Reported rather than applied. `jumping_reach_cm()` reads `fatigue`, so charging
+## it inside the resolver made a rally mutate the roster it was resolving and two
+## replays of the same seed stopped matching -- the determinism gate caught it
+## immediately. Fatigue accrual belongs to the match layer, which already has a
+## post-rally step for exactly this.
+@export var recovery_fatigue: Dictionary = {}
+## And what the *work* cost them: jumps, sprints and metres of court, booked per
+## player by the resolver and charged by the match layer for the same
+## determinism reason as `recovery_fatigue` above. This is what makes condition a
+## consequence of playing rather than of being selected.
+@export var exertion_fatigue: Dictionary = {}
+## What each player was attending to, deciding and feeling, as semantic cues on
+## the same physical clock the events carry.
+##
+## Stored complete on the resolved result, for the same reason the position
+## snapshots above are: a replay must not consult the current roster, match
+## confidence, tactics or scouting state. A cue compiled at resolution time
+## describes what that player knew *then*; recomputing it at display time would
+## quietly give a blocker the benefit of a scouting report the team only earned
+## three rallies later.
+@export var cognition_cues: Array[Resource] = []
 @export var explanation: String = ""
+## The resolved headline, filled in by `RallySimulator._finish`.
+##
+## Stored rather than re-derived from `terminal_outcome` at display time,
+## because headlines now carry `{hitter}`-style placeholders and the UI has no
+## access to the names that fill them. `main.gd` called
+## `RallyExplanations.headline(terminal_outcome)` with no values and would print
+## the raw tokens.
+@export var headline: String = ""
 @export var ending_reason: StringName = &""

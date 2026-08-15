@@ -2,6 +2,9 @@ class_name ShadowAttackSystem
 extends RefCounted
 
 const BallTrajectoryModel := preload("res://scripts/models/ball_trajectory.gd")
+const HitterPlacementModel := preload(
+	"res://scripts/simulation/hitter_placement_model.gd"
+)
 const ApproachMechanicsModel := preload(
 	"res://scripts/simulation/approach_mechanics_system.gd"
 )
@@ -95,9 +98,16 @@ static func _setter_options(
 		var actor := state.player_state(&"home", player_id)
 		if actor == null or actor.player == null:
 			continue
-		var target := CourtConstants.lane_target(str(assignment.get(
-			"lane", "Left Pin"
-		)))
+		## The same coordinate the live set aims at, not the lane's centre.
+		##
+		## This read `lane_target` while the official path moved to asking the
+		## hitter where they want it, which is a shadow layer disagreeing with the
+		## thing it exists to shadow -- the one divergence this system can never be
+		## allowed to have, because every comparison it reports would inherit it.
+		var target := HitterPlacementModel.preferred_point(
+			actor.player, str(assignment.get("lane", "Left Pin")),
+			seed_value, index,
+		)
 		assignment["target"] = target
 		var tempo := clampi(int(assignment.get("tempo", 2)), 0, 3)
 		var contact_time := set_contact_time + SET_DURATIONS[tempo]

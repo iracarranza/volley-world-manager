@@ -82,25 +82,52 @@ const ABSENCE_MARKERS := {
 ## per-rally records both reports are built from. Driving both serving sides
 ## matters: the shadow pipeline only runs on opponent serves, so a sweep that
 ## forgets to alternate silently measures half the engine.
+## `principle_overrides` sets named principles on the home team *after* the
+## identity is applied, so a caller can hold six of the seven constant and move
+## the seventh.
+##
+## The presets co-vary heavily -- Physical is high on every principle and
+## Defensive is low on every one -- so a ranking taken across identities cannot
+## say which principle produced a difference. That is the confound this file's
+## own design doc warns about, arriving from a direction nobody had checked: not
+## two numbers taken under different conditions, but seven conditions moved at
+## once and one number read off the end.
 static func _sweep(
 	sample_count: int,
 	base_seed: int,
 	population: StringName = DEFAULT_POPULATION,
 	identity_name: String = "Balanced",
+	principle_overrides: Dictionary = {},
 ) -> Array[Dictionary]:
 	var records: Array[Dictionary] = []
 	for serving_home in [true, false]:
 		var manager := GameManagerModel.new()
 		manager.seed_vertical_slice_data()
 		manager.team.apply_identity(identity_name)
+		for principle_name in principle_overrides:
+			manager.team.principles.set(
+				principle_name, float(principle_overrides[principle_name])
+			)
 		if population == &"generated":
 			## Both sides, or the measurement compares a real squad against a
 			## squad of clones and reads the difference as a balance finding.
+			##
+			## And both from the *same* seed. `base_seed + 5000` drew the two
+			## rosters independently, which is a different imbalance rather than a
+			## fix for the first one: each career became a lopsided matchup, and
+			## the metrics measured over it saturated. `home_kill_rate` read 0.906
+			## here against 0.465 on identically-seeded squads -- so the identity
+			## gates were comparing two numbers pinned near a ceiling, and one of
+			## them came out bit-identical between identities.
+			##
+			## An identity comparison has to hold everything except the identity
+			## constant. Two squads generated alike is exactly that; clones are the
+			## right control here, not a hazard.
 			ExecutionScaleModel.apply_generated_attributes(
 				manager.players, base_seed
 			)
 			ExecutionScaleModel.apply_generated_attributes(
-				manager.opponent_team.players, base_seed + 5000
+				manager.opponent_team.players, base_seed
 			)
 		manager.match_state.serving_home = serving_home
 		for index in range(maxi(sample_count, 1)):
@@ -202,8 +229,11 @@ static func outcome_calibration(
 	base_seed: int = 900000,
 	population: StringName = DEFAULT_POPULATION,
 	identity_name: String = "Balanced",
+	principle_overrides: Dictionary = {},
 ) -> Dictionary:
-	var records := _sweep(sample_count, base_seed, population, identity_name)
+	var records := _sweep(
+		sample_count, base_seed, population, identity_name, principle_overrides
+	)
 	if records.is_empty():
 		return {"fixture_valid": false}
 
@@ -275,7 +305,8 @@ static func outcome_calibration(
 		## scored against every attempt above, not against each other: the
 		## sport's kill and hitting-error rates are per attempt, and a
 		## terminal-only denominator makes each rate a function of the others.
-		if outcome in ["kill", "opponent_kill", "attack_error", "blocked", "counter_block"]:
+		if outcome in ["kill", "opponent_kill", "attack_error",
+			"opponent_attack_error", "blocked", "counter_block"]:
 			terminal_attacks += 1
 			match outcome:
 				"kill", "opponent_kill":
@@ -283,6 +314,13 @@ static func outcome_calibration(
 				"attack_error":
 					attack_errors += 1
 					home_attack_errors += 1
+				## Counted in the sport's hitting-error rate like any other, but
+				## deliberately not in the home tally: the whole reason that
+				## tally is split is that an engine which models one side fully
+				## and the other in parallel will silently attribute one side's
+				## misses to the other.
+				"opponent_attack_error":
+					attack_errors += 1
 				"blocked", "counter_block":
 					stuffs += 1
 		## Which side's attack won the point. Every asymmetry found in this

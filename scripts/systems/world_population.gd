@@ -23,7 +23,7 @@ extends RefCounted
 ##
 ## 2. **Origin is not destination.** Talent is *born* evenly across the world
 ##    and *accumulates* wherever the money is. Nowhere breeds champions;
-##    rich programs collect them. A'ace fields stars it never raised, Ispayk
+##    rich programs collect them. A'ace fields stars it never raised, Ĭspayk
 ##    raises players it cannot keep, and aging stars filter back down to the
 ##    programs that will still have them.
 ##
@@ -138,20 +138,20 @@ const GUARANTEED_YOUNG_TIER: String = "standout"
 ## A'ace is that it produces almost nothing and buys the rest. All of that
 ## now lives in migration below, where it belongs.
 ##
-## A'ace is low because it is a young program with no pipeline yet. Ispayk
+## A'ace is low because it is a young program with no pipeline yet. Ĭspayk
 ## stays high: a fallen flagship still has its academies and its coaching,
 ## which is exactly why losing the players hurts.
 const REGION_BIRTH_WEIGHTS := {
 	"A'ace": 0.35,
-	"Ispayk": 1.20,
+	"Ĭspayk": 1.20,
 	## Minor regions are small programs, not small talent pools with the same
 	## headcount -- they genuinely raise far fewer players. Zaitgaist is a
 	## city-state you could walk across in a morning.
-	"Tu'ul ys Feynt": 0.25,
-	"Lo-onğ Ralī": 0.20,
-	"Bompaşao": 0.30,
-	"Rhen Tempaol": 0.28,
-	"Kutre den Lyn": 0.26,
+	"Tãul ys Feynt": 0.25,
+	"Lo-ong Ralī": 0.20,
+	"Bompaçao": 0.30,
+	"Rhėn Tempaol": 0.28,
+	"Kutré Lyn": 0.26,
 	"Zaitgaist": 0.12,
 }
 
@@ -159,33 +159,33 @@ const REGION_BIRTH_WEIGHTS := {
 ##
 ## Pull is a region's ability to attract and keep players -- money,
 ## facilities, prestige. This is the mechanism that fills A'ace's squads
-## with players it never raised, and empties Ispayk of the ones it did.
+## with players it never raised, and empties Ĭspayk of the ones it did.
 const REGION_PULL := {
 	"A'ace": 3.40,
 	"Pāwa Hitō": 1.35,
-	"Bloc du Larg": 1.15,
+	"Blôc du Larg": 1.15,
 	"Landavol": 1.00,
 	"Xérvu": 0.90,
 	"Spëddigh": 0.80,
 	"Taktikã": 0.80,
-	"Ispayk": 0.45,
+	"Ĭspayk": 0.45,
 	## Every minor region loses its best players to bigger programs. This is
 	## what produces the tier's signature story: a specialist raised in one of
 	## these and scouted playing somewhere else entirely, which the roster
 	## dossier already shows because `home_region` and `club_region` are
 	## separate fields.
-	## Well below every major, including Ispayk. Pull is relative and shared
+	## Well below every major, including Ĭspayk. Pull is relative and shared
 	## across all inhabited regions, so values merely *lower* than the majors
 	## still made the minor tier a net importer once six of them existed: they
 	## raise about 15% of the world between them, and at 0.45-0.70 they were
 	## attracting 26% of all migration. A minor region has to end a career
 	## having exported its best players, not collected somebody else's.
-	"Kutre den Lyn": 0.30,
-	"Rhen Tempaol": 0.26,
-	"Bompaşao": 0.24,
-	"Tu'ul ys Feynt": 0.20,
+	"Kutré Lyn": 0.30,
+	"Rhėn Tempaol": 0.26,
+	"Bompaçao": 0.24,
+	"Tãul ys Feynt": 0.20,
 	"Zaitgaist": 0.18,
-	"Lo-onğ Ralī": 0.14,
+	"Lo-ong Ralī": 0.14,
 }
 
 ## How likely a player is to have moved at all, by how good they are. Talent
@@ -209,7 +209,7 @@ const MIGRATION_CHANCE_BY_BAND := {
 ## bleeds its own graduates while a rich one holds on to them.
 ##
 ## Without this the veteran story only half worked: aging players did filter
-## down to Ispayk, but Ispayk's own large home-grown intake stayed put at
+## down to Ĭspayk, but Ĭspayk's own large home-grown intake stayed put at
 ## every age and diluted the effect back toward the world average -- on some
 ## seeds below it. A fallen program does not just take in old players, it
 ## also loses its young ones, and it needs to do both for the shape to read.
@@ -221,12 +221,12 @@ const ORIGIN_RETENTION_EXPONENT: float = -0.50
 ## The exponent goes *negative* once players are past it, inverting the
 ## ordering: clubs that can buy anyone stop buying thirty-year-olds, and the
 ## aging stars filter down to programs glad to have them. This is what fills
-## Ispayk with veterans -- not a birth quirk, but a fallen flagship taking in
+## Ĭspayk with veterans -- not a birth quirk, but a fallen flagship taking in
 ## players on the way back down.
 ##
 ## The turn has to come at the veteran band rather than only at the very
 ## end. With it starting only at 33-38 the effect was real but far too
-## small to see: that band is six per cent of the world, so Ispayk's veteran
+## small to see: that band is six per cent of the world, so Ĭspayk's veteran
 ## share landed inside the noise of a region with no lean at all.
 const PULL_EXPONENT_BY_BAND := {
 	"youth": 0.85, "emerging": 1.20, "prime": 1.20,
@@ -360,14 +360,14 @@ static func _scarce_allotment(
 ## region could be star-heavy or depth-heavy and the taglines describing
 ## exactly that were fiction the generator never implemented. Pāwa Hitō's
 ## showcase academies now genuinely concentrate top-tier talent at the cost of
-## depth; Bloc du Larg's methodical halls produce the inverse. Minor regions
+## depth; Blôc du Larg's methodical halls produce the inverse. Minor regions
 ## lean hard toward the middle tiers -- low ceiling, respectable floor -- so
 ## they stay places worth scouting without ever producing a generational
 ## player.
 const REGION_TIER_AFFINITY := {
 	"Pāwa Hitō": {"generational": 1.9, "elite": 1.6, "standout": 1.3,
 		"solid": 0.9, "squad": 0.8, "fringe": 1.1},
-	"Bloc du Larg": {"generational": 0.5, "elite": 0.8, "standout": 1.1,
+	"Blôc du Larg": {"generational": 0.5, "elite": 0.8, "standout": 1.1,
 		"solid": 1.4, "squad": 1.3, "fringe": 0.7},
 	"Taktikã": {"generational": 0.8, "elite": 1.0, "standout": 1.2,
 		"solid": 1.2, "squad": 1.0, "fringe": 0.8},
@@ -375,20 +375,20 @@ const REGION_TIER_AFFINITY := {
 		"solid": 1.0, "squad": 0.9, "fringe": 0.9},
 	"Spëddigh": {"generational": 0.7, "elite": 0.9, "standout": 1.2,
 		"solid": 1.3, "squad": 1.1, "fringe": 0.8},
-	"Ispayk": {"generational": 1.1, "elite": 1.0, "standout": 1.1,
+	"Ĭspayk": {"generational": 1.1, "elite": 1.0, "standout": 1.1,
 		"solid": 1.1, "squad": 1.0, "fringe": 1.0},
 	## Buys rather than raises: almost no homegrown pipeline at any tier.
 	"A'ace": {"generational": 0.4, "elite": 0.6, "standout": 0.8,
 		"solid": 1.1, "squad": 1.2, "fringe": 1.2},
-	"Tu'ul ys Feynt": {"generational": 0.3, "elite": 0.6, "standout": 1.0,
+	"Tãul ys Feynt": {"generational": 0.3, "elite": 0.6, "standout": 1.0,
 		"solid": 1.2, "squad": 1.2, "fringe": 1.1},
-	"Lo-onğ Ralī": {"generational": 0.2, "elite": 0.5, "standout": 0.9,
+	"Lo-ong Ralī": {"generational": 0.2, "elite": 0.5, "standout": 0.9,
 		"solid": 1.3, "squad": 1.3, "fringe": 1.1},
-	"Bompaşao": {"generational": 0.4, "elite": 0.9, "standout": 1.2,
+	"Bompaçao": {"generational": 0.4, "elite": 0.9, "standout": 1.2,
 		"solid": 1.1, "squad": 1.0, "fringe": 0.9},
-	"Rhen Tempaol": {"generational": 0.3, "elite": 0.7, "standout": 1.1,
+	"Rhėn Tempaol": {"generational": 0.3, "elite": 0.7, "standout": 1.1,
 		"solid": 1.2, "squad": 1.1, "fringe": 1.0},
-	"Kutre den Lyn": {"generational": 0.4, "elite": 1.0, "standout": 1.3,
+	"Kutré Lyn": {"generational": 0.4, "elite": 1.0, "standout": 1.3,
 		"solid": 1.1, "squad": 0.9, "fringe": 0.8},
 	"Zaitgaist": {"generational": 0.15, "elite": 0.4, "standout": 0.9,
 		"solid": 1.4, "squad": 1.4, "fringe": 1.0},
@@ -407,7 +407,7 @@ const REGION_TIER_AFFINITY := {
 const REGION_POSITION_AFFINITY := {
 	"Pāwa Hitō": {"Setter": 0.8, "Outside Hitter": 1.2, "Middle Blocker": 1.3,
 		"Opposite": 1.3, "Libero": 0.6},
-	"Bloc du Larg": {"Setter": 1.2, "Outside Hitter": 1.0, "Middle Blocker": 1.3,
+	"Blôc du Larg": {"Setter": 1.2, "Outside Hitter": 1.0, "Middle Blocker": 1.3,
 		"Opposite": 0.8, "Libero": 1.0},
 	"Spëddigh": {"Setter": 1.3, "Outside Hitter": 1.1, "Middle Blocker": 0.8,
 		"Opposite": 0.7, "Libero": 1.4},
@@ -416,17 +416,17 @@ const REGION_POSITION_AFFINITY := {
 	"Xérvu": {"Setter": 0.9, "Outside Hitter": 1.2, "Middle Blocker": 0.9,
 		"Opposite": 1.2, "Libero": 0.8},
 	## Deception is a pin-hitter's craft; nobody here is tall.
-	"Tu'ul ys Feynt": {"Setter": 1.1, "Outside Hitter": 1.4, "Middle Blocker": 0.4,
+	"Tãul ys Feynt": {"Setter": 1.1, "Outside Hitter": 1.4, "Middle Blocker": 0.4,
 		"Opposite": 1.2, "Libero": 1.0},
 	## The sharpest case in the set: elite liberos, nothing tall at all.
-	"Lo-onğ Ralī": {"Setter": 0.9, "Outside Hitter": 1.2, "Middle Blocker": 0.3,
+	"Lo-ong Ralī": {"Setter": 0.9, "Outside Hitter": 1.2, "Middle Blocker": 0.3,
 		"Opposite": 0.5, "Libero": 2.4},
-	"Bompaşao": {"Setter": 0.9, "Outside Hitter": 1.5, "Middle Blocker": 0.4,
+	"Bompaçao": {"Setter": 0.9, "Outside Hitter": 1.5, "Middle Blocker": 0.4,
 		"Opposite": 0.6, "Libero": 2.2},
 	## The only middle-heavy region here -- setters and quick middles.
-	"Rhen Tempaol": {"Setter": 2.0, "Outside Hitter": 0.9, "Middle Blocker": 1.6,
+	"Rhėn Tempaol": {"Setter": 2.0, "Outside Hitter": 0.9, "Middle Blocker": 1.6,
 		"Opposite": 0.5, "Libero": 0.8},
-	"Kutre den Lyn": {"Setter": 1.2, "Outside Hitter": 1.5, "Middle Blocker": 0.5,
+	"Kutré Lyn": {"Setter": 1.2, "Outside Hitter": 1.5, "Middle Blocker": 0.5,
 		"Opposite": 1.3, "Libero": 0.7},
 	## Flat on purpose: no tradition telling it what to produce.
 	"Zaitgaist": {"Setter": 1.0, "Outside Hitter": 1.0, "Middle Blocker": 1.0,
@@ -442,7 +442,7 @@ const REGION_POSITION_AFFINITY := {
 ## identity is built on.
 const REGION_ROSTER_CAPACITY := {
 	"A'ace": 1.50,
-	"Ispayk": 0.95,
+	"Ĭspayk": 0.95,
 }
 
 
@@ -475,6 +475,39 @@ static func birth_region(rng: RandomNumberGenerator, tier_key: String = "") -> S
 	return str(Regions.INHABITED_REGIONS[Regions.INHABITED_REGIONS.size() - 1])
 
 
+## How much *this* region wants *this* particular voli, over and above how
+## attractive the region is in general.
+##
+## **Pull says how loud a region's offer is; this says who it is aimed at.**
+## Every other region takes whoever will come, which is why they return 1.0 and
+## the ordinary migration model is untouched.
+##
+## A'ace is the exception and it is the whole of what the region is. It has no
+## tradition to develop and it knows it, so it shops -- and what it shops for is
+## specific and stated in the fiction: somebody who ends points, who wants the
+## ball, and who a dressing room of strangers will follow. Terminal ability,
+## ego and leadership, weighted so a voli who has all three is several times
+## more likely to end up there than one who is merely good.
+##
+## The cost of shopping that way is not priced here. It is `REGION_CEILING_PENALTY`
+## on the volis A'ace raises itself, and the cohesion it never builds -- a squad
+## assembled from eight traditions has no shared idea of how to play, and a
+## strong team that is not coached into strong decisions does not find the
+## situations its terminal players were bought for.
+static func _recruitment_appetite(
+	region_name: String, player: VolleyballPlayer
+) -> float:
+	if region_name != "A'ace" or player == null:
+		return 1.0
+	var terminal := (float(player.attack_power) + float(player.block_timing)) \
+		/ 200.0
+	var presence := (float(player.ego) + float(player.leadership)) / 200.0
+	## 0.45 at the bottom of both scales and 2.35 at the top, so this genuinely
+	## sorts rather than nudging -- a region that assembles has to visibly
+	## assemble somebody in particular.
+	return clampf(0.45 + terminal * 1.15 + presence * 0.75, 0.30, 2.60)
+
+
 ## Decides where a player actually plays. Better players move more often,
 ## careers accumulate moves with age, and the destination is drawn against
 ## regional pull raised to an age-dependent exponent -- so prospects flow
@@ -501,7 +534,8 @@ static func assign_club_region(player: VolleyballPlayer, rng: RandomNumberGenera
 		## migration and ended every career a net importer -- backwards for a
 		## tier defined by losing its best players.
 		var weight := pow(float(REGION_PULL.get(region_name, 1.0)), exponent) \
-			* region_capacity(str(region_name))
+			* region_capacity(str(region_name)) \
+			* _recruitment_appetite(str(region_name), player)
 		weights[region_name] = weight
 		total += weight
 	var roll := rng.randf() * total

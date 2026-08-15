@@ -4,6 +4,29 @@ Date: 2026-08-03
 Measured at: `b33b5b9`, revised against `f2fbc80` ("Recalibrate attacks and
 split regional strength") after review.
 
+> **Status as of 2026-08-06 (`819a9b8`): the work this planned is built.** See
+> **[UI_VISUAL_SYSTEM.md](UI_VISUAL_SYSTEM.md)** for the system as it actually
+> exists — the object classes, the treatments, and the two colour rules the
+> drawn edges turned out to require.
+>
+> This page is kept as the record of the constraints, most of which held:
+>
+> - **§1 (three rendering paths, palette is a GDScript module) held in full**,
+>   including the synchronisation test, which has since caught real drift.
+> - **§3 (`theme_type_variation`) held**, and the variation list grew into the
+>   object-class table that is now the centre of the system.
+> - **§6 (grade colours move to `UIPalette`, thresholds stay in
+>   `AttributeProfiles`) held** — and needed a second table. One set of five
+>   colours cannot serve a dark page and a cream one; see the built doc, §4.
+> - **§5 (fonts do not exist yet) is superseded.** Short Stack and Cherry Bomb
+>   One are both in the tree and both under test for regional glyph coverage.
+> - **§7 (player visual identity) partly landed.** The Roster's 3D slot exists
+>   and renders the rig; per-player cosmetic variation is still the open
+>   prerequisite it describes.
+> - **§9's check count (620) is stale.** It is 925 at `819a9b8`. The line above
+>   it — re-read the current count rather than trusting a figure quoted in a doc
+>   — is the part that matters.
+
 This is the **structural half** of the visual system: what the system has to
 cover, where it has to live, and what already exists. It deliberately contains
 no design taste — palette values, type scale, corner radii and motion curves
@@ -135,7 +158,7 @@ panel, raised panel, and inset/well panel.
 
 | file | overrides |
 | --- | ---: |
-| `career_dashboard.tscn` | 85 |
+| `journal_screen.tscn` | 85 |
 | `main.tscn` | 57 |
 | `new_career_screen.tscn` | 44 |
 | `title_screen.tscn` | 43 |
@@ -169,7 +192,7 @@ miss:
   shifts horizontally as values change. In a dense simulation UI this reads as
   cheap more than almost anything else.
 - **Full coverage of the region name glyphs.** `Spëddigh`, `Pāwa Hitō`,
-  `Xérvu`, `Taktikã`, `Braç Sindao` and `Tu'ul ys Feynt` need diaereses,
+  `Xérvu`, `Taktikã`, `Braç Sindao` and `Tãul ys Feynt` need diaereses,
   macrons, acute accents, tildes and cedillas present in both faces, or region
   names fall back mid-string and look broken.
 

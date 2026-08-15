@@ -78,13 +78,39 @@ const CLOSE_FRACTIONS: Array[float] = [1.0, 0.6, 0.2]
 ## rotations, plays, defensive assignments -- are left exactly as they were.
 ## Only the ability attributes are replaced, drawn from `PlayerGenerator` and
 ## matched by position role so a middle still gets a middle's profile.
+## The region is a parameter now.
+##
+## It was pinned to "Pāwa Hitō", so every calibration sweep in the engine drew
+## its rosters from one tradition -- and a tradition is not cosmetic here:
+## `REGION_SPECIALTY` grants a flat +8 on each region's named attributes, so a
+## Blôc du Larg roster genuinely blocks better and a Landavol roster carries no
+## bonus at all by design. Sweeping one region measures how much a *seed* moves
+## an outcome; sweeping regions measures how much a known attribute delta moves
+## it, which is the question worth asking.
+## **Landavol, because a fixture must not carry an identity.**
+##
+## This defaulted to `Pāwa Hitō`, which is the most extreme rating profile in the
+## game -- physical 4, technical 1, mental 1 -- and every calibration and gate
+## that reaches for generated attributes was therefore measuring a physical
+## region's squad and calling it "a generated roster". That was invisible while
+## the three region ratings did nothing; the moment they were wired to attribute
+## ceilings it showed up as a legality gate losing half its back-row sample,
+## because back-row attacking is a `court_vision` and `decision_making` choice
+## and the donor region is 2.6 short on both.
+##
+## Landavol is zero on every regional system there is -- no specialty, no physique
+## bias, no ego bias, no ceiling penalty, 0.50 on all seven principles, 1.00 on
+## both curves and 2/2/2 on the ratings. It is the only region that adds nothing
+## to what it is asked to measure, which is precisely what a fixture needs and is
+## the standing decision for what the symmetry fixtures should be.
 static func apply_generated_attributes(
 	players: Array,
 	base_seed: int,
+	region_name: String = "Landavol",
 ) -> void:
 	var donors_by_role := {}
 	var donors: Array[VolleyballPlayer] = PlayerGeneratorModel.generate_roster(
-		"Pāwa Hitō", "Club", base_seed
+		region_name, "Club", base_seed
 	)
 	for donor in donors:
 		var role := str(donor.position_role)
@@ -276,8 +302,12 @@ static func block_values(
 				(index + 1) % players.size()
 			] as VolleyballPlayer
 			assist_skill = simulator._block_contact_skill(partner, assist_close)
+		## Sealed positions, because this harness is measuring what the *skill*
+		## terms are worth. A seam is a separate quantity with its own scale, and
+		## letting it vary here would fold two answers into one column.
 		values.append(simulator._block_wall_quality(
-			simulator._block_contact_skill(player, close_fraction), assist_skill
+			simulator._block_contact_skill(player, close_fraction), assist_skill,
+			0.5, 0.5,
 		))
 	return values
 
@@ -303,44 +333,21 @@ static func block_scale(players: Array[VolleyballPlayer]) -> Dictionary:
 	return rows
 
 
-## What the contest margins would produce, given two scales.
+## `contest_shares` lived here and has been deleted.
 ##
-## Pairs a random swing with a random block and applies the resolver's own
-## thresholds. This is the number that decides a margin, and it costs
-## microseconds instead of a five-minute sweep.
-static func contest_shares(
-	attack_values: Array,
-	block_values: Array,
-	sample_count: int = 20000,
-	base_seed: int = 20250801,
-) -> Dictionary:
-	if attack_values.is_empty() or block_values.is_empty():
-		return {}
-	var rng := RandomNumberGenerator.new()
-	rng.seed = base_seed
-	var counts := {"stuff": 0, "touch": 0, "funnel": 0, "miss": 0}
-	for index in range(maxi(sample_count, 1)):
-		var attack := float(attack_values[rng.randi() % attack_values.size()])
-		var block := float(block_values[rng.randi() % block_values.size()])
-		var contest := block + rng.randf_range(-0.14, 0.12)
-		var outcome := "miss"
-		if contest > attack + RallySimulatorModel.BLOCK_STUFF_MARGIN:
-			outcome = "stuff"
-		elif contest > attack + RallySimulatorModel.BLOCK_TOUCH_MARGIN:
-			outcome = "touch"
-		elif contest > attack + RallySimulatorModel.BLOCK_FUNNEL_MARGIN:
-			outcome = "funnel"
-		counts[outcome] = int(counts[outcome]) + 1
-	var shares := {}
-	for key in counts:
-		shares[key] = float(counts[key]) / float(maxi(sample_count, 1))
-	## The stuff share here is an upper bound: the resolver additionally
-	## requires the primary to have sealed the lane, which this does not model.
-	shares["touched"] = 1.0 - float(shares["miss"])
-	return shares
+## It paired a random swing with a random block, applied `BLOCK_STUFF_MARGIN` and
+## its two siblings, and reported the resulting mix as what the block does. That
+## stopped being true when `ENABLE_GEOMETRIC_ATTACK` opened: the geometric path
+## overwrites the outcome and those three thresholds decide nothing. So it
+## projected a branch production does not take -- and it had no callers, so it was
+## a wrong answer nobody was even asking for.
+##
+## Recorded rather than silently removed because this is the second instance of
+## the same defect in as many days. Gate D's harness had also fallen behind the
+## resolver it was meant to calibrate, and for the same reason: nothing ran it, so
+## nothing noticed.
 
 
-## Share of swings the error threshold would reject, per situation.
 static func error_shares(attack_rows: Dictionary) -> Dictionary:
 	var shares := {}
 	for situation_name in attack_rows:

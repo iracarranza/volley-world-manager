@@ -9,6 +9,10 @@ both generation paths wired. The flat-distribution rule in §1 is enforced by
 `_test_body_type_distribution_is_flat`, which fails naming the region and the
 type if anyone weights it.
 
+Re-checked 2026-08-06 at `1ee4c96`: still accurate. `body_type` appears in
+`player_generator.gd` and `volleyball_player.gd` and in no system-fit code path,
+so §2 has not moved.
+
 Not landed: **the `SystemFitProfile` shifts of §2**, which is the layer that
 makes a type a tactical answer rather than a power level. Until those exist,
 body types are stat blocks — precisely what §2 says the feature must not be.
@@ -44,7 +48,7 @@ and positional skews in
 feel distinct. If body type were also regionally weighted, it would immediately
 read as a proxy for ethnicity — "people from here are built like that" — which
 is the one reading this feature must never support. A flat distribution makes
-body type orthogonal to origin: a Tu'ul ys Feynt Ursi and a Pāwa Hitō Ursi are
+body type orthogonal to origin: a Tãul ys Feynt Ursi and a Pāwa Hitō Ursi are
 the same body in different traditions, and the *tradition* is what differs.
 
 It is also culturally invisible in-world. No scouting text, news copy, region

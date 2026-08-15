@@ -1,5 +1,118 @@
 # Current Implementation Handoff
 
+## Immediate handoff: player cognition legibility
+
+**Owner:** Claude. Codex is changing scope to new 3D models and VFX. Keep the
+semantic cognition work independent of those assets: the result contract and
+cue timing must work with the existing primitive 2D/3D presentation, and new
+3D art should be able to consume the same contract later.
+
+**Branch:** `claude/system-fit-serve-receive-von64k`. This branch tracks its
+remote and contains the current simulation/playback work; none of it is on
+`main`. The title-screen/theme/Yatra working-tree changes are separate work and
+must not be staged with cognition changes.
+
+### Recovered Codex groundwork
+
+Four standalone foundations exist but are not wired into the game yet:
+
+- `scripts/models/player_cognition_cue.gd` -- replay-safe semantic cue data:
+  player/side, related action, physical interval, attention target, visibility,
+  certainty, urgency, punctuation, affect, trend, outcome and audience.
+- `scripts/simulation/cognition_timeline.gd` -- deterministic active-cue
+  selection. It currently returns one winning cue per player, which is the
+  intended UI rule: one composite overhead badge, never stacked bubbles.
+- `scripts/simulation/player_sightline_system.gd` -- first geometric pass at
+  sampling a defender-to-ball ray against occupied blocker silhouettes. It is
+  not yet connected to player movement, rally evidence or either renderer.
+- `scripts/simulation/rally_action_vocabulary.gd` -- first implementation of
+  the named outcomes in `docs/design/ACTION_VOCABULARY_DRAFT.md`. It is not yet
+  called, budgeted, calibrated or consumed by captions/statistics/cognition.
+
+No production file references these classes yet. `RallyResult` has no cognition
+stream, there is no compiler, no visual layer, no renderer and no cue tests.
+
+### Contract and invariants
+
+1. Add `cognition_cues` to `scripts/models/rally_result.gd`. Store complete cue
+   resources on the resolved result so replay never consults current roster,
+   confidence, tactics or scouting state.
+2. Build a resolver-side cognition compiler which promotes useful observation
+   evidence into a canonical result-level contract. The presentation must not
+   depend permanently on `shadow_reception`, `shadow_attack`, `shadow_block` or
+   other debug dictionaries.
+3. A cue describes semantics, never an icon: attention target (`ball`, `setter`,
+   `hitter`, `teammate`, court position), state (`searching`, `recognizing`,
+   `deciding`, `calling`, `committed`, `lost_sight`, `reacting`), certainty,
+   urgency, visibility, affect/intensity/trend and audience (`private`, `public`,
+   `observable`).
+4. Perception cues may contain only what that player perceived. Reception and
+   defense use perceived destinations; blocker gaze changes use each blocker's
+   recognition time and believed lane. Authoritative truth may grade an outcome
+   only after the decision boundary, never leak into the preceding read.
+5. Sample cues against the existing `physical_time`/trajectory clock, not UI
+   event beats. `SET_DECISION` is deliberately skipped as a standalone playback
+   pause, so setter thought must occur during the incoming pass.
+6. Render one composite cue per player. Eye shape/pupil direction, punctuation,
+   call symbol, face and trend arrow share one badge. Shape and punctuation must
+   carry the meaning alongside yellow/red/blue; color is never the only signal.
+7. Immediate action reaction is ephemeral replay data. Persistent
+   `match_confidence` remains the post-point system in `game_manager.gd` and is
+   not mutated during resolution or playback.
+8. Both playback paths consume identical semantic cues. The 2D court draws the
+   badge above its marker. The 3D path should add a separate camera-facing
+   cognition billboard component and use the existing head-look/expression APIs
+   with minimal edits to `player_actor_3d.gd`, reducing overlap with Codex's new
+   3D-model/VFX work. With no attention cue, existing ball tracking remains.
+
+### Implementation order
+
+1. Finalize and test `PlayerCognitionCue` serialization, one-winner overlap
+   rules and monotonic physical intervals; then add the stream to `RallyResult`.
+2. Add the canonical compiler at the resolver boundary. Promote the necessary
+   fields rather than teaching UI code the layout of shadow evidence.
+3. Implement the first vertical slice: set -> attack -> block. Reuse setter
+   option evidence, real hitter availability/responsibility, blocker early/late
+   estimates, recognition delays, commitments and perceived teammate cues.
+4. Add a `VISUAL_COGNITION` bit to the existing Match Centre `Visuals` menu,
+   enabled by default and independently toggleable on both tactical courts.
+5. Drive 2D cues from physical time, including pause, speed, skip, reset and
+   replay cleanup. Then connect the same sampler to a separate 3D billboard and
+   cognition-directed head/face overrides.
+6. Complete sightline geometry using the observer's sampled phase position,
+   incoming attack trajectory, occupied blocker body/hand geometry and block
+   timing. Emit `visible`, `partially_obscured`, `occluded` and reacquisition
+   boundaries in perception, not in a renderer.
+7. Integrate the canonical action vocabulary. Preserve the draft's notability
+   budget rather than naming every competent contact; cognition reactions read
+   the same tags captions and later statistics read.
+8. Add immediate reactions using pre-rally confidence, composure, action
+   involvement and team emotional expression. A decisive failed hitter may go
+   confident/yellow -> upset/red/down, while a teammate can go
+   neutral/yellow -> sad/blue/down without changing persistent confidence yet.
+9. Expand coverage across serve, reception, set, attack, block, defense,
+   coverage and point reactions only where a real read exists.
+
+### First acceptance sequence
+
+The set-to-block slice should visibly and deterministically show:
+
+- setter eyes moving among options they actually perceived;
+- an available, responsible hitter issuing a public fire/`!!` call;
+- blockers initially attending to different cues;
+- an early commitment pointing at the believed lane;
+- staggered gaze changes at each blocker's own recognition time;
+- floor defender `visible -> occluded -> reacquired` sightline changes;
+- `...?` during loss of sight and `!` on seeing the deflection/result;
+- distinct immediate reactions for the decisive actor and teammates.
+
+Tests must cover deterministic serialized cue streams, ordered timestamps, no
+truth leakage, staggered recognition, sightline transitions, reaction ownership,
+toggle-off behavior, lifecycle cleanup and semantic parity between 2D and 3D.
+Run the full headless suite after re-importing because these foundations add
+new `class_name` scripts. The verified 2026-08-09 baseline is 1,014 passing
+checks; treat any failure as a regression.
+
 ## Playable now
 
 - Start at a dedicated two-column title screen with New Career, Load Career,
@@ -15,7 +128,19 @@
   tendencies; clubs begin with ten senior players and stronger finances, while
   academies begin with twelve younger, higher-potential players.
 - Navigate a career dashboard with reusable summary cards and dedicated Home,
-  Roster, Team, Transfers/Recruitment and Competition screens.
+  Roster, Team, Club, Transfers/Recruitment, Competition and Sixnet screens.
+  Navigation collapses to a single strip: the button is the case of a tape
+  measure, and Tab (or pressing it) rolls the section menu out along the band.
+- Read the interface as a manager's working journal rather than a styled
+  application. Card surfaces are cut-out patches with a sewn seam, controls are
+  written with a broad nib and marked with a highlighter under the pointer,
+  scrolling regions are slips of paper threaded under the page through hand-cut
+  slits, and tab rows are index tabs cut into a divider. Every treatment is
+  drawn at runtime by `scripts/systems/ui_style_system.gd` from the tier it
+  assigns each `Control`, so a new screen is styled without knowing any of it
+  exists. The full account is in
+  [docs/design/UI_VISUAL_SYSTEM.md](docs/design/UI_VISUAL_SYSTEM.md); if you are
+  about to add a screen or a control, read it first.
 - Inspect individual player identity, availability, age, experience, satisfaction,
   reputation, match confidence, fatigue, position-weighted ability, potential,
   measurements and every raw attribute from the Roster screen. View a seven-axis
@@ -277,7 +402,7 @@
 - Playbook and active-play-per-rotation serialization.
 - Pure seeded `RallySimulator`; presentation never determines outcomes.
 - Centralized player-facing rally text in `scripts/data/rally_explanations.gd`.
-- 185 passing headless foundation checks and UI-binding validation, including a
+- 1,013 passing headless foundation checks and UI-binding validation, including a
   seeded ceiling on terminal home stuff-block frequency.
 
 ## Intentionally not implemented yet
@@ -300,6 +425,13 @@ event stream and player snapshots; it does not replace the tactical board or
 participate in simulation.
 
 ## Running the tests on a fresh checkout
+
+The 2026-08-09 serve, setter-choice, set-height and block-intent changes have a
+formula-level review packet at
+[`docs/calibration/SERVE_SETTER_REVIEW_HANDOFF_2026_08_09.md`](docs/calibration/SERVE_SETTER_REVIEW_HANDOFF_2026_08_09.md).
+It records assumptions, asymmetric paths, temporary measurements and likely
+failure-mode objections. Read it before changing any coefficient in those
+systems.
 
 The headless test runner needs Godot's global class cache to know about every
 `class_name` in the project. That cache lives in `.godot/` and is **not** in

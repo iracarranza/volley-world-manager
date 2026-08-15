@@ -54,7 +54,7 @@ Examples already favored:
 - Landavol
 - Spëddigh
 - Pāwa Hitō
-- Bloc du Larg
+- Blôc du Larg
 
 Regions should express different coaching philosophies rather than biological stereotypes.
 

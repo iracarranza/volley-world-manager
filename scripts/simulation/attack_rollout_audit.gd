@@ -82,7 +82,9 @@ static func evaluate(
 		)),
 		"contact_position": contact_position,
 		"contact_time": contact_time,
-		"arrival_margin": float(response.get("true_arrival_margin", -9.0)),
+		## Seconds. See `LiveReceptionIntegrator`: this is a time to spare and
+		## must not share a key with the coverage model's metres of reach.
+		"arrival_margin_seconds": float(response.get("true_arrival_margin", -9.0)),
 		"arrival_balance": float(response.get("true_arrival_balance", 0.0)),
 		"requires_jump": bool(response.get("requires_jump", false)),
 		"maximum_contact_height_meters": float(response.get(

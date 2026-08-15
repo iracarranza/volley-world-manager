@@ -18,6 +18,12 @@ extends Resource
 ## an estimate derived from this data rather than this data itself, not
 ## changing what is stored here.
 @export var attribute_ceilings: Dictionary = {}
+## Fractional progress toward the next point of each attribute.
+##
+## Training used to move an attribute by a whole point or not at all, so the
+## smallest change the model could express was also the largest and there was no
+## such thing as a slow week. This carries the remainder between weeks.
+@export var training_progress: Dictionary = {}
 ## Long-term relationship with the player's current club. Unlike the old
 ## `morale` field this does not directly modify rally execution; playing time,
 ## results and management decisions move it over weeks and matches.
@@ -26,6 +32,17 @@ extends Resource
 ## talks about a player; it is deliberately absent from ability scoring.
 @export_range(1, 100) var reputation: int = 20
 @export_enum("Available", "Resting", "Injured", "Suspended") var availability: String = "Available"
+
+## How many weeks this club has had this voli under its own eyes.
+##
+## The observation half of `ScoutingSystem.confidence()` -- a scout tells you
+## about somebody you have never met, and time tells you the rest. Saturates
+## after about a season and a half, so this climbing forever costs nothing.
+##
+## Stored on the voli rather than in a per-career table keyed by id, because a
+## voli who moves clubs takes their history with them and a side table would have
+## to be told about every transfer to stay correct.
+@export var weeks_observed: int = 0
 
 @export_category("Physical")
 @export_range(150.0, 220.0, 0.5) var height_cm: float = 188.0
@@ -86,6 +103,19 @@ extends Resource
 @export_range(1, 100) var composure: int = 50
 @export_range(1, 100) var tactical_discipline: int = 50
 @export_range(1, 100) var improvisation: int = 50
+## How much the rest of the side plays up around this player.
+##
+## Out of `ABILITY_ATTRIBUTES` for the same reason as `ego` and `body_type`:
+## every ability attribute belongs to a category that
+## `AttributeProfiles.category_score()` averages into a rating, and leadership
+## does not make *this* player better at volleyball -- it acts on everybody
+## else. Scoring a captain higher for it inflated Mental & Tactical, and Overall
+## with it, for a quality the player never applies to their own contacts.
+##
+## Read by `GameManager` for how a squad's confidence moves after a point and
+## how far a collapse is allowed to run, and by
+## `SignatureMoveModel.crush_capability()` -- a hitter the room follows goes for
+## the big one more readily.
 @export_range(1, 100) var leadership: int = 50
 ## How hard this setter's distribution pattern is to scout across a whole
 ## match -- varying tempo and target selection rather than falling into
@@ -117,14 +147,59 @@ extends Resource
 ## Distribution is uniform in every region without exception -- see
 ## `PlayerGenerator.BODY_TYPES`. That is a fixed property of the world, not a
 ## tuning value.
-@export_enum("Homi", "Avi", "Cani", "Feli", "Ursi", "Simi")
-var body_type: String = "Homi"
+@export_enum("Vegi", "Avi", "Cani", "Feli", "Ursi", "Simi")
+var body_type: String = "Vegi"
 @export_range(1, 100) var adaptability: int = 50
+
+## How much a player backs themselves -- whether they take the shot on or take
+## the safe one.
+##
+## Deliberately **not** in `ABILITY_ATTRIBUTES`, for the same reason `body_type`
+## is not. It is a temperament rather than a skill, and every ability attribute
+## belongs to a category that `AttributeProfiles.category_score()` averages into
+## a rating. Ego does not make a player better, so folding it into a capability
+## score would inflate Mental & Tactical -- and therefore Overall -- for a trait
+## whose high end is not an improvement. A hitter with ego 90 is not stronger
+## than one with 50; they attempt different shots and fail differently.
+##
+## **Ego is how hard a decision is to change, not how big a swing is.** It used
+## to be both, and doing two jobs it was only ever read as one: every call site
+## asked it how hard this player hits. That is `aggression` below. What is left
+## here is the question nothing else in the engine could ask -- once this voli
+## has decided, how easily do they decide otherwise?
+##
+## High ego holds the read: a blocker who chose line closes line even as the
+## hitter turns cross, a setter who called the ball does not give it up, a voli
+## crossing somebody else's ground expects the other one to move. Low ego
+## changes course readily, yields a contested ball, and gives way in a corridor.
+## Neither is better. High ego is right when the read was right.
+##
+## It cuts both ways and the cost is late: changing a decision late is worse
+## than changing it early *and* worse than never changing it, which is why this
+## is a separate axis from being correct.
+@export_range(1, 100) var ego: int = 50
+## How committed this voli is to creating a terminal play.
+##
+## Out of `ABILITY_ATTRIBUTES` with `ego` and `leadership`, for the same reason:
+## a temperament is not a capability, and folding it into a category rating
+## would inflate Overall for a trait whose high end is not an improvement.
+##
+## This is the axis `ego` was silently carrying. High aggression swings bigger
+## than the situation asks and sails long, closes a block lane hard enough to
+## risk arriving into a teammate, and takes the second ball to attack rather
+## than to keep the rally alive. Low aggression leaves something on the ball and
+## gets dug, blocks to touch rather than to stuff, and plays the percentage.
+##
+## Separate from ego on purpose: a voli can be certain and cautious (holds a
+## conservative read), or uncertain and violent (changes their mind, then
+## crushes it). Those are different players and the engine could not tell them
+## apart while one number meant both.
+@export_range(1, 100) var aggression: int = 50
 ## Where this player was raised, and where they actually play now. These are
 ## deliberately separate: talent is *born* roughly evenly across the world but
 ## *accumulates* wherever the money is, and collapsing the two would erase the
 ## most interesting thing about a player's biography. A'ace's squads are full
-## of stars it did not produce; Ispayk raises players it cannot keep.
+## of stars it did not produce; Ĭspayk raises players it cannot keep.
 ##
 ## Blank for hand-authored fixture players that predate the world population;
 ## every generated player carries both.
@@ -133,6 +208,15 @@ var body_type: String = "Homi"
 @export var primary_position: String = "Outside Hitter"
 @export var natural_positions: Array[String] = []
 @export var position_familiarity: Dictionary = {}
+## The regions whose food this voli is comfortable with.
+##
+## Starts as where they grew up and grows: a season at a club in a region, or
+## long enough rooming with somebody from one. Stored as region names rather
+## than as a number because it is meant to be **read on a card** -- "eats:
+## Landavol, Xérvu" is something a player can see, understand and predict, and a
+## float called `adaptability_to_foreign_cuisine` would be the same data with
+## nobody able to say what it meant. See `FoodSupply`.
+@export var palate_regions: Array[String] = []
 @export var situation_experience: Dictionary = {}
 @export var position_training_target: String = ""
 
@@ -144,11 +228,11 @@ const ABILITY_ATTRIBUTES: Array[String] = [
 	"set_disguise", "hand_control", "unpredictability", "attack_power", "attack_accuracy", "approach_timing",
 	"tooling", "feinting", "finesse", "shot_variety", "block_timing", "ball_control", "dig_control", "court_vision",
 	"anticipation", "decision_making", "composure", "tactical_discipline", "improvisation",
-	"leadership", "adaptability",
+	"adaptability",
 ]
 
 const POSITION_WEIGHTS := {
-	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making", "leadership"],
+	"Setter": ["set_accuracy", "set_balance", "set_stability", "tempo_control", "set_disguise", "hand_control", "unpredictability", "court_vision", "decision_making"],
 	"Outside Hitter": ["attack_power", "attack_accuracy", "approach_timing", "tooling", "finesse", "shot_variety", "reception", "reception_balance", "work_rate"],
 	"Middle Blocker": ["block_timing", "jump_reach", "explosiveness", "lateral_speed", "attack_power", "approach_timing", "anticipation", "work_rate"],
 	"Opposite": ["attack_power", "attack_accuracy", "jump_reach", "approach_timing", "tooling", "shot_variety", "block_timing", "serve_power"],
@@ -408,13 +492,16 @@ func to_dict() -> Dictionary:
 		"primary_serve_style": primary_serve_style,
 		"serve_style_proficiencies": serve_style_proficiencies.duplicate(true),
 		"dominant_hand": dominant_hand, "body_type": body_type,
-		"adaptability": adaptability,
+		"adaptability": adaptability, "ego": ego, "aggression": aggression,
 		"home_region": home_region, "club_region": club_region,
 		"primary_position": primary_position, "natural_positions": natural_positions.duplicate(),
 		"position_familiarity": position_familiarity.duplicate(true),
+		"palate_regions": Array(palate_regions).duplicate(),
 		"situation_experience": situation_experience.duplicate(true),
 		"position_training_target": position_training_target,
+		"weeks_observed": weeks_observed,
 		"attribute_ceilings": attribute_ceilings.duplicate(true),
+		"training_progress": training_progress.duplicate(true),
 	}
 
 
@@ -458,13 +545,25 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.dominant_hand = str(data.get("dominant_hand", "Right"))
 	## Saves written before body types load as Homi, the no-modifier baseline,
 	## so an old career is unchanged rather than silently re-rolled.
-	player.body_type = str(data.get("body_type", "Homi"))
+	## Saves written before Vegi replaced Homi still carry the old string.
+	## Dropping it would leave those volis with a body type nothing can draw.
+	player.body_type = str(data.get("body_type", "Vegi"))
+	if player.body_type == "Homi":
+		player.body_type = "Vegi"
+	player.ego = clampi(int(data.get("ego", 50)), 1, 100)
+	## Saves written before ego and aggression were separated carry one number
+	## that meant both, and every simulation reader of it meant aggression. An
+	## old career keeps the swing it had rather than reverting to the default.
+	player.aggression = clampi(int(data.get("aggression", player.ego)), 1, 100)
 	player.home_region = str(data.get("home_region", ""))
 	player.club_region = str(data.get("club_region", player.home_region))
 	player.adaptability = clampi(int(data.get("adaptability", 50)), 1, 100)
 	player.primary_position = str(data.get("primary_position", player.position_role))
 	player.natural_positions = Array(data.get("natural_positions", [player.primary_position]), TYPE_STRING, "", null)
 	player.position_familiarity = Dictionary(data.get("position_familiarity", {player.primary_position: 90})).duplicate(true)
+	player.palate_regions.clear()
+	for region in Array(data.get("palate_regions", [player.home_region])):
+		player.palate_regions.append(str(region))
 	player.situation_experience = Dictionary(data.get("situation_experience", {})).duplicate(true)
 	player.position_training_target = str(data.get("position_training_target", ""))
 	player.fatigue = clampf(float(data.get("fatigue", 0.0)), 0.0, 1.0)
@@ -476,7 +575,9 @@ static func from_dict(data: Dictionary) -> VolleyballPlayer:
 	player.stride_length_m = clampf(float(
 		data.get("stride_length_m", player.default_stride_length_m())
 	), 0.55, 1.15)
+	player.weeks_observed = int(data.get("weeks_observed", 0))
 	player.attribute_ceilings = Dictionary(data.get("attribute_ceilings", {})).duplicate(true)
+	player.training_progress = Dictionary(data.get("training_progress", {})).duplicate(true)
 	player.refresh_system_fit_profiles()
 	return player
 
@@ -497,8 +598,35 @@ func standing_reach_cm() -> float:
 ## heights setting off their back foot and swinging off a four-step run-up.
 ## This is the single place the three inputs are combined; callers that need a
 ## reach must ask here rather than re-adding height and leap themselves.
+## Vertical leap band, in centimetres, from no jumping ability to elite. Named
+## because the attack-versus-block contest is proportional to this number -- see
+## `jumping_reach_cm()` -- so anyone retuning it is retuning blocking.
+const JUMP_LEAP_MIN_CM: float = 20.0
+const JUMP_LEAP_MAX_CM: float = 110.0
+
+
 func jumping_reach_cm(effort: float = 1.0) -> float:
-	var leap := lerpf(12.0, 78.0, float(jump_reach) / 100.0) \
+	## Leap carries the attack-versus-block contest, which is why this band is
+	## wide and generous rather than sober.
+	##
+	## That contest is decided by one number: how far a hitter's contact sits
+	## above a blocker's reach. Because a blocker jumps at a fraction of a
+	## hitter's effort, that difference works out at roughly
+	## `leap * (1 - blocker_effort)` -- it is *proportional to the leap itself*.
+	## At the old 12-78 cm band an average hitter contacted 9 cm above the
+	## blocker and a poor one 0 cm, so almost every swing met hands and the
+	## contest had no room to resolve. Widening the leap widens the attacking
+	## advantage without touching `standing_reach_cm()`, and it moves the contest
+	## off body height -- which a player is born with -- and onto jump and
+	## explosiveness, which they can train.
+	##
+	## It also puts contact where the sport puts it. A hitter now meets the ball
+	## 22 cm above the tape at the bottom of the range and 87 cm at the top,
+	## against 10-57 cm before; real contact is 60-90 cm above a 2.43 m net.
+	##
+	## And it suits the setting: small players making enormous leaps is exactly
+	## the register this world plays in.
+	var leap := lerpf(JUMP_LEAP_MIN_CM, JUMP_LEAP_MAX_CM, float(jump_reach) / 100.0) \
 		* lerpf(0.72, 1.0, float(explosiveness) / 100.0) \
 		* (1.0 - fatigue * 0.35)
 	return standing_reach_cm() + leap * clampf(effort, 0.0, 1.0)

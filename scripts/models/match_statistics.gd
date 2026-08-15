@@ -19,6 +19,14 @@ func record_rally(result: Resource) -> void:
 		if int(event.actor_id) >= 0:
 			var player_key := str(event.actor_id)
 			var player_stats: Dictionary = players.get(player_key, {})
+			## **Which side they were on.**
+			##
+			## This table has always been keyed by actor id alone, and both teams'
+			## volis land in it -- so a reader had no way to tell one of ours from
+			## one of theirs, and the scouting board's cuttings named every
+			## standout "a visiting voli" because the id never matched our roster.
+			## An id is only unique within a side.
+			player_stats["side"] = side
 			_increment(player_stats, event.type_name().to_lower())
 			player_stats["quality_total"] = float(player_stats.get("quality_total", 0.0)) \
 				+ float(event.quality)

@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Background world-league engine for the Sixnet Championship: 8 slots (4
 ## upper bracket + 4 lower bracket) filled from the 6 core regions
-## (`VolleyballRegions.CORE_REGIONS` -- Ispayk and A'ace are deliberately
+## (`VolleyballRegions.CORE_REGIONS` -- Ĭspayk and A'ace are deliberately
 ## excluded, see `docs/world/STYLE_AND_SETTING.md`). Everything here is a
 ## lightweight, abstracted resolver on purpose: it produces a scalar rating
 ## per region and a sets-won/lost result per match, nothing set-by-set or
@@ -24,7 +24,7 @@ const ALL_SLOT_IDS: Array[String] = [
 
 ## Where the two non-core regions enter at world generation, both at the
 ## *bottom* of their bracket. A'ace bought a seat at the top table and is
-## the least established team sitting at it; Ispayk is rock bottom of
+## the least established team sitting at it; Ĭspayk is rock bottom of
 ## everything. Neither is pinned there afterward -- both promote and
 ## relegate like any other participant.
 const AACE_FIXED_SLOT: String = "upper_4"
@@ -171,9 +171,9 @@ static func bootstrap_rating(region_name: String, seed_value: int) -> float:
 
 ## Eight regions, eight slots, exactly one each -- no region ever holds two.
 ##
-## A'ace and Ispayk take a *fixed starting* slot that expresses their story
+## A'ace and Ĭspayk take a *fixed starting* slot that expresses their story
 ## rather than their measured strength: A'ace enters straight into the upper
-## bracket (it bought its way to the top table without earning it), Ispayk
+## bracket (it bought its way to the top table without earning it), Ĭspayk
 ## into the lower (a fallen flagship clawing back). Both are ordinary
 ## competitors from that point on -- promotion and relegation move them like
 ## anyone else, so "always starts" is a starting condition, not a permanent
@@ -187,7 +187,7 @@ static func allocate_slots(initial_power: Dictionary, _seed_value: int = 0) -> D
 	ranked.sort_custom(func(a, b):
 		return float(initial_power.get(a, 50.0)) > float(initial_power.get(b, 50.0))
 	)
-	var slots := {AACE_FIXED_SLOT: "A'ace", ISPAYK_FIXED_SLOT: "Ispayk"}
+	var slots := {AACE_FIXED_SLOT: "A'ace", ISPAYK_FIXED_SLOT: "Ĭspayk"}
 	var open_upper: Array[String] = []
 	for slot_id in UPPER_SLOT_IDS:
 		if not slots.has(slot_id):
@@ -371,7 +371,7 @@ static func _combined_record(career: Resource, region_name: String) -> Dictionar
 ## `POWER_SEASON_PULL`), and clamped to `[POWER_MIN, POWER_MAX]` so no region
 ## is ever permanently unbeatable or permanently dead across a long career.
 ## Covers all eight bracket participants, not just the six core regions:
-## Ispayk and A'ace play in the Sixnet and so their form moves with their
+## Ĭspayk and A'ace play in the Sixnet and so their form moves with their
 ## results too. (Influence *drift* below stays core-only -- that mechanic is
 ## about geography, which those two deliberately sit outside of.)
 static func apply_power_update(career: Resource) -> void:
@@ -422,7 +422,7 @@ static func apply_promotion_relegation(career: Resource) -> void:
 ## One shared entry check, one overlay dict -- two legible, narratively
 ## distinct outcomes rather than two competing systems.
 ## Scoped to `DEVELOPMENT_REGIONS` -- core plus minor -- rather than
-## `CORE_REGIONS`. Ispayk and A'ace stay out: their identities come from
+## `CORE_REGIONS`. Ĭspayk and A'ace stay out: their identities come from
 ## history and money, not from a local tradition that could spread.
 static func apply_influence_drift(career: Resource) -> void:
 	for region_name in Regions.DEVELOPMENT_REGIONS:

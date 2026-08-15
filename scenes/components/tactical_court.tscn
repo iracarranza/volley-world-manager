@@ -4,7 +4,7 @@
 
 [node name="TacticalCourt" type="Control" unique_id=928208356]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(400, 500)
+custom_minimum_size = Vector2(220, 440)
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

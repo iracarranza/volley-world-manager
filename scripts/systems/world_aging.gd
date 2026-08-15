@@ -58,7 +58,7 @@ const FINAL_AGE: int = WorldPopulationModel.MAX_AGE
 
 
 ## Advances the whole world one season. Returns a report of what happened,
-## which is the raw material for a future news feed ("Ispayk's captain
+## which is the raw material for a future news feed ("Ĭspayk's captain
 ## retires", "a golden generation enters the academies").
 static func advance_year(
 	players: Array, career: Resource, world_year: int, seed_value: int,

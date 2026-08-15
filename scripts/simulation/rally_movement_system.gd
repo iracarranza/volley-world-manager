@@ -263,11 +263,21 @@ static func estimate_movement(
 ## Advances a temporary actor snapshot toward a target without mutating the
 ## supplied rally state. Velocity is carried into the returned snapshot so a
 ## later perception update can redirect movement already underway.
+## `carry_through` decides what arriving means.
+##
+## The default is a player who has got where they were going and set up there,
+## which is right for a defensive mark. It is wrong for a waypoint: a hitter
+## running to their approach mark does not stop on it, they run through it into
+## the swing. That distinction did not exist, so arrival always wrote
+## `Vector2.ZERO` and every player in the engine reached every destination at a
+## dead stop -- contradicting this function's own contract two lines above, and
+## leaving `_leg_seconds`'s carried-speed branch permanently unreachable.
 static func project_toward(
 	actor: RallyPlayerState,
 	target: Vector2,
 	duration: float,
 	mode: RallyPlayerState.MovementMode,
+	carry_through: bool = false,
 ) -> Dictionary:
 	if actor == null or actor.player == null:
 		return {"actor": null, "distance_meters": 0.0, "elapsed": 0.0}
@@ -311,9 +321,12 @@ static func project_toward(
 		direction.y * traveled / RallyKinematicsModel.COURT_LENGTH_METERS,
 	)
 	var reached_target := traveled >= distance - 0.001
+	var arrival_velocity := direction * ending_speed
+	if reached_target and not carry_through:
+		arrival_velocity = Vector2.ZERO
 	projected.apply_position(
 		target if reached_target else actor.position + court_delta,
-		Vector2.ZERO if reached_target else direction * ending_speed,
+		arrival_velocity,
 	)
 	projected.movement_mode = mode
 	projected.intent = &"receive"
@@ -386,10 +399,27 @@ static func traversal_seconds(
 	mode: RallyPlayerState.MovementMode,
 	waypoint: Variant = null,
 ) -> float:
+	return float(traversal_result(actor, target, mode, waypoint)["seconds"])
+
+
+## The same traversal, keeping the speed the player carries out of it.
+##
+## `_leg_seconds` has always computed an exit speed and `traversal_seconds` has
+## always thrown it away, so every caller got a duration and no state -- which
+## is why every leg in the engine began from rest and why the guard below that
+## skips the standing-start charge for a moving player had never once fired.
+## The value existed; nothing could reach it.
+static func traversal_result(
+	actor: RallyPlayerState,
+	target: Vector2,
+	mode: RallyPlayerState.MovementMode,
+	waypoint: Variant = null,
+) -> Dictionary:
 	if actor == null or actor.player == null:
-		return 0.0
+		return {"seconds": 0.0, "exit_speed": 0.0, "exit_velocity": Vector2.ZERO}
 	if waypoint == null:
-		return _leg_seconds(actor, actor.position, target, mode, 0.0)["seconds"]
+		var single := _leg_seconds(actor, actor.position, target, mode, 0.0)
+		return _with_exit_velocity(single, actor.position, target)
 	var corner := Vector2(waypoint)
 	var first := _leg_seconds(actor, actor.position, corner, mode, 0.0)
 	## Only the component of the carried speed aligned with the new heading
@@ -403,7 +433,28 @@ static func traversal_seconds(
 				incoming.normalized().dot(outgoing.normalized()), 0.0
 			) * float(first["exit_speed"])
 	var second := _leg_seconds(actor, corner, target, mode, carried)
-	return float(first["seconds"]) + float(second["seconds"])
+	return _with_exit_velocity(
+		{
+			"seconds": float(first["seconds"]) + float(second["seconds"]),
+			"exit_speed": float(second["exit_speed"]),
+		},
+		corner, target,
+	)
+
+
+## Turns a scalar exit speed into a velocity along the heading the leg ended on,
+## which is the form a player's state carries and the next leg reads.
+static func _with_exit_velocity(
+	leg: Dictionary, from: Vector2, to: Vector2
+) -> Dictionary:
+	var heading := RallyKinematicsModel.court_delta_meters(from, to)
+	var speed := float(leg.get("exit_speed", 0.0))
+	return {
+		"seconds": float(leg.get("seconds", 0.0)),
+		"exit_speed": speed,
+		"exit_velocity": heading.normalized() * speed \
+			if heading.length() > 0.0001 else Vector2.ZERO,
+	}
 
 
 static func _leg_seconds(
@@ -416,7 +467,19 @@ static func _leg_seconds(
 	var meter_delta := RallyKinematicsModel.court_delta_meters(from, to)
 	var distance := meter_delta.length()
 	if distance <= 0.001:
-		return {"seconds": 0.0, "exit_speed": entry_speed}
+		## A zero-length leg costs no time and sheds no speed. Returning
+		## `entry_speed` looks harmless and is not: the two-leg form passes 0.0
+		## as the first leg's entry and lets it fall back to the actor's own
+		## velocity, so a corner that coincides with the start reported an exit
+		## of zero and handed the *real* leg a standing start -- the one case
+		## where a waypoint silently discards the speed a player is carrying.
+		## The home first ball takes exactly that shape: its approach mark and
+		## its start are the same point.
+		return {
+			"seconds": 0.0,
+			"exit_speed": entry_speed if entry_speed > 0.0 \
+				else actor.velocity.length(),
+		}
 	var direction := meter_delta.normalized()
 	var profile := _movement_profile(actor, direction, mode)
 	var maximum_speed := maxf(float(profile.maximum_speed), 0.05)
@@ -442,6 +505,43 @@ static func _leg_seconds(
 ## Time to cover `distance` accelerating from `entry_speed` toward
 ## `maximum_speed`. Exactly the traversal `project_toward()` integrates, solved
 ## for time instead of distance.
+## How far a body actually covers in a window, accelerating from a standstill.
+##
+## The exact inverse of `_accelerated_seconds`, and it exists because the
+## coverage calculator was answering this question with `maximum_speed * time *
+## factor` -- a player already at top speed the instant the ball is struck, never
+## decelerating, credited with sprinting until contact.
+##
+## That is the same defect, in the same words, that `_blocker_close_terms`
+## records having fixed for the block: *"This used to be `maximum_speed *
+## movement_time`: the blocker left the ready stance already at top speed, never
+## decelerated, and was credited with shuffling until the instant of contact.
+## Every close in the game resolved at exactly 1.0 as a result."* The block was
+## repaired and the reception was not, so receivers were still being handed 3.6 m
+## of travel in a 0.97 s window and arriving with metres to spare on every ball.
+##
+## Two segments, and no third: a body accelerates to its top speed and then holds
+## it. Deceleration is deliberately not modelled here -- a defender arrives *at*
+## the ball rather than stopping on it, and charging them a braking phase would
+## be inventing a cost the sport does not have.
+static func reachable_distance(
+	seconds: float,
+	maximum_speed: float,
+	acceleration: float,
+	entry_speed: float = 0.0,
+) -> float:
+	var window := maxf(seconds, 0.0)
+	var top := maxf(maximum_speed, 0.01)
+	var rate := maxf(acceleration, 0.01)
+	var entry := clampf(entry_speed, 0.0, top)
+	var to_top_speed := (top - entry) / rate
+	if window <= to_top_speed:
+		return entry * window + 0.5 * rate * window * window
+	var distance_while_accelerating := entry * to_top_speed \
+		+ 0.5 * rate * to_top_speed * to_top_speed
+	return distance_while_accelerating + top * (window - to_top_speed)
+
+
 static func _accelerated_seconds(
 	distance: float,
 	entry_speed: float,

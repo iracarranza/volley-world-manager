@@ -155,7 +155,14 @@ Not all event properties should be treated the same way:
 - Output: Per-direction quality score
 - Feeds into: Set trajectory accuracy, perceived ball destination
 
-#### 4. **Set Trajectory** (MEASURED OBSERVABLE) ← **NEW**
+#### 4. **Set Trajectory** (MEASURED OBSERVABLE) ← **LANDED 2026-08-03**
+> Implemented as `_delivered_point()` in `rally_simulator.gd`, at the spread
+> stated below, for the first-ball set, the transition set and the opponent's
+> reception. The landing position is real; the *flight* is still the existing
+> `solve_launch_arc` shape rather than a simulated one, which is deliberate —
+> own-side contacts have no boundary to test against. `intended_target` is now
+> carried on SET events so aim and result read separately. Scatter is normal
+> rather than uniform. See `docs/BACKLOG.md` §8.
 - Calculated from delivery_execution_quality and chosen height
 - Base arc shape (parabola) determined by `set_height_meters` and distance
 - Variance around nominal landing:
@@ -322,7 +329,13 @@ Not all event properties should be treated the same way:
 - Output: Contact quality per action type
 - Feeds into: Pass trajectory accuracy
 
-#### 5. **Pass Trajectory** (MEASURED OBSERVABLE) ← **NEW**
+#### 5. **Pass Trajectory** (MEASURED OBSERVABLE) ← **LANDED 2026-08-03**
+> The home passer already resolved a real destination in
+> `_reception_pass_result`, including the height term below; its scatter is now
+> normal rather than uniform. The opponent's passer delivered to the setter's
+> release position exactly, every time, however badly the ball was passed — it
+> now uses `_delivered_point()` at the spread stated here. See
+> `docs/BACKLOG.md` §8.
 - Calculated from contact_execution_quality, similar to reception
 - Formula:
   ```

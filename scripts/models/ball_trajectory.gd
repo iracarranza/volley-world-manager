@@ -51,12 +51,18 @@ func velocity_at_time(simulation_time: float) -> Vector2:
 	return velocity_at_progress(progress_at_time(simulation_time))
 
 
+## Where the ball is vertically, from gravity and the two contacts it is between.
+##
+## `apex_height_meters` is deliberately not read here any more. It used to be the
+## input that set the shape of a symmetric hump; it is now a *reported* figure
+## that presentation and calibration can inspect, and the drawn curve is the one
+## parabola the two contact heights and the flight time already determine. The
+## reasoning, and the measurement that forced it, are in
+## `BallFlightModel.height_between`.
 func height_at_progress(progress: float) -> float:
-	var t := clampf(progress, 0.0, 1.0)
-	var base_height := lerpf(start_height_meters, end_height_meters, t)
-	var midpoint_height := lerpf(start_height_meters, end_height_meters, 0.5)
-	var arc_height := maxf(apex_height_meters - midpoint_height, 0.0)
-	return base_height + 4.0 * arc_height * t * (1.0 - t)
+	return BallFlightModel.height_between(
+		start_height_meters, end_height_meters, duration(), progress
+	)
 
 
 func height_at_time(simulation_time: float) -> float:
@@ -106,6 +112,27 @@ func to_dict() -> Dictionary:
 		"start_height_meters": start_height_meters,
 		"end_height_meters": end_height_meters,
 	}
+
+
+## Back from `to_dict()`, so a consumer holding the published dictionary can ask
+## the trajectory questions instead of re-deriving them.
+##
+## Every field round-trips except `outgoing_velocity`, which `create` recomputes
+## from the control point and the flight time -- the same value by the same
+## formula, so the two agree by construction rather than by being copied.
+static func from_dict(data: Dictionary) -> BallTrajectory:
+	var start_time := float(data.get("start_time", 0.0))
+	return create(
+		str(data.get("trajectory_type", "pass")),
+		Vector2(data.get("start_position", Vector2.ZERO)),
+		Vector2(data.get("control_position", Vector2.ZERO)),
+		Vector2(data.get("end_position", Vector2.ZERO)),
+		start_time,
+		maxf(float(data.get("end_time", start_time)) - start_time, 0.01),
+		float(data.get("apex_height_meters", 1.0)),
+		float(data.get("start_height_meters", 1.0)),
+		float(data.get("end_height_meters", 1.0)),
+	)
 
 
 static func create(

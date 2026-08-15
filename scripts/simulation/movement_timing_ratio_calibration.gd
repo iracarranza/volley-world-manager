@@ -19,8 +19,11 @@ extends RefCounted
 
 const ShadowMovementModel := preload("res://scripts/simulation/shadow_movement_system.gd")
 
-## Event types where `start_position` is the actor's movement destination, which
-## is the same mapping 2D playback uses in `_prepare_player_movement()`.
+## Event types whose contact publishes a movement destination. Most contacts use
+## the ball's `start_position`; an attack publishes `body_contact_position`
+## because the hitter's centre is behind the ball. This is the same distinction
+## playback uses, so the diagnostic measures the timed leg rather than the old
+## body-on-ball fiction.
 static func _destination_is_start_position(event_type: int) -> bool:
 	return event_type in [
 		RallyEvent.EventType.RECEPTION, RallyEvent.EventType.SET,
@@ -56,7 +59,9 @@ static func run(seed_count: int = 40, base_seed: int = 300000) -> Dictionary:
 			if allotted <= 0.01:
 				continue
 			var start := Vector2(event.metadata.get("movement_start", event.start_position))
-			var destination := event.start_position
+			var destination := Vector2(event.metadata.get(
+				"body_contact_position", event.start_position
+			))
 			var mode := _mode_for(int(event.event_type))
 			var actor := RallyPlayerState.create(
 				profile,
@@ -68,8 +73,19 @@ static func run(seed_count: int = 40, base_seed: int = 300000) -> Dictionary:
 				## A traversal of a few centimetres says nothing about pace.
 				continue
 			actor.facing = opening.normalized()
+			## The same speed the resolver credited this player with entering the
+			## leg. Rebuilding the actor at rest and comparing that against a
+			## duration the resolver computed *with* carried velocity measures the
+			## difference between the two assumptions, not the difference between
+			## the two models -- which is the only thing this gate exists to see.
+			actor.velocity = Vector2(event.metadata.get(
+				"movement_entry_velocity", Vector2.ZERO
+			))
+			var waypoint: Variant = event.metadata.get(
+				"navigation_waypoint", null
+			)
 			var natural: float = ShadowMovementModel.natural_traversal_time(
-				actor, destination, mode
+				actor, destination, mode, waypoint
 			)
 			if natural < 0.0:
 				unreachable += 1

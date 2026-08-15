@@ -1,6 +1,17 @@
 # Development Projects
 
-Status: **Product direction; intentionally separate from the current rally architecture overhaul**
+Status: **Product direction. One ingredient of it has since landed.**
+
+`VolleyballPlayer.position_training_target` is serialized both ways,
+`GameManager.set_position_training()` assigns it, and `FamiliaritySystem` reads
+it so that repeated training moves a voli toward a position they were not
+generated for. The Team tab's Individual Training sub-tab is its interface. That
+is the *opportunity* leg of the formula below and nothing else — there is no
+tactical-need model, no latent-potential surface that shows a manager what a
+voli could become, and no project that spans seasons. The fantasy in the first
+section is still ahead of the code.
+
+Otherwise intentionally separate from the rally architecture work.
 
 ## Core fantasy
 

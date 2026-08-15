@@ -53,10 +53,10 @@ Across six independently generated 1,200-player worlds:
 
 | Region | Mean strength | Observed range |
 | --- | ---: | ---: |
-| Bloc du Larg | 77.28 | 74.31-81.74 |
+| Blôc du Larg | 77.28 | 74.31-81.74 |
 | Xérvu | 77.06 | 72.81-79.61 |
 | Pāwa Hitō | 76.77 | 73.63-78.27 |
-| Ispayk | 76.30 | 73.91-78.34 |
+| Ĭspayk | 76.30 | 73.91-78.34 |
 | Taktikã | 76.29 | 72.77-80.57 |
 | Landavol | 75.94 | 72.95-79.36 |
 | Spëddigh | 74.80 | 73.05-77.20 |

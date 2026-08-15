@@ -26,10 +26,15 @@ static func build(
 	## zone still overrides it below.
 	var home_serve_receive := {}
 	if home_lineup != null and not home_serving:
+		var home_passers := CourtConstants.roster_serve_receive_passer_slots(
+			home_lineup, home_roster, _passer_count()
+		)
 		home_serve_receive = CourtConstants.serve_receive_formation(
 			home_lineup.slot_for_player(home_lineup.active_setter_id()),
 			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
 			_libero_slot(home_roster, home_lineup),
+			false,
+			home_passers,
 		)
 
 	if home_lineup != null:
@@ -59,6 +64,11 @@ static func build(
 	## identical logic and any change lands on both sides in the same rally.
 	var opponent_serve_receive := {}
 	if state.opponent_lineup != null and home_serving:
+		var opponent_roster: Array = opponent_team.players \
+			if opponent_team != null else []
+		var opponent_passers := CourtConstants.roster_serve_receive_passer_slots(
+			state.opponent_lineup, opponent_roster, _passer_count()
+		)
 		opponent_serve_receive = CourtConstants.serve_receive_formation(
 			state.opponent_lineup.slot_for_player(
 				state.opponent_lineup.active_setter_id()
@@ -66,6 +76,7 @@ static func build(
 			CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION,
 			-1,
 			true,
+			opponent_passers,
 		)
 
 	if state.opponent_lineup != null and opponent_team != null:
@@ -87,6 +98,12 @@ static func build(
 			)
 
 	return state
+
+
+static func _passer_count() -> int:
+	return int(CourtConstants.SERVE_RECEIVE_FORMATIONS[
+		CourtConstants.DEFAULT_SERVE_RECEIVE_FORMATION
+	]["passer_count"])
 
 
 ## The libero is the preferred first passer whenever they are on court.

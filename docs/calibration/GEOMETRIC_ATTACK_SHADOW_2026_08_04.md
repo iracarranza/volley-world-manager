@@ -1,0 +1,498 @@
+# Gate E: what the geometric attack does when a rally feeds it
+
+Date: 2026-08-04
+Occasion: the geometric attack now runs in shadow on every home first-ball
+swing. This is the first time the Gate B–D models have seen inputs a rally
+produced rather than inputs a sweep produced, and three of the differences
+matter.
+
+## What is wired
+
+`GeometricAttackPromotion` translates a rally into the resolver's inputs and
+the resolver's answer back into the rally's outcome vocabulary. The home
+first-ball attack path calls it on every swing and records the result at
+`analysis.shadow_reception.summary.geometric_attack`. Nothing downstream reads
+it. `ENABLE_GEOMETRIC_ATTACK` is still false and no attack outcome changes.
+
+The draws come from `geometric_rng`, a stream of its own seeded from the rally
+seed and the swing index. This is the load-bearing detail of the whole gate:
+the shadow runs on every swing whether or not it is promoted, so drawing from
+the rally's own generator would advance the stream and change every rally in
+the game. The suite passing unchanged at 753 checks immediately after wiring
+is the evidence that it does not.
+
+## The block contest survives contact with a rally
+
+Gate D swept the models in isolation and landed the terminal stuff rate at
+12.5% against a 12% target. Measured on live rallies, through a real
+`_form_opponent_block` formation with real close fractions converted to hand
+widths, stuff is **11.9%** of resolved swings (51 of 428).
+
+That is the number this gate most expected to move, and it did not. The close
+fraction to half-width mapping — a blocker below `WALL_JOIN_CLOSE` is not in
+the wall, a partial close seals proportionally less net — reproduces the swept
+contest rather than replacing it.
+
+## Three findings
+
+All three are fixed below. They are recorded as they were found, hypothesis and
+all, because the wrong hypothesis in finding 2 is what led to the measurement
+that found the real cause.
+
+### 1. A uniform draw where three named tiers belong
+
+`choose_power` reads `intent_fraction` as how much of the available ceiling the
+swing asks for, and its meaningful values are the three named constants:
+`DRIVE_INTENT` 0.90, `CONTROL_INTENT` 0.66, `OFF_SPEED_INTENT` 0.36. The first
+wiring handed it `rng.randf()`.
+
+That looks like randomness and is not. A uniform on 0–1 averages 0.5, which sits
+*below* control, so the mean swing in the game was softer than a deliberately
+controlled ball:
+
+| | before | after |
+| --- | ---: | ---: |
+| mean contact speed | 9.84 m/s | 13.70 m/s |
+| median | 8.54 m/s | 14.01 m/s |
+| p90 | 17.97 m/s | 21.46 m/s |
+
+Fixed by drawing a tier — drive 62%, control 26%, off-speed 12% — weighted
+toward driving the ball, because that is what a hitter does with a set they can
+attack. Choosing the tier from what the hitter *reads* (off-speed into a formed
+block, drive into a gap) is the correct version and belongs with the resolver's
+own read; the weighted draw is a placeholder that is at least in the right part
+of the range.
+
+Even after the fix the median sits at 14 m/s against a sport that spikes at
+20–30. Contact speed is still low and this is not finished.
+
+### 2. The error rate is more than double the sport's
+
+| outcome | share of 398 resolved swings |
+| --- | ---: |
+| in | 43.0% |
+| net | 23.6% |
+| touch | 14.6% |
+| tool | 8.5% |
+| stuff | 5.8% |
+| out | 4.3% |
+| high hands | 0.3% |
+
+`net` plus `out` is **27.9%**. Real volleyball attack error is 10–15%, and
+nearly all of this excess is balls into the tape rather than balls long or wide.
+Raising the intent tiers made it worse (20.1% → 27.9%), which is consistent:
+harder swings leave less margin over the net.
+
+The likely cause is a difference between the sweep and the rally that the sweep
+could not see. `AttackGeometryCalibration` contacts at `jumping_reach_cm()`
+minus 10 cm with no approach term. A rally applies the approach's
+`jump_multiplier`, so a hitter who never reached their mark contacts *lower*
+than any sample in the sweep, and a ball struck downward from a lower contact
+clears 2.43 m by less. That is a hypothesis with an obvious test — re-run the
+Gate D sweep with the live distribution of `jump_multiplier` instead of 1.0 —
+and it is the next thing to do on this gate.
+
+### 3. The course scan is not choosing
+
+Only **33 of 398** swings (8.3%) left the natural approach line. Every other
+swing recorded `offset_degrees` of exactly 0.0.
+
+This is the same shape as the recurring defect in this engine — correct
+mechanism, input that does not discriminate — that produced set quality
+compressed below 0.50, `block_commitment` spanning 0.33, an approach angle a
+third of the sport's, and a blocker out-reaching the hitter by 6 cm. The scan
+evaluates 17 bearings and scores each on perceived openness minus strain, but
+with a block that is frequently not formed and a defence read at coarse
+resolution, openness comes out flat across the cone and `STRAIN_AVERSION` then
+decides everything — and strain is minimised at the natural line by
+construction.
+
+A hitter who always hits where their approach points has no shot selection,
+which is the thing this whole rework exists to give them. Promoting the
+geometric attack before this is resolved would replace a legacy attack that
+picks targets with a geometric one that does not.
+
+## Both open findings, resolved
+
+### The tape was not a constraint on shot selection
+
+The jump-multiplier hypothesis above was **wrong**, and measuring it is what
+found the real cause. Live `jump_multiplier` is 0.999 / 1.010 / 1.038 at p10 /
+median / p90 -- the approach is not costing anyone their contact height.
+
+What the same measurement did show is a vertical launch angle running to
+**-53.5 degrees at p10**. The tape is checked in `AttackResolutionModel`, in
+*resolution*, and nowhere in *decision*: the course scan reads the block and the
+floor, the power model reads the target distance, and nothing between them knows
+there is a net. So a hitter could pick a short cut shot whose driven solution is
+a dive into the tape, swing at it, and have the resolver dutifully report "net".
+The decision layer was offering shots that are not physically available.
+
+`_feasible_launch` makes the net a constraint on the choice. For a fixed speed a
+longer target range means a flatter driven solution and more height at the net,
+so the search is monotone: start where the hitter aimed, push the target deeper
+until it clears by `NET_CLEARANCE_MARGIN_METERS`. If nothing driven clears, lift
+it -- the roll shot off a tight set. If nothing clears at all, the swing happens
+anyway and will probably be in the net, which is correct: a hitter under a bad
+set does hit the tape, and that is now the only path that produces one.
+
+Net contact fell from **23.6% to 4.5%**.
+
+### The gap was not visible to the scan
+
+Only 33 of 398 swings left the natural approach line. The cause was not tie
+saturation, as guessed -- it was the opposite. Probing openness across a
+17-bearing cone against a formed two-man block:
+
+| bearing offset | block clearance | floor clearance | openness | score |
+| ---: | ---: | ---: | ---: | ---: |
+| -45.0 | +0.19 m | 3.12 m | 0.048 | -0.302 |
+| -22.5 | +0.04 m | 1.57 m | 0.009 | -0.166 |
+| 0.0 (natural) | **-0.11 m** | 1.54 m | **0.000** | **0.000** |
+| +22.5 | -0.31 m | 2.20 m | 0.000 | -0.175 |
+| +45.0 | +0.06 m | 1.31 m | 0.015 | -0.335 |
+
+Two defects, visible in the same table. Block clearance spans **-0.31 to +0.19
+metres** and was normalised against `OPENNESS_SATURATION_M = 4.0` -- a scale an
+order of magnitude too large for the quantity, so every block score came out at
+0.05 or less. And openness was clamped at zero, so the natural line, which sends
+the ball *into* sealed net at -0.11 m, scored exactly the same 0.000 as a lane
+that grazes past. With openness flat at zero the score reduced to
+`-strain x STRAIN_AVERSION`, which is maximised at strain zero -- the natural
+line, by construction. The scan was not choosing badly; it had nothing to choose
+on.
+
+Fixed by giving block clearance its own scale (`BLOCK_OPENNESS_SATURATION_M`,
+0.70 m -- clearing the outside hand by 70 cm is a fully open shot) and letting
+openness go negative, so a ball into the hands scores below one past them.
+
+That inverted the balance: openness now spans -1 to 1 where it spanned 0.05, and
+`STRAIN_AVERSION = 0.35` stopped being a tie-break and became irrelevant. 89% of
+swings went to the sharpest available cut. Re-derived against the design targets
+on live rallies:
+
+| STRAIN_AVERSION | off natural line | attack error | block involvement | stuff |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.35 | 89.2% | 26.6% | 20.1% | 5.3% |
+| 0.60 | 73.1% | 21.6% | 24.6% | 6.3% |
+| 0.85 | 51.0% | 14.6% | 32.4% | 8.0% |
+| **1.10** | **30.7%** | **10.6%** | **36.2%** | **9.0%** |
+| 1.40 | 15.3% | 6.8% | 41.5% | 11.6% |
+
+1.10 is where attack error and block involvement are both inside their bands
+with shot selection still alive. 1.40 reaches the 12% stuff target, but only by
+dropping errors below the sport and pulling selection back toward the natural
+line -- buying one target by spending two. Stuff at 9.0% against a 12% target is
+the residual, and it is the honest cost of the trade.
+
+## All five ball paths measured
+
+### The transition swing was not uncontested -- the call was misplaced
+
+The previous revision of this document recorded a transition swing facing no
+block at all, 0.0% block involvement and 96.2% in. That was wrong, and the error
+was mine rather than the engine's: `_resolve_home_continuation` resolves its
+block *after* it scores the swing, so the shadow call placed beside the swing
+handed the resolver an empty formation. A misplaced call read as an absent
+mechanism.
+
+Moved to after `_resolve_opponent_block`, the transition swing is contested.
+What that path genuinely does not do -- and the other two do -- is feed the
+block back into `_attack_execution` as pressure. That asymmetry is real and
+stays open; it is a missing term, not a missing block.
+
+| path | n | attack error | block involvement | stuff | in |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| home first ball | 724 | 8.7% | 43.1% | 16.3% | 48.2% |
+| transition | 75 | 9.3% | 16.0% | 4.0% | 74.7% |
+| opponent first ball | 13 | 23.1% | 23.1% | 7.7% | 53.8% |
+
+A transition block being weaker than a first-ball block is right -- it forms off
+a dig with no setter to read. The opponent first-ball path is rare in these
+fixtures and n=13 says nothing yet.
+
+**A caution on all of these numbers.** Measured over four roster pairings the
+home path reads 8.7% error and 16.3% stuff; over three it read 10.6% and 9.0%.
+The pairing-to-pairing spread is large enough that the `STRAIN_AVERSION` table
+above is a guide to the *shape* of the trade, not a precise measurement of any
+row. This is the same lesson as `ATTACK_SIDE_SYMMETRY_2026_08_03.md`, and the
+same remedy applies: any figure worth acting on needs pairings averaged, not one
+lucky fixture.
+
+### The serve
+
+`resolve_serve` composes the same pieces with two of them removed: no approach,
+so no natural line and no repertoire cone -- a server picks a spot and hits it --
+and no block, so the only things between contact and the floor are the tape and
+the lines.
+
+The property that decides everything: **a serve must be launched upward.** From
+a 2.6 m contact a flat ball is about 1.5 m high when it reaches the net, so the
+driven root cannot clear the tape and every serve takes the lofted one. On the
+lofted branch range is steeply sensitive to launch angle, so vertical execution
+error converts directly into balls long -- which is why a serve cannot carry a
+spike's execution spread:
+
+| SERVE_SPREAD_MULTIPLIER | home | opponent | combined |
+| ---: | ---: | ---: | ---: |
+| 1.00 | 32.8% | 32.2% | 32.5% |
+| **0.70** | **15.6%** | **10.6%** | **13.1%** |
+| 0.45 | 3.9% | 0.0% | 1.9% |
+
+0.70 lands inside the sport's 8-15%. 0.45 produces a serve that essentially
+cannot miss. A serve is struck from a standstill off a self-toss with no set to
+read and no block to beat -- the one contact in the sport rehearsed in isolation
+-- so carrying less scatter than a swing is right, and the multiplier is where
+that belief gets a number.
+
+Worth noting on its own: at full spread the two sides measured 32.8% and 32.2%,
+and at 0.70 they measure 15.6% and 10.6%. One resolver, two sides, no divergence
+that is not sampling -- which is the first direct evidence for the prediction
+this gate is being held to.
+
+## What this means for promotion
+
+Promotion is still not taken, but the reasons have changed. Findings 2 and 3
+were both reasons a promoted geometric attack would have played *worse* than the
+legacy one despite being the better model -- a 28% error rate would have swamped
+the rally, and a hitter with no course selection would have made every rally read
+the same. Both are resolved: attack error sits at 10.6% inside the sport's band,
+and 30.7% of swings now leave the natural line.
+
+Coverage is now complete: three attack paths and two serve paths all resolve
+through the shared geometry in shadow, and every rate they produce is inside or
+adjacent to its design band. What is left before the flip is not more wiring.
+
+The order from here:
+
+1. Feed the transition block back into `_attack_execution` as pressure, the one
+   term that path is still missing.
+2. Re-derive `STRAIN_AVERSION` over averaged pairings rather than the three the
+   table above used, now that the spread between samples is known to be wide.
+3. Then open `ENABLE_GEOMETRIC_ATTACK` behind the development override and
+   compare terminal outcome distributions against the legacy path.
+
+The symmetry gate repaired in `ATTACK_SIDE_SYMMETRY_2026_08_03.md` is the
+instrument for step 3. It measures a real six-point home tilt today, and the
+geometric attack replacing three separately-written attack paths with one shared
+resolver is the most plausible way that tilt goes away -- which makes it a
+genuine prediction this gate can be held to rather than a hope.
+
+
+## Postscript: the two things that were left before the flip
+
+### The transition block now pressures the swing
+
+`_resolve_home_continuation` formed its wall *after* it scored the swing, so the
+block on that path could take a ball away but never make one harder to hit -- it
+passed a block pressure of zero, alone among the three swings. The formation is
+now built before the swing is scored, its closes become pressure, and
+`_contest_block` contests that same formation afterwards rather than forming a
+second one. One wall does both jobs; a wall that hurried the hitter and a wall
+that touched the ball can no longer be different walls.
+
+### `STRAIN_AVERSION` re-derived, and the first answer was wrong
+
+The table this document carried was measured on three roster pairings. Re-run
+over eight, with both serving assignments and all three attack paths pooled:
+
+| STRAIN_AVERSION | off natural line | attack error | block involvement | stuff |
+| ---: | ---: | ---: | ---: | ---: |
+| **0.85** | **60.4%** | **11.7%** | 24.7% | **11.7%** |
+| 1.10 | 37.1% | 9.2% | 27.4% | 13.3% |
+| 1.40 | 16.8% | 7.6% | 32.8% | 16.3% |
+
+0.85 is the only row with attack error inside the sport's 10-15%, and its 11.7%
+stuff is the closest any row gets to the 12% target. **1.10 -- the value three
+pairings chose -- sits below the error band and overshoots stuff.** The constant
+is now 0.85.
+
+That the answer moved is the finding. At a fixed value of this constant, attack
+error and stuff each shift by several points between a three-pairing sample and
+an eight-pairing one. This is the lesson of `ATTACK_SIDE_SYMMETRY_2026_08_03.md`
+arriving in a second place, and it would have been shipped as a tuning decision
+if the sweep had not been repeated: a figure read off one handful of pairings is
+a draw from a wide distribution, not a measurement.
+
+Involvement reads lower in this table than in the per-path one because this
+sweep pools the transition swing, whose block forms off a dig and is genuinely
+weaker. It is a comparison between rows, not a reading against the 35-45% band.
+
+### What the flip is now waiting on
+
+Nothing structural. Five ball paths resolve through shared geometry, every rate
+is in or adjacent to its band, and both tuning constants have been derived on
+samples large enough to support them. The next step is to open
+`ENABLE_GEOMETRIC_ATTACK` behind the development override and compare terminal
+outcome distributions against the legacy path -- with the symmetry gate as the
+instrument, and its six-point home tilt as the prediction.
+
+## Promotion, and the gate refusing it
+
+The flag was inert. `ENABLE_GEOMETRIC_ATTACK` was read in exactly one function,
+`GeometricAttackPromotion.enabled()`, and that function had no callers.
+`continuation()` -- the translation from a resolved swing into the rally's
+outcome vocabulary -- was called only from `_geometric_swing_record`, the shadow
+recorder. Setting the constant to `true` would have changed nothing while
+reading, everywhere else, as a shipped feature.
+
+The promotion branch is now wired on all three attack paths. What it takes over
+is the swing's result: the landing point, the in/out, and whether the wall got
+to the ball. What it deliberately leaves alone is `attack_quality` -- execution
+is how the swing was struck, outcome is what it produced, and the two are
+allowed to disagree -- and the drawn arc, because `solve_launch_arc` is a
+ground-to-ground solver and the resolver launches from three metres up.
+
+Three things came out of wiring it that the shadow pass could not have shown.
+
+**The opponent could not miss.** There was no attack-error branch anywhere on
+the opponent's swing path. Every transition ball the opponent hit either beat
+the block or was dug, against a home hitter erring at the sport's rate. It
+needed a new terminal outcome, `opponent_attack_error`, and it is counted in the
+hitting-error rate but deliberately not in the home tally.
+
+**Every opponent swing was a left-pin swing.** `_choose_opponent_attack` returns
+a hitter, a contact point and a shot; it has never returned a lane, so all three
+readers of one took the `"Left Pin"` default. Currently inert -- the lane
+reaches `approach_start_position`, whose `_lane` parameter is unused, and
+measurably nothing moved when it was fixed -- but it was labelling events and
+accruing familiarity against a lane 47% of opponent hitters were not in.
+`CourtConstants.lane_at_x` now derives it from the contact point.
+
+**The symmetry gate rejects the promotion.** Opened across all three paths, the
+pooled roster-cancelling estimator moves from 0.558 to 0.671, against a 0.12
+bound. Counting attack errors as the other side's point it is 0.749: 247 kills
+and 90 opponent errors against 74 opponent kills and 39 home errors, over 600
+rallies played in both squad and both serving assignments.
+
+The promotion did not create that tilt. It removed what was hiding it. The
+legacy path ends a large share of attacks at the block, and a ball that never
+reaches the floor never asks which side's floor defence is modelled better. Once
+the geometric swing puts those balls down, every rally runs through the home
+side's claimant search, arrival margins, posture reads and support counts on one
+side of the net, and through `_choose_opponent_defender` and a flat dig contest
+on the other. That is the same defect shape as every asymmetry found in this
+engine: one side modelled fully, the other as a simplified parallel
+implementation.
+
+So production stays closed and development is open, which is where Gates 42, 48
+and 49 each sat before their own flip. The next gate is the opponent's floor
+defence, and the symmetry estimator is already the instrument for it: it should
+fall from 0.671 toward 0.5 as the two dig paths converge, and the production
+flip belongs at the end of that gate rather than this one.
+
+## The defence gate
+
+The previous section closed with the prediction that the home tilt was not the
+geometric attack's doing but its floor defence's. That was measurable, and the
+measurement is unambiguous. Over 407 digs played on the roster-cancelling
+design -- each pairing in both squad assignments and both serving assignments,
+with the geometric attack promoted so balls actually reach the floor:
+
+| | home | opponent |
+|---|---|---|
+| digs attempted | 185 | 222 |
+| dig success | **0.422** | **0.225** |
+| mean contact quality | 0.361 | 0.325 |
+| mean arrival margin | **+0.967** | **-0.559** |
+| supporters per dig | 0.30 | 0.00 |
+| roles ever digging | all six | three |
+
+The dig attributes are identical on both sides by construction. Everything in
+that table is the engine, not the rosters.
+
+Four separate mechanisms, all the same defect -- a second implementation
+written for a job that already had one.
+
+**Nobody staged the opponent's floor.** `_home_floor_phase_positions` walked the
+home six into their defensive shape during the attack's flight. The opponent had
+no equivalent: two blockers were sent to the wall and the other four were left
+wherever the previous phase had put them. It is now `_floor_phase_positions`
+with the side as a parameter, mirroring the y axis and the sign of every depth
+and posture term.
+
+**The opponent had no defensive plan.** Every read of a posture, a seam
+responsibility or a floor-defence zone on that side returned a default, so the
+opponent defended from the rotation grid while the home side defended from a
+plan. They now get `ensure_defaults`, mirrored once at the source -- the same
+plan a home coach starts from, not a better one.
+
+**Three of six were struck off the candidate list.** `_choose_opponent_defender`
+skipped the setter and both middles outright, which is not a rule of the sport
+and is not what the home side's claimant search does. A six-player defence
+defended with three.
+
+**And the search itself was a different search.** The home side runs
+`CoverageModel.choose_claimant`, which credits a defender with a metre and a
+half of reach before asking them to move. The opponent's hand-rolled scan made
+its defender run to the exact landing coordinate, reported no support count, and
+on the transition path did not even choose by position -- it took the roster's
+best digger for any ball anywhere and handed `_defense_execution` a flat zero
+arrival margin, a defender always exactly on time for a ball they never had to
+move to. Both sides now go through one search.
+
+Fixing those moves the opponent's mean arrival margin from **-0.559 to -0.048**,
+puts all six roles on the floor, and makes the support term and the body penalty
+real on that side for the first time. Dig success is 0.126, and the drop from
+the nominal 0.225 is honesty rather than regression: most of the old number came
+from transition digs that could not be late.
+
+**A unit defect surfaced on the way.** `evaluate_arrival` reports
+`arrival_margin` as `physical_reach - distance`, which is **metres**, and
+`_defense_execution` reads it against `DIG_LATE_ARRIVAL_SECONDS`, which is
+**seconds**. This is older than any of the above and is deliberately not
+corrected here, because correcting it rescales every dig in the engine including
+the home side's, and that belongs in its own gate with its own re-calibration.
+What matters for two sides being comparable is that they are on one scale, so
+the fallback path now reports metres too rather than the seconds it used to.
+
+**What remains.** The home defender still arrives with about a metre in hand and
+the opponent with none, and both sides are now measured by the same function, so
+the residual is placement rather than mechanism: the home side defends from a
+career-tuned plan and the opponent from `ensure_defaults`. The other named term
+is identity -- `_attack_effectiveness` prices a decisive attack up by as much as
+15% against the dig it faces, and only the home team has principles to be
+decisive with. Neither is a parallel implementation any more, which is what this
+gate was for.
+
+### The gate did not close
+
+| | kill share | with errors counted |
+|---|---|---|
+| legacy attack | 0.574 | 0.437 |
+| geometric attack promoted | **0.716** | 0.716 |
+
+Against a 0.12 bound, over 960 rallies per condition on the roster-cancelling
+design. It moved *away* from 0.5, not toward it.
+
+That is not the defence work regressing. Most of the opponent's old dig rate came
+from transition digs that could not be late -- a flat zero arrival margin on a
+defender chosen without reference to where the ball went -- so removing the
+freebie made the number honest and made the real gap visible. Home digs 0.39,
+opponent 0.13, and with the parallel implementation gone that difference is now
+a calibration question about one model rather than an argument between two.
+
+Two changes were tried and backed out, both because measuring beat assuming.
+
+**A floor preset for the opponent.** They were positioned from
+`ROTATION_SLOT_POSITIONS`, whose own comment forbids it for live play, so giving
+them `apply_floor_preset("Perimeter")` looked obviously right. Then:
+`apply_floor_preset` is only ever called from the tactics screen, so a default
+career plan is on that same grid. The experiment measured 0.723 -- slightly
+*worse* -- and would have handed the opponent a floor system the player has to
+go and choose. Reverted. The grid defect is real and belongs to both sides.
+
+**The opponent's decisiveness.** Their swing read `home_principles.decisiveness`,
+so a decisive home identity made the opponent swing harder at gaps they had not
+chosen. Fixed to neutral. Numerically inert on this fixture -- the vertical
+slice is Balanced, multiplier 1.0 -- and correct regardless.
+
+The opponent also now reads its own plan on a dig, through
+`_defensive_responsibility_fit`, with the landing point mirrored into the frame
+`_opponent_attack_type` classifies in. Positioning a side by a plan while never
+letting them read it would have been the same defect one layer down.
+
+`ENABLE_GEOMETRIC_ATTACK` stays closed. The next gate is the dig contest itself
+-- one model, both sides, needing calibration rather than reconciliation -- and
+the metres-for-seconds unit defect in `_defense_execution` is the first thing it
+has to settle, because every dig rate in this table is read through it.

@@ -1,0 +1,174 @@
+NON-NORMALISING CLAMPS IN LIVE CODE
+95 sites. 0..1 and -1..1 excluded as normalisation; 3 further matches were
+inside comments (prose describing clamps, including ones already removed) and are excluded.
+
+This is an ENUMERATION ONLY. No claim is made that any bound is wrong: deciding
+that requires measuring the distribution each one acts on, which is the next step.
+
+
+scenes/components/cognition_billboard_3d.gd
+    432  [    0.05 .. 1.0     ]  1.0 - blink
+
+scenes/components/player_actor_3d.gd
+    848  [   -34.0 .. 34.0    ]  platform_residual * 0.55
+    849  [    -9.0 .. 0.0     ]  absf(platform_residual) * -0.16
+   2238  [    0.55 .. 1.15    ]  height_cm / 100.0 * 0.43
+   2263  [    0.55 .. 1.45    ]  (upper_span - leg_gain) / upper_span
+
+scenes/components/player_attribute_wheel.gd
+    250  [   300.0 .. 440.0   ]  size.x * 0.34
+
+scenes/components/tactical_court.gd
+    482  [    0.56 .. 0.94    ]  read_position.y
+    484  [    0.06 .. 0.94    ]  read_position.x
+    485  [    0.53 .. 0.96    ]  read_position.y
+    955  [    0.70 .. 0.92    ]  local_base.y
+    961  [    0.06 .. 0.94    ]  target.x
+    961  [    0.53 .. 0.96    ]  target.y
+
+scenes/main/main.gd
+   1471  [     0.0 .. 0.40    ]  value / 100.0
+
+scenes/screens/match_screen.gd
+     96  [     0.1 .. 4.0     ]  requested_speed
+
+scripts/data/body_type_models.gd
+    256  [     0.0 .. 0.98    ]  up
+
+scripts/data/cogniticon_marks.gd
+    281  [    0.05 .. 2.0     ]  openness
+    283  [     0.0 .. 2.0     ]  openness
+
+scripts/data/court_constants.gd
+    371  [    0.10 .. 0.90    ]  front_reference.x
+    381  [    0.10 .. 0.90    ]  partner.x
+    478  [    0.06 .. 0.94    ]  lane_x
+    478  [    0.53 .. 0.96    ]  lane_y
+
+scripts/data/gait_biomechanics.gd
+    340  [    0.05 .. 0.95    ]  stance_share
+
+scripts/data/regions.gd
+    525  [    0.18 .. 0.52    ]  0.52 - distance * 0.34
+    526  [    0.35 .. 0.60    ]  0.60 - distance * 0.25
+
+scripts/models/ball_contact_signature.gd
+     27  [   -90.0 .. 90.0    ]  horizontal_angle
+     28  [   -90.0 .. 90.0    ]  vertical_angle
+     29  [   -30.0 .. 30.0    ]  topspin
+     30  [   -30.0 .. 30.0    ]  sidespin
+
+scripts/models/defensive_plan.gd
+     59  [    0.12 .. 0.88    ]  position.x
+     59  [    0.52 .. 0.68    ]  position.y
+    123  [    0.06 .. 0.94    ]  position.x
+    124  [    0.53 .. 0.96    ]  position.y
+    257  [     0.5 .. 6.0     ]  radius_meters
+    267  [    0.06 .. 0.94    ]  position.x
+    268  [    0.53 .. 0.96    ]  position.y
+
+scripts/models/opponent_team.gd
+     65  [     0.0 .. 0.85    ]  value
+     66  [     0.0 .. 0.85    ]  value
+     67  [     0.0 .. 0.85    ]  value
+
+scripts/models/system_fit_profile.gd
+     48  [    0.05 .. 1.0     ]  profile_in_system_fraction
+
+scripts/models/volleyball_player.gd
+    314  [    0.55 .. 1.15    ]  height_cm / 100.0 * 0.43
+
+scripts/simulation/approach_mechanics_system.gd
+    441  [    0.04 .. 0.46    ]  target.y - depth
+    442  [    0.54 .. 0.96    ]  target.y + depth
+
+scripts/simulation/attack_power_model.gd
+    166  [     0.1 .. 1.0     ]  swing_power_fraction
+
+scripts/simulation/attack_resolution_model.gd
+    146  [    0.02 .. 0.98    ]  crossing_x
+
+scripts/simulation/ball_read_system.gd
+    126  [     0.0 .. 0.95    ]  raw_progress
+
+scripts/simulation/block_deflection_model.gd
+    133  [    0.02 .. 0.98    ]  lane + across
+
+scripts/simulation/cognition_compiler.gd
+    324  [    0.15 .. 1.0     ]  1.0 - cue.certainty
+
+scripts/simulation/coverage_calculator.gd
+    116  [    -0.5 .. 0.5     ]  reach_margin / 3.0
+    117  [    -0.5 .. 0.5     ]  zone_margin / 3.0
+    257  [    0.78 .. 1.18    ]  player.wingspan_cm / 200.0
+
+scripts/simulation/geometric_attack_promotion.gd
+    333  [     0.0 .. 1.5     ]  jump_multiplier
+
+scripts/simulation/live_block_integrator.gd
+    136  [    0.12 .. 0.88    ]  target_x
+
+scripts/simulation/rally_decision_system.gd
+     34  [     0.0 .. 0.70    ]  margin + 0.20
+
+scripts/simulation/rally_playback_adapter.gd
+    157  [  -0.025 .. 0.025   ]  sidespin * 0.006
+
+scripts/simulation/rally_simulator.gd
+   6127  [    0.06 .. 0.94    ]  intended.x
+   6947  [    0.06 .. 0.94    ]  target.x
+   6948  [    0.04 .. 0.44    ]  target.y
+   6949  [    0.56 .. 0.96    ]  target.y
+   7222  [    0.05 .. 0.95    ]  lane_x
+   7224  [    0.05 .. 0.95    ]  lane_x + BLOCK_SHOULDER_OFFSET * inward
+   7750  [     0.0 .. 0.035   ]  direction.length() * 0.08
+   7775  [     0.0 .. 0.045   ]  (distance_meters - 4.0) * 0.006
+   7776  [    0.55 .. 0.70    ]  release_target.y + safety_offset
+   7805  [     0.0 .. 0.055   ]  (0.55 - net_distance_meters) * 0.10
+   7886  [     0.0 .. 1.2     ]  edge_ratio
+   7923  [    0.02 .. 0.98    ]  destination.x
+   8747  [    0.54 .. 0.94    ]  original_target.y + 0.02
+   9176  [     0.0 .. 1.4     ]  effort
+   9291  [   -0.04 .. 0.08    ]  fit
+  10127  [     0.0 .. 1.8     ]  set_height_extra_meters
+  10361  [     0.0 .. 0.60    ]  tempo_demand
+  10365  [     0.0 .. 0.16    ]  set_height_extra_meters * 0.075
+  10810  [     0.0 .. 0.85    ]  miss_chance
+  10905  [   -0.42 .. 0.08    ]  arrival_margin * 0.18
+  11053  [    0.04 .. 0.96    ]  intended.x + offset_x
+  11425  [    0.02 .. 0.98    ]  center_x - effective_width * 0.5
+  11426  [    0.02 .. 0.98    ]  center_x + effective_width * 0.5
+  11854  [    0.05 .. 0.98    ]  execution_accuracy
+  12533  [    0.06 .. 0.94    ]  contact.x + (0.0 if not tight_taken else 0.16)
+  13120  [   -0.50 .. 1.0     ]  (player.mass_kg - 82.0) / 48.0
+  13121  [    0.05 .. 1.0     ]  base + mass_bonus
+  13127  [    0.05 .. 1.0     ]  maximum_jump * jump_access
+  13133  [    0.05 .. 1.0     ]  standing_reach * 0.68 + wingspan * 0.32
+
+scripts/simulation/shadow_reception_system.gd
+    834  [    -1.0 .. 0.5     ]  opportunity.arrival_margin
+    870  [    -4.0 .. 4.0     ]  horizontal_angle / 12.0
+
+scripts/systems/cognition_badge.gd
+     98  [    0.25 .. 1.0     ]  certainty
+
+scripts/systems/familiarity_system.gd
+     47  [     1.0 .. 100.0   ]  physical_reach * 0.42 + player.jump_reach * 0.38 + player.
+     56  [     0.0 .. 100.0   ]  current + gain
+    105  [   -0.10 .. 0.10    ]  (known * 0.55 + scouting * 0.25 + mental * 0.20) - 0.50
+
+scripts/systems/player_generator.gd
+    335  [     1.0 .. 99.0    ]  talent - float(error)
+
+scripts/systems/scouting_system.gd
+    373  [     1.0 .. 100.0   ]  folded
+
+scripts/systems/world_population.gd
+    508  [    0.30 .. 2.60    ]  0.45 + terminal * 1.15 + presence * 0.75
+    523  [     0.0 .. 0.95    ]  chance
+
+tools/run_ball_flight_probe.gd
+    226  [     0.0 .. 0.999   ]  float(event.quality)
+
+tools/run_reach_posture_probe.gd
+     41  [    -1.0 .. 2.0     ]  floorf(margin / 0.25) * 0.25

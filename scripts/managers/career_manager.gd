@@ -1,15 +1,26 @@
 extends Node
 
+const FatigueModel := preload("res://scripts/simulation/fatigue_model.gd")
+const Accommodation := preload("res://scripts/data/accommodation.gd")
+const FoodSupply := preload("res://scripts/data/food_supply.gd")
+const RecruitOffer := preload("res://scripts/data/recruit_offer.gd")
+const FoodBlock := preload("res://scripts/data/food_block.gd")
+const PasteRatioModel := preload("res://scripts/data/paste_ratio.gd")
+const StaffMemberModel := preload("res://scripts/models/staff_member.gd")
+
 const CareerStateModel := preload("res://scripts/models/career_state.gd")
 const TeamModel := preload("res://scripts/models/team.gd")
 const FixtureModel := preload("res://scripts/models/fixture.gd")
 const MatchFormatModel := preload("res://scripts/models/match_format.gd")
 const Generator := preload("res://scripts/systems/player_generator.gd")
 const Training := preload("res://scripts/systems/training_system.gd")
+const DailyScheduleSystem := preload("res://scripts/systems/daily_schedule_system.gd")
 const Calendar := preload("res://scripts/data/calendar_rules.gd")
 const SixnetLeague := preload("res://scripts/systems/sixnet_league.gd")
 const WorldPopulation := preload("res://scripts/systems/world_population.gd")
 const WorldAging := preload("res://scripts/systems/world_aging.gd")
+const StaffGen := preload("res://scripts/systems/staff_generator.gd")
+const StaffFamiliar := preload("res://scripts/data/staff_familiarity.gd")
 
 signal career_changed
 signal career_loaded
@@ -29,7 +40,33 @@ var game_manager_override: Node
 ## Generated once at career creation and persisted alongside the career in
 ## its own file, because it is megabytes of data that almost never changes
 ## while the career file itself is rewritten every week.
-var world_population: Array[VolleyballPlayer] = []
+## Everyone in the world who is not on the managed roster.
+##
+## **Loaded on first use, not on career load.** Measured: a career's own file is
+## 79 KB and parses in 4 ms, its state rebuilds in 6, and the game state in 8 --
+## eighteen milliseconds for everything the player is about to look at. The world
+## sidecar is 3,880 volis, and rebuilding them took **1.9 seconds of a 1.94 second
+## load**, every time, before the journal could draw a single row.
+##
+## Nothing on the journal, the clipboard, the planner or the match centre reads
+## this. It is the free-agent pool: scouting and transfers want it, and both are
+## screens the player has to choose to open. So the file path is remembered at
+## load and the work happens the first time somebody actually asks -- which for
+## most sessions is never.
+var _world_population: Array[VolleyballPlayer] = []
+var _world_save_id: String = ""
+var _world_loaded: bool = true
+
+var world_population: Array[VolleyballPlayer]:
+	get:
+		if not _world_loaded:
+			_world_loaded = true
+			_read_world_population(_world_save_id)
+		return _world_population
+	set(value):
+		## An outright assignment is an answer, so there is nothing left to defer.
+		_world_loaded = true
+		_world_population = value
 var _world_dirty: bool = false
 ## What the last season's turnover did -- retirements, intake size, whether a
 ## golden generation arrived. Raw material for a news feed; kept in memory
@@ -41,6 +78,14 @@ func has_career() -> bool:
 	return career != null
 
 
+## What seat the manager took. `Academy` is a dead value: the academy is the
+## region's selection body and is not a thing anybody manages. A save written
+## before this migrates to `Established`, which is what both old options
+## actually were.
+const ESTABLISHED_CLUB: String = "Established"
+const FOUNDED_CLUB: String = "Founded"
+
+
 func create_career(
 	career_name: String,
 	organization_name: String,
@@ -48,6 +93,11 @@ func create_career(
 	organization_type: String,
 	identity: String,
 	custom_principles: Dictionary = {},
+	## Who the manager is: name, home region, background, hand and body. Optional
+	## so every existing caller -- the suite's fixtures, the probes -- keeps
+	## working and gets the defaults, which is what they had before there was a
+	## manager at all.
+	manager: Dictionary = {},
 ) -> String:
 	if career_name.strip_edges().is_empty() or organization_name.strip_edges().is_empty():
 		return "Career and organization names are required."
@@ -58,8 +108,38 @@ func create_career(
 	state.region = region
 	state.organization_type = organization_type
 	state.identity = identity
-	state.reputation = 6 if organization_type == "Academy" else 10
-	state.finances = 65000 if organization_type == "Academy" else 120000
+	## The manager's own region defaults to the club's, which is the common case
+	## and never the interesting one. `CHARACTER_CREATION.md` wants the two to
+	## differ often; the creator asks for one region today and this is the seam
+	## where a second question would land.
+	state.manager_name = str(manager.get("name", "")).strip_edges()
+	state.manager_region = VolleyballRegions.canonical_name(
+		str(manager.get("region", region))
+	)
+	state.manager_background = str(manager.get("background", "played"))
+	state.manager_hand = "left" if str(manager.get("hand", "right")) == "left" \
+		else "right"
+	state.manager_appearance = ManagerProfile.sanitise_appearance(
+		Dictionary(manager.get("appearance", {}))
+	)
+	## **The save's opening position is where you are, not what you are called.**
+	##
+	## This was `6/65,000` for an academy and `10/120,000` for a club -- two
+	## clubs, an established one and a young one, under a word that now means the
+	## regional selection body. `CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` §3
+	## recuts it as major region versus minor, and the seat you take inside it.
+	##
+	## A major region is where the resources are: established clubs with squads
+	## and accommodation somebody already built. A minor one hands you the small
+	## club and the difficulty that your best volis are watched by academies that
+	## are not yours. Founding is the hard route and belongs where the resources
+	## are -- from nothing, against clubs that have everything -- so it costs
+	## standing and money rather than being what happens when you pick the
+	## smaller region.
+	var major := VolleyballRegions.is_major(region)
+	var founded := organization_type == FOUNDED_CLUB
+	state.reputation = (10 if major else 6) - (4 if founded else 0)
+	state.finances = (120000 if major else 65000) - (45000 if founded else 0)
 	state.match_format = MatchFormatModel.new()
 	state.match_format.format_name = "Career Best of 3"
 	state.match_format.best_of_sets = 3
@@ -87,6 +167,10 @@ func create_career(
 	if not error.is_empty():
 		return error
 	state.fixtures = _starting_fixtures(region)
+	## **The club already has staff, and until now it never did.** `career.staff`
+	## was empty in every save ever played, which meant `ScoutingSystem` read a
+	## scout rating of zero for the whole game and nothing said so.
+	state.staff.assign(StaffGen.for_club(region, organization_type, seed_value + 313))
 	## The world is built once, here, and then kept. The transfer market is a
 	## slice taken out of it rather than a separate roll, so every player the
 	## manager can sign is a real person from somewhere with a real place in
@@ -122,7 +206,68 @@ func calendar_state() -> Dictionary:
 
 
 func date_text() -> String:
-	return Calendar.display_date(int(career.absolute_week)) if career != null else "No career"
+	if career == null:
+		return "No career"
+	return Calendar.display_date(
+		int(career.absolute_week), int(career.day_of_week)
+	)
+
+
+## Is today the day the club holds its session, and has it been held?
+##
+## Two questions with one answer, because the only thing anybody wants to know
+## is whether there is somewhere to be. A session that has already been attended
+## this week is not somewhere to be.
+func training_day_is_today() -> bool:
+	if career == null:
+		return false
+	return int(career.day_of_week) == int(career.training_day) \
+		and int(career.last_drilled_week) != int(career.absolute_week)
+
+
+## Move the calendar on by one day, running the week when the week ends.
+##
+## The week is still the unit training is applied in -- a regimen is a week's
+## work and pretending otherwise would mean re-deriving every load in the game --
+## so this is a clock, and `advance_week` is still the thing that happens. What
+## the day buys is a *place in the week*, which is what an appointment needs: you
+## cannot turn up to a week.
+func advance_day() -> String:
+	if career == null:
+		return "No active career."
+	if training_day_is_today():
+		return "The squad is on the floor today. Take the session or skip it."
+	if int(career.day_of_week) < Calendar.DAYS_PER_WEEK:
+		career.day_of_week += 1
+		save_career()
+		career_changed.emit()
+		return ""
+	var error := advance_week()
+	if not error.is_empty():
+		return error
+	career.day_of_week = 1
+	save_career()
+	career_changed.emit()
+	return ""
+
+
+## Hold this week's session, on whatever the manager put it on.
+##
+## `focus` is a key out of the tactic sheet's own vocabulary rather than a
+## string invented here, so what a manager drills is always something they
+## actually drew. Skipping is a real choice and costs the focus rather than the
+## session: the squad still trains, they simply train nothing in particular,
+## which is what an unattended week has always silently been.
+func hold_drill_session(focus: String = "") -> String:
+	if career == null:
+		return "No active career."
+	if int(career.last_drilled_week) == int(career.absolute_week):
+		return "This week's session has already been held."
+	career.drill_focus = focus
+	career.last_drilled_week = int(career.absolute_week)
+	save_career()
+	career_changed.emit()
+	return ""
 
 
 func next_fixture() -> Resource:
@@ -141,6 +286,25 @@ func fixture_by_id(fixture_id: int) -> Resource:
 		if int(fixture.id) == fixture_id:
 			return fixture
 	return null
+
+
+## The regimens this week runs, defaulting to the whole roster on one activity.
+##
+## A career with no regimens set is every career saved before squads existed and
+## every new one before the manager opens the screen, so the default has to be
+## the behaviour they already had rather than nobody training.
+func active_regimens() -> Array:
+	if career == null:
+		return []
+	if not career.training_regimens.is_empty():
+		return career.training_regimens
+	var default_regimen := TrainingRegimen.new()
+	default_regimen.squad_name = "Full Squad"
+	default_regimen.activity = career.training_focus
+	default_regimen.focus = TrainingRegimen.Focus.MEDIUM
+	for player in _game_manager().players:
+		default_regimen.player_ids.append(int(player.id))
+	return [default_regimen]
 
 
 func set_training_focus(activity_name: String) -> String:
@@ -184,9 +348,40 @@ func advance_week() -> String:
 			and not bool(fixture.completed):
 		return "Play the scheduled fixture before advancing the week."
 	SixnetLeague.ensure_bootstrapped(career)
-	last_training_report = Training.apply_week(
-		career.training_focus, _game_manager().players, _game_manager().team
+	## The day sets the training budget. A club that scheduled one session does
+	## not get to run three regimens because the screen let them be typed in.
+	var day: Dictionary = DailyScheduleSystem.evaluate(
+		_game_manager().team.daily_schedule
 	)
+	last_training_report = Training.apply_week(
+		active_regimens(), _game_manager().players, _game_manager().team,
+		int(career.absolute_week),
+		float(day.get("effective_training_blocks", 0.0)),
+	)
+	last_training_report["day"] = day
+	## And the day pays the squad back: sleep and meals are what recovery is.
+	var roster: Dictionary = DailyScheduleSystem.evaluate_roster(
+		_game_manager().team.daily_schedule,
+		_game_manager().team.personal_schedules,
+		_game_manager().players.size(),
+	)
+	for player in _game_manager().players:
+		player.fatigue = clampf(
+			player.fatigue - float(day.get("recovery", 0.0)), 0.0, 1.0
+		)
+		var personal: Dictionary = Dictionary(roster.get("per_player", {})).get(
+			player.id, {}
+		)
+		player.satisfaction = clampf(
+			player.satisfaction + float(day.get("satisfaction", 0.0))
+				+ float(personal.get("satisfaction", 0.0)),
+			0.0, 1.0,
+		)
+	_game_manager().team.cohesion = clampf(
+		float(_game_manager().team.cohesion) + float(roster.get("cohesion", 0.0)),
+		0.0, 1.0,
+	)
+	last_training_report["roster_schedule"] = roster
 	var pre_year: int = Calendar.state_for_week(career.absolute_week).year
 	career.absolute_week += 1
 	var post_year: int = Calendar.state_for_week(career.absolute_week).year
@@ -205,17 +400,183 @@ func advance_week() -> String:
 		## Weekly recovery must exceed every training load. The old 0.04 was
 		## smaller than default Team Practice's 0.05, so an idle week made a
 		## rested squad more tired and fixture-to-fixture fatigue only climbed.
-		recover_weekly_fatigue(player)
+		## **Recovery is now what living here buys you.**
+		##
+		## `ACCOMMODATIONS_AND_CARE.md` §11: a dorm is still a dorm, so the floor
+		## under this is high and nobody rests badly because of where they live.
+		## What reduces it are *conditions* -- a crowded room, a table with
+		## nothing familiar on it, being a long way from home with no way to call
+		## -- and every one of those is answerable by something a manager
+		## installs or arranges.
+		##
+		## This is the seam the whole accommodation design attaches to, and it
+		## could not exist until a match cost something that survived the week.
+		recover_weekly_fatigue(player, _weekly_recovery_share(player))
+		_advance_weekly_palate(player)
 		player.current_form *= 0.92
+		## A week spent under your own eyes. The other half of scouting
+		## confidence, and the half a scout cannot buy: `ScoutingSystem`
+		## saturates this after about a season and a half, so it is free to
+		## climb without bound.
+		player.weeks_observed += 1
+	## The chef gets a week better at whatever they cooked, and a week rustier at
+	## whatever they did not. Both halves here, because a decay applied somewhere
+	## else is a decay somebody forgets -- and a familiarity that only climbs
+	## looks exactly like a chef who is learning.
+	var kitchen_chef := _chef()
+	if kitchen_chef != null:
+		var served_now: Dictionary = _week_service(
+			str(career.region), int(career.absolute_week)
+		)
+		StaffFamiliar.record_week(
+			career.staff_familiarity, int(kitchen_chef.id),
+			Dictionary(served_now.get("pastes", {})).keys()
+		)
+	## And the squad settles into wherever they were moved, a week at a time.
+	var housed: Resource = _game_manager().team
+	if housed != null and int(housed.housing_settling_weeks) > 0:
+		housed.housing_settling_weeks -= 1
+	for member in career.staff:
+		member.weeks_employed += 1
 	save_career()
 	week_advanced.emit(last_training_report)
 	career_changed.emit()
 	return ""
 
 
-static func recover_weekly_fatigue(player: VolleyballPlayer) -> void:
+static func recover_weekly_fatigue(
+	player: VolleyballPlayer, share: float = 1.0
+) -> void:
 	if player != null:
-		player.fatigue = maxf(player.fatigue - WEEKLY_FATIGUE_RECOVERY, 0.0)
+		player.fatigue = maxf(
+			player.fatigue - WEEKLY_FATIGUE_RECOVERY * share, 0.0
+		)
+
+
+## What share of a full week's recovery this voli actually banks.
+func _weekly_recovery_share(player: VolleyballPlayer) -> float:
+	var team: Resource = _game_manager().team
+	if team == null or player == null:
+		return 1.0
+	## The club's region lives on the career, not the team -- the squad is the
+	## people and the region is the address.
+	var club_region := str(career.region) if career != null else str(player.club_region)
+	var week := int(career.absolute_week) if career != null else 1
+	## Against what the chef put on the block, not against the whole larder --
+	## see `FoodSupply.served`. Measuring the larder made a supply line a penalty
+	## for a squad that was already eating what it knew.
+	var served: Dictionary = _week_service(club_region, week)
+	var discomfort := FoodSupply.discomfort(player.palate_regions, served)
+	var crowding := Accommodation.crowding(
+		str(team.housing_structure), int(team.housing_occupants_per_room),
+		team.housing_small_equipment, team.housing_large_equipment,
+	)
+	return Accommodation.weekly_recovery_share(
+		crowding,
+		Accommodation.homesick(str(player.home_region), club_region),
+		discomfort,
+		FoodSupply.palate_of(_palate_clock(), int(player.id)),
+		team.housing_small_equipment,
+		int(team.housing_settling_weeks),
+		str(team.food_block),
+	)
+
+
+## What is on the block this week, for whoever asks.
+##
+## One function so the weekly seam, the palate clock and every screen agree about
+## what the squad is eating -- three callers deriving it separately is how the
+## page ends up naming a different paste than the week charged for.
+func _week_service(club_region: String, week: int) -> Dictionary:
+	var team: Resource = _game_manager().team
+	if team == null:
+		return {}
+	var table: Dictionary = FoodSupply.table(club_region, team.supply_lines, week)
+	## **A painted block is served exactly.**
+	##
+	## §2's rule is that only manual instruction guarantees the ratio, and
+	## painting the block *is* manual instruction -- a manager who stood at the
+	## bench and spread the paste themselves has done the thing the rule is about.
+	## So the chef's drift does not apply: there is nothing for them to
+	## approximate, because the mix is already on the block in front of them.
+	##
+	## This is also what stops the two inputs contradicting each other. A preset
+	## is a standing order the chef interprets; a painting is this week, done.
+	## When both exist the painting wins, because it is the more recent and the
+	## more specific instruction.
+	var painted: PastePaint = PastePaint.from_dict(team.paste_canvas)
+	var painted_shares: Dictionary = painted.shares()
+	if not painted_shares.is_empty():
+		return FoodSupply.served_exactly(table, painted_shares, week, painted.coverage())
+	var chef := _chef()
+	var known := 0.0
+	if chef != null:
+		for paste in Dictionary(team.paste_preset):
+			known += StaffFamiliar.of(
+				career.staff_familiarity, int(chef.id), str(paste)
+			)
+		known = known / maxf(float(Dictionary(team.paste_preset).size()), 1.0)
+	return FoodSupply.served(
+		table, FoodBlock.paste_slots(chef_rating()), week,
+		team.paste_preset, chef_rating(),
+		known if known > 0.0 else StaffFamiliar.BASELINE
+	)
+
+
+## How good the chef is, which until this week nothing could read: no career had
+## any staff at all. §1's paste ceiling is the first job the rating has.
+func chef_rating() -> int:
+	var member := _chef()
+	return int(member.rating) if member != null else 0
+
+
+func _chef() -> Resource:
+	if career == null:
+		return null
+	for entry in career.staff:
+		var member := entry as VolleyballStaffMember
+		if member != null and str(member.role) == StaffMemberModel.ROLE_CHEF:
+			return member
+	return null
+
+
+## One paste per week, rotated by the chef, and one palate figure per voli.
+##
+## The chef rotates through whatever the table has rather than repeating -- a
+## manager who has given them three pastes gets three weeks before anything
+## repeats, which is `FoodSupply`'s own rule that rotating is the fix.
+##
+## It lives on the career rather than here. It was an ivar on the manager, which
+## is not saved, so a palate reset to zero every time the game was reopened --
+## invisible in the numbers, because a reset palate looks exactly like a squad
+## that has been fed well.
+func _palate_clock() -> Dictionary:
+	return career.palate_clock if career != null else {}
+
+
+func _advance_weekly_palate(player: VolleyballPlayer) -> void:
+	var team: Resource = _game_manager().team
+	if team == null or player == null:
+		return
+	## The club's region lives on the career, not the team -- the squad is the
+	## people and the region is the address.
+	var club_region := str(career.region) if career != null else str(player.club_region)
+	var week := int(career.absolute_week) if career != null else 1
+	var served: Dictionary = _week_service(club_region, week)
+	## Keyed on the **mix**, per §2 -- a voli tires of this week's blend rather
+	## than of one ingredient in it, which is what makes varying the ratio a real
+	## answer and rotating pastes entirely a stronger one.
+	var serving := PasteRatioModel.key(Dictionary(served.get("ratio", {})))
+	## Blan'deral is the reset block: §1 makes it the one thing palate fatigue
+	## does not accumulate on, which is the week a manager spends to make the
+	## next paste land again.
+	if FoodBlock.resets_palate(str(team.food_block)):
+		serving = ""
+	FoodSupply.advance_palate(_palate_clock(), int(player.id), serving)
+	## And a week of eating somebody else's food widens a palate, which is the
+	## ceiling in §17 doing its job: comfortable is not the same as learning.
+	if FoodSupply.widens_palate(player.palate_regions, served):
+		FoodSupply.learn_region(player.palate_regions, club_region)
 
 
 func prepare_fixture(fixture_id: int) -> String:
@@ -228,6 +589,19 @@ func prepare_fixture(fixture_id: int) -> String:
 	if not errors.is_empty():
 		return errors[0]
 	career.active_fixture_id = fixture_id
+	## Point the match at the club on the calendar. Without this the fixture's
+	## name was decoration: every match of every season was played against the
+	## default squad, whatever the schedule said. Guarded on a named region so a
+	## save written before fixtures carried one keeps the opponent it had.
+	if not str(fixture.opponent_region).is_empty():
+		_game_manager().set_opponent_region(
+			str(fixture.opponent_region), int(fixture.opponent_club_index)
+		)
+		## Read back rather than assumed. `club_name` falls back to "<Region> VC"
+		## for a region with no clubs listed, and a fixture whose printed name
+		## disagreed with the squad across the net is the exact defect this is
+		## fixing.
+		fixture.opponent_name = str(_game_manager().opponent_team.team_name)
 	_game_manager().start_new_match(career.match_format)
 	career_changed.emit()
 	return ""
@@ -275,6 +649,13 @@ func complete_active_match() -> void:
 		fixture.completed = true
 		fixture.home_sets = int(_game_manager().match_state.home_sets)
 		fixture.opponent_sets = int(_game_manager().match_state.opponent_sets)
+		## The figures, kept. Every one of these was already counted rally by
+		## rally and then dropped here; see `VolleyballFixture.home_statistics`.
+		var match_statistics: Resource = _game_manager().match_state.statistics
+		if match_statistics != null:
+			fixture.home_statistics = match_statistics.home.duplicate(true)
+			fixture.opponent_statistics = match_statistics.opponent.duplicate(true)
+			fixture.player_statistics = match_statistics.players.duplicate(true)
 		career.reputation = clampi(int(career.reputation) + (
 			2 if fixture.home_sets > fixture.opponent_sets else -1
 		), 0, 100)
@@ -287,10 +668,44 @@ func complete_active_match() -> void:
 func _apply_player_match_outcomes(won: bool) -> void:
 	var manager := _game_manager()
 	var player_statistics: Dictionary = manager.match_state.statistics.players
+	## Who was actually on court, for the pair table below. Read off contacts
+	## rather than off the lineup, because the lineup is who was *picked* and a
+	## pair does not learn anything about each other from the bench.
+	var _played_together: Array[int] = []
 	for player in manager.players:
 		var stats: Dictionary = player_statistics.get(str(player.id), {})
 		var contacts := int(stats.get("contacts", 0))
 		var appeared := contacts > 0
+		if appeared:
+			_played_together.append(int(player.id))
+			## **A match has to cost something, and it was costing nothing.**
+			##
+			## `WEEKLY_FATIGUE_RECOVERY` is 0.40 and its own note says "a match
+			## costs an on-court player roughly 0.60" -- but that cost was only
+			## ever charged during live playback. A career that simulates its
+			## fixtures, which is every career, charged nothing at all.
+			##
+			## Measured before this line existed: 300 weekly readings of every
+			## voli's fatigue across 30 weeks came back **0.000 at every
+			## percentile**, peak 0.014, against a `LABOURED_ONSET` of 0.34. The
+			## three-stage fatigue model was unreachable between matches, and
+			## every design resting on it -- the table, the dorms, the care row
+			## in `ACCOMMODATIONS_AND_CARE.md` -- was a multiplier on a number
+			## that was always already zero.
+			##
+			## Scaled by involvement rather than flat, because a libero who
+			## touched the ball ninety times did not have the same afternoon as
+			## an opposite who came on for one rotation, and divided by the
+			## voli's own regional resistance, which `VolleyballRegions` has
+			## carried since F2 and which nothing outside a live rally read.
+			player.fatigue = clampf(
+				player.fatigue + FatigueModel.match_cost(
+					contacts, VolleyballRegions.fatigue_resistance(
+						str(player.home_region)
+					)
+				),
+				0.0, 1.0,
+			)
 		var satisfaction_change := 0.01 if won else -0.008
 		satisfaction_change += 0.005 if appeared else -0.004
 		player.satisfaction = clampf(
@@ -316,6 +731,61 @@ func _apply_player_match_outcomes(won: bool) -> void:
 	manager.team.cohesion = clampf(
 		float(manager.team.cohesion) + (0.006 if won else -0.003), 0.0, 1.0
 	)
+	## **The pair table, updated once per match rather than per rally.**
+	##
+	## A relationship is built over matches, not over contacts: two volis who
+	## happened to touch the ball forty times in one five-setter have not learned
+	## more about each other than a pair who played four tidy matches. Rate, not
+	## event -- see `PairFamiliarity`.
+	if manager.team != null:
+		PairFamiliarity.record_match(
+			manager.team.pair_familiarity, _played_together
+		)
+
+
+
+## Offer a place to a voli, and say what was offered.
+##
+## ## Why this is a function and not a button
+##
+## The board's route onto the roster used to be `sign_transfer` reached from the
+## transfers tab: one click, free, and the voli had no say and no bed checked.
+## Recruiting somebody here is asking them to join a household as well as a side,
+## so the thing that happens has to name the household.
+##
+## It returns the terms rather than storing them. Nothing reads a stored offer
+## yet, and a record nothing reads is `FAILURE_MODES.md` §0 at schema altitude --
+## so the room and the table are computed for the sentence the manager is told,
+## which is a read, and recomputed whenever anybody asks again.
+##
+## **This is the seam.** When the interview exists it wraps this call and charges
+## the manager's time for it; when a voli gets a say, the refusal happens here.
+## Neither needs the screen rebuilt, which is the whole reason the transaction is
+## one named function instead of a handler on a panel.
+func offer_place(player_id: int) -> Dictionary:
+	if career == null:
+		return {"error": "No active career."}
+	var team: Resource = _game_manager().team
+	var squad: Array = _game_manager().players
+	var room := RecruitOffer.proposed_room(
+		str(team.housing_structure), int(team.housing_occupants_per_room),
+		squad.size(), team.housing_small_equipment, team.housing_large_equipment,
+	)
+	var error := sign_transfer(player_id)
+	if not error.is_empty():
+		return {"error": error}
+	var signed := _game_manager().player_by_id(player_id) as VolleyballPlayer
+	var service: Dictionary = _week_service(
+		str(career.region), int(career.absolute_week)
+	)
+	return {
+		"error": "",
+		"name": str(signed.display_name) if signed != null else "",
+		"room": room,
+		"table": RecruitOffer.table_word(
+			Array(signed.palate_regions) if signed != null else [], service
+		),
+	}
 
 
 func sign_transfer(player_id: int) -> String:
@@ -427,7 +897,11 @@ func load_career(save_id: String) -> String:
 	var payload: Dictionary = parsed
 	career = CareerStateModel.from_dict(payload.get("career", {}))
 	_game_manager().from_dict(payload.get("game_state", {}))
-	_load_world_population(save_id)
+	## Remembered rather than read -- see `world_population`.
+	_world_population = [] as Array[VolleyballPlayer]
+	_world_save_id = save_id
+	_world_loaded = false
+	_world_dirty = false
 	career_loaded.emit()
 	career_changed.emit()
 	return ""
@@ -438,14 +912,14 @@ func load_career(save_id: String) -> String:
 ## sidecar and carries its market inline instead, which `CareerState` has
 ## already loaded by this point -- so that path simply leaves an empty world
 ## rather than failing.
-func _load_world_population(save_id: String) -> void:
-	world_population = [] as Array[VolleyballPlayer]
+func _read_world_population(save_id: String) -> void:
+	_world_population = [] as Array[VolleyballPlayer]
 	_world_dirty = false
 	var file := FileAccess.open(_world_path(save_id), FileAccess.READ)
 	if file != null:
 		var parsed: Variant = JSON.parse_string(file.get_as_text())
 		if parsed is Dictionary:
-			world_population = WorldPopulation.from_dict_array(
+			_world_population = WorldPopulation.from_dict_array(
 				Array((parsed as Dictionary).get("players", []))
 			)
 	## Belt and braces: anyone already on the managed roster is not also a
@@ -454,21 +928,21 @@ func _load_world_population(save_id: String) -> void:
 	for player in _game_manager().players:
 		rostered_ids[int(player.id)] = true
 	var world_free_agents: Array[VolleyballPlayer] = []
-	for player in world_population:
+	for player in _world_population:
 		if not rostered_ids.has(int(player.id)):
 			world_free_agents.append(player)
-	world_population = world_free_agents
+	_world_population = world_free_agents
 	if career.transfer_pool_ids.is_empty():
 		return
 	var by_id := {}
-	for player in world_population:
+	for player in _world_population:
 		by_id[int(player.id)] = player
 	var resolved: Array[VolleyballPlayer] = []
 	for player_id in career.transfer_pool_ids:
 		var player: VolleyballPlayer = by_id.get(int(player_id))
 		if player != null:
 			resolved.append(player)
-			world_population.erase(player)
+			_world_population.erase(player)
 	career.transfer_pool.assign(resolved)
 
 
@@ -492,9 +966,21 @@ func list_save_metadata() -> Array[Dictionary]:
 				result.append(metadata)
 		file_name = directory.get_next()
 	directory.list_dir_end()
-	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return int(a.get("last_saved_unix", 0)) > int(b.get("last_saved_unix", 0)))
+	result.sort_custom(newest_first)
 	return result
+
+
+## Most recently saved first.
+##
+## Lifted out of the `sort_custom` lambda it used to be because the title
+## screen's continue card now depends on it: that card opens
+## `list_save_metadata()[0]` rather than carrying a "last played" field of its
+## own, so this ordering is load-bearing and belongs somewhere the suite can
+## assert it. A save written before `last_saved_unix` existed reads as 0 and
+## sorts to the back, which is the direction that matters -- an absent
+## timestamp must never present itself as the newest one.
+static func newest_first(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("last_saved_unix", 0)) > int(b.get("last_saved_unix", 0))
 
 
 func _metadata() -> Dictionary:
@@ -509,14 +995,57 @@ func _metadata() -> Dictionary:
 		"last_saved_unix": int(Time.get_unix_time_from_system())}
 
 
+## The first three matches, against clubs that exist.
+##
+## They used to be Port Azure VC, "<Region> Select" and Northbridge Volley --
+## three names belonging to no region, matching no entry in
+## `VolleyballRegions.CLUB_NAMES`, and, because `prepare_fixture` never passed
+## them on, all three were played against the same default squad. A calendar of
+## opponents you cannot look up and do not actually face is not a calendar.
+##
+## Two derbies then a trip out of the region: a new club's first season should
+## start against the people it shares a region with, since that is who it is
+## competing with for the Academy's attention, and the away fixture is what tells
+## a manager that other regions play differently at all.
 func _starting_fixtures(region: String) -> Array[Resource]:
-	var opponents := ["Port Azure VC", "%s Select" % region, "Northbridge Volley"]
+	var home_region := VolleyballRegions.canonical_name(region)
+	var neighbours: Array = VolleyballRegions.REGION_ADJACENCY.get(home_region, [])
+	var away_region: String = str(neighbours[0]) if not neighbours.is_empty() \
+		else home_region
+	## **A region with one club cannot supply two fixtures.**
+	##
+	## This took club 0 and club 1 of the home region, and `club_name` wraps its
+	## index -- so for any of the six minor regions, which field exactly one club,
+	## weeks 2 and 4 were the *same* opponent, and that opponent was also the club
+	## you had just taken over. Invisible while only the eight majors were
+	## manageable, and produced the moment minors became a starting position: two
+	## changes each correct on their own.
+	##
+	## Built by asking the region what it actually has rather than assuming two.
+	## A second home club if there is one, and the neighbour otherwise -- which
+	## is also the better fixture, because a minor region's difficulty is that
+	## the interesting volleyball is somewhere else.
+	var home_clubs := VolleyballRegions.clubs_in(home_region).size()
+	var opponents := [{"region": home_region, "club": 0}]
+	if home_clubs > 1:
+		opponents.append({"region": home_region, "club": 1})
+	else:
+		opponents.append({"region": away_region, "club": 0})
+	opponents.append({
+		"region": away_region,
+		"club": mini(1, VolleyballRegions.clubs_in(away_region).size() - 1),
+	})
 	var result: Array[Resource] = []
 	for index in range(opponents.size()):
+		var opponent: Dictionary = opponents[index]
+		var opponent_region := str(opponent["region"])
+		var club_index := int(opponent["club"])
 		var fixture: Resource = FixtureModel.new()
 		fixture.id = index + 1
 		fixture.week = (index + 1) * 2
-		fixture.opponent_name = opponents[index]
+		fixture.opponent_region = opponent_region
+		fixture.opponent_club_index = club_index
+		fixture.opponent_name = VolleyballRegions.club_name(opponent_region, club_index)
 		fixture.competition_name = "Regional Series"
 		result.append(fixture)
 	return result

@@ -126,8 +126,49 @@ static func stride_meters(
 	return player.stride_length_m * float(MODE_STRIDE_SCALE.get(mode, 1.0))
 
 
+## The population mean of `mass_factor()`, measured over 400 generated players
+## across all five roles (`p10 0.943, p50 0.977, p90 1.021`, against masses of
+## 69.6 / 86.0 / 99.1 kg).
+##
+## Turnover is divided by this so the *mean* player's cadence is exactly what it
+## was before mass entered it, and only the deviation either side is new. Without
+## it, pricing mass would also shift every traversal time in the engine, and no
+## measurement afterwards could separate "mass now matters" from "everyone got
+## slower" -- the same trap the block jump model had to be solved out of twice.
+const REFERENCE_MASS_FACTOR: float = 0.9793
+
+## How much of `mass_factor()`'s span turnover actually pays.
+##
+## Not the whole of it, and the reason is the tradeoff this file was built to
+## express. Stride grows with height and `limb_turnover_factor` claws most of it
+## back -- net, a taller player gains only about `stride^0.2`. Mass grows with
+## height too, and at full strength the mass penalty cancels that gain almost
+## exactly: the gate asserting a longer stride makes the taller player faster in a
+## transition run flips outright. Height would then buy nothing, which is the
+## precise defect the header says the stride decomposition exists to fix.
+##
+## Solved against that gate rather than chosen. Mass costs turnover; it does not
+## get to cost more than height buys.
+const MASS_TURNOVER_SENSITIVITY: float = 0.30
+
+
 ## Steps per second. Turnover is what the speed rating really describes; fatigue
-## degrades it because tired legs stop turning over before they stop reaching.
+## degrades it because tired legs stop turning over before they stop reaching --
+## and mass degrades it because heavy limbs swing slower.
+##
+## **Mass belongs here and was missing.** This file's own header argues that
+## physique should enter locomotion honestly -- height buying stride while mass
+## costs turnover -- and only the first half was built: `limb_turnover_factor`
+## penalises turnover by *stride*, so a long-limbed player pays, but a heavy one
+## did not. `legacy_maximum_speed` multiplied by `mass_factor()` explicitly, so
+## the two systems disagreed about whether mass affects movement at all, and
+## unifying them dropped mass out of defensive coverage entirely.
+##
+## It is applied to cadence rather than to the finished speed on purpose. A
+## multiplier on the outside is the crude penalty the stride decomposition was
+## written to replace; a divisor on turnover is the physical claim -- heavier legs
+## take longer to come back round -- and it composes with stride instead of
+## overriding it.
 static func cadence_hz(
 	player: VolleyballPlayer,
 	mode: RallyPlayerState.MovementMode,
@@ -138,7 +179,12 @@ static func cadence_hz(
 	var rating := _speed_rating(player, mode)
 	var fatigue_factor := 1.0 - player.fatigue * 0.30
 	return lerpf(float(band[0]), float(band[1]), rating) \
-		* fatigue_factor * player.effort_scale() * limb_turnover_factor(player, mode)
+		* fatigue_factor * player.effort_scale() \
+		* limb_turnover_factor(player, mode) \
+		* lerpf(
+			1.0, mass_factor(player) / REFERENCE_MASS_FACTOR,
+			MASS_TURNOVER_SENSITIVITY,
+		)
 
 
 static func cadence_band(mode: RallyPlayerState.MovementMode) -> Array:

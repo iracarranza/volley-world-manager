@@ -5,7 +5,6 @@ signal career_exit_requested
 const LIGHT_THEME := preload("res://scenes/themes/light_theme.tres")
 const DARK_THEME := preload("res://scenes/themes/dark_theme.tres")
 const UIStyleSystem := preload("res://scripts/systems/ui_style_system.gd")
-const ExplanationText := preload("res://scripts/data/rally_explanations.gd")
 const DefensiveZoneModel := preload("res://scripts/models/defensive_zone.gd")
 const CareerManagerScript := preload("res://scripts/managers/career_manager.gd")
 const ENABLE_3D_MATCH_PLAYBACK: bool = false
@@ -89,6 +88,7 @@ const ENABLE_3D_MATCH_PLAYBACK: bool = false
 @onready var defense_summary_label: Label = %DefenseSummaryLabel
 @onready var opponent_scouting_label: Label = %OpponentScoutingLabel
 @onready var opponent_adaptation_rate_slider: HSlider = %OpponentAdaptationRateSlider
+@onready var opponent_region_option: OptionButton = %OpponentRegionOption
 @onready var save_defense_button: Button = %SaveDefenseButton
 @onready var timeout_button: Button = %TimeoutButton
 @onready var substitute_out_option: OptionButton = %SubstituteOutOption
@@ -200,6 +200,7 @@ func _ready() -> void:
 	zone_radius_slider.value_changed.connect(_zone_radius_changed)
 	apply_zone_button.pressed.connect(_apply_selected_zone)
 	opponent_adaptation_rate_slider.value_changed.connect(_opponent_adaptation_rate_changed)
+	opponent_region_option.item_selected.connect(_opponent_region_selected)
 	timeout_button.pressed.connect(_call_timeout)
 	apply_substitution_button.pressed.connect(_apply_substitution)
 	undo_substitution_button.pressed.connect(_undo_substitution)
@@ -404,6 +405,7 @@ func _setup_visualization_controls() -> void:
 		["Tactical guides", TacticalCourt.VISUAL_TACTICAL_GUIDES],
 		["Coverage zones", TacticalCourt.VISUAL_COVERAGE_ZONES],
 		["Contact overlays", TacticalCourt.VISUAL_CONTACT_OVERLAYS],
+		["Player cognition", TacticalCourt.VISUAL_COGNITION],
 	]:
 		popup.add_check_item(str(layer[0]), int(layer[1]))
 	popup.id_pressed.connect(_visualization_layer_toggled)
@@ -425,6 +427,7 @@ func _refresh_visualization_menu() -> void:
 		TacticalCourt.VISUAL_TACTICAL_GUIDES,
 		TacticalCourt.VISUAL_COVERAGE_ZONES,
 		TacticalCourt.VISUAL_CONTACT_OVERLAYS,
+		TacticalCourt.VISUAL_COGNITION,
 	]:
 		var item_index := popup.get_item_index(layer_id)
 		if item_index >= 0:
@@ -573,7 +576,7 @@ func _apply_light_mode(light_mode: bool) -> void:
 	background.color = Color("e8f0eb") if light_mode else Color("070b13")
 	tactical_court.set_theme_mode(light_mode)
 	match_preview_court.set_theme_mode(light_mode)
-	theme_toggle.text = "Theme: Molten Light" if light_mode else "Theme: Mikasa Dark"
+	theme_toggle.text = "Theme: Molten" if light_mode else "Theme: Mikasa"
 	_update_interface_scale()
 	var secondary_text := Color("315f4b") if light_mode else Color("b9cce0")
 	court_instructions.add_theme_color_override("font_color", secondary_text)
@@ -688,9 +691,16 @@ func _load_defender_assignment(player_id: int) -> void:
 		return
 	selected_defender_label.visible = false
 	selected_zone_label.visible = false
-	defender_popup_title.text = [
+	## An `OptionButton` with nothing selected reports -1, and indexing a four
+	## element array with -1 is an out-of-bounds read rather than a wrap. Nothing
+	## guarantees a selection here: the popup opens from a click on the court,
+	## which does not go through the section control at all.
+	const SECTION_TITLES := [
 		"Serve Receive", "Blocking", "Floor Defense", "Attack Coverage & Transition",
-	][defense_section_option.selected]
+	]
+	defender_popup_title.text = SECTION_TITLES[
+		clampi(defense_section_option.selected, 0, SECTION_TITLES.size() - 1)
+	]
 	var slot_number := GameManager.current_lineup().slot_for_player(player_id)
 	var front_row := CourtConstants.is_front_row_slot(slot_number)
 	var blocking_phase := defense_section_option.selected == 1
@@ -1069,11 +1079,23 @@ func _open_player_instructions(player_id: int, marker_screen_position: Vector2) 
 	var popup_position := marker_local + Vector2(28.0, -popup_size.y * 0.52)
 	if popup_position.x + popup_size.x > tactical_court.size.x - 8.0:
 		popup_position.x = marker_local.x - popup_size.x - 28.0
+	## `clampf` with its bounds the wrong way round returns the maximum, and the
+	## bounds go the wrong way round whenever the panel is wider or taller than
+	## the court view it is being placed inside -- which is a small window, a
+	## long assignment name, or a court that has not been laid out yet and still
+	## reports a size of zero. The panel then lands at a negative coordinate,
+	## off the top-left of its own parent.
+	##
+	## Not confirmed as the cause of the reported planner freeze, and said here
+	## rather than implied: this is a defect on the same code path that is
+	## provable from the code, which is not the same as being the one somebody
+	## saw. Clamping the *limit* first means the panel is merely flush against
+	## an edge it cannot fit inside.
 	popup_position.x = clampf(
-		popup_position.x, 8.0, tactical_court.size.x - popup_size.x - 8.0
+		popup_position.x, 8.0, maxf(tactical_court.size.x - popup_size.x - 8.0, 8.0)
 	)
 	popup_position.y = clampf(
-		popup_position.y, 8.0, tactical_court.size.y - popup_size.y - 8.0
+		popup_position.y, 8.0, maxf(tactical_court.size.y - popup_size.y - 8.0, 8.0)
 	)
 	defender_popup.position = Vector2i(popup_position)
 	defender_popup.size = Vector2i(popup_size)
@@ -1190,11 +1212,27 @@ func _refresh_defensive_plan() -> void:
 				assignment.short_ball_responsibility,
 			])
 	defense_summary_label.text += "\n" + "\n".join(responsibility_lines)
-	opponent_scouting_label.text = "%s\n%s\n%s" % [
+	## **Who are these people.** The club's name alone answers nothing -- a player
+	## who reads "Port Azure VC" learns that they are playing somebody, and every
+	## opponent in the game was equally anonymous. The region, its demonym and its
+	## own one-line description are the three things that make a fixture a place
+	## rather than a label, and all three already existed in `VolleyballRegions`
+	## with nothing on screen reading them.
+	var opponent_region := str(GameManager.opponent_team.region)
+	var region_line := ""
+	if not opponent_region.is_empty():
+		region_line = "%s · %s\n%s\n" % [
+			opponent_region,
+			VolleyballRegions.demonym(opponent_region),
+			str(VolleyballRegions.definition(opponent_region).get("tagline", "")),
+		]
+	opponent_scouting_label.text = "%s\n%s%s\n%s" % [
 		GameManager.opponent_team.team_name,
+		region_line,
 		GameManager.opponent_team.scouting_summary(),
 		GameManager.opponent_team.adaptation_summary(),
 	]
+	_refresh_opponent_region_option()
 	opponent_adaptation_rate_slider.set_value_no_signal(
 		float(GameManager.opponent_team.adaptation_rate) * 100.0
 	)
@@ -1435,6 +1473,36 @@ func _opponent_adaptation_rate_changed(value: float) -> void:
 	_set_status("Opponent adaptation rate set to %d%%." % roundi(value))
 
 
+## Play somebody else, now, without a schedule to wait for.
+##
+## **All fourteen inhabited regions, not the eight in the bracket.** The minor
+## regions each field a club and carry a full identity, and the only thing that
+## had ever kept them out of this list was that it reused the region list for
+## *career creation* -- where the eight is right, because a minor runs no
+## programme to manage. Two questions, one list, and it was right for one of
+## them. `opponent_names` is the other question.
+func _refresh_opponent_region_option() -> void:
+	var names := VolleyballRegions.opponent_names()
+	if opponent_region_option.item_count != names.size():
+		_populate_text_options(opponent_region_option, names)
+	var current := str(GameManager.opponent_team.region)
+	var index := names.find(current)
+	if index >= 0:
+		opponent_region_option.select(index)
+
+
+func _opponent_region_selected(index: int) -> void:
+	var names := VolleyballRegions.opponent_names()
+	if index < 0 or index >= names.size():
+		return
+	GameManager.set_opponent_region(str(names[index]))
+	_refresh_defensive_plan()
+	_set_status("Now facing %s of %s." % [
+		GameManager.opponent_team.team_name,
+		VolleyballRegions.demonym(str(names[index])),
+	])
+
+
 func _populate_text_options(option: OptionButton, values: Array[String]) -> void:
 	option.clear()
 	for value in values:
@@ -1513,6 +1581,12 @@ func _play_rally(
 	match_preview_court.begin_rally_playback(
 		initial_home_positions, initial_opponent_positions
 	)
+	## The rally's own cognition stream, handed to both courts before the first
+	## event plays. Taken off the result rather than recompiled here, so what a
+	## replay shows is what the rally was resolved with.
+	var cognition_stream: Array = result.cognition_cues if result != null else []
+	tactical_court.set_cognition_stream(cognition_stream)
+	match_preview_court.set_cognition_stream(cognition_stream)
 	_show_shadow_reception_debug(result, show_shadow_diagnostics)
 	tactical_court.set_coverage_zones_visible(false)
 	match_preview_court.set_coverage_zones_visible(false)
@@ -1530,6 +1604,8 @@ func _play_rally(
 	dashboard_playback_history_label.text = "No earlier events."
 	var playback_speed := float(_selected_metadata(playback_speed_option))
 	var last_displayed_event: Resource = null
+	## Where the rally's own clock has reached, in resolver seconds.
+	var cognition_clock := 0.0
 	## The event a spatial transition just delivered its mover to (its
 	## next-contact partner). That mover already arrived and made contact
 	## during the leg just played; replaying the same approach on this event's
@@ -1556,9 +1632,28 @@ func _play_rally(
 		)
 		var next_contact := _next_contact_event(result.events, event_index + 1)
 		if not outgoing_trajectory.is_empty() and next_contact != null:
-			var trajectory_duration := clampf(
-				float(outgoing_trajectory.get("duration", 0.5)), 0.28, 2.60
+			var trajectory_duration := PlaybackPacing.watchable(
+				float(outgoing_trajectory.get("duration", 0.5)), "ball leg"
 			) / maxf(playback_speed, 0.1)
+			## A transition leg draws the ball travelling from *this* contact to
+			## the next one, so the physical window it depicts is [this event, next
+			## contact] -- not the window ending here.
+			##
+			## The first version advanced one clock per event, at the top of the
+			## loop, from the previous event's stamp to this one's. That is right for
+			## a contact drawn in place and **one leg behind** for every ball flight,
+			## which is most of them: blockers were animated closing during the set's
+			## flight while the badges still showed the reception. It read exactly as
+			## reported -- players moving before the cue that explains the movement
+			## appears.
+			var leg_end := float(
+				next_contact.metadata.get("event_time", cognition_clock)
+			)
+			_advance_cognition(
+				float(event.metadata.get("event_time", cognition_clock)),
+				leg_end, trajectory_duration,
+			)
+			cognition_clock = leg_end
 			tactical_court.animate_spatial_transition(
 				event, next_contact, trajectory_duration
 			)
@@ -1584,20 +1679,47 @@ func _play_rally(
 			"event_duration",
 			maxf(0.46, simulated_movement + simulated_flight * 0.55),
 		))
-		var event_duration := clampf(simulated_duration, 0.55, 2.60) \
-			/ maxf(playback_speed, 0.1)
 		var pre_targets: Array[Vector2] = []
 		if not already_arrived:
 			pre_targets = tactical_court.movement_phase_targets(event)
 		var post_targets: Array[Vector2] = tactical_court.movement_phase_targets(event, true)
-		var movement_share := clampf(
-			simulated_movement / maxf(simulated_duration, 0.1), 0.30, 0.72
+		var draws_movement := has_movement and not pre_targets.is_empty()
+		## **The approach and the contact are two different physical spans**, and
+		## the resolver has always reported them separately -- `movement_duration`
+		## is how long the voli takes to get there, `event_duration` is the contact
+		## itself. The old code carved the approach out of the contact's own window
+		## with `clampf(movement / duration, 0.30, 0.72)`, a share that was pinned
+		## at its ceiling almost always: the measured contact is 0.10-0.24s and an
+		## approach runs to about a second, so the true ratio is around eight and
+		## the clamp reported 0.72.
+		##
+		## Drawn one after the other they are at least both honest lengths. They
+		## should *overlap the preceding flight* rather than follow it, which is
+		## the per-player timeline work and is not this change.
+		var movement_seconds := PlaybackPacing.watchable(simulated_movement, "approach") \
+			if draws_movement else 0.0
+		## The terminal contact has a flight after it and no next contact to hand
+		## it to, so the loop draws its ball here. Pacing that on the contact's own
+		## 0.12s is how a rally could finish before the ball landed.
+		var ball_seconds := PlaybackPacing.watchable(
+			PlaybackPacing.terminal_ball_seconds(
+				outgoing_trajectory, next_contact != null, simulated_duration
+			), "ball")
+		var contact_pause := ball_seconds * 0.10 if has_movement else 0.0
+		var post_budget := ball_seconds * 0.18 if has_movement else 0.0
+		var event_duration := (movement_seconds + ball_seconds + contact_pause
+			+ post_budget) / maxf(playback_speed, 0.1)
+		var pre_budget := movement_seconds / maxf(playback_speed, 0.1)
+		var ball_duration := ball_seconds / maxf(playback_speed, 0.1)
+		contact_pause /= maxf(playback_speed, 0.1)
+		post_budget /= maxf(playback_speed, 0.1)
+		## A contact drawn in place resolves *at* its own stamp, so its window
+		## is the one ending here.
+		var contact_moment := float(
+			event.metadata.get("event_time", cognition_clock)
 		)
-		var pre_budget := event_duration * movement_share \
-			if has_movement and not pre_targets.is_empty() else 0.0
-		var contact_pause := event_duration * 0.10 if has_movement else 0.0
-		var post_budget := event_duration * 0.18 if has_movement else 0.0
-		var ball_duration := event_duration - pre_budget - contact_pause - post_budget
+		_advance_cognition(cognition_clock, contact_moment, event_duration)
+		cognition_clock = contact_moment
 		if has_movement and not pre_targets.is_empty():
 			var pre_phase_duration := pre_budget / maxf(float(pre_targets.size()), 1.0)
 			for phase_index in range(pre_targets.size()):
@@ -1734,7 +1856,28 @@ func _append_playback_history(event: Resource) -> void:
 	dashboard_playback_history_label.scroll_to_line(0)
 
 
+## The name the vocabulary gave this contact, when it gave it one.
+##
+## Prefixed onto the headline rather than replacing it, because the two answer
+## different questions: the name is *what a viewer saw* ("Tool off the block")
+## and the headline is *who did what to whom*. A viewer wants both and the name
+## first, which is the order a commentator says them in.
+##
+## Only for contacts that survived the notability budget. `action_outcome` is on
+## every event and most of them read "Swing continued", which is the silence the
+## budget exists to protect.
+func _named_action_prefix(event: Resource) -> String:
+	if event == null or not bool(event.metadata.get("named_action", false)):
+		return ""
+	var outcome := str(event.metadata.get("action_outcome", ""))
+	return "" if outcome.is_empty() else "%s — " % outcome
+
+
 func _playback_event_headline(event: Resource) -> String:
+	return _named_action_prefix(event) + _plain_event_headline(event)
+
+
+func _plain_event_headline(event: Resource) -> String:
 	if event == null:
 		return ""
 	if int(event.event_type) != RallyEvent.EventType.BLOCK:
@@ -1776,6 +1919,10 @@ func _reset_tactical_positions(show_status: bool = true) -> void:
 		return
 	tactical_court.clear_rally_playback()
 	match_preview_court.clear_rally_playback()
+	## A badge outliving the rally it belonged to is the same defect class as a
+	## stale movement trail, which the call above already exists to prevent.
+	tactical_court.clear_cognition()
+	match_preview_court.clear_cognition()
 	if show_status:
 		_set_status("Tactical markers returned to saved rotation positions.")
 
@@ -2027,14 +2174,34 @@ func _show_shadow_reception_debug(
 
 func _show_rally_result(result: Resource) -> void:
 	rally_event_label.text = "Rally complete · %d discrete events" % result.events.size()
+	## The resolved headline, not a fresh lookup: headlines carry placeholders
+	## now and this call site has no names to fill them with.
 	rally_result_title.text = "%s · %s" % [
 		"HOME POINT" if result.home_team_won else "OPPONENT POINT",
-		ExplanationText.headline(result.terminal_outcome),
+		result.headline,
 	]
 	rally_result_explanation.text = result.explanation
 	dashboard_event_label.text = rally_result_title.text
 	dashboard_explanation_label.text = result.explanation
 	var factor_lines: Array[String] = []
+	## The rally's named moments, first, because they are the part a viewer
+	## actually watched. Everything below them is measurement.
+	##
+	## The vocabulary has been computing these since it was integrated and no
+	## screen showed one -- the failure this repository records most often, a
+	## value derived and then dropped before anything could use it. At most two
+	## per rally, so this is a line, never a list.
+	var named_moments: Array[String] = []
+	for event_resource in result.events:
+		var event: Resource = event_resource
+		if not bool(event.metadata.get("named_action", false)):
+			continue
+		var outcome := str(event.metadata.get("action_outcome", ""))
+		if outcome.is_empty():
+			continue
+		named_moments.append("%s (%s)" % [outcome, str(event.actor_name)])
+	if not named_moments.is_empty():
+		factor_lines.append("★ %s" % " · ".join(named_moments))
 	for factor in result.key_factors:
 		factor_lines.append("• %s" % factor)
 	factor_lines.append("Reception %d%% · Set %d%% · Attack %d%%" % [
@@ -2335,3 +2502,37 @@ func _on_rally_completed(rally_result: RallyResult) -> void:
 	if match_screen == null:
 		return
 	await match_screen.load_and_play_rally(rally_result)
+
+
+## Walks both courts' copy of the rally's physical clock across one leg.
+##
+## `from_time` and `to_time` are the resolver's seconds; `seconds` is wall-clock
+## and already scaled by playback speed. Keeping the two apart is what makes
+## 0.5x and 2x show the same thought at the same point of the rally rather than
+## at the same point of the animation.
+func _advance_cognition(from_time: float, to_time: float, seconds: float) -> void:
+	tactical_court.advance_cognition_time(from_time, to_time, seconds)
+	match_preview_court.advance_cognition_time(from_time, to_time, seconds)
+
+
+## Wall-clock seconds one event occupies during playback.
+##
+## Mirrors the two branches of `_play_rally_events` exactly -- a ball flight
+## between two contacts uses the trajectory's own clamped duration, everything
+## else uses the movement-plus-flight estimate -- because the cognition clock has
+## to finish its walk at the same instant the event's animation does. A second
+## formula here would drift, and a badge arriving a beat after the contact it
+## explains is worse than no badge.
+func _event_playback_seconds(event: Resource, playback_speed: float) -> float:
+	var outgoing: Dictionary = event.metadata.get("outgoing_trajectory", {})
+	if not outgoing.is_empty():
+		return clampf(float(outgoing.get("duration", 0.5)), 0.28, 2.60) \
+			/ maxf(playback_speed, 0.1)
+	var simulated_movement := float(event.metadata.get("movement_duration", 0.0))
+	var simulated_flight := float(event.metadata.get(
+		"flight_time", event.metadata.get("set_flight_time", 0.0)
+	))
+	return clampf(float(event.metadata.get(
+		"event_duration",
+		maxf(0.46, simulated_movement + simulated_flight * 0.55),
+	)), 0.55, 2.60) / maxf(playback_speed, 0.1)

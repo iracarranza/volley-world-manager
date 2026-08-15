@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VWM Interface Drafts</title>
+<style>
+@font-face{font-family:"ShortStack";src:url(../../../Short_Stack/ShortStack-Regular.ttf) format("truetype");font-display:block}
+@font-face{font-family:"CherryBomb";src:url(../../../Cherry_Bomb_One/CherryBombOne-Regular.ttf) format("truetype");font-display:block}
+
+:root{
+  /* Mikasa — lifted verbatim from scripts/data/ui_palette.gd */
+  --canvas:#08131f; --canvas-alt:#0d2130; --surface:#10283a; --raised:#17384b;
+  --inset:#07101a; --ink:#f5f0dc; --muted:#a9bdc6; --faint:#6f8995;
+  --stroke:#34596a; --stroke-strong:#5e8590; --accent:#f2c84b; --accent-ink:#17202a;
+  --alt:#55c9c1; --danger:#ff6b5f; --positive:#75d99b;
+  /* Molten */
+  --m-canvas:#efe7d3; --m-surface:#fffaf0; --m-raised:#f4eedf; --m-ink:#173d35;
+  --m-muted:#4e6b64; --m-faint:#768b83; --m-stroke:#9db6a9; --m-accent:#d94b3d;
+  --m-alt:#167f79;
+  /* media grounds */
+  --cork:#6b5138; --cork-hi:#7d6044; --manila:#c9b085; --manila-edge:#b39a6d;
+  --form:#dfe6e9; --form-ink:#25333c;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--canvas); color:var(--ink);
+  font-family:"ShortStack",ui-sans-serif,system-ui,sans-serif;
+  font-size:16px; line-height:1.55; padding:0 0 80px;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+header.top{padding:64px 0 8px}
+h1{font-family:"CherryBomb",cursive;font-size:clamp(34px,5vw,54px);line-height:1.05;margin:0 0 14px;color:var(--ink);text-wrap:balance}
+.lede{color:var(--muted);max-width:60ch;margin:0 0 6px}
+.meta{color:var(--faint);font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin-top:22px}
+hr.rule{border:0;border-top:1px solid var(--stroke);margin:40px 0}
+
+.plate{margin:56px 0 0}
+.plate > .cap{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.num{font-family:"CherryBomb",cursive;color:var(--accent);font-size:22px;line-height:1}
+.cap h2{font-family:"CherryBomb",cursive;font-size:25px;margin:0;color:var(--ink)}
+.tag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);background:var(--alt);padding:3px 9px;border-radius:3px}
+.tag.form{background:#9fb4bd}.tag.card{background:var(--manila)}.tag.pin{background:#c2a074}
+.tag.sewn{background:var(--accent)}.tag.panel{background:#d9a3a0}
+.why{color:var(--muted);max-width:74ch;margin:2px 0 18px}
+.why b{color:var(--ink);font-weight:400;border-bottom:1px solid var(--accent)}
+
+/* the screen frame — 1280x720, the game's window */
+.screen{position:relative;width:100%;aspect-ratio:16/9;border:1px solid var(--stroke);
+  border-radius:4px;overflow:hidden;background:var(--canvas-alt);
+  container-type:inline-size; box-shadow:0 18px 40px rgba(0,0,0,.45)}
+.screen .in{position:absolute;inset:0;padding:2.2cqw;display:flex;flex-direction:column;gap:1.4cqw}
+.screen, .screen *{font-size:1.15cqw}
+.hdr{display:flex;align-items:baseline;gap:1.4cqw;color:var(--faint)}
+.hdr .club{font-family:"CherryBomb",cursive;font-size:2.1cqw;color:var(--ink)}
+.hdr .sp{margin-left:auto}
+.disp{font-family:"CherryBomb",cursive}
+
+/* ---- sewn: the journal ---- */
+.sewn{background:
+   repeating-linear-gradient(45deg,rgba(245,240,220,.022) 0 2px,transparent 2px 4px),
+   var(--surface)}
+.stitch{border:0;border-top:2px dashed var(--stroke-strong);opacity:.75;margin:1cqw 0}
+.patch{background:var(--raised);border-radius:3px;padding:1.1cqw 1.3cqw}
+.lbl{color:var(--faint);text-transform:uppercase;letter-spacing:.09em;font-size:.92cqw}
+.val{color:var(--ink)}
+.row{display:flex;gap:1cqw;align-items:baseline}
+.row .k{color:var(--muted);min-width:11cqw}
+.grade{font-family:"CherryBomb",cursive;color:var(--accent);font-size:1.5cqw}
+
+/* ---- form: the planner ---- */
+.form{background:var(--form);color:var(--form-ink);
+  background-image:linear-gradient(var(--form) 0 0),
+    repeating-linear-gradient(0deg,rgba(37,51,60,.07) 0 1px,transparent 1px 14px),
+    repeating-linear-gradient(90deg,rgba(37,51,60,.07) 0 1px,transparent 1px 14px);
+  background-blend-mode:normal}
+.form .hair{border-top:1px solid rgba(37,51,60,.35)}
+
+/* ---- card: manila folder ---- */
+.card-bg{background:
+  radial-gradient(circle at 12% 30%,rgba(120,95,55,.10) 0 1px,transparent 1px),
+  radial-gradient(circle at 63% 71%,rgba(120,95,55,.09) 0 1px,transparent 1px),
+  radial-gradient(circle at 88% 18%,rgba(120,95,55,.08) 0 1px,transparent 1px),
+  var(--manila); background-size:38px 44px,52px 60px,71px 49px,auto;
+  color:#3a2f1c}
+
+/* ---- pinned: cork ---- */
+.cork-bg{background:
+  radial-gradient(ellipse at 20% 35%,rgba(0,0,0,.20) 0 2.5px,transparent 3px),
+  radial-gradient(ellipse at 70% 65%,rgba(255,236,200,.07) 0 2px,transparent 3px),
+  radial-gradient(circle at 45% 12%,rgba(0,0,0,.14) 0 1.5px,transparent 2px),
+  repeating-linear-gradient(102deg,rgba(0,0,0,.05) 0 3px,transparent 3px 9px),
+  linear-gradient(160deg,var(--cork-hi),var(--cork));
+  background-size:23px 27px,31px 29px,19px 21px,auto,auto}
+.slip{background:#efe6d2;color:#2b2418;border-radius:1px;padding:1cqw 1.2cqw;
+  box-shadow:0 .5cqw 1.2cqw rgba(0,0,0,.42); position:relative}
+.pin{position:absolute;width:.9cqw;height:.9cqw;border-radius:50%;top:.5cqw;left:50%;
+  transform:translateX(-50%);box-shadow:0 1px 2px rgba(0,0,0,.5)}
+
+table.reg{width:100%;border-collapse:collapse}
+table.reg td,table.reg th{padding:.55cqw .7cqw;text-align:left;border-bottom:1px dashed rgba(94,133,144,.35)}
+table.reg th{color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:400;font-size:.9cqw}
+.chip{display:inline-block;border:1px solid var(--stroke-strong);color:var(--muted);
+  padding:.15cqw .7cqw;border-radius:99px;font-size:.95cqw}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn{display:inline-block;background:transparent;border:1px solid var(--stroke-strong);
+  color:var(--ink);padding:.4cqw 1cqw;border-radius:3px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.quote{color:inherit;font-style:normal}
+.note{color:var(--faint)}
+.card-bg .note,.card-bg .lbl{color:#7a6a4e}
+.slip .note,.slip .lbl{color:#6b5c42}
+.form .note,.form .lbl{color:#5b6d77}
+
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:14px}
+.legend div{border-left:2px solid var(--stroke);padding-left:12px;color:var(--muted);font-size:14px}
+.legend b{display:block;color:var(--ink);font-weight:400}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;color:var(--alt)}
+footer{color:var(--faint);font-size:14px;margin-top:64px;max-width:70ch}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="top">
+  <h1>Six interfaces the design asks for and the build does not have</h1>
+  <p class="lede">Aesthetic drafts only — no implementation. Each plate is drawn at the game's window
+  proportion, in the Mikasa palette taken verbatim from <code>ui_palette.gd</code>, set in the
+  game's own two faces.</p>
+  <p class="lede" style="margin-top:14px">Every screen here has been through one rule, and the
+  first draft failed it badly:</p>
+  <blockquote style="margin:14px 0 0;padding:0 0 0 16px;border-left:2px solid var(--accent);color:var(--ink);max-width:62ch">
+  The interface may state what is known, recorded, observed, scheduled, promised, or said by a
+  named person. It may not tell the player what to conclude, what it means, or what significance
+  it will have later.</blockquote>
+  <p class="lede" style="margin-top:14px">Attribution is what makes judgement legal.
+  <i>Physio · 3 notes</i> is a fact about the physio. <i>Three of them look tired</i> is the
+  interface claiming to know. And a heading may name what is under it — never the reader's
+  relationship to it, which is why <i>If she came here</i> became <i>Offer</i>.</p>
+  <p class="meta">Drafts · not built · one plate in Molten to check the light ground</p>
+</header>
+<hr class="rule">
+
+<!-- 1 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">01</span><h2>The interview</h2><span class="tag pin">pinned · the board</span></div>
+  <p class="why">The second manager appointment; it wraps <code>offer_place</code>. Nothing under
+  the three answers says which one is mechanically correct, and nothing says she will remember —
+  the journal will simply carry <i>week 11 · you said: starting opposite</i>, and week 14 will do
+  the rest.</p>
+  <div class="screen cork-bg"><div class="in">
+    <div class="hdr"><span class="club disp">Aude Luc</span><span>Largen · 24 · OP</span>
+      <span class="sp">Tuesday · block 21 — 14:00</span></div>
+    <div style="display:grid;grid-template-columns:1.15fr .85fr;gap:1.6cqw;flex:1;min-height:0">
+      <div class="slip" style="display:flex;flex-direction:column;gap:.9cqw;align-self:flex-start">
+        <span class="pin" style="background:#3f7d52"></span>
+        <div class="lbl" style="color:#7a6a4e;margin-top:.5cqw">Aude Luc · week 11</div>
+        <p class="quote" style="margin:0">“I've been at Larg since I was fifteen. It's not that I want
+          to leave, exactly. I want to know what I'd be walking into.”</p>
+        <hr style="border:0;border-top:1px dashed #b3a888;margin:.3cqw 0">
+        <p class="quote" style="margin:0">“What is it you eat here?”</p>
+        <p style="margin:0;color:#6b5c42">— nothing on the block is theirs</p>
+        <p class="quote" style="margin:.4cqw 0 0">“I'd have the room to myself, then?”</p>
+        <p style="margin:0;color:#6b5c42">— Bunkhouse 6, 3 floor left</p>
+        <p class="quote" style="margin:.4cqw 0 0">“Where would I be playing?”</p>
+        <div style="display:flex;gap:.6cqw;flex-wrap:wrap;margin-top:.3cqw">
+          <span class="btn" style="border-color:#8d7a55;color:#3a3020">“Starting opposite.”</span>
+          <span class="btn" style="border-color:#8d7a55;color:#3a3020">“You'd compete for it.”</span>
+          <span class="btn" style="border-color:#8d7a55;color:#3a3020">“I don't know yet.”</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1cqw">
+        <div class="slip" style="transform:rotate(-.6deg)">
+          <span class="pin" style="background:#d9982f"></span>
+          <div class="lbl" style="color:#7a6a4e;margin-top:.5cqw">Offer</div>
+          <div class="row"><span class="k" style="color:#6b5c42">Room</span><span>Bunkhouse 6, hers alone</span></div>
+          <div class="row"><span class="k" style="color:#6b5c42">Floor</span><span>5, 1 in it uses 2, 3 left</span></div>
+          <div class="row"><span class="k" style="color:#6b5c42">The table</span><span>nothing on the block is theirs</span></div>
+        </div>
+        <div class="slip" style="transform:rotate(.8deg)">
+          <span class="pin" style="background:#8d8377"></span>
+          <div class="lbl" style="color:#7a6a4e;margin-top:.5cqw">Your Tuesday</div>
+          <div class="row"><span class="k" style="color:#6b5c42">This visit</span><span>blocks 21–23</span></div>
+          <div class="row"><span class="k" style="color:#6b5c42">Squad</span><span>training, blocks 21–23</span></div>
+        </div>
+        <div style="margin-top:auto;display:flex;gap:.8cqw;justify-content:flex-end">
+          <span class="btn">Leave it there</span>
+          <span class="btn pri">Offer a place</span>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<!-- 2 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">02</span><h2>Journal — a voli's page</h2><span class="tag sewn">sewn · the journal</span></div>
+  <p class="why"><b>One subject, many systems.</b> A page may be as wide in domains as it likes so
+  long as it is one person deep. Every line is a direct or derived fact; there is no composite
+  combining them, and nothing ranks her against anyone.</p>
+  <div class="screen sewn"><div class="in">
+    <div class="hdr"><span class="club disp">Pāla Nën</span><span>OP · 24 · Largen</span>
+      <span class="sp">Sidaut VK · week 11, spring</span></div>
+    <div style="display:grid;grid-template-columns:.9fr 1.1fr 1fr;gap:1.4cqw;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:1cqw">
+        <div class="patch" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--faint)">
+          <span>portrait</span></div>
+        <div class="patch">
+          <div class="lbl">Rated</div>
+          <div><span class="grade">B</span> <span class="note">now</span>
+            <span class="grade" style="color:var(--alt);margin-left:1cqw">A</span> <span class="note">could be</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.6cqw">
+        <div class="lbl">On the court</div>
+        <div class="row"><span class="k">Role</span><span class="val">Opposite · started 3 of last 3</span></div>
+        <div class="row"><span class="k">Appearances</span><span class="val">8 of 11</span></div>
+        <div class="row"><span class="k">Rotation</span><span class="val">serves from 1</span></div>
+        <hr class="stitch">
+        <div class="lbl">Condition</div>
+        <div class="row"><span class="k">Now</span><span class="val">41</span>
+          <span class="note">· physio</span></div>
+        <div class="row"><span class="k">Last rested</span><span class="val">week 9</span></div>
+        <hr class="stitch">
+        <div class="lbl">Being taught</div>
+        <div class="row"><span class="k">Emphasis</span><span class="val">reception</span></div>
+        <div class="row"><span class="k">Since</span><span class="val">week 6</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.6cqw">
+        <div class="lbl">Where she lives</div>
+        <div class="row"><span class="k">Room</span><span class="val">Bunkhouse 3</span></div>
+        <div class="row"><span class="k">With</span><span class="val">Iri Pan</span></div>
+        <div class="row"><span class="k">In the room</span><span class="val">landline, kettle</span></div>
+        <hr class="stitch">
+        <div class="lbl">At the table</div>
+        <div class="row"><span class="k">Raised on</span><span class="val">Largen paste</span></div>
+        <div class="row"><span class="k">This week</span><span class="val">enough of it is theirs</span></div>
+        <hr class="stitch">
+        <div class="lbl">Attached</div>
+        <div class="note">scout's slip, week 3 · match chart, week 4</div>
+        <div style="margin-top:auto;display:flex;gap:.6cqw;flex-wrap:wrap">
+          <span class="chip on">tabbed</span><span class="chip">write a note</span>
+          <span class="chip">→ her room</span><span class="chip">→ her training</span>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <div class="legend">
+    <div><b>Deep links</b>→ her room opens housing at Bunkhouse 3. The desk owns the doors; a page owns the cross-reference.</div>
+    <div><b>“· physio”</b>Condition is a number because somebody is employed to measure it. Without them, a band.</div>
+  </div>
+</section>
+
+<!-- 3 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">03</span><h2>Journal — the roster register</h2><span class="tag sewn">sewn · the journal</span></div>
+  <p class="why"><b>Many subjects, one system.</b> Fixed roster order, no sortable column, graded
+  rather than numbered. The physio's three notes are a fact about the physio.</p>
+  <div class="screen sewn"><div class="in">
+    <div class="hdr"><span class="club disp">The squad</span><span>twelve</span>
+      <span class="sp">roster order</span></div>
+    <div style="display:flex;gap:.6cqw;margin-bottom:.4cqw">
+      <span class="chip on">everyone</span><span class="chip">front row</span><span class="chip">back row</span>
+      <span class="chip">setters</span><span class="chip">middles</span><span class="chip">on loan</span>
+      
+    </div>
+    <table class="reg">
+      <tr><th></th><th>voli</th><th>role</th><th>now</th><th>could be</th><th>from</th></tr>
+      <tr><td class="note">1</td><td class="val">Iri Pan <span class="note">· C</span></td><td>Setter</td><td><span class="grade">A</span></td><td><span class="grade" style="color:var(--alt)">A</span></td><td class="note">Landavol</td></tr>
+      <tr><td class="note">2</td><td class="val">Pāla Nën</td><td>Opposite</td><td><span class="grade">B</span></td><td><span class="grade" style="color:var(--alt)">A</span></td><td class="note">Blôc du Larg</td></tr>
+      <tr><td class="note">3</td><td class="val">Ōno Aki</td><td>Middle</td><td><span class="grade">B</span></td><td><span class="grade" style="color:var(--alt)">B</span></td><td class="note">Pāwa Hitō</td></tr>
+      <tr><td class="note">4</td><td class="val">Bryn Tãulwen</td><td>Outside</td><td><span class="grade">C</span></td><td><span class="grade" style="color:var(--alt)">B</span></td><td class="note">Tãul ys Feynt</td></tr>
+      <tr><td class="note">5</td><td class="val">Kiko Bătangas</td><td>Outside</td><td><span class="grade">B</span></td><td><span class="grade" style="color:var(--alt)">B</span></td><td class="note">Ĭspayk</td></tr>
+      <tr><td class="note">6</td><td class="val">Ġil Soah</td><td>Libero</td><td><span class="grade">B</span></td><td><span class="grade" style="color:var(--alt)">A</span></td><td class="note">Rhėn Tempaol</td></tr>
+      <tr><td class="note">7</td><td class="val">Quispẽ Inti</td><td>Middle</td><td><span class="grade">C</span></td><td><span class="grade" style="color:var(--alt)">B</span></td><td class="note">Taktikã</td></tr>
+      <tr><td class="note">8</td><td class="val">Kofi Ashánti</td><td>Opposite</td><td><span class="grade">C</span></td><td><span class="grade" style="color:var(--alt)">C</span></td><td class="note">Xérvu</td></tr>
+    </table>
+    <div style="margin-top:auto;display:flex;gap:1.2cqw;align-items:baseline">
+      <span class="note">Physio · 3 notes</span>
+      <span class="btn" style="margin-left:auto">Read them</span>
+    </div>
+  </div></div>
+  <div class="legend">
+    <div><b>Why no condition column</b>Identity and ability are one domain. Add condition and the row spans identity, care and selection — twelve rows down, that is the composite without the label.</div>
+    <div><b>Grades, not numbers</b>Already how the built roster list works. B/B/A resists ranking in a way 74/76/88 does not.</div>
+  </div>
+</section>
+
+<!-- 4 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">04</span><h2>The week, in blocks</h2><span class="tag form">form · the planner</span></div>
+  <p class="why">Thirty-six blocks of forty minutes, seven days across. <b>The block is the unit and hours are presentation.</b> Left of NOW is history and cannot be repainted. The lane below the week is the manager's own Tuesday.</p>
+  <div class="screen form"><div class="in" style="gap:1cqw">
+    <div class="hdr" style="color:#4a5b66"><span class="club disp" style="color:#25333c">The week</span>
+      <span>spring · week 11</span>
+      <span class="sp" style="color:#25333c">paused — Tue, block 21</span></div>
+    <div style="display:flex;gap:.8cqw;align-items:center;color:#4a5b66">
+      <span class="btn" style="border-color:#7d909a;color:#25333c">❚❚</span>
+      <span class="btn" style="background:#25333c;border-color:#25333c;color:#dfe6e9">1×</span>
+      <span class="btn" style="border-color:#7d909a;color:#25333c">2×</span>
+      <span class="btn" style="border-color:#7d909a;color:#25333c">4×</span>
+      <span style="margin-left:1cqw">skip to …</span>
+      <span class="chip" style="border-color:#7d909a;color:#25333c">next block</span>
+      <span class="chip" style="border-color:#7d909a;color:#25333c">the evening</span>
+      <span class="chip" style="border-color:#7d909a;color:#25333c">tomorrow</span>
+      <span style="margin-left:auto;font-size:.95cqw">a longer skip stops for less</span>
+    </div>
+    <div style="display:grid;grid-template-columns:4.5cqw repeat(7,1fr);gap:.25cqw;flex:1;min-height:0;font-size:.85cqw">
+      <div></div>
+      <div style="text-align:center;color:#4a5b66">MON</div><div style="text-align:center;color:#25333c;font-weight:600">TUE</div>
+      <div style="text-align:center;color:#4a5b66">WED</div><div style="text-align:center;color:#4a5b66">THU</div>
+      <div style="text-align:center;color:#4a5b66">FRI</div><div style="text-align:center;color:#4a5b66">SAT</div>
+      <div style="text-align:center;color:#4a5b66">SUN</div>
+      <div id="planner-grid" style="display:contents"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:4.5cqw 1fr;gap:.25cqw;align-items:center">
+      <div style="color:#25333c;font-size:.78cqw;text-align:right;padding-right:.3cqw;line-height:1.1">your<br>Tuesday</div>
+      <div id="manager-lane" style="display:flex;gap:.15cqw;height:1.5cqw"></div>
+    </div>
+    <div style="display:flex;gap:1cqw;flex-wrap:wrap;color:#4a5b66;font-size:.9cqw">
+      <span><i style="display:inline-block;width:1cqw;height:1cqw;background:#8fa6b0;vertical-align:-1px"></i> sleep</span>
+      <span><i style="display:inline-block;width:1cqw;height:1cqw;background:#c9a86a;vertical-align:-1px"></i> meal</span>
+      <span><i style="display:inline-block;width:1cqw;height:1cqw;background:#5e8f86;vertical-align:-1px"></i> training</span>
+      <span><i style="display:inline-block;width:1cqw;height:1cqw;background:#b98a7d;vertical-align:-1px"></i> social</span>
+      <span><i style="display:inline-block;width:1cqw;height:1cqw;background:#d5dde1;border:1px solid #a9b8bf;vertical-align:-1px"></i> free — the club fills it itself</span>
+      <span style="margin-left:auto">the lane below the week is <b>your</b> Tuesday, not the club's</span>
+    </div>
+  </div></div>
+</section>
+
+<!-- 5 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">05</span><h2>Change our housing</h2><span class="tag card">card · the folder</span></div>
+  <p class="why">Three architects answering <b>one brief</b> — responses filed under the project
+  that asked for them, which is why this is a folder and not a second board. They close when it
+  closes.</p>
+  <div class="screen card-bg"><div class="in">
+    <div class="hdr" style="color:#6b5c42"><span class="club disp" style="color:#3a2f1c">Replace the Bunkhouse</span>
+      <span>opened week 4 · decide before the lease turns, week 19</span>
+      </div>
+    <div style="background:rgba(255,255,255,.28);padding:1cqw 1.2cqw;border-radius:2px">
+      <div class="lbl" style="color:#7a6a4e">Brief</div>
+      <p style="margin:.3cqw 0 0">“Twelve of us, and I want them to actually see each other. Somewhere
+        to sit that isn't a bed. Keep the rent under what we pay now. I don't care what it looks like.”</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.2cqw;flex:1;min-height:0">
+      <div style="background:rgba(255,255,255,.22);padding:1cqw;display:flex;flex-direction:column;gap:.5cqw">
+        <div class="disp" style="font-size:1.5cqw;color:#3a2f1c">Vallêe &amp; fils</div>
+        <div class="note" style="color:#6b5c42">Largen · has built four Commons</div>
+        <hr style="border:0;border-top:1px solid #a38f68;margin:.4cqw 0">
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Proposes</span><span>a Commons, 8 rooms</span></div>
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Rent</span><span>a little over</span></div>
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Ready</span><span>week 31</span></div>
+        <p style="margin:.4cqw 0 0">“You said see each other. So the room in the middle is the
+          building, and the bedrooms are off it.”</p>
+        <span class="btn" style="margin-top:auto;border-color:#8d7a55;color:#3a3020">Read the drawing</span>
+      </div>
+      <div style="background:rgba(255,255,255,.22);padding:1cqw;display:flex;flex-direction:column;gap:.5cqw">
+        <div class="disp" style="font-size:1.5cqw;color:#3a2f1c">Skäddur</div>
+        <div class="note" style="color:#6b5c42">Spëddish · cheap, fast, does one thing</div>
+        <hr style="border:0;border-top:1px solid #a38f68;margin:.4cqw 0">
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Proposes</span><span>a Longhouse, 14</span></div>
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Rent</span><span>well under</span></div>
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Ready</span><span>week 24</span></div>
+        <p style="margin:.4cqw 0 0">“Everybody in one hall. You will not have a privacy problem
+          because you will not have any privacy.”</p>
+        <span class="btn" style="margin-top:auto;border-color:#8d7a55;color:#3a3020">Read the drawing</span>
+      </div>
+      <div style="background:rgba(255,255,255,.14);padding:1cqw;display:flex;flex-direction:column;gap:.5cqw;opacity:.85">
+        <div class="disp" style="font-size:1.5cqw;color:#3a2f1c">Rempârt</div>
+        <div class="note" style="color:#6b5c42">Largen · expensive, slow, very good</div>
+        <hr style="border:0;border-top:1px solid #a38f68;margin:.4cqw 0">
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Proposes</span><span class="note">has not replied</span></div>
+        <div class="row"><span class="k" style="color:#6b5c42;min-width:7cqw">Asked</span><span>week 6</span></div>
+        <p style="margin:.4cqw 0 0;color:#6b5c42">Assistant: unlikely to accept a club this size.</p>
+        <span class="btn" style="margin-top:auto;border-color:#8d7a55;color:#3a3020">Ring him again</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:.8cqw;justify-content:flex-end">
+      <span class="btn" style="border-color:#8d7a55;color:#3a3020">Revise the brief</span>
+      <span class="btn" style="background:#3a2f1c;border-color:#3a2f1c;color:#e8dcc0">Commission one</span>
+    </div>
+  </div></div>
+</section>
+
+<!-- 6 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">06</span><h2>The phone, both directions</h2><span class="tag panel">panel · the intrusion</span></div>
+  <p class="why">Ringing means <b>synchronous</b>, never <b>important</b>. No unread badge and no
+  count. What a missed call cost you is a message you do not have.</p>
+  <div class="screen" style="background:var(--canvas-alt)"><div class="in">
+    <div class="hdr"><span class="club disp">The phone</span><span>Tuesday · block 21</span>
+      <span class="sp">two on the machine</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.4cqw;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:.8cqw">
+        <div class="lbl">Call</div>
+        <div class="patch"><div class="val">Marisol Furtaço</div><div class="note">your scout — somewhere near Xérvu</div></div>
+        <div class="patch"><div class="val">Reike Steinbrenn</div><div class="note">assistant — at the hall, now</div></div>
+        <div class="patch"><div class="val">Ozéias Beiraçu</div><div class="note">the kitchen</div></div>
+        <div class="patch"><div class="val">Aude Luc</div><div class="note">a recruit you have met once</div></div>
+        <div class="note" style="margin-top:auto">Squad: training, blocks 21–23.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.8cqw">
+        <div class="lbl">On the machine</div>
+        <div class="patch" style="border-left:2px solid var(--accent)">
+          <div class="val">Marisol · yesterday, late</div>
+          <p style="margin:.3cqw 0 0" class="quote">“Boss? Call me when you get this. I think I may
+            have gone to the wrong hall.”</p></div>
+        <div class="patch">
+          <div class="val">Ozéias · this morning</div>
+          <p style="margin:.3cqw 0 0" class="quote">“Nothing's on fire. We're nearly out of Xérvyan
+            paste, that's all.”</p></div>
+        <div class="lbl" style="margin-top:.6cqw">Block 14</div>
+        <div class="note">Rang. No message.</div>
+        <div style="margin-top:auto;display:flex;gap:.8cqw">
+          <span class="btn">Play it again</span><span class="btn pri">Ring Marisol back</span>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+</section>
+
+<!-- 7 ................................................. -->
+<section class="plate">
+  <div class="cap"><span class="num">07</span><h2>The same page in Molten</h2><span class="tag sewn">sewn · light ground</span></div>
+  <p class="why">Molten is a warm paper ground with deep green ink and a vermilion accent, not an
+  inversion. Drawn at draft stage because a dark-only mockup hides the contrast problems that took
+  two tries on the scouting pins.</p>
+  <div class="screen" style="background:
+     repeating-linear-gradient(45deg,rgba(23,61,53,.03) 0 2px,transparent 2px 4px),var(--m-surface);
+     color:var(--m-ink);border-color:var(--m-stroke)"><div class="in">
+    <div class="hdr" style="color:var(--m-faint)"><span class="club disp" style="color:var(--m-ink)">Pāla Nën</span>
+      <span>OP · 24 · Largen</span><span class="sp">Sidaut VK · week 11</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.4cqw;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:.5cqw">
+        <div class="lbl" style="color:var(--m-faint)">On the court</div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">Role</span><span>Opposite · started 3 of last 3</span></div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">Appearances</span><span>8 of 11</span></div>
+        <hr style="border:0;border-top:2px dashed var(--m-stroke);margin:.8cqw 0">
+        <div class="lbl" style="color:var(--m-faint)">Condition</div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">Now</span><span>41</span>
+          <span style="color:var(--m-faint)">— read by the physio</span></div>
+        <hr style="border:0;border-top:2px dashed var(--m-stroke);margin:.8cqw 0">
+        <div class="lbl" style="color:var(--m-faint)">Rated</div>
+        <div><span class="disp" style="color:var(--m-accent);font-size:1.5cqw">B</span>
+          <span style="color:var(--m-faint)">now</span>
+          <span class="disp" style="color:var(--m-alt);font-size:1.5cqw;margin-left:1cqw">A</span>
+          <span style="color:var(--m-faint)">could be</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.5cqw">
+        <div class="lbl" style="color:var(--m-faint)">Where she lives</div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">Room</span><span>Bunkhouse 3, with Iri Pan</span></div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">In the room</span><span>landline, kettle</span></div>
+        <hr style="border:0;border-top:2px dashed var(--m-stroke);margin:.8cqw 0">
+        <div class="lbl" style="color:var(--m-faint)">At the table</div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">Raised on</span><span>Largen paste</span></div>
+        <div class="row"><span class="k" style="color:var(--m-muted)">This week</span><span>enough of it is theirs</span></div>
+        <div style="margin-top:auto;display:flex;gap:.6cqw;flex-wrap:wrap">
+          <span class="chip" style="background:var(--m-accent);border-color:var(--m-accent);color:#fff9e9">tabbed</span>
+          <span class="chip" style="border-color:var(--m-stroke);color:var(--m-muted)">write a note</span>
+          <span class="chip" style="border-color:var(--m-stroke);color:var(--m-muted)">→ her room</span>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<hr class="rule">
+<footer>
+  <p>Nothing here is implemented and none of it is a spec. Plates 02, 03 and 07 depend on a decision
+  that is still open — whether the journal keeps a partial hub role — so they are drawn as the
+  reference object rather than as the application shell. Plate 04 is held behind the volleyball
+  fidelity pass; plate 01 is the one piece of this that is currently second in the build order.</p>
+  <p>Palette from <code>scripts/data/ui_palette.gd</code>. Faces are Short Stack and Cherry Bomb One,
+  the game's own, embedded so the drafts read at the weight they would ship at.</p>
+</footer>
+</div>
+
+<script>
+(function(){
+  const g=document.getElementById('planner-grid');
+  const lane=document.getElementById('manager-lane');
+  if(!g) return;
+  const C={s:'#8fa6b0',m:'#c9a86a',t:'#5e8f86',o:'#b98a7d',f:'rgba(37,51,60,.06)'};
+  function day(second){const a=[];for(let i=0;i<36;i++){
+    let k='f';
+    if(i<12) k='s'; else if(i===13||i===19||i===27) k='m';
+    else if(i>=15&&i<18) k='t'; else if(second&&i>=21&&i<24) k='t';
+    else if(i>=29&&i<32) k='o';
+    a.push(k);} return a;}
+  const week=[day(1),day(1),day(0),day(1),day(0),day(1),day(0)];
+  const NOWDAY=1, NOWBLOCK=21;
+  const lab=b=>String(Math.floor(b*40/60)).padStart(2,'0')+':'+String((b*40)%60).padStart(2,'0');
+  let html='';
+  for(let b=0;b<36;b++){
+    html+='<div style="color:#7d909a;font-size:.72cqw;text-align:right;padding-right:.3cqw;line-height:1">'
+       + (b%3===0?lab(b):'') + '</div>';
+    for(let d=0;d<7;d++){
+      const past = d<NOWDAY || (d===NOWDAY && b<NOWBLOCK);
+      const now  = d===NOWDAY && b===NOWBLOCK;
+      html+='<div style="height:100%;min-height:.55cqw;background:'+C[week[d][b]]
+         +';opacity:'+(past?.38:1)
+         +(now?';box-shadow:inset 0 0 0 1.5px #d94b3d':'')
+         +'"></div>';
+    }
+  }
+  g.innerHTML=html;
+  // the manager's own Tuesday, which is not the club's
+  const mine=[[0,14,'',''],[15,18,'watch training','#5e8f86'],[19,20,'',''],
+              [21,23,'interview','#b98a7d'],[24,25,'the scout','#c9a86a'],
+              [26,35,'','']];
+  let lh='';
+  mine.forEach(([a,z,t,c])=>{
+    const w=(z-a+1)/36*100;
+    lh+='<div style="flex:0 0 '+w+'%;background:'+(c||'rgba(37,51,60,.06)')
+      +';display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;'
+      +'font-size:.78cqw;color:'+(c?'#20303a':'#7d909a')+';border-radius:1px'
+      +(a<=21&&z>=21?';box-shadow:inset 0 0 0 1.5px #d94b3d':'')
+      +';opacity:'+(z<21?.38:1)+'">'+t+'</div>';
+  });
+  lane.innerHTML=lh;
+})();
+</script>
+</body>
+</html>
