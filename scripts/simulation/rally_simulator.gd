@@ -9485,16 +9485,39 @@ func _ball_trajectory(
 	## the struck flights supply them.
 	launch_vertical_mps: float = NAN,
 	swing_duration_seconds: float = NAN,
+	## **Where the ball actually was, vertically, at each end of this flight.**
+	##
+	## `BallTrajectory.create` has taken these since it was written and no caller
+	## ever passed them, so every published trajectory in the game carried the
+	## 1.0 m defaults. That was invisible because `apex_height_meters` is a
+	## *relative rise* -- a documented contract with its own gate -- and because
+	## presentation rebuilds the real heights from body profiles before drawing.
+	##
+	## It stopped being invisible the moment anything asked the trajectory itself:
+	## `height_at_progress`, `height_at_time` and `earliest_contact_time` all
+	## derive from these two fields, so on seed 20010's dig the record answered
+	## 1.000 m at the far end where the ball really arrives at 2.190 -- a metre
+	## and a fifth of fiction, in the exact methods a future interception resolver
+	## has to trust.
+	##
+	## NAN means "this writer does not know", which is honest and keeps the old
+	## default. `height_source` records which it was so the gap stays countable.
+	start_height: float = NAN,
+	end_height: float = NAN,
 ) -> Dictionary:
 	var timestamp := rally_clock if start_timestamp < 0.0 else start_timestamp
 	var direction := end - start
 	var perpendicular := Vector2(-direction.y, direction.x).normalized()
 	var curve_amount := clampf(direction.length() * 0.08, 0.0, 0.035)
 	var control := start.lerp(end, 0.5) + perpendicular * curve_amount
+	var heights_known := not is_nan(start_height) and not is_nan(end_height)
 	var trajectory: Resource = BallTrajectoryModel.create(
-		kind, start, control, end, timestamp, flight_time, apex_height
+		kind, start, control, end, timestamp, flight_time, apex_height,
+		start_height if heights_known else 1.0,
+		end_height if heights_known else 1.0,
 	)
 	var data: Dictionary = trajectory.to_dict()
+	data["height_source"] = "resolved" if heights_known else "default"
 	## RallyKinematics solves vertical displacement above launch level. Preserve
 	## that contract explicitly; legacy `apex_height_meters` is retained because
 	## calibration reads it for the duration/rise invariant.
@@ -9719,9 +9742,12 @@ func _dig_pass_result(
 	var flight_time := BallFlightModel.duration_for_apex(
 		pass_contact_height, set_contact_height, pass_apex
 	)
+	## The rise stays the published apex, per the `relative_rise` contract; the
+	## two absolute heights are what the record was missing.
 	var trajectory := _ball_trajectory(
 		"dig", contact_position, destination, flight_time,
 		maxf(pass_apex - pass_contact_height, 0.0), contact_time,
+		NAN, NAN, pass_contact_height, set_contact_height,
 	)
 	return {
 		"trajectory": trajectory,
@@ -9904,9 +9930,13 @@ func _reception_pass_result(
 		"movement_alignment": movement_alignment,
 		"incoming_force": _incoming_ball_force(incoming_trajectory, serve_force),
 		"incoming_speed_mps": _incoming_ball_speed(incoming_trajectory),
+		## Same repair as the dig: the rise stays the published apex and the two
+		## absolute heights, which this model has computed all along, now reach
+		## the record instead of stopping at the event metadata.
 		"trajectory": _ball_trajectory(
 			"reception_pass", contact_position, destination,
-			flight_time, maxf(pass_apex - pass_contact_height, 0.0), rally_clock
+			flight_time, maxf(pass_apex - pass_contact_height, 0.0), rally_clock,
+			NAN, NAN, pass_contact_height, set_contact_height
 		),
 		## The three numbers the second contact needs, stated rather than
 		## re-derived. `set_contact_height_meters` is what `SetterCapabilitySystem`
