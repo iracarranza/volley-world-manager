@@ -1,8 +1,10 @@
 # Volley World Manager
 
 A volleyball management sim in Godot 4. The simulation is the point: numbers
-come from models, not from dials, and the interface is a hand-kept journal
-rather than a dashboard.
+come from models, not from dials, and the interface is a desk of physical
+workspaces rather than one generic dashboard. The hand-kept journal is the
+manager's organized working knowledge of the club and career, not a substitute
+for every specialist interface.
 
 ## Run the tests
 
@@ -49,10 +51,11 @@ Then, by subject:
 | Working on | Read |
 |---|---|
 | **Anything about the interface at all** | `docs/design/DIEGETIC_MANAGEMENT.md` |
+| Journal, roster/voli pages, what the manager knows, personality/preferences, staff reports, tabs/notes, career archive, office/job transitions | `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` |
 | Paired 2D/3D views, observation vs input, physical presence | `docs/design/ABSTRACTION_AND_MANIFESTATION.md` |
 | The clock, the day, the calendar, manager time | `docs/design/THE_DAY_AND_THE_CLOCK.md` |
-| Signing, offers, the interview | `docs/design/RECRUITMENT_AND_THE_OFFER.md` |
-| Staff, and how they get things wrong | `docs/design/STAFF_AND_FALLIBILITY.md` |
+| Signing, offers, the interview | `docs/design/RECRUITMENT_AND_THE_OFFER.md` **and** `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` for what an interview teaches the club |
+| Staff, how they get things wrong, reports and interpretation | `docs/design/STAFF_AND_FALLIBILITY.md` **and** `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` |
 | Contractors, outsourcing, services, when a role belongs inside the club | `docs/design/CONTRACTORS_AND_SERVICES.md` |
 | **Anything in the rally, and whether it looks like volleyball** | `docs/design/VOLLEYBALL_FIDELITY.md` |
 | Club culture, philosophy, what a team believes | `docs/design/TEAM_IDENTITY_AND_PHILOSOPHY.md` |
@@ -68,7 +71,7 @@ Then, by subject:
 | Clubs, transfers, why the roster matters | `docs/design/CLUBS_REGIONS_AND_THE_ROSTER_DECISION.md` |
 | Traits and what they may touch | `docs/design/TRAITS.md` |
 | Scouts, uncertainty, what a report means | `docs/design/SCOUTING.md` |
-| The phone, incoming and outgoing | `docs/design/THE_DESK_AND_THE_PHONE.md` |
+| The phone, incoming/outgoing calls, information arrival | `docs/design/THE_DESK_AND_THE_PHONE.md` **and** `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` §§10, 17 |
 | The team wheel, functional contribution | `docs/design/TEAM_ATTRIBUTE_WHEEL.md` |
 | Accommodations, food, lodging simulation | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
 | Housing workspace, inherited property, architects, quotes and construction | `docs/design/HOUSING_WORKSPACE_AND_ARCHITECTURE.md` |
@@ -90,7 +93,7 @@ away.
 
 | Object | Screen |
 |---|---|
-| The journal -- the club | `scenes/screens/journal_screen.gd` |
+| The journal -- the manager's organized working knowledge of the club and career | `scenes/screens/journal_screen.gd` |
 | Training clipboard -- tactics and drills | `scenes/screens/training_screen.gd` |
 | The scouting board -- cork, pinned | `scenes/screens/scouting_screen.gd` |
 | The planner -- the daily schedule | `scenes/screens/schedule_screen.gd` |
@@ -114,7 +117,7 @@ away.
 
   | medium | substrate | divisions | who made the marks |
   |---|---|---|---|
-  | `sewn` -- the journal | halftone, warm cream, per-patch tint | running stitch | everything, by hand |
+  | `sewn` -- the journal | halftone, warm cream, per-patch tint | running stitch | everything, by hand; structured working pages may accumulate player-added tabs, notes and keepsakes without sacrificing readability |
   | `form` -- the clipboard | flat stock, cooler, unscreened | printed hairlines, square corners, faint grid | only the annotation: marker, red pen, highlighter |
   | `drawn` -- default | halftone, pen edge | broad-nib pen | by hand |
   | `board` -- the match centre | melamine, cool, a wiped smear, no screen | marker rules edge to edge; magnets, not borders | all of it, in four markers, minutes ago |
