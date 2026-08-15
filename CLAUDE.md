@@ -49,9 +49,11 @@ Then, by subject:
 | Working on | Read |
 |---|---|
 | **Anything about the interface at all** | `docs/design/DIEGETIC_MANAGEMENT.md` |
+| Paired 2D/3D views, observation vs input, physical presence | `docs/design/ABSTRACTION_AND_MANIFESTATION.md` |
 | The clock, the day, the calendar, manager time | `docs/design/THE_DAY_AND_THE_CLOCK.md` |
 | Signing, offers, the interview | `docs/design/RECRUITMENT_AND_THE_OFFER.md` |
 | Staff, and how they get things wrong | `docs/design/STAFF_AND_FALLIBILITY.md` |
+| Contractors, outsourcing, services, when a role belongs inside the club | `docs/design/CONTRACTORS_AND_SERVICES.md` |
 | **Anything in the rally, and whether it looks like volleyball** | `docs/design/VOLLEYBALL_FIDELITY.md` |
 | Club culture, philosophy, what a team believes | `docs/design/TEAM_IDENTITY_AND_PHILOSOPHY.md` |
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
@@ -68,7 +70,8 @@ Then, by subject:
 | Scouts, uncertainty, what a report means | `docs/design/SCOUTING.md` |
 | The phone, incoming and outgoing | `docs/design/THE_DESK_AND_THE_PHONE.md` |
 | The team wheel, functional contribution | `docs/design/TEAM_ATTRIBUTE_WHEEL.md` |
-| Accommodations, food, lodging | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
+| Accommodations, food, lodging simulation | `docs/design/ACCOMMODATIONS_AND_CARE.md` |
+| Housing workspace, inherited property, architects, quotes and construction | `docs/design/HOUSING_WORKSPACE_AND_ARCHITECTURE.md` |
 | Who the manager is | `docs/design/CHARACTER_CREATION.md` |
 | Regions, principles, what makes a team feel like itself | `docs/design/REGIONAL_IDENTITY_OVER_A_MATCH.md`, `REGIONAL_DIFFERENTIATION_SPEC.md` |
 | Ball flight | `docs/design/BALL_LAUNCH_KINEMATICS.md` |
