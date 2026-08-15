@@ -144,9 +144,7 @@ func _venues() -> Array:
 				_key.light_energy = 3.2
 				_key.light_color = Color(1.0, 0.99, 0.94)
 				_fill.light_energy = 0.0
-				_env.background_color = Color(0.36, 0.55, 0.78)
-				_env.ambient_light_color = Color(0.52, 0.66, 0.86)
-				_env.ambient_light_energy = 0.85
+				_sky()
 				_env.fog_enabled = true
 				_env.fog_light_color = Color(0.62, 0.70, 0.80)
 				_env.fog_density = 0.004
@@ -417,6 +415,50 @@ func _arena() -> void:
 		Color(0.26, 0.27, 0.30), 0.0, 0.9
 	)
 	deck.name = "Mezzanine"
+
+
+## A real sky, with a horizon in it.
+##
+## A flat background colour has no horizon, and a horizon is the one line that
+## says where the ground stops -- without it a terrace with sky beyond reads as a
+## slab in a void, which is what every previous pass of this venue looked like.
+## `ProceduralSkyMaterial` gives the gradient *and* the ground half, so the land
+## meets something instead of ending.
+##
+## Depth fog does the other half. Distant land at full saturation sits in the
+## same plane as near land; fading it with distance is the cue that tells a
+## viewer the ridge is far away and therefore large, which is the whole reason
+## the ridge is there. `fog_sky_affect` stays low so the sky itself is not washed
+## out along with it.
+func _sky() -> void:
+	var material := ProceduralSkyMaterial.new()
+	material.sky_top_color = Color(0.26, 0.46, 0.76)
+	material.sky_horizon_color = Color(0.78, 0.87, 0.94)
+	material.sky_curve = 0.14
+	## The ground half is the haze *below* the horizon seen from height, not soil:
+	## at 0.20 it rendered as a black void under the ridge and the whole frame went
+	## murky. It should read as distance, so it is pale and only slightly cooler
+	## than the sky it meets.
+	material.ground_bottom_color = Color(0.46, 0.47, 0.50)
+	material.ground_horizon_color = Color(0.74, 0.79, 0.83)
+	material.ground_curve = 0.05
+	material.sun_angle_max = 18.0
+	material.energy_multiplier = 1.0
+	var sky := Sky.new()
+	sky.sky_material = material
+	_env.sky = sky
+	_env.background_mode = Environment.BG_SKY
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	_env.ambient_light_energy = 1.05
+	_env.fog_enabled = true
+	_env.fog_mode = Environment.FOG_MODE_DEPTH
+	_env.fog_light_color = Color(0.70, 0.80, 0.90)
+	_env.fog_density = 0.0
+	_env.fog_depth_begin = 60.0
+	_env.fog_depth_end = 520.0
+	_env.fog_depth_curve = 0.7
+	_env.fog_sky_affect = 0.08
+	_env.fog_aerial_perspective = 0.4
 
 
 ## Pāwa Hitō plays outside.
