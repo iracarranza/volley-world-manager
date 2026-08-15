@@ -35,10 +35,19 @@ for those fields to be renamed or re-tuned.
 | 1 | **club culture** | what kind of institution are we? | not built |
 | 2 | **team philosophy** | how do we believe volleyball is won here? | not built |
 | 3 | **tactical principles** | what patterns express that belief? | **`TeamPrinciples`** |
-| 4 | **individual personality** | how does each voli read it? | partly — traits, ego, aggression, leadership exist |
+| 4 | **individual personality** | how does each voli read it? | partly — behavioural data exists; read the player model and generator for the current fields |
 | 5 | **athletic reality** | what can these bodies actually do? | built — attributes, morphology, fatigue |
 | 6 | **match behaviour** | what does the team truly look like? | built — the rally |
 | 7 | **external reputation** | what does everyone else say we are? | not built |
+
+**Layer 4's inventory is deliberately not listed.** An earlier draft named
+specific fields and named them more confidently than a check justified. The
+design does not depend on whether a particular value is called `ego` today, and a
+document that carries a field list acquires a second job — staying accurate about
+code — that it will lose at. What matters here is only that **individual
+personality interprets team philosophy** (§5); the current fields belong to
+`volleyball_player.gd` and `player_generator.gd`, which are the honest place to
+read them from.
 
 **Club culture (1) is long-lived** and survives roster and coaching turnover:
 communal, severe, developmental, experimental, individualistic, patient,

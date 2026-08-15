@@ -1,5 +1,21 @@
 # The tactical whiteboard
 
+**The match centre has two presentations of one match, and they are not a
+graphics setting.** `ABSTRACTION_AND_MANIFESTATION.md` is the general rule —
+2D is the manager's compressed, actionable representation and 3D is where that
+representation is *observed* becoming bodies — and the match centre is its
+precedent. The court view is technically optional and is not decoration:
+spacing, approach geometry, block timing and responsibility are often read
+faster by watching than by reading a figure, which is why a court view that lies
+about where a body could have been is a bad diagnostic instrument rather than a
+cosmetic flaw.
+
+Two things that rule does **not** license. The screen is still called the match
+centre; only engine-flavoured labels like `3D MATCH ENGINE` want replacing. And
+the vocabulary is not universal — match, drills and housing share the
+*principle* and keep their own native language, so there is no global 2D/3D
+toggle to build.
+
 A fourth medium, and the one the whole match centre is made of — lock-in,
 playback and the report after it.
 

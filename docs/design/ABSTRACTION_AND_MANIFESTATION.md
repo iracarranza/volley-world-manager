@@ -63,8 +63,21 @@ controls; they share a relationship between **representation and reality**.
 
 ## 2. The match centre is the precedent
 
-The existing 3D rally playback should stop presenting itself as a technical
-"3D playback" mode. It should read like a volleyball broadcast or court view.
+**The object keeps its name.** "Match centre" is the desk identity and does not
+change; what changes is the *technical* vocabulary inside it. The distinction is
+internal to the match centre — an embodied court presentation, an analytical
+presentation, and the adjustment controls — rather than a new screen or a
+rename of an existing one.
+
+What should go is player-facing engine language. Two strings carry it today:
+
+| where | reads |
+|---|---|
+| `scenes/screens/match_screen.tscn:101` | `3D MATCH ENGINE` |
+| `scenes/screens/journal_screen.tscn:334` | `3D VIEW` |
+
+Both name the implementation rather than the activity. It should read like a
+volleyball broadcast or a court view.
 
 The important distinction is not a graphics setting:
 

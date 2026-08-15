@@ -540,6 +540,39 @@ Future-facing:
 These are conceptual divisions; the final physical folder may use papers,
 photos, envelopes and inserts rather than literal software tabs.
 
+### 12.1 Why this is still a folder, and the rule that keeps it one
+
+*Change Our Housing* holds available stock, architects, quotes and proposals —
+several things, compared against each other — and that resembles the shape which
+took `MEDIUM_CARD` away from scouting in the first place. `CLAUDE.md` is blunt
+about the risk: this material has been assigned to the wrong system three times,
+and it calls the fourth "a free action". So the defence has to be explicit rather
+than assumed.
+
+**It holds because scouting and housing are not the same shape.**
+
+| | scouting | housing |
+|---|---|---|
+| unit | **many independent subjects** — volis, clubs, agents, regions — and the connections between them | **one live matter** — this home, or the one open question about changing it |
+| arrival | indefinitely, unsolicited | pulled in because a commission is open |
+| lifetime | persists whether or not you act | closes when the matter closes |
+| the manager is | tracking a field of possibilities | choosing between answers to a question they asked |
+
+Three architect portfolios in the folder are not an architect database. They are
+**three responses to one brief**, filed under the project that requested them —
+which is what a folder is for. The same papers, kept indefinitely and browsed
+whenever, would be a board.
+
+> **Rule.** The housing folder may compare several answers to **one live housing
+> matter**. It must not become an evergreen catalogue in which unrelated
+> properties, architects and quotes accumulate indefinitely.
+
+This is not only a medium argument. An evergreen architect catalogue would turn
+architecture into a second scouting profession to be optimised, which §3 and §4
+exist specifically to prevent: **the manager manages the brief, not
+architecture.** The folder staying folder-shaped and the manager not becoming an
+amateur architect are the same constraint seen from two directions.
+
 ---
 
 ## 13. Visit Home: housing's manifestation layer
@@ -586,19 +619,13 @@ So:
 - *Pāla complained about Room 4* belongs in the journal as history;
 - Room 4 itself remains managed in housing.
 
-The same distinction should hold across the desk:
+The journal may point to the housing folder. It should not absorb it.
 
-| object | answers |
-|---|---|
-| **journal** | what happened? |
-| **planner** | what is going to happen, and when? |
-| **scouting board** | who might we sign, and what do we know? |
-| **tactical workspace** | how are we trying to play? |
-| **housing folder** | where/how are we living, and what should change? |
-| **phone** | who needs me now? |
-| **encyclopedia** | what is this thing/place/category? |
-
-The journal may point to another workspace. It should not absorb that workspace.
+The general form of this — every desk object, its core question, its verbs and
+its role — is one table in `DIEGETIC_MANAGEMENT.md` §4, and deliberately only
+there. A second copy lived here briefly and is exactly the kind of duplication
+that agrees on the day it is written and disagrees the first time somebody adds a
+row to one of them.
 
 ---
 

@@ -180,17 +180,24 @@ have built**, which is the thing a dashboard can never say.
 The desk is objects, not tabs. `CLAUDE.md`'s medium table is the visual half of
 this; the verbs are the functional half.
 
-| object | verbs | note |
-|---|---|---|
-| **journal** — the club | read, review, reference | persistent, formal. Do **not** default new systems into it because it has tabs |
-| **scouting board** — cork | pin, mark, arrange, compare | an imperfect-knowledge workspace. Not the signing interface |
-| **tactical whiteboard** | arrange, draw, assign | where tactical ideas become spatial. The match viewer answers whether they happened |
-| **housing folder** — manila | inspect, compare, assign, purchase | expose the physical consequences, never collapse to a Housing Quality rating |
-| **kitchen** | ? | the simulation is strong and the verbs are the least settled thing here — see §5 |
-| **planner** — the day | paint, resize, copy | already a painted strip; keep it |
-| **phone** | answer, ignore, call, replay | synchronous. Ringing means *now*, not *important* |
-| **encyclopedia** | browse | reference. Do not hang active management on it |
-| **match centre** | observe, intervene | where every prior decision becomes visible |
+**One table, and it carries every dimension.** There were briefly two here — one
+of verbs and one of questions — and a second copy of the general taxonomy had
+appeared in the housing document as well. Three tables of one fact, and the
+argument that they asked *different* questions is precisely the argument that
+gets made right before they disagree. If two tables need a paragraph explaining
+why they are not duplicates, one table with more columns is the safer object.
+
+| object | core question | verbs | role |
+|---|---|---|---|
+| **journal** — the club | what happened, and what have I kept? | read, review, annotate | chronology and record. Do **not** default new systems into it because it has tabs |
+| **planner** — the day | what happens next? | paint, resize, copy | the schedule. Already a painted strip; keep it |
+| **scouting board** — cork | who might we sign, and what do we know? | pin, mark, arrange, compare | accumulated uncertain knowledge. Not the signing interface |
+| **tactical whiteboard** | how are we trying to play? | arrange, draw, assign | sporting intent. The match centre answers whether it happened |
+| **housing folder** — manila | where and how are we living, and what should change? | inspect, assign, compare, commission | the current home, plus whatever live housing matter is open — see §4.3 |
+| **kitchen** | what is the squad eating? | ? | the verbs are the least settled thing on this desk — see §5 |
+| **phone** | who needs me now? | answer, ignore, call, replay | synchronous communication. Ringing means *now*, not *important* |
+| **encyclopedia** | what is this thing, place or category? | browse | reference. Do not hang active management on it |
+| **match centre** | what actually happened out there, and what do I change? | observe, intervene | where every prior decision becomes visible |
 
 ### 4.1 Two standing corrections
 
@@ -205,34 +212,57 @@ presentational changes rather than a redesign — see
 
 ### 4.2 Record, workspace, presence
 
-A useful boundary now exists across the desk.
+The table's `role` column carries one boundary worth stating on its own: the
+**journal is chronology** and every other object owns the **active state** of its
+subject.
 
-The **journal is chronology**. It answers:
-
-> **What happened?**
-
-Other objects own the active state of their subject:
-
-| object | answers |
-|---|---|
-| **planner** | what is going to happen, and when? |
-| **scouting board** | who might we sign, and what do we know? |
-| **tactical workspace** | how are we trying to play? |
-| **housing folder** | where/how are we living, and what should change? |
-| **phone** | who needs me now? |
-| **encyclopedia** | what is this thing/place/category? |
-
-A journal entry may point to another workspace without becoming that workspace.
+A journal entry may point to a workspace without becoming that workspace.
 *Architect proposal received* belongs in today's record; the proposal itself
 belongs in the housing folder. *Scout report received* is history; the current
-prospect belongs on the scouting board.
+prospect belongs on the board.
 
-There is a second boundary as well: the desk works with **representations** of
-things. Sometimes the manager can be physically present for the thing itself —
-attend a drill, attend a match, visit the current home, meet a recruit. Presence
-is not an overworld and does not replace the workspace.
+**The journal's own final scope is not settled**, and this section deliberately
+does not settle it. It has historically carried roster, club and competition
+information alongside the record, and as systems graduate into workspaces the
+question of what should remain — and whether the journal is the club's database
+or the manager's personal accumulated career memory — is open. Only the boundary
+above is fixed.
 
-See `ABSTRACTION_AND_MANIFESTATION.md` for the 2D/3D form of this distinction.
+And when something *does* graduate, the test is a managerial one rather than a
+data one:
+
+> **A system leaves the record when it gains a distinct managerial verb — not
+> because its data got complicated.**
+
+Read-and-reference information can stay inside a record-like object no matter how
+much of it there is. Something the manager manipulates in a way nothing else
+manipulates has earned a workspace. Getting this backwards rebuilds the
+conventional Roster / Staff / Facilities / Competitions / Continue menu one
+justified screen at a time, which is the shape §0 exists to avoid.
+
+**Presence is the third layer.** The desk works with *representations*; sometimes
+the manager can be present for the thing itself — attend a drill, attend a match,
+visit the current home, meet a recruit. Presence is not an overworld and does not
+replace the workspace. See `ABSTRACTION_AND_MANIFESTATION.md` for the 2D/3D form.
+
+### 4.3 Skeuomorphism describes information shape, not job association
+
+The standard for choosing an object, and it is stricter than *would a manager own
+this thing?*
+
+> **The object must match the information's topology and the managerial verb —
+> not merely be an object associated with the job.**
+
+Scouting is not cork because scouts use corkboards. It is cork because **many
+fragments stay simultaneously relevant and relate to each other**: independent
+subjects, arriving indefinitely, compared against one another.
+
+Housing is not a folder because leases are paperwork. It is a folder because
+**every paper in it belongs to one live matter** — this home, or the one open
+question about changing it.
+
+That difference is why the same material has been reassigned three times in this
+project's history, and it is the test to apply before the fourth.
 
 ---
 
