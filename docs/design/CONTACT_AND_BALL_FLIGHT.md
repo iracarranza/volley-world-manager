@@ -513,6 +513,85 @@ it makes both unmeasurable.
 
 What a recalibration will need to decide is named below, not invented here.
 
+## ATTACK_COVERAGE cannot own its ball yet — traced 2026-08-16, no code changed
+
+The ownership pass was attempted and stopped at the classification step, which is
+where it was supposed to stop if a required quantity had no model. One does.
+
+**The current chain, all three sites.** A blocked swing produces a rebound point
+(`_attack_coverage_target`, or `BlockDeflectionModel`'s landing).
+`_resolve_attack_coverage` scores the six on-court volis on proximity, ball
+control, anticipation and their `attack_coverage_responsibility`, adds one RNG
+draw, and returns `{player, quality, success}` — **and nothing else**. The event
+is added with `start = rebound point`, `end = rebound point + Vector2(0.04,
+±0.05)`, and no `outgoing_trajectory`. After the rally is resolved,
+`_ensure_event_trajectories` invents one: `flight_time = 0.58`, `apex = 1.8`,
+both endpoint heights defaulted to 1.0 m.
+
+Measured over 1,400 isolated rallies, 60 successful coverage contacts, **60 of
+60 fabricated afterwards** — every one carries `height_source = "default"`,
+duration exactly 0.58, apex exactly 1.8, heights 1.0 → 1.0, and a target offset
+of exactly 0.5763 m. The next contact is a SET in 60 of 60.
+
+**Four accounts of one covered ball, and no two agree.** The drawn flight lasts
+0.58 s. The gap from the coverage contact to the SET that plays it runs 0.885 to
+1.296 s, median **1.115 s** — so the ball is drawn landing roughly half a second
+before the setter touches it. The setter's own reachability window is a third
+number and differs per site: the first-exchange home site passes nothing and
+falls through to `DEFAULT_TRANSITION_SECOND_CONTACT_SECONDS` (0.68 s); the
+continuation site passes `coverage_time`, which is the **incoming** block leg's
+duration standing in for the outgoing pass's; the opponent site passes neither,
+and also skips `pass_contact_height_meters` and `pass_apex_meters`, which
+`_resolve_opponent_transition` has accepted since the bump-height work.
+
+### Classification
+
+**A — already authoritative.** Contact position (the rebound point). Contact
+time (the incoming deflection's `end_time`, already published as `event_time`).
+The actor. Control, as `coverage_quality`, whose RNG is already spent. The
+incoming ball. Travel distance, already computed for `coverer_move_time`.
+
+**B — exactly derivable.** Contact height, from
+`GeometricAttackPromotionModel.pass_contact_height_meters(coverer)` — the same
+primitive the dig and the reception already call for a platform contact. Ending
+height, from `set_contact_height_meters(setter)`, though only the first-exchange
+site has a setter in scope; the other two select one inside the continuation.
+Duration, from `BallFlightModel.duration_for_apex` — **given an apex**. And the
+hand-off itself: `_resolve_home_continuation` already takes `dig_flight_seconds`
+and `incoming_pass_trajectory`, so once a ball exists there is a consumer with
+its hand out.
+
+**C — missing physics, and this is the stop.**
+
+1. **The apex.** Nothing in the engine models how high a platform contact off a
+   block rebound goes. The one adjacent model is `_dig_pass_result`'s
+   `pass_contact_height + lerpf(1.35, 3.05, 1.0 - spoil)`, which is UNRESOLVED
+   PHYSICS 1 on this page — chosen by eye, never measured against a
+   distribution, and authored under exactly the plumbing pressure this pass is
+   under now.
+2. **The `spoil` that would drive it.** The dig composes spoil from control
+   (0.55), reach margin (0.20), posture (0.17) and travel (0.08). Coverage
+   resolves **no posture and no arrival at all**, so two of the four terms do
+   not exist for it. Handing `_dig_pass_result` an empty arrival does not omit
+   the term — it computes `stretched = (0.25 - 0.0) / 0.85 = 0.294`, a 29%
+   stretch applied to every coverage contact in the game, arriving by default
+   rather than by measurement. That is `FAILURE_MODES.md` §0 in one line.
+
+There is no third route. `BlockDeflectionModel` gives the incoming ball a speed
+and a duration, but no relation anywhere in the engine turns incoming pace into
+outgoing height — the dig's apex pointedly does not use it, and inventing one is
+a restitution model, not plumbing.
+
+**So coverage stays unowned, and the reason is now countable rather than
+asserted.** `tools/run_coverage_census.gd` is the instrument; the numbers above
+are its output. What this needs is the platform-contact physics pass — one
+vertical model for reception, controlled dig, emergency dig and coverage
+together, measured against a distribution — which is UNRESOLVED PHYSICS 1 and 4
+answered as one question rather than four. Doing coverage first would mean
+copying an unmeasured band onto a second family and defaulting two of its four
+inputs, which increases the number of independent opinions about a physical
+quantity at the exact moment this document exists to reduce it.
+
 ## UNRESOLVED PHYSICS — do not fill with defaults
 
 1. **DIG apex calibration.** `lerpf(1.35, 3.05, 1.0 - spoil)` was chosen by eye
@@ -566,7 +645,13 @@ What a recalibration will need to decide is named below, not invented here.
    strong-float cell of the factorial.
 6. **`ATTACK_COVERAGE` outgoing ball.** Still built by
    `_ensure_event_trajectories` after resolution; the only successful contact
-   whose physical ball is not its own.
+   whose physical ball is not its own. **Traced 2026-08-16 and blocked on items
+   1 and 4** — see the section above. Position, time, actor, control and the
+   incoming ball are authoritative; contact height, ending height and duration
+   are derivable; the apex is not, and the `spoil` that would drive it needs a
+   posture and an arrival that coverage never resolves. It is the same question
+   as 1 and 4, not a separate one, and it should be answered once for all four
+   platform contexts rather than copied onto a second family.
 
 Items 1 and 2 are mine, authored under plumbing pressure. They are the reason the
 hard rule above exists.
