@@ -121,3 +121,72 @@ python3 tools/audit_unreachable_branches.py scripts scenes
 
 Validate it first. If it does not report `"emergency"` under `match posture`, it
 is broken again and its output means nothing.
+
+---
+
+## The numeric half, addressed by proxy
+
+Added 2026-08-16. Instrument: `tools/audit_unmeasured_constants.py`.
+
+The section above says the numeric half of §0 — a threshold outside the
+distribution it acts on — needs a runtime measurement per constant and does not
+scale to a sweep. That remains true. What *is* available statically is the
+profile every §0 defect this repository has found has shared:
+
+> **a constant that appears in exactly one comparison, and which no test and no
+> probe has ever named.**
+
+- `SERVE_PACE_RELIEF_FLOOR` — one comparison, never measured, stopped the launch
+  search before the serve became feasible.
+- The flat serve net-clearance margin — one comparison, never measured, sat where
+  a function belonged.
+- `RECOVERY_HEAVY_FORCE` — its own comment records the threshold landing outside
+  the range force could reach, so no ball in the game could knock anyone down.
+
+A constant a gate reads by name has been thought about. One that only ever
+appears in a single `if` has not necessarily been.
+
+### The headline is the ratio
+
+| | count |
+|---|---|
+| numeric constants declared across the tree | **1,392** |
+| named by any test or probe | **171 — 12%** |
+| read in exactly one comparison and named by nothing | **189** |
+
+**Seven eighths of this project's tuned constants are not mentioned by a single
+test or probe.** That is not 1,213 defects — most are perfectly reasonable and
+many are not thresholds at all — but it is the population every §0 defect so far
+has been drawn from, and nothing currently distinguishes a measured constant from
+an unmeasured one except reading the comment above it.
+
+The 189 candidates are the sharp end: they decide exactly one thing, and no
+instrument has ever looked at the distribution they decide it on. The simulation's
+share includes `MAX_APPROACH_ANGLE_DEGREES`, `RECYCLE_DEPTH_SHARE`,
+`STANDING_JUMP_FRACTION`, `APEX_WINDOW`, `CLOSE_FOR_ONE_ARM`,
+`SETTER_COMMIT_LEAD_SECONDS` and `MIN_USABLE_SPAN_METERS`.
+
+### What a candidate is worth
+
+Nothing on its own. The list is a *reading order*, not a defect list — the way to
+use it is to take one constant, measure the distribution it acts on, and either
+find it inside (and add the probe, which moves it out of the candidate set
+permanently) or find it outside (and have a §0 finding).
+
+The serve pass did exactly that twice, one constant at a time, and both times the
+constant was in this profile.
+
+### Instrument note
+
+The first version searched every constant against every line and did not finish
+in two minutes across 224 files. Rewritten to one pass extracting upper-case
+identifiers per line. Same answer, seconds instead.
+
+### Re-running
+
+```bash
+python3 tools/audit_unmeasured_constants.py scripts scenes tests tools
+```
+
+The count of constants "named by a test or probe" is the number worth watching
+over time. It should go up.

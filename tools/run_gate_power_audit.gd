@@ -34,6 +34,15 @@ const RECEPTION_DECISION := preload(
 const SETTER_PROGRESSION := preload(
 	"res://scripts/simulation/setter_progression_calibration.gd"
 )
+const ATTACK_PROGRESSION := preload(
+	"res://scripts/simulation/attack_progression_calibration.gd"
+)
+const BLOCKER_PROGRESSION := preload(
+	"res://scripts/simulation/block_progression_calibration.gd"
+)
+const SETTER_HANDOFF := preload(
+	"res://scripts/simulation/setter_handoff_calibration.gd"
+)
 
 ## name, script, production sample size, start seed, the bucket the gate reads,
 ## and the two tiers it compares.
@@ -56,6 +65,21 @@ const CASES := [
 		"bucket": "by_setter_tier", "high": "elite", "low": "developing",
 		"fields": [],
 	},
+	## **Bucket left blank on purpose below.** Naming it wrong is how this file
+	## silently reported nothing for two of three gates on its first run, so
+	## anything not already verified is discovered from the summary instead.
+	{
+		"gate": "attack progression", "which": "attack_progression",
+		"n": 6, "seed": 300000, "bucket": "", "high": "", "low": "", "fields": [],
+	},
+	{
+		"gate": "blocker progression", "which": "blocker_progression",
+		"n": 6, "seed": 310000, "bucket": "", "high": "", "low": "", "fields": [],
+	},
+	{
+		"gate": "gate 21 setter handoff", "which": "setter_handoff",
+		"n": 6, "seed": 210000, "bucket": "", "high": "", "low": "", "fields": [],
+	},
 ]
 
 
@@ -68,9 +92,25 @@ func _initialize() -> void:
 		if small.is_empty() or large.is_empty():
 			print("    harness returned nothing -- signature or seed wrong")
 			continue
+		var bucket := str(case.bucket)
+		var high := str(case.high)
+		var low := str(case.low)
+		if bucket.is_empty():
+			var found := _discover_bucket(small)
+			if found.is_empty():
+				print("    NO TIERED BUCKET -- summary keys are %s" % str(small.keys()))
+				continue
+			bucket = str(found[0])
+			high = str(found[1])
+			low = str(found[2])
+			print("    discovered bucket %s, comparing %s against %s"
+				% [bucket, high, low])
+		case["bucket"] = bucket
+		case["high"] = high
+		case["low"] = low
 		var fields: Array = case.fields
 		if fields.is_empty():
-			fields = _discover_fields(small, str(case.bucket), str(case.high))
+			fields = _discover_fields(small, bucket, high)
 		## **Say so rather than printing nothing.** The first run of this file
 		## reported two of three cases as blank because the bucket keys were
 		## guessed wrong, and a blank reads exactly like "no finding".
@@ -107,7 +147,35 @@ func _run(which: String, samples: int, start_seed: int) -> Dictionary:
 			return RECEPTION_DECISION.run(samples, start_seed)
 		"setter_progression":
 			return SETTER_PROGRESSION.run(samples, start_seed)
+		"attack_progression":
+			return ATTACK_PROGRESSION.run(samples, start_seed)
+		"blocker_progression":
+			return BLOCKER_PROGRESSION.run(samples, start_seed)
+		"setter_handoff":
+			return SETTER_HANDOFF.run(samples, start_seed)
 	return {}
+
+
+## Which key holds the tiered comparison, and which two tiers sit at its ends.
+##
+## Discovered rather than declared, because a wrong guess here is how this file
+## reported two blank gates and looked like it had found nothing. Any key whose
+## value is a dictionary of dictionaries is a candidate bucket; the two tiers
+## taken are the first and last in the harness's own order, which is the order
+## the progression gates assert monotonicity along.
+func _discover_bucket(summary: Dictionary) -> Array:
+	for key in summary:
+		if typeof(summary[key]) != TYPE_DICTIONARY:
+			continue
+		var group: Dictionary = summary[key]
+		var tiers: Array = []
+		for tier in group:
+			if typeof(group[tier]) == TYPE_DICTIONARY \
+					and not Dictionary(group[tier]).is_empty():
+				tiers.append(str(tier))
+		if tiers.size() >= 2:
+			return [str(key), tiers[tiers.size() - 1], tiers[0]]
+	return []
 
 
 ## Every numeric field both tiers publish, so a harness whose keys are not known
