@@ -59,6 +59,7 @@ Then, by subject:
 | Staff, how they get things wrong, reports and interpretation | `docs/design/STAFF_AND_FALLIBILITY.md` **and** `docs/design/THE_JOURNAL_AND_KNOWLEDGE.md` |
 | Contractors, outsourcing, services, when a role belongs inside the club | `docs/design/CONTRACTORS_AND_SERVICES.md` |
 | **Anything in the rally, and whether it looks like volleyball** | `docs/design/VOLLEYBALL_FIDELITY.md` |
+| **Who owns a physical fact: contact, launch, flight, the drawn ball** | `docs/design/CONTACT_AND_BALL_FLIGHT.md` |
 | Club culture, philosophy, what a team believes | `docs/design/TEAM_IDENTITY_AND_PHILOSOPHY.md` |
 | Tactics, training, drills, the planner | `docs/design/TACTICS_AND_TRAINING.md` |
 | The title screen | `docs/design/TITLE_SCREEN.md` |
