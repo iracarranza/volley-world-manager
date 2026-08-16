@@ -84,18 +84,47 @@ existing RNG" cannot mean the same thing for both.
 
 ## 2. The shared input contract
 
+**Four questions, in order, and each has a different kind of answer.**
+
 ```text
-PlatformContactIntent      what the voli is trying to produce
-PlatformContactState       what contact was physically available
-PlatformContactExecution   how well they realized the intent inside that
-    ↓
-PlatformContactResult      the outgoing launch state, and what it was worth
+1. TACTICAL INTENT      what does the voli want?            a decision
+2. PHYSICAL FEASIBILITY what can this contact produce?      physics
+3. SELECTION            which feasible ball do they try?    a decision
+4. EXECUTION            how accurately do they hit it?      physics + capability
+   ↓
+   REALIZED LAUNCH
 ```
 
-The load-bearing claim is the middle one. **Circumstance does not degrade the
-ball; it narrows the set of balls available.** Execution then picks somewhere
-inside that set, further from the intent the worse it is. Nothing in this model
-says a bad contact goes low, and nothing says it goes high.
+The first draft of this document collapsed 2 and 3, and that was the mistake
+worth catching before any code existed.
+
+**The feasible envelope answers exactly one question — what launches this body,
+at this contact, off this ball, could physically produce.** It does not know
+which of them is a good idea. A voli at full stretch under a hard ball can
+physically produce a rocket over the net, a soft ball straight up, and several
+things in between; the envelope contains all three and prefers none of them.
+Choosing is a separate act, and it is a *decision*, not a physical law.
+
+Collapsing them would have smuggled a preference in as geometry — "take the
+centre of the envelope" is a tactical rule wearing a physicist's coat, and it
+would have been unfalsifiable because nothing would have named it.
+
+**Circumstance therefore does not degrade the ball; it narrows the set of balls
+available.** The voli chooses inside that set, and execution lands somewhere near
+what they chose. Nothing here says a bad contact goes low, and nothing says it
+goes high.
+
+This also gives the model **three distinct ways to produce a bad ball**, which the
+old scalar could not tell apart:
+
+| failure | meaning |
+|---|---|
+| narrow envelope | there was no good ball available — circumstance |
+| poor selection | a good ball was available and they went for the wrong one |
+| poor execution | they chose well and mishit it |
+
+A voli who overpasses a free ball did not necessarily mishit it. That distinction
+does not exist in the engine today.
 
 ---
 
@@ -107,30 +136,63 @@ Five fields, which is the minimum that separates the four contexts:
 |---|---|
 | `target_point` | where the ball is meant to go |
 | `target_tolerance_meters` | how precise the attempt is — a radius, not a promise |
-| `desired_contact_height_meters` | how high the *next* contact wants it, 0 for "don't care" |
-| `desired_hang_seconds` | recovery time being asked for, 0 for "as soon as feasible" |
+| `desired_height_at_target_meters` | how high the voli wants it **at that place**, 0 for "don't care" |
+| `desired_time_to_target_seconds` | how long they want it to take getting there, 0 for "don't care" |
 | `intended_recipient_id` | who it is aimed at, or −1 |
 
-The four contexts differ only in these values:
+### The height field names a place, not a person
 
-| | tolerance | desired height | hang | recipient |
-|---|---|---|---|---|
-| serve reception | tight (setter's hands) | setter's reach | minimal | the setter |
-| controlled dig | a setting zone | setter's reach | **deliberately more** | the setter |
-| emergency dig | own side of the court | 0 — don't care | 0 | −1 |
-| attack coverage | own side, broad | 0 | 0 | −1 |
+It was `desired_contact_height_meters` in the first draft, and that name asserted
+something the model must never assert: that the intended recipient is the one who
+touches the ball, at that height. **They are not, and §9 of the spec measured it —
+the actual second-contact actor differs from the designated setter on about 22.8%
+of successful digs.**
 
-That is the whole of the "four contexts" distinction. There is no fifth kind of
-platform.
+The renamed field says what a passer can actually intend: *"around there, around
+that high, around then."* Where the ball genuinely ends up being contacted is
+free-flight interception, resolved later, by whoever gets there.
 
 > `intended_recipient_id` is **intent and nothing else**. It may not terminate a
-> flight, and it may not be used to pick the second contact. §9 of the spec
-> already measured the cost of letting it: the actual second-contact actor
-> differs from the designated setter on about 22.8% of successful digs.
+> flight and it may not pick the second contact. It exists so a pass can be aimed
+> at a person, which is real, and so that aiming at them can be *wrong*.
 
-A controlled dig asking for *more* hang than a reception is the model's answer to
-"should a dig be higher than a pass?" — sometimes yes, and it should be because
-the team wanted the time, not because the enum said `DIG`.
+### Context supplies a default policy, not a shape
+
+The four contexts differ in their **purpose**, and purpose suggests a starting
+policy:
+
+| | usual purpose | usual tolerance | recipient |
+|---|---|---|---|
+| serve reception | deliver a settable ball | tight | the setter |
+| controlled dig | recover the rally, usually with time | a setting zone | the setter |
+| emergency dig | survive the contact | own side | −1 |
+| attack coverage | keep the ball alive | own side, broad | −1 |
+
+**But the height and time fields are not in that table, and that is deliberate.**
+
+The first draft put them there — reception "minimal hang", controlled dig
+"deliberately more" — and that is the old event-specific apex band moved up one
+layer and given a better name. `if DIG: more hang` is the same defect as
+`if DIG: apex band 1.35–3.05`; it is merely harder to see.
+
+Height and time are **rally state, not context**:
+
+- an ordinary reception off a readable serve wants a direct, low, fast ball,
+  because the setter is already there;
+- a reception from deep in the corner off a hard jump serve may want to buy the
+  setter two extra strides, and buys them with height;
+- a controlled dig usually wants recovery time, because the offence has to
+  rebuild from nothing;
+- **a transition dig with the setter already stood in base may want the same
+  direct ball a good reception wants** — the offence is already assembled;
+- an emergency contact may want nothing but survival, and precision goes.
+
+So: context proposes, rally state disposes. Whatever eventually computes these
+two fields must read where the setter is, how much of the offence is assembled,
+and how rushed the contact is — not which enum arm it was reached from.
+
+That computation is **not authored in this pass**. What is settled here is only
+that it may not be a per-context constant.
 
 ---
 
@@ -158,7 +220,13 @@ What was physically available, all of it already resolved somewhere today:
    the body can be angled almost anywhere. A ball met at full stretch, wide,
    below the knee, can be angled through a few degrees and no more.
 
-That is the feasible envelope. It is a *range*, not a penalty.
+That is the feasible envelope. It is a *range*, not a penalty, and it is a range
+of **launches the contact could produce** — not a ranking of them.
+
+> **The envelope has no opinion.** It does not contain a best ball, a default
+> ball, or a centre worth taking. Asking it "what happens if the voli has no
+> particular intent" is a category error: something still has to choose, and that
+> something is §4a, not this.
 
 **Coverage's missing state is class B, not C.** Everything above is derivable at
 the three coverage sites from values already in scope: `coverer_start`, the
@@ -167,6 +235,55 @@ deflection's `end_time` and duration, `_movement_time`, `_reached_point`, and
 computed them, not because they are unknowable.
 
 ---
+
+## 4a. Feasible-launch selection — the stage that does not exist yet
+
+Between "what could this contact produce" and "how well did they hit it" sits a
+choice, and it is unresolved.
+
+**When intent is precise and feasible, selection is trivial**: attempt the
+intended ball. The stage still exists, it just has one candidate.
+
+**When intent is broad, or infeasible, selection is the whole question.** A
+coverage contact intending only "keep it alive" has an entire envelope of balls
+that all keep it alive. A reception intending a tight setter-oriented ball that
+the envelope cannot produce needs the nearest thing it can. Both need a
+preference order over feasible launches, and there is none.
+
+> **THE UNRESOLVED DECISION.** Given an intent and a feasible envelope, what makes
+> one feasible launch preferable to another?
+
+Candidate considerations, recorded so the question is not re-derived from
+scratch, and deliberately **unweighted and unordered**:
+
+- probability the ball stays inbounds and playable;
+- avoiding an overpass — a ball that crosses the net is worse than a bad ball
+  that stays home;
+- recovery time bought for teammates;
+- leaving broad setting space rather than a corner;
+- how much energy the contact has to spend to get there.
+
+**No weights, no constants, no scoring function in this pass.** Writing one here
+would be authoring the most consequential rule in the model before anything can
+measure it.
+
+### Why this is decision logic and not physics
+
+Because it can be *wrong*, and physics cannot. A voli may choose a feasible ball
+that turns out badly — that is a read, a habit, a panic, or a bad instruction.
+Physics only says what was available.
+
+This has two consequences worth stating now:
+
+1. **It belongs with cognition, not with the launch solver.** It may legitimately
+   read what the *voli* believes — where they think their teammates are, what
+   they think the ball is doing — rather than ground truth. §8 of the spec fixes
+   that direction: authoritative ball → read → decision, never the reverse.
+2. **Attributes may reach it**, and they are different attributes from the ones
+   that reach execution. Decision-making and technique are not the same thing,
+   and a model with both can express the voli who always makes the right choice
+   and shanks it, and the one with a beautiful platform who keeps picking the
+   wrong ball.
 
 ## 5. Execution variables
 
@@ -211,17 +328,24 @@ segment.
 
 ### How the vertical falls out
 
-Intent asks for a ball at height `h` after time `t`. Given the actual contact
-height, that is a required vertical launch speed — one call to the existing
-`BallFlightModel`. Feasibility says whether that vertical speed is inside the
-envelope this contact can produce. If it is, execution deviates from it. If it
-is not, the voli produces the closest thing the envelope contains, which is the
-physical meaning of "they did what they could with it".
+Intent asks for a ball around height `h` around time `t` around a place. Given
+the actual contact height, that is a required vertical launch speed — one call to
+the existing `BallFlightModel`. Feasibility says whether that vertical speed is
+inside the envelope this contact can produce.
 
-An intent with `desired_height = 0` (emergency, coverage) asks only for a ball
-that stays inbounds and is reachable by somebody, so its vertical is whatever
-the envelope's centre offers — genuinely unconstrained, which is what those
-contexts mean.
+**If it is, selection has one candidate and execution deviates from it.**
+
+**If it is not, selection has to choose**, and this document does not say how.
+"The closest feasible thing" is a preference rule, not a physical consequence:
+closest in vertical speed, in landing point, in time, and in overpass risk are
+four different balls, and picking among them is §4a's unresolved decision.
+
+An intent with `desired_height_at_target = 0` — emergency, coverage — does not
+resolve to a default ball either. It states that the voli does not care about
+height, which **widens** the acceptable set rather than nominating a member of
+it. Something still chooses. An earlier draft of this page said such a contact
+takes "whatever the envelope's centre offers"; that sentence was a tactical rule
+disguised as geometry, and it is deleted rather than corrected.
 
 ---
 
@@ -277,68 +401,168 @@ one the redesign log's §12 asked for by name.
 
 ---
 
-## 9. Must incoming momentum participate? Yes
+## 9. Must incoming momentum participate? Yes — and it is two separate claims
 
 It is the answer to §8 and it is what makes the reception/dig band difference
-dissolve rather than get re-tuned.
+dissolve rather than get re-tuned. But the first draft of this section made an
+error worth naming permanently, because it is the most tempting error available
+to every future pass on this page.
 
-The three contexts face structurally different incoming balls: a reception meets
-a serve at 13–15 m/s of horizontal pace; a dig meets a spike, harder; coverage
-meets a ball that has just been stopped by a pair of hands and has almost
-nothing left. **The band differences the two families currently hard-code are
-approximately what incoming pace would produce anyway** — which is why they look
-plausible and why they resist tuning: they are a real effect encoded in the wrong
-variable.
+> **Knowing a number exactly is not permission to invent what it does.**
 
-The quantity is already computed on both families and already discarded. Wiring
-it into the outgoing model is REMOVING FICTION in the strict sense the spec
-defines: the simulator has the number and the consumer carries something else.
+Two claims, and only one of them is settled:
+
+**Claim 1 — REMOVING FICTION, settled.** The incoming velocity is authoritative
+and is currently discarded. `_incoming_ball_speed` and `_incoming_ball_force` are
+computed on both platform families and reach only the recovery state and the
+diagnostics; neither outgoing model consults them. **Omitting the incoming ball
+from a model of what a platform does with it is wrong**, and correcting that
+omission needs no new physics — the value exists and is exact.
+
+**Claim 2 — AUTHORING PHYSICS, not settled.** The mapping
+
+```text
+incoming velocity + posture/platform state + absorption/generation ability
+    → outgoing speed
+```
+
+does not exist anywhere in this engine, in any form, for any contact. It is a
+transfer relation — restitution plus applied force — and it has never been
+written, measured, or calibrated here.
+
+**Claim 1 does not license Claim 2.** A pass that says "the incoming speed is
+already authoritative, so wiring it in is plumbing" would be smuggling the entire
+transfer relation in under a REMOVING FICTION label. That is precisely the trap
+§8 of the spec's own history describes, and it is easier to fall into here than
+anywhere else on this page, because the input really is exact and the omission
+really is a defect.
+
+**So: the incoming ball is a required input from slice 1 onward, and its effect
+on the outgoing launch may not be promoted until the transfer relation has a
+measured model with an acceptance criterion.** Until then it may be recorded,
+carried and measured in shadow — and nothing more.
+
+### Why it will be worth the trouble
+
+The three contexts face structurally different incoming balls: a reception meets a
+serve at 13–15 m/s of horizontal pace; a dig meets a spike, harder; coverage meets
+a ball that two hands have just stopped and which has almost nothing left. **The
+band differences the two families currently hard-code are approximately what
+incoming pace would produce anyway** — which is why they look plausible and why
+they resisted tuning. They are a real effect encoded in the wrong variable.
+
+That is a hypothesis with a measurement attached, not a result. Slice 2 is where
+it gets tested, and it may fail.
 
 ---
 
-## 10. What is still AUTHORING PHYSICS
+## 10. What is still AUTHORING PHYSICS — three relations, not four
 
-Four relations, named honestly. Each replaces more than it costs.
+The first draft listed four. Two of them were one relation counted twice:
+"speed retention" and "generation capacity" are the absorbing and the driving
+halves of a single map from incoming speed and posture to outgoing speed. A
+platform that returns 40% of a hard ball and one that adds 3 m/s to a dead ball
+are the same function evaluated at different inputs, and splitting them would
+have produced two authored curves that have to be kept consistent by hand — the
+defect this whole document exists to remove.
 
-1. **Speed retention.** What fraction of incoming speed a platform returns, as a
-   range across posture. Real, measurable in the sport — pass speeds off serves
-   are observable — and it has a physical form (restitution) rather than being a
-   curve fitted by eye.
-2. **Generation capacity.** How much speed a voli can *add* from a given posture,
-   which is what makes a tip save hard and a planted platform able to drive a
-   ball.
-3. **Reachable platform-angle range** as a function of contact height, arrival
-   margin and lateral offset. This is the envelope's shape.
-4. **The execution-error to platform-angle mapping**, in degrees, scaled by
-   technique. The swing already has the analogue —
-   `AttackSwingModel.vertical_spread_degrees` — so this is the one item with an
-   existing pattern to follow rather than a blank page.
+**T1 — the transfer relation.** `incoming speed + posture/platform state +
+absorption-generation ability → outgoing speed`. This is §9's Claim 2. It has a
+physical form (restitution plus applied force) and a real-world referent: pass
+speeds off served balls are observable.
+
+**T2 — the reachable platform-angle range**, as a function of contact height,
+arrival margin and lateral offset. This is the envelope's shape — how much
+freedom the body has to point the ball.
+
+**T3 — execution error as platform-angle deviation**, in degrees, scaled by
+technique. The only one of the three with an existing pattern to copy rather
+than a blank page: `AttackSwingModel.vertical_spread_degrees` and its sigma
+budgets do exactly this job for the swing.
 
 What they replace: two apex bands (four constants), the shank branch (two), the
 dig's four spoil weights, the `digger.id % 2` rule, coverage's 0.58 and 1.8, and
-three fixed target offsets. **Four authored relations for sixteen authored
-numbers**, and each of the four is a quantity somebody could go and measure.
+three fixed target offsets. **Three authored relations for sixteen authored
+numbers**, and each of the three is a quantity somebody could go and measure.
 
-None of them may be chosen by eye. Each needs a distribution and an acceptance
-criterion before it is promoted, which is what §11 is for.
+**The selection rule of §4a is not on this list**, and that is a deliberate
+classification, not an omission — see §10a.
+
+None of the three may be chosen by eye. Each needs a distribution and an
+acceptance criterion before it is promoted, which is what §11 is for.
+
+## 10a. Selection is decision logic, not a fourth physical relation
+
+It would be easy to call §4a's preference order "T4" and calibrate it alongside
+the others. That would be wrong, and the distinction matters for where the code
+eventually lives and what it is allowed to read.
+
+**A physical relation cannot be mistaken. A decision can.** T1, T2 and T3
+describe what a body and a ball do; if they are wrong, the physics is wrong.
+Selection describes what a voli *chooses*, and a voli choosing badly is not a
+modelling error — it is the thing being modelled.
+
+Three consequences:
+
+1. **It is calibrated against different evidence.** T1–T3 are calibrated against
+   ball behaviour. Selection is calibrated against *decisions* — how often a
+   real passer overpasses a tight ball rather than eating it, which is a
+   scouting-and-tendencies question, not a ballistics one.
+2. **It may read perceived state, and the physics may not.** Selection is
+   downstream of a read, so it may act on where the voli *thinks* the setter is.
+   T1–T3 must act on ground truth. §8 of the spec fixes that direction.
+3. **It carries different attributes.** Decision quality and platform technique
+   are separate ratings, and keeping the stages apart is what lets a voli be good
+   at one and bad at the other.
+
+So selection is authored eventually, but as decision logic beside the existing
+choosers — `_serve_decision`, `_second_contact_setter`, `CoverageModel` — and not
+as a physical constant in the launch solver.
 
 ---
 
 ## 11. The smallest safe first slice
 
-**Slice 1 — intent, published, inert.** Attach the five intent fields of §3 to
-every platform contact and publish them on the event. Nothing reads them. This is
-provably outcome-neutral — rallies must be byte-identical — and it makes the
-four contexts' differences countable for the first time, the way `height_source`
-made the height gap countable.
+**Slice 1 — publish the intent that already exists, and mark the intent that does
+not.** Narrower than the first draft said, and the narrowing is the point.
 
-**Slice 2 — the envelope as a shadow.** Implement §§4–6 as a resolver that runs
-beside the current one, publishes what it *would* have produced, and changes
-nothing. Then measure: outgoing speed, vertical, apex, destination error, and how
-often the current model's ball lies outside the envelope the shadow says was
-available. That measurement is what the four authored relations get calibrated
-against, and it is the only honest way to introduce them. The repository has run
-this pattern twice before, for the block and for reception.
+Of the five fields in §3, **two exist today** and three do not:
+
+| field | today |
+|---|---|
+| `target_point` | exists — `desired_target` on both resolvers, the fixed offset on coverage |
+| `intended_recipient_id` | exists — `setter` on reception and dig, absent on coverage |
+| `target_tolerance_meters` | **does not exist** |
+| `desired_height_at_target_meters` | **does not exist** |
+| `desired_time_to_target_seconds` | **does not exist** |
+
+Publishing all five would mean authoring intent policy for three of them while
+calling it plumbing — the same error §9 warns about, one layer up. So slice 1
+publishes the two real fields, a `purpose` label naming the context, and an
+explicit **absence marker** for the other three, in the manner of `height_source`:
+a record that says "this contact has no stated tolerance" is worth having, and a
+record that invents one is not.
+
+That keeps the slice provably outcome-neutral — rallies must come back
+byte-identical — while making countable, for the first time, how many platform
+contacts in the game have any stated intent at all. The expected answer is that
+coverage has none and the other two have half of one.
+
+**Slice 2 — the envelope as a shadow, and the transfer relation with it.**
+Implement §§4–6 as a resolver that runs beside the current one, publishes what it
+*would* have produced, and changes nothing. Then measure: outgoing speed,
+vertical, apex, destination error, and — the sharpest question — **how often the
+ball the current model produces lies outside the envelope the shadow says was
+physically available.** A current ball that is routinely infeasible is the
+strongest possible evidence that the bands are fiction; one that sits comfortably
+inside is evidence the bands were accidentally right and the envelope is too
+loose.
+
+This is where T1 gets its distribution. It is also where T1 may fail: if the
+shadow cannot discriminate a plausible transfer relation from the existing bands,
+the honest outcome is to say so and stop, not to promote it because the
+architecture is prettier. The repository has run this pattern twice, for the
+block and for reception.
 
 **Slice 3 — promote one context.** The controlled dig, because it has the richest
 state and the worst current model, and because it is where the `id % 2` rule
@@ -352,26 +576,50 @@ B, no new physics.
 
 Do not reorder these. Slice 2 before slice 3 is the whole safety argument.
 
+**Selection (§4a) is not in this list.** It is needed before any context with a
+broad intent can be promoted — which means before coverage and before the
+emergency regime — and it is a separate design question with its own pass. Slices
+3 and 4 are reachable without it because the controlled dig's intent is precise
+enough that selection has one candidate. Coverage is not, so **slice 5 depends on
+the selection pass landing first**, and that dependency should not be discovered
+halfway through it.
+
 ---
 
-## 12. Can coverage own its ball afterwards? Yes — after slice 4
+## 12. Can coverage own its ball afterwards? Yes — but later than the first draft said
 
 The blocker recorded in `CONTACT_AND_BALL_FLIGHT.md` was that coverage's apex is
 class C and the `spoil` that would drive it needs a posture and an arrival that
 coverage never resolves.
 
 This design removes both halves. There is no apex to supply, because the apex is
-a consequence of intent and envelope rather than an input. And coverage's intent
-is expressible in the §3 fields without inventing anything: broad tolerance, own
-side, no desired height, no hang requirement, no recipient — which is exactly
-what "keep it alive" means.
+a consequence rather than an input. And coverage's contact state, per §4, is
+derivable at all three call sites from values already in scope — class B
+throughout, missing only because nobody computed it.
 
-What remains is coverage's contact state, and §4 establishes that every field of
-it is derivable from values already in scope at all three call sites. That is
-slice 4, it is class B throughout, and after it coverage resolves its outgoing
-ball once, publishes it, and hands it to `_resolve_home_continuation`, which has
-been accepting `incoming_pass_trajectory` since the dig pass and receiving
-nothing.
+**But the first draft said "after slice 4", and that was wrong.** Coverage's
+intent is `keep it alive`, which is the broadest intent in the model, and §4a
+establishes that a broad intent is exactly the case where **the envelope alone
+cannot produce a ball**. Something must choose among the feasible launches that
+all keep it alive, and that chooser does not exist and is not designed.
+
+So the honest dependency is:
+
+```text
+slice 1  →  slice 2  →  slice 3 (controlled dig)  →  slice 4 (coverage state)
+                                                          ↓
+                                     SELECTION PASS (§4a) ← required here
+                                                          ↓
+                                                     slice 5 (coverage owns its ball)
+```
+
+Coverage was the contact that motivated this whole design, and it turns out to be
+the **last** one that can be finished, because it is the one with the least
+intent. That is worth stating plainly rather than discovering during slice 5.
+
+The controlled dig can be promoted without the selection pass, because its intent
+is precise enough that selection has a single candidate — which is why it is
+slice 3 and coverage is not.
 
 ---
 

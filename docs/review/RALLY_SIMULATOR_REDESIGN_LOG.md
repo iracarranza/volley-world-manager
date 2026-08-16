@@ -889,6 +889,8 @@ redesign direction.
 | `a95772b` | forward serve certification; power shortfall identified as dominant net-error channel |
 | `829ec7a` | pace-relief floor derived from minimum reachable speed; attempted power reserve reverted as authored physics |
 | `5ba5cee` | ATTACK_COVERAGE census/classification; ownership migration stops on missing platform physics |
+| `666a56f` | `PLATFORM_CONTACT.md`; intent/circumstance/execution replaces per-event apex bands. Audit finds the DIG posture penalty `"emergency"/"fall"` unreachable, and incoming momentum computed but discarded by both outgoing models |
+| `9114d2e` | platform design tightened: feasible-launch **selection** separated from feasibility; incoming momentum split into authoritative input vs authored transfer relation; hang/height moved from context to rally state; authored relations reduced four → three |
 
 ---
 
@@ -899,13 +901,27 @@ normative when wording differs.
 
 ### Platform contact
 
-- shared intent representation;
-- outgoing vertical model based on intent + actual contact state + execution;
-- whether incoming momentum/restitution needs an explicit physical relation;
-- horizontal miss model replacing deterministic ID parity;
-- coverage posture/arrival/contact-state resolution;
-- emergency-contact feasible envelopes;
-- whether a scalar `spoil` survives at all, and if so what it means.
+Designed in `docs/design/PLATFORM_CONTACT.md`; that page and the spec are
+normative. What remains genuinely open after the design pass:
+
+- **the selection rule** — given an intent and a feasible envelope, what makes one
+  feasible launch preferable to another? Required before any broad-intent contact
+  (coverage, emergency) can be promoted. Decision logic, not physics;
+- **the transfer relation** — incoming speed + posture + ability → outgoing speed.
+  The incoming velocity is authoritative and currently discarded, but knowing the
+  input exactly is *not* permission to invent its transformation;
+- the reachable platform-angle range, and execution error as angular deviation;
+- how `desired_height_at_target` and `desired_time_to_target` are computed from
+  rally state — settled only that they may **not** be per-context constants;
+- coverage posture/arrival/contact-state resolution (class B, derivable);
+- whether a contact *modality* — two-arm platform, one-arm save — is needed,
+  which is only true if it changes the feasible envelope;
+- what `quality` means once it is an evaluation of realized-against-intended
+  rather than a cause.
+
+Settled and not to be reopened: `spoil` does not survive as the vertical driver;
+event family may not choose an apex band; the dead `"emergency"/"fall"` penalty
+is not to be repaired, only cited.
 
 ### Serve
 
