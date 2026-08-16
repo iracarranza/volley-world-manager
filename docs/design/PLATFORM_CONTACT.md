@@ -1,6 +1,9 @@
 # The Platform Contact
 
 Design pass: 2026-08-16. Status: **DESIGN. Nothing here is implemented.**
+Revised the same day by the §3a audit, which changed the intent representation
+from one exact launch to anchors plus a derived bound. §§3, 4a, 4b, 6, 11 and 12
+carry amendments; **§3a is the reasoning and should be read first.**
 
 Covers the four contacts a voli makes with the forearms: serve reception, the
 controlled floor dig, the emergency dig, and attack coverage.
@@ -130,15 +133,29 @@ does not exist in the engine today.
 
 ## 3. Intent variables
 
-Five fields, which is the minimum that separates the four contexts:
+**Revised 2026-08-16 by the §3a audit.** The first version of this table had five
+fields naming one exact launch. Three of the five changed shape and one was
+deleted; §3a is the reasoning and it should be read before this table is used.
 
-| field | meaning |
-|---|---|
-| `target_point` | where the ball is meant to go |
-| `target_tolerance_meters` | how precise the attempt is — a radius, not a promise |
-| `desired_height_at_target_meters` | how high the voli wants it **at that place**, 0 for "don't care" |
-| `desired_time_to_target_seconds` | how long they want it to take getting there, 0 for "don't care" |
-| `intended_recipient_id` | who it is aimed at, or −1 |
+| field | shape | meaning |
+|---|---|---|
+| `purpose` | label | which context this is, for diagnosis only |
+| `target_anchor` | **anchor** | where the ball is meant to go — a preferred place, not a constraint |
+| `height_anchor_meters` | **anchor** | preferred height **at that place**, or *unset* |
+| `arrival_floor_seconds` | **one-sided bound** | before this the ball is not more useful, or *unset* |
+| `intended_recipient_id` | id | who it is aimed at, or −1 |
+
+`target_tolerance_meters` is **deleted** — §3a explains why a radius is the wrong
+instrument and why an anchor needs none.
+
+Three fields, three different shapes, and the shapes are not a stylistic choice:
+**each one matches what the simulator can actually derive.** Time has a derived
+floor and no derived ceiling. The target and the height have derived anchors and
+no derived widths. A representation that gave all three the same shape would have
+had to invent whatever the shape demanded and the data did not supply.
+
+> **Intent does not name a launch.** It names anchors to be near and a bound not
+> to violate. Which launch is attempted is §4a's, against §4's envelope.
 
 ### The height field names a place, not a person
 
@@ -161,12 +178,18 @@ free-flight interception, resolved later, by whoever gets there.
 The four contexts differ in their **purpose**, and purpose suggests a starting
 policy:
 
-| | usual purpose | usual tolerance | recipient | has one today? |
+| | usual purpose | how much the anchor matters | recipient | has one today? |
 |---|---|---|---|---|
-| serve reception | deliver a settable ball | tight | the setter | **yes** — `_desired_pass_target(preferred_release, …)` |
-| controlled dig | recover the rally | a setting zone | the setter | **no** — see §4b |
-| emergency dig | survive the contact | own side | −1 | no context exists |
-| attack coverage | keep the ball alive | own side, broad | −1 | **no** — a fixed offset |
+| serve reception | deliver a settable ball | a great deal | the setter | **yes** — `_desired_pass_target(preferred_release, …)` |
+| controlled dig | recover the rally | somewhat | the setter | **no** — see §4b |
+| emergency dig | survive the contact | barely | −1 | no context exists |
+| attack coverage | keep the ball alive | hardly at all | −1 | **no** — a fixed offset |
+
+The third column is **prose about purpose, not a field**. It was
+`usual tolerance` while intent carried a radius; §3a deletes the radius, and how
+strongly an anchor pulls is a selection weight rather than a property of the
+intent record. The column stays because the ordering in it is real and a later
+pass will need it.
 
 **Only the reception aims at anything.** The controlled dig and coverage both aim
 at a fixed small offset from their own contact point, which is not a setting zone
@@ -197,6 +220,164 @@ and how rushed the contact is — not which enum arm it was reached from.
 
 That computation is **not authored in this pass**. What is settled here is only
 that it may not be a per-context constant.
+
+---
+
+## 3a. Is intent a point or a region? — audited 2026-08-16
+
+The first two drafts of this page assumed intent ultimately names an exact
+`(target, height at target, time to target)`, which uniquely specifies one
+ballistic launch. That is mathematically sufficient — §4b works the arithmetic —
+and it is the wrong model. This section is the audit, and it rejects **both** the
+exact-launch form and the obvious replacement.
+
+### Why "a voli does not compute exact numbers" is not the argument
+
+It is the first argument that comes to mind and it proves too much. A server does
+not compute an exact launch either, and the canonical forward serve — this
+repository's one certified forward contact — is built on aim → one intent speed →
+execution perturbation → one launch. If cognitive realism were the test, that
+model would be wrong too, and it is not.
+
+The real distinction is which side the binding constraint sits on.
+
+**A server's envelope is wide and their intent is what selects.** Standing behind
+the line, unhurried, on their own toss, essentially the whole envelope is
+available; there is no ordinary case where the intended serve is physically
+impossible. Intent-as-point is fine because nothing else is competing to choose.
+
+**A platform contact is the opposite: circumstance binds, not choice.** §8 of this
+page is built entirely on that — "poor circumstance, good execution" produces a
+ball that goes exactly where the voli intended and barely gets there. That
+sentence only means something if intent had slack for circumstance to eat. An
+exact-launch intent has no slack by construction.
+
+### And the serve does not actually use an exact intent
+
+Checked in `geometric_attack_resolver.gd::_serve_launch` rather than assumed, and
+the answer reverses the precedent:
+
+```gdscript
+var relief_floor := minf(reach_floor, full_speed)
+for step in range(SERVE_PACE_RELIEF_STEPS):
+    var trial := lerpf(full_speed, relief_floor, …)
+```
+
+The serve names a **preferred** pace, relaxes it toward a floor that is
+`BallFlightModel.minimum_speed_to_reach` — *derived*, since `829ec7a` — takes the
+quickest trial that clears the net, and keeps a `forced` fallback (the highest
+ball at the tape) for when nothing clears at all.
+
+That is an anchor, a derived bound, a preference direction and a defined answer in
+the infeasible case. **The shipped, certified serve is already intent-as-anchors,
+not intent-as-point**, and the pace-relief floor's own history is the lesson that
+the bound must be derived rather than dialled.
+
+### The decisive argument: the point form exists only to skip a stage it cannot skip
+
+Exact intent buys exactly one thing — it lets the controlled dig skip §4a, because
+a feasible point has a single candidate. But it can only be a point if something
+supplies the third scalar, and §4b already traced that scalar to class D:
+underivable, unauthored, and gating slice 3.
+
+> **The point form does not avoid an unbuilt component. It swaps an unbuilt
+> selection rule for an unbuilt intent policy — and the selection rule is needed
+> regardless**, for coverage, for the emergency regime, and for every controlled
+> dig whose intended launch turns out infeasible.
+
+One unbuilt thing is better than two.
+
+### Why the obvious replacement is also wrong
+
+The natural alternative — target *region*, acceptable height *range*, earliest and
+latest useful arrival — **authors more numbers than the form it replaces**, and
+that has to be said plainly because it is the shape the question invites:
+
+| proposed field | where would its bound come from? |
+|---|---|
+| earliest useful arrival | `_movement_time` to the release seat — **derived** ✓ |
+| latest useful arrival | nothing derives it ✗ |
+| acceptable height range, low and high | nothing derives either edge ✗ |
+| target region radius | nothing derives it ✗ |
+
+Four of five bounds would be invented. A range is also the wrong *shape* even
+where a width could be found: it is flat inside and infinitely bad outside, so it
+authors a **cliff** at a boundary nobody measured, and it cannot rank two launches
+that are both inside it. Volleyball intent is graded — a ball 20 cm high is
+slightly worse, not identical-then-suddenly-a-disaster.
+
+### What is actually derivable, and it is heterogeneous
+
+| quantity | what the simulator has | shape it supports |
+|---|---|---|
+| release seat `T` | `setter_release_target()`, both sides, manager policy | an **anchor**, no radius |
+| standing release height `h₁` | `set_contact_height_meters(setter, false)` | an **anchor**, no width |
+| setter arrival `t₀` | `_movement_time`, existing locomotion model | a **floor**, no ceiling |
+
+Three quantities, three different shapes. **The heterogeneity is the finding.**
+Any uniform representation — all points, or all ranges — has to manufacture
+whatever the uniformity requires and the data does not provide.
+
+### The brief's own two examples resolve cleanly under this
+
+**`travel_time = 0` does not mean the ball should arrive in 0 seconds.** Under the
+point form that is an outright defect requiring a margin to patch. Under a floor
+it is automatic: `t ≥ 0` is simply *slack*, so the arrival bound stops binding and
+the anchors and the preference decide. A setter already at the seat does not
+compress the ball to nothing; they stop constraining it.
+
+**`set_contact_height_meters(setter, false)` is an anchor, not an assertion.** As
+an equality it claims the intended setter contacts the ball at that height, which
+§9 of the spec measured false on 22.8% of successful digs, and which is also
+wrong whenever the actual interceptor jumps, is shorter, or is somebody else. As a
+preferred height *for the ball at the target region*, it survives all three,
+because it asserts nothing about who arrives.
+
+### Evidence that the point form silently absorbs preferences
+
+This is not hypothetical. `_desired_pass_target` already does it:
+
+```gdscript
+# A distant passer aims slightly higher/off the net to reduce overpass risk
+var safety_offset := clampf((distance_meters - 4.0) * 0.006, 0.0, 0.045)
+return Vector2(release_target.x, clampf(release_target.y + safety_offset, 0.55, 0.70))
+```
+
+That is **a selection preference — avoid the overpass, §4a's second bullet —
+compiled into the target point**, at the cost of five bare numeric literals that
+are not even named constants, and therefore cannot be found by
+`audit_unmeasured_constants.py` or referenced by any gate.
+
+When intent must be a point, preferences do not go away. They get baked into the
+point as authored offsets, in the least visible form available. That is the
+mechanism this audit exists to stop, and one instance of it is already shipped.
+
+### The verdict, and the strict-dominance claim
+
+**Intent is anchors plus at most one derived bound. It does not name a launch.**
+
+The minimal shippable preference — *satisfy the arrival floor, then be as near the
+anchors as the envelope allows, breaking ties toward the earlier ball* — has one
+criterion and no weights, so it can be named without authoring anything. Against
+the point form's own degenerate policy (`t = t₀`, which §4b offered as the
+fallback), it is strictly better:
+
+| case | point form, `t = t₀` | anchors + floor, minimal preference |
+|---|---|---|
+| the `(T, h₁, t₀)` launch is feasible | that launch | **the same launch** — the floor binds at `t₀`, both anchors are hit exactly, so it maximises the preference |
+| it is not feasible | intent is infeasible, selection unresolved, no ball defined | the preference still ranks the feasible set; a ball comes out and the binding constraint is nameable |
+
+Identical where the easy case holds, defined where it does not, and one fewer
+authored number. That is the whole argument.
+
+### What this does not fix
+
+It does not remove the trade-off. Deciding *how much* to prefer an earlier ball
+over a nearer-to-anchor one is the same tactical question §4b called the missing
+rally-intent policy — it has moved from intent into selection rather than
+disappearing. The gain is that it is now **one** open question instead of two, it
+sits in the layer that is allowed to be wrong (§10a), and the model has defined
+behaviour without it.
 
 ---
 
@@ -245,14 +426,23 @@ computed them, not because they are unknowable.
 Between "what could this contact produce" and "how well did they hit it" sits a
 choice, and it is unresolved.
 
-**When intent is precise and feasible, selection is trivial**: attempt the
-intended ball. The stage still exists, it just has one candidate.
+**Amended by §3a: selection is now universal, and that is a simplification.**
 
-**When intent is broad, or infeasible, selection is the whole question.** A
-coverage contact intending only "keep it alive" has an entire envelope of balls
-that all keep it alive. A reception intending a tight setter-oriented ball that
-the envelope cannot produce needs the nearest thing it can. Both need a
-preference order over feasible launches, and there is none.
+The earlier text said selection was trivial when intent was precise and feasible,
+and "the whole question" otherwise — two regimes, with the boundary between them a
+measured rate nobody had. Since intent no longer names a launch, **every platform
+contact runs the same selection stage with the same shape**: maximise the intent
+preference over the feasible envelope.
+
+The contexts stop differing in mechanism and differ only in how many constraints
+bind. Coverage's "keep it alive" is not a special broad case needing different
+machinery; it is this machinery with an unset height anchor and an unset arrival
+floor. A reception is the same machinery with all three supplied and pulling hard.
+
+What is still missing is the preference itself. A coverage contact has an entire
+envelope of balls that all keep it alive; a reception whose anchored ball the
+envelope cannot produce needs the nearest thing it can. Both need an ordering over
+feasible launches, and there is none.
 
 > **THE UNRESOLVED DECISION.** Given an intent and a feasible envelope, what makes
 > one feasible launch preferable to another?
@@ -265,11 +455,29 @@ scratch, and deliberately **unweighted and unordered**:
   that stays home;
 - recovery time bought for teammates;
 - leaving broad setting space rather than a corner;
-- how much energy the contact has to spend to get there.
+- how much energy the contact has to spend to get there;
+- **nearness to the intent anchors** — added by §3a, and it is the term that
+  makes the stage universal rather than a fallback.
 
 **No weights, no constants, no scoring function in this pass.** Writing one here
 would be authoring the most consequential rule in the model before anything can
 measure it.
+
+### Two things §3a hands this pass for free
+
+**A minimal preference that authors nothing.** *Satisfy the arrival floor; then be
+as near the anchors as the envelope allows; break ties toward the earlier ball.*
+One criterion, no weights, and §3a shows it reproduces the point form's own
+degenerate policy exactly wherever that policy was defined. It is not the answer —
+it forecloses tempo entirely — but it means **slice 3 does not have to wait for the
+full preference**, only for a named one.
+
+**An authored rule to absorb rather than add.** `_desired_pass_target`'s safety
+offset is already the overpass-avoidance bullet above, compiled into the
+reception's target point as five bare literals (§3a). When this pass lands it
+should *take that rule over*, not sit beside it. A preference order that leaves the
+old offset in place would have the same consideration expressed twice, in two
+layers, at two strengths — which is the shape §10 of this page exists to prevent.
 
 ### Why this is decision logic and not physics
 
@@ -382,22 +590,94 @@ than its setter's legs strictly require — which is what tempo means.
 That is class D, it is not derivable from anything present, and **it is not
 authored in this pass.**
 
+### Amended by §3a — the missing scalar dissolves, and the trade does not
+
+**The margin above was only required because intent had to be a point.** Under
+anchors-plus-a-floor, `t₀` is the floor and nothing needs to name a distance
+beyond it: the arrival constraint either binds or is slack, and the preference
+decides inside whatever the envelope permits. So the class D scalar is gone as a
+*field*.
+
+The **trade** it was standing for is not gone. It moves into §4a's preference,
+which now has to rank an earlier ball against a nearer-to-anchor one, and that is
+the same tactical question in the same units of ignorance. Two things change, and
+both are improvements:
+
+1. It sits in the layer that is **allowed to be wrong** (§10a). A margin in the
+   intent record is a physical-looking quantity that would have had to be right; a
+   weight in a preference is a decision, and a voli or a coach making it badly is
+   the thing being modelled.
+2. The model has **defined behaviour without it** — the minimal preference in §4a.
+   The margin form had none: `t = t₀` was offered as the ship-it fallback and it is
+   undefined the moment the `t₀` launch is infeasible.
+
+### And this is how tempo enters without becoming another apex constant
+
+The units test settles it, and it is the reason to prefer the preference form
+beyond tidiness.
+
+`transition_commitment` and `tempo_variation` are **dimensionless**, 0–1,
+manager-set, already persisted, and already read as a dimensionless pull by
+`_identity_tempo_shift`. A weight between two preference terms is also
+dimensionless. **The principle can be spent directly as the weight, and no new
+quantity is introduced.**
+
+A margin in the intent record is in **seconds**. Converting a 0–1 principle into
+seconds needs a seconds-per-unit-principle scale factor, and no such quantity
+exists anywhere in the engine. That factor would be a new authored constant, with
+units, on the most consequential path in the model — which is exactly the shape of
+the apex band this whole document exists to delete, one layer up and harder to
+see.
+
+> Tempo is a **weight**, not a **margin**. The weight is free because the number
+> already exists and somebody already set it; the margin is not, because it needs a
+> conversion nobody has measured.
+
+**The magnitude is still open.** What is settled here is only the form: whatever
+the selection pass authors, it may spend the existing principles as weights and it
+may not introduce a tempo quantity with units.
+
 ### So does the controlled dig bypass the selection problem?
 
-**No — and the original claim was not wrong so much as unquantified.**
+**No, and after §3a it does not even try to.**
 
-Once T, h₁ and t are fixed, intent names exactly one launch. If that launch is
-inside the feasible envelope, selection genuinely does have a single candidate
-and the claim holds. If it is not — a defender stretched under a hard-driven
-spike will often be unable to produce the ball the team wants — then selection
-must choose a fallback, and that is the general unresolved problem of §4a.
+The original claim was that once T, h₁ and t are fixed, intent names exactly one
+launch, so selection has a single candidate wherever that launch is feasible. The
+arithmetic is right and the conclusion was unquantified: a defender stretched under
+a hard-driven spike will often be unable to produce the ball the team wants, and
+nobody knew how often.
 
-**Nobody knows how often the intended launch is infeasible, and slice 2 measures
-exactly that.** It is a number, not an argument, and it decides whether slice 3
-can proceed with a stated gap or not at all.
+§3a settles it by removing the premise. Intent no longer fixes a launch, so there
+is no single candidate to have, and the controlled dig runs the same selection
+stage as every other context. What slice 2 measures therefore changes, and gets
+sharper — see the restated gate in §11.
 
-Execution answers one question: **how far from the intended platform angle and
-intended speed retention did this contact actually land?**
+**This is the honest cost of §3a**, stated once and plainly: under the point form
+slice 3 could have shipped with selection deferred *if* the measured feasibility
+rate came back high. It can no longer. Selection must exist for slice 3, though it
+may be the minimal no-weight preference of §4a rather than the full one. Set
+against that, the class D intent margin that also gated slice 3 is gone, and it had
+no prospect of being derived at all.
+
+---
+
+## 5. Execution variables
+
+**This heading was missing.** The section existed with no `## 5.` above it, so the
+document ran 4b → 6 and the execution stage — named as stage 4 of the four-stage
+contract in §2, and referenced as "§5" by §6 — had no anchor to link to. Found
+while revising for §3a; content unchanged.
+
+Execution answers one question: **how far from the *selected* platform angle and
+selected speed retention did this contact actually land?**
+
+> The word was "intended" until §3a, and the change is not cosmetic. Execution
+> deviates from what the voli **went for**, which is §4a's output, not from what
+> they **wanted**, which is §3's anchors. Under the old point form the two were the
+> same object and the distinction did not arise; now they are different, and
+> measuring execution error against intent would charge a passer for a ball their
+> circumstance never made available — which is precisely the conflation of
+> circumstance with technique that §2 and §8 exist to prevent.
 
 | field | source today |
 |---|---|
@@ -437,24 +717,28 @@ segment.
 
 ### How the vertical falls out
 
-Intent asks for a ball around height `h` around time `t` around a place. Given
-the actual contact height, that is a required vertical launch speed — one call to
-the existing `BallFlightModel`. Feasibility says whether that vertical speed is
-inside the envelope this contact can produce.
+**Rewritten by §3a.** The earlier version of this passage read intent as a
+required vertical launch speed, which was the point form stated in the units of
+the solver.
 
-**If it is, selection has one candidate and execution deviates from it.**
+Intent supplies a place to be near, a height to be near there, and a time not to
+be earlier than. Each of those is a *ranking* over the envelope, not a filter on
+it: given the actual contact height, `BallFlightModel` says what each candidate
+launch would deliver at the anchor, and the preference says which delivery is
+better. Feasibility never has to agree with intent, and intent is never
+"infeasible" — it is only more or less well served by what the contact can do.
 
-**If it is not, selection has to choose**, and this document does not say how.
-"The closest feasible thing" is a preference rule, not a physical consequence:
-closest in vertical speed, in landing point, in time, and in overpass risk are
-four different balls, and picking among them is §4a's unresolved decision.
+**Selection therefore always has work to do, and always the same work**, which is
+the simplification §3a bought. There is no branch where it is trivial and no
+branch where it is undefined. What is missing is only the ranking itself, and §4a
+names a minimal one that authors nothing.
 
-An intent with `desired_height_at_target = 0` — emergency, coverage — does not
-resolve to a default ball either. It states that the voli does not care about
-height, which **widens** the acceptable set rather than nominating a member of
-it. Something still chooses. An earlier draft of this page said such a contact
-takes "whatever the envelope's centre offers"; that sentence was a tactical rule
-disguised as geometry, and it is deleted rather than corrected.
+An intent with an `unset` height anchor — emergency, coverage — does not resolve
+to a default ball. It removes one term from the ranking, which **widens** what
+scores equally rather than nominating a member. Something still chooses. An
+earlier draft of this page said such a contact takes "whatever the envelope's
+centre offers"; that sentence was a tactical rule disguised as geometry, and it is
+deleted rather than corrected.
 
 ---
 
@@ -489,7 +773,7 @@ equations with different inputs:
 
 **Good circumstance, poor execution.** The envelope is wide — a planted platform
 under a driven serve has plenty of pace to work with and can angle it anywhere.
-Poor technique misses the intended platform angle by several degrees. Several
+Poor technique misses the selected platform angle by several degrees. Several
 degrees of a *fast* ball is a long way: it goes hard, and to the wrong place —
 over the net, into the antenna, off the court. **A shank, and fast.**
 
@@ -635,22 +919,33 @@ as a physical constant in the launch solver.
 **Slice 1 — publish the intent that already exists, and mark the intent that does
 not.** Narrower than the first draft said, and the narrowing is the point.
 
-Of the five fields in §3, **two exist today** and three do not:
+**Restated after §3a**, which changed the field list and moved one field from
+"must be authored" to "already derivable":
 
 | field | today |
 |---|---|
-| `target_point` | exists — `desired_target` on both resolvers, the fixed offset on coverage |
+| `purpose` | free — the call site knows it |
+| `target_anchor` | exists — `desired_target` on both resolvers, the fixed offset on coverage |
 | `intended_recipient_id` | exists — `setter` on reception and dig, absent on coverage |
-| `target_tolerance_meters` | **does not exist** |
-| `desired_height_at_target_meters` | **does not exist** |
-| `desired_time_to_target_seconds` | **does not exist** |
+| `height_anchor_meters` | **derivable** — `set_contact_height_meters(setter, false)`, class C |
+| `arrival_floor_seconds` | **derivable** — `_movement_time(setter, position, seat)`, class C |
+| ~~`target_tolerance_meters`~~ | **deleted by §3a** — a radius nothing derives, replaced by an anchor that needs none |
 
-Publishing all five would mean authoring intent policy for three of them while
-calling it plumbing — the same error §9 warns about, one layer up. So slice 1
-publishes the two real fields, a `purpose` label naming the context, and an
-explicit **absence marker** for the other three, in the manner of `height_source`:
-a record that says "this contact has no stated tolerance" is worth having, and a
-record that invents one is not.
+The first version of this slice published two real fields and three absence
+markers, because under the point form the height and time fields required an
+authored policy before they could carry anything. **Under anchors and a floor they
+require no policy at all** — both are class C, computed from models that already
+exist, and neither reads the dig's apex band, its `spoil`, or its outgoing
+trajectory.
+
+So slice 1 now publishes **five real fields**, with `unset` reserved for the
+contexts that genuinely have no anchor rather than for the ones whose policy was
+missing. Coverage and the emergency regime will carry `unset` on the height anchor
+and the arrival floor, and that is a true statement about them rather than a
+placeholder.
+
+Publishing them is still not the same as *reading* them: nothing consumes any of
+this in slice 1, and rallies must come back byte-identical.
 
 That keeps the slice provably outcome-neutral — rallies must come back
 byte-identical — while making countable, for the first time, how many platform
@@ -679,17 +974,35 @@ block and for reception.
 audit; the sequence in the first two drafts of this page was wrong.
 
 Slice 3 cannot begin until three things are true, and none of them is a
-measurement of the model being replaced:
+measurement of the model being replaced. **Conditions 2 and 3 are restated by
+§3a**; condition 1 is untouched.
 
 1. The controlled dig reads a real setting target instead of
    `contact + Vector2(0.03, −0.04)`. Class B on both sides; the value exists and
    the reception already uses it.
-2. The missing rally-intent policy of §4b — time wanted beyond the setter's bare
-   arrival — is designed and named, or the model explicitly ships with `t = t₀`
-   and states what that forecloses.
-3. Slice 2 has reported **how often the intended launch is feasible** on
-   controlled digs. Below some rate, "selection is trivial here" is false and
-   slice 3 waits for the selection pass like coverage does.
+2. ~~The missing rally-intent policy — time wanted beyond the setter's bare
+   arrival — is designed and named, or the model ships with `t = t₀`.~~
+   **Dissolved.** There is no margin to design: `t₀` is a floor and the preference
+   works inside it. What replaces this condition is that §4a has **a named
+   preference**, which may be the minimal no-weight one.
+3. Slice 2 has reported, not *whether one intended launch was feasible*, but
+   **whether the intent constraints are simultaneously satisfiable inside the
+   envelope, and which one binds when they are not.**
+
+Condition 3's restatement is worth its own paragraph, because the new measurement
+is strictly better and costs nothing extra:
+
+> The old gate asked a yes/no question about a point, which discards how far
+> outside the envelope the intent fell and in which direction. The new one is a
+> **satisfiability** question over a constraint set — is there any launch in the
+> envelope that reaches the target region at around the height anchor no earlier
+> than the floor — and it reports *which constraint is the binding one*. "The
+> arrival floor is unreachable on 40% of stretched digs" and "the height anchor is
+> unreachable on 40%" are completely different findings that the point form
+> returns as the same number.
+
+It is also weight-free: satisfiability needs no preference, so this measurement
+does not wait on the selection pass. That is what keeps slice 2 where it is.
 
 > **The intent policy may not be calibrated against the current model's output.**
 > "Successful digs today rise a median 2.507 m, so intent wants 2.5" would make
@@ -710,13 +1023,24 @@ B, no new physics.
 
 Do not reorder these. Slice 2 before slice 3 is the whole safety argument.
 
-**Selection (§4a) is not in this list.** It is needed before any context with a
-broad intent can be promoted — which means before coverage and before the
-emergency regime — and it is a separate design question with its own pass. Slices
-3 and 4 are reachable without it because the controlled dig's intent is precise
-enough that selection has one candidate. Coverage is not, so **slice 5 depends on
-the selection pass landing first**, and that dependency should not be discovered
-halfway through it.
+**Selection (§4a) is not in this list, and §3a changed when it is needed.**
+
+The earlier text said slices 3 and 4 were reachable without it "because the
+controlled dig's intent is precise enough that selection has one candidate."
+That is no longer true, and it was never measured. Since intent names anchors
+rather than a launch, **selection is required from slice 3 onward** — but only in
+its minimal, weight-free form, which §4a shows can be named without authoring
+anything.
+
+The full preference, with tempo weights, is still a separate pass and is still
+required before coverage and the emergency regime. So the dependency edge moved
+earlier and got thinner rather than disappearing:
+
+| | before §3a | after §3a |
+|---|---|---|
+| slice 3 needs | the intent margin policy (class D, underivable) | a **named** preference; minimal is enough |
+| slice 5 needs | the full selection pass | unchanged |
+| open questions gating slice 3 | two | **one** |
 
 ---
 
@@ -736,6 +1060,24 @@ intent is `keep it alive`, which is the broadest intent in the model, and §4a
 establishes that a broad intent is exactly the case where **the envelope alone
 cannot produce a ball**. Something must choose among the feasible launches that
 all keep it alive, and that chooser does not exist and is not designed.
+
+### §3a changes coverage's *reason* for being last, not its position
+
+The claim below — "coverage has no escape at any rate, because its intent does not
+name a launch at all" — was true and is now vacuous: **no intent names a launch**,
+so that is no longer what distinguishes coverage.
+
+What distinguishes it is that coverage has the **fewest binding constraints**. Its
+height anchor and arrival floor are both `unset`, so nothing but the preference
+orders its feasible set, and the preference is the least-measured component in the
+whole design. Coverage is therefore the contact whose ball is **most sensitive to
+whatever weights the selection pass eventually authors**, and the one where getting
+them wrong is least likely to be caught by anything else.
+
+Same position, better reason, and the new reason survives the next redesign:
+"least constrained, therefore most weight-sensitive" is a property of the contact,
+where "its intent does not name a launch" was a property of a representation that
+has now been discarded.
 
 So the honest dependency is:
 
@@ -760,6 +1102,22 @@ rate, because its intent does not name a launch at all.
 
 ---
 
+## Implementation conclusions that survive every revision
+
+Carried forward unchanged through the §3a audit, because none of them depends on
+how intent is represented:
+
+- **Do not repair the continuation dig's `{}` arrival path in place.** The fake
+  29% stretch it fabricates is a symptom; patching it would make the old model
+  slightly less wrong and slightly harder to replace.
+- **Slice 2's shadow consumes the correctly derived arrival state and measures
+  it**, rather than inheriting the empty one.
+- **The eventual replacement eliminates the 29% stretch**, by deriving arrival
+  rather than defaulting it.
+- **The controlled dig must eventually use the existing setter release target**,
+  which both sides already carry and the reception already reads. **No production
+  behaviour changes in this pass.**
+
 ## What this document may not be used to justify
 
 - Creating `PlatformContact` classes because they are named here. The redesign
@@ -771,3 +1129,9 @@ rate, because its intent does not name a launch at all.
   arm whose minimum realized rise, measured over 663 receptions, is 2.231 m
   against a branch that turns on below 1.873 m. Neither is evidence of anything
   yet, and neither is disproven.
+- **Reading §3a as licence to author a tempo weight.** It settles that tempo
+  enters as a dimensionless weight over existing principles rather than as a
+  margin in seconds. The magnitude is the selection pass's, and it is open.
+- **Reading "intent is anchors" as "intent is a box".** §3a rejects the range
+  form explicitly and for a stated reason: four of its five bounds would be
+  invented, and a range authors a cliff where the data supports a gradient.

@@ -62,6 +62,17 @@ a fixed small offset from the contact point as their target, and the only setter
 property any of them reads is a contact height used to terminate a flight — which
 is the opposite of intent.
 
+**"Intended target region" above is deliberate wording, and 2026-08-16 sharpened
+what it may mean.** `PLATFORM_CONTACT.md` §3a audited whether intent should
+resolve to one exact `(target, height at target, time to target)` — which uniquely
+determines a launch — or to a region and a window. **It is neither.** Intent
+carries *anchors* to be near and, where one is derivable, a *one-sided bound* not
+to be beaten; it does not name a launch and it does not draw a box. A region form
+would have to invent an upper arrival bound, both height edges and a target radius,
+none of which the simulator derives, and would author a discontinuity at each. Read
+§3a before adding any tolerance, window or margin field to a platform intent
+record here.
+
 ## 2. Physical contact — TARGET
 
 **Takes:** incoming ball state, actual body state, contact position, technical
@@ -617,7 +628,14 @@ the two disagree.
 3. **Poor-contact vertical failure modes.** Reception lifts a shanked ball;
    dig flattens a spoiled one. Both are plausible; they disagree.
 4. **Platform target intent** across reception, controlled dig, emergency dig and
-   coverage. No shared representation exists.
+   coverage. No shared representation exists. **The representation question is
+   settled as of 2026-08-16** — `PLATFORM_CONTACT.md` §3a: anchors plus at most one
+   derived bound, not an exact launch and not a region. What remains open is the
+   *preference* that ranks feasible launches against those anchors, which is
+   decision logic and has moved to the selection rule. Note that
+   `_desired_pass_target` already compiles an overpass-avoidance preference into
+   the reception's target point as five bare literals; the selection pass should
+   take that rule over rather than sit beside it.
 5. **Serve endpoint semantics** — floor landing or reception contact — unresolved
    until §4/§5 are represented. Sharpened rather than settled by the forward
    serve: its *launch* height is now exact and published, and `height_source`

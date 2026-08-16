@@ -891,6 +891,8 @@ redesign direction.
 | `5ba5cee` | ATTACK_COVERAGE census/classification; ownership migration stops on missing platform physics |
 | `666a56f` | `PLATFORM_CONTACT.md`; intent/circumstance/execution replaces per-event apex bands. Audit finds the DIG posture penalty `"emergency"/"fall"` unreachable, and incoming momentum computed but discarded by both outgoing models |
 | `e8004b1` | platform design tightened: feasible-launch **selection** separated from feasibility; incoming momentum split into authoritative input vs authored transfer relation; hang/height moved from context to rally state; authored relations reduced four → three |
+| `dce1598` | controlled-dig promotion gated on rally-state intent; the dig is found to have no setting target at all, and the continuation dig to fabricate a 29% stretch from an empty arrival |
+| *(this pass)* | **intent stops naming a launch.** `PLATFORM_CONTACT.md` §3a: intent is anchors plus one derived bound, not an exact `(target, height, time)`. The range form is rejected too — four of its five bounds would be invented. Selection becomes universal and the class D intent margin dissolves into it; tempo enters as a dimensionless weight rather than a margin in seconds |
 
 ---
 
@@ -904,23 +906,35 @@ normative when wording differs.
 Designed in `docs/design/PLATFORM_CONTACT.md`; that page and the spec are
 normative. What remains genuinely open after the design pass:
 
-- **the rally-intent policy** — how much time beyond the setter's bare arrival
-  does the team want a transition ball to buy, and what does it trade away to buy
-  it? Audited 2026-08-16: the target seat, the standing release height and the
-  setter's travel time are all available and non-circular, but `t = travel time`
-  alone is degenerate — it gives every intended ball zero arrival margin and
-  leaves no way to intend a quicker transition than the setter's legs require.
-  Gates controlled-dig promotion;
+- **~~the rally-intent policy~~ — closed by the §3a audit, and it closed by
+  dissolving rather than by being answered.** The question was how much time
+  beyond the setter's bare arrival a transition ball should buy, and it existed
+  *only* because intent had to name one exact launch. Under anchors plus a
+  derived floor there is no margin to name: the setter's travel time is a bound
+  the ball may not usefully beat, and whether it binds or goes slack is decided by
+  the envelope. The **trade** the margin stood for survives, inside the selection
+  rule below, where it is allowed to be wrong;
 - **the selection rule** — given an intent and a feasible envelope, what makes one
-  feasible launch preferable to another? Required before any broad-intent contact
-  (coverage, emergency) can be promoted, and required for the controlled dig
-  wherever its intended launch turns out infeasible. Decision logic, not physics;
+  feasible launch preferable to another? **Now required from slice 3 onward**
+  rather than only for broad-intent contacts, because no intent names a launch any
+  more. Decision logic, not physics. Two things make the earlier requirement
+  cheaper than it looks: §4a names a **minimal, weight-free** preference that
+  reproduces the old degenerate policy exactly wherever that policy was defined
+  and stays defined where it was not; and slice 2's gate measurement is a
+  **satisfiability** question, so it does not wait on the preference. Tempo enters
+  this rule as a dimensionless weight over `transition_commitment` and
+  `tempo_variation` — never as a margin in seconds, which would need a
+  seconds-per-unit-principle conversion the engine does not have;
 - **the transfer relation** — incoming speed + posture + ability → outgoing speed.
   The incoming velocity is authoritative and currently discarded, but knowing the
   input exactly is *not* permission to invent its transformation;
 - the reachable platform-angle range, and execution error as angular deviation;
-- how `desired_height_at_target` and `desired_time_to_target` are computed from
-  rally state — settled only that they may **not** be per-context constants;
+- ~~how `desired_height_at_target` and `desired_time_to_target` are computed from
+  rally state~~ — **settled by §3a.** Both are class C and derivable today:
+  the height anchor is `set_contact_height_meters(setter, false)` and the arrival
+  floor is `_movement_time` to the release seat. Neither needs a policy, because
+  neither has to be hit — one is a preferred value and the other a bound. They
+  were unanswerable only while intent had to name a launch;
 - coverage posture/arrival/contact-state resolution (class B, derivable);
 - **the controlled dig has no setting target** — all three sites aim at
   `contact + Vector2(~0.04, ~-0.04)` and never consult the setter's position,
@@ -936,7 +950,18 @@ normative. What remains genuinely open after the design pass:
 
 Settled and not to be reopened: `spoil` does not survive as the vertical driver;
 event family may not choose an apex band; the dead `"emergency"/"fall"` penalty
-is not to be repaired, only cited.
+is not to be repaired, only cited; **intent does not name a launch**, and the
+range/window form was considered and rejected on the same pass that rejected the
+point form — four of its five bounds have no derivation, and a range authors a
+discontinuity where the available data supports a gradient.
+
+One observation from that audit is worth keeping outside the platform section,
+because it generalises past this design. **When intent is forced to be a point,
+preferences do not disappear — they get compiled into the point as authored
+offsets, in the least visible form available.** `_desired_pass_target` is the
+shipped instance: an overpass-avoidance preference living inside the reception's
+target as five bare numeric literals that no gate names and no constant audit can
+find. Expect the same wherever a representation is more precise than its evidence.
 
 ### Serve
 
