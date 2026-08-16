@@ -5237,7 +5237,20 @@ func _resolve_opponent_transition(
 			"movement_duration": opponent_move_time,
 			"movement_entry_velocity": opponent_entry_velocity,
 			"outgoing_trajectory": opponent_attack_trajectory})
+	## **The ball this swing was actually struck against.**
+	##
+	## Read straight off the SET event this path already published and retargeted,
+	## so the identity is by construction rather than by two endpoints happening to
+	## agree. The home first ball has carried it since it existed; this path and
+	## the home continuation did not, so the one-ball chain could be audited on one
+	## of the three attack paths and was silently unprovable on the other two.
+	## Reporting only -- the swing was already resolved against `set_flight_time`
+	## and this set's arc.
 	var opponent_attack_event := result.events[-1] as RallyEvent
+	if opponent_attack_event != null and opponent_set_event != null:
+		opponent_attack_event.metadata["incoming_trajectory"] = Dictionary(
+			opponent_set_event.metadata.get("outgoing_trajectory", {})
+		)
 	opponent_live_positions[opponent_hitter.id] = opponent_body_contact
 	## The opponent could not miss a swing. Not "rarely" -- there was no branch
 	## for it anywhere on this path, so every transition ball the opponent hit
@@ -6687,6 +6700,20 @@ func _resolve_home_continuation(
 			"flight_time": continuation_attack_flight,
 			"event_time": cont_set_contact_time + continuation_flight_time,
 			"outgoing_trajectory": continuation_attack_trajectory})
+	## **The ball this swing was actually struck against.**
+	##
+	## Read straight off the SET event this path already published and retargeted,
+	## so the identity is by construction rather than by two endpoints happening to
+	## agree. The home first ball has carried it since it existed; this path and
+	## the opponent transition did not, so the one-ball chain could be audited on one
+	## of the three attack paths and was silently unprovable on the other two.
+	## Reporting only -- the swing was already resolved against `set_flight_time`
+	## and this set's arc.
+	var cont_swing_event := result.events[-1] as RallyEvent
+	if cont_swing_event != null and cont_set_event != null:
+		cont_swing_event.metadata["incoming_trajectory"] = Dictionary(
+			cont_set_event.metadata.get("outgoing_trajectory", {})
+		)
 	live_positions[hitter.id] = continuation_body_contact
 	## The continuation now owns a real timeline instead of stamping every
 	## contact with the dig's clock: set contact, then the set flight, then the

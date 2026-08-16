@@ -12,12 +12,15 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-16 on the set quality and generation
-audit: **2,104 checks pass**. Treat any test failure as a regression.
+Current branch baseline, verified 2026-08-16 on the attack-chain forward walk:
+**2,106 checks pass**. Treat any test failure as a regression.
 
-That is 2,098 plus exactly the six checks written, which is what a
-publication-only change should do to a sampling population: nothing. See
-`docs/review/SET_QUALITY_AND_GENERATION.md`.
+That is 2,104 plus exactly the two checks written -- another publication-only
+change, so no sampling population moved. See
+`docs/review/FORWARD_WALK_ATTACK_CHAIN.md`.
+
+The pass before it moved 2,098 → 2,104: six checks written and, again, no
+sampling movement. See `docs/review/SET_QUALITY_AND_GENERATION.md`.
 
 The pass before it moved 2,095 → 2,098: four checks written and one sampling
 gate drawing a check fewer, because the opponent's second contact began

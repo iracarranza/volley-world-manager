@@ -278,6 +278,7 @@ func _initialize() -> void:
 	_test_second_contact_rotation_invariance()
 	_test_opponent_setter_movement_consumes_selection()
 	_test_set_feasibility_then_execution()
+	_test_every_swing_publishes_the_ball_it_struck()
 	_test_play_validation_and_serialization()
 	_test_back_row_lane_restriction()
 	_test_tactical_demand()
@@ -9938,6 +9939,63 @@ func _same_published_ball(first: Dictionary, second: Dictionary) -> bool:
 		) and is_equal_approx(
 			float(first.get("duration", -1.0)), float(second.get("duration", -2.0))
 		)
+
+
+
+## Every swing must publish the ball it was actually struck against.
+##
+## Three paths produce an ATTACK event -- the home first ball, the opponent
+## transition and the home continuation -- and only the first carried
+## `incoming_trajectory`. All three were already *resolved* against their own
+## set's flight, so this was a reporting gap rather than an authority one: the
+## one-ball chain was provable on 240 of 611 swings and silently unprovable on
+## the rest.
+##
+## Read off the SET event each path had already published and retargeted, so the
+## identity holds by construction and this check is what notices if a path stops
+## doing it.
+func _test_every_swing_publishes_the_ball_it_struck() -> void:
+	var swings := 0
+	var without_incoming := 0
+	var matched := 0
+	var compared := 0
+	for serving_home in [false, true]:
+		for seed_value in range(84000, 84040):
+			var manager := GAME_MANAGER_SCRIPT.new()
+			manager.seed_vertical_slice_data()
+			manager.match_state.serving_home = serving_home
+			var rally: Resource = manager.resolve_active_rally(seed_value)
+			if rally != null:
+				var last_set := {}
+				for event in rally.events:
+					var kind := int(event.event_type)
+					if kind == RALLY_EVENT_SCRIPT.EventType.SET:
+						last_set = Dictionary(
+							event.metadata.get("outgoing_trajectory", {})
+						)
+					elif kind == RALLY_EVENT_SCRIPT.EventType.ATTACK:
+						swings += 1
+						var swung_at: Dictionary = event.metadata.get(
+							"incoming_trajectory", {}
+						)
+						if swung_at.is_empty():
+							without_incoming += 1
+							continue
+						if last_set.is_empty():
+							continue
+						compared += 1
+						if _same_published_ball(last_set, swung_at):
+							matched += 1
+			manager.free()
+
+	_check(
+		swings > 0 and without_incoming == 0,
+		"every swing on every path publishes the ball it was struck against",
+	)
+	_check(
+		compared > 0 and matched == compared,
+		"that ball is the exact set the setter published, on every path",
+	)
 
 
 func _test_gate_twenty_two_setter_progression() -> void:
