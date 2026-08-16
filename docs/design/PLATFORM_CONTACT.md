@@ -161,12 +161,16 @@ free-flight interception, resolved later, by whoever gets there.
 The four contexts differ in their **purpose**, and purpose suggests a starting
 policy:
 
-| | usual purpose | usual tolerance | recipient |
-|---|---|---|---|
-| serve reception | deliver a settable ball | tight | the setter |
-| controlled dig | recover the rally, usually with time | a setting zone | the setter |
-| emergency dig | survive the contact | own side | −1 |
-| attack coverage | keep the ball alive | own side, broad | −1 |
+| | usual purpose | usual tolerance | recipient | has one today? |
+|---|---|---|---|---|
+| serve reception | deliver a settable ball | tight | the setter | **yes** — `_desired_pass_target(preferred_release, …)` |
+| controlled dig | recover the rally | a setting zone | the setter | **no** — see §4b |
+| emergency dig | survive the contact | own side | −1 | no context exists |
+| attack coverage | keep the ball alive | own side, broad | −1 | **no** — a fixed offset |
+
+**Only the reception aims at anything.** The controlled dig and coverage both aim
+at a fixed small offset from their own contact point, which is not a setting zone
+and not a person. §4b traces it.
 
 **But the height and time fields are not in that table, and that is deliberate.**
 
@@ -285,7 +289,112 @@ This has two consequences worth stating now:
    and shanks it, and the one with a beautiful platform who keeps picking the
    wrong ball.
 
-## 5. Execution variables
+## 4b. Rally-state intent — audited, and it is not ready
+
+The design said the controlled dig could be promoted before the selection pass
+"because its intent is precise enough that selection has a single candidate".
+**That was asserted, not audited.** This section is the audit.
+
+### A target point and a recipient do not determine a launch
+
+A ballistic flight from a known contact `(P, h₀)` to a target `(T, h₁)` has three
+unknowns — horizontal speed, vertical speed, flight time — and two equations,
+the horizontal reach and the vertical drop. **One free parameter remains.** The
+same dig can put the ball on the same spot at the same height as a low fast ball,
+a medium one, or a high slow one, and nothing about "aim at the setter" chooses
+between them.
+
+So a controlled dig is vertically underspecified by exactly one scalar, and the
+old apex band was the thing secretly supplying it. Remove the band without
+replacing that scalar and the model has a hole where its intent should be.
+
+Three intent constraints — target point, height at target, time to target —
+determine the launch exactly. The question is where the third comes from.
+
+### What the simulator has at a controlled dig, classified
+
+Traced at all three dig sites: `rally_simulator.gd:3449` (opponent),
+`:5639` (home floor), `:6956` (continuation).
+
+| input | class | note |
+|---|---|---|
+| setter identity | **A** | the *rotational* setter — `lineup.active_setter_id()` / `opponent_team.setter()`. The actual second contact is chosen later by `_second_contact_setter` |
+| setter release target | **B** | `defensive_plan.setter_release_target()` and `_opponent_setter_release_target()` both exist, are manager-set policy, and are **already consumed by reception** |
+| setter live position | **A** | `live_positions` / `opponent_live_positions`, freshness varies by path |
+| setter travel time to the seat | **C** | `_movement_time`, the existing locomotion model, no new constant |
+| contact time | **A** | the incoming trajectory's `end_time` |
+| defender contact state | **A** | `arrival`, posture, control — **except at `:6956`, see below** |
+| tempo / recovery instructions | **B** | `transition_commitment` and `tempo_variation` exist as principles and reach nothing on this path |
+| standing set release height | **C** | `set_contact_height_meters(setter, false)` |
+| jump-set feasibility | **circular — unusable** | `_jump_set_decision` consumes `pass_apex_meters`, the quantity being derived |
+| offence assembly / attackers ready | **D** | no representation of how much of the offence has rebuilt |
+| time wanted *beyond* the setter's arrival | **D** | nothing states it |
+
+### Two defects found while tracing
+
+**The controlled dig has no setting target at all.** All three sites aim at
+`contact + Vector2(0.03–0.04, −0.03 to −0.05)` — about 0.8 m from where the ball
+was dug. **The setter's position is never consulted**; the setter is passed to
+`_dig_pass_result` only to supply a *reach height*. The reception, by contrast,
+aims at `_desired_pass_target(preferred_release, …)`, a real seat.
+
+So this document's earlier claim that a controlled dig intends "a playable ball
+to a setting zone" describes no code. It intends a point a stride away from
+itself. The setting target it needs already exists on both sides and is simply
+not read.
+
+**The continuation dig passes `arrival = {}`.** Empty, so `reach_margin` defaults
+to 0.0 and `stretched` computes `(0.25 − 0.0) / 0.85 = 0.294` — a 29% stretch
+fabricated on every continuation dig. That is precisely the defect that
+disqualified coverage from owning its ball, already live on one of the three
+controlled-dig sites.
+
+### Can rally state supply the missing scalar? Partly — and the remainder is D
+
+The physically meaningful thing the vertical knob buys is **time for the setter
+to get to the seat**, and that is derivable without circularity:
+
+```text
+T   = setter_release_target(setter)                 B, already policy
+h₁  = set_contact_height_meters(setter, standing)   C
+t₀  = _movement_time(setter, setter_position, T)    C, existing locomotion model
+```
+
+None of those reads the dig's apex band, its duration, its `spoil`, or its
+outgoing trajectory. The derivation is clean, and it produces the behaviour the
+design asked for *without authoring it*: a setter already stood at the seat needs
+no time, so the ball wants to be direct; a setter scrambling out of the back
+court needs two strides, so the ball wants to be higher.
+
+**But `t = t₀` exactly is a degenerate policy.** It makes every intended ball
+arrive with zero margin, which erases the arrival-margin variation the set model
+already consumes, and leaves no way for a team to intend a *quicker* transition
+than its setter's legs strictly require — which is what tempo means.
+
+> **THE MISSING RALLY-INTENT POLICY.** How much time beyond the setter's bare
+> arrival does the team want to buy, and what does it trade away to buy it?
+>
+> Buying time means a higher, slower ball: easier for the setter, and equally
+> easier for the opposing block to form against. That trade is the transition
+> tempo decision. `transition_commitment` and `tempo_variation` exist as
+> principles and reach nothing here.
+
+That is class D, it is not derivable from anything present, and **it is not
+authored in this pass.**
+
+### So does the controlled dig bypass the selection problem?
+
+**No — and the original claim was not wrong so much as unquantified.**
+
+Once T, h₁ and t are fixed, intent names exactly one launch. If that launch is
+inside the feasible envelope, selection genuinely does have a single candidate
+and the claim holds. If it is not — a defender stretched under a hard-driven
+spike will often be unable to produce the ball the team wants — then selection
+must choose a fallback, and that is the general unresolved problem of §4a.
+
+**Nobody knows how often the intended launch is infeasible, and slice 2 measures
+exactly that.** It is a number, not an argument, and it decides whether slice 3
+can proceed with a stated gap or not at all.
 
 Execution answers one question: **how far from the intended platform angle and
 intended speed retention did this contact actually land?**
@@ -548,7 +657,9 @@ byte-identical — while making countable, for the first time, how many platform
 contacts in the game have any stated intent at all. The expected answer is that
 coverage has none and the other two have half of one.
 
-**Slice 2 — the envelope as a shadow, and the transfer relation with it.**
+**Slice 2 — the envelope as a shadow, and the transfer relation with it.** It
+also carries the gate measurement §4b asks for: **what fraction of controlled
+digs could physically have produced the ball the team wanted.**
 Implement §§4–6 as a resolver that runs beside the current one, publishes what it
 *would* have produced, and changes nothing. Then measure: outgoing speed,
 vertical, apex, destination error, and — the sharpest question — **how often the
@@ -563,6 +674,29 @@ shadow cannot discriminate a plausible transfer relation from the existing bands
 the honest outcome is to say so and stop, not to promote it because the
 architecture is prettier. The repository has run this pattern twice, for the
 block and for reception.
+
+**The rally-state intent gate — between slices 2 and 3.** Added after the §4b
+audit; the sequence in the first two drafts of this page was wrong.
+
+Slice 3 cannot begin until three things are true, and none of them is a
+measurement of the model being replaced:
+
+1. The controlled dig reads a real setting target instead of
+   `contact + Vector2(0.03, −0.04)`. Class B on both sides; the value exists and
+   the reception already uses it.
+2. The missing rally-intent policy of §4b — time wanted beyond the setter's bare
+   arrival — is designed and named, or the model explicitly ships with `t = t₀`
+   and states what that forecloses.
+3. Slice 2 has reported **how often the intended launch is feasible** on
+   controlled digs. Below some rate, "selection is trivial here" is false and
+   slice 3 waits for the selection pass like coverage does.
+
+> **The intent policy may not be calibrated against the current model's output.**
+> "Successful digs today rise a median 2.507 m, so intent wants 2.5" would make
+> the model being replaced its own design authority, and the band it came from
+> was itself calibrated against an unreachable posture branch. Historical
+> distributions are descriptive evidence about the old model, never the causal
+> source of intended geometry.
 
 **Slice 3 — promote one context.** The controlled dig, because it has the richest
 state and the worst current model, and because it is where the `id % 2` rule
@@ -606,20 +740,23 @@ all keep it alive, and that chooser does not exist and is not designed.
 So the honest dependency is:
 
 ```text
-slice 1  →  slice 2  →  slice 3 (controlled dig)  →  slice 4 (coverage state)
-                                                          ↓
-                                     SELECTION PASS (§4a) ← required here
-                                                          ↓
-                                                     slice 5 (coverage owns its ball)
+slice 1  →  slice 2  →  RALLY-STATE INTENT GATE (§4b)  →  slice 3 (controlled dig)
+                                                                    ↓
+                                                        slice 4 (coverage state)
+                                                                    ↓
+                                               SELECTION PASS (§4a) ← required here
+                                                                    ↓
+                                              slice 5 (coverage owns its ball)
 ```
 
 Coverage was the contact that motivated this whole design, and it turns out to be
 the **last** one that can be finished, because it is the one with the least
 intent. That is worth stating plainly rather than discovering during slice 5.
 
-The controlled dig can be promoted without the selection pass, because its intent
-is precise enough that selection has a single candidate — which is why it is
-slice 3 and coverage is not.
+The controlled dig can be promoted without the selection pass **only where its
+intended launch is feasible**, which §4b establishes is a measured rate rather
+than a property, and which slice 2 reports. Coverage has no such escape at any
+rate, because its intent does not name a launch at all.
 
 ---
 

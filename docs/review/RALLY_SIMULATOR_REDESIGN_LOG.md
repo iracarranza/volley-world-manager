@@ -904,9 +904,17 @@ normative when wording differs.
 Designed in `docs/design/PLATFORM_CONTACT.md`; that page and the spec are
 normative. What remains genuinely open after the design pass:
 
+- **the rally-intent policy** — how much time beyond the setter's bare arrival
+  does the team want a transition ball to buy, and what does it trade away to buy
+  it? Audited 2026-08-16: the target seat, the standing release height and the
+  setter's travel time are all available and non-circular, but `t = travel time`
+  alone is degenerate — it gives every intended ball zero arrival margin and
+  leaves no way to intend a quicker transition than the setter's legs require.
+  Gates controlled-dig promotion;
 - **the selection rule** — given an intent and a feasible envelope, what makes one
   feasible launch preferable to another? Required before any broad-intent contact
-  (coverage, emergency) can be promoted. Decision logic, not physics;
+  (coverage, emergency) can be promoted, and required for the controlled dig
+  wherever its intended launch turns out infeasible. Decision logic, not physics;
 - **the transfer relation** — incoming speed + posture + ability → outgoing speed.
   The incoming velocity is authoritative and currently discarded, but knowing the
   input exactly is *not* permission to invent its transformation;
@@ -914,6 +922,13 @@ normative. What remains genuinely open after the design pass:
 - how `desired_height_at_target` and `desired_time_to_target` are computed from
   rally state — settled only that they may **not** be per-context constants;
 - coverage posture/arrival/contact-state resolution (class B, derivable);
+- **the controlled dig has no setting target** — all three sites aim at
+  `contact + Vector2(~0.04, ~-0.04)` and never consult the setter's position,
+  while both sides already carry a `setter_release_target` the reception uses;
+- **the continuation dig passes an empty arrival**, fabricating a 29% stretch on
+  every one — the same defect that disqualified coverage, already live;
+- how much of the offence has rebuilt at a transition contact: no representation
+  exists, and it is the natural second input to the rally-intent policy;
 - whether a contact *modality* — two-arm platform, one-arm save — is needed,
   which is only true if it changes the feasible envelope;
 - what `quality` means once it is an evaluation of realized-against-intended
