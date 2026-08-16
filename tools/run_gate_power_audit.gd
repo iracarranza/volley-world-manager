@@ -68,13 +68,18 @@ const CASES := [
 	## **Bucket left blank on purpose below.** Naming it wrong is how this file
 	## silently reported nothing for two of three gates on its first run, so
 	## anything not already verified is discovered from the summary instead.
+	##
+	## `n` and `seed` are the production values read out of `test_runner.gd`, not
+	## round numbers. The first extended run guessed 6/300000 and 6/310000 for the
+	## two progression gates and so measured a population no gate ever asserts on
+	## -- the same defect as guessing the bucket key, one column over.
 	{
-		"gate": "attack progression", "which": "attack_progression",
-		"n": 6, "seed": 300000, "bucket": "", "high": "", "low": "", "fields": [],
+		"gate": "gate 39 attack progression", "which": "attack_progression",
+		"n": 12, "seed": 420000, "bucket": "", "high": "", "low": "", "fields": [],
 	},
 	{
-		"gate": "blocker progression", "which": "blocker_progression",
-		"n": 6, "seed": 310000, "bucket": "", "high": "", "low": "", "fields": [],
+		"gate": "gate 46 blocker progression", "which": "blocker_progression",
+		"n": 8, "seed": 520000, "bucket": "", "high": "", "low": "", "fields": [],
 	},
 	{
 		"gate": "gate 21 setter handoff", "which": "setter_handoff",
@@ -105,9 +110,10 @@ func _initialize() -> void:
 			low = str(found[2])
 			print("    discovered bucket %s, comparing %s against %s"
 				% [bucket, high, low])
-		case["bucket"] = bucket
-		case["high"] = high
-		case["low"] = low
+		## **The discovered bucket stays in a local.** `CASES` is a `const`, and a
+		## `const` Dictionary in GDScript is read-only *through every reference to
+		## it* -- `Dictionary(entry)` wraps, it does not copy -- so writing the
+		## discovered key back into `case` aborted the run on its first entry.
 		var fields: Array = case.fields
 		if fields.is_empty():
 			fields = _discover_fields(small, bucket, high)
@@ -116,22 +122,20 @@ func _initialize() -> void:
 		## guessed wrong, and a blank reads exactly like "no finding".
 		if fields.is_empty():
 			print("    NO FIELDS -- bucket %s / tier %s not in this summary; keys are %s"
-				% [str(case.bucket), str(case.high), str(small.keys())])
+				% [bucket, high, str(small.keys())])
 			continue
 		for raw_field in fields:
 			var field := str(raw_field)
-			var a := _margin(small, str(case.bucket), str(case.high),
-				str(case.low), field)
-			var b := _margin(large, str(case.bucket), str(case.high),
-				str(case.low), field)
+			var a := _margin(small, bucket, high, low, field)
+			var b := _margin(large, bucket, high, low, field)
 			if is_nan(a) or is_nan(b):
 				continue
 			## **Absolutes beside the margin.** A margin of zero can mean the two
 			## tiers are equal and active, or that the metric is dead for both,
 			## and those are completely different findings. The first version of
 			## this printed only the difference and could not tell them apart.
-			var hi := _value(large, str(case.bucket), str(case.high), field)
-			var lo := _value(large, str(case.bucket), str(case.low), field)
+			var hi := _value(large, bucket, high, field)
+			var lo := _value(large, bucket, low, field)
 			print("    %-30s n=%-4d %+8.4f   n=%-4d %+8.4f  [%.4f vs %.4f]  %s" % [
 				field, int(case.n), a, int(case.n) * 4, b, hi, lo,
 				_reading(a, b) + (" -- BOTH ZERO" if is_zero_approx(hi)
