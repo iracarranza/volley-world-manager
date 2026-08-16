@@ -241,6 +241,91 @@ a rolled outcome may not define a landing that launch state is then fitted to.
 **Nothing here requires authoring physics.** Every needed component exists. The
 missing piece is order.
 
+## The serve, built forward — CURRENT
+
+Implemented 2026-08-16, on verdict C. The chain, and it is the only one:
+
+    aim (intent)
+      -> _serve_launch: pace relief x spin, filtered on the tape,
+         quickest clearing ball kept
+      -> AttackSwingModel.deliver: bearing, vertical and power execution error
+      -> ONE launch state
+      -> AttackResolutionModel.resolve under that launch's own gravity
+      -> net clearance, landing, in / net / long / wide, duration
+      -> trajectory, stamped with the launch state
+      -> receiver read
+      -> presentation
+
+`GeometricAttackResolverModel.resolve_serve` owns the launch and is now live on
+both sides rather than a shadow. `rally_simulator._serve_arc`,
+`_ground_to_net_meters` and `_errant_serve_landing` are deleted: nothing
+manufactures a landing, and nothing fits a launch to one.
+
+**The serve-error draw survives and decides nothing.** `rng.randf() <
+_serve_error_chance(...)` still runs, in its old position, so every downstream
+consumer of the main stream keeps the sequence it had. A serve pass that also
+reshuffled the reception, the set and the swing would have been unmeasurable.
+Removing it is a separate, mechanical change.
+
+### What the forward order exposed
+
+Two defects, both of the §0 kind, neither visible while the sweep was solving
+backwards to a landing nothing perturbed afterwards.
+
+**One ball, two gravities.** The old sweep solved each candidate flight under
+the ball's spin gravity and then asked its height at the net under the default
+9.8. A topspin serve was certified over a tape it crossed as much as a metre
+lower. Fixed by passing the candidate's own gravity to the height query.
+
+**A constant standing where a function belongs.** `SERVE_NET_CLEARANCE_METERS`
+was a flat 0.12 m. `_feasible_launch` had already found that exact constant
+wanting for the swing and replaced it with the margin the shot's own vertical
+spread demands, because execution error arrives at the tape as `ground_to_net *
+tan(error)` — centimetres from a tight set, a third of a metre from four metres
+back. **A serve is struck nine metres back.** Measured on the first forward
+build: median clearance 0.071 m against a planned 0.12, 46% of serves missing,
+90% of those into the tape. The serve now obeys the swing's clearance rule and
+has no constant of its own.
+
+### Before and after, 160 isolated rallies per side
+
+Each rally gets a fresh `GameManager`, so a difference is that rally's own.
+
+| | opponent before | opponent after | home before | home after |
+|---|---|---|---|---|
+| launch pace | *not published* | 14.27 | *not published* | 13.93 |
+| launch angle | *not published* | 18.5° | *not published* | 18.8° |
+| horizontal | 15.87 | 13.47 | 15.88 | 13.18 |
+| vertical | **0.000 by construction** | 4.35 | **0.000** | 4.45 |
+| net clearance | *not computed* | 0.599 | *not computed* | 0.601 |
+| landing | manufactured on error | from the flight | manufactured | from the flight |
+| duration | 1.095 | 1.253 | 1.092 | 1.270 |
+| serve error | 0.150 | 0.181 | 0.150 | 0.294 |
+| ace | 0.019 | 0.019 | 0.019 | 0.013 |
+| reception quality | 0.411 | 0.471 | 0.339 | 0.379 |
+| contacts/rally | 7.74 | 7.27 | 6.25 | 5.84 |
+| launch mode | lofted 160/160 | driven 146 / lofted 14 | lofted 160/160 | driven 154 / lofted 6 |
+
+The degenerate branch is gone: a serve is a driven ball most of the time and a
+lofted one when the server cannot drive it, which is a repertoire.
+
+**The 15.0% either side was not a measurement.** It was one coin flip called
+twice against the same function, so the two sides agreed by construction. They
+now differ — 18.1% and 29.4% — because their servers and their instructions
+differ. Geometry is not the cause and was checked: both sides serve from x=0.82,
+median reach 17.11 m against 17.30 m, aims mirrored.
+
+### The calibration this invalidated
+
+`SERVE_SPREAD_MULTIPLIER = 0.70` carries a sweep table claiming 15.6% / 10.6%
+serve error at that value. That table was measured against the old launch — full
+pace on the lofted root — and the launch has changed. **The constant is not
+wrong; its evidence is stale.** Recalibrating it is a balance pass and was not
+done here, because tuning a rate at the same time as changing the physics under
+it makes both unmeasurable.
+
+What a recalibration will need to decide is named below, not invented here.
+
 ## UNRESOLVED PHYSICS — do not fill with defaults
 
 1. **DIG apex calibration.** `lerpf(1.35, 3.05, 1.0 - spoil)` was chosen by eye
@@ -252,8 +337,22 @@ missing piece is order.
 4. **Platform target intent** across reception, controlled dig, emergency dig and
    coverage. No shared representation exists.
 5. **Serve endpoint semantics** — floor landing or reception contact — unresolved
-   until §4/§5 are represented. Note that `launch_speed_mps` reads *both*
-   endpoints, so this choice is not cosmetic.
+   until §4/§5 are represented. Sharpened rather than settled by the forward
+   serve: its *launch* height is now exact and published, and `height_source`
+   grew a third value, `start_resolved`, to say so. The ending height is still
+   the 1.0 m default, because `BallFlight.from_trajectory` reads
+   `end_height_meters` as **the height of the next contact** while the serve's
+   own flight solves to the floor. Those are different numbers and publishing
+   either one silently would move the receiver's read for a reason nobody
+   chose.
+7. **What margin does a server plan for their own mishit?** The clearance rule
+   budgets two sigma of *vertical* spread. Measured over 2,000 isolated serves,
+   a netted serve is 1.65 sigma low on the vertical draw **and 1.45 sigma low on
+   the power draw** — it takes both. From nine metres back the gravity drop term
+   goes as `1/v²`, so a power shortfall costs more height at the tape than the
+   angle error does, and nothing budgets for it. Adding a power term to the
+   margin is a design decision about how much a server holds back, not
+   plumbing — which is why it was named here instead of written.
 6. **`ATTACK_COVERAGE` outgoing ball.** Still built by
    `_ensure_event_trajectories` after resolution; the only successful contact
    whose physical ball is not its own.

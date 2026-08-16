@@ -1243,46 +1243,36 @@ func resolve(
 	var opponent_serve_origin := CourtConstants.serve_origin(
 		opponent_serve_base.x, false
 	)
-	var serve_error_chance := _serve_error_chance(opponent_server, opponent_risk)
-	var serve_error := rng.randf() < serve_error_chance
-	var serve_landing := _serve_landing_point(
+	## **Drawn and discarded.** The verdict this used to decide now comes off the
+	## flight, but the draw stays where it was so every downstream consumer of
+	## `rng` keeps the stream it had -- a serve pass that also reshuffled the
+	## reception, the set and the swing would be unmeasurable. It decides
+	## nothing; `_serve_error_chance` survives only to keep the shape of it.
+	## Removing it is a separate, purely mechanical change.
+	var _retired_serve_error_draw := \
+		rng.randf() < _serve_error_chance(opponent_server, opponent_risk)
+	var serve_aim := _serve_landing_point(
 		str(serve_decision.target), opponent_server, players, lineup, true,
 		_receive_formation_positions(lineup, players, false), opponent_serve_origin,
 		serve_decision,
 	)
-	## Gate E: the same serve through the shared ballistics, in shadow.
-	_geometric_serve_record(
+	var canonical_serve := _canonical_serve(
 		"geometric_serve_opponent", opponent_server,
-		opponent_serve_origin, serve_landing, false, opponent_risk,
+		opponent_serve_origin, serve_aim, false, opponent_risk,
 	)
-	## Recorded against the intent above, moved below: the shadow resolver aims
-	## where the server aimed and reaches its own verdict, while the official
-	## ball has to go where the official verdict already says it went.
-	if serve_error:
-		serve_landing = _errant_serve_landing(serve_landing, serve_quality, true)
-	var opponent_serve_distance := RallyKinematics.court_distance_meters(
-		opponent_serve_origin, serve_landing
+	var serve_landing: Vector2 = canonical_serve.get("landing", serve_aim)
+	var serve_error := bool(canonical_serve.get("error", true))
+	var serve_spin: Dictionary = canonical_serve.get(
+		"spin", _serve_spin(opponent_server)
 	)
-	var serve_arc := _serve_arc(
-		"geometric_serve_opponent",
-		opponent_serve_distance,
-		_serve_launch_angle_degrees(opponent_server, serve_quality),
-		GeometricAttackPromotionModel.serve_contact_height_meters(
-			opponent_server,
-			GeometricAttackPromotionModel.serve_effort_for_style(
-				str(opponent_server.primary_serve_style)
-			),
-		),
-		_ground_to_net_meters(
-			opponent_serve_origin, serve_landing, opponent_serve_distance
-		),
-		_serve_spin(opponent_server),
-	)
-	var serve_time := float(serve_arc.duration_seconds)
+	var serve_time := float(canonical_serve.get("duration_seconds", 1.0))
 	var serve_trajectory := _ball_trajectory(
 		"serve", opponent_serve_origin, serve_landing, serve_time,
-		float(serve_arc.apex_height_meters),
+		float(canonical_serve.get("apex_rise_meters", 0.0)),
+		-1.0, NAN, NAN,
+		float(canonical_serve.get("contact_height_meters", NAN)),
 	)
+	_stamp_launch_state(serve_trajectory, canonical_serve)
 	## Where this server belongs once the ball is gone: their own defensive spot,
 	## the same one every other opponent gets from `court_position`.
 	_add_event(result, RallyEventModel.EventType.SERVE, opponent_server.id, server_name,
@@ -1302,6 +1292,18 @@ func resolve(
 			"serve_style": opponent_server.primary_serve_style,
 			"flight_time": serve_time,
 			"event_time": 0.0, "contact_time": serve_time,
+			## What the ball did, from the one flight that decided all of it.
+			## `serve_out_reason` is empty on a serve that stayed in; on one that
+			## did not it names the line or the tape, which the old path could not
+			## do because the verdict predated the ball.
+			"serve_out_reason": canonical_serve.get("out_reason", ""),
+			"net_clearance_meters": canonical_serve.get(
+				"net_clearance_meters", 0.0
+			),
+			"launch_speed_mps": serve_trajectory.get("launch_speed_mps", 0.0),
+			"launch_angle_degrees": serve_trajectory.get(
+				"launch_angle_degrees", 0.0
+			),
 			## Struck from behind the baseline, then onto the court.
 			##
 			## A server is off the court when they contact the ball and back in it
@@ -1427,7 +1429,12 @@ func resolve(
 	var arrival: Dictionary = _read_adjusted_arrival(
 		Dictionary(reception_claim.get("arrival", {})),
 		_read_error_meters(
-			receiver, serve_trajectory, _serve_spin(opponent_server),
+			## The spin the launch search *settled on*, not the whole of what this
+			## server can put on a ball. They are different numbers -- the sweep
+			## trades brush against range and usually keeps less than all of it --
+			## and novelty, which is what makes a ball hard to track, is computed
+			## from the rotation the ball actually carries.
+			receiver, serve_trajectory, serve_spin,
 			float(serve_trajectory.get("start_time", rally_clock)),
 		),
 	)
@@ -3567,9 +3574,10 @@ func _resolve_home_serve(
 		+ (0.06 if str(serve_decision.mode) == "aggressive" else -0.015)
 		+ rng.randf_range(-0.14, 0.14), 0.05, 0.98
 	)
-	var error_chance := _serve_error_chance(server, serve_risk)
-	var serve_error := rng.randf() < error_chance
-	var opponent_landing := _serve_landing_point(
+	## See the opponent serve: drawn to hold the RNG stream, and deciding nothing.
+	var _retired_serve_error_draw := \
+		rng.randf() < _serve_error_chance(server, serve_risk)
+	var serve_aim := _serve_landing_point(
 		str(serve_decision.target), server,
 		opponent_team.players if opponent_team != null else [],
 		opponent_team.current_lineup() if opponent_team != null else null,
@@ -3583,40 +3591,27 @@ func _resolve_home_serve(
 		CourtConstants.serve_origin(0.82, true),
 		serve_decision,
 	)
-	_geometric_serve_record(
-		"geometric_serve_home", server,
-		CourtConstants.serve_origin(0.82, true), opponent_landing, true, serve_risk,
-	)
-	if serve_error:
-		opponent_landing = _errant_serve_landing(
-			opponent_landing, serve_quality, false
-		)
 	var home_serve_origin := CourtConstants.serve_origin(0.82, true)
-	var home_serve_distance := RallyKinematics.court_distance_meters(
-		home_serve_origin, opponent_landing
+	## The same call the opponent makes, in the same order, off the same model.
+	## Every asymmetry ever found in this engine was one side modelled fully and
+	## the other as a parallel implementation, and the serve had two of them.
+	var canonical_serve := _canonical_serve(
+		"geometric_serve_home", server,
+		home_serve_origin, serve_aim, true, serve_risk,
 	)
-	var serve_arc := _serve_arc(
-		"geometric_serve_home",
-		home_serve_distance,
-		_serve_launch_angle_degrees(server, serve_quality),
-		GeometricAttackPromotionModel.serve_contact_height_meters(
-			server,
-			GeometricAttackPromotionModel.serve_effort_for_style(
-				str(server.primary_serve_style)
-			),
-		),
-		_ground_to_net_meters(
-			home_serve_origin, opponent_landing, home_serve_distance
-		),
-		_serve_spin(server),
-	)
-	var serve_time := float(serve_arc.duration_seconds)
+	var opponent_landing: Vector2 = canonical_serve.get("landing", serve_aim)
+	var serve_error := bool(canonical_serve.get("error", true))
+	var serve_spin: Dictionary = canonical_serve.get("spin", _serve_spin(server))
+	var serve_time := float(canonical_serve.get("duration_seconds", 1.0))
 	## Named so the reception can carry it as its incoming ball, exactly as the
 	## opponent-serve path already does.
 	var serve_trajectory := _ball_trajectory(
-		"serve", CourtConstants.serve_origin(0.82, true), opponent_landing,
-		serve_time, float(serve_arc.apex_height_meters),
+		"serve", home_serve_origin, opponent_landing,
+		serve_time, float(canonical_serve.get("apex_rise_meters", 0.0)),
+		-1.0, NAN, NAN,
+		float(canonical_serve.get("contact_height_meters", NAN)),
 	)
+	_stamp_launch_state(serve_trajectory, canonical_serve)
 	## Their floor-defence spot, from the plan if there is one and the rotation
 	## grid if there is not -- the same fallback `_initial_home_positions` uses.
 	var home_serve_base: Vector2 = CourtConstants.slot_position(1)
@@ -3638,8 +3633,17 @@ func _resolve_home_serve(
 			"server_id": server.id, "server_slot": 1,
 			"serve_style": server.primary_serve_style,
 			"event_time": 0.0, "contact_time": serve_time,
-			## See the opponent serve: struck from behind the baseline, then onto
-			## the court over the serve's own flight.
+			## See the opponent serve: what the ball did, from its own flight.
+			"serve_out_reason": canonical_serve.get("out_reason", ""),
+			"net_clearance_meters": canonical_serve.get(
+				"net_clearance_meters", 0.0
+			),
+			"launch_speed_mps": serve_trajectory.get("launch_speed_mps", 0.0),
+			"launch_angle_degrees": serve_trajectory.get(
+				"launch_angle_degrees", 0.0
+			),
+			## Struck from behind the baseline, then onto the court over the
+			## serve's own flight.
 			"movement_start": CourtConstants.serve_origin(0.82, true),
 			"movement_target": home_serve_base,
 			"outgoing_trajectory": serve_trajectory})
@@ -3669,7 +3673,8 @@ func _resolve_home_serve(
 	var opponent_arrival: Dictionary = _read_adjusted_arrival(
 		Dictionary(opponent_claim.get("arrival", {})),
 		_read_error_meters(
-			receiver, serve_trajectory, _serve_spin(server),
+			## The spin the launch search settled on. See the opponent's read.
+			receiver, serve_trajectory, serve_spin,
 			float(serve_trajectory.get("start_time", rally_clock)),
 		),
 	)
@@ -7627,61 +7632,6 @@ func _missed_set_drop_trajectory(
 	)
 
 ## The same three numbers for a serve, and the same reasoning behind them.
-##
-## A serve misses in one of three ways and the tape is the commonest, so the
-## net channel is entered on a wider band of quality than the attack's.
-const SERVE_ERROR_OVERSHOOT_METERS: float = 0.60
-const SERVE_NET_ERROR_DROP_METERS: float = 0.50
-const SERVE_NET_ERROR_QUALITY: float = 0.42
-
-
-## Where a serve that misses actually lands.
-##
-## `_serve_landing_point` clamps its result to the receiving half -- x into
-## [0.06, 0.94] and y into the legal depth band -- so it is structurally
-## incapable of producing a ball that is out. The error verdict is a separate
-## coin flip against `_serve_error_chance`, taken before the landing point is
-## computed and never fed into it, so a serve ruled out was drawn landing
-## cleanly inside the court and the rally then ended with "the serve does not
-## enter the court". That is the same defect `_errant_attack_target` was written
-## for, on the one contact that starts every rally, and it went unfixed because
-## the attack fix was made where the attack was wrong rather than where the
-## engine was.
-##
-## Deterministic, like the attack version: it reads the intended target and the
-## quality that already decided the outcome, so a replayed seed draws the
-## identical miss.
-func _errant_serve_landing(
-	intended: Vector2,
-	serve_quality: float,
-	landing_on_home_side: bool,
-) -> Vector2:
-	var wide_overshoot := SERVE_ERROR_OVERSHOOT_METERS \
-		/ CourtConstants.COURT_WIDTH_METERS
-	var deep_overshoot := SERVE_ERROR_OVERSHOOT_METERS \
-		/ CourtConstants.COURT_LENGTH_METERS
-	var net_drop := SERVE_NET_ERROR_DROP_METERS / CourtConstants.COURT_LENGTH_METERS
-	var lane_x := clampf(intended.x, 0.06, 0.94)
-	if serve_quality < SERVE_NET_ERROR_QUALITY:
-		## Into the tape, dropping on the server's own side of it -- which is
-		## the half the ball came from, the opposite one to where it was aimed.
-		return Vector2(lane_x, CourtConstants.NET_Y
-			+ (-net_drop if landing_on_home_side else net_drop))
-	## Otherwise it carried. Past whichever line the intended target already sat
-	## nearest, so a deep serve sails long and one aimed near a sideline sails
-	## wide, rather than every miss landing on one arbitrary spot.
-	var endline := 1.0 if landing_on_home_side else 0.0
-	var to_endline := absf(intended.y - endline)
-	var to_left := intended.x
-	var to_right := 1.0 - intended.x
-	if to_endline <= to_left and to_endline <= to_right:
-		return Vector2(lane_x, endline
-			+ (deep_overshoot if landing_on_home_side else -deep_overshoot))
-	if to_left <= to_right:
-		return Vector2(-wide_overshoot, intended.y)
-	return Vector2(1.0 + wide_overshoot, intended.y)
-
-
 ## Depth a shot family naturally wants, as a fraction from the net (0) to the
 ## endline (1). Power swings drive deep; rolls and tips die short.
 const ATTACK_DEPTH_PREFERENCE := {
@@ -9510,14 +9460,29 @@ func _ball_trajectory(
 	var perpendicular := Vector2(-direction.y, direction.x).normalized()
 	var curve_amount := clampf(direction.length() * 0.08, 0.0, 0.035)
 	var control := start.lerp(end, 0.5) + perpendicular * curve_amount
-	var heights_known := not is_nan(start_height) and not is_nan(end_height)
+	var start_known := not is_nan(start_height)
+	var end_known := not is_nan(end_height)
 	var trajectory: Resource = BallTrajectoryModel.create(
 		kind, start, control, end, timestamp, flight_time, apex_height,
-		start_height if heights_known else 1.0,
-		end_height if heights_known else 1.0,
+		start_height if start_known else 1.0,
+		end_height if end_known else 1.0,
 	)
 	var data: Dictionary = trajectory.to_dict()
-	data["height_source"] = "resolved" if heights_known else "default"
+	## **Three states, not two, because the serve genuinely has three.** Its
+	## launch height is now known exactly; its *ending* height is the open
+	## question -- `end_height_meters` is read by `BallFlight.from_trajectory` as
+	## the height of the **next contact**, while the serve's own flight solves to
+	## the floor. Those are different numbers and choosing between them is
+	## `CONTACT_AND_BALL_FLIGHT.md`'s unresolved item 5, not something to settle
+	## as a side effect of owning the launch. Publishing the half that is known
+	## and marking the half that is not keeps the gap countable, which is the
+	## whole reason this marker exists.
+	var height_source := "default"
+	if start_known and end_known:
+		height_source = "resolved"
+	elif start_known:
+		height_source = "start_resolved"
+	data["height_source"] = height_source
 	## RallyKinematics solves vertical displacement above launch level. Preserve
 	## that contract explicitly; legacy `apex_height_meters` is retained because
 	## calibration reads it for the duration/rise invariant.
@@ -9528,6 +9493,33 @@ func _ball_trajectory(
 	if not is_nan(swing_duration_seconds):
 		data["swing_duration_seconds"] = swing_duration_seconds
 	return data
+
+
+## Put the launch state on the published flight, so nothing has to rebuild it.
+##
+## **`BallPresentation.launch_speed_mps` reconstructs launch speed from the two
+## endpoint heights and the duration**, which makes it a property of wherever the
+## flight was cut rather than of the contact that made it -- the §3 violation the
+## spec names, and it is read by `_read_error_meters`, which is gameplay. A ball
+## dug at six metres left the hand at the same speed as one that reached the
+## floor, and a record that cannot say so will keep being asked to guess.
+##
+## Only the serve carries this today. Every other family still reconstructs, and
+## `_read_error_meters` still falls back to the reconstruction for them, so the
+## marker is also the migration's own to-do list.
+func _stamp_launch_state(trajectory: Dictionary, resolved: Dictionary) -> void:
+	var launch: Dictionary = resolved.get("launch", {})
+	if launch.is_empty():
+		return
+	trajectory["launch_speed_mps"] = float(launch.get("speed_mps", 0.0))
+	trajectory["launch_angle_degrees"] = float(launch.get("angle_degrees", 0.0))
+	trajectory["launch_bearing_degrees"] = float(launch.get("bearing_degrees", 0.0))
+	trajectory["launch_horizontal_mps"] = float(
+		launch.get("horizontal_speed_mps", 0.0)
+	)
+	trajectory["launch_vertical_mps"] = float(launch.get("vertical_speed_mps", 0.0))
+	trajectory["launch_gravity_mps2"] = float(launch.get("gravity_mps2", 0.0))
+	trajectory["launch_source"] = "resolver"
 
 
 func _desired_pass_target(release_target: Vector2, reception_contact: Vector2) -> Vector2:
@@ -12933,45 +12925,101 @@ func _geometric_swing(
 	return swing
 
 
-## Gate E. The geometric serve, alongside the legacy one.
+## **The serve. One of them, forward.**
 ##
-## Same private stream as the swing, for the same reason, and the record goes
-## straight onto `result.analysis` because a serve happens before the shadow
-## trace this rally will carry exists.
-func _geometric_serve_record(
+## This used to be `_geometric_serve_record`, a shadow: it resolved the serve
+## properly, wrote what it found onto `result.analysis`, and was then ignored
+## while the official ball was fitted backwards to a landing point a coin flip
+## had already chosen. The audit in `docs/design/CONTACT_AND_BALL_FLIGHT.md`
+## found the two disagreed by 2.89x on horizontal pace and concluded that
+## neither was the authority: production asked *"what launch puts the ball where
+## I already decided it lands?"* and the shadow asked *"what does this server's
+## ball do?"* -- two different questions, so the gap was never arithmetic.
+##
+## The order here is the one the audit asked for and it is the whole of the
+## change:
+##
+##     aim -> launch search -> execution error -> flight -> landing -> verdict
+##
+## `_errant_serve_landing` is gone with the rest of the inverse path. A serve
+## misses now because the ball it was hit as missed, and which way it missed --
+## into the tape, long, wide, outside the antenna -- is read off the same flight
+## that decides everything else about it.
+func _canonical_serve(
 	key: String,
 	server: VolleyballPlayer,
 	contact: Vector2,
-	target: Vector2,
+	## Where the server is *trying* to put it. Intent, not a guaranteed landing:
+	## nothing below is permitted to move this point to make a verdict true.
+	aim: Vector2,
 	attacking_negative_y: bool,
 	tactical_risk: float,
-) -> void:
+) -> Dictionary:
 	if server == null:
-		return
+		return {}
 	geometric_rng.seed = hash("%d|serve|%s|%d" % [rally_seed, key, server.id])
-	var serve: Dictionary = GeometricAttackResolverModel.resolve_serve(
-		server, contact,
-		GeometricAttackPromotionModel.serve_contact_height_meters(
-			server,
-			GeometricAttackPromotionModel.serve_effort_for_style(
-				str(server.primary_serve_style)
-			),
+	var contact_height := GeometricAttackPromotionModel.serve_contact_height_meters(
+		server,
+		GeometricAttackPromotionModel.serve_effort_for_style(
+			str(server.primary_serve_style)
 		),
-		target, attacking_negative_y, tactical_risk,
+	)
+	var serve: Dictionary = GeometricAttackResolverModel.resolve_serve(
+		server, contact, contact_height,
+		aim, attacking_negative_y, tactical_risk,
 		GeometricAttackPromotionModel.serve_draws(geometric_rng),
 		_serve_spin(server),
 	)
 	if not bool(serve.get("available", false)):
-		return
+		return {}
 	var resolution: Dictionary = serve.get("resolution", {})
+	var launch: Dictionary = serve.get("launch", {})
+	var landing := Vector2(serve.landing)
+	var horizontal := maxf(
+		float(launch.get("horizontal_speed_mps", 0.0)),
+		BallFlightModel.MIN_SPEED_MPS,
+	)
+	## **The drawn segment ends where the ball ended, and the launch does not
+	## care.** A serve into the tape stops at the tape; a serve that lands flies
+	## its whole range. Both take their duration from the same horizontal speed,
+	## so truncating one cannot change the pace it left the hand at -- which is
+	## exactly what reconstructing speed from two endpoints and a duration had
+	## been doing.
+	var duration := maxf(
+		RallyKinematics.court_distance_meters(contact, landing) / horizontal,
+		RallyKinematics.MIN_FLIGHT_DURATION,
+	)
+	var flight: Dictionary = serve.get("flight", {})
+	## Relative rise above the contact, which is the published contract for every
+	## trajectory in the engine. `solve_flight` reports the apex absolutely.
+	var apex_rise := maxf(
+		float(flight.get("apex_height_meters", contact_height)) - contact_height,
+		0.0,
+	)
 	geometric_serves[key] = {
 		"outcome": str(serve.outcome),
-		"out_reason": str(resolution.get("out_reason", "")),
+		"out_reason": str(serve.get("out_reason", "")),
 		"speed_mps": float(serve.speed_mps),
 		"bearing_degrees": float(serve.bearing_degrees),
 		"launch_mode": str(serve.launch_mode),
-		"landing": Vector2(serve.landing),
+		"landing": landing,
 		"net_clearance_meters": float(resolution.get("net_clearance_meters", 0.0)),
+		## Marked so a reader of `result.analysis` can tell this is the ball that
+		## was played, not the ball that would have been. It was a shadow for
+		## eleven gates and the key names have not changed.
+		"authority": "canonical",
+	}
+	return {
+		"landing": landing,
+		"outcome": str(serve.outcome),
+		"out_reason": str(serve.get("out_reason", "")),
+		"error": str(serve.outcome) != "in",
+		"duration_seconds": duration,
+		"apex_rise_meters": apex_rise,
+		"contact_height_meters": contact_height,
+		"net_clearance_meters": float(resolution.get("net_clearance_meters", 0.0)),
+		"launch": launch,
+		"spin": Dictionary(serve.get("spin", {})),
 	}
 
 
@@ -13743,7 +13791,24 @@ func _read_error_meters(
 		return 0.0
 	var signature := BallContactSignature.create(
 		&"flight",
-		BallPresentation.launch_speed_mps(trajectory),
+		## **The pace the ball actually left the contact at, when the record
+		## knows it.**
+		##
+		## `BallPresentation.launch_speed_mps` derives speed from the start
+		## height, the *chosen endpoint* height and the duration, so a flight cut
+		## short somewhere else comes back slower -- presentation deciding a
+		## gameplay physical value, which §7 of the spec forbids and which this is
+		## the one live instance of. Worse, every published trajectory carried
+		## 1.0 m at both ends, so its vertical term was exactly zero for every
+		## ball in the game and the "speed" a defender read was pure horizontal.
+		##
+		## The serve now publishes its own launch state and this reads it. The
+		## other families still reconstruct, and will until each owns its launch
+		## in turn; the fallback is what makes that a migration rather than a
+		## rewrite.
+		float(trajectory.get(
+			"launch_speed_mps", BallPresentation.launch_speed_mps(trajectory)
+		)),
 		0.0,
 		0.0,
 		float(spin_state.get("topspin_rps", 0.0)),
@@ -14629,145 +14694,6 @@ func _serve_spin(server: VolleyballPlayer) -> Dictionary:
 		_rating(server, "serve_technique"),
 		str(server.dominant_hand) != "Left",
 	)
-
-
-## How much ground a flight covers before it reaches the tape.
-##
-## Read off the line the ball was struck on rather than as the straight
-## perpendicular distance to the net, because a serve angled across the court
-## crosses more ground getting there and it is that longer path the ball has to
-## stay above the tape over.
-func _ground_to_net_meters(
-	from_position: Vector2, to_position: Vector2, distance_meters: float
-) -> float:
-	var span := to_position.y - from_position.y
-	if absf(span) < 0.0001:
-		return 0.0
-	return distance_meters * clampf(
-		(CourtConstants.NET_Y - from_position.y) / span, 0.0, 1.0
-	)
-
-
-## How far a server may come off full pace to get the ball over the tape, and in
-## how many steps. The same shape as `GeometricAttackResolver`'s relief sweep and
-## for the same reason: a server who cannot clear the net at full pace does not
-## serve through it, they take something off.
-const SERVE_PACE_RELIEF_STEPS: int = 8
-const SERVE_PACE_RELIEF_FLOOR: float = 0.55
-## The margin a serve is aimed to clear the tape by. A serve is struck nine
-## metres back, so a small bearing error is a large change in the ground it has
-## to cover before it gets there; this is the same clearance the swing's own
-## search insists on.
-const SERVE_NET_CLEARANCE_METERS: float = 0.12
-## How many spin settings a server is allowed to consider between none and all
-## of theirs. Three is enough to find the trade -- flat, half-brushed, fully
-## brushed -- and a finer sweep buys resolution the shot does not have.
-const SERVE_SPIN_LEVELS: int = 3
-
-
-func _serve_arc(
-	key: String,
-	distance_meters: float,
-	fallback_angle_degrees: float,
-	contact_height_meters: float,
-	## Ground covered before the ball reaches the tape, along the line it was
-	## struck on.
-	net_distance_meters: float,
-	## **The reason a real serve can be hit hard at all.** A flat ball struck at
-	## 25 m/s from nine metres back is either under the tape when it gets there or
-	## past the endline when it comes down; there is no angle that does both. A
-	## topspin serve solves it by falling harder than gravity, so it can be
-	## launched *upward* -- well clear of the net -- and still drop inside the
-	## court. Without this the relief loop below had to keep taking pace off until
-	## the ball was slow enough to be a lob, which is what it did: measured, every
-	## serve came back at the minimum-force solve it was supposed to replace.
-	spin_state: Dictionary = {},
-) -> Dictionary:
-	var speed := float(Dictionary(geometric_serves.get(key, {})).get(
-		"speed_mps", 0.0
-	))
-	if speed <= 0.0:
-		return RallyKinematics.solve_struck_arc(
-			distance_meters, fallback_angle_degrees, contact_height_meters
-		)
-	## **The tape, which the first version of this forgot.** Handing the serve
-	## the server's real pace and then re-solving the angle for the official
-	## landing put 215 of 218 serves *through the net*: at 25 m/s a ball aimed
-	## 17 m away has to be struck slightly downward to land there at all, and
-	## from a 2.9 m contact that is under the tape by the time it arrives. The
-	## flight was right and the shot was impossible, which is the same class of
-	## mistake as solving a spike without knowing the net exists.
-	var needed := CourtConstants.NET_HEIGHT_METERS + SERVE_NET_CLEARANCE_METERS
-	var fallback := RallyKinematics.solve_struck_arc(
-		distance_meters, fallback_angle_degrees, contact_height_meters
-	)
-	## **The quickest ball that clears, not the first one found.** Trying the
-	## flatter root first and taking whatever cleared put every serve on the
-	## lofted root at full pace: measured, they crossed the tape at a mean of
-	## 31 metres and hung for 5.1 seconds. That is the identical mistake
-	## `_quickest_clearing_loft` was written to fix on the attack side, made
-	## again three hundred lines away, and the lesson is the same both times --
-	## what the receiver gets is *time*, so the thing to minimise is the flight.
-	##
-	## Horizontal speed is that directly, and comparing candidates on it prices
-	## the arc and the pace together instead of trading one against the other
-	## blind.
-	var best := {}
-	var best_ground_speed := 0.0
-	for step in range(SERVE_PACE_RELIEF_STEPS):
-		var trial := speed * lerpf(
-			1.0, SERVE_PACE_RELIEF_FLOOR,
-			float(step) / float(SERVE_PACE_RELIEF_STEPS - 1),
-		)
-		## **Spin is a dial, not a constant, and it trades range for clearance.**
-		##
-		## Topspin buys the dive that lets a hard serve drop inside the endline,
-		## and it buys it by shortening the flight. Applying a server's full spin
-		## to every serve therefore does the opposite of what it looks like: at 19
-		## m/s under a full topspin dive the ball cannot reach the far court *at
-		## all*, so no root solves, and every serve fell through to the
-		## minimum-force fallback. Measured, that pinned the whole population at
-		## 15.6 m/s no matter what was done to the spin model.
-		##
-		## A server does not have one setting. They choose how hard and how much
-		## to brush the ball, together, and the pair that works is the pair that
-		## gets over the tape and still lands in. Both are swept here for the same
-		## reason `_quickest_clearing_loft` sweeps pace: the answer is a
-		## combination, and picking either half first throws the other away.
-		for spin_step in range(SERVE_SPIN_LEVELS):
-			var used := BallSpin.spin(
-				float(spin_state.get("axis", 0.0)),
-				float(spin_state.get("rate_rps", 0.0))
-					* float(spin_step) / float(SERVE_SPIN_LEVELS - 1),
-			)
-			var gravity := BallSpin.gravity_for(used)
-			var solved := BallFlightModel.solve_angle_for_range(
-				trial, distance_meters, contact_height_meters, gravity
-			)
-			for branch in [&"driven", &"lofted"]:
-				if not bool(solved.get("%s_found" % branch, false)):
-					continue
-				var angle := float(solved.get("%s_angle_degrees" % branch, 0.0))
-				var ground_speed := trial * cos(deg_to_rad(angle))
-				if ground_speed <= best_ground_speed:
-					continue
-				if net_distance_meters > 0.0 and BallFlightModel.height_at_distance(
-					BallFlightModel.solve_flight(
-						trial, angle, contact_height_meters, gravity
-					),
-					net_distance_meters,
-				) < needed:
-					continue
-				best_ground_speed = ground_speed
-				best = RallyKinematics.struck_arc_from_speed(
-					distance_meters, trial, angle, contact_height_meters, gravity
-				)
-	if not best.is_empty():
-		return best
-	## Nothing this server has gets over from here. The old minimum-force solve
-	## is the least-bad ball, and the serve-error verdict was already taken
-	## upstream -- this only decides what the ball looks like on its way.
-	return fallback
 
 
 ## How far this server's ball travels before it lands, at the flat end of their

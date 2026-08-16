@@ -313,6 +313,7 @@ func _initialize() -> void:
 	_test_serve_attributes_choose_and_execute_targets()
 	_test_a_margin_carries_its_unit_in_its_name()
 	_test_a_serve_that_misses_is_drawn_missing()
+	_test_the_serve_is_one_forward_flight()
 	_test_a_block_can_be_told_what_it_is_for()
 	_test_scouting_crosses_the_net_in_both_directions()
 	_test_defense_opponent_and_match_day_controls()
@@ -4377,8 +4378,16 @@ func _test_shadow_reception_trace() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var result: Resource = manager.resolve_active_rally(1001)
-	var seed_1001_contacts_legal := true
+	## **1002, and it used to be 1001.** The seed is a fixture for a rally that
+	## reaches a reception, and nothing here is about the serve -- but the serve
+	## now decides whether it lands from its own flight rather than from a coin
+	## flip taken before it was struck, and on 1001 this opponent misses. The
+	## contract was never in question: every check below passed unchanged the
+	## moment a seed whose serve stays in was supplied. Weakening one of them to
+	## tolerate a rally with no reception in it would have hidden the next real
+	## break, which is the trade this repository has made the wrong way before.
+	var result: Resource = manager.resolve_active_rally(1002)
+	var setter_contacts_legal := true
 	for event_index in range(result.events.size() - 1):
 		var event: Resource = result.events[event_index]
 		if event.event_type != RALLY_EVENT_SCRIPT.EventType.SET:
@@ -4389,11 +4398,11 @@ func _test_shadow_reception_trace() -> void:
 					and str(next_event.metadata.get("side", "")) == str(
 						event.metadata.get("side", "")
 					):
-				seed_1001_contacts_legal = next_event.actor_id != event.actor_id
+				setter_contacts_legal = next_event.actor_id != event.actor_id
 				break
 	_check(
-		seed_1001_contacts_legal,
-		"seed 1001 never lets a setter attack their own second contact",
+		setter_contacts_legal,
+		"seed 1002 never lets a setter attack their own second contact",
 	)
 	var trace: Dictionary = result.analysis.get("shadow_reception", {})
 	var summary: Dictionary = trace.get("summary", {})
@@ -4546,7 +4555,7 @@ func _test_shadow_reception_trace() -> void:
 	var repeated_manager := GAME_MANAGER_SCRIPT.new()
 	repeated_manager.seed_vertical_slice_data()
 	repeated_manager.match_state.serving_home = false
-	var repeated_result: Resource = repeated_manager.resolve_active_rally(1001)
+	var repeated_result: Resource = repeated_manager.resolve_active_rally(1002)
 	var repeated_trace: Dictionary = repeated_result.analysis.get("shadow_reception", {})
 	_check(
 		trace == repeated_trace,
@@ -5231,7 +5240,13 @@ func _test_gate_fifteen_disabled_rollout() -> void:
 	var manager := GAME_MANAGER_SCRIPT.new()
 	manager.seed_vertical_slice_data()
 	manager.match_state.serving_home = false
-	var result: Resource = manager.resolve_active_rally(150000)
+	## 150001, and it used to be 150000. Same reason as
+	## `_test_shadow_reception_trace`: this gate needs a rally that reaches a
+	## reception, and the serve now misses or lands on the strength of its own
+	## flight rather than a coin flip taken before it was struck. Nothing about
+	## the rollout contract moved -- every check below passed unchanged on the
+	## next seed whose serve stays in.
+	var result: Resource = manager.resolve_active_rally(150001)
 	var trace: Dictionary = result.analysis.get("shadow_reception", {})
 	var rollout: Dictionary = Dictionary(trace.get("summary", {})).get(
 		"reception_rollout", {}
@@ -14066,6 +14081,115 @@ func _test_a_serve_that_misses_is_drawn_missing() -> void:
 		"missed serves find the tape and the lines both (%d net, %d long or wide)" % [
 			net_misses, long_or_wide,
 		],
+	)
+
+
+## The serve is one flight, and it runs forwards.
+##
+## The audit in `docs/design/CONTACT_AND_BALL_FLIGHT.md` found two serve models
+## and no authority: production rolled the error verdict first, moved the landing
+## to make the verdict true, and then solved a launch backwards to reach it,
+## while a forward shadow resolved the same serve and was ignored. This is the
+## gate on the replacement, and each check is one of the ways the old shape could
+## come back.
+##
+## The strongest of them is the last. A record that publishes launch pace *and*
+## endpoints can only be trusted if the two agree -- so the launch state is flown
+## through the resolution model a second time here, and the landing it produces
+## has to be the landing the rally reported. If anything downstream ever moves a
+## serve's endpoint without moving its launch, this is what says so.
+func _test_the_serve_is_one_forward_flight() -> void:
+	var manager := GAME_MANAGER_SCRIPT.new()
+	manager.seed_vertical_slice_data()
+	var serves := 0
+	var launch_published := 0
+	var start_height_real := 0
+	var landing_reproduced := 0
+	var reconstruction_disagreed := 0
+	var truncation_moved_launch := 0
+	for serving_home in [true, false]:
+		manager.match_state.serving_home = serving_home
+		for seed_value in range(9400, 9460):
+			var result: Resource = manager.resolve_active_rally(seed_value)
+			if result == null:
+				continue
+			for raw_event in result.events:
+				var event := raw_event as RallyEvent
+				if event == null \
+						or event.event_type != RALLY_EVENT_SCRIPT.EventType.SERVE:
+					continue
+				serves += 1
+				var trajectory: Dictionary = event.metadata.get(
+					"outgoing_trajectory", {}
+				)
+				var pace := float(trajectory.get("launch_speed_mps", 0.0))
+				var angle := float(trajectory.get("launch_angle_degrees", 0.0))
+				var gravity := float(trajectory.get("launch_gravity_mps2", 0.0))
+				if pace > 0.0 and gravity > 0.0 \
+						and str(trajectory.get("launch_source", "")) == "resolver":
+					launch_published += 1
+				## Struck from a real reach, not from the 1.0 m every published
+				## trajectory in the game used to carry.
+				if float(trajectory.get("start_height_meters", 0.0)) > 1.8 \
+						and str(trajectory.get("height_source", "")) \
+							== "start_resolved":
+					start_height_real += 1
+				## **Truncation must not redefine the launch.** The reconstruction
+				## `BallPresentation.launch_speed_mps` performs reads the endpoint
+				## height and the duration, so cutting a flight short changes the
+				## speed it reports the ball left the hand at. The published state
+				## is a property of the contact and must not move at all.
+				var cut := trajectory.duplicate(true)
+				cut["duration"] = float(cut.get("duration", 1.0)) * 0.5
+				cut["end_position"] = Vector2(
+					event.start_position
+				).lerp(Vector2(event.end_position), 0.5)
+				cut["end_height_meters"] = 1.35
+				if not is_equal_approx(
+						float(cut.get("launch_speed_mps", -1.0)), pace):
+					truncation_moved_launch += 1
+				if not is_equal_approx(
+						BallPresentation.launch_speed_mps(cut),
+						BallPresentation.launch_speed_mps(trajectory),
+					):
+					reconstruction_disagreed += 1
+				## And the flight the record describes is the flight that decided
+				## where the ball went.
+				var flown: Dictionary = ATTACK_RESOLUTION_SCRIPT.resolve(
+					Vector2(event.start_position),
+					float(trajectory.get("start_height_meters", 1.0)),
+					float(trajectory.get("launch_bearing_degrees", 0.0)),
+					angle, pace, [],
+					str(event.metadata.get("side", "")) == "home",
+					gravity,
+				)
+				if Vector2(flown.landing).distance_to(
+						Vector2(event.end_position)) < 0.002:
+					landing_reproduced += 1
+	manager.free()
+	_check(
+		serves >= 40 and launch_published == serves,
+		"every serve publishes the launch state its resolver chose (%d of %d)" % [
+			launch_published, serves,
+		],
+	)
+	_check(
+		start_height_real == serves,
+		"every serve is struck from the server's real reach (%d of %d)" % [
+			start_height_real, serves,
+		],
+	)
+	_check(
+		truncation_moved_launch == 0 and reconstruction_disagreed == serves,
+		"cutting a serve short leaves its launch pace alone, where rebuilding it"
+		+ " from the endpoints does not (%d moved, %d rebuilds disagreed of %d)" % [
+			truncation_moved_launch, reconstruction_disagreed, serves,
+		],
+	)
+	_check(
+		landing_reproduced == serves,
+		"flying the published launch again lands where the rally said it did"
+		+ " (%d of %d)" % [landing_reproduced, serves],
 	)
 
 

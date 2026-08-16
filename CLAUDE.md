@@ -12,9 +12,13 @@ for every specialist interface.
 godot --headless --path . --script res://tests/test_runner.gd
 ```
 
-Current branch baseline, verified 2026-08-15 on `76a7818` plus the regional kit
-gate and the dig/coverage split: **2,083 checks pass**. Treat any test failure
-as a regression.
+Current branch baseline, verified 2026-08-16 on the canonical forward serve:
+**2,060 checks pass**. Treat any test failure as a regression.
+
+That is *fewer* than the 2,083 recorded the day before, and nothing was deleted.
+Sampling gates emit a check per sample, and the forward serve changed which
+rallies reach a reception -- so the population several gates sample moved. It is
+the clearest possible demonstration of the paragraph below.
 
 The count itself is not the signal and should not be read as one -- sampling
 tests emit a variable number of checks, and this line sat at 1,048 for four days
