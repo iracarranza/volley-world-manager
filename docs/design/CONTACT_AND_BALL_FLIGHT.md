@@ -594,6 +594,12 @@ quantity at the exact moment this document exists to reduce it.
 
 ## UNRESOLVED PHYSICS — do not fill with defaults
 
+Items 1, 2, 3, 4 and 6 are one question, not five, and
+**`docs/design/PLATFORM_CONTACT.md`** is the design pass that answers it: intent,
+contact circumstance and execution as three separate layers, with no apex band in
+any context. Read it before touching any of them. This page stays normative where
+the two disagree.
+
 1. **DIG apex calibration.** `lerpf(1.35, 3.05, 1.0 - spoil)` was chosen by eye
    and never measured against a distribution.
 2. **DIG lateral miss direction.** `digger.id % 2` was introduced to avoid a new
