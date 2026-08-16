@@ -315,6 +315,102 @@ now differ — 18.1% and 29.4% — because their servers and their instructions
 differ. Geometry is not the cause and was checked: both sides serve from x=0.82,
 median reach 17.11 m against 17.30 m, aims mirrored.
 
+### Certification, 2026-08-16 — and a correction
+
+Measured with two instruments, because one could not have answered the question.
+`tools/run_serve_certification.gd` calls the resolver directly across side ×
+style × risk × ability, 400 draws a cell, 36,000 serves.
+`tools/run_serve_live_census.gd` runs 400 isolated rallies a side and
+*reproduces* each serve's three execution draws from the rally seed, so nothing
+in production had to be modified to be measured.
+
+**The controlled serve is sound.** 9.8% error overall, and the responses are the
+ones a simulation should have:
+
+| | error | net | long | wide | short | pace | angle | driven |
+|---|---|---|---|---|---|---|---|---|
+| **all** | 0.098 | 0.029 | 0.018 | 0.034 | 0.017 | 19.45 | 13.7° | 0.93 |
+| home | 0.098 | 0.030 | 0.019 | 0.033 | 0.017 | 19.47 | 13.7° | 0.93 |
+| opponent | 0.098 | 0.028 | 0.018 | 0.035 | 0.017 | 19.43 | 13.7° | 0.93 |
+| weak | 0.168 | 0.034 | 0.029 | 0.069 | 0.036 | 15.74 | 18.6° | 1.00 |
+| average | 0.088 | 0.029 | 0.019 | 0.029 | 0.011 | 19.34 | 13.4° | 0.93 |
+| strong | 0.038 | 0.024 | 0.007 | 0.004 | 0.002 | 24.41 | 8.9° | 0.87 |
+| risk 0.0 | 0.099 | 0.035 | 0.012 | 0.032 | 0.019 | 15.75 | 17.6° | 1.00 |
+| risk 0.5 | 0.091 | 0.023 | 0.019 | 0.033 | 0.016 | 20.77 | 12.0° | 0.93 |
+| risk 1.0 | 0.104 | 0.029 | 0.024 | 0.037 | 0.014 | 21.43 | 11.1° | 0.87 |
+
+Ability is monotone. Risk reaches the ball as pace (15.75 → 21.43) and not as a
+hidden error term. **The two sides are identical to three decimals when
+personnel are matched**, which settles the geometry question: 0.098 against
+0.098, contact height 2.62 both, target error 1.64 against 1.67.
+
+**Correction to the previous entry.** It said the live sides "differ on
+personnel and instructions". The personnel half is wrong and the measurement
+says so: across all 800 live serves the server is **the same voli on both
+sides** — home #1 and opponent #101, both Jump Float, both 58/74/74/74. They are
+attribute-identical clones. The live figures were:
+
+| window | opponent | home | gap |
+|---|---|---|---|
+| seeds 20000–20159 (the 160 first reported) | 0.181 | **0.294** | +0.113 |
+| seeds 20000–20399 | 0.203 | 0.237 | +0.035, z = **+1.19** |
+
+The 29.4% was a 160-sample window, and it reproduces exactly on that window —
+the number was right and the inference from it was not. At 400 a side the gap is
+1.2 sigma and survives conditioning on serve mode (+0.027 targeted, +0.032
+aggressive), consistent with the home side's slightly lower planned pace (13.89
+against 14.19) and clearance (0.597 against 0.612), which comes from its risk
+instruction. **There is no side asymmetry worth chasing.**
+
+**The live 22% is one style at one ability, not a game-wide rate.** Every live
+serve is a Jump Float, which is the worst style in the factorial (0.159 against
+0.079–0.091 for the other four) because a float has no topspin to buy a dive.
+The vertical slice cannot exercise the serve model, and no live measurement of
+it should be read as one until the roster serves more than one way.
+
+### Which channel nets a serve — the earlier answer was wrong
+
+The first reading of this was that a netted serve is low on *both* the vertical
+and the power draw, taken from the two conditional **means** (−1.65 and −1.45).
+Means cannot answer a sufficiency question. The conditional rates can:
+
+| draw state (bad = below −1σ) | live net rate | factorial net rate | share of live nets |
+|---|---|---|---|
+| power bad only | **0.810** | 0.113 | 0.596 |
+| vertical bad only | 0.163 | 0.035 | 0.154 |
+| both bad | 0.941 | 0.352 | 0.118 |
+| neither | 0.032 | 0.001 | 0.132 |
+
+**A bad power draw is close to sufficient on its own; a bad vertical draw is
+not**, by a factor of four to five, and power alone accounts for 60% of every
+serve put into the tape. It does not take both.
+
+### The spread multiplier's response, measured and not committed
+
+`SERVE_SPREAD_MULTIPLIER` was swept 0.45 → 1.00 with no change kept.
+
+| multiplier | factorial error | factorial **net** | factorial long | factorial wide | live error | live **net** |
+|---|---|---|---|---|---|---|
+| 0.45 | 0.033 | **0.025** | 0.002 | 0.005 | 0.150 | **0.139** |
+| 0.55 | 0.055 | **0.030** | 0.007 | 0.014 | 0.174 | **0.150** |
+| 0.70 | 0.098 | **0.029** | 0.018 | 0.034 | 0.220 | **0.170** |
+| 0.85 | 0.164 | **0.035** | 0.036 | 0.056 | 0.259 | **0.160** |
+| 1.00 | 0.229 | **0.038** | 0.051 | 0.078 | 0.314 | **0.158** |
+
+Long and wide scale with the dial across a factor of twenty-five. **The net rate
+does not move at all** — and what movement there is runs the wrong way.
+
+That is the whole diagnosis in one table. The clearance margin is derived from
+*vertical* spread, so raising the multiplier raises the planned margin (median
+0.956 → 1.426 m) and the power error in lockstep, and the two cancel exactly on
+the channel that nets the ball. The conditional net rates confirm it: power-only
+sits at 0.67–0.81 and vertical-only at 0.16–0.17 **at every multiplier**. They
+are properties of the channel, not of the dial.
+
+So the multiplier cannot be used to set the net rate, and recalibrating it would
+move long and wide to hit a number that net is producing. Its evidence is stale;
+the reason not to touch it now is stronger than that.
+
 ### The calibration this invalidated
 
 `SERVE_SPREAD_MULTIPLIER = 0.70` carries a sweep table claiming 15.6% / 10.6%
@@ -345,14 +441,31 @@ What a recalibration will need to decide is named below, not invented here.
    own flight solves to the floor. Those are different numbers and publishing
    either one silently would move the receiver's read for a reason nobody
    chose.
-7. **What margin does a server plan for their own mishit?** The clearance rule
-   budgets two sigma of *vertical* spread. Measured over 2,000 isolated serves,
-   a netted serve is 1.65 sigma low on the vertical draw **and 1.45 sigma low on
-   the power draw** — it takes both. From nine metres back the gravity drop term
-   goes as `1/v²`, so a power shortfall costs more height at the tape than the
-   angle error does, and nothing budgets for it. Adding a power term to the
-   margin is a design decision about how much a server holds back, not
-   plumbing — which is why it was named here instead of written.
+7. **What margin does a server plan for their own mishit?** **Verdict A —
+   material missing physics.** The clearance rule budgets two sigma of *vertical*
+   spread and nothing of power. From nine metres back the gravity drop term goes
+   as `1/v²`, so a power shortfall costs far more height at the tape than an
+   angle error does: power-only-bad nets 0.81 of live serves against 0.16 for
+   vertical-only, and accounts for 60% of every netted serve. Because the margin
+   scales with the vertical spread and the power error scales with the same
+   multiplier, **the net rate is invariant to the only dial that touches it** —
+   0.025 to 0.038 across a factor-of-25 change in every other error channel. Net
+   is 17.0 of the live 22.0 points of serve error, so this is not a rounding
+   question. What it needs is a decision about how much pace a server holds in
+   reserve, which is design, not plumbing.
+8. **The pace-relief floor is a dial where a derived quantity belongs.**
+   `SERVE_PACE_RELIEF_FLOOR = 0.55` bounds how much pace the launch search may
+   give up. For a **strong float server** nothing inside that bound clears: the
+   driven root's height at the tape climbs 1.447 → 2.674 m as pace comes off and
+   is still short of the 2.877 m needed when the sweep hits its floor, so the
+   search falls to the lofted root and serves a **68° ball with 10.1 m of
+   clearance and a 2.98 s flight**. That is a punt, not a serve, and it makes
+   ability *perverse*: serve technique purifies a float, which removes the topspin
+   that would let it dive, so the better float server is the one who cannot keep
+   it in. `_quickest_clearing_loft` says this exactly, about its own floor, in
+   the same file: *"The floor is a derived quantity, not a dial."* It reaches
+   6.5% of live serves (52 of 800, median 2.51 s, 7.0 m clearance) and the whole
+   strong-float cell of the factorial.
 6. **`ATTACK_COVERAGE` outgoing ball.** Still built by
    `_ensure_event_trajectories` after resolution; the only successful contact
    whose physical ball is not its own.
